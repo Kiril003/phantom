@@ -1,0 +1,215 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* CSS Variables — PHANTOM color language */
+:root {
+  --phantom-bg: #0a0e14;
+  --phantom-surface: #0d1117;
+  --phantom-border: #1e2a3a;
+  --phantom-cyan: #00d4ff;
+  --phantom-cyan-dim: #0099bb;
+  --phantom-warning: #ff6b35;
+  --phantom-success: #39ff14;
+  --phantom-danger: #ff073a;
+  --phantom-dream: #9b8fd4;
+  --phantom-ghost: #1a1a2e;
+  --phantom-text: #c8d8e8;
+  --phantom-text-dim: #6b7e8f;
+  --phantom-text-bright: #e8f4ff;
+
+  /* Status-driven glow — changed by JS via data-state attribute */
+  --state-glow: #00d4ff40;
+  --state-color: #00d4ff;
+
+  --status-bar-height: 28px;
+  --font-size-base: 14px;
+  --animation-speed: 1;
+}
+
+/* State color overrides via data-state attribute on <html> or <body> */
+[data-state='SHADOW'] {
+  --state-glow: #00d4ff20;
+  --state-color: #00d4ff;
+}
+[data-state='FOCUS'] {
+  --state-glow: #39ff1430;
+  --state-color: #39ff14;
+}
+[data-state='DIALOGUE'] {
+  --state-glow: #00d4ff50;
+  --state-color: #00d4ff;
+}
+[data-state='SENTINEL'] {
+  --state-glow: #ff073a50;
+  --state-color: #ff073a;
+}
+[data-state='GHOST'] {
+  --state-glow: #1a1a2e80;
+  --state-color: #333355;
+}
+[data-state='DREAM'] {
+  --state-glow: #9b8fd450;
+  --state-color: #9b8fd4;
+}
+
+/* Base resets */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  width: 1024px;
+  height: 600px;
+  overflow: hidden;
+  background: var(--phantom-bg);
+  color: var(--phantom-text);
+  font-family: 'JetBrains Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: var(--font-size-base);
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  width: 1024px;
+  height: 600px;
+  overflow: hidden;
+  position: relative;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Scrollbar styling for internal panels */
+::-webkit-scrollbar {
+  width: 4px;
+  height: 4px;
+}
+::-webkit-scrollbar-track {
+  background: var(--phantom-surface);
+}
+::-webkit-scrollbar-thumb {
+  background: var(--phantom-border);
+  border-radius: 2px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--phantom-cyan-dim);
+}
+
+/* Touch target minimum — 44×44px */
+button,
+[role='button'],
+a,
+input,
+select,
+textarea {
+  min-width: 44px;
+  min-height: 44px;
+}
+
+/* Phantom-specific utility classes */
+@layer components {
+  .phantom-surface {
+    background: var(--phantom-surface);
+    border: 1px solid var(--phantom-border);
+  }
+
+  .phantom-glow {
+    box-shadow: 0 0 8px var(--state-glow);
+    border-color: var(--state-color);
+  }
+
+  .phantom-text-mono {
+    font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  }
+
+  .phantom-panel {
+    background: var(--phantom-surface);
+    border: 1px solid var(--phantom-border);
+    border-radius: 4px;
+  }
+
+  .status-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--state-color);
+    box-shadow: 0 0 4px var(--state-glow);
+    animation: pulse-state calc(2s / var(--animation-speed)) ease-in-out infinite;
+  }
+}
+
+/* Animation definitions */
+@keyframes pulse-state {
+  0%,
+  100% {
+    opacity: 1;
+    box-shadow: 0 0 4px var(--state-glow);
+  }
+  50% {
+    opacity: 0.7;
+    box-shadow: 0 0 10px var(--state-glow);
+  }
+}
+
+@keyframes breathe-in {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.6;
+  }
+  50% {
+    transform: scale(1.05);
+    opacity: 1;
+  }
+}
+
+@keyframes scan-line {
+  0% {
+    transform: translateY(-100%);
+    opacity: 0;
+  }
+  50% {
+    opacity: 0.6;
+  }
+  100% {
+    transform: translateY(600px);
+    opacity: 0;
+  }
+}
+
+@keyframes state-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes alert-flash {
+  0%,
+  100% {
+    background: transparent;
+  }
+  50% {
+    background: #ff073a15;
+  }
+}
+
+.animate-breathe {
+  animation: breathe-in calc(4s / var(--animation-speed)) ease-in-out infinite;
+}
+
+.animate-state-enter {
+  animation: state-enter calc(0.4s / var(--animation-speed)) ease-out both;
+}
+
+.animate-alert-flash {
+  animation: alert-flash calc(0.8s / var(--animation-speed)) ease-in-out infinite;
+}

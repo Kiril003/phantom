@@ -7,6 +7,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import math
 import time
 from typing import Any, Callable, Coroutine
 
@@ -16,6 +17,17 @@ logger = logging.getLogger(__name__)
 
 Channel = str
 MessageHandler = Callable[[str, dict[str, Any], "WSClient"], Coroutine[Any, Any, None]]
+
+
+def _sanitize(obj: Any) -> Any:
+    """Replace non-finite floats with None so json.dumps never emits Infinity/NaN."""
+    if isinstance(obj, float):
+        return obj if math.isfinite(obj) else None
+    if isinstance(obj, dict):
+        return {k: _sanitize(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_sanitize(v) for v in obj]
+    return obj
 
 
 class WSClient:
@@ -30,7 +42,7 @@ class WSClient:
             return
         try:
             msg = {"channel": channel, "type": type_, "data": data, "ts": int(time.time() * 1000)}
-            await self.ws.send_text(json.dumps(msg))
+            await self.ws.send_text(json.dumps(_sanitize(msg)))
         except Exception as exc:
             logger.debug("WS send error: %s", exc)
             self._connected = False

@@ -3,7 +3,9 @@ PHANTOM OS — FastAPI Application Factory
 """
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 import uuid
 from contextlib import asynccontextmanager
 from typing import AsyncGenerator
@@ -29,6 +31,73 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+_last_batch_ts: float = 0.0
+
+
+async def _context_loop() -> None:
+    """
+    Main engine loop — runs every 500ms.
+    Drives ContextEngine tick, StateMachine evaluation, DecisionTree,
+    and WebSocket broadcasts when serial bridge is not connected.
+    """
+    from core.context_engine import context_engine
+    from core.state_machine import state_machine
+    from core.decision_tree import decision_tree
+
+    interval = config.sensor_batch_interval_ms / 1000.0
+    while True:
+        try:
+            # Skip tick if a live sensor batch was processed recently
+            if time.monotonic() - _last_batch_ts < 0.4:
+                await asyncio.sleep(interval)
+                continue
+            snapshot = await context_engine.tick()
+            transition = state_machine.evaluate(snapshot)
+            if transition:
+                context_engine.set_state(transition.to_state)
+                await hub.broadcast("state", "transition", {
+                    "from": transition.from_state,
+                    "to": transition.to_state,
+                    "trigger": transition.trigger,
+                    "timestamp": transition.timestamp,
+                    "auto": transition.auto,
+                })
+            decision_tree.evaluate(snapshot)
+            await hub.broadcast("sensor", "snapshot", {"snapshot": snapshot})
+        except Exception as exc:
+            logger.error("Context loop error: %s", exc)
+        await asyncio.sleep(interval)
+
+
+async def _start_serial_bridge() -> None:
+    """Start serial bridge if port is available."""
+    from sensors.serial_bridge import serial_bridge
+    from core.context_engine import context_engine
+    from core.state_machine import state_machine
+
+    from sensors.sensor_parser import SensorBatch as _SensorBatch
+
+    async def on_batch(batch: _SensorBatch) -> None:
+        global _last_batch_ts
+        _last_batch_ts = time.monotonic()
+        snapshot = await context_engine.update(batch)
+        transition = state_machine.evaluate(snapshot)
+        if transition:
+            context_engine.set_state(transition.to_state)
+            await hub.broadcast("state", "transition", {
+                "from": transition.from_state,
+                "to": transition.to_state,
+                "trigger": transition.trigger,
+                "timestamp": transition.timestamp,
+                "auto": transition.auto,
+            })
+        await hub.broadcast("sensor", "snapshot", {"snapshot": snapshot})
+
+    serial_bridge.on_batch(on_batch)
+
+    # Start in background task — reconnects automatically
+    asyncio.create_task(serial_bridge.start(), name="serial_bridge")
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
@@ -36,7 +105,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     logger.info("PHANTOM OS starting...")
     await init_db()
     logger.info("Database initialized")
+
+    # Start serial bridge (non-blocking, will retry on error)
+    await _start_serial_bridge()
+
+    # Start tick loop for time-driven context updates
+    loop_task = asyncio.create_task(_context_loop(), name="context_loop")
+
     yield
+
+    loop_task.cancel()
+    try:
+        await loop_task
+    except asyncio.CancelledError:
+        pass
+
+    from sensors.serial_bridge import serial_bridge
+    await serial_bridge.stop()
     await close_db()
     logger.info("PHANTOM OS stopped")
 
@@ -79,10 +164,9 @@ def create_app() -> FastAPI:
 
 def _register_ws(app: FastAPI) -> None:
     @app.websocket("/ws")
-    async def _ws(ws: WebSocket, token: str | None = None) -> None:  # noqa: RUF029
+    async def _ws(ws: WebSocket, token: str | None = None) -> None:
         client_id = str(uuid.uuid4())
-        # Auth enforced in Phase 02; token stored for future validation
-        _ = token
+        _ = token  # Auth enforced in Phase 02
         user_id: str | None = None
 
         client = await hub.connect(ws, client_id, user_id)
@@ -97,10 +181,12 @@ def _register_ws(app: FastAPI) -> None:
 def _register_health(app: FastAPI) -> None:
     @app.get("/health")
     async def _health() -> dict:
+        from sensors.serial_bridge import serial_bridge
         return {
             "status": "ok",
             "version": "0.1.0",
             "ws_clients": hub.client_count,
+            "esp32_connected": serial_bridge.is_connected,
         }
 
 

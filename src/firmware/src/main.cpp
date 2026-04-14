@@ -9,30 +9,40 @@
 #include "protocol.h"
 
 // ── FreeRTOS queues ───────────────────────────────────────────────────────────
-QueueHandle_t sensorDataQueue;   // sensor_hub → json_protocol
-QueueHandle_t cmdQueue;          // json_protocol → actuator_ctrl
-QueueHandle_t wifiScanQueue;     // wifi_scanner → json_protocol
+QueueHandle_t sensorDataQueue;   // sensor_hub → json_tx (batch JSON strings)
+QueueHandle_t cmdQueue;          // json_rx → actuator_ctrl (command strings)
+QueueHandle_t wifiScanQueue;     // wifi_scanner → sensor_hub (latest scan JSON)
 
-// ── Task forward declarations ─────────────────────────────────────────────────
+// ── Task declarations (implemented in respective .cpp files) ──────────────────
 void taskSensorHub(void* pvParameters);
 void taskJsonTx(void* pvParameters);
 void taskCmdRx(void* pvParameters);
 void taskWifiScanner(void* pvParameters);
+void taskActuatorCtrl(void* pvParameters);
 
 // ── Setup ─────────────────────────────────────────────────────────────────────
 void setup() {
-    // USB Serial to host (Radxa)
+    // USB Serial to host (Radxa) at 921600 baud
     Serial.begin(SERIAL_BAUD);
     while (!Serial && millis() < 3000) {
         delay(10);
     }
 
     // Create inter-task queues
-    sensorDataQueue = xQueueCreate(4, 512);   // 4 batches × 512 bytes
-    cmdQueue        = xQueueCreate(8, 256);   // 8 commands × 256 bytes
-    wifiScanQueue   = xQueueCreate(2, 4096);  // 2 scan results × 4KB
+    // sensorDataQueue: holds up to 4 full batch JSON strings (2KB each)
+    sensorDataQueue = xQueueCreate(4, 2048);
+    // cmdQueue: holds up to 8 command strings (512 bytes each)
+    cmdQueue = xQueueCreate(8, 512);
+    // wifiScanQueue: holds 1 scan result (overwrite semantics via xQueueOverwrite)
+    wifiScanQueue = xQueueCreate(1, 4096);
 
-    // Spawn FreeRTOS tasks — pinned to cores for determinism
+    configASSERT(sensorDataQueue != NULL);
+    configASSERT(cmdQueue        != NULL);
+    configASSERT(wifiScanQueue   != NULL);
+
+    // ── Spawn FreeRTOS tasks ──────────────────────────────────────────────────
+
+    // Sensor Hub — Core 1, high priority (deterministic timing)
     xTaskCreatePinnedToCore(
         taskSensorHub,
         "sensor_hub",
@@ -40,9 +50,10 @@ void setup() {
         NULL,
         TASK_PRIO_SENSOR,
         NULL,
-        1  // Core 1 — sensor reading
+        1
     );
 
+    // Command RX — Core 1, highest priority (responsive to host commands)
     xTaskCreatePinnedToCore(
         taskCmdRx,
         "cmd_rx",
@@ -50,9 +61,21 @@ void setup() {
         NULL,
         TASK_PRIO_CMD_RX,
         NULL,
-        1  // Core 1 — high priority command receive
+        1
     );
 
+    // Actuator Control — Core 1, medium priority
+    xTaskCreatePinnedToCore(
+        taskActuatorCtrl,
+        "actuator_ctrl",
+        STACK_SENSOR,  // reuse same stack size
+        NULL,
+        TASK_PRIO_SENSOR - 1,
+        NULL,
+        1
+    );
+
+    // JSON TX — Core 0, medium priority (serial I/O)
     xTaskCreatePinnedToCore(
         taskJsonTx,
         "json_tx",
@@ -60,9 +83,10 @@ void setup() {
         NULL,
         TASK_PRIO_JSON_TX,
         NULL,
-        0  // Core 0 — serial TX
+        0
     );
 
+    // WiFi Scanner — Core 0, lowest priority (background scan)
     xTaskCreatePinnedToCore(
         taskWifiScanner,
         "wifi_scan",
@@ -70,67 +94,11 @@ void setup() {
         NULL,
         TASK_PRIO_WIFI_SCAN,
         NULL,
-        0  // Core 0 — background scan
+        0
     );
 }
 
-// ── Loop (idle — FreeRTOS manages everything) ─────────────────────────────────
+// ── Loop (idle — FreeRTOS task scheduler owns execution) ─────────────────────
 void loop() {
     vTaskDelay(pdMS_TO_TICKS(10000));
-}
-
-// ── Task: Sensor Hub ──────────────────────────────────────────────────────────
-// Reads all sensors every BATCH_INTERVAL_MS and posts to sensorDataQueue.
-// Implemented in sensor_hub.cpp
-void taskSensorHub(void* pvParameters) {
-    (void)pvParameters;
-    // Full implementation in sensor_hub.cpp (Phase 01)
-    for (;;) {
-        vTaskDelay(pdMS_TO_TICKS(BATCH_INTERVAL_MS));
-    }
-}
-
-// ── Task: JSON TX ─────────────────────────────────────────────────────────────
-// Takes sensor batches from queue, serializes to JSON, sends over Serial.
-// Also sends heartbeat every HEARTBEAT_INTERVAL_MS.
-// Implemented in json_protocol.cpp
-void taskJsonTx(void* pvParameters) {
-    (void)pvParameters;
-    TickType_t lastHeartbeat = xTaskGetTickCount();
-
-    for (;;) {
-        TickType_t now = xTaskGetTickCount();
-
-        // Heartbeat
-        if ((now - lastHeartbeat) >= pdMS_TO_TICKS(HEARTBEAT_INTERVAL_MS)) {
-            lastHeartbeat = now;
-            // Full implementation in json_protocol.cpp (Phase 01)
-        }
-
-        vTaskDelay(pdMS_TO_TICKS(10));
-    }
-}
-
-// ── Task: Command RX ──────────────────────────────────────────────────────────
-// Reads JSON commands from Serial, parses, dispatches to actuator_ctrl.
-// Implemented in json_protocol.cpp + actuator_ctrl.cpp
-void taskCmdRx(void* pvParameters) {
-    (void)pvParameters;
-    for (;;) {
-        if (Serial.available()) {
-            // Full implementation in json_protocol.cpp (Phase 01)
-        }
-        vTaskDelay(pdMS_TO_TICKS(5));
-    }
-}
-
-// ── Task: WiFi Scanner ────────────────────────────────────────────────────────
-// Passive WiFi scan every WIFI_SCAN_INTERVAL_MS.
-// Results posted to wifiScanQueue for inclusion in next batch.
-// Implemented in wifi_scanner.cpp
-void taskWifiScanner(void* pvParameters) {
-    (void)pvParameters;
-    for (;;) {
-        vTaskDelay(pdMS_TO_TICKS(WIFI_SCAN_INTERVAL_MS));
-    }
 }

@@ -59,13 +59,18 @@ export interface AuthResponse {
 }
 
 export const authApi = {
-  loginRfid: (uid_hash: string) =>
-    request<AuthResponse>('POST', '/auth/login/rfid', { uid_hash }),
+  loginRfid: (uid: string) =>
+    request<AuthResponse>('POST', '/auth/login/rfid', { uid }),
   loginPin: (username: string, pin: string) =>
     request<AuthResponse>('POST', '/auth/login/pin', { username, pin }),
   refresh: () => request<{ token: string; expires_at: string }>('POST', '/auth/refresh'),
   me: () => request<User>('GET', '/auth/me'),
   logout: () => request<{ ok: boolean }>('POST', '/auth/logout'),
+  config: () =>
+    request<{ max_pin_attempts: number; lockout_duration_m: number; session_timeout_m: number }>(
+      'GET',
+      '/auth/config'
+    ),
 };
 
 /* ─── Chat ────────────────────────────────────────────────────────────────── */

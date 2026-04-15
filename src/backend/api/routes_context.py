@@ -1,34 +1,29 @@
 """Context routes — current snapshot, history, state."""
 from __future__ import annotations
 
-from typing import Optional
-
-from fastapi import APIRouter, Depends, Security
-from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
+import time
+from fastapi import APIRouter, Depends
 
 from core.context_engine import context_engine
 from core.state_machine import state_machine
+from security.auth import TokenPayload, require_auth
 
 router = APIRouter(prefix="/context", tags=["context"])
 
-# Phase 01 — full JWT verification enforced in Phase 02
-_bearer = HTTPBearer(auto_error=False)
 
-
-async def _auth_gate(
-    creds: Optional[HTTPAuthorizationCredentials] = Security(_bearer),
-) -> Optional[str]:
-    return creds.credentials if creds else None
-
-
-@router.get("/current", dependencies=[Depends(_auth_gate)])
-async def get_current_context() -> dict:
+@router.get("/current")
+async def get_current_context(
+    _: TokenPayload = Depends(require_auth),
+) -> dict:
     """Return the most recent ContextSnapshot."""
     return context_engine.get_snapshot()
 
 
-@router.get("/history", dependencies=[Depends(_auth_gate)])
-async def get_context_history(minutes: int = 60) -> dict:
+@router.get("/history")
+async def get_context_history(
+    minutes: int = 60,
+    _: TokenPayload = Depends(require_auth),
+) -> dict:
     """Return snapshots for the last N minutes."""
     snapshots = context_engine.get_history(minutes)
     return {
@@ -37,10 +32,11 @@ async def get_context_history(minutes: int = 60) -> dict:
     }
 
 
-@router.get("/state", dependencies=[Depends(_auth_gate)])
-async def get_state() -> dict:
+@router.get("/state")
+async def get_state(
+    _: TokenPayload = Depends(require_auth),
+) -> dict:
     """Return current SystemState with metadata."""
-    import time
     last = state_machine.last_transition
     since_iso = ""
     if last:

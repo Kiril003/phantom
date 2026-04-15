@@ -16,7 +16,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from config import config
 from db.database import close_db, init_db
 from api.websocket_hub import hub
-from api.routes_auth import router as auth_router
+from api.routes_auth import router as auth_router, users_router
 from api.routes_chat import router as chat_router
 from api.routes_context import router as context_router
 from api.routes_settings import router as settings_router
@@ -106,6 +106,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await init_db()
     logger.info("Database initialized")
 
+    # Ensure at least one user exists (creates default ROOT 'phantom'/000000)
+    from db.database import get_session
+    from security.auth import ensure_default_user
+    async with get_session() as db:
+        await ensure_default_user(db)
+
     # Start serial bridge (non-blocking, will retry on error)
     await _start_serial_bridge()
 
@@ -148,6 +154,7 @@ def create_app() -> FastAPI:
     # API routers
     prefix = "/api/v1"
     app.include_router(auth_router, prefix=prefix)
+    app.include_router(users_router, prefix=prefix)
     app.include_router(chat_router, prefix=prefix)
     app.include_router(context_router, prefix=prefix)
     app.include_router(settings_router, prefix=prefix)
@@ -166,8 +173,16 @@ def _register_ws(app: FastAPI) -> None:
     @app.websocket("/ws")
     async def _ws(ws: WebSocket, token: str | None = None) -> None:
         client_id = str(uuid.uuid4())
-        _ = token  # Auth enforced in Phase 02
         user_id: str | None = None
+
+        # Validate JWT if provided (non-blocking: unauthenticated WS gets sensor data only)
+        if token:
+            try:
+                from security.jwt_manager import verify_token
+                payload = verify_token(token)
+                user_id = payload.user_id
+            except Exception:
+                pass  # Accept connection but mark as unauthenticated
 
         client = await hub.connect(ws, client_id, user_id)
         try:

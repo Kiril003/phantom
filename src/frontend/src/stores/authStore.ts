@@ -1,5 +1,6 @@
 import { create } from 'zustand';
-import { User } from '@shared/types';
+import type { User } from '@shared/types';
+import { authApi } from '../services/api';
 
 interface AuthStoreState {
   user: User | null;
@@ -8,12 +9,18 @@ interface AuthStoreState {
   loginAttempts: number;
   lockedUntil: number | null;
 
+  // Setters
   setUser: (user: User, token: string, expiresAt: string) => void;
   clearAuth: () => void;
   incrementAttempts: () => void;
   resetAttempts: () => void;
   setLockout: (until: number) => void;
   isLocked: () => boolean;
+
+  // Session management
+  autoLogin: () => Promise<boolean>;
+  refreshToken: () => Promise<boolean>;
+  updateUser: (patch: Partial<User>) => void;
 }
 
 export const useAuthStore = create<AuthStoreState>((set, get) => ({
@@ -47,4 +54,63 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
     if (!lockedUntil) return false;
     return Date.now() < lockedUntil;
   },
+
+  /**
+   * Try to restore session from persisted token.
+   * Returns true if session is valid, false otherwise.
+   */
+  autoLogin: async () => {
+    const { token, expiresAt } = get();
+    if (!token) return false;
+
+    // Check expiry client-side first
+    if (expiresAt) {
+      const exp = new Date(expiresAt).getTime();
+      if (Date.now() >= exp) {
+        // Try refresh
+        try {
+          const res = await authApi.refresh();
+          localStorage.setItem('phantom_token', res.token);
+          localStorage.setItem('phantom_token_expires', res.expires_at);
+          set({ token: res.token, expiresAt: res.expires_at });
+        } catch {
+          get().clearAuth();
+          return false;
+        }
+      }
+    }
+
+    // Validate by fetching current user
+    try {
+      const user = await authApi.me();
+      set({ user });
+      return true;
+    } catch {
+      get().clearAuth();
+      return false;
+    }
+  },
+
+  /**
+   * Refresh the JWT token silently.
+   */
+  refreshToken: async () => {
+    try {
+      const res = await authApi.refresh();
+      localStorage.setItem('phantom_token', res.token);
+      localStorage.setItem('phantom_token_expires', res.expires_at);
+      set({ token: res.token, expiresAt: res.expires_at });
+      return true;
+    } catch {
+      return false;
+    }
+  },
+
+  /**
+   * Merge a user patch into the current user (optimistic update).
+   */
+  updateUser: (patch) =>
+    set((s) => ({
+      user: s.user ? { ...s.user, ...patch } : null,
+    })),
 }));

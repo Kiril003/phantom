@@ -45,6 +45,7 @@ class PhantomConfig(BaseSettings):
     ai_gemini_api_key: str = ""
     ai_ollama_model: str = "gemma4:e4b"
     ai_ollama_host: str = "http://localhost:11434"
+    ai_ollama_num_ctx: int = 8192
     ai_temperature: float = 0.7
     ai_max_tokens: int = 2048
     ai_top_p: float = 0.9

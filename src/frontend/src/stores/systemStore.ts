@@ -15,6 +15,11 @@ interface SystemStoreState {
   setWsConnected: (v: boolean) => void;
 }
 
+/* eslint-disable @typescript-eslint/no-explicit-any */
+if (import.meta.env.DEV) {
+  (window as any).__phantom = (window as any).__phantom ?? {};
+}
+
 export const useSystemStore = create<SystemStoreState>((set, get) => ({
   state: SystemState.SHADOW,
   previousState: null,
@@ -46,3 +51,7 @@ export const useSystemStore = create<SystemStoreState>((set, get) => ({
   setAuthenticated: (v) => set({ authenticated: v }),
   setWsConnected: (v) => set({ wsConnected: v }),
 }));
+
+if (import.meta.env.DEV) {
+  (window as any).__phantom.system = useSystemStore;
+}

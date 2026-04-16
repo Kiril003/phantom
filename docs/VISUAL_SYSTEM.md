@@ -261,3 +261,35 @@ export const motion = {
 4. Fits 1024×600 без скролу
 5. State transition 60fps
 6. Lighthouse performance + a11y ≥ 90
+
+
+---
+
+## 🎨 Конкретні візуальні референси
+
+### Login screen має виглядати так:
+
+- **Фон:** повністю чорний (`--surface-void`), не темно-сірий. Можливо з ледь помітним grid pattern (opacity 0.03) або vignette.
+- **Використовує весь 1024×600.** Не центрована карточка з полями. Контент розподілений: ліворуч identity block (PHANTOM logo + status), праворуч PIN pad, знизу system info bar.
+- **"PHANTOM"** — не просто letter-spaced text. Або ASCII-art варіант, або broken/glitched rendering, або з subtle scan-line ефектом. Це назва системи — має виглядати як branding військового продукту, не як "tech startup".
+- **PIN pad кнопки** — не округлі квадрати з цифрами посередині. Або:
+  - варіант A: квадрати з цифрою в кутку + subtle border, як military keypad
+  - варіант B: секторні кнопки з LED-style glow на press
+  - варіант C: термінал-стиль: `[ 1 ]` `[ 2 ]` `[ 3 ]` з моно-шрифтом
+- **PIN indicator** — не 6 однакових точок. Сегменти/бокси/underscores що заповнюються: `_ _ _ _ _ _` → `█ _ _ _ _ _` → `█ █ _ _ _ _`.
+- **Помилка** — не просто червоний текст. Show це як system alert: `[ AUTH.DENY ]` або `> ACCESS DENIED // ATTEMPT 2/5` — завжди монotech.
+- **RFID tab** — при активному має показувати animated pulse/scan indicator (мова "чекаю сигналу"), не просто порожню панель.
+- **Tabs PIN/RFID** — не підсвічений `#4fc3f7` fill background. Натомість underline-style active indicator, або monochrome з subtle glow.
+
+### Антиреференси (НЕ робити):
+
+- ❌ Центрована карточка на чорному фоні (як зараз)
+- ❌ Світло-блакитні акценти на всьому (`#4fc3f7` blast)
+- ❌ Material Design rounded buttons з цифрами
+- ❌ Generic dots для PIN indicator
+- ❌ Червоний текст для помилки без context/branding
+- ❌ "tech startup landing page" aesthetic
+
+### Палітра FOCUS — уточнення:
+
+Замість чистого `#4fc3f7` (material cyan) використовуй `#7dd3fc` з низькою насиченістю АБО майже-monochrome варіант `#c8d4dc` як primary accent, а `#4fc3f7` залишити тільки для критичних active states (pressed keypad button).

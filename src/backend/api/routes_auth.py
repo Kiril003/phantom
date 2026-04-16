@@ -292,12 +292,12 @@ async def update_user(
     return _user_to_dict(user)
 
 
-@users_router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+@users_router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT, response_model=None)
 async def delete_user(
     user_id: str,
     current_user: User = Depends(require_root),
     db: AsyncSession = Depends(get_db),
-) -> None:
+) -> Response:
     if user_id == current_user.id:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -309,6 +309,7 @@ async def delete_user(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found")
     await db.delete(user)
     await db.commit()
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @users_router.put("/{user_id}/role")

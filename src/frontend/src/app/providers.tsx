@@ -1,7 +1,9 @@
 import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { wsClient } from '../services/websocket';
-import type { WSMessage } from '../services/websocket';
+import type { WSMessage, SensorMessage, StateMessage } from '../services/websocket';
+import { useSystemStore } from '../stores/systemStore';
+import { SystemState } from '@shared/types';
 
 /* ─── QueryClient ─────────────────────────────────────────────────────────── */
 
@@ -38,12 +40,43 @@ function WebSocketProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     tokenRef.current = localStorage.getItem('phantom_token');
 
-    wsClient.onConnect(() => setConnected(true));
-    wsClient.onDisconnect(() => setConnected(false));
+    const unsubs: Array<() => void> = [];
+
+    unsubs.push(wsClient.onConnect(() => {
+      setConnected(true);
+      useSystemStore.getState().setWsConnected(true);
+    }));
+
+    unsubs.push(wsClient.onDisconnect(() => {
+      setConnected(false);
+      useSystemStore.getState().setWsConnected(false);
+    }));
+
+    // State transitions from backend
+    unsubs.push(wsClient.on<StateMessage>('state', (msg) => {
+      if (msg.type === 'transition') {
+        const to = msg.data.to as SystemState;
+        if (Object.values(SystemState).includes(to)) {
+          useSystemStore.getState().setState(to, {
+            trigger: msg.data.trigger as string,
+            timestamp: msg.ts ?? Date.now(),
+            auto: (msg.data.auto as boolean) ?? true,
+          });
+        }
+      }
+    }));
+
+    // Context snapshots from backend
+    unsubs.push(wsClient.on<SensorMessage>('sensor', (msg) => {
+      if (msg.type === 'snapshot' && msg.data.snapshot) {
+        useSystemStore.getState().setContext(msg.data.snapshot);
+      }
+    }));
 
     wsClient.connect(tokenRef.current ?? undefined);
 
     return () => {
+      unsubs.forEach((u) => u());
       wsClient.disconnect();
     };
   }, []);

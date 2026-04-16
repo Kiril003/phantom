@@ -1,56 +1,31 @@
+@import './tokens.css';
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
 
-/* CSS Variables — PHANTOM color language */
+/* CSS Variables — PHANTOM color language (backward compat + extensions) */
 :root {
-  --phantom-bg: #0a0e14;
-  --phantom-surface: #0d1117;
-  --phantom-border: #1e2a3a;
+  --phantom-bg: var(--surface-deep);
+  --phantom-surface: var(--surface-raised);
+  --phantom-border: var(--line-default);
   --phantom-cyan: #00d4ff;
   --phantom-cyan-dim: #0099bb;
-  --phantom-warning: #ff6b35;
-  --phantom-success: #39ff14;
-  --phantom-danger: #ff073a;
+  --phantom-warning: var(--signal-warn);
+  --phantom-success: var(--signal-ok);
+  --phantom-danger: var(--signal-alert);
   --phantom-dream: #9b8fd4;
   --phantom-ghost: #1a1a2e;
-  --phantom-text: #c8d8e8;
-  --phantom-text-dim: #6b7e8f;
+  --phantom-text: var(--ink-primary);
+  --phantom-text-dim: var(--ink-secondary);
   --phantom-text-bright: #e8f4ff;
 
-  /* Status-driven glow — changed by JS via data-state attribute */
-  --state-glow: #00d4ff40;
-  --state-color: #00d4ff;
+  /* State-driven — mapped from accent tokens */
+  --state-glow: var(--accent-glow);
+  --state-color: var(--accent);
 
-  --status-bar-height: 28px;
+  --status-bar-height: var(--status-bar-h);
   --font-size-base: 14px;
-  --animation-speed: 1;
-}
-
-/* State color overrides via data-state attribute on <html> or <body> */
-[data-state='SHADOW'] {
-  --state-glow: #00d4ff20;
-  --state-color: #00d4ff;
-}
-[data-state='FOCUS'] {
-  --state-glow: #39ff1430;
-  --state-color: #39ff14;
-}
-[data-state='DIALOGUE'] {
-  --state-glow: #00d4ff50;
-  --state-color: #00d4ff;
-}
-[data-state='SENTINEL'] {
-  --state-glow: #ff073a50;
-  --state-color: #ff073a;
-}
-[data-state='GHOST'] {
-  --state-glow: #1a1a2e80;
-  --state-color: #333355;
-}
-[data-state='DREAM'] {
-  --state-glow: #9b8fd450;
-  --state-color: #9b8fd4;
+  --animation-speed: var(--motion-scale);
 }
 
 /* Base resets */
@@ -212,4 +187,18 @@ textarea {
 
 .animate-alert-flash {
   animation: alert-flash calc(0.8s / var(--animation-speed)) ease-in-out infinite;
+}
+
+/* State transition choreography — applied during the 600ms transition window */
+body.state-transitioning {
+  --accent: var(--accent);
+  transition: --accent 600ms cubic-bezier(0.16, 1, 0.3, 1),
+              --accent-glow 600ms cubic-bezier(0.16, 1, 0.3, 1),
+              --ui-opacity 600ms cubic-bezier(0.16, 1, 0.3, 1),
+              --motion-scale 600ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Smooth accent transitions for all states */
+body {
+  transition: --accent 400ms ease, --accent-glow 400ms ease;
 }

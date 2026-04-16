@@ -190,3 +190,7 @@ cd src/backend && pytest               # Tests
 cd src/firmware && pio run             # Build
 cd src/firmware && pio run -t upload   # Flash
 ```
+
+
+## 🎨 Візуал
+Перед будь-якою роботою з UI — прочитай `docs/VISUAL_SYSTEM.md` повністю.

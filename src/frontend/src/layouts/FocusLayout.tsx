@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { StatusBar } from '../components/core/StatusBar';
 import { Avatar } from '../components/core/Avatar';
+import { TacticalMap } from '../components/map/TacticalMap';
 import { useSystemStore } from '../stores/systemStore';
 import { EASE_PHANTOM } from '../styles/motion';
 import {
@@ -112,37 +113,51 @@ export default function FocusLayout() {
           </div>
         </motion.aside>
 
-        {/* Main workspace area — placeholder for future tools/chat/map */}
-        <main className="flex-1 h-full overflow-hidden flex items-center justify-center">
-          <motion.div
-            className="flex flex-col items-center gap-3"
-            initial={{ opacity: 0, y: 8 }}
-            animate={{ opacity: 0.4, y: 0 }}
-            transition={{ delay: 0.3, duration: 0.5 }}
+        {/* Main workspace — TacticalMap */}
+        <main className="flex-1 h-full min-w-0 overflow-hidden relative">
+          <TacticalMap />
+          {/* Overlay chip: mode + active location */}
+          <div
+            className="absolute top-3 right-3 flex flex-col items-end gap-1 pointer-events-none z-10"
           >
             <span
-              className="font-mono tracking-[0.3em]"
-              style={{ color: 'var(--ink-muted)', fontSize: 'var(--fs-sm)' }}
+              className="font-mono tracking-[0.3em] px-2 py-1 rounded"
+              style={{
+                color: 'var(--ink-muted)',
+                background: 'var(--surface-raised)',
+                border: '1px solid var(--line-subtle)',
+                fontSize: 'var(--fs-micro)',
+              }}
             >
               FOCUS MODE
             </span>
             {context?.where.place_name && (
               <span
-                className="font-mono"
-                style={{ color: 'var(--ink-muted)', fontSize: 'var(--fs-xs)' }}
+                className="font-mono px-2 py-1 rounded"
+                style={{
+                  color: 'var(--ink-secondary)',
+                  background: 'var(--surface-raised)',
+                  border: '1px solid var(--line-subtle)',
+                  fontSize: 'var(--fs-micro)',
+                }}
               >
                 {context.where.place_name}
               </span>
             )}
             {context?.history.pending_events_1h != null && context.history.pending_events_1h > 0 && (
               <span
-                className="font-mono"
-                style={{ color: 'var(--signal-warn)', fontSize: 'var(--fs-xs)' }}
+                className="font-mono px-2 py-1 rounded"
+                style={{
+                  color: 'var(--signal-warn)',
+                  background: 'var(--surface-raised)',
+                  border: '1px solid var(--signal-warn)',
+                  fontSize: 'var(--fs-micro)',
+                }}
               >
                 {context.history.pending_events_1h} event{context.history.pending_events_1h > 1 ? 's' : ''} in next hour
               </span>
             )}
-          </motion.div>
+          </div>
         </main>
       </div>
     </motion.div>

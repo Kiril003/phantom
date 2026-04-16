@@ -26,7 +26,6 @@ class PhantomConfig(BaseSettings):
 
     # ── Database ──────────────────────────────────────────────────────────────
     database_url: str = "sqlite+aiosqlite:///./phantom.db"
-    wardriving_db_path: str = "/data/wardriving.db"
 
     # ── ChromaDB ──────────────────────────────────────────────────────────────
     chroma_path: str = "./chroma_data"
@@ -90,6 +89,9 @@ class PhantomConfig(BaseSettings):
     sensor_serial_baud: int = 921600
     sensor_wifi_scan_interval_s: int = 10
     sensor_wifi_scan_enabled: bool = True
+    wardriving_cell_precision: int = 4  # decimal digits ≈ 11 m cells
+    wardriving_heatmap_precision: int = 3  # decimal digits ≈ 110 m cells for heatmap
+    wardriving_max_records_query: int = 5000
     sensor_radar_sensitivity: int = 7
     sensor_radar_max_distance_cm: int = 300
     sensor_breathing_detection: bool = True

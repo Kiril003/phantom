@@ -35,3 +35,13 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (globalThis as any).ResizeObserver = RO;
 }
+
+// jsdom lacks URL.createObjectURL — maplibre-gl references it at import time
+if (typeof URL !== 'undefined' && typeof URL.createObjectURL !== 'function') {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (URL as any).createObjectURL = () => 'blob:phantom-test';
+}
+if (typeof URL !== 'undefined' && typeof URL.revokeObjectURL !== 'function') {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (URL as any).revokeObjectURL = () => {};
+}

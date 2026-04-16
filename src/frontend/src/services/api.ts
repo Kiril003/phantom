@@ -8,6 +8,8 @@ import type {
   SettingDefinition,
   WardrivingRecord,
   MapPOI,
+  HeatmapPoint,
+  TrackPoint,
 } from '@shared/types';
 
 const BASE = '/api/v1';
@@ -194,34 +196,32 @@ export interface Bounds {
 }
 
 export const mapApi = {
-  getWardriving: (bounds?: Bounds, since?: string) => {
+  getWardriving: (bounds?: Bounds, since?: string, limit = 5000) => {
     const params = new URLSearchParams();
     if (bounds) params.set('bounds', `${bounds.lat1},${bounds.lon1},${bounds.lat2},${bounds.lon2}`);
     if (since) params.set('since', since);
+    params.set('limit', String(limit));
     return request<{ records: WardrivingRecord[]; total: number }>(
       'GET',
       `/map/wardriving?${params}`
     );
   },
-  getHeatmap: (bounds?: Bounds) => {
+  getHeatmap: (bounds?: Bounds, minWeight = 0) => {
     const params = new URLSearchParams();
     if (bounds) params.set('bounds', `${bounds.lat1},${bounds.lon1},${bounds.lat2},${bounds.lon2}`);
-    return request<{ points: Array<{ lat: number; lon: number; weight: number }> }>(
-      'GET',
-      `/map/heatmap?${params}`
-    );
+    if (minWeight > 0) params.set('min_weight', String(minWeight));
+    return request<{ points: HeatmapPoint[] }>('GET', `/map/heatmap?${params}`);
   },
   getPOIs: (category?: string) => {
     const params = category ? `?category=${category}` : '';
     return request<{ pois: MapPOI[] }>('GET', `/map/pois${params}`);
   },
-  createPOI: (poi: Omit<MapPOI, 'id' | 'created_at'>) =>
+  createPOI: (poi: Omit<MapPOI, 'id' | 'created_at' | 'user_id'>) =>
     request<MapPOI>('POST', '/map/pois', poi),
+  deletePOI: (id: string) =>
+    request<{ ok: boolean }>('DELETE', `/map/pois/${id}`),
   getTrack: (hours = 2) =>
-    request<{ points: Array<{ lat: number; lon: number; ts: string; speed: number }> }>(
-      'GET',
-      `/map/track?hours=${hours}`
-    ),
+    request<{ points: TrackPoint[] }>('GET', `/map/track?hours=${hours}`),
 };
 
 /* ─── Linux ───────────────────────────────────────────────────────────────── */

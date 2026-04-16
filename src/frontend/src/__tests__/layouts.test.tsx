@@ -17,6 +17,94 @@ vi.mock('framer-motion', async () => {
   };
 });
 
+// Stub maplibre-gl — FocusLayout renders TacticalMap which instantiates it
+vi.mock('maplibre-gl', () => {
+  class FakeMap {
+    on(evt: string, cb: () => void) {
+      if (evt === 'load') setTimeout(cb, 0);
+      return this;
+    }
+    off() {
+      return this;
+    }
+    remove() {
+      /* noop */
+    }
+    getBounds() {
+      return {
+        getSouth: () => 0,
+        getWest: () => 0,
+        getNorth: () => 1,
+        getEast: () => 1,
+      };
+    }
+    getCenter() {
+      return { lat: 50.45, lng: 30.52 };
+    }
+    getZoom() {
+      return 15;
+    }
+    setStyle() {
+      /* noop */
+    }
+    flyTo() {
+      /* noop */
+    }
+    fitBounds() {
+      /* noop */
+    }
+    getSource() {
+      return undefined;
+    }
+    addSource() {
+      /* noop */
+    }
+    addLayer() {
+      /* noop */
+    }
+    removeLayer() {
+      /* noop */
+    }
+    removeSource() {
+      /* noop */
+    }
+    getLayer() {
+      return undefined;
+    }
+  }
+  class FakeMarker {
+    setLngLat() {
+      return this;
+    }
+    addTo() {
+      return this;
+    }
+    setPopup() {
+      return this;
+    }
+    remove() {
+      /* noop */
+    }
+  }
+  class FakePopup {
+    setHTML() {
+      return this;
+    }
+  }
+  class FakeLngLatBounds {
+    extend() {
+      /* noop */
+    }
+  }
+  return {
+    default: { Map: FakeMap, Marker: FakeMarker, Popup: FakePopup, LngLatBounds: FakeLngLatBounds },
+    Map: FakeMap,
+    Marker: FakeMarker,
+    Popup: FakePopup,
+    LngLatBounds: FakeLngLatBounds,
+  };
+});
+
 function createMockContext(state: SystemState) {
   return {
     timestamp: Date.now(),

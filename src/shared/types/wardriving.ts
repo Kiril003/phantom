@@ -24,3 +24,18 @@ export interface MapPOI {
   is_secret: boolean;
   created_at: string;
 }
+
+export interface HeatmapPoint {
+  lat: number;
+  lon: number;
+  weight: number;
+  network_count?: number;
+  strongest_rssi?: number;
+}
+
+export interface TrackPoint {
+  lat: number;
+  lon: number;
+  ts: string;
+  speed: number;
+}

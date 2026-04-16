@@ -93,6 +93,19 @@ async def _start_serial_bridge() -> None:
             })
         await hub.broadcast("sensor", "snapshot", {"snapshot": snapshot})
 
+        # Ingest wardriving data when WiFi + GPS fix present
+        try:
+            from wardriving.collector import wardriving_collector
+            stats = await wardriving_collector.process_batch(batch)
+            if stats.seen:
+                await hub.broadcast("map", "wardriving_update", {
+                    "seen": stats.seen,
+                    "inserted": stats.inserted,
+                    "updated": stats.updated,
+                })
+        except Exception as exc:
+            logger.debug("Wardriving ingest failed (non-critical): %s", exc)
+
     serial_bridge.on_batch(on_batch)
 
     # Start in background task — reconnects automatically

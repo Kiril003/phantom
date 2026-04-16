@@ -168,6 +168,70 @@ RESPONSE_FORM_TOOLS: list[dict[str, Any]] = [
             "required": ["content", "metrics"],
         },
     },
+    {
+        "name": "respond_diagram",
+        "description": "Діаграма зв'язків або ієрархія — D3 вузли + ребра",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string",
+                    "description": "Текстовий коментар до діаграми",
+                },
+                "kind": {
+                    "type": "string",
+                    "enum": ["force", "tree", "flow"],
+                    "description": "Тип діаграми: force — сила, tree — ієрархія, flow — потік зі стрілками",
+                },
+                "title": {
+                    "type": "string",
+                    "description": "Заголовок діаграми",
+                },
+                "nodes": {
+                    "type": "array",
+                    "description": "Масив вузлів [{id, label?, group?, value?}]",
+                    "items": {"type": "object"},
+                },
+                "links": {
+                    "type": "array",
+                    "description": "Масив ребер [{source, target, value?, label?}]",
+                    "items": {"type": "object"},
+                },
+            },
+            "required": ["content", "nodes", "links"],
+        },
+    },
+    {
+        "name": "respond_mixed",
+        "description": "Комбінована відповідь: кілька блоків різних форм в одному повідомленні",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "content": {
+                    "type": "string",
+                    "description": "Основний текстовий блок (markdown)",
+                },
+                "chart": {
+                    "type": "object",
+                    "description": "Опціонально: дані графіку {chart_type, data, title, x_key?, y_keys?}",
+                },
+                "code": {
+                    "type": "object",
+                    "description": "Опціонально: {language, code}",
+                },
+                "metrics": {
+                    "type": "array",
+                    "description": "Опціонально: [{label, value, trend}]",
+                    "items": {"type": "object"},
+                },
+                "map": {
+                    "type": "object",
+                    "description": "Опціонально: {markers, center, zoom}",
+                },
+            },
+            "required": ["content"],
+        },
+    },
 ]
 
 # Map function name → ResponseForm string
@@ -178,6 +242,8 @@ _FORM_MAP: dict[str, str] = {
     "respond_terminal": "terminal",
     "respond_code":     "code",
     "respond_metrics":  "metric_cards",
+    "respond_diagram":  "diagram",
+    "respond_mixed":    "mixed",
 }
 
 
@@ -247,6 +313,58 @@ def parse_function_call(
                 "metrics": fn_args.get("metrics", []),
             },
         })
+
+    elif fn_name == "respond_diagram":
+        attachments.append({
+            "type": "chart_data",
+            "data": {
+                "diagram": {
+                    "kind": fn_args.get("kind", "force"),
+                    "title": fn_args.get("title", ""),
+                    "nodes": fn_args.get("nodes", []),
+                    "links": fn_args.get("links", []),
+                },
+            },
+        })
+
+    elif fn_name == "respond_mixed":
+        chart = fn_args.get("chart")
+        if isinstance(chart, dict) and chart.get("data"):
+            attachments.append({
+                "type": "chart_data",
+                "data": {
+                    "chart_type": chart.get("chart_type", "bar"),
+                    "data": chart.get("data", []),
+                    "title": chart.get("title", ""),
+                    "x_key": chart.get("x_key", "name"),
+                    "y_keys": chart.get("y_keys", []),
+                },
+            })
+        code = fn_args.get("code")
+        if isinstance(code, dict) and code.get("code"):
+            attachments.append({
+                "type": "code_block",
+                "data": {
+                    "language": code.get("language", "text"),
+                    "code": code.get("code", ""),
+                },
+            })
+        metrics = fn_args.get("metrics")
+        if isinstance(metrics, list) and metrics:
+            attachments.append({
+                "type": "metric_card",
+                "data": {"metrics": metrics},
+            })
+        map_data = fn_args.get("map")
+        if isinstance(map_data, dict) and map_data.get("markers"):
+            attachments.append({
+                "type": "map_markers",
+                "data": {
+                    "markers": map_data.get("markers", []),
+                    "center": map_data.get("center", [0.0, 0.0]),
+                    "zoom": map_data.get("zoom", 13),
+                },
+            })
 
     return response_form, content, attachments
 

@@ -17,7 +17,7 @@ from config import config
 from db.database import close_db, init_db
 from api.websocket_hub import hub
 from api.routes_auth import router as auth_router, users_router
-from api.routes_chat import router as chat_router
+from api.routes_chat import router as chat_router, register_ws_handlers as register_chat_ws_handlers
 from api.routes_context import router as context_router
 from api.routes_settings import router as settings_router
 from api.routes_map import router as map_router
@@ -111,6 +111,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from security.auth import ensure_default_user
     async with get_session() as db:
         await ensure_default_user(db)
+
+    # Register chat WebSocket handlers
+    register_chat_ws_handlers()
 
     # Start serial bridge (non-blocking, will retry on error)
     await _start_serial_bridge()

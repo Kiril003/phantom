@@ -55,6 +55,11 @@ class PhantomConfig(BaseSettings):
     ai_initiative_cooldown_s: int = 300
     ai_streaming: bool = True
 
+    # Chat (Phase 5) — WS stream emission cadence
+    chat_stream_chunk_chars: int = 24
+    chat_stream_delay_s: float = 0.05
+    chat_max_session_history: int = 50
+
     # ── Voice / STT ───────────────────────────────────────────────────────────
     voice_stt_mode: Literal["hybrid", "vosk", "whisper"] = "hybrid"
     voice_stt_vosk_model: str = "uk-v3-lgraph"

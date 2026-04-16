@@ -2,3 +2,36 @@ import '@testing-library/jest-dom';
 
 // Mock HTMLCanvasElement.getContext for jsdom (Avatar uses canvas)
 HTMLCanvasElement.prototype.getContext = (() => null) as typeof HTMLCanvasElement.prototype.getContext;
+
+// jsdom doesn't implement scrollIntoView
+if (typeof Element !== 'undefined' && !Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = function () {
+    /* noop for tests */
+  };
+}
+
+// Stub clipboard API for jsdom
+if (typeof navigator !== 'undefined' && !navigator.clipboard) {
+  Object.defineProperty(navigator, 'clipboard', {
+    value: { writeText: async () => {} },
+    writable: true,
+    configurable: true,
+  });
+}
+
+// jsdom lacks ResizeObserver, used by some Recharts paths
+if (typeof globalThis.ResizeObserver === 'undefined') {
+  class RO {
+    observe() {
+      /* noop */
+    }
+    unobserve() {
+      /* noop */
+    }
+    disconnect() {
+      /* noop */
+    }
+  }
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (globalThis as any).ResizeObserver = RO;
+}

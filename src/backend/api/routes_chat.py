@@ -1,9 +1,12 @@
 """
 Chat routes — messages, sessions, AI response pipeline.
-Phase 3: full implementation with AI provider, memory, streaming.
+Phase 3: full implementation with AI provider, memory.
+Phase 5: adds WebSocket stream broadcasting (chat channel) and WS-initiated
+messages for the ChatWindow component.
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 import time
@@ -16,7 +19,7 @@ from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import config
-from db.database import get_db
+from db.database import get_db, get_session
 from db.models import ChatMessage, ChatSession
 from security.auth import get_current_user, require_auth
 from security.jwt_manager import TokenPayload
@@ -157,7 +160,9 @@ async def _build_ai_response(
     )
 
     # 4. Get history from session memory (already in RAM from this session)
-    history = session_memory.get_history_dicts(session_id, max_turns=20)
+    history = session_memory.get_history_dicts(
+        session_id, max_turns=config.chat_max_session_history
+    )
 
     # 5. Generate AI response
     ai_response = await ai_router.generate(
@@ -304,7 +309,6 @@ async def send_message(
     # Create TemporalAnchor — "what was happening at this moment"
     try:
         from db.models import TemporalAnchor
-        import re as _re
         # Derive mood from tone description
         mood = tone_desc or "neutral"
         anchor_summary = f"Розмова: «{req.content[:80]}»"
@@ -323,20 +327,197 @@ async def send_message(
     except Exception as exc:
         logger.debug("TemporalAnchor creation failed (non-critical): %s", exc)
 
-    # Push to WebSocket chat channel (streaming is separate; this is the final message)
+    # Push to WebSocket chat channel — simulated stream deltas + final message
     try:
         from api.websocket_hub import hub
-        await hub.broadcast("chat", "message", {
-            "message": _serialize_message(assistant_msg),
-            "session_id": session.id,
-        })
-    except Exception:
-        pass
+        serialized = _serialize_message(assistant_msg)
+        await _broadcast_message_stream(hub, user.id, serialized, session.id)
+    except Exception as exc:
+        logger.debug("WS chat broadcast failed (non-critical): %s", exc)
 
     return {
         "message": _serialize_message(assistant_msg),
         "session_id": session.id,
     }
+
+
+async def _broadcast_message_stream(hub: Any, user_id: str, message: dict, session_id: str) -> None:
+    """
+    Broadcast an assistant message as a short series of WS stream events
+    followed by a final 'message' broadcast.  Front-end dedupes via message_id.
+    """
+    message_id = message["id"]
+    content = message.get("content") or ""
+    # Stream the content in word-ish chunks to preserve UX parity with a true streaming provider.
+    if content:
+        chunks = _chunk_content(content, chunk_size=config.chat_stream_chunk_chars)
+        for chunk in chunks:
+            await hub.broadcast(
+                "chat", "stream",
+                {"message_id": message_id, "delta": chunk, "done": False},
+                user_id=user_id,
+            )
+            await asyncio.sleep(config.chat_stream_delay_s)
+
+    await hub.broadcast(
+        "chat", "stream",
+        {"message_id": message_id, "delta": "", "done": True, "message": message},
+        user_id=user_id,
+    )
+    await hub.broadcast(
+        "chat", "message",
+        {"message": message, "session_id": session_id},
+        user_id=user_id,
+    )
+
+
+def _chunk_content(text: str, chunk_size: int = 24) -> list[str]:
+    if chunk_size <= 0:
+        return [text] if text else []
+    chunks: list[str] = []
+    cursor = 0
+    while cursor < len(text):
+        end = min(cursor + chunk_size, len(text))
+        # Try to end chunks at a whitespace boundary when possible
+        if end < len(text):
+            space = text.rfind(" ", cursor, end)
+            if space > cursor + chunk_size // 2:
+                end = space + 1
+        chunks.append(text[cursor:end])
+        cursor = end
+    return chunks
+
+
+async def _ws_chat_handler(type_: str, data: dict, client: Any) -> None:
+    """
+    Handle client → server chat WS messages.
+    Currently supports:
+      - type='message': triggers the full send flow and streams the response
+        via the chat channel back to this user.
+    """
+    if type_ != "message":
+        return
+
+    if not client.user_id:
+        await client.send("chat", "error", {"detail": "Not authenticated"})
+        return
+
+    content = str(data.get("content", "")).strip()
+    if not content:
+        return
+
+    input_method = str(data.get("input_method", "text"))
+    session_id = data.get("session_id") or None
+
+    try:
+        async with get_session() as db:
+            from sqlalchemy import select as _select
+            from db.models import User as _User
+            user_result = await db.execute(
+                _select(_User).where(_User.id == client.user_id)
+            )
+            user = user_result.scalar_one_or_none()
+            if not user:
+                await client.send("chat", "error", {"detail": "User not found"})
+                return
+
+            session = await _get_or_create_session(db, user.id, session_id)
+
+            # Session cache + user DB message
+            from memory.session_memory import session_memory
+            from core.context_engine import context_engine
+            session_memory.add_message(session.id, "user", content)
+
+            user_msg = ChatMessage(
+                id=str(uuid.uuid4()),
+                session_id=session.id,
+                user_id=user.id,
+                role="user",
+                content=content,
+                response_form="text",
+                metadata_json=json.dumps({
+                    "input_method": input_method,
+                    "state_at_time": context_engine.get_snapshot().get("system", {}).get("state", "SHADOW"),
+                }),
+                attachments_json="[]",
+            )
+            db.add(user_msg)
+            await db.flush()
+            context_engine.record_interaction()
+
+            # Broadcast confirmed user message
+            from api.websocket_hub import hub as _hub
+            await _hub.broadcast(
+                "chat", "message",
+                {"message": _serialize_message(user_msg), "session_id": session.id},
+                user_id=user.id,
+            )
+
+            t_start = time.monotonic()
+            try:
+                ai_content, response_form, attachments, provider, tokens_used = \
+                    await _build_ai_response(content, session.id, user, db)
+            except Exception as exc:
+                logger.error("WS chat AI generation failed: %s", exc)
+                await client.send("chat", "error", {"detail": f"AI unavailable: {exc}"})
+                await db.commit()
+                return
+
+            latency_ms = int((time.monotonic() - t_start) * 1000)
+            snap = context_engine.get_snapshot()
+
+            tone_desc = ""
+            try:
+                from ai.personality import calculate_tone
+                from memory.user_model import get_behavioral_model as _gbm
+                bmodel_fresh = await _gbm(db, user.id)
+                tone_desc = calculate_tone(snap, bmodel_fresh.to_dict()).description
+            except Exception:
+                pass
+
+            assistant_msg = ChatMessage(
+                id=str(uuid.uuid4()),
+                session_id=session.id,
+                user_id=user.id,
+                role="assistant",
+                content=ai_content,
+                response_form=response_form,
+                metadata_json=json.dumps({
+                    "state_at_time": snap.get("system", {}).get("state", "SHADOW"),
+                    "context_snapshot_id": str(snap.get("timestamp", "")),
+                    "ai_provider": provider,
+                    "latency_ms": latency_ms,
+                    "tokens_used": tokens_used,
+                    "tone": tone_desc,
+                    "input_method": input_method,
+                }),
+                attachments_json=json.dumps(attachments),
+            )
+            db.add(assistant_msg)
+            session.message_count += 2  # type: ignore[operator]
+            await db.flush()
+
+            session_memory.add_message(
+                session.id, "assistant", ai_content,
+                response_form=response_form,
+                attachments=attachments,
+            )
+
+            serialized = _serialize_message(assistant_msg)
+            await _broadcast_message_stream(_hub, user.id, serialized, session.id)
+            await db.commit()
+    except Exception as exc:
+        logger.error("WS chat handler error: %s", exc)
+        try:
+            await client.send("chat", "error", {"detail": str(exc)})
+        except Exception:
+            pass
+
+
+def register_ws_handlers() -> None:
+    """Called once at app startup to wire up chat WS channel handler."""
+    from api.websocket_hub import hub
+    hub.on("chat", _ws_chat_handler)
 
 
 @router.get("/sessions")

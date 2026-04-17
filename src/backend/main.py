@@ -256,6 +256,13 @@ def _register_health(app: FastAPI) -> None:
             "ws_clients": hub.client_count,
             "esp32_connected": esp32_connected,
             "serial_enabled": config.serial_enabled,
+            # Configured primary provider. Surfaced here so any client that
+            # doesn't subscribe to the context-snapshot WS stream (scripts,
+            # probes, future monitoring UIs) can see which provider the next
+            # chat turn will try first. AIRouter reads this same value
+            # dynamically, so it's always the truth.
+            "ai_active": config.ai_primary_provider,
+            "ai_fallback": config.ai_fallback_provider,
         }
 
 

@@ -419,6 +419,16 @@ def _apply_runtime_side_effect(key: str, value: Any) -> None:
     """
     if key == "log_level":
         logging.getLogger().setLevel(value)
+    elif key == "ai_primary_provider":
+        # Sync the ContextEngine snapshot immediately so the StatusBar flips
+        # from the previous provider on the very next WS broadcast, rather
+        # than waiting for either the next chat turn or the next context
+        # tick (both can be >500 ms away).
+        try:
+            from core.context_engine import context_engine
+            context_engine.set_ai_provider(value)
+        except Exception as exc:
+            logger.debug("context_engine.set_ai_provider failed: %s", exc)
     elif key == "system_hostname":
         # Keep the running logger formatter in sync so subsequent records carry
         # the new hostname without a restart.

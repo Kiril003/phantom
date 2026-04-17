@@ -309,6 +309,15 @@ class ContextEngine:
             cpu, ram, disk = 0.0, 0.0, 0.0
 
         uptime = time.monotonic() - self._start_time
+        # Reconcile the cached provider with the live config each tick so a
+        # Settings → AI primary change propagates to the snapshot (and thus
+        # the StatusBar) within one 500 ms broadcast cycle. AIRouter still
+        # calls set_ai_provider() after a response, which briefly surfaces
+        # the actual responder (useful when primary failed and fallback
+        # answered); the next tick converges back to the configured primary.
+        configured = config.ai_primary_provider
+        if self._ai_provider != configured:
+            self._ai_provider = configured
         self._snapshot["system"].update({
             "state": self._system_state,
             "uptime_s": int(uptime),

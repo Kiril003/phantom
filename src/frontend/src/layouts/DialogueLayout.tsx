@@ -83,11 +83,20 @@ export default function DialogueLayout() {
             <div className="w-full flex flex-col gap-1.5 glass-panel px-3 py-2.5"
               style={{ borderRadius: 14 }}
             >
-              <ContextLine label="Breathing" value={context.body.breathing_bpm != null ? `${context.body.breathing_bpm} bpm` : '—'} />
+              <ContextLine
+                label="Breathing"
+                value={context.body.breathing_bpm != null ? `${context.body.breathing_bpm} bpm` : '—'}
+                muted={context.body.breathing_bpm == null}
+              />
               <ContextLine
                 label="Stress"
-                value={`${Math.round((context.body.stress_level ?? 0) * 100)}%`}
+                value={
+                  context.body.stress_level != null
+                    ? `${Math.round(context.body.stress_level * 100)}%`
+                    : '—'
+                }
                 alert={(context.body.stress_level ?? 0) > 0.7}
+                muted={context.body.stress_level == null}
               />
               {context.where.place_name && (
                 <ContextLine label="Location" value={context.where.place_name} />
@@ -133,12 +142,19 @@ function ContextLine({
   value,
   alert = false,
   capitalize = false,
+  muted = false,
 }: {
   label: string;
   value: string;
   alert?: boolean;
   capitalize?: boolean;
+  muted?: boolean;
 }) {
+  const valueColor = alert
+    ? 'var(--signal-alert)'
+    : muted
+      ? 'var(--ink-muted)'
+      : 'var(--ink-primary)';
   return (
     <div className="flex items-center justify-between">
       <span
@@ -157,7 +173,7 @@ function ContextLine({
         style={{
           fontFamily: 'var(--font-mono)',
           fontSize: 'var(--fs-xs)',
-          color: alert ? 'var(--signal-alert)' : 'var(--ink-primary)',
+          color: valueColor,
           textTransform: capitalize ? 'capitalize' : 'none',
         }}
       >

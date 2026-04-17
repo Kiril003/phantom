@@ -101,7 +101,7 @@ export function TerminalResponse({ data }: TerminalResponseProps) {
           <motion.div
             className="flex items-center gap-1 px-1.5 py-0.5 rounded"
             style={{
-              background: 'rgba(255,107,107,.12)',
+              background: 'color-mix(in srgb, var(--signal-alert) 14%, transparent)',
               color: 'var(--signal-alert)',
               fontSize: 'var(--fs-micro)',
             }}

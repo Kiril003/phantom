@@ -12,10 +12,11 @@
 
 html,
 body {
-  width: 1024px;
-  height: 600px;
+  width: 100%;
+  height: 100%;
+  min-height: 100vh;
   overflow: hidden;
-  background: var(--surface-base);
+  background: var(--surface-void);
   color: var(--ink-primary);
   font-family: var(--font-display);
   font-size: var(--fs-sm);
@@ -25,13 +26,13 @@ body {
 }
 
 #root {
-  width: 1024px;
-  height: 600px;
+  width: 100%;
+  height: 100vh;
   overflow: hidden;
   position: relative;
   display: flex;
   flex-direction: column;
-  background: var(--surface-base);
+  background: var(--surface-void);
 }
 
 /* Scrollbars on internal panels */
@@ -61,15 +62,24 @@ textarea {
   min-height: var(--touch-min);
 }
 
+/* Consistent hover/press transitions across interactive surfaces */
+button,
+[role='button'],
+a {
+  transition: background-color 200ms ease, color 200ms ease,
+    box-shadow 200ms ease, transform 120ms ease, border-color 200ms ease,
+    opacity 200ms ease;
+}
+
 /* ─── Glassmorphism utilities ─────────────────────────────────────────── */
 @layer components {
   .glass-panel {
     background: var(--glass-panel);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(16px);
+    -webkit-backdrop-filter: blur(16px);
     border: 1px solid var(--glass-border);
     box-shadow:
-      0 4px 20px -2px rgba(0, 0, 0, 0.2),
+      0 10px 32px -8px rgba(0, 0, 0, 0.35),
       inset 0 1px 0 var(--glass-highlight);
   }
 
@@ -79,7 +89,8 @@ textarea {
     -webkit-backdrop-filter: blur(24px);
     border: 1px solid var(--glass-border);
     box-shadow:
-      0 4px 20px -2px rgba(0, 0, 0, 0.3),
+      0 14px 36px -10px rgba(0, 0, 0, 0.45),
+      0 2px 6px rgba(0, 0, 0, 0.2),
       inset 0 1px 0 var(--glass-highlight);
   }
 
@@ -89,14 +100,15 @@ textarea {
     -webkit-backdrop-filter: blur(32px);
     border: 1px solid var(--glass-border-hover);
     box-shadow:
-      0 20px 50px -10px rgba(0, 0, 0, 0.5),
+      0 24px 60px -12px rgba(0, 0, 0, 0.6),
+      0 2px 10px rgba(0, 0, 0, 0.25),
       inset 0 1px 0 var(--glass-highlight);
   }
 
   .glass-subtle {
     background: var(--glass-subtle);
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
     border: 1px solid var(--glass-border);
   }
 

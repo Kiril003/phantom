@@ -126,14 +126,21 @@ class OllamaProvider(AIProvider):
                 yield delta
 
     async def health_check(self) -> bool:
+        """
+        Cheap reachability probe: hit Ollama's /api/tags and confirm that the
+        configured model is in the installed list. Calling chat() for a ping
+        would cold-start the model (~30s on Radxa 3B) and that's unreasonably
+        expensive for a keep-alive — this is what we surface to the Settings
+        "Test connection" button.
+        """
         try:
-            client = self._client()
-            response = await client.chat(
-                model=config.ai_ollama_model,
-                messages=[{"role": "user", "content": "ping"}],
-                options={"num_predict": 4},
-            )
-            return bool(response)
+            import httpx
+            host = config.ai_ollama_host.rstrip("/")
+            async with httpx.AsyncClient(timeout=3.0) as client:
+                res = await client.get(f"{host}/api/tags")
+                res.raise_for_status()
+                names = [m.get("name") for m in (res.json().get("models") or [])]
+            return config.ai_ollama_model in names
         except Exception as exc:
             logger.debug("Ollama health check failed: %s", exc)
             return False

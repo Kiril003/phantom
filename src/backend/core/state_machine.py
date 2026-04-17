@@ -48,7 +48,10 @@ def _breathing_calm(snap: dict) -> bool:
     bpm = body.get("breathing_bpm")
     if bpm is None:
         return False
-    return 12 <= bpm <= 20 and body.get("stress_level", 1.0) < 0.4
+    stress = body.get("stress_level")
+    if stress is None:
+        return False
+    return 12 <= bpm <= 20 and stress < 0.4
 
 
 def _other_detected(snap: dict) -> bool:

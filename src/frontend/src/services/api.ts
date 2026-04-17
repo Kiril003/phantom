@@ -257,6 +257,37 @@ export const linuxApi = {
     }>('GET', '/linux/resources'),
 };
 
+/* ─── AI ──────────────────────────────────────────────────────────────────── */
+
+export interface OllamaModelInfo {
+  name: string;
+  size?: number | null;
+  parameter_size?: string | null;
+  quantization?: string | null;
+  family?: string | null;
+}
+
+export interface AIModelsResponse {
+  ok: boolean;
+  host: string;
+  models: OllamaModelInfo[];
+  error?: string | null;
+}
+
+export interface AITestResponse {
+  ok: boolean;
+  provider: string;
+  latency_ms: number;
+  reply_preview?: string | null;
+  error?: string | null;
+}
+
+export const aiApi = {
+  listModels: () => request<AIModelsResponse>('GET', '/ai/models'),
+  test: (provider: 'ollama' | 'gemini') =>
+    request<AITestResponse>('POST', '/ai/test', { provider }),
+};
+
 /* ─── Tools ───────────────────────────────────────────────────────────────── */
 
 export const toolsApi = {

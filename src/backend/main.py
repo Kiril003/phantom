@@ -24,6 +24,7 @@ from api.routes_map import router as map_router
 from api.routes_linux import router as linux_router
 from api.routes_tools import router as tools_router
 from api.routes_voice import router as voice_router
+from api.routes_ai import router as ai_router
 
 logging.basicConfig(
     level=getattr(logging, config.log_level),
@@ -128,8 +129,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Register chat WebSocket handlers
     register_chat_ws_handlers()
 
-    # Start serial bridge (non-blocking, will retry on error)
-    await _start_serial_bridge()
+    # Start serial bridge (non-blocking, will retry on error).
+    # Skipped on dev machines via PHANTOM_SERIAL_ENABLED=false.
+    if config.serial_enabled:
+        await _start_serial_bridge()
+    else:
+        logger.info("Serial bridge disabled (PHANTOM_SERIAL_ENABLED=false)")
 
     # Start tick loop for time-driven context updates
     loop_task = asyncio.create_task(_context_loop(), name="context_loop")
@@ -142,8 +147,9 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except asyncio.CancelledError:
         pass
 
-    from sensors.serial_bridge import serial_bridge
-    await serial_bridge.stop()
+    if config.serial_enabled:
+        from sensors.serial_bridge import serial_bridge
+        await serial_bridge.stop()
     await close_db()
     logger.info("PHANTOM OS stopped")
 
@@ -178,6 +184,7 @@ def create_app() -> FastAPI:
     app.include_router(linux_router, prefix=prefix)
     app.include_router(tools_router, prefix=prefix)
     app.include_router(voice_router, prefix=prefix)
+    app.include_router(ai_router, prefix=prefix)
 
     _register_ws(app)
     _register_health(app)
@@ -212,12 +219,17 @@ def _register_ws(app: FastAPI) -> None:
 def _register_health(app: FastAPI) -> None:
     @app.get("/health")
     async def _health() -> dict:
-        from sensors.serial_bridge import serial_bridge
+        if config.serial_enabled:
+            from sensors.serial_bridge import serial_bridge
+            esp32_connected = serial_bridge.is_connected
+        else:
+            esp32_connected = False
         return {
             "status": "ok",
             "version": "0.1.0",
             "ws_clients": hub.client_count,
-            "esp32_connected": serial_bridge.is_connected,
+            "esp32_connected": esp32_connected,
+            "serial_enabled": config.serial_enabled,
         }
 
 

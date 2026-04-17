@@ -393,19 +393,7 @@ export function ChatWindow({
         </div>
 
         {error && (
-          <div
-            className="mx-6 mb-3 px-3 py-2 rounded-xl flex items-center gap-2"
-            style={{
-              background: 'color-mix(in srgb, var(--signal-alert) 10%, transparent)',
-              border: '1px solid color-mix(in srgb, var(--signal-alert) 40%, transparent)',
-              color: 'var(--signal-alert)',
-              fontFamily: 'var(--font-display)',
-              fontSize: 'var(--fs-xs)',
-            }}
-          >
-            <Sparkles size={12} strokeWidth={1.75} />
-            <span>{error}</span>
-          </div>
+          <ChatErrorBanner message={error} />
         )}
 
         {/* Input bar — glass card rounded-full */}
@@ -496,6 +484,41 @@ export function ChatWindow({
           </div>
         </div>
       </div>
+    </div>
+  );
+}
+
+function ChatErrorBanner({ message }: { message: string }) {
+  const isProviderError = message.includes('AI провайдер недоступний');
+  return (
+    <div
+      className="mx-6 mb-3 px-3 py-2 rounded-xl flex items-center gap-2"
+      style={{
+        background: 'color-mix(in srgb, var(--signal-alert) 10%, transparent)',
+        border: '1px solid color-mix(in srgb, var(--signal-alert) 40%, transparent)',
+        color: 'var(--signal-alert)',
+        fontFamily: 'var(--font-display)',
+        fontSize: 'var(--fs-xs)',
+      }}
+    >
+      <Sparkles size={12} strokeWidth={1.75} />
+      <span className="flex-1">{message}</span>
+      {isProviderError && (
+        <a
+          href="/settings"
+          className="underline underline-offset-2"
+          style={{
+            color: 'var(--signal-alert)',
+            minHeight: 44,
+            padding: '10px 8px',
+            display: 'inline-flex',
+            alignItems: 'center',
+            fontWeight: 500,
+          }}
+        >
+          Open Settings
+        </a>
+      )}
     </div>
   );
 }

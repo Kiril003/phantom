@@ -360,7 +360,7 @@ describe('TacticalMap', () => {
     expect(btn.disabled).toBe(true);
   });
 
-  it('drop POI button calls savePOI', async () => {
+  it('drop POI button calls savePOI (after confirm)', async () => {
     const saveSpy = vi.fn(async () => null);
     useMapStore.setState({ savePOI: saveSpy });
     const { TacticalMap } = await import('../components/map/TacticalMap');
@@ -368,6 +368,11 @@ describe('TacticalMap', () => {
     await waitFor(() => screen.getByLabelText('Drop POI'));
     act(() => {
       fireEvent.click(screen.getByLabelText('Drop POI'));
+    });
+    // Confirm dialog appears with a dedicated "Confirm POI" button.
+    await waitFor(() => screen.getByLabelText('Confirm POI'));
+    act(() => {
+      fireEvent.click(screen.getByLabelText('Confirm POI'));
     });
     await waitFor(() => expect(saveSpy).toHaveBeenCalled());
     const call = saveSpy.mock.calls[0] as unknown as [{

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import maplibregl, { Map as MapLibreMap } from 'maplibre-gl';
 import {
   Search,
@@ -63,7 +63,6 @@ export function TacticalMap({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const [ready, setReady] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
 
   const layers = useMapStore((s) => s.layers);
   const toggleLayer = useMapStore((s) => s.toggleLayer);
@@ -77,6 +76,38 @@ export function TacticalMap({
   const loadTrack = useMapStore((s) => s.loadTrack);
   const savePOI = useMapStore((s) => s.savePOI);
   const loading = useMapStore((s) => s.loading);
+  const searchQuery = useMapStore((s) => s.searchQuery);
+  const setSearchQuery = useMapStore((s) => s.setSearchQuery);
+  const wardrivingRecords = useMapStore((s) => s.wardrivingRecords);
+  const pois = useMapStore((s) => s.pois);
+  const toast = useMapStore((s) => s.toast);
+  const setToast = useMapStore((s) => s.setToast);
+
+  useEffect(() => {
+    if (!toast) return;
+    const t = setTimeout(() => setToast(null), 2400);
+    return () => clearTimeout(t);
+  }, [toast, setToast]);
+
+  const searchResults = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return null;
+    const nets = wardrivingRecords
+      .filter(
+        (r) =>
+          (r.ssid ?? '').toLowerCase().includes(q) ||
+          r.mac.toLowerCase().includes(q)
+      )
+      .slice(0, 8);
+    const intel = pois
+      .filter(
+        (p) =>
+          p.name.toLowerCase().includes(q) ||
+          (p.notes ?? '').toLowerCase().includes(q)
+      )
+      .slice(0, 6);
+    return { nets, intel, total: nets.length + intel.length };
+  }, [searchQuery, wardrivingRecords, pois]);
 
   const resolvedInitialCenter: [number, number] =
     initialCenter ??
@@ -109,11 +140,79 @@ export function TacticalMap({
     };
     const onClick = () => select(null);
 
+    /* Long-press drop POI.
+     *  - Requires pointer to stay within MOVE_THRESHOLD px for LONG_PRESS_MS.
+     *  - ANY map pan (dragstart / zoomstart / rotatestart) cancels the timer.
+     *  - Movement of more than MOVE_THRESHOLD px ALSO cancels.
+     *  This prevents the confirm dialog from firing when user is panning.
+     */
+    const LONG_PRESS_MS = 550;
+    const MOVE_THRESHOLD = 5;
+
+    let longPressTimer: ReturnType<typeof setTimeout> | null = null;
+    let longPressLngLat: { lng: number; lat: number } | null = null;
+    let longPressOriginPx: { x: number; y: number } | null = null;
+    const clearLongPress = () => {
+      if (longPressTimer) {
+        clearTimeout(longPressTimer);
+        longPressTimer = null;
+      }
+      longPressLngLat = null;
+      longPressOriginPx = null;
+    };
+    const onMouseDown = (e: {
+      lngLat: { lng: number; lat: number };
+      point?: { x: number; y: number };
+      originalEvent?: { button?: number };
+    }) => {
+      // Ignore right/middle click and any existing timer.
+      if (e.originalEvent?.button && e.originalEvent.button !== 0) return;
+      clearLongPress();
+      longPressLngLat = { lng: e.lngLat.lng, lat: e.lngLat.lat };
+      longPressOriginPx = e.point ? { x: e.point.x, y: e.point.y } : null;
+      longPressTimer = setTimeout(() => {
+        if (!longPressLngLat) return;
+        setPendingPoi(longPressLngLat);
+        longPressTimer = null;
+      }, LONG_PRESS_MS);
+    };
+    const onMouseMove = (e: { point?: { x: number; y: number } }) => {
+      if (!longPressTimer || !longPressOriginPx || !e.point) return;
+      const dx = e.point.x - longPressOriginPx.x;
+      const dy = e.point.y - longPressOriginPx.y;
+      if (dx * dx + dy * dy > MOVE_THRESHOLD * MOVE_THRESHOLD) {
+        clearLongPress();
+      }
+    };
+    const onMouseUp = () => clearLongPress();
+
     map.on('load', onLoad);
     map.on('moveend', onMove);
     map.on('click', onClick);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    map.on('mousedown' as any, onMouseDown);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    map.on('mousemove' as any, onMouseMove);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    map.on('mouseup' as any, onMouseUp);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    map.on('touchstart' as any, onMouseDown);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    map.on('touchmove' as any, onMouseMove);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    map.on('touchend' as any, onMouseUp);
+    // Any real map gesture cancels the pending long-press immediately.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    map.on('dragstart' as any, clearLongPress);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    map.on('zoomstart' as any, clearLongPress);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    map.on('rotatestart' as any, clearLongPress);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    map.on('pitchstart' as any, clearLongPress);
 
     return () => {
+      clearLongPress();
       map.off('load', onLoad);
       map.off('moveend', onMove);
       map.off('click', onClick);
@@ -123,6 +222,9 @@ export function TacticalMap({
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  const [pendingPoi, setPendingPoi] = useState<{ lng: number; lat: number } | null>(null);
+  const [pendingName, setPendingName] = useState('');
 
   useEffect(() => {
     if (!ready || !mapRef.current) return;
@@ -165,16 +267,28 @@ export function TacticalMap({
     const map = mapRef.current;
     if (!map) return;
     const c = map.getCenter();
-    await savePOI({
-      lat: c.lat,
-      lon: c.lng,
-      name: `POI ${new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })}`,
+    setPendingPoi({ lng: c.lng, lat: c.lat });
+  }, []);
+
+  const confirmPendingPoi = useCallback(async () => {
+    if (!pendingPoi) return;
+    const name =
+      pendingName.trim() ||
+      `POI ${new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })}`;
+    const saved = await savePOI({
+      lat: pendingPoi.lat,
+      lon: pendingPoi.lng,
+      name,
       category: 'saved',
       notes: '',
       icon: '📍',
       is_secret: false,
     });
-  }, [savePOI]);
+    setPendingPoi(null);
+    setPendingName('');
+    if (saved) setToast(`POI "${saved.name}" dropped`);
+    else setToast('POI save failed');
+  }, [pendingPoi, pendingName, savePOI, setToast]);
 
   const handleZoomIn = useCallback(() => {
     mapRef.current?.zoomIn();
@@ -285,7 +399,264 @@ export function TacticalMap({
             <span>AI</span>
           </span>
         </div>
+        {searchResults && (
+          <div
+            className="glass-elevated mt-2"
+            style={{
+              borderRadius: 14,
+              padding: 8,
+              maxHeight: 260,
+              overflowY: 'auto',
+              boxShadow:
+                '0 16px 36px -10px rgba(0,0,0,0.55), 0 0 0 1px var(--glass-border)',
+            }}
+          >
+            {searchResults.total === 0 && (
+              <div
+                className="px-3 py-3 text-center italic"
+                style={{
+                  fontFamily: 'var(--font-serif)',
+                  fontSize: 'var(--fs-xs)',
+                  color: 'var(--ink-muted)',
+                }}
+              >
+                No networks or intel match "{searchQuery}".
+              </div>
+            )}
+            {searchResults.intel.length > 0 && (
+              <>
+                <div
+                  className="uppercase px-3 py-1"
+                  style={{
+                    fontFamily: 'var(--font-display)',
+                    fontSize: 'var(--fs-micro)',
+                    letterSpacing: 'var(--tracking-widest)',
+                    color: 'var(--ink-muted)',
+                  }}
+                >
+                  Intel · {searchResults.intel.length}
+                </div>
+                {searchResults.intel.map((poi) => (
+                  <button
+                    key={poi.id}
+                    type="button"
+                    onClick={() => {
+                      mapRef.current?.flyTo({ center: [poi.lon, poi.lat], zoom: 17 });
+                      setSearchQuery('');
+                    }}
+                    className="w-full flex items-center gap-2 px-3"
+                    style={{
+                      minHeight: 44,
+                      borderRadius: 10,
+                      color: 'var(--ink-primary)',
+                      fontFamily: 'var(--font-display)',
+                      fontSize: 'var(--fs-xs)',
+                      background: 'transparent',
+                      border: 'none',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <MapPin size={12} strokeWidth={1.75} style={{ color: 'var(--accent)' }} />
+                    <span className="flex-1 truncate">{poi.name}</span>
+                    <span
+                      className="tabular-nums"
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 'var(--fs-micro)',
+                        color: 'var(--ink-muted)',
+                      }}
+                    >
+                      {poi.lat.toFixed(3)}, {poi.lon.toFixed(3)}
+                    </span>
+                  </button>
+                ))}
+              </>
+            )}
+            {searchResults.nets.length > 0 && (
+              <>
+                <div
+                  className="uppercase px-3 py-1 mt-1"
+                  style={{
+                    fontFamily: 'var(--font-display)',
+                    fontSize: 'var(--fs-micro)',
+                    letterSpacing: 'var(--tracking-widest)',
+                    color: 'var(--ink-muted)',
+                  }}
+                >
+                  Networks · {searchResults.nets.length}
+                </div>
+                {searchResults.nets.map((rec) => (
+                  <button
+                    key={`${rec.mac}-${rec.first_seen}`}
+                    type="button"
+                    onClick={() => {
+                      mapRef.current?.flyTo({ center: [rec.lon, rec.lat], zoom: 17 });
+                      setSearchQuery('');
+                    }}
+                    className="w-full flex items-center gap-2 px-3"
+                    style={{
+                      minHeight: 44,
+                      borderRadius: 10,
+                      color: 'var(--ink-primary)',
+                      fontFamily: 'var(--font-display)',
+                      fontSize: 'var(--fs-xs)',
+                      background: 'transparent',
+                      border: 'none',
+                      textAlign: 'left',
+                    }}
+                  >
+                    <Wifi size={12} strokeWidth={1.75} style={{ color: 'var(--accent)' }} />
+                    <span className="flex-1 truncate">
+                      {rec.ssid?.trim() || <em style={{ color: 'var(--ink-muted)' }}>(hidden)</em>}
+                    </span>
+                    <span
+                      className="tabular-nums"
+                      style={{
+                        fontFamily: 'var(--font-mono)',
+                        fontSize: 'var(--fs-micro)',
+                        color: 'var(--ink-muted)',
+                      }}
+                    >
+                      {rec.rssi ?? '—'} dBm
+                    </span>
+                  </button>
+                ))}
+              </>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* POI confirm dialog */}
+      {pendingPoi && (
+        <div
+          className="absolute inset-0 z-30 flex items-center justify-center pointer-events-auto"
+          style={{ background: 'rgba(0,0,0,0.45)' }}
+          onClick={() => {
+            setPendingPoi(null);
+            setPendingName('');
+          }}
+        >
+          <div
+            className="glass-elevated"
+            style={{
+              width: 340,
+              borderRadius: 18,
+              padding: 20,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 12,
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            <div
+              className="uppercase"
+              style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: 'var(--fs-micro)',
+                letterSpacing: 'var(--tracking-widest)',
+                color: 'var(--ink-muted)',
+              }}
+            >
+              Drop POI
+            </div>
+            <div
+              className="tabular-nums"
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 'var(--fs-xs)',
+                color: 'var(--ink-secondary)',
+              }}
+            >
+              {pendingPoi.lat.toFixed(5)}, {pendingPoi.lng.toFixed(5)}
+            </div>
+            <input
+              autoFocus
+              value={pendingName}
+              onChange={(e) => setPendingName(e.target.value)}
+              placeholder="POI name (optional)"
+              aria-label="POI name"
+              className="bg-transparent outline-none"
+              style={{
+                minHeight: 44,
+                padding: '0 12px',
+                borderRadius: 10,
+                color: 'var(--ink-primary)',
+                background: 'var(--surface-deep)',
+                border: '1px solid var(--glass-border)',
+                fontFamily: 'var(--font-display)',
+                fontSize: 'var(--fs-sm)',
+              }}
+            />
+            <div className="flex items-center gap-2 justify-end">
+              <button
+                type="button"
+                className="active:scale-95"
+                onClick={() => {
+                  setPendingPoi(null);
+                  setPendingName('');
+                }}
+                style={{
+                  minHeight: 44,
+                  padding: '0 14px',
+                  borderRadius: 9999,
+                  background: 'transparent',
+                  color: 'var(--ink-secondary)',
+                  border: '1px solid var(--glass-border)',
+                  fontFamily: 'var(--font-display)',
+                  fontSize: 'var(--fs-xs)',
+                  letterSpacing: 'var(--tracking-wide)',
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="active:scale-95"
+                aria-label="Confirm POI"
+                onClick={confirmPendingPoi}
+                style={{
+                  minHeight: 44,
+                  padding: '0 16px',
+                  borderRadius: 9999,
+                  background: 'var(--accent)',
+                  color: 'var(--ink-inverse)',
+                  border: '1px solid var(--accent)',
+                  fontFamily: 'var(--font-display)',
+                  fontSize: 'var(--fs-xs)',
+                  letterSpacing: 'var(--tracking-wider)',
+                  textTransform: 'uppercase',
+                  boxShadow: '0 0 20px var(--accent-glow)',
+                }}
+              >
+                Drop POI
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Toast */}
+      {toast && (
+        <div
+          className="absolute top-[70px] left-1/2 -translate-x-1/2 z-30 pointer-events-none"
+          style={{
+            padding: '8px 16px',
+            borderRadius: 9999,
+            background: 'var(--glass-elevated)',
+            border: '1px solid color-mix(in srgb, var(--accent) 34%, transparent)',
+            color: 'var(--ink-primary)',
+            fontFamily: 'var(--font-display)',
+            fontSize: 'var(--fs-xs)',
+            letterSpacing: 'var(--tracking-wide)',
+            boxShadow: '0 0 24px var(--accent-glow)',
+            backdropFilter: 'blur(16px)',
+            WebkitBackdropFilter: 'blur(16px)',
+          }}
+        >
+          {toast}
+        </div>
+      )}
 
       {/* Coordinate HUD — bottom left */}
       <div className="absolute bottom-3 left-[76px] z-20 pointer-events-none">

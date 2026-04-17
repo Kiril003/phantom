@@ -31,7 +31,7 @@ const STATE_LABELS: Record<SystemState, string> = {
  * Hidden in GHOST / DREAM per VISUAL_SYSTEM.md (stealth / offline modes).
  */
 export function StatusBar() {
-  const { state, wsConnected, context } = useSystemStore();
+  const { state, wsConnected, context, esp32 } = useSystemStore();
   const { user } = useAuthStore();
   const [now, setNow] = useState(() => new Date());
 
@@ -53,7 +53,11 @@ export function StatusBar() {
   const cpu = context?.system.cpu_percent;
   const ram = context?.system.ram_percent;
   const disk = context?.system.disk_percent;
-  const provider = context?.system.ai_provider ?? 'gemini';
+  const provider = context?.system.ai_provider ?? '—';
+  /* ESP32 tri-state comes from /health polling; fallback derived from sensor data. */
+  const esp32DerivedOnline = bpm != null || tempC != null;
+  const esp32Effective: 'disabled' | 'offline' | 'online' | 'unknown' =
+    esp32 === 'unknown' && esp32DerivedOnline ? 'online' : esp32;
 
   return (
     <div
@@ -84,35 +88,31 @@ export function StatusBar() {
       )}
 
       {/* Biosignal */}
-      {bpm != null && (
-        <>
-          <Segment
-            icon={<Activity size={12} strokeWidth={2} />}
-            value={`${bpm}`}
-            unit="bpm"
-          />
-          <Divider />
-        </>
-      )}
+      <Segment
+        icon={<Activity size={12} strokeWidth={2} />}
+        value={bpm != null ? `${bpm}` : '—'}
+        unit="bpm"
+      />
+      <Divider />
 
       {/* Environment */}
-      {tempC != null && (
-        <>
-          <Segment
-            icon={<Thermometer size={12} strokeWidth={2} />}
-            value={tempC.toFixed(1)}
-            unit="°C"
-          />
-          <Divider />
-        </>
-      )}
+      <Segment
+        icon={<Thermometer size={12} strokeWidth={2} />}
+        value={tempC != null ? tempC.toFixed(1) : '—'}
+        unit="°C"
+      />
+      <Divider />
+
+      {/* ESP32 tri-state pill: disabled (muted) / offline (amber) / online (green) */}
+      {esp32Effective !== 'unknown' && <Esp32Pill status={esp32Effective} />}
+      {esp32Effective !== 'unknown' && <Divider />}
 
       <div className="flex-1" />
 
-      {/* Resource load */}
-      <Resource icon={<Cpu size={12} strokeWidth={2} />} label="CPU" pct={cpu ?? 0} />
-      <Resource icon={<MemoryStick size={12} strokeWidth={2} />} label="RAM" pct={ram ?? 0} />
-      <Resource icon={<HardDrive size={12} strokeWidth={2} />} label="Disk" pct={disk ?? 0} />
+      {/* Resource load (CPU/RAM/Disk come from Radxa psutil — these are live locally even without ESP32) */}
+      <Resource icon={<Cpu size={12} strokeWidth={2} />} label="CPU" pct={cpu} />
+      <Resource icon={<MemoryStick size={12} strokeWidth={2} />} label="RAM" pct={ram} />
+      <Resource icon={<HardDrive size={12} strokeWidth={2} />} label="Disk" pct={disk} />
 
       <Divider />
 
@@ -156,6 +156,52 @@ export function StatusBar() {
         {timeStr}
       </span>
     </div>
+  );
+}
+
+function Esp32Pill({ status }: { status: 'disabled' | 'offline' | 'online' }) {
+  const color =
+    status === 'online'
+      ? 'var(--signal-ok)'
+      : status === 'offline'
+        ? 'var(--signal-warn)'
+        : 'var(--ink-muted)';
+  const label =
+    status === 'online' ? 'ESP32 online' : status === 'offline' ? 'ESP32 offline' : 'ESP32 disabled';
+  const title =
+    status === 'online'
+      ? 'Serial bridge connected; sensor batches incoming'
+      : status === 'offline'
+        ? 'Serial bridge enabled but no ESP32 device connected'
+        : 'Serial bridge disabled (dev mode or no hardware)';
+  return (
+    <span
+      className="uppercase px-2 rounded-full inline-flex items-center gap-1.5"
+      style={{
+        height: 20,
+        lineHeight: '18px',
+        background: `color-mix(in srgb, ${color} 14%, transparent)`,
+        border: `1px solid color-mix(in srgb, ${color} 40%, transparent)`,
+        color,
+        fontFamily: 'var(--font-display)',
+        fontSize: 'var(--fs-micro)',
+        letterSpacing: 'var(--tracking-widest)',
+      }}
+      title={title}
+    >
+      <span
+        aria-hidden
+        className="rounded-full"
+        style={{
+          width: 5,
+          height: 5,
+          background: color,
+          boxShadow: status === 'online' ? `0 0 6px ${color}` : 'none',
+          display: 'inline-block',
+        }}
+      />
+      {label}
+    </span>
   );
 }
 
@@ -279,12 +325,25 @@ function Segment({ icon, label, value, unit, sub, capitalize }: SegmentProps) {
   );
 }
 
-function Resource({ icon, label, pct }: { icon: React.ReactNode; label: string; pct: number }) {
-  const color =
-    pct > 85 ? 'var(--signal-alert)' :
-    pct > 60 ? 'var(--signal-warn)' :
-    'var(--ink-primary)';
-  const width = Math.max(3, Math.min(100, pct));
+function Resource({
+  icon,
+  label,
+  pct,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  pct: number | undefined;
+}) {
+  const hasValue = typeof pct === 'number' && Number.isFinite(pct);
+  const v = hasValue ? (pct as number) : 0;
+  const color = !hasValue
+    ? 'var(--ink-muted)'
+    : v > 85
+      ? 'var(--signal-alert)'
+      : v > 60
+        ? 'var(--signal-warn)'
+        : 'var(--ink-primary)';
+  const width = Math.max(3, Math.min(100, v));
   return (
     <div className="flex items-center gap-1.5">
       <span style={{ color: 'var(--ink-muted)' }}>{icon}</span>
@@ -312,7 +371,7 @@ function Resource({ icon, label, pct }: { icon: React.ReactNode; label: string; 
         <span
           className="block absolute left-0 top-0 bottom-0"
           style={{
-            width: `${width}%`,
+            width: hasValue ? `${width}%` : '0%',
             background: color,
             borderRadius: 9999,
           }}
@@ -328,7 +387,7 @@ function Resource({ icon, label, pct }: { icon: React.ReactNode; label: string; 
           textAlign: 'right',
         }}
       >
-        {Math.round(pct)}
+        {hasValue ? Math.round(v) : '—'}
       </span>
     </div>
   );

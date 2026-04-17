@@ -6,6 +6,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -37,12 +38,16 @@ class PhantomConfig(BaseSettings):
     memory_max_facts_per_user: int = 10000
 
     # ── AI ────────────────────────────────────────────────────────────────────
-    ai_primary_provider: Literal["gemini", "ollama"] = "gemini"
+    # ai_primary_provider accepts either AI_PRIMARY_PROVIDER or the shorter AI_PROVIDER.
+    ai_primary_provider: Literal["gemini", "ollama"] = Field(
+        default="gemini",
+        validation_alias=AliasChoices("AI_PRIMARY_PROVIDER", "AI_PROVIDER"),
+    )
     ai_fallback_provider: Literal["gemini", "ollama", "none"] = "ollama"
-    ai_timeout_s: float = 5.0
+    ai_timeout_s: float = 120.0
     ai_gemini_model: str = "gemini-2.0-flash"
     ai_gemini_api_key: str = ""
-    ai_ollama_model: str = "gemma4:e4b"
+    ai_ollama_model: str = "llama3.2:3b"
     ai_ollama_host: str = "http://localhost:11434"
     ai_ollama_num_ctx: int = 8192
     ai_temperature: float = 0.7
@@ -87,6 +92,12 @@ class PhantomConfig(BaseSettings):
     sensor_batch_interval_ms: int = 500
     sensor_serial_port: str = "/dev/ttyUSB0"
     sensor_serial_baud: int = 921600
+    # Master switch for the ESP32 serial bridge. Disable on dev machines where
+    # no ESP32 is attached to avoid noisy reconnect logs.
+    serial_enabled: bool = Field(
+        default=True,
+        validation_alias=AliasChoices("PHANTOM_SERIAL_ENABLED", "SERIAL_ENABLED"),
+    )
     sensor_wifi_scan_interval_s: int = 10
     sensor_wifi_scan_enabled: bool = True
     wardriving_cell_precision: int = 4  # decimal digits ≈ 11 m cells

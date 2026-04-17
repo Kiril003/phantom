@@ -89,9 +89,10 @@ def build_system_prompt(
         parts.append("LOCATION: unknown (no GPS fix)")
 
     bpm = body.get("breathing_bpm")
-    stress = body.get("stress_level", 0.3)
+    stress = body.get("stress_level")
     if bpm is not None:
-        parts.append(f"BODY: breathing={bpm}bpm, stress={stress:.1f}, state={body.get('breathing_state', '?')}")
+        stress_txt = f"{stress:.1f}" if stress is not None else "unknown"
+        parts.append(f"BODY: breathing={bpm}bpm, stress={stress_txt}, state={body.get('breathing_state', '?')}")
 
     temp = env.get("temp_c")
     if temp is not None:

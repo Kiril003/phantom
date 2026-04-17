@@ -51,7 +51,9 @@ def calculate_tone(snapshot: dict[str, Any], behavioral_model: dict[str, Any]) -
 
     # ── Biosignal axis ─────────────────────────────────────────────────────────
     breathing_state = body.get("breathing_state", "normal")
-    stress = body.get("stress_level", 0.3)
+    stress_raw = body.get("stress_level")
+    # Unknown stress (ESP32 offline) → neutral default, don't synthesise calm/alert.
+    stress = 0.3 if stress_raw is None else stress_raw
 
     if breathing_state == "sleep":
         bio = "whisper"

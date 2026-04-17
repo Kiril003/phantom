@@ -32,6 +32,11 @@ interface MapStoreState {
   setCenter: (center: [number, number]) => void;
   setZoom: (zoom: number) => void;
 
+  searchQuery: string;
+  setSearchQuery: (q: string) => void;
+  toast: string | null;
+  setToast: (t: string | null) => void;
+
   toggleLayer: (key: MapLayerKey) => void;
   setLayer: (key: MapLayerKey, visible: boolean) => void;
   select: (selection: MapSelection) => void;
@@ -84,6 +89,11 @@ export const useMapStore = create<MapStoreState>((set, get) => ({
     set((s) => ({ track: [...s.track.slice(-999), point] })),
   setCenter: (center) => set({ center }),
   setZoom: (zoom) => set({ zoom }),
+
+  searchQuery: '',
+  setSearchQuery: (q) => set({ searchQuery: q }),
+  toast: null,
+  setToast: (t) => set({ toast: t }),
 
   toggleLayer: (key) =>
     set((s) => ({ layers: { ...s.layers, [key]: !s.layers[key] } })),

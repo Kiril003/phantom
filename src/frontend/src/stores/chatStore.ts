@@ -201,10 +201,21 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         };
       });
     } catch (err) {
+      // Surface AI-provider outages as actionable copy pointing to Settings.
+      const maybeStatus =
+        err && typeof err === 'object' && 'status' in err
+          ? (err as { status: number }).status
+          : 0;
+      const friendly =
+        maybeStatus === 503
+          ? 'AI провайдер недоступний. Перевір Settings → AI → Provider'
+          : err instanceof Error
+            ? err.message
+            : 'Failed to send message';
       set((s) => ({
         sending: false,
         isTyping: false,
-        error: err instanceof Error ? err.message : 'Failed to send message',
+        error: friendly,
         // Keep optimistic message so user sees it; no rollback.
         messages: s.messages,
       }));

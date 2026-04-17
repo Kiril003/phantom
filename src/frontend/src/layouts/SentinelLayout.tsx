@@ -25,8 +25,8 @@ export default function SentinelLayout() {
   const context = useSystemStore((s) => s.context);
 
   const otherDistance = context?.presence.other_distance_cm;
-  const motionEnergy = context?.body.motion_energy ?? 0;
-  const staticEnergy = context?.body.static_energy ?? 0;
+  const motionEnergy = context?.body.motion_energy ?? null;
+  const staticEnergy = context?.body.static_energy ?? null;
 
   return (
     <motion.div
@@ -177,14 +177,14 @@ export default function SentinelLayout() {
           <ThreatCard
             icon={<AlertTriangle size={16} strokeWidth={1.5} />}
             label="Motion"
-            value={`${motionEnergy}`}
-            alert={motionEnergy > 50}
+            value={motionEnergy != null ? `${motionEnergy}` : '—'}
+            alert={motionEnergy != null && motionEnergy > 50}
           />
           <ThreatCard
             icon={<Eye size={16} strokeWidth={1.5} />}
             label="Static"
-            value={`${staticEnergy}`}
-            alert={staticEnergy > 70}
+            value={staticEnergy != null ? `${staticEnergy}` : '—'}
+            alert={staticEnergy != null && staticEnergy > 70}
           />
 
           {/* First visit / night context */}

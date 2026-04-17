@@ -85,7 +85,11 @@ class DecisionTree:
     def _check_health(self, snap: dict) -> list[DecisionAction]:
         actions: list[DecisionAction] = []
         body = snap.get("body", {})
-        stress = body.get("stress_level", 0.0)
+        stress_raw = body.get("stress_level")
+        # When ESP32 offline stress is unknown; skip health-triggered actions.
+        if stress_raw is None:
+            return actions
+        stress = stress_raw
         bpm = body.get("breathing_bpm")
         state = snap.get("system", {}).get("state", "SHADOW")
 

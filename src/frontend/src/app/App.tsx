@@ -3,6 +3,8 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { AnimatePresence } from 'framer-motion';
 import { Providers } from './providers';
 import { StateTransitionController } from './StateTransitionController';
+import { ViewportFrame } from './ViewportFrame';
+import { Overlays } from '../components/core/Overlays';
 import { useSystemStore } from '../stores/systemStore';
 import { SystemState } from '@shared/types';
 
@@ -84,21 +86,33 @@ export function App() {
     <Providers>
       <BrowserRouter>
         <StateTransitionController />
-        <div className="w-[1024px] h-[600px] overflow-hidden relative" style={{ background: 'var(--surface-void)' }}>
-          <Routes>
-            <Route path="/settings" element={
-              <React.Suspense fallback={<PhantomLoader />}>
-                <SettingsPanel />
-              </React.Suspense>
-            } />
-            <Route path="/map" element={
-              <React.Suspense fallback={<PhantomLoader />}>
-                <MapLayout />
-              </React.Suspense>
-            } />
-            <Route path="/*" element={<StateRouter />} />
-          </Routes>
-        </div>
+        <ViewportFrame>
+          <div
+            className="w-[1024px] h-[600px] overflow-hidden relative"
+            style={{ background: 'var(--surface-void)' }}
+          >
+            <Routes>
+              <Route
+                path="/settings"
+                element={
+                  <React.Suspense fallback={<PhantomLoader />}>
+                    <SettingsPanel />
+                  </React.Suspense>
+                }
+              />
+              <Route
+                path="/map"
+                element={
+                  <React.Suspense fallback={<PhantomLoader />}>
+                    <MapLayout />
+                  </React.Suspense>
+                }
+              />
+              <Route path="/*" element={<StateRouter />} />
+            </Routes>
+            <Overlays />
+          </div>
+        </ViewportFrame>
       </BrowserRouter>
     </Providers>
   );

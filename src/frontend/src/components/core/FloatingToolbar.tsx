@@ -1,104 +1,140 @@
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { AnimatePresence, motion } from 'framer-motion';
 import {
-  Terminal,
   Map,
   Mic,
-  Radar,
   Home,
-  Grid3x3,
   Settings,
-  Camera,
+  MessageSquare,
+  MoreHorizontal,
+  Terminal,
+  Radar,
   Shield,
+  Grid3x3,
+  Camera,
   Wifi,
   Power,
 } from 'lucide-react';
 import { useSystemStore } from '../../stores/systemStore';
 import { useAuthStore } from '../../stores/authStore';
+import { useUIStore, type OverlayName } from '../../stores/uiStore';
 import { SystemState } from '@shared/types';
+import { EASE_PHANTOM } from '../../styles/motion';
 
-export interface FloatingToolbarItem {
+export interface ToolbarAction {
   id: string;
   icon: React.ReactNode;
   label: string;
   active?: boolean;
   onClick?: () => void;
   tone?: 'default' | 'alert';
+  disabled?: boolean;
 }
 
 interface FloatingToolbarProps {
-  /** Override default items (e.g., context-specific). */
-  items?: FloatingToolbarItem[];
+  items?: ToolbarAction[];
 }
 
+const LONG_PRESS_MS = 500;
+
 /**
- * FloatingToolbar — bottom-centre glass pill with quick actions.
- * Default: terminal / map / voice / radar / home / menu / settings / camera / security / wifi / power.
- * Active state uses accent color + subtle glow; others muted.
+ * FloatingToolbar — bottom-centre glass pill.
+ *
+ * Primary (always visible): Home, Dialogue, Map, Voice, Settings, More
+ * Secondary (opens via More or long-press on Home): Terminal, Sentinel,
+ *   Ghost, Grid/SystemCore, Camera, Networks, Power.
  */
 export function FloatingToolbar({ items }: FloatingToolbarProps) {
   const navigate = useNavigate();
   const location = useLocation();
+
   const state = useSystemStore((s) => s.state);
+  const previousState = useSystemStore((s) => s.previousState);
   const setState = useSystemStore((s) => s.setState);
-  const clearAuth = useAuthStore((s) => s.clearAuth);
   const setAuthenticated = useSystemStore((s) => s.setAuthenticated);
 
-  const defaultItems: FloatingToolbarItem[] = [
+  const user = useAuthStore((s) => s.user);
+  const clearAuth = useAuthStore((s) => s.clearAuth);
+
+  const windows = useUIStore((s) => s.windows);
+  const toggleOverlay = useUIStore((s) => s.toggleOverlay);
+  const moreMenuOpen = useUIStore((s) => s.moreMenuOpen);
+  const setMoreMenuOpen = useUIStore((s) => s.setMoreMenuOpen);
+
+  const isOverlayOpen = (name: OverlayName) => windows[name].open && !windows[name].minimized;
+  const isRoot = user?.role === 'ROOT';
+
+  const toolbarTransition = (to: SystemState) =>
+    setState(to, { trigger: 'toolbar', timestamp: Date.now(), auto: false });
+
+  const goHome = () => {
+    if (location.pathname !== '/') navigate('/');
+    if (state !== SystemState.SHADOW) toolbarTransition(SystemState.SHADOW);
+  };
+  const goDialogue = () => {
+    if (location.pathname !== '/') navigate('/');
+    toolbarTransition(SystemState.DIALOGUE);
+  };
+  const goMap = () => {
+    if (!location.pathname.startsWith('/map')) navigate('/map');
+    if (state !== SystemState.FOCUS) toolbarTransition(SystemState.FOCUS);
+  };
+  const goFocus = () => {
+    if (location.pathname !== '/') navigate('/');
+    toolbarTransition(SystemState.FOCUS);
+  };
+  const goSentinel = () => {
+    if (location.pathname !== '/') navigate('/');
+    if (state === SystemState.SENTINEL) toolbarTransition(previousState ?? SystemState.SHADOW);
+    else toolbarTransition(SystemState.SENTINEL);
+  };
+  const goGhost = () => {
+    if (!isRoot) return;
+    if (location.pathname !== '/') navigate('/');
+    if (state === SystemState.GHOST) toolbarTransition(previousState ?? SystemState.SHADOW);
+    else toolbarTransition(SystemState.GHOST);
+  };
+  const signOut = () => {
+    clearAuth();
+    setAuthenticated(false);
+    useUIStore.getState().closeAll();
+    navigate('/');
+  };
+  /** Voice entry point: route user to DIALOGUE where the chat pill's mic is
+   *  the single, authoritative voice control. No separate floating pill. */
+  const openVoice = () => {
+    if (state !== SystemState.DIALOGUE) goDialogue();
+  };
+
+  const primary: ToolbarAction[] = [
     {
       id: 'home',
       icon: <Home size={18} strokeWidth={1.75} />,
       label: 'Home',
-      active: location.pathname === '/',
-      onClick: () => navigate('/'),
+      active: state === SystemState.SHADOW && location.pathname === '/',
+      onClick: goHome,
     },
     {
-      id: 'terminal',
-      icon: <Terminal size={18} strokeWidth={1.75} />,
+      id: 'dialogue',
+      icon: <MessageSquare size={18} strokeWidth={1.75} />,
       label: 'Dialogue',
       active: state === SystemState.DIALOGUE,
-      onClick: () => setState(SystemState.DIALOGUE, { trigger: 'toolbar', timestamp: Date.now(), auto: false }),
+      onClick: goDialogue,
     },
     {
       id: 'map',
       icon: <Map size={18} strokeWidth={1.75} />,
       label: 'Map',
       active: location.pathname.startsWith('/map'),
-      onClick: () => navigate('/map'),
+      onClick: goMap,
     },
     {
       id: 'voice',
       icon: <Mic size={18} strokeWidth={1.75} />,
       label: 'Voice',
-    },
-    {
-      id: 'radar',
-      icon: <Radar size={18} strokeWidth={1.75} />,
-      label: 'Sentinel',
-      active: state === SystemState.SENTINEL,
-      tone: state === SystemState.SENTINEL ? 'alert' : 'default',
-      onClick: () => setState(SystemState.SENTINEL, { trigger: 'toolbar', timestamp: Date.now(), auto: false }),
-    },
-    {
-      id: 'ghost',
-      icon: <Shield size={18} strokeWidth={1.75} />,
-      label: 'Ghost',
-      active: state === SystemState.GHOST,
-      onClick: () => setState(SystemState.GHOST, { trigger: 'toolbar', timestamp: Date.now(), auto: false }),
-    },
-    {
-      id: 'grid',
-      icon: <Grid3x3 size={18} strokeWidth={1.75} />,
-      label: 'Apps',
-    },
-    {
-      id: 'camera',
-      icon: <Camera size={18} strokeWidth={1.75} />,
-      label: 'Camera',
-    },
-    {
-      id: 'wifi',
-      icon: <Wifi size={18} strokeWidth={1.75} />,
-      label: 'WiFi',
+      active: state === SystemState.DIALOGUE,
+      onClick: openVoice,
     },
     {
       id: 'settings',
@@ -107,56 +143,298 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
       active: location.pathname.startsWith('/settings'),
       onClick: () => navigate('/settings'),
     },
+  ];
+
+  const secondary: ToolbarAction[] = [
+    {
+      id: 'terminal',
+      icon: <Terminal size={16} strokeWidth={1.75} />,
+      label: 'Terminal',
+      active: isOverlayOpen('terminal'),
+      onClick: () => {
+        toggleOverlay('terminal');
+        setMoreMenuOpen(false);
+      },
+    },
+    {
+      id: 'sentinel',
+      icon: <Radar size={16} strokeWidth={1.75} />,
+      label: 'Sentinel',
+      active: state === SystemState.SENTINEL,
+      tone: state === SystemState.SENTINEL ? 'alert' : 'default',
+      onClick: () => {
+        goSentinel();
+        setMoreMenuOpen(false);
+      },
+    },
+    {
+      id: 'ghost',
+      icon: <Shield size={16} strokeWidth={1.75} />,
+      label: isRoot ? 'Ghost' : 'Ghost (root only)',
+      active: state === SystemState.GHOST,
+      onClick: () => {
+        goGhost();
+        setMoreMenuOpen(false);
+      },
+      disabled: !isRoot,
+    },
+    {
+      id: 'grid',
+      icon: <Grid3x3 size={16} strokeWidth={1.75} />,
+      label: 'System core',
+      active: state === SystemState.FOCUS && location.pathname === '/',
+      onClick: () => {
+        goFocus();
+        setMoreMenuOpen(false);
+      },
+    },
+    {
+      id: 'camera',
+      icon: <Camera size={16} strokeWidth={1.75} />,
+      label: 'Camera',
+      active: isOverlayOpen('camera'),
+      onClick: () => {
+        toggleOverlay('camera');
+        setMoreMenuOpen(false);
+      },
+    },
+    {
+      id: 'wifi',
+      icon: <Wifi size={16} strokeWidth={1.75} />,
+      label: 'Networks',
+      active: isOverlayOpen('wardriving'),
+      onClick: () => {
+        toggleOverlay('wardriving');
+        setMoreMenuOpen(false);
+      },
+    },
     {
       id: 'power',
-      icon: <Power size={18} strokeWidth={1.75} />,
+      icon: <Power size={16} strokeWidth={1.75} />,
       label: 'Sign out',
+      tone: 'alert',
       onClick: () => {
-        clearAuth();
-        setAuthenticated(false);
+        setMoreMenuOpen(false);
+        signOut();
       },
     },
   ];
 
-  const list = items ?? defaultItems;
+  /* Long-press on Home opens secondary menu too. */
+  const homePressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const didLongPress = useRef(false);
+  const onHomePointerDown = () => {
+    didLongPress.current = false;
+    homePressTimer.current = setTimeout(() => {
+      didLongPress.current = true;
+      setMoreMenuOpen(true);
+    }, LONG_PRESS_MS);
+  };
+  const onHomePointerUp = () => {
+    if (homePressTimer.current) {
+      clearTimeout(homePressTimer.current);
+      homePressTimer.current = null;
+    }
+  };
+  const onHomeClick = () => {
+    if (didLongPress.current) {
+      didLongPress.current = false;
+      return;
+    }
+    goHome();
+  };
+
+  /* Close More on outside click */
+  const moreRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!moreMenuOpen) return;
+    const onDown = (e: PointerEvent) => {
+      if (!moreRef.current) return;
+      if (!moreRef.current.contains(e.target as Node)) setMoreMenuOpen(false);
+    };
+    document.addEventListener('pointerdown', onDown);
+    return () => document.removeEventListener('pointerdown', onDown);
+  }, [moreMenuOpen, setMoreMenuOpen]);
+
+  const list = items ?? primary;
 
   return (
     <div
       className="absolute bottom-3 left-1/2 -translate-x-1/2 pointer-events-auto"
       style={{ zIndex: 30 }}
+      ref={moreRef}
     >
-      <div className="glass-card rounded-full px-3 py-1.5 flex items-center gap-1">
-        {list.map((item) => (
-          <button
-            key={item.id}
-            type="button"
-            onClick={item.onClick}
-            className="relative flex items-center justify-center transition-all active:scale-95"
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: 9999,
-              color:
-                item.tone === 'alert'
-                  ? 'var(--signal-alert)'
-                  : item.active
-                    ? 'var(--accent)'
-                    : 'var(--ink-secondary)',
-              background: item.active
-                ? 'color-mix(in srgb, var(--accent) 14%, transparent)'
-                : 'transparent',
-              boxShadow: item.active
-                ? '0 0 16px var(--accent-glow), inset 0 0 0 1px var(--glass-border-hover)'
-                : 'none',
-            }}
-            aria-label={item.label}
-            aria-pressed={item.active}
-            title={item.label}
+      <AnimatePresence>
+        {moreMenuOpen && (
+          <motion.div
+            initial={{ opacity: 0, y: 12, scale: 0.96 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 8, scale: 0.96 }}
+            transition={{ duration: 0.2, ease: EASE_PHANTOM as unknown as number[] }}
+            className="absolute left-1/2 -translate-x-1/2"
+            style={{ bottom: 60, zIndex: 40 }}
           >
-            {item.icon}
-          </button>
-        ))}
+            <div
+              className="glass-elevated flex flex-col gap-1 px-2 py-2"
+              style={{
+                borderRadius: 18,
+                minWidth: 220,
+                backdropFilter: 'blur(16px)',
+                WebkitBackdropFilter: 'blur(16px)',
+                boxShadow:
+                  '0 24px 48px -12px rgba(0,0,0,0.55), 0 0 0 1px var(--glass-border), inset 0 1px 0 var(--glass-highlight)',
+              }}
+            >
+              {secondary.map((it) => (
+                <MoreMenuItem key={it.id} action={it} />
+              ))}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      <div
+        className="glass-card rounded-full px-3 py-1.5 flex items-center gap-1"
+        style={{
+          transition: 'all 200ms ease',
+          boxShadow:
+            '0 18px 40px -14px rgba(0,0,0,0.55), 0 0 0 1px var(--glass-border), inset 0 1px 0 var(--glass-highlight)',
+        }}
+      >
+        {list.map((item) => {
+          if (item.id === 'home') {
+            return (
+              <ToolbarIcon
+                key={item.id}
+                item={item}
+                onPointerDown={onHomePointerDown}
+                onPointerUp={onHomePointerUp}
+                onPointerLeave={onHomePointerUp}
+                onClick={onHomeClick}
+              />
+            );
+          }
+          return <ToolbarIcon key={item.id} item={item} />;
+        })}
+        <ToolbarIcon
+          item={{
+            id: 'more',
+            icon: <MoreHorizontal size={18} strokeWidth={1.75} />,
+            label: 'More',
+            active: moreMenuOpen,
+            onClick: () => setMoreMenuOpen(!moreMenuOpen),
+          }}
+        />
       </div>
     </div>
+  );
+}
+
+function ToolbarIcon({
+  item,
+  onPointerDown,
+  onPointerUp,
+  onPointerLeave,
+  onClick,
+}: {
+  item: ToolbarAction;
+  onPointerDown?: (e: React.PointerEvent) => void;
+  onPointerUp?: (e: React.PointerEvent) => void;
+  onPointerLeave?: (e: React.PointerEvent) => void;
+  onClick?: () => void;
+}) {
+  const handle = onClick ?? item.onClick;
+  return (
+    <button
+      type="button"
+      disabled={item.disabled}
+      onPointerDown={onPointerDown}
+      onPointerUp={onPointerUp}
+      onPointerLeave={onPointerLeave}
+      onClick={item.disabled ? undefined : handle}
+      className="relative flex items-center justify-center active:scale-95"
+      style={{
+        width: 44,
+        height: 44,
+        borderRadius: 9999,
+        opacity: item.disabled ? 0.35 : 1,
+        cursor: item.disabled ? 'not-allowed' : 'pointer',
+        color:
+          item.tone === 'alert'
+            ? 'var(--signal-alert)'
+            : item.active
+              ? 'var(--accent)'
+              : 'var(--ink-secondary)',
+        background: item.active
+          ? 'color-mix(in srgb, var(--accent) 14%, transparent)'
+          : 'transparent',
+        boxShadow: item.active
+          ? '0 0 16px var(--accent-glow), inset 0 0 0 1px var(--glass-border-hover)'
+          : 'none',
+        transition: 'all 200ms ease',
+      }}
+      aria-label={item.label}
+      aria-pressed={item.active}
+      title={item.label}
+    >
+      {item.icon}
+    </button>
+  );
+}
+
+function MoreMenuItem({ action }: { action: ToolbarAction }) {
+  return (
+    <button
+      type="button"
+      disabled={action.disabled}
+      onClick={action.disabled ? undefined : action.onClick}
+      className="flex items-center gap-3 px-3"
+      style={{
+        minHeight: 44,
+        borderRadius: 12,
+        background: action.active
+          ? 'color-mix(in srgb, var(--accent) 14%, transparent)'
+          : 'transparent',
+        border: action.active
+          ? '1px solid color-mix(in srgb, var(--accent) 34%, transparent)'
+          : '1px solid transparent',
+        color:
+          action.tone === 'alert'
+            ? 'var(--signal-alert)'
+            : action.active
+              ? 'var(--accent)'
+              : 'var(--ink-primary)',
+        opacity: action.disabled ? 0.35 : 1,
+        cursor: action.disabled ? 'not-allowed' : 'pointer',
+        fontFamily: 'var(--font-display)',
+        fontSize: 'var(--fs-xs)',
+        letterSpacing: 'var(--tracking-wide)',
+        textAlign: 'left',
+        transition: 'all 200ms ease',
+      }}
+      onMouseEnter={(e) => {
+        if (action.disabled || action.active) return;
+        (e.currentTarget as HTMLElement).style.background = 'var(--glass-border)';
+      }}
+      onMouseLeave={(e) => {
+        if (action.disabled || action.active) return;
+        (e.currentTarget as HTMLElement).style.background = 'transparent';
+      }}
+      aria-label={action.label}
+    >
+      <span style={{ display: 'inline-flex', color: 'inherit' }}>{action.icon}</span>
+      <span className="flex-1">{action.label}</span>
+      {action.active && (
+        <span
+          className="rounded-full"
+          style={{
+            width: 6,
+            height: 6,
+            background: 'currentColor',
+            boxShadow: '0 0 6px currentColor',
+          }}
+        />
+      )}
+    </button>
   );
 }

@@ -19,7 +19,6 @@ export interface WSMessage {
   ts?: number;
 }
 
-// Typed payloads per channel
 export interface SensorMessage extends WSMessage {
   channel: 'sensor';
   type: 'snapshot';
@@ -60,12 +59,14 @@ type ChannelHandler<T extends WSMessage = WSMessage> = (msg: T) => void;
 type ConnectHandler = () => void;
 type DisconnectHandler = () => void;
 
+const INITIAL_RECONNECT_DELAY = 1000;
+const MAX_RECONNECT_DELAY = 30000;
+
 class WebSocketClient {
   private ws: WebSocket | null = null;
   private token: string | undefined;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
-  private reconnectDelay = 1000;
-  private readonly maxReconnectDelay = 30000;
+  private reconnectDelay = INITIAL_RECONNECT_DELAY;
   private intentionalClose = false;
 
   private connectHandlers: ConnectHandler[] = [];
@@ -75,14 +76,62 @@ class WebSocketClient {
   connect(token?: string): void {
     this.token = token;
     this.intentionalClose = false;
+
+    // Idempotent: if we already have an open/connecting socket, keep it.
+    if (
+      this.ws &&
+      (this.ws.readyState === WebSocket.OPEN ||
+        this.ws.readyState === WebSocket.CONNECTING)
+    ) {
+      return;
+    }
+
+    // Clear any scheduled reconnect — we're connecting now.
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+
     this._open();
   }
 
   disconnect(): void {
     this.intentionalClose = true;
-    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
-    this.ws?.close(1000, 'client disconnect');
+    if (this.reconnectTimer) {
+      clearTimeout(this.reconnectTimer);
+      this.reconnectTimer = null;
+    }
+    const ws = this.ws;
     this.ws = null;
+    if (!ws) return;
+
+    // Detach handlers so no late onclose/onerror triggers reconnect.
+    ws.onopen = null;
+    ws.onmessage = null;
+    ws.onerror = null;
+    ws.onclose = null;
+
+    if (ws.readyState === WebSocket.CONNECTING) {
+      // Can't close a CONNECTING socket without the "closed before established"
+      // error. Wait for open, then close cleanly.
+      ws.addEventListener(
+        'open',
+        () => {
+          try {
+            ws.close(1000, 'client disconnect');
+          } catch {
+            /* ignore */
+          }
+        },
+        { once: true }
+      );
+    } else if (ws.readyState === WebSocket.OPEN) {
+      try {
+        ws.close(1000, 'client disconnect');
+      } catch {
+        /* ignore */
+      }
+    }
   }
 
   send(msg: WSMessage): void {
@@ -127,41 +176,71 @@ class WebSocketClient {
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
     if (this.token) url.searchParams.set('token', this.token);
 
-    this.ws = new WebSocket(url.toString());
+    let ws: WebSocket;
+    try {
+      ws = new WebSocket(url.toString());
+    } catch {
+      this._scheduleReconnect();
+      return;
+    }
+    this.ws = ws;
 
-    this.ws.onopen = () => {
-      this.reconnectDelay = 1000;
-      this.connectHandlers.forEach((h) => h());
+    ws.onopen = () => {
+      this.reconnectDelay = INITIAL_RECONNECT_DELAY;
+      this.connectHandlers.forEach((h) => {
+        try {
+          h();
+        } catch {
+          /* handler error — ignore */
+        }
+      });
     };
 
-    this.ws.onmessage = (event: MessageEvent<string>) => {
+    ws.onmessage = (event: MessageEvent<string>) => {
       try {
         const msg = JSON.parse(event.data) as WSMessage;
         const handlers = this.channelHandlers.get(msg.channel) ?? [];
         handlers.forEach((h) => h(msg));
       } catch {
-        // malformed message — ignore
+        /* malformed — ignore */
       }
     };
 
-    this.ws.onclose = () => {
-      this.disconnectHandlers.forEach((h) => h());
+    ws.onclose = () => {
+      // If this ws was detached by disconnect(), this.ws will be null or
+      // point to a new socket; skip side-effects in that case.
+      if (this.ws !== ws) return;
+      this.ws = null;
+      this.disconnectHandlers.forEach((h) => {
+        try {
+          h();
+        } catch {
+          /* handler error — ignore */
+        }
+      });
       if (!this.intentionalClose) {
         this._scheduleReconnect();
       }
     };
 
-    this.ws.onerror = () => {
-      this.ws?.close();
+    ws.onerror = () => {
+      // Let onclose handle reconnect logic.
+      try {
+        ws.close();
+      } catch {
+        /* ignore */
+      }
     };
   }
 
   private _scheduleReconnect(): void {
-    if (this.reconnectTimer) clearTimeout(this.reconnectTimer);
+    if (this.reconnectTimer) return;
+    const delay = this.reconnectDelay;
     this.reconnectTimer = setTimeout(() => {
-      this.reconnectDelay = Math.min(this.reconnectDelay * 2, this.maxReconnectDelay);
-      this._open();
-    }, this.reconnectDelay);
+      this.reconnectTimer = null;
+      this.reconnectDelay = Math.min(this.reconnectDelay * 2, MAX_RECONNECT_DELAY);
+      if (!this.intentionalClose) this._open();
+    }, delay);
   }
 }
 

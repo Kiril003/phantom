@@ -24,6 +24,17 @@ import { EASE_PHANTOM } from '../styles/motion';
  */
 export default function FocusLayout() {
   const context = useSystemStore((s) => s.context);
+  const wsConnected = useSystemStore((s) => s.wsConnected);
+  const esp32 = useSystemStore((s) => s.esp32);
+
+  const cpu = context?.system.cpu_percent;
+  const ram = context?.system.ram_percent;
+  const disk = context?.system.disk_percent;
+  const tempC = context?.env.temp_c;
+  const aqi = context?.env.aqi;
+  const bpm = context?.body.breathing_bpm;
+  const esp32Disabled = esp32 === 'disabled';
+  const esp32Offline = esp32 === 'offline';
 
   return (
     <motion.div
@@ -44,17 +55,17 @@ export default function FocusLayout() {
 
           <Card>
             <CardHead icon={<Cpu size={14} strokeWidth={1.75} />} label="CPU" />
-            <Gauge1 value={context?.system.cpu_percent ?? 0} unit="%" />
+            <Gauge1 value={cpu} unit="%" />
           </Card>
 
           <Card>
             <CardHead icon={<MemoryStick size={14} strokeWidth={1.75} />} label="RAM" />
-            <Gauge1 value={context?.system.ram_percent ?? 0} unit="%" />
+            <Gauge1 value={ram} unit="%" />
           </Card>
 
           <Card>
             <CardHead icon={<HardDrive size={14} strokeWidth={1.75} />} label="Disk" />
-            <Gauge1 value={context?.system.disk_percent ?? 0} unit="%" />
+            <Gauge1 value={disk} unit="%" />
           </Card>
 
           <SectionLabel>ENVIRONMENT</SectionLabel>
@@ -62,18 +73,45 @@ export default function FocusLayout() {
             <CardRow
               icon={<Thermometer size={14} strokeWidth={1.75} />}
               label="Temp"
-              value={context?.env.temp_c != null ? `${context.env.temp_c.toFixed(1)}°C` : '—'}
+              value={tempC != null ? `${tempC.toFixed(1)}°C` : '—'}
+              muted={tempC == null}
             />
             <CardRow
               icon={<Wind size={14} strokeWidth={1.75} />}
               label="AQI"
-              value={context?.env.aqi != null ? String(context.env.aqi) : '—'}
+              value={aqi != null ? String(aqi) : '—'}
+              muted={aqi == null}
             />
             <CardRow
               icon={<Activity size={14} strokeWidth={1.75} />}
               label="BPM"
-              value={context?.body.breathing_bpm != null ? `${context.body.breathing_bpm}` : '—'}
+              value={bpm != null ? `${bpm}` : '—'}
+              muted={bpm == null}
             />
+            {(esp32Disabled || esp32Offline) && (
+              <div
+                className="flex items-center gap-2 mt-1 px-1"
+                style={{
+                  color: esp32Disabled ? 'var(--ink-muted)' : 'var(--signal-warn)',
+                  fontFamily: 'var(--font-display)',
+                  fontSize: 'var(--fs-micro)',
+                  letterSpacing: 'var(--tracking-wider)',
+                }}
+                title={esp32Disabled ? 'Serial bridge disabled' : 'Serial bridge enabled, no device'}
+              >
+                <span
+                  className="rounded-full"
+                  style={{
+                    width: 5,
+                    height: 5,
+                    background: esp32Disabled ? 'var(--ink-muted)' : 'var(--signal-warn)',
+                    boxShadow: esp32Disabled ? 'none' : '0 0 4px var(--signal-warn)',
+                    display: 'inline-block',
+                  }}
+                />
+                {esp32Disabled ? 'ESP32 disabled' : 'ESP32 offline'}
+              </div>
+            )}
           </Card>
         </section>
 
@@ -136,11 +174,51 @@ export default function FocusLayout() {
           </Card>
 
           <SectionLabel>SYS_LOG</SectionLabel>
-          <Card className="flex-1">
-            <LogLine tone="ok" message="Context engine: online" sub="just now" />
-            <LogLine tone="info" message="Memory index: ready" sub="12s" />
-            <LogLine tone="info" message="Serial bridge: scanning" sub="48s" />
-            <LogLine tone="muted" message="Wardriving: idle" sub="2m" />
+          <Card className="flex-1 min-h-0">
+            <div className="flex-1 overflow-y-auto min-h-0 pr-1">
+              <LogLine
+                tone={wsConnected ? 'ok' : 'warn'}
+                message={wsConnected ? 'WebSocket hub: online' : 'WebSocket hub: offline'}
+                sub="realtime"
+              />
+              <LogLine
+                tone={context ? 'ok' : 'muted'}
+                message={context ? 'Context engine: tick 500ms' : 'Context engine: awaiting data'}
+                sub={context ? 'live' : '—'}
+              />
+              <LogLine
+                tone={esp32 === 'online' ? 'ok' : esp32 === 'disabled' ? 'muted' : 'warn'}
+                message={
+                  esp32 === 'online'
+                    ? 'ESP32 serial bridge: connected'
+                    : esp32 === 'disabled'
+                      ? 'ESP32 serial bridge: disabled'
+                      : 'ESP32 serial bridge: offline'
+                }
+                sub={
+                  esp32 === 'online'
+                    ? 'batched'
+                    : esp32 === 'disabled'
+                      ? 'dev mode'
+                      : 'no batch'
+                }
+              />
+              <LogLine
+                tone={context?.system.ai_provider === 'gemini' ? 'info' : 'muted'}
+                message={`AI provider: ${context?.system.ai_provider ?? '—'}`}
+                sub={context?.system.internet_available ? 'internet' : 'local'}
+              />
+              <LogLine
+                tone="info"
+                message={`STT engine: ${context?.system.stt_engine ?? '—'}`}
+                sub="voice"
+              />
+              <LogLine
+                tone="muted"
+                message={`Uptime: ${formatUptime(context?.system.uptime_s ?? 0)}`}
+                sub="now"
+              />
+            </div>
           </Card>
         </section>
       </main>
@@ -202,7 +280,17 @@ function CardHead({ icon, label }: { icon: React.ReactNode; label: string }) {
   );
 }
 
-function CardRow({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+function CardRow({
+  icon,
+  label,
+  value,
+  muted = false,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  value: string;
+  muted?: boolean;
+}) {
   return (
     <div className="flex items-center gap-2">
       <span style={{ color: 'var(--ink-muted)' }}>{icon}</span>
@@ -222,7 +310,7 @@ function CardRow({ icon, label, value }: { icon: React.ReactNode; label: string;
         style={{
           fontFamily: 'var(--font-mono)',
           fontSize: 'var(--fs-xs)',
-          color: 'var(--ink-primary)',
+          color: muted ? 'var(--ink-muted)' : 'var(--ink-primary)',
         }}
       >
         {value}
@@ -231,11 +319,16 @@ function CardRow({ icon, label, value }: { icon: React.ReactNode; label: string;
   );
 }
 
-function Gauge1({ value, unit }: { value: number; unit?: string }) {
-  const color =
-    value > 85 ? 'var(--signal-alert)' :
-    value > 60 ? 'var(--signal-warn)' :
-    'var(--accent)';
+function Gauge1({ value, unit }: { value: number | undefined; unit?: string }) {
+  const hasValue = typeof value === 'number' && Number.isFinite(value);
+  const v = hasValue ? (value as number) : 0;
+  const color = !hasValue
+    ? 'var(--ink-muted)'
+    : v > 85
+      ? 'var(--signal-alert)'
+      : v > 60
+        ? 'var(--signal-warn)'
+        : 'var(--accent)';
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-baseline gap-1">
@@ -250,9 +343,9 @@ function Gauge1({ value, unit }: { value: number; unit?: string }) {
             lineHeight: 1,
           }}
         >
-          {Math.round(value)}
+          {hasValue ? Math.round(v) : '—'}
         </span>
-        {unit && (
+        {unit && hasValue && (
           <span
             style={{
               fontFamily: 'var(--font-display)',
@@ -276,10 +369,10 @@ function Gauge1({ value, unit }: { value: number; unit?: string }) {
         <span
           className="block absolute left-0 top-0 bottom-0"
           style={{
-            width: `${Math.max(3, Math.min(100, value))}%`,
+            width: hasValue ? `${Math.max(3, Math.min(100, v))}%` : '0%',
             background: color,
             borderRadius: 9999,
-            boxShadow: `0 0 8px ${color}`,
+            boxShadow: hasValue ? `0 0 8px ${color}` : 'none',
           }}
         />
       </span>
@@ -302,8 +395,10 @@ function LogLine({
     tone === 'alert' ? 'var(--signal-alert)' :
     tone === 'info'  ? 'var(--accent)' :
     'var(--ink-muted)';
+  const textColor =
+    tone === 'muted' ? 'var(--ink-secondary)' : 'var(--ink-primary)';
   return (
-    <div className="flex items-start gap-2 py-0.5">
+    <div className="flex items-start gap-2 py-1">
       <span
         className="block rounded-full shrink-0 mt-1.5"
         style={{ width: 5, height: 5, background: color, boxShadow: `0 0 6px ${color}` }}
@@ -314,7 +409,9 @@ function LogLine({
           style={{
             fontFamily: 'var(--font-display)',
             fontSize: 'var(--fs-xs)',
-            color: 'var(--ink-primary)',
+            color: textColor,
+            fontWeight: 500,
+            letterSpacing: 'var(--tracking-tight)',
           }}
         >
           {message}
@@ -334,4 +431,12 @@ function LogLine({
       </div>
     </div>
   );
+}
+
+function formatUptime(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  const sec = s % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(sec).padStart(2, '0')}`;
 }

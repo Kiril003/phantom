@@ -40,9 +40,9 @@ def _classify_breathing(bpm: Optional[float]) -> str:
     return "stressed"
 
 
-def _stress_from_breathing(bpm: Optional[float]) -> float:
+def _stress_from_breathing(bpm: Optional[float]) -> Optional[float]:
     if bpm is None:
-        return 0.3
+        return None
     if bpm < 14:
         return 0.1
     if bpm < 20:
@@ -88,9 +88,9 @@ def _empty_snapshot() -> dict:
         "body": {
             "breathing_bpm": None,
             "breathing_state": "normal",
-            "stress_level": 0.3,
-            "motion_energy": 0,
-            "static_energy": 0,
+            "stress_level": None,
+            "motion_energy": None,
+            "static_energy": None,
             "user_distance_cm": None,
         },
         "env": {
@@ -243,8 +243,9 @@ class ContextEngine:
             "user_distance_cm": r.distance_cm if r.present else None,
         })
 
-        # Track mood trend via stress window
-        self._mood_window.append(stress)
+        # Track mood trend via stress window (skip unknown stress)
+        if stress is not None:
+            self._mood_window.append(stress)
 
         # Presence detection with hysteresis (avoid flickering)
         if r.present:

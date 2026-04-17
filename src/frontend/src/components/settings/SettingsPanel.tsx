@@ -4,6 +4,7 @@ import { ArrowLeft, Save, RotateCcw, Loader2, Plug, CheckCircle2, AlertTriangle 
 import { StatusBar } from '../core/StatusBar';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { settingsApi, aiApi, type OllamaModelInfo, type AITestResponse } from '../../services/api';
+import { applyUISettings } from '../../services/settingsBootstrap';
 import type { SettingDefinition } from '@shared/types';
 
 export default function SettingsPanel() {
@@ -64,10 +65,15 @@ export default function SettingsPanel() {
     if (!activeCategory || dirtyInCategory.length === 0) return;
     setStatus({ kind: 'saving' });
     try {
+      const appliedPatch: Record<string, unknown> = {};
       for (const key of dirtyInCategory) {
         await settingsApi.set(key, values[key]);
+        appliedPatch[key] = values[key];
         markClean(key);
       }
+      // Re-apply UI-affecting values to the DOM immediately so the user sees
+      // the change without a reload. Non-UI keys are no-ops here.
+      applyUISettings(appliedPatch);
       setStatus({ kind: 'saved' });
       setTimeout(() => setStatus({ kind: 'idle' }), 1200);
     } catch (err) {
@@ -84,6 +90,15 @@ export default function SettingsPanel() {
       await settingsApi.reset(activeCategory.id);
       const fresh = await settingsApi.getAll();
       setCategories(fresh.categories);
+      // Same reason as handleSave: flush UI-affecting defaults back to DOM so
+      // a theme reset is visible without a page reload.
+      const all: Record<string, unknown> = {};
+      for (const cat of fresh.categories) {
+        for (const def of cat.settings) {
+          all[def.key] = def.value;
+        }
+      }
+      applyUISettings(all);
       setStatus({ kind: 'saved' });
       setTimeout(() => setStatus({ kind: 'idle' }), 1200);
     } catch (err) {

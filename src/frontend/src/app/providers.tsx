@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { wsClient } from '../services/websocket';
 import type { WSMessage, SensorMessage, StateMessage } from '../services/websocket';
 import { useSystemStore } from '../stores/systemStore';
+import { bootstrapSettings } from '../services/settingsBootstrap';
 import { SystemState } from '@shared/types';
 
 /* ─── QueryClient ─────────────────────────────────────────────────────────── */
@@ -45,6 +46,16 @@ const wsMountState = {
   mounts: 0,
   pendingDisconnect: null as ReturnType<typeof setTimeout> | null,
 };
+
+function SettingsBootstrap() {
+  // Fire-and-forget: paint uses the in-file token defaults until this resolves,
+  // then we update the DOM. Failures are intentional no-ops — the app is
+  // usable with defaults if the backend is momentarily unreachable.
+  useEffect(() => {
+    void bootstrapSettings().catch(() => undefined);
+  }, []);
+  return null;
+}
 
 function HealthPoller() {
   useEffect(() => {
@@ -165,6 +176,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
   return (
     <QueryClientProvider client={queryClient}>
       <WebSocketProvider>
+        <SettingsBootstrap />
         <HealthPoller />
         {children}
       </WebSocketProvider>

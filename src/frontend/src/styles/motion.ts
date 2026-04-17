@@ -42,13 +42,20 @@ export const motion = {
   },
 } as const;
 
-/** Get duration adjusted by motion scale (read from CSS var) */
+/** Get duration adjusted by motion scale (read from CSS var).
+ *
+ * Combines the state-driven multiplier (--motion-scale) with the per-user
+ * setting (--motion-scale-user, from Settings › Theme › Швидкість анімацій)
+ * so both axes compose naturally — a SENTINEL spike stays fast even when a
+ * user has globally dialled motion down.
+ */
 export function getScaledDuration(baseMs: number): number {
   if (typeof document === 'undefined') return baseMs;
-  const scale = parseFloat(
-    getComputedStyle(document.documentElement).getPropertyValue('--motion-scale') || '1'
-  );
-  return baseMs * (1 / (scale || 1));
+  const rootStyle = getComputedStyle(document.documentElement);
+  const stateScale = parseFloat(rootStyle.getPropertyValue('--motion-scale') || '1') || 1;
+  const userScale = parseFloat(rootStyle.getPropertyValue('--motion-scale-user') || '1') || 1;
+  const combined = stateScale * userScale;
+  return baseMs * (1 / (combined || 1));
 }
 
 /** Framer Motion transition with phantom easing */

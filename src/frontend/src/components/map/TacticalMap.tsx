@@ -1,14 +1,21 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import maplibregl, { Map as MapLibreMap } from 'maplibre-gl';
 import {
+  Search,
+  Compass,
+  Crosshair,
+  Plus,
+  Minus,
+  Route,
+  Sparkles,
+  Satellite,
   Layers,
   Radar,
   Wifi,
   MapPin,
-  Route,
   Flame,
-  Crosshair,
-  Plus,
+  Eye,
+  EyeOff,
 } from 'lucide-react';
 import { MapContext } from './MapContext';
 import { BaseLayer } from './layers/BaseLayer';
@@ -24,7 +31,6 @@ import { getMapTokens, buildPhantomStyle } from './mapTokens';
 import type { Bounds } from '../../services/api';
 
 interface TacticalMapProps {
-  /** Initial centre. Falls back to ContextEngine GPS or (50.45, 30.52). */
   initialCenter?: [number, number];
   initialZoom?: number;
   className?: string;
@@ -40,6 +46,15 @@ function computeBounds(map: MapLibreMap): Bounds {
   };
 }
 
+const LATERAL_ITEMS: Array<{ key: MapLayerKey; icon: React.ReactNode; label: string }> = [
+  { key: 'base',       icon: <Layers size={18} strokeWidth={1.75} />,  label: 'Base' },
+  { key: 'presence',   icon: <Radar size={18} strokeWidth={1.75} />,   label: 'Presence' },
+  { key: 'wardriving', icon: <Wifi size={18} strokeWidth={1.75} />,    label: 'Wardriving' },
+  { key: 'heatmap',    icon: <Flame size={18} strokeWidth={1.75} />,   label: 'Heatmap' },
+  { key: 'intel',      icon: <MapPin size={18} strokeWidth={1.75} />,  label: 'Intel' },
+  { key: 'recon',      icon: <Route size={18} strokeWidth={1.75} />,   label: 'Recon' },
+];
+
 export function TacticalMap({
   initialCenter,
   initialZoom = 15,
@@ -48,6 +63,7 @@ export function TacticalMap({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const [ready, setReady] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const layers = useMapStore((s) => s.layers);
   const toggleLayer = useMapStore((s) => s.toggleLayer);
@@ -62,12 +78,11 @@ export function TacticalMap({
   const savePOI = useMapStore((s) => s.savePOI);
   const loading = useMapStore((s) => s.loading);
 
-  // Derive initial center
   const resolvedInitialCenter: [number, number] =
     initialCenter ??
     (context?.where.fix && context.where.lat != null && context.where.lon != null
       ? [context.where.lon, context.where.lat]
-      : [30.52, 50.45]); // Kyiv default
+      : [30.52, 50.45]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -92,10 +107,7 @@ export function TacticalMap({
       setCenter([c.lat, c.lng]);
       setZoom(map.getZoom());
     };
-    const onClick = () => {
-      // Click on empty map area closes the marker card
-      select(null);
-    };
+    const onClick = () => select(null);
 
     map.on('load', onLoad);
     map.on('moveend', onMove);
@@ -112,19 +124,16 @@ export function TacticalMap({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Auto-load layer data when map ready
   useEffect(() => {
     if (!ready || !mapRef.current) return;
     const map = mapRef.current;
     const bounds = computeBounds(map);
-
     if (layers.wardriving) loadWardriving(bounds).catch(() => {});
     if (layers.heatmap) loadHeatmap(bounds).catch(() => {});
     if (layers.intel) loadPOIs().catch(() => {});
     if (layers.recon) loadTrack(2).catch(() => {});
   }, [ready, layers.wardriving, layers.heatmap, layers.intel, layers.recon, loadWardriving, loadHeatmap, loadPOIs, loadTrack]);
 
-  // Debounced refresh on pan/zoom
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !ready) return;
@@ -167,10 +176,18 @@ export function TacticalMap({
     });
   }, [savePOI]);
 
+  const handleZoomIn = useCallback(() => {
+    mapRef.current?.zoomIn();
+  }, []);
+
+  const handleZoomOut = useCallback(() => {
+    mapRef.current?.zoomOut();
+  }, []);
+
   return (
     <div
       className={`relative w-full h-full overflow-hidden ${className}`}
-      style={{ background: 'var(--surface-void)' }}
+      style={{ background: 'var(--surface-base)' }}
     >
       <div
         ref={containerRef}
@@ -189,161 +206,229 @@ export function TacticalMap({
         <MarkerCard />
       </MapContext.Provider>
 
-      <LayerPanel layers={layers} onToggle={toggleLayer} />
+      {/* Dark overlay gradient around edges */}
+      <div
+        aria-hidden
+        className="absolute inset-0 pointer-events-none"
+        style={{
+          background:
+            'radial-gradient(ellipse at center, transparent 55%, color-mix(in srgb, var(--surface-base) 85%, transparent) 100%)',
+        }}
+      />
 
-      {/* Crosshair — centre of view */}
+      {/* Lateral glass icon bar — left */}
+      <aside
+        className="absolute top-3 bottom-3 left-3 z-20 pointer-events-auto"
+      >
+        <div
+          className="glass-card flex flex-col items-center py-2 px-1 gap-1"
+          style={{ borderRadius: 20, width: 56 }}
+        >
+          {LATERAL_ITEMS.map((item) => (
+            <LateralButton
+              key={item.key}
+              icon={item.icon}
+              label={item.label}
+              active={layers[item.key]}
+              onClick={() => toggleLayer(item.key)}
+            />
+          ))}
+          <Divider />
+          <LateralButton
+            icon={<Satellite size={18} strokeWidth={1.75} />}
+            label="Satellite"
+          />
+          <LateralButton
+            icon={<Compass size={18} strokeWidth={1.75} />}
+            label="Compass"
+          />
+        </div>
+      </aside>
+
+      {/* Floating search bar — top */}
+      <div
+        className="absolute top-3 left-1/2 -translate-x-1/2 z-20 pointer-events-auto"
+        style={{ width: 440 }}
+      >
+        <div
+          className="glass-card flex items-center gap-2 px-3"
+          style={{ height: 44, borderRadius: 9999 }}
+        >
+          <Search size={16} strokeWidth={1.75} style={{ color: 'var(--ink-muted)' }} />
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search locations, networks, intel…"
+            aria-label="Map search"
+            className="flex-1 bg-transparent outline-none border-none"
+            style={{
+              color: 'var(--ink-primary)',
+              fontFamily: 'var(--font-display)',
+              fontSize: 'var(--fs-sm)',
+              minHeight: 40,
+            }}
+          />
+          <span
+            className="uppercase inline-flex items-center gap-1 px-2 rounded-full"
+            style={{
+              height: 22,
+              background: 'color-mix(in srgb, var(--accent) 14%, transparent)',
+              color: 'var(--accent)',
+              fontFamily: 'var(--font-display)',
+              fontSize: 'var(--fs-micro)',
+              letterSpacing: 'var(--tracking-widest)',
+              border: '1px solid color-mix(in srgb, var(--accent) 34%, transparent)',
+            }}
+          >
+            <Sparkles size={10} strokeWidth={2} />
+            <span>AI</span>
+          </span>
+        </div>
+      </div>
+
+      {/* Coordinate HUD — bottom left */}
+      <div className="absolute bottom-3 left-[76px] z-20 pointer-events-none">
+        <CoordinateReadout context={context} />
+      </div>
+
+      {/* Right-column HUD — compass + GPS quality */}
+      <div className="absolute top-3 right-3 z-20 pointer-events-none flex flex-col items-end gap-2">
+        <CompassChip bearing={0} />
+        <GpsQualityChip context={context} />
+        <StatusChip loading={loading} zoom={mapRef.current?.getZoom() ?? initialZoom} />
+      </div>
+
+      {/* Bottom glass toolbar — zoom + centre + add POI */}
+      <div
+        className="absolute bottom-3 left-1/2 -translate-x-1/2 z-20 pointer-events-auto"
+      >
+        <div
+          className="glass-card flex items-center gap-1 px-2"
+          style={{ height: 48, borderRadius: 9999 }}
+        >
+          <ToolbarButton icon={<Minus size={16} strokeWidth={1.75} />} onClick={handleZoomOut} label="Zoom out" />
+          <ToolbarButton icon={<Plus size={16} strokeWidth={1.75} />} onClick={handleZoomIn} label="Zoom in" />
+          <VerticalDivider />
+          <ToolbarButton
+            icon={<Crosshair size={16} strokeWidth={1.75} />}
+            onClick={handleCenterToMe}
+            label="Centre on operator"
+            disabled={!context?.where.fix}
+          />
+          <ToolbarButton icon={<MapPin size={16} strokeWidth={1.75} />} onClick={handleAddPoi} label="Drop POI" accent />
+        </div>
+      </div>
+
+      {/* Crosshair — thin cross at centre */}
       <div
         aria-hidden
         className="absolute top-1/2 left-1/2 pointer-events-none"
-        style={{
-          transform: 'translate(-50%, -50%)',
-          width: 28,
-          height: 28,
-          border: '1px solid var(--accent)',
-          borderRadius: '50%',
-          opacity: 0.25,
-        }}
+        style={{ transform: 'translate(-50%, -50%)', width: 40, height: 40, zIndex: 15 }}
       >
-        <div
-          className="absolute top-1/2 left-1/2"
-          style={{
-            transform: 'translate(-50%, -50%)',
-            width: 2,
-            height: 2,
-            background: 'var(--accent)',
-          }}
-        />
-      </div>
-
-      {/* Bottom-left action cluster */}
-      <div className="absolute bottom-3 left-3 flex flex-col gap-2 z-10">
-        <MapControl
-          icon={<Crosshair size={18} strokeWidth={1.75} />}
-          onClick={handleCenterToMe}
-          disabled={!context?.where.fix}
-          label="Centre on operator"
-        />
-        <MapControl
-          icon={<Plus size={18} strokeWidth={1.75} />}
-          onClick={handleAddPoi}
-          label="Drop POI at centre"
-          accent
-        />
-      </div>
-
-      {/* Status chip */}
-      <div
-        className="absolute bottom-3 right-3 flex items-center gap-2 px-3 py-1.5 rounded font-mono tracking-wider uppercase z-10"
-        style={{
-          background: 'var(--surface-raised)',
-          border: '1px solid var(--line-default)',
-          color: 'var(--ink-muted)',
-          fontSize: 'var(--fs-micro)',
-        }}
-      >
+        <span className="absolute top-1/2 left-0 right-0" style={{ height: 1, background: 'var(--accent-glow)', opacity: 0.7 }} />
+        <span className="absolute left-1/2 top-0 bottom-0" style={{ width: 1, background: 'var(--accent-glow)', opacity: 0.7 }} />
         <span
-          className="block rounded-full"
+          className="absolute"
           style={{
-            width: 6,
-            height: 6,
-            background: loading ? 'var(--signal-warn)' : 'var(--signal-ok)',
+            left: '50%',
+            top: '50%',
+            transform: 'translate(-50%, -50%)',
+            width: 10,
+            height: 10,
+            borderRadius: '50%',
+            border: '1px solid var(--accent)',
+            opacity: 0.8,
           }}
         />
-        {loading ? 'SYNC' : 'LIVE'}
       </div>
-
-      <style>{`
-        @keyframes phantom-presence-pulse {
-          0%   { transform: scale(1);   opacity: 0.55; }
-          50%  { transform: scale(1.6); opacity: 0;    }
-          100% { transform: scale(1);   opacity: 0;    }
-        }
-      `}</style>
     </div>
   );
 }
 
-const LAYER_META: Array<{ key: MapLayerKey; icon: React.ReactNode; label: string }> = [
-  { key: 'base',       icon: <Layers size={16} strokeWidth={1.75} />,    label: 'BASE' },
-  { key: 'presence',   icon: <Radar size={16} strokeWidth={1.75} />,     label: 'PRES' },
-  { key: 'wardriving', icon: <Wifi size={16} strokeWidth={1.75} />,      label: 'WARD' },
-  { key: 'heatmap',    icon: <Flame size={16} strokeWidth={1.75} />,     label: 'HEAT' },
-  { key: 'intel',      icon: <MapPin size={16} strokeWidth={1.75} />,    label: 'INTEL' },
-  { key: 'recon',      icon: <Route size={16} strokeWidth={1.75} />,     label: 'RECON' },
-];
+/* ─── Lateral icon button ─────────────────────────────────────────────── */
 
-function LayerPanel({
-  layers,
-  onToggle,
+function LateralButton({
+  icon,
+  label,
+  active = false,
+  onClick,
 }: {
-  layers: Record<MapLayerKey, boolean>;
-  onToggle: (key: MapLayerKey) => void;
+  icon: React.ReactNode;
+  label: string;
+  active?: boolean;
+  onClick?: () => void;
 }) {
   return (
-    <div
-      className="absolute top-3 left-3 flex flex-col rounded z-10"
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex items-center justify-center transition-all active:scale-95"
       style={{
-        background: 'var(--surface-raised)',
-        border: '1px solid var(--line-default)',
+        width: 44,
+        height: 44,
+        minWidth: 44,
+        minHeight: 44,
+        borderRadius: 14,
+        background: active
+          ? 'color-mix(in srgb, var(--accent) 18%, transparent)'
+          : 'transparent',
+        color: active ? 'var(--accent)' : 'var(--ink-secondary)',
+        boxShadow: active ? '0 0 14px var(--accent-glow)' : 'none',
+        border: active
+          ? '1px solid color-mix(in srgb, var(--accent) 42%, transparent)'
+          : '1px solid transparent',
       }}
-      role="group"
-      aria-label="Layer controls"
+      aria-label={label}
+      aria-pressed={active}
+      title={label}
     >
-      {LAYER_META.map((l) => {
-        const active = layers[l.key];
-        return (
-          <button
-            key={l.key}
-            type="button"
-            onClick={() => onToggle(l.key)}
-            className="flex items-center gap-2 px-3 transition-colors"
-            style={{
-              minWidth: 44,
-              minHeight: 44,
-              color: active ? 'var(--accent)' : 'var(--ink-muted)',
-              background: active ? 'var(--accent-glow)' : 'transparent',
-              borderBottom: '1px solid var(--line-subtle)',
-              fontSize: 'var(--fs-micro)',
-              fontFamily: 'var(--font-tech)',
-              letterSpacing: '0.08em',
-            }}
-            aria-pressed={active}
-            aria-label={`Toggle ${l.label} layer`}
-          >
-            {l.icon}
-            <span>{l.label}</span>
-          </button>
-        );
-      })}
-    </div>
+      {icon}
+    </button>
   );
 }
 
-function MapControl({
+function Divider() {
+  return <span className="block" style={{ width: 24, height: 1, margin: '4px 0', background: 'var(--glass-border)' }} />;
+}
+
+function VerticalDivider() {
+  return <span className="block self-center" style={{ width: 1, height: 20, background: 'var(--glass-border)', margin: '0 4px' }} />;
+}
+
+function ToolbarButton({
   icon,
   onClick,
-  disabled = false,
   label,
   accent = false,
+  disabled = false,
 }: {
   icon: React.ReactNode;
   onClick: () => void;
-  disabled?: boolean;
   label: string;
   accent?: boolean;
+  disabled?: boolean;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
-      className="flex items-center justify-center rounded transition-colors"
+      className="flex items-center justify-center transition-all active:scale-95"
       style={{
+        width: 40,
+        height: 40,
         minWidth: 44,
         minHeight: 44,
-        background: accent ? 'var(--accent)' : 'var(--surface-raised)',
+        borderRadius: 9999,
+        background: accent
+          ? 'var(--accent)'
+          : 'transparent',
         color: accent ? 'var(--ink-inverse)' : 'var(--ink-secondary)',
-        border: `1px solid ${accent ? 'var(--accent)' : 'var(--line-default)'}`,
+        border: accent
+          ? '1px solid var(--accent)'
+          : '1px solid transparent',
+        boxShadow: accent ? '0 0 14px var(--accent-glow)' : 'none',
         opacity: disabled ? 0.4 : 1,
       }}
       aria-label={label}
@@ -351,5 +436,177 @@ function MapControl({
     >
       {icon}
     </button>
+  );
+}
+
+/* ─── HUD chips ──────────────────────────────────────────────────────── */
+
+interface CtxShape {
+  where?: {
+    lat: number | null;
+    lon: number | null;
+    fix: boolean;
+    satellites: number;
+    speed_kmh: number;
+  };
+}
+
+function CoordinateReadout({ context }: { context: CtxShape | null | undefined }) {
+  const where = context?.where;
+  const fix = !!where?.fix;
+  const lat = where?.lat;
+  const lon = where?.lon;
+  return (
+    <div
+      className="glass-card flex flex-col gap-1 px-3 py-2 rounded-2xl"
+      style={{ minWidth: 190 }}
+    >
+      <div className="flex items-center gap-2">
+        <span
+          className="block rounded-full"
+          style={{
+            width: 6,
+            height: 6,
+            background: fix ? 'var(--signal-ok)' : 'var(--signal-alert)',
+            boxShadow: fix ? '0 0 6px var(--signal-ok)' : '0 0 6px var(--signal-alert)',
+          }}
+        />
+        <span
+          className="uppercase"
+          style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 'var(--fs-micro)',
+            color: fix ? 'var(--ink-primary)' : 'var(--ink-muted)',
+            letterSpacing: 'var(--tracking-widest)',
+          }}
+        >
+          {fix ? '3D fix' : 'No fix'}
+        </span>
+      </div>
+      <div className="flex items-center gap-3">
+        <span style={{ color: 'var(--ink-muted)', fontFamily: 'var(--font-display)', fontSize: 'var(--fs-micro)' }}>
+          LAT
+        </span>
+        <span
+          className="tabular-nums"
+          style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)', color: 'var(--ink-primary)' }}
+        >
+          {lat != null ? lat.toFixed(5) : '—'}
+        </span>
+      </div>
+      <div className="flex items-center gap-3">
+        <span style={{ color: 'var(--ink-muted)', fontFamily: 'var(--font-display)', fontSize: 'var(--fs-micro)' }}>
+          LON
+        </span>
+        <span
+          className="tabular-nums"
+          style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--fs-xs)', color: 'var(--ink-primary)' }}
+        >
+          {lon != null ? lon.toFixed(5) : '—'}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+function CompassChip({ bearing }: { bearing: number }) {
+  return (
+    <div
+      className="glass-card flex items-center gap-2 px-3 rounded-full"
+      style={{ height: 30 }}
+    >
+      <Compass
+        size={14}
+        strokeWidth={1.75}
+        style={{ color: 'var(--accent)', transform: `rotate(${bearing}deg)` }}
+      />
+      <span
+        className="tabular-nums uppercase"
+        style={{
+          fontFamily: 'var(--font-display)',
+          fontSize: 'var(--fs-micro)',
+          color: 'var(--ink-primary)',
+          letterSpacing: 'var(--tracking-widest)',
+        }}
+      >
+        N · {String(Math.round(bearing)).padStart(3, '0')}°
+      </span>
+    </div>
+  );
+}
+
+function GpsQualityChip({ context }: { context: CtxShape | null | undefined }) {
+  const sats = context?.where?.satellites ?? 0;
+  const fix = !!context?.where?.fix;
+  const speed = context?.where?.speed_kmh ?? 0;
+  return (
+    <div
+      className="glass-card flex items-center gap-3 px-3 rounded-full"
+      style={{ height: 30 }}
+    >
+      <span className="flex items-center gap-1">
+        <Satellite size={12} strokeWidth={1.75} style={{ color: 'var(--ink-muted)' }} />
+        <span
+          className="tabular-nums"
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 'var(--fs-micro)',
+            color:
+              sats >= 6 ? 'var(--signal-ok)' :
+              sats >= 4 ? 'var(--signal-warn)' :
+              'var(--signal-alert)',
+          }}
+        >
+          {String(sats).padStart(2, '0')}
+        </span>
+      </span>
+      <span style={{ color: 'var(--glass-border)' }}>|</span>
+      <span
+        className="tabular-nums"
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 'var(--fs-micro)',
+          color: fix ? 'var(--ink-primary)' : 'var(--ink-muted)',
+        }}
+      >
+        {speed.toFixed(0)} km/h
+      </span>
+    </div>
+  );
+}
+
+function StatusChip({ loading, zoom }: { loading: boolean; zoom: number }) {
+  return (
+    <div
+      className="glass-card flex items-center gap-2 px-3 rounded-full"
+      style={{ height: 30 }}
+    >
+      {loading ? (
+        <EyeOff size={12} strokeWidth={1.75} style={{ color: 'var(--signal-warn)' }} />
+      ) : (
+        <Eye size={12} strokeWidth={1.75} style={{ color: 'var(--signal-ok)' }} />
+      )}
+      <span
+        className="uppercase"
+        style={{
+          fontFamily: 'var(--font-display)',
+          fontSize: 'var(--fs-micro)',
+          color: loading ? 'var(--signal-warn)' : 'var(--signal-ok)',
+          letterSpacing: 'var(--tracking-widest)',
+        }}
+      >
+        {loading ? 'Syncing' : 'Live'}
+      </span>
+      <span
+        className="tabular-nums"
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 'var(--fs-micro)',
+          color: 'var(--ink-muted)',
+        }}
+      >
+        z{zoom.toFixed(0)}
+      </span>
+    </div>
   );
 }

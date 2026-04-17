@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>AI Assistant: User Profiles Settings</title>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#0df20d",
+                        "background-light": "#f5f8f5",
+                        "background-dark": "#102210",
+                    },
+                    fontFamily: { "display": ["Space Grotesk", "sans-serif"] },
+                    borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+                    backgroundImage: {
+                        'glass': 'linear-gradient(145deg, rgba(255, 255, 255, 0.05) 0%, rgba(255, 255, 255, 0.01) 100%)',
+                        'glass-active': 'linear-gradient(145deg, rgba(13, 242, 13, 0.1) 0%, rgba(13, 242, 13, 0.02) 100%)',
+                    }
+                },
+            },
+        }
+    </script>
+<style>
+.hide-scrollbar::-webkit-scrollbar { display: none; }
+.hide-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+.toggle-checkbox:checked { right: 0; border-color: #0df20d; }
+.toggle-checkbox:checked + .toggle-label { background-color: #0df20d; }
+.toggle-checkbox { right: 0; z-index: 10; }
+.toggle-label { width: 3rem; height: 1.5rem; }
+.toggle-checkbox-sm:checked { right: 0; border-color: #0df20d; }
+.toggle-checkbox-sm:checked + .toggle-label-sm { background-color: #0df20d; }
+.toggle-checkbox-sm { right: 0; z-index: 10; width: 1rem; height: 1rem; border-width: 2px; }
+.toggle-checkbox-sm:checked { left: 1rem; }
+.toggle-label-sm { width: 2rem; height: 1rem; }
+</style>
+<style>body { min-height: max(884px, 100dvh); }</style>
+</head>
+<body class="bg-background-light dark:bg-background-dark text-slate-900 dark:text-slate-100 font-display min-h-screen flex flex-col antialiased selection:bg-primary/30">
+<div class="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+<div class="absolute top-[-10%] right-[-5%] w-96 h-96 bg-primary/5 rounded-full blur-3xl opacity-50"></div>
+<div class="absolute bottom-[-10%] left-[-5%] w-96 h-96 bg-primary/10 rounded-full blur-3xl opacity-30"></div>
+</div>
+<div class="relative z-10 flex flex-col h-screen max-w-7xl mx-auto w-full">
+<header class="flex items-center justify-between p-6 pb-2">
+<button class="flex items-center justify-center w-12 h-12 rounded-full bg-white/5 hover:bg-white/10 text-slate-100 transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-primary/50">
+<span class="material-symbols-outlined text-[24px]">arrow_back</span>
+</button>
+<div class="flex-1 flex flex-col items-center">
+<div class="flex items-center gap-2 px-3 py-1 rounded-full bg-black/20 backdrop-blur-sm border border-white/5">
+<span class="w-2 h-2 rounded-full bg-primary animate-pulse shadow-[0_0_8px_rgba(13,242,13,0.8)]"></span>
+<span class="text-xs font-bold tracking-wider uppercase text-primary/80">System Status: Online</span>
+</div>
+</div>
+<div class="flex items-center justify-end w-12">
+<div class="text-primary" title="Battery Full">
+<span class="material-symbols-outlined text-[24px]">battery_full</span>
+</div>
+</div>
+</header>
+<main class="flex-1 flex flex-col overflow-hidden">
+<div class="px-6 py-4">
+<h1 class="text-3xl md:text-4xl font-bold tracking-tight text-white mb-1">User Profiles</h1>
+<p class="text-slate-400 text-sm">Select a profile to manage settings or initialize a new user.</p>
+</div>
+<div class="w-full overflow-x-auto hide-scrollbar pb-8 pt-2 px-6">
+<div class="flex gap-6 min-w-max">
+<div class="group relative w-64 h-80 rounded-2xl overflow-hidden transition-all duration-300 hover:scale-[1.02] cursor-pointer ring-1 ring-primary shadow-[0_0_20px_rgba(13,242,13,0.15)] bg-glass-active backdrop-blur-md flex flex-col">
+<div class="absolute top-3 right-3 w-3 h-3 rounded-full bg-primary shadow-[0_0_8px_rgba(13,242,13,1)] z-20"></div>
+<div class="h-[60%] w-full relative overflow-hidden bg-black/40">
+<div class="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-110" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuAhjVqLweV31-zTSx2lKVuV-fXD6Kx39UxFagSQ_pU7p3M8RBzVij69M1xYYDe0HFFtvOeka3kRWS7HynjTuTHg3lMHHPu6ALQjAz48cRO7cBlW9ZgHpmBO9ImjkKYXuoXK3GAqTQ2C0LmUJhhPkq5ts2PkrvIB7js2S6lnEoCPwy68uJ9NSR6uA5K0S-j9wKrdf_4qr-KzzJ0wFLgxMIehgn3tAzeHpBrvxE6MvWCcbsa5n_C2c_E9JGxcpFwYuEo_yC5a5GfKdAM');"></div>
+<div class="absolute inset-0 bg-gradient-to-t from-black/80 via-transparent to-transparent"></div>
+</div>
+<div class="flex-1 p-5 flex flex-col justify-end relative">
+<h3 class="text-xl font-bold text-white mb-1">Alex</h3>
+<p class="text-primary text-xs font-medium uppercase tracking-wider mb-4">Active User</p>
+<div class="flex items-center text-xs text-slate-400 gap-1">
+<span class="material-symbols-outlined text-[16px]">verified_user</span>
+<span>Admin Access</span>
+</div>
+</div>
+</div>
+<div class="group relative w-64 h-80 rounded-2xl overflow-hidden transition-all duration-300 hover:scale-[1.02] cursor-pointer ring-1 ring-white/10 hover:ring-primary/50 bg-glass backdrop-blur-md flex flex-col">
+<div class="h-[60%] w-full relative overflow-hidden bg-black/40">
+<div class="absolute inset-0 bg-cover bg-center transition-transform duration-700 group-hover:scale-110 grayscale group-hover:grayscale-0" style="background-image: url('https://lh3.googleusercontent.com/aida-public/AB6AXuBE0y7d10m56Aw87D9hxg0tswH80_HZf5Pw53TffSfpggL13tkbtJHcdmqbXOu0dkUH_WPCuUPCTf6Usbt8QWAMr-KkEinh_t5D-MhHBb8UsXkcnDL8pMopB6t-4E_q5Gr_6iGIrLp2yynKii5eBWtPh9JrKphzCVoUzFXXfJjFYro__X3Yx88rrCfS__TVV3K0oVuaxqwWapUYN7F9O-gHwr4uDATauv9BMrQLq4t9ji_8A_E76sBrNgyysXbXVtTulABw3dMZR3o');"></div>
+<div class="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent"></div>
+</div>
+<div class="flex-1 p-5 flex flex-col justify-end relative">
+<h3 class="text-xl font-bold text-slate-200 mb-1 group-hover:text-white">Sarah</h3>
+<p class="text-slate-500 text-xs font-medium uppercase tracking-wider mb-4 group-hover:text-primary/70 transition-colors">Last seen 2h ago</p>
+<div class="flex items-center text-xs text-slate-500 gap-1">
+<span class="material-symbols-outlined text-[16px]">lock</span>
+<span>Standard Access</span>
+</div>
+</div>
+</div>
+<div class="group relative w-64 h-80 rounded-2xl overflow-hidden transition-all duration-300 hover:scale-[1.02] cursor-pointer ring-1 ring-white/10 hover:ring-primary/50 bg-glass backdrop-blur-md flex flex-col">
+<div class="h-[60%] w-full relative overflow-hidden bg-black/40 flex items-center justify-center">
+<div class="w-full h-full bg-slate-800 flex items-center justify-center">
+<span class="material-symbols-outlined text-[64px] text-slate-600">person_outline</span>
+</div>
+<div class="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-transparent"></div>
+</div>
+<div class="flex-1 p-5 flex flex-col justify-end relative">
+<h3 class="text-xl font-bold text-slate-200 mb-1 group-hover:text-white">Guest</h3>
+<p class="text-slate-500 text-xs font-medium uppercase tracking-wider mb-4 group-hover:text-primary/70 transition-colors">Limited Session</p>
+<div class="flex items-center text-xs text-slate-500 gap-1">
+<span class="material-symbols-outlined text-[16px]">visibility_off</span>
+<span>Restricted</span>
+</div>
+</div>
+</div>
+<div class="group relative w-64 h-80 rounded-2xl overflow-hidden transition-all duration-300 hover:scale-[1.02] cursor-pointer border-2 border-dashed border-white/20 hover:border-primary/50 bg-white/5 hover:bg-white/10 backdrop-blur-sm flex flex-col items-center justify-center text-center p-6">
+<div class="w-16 h-16 rounded-full bg-primary/10 flex items-center justify-center mb-4 group-hover:bg-primary/20 transition-colors">
+<span class="material-symbols-outlined text-primary text-[32px]">add</span>
+</div>
+<h3 class="text-lg font-bold text-white mb-2">New Profile</h3>
+<p class="text-slate-400 text-xs mb-6 max-w-[140px]">Initiate facial scan to create a new user entity</p>
+<div class="flex items-center gap-2 text-primary/80 text-xs font-mono border border-primary/30 px-3 py-1.5 rounded bg-primary/5">
+<span class="material-symbols-outlined text-[14px] animate-pulse">center_focus_weak</span>
+<span>SCAN READY</span>
+</div>
+</div>
+</div>
+</div>
+</main>
+</div>
+</body></html>

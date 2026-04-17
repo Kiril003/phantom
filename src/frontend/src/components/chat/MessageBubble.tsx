@@ -1,8 +1,7 @@
 import { motion } from 'framer-motion';
-import { User, Bot, Mic, Hash, Activity } from 'lucide-react';
+import { User, Sparkles, Mic, Hash, Info } from 'lucide-react';
 import type { ChatMessage } from '@shared/types';
 import { ResponseRenderer } from './ResponseRenderer';
-import { EASE_PHANTOM } from '../../styles/motion';
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -21,18 +20,6 @@ function formatTime(iso: string): string {
   }
 }
 
-function ProviderDot({ provider }: { provider: string | undefined }) {
-  if (!provider) return null;
-  const color = provider === 'gemini' ? 'var(--signal-info)' : provider === 'ollama' ? 'var(--signal-ok)' : 'var(--ink-muted)';
-  return (
-    <span
-      className="inline-block rounded-full"
-      style={{ width: 5, height: 5, background: color }}
-      title={`AI: ${provider}`}
-    />
-  );
-}
-
 export function MessageBubble({ message, streaming = false, compact = false }: MessageBubbleProps) {
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
@@ -41,23 +28,23 @@ export function MessageBubble({ message, streaming = false, compact = false }: M
   const provider = (meta as { ai_provider?: string }).ai_provider;
   const latency = (meta as { latency_ms?: number }).latency_ms;
   const tokens = (meta as { tokens_used?: number }).tokens_used;
-  const tone = (meta as { tone?: string }).tone;
 
   if (isSystem) {
     return (
       <motion.div
-        className="self-center flex items-center gap-2 px-3 py-1 rounded-full font-mono tracking-wider"
+        className="self-center flex items-center gap-2 px-3 py-1 rounded-full glass-subtle"
         style={{
-          background: 'var(--surface-raised)',
-          border: '1px solid var(--line-subtle)',
           color: 'var(--ink-muted)',
+          fontFamily: 'var(--font-display)',
           fontSize: 'var(--fs-micro)',
+          letterSpacing: 'var(--tracking-widest)',
+          textTransform: 'uppercase',
         }}
         initial={{ opacity: 0, y: 4 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.2, ease: EASE_PHANTOM as unknown as number[] }}
+        transition={{ duration: 0.2 }}
       >
-        <Activity size={10} strokeWidth={1.5} />
+        <Info size={11} strokeWidth={1.5} />
         <span>{message.content}</span>
       </motion.div>
     );
@@ -65,44 +52,57 @@ export function MessageBubble({ message, streaming = false, compact = false }: M
 
   return (
     <motion.div
-      className={`flex items-start gap-2 ${isUser ? 'self-end flex-row-reverse' : 'self-start'}`}
-      style={{ maxWidth: '84%' }}
-      initial={{ opacity: 0, y: 6, scale: 0.98 }}
-      animate={{ opacity: 1, y: 0, scale: 1 }}
-      transition={{ duration: 0.22, ease: EASE_PHANTOM as unknown as number[] }}
+      className={`flex items-start gap-3 ${isUser ? 'self-end flex-row-reverse' : 'self-start'}`}
+      style={{ maxWidth: '82%' }}
+      initial={{ opacity: 0, y: 6 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
     >
       {/* Avatar */}
       <div
-        className="flex items-center justify-center rounded-md shrink-0"
+        className="flex items-center justify-center shrink-0"
         style={{
-          width: 28,
-          height: 28,
-          background: isUser ? 'var(--surface-raised)' : 'var(--accent-glow)',
+          width: 32,
+          height: 32,
+          borderRadius: 12,
+          background: isUser
+            ? 'var(--glass-subtle)'
+            : 'color-mix(in srgb, var(--accent) 14%, transparent)',
+          border: `1px solid ${isUser ? 'var(--glass-border)' : 'color-mix(in srgb, var(--accent) 40%, transparent)'}`,
           color: isUser ? 'var(--ink-secondary)' : 'var(--accent)',
-          border: `1px solid ${isUser ? 'var(--line-subtle)' : 'var(--accent)'}`,
+          boxShadow: isUser ? 'none' : '0 0 14px var(--accent-glow)',
         }}
       >
-        {isUser ? <User size={14} strokeWidth={1.5} /> : <Bot size={14} strokeWidth={1.5} />}
+        {isUser ? <User size={15} strokeWidth={1.75} /> : <Sparkles size={15} strokeWidth={1.75} />}
       </div>
 
       <div className="flex flex-col gap-1 min-w-0">
         {/* Bubble */}
         <div
-          className={`rounded-lg p-3 ${isUser ? 'rounded-tr-none' : 'rounded-tl-none'}`}
+          className={`relative ${isUser ? 'glass-subtle' : 'glass-panel'}`}
           style={{
-            background: isUser ? 'var(--surface-raised)' : 'var(--surface-glass)',
-            border: `1px solid ${isUser ? 'var(--line-subtle)' : 'var(--line-default)'}`,
+            padding: '12px 16px',
+            borderRadius: 18,
+            borderTopLeftRadius: isUser ? 18 : 6,
+            borderTopRightRadius: isUser ? 6 : 18,
+            fontFamily: 'var(--font-display)',
+            fontSize: 'var(--fs-base)',
+            color: 'var(--ink-primary)',
+            lineHeight: 'var(--lh-normal)',
+            boxShadow: isUser
+              ? 'inset 0 1px 0 var(--glass-highlight)'
+              : '0 4px 20px -4px color-mix(in srgb, var(--accent) 10%, transparent), inset 0 1px 0 var(--glass-highlight)',
           }}
         >
           <ResponseRenderer message={message} streaming={streaming} />
           {streaming && (
             <motion.span
-              className="inline-block ml-1"
+              className="inline-block align-middle ml-1"
               style={{
                 width: 8,
-                height: 14,
+                height: 16,
                 background: 'var(--accent)',
-                verticalAlign: 'text-bottom',
+                borderRadius: 2,
               }}
               animate={{ opacity: [0.3, 1, 0.3] }}
               transition={{ duration: 1, repeat: Infinity }}
@@ -111,37 +111,46 @@ export function MessageBubble({ message, streaming = false, compact = false }: M
           )}
         </div>
 
-        {/* Meta row */}
+        {/* Meta line */}
         {!compact && (
           <div
-            className={`flex items-center gap-2 font-mono ${isUser ? 'justify-end flex-row-reverse' : 'justify-start'}`}
-            style={{ color: 'var(--ink-muted)', fontSize: 'var(--fs-micro)' }}
+            className={`flex items-center gap-2 ${isUser ? 'justify-end flex-row-reverse' : 'justify-start'}`}
+            style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: 'var(--fs-micro)',
+              color: 'var(--ink-muted)',
+              letterSpacing: 'var(--tracking-wide)',
+            }}
           >
             <span>{formatTime(message.created_at)}</span>
             {inputMethod === 'voice' && (
-              <span className="flex items-center gap-0.5">
-                <Mic size={10} strokeWidth={1.5} />
-                VOICE
+              <span className="inline-flex items-center gap-0.5">
+                <Mic size={10} strokeWidth={1.75} />
+                voice
               </span>
             )}
             {!isUser && provider && (
-              <span className="flex items-center gap-1">
-                <ProviderDot provider={provider} />
-                {provider.toUpperCase()}
+              <span className="inline-flex items-center gap-1 capitalize">
+                <span
+                  aria-hidden
+                  className="block rounded-full"
+                  style={{
+                    width: 5,
+                    height: 5,
+                    background:
+                      provider === 'gemini' ? 'var(--signal-info)' :
+                      provider === 'ollama' ? 'var(--signal-ok)' :
+                      'var(--ink-muted)',
+                  }}
+                />
+                {provider}
               </span>
             )}
-            {!isUser && latency != null && latency > 0 && (
-              <span>{latency}ms</span>
-            )}
+            {!isUser && latency != null && latency > 0 && <span>{latency}ms</span>}
             {!isUser && tokens != null && tokens > 0 && (
-              <span className="flex items-center gap-0.5">
-                <Hash size={9} strokeWidth={1.5} />
+              <span className="inline-flex items-center gap-0.5">
+                <Hash size={9} strokeWidth={1.75} />
                 {tokens}
-              </span>
-            )}
-            {!isUser && tone && (
-              <span className="truncate" style={{ maxWidth: 200 }} title={tone}>
-                {tone}
               </span>
             )}
           </div>

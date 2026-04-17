@@ -1,99 +1,129 @@
 import { useState, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { StatusBar } from '../components/core/StatusBar';
-import { Avatar } from '../components/core/Avatar';
+import { AmbientGlows } from '../components/core/AmbientGlows';
+import { FloatingToolbar } from '../components/core/FloatingToolbar';
+import { Orb } from '../components/core/Orb';
 import { ChatWindow } from '../components/chat/ChatWindow';
 import { useSystemStore } from '../stores/systemStore';
 import { useChatStore } from '../stores/chatStore';
 import { EASE_PHANTOM } from '../styles/motion';
 
 /**
- * DIALOGUE — full conversation mode.
- * Left panel: Avatar + live context + memory hints.
- * Right panel: ChatWindow with session list, response forms, voice toggle.
+ * DIALOGUE — conversation surface.
+ * Left: Orb (voice-reactive) + live context whisper + memory hints.
+ * Right: ChatWindow with sessions panel and glass input pill.
  */
 export default function DialogueLayout() {
   const context = useSystemStore((s) => s.context);
   const isTyping = useChatStore((s) => s.isTyping);
+  const streaming = useChatStore((s) => s.streaming);
   const [voiceActive, setVoiceActive] = useState(false);
 
   const handleVoiceToggle = useCallback((active: boolean) => {
     setVoiceActive(active);
   }, []);
 
+  const pulsing = isTyping || !!streaming || voiceActive;
+
   return (
     <motion.div
-      className="w-[1024px] h-[600px] flex flex-col"
-      style={{ background: 'var(--surface-deep)' }}
-      initial={{ opacity: 0, scale: 0.98 }}
-      animate={{ opacity: 1, scale: 1 }}
+      className="w-[1024px] h-[600px] flex flex-col relative"
+      style={{ background: 'var(--surface-base)' }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.4, ease: EASE_PHANTOM as unknown as number[] }}
     >
+      <AmbientGlows />
       <StatusBar />
 
-      <div className="flex-1 flex overflow-hidden">
+      <main className="flex-1 flex min-h-0 z-10 relative">
+        {/* Left — Orb + context whisper */}
         <motion.aside
-          className="w-[240px] h-full flex flex-col items-center border-r py-4 px-3 gap-4 shrink-0"
-          style={{
-            background: 'var(--surface-raised)',
-            borderColor: 'var(--line-subtle)',
-          }}
-          initial={{ x: -240 }}
-          animate={{ x: 0 }}
-          transition={{ duration: 0.4, ease: EASE_PHANTOM as unknown as number[] }}
+          className="w-[300px] shrink-0 flex flex-col items-center justify-between py-6 px-5 relative"
+          initial={{ x: -32, opacity: 0 }}
+          animate={{ x: 0, opacity: 1 }}
+          transition={{ duration: 0.45, ease: EASE_PHANTOM as unknown as number[] }}
         >
-          <Avatar size={140} speaking={isTyping} listening={voiceActive} />
-
-          <div className="w-full flex flex-col gap-2 mt-2">
-            {context?.body.breathing_bpm != null && (
-              <ContextLine label="Breathing" value={`${context.body.breathing_bpm} bpm`} />
-            )}
-            {context?.body.stress_level != null && (
-              <ContextLine
-                label="Stress"
-                value={`${(context.body.stress_level * 100).toFixed(0)}%`}
-                alert={context.body.stress_level > 0.7}
-              />
-            )}
-            {context?.where.place_name && (
-              <ContextLine label="Location" value={context.where.place_name} />
-            )}
-            <ContextLine label="AI" value={context?.system.ai_provider ?? '—'} />
+          <div className="flex-1 flex flex-col items-center justify-center gap-4 w-full">
+            <Orb size="md" pulsing={pulsing} />
+            <div
+              className="text-center mt-2"
+              style={{ maxWidth: 240 }}
+            >
+              <p
+                className="text-gradient"
+                style={{
+                  fontFamily: 'var(--font-display)',
+                  fontSize: 'var(--fs-lg)',
+                  fontWeight: 300,
+                  letterSpacing: 'var(--tracking-tight)',
+                }}
+              >
+                {voiceActive ? 'Listening' : pulsing ? 'Thinking' : 'Ready'}
+              </p>
+              <p
+                className="italic mt-1"
+                style={{
+                  fontFamily: 'var(--font-serif)',
+                  fontSize: 'var(--fs-sm)',
+                  color: 'var(--ink-secondary)',
+                }}
+              >
+                {context?.memory_hints && context.memory_hints.length > 0
+                  ? '"' + context.memory_hints[0] + '"'
+                  : 'Speak freely.'}
+              </p>
+            </div>
           </div>
 
-          {context?.memory_hints && context.memory_hints.length > 0 && (
-            <div className="w-full flex flex-col gap-1 mt-auto">
-              <span
-                style={{ color: 'var(--ink-muted)', fontSize: 'var(--fs-micro)' }}
-                className="tracking-wider"
-              >
-                MEMORY CONTEXT
-              </span>
-              {context.memory_hints.slice(0, 3).map((hint, i) => (
-                <span
-                  key={i}
-                  className="truncate"
-                  style={{
-                    color: 'var(--ink-secondary)',
-                    fontSize: 'var(--fs-micro)',
-                  }}
-                >
-                  {hint}
-                </span>
-              ))}
+          {/* Context readouts */}
+          {context && (
+            <div className="w-full flex flex-col gap-1.5 glass-panel px-3 py-2.5"
+              style={{ borderRadius: 14 }}
+            >
+              <ContextLine label="Breathing" value={context.body.breathing_bpm != null ? `${context.body.breathing_bpm} bpm` : '—'} />
+              <ContextLine
+                label="Stress"
+                value={`${Math.round((context.body.stress_level ?? 0) * 100)}%`}
+                alert={(context.body.stress_level ?? 0) > 0.7}
+              />
+              {context.where.place_name && (
+                <ContextLine label="Location" value={context.where.place_name} />
+              )}
+              <ContextLine label="AI" value={context.system.ai_provider ?? '—'} capitalize />
             </div>
           )}
         </motion.aside>
 
-        <div className="flex-1 h-full min-w-0 min-h-0">
-          <ChatWindow
-            onVoiceToggle={handleVoiceToggle}
-            minimalChrome={false}
-            placeholder="Розмова з PHANTOM…"
+        {/* Right — ChatWindow */}
+        <motion.div
+          className="flex-1 min-w-0 min-h-0 relative"
+          initial={{ y: 16, opacity: 0 }}
+          animate={{ y: 0, opacity: 1 }}
+          transition={{ duration: 0.5, ease: EASE_PHANTOM as unknown as number[] }}
+        >
+          <div
+            className="absolute inset-y-4 inset-x-0 mr-4 glass-panel"
+            style={{
+              borderRadius: 24,
+              borderRight: 'none',
+              zIndex: 0,
+            }}
           />
-        </div>
-      </div>
+          <div className="relative h-full">
+            <ChatWindow
+              onVoiceToggle={handleVoiceToggle}
+              minimalChrome={false}
+              placeholder="Message PHANTOM…"
+              className="pb-14"
+            />
+          </div>
+        </motion.div>
+      </main>
+
+      <FloatingToolbar />
     </motion.div>
   );
 }
@@ -102,19 +132,33 @@ function ContextLine({
   label,
   value,
   alert = false,
+  capitalize = false,
 }: {
   label: string;
   value: string;
   alert?: boolean;
+  capitalize?: boolean;
 }) {
   return (
-    <div className="flex items-center justify-between px-1">
-      <span style={{ color: 'var(--ink-muted)', fontSize: 'var(--fs-micro)' }}>{label}</span>
+    <div className="flex items-center justify-between">
       <span
-        className="font-mono"
+        className="uppercase"
         style={{
-          color: alert ? 'var(--signal-alert)' : 'var(--ink-secondary)',
+          fontFamily: 'var(--font-display)',
+          fontSize: 'var(--fs-micro)',
+          color: 'var(--ink-muted)',
+          letterSpacing: 'var(--tracking-widest)',
+        }}
+      >
+        {label}
+      </span>
+      <span
+        className="tabular-nums"
+        style={{
+          fontFamily: 'var(--font-mono)',
           fontSize: 'var(--fs-xs)',
+          color: alert ? 'var(--signal-alert)' : 'var(--ink-primary)',
+          textTransform: capitalize ? 'capitalize' : 'none',
         }}
       >
         {value}

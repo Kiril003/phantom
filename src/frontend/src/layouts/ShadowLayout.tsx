@@ -1,15 +1,14 @@
 import { motion } from 'framer-motion';
 import { StatusBar } from '../components/core/StatusBar';
-import { Avatar } from '../components/core/Avatar';
+import { AmbientGlows } from '../components/core/AmbientGlows';
+import { Orb } from '../components/core/Orb';
+import { FloatingToolbar } from '../components/core/FloatingToolbar';
 import { useSystemStore } from '../stores/systemStore';
 import { EASE_PHANTOM } from '../styles/motion';
 
 /**
- * SHADOW — Passive observation.
- * UI: only status bar 28px, rest is dark.
- * Minimal presence: faint avatar breathing in center.
- * AI: passive, no initiative.
- * Voice: wake word detection only.
+ * SHADOW — passive observation.
+ * Minimal surface: Orb floats quietly in the middle with dim ambient glows.
  */
 export default function ShadowLayout() {
   const context = useSystemStore((s) => s.context);
@@ -19,44 +18,65 @@ export default function ShadowLayout() {
 
   return (
     <motion.div
-      className="w-[1024px] h-[600px] flex flex-col"
-      style={{ background: 'var(--surface-void)' }}
+      className="w-[1024px] h-[600px] flex flex-col relative"
+      style={{ background: 'var(--surface-base)' }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.6, ease: EASE_PHANTOM as unknown as number[] }}
     >
+      <AmbientGlows />
       <StatusBar />
 
-      <div className="flex-1 relative overflow-hidden flex items-center justify-center">
-        {/* Avatar — small, subdued breathing */}
-        <Avatar size={80} />
+      <main className="flex-1 relative overflow-hidden flex flex-col items-center justify-center gap-6 z-10">
+        <Orb size="sm" />
 
-        {/* Ambient time display — very dim */}
         <motion.div
-          className="absolute bottom-8 left-0 right-0 flex flex-col items-center gap-1"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 0.25 }}
-          transition={{ delay: 0.4, duration: 1 }}
+          className="flex flex-col items-center gap-1"
+          initial={{ opacity: 0, y: 8 }}
+          animate={{ opacity: 0.7, y: 0 }}
+          transition={{ delay: 0.35, duration: 0.9 }}
         >
           {timeStr && (
             <span
-              className="font-mono tabular-nums tracking-[0.2em]"
-              style={{ color: 'var(--ink-muted)', fontSize: 'var(--fs-xl)' }}
+              className="tabular-nums"
+              style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: 'var(--fs-xl)',
+                color: 'var(--ink-secondary)',
+                fontWeight: 300,
+                letterSpacing: 'var(--tracking-tight)',
+              }}
             >
               {timeStr}
             </span>
           )}
           {temp != null && (
             <span
-              className="font-mono"
-              style={{ color: 'var(--ink-muted)', fontSize: 'var(--fs-xs)' }}
+              style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: 'var(--fs-xs)',
+                color: 'var(--ink-muted)',
+                letterSpacing: 'var(--tracking-wide)',
+              }}
             >
-              {temp.toFixed(1)}°C
+              {temp.toFixed(1)}°C · ambient
             </span>
           )}
+          <span
+            className="italic mt-2"
+            style={{
+              fontFamily: 'var(--font-serif)',
+              fontSize: 'var(--fs-sm)',
+              color: 'var(--ink-muted)',
+            }}
+          >
+            Quiet. Watching. Yours.
+          </span>
         </motion.div>
-      </div>
+      </main>
+
+      <FloatingToolbar />
     </motion.div>
   );
 }

@@ -1,185 +1,384 @@
 # PHANTOM OS — Visual System
 
-> Single source of truth для UI. Читати перед будь-якою зміною фронтенду.
-> Не дублювати правила в компонентах — імпортувати з токенів.
+> **Єдине джерело істини для UI.** Читати перед будь-якою зміною фронтенду.
+> Антипаттерн: ASCII brackets + monospace + flat tactical terminal. Це НЕ наша естетика.
+> Наша естетика: **Premium AI OS з tactical data density**.
 
 ---
 
 ## 🎯 Філософія
 
-PHANTOM OS — не "dashboard app". Це **жива істота на екрані**. Візуал має:
+PHANTOM OS — це **жива AI-сутність** у preміумному скляному корпусі.
+Не termінал. Не консоль. Не військовий HUD. А **персональний AI-компаньйон** з відчуттям:
 
-1. **Повідомляти стан** — користувач бачить систему і розуміє що з нею зараз.
-2. **Займати мінімум уваги в SHADOW** і **домінувати в SENTINEL**.
-3. **Не виглядати як AI-згенерований шаблон** — без gradient-mesh, без glassmorphism-заради-glassmorphism, без smile-emoji mascot.
-4. **Працювати на 1024×600 тач-дисплеї** — великі hit targets, низька щільність тексту, високий контраст.
+- **Apple Vision Pro** — глибина, прозорість, плинність
+- **Refik Anadol digital installations** — органічні morphing форми, живий рух
+- **Bang & Olufsen** — тиха впевненість, преміумність через деталі
+- **Teenage Engineering OP-1** — tactility через мікроанімації і реактивність
+- **Superhuman / Linear / Arc browser** — craft у кожному пікселі
 
-**Референси по настрою:** термінали NORAD, інтерфейс Samaritan (Person of Interest), HUD Ghost in the Shell, Teenage Engineering OP-1.
-**Антиреференси:** Material You, iOS widgets, "AI startup landing page", generic Tailwind component library look.
+**Антиреференси:** Material You, generic Tailwind templates, "AI startup landing page", ASCII-terminal brutalism, військовий шрифт всюди.
+
+Продукт для **оператора-оригіналу**, не для адміна серверної. Він має **дихати**, **світитися**, **реагувати**.
+
+---
+
+## 📚 Реальні дизайн-референси
+
+**ОБОВ'ЯЗКОВО** перед розробкою прочитай і подивись файли у `docs/design-refs/*.html`.
+
+Це **власні прототипи попередньої версії** продукту — єталон естетики.
+
+| Файл | Що показує |
+|------|------------|
+| `docs/design-refs/system_core.html` | Головний екран — SYSTEM_CORE з morphing orb, glass cards, toolbar внизу |
+| `docs/design-refs/tactical_map.html` | Карта з lateral icon panel, floating search bar, bottom toolbar |
+| `docs/design-refs/wardriving_sigint.html` | Data table з amber accent, signal bars, monospace BSSID |
+| `docs/design-refs/login.html` | Glassmorphism login з avatar ring, green accent, glow-pulse PIN dots |
+| `docs/design-refs/profiles.html` | Profile cards з image + glass layer + ring glow |
+| `docs/design-refs/music_lyrics.html` | Orb-based interactive mode з dynamic background |
+
+**Правило:** якщо Claude вагається між "ASCII-style" і "glass+orb style" — **завжди glass+orb**. Усі інші рішення — перевіряти проти прототипів.
 
 ---
 
 ## 🎨 Дизайн-токени
 
-Усі токени живуть у `src/frontend/src/styles/tokens.css` як CSS custom properties.
-**Компоненти не мають хардкод-кольорів.** Завжди `var(--color-...)`.
+Усі токени — у `src/frontend/src/styles/tokens.css` як CSS custom properties.
+Компоненти **ніколи не мають хардкод-кольорів**. Завжди `var(--...)`.
 
-### Базова палітра (темна, завжди)
+### Surfaces — шари глибини
+
+Ми використовуємо **layered glass** — прозорі шари з blur над темним фоном з ambient glows.
 
 ```css
 :root {
-  /* Surface — фон і шари */
-  --surface-void:    #000000;
-  --surface-deep:    #0a0b0d;
-  --surface-raised:  #14161a;
-  --surface-glass:   rgba(20,22,26,.72);
+  /* Base — фони */
+  --surface-base:       #020617;              /* deep slate — основний фон */
+  --surface-deep:       #0a0f1a;              /* трохи світліше, бази панелей */
+  --surface-void:       #000000;              /* pure black для SHADOW/GHOST */
 
-  /* Ink — текст */
-  --ink-primary:     #e8e9ec;
-  --ink-secondary:   #8b8f98;
-  --ink-muted:       #4a4d54;
-  --ink-inverse:     #0a0b0d;
+  /* Glass layers — прозорі панелі */
+  --glass-subtle:       rgba(15, 23, 42, 0.4);   /* легкий шар, hover states */
+  --glass-panel:        rgba(15, 23, 42, 0.6);   /* основний glass panel */
+  --glass-card:         rgba(15, 23, 42, 0.7);   /* cards з більшим contrast */
+  --glass-elevated:     rgba(15, 23, 42, 0.85);  /* modal, overlay */
 
-  /* Line — бордери, роздільники */
-  --line-subtle:     rgba(255,255,255,.06);
-  --line-default:    rgba(255,255,255,.12);
-  --line-strong:     rgba(255,255,255,.24);
+  --glass-border:       rgba(255, 255, 255, 0.08);
+  --glass-border-hover: rgba(255, 255, 255, 0.16);
+  --glass-highlight:    rgba(255, 255, 255, 0.05);  /* inset top-line */
 
-  /* Semantic — сигнали */
-  --signal-ok:       #7ee787;
-  --signal-warn:     #f0b72f;
-  --signal-alert:    #ff6b6b;
-  --signal-info:     #7aa2f7;
+  /* Ambient glows — м'які кольорові плями на фоні */
+  --glow-primary:       rgba(34, 211, 238, 0.2);    /* cyan — default ambient */
+  --glow-secondary:     rgba(139, 92, 246, 0.15);   /* purple — orb */
+  --glow-warm:          rgba(244, 175, 37, 0.15);   /* amber — data tables */
 }
 ```
 
-### Акценти стану (міняються з SystemState)
+### Ink — текст
 
-Акцент — **один колір на весь інтерфейс**, задається поточним станом. Компоненти беруть `var(--accent)` і не знають про конкретний стан.
+```css
+:root {
+  --ink-primary:     #f1f5f9;       /* slate-100, основний */
+  --ink-secondary:   #94a3b8;       /* slate-400, вторинний */
+  --ink-muted:       #64748b;       /* slate-500, hint/label */
+  --ink-faint:       #475569;       /* slate-600, disabled */
+  --ink-inverse:     #020617;       /* на світлому accent */
+}
+```
+
+### Accent — акценти стану
+
+Акцент — **один primary колір**, задається SystemState. Зберігаємо рисунок з прототипів:
 
 ```css
 [data-state="shadow"] {
-  --accent:         #3a3d42;
-  --accent-glow:    rgba(58,61,66,.3);
-  --ui-opacity:     0.85;
-  --motion-scale:   0.6;
+  /* Dormant — майже невидимий, система спостерігає */
+  --accent:         #64748b;
+  --accent-glow:    rgba(100, 116, 139, 0.2);
+  --accent-radial:  radial-gradient(circle at 30% 30%, #475569, #1e293b);
+  --ui-opacity:     0.5;
+  --motion-scale:   0.5;
+  --surface-base:   #000000;
 }
 
 [data-state="focus"] {
-  --accent:         #4fc3f7;
-  --accent-glow:    rgba(79,195,247,.4);
+  /* Active — operator за роботою */
+  --accent:         #22d3ee;               /* cyan */
+  --accent-glow:    rgba(34, 211, 238, 0.4);
+  --accent-radial:  radial-gradient(circle at 30% 30%, #22d3ee, #0ea5e9, #6366f1);
   --ui-opacity:     1;
   --motion-scale:   1;
 }
 
 [data-state="dialogue"] {
-  --accent:         #b388ff;
-  --accent-glow:    rgba(179,136,255,.4);
+  /* Conversational — AI + voice/chat */
+  --accent:         #8b5cf6;               /* purple */
+  --accent-glow:    rgba(139, 92, 246, 0.4);
+  --accent-radial:  radial-gradient(circle at 30% 30%, #a78bfa, #8b5cf6, #6366f1);
   --ui-opacity:     1;
   --motion-scale:   1.1;
 }
 
 [data-state="sentinel"] {
-  --accent:         #ff5252;
-  --accent-glow:    rgba(255,82,82,.5);
+  /* Alert — підвищена готовність */
+  --accent:         #f43f5e;               /* rose */
+  --accent-glow:    rgba(244, 63, 94, 0.5);
+  --accent-radial:  radial-gradient(circle at 30% 30%, #fb7185, #f43f5e, #be123c);
   --ui-opacity:     1;
   --motion-scale:   1.3;
 }
 
 [data-state="ghost"] {
-  --accent:         #69f0ae;
-  --accent-glow:    rgba(105,240,174,.3);
-  --ui-opacity:     0.95;
+  /* Incognito — зашифровано, без логів */
+  --accent:         #10b981;               /* emerald */
+  --accent-glow:    rgba(16, 185, 129, 0.3);
+  --accent-radial:  radial-gradient(circle at 30% 30%, #34d399, #10b981, #047857);
+  --ui-opacity:     0.9;
   --motion-scale:   0.8;
-  --surface-deep:   #000000;
+  --surface-base:   #000000;
 }
 
 [data-state="dream"] {
-  --accent:         #9575cd;
-  --accent-glow:    rgba(149,117,205,.2);
+  /* Offline processing — консолідація пам'яті */
+  --accent:         #f4af25;               /* amber */
+  --accent-glow:    rgba(244, 175, 37, 0.2);
+  --accent-radial:  radial-gradient(circle at 30% 30%, #fbbf24, #f59e0b, #b45309);
   --ui-opacity:     0.6;
   --motion-scale:   0.4;
 }
 ```
 
-Перемикач — на `<html data-state="focus">`. Міняється через Zustand store у `<App/>`.
+Перемикач — `<html data-state="focus">` через Zustand store.
 
 ---
 
 ## 🔤 Типографіка
 
+Повторюємо з прототипів:
+
 ```css
 :root {
-  --font-display: "JetBrains Mono", "IBM Plex Mono", monospace;
-  --font-body:    "Inter", system-ui, sans-serif;
-  --font-tech:    "JetBrains Mono", monospace;
+  /* Primary sans — UI, заголовки, body */
+  --font-display: "Space Grotesk", "Outfit", system-ui, sans-serif;
 
-  --fs-micro: 11px;
-  --fs-xs:    13px;
-  --fs-sm:    15px;
-  --fs-md:    17px;
-  --fs-lg:    22px;
-  --fs-xl:    32px;
-  --fs-xxl:   56px;
+  /* Monospace — тільки для data (BSSID, coordinates, timestamps, logs) */
+  --font-mono: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
 
-  --lh-tight: 1.15;
-  --lh-normal: 1.4;
-  --lh-loose: 1.6;
+  /* Серіф — акцентні тексти (поетичні фрази AI, "Nexus Suggests") */
+  --font-serif: "Playfair Display", Georgia, serif;
+
+  --fs-micro:  11px;      /* service labels, uppercase tracking */
+  --fs-xs:     12px;      /* metadata, captions */
+  --fs-sm:     14px;      /* body default */
+  --fs-base:   15px;      /* chat messages */
+  --fs-md:     17px;      /* section subtitles */
+  --fs-lg:     22px;      /* card titles */
+  --fs-xl:     32px;      /* screen titles */
+  --fs-2xl:    48px;      /* hero — hero stats, large numbers */
+  --fs-display: 64px;     /* rare — лише логотип, час */
+
+  --tracking-tight:   -0.02em;
+  --tracking-normal:   0;
+  --tracking-wide:     0.05em;
+  --tracking-widest:   0.15em;       /* для uppercase labels */
+
+  --lh-tight:    1.1;
+  --lh-normal:   1.4;
+  --lh-relaxed:  1.6;
 }
 ```
 
-**Правило:** на одному екрані максимум 3 розміри шрифту.
+**Правила:**
+
+- Uppercase labels (CPU LOAD, WARDRIVING_SIGINT, SYS_LOG) — завжди з `tracking-widest`, `fs-xs`, `--ink-secondary`
+- Числа в data контексті — **моно-шрифт** (`var(--font-mono)`) для правильного вирівнювання колонок
+- Великі числа (26%, 64/100, 07:00) — `Space Grotesk 700` або `600` з `tracking-tight`
+- AI фрази ("Your deep sleep was low...") — `Playfair Display italic` у цитатному блоці
+- Максимум 3 розміри на одному екрані
 
 ---
 
-## 📐 Layout правила для 1024×600
+## 📐 Layout для 1024×600
 
-- **Grid:** 12-колонок, gutter 12px, outer padding 16px
-- **Safe zone:** `960×568`
-- **Touch targets:** `min-width: 44px; min-height: 44px`. Для ключових кнопок — 56px
-- **Нема скролу на main screens.** Якщо не влазить — переробити layout
-- **Модалки — slide-over панелі, не popup**
+Це embedded дисплей, тач. Нагадування:
+
+- **Viewport:** 1024×600, fixed
+- **Outer padding:** 16-24px по краях
+- **Grid:** Tailwind 12-col або flex, gap 12-24px
+- **Touch target:** min 44×44px. Для primary — 56×56px
+- **Без вертикального скролу на main screens.** Якщо не влазить — переглянь layout
+- **Модалки — slide-over панелі**, не popup
 - **Z-index шкала:** base 0, raised 10, sticky 20, overlay 30, modal 40, toast 50
 
 ---
 
-## 🎞 Motion System
+## 🎞 Motion — рух як характер
 
-**Движок:** Framer Motion 11. CSS transitions тільки для hover/focus.
+**Движок:** Framer Motion 11. Tailwind animations для простих keyframes. CSS transitions — тільки hover/focus.
 
-### Правила
+### Ключові анімації (з прототипів)
 
-1. **Анімація = інформація.** Нічого не повідомляє — видалити.
-2. **Duration:** 120-200ms для появи, 400-800ms для зміни стану системи.
-3. **Easing:** уникай `linear`. Стандарт — `[0.16, 1, 0.3, 1]`.
-4. **Усі анімації множать duration на `--motion-scale`** — в SHADOW повільніше, в SENTINEL швидше.
+Заклади усі ці у `src/frontend/src/styles/motion.ts` і Tailwind config.
 
-### Preset бібліотека (`src/frontend/src/styles/motion.ts`)
+#### Орб (центральний — SystemState indicator)
 
-```ts
-export const motion = {
-  fadeIn:      { initial: { opacity: 0 },              animate: { opacity: 1 },                duration: 200 },
-  slideUp:     { initial: { opacity: 0, y: 12 },       animate: { opacity: 1, y: 0 },          duration: 280 },
-  slideOver:   { initial: { x: "100%" },               animate: { x: 0 },                      duration: 400 },
-  stateTransition: { duration: 600, ease: [0.16, 1, 0.3, 1] },
-  pulse:       { animate: { opacity: [0.4, 1, 0.4] },  duration: 2000, repeat: Infinity },
-  heartbeat:   { animate: { scale: [1, 1.06, 1] },     duration: 1400, repeat: Infinity },
-  alarm:       { animate: { scale: [1, 1.1, 1] },      duration: 600, repeat: Infinity },
-} as const;
+```js
+// tailwind.config.ts — extend.animation
+animation: {
+  'breathe':       'breathe 8s ease-in-out infinite',
+  'morph':         'morph 8s ease-in-out infinite',
+  'float':         'float 6s ease-in-out infinite',
+  'pulse-slow':    'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+  'pulse-music':   'pulseMusic 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+  'radar':         'radar 10s linear infinite',
+  'fade-in':       'fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+  'equalizer':     'equalizer 1s ease-in-out infinite',
+  'scanline':      'scanline 3s linear infinite',
+},
+keyframes: {
+  breathe:   { '0%, 100%': { transform: 'scale(1)', opacity: '0.9' },
+               '50%':      { transform: 'scale(1.05)', opacity: '0.7' } },
+  morph:     { '0%':       { borderRadius: '60% 40% 30% 70%/60% 30% 70% 40%' },
+               '50%':      { borderRadius: '30% 60% 70% 40%/50% 60% 30% 60%' },
+               '100%':     { borderRadius: '60% 40% 30% 70%/60% 30% 70% 40%' } },
+  float:     { '0%, 100%': { transform: 'translateY(0)' },
+               '50%':      { transform: 'translateY(-6px)' } },
+  radar:     { '0%':       { transform: 'rotate(0deg)' },
+               '100%':     { transform: 'rotate(360deg)' } },
+  fadeIn:    { '0%':       { opacity: '0', transform: 'translateY(20px)' },
+               '100%':     { opacity: '1', transform: 'translateY(0)' } },
+  pulseMusic:{ '0%, 100%': { transform: 'scale(1)', opacity: '0.8' },
+               '50%':      { transform: 'scale(1.15)', opacity: '1' } },
+  equalizer: { '0%, 100%': { height: '20%' },
+               '50%':      { height: '100%' } },
+}
 ```
+
+### Масштабування через `--motion-scale`
+
+Усі анімації множать duration на `--motion-scale` через CSS custom property або Framer variants:
+- SHADOW → 0.5× (повільніше, сонніше)
+- FOCUS → 1×
+- SENTINEL → 1.3× (швидше, тривожніше)
 
 ### State transition choreography
 
-Зміна `SystemState` — оркестрована послідовність:
+Перемикання SystemState — **600ms orchestrated sequence**:
 
 ```
-0ms    → попередній accent починає fade-out
-150ms  → StatusBar state indicator морфить у нову форму
-300ms  → content shift (elements re-densify/sparsify)
-600ms  → новий accent повністю, анімації адаптуються під --motion-scale
+0ms    → accent починає fade + ambient glow морфиться у новий колір
+150ms  → StatusBar state indicator cross-fades
+300ms  → content re-densifies / sparsifies залежно від стану
+600ms  → нова палітра повністю, motion-scale застосовано
 ```
 
 Реалізація — `src/frontend/src/app/StateTransitionController.tsx`.
+
+---
+
+## 🧊 Glassmorphism — базовий CSS
+
+Повторюємо з прототипів у global CSS або як Tailwind classes:
+
+```css
+.glass-panel {
+  background: var(--glass-panel);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    0 4px 20px -2px rgba(0, 0, 0, 0.2),
+    inset 0 1px 0 var(--glass-highlight);
+}
+
+.glass-card {
+  background: var(--glass-card);
+  backdrop-filter: blur(24px);
+  -webkit-backdrop-filter: blur(24px);
+  border: 1px solid var(--glass-border);
+  box-shadow:
+    0 4px 20px -2px rgba(0, 0, 0, 0.3),
+    inset 0 1px 0 var(--glass-highlight);
+}
+
+.glass-elevated {
+  background: var(--glass-elevated);
+  backdrop-filter: blur(32px);
+  -webkit-backdrop-filter: blur(32px);
+  border: 1px solid var(--glass-border-hover);
+  box-shadow:
+    0 20px 50px -10px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 var(--glass-highlight);
+}
+
+/* Glow text — для headers + AI фраз */
+.glow-text {
+  text-shadow:
+    0 0 20px var(--accent-glow),
+    0 0 40px var(--accent-glow);
+}
+
+/* Text gradient — для брендових заголовків */
+.text-gradient {
+  background-clip: text;
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-image: linear-gradient(to right, var(--accent), var(--ink-primary));
+}
+```
+
+**Правило:** якщо компонент показує дані поверх іншого layer'а → `glass-panel` або `glass-card`. Якщо це solid surface (fullscreen login) → ambient glows + без blur.
+
+---
+
+## 🔮 Орб — серце системи
+
+Центральний AI-орб — **не просто крапка**. Це жива сутність.
+
+Обов'язковий набір шарів:
+
+```tsx
+<div className="relative w-64 h-64 flex items-center justify-center animate-float">
+  {/* Core — morphing gradient blob */}
+  <div
+    className="absolute inset-8 animate-morph animate-breathe mix-blend-screen opacity-90"
+    style={{
+      background: 'var(--accent-radial)',
+      filter: 'blur(20px)',
+      boxShadow: '0 0 100px var(--accent-glow)',
+    }}
+  />
+
+  {/* Outer glow */}
+  <div
+    className="absolute inset-0 rounded-full blur-2xl animate-pulse-music"
+    style={{ background: 'var(--accent-glow)' }}
+  />
+
+  {/* Orbital rings — повільні, різна швидкість */}
+  <div
+    className="absolute w-80 h-80 rounded-full opacity-40 animate-[spin_20s_linear_infinite]"
+    style={{ border: '1px solid var(--accent-glow)' }}
+  />
+  <div
+    className="absolute w-72 h-72 rounded-full opacity-50 rotate-45 animate-[spin_15s_linear_infinite_reverse]"
+    style={{ border: '1px dashed var(--accent-glow)' }}
+  />
+
+  {/* Sparks — random ping dots */}
+  <div className="absolute top-0 right-10 w-1.5 h-1.5 bg-white rounded-full animate-ping" style={{ animationDuration: '3s' }} />
+  <div className="absolute bottom-10 left-4 w-1 h-1 rounded-full animate-ping" style={{ background: 'var(--accent)', animationDuration: '4s' }} />
+</div>
+```
+
+Розміри орба (responsive до SystemState):
+- SHADOW: маленький (~120px), повільне дихання, dim accent
+- FOCUS: середній (~220px), активний, cyan
+- DIALOGUE: великий (~280px), pulse на voice activity
+- SENTINEL: середній, швидке pulse + червоний glow
+- GHOST: маленький + майже невидимий
+- DREAM: середній, дуже повільний morph
 
 ---
 
@@ -187,109 +386,160 @@ export const motion = {
 
 ```
 <App>
-  <StateProvider>                  # задає data-state на <html>
+  <StateProvider>
+    <AmbientGlows />                 # fixed fullscreen blur balls на фоні
     <MotionConfig>
-      <StatusBar />                # завжди, sticky top
+      <StatusBar />                  # завжди, top sticky
       <StateLayout>
-        SHADOW    → <ShadowLayout>
-        FOCUS     → <FocusLayout>
-        DIALOGUE  → <DialogueLayout>
-        SENTINEL  → <SentinelLayout>
-        GHOST     → <GhostLayout>
-        DREAM     → <DreamLayout>
+        SHADOW    → <ShadowLayout    orbSize="sm" />
+        FOCUS     → <FocusLayout />  # SYSTEM_CORE-style: cards + orb + toolbar
+        DIALOGUE  → <DialogueLayout /> # chat + orb з voice pulse
+        SENTINEL  → <SentinelLayout />
+        GHOST     → <GhostLayout />
+        DREAM     → <DreamLayout />
       </StateLayout>
+      <FloatingToolbar />            # bottom glass toolbar з quick actions
     </MotionConfig>
   </StateProvider>
 </App>
 ```
 
-**Шари компонентів** (`src/frontend/src/components/`):
+### AmbientGlows — обов'язковий компонент
 
-- `core/` — StatusBar, StateIndicator, Avatar, SystemPulse
-- `chat/` — ChatWindow, MessageBubble, ResponseForms, VoiceWaveform
-- `map/` — TacticalMap, Layers, MarkerCards
-- `settings/` — SettingsPanel + SettingsGroups
-- `auth/` — LoginScreen, PinPad, RFIDScanner
-- `terminal/` — TerminalWidget, LiveOutput
-- `tools/` — Timer, Alarm, Calendar, FileManager
-- `primitives/` — Button, Card, Input, Toggle, Slider
+Завжди присутній. Створює живий фон:
+
+```tsx
+<div className="fixed inset-0 pointer-events-none z-0 overflow-hidden">
+  <div
+    className="absolute top-[-20%] left-[-10%] w-[50%] h-[80%] rounded-full blur-[120px] opacity-40 animate-pulse-slow"
+    style={{ background: 'var(--glow-primary)' }}
+  />
+  <div
+    className="absolute bottom-[-20%] right-[-10%] w-[40%] h-[60%] rounded-full blur-[100px] opacity-40 animate-pulse-slow"
+    style={{ background: 'var(--glow-secondary)', animationDelay: '2s' }}
+  />
+</div>
+```
+
+Без них — UI flat і мертвий.
+
+### FloatingToolbar (з прототипу SYSTEM_CORE)
+
+Bottom-centered glass bar з icon buttons — terminal / map / voice / scan / home / menu / settings / camera / security / wifi / power.
+
+```tsx
+<footer className="absolute bottom-4 left-1/2 -translate-x-1/2 z-30">
+  <div className="glass-card rounded-full px-6 py-3 flex items-center gap-5">
+    {/* icons, each 44x44 tap target, 24px icon */}
+  </div>
+</footer>
+```
+
+Active button — з `text-accent` + `bg-accent/10` + subtle glow.
 
 ---
 
 ## 🔘 Primitives API
 
 ```tsx
-<Button variant="primary|ghost|danger" size="sm|md|lg" icon={Icon}>Label</Button>
-<Card tone="default|raised|glass" padding="sm|md|lg">...</Card>
-<Input prefix={Icon} suffix={...} state="default|focus|error" />
+<Button variant="primary|ghost|glass|danger" size="sm|md|lg" icon={Icon}>
+  Label
+</Button>
+
+<Card tone="glass|glass-card|glass-elevated|solid" padding="sm|md|lg">
+  ...
+</Card>
+
+<Input
+  prefix={Icon}
+  suffix={Icon}
+  state="default|focus|error"
+  tone="glass"
+/>
+
 <Toggle checked onChange />
 <Slider min max step value onChange marks />
+
+<Badge variant="accent|warn|alert|success" dot>
+  LABEL
+</Badge>
+
+<Orb size="sm|md|lg|xl" state={SystemState} />  {/* використовує композит вище */}
 ```
 
-Усі primitives:
-- Підтримують `data-state` з оточення через CSS
-- Touch target ≥ 44px навіть якщо виглядають менше
+**Усі primitives:**
+- Читають `data-state` з оточення
+- Touch target ≥ 44px, hit area через `::before` якщо візуально менше
 - Не мають власних кольорів — беруть з токенів
+- Мають `hover` і `active:scale-[0.97]` для тактильності
 
 ---
 
 ## 🖼 Іконки
 
-- **Бібліотека:** `lucide-react`
-- **Розмір:** 16 / 20 / 24 px
-- **Stroke:** `1.5px` default, `2px` для emphasis
+- **Бібліотека:** `lucide-react` (локально, не Material Symbols з Google CDN)
+- **Розмір:** 14 / 18 / 20 / 24 px (строго)
+- **Stroke:** `1.5` default, `2` для emphasis
 - **Колір:** `currentColor` завжди
 
----
-
-## 📊 Data viz
-
-- **Charts:** Recharts для стандартних, D3 для кастомних
-- **Кольори:** палітра з 5 тонів `--chart-1..5` + accent, не rainbow
-- **Ніяких 3D chart. Ніяких pie > 5 сегментів**
-- **Map:** MapLibre GL, dark style, кастомний tile layer
+Material Symbols з Google CDN — **не використовувати**. У прототипах був, але для production на embedded Linux потрібен локальний bundle. Lucide покриває 99% потреб і ставиться через npm.
 
 ---
 
-## ✅ Visual acceptance criteria
+## 📊 Data visualization
+
+З прототипів (sleep graph, signal bars, equalizer):
+
+- **Charts:** Recharts з кастомним тематичним wrapper
+- **Палітра графіків:** 5 тонів `--chart-1..5` + accent
+- **Лінійні графіки:** `stroke-width: 2.5`, `stroke-linecap: round`, `stroke-linejoin: round`, завжди з нижнім **gradient fill**
+- **Bar charts:** без 3D, без legend якщо < 4 серій
+- **Signal bars (wardriving):** тонкий indicator з rounded corners, amber → green залежно від RSSI
+- **Мапа:** MapLibre GL dark style, кастомний tile layer
+
+---
+
+## ✅ Visual acceptance — automated checks
 
 Перед "готово":
 
-1. Screenshot у всіх 6 станах (SHADOW/FOCUS/DIALOGUE/SENTINEL/GHOST/DREAM)
-2. Немає хардкод-кольорів (`grep "#[0-9a-f]\{3,6\}" src/frontend/src/components/` → тільки в tokens.css)
-3. Усі кнопки ≥ 44×44
+1. Скріни у всіх 6 станах через Playwright
+2. Немає хардкод-кольорів (`grep -rn "#[0-9a-f]\{3,6\}" src/frontend/src/components/` повертає тільки tokens.css)
+3. Усі кнопки ≥ 44×44 (Playwright bounding box)
 4. Fits 1024×600 без скролу
-5. State transition 60fps
-6. Lighthouse performance + a11y ≥ 90
-
+5. AmbientGlows + Orb видно на FOCUS
+6. Немає ASCII-стилізованих frames у UI (`grep -rn "┌\|└\|├" src/frontend/src/`)
+7. Немає `font-mono` на body-тексті (тільки на data)
+8. Lighthouse perf + a11y ≥ 90
 
 ---
 
-## 🎨 Конкретні візуальні референси
+## 🚫 Заборонено
 
-### Login screen має виглядати так:
+- ASCII brackets (`┌─ SESSIONS ─┐`, `└─`, `├─`) у UI
+- Monospace на title, body text, UI labels
+- `[ AUTH.DENY ]`-стилізовані error — замість цього glass toast з icon
+- `operator@phantom:~$` prompt у чаті — стандартне chat input
+- Flat solid backgrounds без ambient glows
+- Material Symbols від Google CDN
+- Cyan blast `#4fc3f7` на всьому активному елементі
+- Generic rounded buttons без character
+- Centered 380px cards на 1024×600 з великими чорними полями навколо
+- Decorative анімації без інформаційного навантаження
 
-- **Фон:** повністю чорний (`--surface-void`), не темно-сірий. Можливо з ледь помітним grid pattern (opacity 0.03) або vignette.
-- **Використовує весь 1024×600.** Не центрована карточка з полями. Контент розподілений: ліворуч identity block (PHANTOM logo + status), праворуч PIN pad, знизу system info bar.
-- **"PHANTOM"** — не просто letter-spaced text. Або ASCII-art варіант, або broken/glitched rendering, або з subtle scan-line ефектом. Це назва системи — має виглядати як branding військового продукту, не як "tech startup".
-- **PIN pad кнопки** — не округлі квадрати з цифрами посередині. Або:
-  - варіант A: квадрати з цифрою в кутку + subtle border, як military keypad
-  - варіант B: секторні кнопки з LED-style glow на press
-  - варіант C: термінал-стиль: `[ 1 ]` `[ 2 ]` `[ 3 ]` з моно-шрифтом
-- **PIN indicator** — не 6 однакових точок. Сегменти/бокси/underscores що заповнюються: `_ _ _ _ _ _` → `█ _ _ _ _ _` → `█ █ _ _ _ _`.
-- **Помилка** — не просто червоний текст. Show це як system alert: `[ AUTH.DENY ]` або `> ACCESS DENIED // ATTEMPT 2/5` — завжди монotech.
-- **RFID tab** — при активному має показувати animated pulse/scan indicator (мова "чекаю сигналу"), не просто порожню панель.
-- **Tabs PIN/RFID** — не підсвічений `#4fc3f7` fill background. Натомість underline-style active indicator, або monochrome з subtle glow.
+---
 
-### Антиреференси (НЕ робити):
+## ✨ Дозволено і заохочується
 
-- ❌ Центрована карточка на чорному фоні (як зараз)
-- ❌ Світло-блакитні акценти на всьому (`#4fc3f7` blast)
-- ❌ Material Design rounded buttons з цифрами
-- ❌ Generic dots для PIN indicator
-- ❌ Червоний текст для помилки без context/branding
-- ❌ "tech startup landing page" aesthetic
-
-### Палітра FOCUS — уточнення:
-
-Замість чистого `#4fc3f7` (material cyan) використовуй `#7dd3fc` з низькою насиченістю АБО майже-monochrome варіант `#c8d4dc` як primary accent, а `#4fc3f7` залишити тільки для критичних active states (pressed keypad button).
+- Glass panels з `backdrop-blur`
+- Ambient gradient glows на фоні (fixed, pointer-events-none)
+- Morphing orbs з multiple animation layers
+- Orbital rings (повільне обертання)
+- Gradient text для headers (`text-gradient` class)
+- Glow text для pulse/active elements
+- `active:scale-[0.97]` на всіх clickable елементах
+- Неправильні border-radius (60% 40% 30% 70%) для organic shapes
+- Animated decorative dots/sparks
+- Paused equalizer bars при voice activity
+- Scan line overlay (але тонкий, opacity 0.02-0.05)
+- Playfair Display italic для AI-згенерованих quote блоків

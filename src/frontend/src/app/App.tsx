@@ -16,6 +16,7 @@ const GhostLayout = React.lazy(() => import('../layouts/GhostLayout'));
 const DreamLayout = React.lazy(() => import('../layouts/DreamLayout'));
 const LoginScreen = React.lazy(() => import('../components/auth/LoginScreen'));
 const SettingsPanel = React.lazy(() => import('../components/settings/SettingsPanel'));
+const MapLayout = React.lazy(() => import('../layouts/MapLayout'));
 
 /* ─── State → Layout routing ─────────────────────────────────────────────── */
 
@@ -88,6 +89,11 @@ export function App() {
             <Route path="/settings" element={
               <React.Suspense fallback={<PhantomLoader />}>
                 <SettingsPanel />
+              </React.Suspense>
+            } />
+            <Route path="/map" element={
+              <React.Suspense fallback={<PhantomLoader />}>
+                <MapLayout />
               </React.Suspense>
             } />
             <Route path="/*" element={<StateRouter />} />

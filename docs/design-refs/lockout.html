@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html class="dark" lang="en"><head>
+<meta charset="utf-8"/>
+<meta content="width=device-width, initial-scale=1.0" name="viewport"/>
+<title>System Security: Profile Lockout</title>
+<script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com" rel="preconnect"/>
+<link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect"/>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;display=swap" rel="stylesheet"/>
+<script id="tailwind-config">
+tailwind.config = {
+    darkMode: "class",
+    theme: {
+        extend: {
+            colors: {
+                "primary": "#f20d0d",
+                "background-light": "#f8f5f5",
+                "background-dark": "#221010",
+            },
+            fontFamily: { "display": ["Space Grotesk", "sans-serif"] },
+            borderRadius: {"DEFAULT": "0.25rem", "lg": "0.5rem", "xl": "0.75rem", "full": "9999px"},
+        },
+    },
+}
+</script>
+<style>
+.scanline {
+    background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.2) 50%, rgba(0,0,0,0.2));
+    background-size: 100% 4px;
+    position: absolute; top: 0; left: 0; right: 0; bottom: 0;
+    pointer-events: none; z-index: 10;
+}
+.glass-panel {
+    background: rgba(34, 16, 16, 0.6);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid rgba(242, 13, 13, 0.2);
+}
+.glass-btn {
+    background: rgba(255, 255, 255, 0.05);
+    backdrop-filter: blur(4px);
+    -webkit-backdrop-filter: blur(4px);
+    border: 1px solid rgba(6, 182, 212, 0.3);
+    box-shadow: 0 0 15px rgba(6, 182, 212, 0.1);
+}
+</style>
+<style>body { min-height: max(884px, 100dvh); }</style>
+</head>
+<body class="bg-background-light dark:bg-background-dark font-display min-h-screen overflow-hidden flex items-center justify-center relative">
+<div class="absolute inset-0 opacity-10 pointer-events-none select-none overflow-hidden font-mono text-xs leading-tight text-primary">
+<div class="p-4">
+    &gt; SYSTEM_DIAGNOSTIC_RUNNING... <br/>
+    &gt; CHECKING_INTEGRITY_HASH... [FAILED] <br/>
+    &gt; ATTEMPT_ID: 9942-XJ <br/>
+    &gt; UNAUTHORIZED_ACCESS_DETECTED <br/>
+    &gt; PORT_22: BLOCKED <br/>
+    &gt; PORT_80: BLOCKED <br/>
+    &gt; INITIATING_LOCKDOWN_PROTOCOL_V4 <br/>
+    &gt; ENCRYPTING_LOCAL_STORAGE... [DONE] <br/>
+    &gt; DISABLING_PERIPHERALS... [DONE] <br/>
+    &gt; NETWORK_ISOLATION: ACTIVE <br/>
+    &gt; BIOMETRIC_SENSORS: STANDBY <br/>
+    &gt; THREAT_LEVEL: CRITICAL <br/>
+    &gt; KERNEL_PANIC_PREVENTION: ACTIVE <br/>
+    &gt; USER_SESSION: TERMINATED <br/>
+</div>
+</div>
+<div class="scanline"></div>
+<div class="relative z-20 w-full h-full max-w-4xl mx-auto flex flex-col justify-between p-4 md:p-8 landscape:h-screen landscape:max-h-[600px]">
+<header class="flex items-center justify-between border-b border-primary/30 pb-4 mb-2">
+<div class="flex items-center gap-3">
+<div class="flex items-center justify-center w-10 h-10 rounded bg-primary/20 text-primary animate-pulse">
+<span class="material-symbols-outlined" style="font-size: 24px;">security</span>
+</div>
+<div>
+<h1 class="text-slate-900 dark:text-white font-bold tracking-wider text-lg uppercase">Security Alert</h1>
+<div class="flex items-center gap-2">
+<span class="w-2 h-2 rounded-full bg-primary animate-ping"></span>
+<p class="text-primary text-xs font-mono font-medium tracking-widest">LOCKDOWN_ACTIVE</p>
+</div>
+</div>
+</div>
+<div class="text-right hidden sm:block">
+<p class="text-slate-500 dark:text-slate-400 text-xs font-mono">SYS_ID: 884-21-ALPHA</p>
+<p class="text-slate-500 dark:text-slate-400 text-xs font-mono">IP: 192.168.X.XXX [HIDDEN]</p>
+</div>
+</header>
+<main class="flex-1 flex flex-col items-center justify-center py-4 gap-6">
+<div class="relative group">
+<div class="absolute inset-0 bg-primary/20 blur-xl rounded-full transform scale-150"></div>
+<div class="relative w-32 h-32 flex items-center justify-center">
+<svg class="w-full h-full fill-primary/10 stroke-primary stroke-2 drop-shadow-[0_0_15px_rgba(242,13,13,0.5)]" viewBox="0 0 100 100">
+<polygon points="50 1 95 25 95 75 50 99 5 75 5 25"></polygon>
+</svg>
+<span class="material-symbols-outlined absolute text-primary drop-shadow-[0_0_10px_rgba(242,13,13,0.8)]" style="font-size: 48px;">gpp_maybe</span>
+</div>
+</div>
+<div class="text-center space-y-2 max-w-lg">
+<h2 class="text-slate-900 dark:text-white text-3xl font-bold tracking-tight">Profile Locked</h2>
+<p class="text-slate-600 dark:text-slate-300 text-base">Too many failed attempts. Security protocol enacted.</p>
+</div>
+<div class="w-full max-w-2xl">
+<div class="flex gap-4 justify-center py-4">
+<div class="flex flex-col items-center gap-2">
+<div class="glass-panel w-24 h-24 sm:w-32 sm:h-32 flex items-center justify-center rounded-xl bg-gradient-to-b from-primary/10 to-transparent border border-primary/40 shadow-[0_0_20px_rgba(242,13,13,0.15)] relative overflow-hidden">
+<div class="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-white/5 to-transparent"></div>
+<span class="text-4xl sm:text-6xl font-bold text-white font-mono tracking-tighter drop-shadow-md">04</span>
+</div>
+<span class="text-xs uppercase tracking-widest text-primary/80 font-semibold">Minutes</span>
+</div>
+<div class="flex flex-col justify-center h-24 sm:h-32 pb-4">
+<span class="text-4xl sm:text-6xl text-primary/50 font-mono animate-pulse">:</span>
+</div>
+<div class="flex flex-col items-center gap-2">
+<div class="glass-panel w-24 h-24 sm:w-32 sm:h-32 flex items-center justify-center rounded-xl bg-gradient-to-b from-primary/10 to-transparent border border-primary/40 shadow-[0_0_20px_rgba(242,13,13,0.15)] relative overflow-hidden">
+<div class="absolute top-0 left-0 w-full h-1/2 bg-gradient-to-b from-white/5 to-transparent"></div>
+<span class="text-4xl sm:text-6xl font-bold text-white font-mono tracking-tighter drop-shadow-md">59</span>
+</div>
+<span class="text-xs uppercase tracking-widest text-primary/80 font-semibold">Seconds</span>
+</div>
+</div>
+</div>
+<p class="text-slate-500 dark:text-slate-400 text-sm text-center">Please wait until the timer expires to retry PIN entry.</p>
+</main>
+<footer class="mt-4 flex flex-col items-center w-full">
+<button class="glass-btn w-full max-w-md group relative overflow-hidden rounded-lg p-0.5 transition-all hover:scale-[1.01] active:scale-[0.99]">
+<div class="relative flex items-center justify-between rounded-[inherit] bg-background-dark/80 px-6 py-4 transition-colors group-hover:bg-background-dark/60">
+<div class="flex items-center gap-4">
+<div class="flex items-center justify-center rounded-full bg-cyan-500/10 p-2 text-cyan-400 group-hover:text-cyan-300 group-hover:bg-cyan-500/20 transition-colors shadow-[0_0_10px_rgba(6,182,212,0.3)]">
+<span class="material-symbols-outlined">face</span>
+</div>
+<div class="text-left">
+<div class="text-sm font-bold text-cyan-400 group-hover:text-cyan-300 shadow-cyan-500/50 drop-shadow-[0_0_8px_rgba(6,182,212,0.4)]">Emergency Unlock</div>
+<div class="text-xs text-cyan-200/60">Authenticate via Face ID</div>
+</div>
+</div>
+<span class="material-symbols-outlined text-cyan-500/50 group-hover:translate-x-1 transition-transform">arrow_forward_ios</span>
+</div>
+</button>
+<div class="mt-4 h-1 w-1/3 rounded-full bg-slate-800"></div>
+</footer>
+</div>
+</body></html>

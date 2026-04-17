@@ -2,17 +2,34 @@ import { useEffect, useState } from 'react';
 import { useSystemStore } from '../../stores/systemStore';
 import { useAuthStore } from '../../stores/authStore';
 import { SystemState } from '@shared/types';
-import { Wifi, WifiOff, Cloud, CloudOff } from 'lucide-react';
+import {
+  Wifi,
+  WifiOff,
+  Cloud,
+  CloudOff,
+  Activity,
+  Thermometer,
+  Cpu,
+  MemoryStick,
+  HardDrive,
+  User as UserIcon,
+  Sparkles,
+} from 'lucide-react';
 
 const STATE_LABELS: Record<SystemState, string> = {
-  [SystemState.SHADOW]: 'SHADOW',
-  [SystemState.FOCUS]: 'FOCUS',
-  [SystemState.DIALOGUE]: 'DIALOGUE',
-  [SystemState.SENTINEL]: 'SENTINEL',
-  [SystemState.GHOST]: 'GHOST',
-  [SystemState.DREAM]: 'DREAM',
+  [SystemState.SHADOW]: 'Shadow',
+  [SystemState.FOCUS]: 'Focus',
+  [SystemState.DIALOGUE]: 'Dialogue',
+  [SystemState.SENTINEL]: 'Sentinel',
+  [SystemState.GHOST]: 'Ghost',
+  [SystemState.DREAM]: 'Dream',
 };
 
+/**
+ * StatusBar — 36px glass strip with rounded pill segments.
+ * Icons from lucide; labels in Space Grotesk with subtle tracking.
+ * Hidden in GHOST / DREAM per VISUAL_SYSTEM.md (stealth / offline modes).
+ */
 export function StatusBar() {
   const { state, wsConnected, context } = useSystemStore();
   const { user } = useAuthStore();
@@ -29,118 +46,88 @@ export function StatusBar() {
     second: '2-digit',
   });
 
-  // GHOST mode — minimal status bar
-  if (state === SystemState.GHOST) return null;
+  if (state === SystemState.GHOST || state === SystemState.DREAM) return null;
 
-  // DREAM mode — no status bar
-  if (state === SystemState.DREAM) return null;
+  const bpm = context?.body.breathing_bpm;
+  const tempC = context?.env.temp_c;
+  const cpu = context?.system.cpu_percent;
+  const ram = context?.system.ram_percent;
+  const disk = context?.system.disk_percent;
+  const provider = context?.system.ai_provider ?? 'gemini';
 
   return (
     <div
-      className="w-[1024px] flex items-center px-3 gap-2 shrink-0"
+      className="w-[1024px] flex items-center shrink-0 relative gap-2 px-4 glass-panel"
       style={{
         height: 'var(--status-bar-h)',
-        fontSize: 'var(--fs-micro)',
-        background: 'var(--surface-raised)',
-        borderBottom: '1px solid var(--line-subtle)',
+        borderLeft: 'none',
+        borderRight: 'none',
+        borderTop: 'none',
         opacity: 'var(--ui-opacity)',
       }}
     >
-      {/* State indicator dot + label */}
-      <div className="flex items-center gap-1.5">
-        <div className="relative flex items-center justify-center" style={{ width: 10, height: 10 }}>
-          <div
-            className="absolute rounded-full"
-            style={{
-              width: 10,
-              height: 10,
-              background: 'var(--accent)',
-              opacity: 0.3,
-              animation: state === SystemState.SENTINEL
-                ? 'pulse-state 0.6s ease-in-out infinite'
-                : 'pulse-state 2s ease-in-out infinite',
-            }}
-          />
-          <div
-            className="rounded-full relative"
-            style={{
-              width: 6,
-              height: 6,
-              background: 'var(--accent)',
-              boxShadow: '0 0 4px var(--accent-glow)',
-            }}
-          />
-        </div>
-        <span className="tracking-widest font-mono" style={{ color: 'var(--accent)' }}>
-          {STATE_LABELS[state]}
-        </span>
-      </div>
+      {/* State pill (left-most) */}
+      <StatePill state={state} />
 
       <Divider />
 
-      {/* User */}
-      <span style={{ color: 'var(--ink-muted)' }}>{user ? user.username : '—'}</span>
-
-      <Divider />
-
-      {/* Breathing BPM */}
-      {context?.body.breathing_bpm != null && (
+      {/* Operator */}
+      {user && (
         <>
-          <span style={{ color: 'var(--ink-secondary)' }}>
-            {context.body.breathing_bpm} bpm
-          </span>
+          <Segment
+            icon={<UserIcon size={12} strokeWidth={2} />}
+            label={user.username}
+            sub={user.role}
+          />
+          <Divider />
+        </>
+      )}
+
+      {/* Biosignal */}
+      {bpm != null && (
+        <>
+          <Segment
+            icon={<Activity size={12} strokeWidth={2} />}
+            value={`${bpm}`}
+            unit="bpm"
+          />
           <Divider />
         </>
       )}
 
       {/* Environment */}
-      {context?.env.temp_c != null && (
+      {tempC != null && (
         <>
-          <span style={{ color: 'var(--ink-secondary)' }}>
-            {context.env.temp_c.toFixed(1)}°C
-          </span>
+          <Segment
+            icon={<Thermometer size={12} strokeWidth={2} />}
+            value={tempC.toFixed(1)}
+            unit="°C"
+          />
           <Divider />
         </>
       )}
 
-      {/* Spacer */}
       <div className="flex-1" />
 
-      {/* System info */}
-      {context && (
-        <>
-          <span style={{ color: 'var(--ink-muted)' }}>
-            CPU {context.system.cpu_percent.toFixed(0)}%
-          </span>
-          <Divider />
-          <span style={{ color: 'var(--ink-muted)' }}>
-            RAM {context.system.ram_percent.toFixed(0)}%
-          </span>
-          <Divider />
-          <span className="capitalize" style={{ color: 'var(--ink-muted)' }}>
-            {context.system.ai_provider}
-          </span>
-          <Divider />
-        </>
-      )}
-
-      {/* WiFi */}
-      {context?.system.wifi_connected ? (
-        <Wifi size={12} strokeWidth={1.5} style={{ color: 'var(--signal-ok)' }} />
-      ) : (
-        <WifiOff size={12} strokeWidth={1.5} style={{ color: 'var(--ink-muted)' }} />
-      )}
-
-      {/* Internet */}
-      {context?.system.internet_available ? (
-        <Cloud size={12} strokeWidth={1.5} style={{ color: 'var(--signal-ok)' }} />
-      ) : (
-        <CloudOff size={12} strokeWidth={1.5} style={{ color: 'var(--ink-muted)' }} />
-      )}
+      {/* Resource load */}
+      <Resource icon={<Cpu size={12} strokeWidth={2} />} label="CPU" pct={cpu ?? 0} />
+      <Resource icon={<MemoryStick size={12} strokeWidth={2} />} label="RAM" pct={ram ?? 0} />
+      <Resource icon={<HardDrive size={12} strokeWidth={2} />} label="Disk" pct={disk ?? 0} />
 
       <Divider />
 
-      {/* WS connection */}
+      {/* AI */}
+      <Segment
+        icon={<Sparkles size={12} strokeWidth={2} />}
+        label={provider}
+        capitalize
+      />
+
+      <Divider />
+
+      {/* Connectivity */}
+      <ConnectivityDot ok={!!context?.system.wifi_connected} Icon={{ on: Wifi, off: WifiOff }} />
+      <ConnectivityDot ok={!!context?.system.internet_available} Icon={{ on: Cloud, off: CloudOff }} />
       <div
         className="rounded-full"
         style={{
@@ -148,22 +135,222 @@ export function StatusBar() {
           height: 6,
           background: wsConnected ? 'var(--signal-ok)' : 'var(--signal-alert)',
           boxShadow: wsConnected
-            ? '0 0 4px rgba(126,231,135,0.4)'
-            : '0 0 4px rgba(255,107,107,0.4)',
+            ? '0 0 6px var(--signal-ok)'
+            : '0 0 6px var(--signal-alert)',
         }}
-        title={wsConnected ? 'WebSocket connected' : 'WebSocket disconnected'}
+        title={wsConnected ? 'Realtime connected' : 'Realtime offline'}
       />
 
       <Divider />
 
       {/* Time */}
-      <span className="font-mono tabular-nums" style={{ color: 'var(--ink-primary)' }}>
+      <span
+        className="tabular-nums"
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 'var(--fs-xs)',
+          color: 'var(--ink-primary)',
+          letterSpacing: 'var(--tracking-wide)',
+        }}
+      >
         {timeStr}
       </span>
     </div>
   );
 }
 
+function StatePill({ state }: { state: SystemState }) {
+  return (
+    <div
+      className="flex items-center gap-2 px-3 rounded-full"
+      style={{
+        height: 24,
+        minHeight: 24,
+        background: 'color-mix(in srgb, var(--accent) 16%, transparent)',
+        border: '1px solid color-mix(in srgb, var(--accent) 50%, transparent)',
+        boxShadow: 'inset 0 0 12px color-mix(in srgb, var(--accent) 18%, transparent)',
+      }}
+    >
+      <span
+        aria-hidden
+        className="rounded-full"
+        style={{
+          width: 6,
+          height: 6,
+          background: 'var(--accent)',
+          boxShadow: '0 0 8px var(--accent-glow)',
+          animation: state === SystemState.SENTINEL
+            ? 'pulse-state 0.6s ease-in-out infinite'
+            : 'pulse-state 2s ease-in-out infinite',
+        }}
+      />
+      <span
+        style={{
+          fontFamily: 'var(--font-display)',
+          fontSize: 'var(--fs-micro)',
+          color: 'var(--accent)',
+          letterSpacing: 'var(--tracking-widest)',
+          textTransform: 'uppercase',
+          fontWeight: 500,
+        }}
+      >
+        {STATE_LABELS[state]}
+      </span>
+    </div>
+  );
+}
+
 function Divider() {
-  return <div className="w-px h-3" style={{ background: 'var(--line-subtle)' }} />;
+  return (
+    <span
+      aria-hidden
+      className="block self-center"
+      style={{ width: 1, height: 14, background: 'var(--line-default)' }}
+    />
+  );
+}
+
+interface SegmentProps {
+  icon?: React.ReactNode;
+  label?: string;
+  value?: string;
+  unit?: string;
+  sub?: string;
+  capitalize?: boolean;
+}
+
+function Segment({ icon, label, value, unit, sub, capitalize }: SegmentProps) {
+  return (
+    <div className="flex items-center gap-1.5">
+      {icon && (
+        <span style={{ color: 'var(--ink-muted)' }} className="inline-flex">
+          {icon}
+        </span>
+      )}
+      {value && (
+        <span
+          className="tabular-nums"
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 'var(--fs-xs)',
+            color: 'var(--ink-primary)',
+          }}
+        >
+          {value}
+        </span>
+      )}
+      {unit && (
+        <span
+          style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 'var(--fs-micro)',
+            color: 'var(--ink-muted)',
+          }}
+        >
+          {unit}
+        </span>
+      )}
+      {label && (
+        <span
+          style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 'var(--fs-micro)',
+            color: 'var(--ink-primary)',
+            textTransform: capitalize ? 'capitalize' : 'none',
+          }}
+        >
+          {label}
+        </span>
+      )}
+      {sub && (
+        <span
+          style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 'var(--fs-micro)',
+            color: 'var(--ink-muted)',
+            letterSpacing: 'var(--tracking-wider)',
+            textTransform: 'uppercase',
+          }}
+        >
+          · {sub}
+        </span>
+      )}
+    </div>
+  );
+}
+
+function Resource({ icon, label, pct }: { icon: React.ReactNode; label: string; pct: number }) {
+  const color =
+    pct > 85 ? 'var(--signal-alert)' :
+    pct > 60 ? 'var(--signal-warn)' :
+    'var(--ink-primary)';
+  const width = Math.max(3, Math.min(100, pct));
+  return (
+    <div className="flex items-center gap-1.5">
+      <span style={{ color: 'var(--ink-muted)' }}>{icon}</span>
+      <span
+        style={{
+          fontFamily: 'var(--font-display)',
+          fontSize: 'var(--fs-micro)',
+          color: 'var(--ink-muted)',
+          letterSpacing: 'var(--tracking-wide)',
+        }}
+      >
+        {label}
+      </span>
+      <span
+        className="block"
+        style={{
+          width: 28,
+          height: 3,
+          borderRadius: 9999,
+          background: 'var(--line-subtle)',
+          position: 'relative',
+          overflow: 'hidden',
+        }}
+      >
+        <span
+          className="block absolute left-0 top-0 bottom-0"
+          style={{
+            width: `${width}%`,
+            background: color,
+            borderRadius: 9999,
+          }}
+        />
+      </span>
+      <span
+        className="tabular-nums"
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 'var(--fs-micro)',
+          color,
+          minWidth: 20,
+          textAlign: 'right',
+        }}
+      >
+        {Math.round(pct)}
+      </span>
+    </div>
+  );
+}
+
+function ConnectivityDot({
+  ok,
+  Icon,
+}: {
+  ok: boolean;
+  Icon: {
+    on: React.ComponentType<{ size?: number; strokeWidth?: number; style?: React.CSSProperties }>;
+    off: React.ComponentType<{ size?: number; strokeWidth?: number; style?: React.CSSProperties }>;
+  };
+}) {
+  const Component = ok ? Icon.on : Icon.off;
+  return (
+    <span
+      className="inline-flex items-center"
+      style={{ color: ok ? 'var(--signal-ok)' : 'var(--ink-muted)' }}
+    >
+      <Component size={12} strokeWidth={2} />
+    </span>
+  );
 }

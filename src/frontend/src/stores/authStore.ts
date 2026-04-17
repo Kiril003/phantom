@@ -114,3 +114,9 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
       user: s.user ? { ...s.user, ...patch } : null,
     })),
 }));
+
+/* eslint-disable @typescript-eslint/no-explicit-any */
+if (import.meta.env?.DEV && typeof window !== 'undefined') {
+  (window as any).__phantom = (window as any).__phantom ?? {};
+  (window as any).__phantom.auth = useAuthStore;
+}

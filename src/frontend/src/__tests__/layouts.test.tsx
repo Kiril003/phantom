@@ -6,14 +6,22 @@ import { SystemState } from '@shared/types';
 
 // Mock framer-motion to avoid animation issues in tests
 vi.mock('framer-motion', async () => {
-  const actual = await vi.importActual('framer-motion');
+  const actual = await vi.importActual<object>('framer-motion');
   return {
     ...actual,
     AnimatePresence: ({ children }: { children: React.ReactNode }) => <>{children}</>,
-    motion: {
-      div: ({ children, ...props }: React.HTMLAttributes<HTMLDivElement>) => <div {...props}>{children}</div>,
-      aside: ({ children, ...props }: React.HTMLAttributes<HTMLElement>) => <aside {...props}>{children}</aside>,
-    },
+    motion: new Proxy(
+      {},
+      {
+        get:
+          (_target, key) =>
+            (props: Record<string, unknown>) => {
+              const { children, ...rest } = props as { children?: React.ReactNode };
+              const Tag = (key as string) as keyof JSX.IntrinsicElements;
+              return <Tag {...(rest as object)}>{children}</Tag>;
+            },
+      }
+    ),
   };
 });
 
@@ -161,25 +169,26 @@ describe('FocusLayout', () => {
     });
   });
 
-  it('renders sidebar context cards', async () => {
+  it('renders body metrics in SYSTEM_CORE cards', async () => {
     const FocusLayout = (await import('../layouts/FocusLayout')).default;
     render(withRouter(<FocusLayout />));
-    expect(screen.getAllByText('16 bpm').length).toBeGreaterThanOrEqual(1);
+    // BPM from bio mock context = 16, temp = 22.5
+    expect(screen.getAllByText(/16/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText(/22\.5/).length).toBeGreaterThanOrEqual(1);
   });
 
-  it('renders FOCUS MODE label', async () => {
+  it('renders SYSTEM_CORE section label', async () => {
     const FocusLayout = (await import('../layouts/FocusLayout')).default;
     render(withRouter(<FocusLayout />));
-    expect(screen.getByText('FOCUS MODE')).toBeDefined();
+    expect(screen.getByText('SYSTEM_CORE')).toBeDefined();
   });
 
-  it('renders resource bars', async () => {
+  it('renders CPU / RAM / Disk gauges', async () => {
     const FocusLayout = (await import('../layouts/FocusLayout')).default;
     render(withRouter(<FocusLayout />));
-    expect(screen.getByText('CPU')).toBeDefined();
-    expect(screen.getByText('RAM')).toBeDefined();
-    expect(screen.getByText('Disk')).toBeDefined();
+    expect(screen.getAllByText('CPU').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText('RAM').length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/Disk/i).length).toBeGreaterThanOrEqual(1);
   });
 });
 

@@ -29,20 +29,20 @@ export interface MapTokens {
 
 export function getMapTokens(): MapTokens {
   return {
-    accent: resolveCssVar('--accent', '#4fc3f7'),
-    accentGlow: resolveCssVar('--accent-glow', 'rgba(79,195,247,0.4)'),
+    accent: resolveCssVar('--accent', '#22d3ee'),
+    accentGlow: resolveCssVar('--accent-glow', 'rgba(34,211,238,0.4)'),
     surfaceVoid: resolveCssVar('--surface-void', '#000000'),
-    surfaceDeep: resolveCssVar('--surface-deep', '#0a0b0d'),
-    surfaceRaised: resolveCssVar('--surface-raised', '#14161a'),
-    inkPrimary: resolveCssVar('--ink-primary', '#e8e9ec'),
-    inkSecondary: resolveCssVar('--ink-secondary', '#8b8f98'),
-    inkMuted: resolveCssVar('--ink-muted', '#4a4d54'),
-    signalOk: resolveCssVar('--signal-ok', '#7ee787'),
-    signalWarn: resolveCssVar('--signal-warn', '#f0b72f'),
-    signalAlert: resolveCssVar('--signal-alert', '#ff6b6b'),
-    signalInfo: resolveCssVar('--signal-info', '#7aa2f7'),
+    surfaceDeep: resolveCssVar('--surface-deep', '#0a0f1a'),
+    surfaceRaised: resolveCssVar('--surface-raised', '#0f172a'),
+    inkPrimary: resolveCssVar('--ink-primary', '#f1f5f9'),
+    inkSecondary: resolveCssVar('--ink-secondary', '#94a3b8'),
+    inkMuted: resolveCssVar('--ink-muted', '#64748b'),
+    signalOk: resolveCssVar('--signal-ok', '#10b981'),
+    signalWarn: resolveCssVar('--signal-warn', '#f59e0b'),
+    signalAlert: resolveCssVar('--signal-alert', '#f43f5e'),
+    signalInfo: resolveCssVar('--signal-info', '#22d3ee'),
     lineSubtle: resolveCssVar('--line-subtle', 'rgba(255,255,255,0.06)'),
-    lineDefault: resolveCssVar('--line-default', 'rgba(255,255,255,0.12)'),
+    lineDefault: resolveCssVar('--line-default', 'rgba(255,255,255,0.10)'),
   };
 }
 

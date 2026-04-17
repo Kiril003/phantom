@@ -320,16 +320,15 @@ describe('TacticalMap', () => {
     const { TacticalMap } = await import('../components/map/TacticalMap');
     render(<TacticalMap />);
     expect(screen.getByLabelText('Tactical map')).toBeDefined();
-    expect(screen.getByLabelText('Layer controls')).toBeDefined();
-    expect(screen.getByLabelText(/Toggle BASE layer/)).toBeDefined();
-    expect(screen.getByLabelText(/Toggle WARD layer/)).toBeDefined();
-    expect(screen.getByLabelText(/Toggle HEAT layer/)).toBeDefined();
+    expect(screen.getByLabelText('Base')).toBeDefined();
+    expect(screen.getByLabelText('Wardriving')).toBeDefined();
+    expect(screen.getByLabelText('Heatmap')).toBeDefined();
   });
 
   it('layer toggle updates store', async () => {
     const { TacticalMap } = await import('../components/map/TacticalMap');
     render(<TacticalMap />);
-    const heatBtn = screen.getByLabelText(/Toggle HEAT layer/);
+    const heatBtn = screen.getByLabelText('Heatmap');
     expect(useMapStore.getState().layers.heatmap).toBe(false);
     fireEvent.click(heatBtn);
     expect(useMapStore.getState().layers.heatmap).toBe(true);
@@ -366,9 +365,9 @@ describe('TacticalMap', () => {
     useMapStore.setState({ savePOI: saveSpy });
     const { TacticalMap } = await import('../components/map/TacticalMap');
     render(<TacticalMap />);
-    await waitFor(() => screen.getByLabelText('Drop POI at centre'));
+    await waitFor(() => screen.getByLabelText('Drop POI'));
     act(() => {
-      fireEvent.click(screen.getByLabelText('Drop POI at centre'));
+      fireEvent.click(screen.getByLabelText('Drop POI'));
     });
     await waitFor(() => expect(saveSpy).toHaveBeenCalled());
     const call = saveSpy.mock.calls[0] as unknown as [{
@@ -377,17 +376,17 @@ describe('TacticalMap', () => {
     expect(call[0].category).toBe('saved');
   });
 
-  it('shows LIVE status chip when not loading', async () => {
+  it('shows Live status chip when not loading', async () => {
     const { TacticalMap } = await import('../components/map/TacticalMap');
     render(<TacticalMap />);
-    expect(screen.getByText('LIVE')).toBeDefined();
+    expect(screen.getByText('Live')).toBeDefined();
   });
 
-  it('shows SYNC status chip when loading', async () => {
+  it('shows Syncing status chip when loading', async () => {
     useMapStore.setState({ loading: true });
     const { TacticalMap } = await import('../components/map/TacticalMap');
     render(<TacticalMap />);
-    expect(screen.getByText('SYNC')).toBeDefined();
+    expect(screen.getByText('Syncing')).toBeDefined();
   });
 
   it('renders marker card when selection is set', async () => {

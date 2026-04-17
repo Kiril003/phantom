@@ -12,12 +12,12 @@ interface RFIDScannerProps {
 
 type ScanState = 'waiting' | 'detected' | 'success' | 'error';
 
-// Colors sourced from CSS variables defined in globals.css
+// Colors sourced from CSS variables defined in tokens.css
 const RING_COLOR: Record<ScanState, string> = {
-  success:  'var(--phantom-success)',   // #39ff14
-  error:    'var(--phantom-danger)',    // #ff073a
-  detected: 'var(--phantom-warning)',  // #ff6b35
-  waiting:  'var(--phantom-cyan)',     // #00d4ff
+  success:  'var(--signal-ok)',
+  error:    'var(--signal-alert)',
+  detected: 'var(--signal-warn)',
+  waiting:  'var(--accent)',
 };
 
 export default function RFIDScanner({ onSuccess, onError }: RFIDScannerProps) {

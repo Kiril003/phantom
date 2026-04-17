@@ -1,122 +1,158 @@
 /* PHANTOM OS — Design Tokens
- * Single source of truth for all visual properties.
- * Components use var(--...) exclusively — no hardcoded colors.
+ * Glass + Orb aesthetic per docs/VISUAL_SYSTEM.md.
+ * Components use var(--...) exclusively — zero hardcoded colors.
  */
 
 :root {
-  /* Surface — backgrounds and layers */
-  --surface-void:    #000000;
-  --surface-deep:    #0a0b0d;
-  --surface-raised:  #14161a;
-  --surface-glass:   rgba(20,22,26,.72);
+  /* ── Surfaces — depth layers ───────────────────────────────────────── */
+  --surface-base:     #020617;                 /* primary bg — deep slate */
+  --surface-deep:     #0a0f1a;                 /* panel bases */
+  --surface-raised:   #0f172a;                 /* raised cards */
+  --surface-void:     #000000;                 /* pure black — SHADOW / GHOST */
 
-  /* Ink — text */
-  --ink-primary:     #e8e9ec;
-  --ink-secondary:   #8b8f98;
-  --ink-muted:       #4a4d54;
-  --ink-inverse:     #0a0b0d;
+  /* ── Glass — translucent panels ───────────────────────────────────── */
+  --glass-subtle:       rgba(15, 23, 42, 0.4);
+  --glass-panel:        rgba(15, 23, 42, 0.6);
+  --glass-card:         rgba(15, 23, 42, 0.7);
+  --glass-elevated:     rgba(15, 23, 42, 0.85);
 
-  /* Line — borders, dividers */
-  --line-subtle:     rgba(255,255,255,.06);
-  --line-default:    rgba(255,255,255,.12);
-  --line-strong:     rgba(255,255,255,.24);
+  --glass-border:       rgba(255, 255, 255, 0.08);
+  --glass-border-hover: rgba(255, 255, 255, 0.16);
+  --glass-highlight:    rgba(255, 255, 255, 0.05);
 
-  /* Semantic — signals */
-  --signal-ok:       #7ee787;
-  --signal-warn:     #f0b72f;
-  --signal-alert:    #ff6b6b;
-  --signal-info:     #7aa2f7;
+  /* ── Ambient glows — soft gradient blobs on background ────────────── */
+  --glow-primary:       rgba(34, 211, 238, 0.2);
+  --glow-secondary:     rgba(139, 92, 246, 0.15);
+  --glow-warm:          rgba(244, 175, 37, 0.15);
 
-  /* Chart palette */
-  --chart-1: #4fc3f7;
-  --chart-2: #b388ff;
-  --chart-3: #7ee787;
-  --chart-4: #f0b72f;
-  --chart-5: #ff6b6b;
+  /* ── Ink — text ───────────────────────────────────────────────────── */
+  --ink-primary:        #f1f5f9;
+  --ink-secondary:      #94a3b8;
+  --ink-muted:          #64748b;
+  --ink-faint:          #475569;
+  --ink-inverse:        #020617;
 
-  /* Typography */
-  --font-display: "JetBrains Mono", "IBM Plex Mono", monospace;
-  --font-body:    "Inter", system-ui, sans-serif;
-  --font-tech:    "JetBrains Mono", monospace;
+  /* ── Lines — dividers / borders ───────────────────────────────────── */
+  --line-subtle:        rgba(255, 255, 255, 0.06);
+  --line-default:       rgba(255, 255, 255, 0.10);
+  --line-strong:        rgba(255, 255, 255, 0.18);
 
-  --fs-micro: 11px;
-  --fs-xs:    13px;
-  --fs-sm:    15px;
-  --fs-md:    17px;
-  --fs-lg:    22px;
-  --fs-xl:    32px;
-  --fs-xxl:   56px;
+  /* ── Semantic signals ─────────────────────────────────────────────── */
+  --signal-ok:          #10b981;
+  --signal-warn:        #f59e0b;
+  --signal-alert:       #f43f5e;
+  --signal-info:        #22d3ee;
 
-  --lh-tight:  1.15;
-  --lh-normal: 1.4;
-  --lh-loose:  1.6;
+  /* ── Chart palette ────────────────────────────────────────────────── */
+  --chart-1: #22d3ee;
+  --chart-2: #8b5cf6;
+  --chart-3: #10b981;
+  --chart-4: #f59e0b;
+  --chart-5: #f43f5e;
 
-  /* Layout */
-  --grid-columns: 12;
-  --grid-gutter: 12px;
-  --grid-padding: 16px;
-  --safe-w: 960px;
-  --safe-h: 568px;
-  --status-bar-h: 28px;
-  --touch-min: 44px;
-  --touch-key: 56px;
+  /* ── Typography ───────────────────────────────────────────────────── */
+  --font-display:   "Space Grotesk", "Outfit", system-ui, sans-serif;
+  --font-body:      "Space Grotesk", "Outfit", system-ui, sans-serif;
+  --font-mono:      "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+  --font-tech:      "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+  --font-serif:     "Playfair Display", Georgia, serif;
 
-  /* Z-index scale */
-  --z-base:    0;
-  --z-raised:  10;
-  --z-sticky:  20;
-  --z-overlay: 30;
-  --z-modal:   40;
-  --z-toast:   50;
+  --fs-micro:   11px;
+  --fs-xs:      12px;
+  --fs-sm:      14px;
+  --fs-base:    15px;
+  --fs-md:      17px;
+  --fs-lg:      22px;
+  --fs-xl:      32px;
+  --fs-2xl:     48px;
+  --fs-xxl:     56px;        /* legacy alias */
+  --fs-display: 64px;
 
-  /* State-driven (defaults, overridden by [data-state]) */
-  --accent:       #3a3d42;
-  --accent-glow:  rgba(58,61,66,.3);
-  --ui-opacity:   0.85;
-  --motion-scale: 0.6;
+  --tracking-tight:    -0.02em;
+  --tracking-normal:    0;
+  --tracking-wide:      0.05em;
+  --tracking-wider:     0.10em;
+  --tracking-widest:    0.15em;
+
+  --lh-tight:    1.1;
+  --lh-normal:   1.4;
+  --lh-loose:    1.6;
+  --lh-relaxed:  1.6;
+
+  /* ── Layout ───────────────────────────────────────────────────────── */
+  --grid-columns:   12;
+  --grid-gutter:    12px;
+  --grid-padding:   16px;
+  --safe-w:         960px;
+  --safe-h:         568px;
+  --status-bar-h:   36px;
+  --touch-min:      44px;
+  --touch-key:      56px;
+
+  /* ── Z-index ──────────────────────────────────────────────────────── */
+  --z-base:     0;
+  --z-raised:   10;
+  --z-sticky:   20;
+  --z-overlay:  30;
+  --z-modal:    40;
+  --z-toast:    50;
+
+  /* State-driven defaults (overridden by [data-state]) */
+  --accent:         #64748b;
+  --accent-glow:    rgba(100, 116, 139, 0.2);
+  --accent-radial:  radial-gradient(circle at 30% 30%, #475569, #1e293b);
+  --ui-opacity:     1;
+  --motion-scale:   1;
 }
 
-/* ─── State accent overrides ─────────────────────────────────────────────── */
+/* ─── State accent overrides ─────────────────────────────────────────── */
 
 [data-state="SHADOW"] {
-  --accent:       #3a3d42;
-  --accent-glow:  rgba(58,61,66,.3);
-  --ui-opacity:   0.85;
-  --motion-scale: 0.6;
+  --accent:         #64748b;
+  --accent-glow:    rgba(100, 116, 139, 0.2);
+  --accent-radial:  radial-gradient(circle at 30% 30%, #475569, #1e293b);
+  --ui-opacity:     0.85;
+  --motion-scale:   0.5;
+  --surface-base:   #000000;
 }
 
 [data-state="FOCUS"] {
-  --accent:       #4fc3f7;
-  --accent-glow:  rgba(79,195,247,.4);
-  --ui-opacity:   1;
-  --motion-scale: 1;
+  --accent:         #22d3ee;
+  --accent-glow:    rgba(34, 211, 238, 0.4);
+  --accent-radial:  radial-gradient(circle at 30% 30%, #22d3ee, #0ea5e9, #6366f1);
+  --ui-opacity:     1;
+  --motion-scale:   1;
 }
 
 [data-state="DIALOGUE"] {
-  --accent:       #b388ff;
-  --accent-glow:  rgba(179,136,255,.4);
-  --ui-opacity:   1;
-  --motion-scale: 1.1;
+  --accent:         #8b5cf6;
+  --accent-glow:    rgba(139, 92, 246, 0.4);
+  --accent-radial:  radial-gradient(circle at 30% 30%, #a78bfa, #8b5cf6, #6366f1);
+  --ui-opacity:     1;
+  --motion-scale:   1.1;
 }
 
 [data-state="SENTINEL"] {
-  --accent:       #ff5252;
-  --accent-glow:  rgba(255,82,82,.5);
-  --ui-opacity:   1;
-  --motion-scale: 1.3;
+  --accent:         #f43f5e;
+  --accent-glow:    rgba(244, 63, 94, 0.5);
+  --accent-radial:  radial-gradient(circle at 30% 30%, #fb7185, #f43f5e, #be123c);
+  --ui-opacity:     1;
+  --motion-scale:   1.3;
 }
 
 [data-state="GHOST"] {
-  --accent:       #69f0ae;
-  --accent-glow:  rgba(105,240,174,.3);
-  --ui-opacity:   0.95;
-  --motion-scale: 0.8;
-  --surface-deep: #000000;
+  --accent:         #10b981;
+  --accent-glow:    rgba(16, 185, 129, 0.3);
+  --accent-radial:  radial-gradient(circle at 30% 30%, #34d399, #10b981, #047857);
+  --ui-opacity:     0.9;
+  --motion-scale:   0.8;
+  --surface-base:   #000000;
 }
 
 [data-state="DREAM"] {
-  --accent:       #9575cd;
-  --accent-glow:  rgba(149,117,205,.2);
-  --ui-opacity:   0.6;
-  --motion-scale: 0.4;
+  --accent:         #f4af25;
+  --accent-glow:    rgba(244, 175, 37, 0.2);
+  --accent-radial:  radial-gradient(circle at 30% 30%, #fbbf24, #f59e0b, #b45309);
+  --ui-opacity:     0.75;
+  --motion-scale:   0.4;
 }

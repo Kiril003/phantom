@@ -4,26 +4,11 @@ const config: Config = {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
-      colors: {
-        phantom: {
-          bg: '#0A0E14',
-          surface: '#0D1117',
-          border: '#1E2A3A',
-          cyan: '#00D4FF',
-          'cyan-dim': '#0099BB',
-          warning: '#FF6B35',
-          success: '#39FF14',
-          danger: '#FF073A',
-          dream: '#9B8FD4',
-          ghost: '#1A1A2E',
-          text: '#C8D8E8',
-          'text-dim': '#6B7E8F',
-          'text-bright': '#E8F4FF',
-        },
-      },
       fontFamily: {
-        mono: ['JetBrains Mono', 'Fira Code', 'Consolas', 'monospace'],
-        ui: ['Inter', 'system-ui', 'sans-serif'],
+        display: ['Space Grotesk', 'Outfit', 'system-ui', 'sans-serif'],
+        sans: ['Space Grotesk', 'Outfit', 'system-ui', 'sans-serif'],
+        mono: ['JetBrains Mono', 'ui-monospace', 'SF Mono', 'monospace'],
+        serif: ['Playfair Display', 'Georgia', 'serif'],
       },
       screens: {
         phantom: '1024px',
@@ -33,43 +18,55 @@ const config: Config = {
       },
       height: {
         screen: '600px',
-        'status-bar': '28px',
-        'main': '572px',
+        'status-bar': '36px',
+        main: '564px',
       },
       animation: {
-        'pulse-cyan': 'pulse-cyan 2s ease-in-out infinite',
-        'breathe': 'breathe 4s ease-in-out infinite',
-        'scan': 'scan 2s linear infinite',
-        'flicker': 'flicker 0.15s ease-in-out infinite',
-        'state-transition': 'state-transition 0.4s ease-out',
+        breathe: 'breathe 8s ease-in-out infinite',
+        morph: 'morph 8s ease-in-out infinite',
+        float: 'float 6s ease-in-out infinite',
+        'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        'pulse-music': 'pulseMusic 1.2s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+        radar: 'radar 10s linear infinite',
+        'fade-in': 'fadeIn 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards',
+        equalizer: 'equalizer 1s ease-in-out infinite',
+        scanline: 'scanline 3s linear infinite',
       },
       keyframes: {
-        'pulse-cyan': {
-          '0%, 100%': { boxShadow: '0 0 4px #00D4FF40' },
-          '50%': { boxShadow: '0 0 12px #00D4FFAA' },
-        },
         breathe: {
-          '0%, 100%': { opacity: '0.4', transform: 'scale(1)' },
-          '50%': { opacity: '1', transform: 'scale(1.02)' },
+          '0%, 100%': { transform: 'scale(1)', opacity: '0.9' },
+          '50%': { transform: 'scale(1.05)', opacity: '0.7' },
         },
-        scan: {
-          '0%': { transform: 'translateY(-100%)' },
-          '100%': { transform: 'translateY(100%)' },
+        morph: {
+          '0%': { borderRadius: '60% 40% 30% 70%/60% 30% 70% 40%' },
+          '50%': { borderRadius: '30% 60% 70% 40%/50% 60% 30% 60%' },
+          '100%': { borderRadius: '60% 40% 30% 70%/60% 30% 70% 40%' },
         },
-        flicker: {
-          '0%, 100%': { opacity: '1' },
-          '50%': { opacity: '0.8' },
+        float: {
+          '0%, 100%': { transform: 'translateY(0)' },
+          '50%': { transform: 'translateY(-6px)' },
         },
-        'state-transition': {
-          '0%': { opacity: '0', transform: 'scale(0.98)' },
-          '100%': { opacity: '1', transform: 'scale(1)' },
+        radar: {
+          '0%': { transform: 'rotate(0deg)' },
+          '100%': { transform: 'rotate(360deg)' },
         },
-      },
-      boxShadow: {
-        'cyan-glow': '0 0 8px #00D4FF60',
-        'danger-glow': '0 0 8px #FF073A60',
-        'success-glow': '0 0 8px #39FF1460',
-        'dream-glow': '0 0 12px #9B8FD460',
+        fadeIn: {
+          '0%': { opacity: '0', transform: 'translateY(16px)' },
+          '100%': { opacity: '1', transform: 'translateY(0)' },
+        },
+        pulseMusic: {
+          '0%, 100%': { transform: 'scale(1)', opacity: '0.8' },
+          '50%': { transform: 'scale(1.15)', opacity: '1' },
+        },
+        equalizer: {
+          '0%, 100%': { height: '20%' },
+          '50%': { height: '100%' },
+        },
+        scanline: {
+          '0%': { transform: 'translateY(-100%)', opacity: '0' },
+          '50%': { opacity: '0.5' },
+          '100%': { transform: 'translateY(600px)', opacity: '0' },
+        },
       },
     },
   },

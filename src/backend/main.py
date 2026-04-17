@@ -120,6 +120,31 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await init_db()
     logger.info("Database initialized")
 
+    # Load persisted settings BEFORE any module reads config (serial bridge,
+    # AI providers, WS/hostname, loop interval). Order matters: without this
+    # the serial bridge and logger would come up with env/default values even
+    # if the operator had changed them in Settings UI on a previous session.
+    from db.settings_repo import load_all as load_settings_from_db
+    try:
+        overrides = await load_settings_from_db()
+        if overrides:
+            config.apply_overrides(overrides)
+            logger.info("Settings: applied %d DB overrides", len(overrides))
+    except Exception as exc:
+        # A broken settings row must not block startup — log and continue with
+        # env/defaults.
+        logger.error("Settings: failed to load DB overrides: %s", exc)
+
+    # Reconfigure root logger in case log_level or hostname was overridden in
+    # DB. Hostname goes into the log prefix so multi-node log streams can be
+    # distinguished on a shared journal.
+    logging.getLogger().setLevel(getattr(logging, config.log_level))
+    new_fmt = logging.Formatter(
+        f"%(asctime)s [{config.system_hostname}] [%(levelname)s] %(name)s: %(message)s"
+    )
+    for h in logging.getLogger().handlers:
+        h.setFormatter(new_fmt)
+
     # Ensure at least one user exists (creates default ROOT 'phantom'/000000)
     from db.database import get_session
     from security.auth import ensure_default_user
@@ -227,6 +252,7 @@ def _register_health(app: FastAPI) -> None:
         return {
             "status": "ok",
             "version": "0.1.0",
+            "hostname": config.system_hostname,
             "ws_clients": hub.client_count,
             "esp32_connected": esp32_connected,
             "serial_enabled": config.serial_enabled,

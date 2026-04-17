@@ -4,18 +4,30 @@ Settings routes — categorised live view of PhantomConfig plus runtime mutation
 Produces a shape that the frontend SettingsStore expects
 (categories[] with settings[] using SettingDefinition contract).
 
-Phase-03 full DB persistence will land later; for now PUT mutates the in-memory
-config via `apply_db_overrides`, which hot-applies the new value without restart.
+Persistence contract:
+  - PUT /settings/{key} writes to the `settings` DB table AND mutates the
+    in-memory config so the change takes effect without restart.
+  - POST /settings/reset deletes the corresponding DB rows AND re-loads
+    defaults in memory, so on next restart the env/default values win.
+  - POST /settings/import upserts each row, same as a batch of PUTs.
+  - Startup loads every row via `db.settings_repo.load_all()` before any
+    config-reading module initialises (see main.lifespan).
 """
 from __future__ import annotations
 
+import logging
 from datetime import datetime, timezone
 from typing import Any, Iterable, Literal, get_args, get_origin
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel
 
 from config import config
+from db import settings_repo
+from db.models import User
+from security.auth import get_current_user
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/settings", tags=["settings"])
 
@@ -324,22 +336,75 @@ async def get_setting(key: str) -> dict[str, Any]:
 
 
 @router.put("/{key:path}")
-async def set_setting(key: str, req: SetValueRequest) -> dict[str, Any]:
+async def set_setting(
+    key: str,
+    req: SetValueRequest,
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
     if not hasattr(config, key):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"Unknown key: {key}")
+
+    # Apply in-memory first so validation rejects bad values before we persist.
+    before = getattr(config, key)
     try:
-        config.apply_db_overrides({key: req.value})
+        config.apply_overrides({key: req.value})
     except Exception as exc:
         raise HTTPException(
             status.HTTP_400_BAD_REQUEST,
             detail=f"Failed to set {key}: {exc}",
         ) from exc
-    return {"key": key, "value": getattr(config, key), "requires_restart": False}
+
+    after = getattr(config, key)
+    # Pydantic silently ignored the write (type mismatch / Literal miss).
+    if after == before and req.value != before:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail=f"Rejected value for {key}: {req.value!r}",
+        )
+
+    try:
+        await settings_repo.save(key, after, user_id=user.id)
+    except Exception as exc:
+        # Roll in-memory back so UI and DB don't diverge.
+        config.apply_overrides({key: before})
+        logger.exception("settings: failed to persist %s", key)
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to persist {key}: {exc}",
+        ) from exc
+
+    _apply_runtime_side_effect(key, after)
+
+    return {"key": key, "value": after, "requires_restart": False}
+
+
+def _apply_runtime_side_effect(key: str, value: Any) -> None:
+    """
+    A handful of settings need to re-initialise subsystems on change so they
+    take effect without a restart. Keep this list short and explicit — opaque
+    hot-reload magic is worse than `requires_restart: true`.
+    """
+    if key == "log_level":
+        logging.getLogger().setLevel(value)
+    elif key == "system_hostname":
+        # Keep the running logger formatter in sync so subsequent records carry
+        # the new hostname without a restart.
+        new_fmt = logging.Formatter(
+            f"%(asctime)s [{value}] [%(levelname)s] %(name)s: %(message)s"
+        )
+        for h in logging.getLogger().handlers:
+            h.setFormatter(new_fmt)
 
 
 @router.post("/reset")
-async def reset_settings(req: ResetRequest) -> dict[str, Any]:
-    # In-memory reset — re-instantiate from env/defaults.
+async def reset_settings(
+    req: ResetRequest,
+    _user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    """
+    Restore defaults for a category (or all). Mutates in-memory config AND
+    deletes DB overrides so next restart truly falls back to env/defaults.
+    """
     from config import PhantomConfig
 
     fresh = PhantomConfig()
@@ -349,12 +414,22 @@ async def reset_settings(req: ResetRequest) -> dict[str, Any]:
         target_keys = spec["keys"] if spec else []
     else:
         target_keys = [k for c in CATEGORY_SPEC for k in c["keys"]]
-    reset_count = 0
+    reset_keys: list[str] = []
     for key in target_keys:
         if hasattr(fresh, key):
             setattr(config, key, getattr(fresh, key))
-            reset_count += 1
-    return {"ok": True, "reset_count": reset_count}
+            reset_keys.append(key)
+
+    try:
+        await settings_repo.delete(reset_keys)
+    except Exception as exc:
+        logger.exception("settings: failed to clear DB overrides on reset")
+        raise HTTPException(
+            status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Reset (DB clear) failed: {exc}",
+        ) from exc
+
+    return {"ok": True, "reset_count": len(reset_keys)}
 
 
 @router.post("/export")
@@ -373,15 +448,29 @@ async def export_settings() -> dict[str, Any]:
 
 
 @router.post("/import")
-async def import_settings(req: ImportRequest) -> dict[str, Any]:
+async def import_settings(
+    req: ImportRequest,
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
     imported, skipped = 0, 0
     for key, value in req.settings.items():
-        if hasattr(config, key):
-            try:
-                config.apply_db_overrides({key: value})
-                imported += 1
-            except Exception:
+        if not hasattr(config, key):
+            skipped += 1
+            continue
+        before = getattr(config, key)
+        try:
+            config.apply_overrides({key: value})
+            after = getattr(config, key)
+            if after == before and value != before:
                 skipped += 1
-        else:
+                continue
+            await settings_repo.save(key, after, user_id=user.id)
+            imported += 1
+        except Exception:
+            # Best-effort rollback of in-memory mutation.
+            try:
+                config.apply_overrides({key: before})
+            except Exception:
+                pass
             skipped += 1
     return {"ok": True, "imported_count": imported, "skipped": skipped}

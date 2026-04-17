@@ -153,8 +153,14 @@ class PhantomConfig(BaseSettings):
     system_backup_interval_h: int = 24
     system_temporal_anchor_interval_s: int = 300
 
-    def apply_db_overrides(self, overrides: dict[str, Any]) -> None:
-        """Hot-apply settings from DB without restart."""
+    def apply_overrides(self, overrides: dict[str, Any]) -> None:
+        """
+        In-place mutate config fields. Values that fail Pydantic validation are
+        silently skipped (kept as the existing value) so a single bad override
+        can't crash startup.
+
+        Persistence is handled separately by `db.settings_repo.save(...)`.
+        """
         for key, value in overrides.items():
             key_attr = key.replace(".", "_")
             if hasattr(self, key_attr):
@@ -162,6 +168,9 @@ class PhantomConfig(BaseSettings):
                     setattr(self, key_attr, value)
                 except Exception:
                     pass
+
+    # Back-compat alias — the old name lied (it never touched the DB).
+    apply_db_overrides = apply_overrides
 
 
 # Singleton — loaded once at startup, mutated on hot-reload

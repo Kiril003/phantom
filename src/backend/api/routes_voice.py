@@ -1,43 +1,148 @@
-"""Voice routes — TTS, STT."""
+"""
+Voice routes — TTS, STT.
+
+Push-to-talk contract (Phase 07):
+  POST /api/v1/voice/stt   multipart form, `file` = WAV/OGG/… blob.
+       Returns {text, confidence, engine, language}.
+  POST /api/v1/voice/tts   JSON {text, voice, speed, emotion_scale}.
+       Returns audio/wav binary.
+  GET  /api/v1/voice/status   config + active engine names — used by the
+       Settings screen to tell operators which provider is running.
+
+Wake-word always-on and true streaming STT during speech are deferred;
+the front-end drives a tap-to-record loop against these HTTP endpoints.
+"""
 from __future__ import annotations
 
-from fastapi import APIRouter, HTTPException, UploadFile, status
-from pydantic import BaseModel
+import logging
+
+from fastapi import APIRouter, File, HTTPException, Response, UploadFile, status
+from pydantic import BaseModel, Field
+
+from config import config
+from voice.pipeline import (
+    get_stt_provider,
+    get_tts_provider,
+    synthesize_text,
+    transcribe_blob,
+)
+from voice.stt_engine import contains_wake_word
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/voice", tags=["voice"])
 
 
+MAX_STT_BYTES = 10 * 1024 * 1024  # 10 MB — ~5 min of 16 kHz Opus is well under.
+MAX_TTS_CHARS = 4_000
+
+
 class TTSRequest(BaseModel):
-    text: str
-    voice: str = "Марина"
+    text: str = Field(..., min_length=1, max_length=MAX_TTS_CHARS)
+    voice: str = ""
     speed: float = 1.0
-    emotion_scale: float = 1.0
+    emotion_scale: float = 1.0  # accepted but piper ignores for now
 
 
-# TODO(phase-05): once StyleTTS2/Whisper pipelines land, these handlers must
-# read the full voice_* block from `config` instead of the request defaults:
-#   - voice_stt_mode / voice_stt_language / voice_stt_whisper_model /
-#     voice_stt_whisper_device / voice_stt_hybrid_threshold
-#   - voice_tts_enabled (gate the TTS handler) / voice_tts_voice /
-#     voice_tts_speed / voice_tts_alpha / voice_tts_beta /
-#     voice_tts_diffusion_steps / voice_tts_emotion_scale /
-#     voice_tts_state_adaptation
-#   - voice_wake_word_enabled / voice_wake_words (hotword task)
-# Settings UI already surfaces these with a [soon] suffix; marker is kept in
-# routes_settings.UNIMPLEMENTED_KEYS so labels flip automatically once wired.
+class STTResponse(BaseModel):
+    text: str
+    confidence: float
+    engine: str
+    language: str
+    wake_word_matched: bool
 
 
-@router.post("/tts")
-async def synthesize_speech(req: TTSRequest):
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Implemented in Phase 05",
+class StatusResponse(BaseModel):
+    stt_engine: str
+    tts_engine: str
+    stt_mode: str
+    language: str
+    tts_enabled: bool
+    tts_voice: str
+    wake_word_enabled: bool
+    wake_words: str
+
+
+@router.post("/stt", response_model=STTResponse)
+async def transcribe_speech(file: UploadFile = File(...)) -> STTResponse:
+    """Transcribe a single audio clip. Non-streaming — suitable for the
+    browser's MediaRecorder tap-to-speak flow."""
+    raw = await file.read()
+    if not raw:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Empty audio upload",
+        )
+    if len(raw) > MAX_STT_BYTES:
+        raise HTTPException(
+            status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+            detail=f"Audio too large ({len(raw)} bytes, max {MAX_STT_BYTES})",
+        )
+    try:
+        result = await transcribe_blob(raw, config.voice_stt_language)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        logger.exception("STT pipeline failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"STT pipeline error: {exc}",
+        ) from exc
+    return STTResponse(
+        text=result.text,
+        confidence=result.confidence,
+        engine=result.engine,
+        language=result.language,
+        wake_word_matched=contains_wake_word(result.text),
     )
 
 
-@router.post("/stt")
-async def transcribe_speech(file: UploadFile) -> dict:
-    raise HTTPException(
-        status_code=status.HTTP_501_NOT_IMPLEMENTED,
-        detail="Implemented in Phase 05",
+@router.post("/tts")
+async def synthesize_speech(req: TTSRequest) -> Response:
+    """Render text to a WAV blob. Respects voice_tts_enabled (returns 100 ms
+    of silence when disabled) and voice_tts_voice (falls back to the
+    settings default when `req.voice` is empty)."""
+    voice = req.voice.strip() or config.voice_tts_voice
+    speed = req.speed if req.speed > 0 else config.voice_tts_speed
+    try:
+        result = await synthesize_text(req.text, voice, speed)
+    except RuntimeError as exc:
+        # Model-file-missing → meaningful 503 instead of generic 500.
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=str(exc),
+        ) from exc
+    except Exception as exc:
+        logger.exception("TTS pipeline failed")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"TTS pipeline error: {exc}",
+        ) from exc
+    return Response(
+        content=result.audio_wav,
+        media_type="audio/wav",
+        headers={
+            "X-Engine": result.engine,
+            "X-Voice": result.voice,
+            "X-Sample-Rate": str(result.sample_rate),
+        },
+    )
+
+
+@router.get("/status", response_model=StatusResponse)
+async def voice_status() -> StatusResponse:
+    """Live snapshot of the voice subsystem — surfaces which provider
+    actually loaded so a [soon]-vs-wired mismatch is obvious."""
+    return StatusResponse(
+        stt_engine=get_stt_provider().name,
+        tts_engine=get_tts_provider().name,
+        stt_mode=config.voice_stt_mode,
+        language=config.voice_stt_language,
+        tts_enabled=config.voice_tts_enabled,
+        tts_voice=config.voice_tts_voice,
+        wake_word_enabled=config.voice_wake_word_enabled,
+        wake_words=config.voice_wake_words,
     )

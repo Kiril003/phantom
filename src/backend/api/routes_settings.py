@@ -277,13 +277,14 @@ PASSWORD_KEYS = {"ai_gemini_api_key", "jwt_secret_key"}
 # will only come online once the owning phase ships. Keep this list tight:
 # a key that is actually wired must NOT appear here.
 UNIMPLEMENTED_KEYS = {
-    # Voice pipeline — routes are 501, awaiting Phase 05 wire-up.
-    "voice_stt_language",
+    # Voice pipeline — Phase 07 shipped push-to-talk STT/TTS wiring, so
+    # voice_stt_mode / voice_stt_language / voice_tts_enabled /
+    # voice_tts_voice / voice_tts_speed now land. What's still [soon]:
+    #   - Whisper-specific knobs (no faster-whisper on dev image).
+    #   - emotion_scale / state_adaptation → piper doesn't consume them.
+    #   - wake_word family → always-on hotword is a separate phase.
     "voice_stt_whisper_model",
     "voice_stt_whisper_device",
-    "voice_tts_enabled",
-    "voice_tts_voice",
-    "voice_tts_speed",
     "voice_tts_emotion_scale",
     "voice_tts_state_adaptation",
     "voice_wake_word_enabled",
@@ -426,6 +427,15 @@ def _apply_runtime_side_effect(key: str, value: Any) -> None:
         )
         for h in logging.getLogger().handlers:
             h.setFormatter(new_fmt)
+    elif key.startswith("voice_"):
+        # A voice_* mutation may have changed the active STT mode or TTS
+        # voice; drop the cached provider so the next request rebuilds with
+        # the new config.
+        try:
+            from voice.pipeline import reset_providers
+            reset_providers()
+        except Exception as exc:
+            logger.debug("voice.reset_providers() failed: %s", exc)
 
 
 @router.post("/reset")

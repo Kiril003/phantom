@@ -27,13 +27,22 @@ import { HeatmapLayer } from './HeatmapLayer';
 import { MarkerCard } from './MarkerCard';
 import { useMapStore, type MapLayerKey } from '../../stores/mapStore';
 import { useSystemStore } from '../../stores/systemStore';
-import { getMapTokens, buildPhantomStyle } from './mapTokens';
+import { getMapTokens, buildPhantomStyle, type PhantomMapStyle } from './mapTokens';
+import { useSettingsStore } from '../../stores/settingsStore';
 import type { Bounds } from '../../services/api';
 
 interface TacticalMapProps {
   initialCenter?: [number, number];
   initialZoom?: number;
   className?: string;
+}
+
+const MAP_STYLE_VALUES: readonly PhantomMapStyle[] = ['dark', 'satellite', 'streets'];
+
+function resolveMapStyle(raw: unknown): PhantomMapStyle {
+  return typeof raw === 'string' && (MAP_STYLE_VALUES as readonly string[]).includes(raw)
+    ? (raw as PhantomMapStyle)
+    : 'dark';
 }
 
 function computeBounds(map: MapLibreMap): Bounds {
@@ -63,6 +72,9 @@ export function TacticalMap({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const [ready, setReady] = useState(false);
+
+  const mapStyleSetting = useSettingsStore((s) => s.values.ui_map_style);
+  const mapStyle = resolveMapStyle(mapStyleSetting);
 
   const layers = useMapStore((s) => s.layers);
   const toggleLayer = useMapStore((s) => s.toggleLayer);
@@ -123,7 +135,7 @@ export function TacticalMap({
     const map = new maplibregl.Map({
       container,
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      style: buildPhantomStyle(tokens) as any,
+      style: buildPhantomStyle(tokens, mapStyle) as any,
       center: resolvedInitialCenter,
       zoom: initialZoom,
       attributionControl: false,

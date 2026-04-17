@@ -46,19 +46,77 @@ export function getMapTokens(): MapTokens {
   };
 }
 
-export function buildPhantomStyle(tokens: MapTokens) {
+export type PhantomMapStyle = 'dark' | 'satellite' | 'streets';
+
+/**
+ * Per-style raster paint presets. 'dark' is the original desaturated phantom
+ * look; 'streets' is an almost-neutral OSM view; 'satellite' swaps the source
+ * to ESRI world imagery and pulls the paint ops back so labels stay legible.
+ */
+const STYLE_PAINT: Record<
+  PhantomMapStyle,
+  {
+    source: { tiles: string[]; attribution: string };
+    paint: Record<string, number>;
+  }
+> = {
+  dark: {
+    source: {
+      tiles: [
+        'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      ],
+      attribution: '© OpenStreetMap',
+    },
+    paint: {
+      'raster-opacity': 0.45,
+      'raster-brightness-min': 0.0,
+      'raster-brightness-max': 0.55,
+      'raster-saturation': -0.85,
+      'raster-contrast': 0.2,
+    },
+  },
+  streets: {
+    source: {
+      tiles: [
+        'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
+        'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png',
+      ],
+      attribution: '© OpenStreetMap',
+    },
+    paint: {
+      'raster-opacity': 0.95,
+      'raster-saturation': 0,
+      'raster-contrast': 0,
+    },
+  },
+  satellite: {
+    source: {
+      tiles: [
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+      ],
+      attribution: '© Esri, Maxar, Earthstar Geographics',
+    },
+    paint: {
+      'raster-opacity': 0.95,
+      'raster-saturation': -0.1,
+      'raster-contrast': 0.0,
+    },
+  },
+};
+
+export function buildPhantomStyle(tokens: MapTokens, style: PhantomMapStyle = 'dark') {
+  const preset = STYLE_PAINT[style] ?? STYLE_PAINT.dark;
   return {
     version: 8,
     sources: {
       osm: {
         type: 'raster',
-        tiles: [
-          'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
-          'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
-          'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png',
-        ],
+        tiles: preset.source.tiles,
         tileSize: 256,
-        attribution: '© OpenStreetMap',
+        attribution: preset.source.attribution,
       },
     },
     layers: [
@@ -71,13 +129,7 @@ export function buildPhantomStyle(tokens: MapTokens) {
         id: 'osm',
         type: 'raster',
         source: 'osm',
-        paint: {
-          'raster-opacity': 0.45,
-          'raster-brightness-min': 0.0,
-          'raster-brightness-max': 0.55,
-          'raster-saturation': -0.85,
-          'raster-contrast': 0.2,
-        },
+        paint: preset.paint,
       },
     ],
   };

@@ -17,12 +17,15 @@ interface SystemStoreState {
   authenticated: boolean;
   wsConnected: boolean;
   esp32: Esp32Status;
+  /** Live mic amplitude [0, 1] — updated by useVoiceRecorder while listening. */
+  voiceAmplitude: number;
 
   setState: (s: SystemState, transition?: Omit<StateTransition, 'from' | 'to'>) => void;
   setContext: (ctx: ContextSnapshot) => void;
   setAuthenticated: (v: boolean) => void;
   setWsConnected: (v: boolean) => void;
   setEsp32: (s: Esp32Status) => void;
+  setVoiceAmplitude: (amp: number) => void;
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -38,6 +41,7 @@ export const useSystemStore = create<SystemStoreState>((set, get) => ({
   authenticated: false,
   wsConnected: false,
   esp32: 'unknown',
+  voiceAmplitude: 0,
 
   setState: (to, extra) => {
     const from = get().state;
@@ -62,6 +66,12 @@ export const useSystemStore = create<SystemStoreState>((set, get) => ({
   setAuthenticated: (v) => set({ authenticated: v }),
   setWsConnected: (v) => set({ wsConnected: v }),
   setEsp32: (s) => set({ esp32: s }),
+  setVoiceAmplitude: (amp) => {
+    // Ignore sub-threshold jitter to avoid pointless rerenders when idle.
+    const current = get().voiceAmplitude;
+    if (Math.abs(current - amp) < 0.02 && amp < 0.02) return;
+    set({ voiceAmplitude: amp });
+  },
 }));
 
 if (import.meta.env.DEV) {

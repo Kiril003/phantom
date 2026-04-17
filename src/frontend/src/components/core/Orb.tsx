@@ -1,4 +1,5 @@
 import { SystemState } from '@shared/types';
+import { useSystemStore } from '../../stores/systemStore';
 
 export type OrbSize = 'sm' | 'md' | 'lg' | 'xl';
 
@@ -26,6 +27,13 @@ const SIZE_MAP: Record<OrbSize, { container: number; core: number; ringOuter: nu
 export function Orb({ size = 'md', pulsing = false, className = '' }: OrbProps) {
   const s = SIZE_MAP[size];
 
+  // Voice amplitude [0, 1] from the mic recorder — drives a subtle scale
+  // and brightness pulse so the orb visibly reacts while the operator speaks.
+  // Falls back to 0 when no voice session is active.
+  const voiceAmp = useSystemStore((st) => st.voiceAmplitude ?? 0);
+  const voicePulse = 1 + voiceAmp * 0.12;
+  const voiceGlow = 1 + voiceAmp * 1.2;
+
   return (
     <div
       className={`relative flex items-center justify-center animate-float ${className}`}
@@ -37,7 +45,9 @@ export function Orb({ size = 'md', pulsing = false, className = '' }: OrbProps) 
         className={`absolute inset-0 rounded-full ${pulsing ? 'animate-pulse-music' : 'animate-pulse-slow'}`}
         style={{
           background: 'var(--accent-glow)',
-          filter: 'blur(36px)',
+          filter: `blur(36px) brightness(${voiceGlow})`,
+          transform: `scale(${voicePulse})`,
+          transition: 'transform 80ms linear, filter 80ms linear',
         }}
       />
 

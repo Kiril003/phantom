@@ -13,6 +13,9 @@ import { MessageBubble } from './MessageBubble';
 import { useChatStore } from '../../stores/chatStore';
 import { useChatStream } from '../../hooks/useChatStream';
 import { useSystemStore } from '../../stores/systemStore';
+import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { voiceApi } from '../../services/voiceApi';
 import type { ChatMessage } from '@shared/types';
 
 interface ChatWindowProps {
@@ -74,10 +77,27 @@ export function ChatWindow({
   const systemState = useSystemStore((s) => s.state);
 
   const [input, setInput] = useState('');
-  const [voiceActive, setVoiceActive] = useState(false);
+  const [voiceError, setVoiceError] = useState<string | null>(null);
+  const [transcribing, setTranscribing] = useState(false);
+  const lastUserInputMethodRef = useRef<'text' | 'voice' | 'encoder'>('text');
   const endRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const stickyBottomRef = useRef(true);
+
+  const recorder = useVoiceRecorder();
+  const voiceActive = recorder.state === 'recording' || recorder.state === 'requesting';
+  const ttsEnabled = useSettingsStore((s) => Boolean(s.values.voice_tts_enabled ?? true));
+  const ttsVoice = useSettingsStore((s) => String(s.values.voice_tts_voice ?? ''));
+  const ttsSpeed = useSettingsStore((s) =>
+    typeof s.values.voice_tts_speed === 'number' ? (s.values.voice_tts_speed as number) : 1.0
+  );
+
+  // Route the mic amplitude into the system store so the Orb component
+  // (and anything else) can pulse in sync without threading props.
+  const setVoiceAmplitude = useSystemStore((s) => s.setVoiceAmplitude);
+  useEffect(() => {
+    setVoiceAmplitude?.(recorder.amplitude);
+  }, [recorder.amplitude, setVoiceAmplitude]);
 
   useEffect(() => {
     if (!minimalChrome) loadSessions();
@@ -102,6 +122,7 @@ export function ChatWindow({
     if (!text || sending) return;
     setInput('');
     stickyBottomRef.current = true;
+    lastUserInputMethodRef.current = 'text';
     sendMessage(text, 'text', systemState);
   }, [input, sending, sendMessage, systemState]);
 
@@ -115,13 +136,89 @@ export function ChatWindow({
     [handleSend]
   );
 
-  const toggleVoice = useCallback(() => {
-    setVoiceActive((v) => {
-      const next = !v;
-      onVoiceToggle?.(next);
-      return next;
-    });
-  }, [onVoiceToggle]);
+  const toggleVoice = useCallback(async () => {
+    // Idle → start recording.
+    if (recorder.state === 'idle' || recorder.state === 'error') {
+      setVoiceError(null);
+      // Signal intent synchronously so UI toggles / listeners react before
+      // getUserMedia resolves (and so a jsdom-style env without mediaDevices
+      // still observes the toggle).
+      onVoiceToggle?.(true);
+      try {
+        await recorder.start();
+      } catch (err) {
+        setVoiceError(err instanceof Error ? err.message : 'Mic unavailable');
+        onVoiceToggle?.(false);
+      }
+      return;
+    }
+    // Recording → stop, transcribe, send.
+    if (recorder.state === 'recording' || recorder.state === 'requesting') {
+      onVoiceToggle?.(false);
+      setTranscribing(true);
+      const blob = await recorder.stop();
+      try {
+        if (!blob) {
+          setVoiceError('Empty recording — try again.');
+          return;
+        }
+        const result = await voiceApi.transcribe(blob, 'clip.webm');
+        if (!result.text.trim()) {
+          setVoiceError('No speech detected.');
+          return;
+        }
+        stickyBottomRef.current = true;
+        lastUserInputMethodRef.current = 'voice';
+        sendMessage(result.text, 'voice', systemState);
+      } catch (err) {
+        setVoiceError(err instanceof Error ? err.message : 'Transcription failed');
+      } finally {
+        setTranscribing(false);
+      }
+    }
+  }, [recorder, onVoiceToggle, sendMessage, systemState]);
+
+  // Play TTS for any newly-arrived assistant reply when the previous user
+  // turn came from voice input. Keeps playback scoped to voice sessions —
+  // we don't want the assistant talking over the operator's text chats.
+  const lastSpokenMessageIdRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!ttsEnabled) return;
+    if (lastUserInputMethodRef.current !== 'voice') return;
+    const last = messages[messages.length - 1];
+    if (!last || last.role !== 'assistant') return;
+    if (!last.content.trim()) return;
+    if (last.id === lastSpokenMessageIdRef.current) return;
+    lastSpokenMessageIdRef.current = last.id;
+
+    let cancelled = false;
+    let audioEl: HTMLAudioElement | null = null;
+    let objectUrl: string | null = null;
+    (async () => {
+      try {
+        const { blob } = await voiceApi.synthesize(last.content, {
+          voice: ttsVoice || undefined,
+          speed: ttsSpeed,
+        });
+        if (cancelled) return;
+        objectUrl = URL.createObjectURL(blob);
+        audioEl = new Audio(objectUrl);
+        await audioEl.play();
+      } catch (err) {
+        // Non-fatal — TTS failures shouldn't block the chat flow.
+        // eslint-disable-next-line no-console
+        console.warn('[voice] TTS playback failed:', err);
+      }
+    })();
+    return () => {
+      cancelled = true;
+      if (audioEl) {
+        audioEl.pause();
+        audioEl.src = '';
+      }
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
+  }, [messages, ttsEnabled, ttsVoice, ttsSpeed]);
 
   const streamingMessage = useMemo(() => {
     if (!streaming) return null;
@@ -394,6 +491,39 @@ export function ChatWindow({
 
         {error && (
           <ChatErrorBanner message={error} />
+        )}
+
+        {voiceError && (
+          <div
+            className="mx-6 mb-2 px-3 py-2 rounded-xl flex items-center gap-2"
+            style={{
+              background: 'color-mix(in srgb, var(--signal-warn) 10%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--signal-warn) 40%, transparent)',
+              color: 'var(--signal-warn)',
+              fontFamily: 'var(--font-display)',
+              fontSize: 'var(--fs-xs)',
+            }}
+          >
+            <Mic size={12} strokeWidth={1.75} />
+            <span className="flex-1">{voiceError}</span>
+          </div>
+        )}
+
+        {transcribing && (
+          <div
+            className="mx-6 mb-2 px-3 py-2 rounded-xl flex items-center gap-2"
+            style={{
+              background: 'color-mix(in srgb, var(--accent) 10%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--accent) 30%, transparent)',
+              color: 'var(--accent)',
+              fontFamily: 'var(--font-display)',
+              fontSize: 'var(--fs-xs)',
+            }}
+            aria-live="polite"
+          >
+            <Sparkles size={12} strokeWidth={1.75} />
+            <span className="flex-1">Transcribing…</span>
+          </div>
         )}
 
         {/* Input bar — glass card rounded-full */}

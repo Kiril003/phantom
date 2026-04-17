@@ -345,11 +345,15 @@ async def _broadcast_message_stream(hub: Any, user_id: str, message: dict, sessi
     """
     Broadcast an assistant message as a short series of WS stream events
     followed by a final 'message' broadcast.  Front-end dedupes via message_id.
+
+    When `config.ai_streaming` is disabled the per-chunk deltas are skipped
+    and clients receive only the final message — this matches the UX the
+    setting promises ("turn streaming off and get the full reply at once").
     """
     message_id = message["id"]
     content = message.get("content") or ""
     # Stream the content in word-ish chunks to preserve UX parity with a true streaming provider.
-    if content:
+    if content and config.ai_streaming:
         chunks = _chunk_content(content, chunk_size=config.chat_stream_chunk_chars)
         for chunk in chunks:
             await hub.broadcast(

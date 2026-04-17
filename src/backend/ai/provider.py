@@ -130,19 +130,30 @@ class AIRouter:
         """
         Stream from primary.  Falls back to chunked non-streaming if primary
         stream raises immediately.
+
+        Each chunk is gated by `config.ai_timeout_s` via asyncio.wait_for — a
+        hung upstream (network stall, Ollama paging a cold model) can no
+        longer pin the request indefinitely; after one chunk-interval without
+        progress we raise and trigger the fallback path below.
         """
         primary_name = config.ai_primary_provider
         primary = self._providers[primary_name]
 
         try:
-            async for chunk in primary.generate_stream(
-                user_message, system_prompt, history
-            ):
+            stream = primary.generate_stream(user_message, system_prompt, history)
+            while True:
+                try:
+                    chunk = await asyncio.wait_for(
+                        stream.__anext__(),
+                        timeout=config.ai_timeout_s,
+                    )
+                except StopAsyncIteration:
+                    break
                 self._active = primary_name
                 yield chunk
             self._sync_context(primary_name)
             return
-        except Exception as exc:
+        except (asyncio.TimeoutError, Exception) as exc:
             logger.warning(
                 "Primary stream (%s) failed: %s — falling back to non-stream",
                 primary_name, exc,

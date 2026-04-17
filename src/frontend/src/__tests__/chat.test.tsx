@@ -402,6 +402,89 @@ describe('ChatWindow', () => {
     expect(screen.getByText('pong')).toBeDefined();
   });
 
+  // Regression: WS-before-HTTP race used to leave the user message *after*
+  // its own reply. We now sort by created_at with a user-before-assistant
+  // tiebreaker at render time, so even a scrambled `messages` array renders
+  // in chronological order.
+  it('renders messages in chronological order regardless of insertion order', async () => {
+    useChatStore.setState({
+      messages: [
+        // Insertion simulating the race: assistant reply inserted *before*
+        // the confirmed user message for the same turn.
+        baseMessage({
+          id: 'a1',
+          role: 'assistant',
+          content: 'Привіт',
+          created_at: '2026-04-17T23:01:05Z',
+        }),
+        baseMessage({
+          id: 'u1',
+          role: 'user',
+          content: 'hi',
+          created_at: '2026-04-17T23:00:46Z',
+        }),
+        baseMessage({
+          id: 'a2',
+          role: 'assistant',
+          content: 'Все спокійно',
+          created_at: '2026-04-17T23:01:32Z',
+        }),
+        baseMessage({
+          id: 'u2',
+          role: 'user',
+          content: 'як справи?',
+          created_at: '2026-04-17T23:01:30Z',
+        }),
+      ],
+    });
+    const { ChatWindow } = await import('../components/chat/ChatWindow');
+    render(<ChatWindow minimalChrome />);
+    // All four bodies present.
+    expect(screen.getByText('hi')).toBeDefined();
+    expect(screen.getByText('Привіт')).toBeDefined();
+    expect(screen.getByText('як справи?')).toBeDefined();
+    expect(screen.getByText('Все спокійно')).toBeDefined();
+
+    // Chronological order: hi(u) → Привіт(a) → як справи?(u) → Все спокійно(a)
+    const bodies = ['hi', 'Привіт', 'як справи?', 'Все спокійно'].map((t) =>
+      screen.getByText(t)
+    );
+    const positions = bodies.map((el) => {
+      // Walk up to the outermost motion.div bubble wrapper for a stable
+      // DOM position — the text itself is nested a few levels down.
+      let node: Element | null = el;
+      while (node && !(node instanceof HTMLElement && node.className.includes('flex-col'))) {
+        node = node.parentElement;
+      }
+      return node;
+    });
+    // Each wrapper must precede the next one in document order.
+    for (let i = 0; i < positions.length - 1; i++) {
+      const a = positions[i];
+      const b = positions[i + 1];
+      expect(a && b).toBeTruthy();
+      // compareDocumentPosition: 4 = FOLLOWING (b is after a).
+      // eslint-disable-next-line no-bitwise
+      expect((a as Node).compareDocumentPosition(b as Node) & 4).toBeTruthy();
+    }
+  });
+
+  it('ties between user and assistant with same timestamp put user first', async () => {
+    const sameTime = '2026-04-17T23:01:00Z';
+    useChatStore.setState({
+      messages: [
+        baseMessage({ id: 'a', role: 'assistant', content: 'reply', created_at: sameTime }),
+        baseMessage({ id: 'u', role: 'user', content: 'prompt', created_at: sameTime }),
+      ],
+    });
+    const { ChatWindow } = await import('../components/chat/ChatWindow');
+    render(<ChatWindow minimalChrome />);
+    const promptEl = screen.getByText('prompt');
+    const replyEl = screen.getByText('reply');
+    // eslint-disable-next-line no-bitwise
+    expect(promptEl.compareDocumentPosition(replyEl) & 4).toBeTruthy();
+  });
+
   it('disables send button when input is empty', async () => {
     const { ChatWindow } = await import('../components/chat/ChatWindow');
     render(<ChatWindow minimalChrome />);

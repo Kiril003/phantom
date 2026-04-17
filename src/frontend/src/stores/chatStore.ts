@@ -186,12 +186,21 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       });
 
       set((s) => {
-        const withoutOptimistic = s.messages.filter((m) => m.id !== optimistic.id);
+        // Replace the optimistic placeholder IN PLACE with the confirmed
+        // user message. Previously we rebuilt the array as
+        // `[...withoutOptimistic, confirmedUser]` which, when the WS had
+        // already delivered the assistant reply, shoved the user message
+        // *after* its own reply — that's the "AI message appears above
+        // user message" bug. In-place replacement preserves the original
+        // insertion order.
         const confirmedUser: ChatMessage = { ...optimistic, session_id: resp.session_id };
-        const assistantAlready = withoutOptimistic.some((m) => m.id === resp.message.id);
+        const replaced = s.messages.map((m) =>
+          m.id === optimistic.id ? confirmedUser : m
+        );
+        const assistantAlready = replaced.some((m) => m.id === resp.message.id);
         const nextMessages = assistantAlready
-          ? [...withoutOptimistic, confirmedUser]
-          : [...withoutOptimistic, confirmedUser, resp.message];
+          ? replaced
+          : [...replaced, resp.message];
         return {
           currentSessionId: resp.session_id,
           messages: nextMessages,

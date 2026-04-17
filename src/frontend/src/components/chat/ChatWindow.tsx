@@ -225,7 +225,24 @@ export function ChatWindow({
     return streamingMessageShape(streaming.id, streaming.content);
   }, [streaming]);
 
-  const hasMessages = messages.length > 0 || !!streamingMessage;
+  // Defensive render-time sort. The chatStore preserves insertion order when
+  // the HTTP reply lands *after* the WS broadcast of the same turn, but a
+  // brief sidebar session switch or a dropped WS reconnect can still scramble
+  // the array. Sort by created_at ASC with a user-before-assistant tiebreaker
+  // so a user turn and its reply sharing a 1-second wall clock rendering
+  // don't swap positions.
+  const orderedMessages = useMemo(() => {
+    const rolePriority = (r: string): number =>
+      r === 'system' ? 0 : r === 'user' ? 1 : 2;
+    return [...messages].sort((a, b) => {
+      const ta = Date.parse(a.created_at);
+      const tb = Date.parse(b.created_at);
+      if (Number.isFinite(ta) && Number.isFinite(tb) && ta !== tb) return ta - tb;
+      return rolePriority(a.role) - rolePriority(b.role);
+    });
+  }, [messages]);
+
+  const hasMessages = orderedMessages.length > 0 || !!streamingMessage;
 
   return (
     <div
@@ -444,7 +461,7 @@ export function ChatWindow({
           )}
 
           <AnimatePresence initial={false}>
-            {messages.map((msg) => (
+            {orderedMessages.map((msg) => (
               <MessageBubble key={msg.id} message={msg} />
             ))}
           </AnimatePresence>

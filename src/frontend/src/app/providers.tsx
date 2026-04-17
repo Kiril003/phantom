@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { wsClient } from '../services/websocket';
 import type { WSMessage, SensorMessage, StateMessage } from '../services/websocket';
 import { useSystemStore } from '../stores/systemStore';
+import { useOledStore, type OledFrame } from '../stores/oledStore';
 import { bootstrapSettings } from '../services/settingsBootstrap';
 import { SystemState } from '@shared/types';
 
@@ -131,6 +132,14 @@ function WebSocketProvider({ children }: { children: React.ReactNode }) {
       wsClient.on<SensorMessage>('sensor', (msg) => {
         if (msg.type === 'snapshot' && msg.data.snapshot) {
           useSystemStore.getState().setContext(msg.data.snapshot);
+        }
+      })
+    );
+
+    unsubs.push(
+      wsClient.on('oled', (msg) => {
+        if (msg.type === 'frame') {
+          useOledStore.getState().setFrame(msg.data as unknown as OledFrame);
         }
       })
     );

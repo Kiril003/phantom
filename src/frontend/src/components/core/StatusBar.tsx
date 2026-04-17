@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useSystemStore } from '../../stores/systemStore';
 import { useAuthStore } from '../../stores/authStore';
+import { useFaceStore } from '../../stores/faceStore';
 import { SystemState } from '@shared/types';
 import {
   Wifi,
@@ -14,7 +15,10 @@ import {
   HardDrive,
   User as UserIcon,
   Sparkles,
+  UserCheck,
+  HelpCircle,
 } from 'lucide-react';
+import { OledEyePreview } from './OledEyePreview';
 
 const STATE_LABELS: Record<SystemState, string> = {
   [SystemState.SHADOW]: 'Shadow',
@@ -125,6 +129,14 @@ export function StatusBar() {
 
       <Divider />
 
+      {/* Face recognition chip (visible only while tracking is active) */}
+      <FaceChip />
+
+      {/* OLED eye preview — mirrors the hardware face animator */}
+      <OledEyePreview />
+
+      <Divider />
+
       {/* Connectivity */}
       <ConnectivityDot ok={!!context?.system.wifi_connected} Icon={{ on: Wifi, off: WifiOff }} />
       <ConnectivityDot ok={!!context?.system.internet_available} Icon={{ on: Cloud, off: CloudOff }} />
@@ -156,6 +168,55 @@ export function StatusBar() {
         {timeStr}
       </span>
     </div>
+  );
+}
+
+function FaceChip() {
+  const recognized = useFaceStore((s) => s.recognized);
+  const unknownSince = useFaceStore((s) => s.unknownSince);
+  const detection = useFaceStore((s) => s.lastDetection);
+
+  // Only render when a face has been seen recently; otherwise the chip
+  // flickers every time the detector briefly loses track.
+  const active = !!detection || !!recognized || !!unknownSince;
+  if (!active) return null;
+
+  const matched = !!recognized;
+  const color = matched
+    ? 'var(--signal-ok)'
+    : unknownSince
+      ? 'var(--signal-warn)'
+      : 'var(--ink-muted)';
+  const label = matched
+    ? recognized.username
+    : unknownSince
+      ? 'Unknown'
+      : 'Scanning';
+
+  const Icon = matched ? UserCheck : HelpCircle;
+  return (
+    <span
+      className="inline-flex items-center gap-1.5 px-2 rounded-full"
+      style={{
+        height: 20,
+        background: `color-mix(in srgb, ${color} 12%, transparent)`,
+        border: `1px solid color-mix(in srgb, ${color} 40%, transparent)`,
+        color,
+        fontFamily: 'var(--font-display)',
+        fontSize: 'var(--fs-micro)',
+        letterSpacing: 'var(--tracking-wider)',
+      }}
+      title={
+        matched
+          ? `Recognized ${recognized.username} at ${(recognized.confidence * 100).toFixed(0)}%`
+          : unknownSince
+            ? 'Face detected but no enrolled user matched'
+            : 'Face detector online'
+      }
+    >
+      <Icon size={11} strokeWidth={2} />
+      {label}
+    </span>
   );
 }
 

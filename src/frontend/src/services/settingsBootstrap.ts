@@ -8,6 +8,7 @@
  */
 import { settingsApi } from './api';
 import { useSettingsStore } from '../stores/settingsStore';
+import { useFaceStore } from '../stores/faceStore';
 
 const DEFAULT_FONT_SIZE = 14; // matches config.ui_font_size default
 
@@ -23,6 +24,21 @@ export async function bootstrapSettings(): Promise<void> {
   // Seed the store so other components (MapLayout → initialZoom, etc.)
   // can read fresh values without another round-trip.
   useSettingsStore.getState().setCategories(data.categories);
+
+  // Mirror Phase-08 face/privacy values into the faceStore so the detector
+  // hook can gate without reading the settings category tree.
+  const faceEnabled = values.face_tracking_enabled;
+  if (typeof faceEnabled === 'boolean') {
+    useFaceStore.getState().setEnabled(faceEnabled);
+  }
+  const privacy = values.face_tracking_privacy_mode;
+  if (privacy === 'off' || privacy === 'landmarks' || privacy === 'full') {
+    useFaceStore.getState().setPrivacyMode(privacy);
+  }
+  const threshold = values.face_recognition_threshold;
+  if (typeof threshold === 'number' && Number.isFinite(threshold)) {
+    useFaceStore.getState().setThreshold(threshold);
+  }
 }
 
 export function applyUISettings(values: Record<string, unknown>): void {

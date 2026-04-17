@@ -25,6 +25,7 @@ from api.routes_linux import router as linux_router
 from api.routes_tools import router as tools_router
 from api.routes_voice import router as voice_router
 from api.routes_ai import router as ai_router
+from api.routes_face import router as face_router
 
 logging.basicConfig(
     level=getattr(logging, config.log_level),
@@ -63,6 +64,13 @@ async def _context_loop() -> None:
                     "timestamp": transition.timestamp,
                     "auto": transition.auto,
                 })
+                # Drive OLED eyes with the new state so the face animator
+                # transitions within one frame of the FSM decision.
+                try:
+                    from vision.oled_animator import oled_animator
+                    oled_animator.set_system_state(transition.to_state)
+                except Exception:
+                    pass
             decision_tree.evaluate(snapshot)
             await hub.broadcast("sensor", "snapshot", {"snapshot": snapshot})
         except Exception as exc:
@@ -92,6 +100,11 @@ async def _start_serial_bridge() -> None:
                 "timestamp": transition.timestamp,
                 "auto": transition.auto,
             })
+            try:
+                from vision.oled_animator import oled_animator
+                oled_animator.set_system_state(transition.to_state)
+            except Exception:
+                pass
         await hub.broadcast("sensor", "snapshot", {"snapshot": snapshot})
 
         # Ingest wardriving data when WiFi + GPS fix present
@@ -164,6 +177,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Start tick loop for time-driven context updates
     loop_task = asyncio.create_task(_context_loop(), name="context_loop")
 
+    # Start OLED face animator (Phase 08). It self-gates on
+    # oled_animation_enabled inside its loop so a setting flip is picked up
+    # without restarting the task.
+    from vision.oled_animator import oled_animator
+    await oled_animator.start()
+
     yield
 
     loop_task.cancel()
@@ -171,6 +190,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await loop_task
     except asyncio.CancelledError:
         pass
+
+    await oled_animator.stop()
 
     if config.serial_enabled:
         from sensors.serial_bridge import serial_bridge
@@ -210,6 +231,7 @@ def create_app() -> FastAPI:
     app.include_router(tools_router, prefix=prefix)
     app.include_router(voice_router, prefix=prefix)
     app.include_router(ai_router, prefix=prefix)
+    app.include_router(face_router, prefix=prefix)
 
     _register_ws(app)
     _register_health(app)

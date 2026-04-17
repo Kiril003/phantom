@@ -146,6 +146,26 @@ class PhantomConfig(BaseSettings):
     tools_alarm_sound: Literal["gentle", "alert", "custom"] = "gentle"
     tools_timer_sound: Literal["chime", "buzz", "voice"] = "chime"
 
+    # ── Vision / Face / OLED (Phase 08) ──────────────────────────────────────
+    # Browser-side MediaPipe FaceLandmarker produces landmark arrays; backend
+    # stores per-user averaged embeddings in User.preferences_json["face"].
+    # privacy_mode gates what the camera stream is ALLOWED to extract:
+    #   off        — camera completely disabled (same as tracking_enabled=False)
+    #   landmarks  — only geometric landmarks (no raw frames leave the device)
+    #   full       — landmarks + bounding box + head-pose (frames still local)
+    # Embeddings are NEVER sent to AI providers and NEVER leave the device.
+    face_tracking_enabled: bool = True
+    face_tracking_auto_switch_profile: bool = True
+    face_tracking_privacy_mode: Literal["off", "landmarks", "full"] = "landmarks"
+    face_recognition_threshold: float = 0.75
+    face_unknown_lockout_s: int = 10
+    # OLED face animator — mock WS channel "oled" drives a preview UI chip.
+    # On production this same frame stream flows over serial to ESP32 SH1106.
+    oled_animation_enabled: bool = True
+    oled_animation_speed: float = 1.0  # 0.1-3.0; scales state-transition duration
+    oled_brightness: int = 200          # 0-255 UI preview dimming
+    oled_frame_hz: int = 30
+
     # ── System ────────────────────────────────────────────────────────────────
     system_hostname: str = "phantom"
     system_sensor_log_retention_days: int = 7

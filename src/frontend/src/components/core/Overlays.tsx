@@ -6,11 +6,19 @@ import {
   Camera,
   Grid3x3,
   Square as SquareIcon,
+  Trash2,
+  UserCheck,
+  UserX,
+  Shield,
 } from 'lucide-react';
 import { FloatingWindow } from './FloatingWindow';
 import { useUIStore, type OverlayName } from '../../stores/uiStore';
 import { useMapStore } from '../../stores/mapStore';
 import { useSystemStore } from '../../stores/systemStore';
+import { useFaceStore } from '../../stores/faceStore';
+import { useFaceDetection } from '../../hooks/useFaceDetection';
+import { faceApi } from '../../services/faceApi';
+import { SystemState } from '@shared/types';
 
 const TITLES: Record<OverlayName, string> = {
   terminal: 'Terminal',
@@ -417,71 +425,209 @@ function RSSIBars({ rssi }: { rssi: number }) {
 
 /* ─── Camera ───────────────────────────────────────────────────────────── */
 
+const ENROLL_TARGET_SAMPLES = 8;
+
 function CameraOverlay() {
+  const videoRef = useRef<HTMLVideoElement>(null);
   const [tracking, setTracking] = useState(false);
+  const systemState = useSystemStore((s) => s.state);
+  const detection = useFaceStore((s) => s.lastDetection);
+  const recognized = useFaceStore((s) => s.recognized);
+  const unknownSince = useFaceStore((s) => s.unknownSince);
+  const cameraError = useFaceStore((s) => s.cameraError);
+  const enrollStatus = useFaceStore((s) => s.enrollStatus);
+  const enrollSamples = useFaceStore((s) => s.enrollSamples);
+  const enrollError = useFaceStore((s) => s.enrollError);
+  const startEnrollment = useFaceStore((s) => s.startEnrollment);
+  const resetEnrollment = useFaceStore((s) => s.resetEnrollment);
+  const setEnrollStatus = useFaceStore((s) => s.setEnrollStatus);
+  const enabled = useFaceStore((s) => s.enabled);
+  const privacyMode = useFaceStore((s) => s.privacyMode);
+
+  // GHOST forces camera off; also respect the master enable flag.
+  const privacyOff =
+    systemState === SystemState.GHOST || privacyMode === 'off' || !enabled;
+
+  useFaceDetection({
+    videoRef,
+    enabled: tracking && !privacyOff,
+  });
+
+  useEffect(() => {
+    if (privacyOff) setTracking(false);
+  }, [privacyOff]);
+
+  // Auto-finalize enrollment once we have enough samples.
+  useEffect(() => {
+    if (enrollStatus !== 'collecting') return;
+    if (enrollSamples.length < ENROLL_TARGET_SAMPLES) return;
+    setEnrollStatus('sending');
+    faceApi
+      .enroll(enrollSamples.slice(0, ENROLL_TARGET_SAMPLES))
+      .then(() => setEnrollStatus('done'))
+      .catch((err: Error) => setEnrollStatus('error', err.message));
+  }, [enrollStatus, enrollSamples, setEnrollStatus]);
+
+  const onDelete = useCallback(async () => {
+    try {
+      await faceApi.deleteEmbedding();
+      resetEnrollment();
+    } catch {
+      /* surfaced elsewhere */
+    }
+  }, [resetEnrollment]);
+
+  const box = detection?.box;
+  const progress = Math.min(1, enrollSamples.length / ENROLL_TARGET_SAMPLES);
+
   return (
     <div className="h-full flex flex-col">
       <div
-        className="flex-1 relative"
+        className="flex-1 relative overflow-hidden"
         style={{
           background:
             'radial-gradient(circle at center, color-mix(in srgb, var(--accent) 10%, transparent), var(--surface-deep))',
         }}
       >
-        <div className="absolute inset-0 flex items-center justify-center">
-          <div className="flex flex-col items-center gap-2">
-            <Camera size={32} strokeWidth={1.5} style={{ color: 'var(--ink-muted)' }} />
-            <span
-              style={{
-                fontFamily: 'var(--font-display)',
-                fontSize: 'var(--fs-xs)',
-                color: 'var(--ink-muted)',
-              }}
-            >
-              {tracking ? 'Tracking…' : 'Camera idle'}
-            </span>
-            <span
-              className="italic"
-              style={{
-                fontFamily: 'var(--font-serif)',
-                fontSize: 'var(--fs-micro)',
-                color: 'var(--ink-faint)',
-              }}
-            >
-              Face tracking lands in Phase 8
-            </span>
-          </div>
-        </div>
-        {tracking && (
-          <motion.div
-            className="absolute"
+        <video
+          ref={videoRef}
+          muted
+          playsInline
+          style={{
+            position: 'absolute',
+            inset: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            transform: 'scaleX(-1)', // mirror for user-facing webcam
+            display: tracking && !privacyOff ? 'block' : 'none',
+          }}
+        />
+
+        {/* Face bbox overlay (mirrored to match the video). */}
+        {tracking && !privacyOff && box && box.w > 0 && (
+          <div
+            aria-hidden
             style={{
-              top: '30%',
-              left: '35%',
-              width: 90,
-              height: 110,
+              position: 'absolute',
+              left: `${(1 - box.x - box.w) * 100}%`,
+              top: `${box.y * 100}%`,
+              width: `${box.w * 100}%`,
+              height: `${box.h * 100}%`,
               border: '1px solid var(--accent)',
               borderRadius: 6,
               boxShadow: '0 0 12px var(--accent-glow)',
+              pointerEvents: 'none',
+              transition: 'all 80ms linear',
             }}
-            animate={{ x: [0, 8, 0], y: [0, -6, 0] }}
-            transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
           />
+        )}
+
+        {(!tracking || privacyOff) && (
+          <div className="absolute inset-0 flex items-center justify-center">
+            <div className="flex flex-col items-center gap-2 text-center px-4">
+              {privacyOff ? (
+                <Shield size={32} strokeWidth={1.5} style={{ color: 'var(--signal-warn)' }} />
+              ) : (
+                <Camera size={32} strokeWidth={1.5} style={{ color: 'var(--ink-muted)' }} />
+              )}
+              <span
+                style={{
+                  fontFamily: 'var(--font-display)',
+                  fontSize: 'var(--fs-xs)',
+                  color: 'var(--ink-muted)',
+                }}
+              >
+                {privacyOff
+                  ? systemState === SystemState.GHOST
+                    ? 'Camera off · GHOST'
+                    : privacyMode === 'off'
+                      ? 'Camera off · privacy mode'
+                      : 'Face tracking disabled'
+                  : 'Camera idle'}
+              </span>
+              {!privacyOff && (
+                <span
+                  className="italic"
+                  style={{
+                    fontFamily: 'var(--font-serif)',
+                    fontSize: 'var(--fs-micro)',
+                    color: 'var(--ink-faint)',
+                  }}
+                >
+                  Tap “Start tracking” to begin
+                </span>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* Status label */}
+        {tracking && !privacyOff && (
+          <div
+            className="absolute"
+            style={{
+              top: 10,
+              left: 10,
+              padding: '4px 10px',
+              borderRadius: 9999,
+              background: 'color-mix(in srgb, var(--surface-deep) 70%, transparent)',
+              fontFamily: 'var(--font-display)',
+              fontSize: 'var(--fs-micro)',
+              color: recognized
+                ? 'var(--signal-ok)'
+                : unknownSince
+                  ? 'var(--signal-warn)'
+                  : 'var(--ink-muted)',
+              letterSpacing: 'var(--tracking-widest)',
+              textTransform: 'uppercase',
+            }}
+          >
+            {recognized
+              ? `${recognized.username} · ${(recognized.confidence * 100).toFixed(0)}%`
+              : unknownSince
+                ? 'Unknown face'
+                : detection
+                  ? 'Detecting…'
+                  : 'No face'}
+          </div>
+        )}
+
+        {cameraError && (
+          <div
+            className="absolute"
+            style={{
+              bottom: 10,
+              left: 10,
+              right: 10,
+              padding: '6px 10px',
+              borderRadius: 6,
+              background: 'color-mix(in srgb, var(--signal-alert) 16%, transparent)',
+              color: 'var(--signal-alert)',
+              fontFamily: 'var(--font-mono)',
+              fontSize: 'var(--fs-micro)',
+            }}
+          >
+            {cameraError}
+          </div>
         )}
       </div>
       <div
-        className="flex items-center gap-2 px-4 py-3 shrink-0"
+        className="flex items-center gap-2 px-4 py-3 shrink-0 flex-wrap"
         style={{ borderTop: '1px solid var(--glass-border)' }}
       >
         <button
           type="button"
           className="active:scale-95 transition-all"
           onClick={() => setTracking((v) => !v)}
+          disabled={privacyOff}
           style={{
             minHeight: 44,
             padding: '0 14px',
             borderRadius: 9999,
-            background: tracking ? 'var(--accent)' : 'color-mix(in srgb, var(--accent) 14%, transparent)',
+            background: tracking
+              ? 'var(--accent)'
+              : 'color-mix(in srgb, var(--accent) 14%, transparent)',
             color: tracking ? 'var(--ink-inverse)' : 'var(--accent)',
             border: '1px solid var(--accent)',
             fontFamily: 'var(--font-display)',
@@ -489,10 +635,93 @@ function CameraOverlay() {
             letterSpacing: 'var(--tracking-wider)',
             textTransform: 'uppercase',
             transitionDuration: '200ms',
+            opacity: privacyOff ? 0.4 : 1,
           }}
         >
           {tracking ? 'Stop' : 'Start tracking'}
         </button>
+
+        <button
+          type="button"
+          onClick={() => {
+            if (enrollStatus === 'collecting' || enrollStatus === 'sending') return;
+            startEnrollment();
+          }}
+          disabled={!tracking || privacyOff || enrollStatus === 'sending'}
+          className="active:scale-95 transition-all flex items-center gap-2"
+          style={{
+            minHeight: 44,
+            padding: '0 14px',
+            borderRadius: 9999,
+            background: 'color-mix(in srgb, var(--signal-ok) 14%, transparent)',
+            color: 'var(--signal-ok)',
+            border: '1px solid var(--signal-ok)',
+            fontFamily: 'var(--font-display)',
+            fontSize: 'var(--fs-micro)',
+            letterSpacing: 'var(--tracking-wider)',
+            textTransform: 'uppercase',
+            opacity: !tracking || privacyOff ? 0.4 : 1,
+          }}
+        >
+          <UserCheck size={14} strokeWidth={1.75} />
+          {enrollStatus === 'collecting'
+            ? `${Math.round(progress * 100)}%`
+            : enrollStatus === 'sending'
+              ? 'Saving…'
+              : enrollStatus === 'done'
+                ? 'Enrolled'
+                : 'Enroll face'}
+        </button>
+
+        <button
+          type="button"
+          onClick={onDelete}
+          className="active:scale-95 transition-all flex items-center gap-2"
+          style={{
+            minHeight: 44,
+            padding: '0 14px',
+            borderRadius: 9999,
+            background: 'color-mix(in srgb, var(--signal-alert) 12%, transparent)',
+            color: 'var(--signal-alert)',
+            border: '1px solid color-mix(in srgb, var(--signal-alert) 40%, transparent)',
+            fontFamily: 'var(--font-display)',
+            fontSize: 'var(--fs-micro)',
+            letterSpacing: 'var(--tracking-wider)',
+            textTransform: 'uppercase',
+          }}
+          title="Delete my face embedding"
+        >
+          <Trash2 size={14} strokeWidth={1.75} />
+          Forget me
+        </button>
+
+        <div className="flex-1" />
+
+        {(enrollStatus === 'done' || enrollStatus === 'error') && (
+          <span
+            style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: 'var(--fs-micro)',
+              color:
+                enrollStatus === 'error' ? 'var(--signal-alert)' : 'var(--signal-ok)',
+            }}
+          >
+            {enrollStatus === 'error' ? enrollError ?? 'Enroll failed' : 'Saved ✓'}
+          </span>
+        )}
+
+        {unknownSince && !recognized && (
+          <span className="flex items-center gap-1"
+            style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: 'var(--fs-micro)',
+              color: 'var(--signal-warn)',
+            }}
+          >
+            <UserX size={12} strokeWidth={1.75} />
+            Unknown
+          </span>
+        )}
       </div>
     </div>
   );

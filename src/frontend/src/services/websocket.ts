@@ -10,7 +10,9 @@ export type WSChannel =
   | 'terminal'
   | 'alert'
   | 'map'
-  | 'settings';
+  | 'settings'
+  | 'oled'
+  | 'face';
 
 export interface WSMessage {
   channel: WSChannel;

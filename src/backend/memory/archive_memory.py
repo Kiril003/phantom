@@ -2,6 +2,11 @@
 PHANTOM OS — Archive Memory (Sealed / Dead Zone).
 Records sealed into the archive are never returned in normal queries.
 Used for GHOST state recordings (AES-256 encrypted in Phase 12).
+
+TODO(phase-12): when AES-256 sealing lands, consult
+    config.security_ghost_auto_encrypt
+before skipping / performing encryption on seal. Settings UI exposes
+the toggle as [soon] via routes_settings.UNIMPLEMENTED_KEYS.
 """
 from __future__ import annotations
 

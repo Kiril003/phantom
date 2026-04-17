@@ -1,6 +1,19 @@
 """
 Command Sender — typed ActuatorCommand → JSON → Serial TX.
 Uses short protocol keys from protocol.h.
+
+TODO(phase-01/firmware): several Settings fields persist but don't reach
+the ESP32 yet because the firmware doesn't accept these `cfg` commands:
+  - sensor_radar_sensitivity        → cfg key "radar_sens"
+  - sensor_radar_max_distance_cm    → cfg key "radar_max"
+  - sensor_breathing_detection      → cfg key "breath_on"
+  - sensor_gps_enabled              → cfg key "gps_on"
+  - sensor_wifi_scan_interval_s     → cfg key "wifi_ival"
+  - sensor_oled_brightness          → cfg key "oled_bri"
+Settings UI marks them [soon] via routes_settings.UNIMPLEMENTED_KEYS.
+Implementation path: send CMD_TYPE_CFG with the key above on settings PUT
+AND on serial reconnect (so a freshly-booted ESP32 picks up persisted
+overrides).
 """
 from __future__ import annotations
 

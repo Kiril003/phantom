@@ -13,6 +13,12 @@ class ExecuteRequest(BaseModel):
     confirmed: bool = False
 
 
+# TODO(phase-09): when the sandboxed executor lands, consult
+#   config.security_dangerous_cmd_confirm — if true, abort on a dangerous
+#   command pattern unless req.confirmed is also true. Settings UI already
+#   exposes the toggle as [soon] via routes_settings.UNIMPLEMENTED_KEYS.
+
+
 @router.post("/execute")
 async def execute_command(req: ExecuteRequest) -> dict:
     raise HTTPException(

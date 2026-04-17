@@ -14,6 +14,19 @@ class TTSRequest(BaseModel):
     emotion_scale: float = 1.0
 
 
+# TODO(phase-05): once StyleTTS2/Whisper pipelines land, these handlers must
+# read the full voice_* block from `config` instead of the request defaults:
+#   - voice_stt_mode / voice_stt_language / voice_stt_whisper_model /
+#     voice_stt_whisper_device / voice_stt_hybrid_threshold
+#   - voice_tts_enabled (gate the TTS handler) / voice_tts_voice /
+#     voice_tts_speed / voice_tts_alpha / voice_tts_beta /
+#     voice_tts_diffusion_steps / voice_tts_emotion_scale /
+#     voice_tts_state_adaptation
+#   - voice_wake_word_enabled / voice_wake_words (hotword task)
+# Settings UI already surfaces these with a [soon] suffix; marker is kept in
+# routes_settings.UNIMPLEMENTED_KEYS so labels flip automatically once wired.
+
+
 @router.post("/tts")
 async def synthesize_speech(req: TTSRequest):
     raise HTTPException(

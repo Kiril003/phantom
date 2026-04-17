@@ -271,6 +271,36 @@ LABEL_OVERRIDES: dict[str, str] = {
 
 PASSWORD_KEYS = {"ai_gemini_api_key", "jwt_secret_key"}
 
+# Settings exposed in the UI whose underlying subsystem hasn't landed yet.
+# They still persist via PUT and survive restart, but the label carries a
+# "[soon]" badge so operators aren't misled into expecting behaviour that
+# will only come online once the owning phase ships. Keep this list tight:
+# a key that is actually wired must NOT appear here.
+UNIMPLEMENTED_KEYS = {
+    # Voice pipeline — routes are 501, awaiting Phase 05 wire-up.
+    "voice_stt_language",
+    "voice_stt_whisper_model",
+    "voice_stt_whisper_device",
+    "voice_tts_enabled",
+    "voice_tts_voice",
+    "voice_tts_speed",
+    "voice_tts_emotion_scale",
+    "voice_tts_state_adaptation",
+    "voice_wake_word_enabled",
+    "voice_wake_words",
+    # ESP32-side sensors — need a command in firmware/protocol.h before
+    # toggling them from the OS has any effect.
+    "sensor_radar_sensitivity",
+    "sensor_radar_max_distance_cm",
+    "sensor_breathing_detection",
+    "sensor_gps_enabled",
+    "sensor_wifi_scan_interval_s",
+    "sensor_oled_brightness",
+    # Linux subsystem stubbed until Phase 09; GHOST pipeline not hooked yet.
+    "security_dangerous_cmd_confirm",
+    "security_ghost_auto_encrypt",
+}
+
 
 def _build_definition(key: str, category_id: str) -> SettingDefinitionOut | None:
     model_fields = type(config).model_fields
@@ -288,9 +318,11 @@ def _build_definition(key: str, category_id: str) -> SettingDefinitionOut | None
         display_value = value
 
     options = _select_options_from_literal(annotation)
+    base_label = LABEL_OVERRIDES.get(key, key.replace("_", " ").title())
+    label = f"{base_label} [soon]" if key in UNIMPLEMENTED_KEYS else base_label
     return SettingDefinitionOut(
         key=key,
-        label=LABEL_OVERRIDES.get(key, key.replace("_", " ").title()),
+        label=label,
         description="",
         type=inferred,
         default=field_info.default,

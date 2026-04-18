@@ -49,6 +49,39 @@ _TERMINAL_DONE_TASK = "DONE_TASK"
 _TERMINAL_DONE_SUBGOAL = "DONE_SUBGOAL"
 
 
+# Phase 9.2.1 — repeat-action detection. We canonicalise (action, args)
+# into a hash so a second-of-second copy of the same FAILED step inside the
+# 5-step lookback window forces a reflection; the third triggers
+# sub-goal abandonment via the synthetic DONE_SUBGOAL marker. The
+# canonicaliser ignores timestamps and case so "Selector"/"selector" or
+# args containing { "ts": ... } don't dodge the check.
+_REPEAT_LOOKBACK = 5
+_REPEAT_FORCE_REFLECT_AT = 2
+_REPEAT_ABANDON_AT = 3
+_TIMESTAMP_KEYS = frozenset({"ts", "timestamp", "now", "_ts", "created_at"})
+
+
+def _canonical_args_key(action: str, args: dict | None) -> str:
+    import hashlib
+
+    def _norm(v):
+        if isinstance(v, str):
+            return v.lower().strip()
+        if isinstance(v, dict):
+            return {k: _norm(vv) for k, vv in sorted(v.items()) if k not in _TIMESTAMP_KEYS}
+        if isinstance(v, list):
+            return [_norm(x) for x in v]
+        return v
+
+    payload = json.dumps([action.lower(), _norm(args or {})], sort_keys=True, default=str)
+    return hashlib.sha1(payload.encode()).hexdigest()
+
+
+def _count_recent_failed_repeats(state: "TaskState", key: str) -> int:
+    log = state.actions_log[-_REPEAT_LOOKBACK:]
+    return sum(1 for entry in log if entry.get("repeat_key") == key and not entry.get("ok"))
+
+
 def _summarize_recent_actions(state: "TaskState", limit: int = 8) -> str:
     if not state.actions_log:
         return "(no actions yet)"
@@ -386,6 +419,43 @@ async def run_task_loop(runtime: "AgentRuntime", state: "TaskState", *, resumed:
                     return
                 continue
 
+            # Phase 9.2.1 — repeat-action detection.
+            # Skip terminal markers (DONE_*/REFLECT) since their summary text
+            # changes per call but their action name is constant.
+            if step.action not in {_TERMINAL_DONE_TASK, _TERMINAL_DONE_SUBGOAL, "REFLECT"}:
+                repeat_key = _canonical_args_key(step.action, step.args)
+                step_repeat_key = repeat_key  # threaded into actions_log below
+                prior_failures = _count_recent_failed_repeats(state, repeat_key)
+                if prior_failures >= _REPEAT_ABANDON_AT - 1:  # 3rd attempt would be repeat
+                    state.observations.append(build_system(
+                        state.step_idx, "repeat_guard",
+                        f"abandoning sub-goal: action {step.action} repeated {prior_failures + 1} "
+                        f"times with no progress (repeated_action_no_progress)",
+                    ))
+                    current_sg.status = "failed"
+                    actions_in_subgoal = 0
+                    state.step_idx += 1
+                    await runtime._broadcast("sub_goal.abandoned", {
+                        "task_id": state.id, "sub_goal_id": current_sg.id,
+                        "reason": "repeated_action_no_progress",
+                    })
+                    continue
+                if prior_failures >= _REPEAT_FORCE_REFLECT_AT - 1:  # 2nd attempt about to repeat
+                    state.observations.append(build_system(
+                        state.step_idx, "repeat_guard",
+                        f"forcing reflection: action {step.action} repeated "
+                        f"{prior_failures + 1} times within last {_REPEAT_LOOKBACK} steps",
+                    ))
+                    ref = await _run_reflection(runtime, state, "repeated_action_no_progress")
+                    if ref.verdict == "abandon_task":
+                        await runtime.finalize_task(state, "failed", summary=ref.summary, error="repeated_action_no_progress")
+                        return
+                    # Drop the planner's (likely-repeat) step and replan next iteration.
+                    state.step_idx += 1
+                    continue
+            else:
+                step_repeat_key = None
+
             # Risk-tolerance preview — let the loop block before executor wastes
             # the action attempt + audit row when the LLM picked too risky.
             from .actions.registry import registry as _reg
@@ -459,6 +529,7 @@ async def run_task_loop(runtime: "AgentRuntime", state: "TaskState", *, resumed:
             state.actions_log.append({
                 "step_idx": step.step_idx, "action": step.action,
                 "ok": result.ok, "error_class": result.error_class,
+                "repeat_key": step_repeat_key,
             })
             obs = build_from_action_result(step, result)
             state.observations.append(obs)

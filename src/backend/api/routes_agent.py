@@ -162,6 +162,17 @@ async def get_audit(
     return {"audit": [a.model_dump(mode="json") for a in rows]}
 
 
+@router.get("/router_state")
+async def get_router_state(_: TokenPayload = Depends(require_auth)) -> dict:
+    """
+    Phase 9.2.1 — exposes AIRouter cooling / quota / last-call state so the
+    StatusBar can show a live provider indicator and the operator can spot
+    why a task parked on `blocked_quota`.
+    """
+    from ai.provider import ai_router
+    return ai_router.router_state_snapshot()
+
+
 @router.get("/self_model")
 async def get_self_model(_: TokenPayload = Depends(require_auth)) -> dict:
     sm = agent_runtime.self_model

@@ -1,7 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useSystemStore } from '../../stores/systemStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useFaceStore } from '../../stores/faceStore';
+import { agentApi } from '../../services/agentApi';
 import { SystemState } from '@shared/types';
 import {
   Wifi,
@@ -59,6 +60,7 @@ export function StatusBar() {
   const ram = context?.system.ram_percent;
   const disk = context?.system.disk_percent;
   const provider = context?.system.ai_provider ?? '—';
+  const routerState = useRouterStatePolled();
   /* ESP32 tri-state comes from /health polling; fallback derived from sensor data. */
   const esp32DerivedOnline = bpm != null || tempC != null;
   const esp32Effective: 'disabled' | 'offline' | 'online' | 'unknown' =
@@ -121,12 +123,8 @@ export function StatusBar() {
 
       <Divider />
 
-      {/* AI */}
-      <Segment
-        icon={<Sparkles size={12} strokeWidth={2} />}
-        label={provider}
-        capitalize
-      />
+      {/* AI — Phase 9.2.1: cooling/quota-aware. */}
+      <ProviderBadge provider={provider} routerState={routerState} />
 
       <Divider />
 
@@ -453,6 +451,127 @@ function Resource({
       </span>
     </div>
   );
+}
+
+// Phase 9.2.1 — poll /agent/router_state every 15s. Cheap (single GET, no body)
+// and gives the operator visibility into AI provider cooldowns / quota state.
+import type { RouterStateSnapshot } from '../../services/agentApi';
+
+function useRouterStatePolled(): RouterStateSnapshot | null {
+  const [state, setState] = useState<RouterStateSnapshot | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const snap = await agentApi.routerState();
+        if (!cancelled) setState(snap);
+      } catch {
+        // 401 (logged-out) or backend down — silently keep last value.
+      }
+    };
+    tick();
+    const t = setInterval(tick, 15000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, []);
+  return state;
+}
+
+function ProviderBadge({
+  provider,
+  routerState,
+}: {
+  provider: string;
+  routerState: RouterStateSnapshot | null;
+}) {
+  const summary = useMemo(() => deriveProviderSummary(provider, routerState), [provider, routerState]);
+
+  return (
+    <div className="flex items-center gap-1.5" title={summary.tooltip}>
+      <span style={{ color: 'var(--ink-muted)' }} className="inline-flex">
+        <Sparkles size={12} strokeWidth={2} />
+      </span>
+      <span
+        aria-hidden
+        className="rounded-full"
+        style={{
+          width: 6,
+          height: 6,
+          background: summary.color,
+          boxShadow: `0 0 6px ${summary.color}`,
+          display: 'inline-block',
+        }}
+      />
+      <span
+        style={{
+          fontFamily: 'var(--font-display)',
+          fontSize: 'var(--fs-micro)',
+          color: 'var(--ink-primary)',
+          textTransform: 'capitalize',
+        }}
+      >
+        {summary.label}
+      </span>
+      {summary.fallbackArrow && (
+        <span
+          style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 'var(--fs-micro)',
+            color: 'var(--ink-muted)',
+          }}
+        >
+          →
+        </span>
+      )}
+    </div>
+  );
+}
+
+function deriveProviderSummary(
+  provider: string,
+  rs: RouterStateSnapshot | null,
+): { color: string; label: string; tooltip: string; fallbackArrow: boolean } {
+  if (!rs) {
+    return { color: 'var(--signal-ok)', label: provider, tooltip: provider, fallbackArrow: false };
+  }
+  const primary = rs.primary;
+  const fallback = rs.fallback;
+
+  if (primary in rs.quota_exhausted) {
+    return {
+      color: 'var(--signal-alert)',
+      label: `${primary} · quota`,
+      tooltip: `${primary} quota exhausted until ${rs.quota_exhausted[primary]?.until_utc}`,
+      fallbackArrow: true,
+    };
+  }
+  if (primary in rs.cooling) {
+    const until = rs.cooling[primary]?.until_utc;
+    const reason = rs.cooling[primary]?.reason;
+    const remaining = until ? Math.max(0, Math.round((Date.parse(until) - Date.now()) / 1000)) : 0;
+    return {
+      color: 'var(--signal-warn)',
+      label: `${primary} · cooling ${remaining}s`,
+      tooltip: `${primary} cooling ${remaining}s (${reason})`,
+      fallbackArrow: true,
+    };
+  }
+  if (rs.active && rs.active !== primary && fallback !== 'none') {
+    return {
+      color: 'var(--chart-2)',
+      label: `${rs.active} ←`,
+      tooltip: `Fallback ${rs.active} active; ${primary} primary will be retried.`,
+      fallbackArrow: false,
+    };
+  }
+  return {
+    color: 'var(--signal-ok)',
+    label: provider,
+    tooltip: `${provider} (primary)`,
+    fallbackArrow: false,
+  };
 }
 
 function ConnectivityDot({

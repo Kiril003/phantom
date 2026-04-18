@@ -4,6 +4,7 @@ import { GoalInput } from './GoalInput';
 import { ControlsBar } from './ControlsBar';
 import { InterventionDialog } from './InterventionDialog';
 import { ThoughtBudget } from './ThoughtBudget';
+import { LLMCallBudget } from './LLMCallBudget';
 import { TaskTree } from './TaskTree';
 import { SubstateIndicator } from './SubstateIndicator';
 
@@ -13,6 +14,9 @@ const STATUS_BADGE: Record<string, { color: string; label: string }> = {
   running:        { color: 'var(--signal-info)', label: 'RUNNING' },
   paused:         { color: 'var(--ink-muted)', label: 'PAUSED' },
   awaiting_user:  { color: 'var(--signal-warn)', label: 'AWAITING USER' },
+  // Phase 9.2.1 — distinct badge so the operator can tell quota waits
+  // apart from user-input waits (both are "task pinned, no progress").
+  blocked_quota:  { color: 'var(--chart-3)', label: 'BLOCKED · QUOTA' },
   done:           { color: 'var(--signal-ok)', label: 'DONE' },
   failed:         { color: 'var(--signal-alert)', label: 'FAILED' },
   stopped:        { color: 'var(--signal-alert)', label: 'STOPPED' },
@@ -25,6 +29,8 @@ export function AgentPanel() {
   const subGoals = useAgentStore((s) => s.subGoals);
   const recentActions = useAgentStore((s) => s.recentActions);
   const thoughtBudget = useAgentStore((s) => s.thoughtBudget);
+  const llmCallsUsed = useAgentStore((s) => s.llmCallsUsed);
+  const llmCallsCap = useAgentStore((s) => s.llmCallsCap);
   const promptToUser = useAgentStore((s) => s.promptToUser);
   const startTask = useAgentStore((s) => s.startTask);
   const intervene = useAgentStore((s) => s.intervene);
@@ -73,6 +79,7 @@ export function AgentPanel() {
           </span>
         </div>
         <ThoughtBudget budget={thoughtBudget} />
+        <LLMCallBudget used={llmCallsUsed} cap={llmCallsCap} />
       </div>
 
       {/* Middle scrollable region */}

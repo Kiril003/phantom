@@ -42,6 +42,9 @@ interface AgentState {
   promptToUser: string | null;
   notification: { title: string; message: string; urgency: string } | null;
   wsConnected: boolean;
+  // Phase 9.2.1 — per-task LLM call budget surfacing
+  llmCallsUsed: number;
+  llmCallsCap: number;
 
   // Setters
   setWSConnected: (connected: boolean) => void;
@@ -87,6 +90,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   promptToUser: null,
   notification: null,
   wsConnected: false,
+  llmCallsUsed: 0,
+  llmCallsCap: 50,
 
   setWSConnected: (connected) => set({ wsConnected: connected }),
   setPromptToUser: (prompt) => set({ promptToUser: prompt }),
@@ -191,6 +196,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         patch.recentActions = [];
         patch.reflections = [];
         patch.thoughtBudget = EMPTY_BUDGET;
+        patch.llmCallsUsed = 0;
+        patch.llmCallsCap = 50;
         patch.status = 'running';
         patch.connectionStatus = 'running';
         patch.promptToUser = null;
@@ -303,6 +310,19 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         patch.connectionStatus = 'idle';
         break;
       }
+      case 'task.blocked_quota': {
+        patch.status = 'blocked_quota';
+        patch.promptToUser = String(
+          e.payload.reason ??
+            'AI provider quota exhausted — waiting for recovery probe.',
+        );
+        break;
+      }
+      case 'agent.budget.warning': {
+        patch.llmCallsUsed = Number(e.payload.llm_calls_used ?? 0);
+        patch.llmCallsCap = Number(e.payload.cap_at ?? 50);
+        break;
+      }
       case 'notification': {
         patch.notification = {
           title: String(e.payload.title ?? ''),
@@ -325,6 +345,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     status: 'idle',
     connectionStatus: 'idle',
     thoughtBudget: EMPTY_BUDGET,
+    llmCallsUsed: 0,
+    llmCallsCap: 50,
     reflections: [],
     observations: [],
     recentActions: [],

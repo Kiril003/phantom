@@ -47,6 +47,15 @@ export interface StartTaskResponse {
   detail?: string;
 }
 
+export interface RouterStateSnapshot {
+  primary: string;
+  fallback: string;
+  active: string;
+  cooling: Record<string, { until_utc: string; reason: string }>;
+  quota_exhausted: Record<string, { until_utc: string }>;
+  last_calls: Record<string, { at: string; success: boolean; tool?: string; kind?: string }>;
+}
+
 export const agentApi = {
   startTask: (goal: string) => req<StartTaskResponse>('POST', '/agent/task', { goal }),
   pause: (id: string) => req<{ paused: boolean }>('POST', `/agent/task/${id}/pause`),
@@ -72,6 +81,7 @@ export const agentApi = {
     return req<{ audit: AgentAuditEntry[] }>('GET', `/agent/audit?${qs.toString()}`);
   },
   selfModel: () => req<{ self_model: AgentSelfModel; substate: AgentSubstate }>('GET', '/agent/self_model'),
+  routerState: () => req<RouterStateSnapshot>('GET', '/agent/router_state'),
   feedback: (audit_entry_id: number, rating: 'up' | 'down' | 'comment', comment?: string) =>
     req<{ id: number }>('POST', '/agent/feedback', { audit_entry_id, rating, comment: comment ?? null }),
 };

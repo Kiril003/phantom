@@ -192,6 +192,10 @@ export type AgentEventType =
   | 'task.completed'
   | 'task.stopped'
   | 'task.failed'
+  // Phase 9.2.1
+  | 'task.blocked_quota'
+  | 'sub_goal.abandoned'
+  | 'agent.budget.warning'
   | 'notification';
 
 export interface AgentEvent {

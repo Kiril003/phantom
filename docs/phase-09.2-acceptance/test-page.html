@@ -1,0 +1,58 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>PHANTOM Phase 9.2 grounded-click fixture</title>
+<style>
+  body { font: 16px/1.4 system-ui, sans-serif; padding: 32px; background: #0a0e1a; color: #d8e1ff; }
+  h1 { font-size: 22px; margin-bottom: 24px; }
+  .row { display: flex; gap: 16px; margin: 20px 0; }
+  button {
+    font: 16px system-ui; padding: 12px 24px; border: 0; border-radius: 6px;
+    cursor: pointer; min-width: 120px; min-height: 44px;
+  }
+  .submit { background: #00d4ff; color: #001a2a; }
+  .cancel { background: #ff6b35; color: #1a0500; }
+  .secondary { background: #2a3556; color: #d8e1ff; }
+  input[type=text] {
+    font: 16px system-ui; padding: 10px 12px; border-radius: 6px; border: 0;
+    background: #1a223a; color: #d8e1ff; min-width: 240px;
+  }
+  #status { margin-top: 32px; padding: 12px; border-left: 3px solid #00d4ff; }
+</style>
+</head>
+<body>
+  <h1>Grounded-click test page (Phase 9.2)</h1>
+  <p>Used by the live acceptance run to verify
+     <code>browser.click_by_description</code> resolves natural-language
+     descriptions to real screen coordinates.</p>
+
+  <div class="row">
+    <input type="text" id="email" placeholder="email">
+    <input type="text" id="password" placeholder="password">
+  </div>
+
+  <div class="row">
+    <button class="submit" id="submit-btn"
+            onclick="document.getElementById('status').textContent =
+                     'submit clicked at ' + new Date().toISOString();
+                     window.history.pushState({}, '', '?clicked=submit')">
+      Submit
+    </button>
+    <button class="cancel" id="cancel-btn"
+            onclick="document.getElementById('status').textContent =
+                     'cancel clicked at ' + new Date().toISOString();
+                     window.history.pushState({}, '', '?clicked=cancel')">
+      Cancel
+    </button>
+    <button class="secondary" id="help-btn"
+            onclick="document.getElementById('status').textContent =
+                     'help clicked at ' + new Date().toISOString();
+                     window.history.pushState({}, '', '?clicked=help')">
+      Help
+    </button>
+  </div>
+
+  <div id="status">no clicks yet</div>
+</body>
+</html>

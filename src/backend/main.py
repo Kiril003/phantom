@@ -26,6 +26,7 @@ from api.routes_tools import router as tools_router
 from api.routes_voice import router as voice_router
 from api.routes_ai import router as ai_router
 from api.routes_face import router as face_router
+from api.routes_agent import router as agent_router
 
 logging.basicConfig(
     level=getattr(logging, config.log_level),
@@ -183,6 +184,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     from vision.oled_animator import oled_animator
     await oled_animator.start()
 
+    # Phase 09.1 — agent cognitive layer
+    if config.agent_enabled:
+        try:
+            from agent.runtime import ensure_workspace
+            from agent.audit import mark_orphans_paused
+            ensure_workspace()
+            orphans = await mark_orphans_paused("uvicorn_restart")
+            if orphans:
+                logger.info("Agent: marked %d orphaned task(s) as paused", orphans)
+        except Exception as exc:
+            logger.error("Agent startup hook failed: %s", exc)
+
     yield
 
     loop_task.cancel()
@@ -192,6 +205,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         pass
 
     await oled_animator.stop()
+
+    # Phase 09.1 — best-effort agent shutdown: stop running task + close browser
+    if config.agent_enabled:
+        try:
+            from agent.runtime import agent_runtime
+            from agent.audit import mark_orphans_paused
+            if agent_runtime.current_task is not None:
+                await agent_runtime.stop()
+            await mark_orphans_paused("uvicorn_shutdown")
+        except Exception as exc:
+            logger.warning("Agent shutdown hook failed: %s", exc)
 
     if config.serial_enabled:
         from sensors.serial_bridge import serial_bridge
@@ -232,6 +256,7 @@ def create_app() -> FastAPI:
     app.include_router(voice_router, prefix=prefix)
     app.include_router(ai_router, prefix=prefix)
     app.include_router(face_router, prefix=prefix)
+    app.include_router(agent_router, prefix=prefix)
 
     _register_ws(app)
     _register_health(app)

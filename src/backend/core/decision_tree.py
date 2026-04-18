@@ -44,6 +44,12 @@ class DecisionTree:
         """
         actions: list[DecisionAction] = []
 
+        # TODO(phase-09.2): hook agent voice trigger here — when the wake-word
+        # pipeline produces a transcript that looks like a command (e.g. starts
+        # with «PHANTOM, ...»), enqueue a DecisionAction(kind="agent_task",
+        # payload={"goal": transcript}) and wire main.py to call
+        # agent_runtime.start_task on it. Skipped in 9.1 — text-only goals.
+
         actions.extend(self._check_health(snapshot))
         actions.extend(self._check_environment(snapshot))
         actions.extend(self._check_calendar(snapshot))

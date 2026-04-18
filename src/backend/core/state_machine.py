@@ -22,8 +22,9 @@ class SystemState:
     SENTINEL = "SENTINEL"
     GHOST = "GHOST"
     DREAM = "DREAM"
+    OPERATOR = "OPERATOR"
 
-    ALL = {SHADOW, FOCUS, DIALOGUE, SENTINEL, GHOST, DREAM}
+    ALL = {SHADOW, FOCUS, DIALOGUE, SENTINEL, GHOST, DREAM, OPERATOR}
 
 
 @dataclass
@@ -198,6 +199,15 @@ class StateMachine:
         self._stt_listening = False
         self._tts_playing = False
         self._ai_initiative = False
+        # Phase 9.1 — OPERATOR substate, broadcast alongside the main state.
+        self._operator_substate: str = "idle"
+        # Snapshot of state we were in BEFORE entering OPERATOR. Restored on
+        # task.completed / task.failed so the user sees the same surface they
+        # left when the agent finishes. task.stopped routes to SHADOW (safety
+        # default). NB: kept separate from `_previous` because that one tracks
+        # the immediately-prior state for transition guards (e.g. DIALOGUE
+        # returning to FOCUS), and we don't want OPERATOR exits to clobber it.
+        self._pre_operator_state: Optional[str] = None
 
     @property
     def current_state(self) -> str:
@@ -217,6 +227,26 @@ class StateMachine:
 
     def set_ai_initiative(self, has_initiative: bool) -> None:
         self._ai_initiative = has_initiative
+
+    @property
+    def operator_substate(self) -> str:
+        return self._operator_substate
+
+    def set_operator_substate(self, sub: str) -> None:
+        self._operator_substate = sub
+
+    def enter_operator(self, trigger: str) -> StateTransition:
+        if self._current != SystemState.OPERATOR:
+            self._pre_operator_state = self._current
+        return self.force_transition(SystemState.OPERATOR, trigger)
+
+    def exit_operator(self, trigger: str, *, to_safe: bool = False) -> StateTransition | None:
+        if self._current != SystemState.OPERATOR:
+            return None
+        target = SystemState.SHADOW if to_safe else (self._pre_operator_state or SystemState.SHADOW)
+        self._pre_operator_state = None
+        self._operator_substate = "idle"
+        return self.force_transition(target, trigger)
 
     def force_transition(self, to: str, trigger: str) -> StateTransition:
         """Used for user-initiated transitions (touch, encoder, etc.)."""

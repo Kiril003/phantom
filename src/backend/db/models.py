@@ -347,3 +347,24 @@ class AgentFeedback(Base):
     rating: Mapped[str] = mapped_column(String(16), nullable=False)  # up | down | comment
     comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+# ── AI tool-use telemetry (Phase 9.2) ─────────────────────────────────────────
+
+
+class AiToolUseLog(Base):
+    """One row per call_with_tools attempt — used to tune provider routing."""
+    __tablename__ = "ai_tool_use_log"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    task_id: Mapped[Optional[str]] = mapped_column(String(36), index=True, nullable=True)
+    step_idx: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False)
+    model: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    tool_name: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    success: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False)
+    error_kind: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    elapsed_ms: Mapped[int] = mapped_column(Integer, default=0)
+    retry_count: Mapped[int] = mapped_column(Integer, default=1)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=_now, index=True)

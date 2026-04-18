@@ -183,6 +183,108 @@ class AIRouter:
                 results[name] = False
         return results
 
+    # ── Tool-use routing (Phase 9.2) ─────────────────────────────────────────
+
+    async def call_with_tools(
+        self,
+        *,
+        system_prompt: str,
+        user_message: str,
+        tools: list,
+        task_id: str | None = None,
+        step_idx: int | None = None,
+        max_total_retries: int | None = None,
+    ):
+        """
+        Try primary.call_with_tools → on retriable error fall back to the
+        configured fallback provider. Audit every attempt.
+
+        Returns ToolCallResult on success, ToolUseError on terminal failure.
+        """
+        # Lazy import to avoid module-load cycles.
+        from ai.tool_use import ToolCallResult, ToolErrorKind, ToolUseError
+        from ai.tool_use_audit import write_log
+
+        budget = max_total_retries if max_total_retries is not None else int(
+            config.ai_tool_use_max_total_retries
+        )
+        attempts_total = 0
+        primary_name = config.ai_primary_provider
+        fallback_name = config.ai_fallback_provider
+        sequence: list[str] = [primary_name]
+        if fallback_name != "none" and fallback_name in self._providers:
+            sequence.append(fallback_name)
+
+        last_error: ToolUseError | None = None
+        for prov_name in sequence:
+            if attempts_total >= budget:
+                break
+            provider = self._providers.get(prov_name)
+            if provider is None or not hasattr(provider, "call_with_tools"):
+                continue
+            remaining = max(1, budget - attempts_total)
+            t0 = time.monotonic()
+            try:
+                outcome = await provider.call_with_tools(
+                    system_prompt=system_prompt,
+                    user_message=user_message,
+                    tools=tools,
+                    max_retries=min(3, remaining),
+                )
+            except Exception as exc:
+                outcome = ToolUseError(
+                    kind=ToolErrorKind.UNKNOWN,
+                    message=f"{prov_name} raised: {exc}",
+                    retriable=True,
+                    provider=prov_name,
+                    model="",
+                    parse_attempts=1,
+                )
+            elapsed_ms = int((time.monotonic() - t0) * 1000)
+            attempts_total += getattr(outcome, "parse_attempts", 1)
+
+            if isinstance(outcome, ToolCallResult):
+                self._active = prov_name
+                self._sync_context(prov_name)
+                await write_log(
+                    task_id=task_id,
+                    step_idx=step_idx,
+                    provider=prov_name,
+                    model=outcome.model,
+                    tool_name=outcome.tool_name,
+                    success=True,
+                    error_kind=None,
+                    error_message=None,
+                    elapsed_ms=elapsed_ms,
+                    retry_count=outcome.parse_attempts,
+                )
+                return outcome
+
+            last_error = outcome
+            await write_log(
+                task_id=task_id,
+                step_idx=step_idx,
+                provider=prov_name,
+                model=outcome.model,
+                tool_name=None,
+                success=False,
+                error_kind=str(outcome.kind),
+                error_message=outcome.message,
+                elapsed_ms=elapsed_ms,
+                retry_count=outcome.parse_attempts,
+            )
+            if not outcome.retriable:
+                break
+
+        return last_error or ToolUseError(
+            kind=ToolErrorKind.UNKNOWN,
+            message="all providers exhausted",
+            retriable=False,
+            provider="router",
+            model="",
+            parse_attempts=attempts_total,
+        )
+
     # ── Internals ──────────────────────────────────────────────────────────────
 
     def _sync_context(self, provider_name: str) -> None:
@@ -194,5 +296,16 @@ class AIRouter:
             logger.debug("_sync_context: could not update context engine: %s", exc)
 
 
-# Singleton — imported everywhere that needs AI
-ai_router = AIRouter()
+# Lazy singleton — `from ai.provider import ai_router` materialises on first
+# access, avoiding the import cycle when ai.gemini_provider is loaded as the
+# entry-point.
+_AI_ROUTER_SINGLETON: AIRouter | None = None
+
+
+def __getattr__(name: str):
+    global _AI_ROUTER_SINGLETON
+    if name == "ai_router":
+        if _AI_ROUTER_SINGLETON is None:
+            _AI_ROUTER_SINGLETON = AIRouter()
+        return _AI_ROUTER_SINGLETON
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")

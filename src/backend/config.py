@@ -58,6 +58,8 @@ class PhantomConfig(BaseSettings):
     ai_initiative_enabled: bool = True
     ai_initiative_cooldown_s: int = 300
     ai_streaming: bool = True
+    # Phase 9.2 — total retries across primary+fallback for tool-use calls.
+    ai_tool_use_max_total_retries: int = 5
 
     # Chat (Phase 5) — WS stream emission cadence
     chat_stream_chunk_chars: int = 24
@@ -181,6 +183,30 @@ class PhantomConfig(BaseSettings):
         "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
         "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
     )
+
+    # ── Agent (Phase 9.2 Grounded Mind) ──────────────────────────────────────
+    # Episodic memory — uses Phase 3 ChromaDB (chroma_path) with extra collection.
+    agent_episodic_memory_enabled: bool = True
+    agent_episodic_collection: str = "agent_episodes"
+    agent_episodic_top_k: int = 3
+    # Visual grounding (OmniParser V2 wrapper)
+    agent_grounding_enabled: bool = True
+    agent_grounding_min_confidence: float = 0.5
+    # MCP — empty = no MCP servers active. Each entry:
+    # {"name": str, "transport": "stdio"|"http", "command"?: str, "url"?: str,
+    #  "default_risk": int 1..7, "enabled": bool}
+    agent_mcp_servers: list[dict] = []
+    # Native tool-use vs fall back to free-form JSON. Tactical planner respects
+    # this — tests can flip to False to bypass without unmocking the providers.
+    agent_use_native_tool_calling: bool = True
+    # Persona — Ukrainian primary, English technical-term fallback.
+    agent_language_primary: Literal["uk", "en"] = "uk"
+    agent_language_fallback: Literal["uk", "en"] = "en"
+
+    # ── Voice / TTS — language-aware (Phase 9.2) ─────────────────────────────
+    voice_tts_voice_uk: str = "uk_UA-lada-x_low"
+    voice_tts_voice_en: str = "en_US-amy-low"
+    voice_tts_auto_language: bool = True
 
     # ── System ────────────────────────────────────────────────────────────────
     system_hostname: str = "phantom"

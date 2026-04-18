@@ -105,7 +105,14 @@ async def synthesize_speech(req: TTSRequest) -> Response:
     """Render text to a WAV blob. Respects voice_tts_enabled (returns 100 ms
     of silence when disabled) and voice_tts_voice (falls back to the
     settings default when `req.voice` is empty)."""
-    voice = req.voice.strip() or config.voice_tts_voice
+    # Phase 9.2: when caller doesn't specify a voice, auto-select UA or EN
+    # based on Cyrillic content ratio. Disabled callers always get the
+    # configured `voice_tts_voice`.
+    if req.voice.strip():
+        voice = req.voice.strip()
+    else:
+        from voice.tts_engine import select_voice_for_text
+        voice = select_voice_for_text(req.text)
     speed = req.speed if req.speed > 0 else config.voice_tts_speed
     try:
         result = await synthesize_text(req.text, voice, speed)

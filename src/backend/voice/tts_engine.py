@@ -190,3 +190,41 @@ def build_tts_provider() -> TTSProvider:
     except Exception as exc:
         logger.warning("Piper unavailable, using SilentTTSProvider: %s", exc)
         return SilentTTSProvider()
+
+
+# ── Phase 9.2 — language-aware voice selection ────────────────────────────────
+
+
+def _cyrillic_ratio(text: str) -> float:
+    """Fraction of letters in `text` that are Cyrillic. Spaces+punct ignored."""
+    if not text:
+        return 0.0
+    letters = [c for c in text if c.isalpha()]
+    if not letters:
+        return 0.0
+    cyrillic = sum(
+        1 for c in letters
+        if "\u0400" <= c <= "\u04FF" or "\u0500" <= c <= "\u052F"
+    )
+    return cyrillic / len(letters)
+
+
+def select_voice_for_text(text: str) -> str:
+    """Pick UA or EN Piper voice based on Cyrillic content ratio.
+
+    >50% Cyrillic → UA voice. Else EN voice. When auto-detection is off,
+    return the configured `voice_tts_voice`.
+    """
+    if not getattr(config, "voice_tts_auto_language", True):
+        return config.voice_tts_voice
+    return (
+        config.voice_tts_voice_uk
+        if _cyrillic_ratio(text) > 0.5
+        else config.voice_tts_voice_en
+    )
+
+
+__all__ = [
+    "TTSProvider", "TTSResult", "SilentTTSProvider", "PiperTTSProvider",
+    "build_tts_provider", "select_voice_for_text", "_cyrillic_ratio",
+]

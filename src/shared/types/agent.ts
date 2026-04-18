@@ -105,6 +105,8 @@ export interface AgentSelfModel {
   current_track: AgentTrack;
   active_connections: string[];
   recent_task_summary: string | null;
+  language_primary: string;
+  language_fallback: string;
 }
 
 export interface AgentThoughtBudget {

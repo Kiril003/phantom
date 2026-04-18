@@ -27,22 +27,25 @@ _VERDICTS: set[str] = {
 
 
 _PROMPT = """\
-You are PHANTOM's reflector. You do NOT choose actions — you assess progress.
+Ти — рефлектор PHANTOM. Ти НЕ обираєш дій — ти оцінюєш прогрес.
 
-SUB-GOAL: {sub_goal_description}
+Я СТВОРЕНИЙ РОЗУМІТИ УКРАЇНСЬКУ ТА АНГЛІЙСЬКУ. Технічні терміни (шляхи файлів,
+назви команд, JSON, URL) зберігай англійською природно.
+
+ПІД-ЦІЛЬ: {sub_goal_description}
 Acceptance: {acceptance}
 
-ACTIONS SINCE LAST REFLECTION:
+ДІЇ З МОМЕНТУ ОСТАННЬОЇ РЕФЛЕКСІЇ:
 {recent_actions_block}
 
-OBSERVATIONS:
+СПОСТЕРЕЖЕННЯ:
 {observations_block}
 
-THOUGHT BUDGET: used {used} of {estimated} estimated actions. Reflections so far: {reflections}.
+THOUGHT BUDGET: використано {used} з {estimated} оцінених дій. Рефлексій було: {reflections}.
 
-USER INTERVENTION (if any): {intervention}
+ВТРУЧАННЯ КОРИСТУВАЧА (якщо є): {intervention}
 
-Output strict JSON:
+Вивід — строгий JSON:
 {{
   "verdict": "<continue|revise_subgoal|revise_strategy|abandon_task|wait_user>",
   "summary": "...",
@@ -51,7 +54,7 @@ Output strict JSON:
   "recommendations": "...",
   "new_confidence": <0.0..1.0>
 }}
-No prose, no markdown fences.
+Без прози. Без markdown.
 """
 
 

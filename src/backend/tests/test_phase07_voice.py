@@ -325,12 +325,19 @@ class TestVoiceRoutes:
         mock = _MockTTS()
         voice_pipeline._tts = mock
         config.voice_tts_voice = "configured-voice"
-        res = client.post(
-            "/api/v1/voice/tts",
-            json={"text": "hi", "voice": "", "speed": 1.0},
-        )
-        assert res.status_code == 200
-        assert mock.calls[0][1] == "configured-voice"
+        # Phase 9.2 introduced language-aware auto-selection. Disable it so
+        # this test continues to validate the legacy fallback contract.
+        prev_auto = config.voice_tts_auto_language
+        config.voice_tts_auto_language = False
+        try:
+            res = client.post(
+                "/api/v1/voice/tts",
+                json={"text": "hi", "voice": "", "speed": 1.0},
+            )
+            assert res.status_code == 200
+            assert mock.calls[0][1] == "configured-voice"
+        finally:
+            config.voice_tts_auto_language = prev_auto
 
     def test_tts_rejects_empty_text(self, client):
         voice_pipeline._tts = _MockTTS()

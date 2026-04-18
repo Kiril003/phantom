@@ -158,13 +158,16 @@ class ActionResult(BaseModel):
 # ── Self-model + thought-budget ──────────────────────────────────────────────
 
 class SelfModel(BaseModel):
-    identity: str = "PHANTOM, embedded AI operating system, Phase 9.1"
+    identity: str = "PHANTOM, embedded AI operating system"
     hardware: dict[str, Any] = Field(default_factory=dict)
     capabilities: list[str] = Field(default_factory=list)
     risk_tolerance: RiskLevel = RiskLevel.MEDIUM
     current_track: Track = "foreground"
     active_connections: list[str] = Field(default_factory=list)
     recent_task_summary: str | None = None
+    # Phase 9.2 — Ukrainian primary persona, English technical-term fallback.
+    language_primary: str = "uk"
+    language_fallback: str = "en"
 
 
 class ThoughtBudget(BaseModel):

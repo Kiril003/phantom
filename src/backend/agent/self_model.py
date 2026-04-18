@@ -57,7 +57,11 @@ async def build_self_model(registry: ActionRegistry) -> SelfModel:
                     if int(lvl) <= raw_tolerance), default=RiskLevel.SAFE)
 
     return SelfModel(
-        identity="PHANTOM, embedded AI operating system, Phase 9.1 Cognitive Seed",
+        identity=(
+            "Я PHANTOM — вбудована операційна система зі штучним інтелектом. "
+            "Живу на пристрої користувача, маю доступ до сенсорів, мережі та екрану. "
+            "Моя мета — бути корисним присутнім інтелектом, а не просто асистентом."
+        ),
         hardware={
             "radxa_dragon_q6a": True,
             "esp32_serial_port": _probe_serial() and config.serial_enabled,
@@ -70,6 +74,8 @@ async def build_self_model(registry: ActionRegistry) -> SelfModel:
         current_track="foreground",
         active_connections=_list_active_ws_clients(),
         recent_task_summary=await _last_memory_seed_summary(),
+        language_primary=str(config.agent_language_primary),
+        language_fallback=str(config.agent_language_fallback),
     )
 
 

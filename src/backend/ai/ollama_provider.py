@@ -3,12 +3,19 @@ PHANTOM OS — Ollama provider (Gemma 4 e4b local).
 """
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any, AsyncIterator
 
 from config import config
 from ai.provider import AIProvider, AIResponse
 from ai.response_formatter import RESPONSE_FORM_TOOLS, parse_function_call, parse_plain_text
+from ai.tool_use import (
+    ToolCallResult,
+    ToolErrorKind,
+    ToolSchema,
+    ToolUseError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -125,6 +132,146 @@ class OllamaProvider(AIProvider):
             if delta:
                 yield delta
 
+    # ── Prompt-based tool use (Phase 9.2) ────────────────────────────────────
+
+    async def call_with_tools(
+        self,
+        *,
+        system_prompt: str,
+        user_message: str,
+        tools: list[ToolSchema],
+        max_retries: int = 3,
+    ) -> ToolCallResult | ToolUseError:
+        """
+        Strict-JSON mode tool use. Local models don't speak native function
+        calling reliably so we coerce the prompt + format='json' into a
+        {tool, arguments, reasoning} envelope and validate it against the
+        provided tools list.
+        """
+        if not tools:
+            return ToolUseError(
+                kind=ToolErrorKind.INVALID_ARGS,
+                message="no tools provided",
+                retriable=False,
+                provider="ollama",
+                model=config.ai_ollama_model,
+            )
+
+        valid_names = {t.name for t in tools}
+        catalog_block = _format_tools_catalog(tools)
+        client = self._client()
+        last_error: ToolUseError | None = None
+        feedback = ""
+
+        for attempt in range(1, max_retries + 1):
+            tool_prompt = _build_tool_prompt(
+                system_prompt=system_prompt,
+                user_message=user_message,
+                catalog_block=catalog_block,
+                feedback=feedback,
+            )
+            try:
+                response = await client.chat(
+                    model=config.ai_ollama_model,
+                    messages=[
+                        {"role": "system", "content": system_prompt},
+                        {"role": "user", "content": tool_prompt},
+                    ],
+                    options=self._options(),
+                    format="json",
+                )
+            except Exception as exc:
+                kind = (
+                    ToolErrorKind.TIMEOUT
+                    if "timeout" in str(exc).lower()
+                    else ToolErrorKind.NETWORK
+                )
+                return ToolUseError(
+                    kind=kind,
+                    message=f"ollama network error: {exc}",
+                    retriable=True,
+                    provider="ollama",
+                    model=config.ai_ollama_model,
+                    parse_attempts=attempt,
+                )
+
+            raw = (response.message.content or "").strip()
+            try:
+                envelope = json.loads(raw)
+            except json.JSONDecodeError as exc:
+                last_error = ToolUseError(
+                    kind=ToolErrorKind.PARSE_FAILED,
+                    message=f"ollama returned invalid JSON: {exc}; raw={raw[:200]!r}",
+                    retriable=True,
+                    provider="ollama",
+                    model=config.ai_ollama_model,
+                    parse_attempts=attempt,
+                )
+                feedback = (
+                    f"Your previous response was not valid JSON ({exc}). "
+                    f"Return ONE object: "
+                    f'{{"tool": "<name>", "arguments": {{...}}, "reasoning": "..."}}.'
+                )
+                continue
+
+            tool_name = str(envelope.get("tool") or envelope.get("name") or "").strip()
+            arguments = envelope.get("arguments") or envelope.get("args") or {}
+            if not isinstance(arguments, dict):
+                arguments = {}
+            reasoning = str(envelope.get("reasoning") or envelope.get("thought") or "")
+
+            if not tool_name:
+                last_error = ToolUseError(
+                    kind=ToolErrorKind.MODEL_REFUSED,
+                    message="ollama envelope missing 'tool' field",
+                    retriable=True,
+                    provider="ollama",
+                    model=config.ai_ollama_model,
+                    parse_attempts=attempt,
+                )
+                feedback = (
+                    "Your previous response had no 'tool' field. "
+                    f"Pick one from: {sorted(valid_names)}."
+                )
+                continue
+
+            if tool_name not in valid_names:
+                last_error = ToolUseError(
+                    kind=ToolErrorKind.UNKNOWN_TOOL,
+                    message=(
+                        f"ollama chose unknown tool '{tool_name}'. "
+                        f"Valid: {sorted(valid_names)}"
+                    ),
+                    retriable=True,
+                    provider="ollama",
+                    model=config.ai_ollama_model,
+                    parse_attempts=attempt,
+                )
+                feedback = (
+                    f"Your previous response used '{tool_name}' which doesn't exist. "
+                    f"Use only: {sorted(valid_names)}."
+                )
+                continue
+
+            return ToolCallResult(
+                tool_name=tool_name,
+                arguments=arguments,
+                raw_reasoning=reasoning,
+                confidence=float(envelope.get("confidence") or 0.7),
+                parse_attempts=attempt,
+                provider="ollama",
+                model=config.ai_ollama_model,
+            )
+
+        return last_error or ToolUseError(
+            kind=ToolErrorKind.UNKNOWN,
+            message=f"ollama call_with_tools exhausted retries (attempts={max_retries})",
+            retriable=False,
+            provider="ollama",
+            model=config.ai_ollama_model,
+            parse_attempts=max_retries,
+        )
+
     async def health_check(self) -> bool:
         """
         Cheap reachability probe: hit Ollama's /api/tags and confirm that the
@@ -144,3 +291,47 @@ class OllamaProvider(AIProvider):
         except Exception as exc:
             logger.debug("Ollama health check failed: %s", exc)
             return False
+
+
+# ── Helpers for call_with_tools ────────────────────────────────────────────────
+
+
+def _format_tools_catalog(tools: list[ToolSchema]) -> str:
+    """Pretty-format a tools list for inclusion in the prompt."""
+    lines: list[str] = []
+    for t in tools:
+        params = t.parameters or {"type": "object", "properties": {}}
+        prop_lines: list[str] = []
+        for pname, pdef in (params.get("properties") or {}).items():
+            ptype = pdef.get("type", "string")
+            req = " (required)" if pname in (params.get("required") or []) else ""
+            desc = pdef.get("description", "")
+            prop_lines.append(f"      - {pname}: {ptype}{req}{(' — ' + desc) if desc else ''}")
+        params_block = "\n".join(prop_lines) if prop_lines else "      (no arguments)"
+        lines.append(
+            f"  - name: {t.name}\n"
+            f"    description: {t.description.strip().splitlines()[0][:200] if t.description else ''}\n"
+            f"    risk_level: {t.risk_level}\n"
+            f"    parameters:\n{params_block}"
+        )
+    return "\n".join(lines)
+
+
+def _build_tool_prompt(
+    *,
+    system_prompt: str,
+    user_message: str,
+    catalog_block: str,
+    feedback: str,
+) -> str:
+    """Build the strict-JSON prompt for prompt-based tool selection."""
+    feedback_block = f"\n\nIMPORTANT FEEDBACK FROM PREVIOUS ATTEMPT:\n{feedback}" if feedback else ""
+    return (
+        f"You must respond with ONE valid JSON object — no markdown, no prose, "
+        f"no fences. The object schema is:\n\n"
+        f'{{"tool": "<exact tool name>", "arguments": {{<args object>}}, '
+        f'"reasoning": "<one sentence on why>"}}\n\n'
+        f"Available tools:\n{catalog_block}\n\n"
+        f"Request:\n{user_message}{feedback_block}\n\n"
+        f"Respond with JSON only."
+    )

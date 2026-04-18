@@ -9,6 +9,12 @@ from typing import AsyncIterator, Any
 from config import config
 from ai.provider import AIProvider, AIResponse
 from ai.response_formatter import RESPONSE_FORM_TOOLS, parse_function_call, parse_plain_text
+from ai.tool_use import (
+    ToolCallResult,
+    ToolErrorKind,
+    ToolSchema,
+    ToolUseError,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -199,15 +205,221 @@ class GeminiProvider(AIProvider):
                 yield chunk.text
 
     async def health_check(self) -> bool:
+        """
+        Single minimal Gemini API request — verifies key + model are reachable.
+        "ping" ≈ 1 input token, 5 max output tokens, no tools/safety/system
+        instruction. No retries, no fallbacks.
+        """
         try:
             client = _get_client()
             from google.genai import types
             response = await client.aio.models.generate_content(
                 model=config.ai_gemini_model,
                 contents=[{"role": "user", "parts": [{"text": "ping"}]}],
-                config=types.GenerateContentConfig(max_output_tokens=4),
+                config=types.GenerateContentConfig(max_output_tokens=5),
             )
             return bool(response)
         except Exception as exc:
             logger.debug("Gemini health check failed: %s", exc)
             return False
+
+    # ── Native tool-use (Phase 9.2) ───────────────────────────────────────────
+
+    async def call_with_tools(
+        self,
+        *,
+        system_prompt: str,
+        user_message: str,
+        tools: list[ToolSchema],
+        max_retries: int = 3,
+    ) -> ToolCallResult | ToolUseError:
+        """
+        Native Gemini function calling. Returns ToolCallResult if Gemini picked
+        a tool from `tools`, or ToolUseError otherwise.
+
+        Retries up to `max_retries-1` times on UNKNOWN_TOOL / INVALID_ARGS by
+        appending the validation error to the prompt.
+        """
+        if not tools:
+            return ToolUseError(
+                kind=ToolErrorKind.INVALID_ARGS,
+                message="no tools provided",
+                retriable=False,
+                provider="gemini",
+                model=config.ai_gemini_model,
+            )
+
+        from google.genai import types
+
+        valid_names = {t.name for t in tools}
+        attempts = 0
+        last_error: ToolUseError | None = None
+        prompt = user_message
+
+        while attempts < max_retries:
+            attempts += 1
+            try:
+                client = _get_client()
+                gen_config = types.GenerateContentConfig(
+                    system_instruction=system_prompt,
+                    temperature=config.ai_temperature,
+                    max_output_tokens=config.ai_max_tokens,
+                    tools=[_tools_for_call_with_tools(tools)],
+                    tool_config=types.ToolConfig(
+                        function_calling_config=types.FunctionCallingConfig(mode="ANY"),
+                    ),
+                    safety_settings=[types.SafetySetting(**s) for s in _SAFETY_OFF],
+                )
+                response = await client.aio.models.generate_content(
+                    model=config.ai_gemini_model,
+                    contents=[{"role": "user", "parts": [{"text": prompt}]}],
+                    config=gen_config,
+                )
+            except Exception as exc:
+                kind = (
+                    ToolErrorKind.TIMEOUT
+                    if "timeout" in str(exc).lower()
+                    else ToolErrorKind.NETWORK
+                )
+                return ToolUseError(
+                    kind=kind,
+                    message=f"gemini network/api error: {exc}",
+                    retriable=True,
+                    provider="gemini",
+                    model=config.ai_gemini_model,
+                    parse_attempts=attempts,
+                )
+
+            fn_name, fn_args, text = _extract_function_call(response)
+            if fn_name is None:
+                last_error = ToolUseError(
+                    kind=ToolErrorKind.MODEL_REFUSED,
+                    message=f"gemini returned text without a function_call: {text[:200]!r}",
+                    retriable=True,
+                    provider="gemini",
+                    model=config.ai_gemini_model,
+                    parse_attempts=attempts,
+                )
+                prompt = (
+                    user_message
+                    + f"\n\nYour previous reply was prose, not a function_call. "
+                    f"Pick exactly one tool from: {sorted(valid_names)}."
+                )
+                continue
+
+            if fn_name not in valid_names:
+                last_error = ToolUseError(
+                    kind=ToolErrorKind.UNKNOWN_TOOL,
+                    message=(
+                        f"gemini chose unknown tool '{fn_name}'. "
+                        f"Valid: {sorted(valid_names)}"
+                    ),
+                    retriable=True,
+                    provider="gemini",
+                    model=config.ai_gemini_model,
+                    parse_attempts=attempts,
+                )
+                prompt = (
+                    user_message
+                    + f"\n\nYour previous reply named '{fn_name}', which is NOT a valid "
+                    f"tool. Pick exactly one of: {sorted(valid_names)}."
+                )
+                continue
+
+            return ToolCallResult(
+                tool_name=fn_name,
+                arguments=fn_args,
+                raw_reasoning=text,
+                confidence=1.0,
+                parse_attempts=attempts,
+                provider="gemini",
+                model=config.ai_gemini_model,
+            )
+
+        return last_error or ToolUseError(
+            kind=ToolErrorKind.UNKNOWN,
+            message=f"gemini call_with_tools exhausted retries (attempts={attempts})",
+            retriable=False,
+            provider="gemini",
+            model=config.ai_gemini_model,
+            parse_attempts=attempts,
+        )
+
+
+# ── Helpers for call_with_tools ────────────────────────────────────────────────
+
+
+def _json_schema_to_genai_schema(prop: dict[str, Any]) -> Any:
+    """Translate one JSON-Schema property dict → google.genai.types.Schema."""
+    from google.genai import types
+
+    js_type = (prop.get("type") or "string").lower()
+    type_map = {
+        "string": types.Type.STRING,
+        "integer": types.Type.INTEGER,
+        "number": types.Type.NUMBER,
+        "boolean": types.Type.BOOLEAN,
+        "array": types.Type.ARRAY,
+        "object": types.Type.OBJECT,
+    }
+    kwargs: dict[str, Any] = {"type": type_map.get(js_type, types.Type.STRING)}
+    if "description" in prop:
+        kwargs["description"] = prop["description"]
+    if "enum" in prop:
+        kwargs["enum"] = list(prop["enum"])
+    if js_type == "array":
+        items = prop.get("items") or {"type": "string"}
+        kwargs["items"] = _json_schema_to_genai_schema(items)
+    if js_type == "object":
+        sub_props: dict[str, Any] = {}
+        for sk, sv in (prop.get("properties") or {}).items():
+            sub_props[sk] = _json_schema_to_genai_schema(sv)
+        if sub_props:
+            kwargs["properties"] = sub_props
+        if "required" in prop:
+            kwargs["required"] = list(prop["required"])
+    return types.Schema(**kwargs)
+
+
+def _tools_for_call_with_tools(tools: list[ToolSchema]) -> Any:
+    """Convert ToolSchema list → google.genai.types.Tool with FunctionDeclarations."""
+    from google.genai import types
+
+    declarations: list[Any] = []
+    for tool in tools:
+        params = tool.parameters or {"type": "object", "properties": {}}
+        properties: dict[str, Any] = {}
+        for pname, pdef in (params.get("properties") or {}).items():
+            properties[pname] = _json_schema_to_genai_schema(pdef)
+        schema_kwargs: dict[str, Any] = {
+            "type": types.Type.OBJECT,
+            "properties": properties,
+        }
+        if tool.required:
+            schema_kwargs["required"] = list(tool.required)
+        declarations.append(
+            types.FunctionDeclaration(
+                name=tool.name,
+                description=(tool.description or "")[:1024],
+                parameters=types.Schema(**schema_kwargs),
+            )
+        )
+    return types.Tool(function_declarations=declarations)
+
+
+def _extract_function_call(response: Any) -> tuple[str | None, dict[str, Any], str]:
+    """Pull (function_name, args, text) out of a Gemini response."""
+    fn_name: str | None = None
+    fn_args: dict[str, Any] = {}
+    text_parts: list[str] = []
+
+    candidate = response.candidates[0] if getattr(response, "candidates", None) else None
+    if candidate and getattr(candidate, "content", None) and candidate.content.parts:
+        for part in candidate.content.parts:
+            if hasattr(part, "function_call") and part.function_call:
+                fn_name = part.function_call.name
+                args = part.function_call.args
+                fn_args = dict(args) if args else {}
+            elif hasattr(part, "text") and part.text:
+                text_parts.append(part.text)
+    return fn_name, fn_args, " ".join(text_parts).strip()

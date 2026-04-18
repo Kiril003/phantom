@@ -62,7 +62,23 @@ class ToolErrorKind(StrEnum):
     MODEL_REFUSED = "model_refused"
     NETWORK = "network"
     TIMEOUT = "timeout"
+    # Phase 9.2.1 — finer-grained transient errors so the router can pick
+    # the right resilience strategy instead of treating all failures alike.
+    RATE_LIMIT = "rate_limit"
+    QUOTA_EXHAUSTED = "quota_exhausted"
+    PROVIDER_UNAVAILABLE = "provider_unavailable"
     UNKNOWN = "unknown"
+
+
+# Semantic errors — fallback won't fix them; another model would just hallucinate
+# a different invalid name. Network/quota/transient errors are the ones worth
+# retrying or routing to the secondary provider.
+SEMANTIC_ERROR_KINDS: frozenset[ToolErrorKind] = frozenset({
+    ToolErrorKind.UNKNOWN_TOOL,
+    ToolErrorKind.INVALID_ARGS,
+    ToolErrorKind.PARSE_FAILED,
+    ToolErrorKind.MODEL_REFUSED,
+})
 
 
 class ToolUseError(BaseModel):
@@ -74,6 +90,13 @@ class ToolUseError(BaseModel):
     provider: str = "unknown"
     model: str = ""
     parse_attempts: int = 1
+    # Phase 9.2.1 — populated when the upstream API hands us a Retry-After
+    # hint (Google returns this for 429s as `retry_delay`); router uses it
+    # in place of the exponential backoff base when set.
+    retry_after_s: float | None = None
+    # Phase 9.2.1 — set by AIRouter when fallback was tried after primary
+    # ran out of retries. Used by audit + acceptance verification.
+    fell_through: bool = False
 
 
 # ── Provider Protocol ──────────────────────────────────────────────────────────
@@ -213,6 +236,7 @@ __all__ = [
     "ToolErrorKind",
     "ToolUseError",
     "ToolUseProvider",
+    "SEMANTIC_ERROR_KINDS",
     "action_to_tool_schema",
     "registry_as_tools",
     "terminal_marker_tools",

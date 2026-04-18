@@ -4,6 +4,7 @@ PHANTOM OS — Gemini 2.0 Flash provider via google-genai SDK.
 from __future__ import annotations
 
 import logging
+import re
 from typing import AsyncIterator, Any
 
 from config import config
@@ -17,6 +18,60 @@ from ai.tool_use import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+# ── Phase 9.2.1 — error classification ─────────────────────────────────────────
+#
+# We never trust just the exception class — google-genai funnels different
+# upstream conditions through ClientError/ServerError. Match on the message
+# substring set Google actually emits.
+
+_QUOTA_DAILY_HINTS = (
+    "per day",
+    "per_day",
+    "perday",
+    "daily",
+    "free_tier",
+    "free tier",
+    "generate_content_free_tier_requests",
+    "PerDay",
+)
+
+_RETRY_AFTER_RE = re.compile(r"retry_delay[^0-9]*([0-9]+(?:\.[0-9]+)?)\s*s?", re.IGNORECASE)
+
+
+def _classify_gemini_error(exc: Exception) -> tuple[ToolErrorKind, bool, float | None]:
+    """Map a Gemini SDK exception → (kind, retriable, retry_after_s).
+
+    Order matters: check daily-quota text BEFORE generic 429 so quota gets
+    its own non-retriable kind.
+    """
+    msg = str(exc)
+    lower = msg.lower()
+
+    retry_after: float | None = None
+    m = _RETRY_AFTER_RE.search(msg)
+    if m:
+        try:
+            retry_after = float(m.group(1))
+        except ValueError:  # pragma: no cover — regex guarantees a number
+            retry_after = None
+
+    if "timeout" in lower or "timed out" in lower:
+        return ToolErrorKind.TIMEOUT, True, retry_after
+
+    is_429 = "429" in msg or "RESOURCE_EXHAUSTED" in msg or "rate" in lower and "limit" in lower
+    if is_429:
+        # Daily quota → retriable=False (no point retrying within the same UTC day).
+        if "RESOURCE_EXHAUSTED" in msg and any(h in msg for h in _QUOTA_DAILY_HINTS):
+            return ToolErrorKind.QUOTA_EXHAUSTED, False, retry_after
+        return ToolErrorKind.RATE_LIMIT, True, retry_after
+
+    # 5xx — provider-side hiccup, retriable.
+    if any(code in msg for code in (" 500", " 502", " 503", " 504", "INTERNAL", "UNAVAILABLE")):
+        return ToolErrorKind.PROVIDER_UNAVAILABLE, True, retry_after
+
+    return ToolErrorKind.NETWORK, True, retry_after
 
 _SAFETY_OFF = [
     {"category": "HARM_CATEGORY_HARASSMENT",        "threshold": "BLOCK_NONE"},
@@ -276,18 +331,15 @@ class GeminiProvider(AIProvider):
                     config=gen_config,
                 )
             except Exception as exc:
-                kind = (
-                    ToolErrorKind.TIMEOUT
-                    if "timeout" in str(exc).lower()
-                    else ToolErrorKind.NETWORK
-                )
+                kind, retriable, retry_after_s = _classify_gemini_error(exc)
                 return ToolUseError(
                     kind=kind,
                     message=f"gemini network/api error: {exc}",
-                    retriable=True,
+                    retriable=retriable,
                     provider="gemini",
                     model=config.ai_gemini_model,
                     parse_attempts=attempts,
+                    retry_after_s=retry_after_s,
                 )
 
             fn_name, fn_args, text = _extract_function_call(response)

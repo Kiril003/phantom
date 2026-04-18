@@ -36,7 +36,7 @@ from ..schemas import (
     SelfModel,
     SubGoal,
 )
-from ._llm import PlannerLLMError, llm_json
+from ._llm import BlockedQuotaError, PlannerLLMError, llm_json
 
 logger = logging.getLogger(__name__)
 
@@ -328,6 +328,14 @@ async def plan(
     )
 
     if isinstance(outcome, ToolUseError):
+        # Phase 9.2.1: distinguish quota exhaustion (where retry IS possible
+        # later when the daily quota window resets) from semantic / parse
+        # failures (where the task is just stuck on planner output).
+        if outcome.kind == ToolErrorKind.QUOTA_EXHAUSTED:
+            raise BlockedQuotaError(
+                f"tactical blocked: provider={outcome.provider} quota exhausted; "
+                f"router will probe and resume when quota recovers"
+            )
         # Bubble up as PlannerLLMError so the loop's existing handler catches it
         # and turns it into a reflection trigger instead of a task crash.
         raise PlannerLLMError(

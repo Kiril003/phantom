@@ -22,6 +22,15 @@ class PlannerLLMError(JsonResponseError):
     """Raised when an LLM call cannot be coerced into valid JSON."""
 
 
+class BlockedQuotaError(PlannerLLMError):
+    """
+    Phase 9.2.1 — raised by tactical when both primary AND fallback providers
+    are quota-exhausted / cooling. The loop catches this and switches the
+    task to status=blocked_quota instead of `failed`, then waits for the
+    runtime probe to detect quota recovery before resuming.
+    """
+
+
 async def _call(prompt: str) -> str:
     """Single LLM call. Wraps ai_router so tests can patch this one symbol."""
     response = await ai_router.generate(

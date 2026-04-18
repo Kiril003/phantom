@@ -26,7 +26,7 @@ from .observations import (
 )
 from .planner import reflector as reflector_mod
 from .planner import strategic, tactical
-from .planner._llm import PlannerLLMError
+from .planner._llm import BlockedQuotaError, PlannerLLMError
 from .safety.circuit_breakers import TaskBudget, evaluate as evaluate_breaker
 from .schemas import (
     ActionResult,
@@ -333,6 +333,14 @@ async def run_task_loop(runtime: "AgentRuntime", state: "TaskState", *, resumed:
                     observations=state.observations,
                     actions_in_sub_goal=actions_in_subgoal,
                 )
+            except BlockedQuotaError as exc:
+                # Phase 9.2.1 — both LLM providers are quota-exhausted.
+                # Park the task in `blocked_quota` and let the runtime
+                # probe poll for recovery; resume on success.
+                resumed = await runtime.enter_blocked_quota(state, str(exc))
+                if not resumed:
+                    return
+                continue
             except PlannerLLMError as exc:
                 # tactical bombed — observation + reflection
                 state.observations.append(build_system(state.step_idx, "tactical", f"tactical_failed: {exc}"))

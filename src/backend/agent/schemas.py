@@ -48,6 +48,10 @@ TaskStatus = Literal[
     "running",
     "paused",
     "awaiting_user",
+    # Phase 9.2.1 — task can't make LLM progress because both primary and
+    # fallback are quota-exhausted/cooling. Distinct from `failed` because
+    # the runtime auto-resumes when a probe call succeeds.
+    "blocked_quota",
     "done",
     "failed",
     "stopped",

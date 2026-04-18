@@ -17,6 +17,9 @@ export type AgentTaskStatus =
   | 'running'
   | 'paused'
   | 'awaiting_user'
+  // Phase 9.2.1 — both primary and fallback providers are quota-exhausted
+  // / cooling; runtime probes every 60s and auto-resumes when one recovers.
+  | 'blocked_quota'
   | 'done'
   | 'failed'
   | 'stopped';

@@ -45,6 +45,12 @@ from .schemas import (
 logger = logging.getLogger(__name__)
 
 
+# Phase 9.2.1 — interval between provider-recovery probes when a task is
+# parked on `blocked_quota`. 60s matches Gemini's free-tier per-minute
+# rate-limit window so we don't probe more aggressively than the quota allows.
+_BLOCKED_QUOTA_PROBE_S = 60.0
+
+
 @dataclass
 class TaskState:
     id: str
@@ -204,6 +210,53 @@ class AgentRuntime:
             # action checking emergency_stop / cancel_step flags.
             pass
         return True
+
+    async def enter_blocked_quota(self, state: TaskState, reason: str) -> bool:
+        """
+        Phase 9.2.1 — park a task on `blocked_quota` and probe for provider
+        recovery every `_BLOCKED_QUOTA_PROBE_S` seconds. Returns True when
+        the loop should resume (probe succeeded), False on emergency stop.
+
+        The probe is a trivial 'ping' through the router so we don't burn
+        any tool-use quota — strategic / tactical can pick up where they
+        left off as soon as we return.
+        """
+        state.status = "blocked_quota"
+        state.paused_reason = reason[:128]
+        await update_task_status(state.id, "blocked_quota", paused_reason=state.paused_reason)
+        await self.set_substate("waiting_user")
+        await self._broadcast("task.blocked_quota", {
+            "task_id": state.id, "reason": reason, "probe_interval_s": _BLOCKED_QUOTA_PROBE_S,
+        })
+
+        while True:
+            if self.controls.emergency_stop.is_set():
+                return False
+            await asyncio.sleep(_BLOCKED_QUOTA_PROBE_S)
+            if self.controls.emergency_stop.is_set():
+                return False
+            if await self._probe_provider_recovered():
+                state.status = "running"
+                state.paused_reason = None
+                await update_task_status(state.id, "running", paused_reason=None)
+                await self.set_substate("thinking")
+                await self._broadcast("task.resumed", {"task_id": state.id, "reason": "quota_recovered"})
+                return True
+
+    async def _probe_provider_recovered(self) -> bool:
+        """Cheap ping through ai_router.generate; on success clear cooldowns."""
+        try:
+            from ai.provider import ai_router
+            await ai_router.generate(
+                user_message="ping",
+                system_prompt="Reply with one word: OK.",
+                history=[],
+            )
+            ai_router.clear_provider_cooling(config.ai_primary_provider)
+            return True
+        except Exception as exc:
+            logger.debug("blocked_quota probe still failing: %s", exc)
+            return False
 
     async def stop(self, task_id: str | None = None) -> bool:
         target = self.current_task

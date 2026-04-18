@@ -2,8 +2,9 @@
 from __future__ import annotations
 
 import logging
+import random
 import time
-from typing import ClassVar
+from typing import ClassVar, Literal
 from urllib.parse import urlparse
 
 from pydantic import Field
@@ -150,5 +151,94 @@ class BrowserExtract(Action):
         return ActionResult(
             ok=True,
             output={"selector": self.selector, "mode": self.mode, "value": value},
+            elapsed_ms=int((time.monotonic() - t0) * 1000),
+        )
+
+
+class BrowserClickByDescription(Action):
+    """Click a UI element matching `description` via visual/DOM grounding."""
+
+    name: ClassVar[str] = "browser.click_by_description"
+    risk_level: ClassVar[RiskLevel] = RiskLevel.LOW
+
+    description: str = Field(..., description="natural-language description of the element")
+    expected_type: Literal["button", "input", "link", "image", "text", "element"] = Field(
+        default="button",
+        description="hint for the grounder — narrows the candidate set",
+    )
+
+    def preconditions(self) -> list[Precondition]:
+        return [Precondition(key="browser.page_active", required=None, failure_mode="abandon")]
+
+    async def execute(self, ctx: ActionContext) -> ActionResult:
+        t0 = time.monotonic()
+        runtime = ctx.runtime
+        if runtime is None or runtime.browser_page is None:
+            return ActionResult(
+                ok=False, error="no_active_page",
+                error_class="no_active_page",
+                elapsed_ms=int((time.monotonic() - t0) * 1000),
+            )
+        page = runtime.browser_page
+
+        if not config.agent_grounding_enabled:
+            return ActionResult(
+                ok=False, error="grounding_disabled",
+                error_class="grounding_disabled",
+                elapsed_ms=int((time.monotonic() - t0) * 1000),
+            )
+
+        from vision.grounding import (
+            GroundingFailed, GroundingUnavailable, OmniParserGrounder,
+        )
+        grounder = getattr(runtime, "grounder", None) or OmniParserGrounder()
+
+        try:
+            x, y = await grounder.resolve_coords(
+                description=self.description,
+                expected_type=self.expected_type,
+                page=page,
+            )
+        except GroundingUnavailable as exc:
+            return ActionResult(
+                ok=False, error=f"grounding_unavailable: {exc}",
+                error_class="grounding_unavailable",
+                elapsed_ms=int((time.monotonic() - t0) * 1000),
+            )
+        except GroundingFailed as exc:
+            return ActionResult(
+                ok=False, error=f"grounding_failed: {exc}",
+                error_class="grounding_failed",
+                elapsed_ms=int((time.monotonic() - t0) * 1000),
+            )
+
+        # Human-like jitter so the click looks less robotic.
+        jx = x + random.randint(-3, 3)
+        jy = y + random.randint(-3, 3)
+
+        try:
+            await page.mouse.click(jx, jy)
+            try:
+                await page.wait_for_load_state("domcontentloaded", timeout=5000)
+            except Exception:
+                pass
+            new_url = page.url
+        except Exception as exc:
+            return ActionResult(
+                ok=False, error=f"click_failed: {exc}",
+                error_class=type(exc).__name__,
+                elapsed_ms=int((time.monotonic() - t0) * 1000),
+            )
+
+        return ActionResult(
+            ok=True,
+            output={
+                "clicked_at": [x, y],
+                "jitter_at": [jx, jy],
+                "description": self.description,
+                "expected_type": self.expected_type,
+                "new_url": new_url,
+            },
+            side_effects=[f"clicked '{self.description}' at ({x}, {y})"],
             elapsed_ms=int((time.monotonic() - t0) * 1000),
         )

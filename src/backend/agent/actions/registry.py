@@ -14,23 +14,25 @@ from pydantic_core import PydanticUndefined
 from ..schemas import RiskLevel
 from .base import Action
 from .bash import BashRun
-from .browser import BrowserExtract, BrowserNavigate
+from .browser import BrowserClickByDescription, BrowserExtract, BrowserNavigate
 from .fs import FsRead, FsWrite
 from .net import NetScan
 from .notify import NotifyDesktop
 from .process import ProcessList
 from .self_introspect import SelfCapability, SelfRecall
 from .time_ import TimeWait
+from .web import WebSearch
 
 _REGISTERED: list[Type[Action]] = [
     FsRead, FsWrite,
     BashRun,
-    BrowserNavigate, BrowserExtract,
+    BrowserNavigate, BrowserExtract, BrowserClickByDescription,
     NetScan,
     ProcessList,
     NotifyDesktop,
     TimeWait,
     SelfCapability, SelfRecall,
+    WebSearch,
 ]
 
 

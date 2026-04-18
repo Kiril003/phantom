@@ -33,3 +33,7 @@ src/frontend/tailwind.config.d.ts
 src/frontend/tailwind.config.js
 src/frontend/vite.config.d.ts
 src/frontend/vite.config.js
+
+# ChromaDB per-collection data dirs (UUID-named); chroma.sqlite3 itself
+# stays tracked because it carries the schema + collection metadata.
+src/backend/chroma_data/*/

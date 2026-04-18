@@ -12,7 +12,8 @@ export type WSChannel =
   | 'map'
   | 'settings'
   | 'oled'
-  | 'face';
+  | 'face'
+  | 'agent.stream';
 
 export interface WSMessage {
   channel: WSChannel;

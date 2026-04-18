@@ -359,6 +359,15 @@ class AIRouter:
                     "success": False,
                     "kind": str(outcome.kind),
                 }
+                kind = outcome.kind
+                # Decide cooling FIRST so the audit row tagged with the
+                # attempt that triggered cooling actually has the flag set.
+                attempt_cools = (
+                    kind == ToolErrorKind.RATE_LIMIT
+                    and tries_for_this_provider > extra_retries
+                ) or kind == ToolErrorKind.PROVIDER_UNAVAILABLE and (
+                    tries_for_this_provider > _TRANSIENT_RETRIES
+                )
                 await write_log(
                     task_id=task_id,
                     step_idx=step_idx,
@@ -366,16 +375,14 @@ class AIRouter:
                     model=outcome.model,
                     tool_name=None,
                     success=False,
-                    error_kind=str(outcome.kind),
+                    error_kind=str(kind),
                     error_message=outcome.message,
                     elapsed_ms=elapsed_ms,
                     retry_count=outcome.parse_attempts,
                     retry_after_s=outcome.retry_after_s,
                     fell_through_to_fallback=is_fallback_attempt,
-                    cooling_triggered=cooling_triggered,
+                    cooling_triggered=attempt_cools,
                 )
-
-                kind = outcome.kind
 
                 # Quota — mark and fall through immediately.
                 if kind == ToolErrorKind.QUOTA_EXHAUSTED:

@@ -380,14 +380,22 @@ class _FakeOk:
 
 
 class _FakeFail:
-    def __init__(self, name="gemini", retriable=True):
+    def __init__(self, name="gemini", retriable=True, kind=None):
         self.name = name
         self.retriable = retriable
+        # Default to NETWORK so the new (Phase 9.2.1) router policy actually
+        # falls through to the secondary provider — semantic kinds like
+        # UNKNOWN_TOOL deliberately stay on the primary because a different
+        # model would just hallucinate a different invalid name.
+        self._kind = kind
 
     async def call_with_tools(self, **_kw):
         from ai.tool_use import ToolErrorKind, ToolUseError
         return ToolUseError(
-            kind=ToolErrorKind.UNKNOWN_TOOL, message="fail",
+            # UNKNOWN reaches the "anything else → fallback" arm of the
+            # Phase 9.2.1 policy WITHOUT triggering inline retries, so
+            # the original two-row audit assertion still holds.
+            kind=self._kind or ToolErrorKind.UNKNOWN, message="fail",
             retriable=self.retriable, provider=self.name,
             model="x", parse_attempts=1,
         )

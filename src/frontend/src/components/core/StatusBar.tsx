@@ -456,6 +456,7 @@ function Resource({
 // Phase 9.2.1 — poll /agent/router_state every 15s. Cheap (single GET, no body)
 // and gives the operator visibility into AI provider cooldowns / quota state.
 import type { RouterStateSnapshot } from '../../services/agentApi';
+import { deriveProviderSummary } from '../../utils/providerSummary';
 
 function useRouterStatePolled(): RouterStateSnapshot | null {
   const [state, setState] = useState<RouterStateSnapshot | null>(null);
@@ -527,51 +528,6 @@ function ProviderBadge({
       )}
     </div>
   );
-}
-
-function deriveProviderSummary(
-  provider: string,
-  rs: RouterStateSnapshot | null,
-): { color: string; label: string; tooltip: string; fallbackArrow: boolean } {
-  if (!rs) {
-    return { color: 'var(--signal-ok)', label: provider, tooltip: provider, fallbackArrow: false };
-  }
-  const primary = rs.primary;
-  const fallback = rs.fallback;
-
-  if (primary in rs.quota_exhausted) {
-    return {
-      color: 'var(--signal-alert)',
-      label: `${primary} · quota`,
-      tooltip: `${primary} quota exhausted until ${rs.quota_exhausted[primary]?.until_utc}`,
-      fallbackArrow: true,
-    };
-  }
-  if (primary in rs.cooling) {
-    const until = rs.cooling[primary]?.until_utc;
-    const reason = rs.cooling[primary]?.reason;
-    const remaining = until ? Math.max(0, Math.round((Date.parse(until) - Date.now()) / 1000)) : 0;
-    return {
-      color: 'var(--signal-warn)',
-      label: `${primary} · cooling ${remaining}s`,
-      tooltip: `${primary} cooling ${remaining}s (${reason})`,
-      fallbackArrow: true,
-    };
-  }
-  if (rs.active && rs.active !== primary && fallback !== 'none') {
-    return {
-      color: 'var(--chart-2)',
-      label: `${rs.active} ←`,
-      tooltip: `Fallback ${rs.active} active; ${primary} primary will be retried.`,
-      fallbackArrow: false,
-    };
-  }
-  return {
-    color: 'var(--signal-ok)',
-    label: provider,
-    tooltip: `${provider} (primary)`,
-    fallbackArrow: false,
-  };
 }
 
 function ConnectivityDot({

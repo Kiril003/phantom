@@ -337,12 +337,35 @@ class AgentRuntime:
         for entry in state.actions_log:
             action_counts[entry["action"]] = action_counts.get(entry["action"], 0) + 1
         key_actions = sorted(action_counts.items(), key=lambda x: -x[1])[:5]
+
+        # Phase 9.2 — compose UA summary via LLM, embed into ChromaDB,
+        # and dual-write the SQL row so legacy lookups still work.
+        episode_summary = summary[:500]
+        with contextlib.suppress(Exception):
+            from .memory.seeds import compose_summary, write_episode
+            last_obs = state.observations[-1].content if state.observations else ""
+            episode_summary = await compose_summary(
+                goal=state.goal,
+                outcome=outcome_kind,
+                action_counts=action_counts,
+                last_observation=last_obs,
+            )
+            duration_s = max(0.0, time.monotonic() - state.started_at)
+            await write_episode(
+                task_id=state.id,
+                goal=state.goal,
+                outcome=outcome_kind,
+                summary=episode_summary,
+                action_counts=action_counts,
+                duration_s=duration_s,
+            )
+
         with contextlib.suppress(Exception):
             await write_memory_seed(
                 task_id=state.id,
                 goal=state.goal,
                 outcome=outcome_kind,
-                summary=summary[:500],
+                summary=episode_summary[:500],
                 key_actions=key_actions,
             )
 

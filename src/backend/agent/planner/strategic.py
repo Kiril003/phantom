@@ -4,6 +4,9 @@ Strategic planner — decomposes a goal into 1..7 SubGoals.
 Called once at task start, plus when the reflector returns
 verdict='revise_strategy'. Output is a StrategicPlan with per-sub-goal
 expected_actions estimates that drive the thought-budget.
+
+Phase 9.2: episodic memory (ChromaDB agent_episodes) injects the top-k
+similar past episodes so the planner can spot repeated goal shapes.
 """
 from __future__ import annotations
 
@@ -17,44 +20,46 @@ logger = logging.getLogger(__name__)
 
 
 _PROMPT = """\
-You are PHANTOM's strategic planner. Decompose the goal into 1-7 sub-goals
-that can each be achieved by a short sequence of actions.
+Ти — стратегічний планувальник PHANTOM. Розділи мету на 1-7 під-цілей,
+кожну з яких можна досягти короткою послідовністю дій.
+
+Я СТВОРЕНИЙ РОЗУМІТИ УКРАЇНСЬКУ ТА АНГЛІЙСЬКУ. Технічні терміни (шляхи файлів,
+назви команд, JSON, URL) зберігай англійською природно.
 
 SELF:
 {self_model_json}
 
-PAST RELEVANT EPISODES (if any):
-{memory_seeds_summary}
+{memory_block}
 
-AVAILABLE ACTION CATEGORIES:
-- filesystem (read/write within ~/phantom/workspace)
-- shell (sandboxed commands via firejail when available)
-- browser (navigate, extract via Playwright chromium)
-- network (ping sweep up to /24, tcp port check)
+ДОСТУПНІ КАТЕГОРІЇ ДІЙ:
+- filesystem (читання/запис у ~/phantom/workspace)
+- shell (sandboxed команди через firejail коли доступний)
+- browser (navigate, extract, click_by_description через Playwright)
+- network (web.search, ping sweep до /24, tcp порти)
 - process (list)
 - notification (desktop)
 - time (wait, ≤ 60s)
-- self (capability check, memory recall — SQL LIKE for now)
+- self (capability check, memory recall — ChromaDB)
 
-GOAL: {goal}
+МЕТА: {goal}
 
 {revise_note}
 
-Output strict JSON:
+Вивід — строгий JSON:
 {{
   "sub_goals": [
     {{
       "description": "...",
-      "rationale": "why this sub-goal advances the main goal",
+      "rationale": "чому ця під-ціль наближає до головної",
       "expected_actions": <int>,
-      "acceptance_criteria": "what observable outcome means this sub-goal is done"
+      "acceptance_criteria": "який спостережуваний результат означає завершення"
     }}
   ],
   "estimated_total_actions": <sum>,
-  "risk_assessment": "brief sentence on max risk involved"
+  "risk_assessment": "коротке речення про максимальний ризик"
 }}
 
-No prose, no markdown fences.
+Без прози. Без markdown.
 """
 
 
@@ -64,9 +69,30 @@ async def plan(
     memory_seeds_summary: str = "",
     revise_note: str = "",
 ) -> StrategicPlan:
+    # Phase 9.2 — pull top-k similar past episodes from ChromaDB.
+    memory_block = ""
+    try:
+        from ..memory.recall import format_episodes_for_prompt, recall
+        episodes = await recall(goal)
+        if episodes:
+            memory_block = (
+                "ПОПЕРЕДНІ СХОЖІ ВИПАДКИ (з пам'яті):\n"
+                + format_episodes_for_prompt(episodes)
+            )
+    except Exception as exc:
+        logger.debug("strategic: episodic recall skipped (%s)", exc)
+
+    # Back-compat — if caller already passed a synthesized summary string
+    # (legacy 9.1 path), surface it alongside the episodic block.
+    if memory_seeds_summary:
+        prefix = (
+            "ОСТАННЄ РЕЗЮМЕ:\n" + memory_seeds_summary.strip()
+        )
+        memory_block = (memory_block + "\n\n" + prefix).strip() if memory_block else prefix
+
     prompt = _PROMPT.format(
         self_model_json=json.dumps(self_model.model_dump(mode="json"), ensure_ascii=False),
-        memory_seeds_summary=memory_seeds_summary or "(none)",
+        memory_block=memory_block or "(пам'ять порожня)",
         goal=goal,
         revise_note=("REVISION NOTE:\n" + revise_note) if revise_note else "",
     )

@@ -15,6 +15,23 @@ _URL_RE = re.compile(r"https?://[^\s\"'<>]+")
 _PATH_RE = re.compile(r"(?:/|~/)[^\s\"'<>]+")
 _IP_RE = re.compile(r"\b(?:\d{1,3}\.){3}\d{1,3}\b")
 
+# Phase 9.2.1 — markers that mean "the action picked an element/locator that
+# wasn't on the page". Ranking them as a class lets the tactical prompt
+# bias toward grounded interaction (browser.click_by_description) instead
+# of guessing another CSS selector against a page it doesn't know.
+_SELECTOR_MISS_MARKERS = (
+    "selector_no_match",
+    "element_not_found",
+    "no_such_element",
+    "stale_element",
+)
+
+_SELECTOR_HINT_TEXT = (
+    "(Hint: CSS selector did not match. Consider browser.click_by_description "
+    "with a semantic description of the target, or try a different selector "
+    "pattern.)"
+)
+
 
 def _truncate(text: str, limit: int = 500) -> str:
     if len(text) <= limit:
@@ -63,16 +80,29 @@ def _extract_entities(step: PlanStep, result: ActionResult) -> list[str]:
     return out
 
 
+def _is_selector_miss(result: ActionResult) -> bool:
+    err_text = (result.error or "") + " " + (result.error_class or "")
+    err_text = err_text.lower()
+    return any(marker in err_text for marker in _SELECTOR_MISS_MARKERS)
+
+
 def build_from_action_result(step: PlanStep, result: ActionResult) -> Observation:
     obs_type = "result" if result.ok else "error"
     confidence = step.monologue.confidence if result.ok else 0.3
+    entities = _extract_entities(step, result)
+    content = _summarize(step, result)
+    if (not result.ok) and _is_selector_miss(result):
+        # Tag for downstream prompt bias and append a trailer the planner sees verbatim.
+        if "hint:selector_failed" not in entities:
+            entities = [*entities, "hint:selector_failed"]
+        content = _truncate(f"{content}\n{_SELECTOR_HINT_TEXT}")
     return Observation(
         step_idx=step.step_idx,
         type=obs_type,
         source=step.action,
-        content=_summarize(step, result),
+        content=content,
         confidence=confidence,
-        entities=_extract_entities(step, result),
+        entities=entities,
         ts=datetime.now(tz=timezone.utc),
     )
 

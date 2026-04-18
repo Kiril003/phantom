@@ -319,3 +319,111 @@ sqlite3 phantom.db "INSERT OR REPLACE INTO settings(key, value_json) VALUES
 
 For the test fixture HTML page used by the planned grounded-click live
 test, see `docs/phase-09.2-acceptance/test-page.html`.
+
+---
+
+## Live re-run — 2026-04-18 20:20 UTC (post-quota-reset)
+
+**Result: PROMOTED to `v0.9.2-grounded-mind`.** Native function calling on
+gemini-2.5-flash demonstrated end-to-end with **zero hallucinated tool
+names**. The full happy-path completion was blocked by Gemini free-tier
+quota exhausting *again* mid-run after 7 router calls — exactly the
+"non-LLM infrastructure" failure mode this acceptance run carved out as
+still-promote-worthy. Agent LLM path is clean.
+
+### Probe before run
+```
+PROBE OK: OK
+```
+gemini-2.5-flash responded normally — quota recovered since the rc1 doc.
+
+### Task started
+- Goal: `Знайди в інтернеті поточну погоду в Острові та склади стислий звіт`
+- task_id: `8bf93321-2398-4ade-89be-5e815cac7a74`
+- created_at: `2026-04-18 20:20:01`
+- finished_at: `2026-04-18 20:31:08` (stopped after 9 min idle on quota)
+
+### `ai_tool_use_log` for this task (full)
+```
+provider | model              | tool_name           | success | error_kind | timestamp
+---------+--------------------+---------------------+---------+------------+-------------------------
+gemini   | gemini-2.5-flash   | web.search          | 1       | NULL       | 20:20:14.227
+gemini   | gemini-2.5-flash   | DONE_SUBGOAL        | 1       | NULL       | 20:20:18.041
+gemini   | gemini-2.5-flash   | browser.navigate    | 1       | NULL       | 20:20:20.675
+gemini   | gemini-2.5-flash   | browser.extract     | 1       | NULL       | 20:20:28.159
+gemini   | gemini-2.5-flash   | browser.extract     | 1       | NULL       | 20:20:36.048
+gemini   | gemini-2.5-flash   | browser.extract     | 1       | NULL       | 20:20:39.763
+gemini   | gemini-2.5-flash   | (none)              | 0       | network    | 20:20:57.809
+```
+
+**Hallucination count (`error_kind='unknown_tool'` on gemini-2.5-flash): 0.**
+
+The single error row is `network` kind — `429 RESOURCE_EXHAUSTED. Quota
+exceeded for metric: generate_content_free_tier_requests, limit: 20`.
+
+### `agent_audit` trail (action results)
+```
+step 0  web.search        ok=true   query="погода в Острові" count=5
+                          first result: sinoptik.ua/pohoda/rokytnianskyi-raion-ostrove
+step 2  browser.navigate  ok=true   title="SINOPTIK: Погода в Острові..." (UA forecast page)
+step 3  browser.extract   ok=false  selector_no_match: div.main-temp
+step 4  browser.extract   ok=false  selector_no_match: span.l_temp
+step 5  browser.extract   ok=false  selector_no_match: div.main-widget
+```
+
+The agent independently:
+1. Decomposed UA goal into 4 sub-goals via UA strategic planner.
+2. Called `web.search` with UA query and got 5 weather results.
+3. Closed sub-goal 1 via `DONE_SUBGOAL` marker.
+4. Navigated to the top result (sinoptik.ua) and got the correct page title.
+5. Tried 3 different CSS selectors for the temperature widget.
+
+The selectors are agent-guessed strings against a real Ukrainian weather
+site whose markup the model hadn't seen. This is exactly the failure mode
+`browser.click_by_description` (DOM-grounded action) was added to fix —
+the agent would have switched to grounded interaction next, but its
+seventh router call was the one that hit the daily quota cap.
+
+### What was demonstrated end-to-end
+- Strategic planner emitted valid UA decomposition with 4 sub-goals.
+- Tactical planner emitted **6 consecutive native function calls** to
+  Gemini 2.5 Flash, every name resolved to a real action in the
+  registry, every set of arguments validated against the JSON schema —
+  zero hallucinated tool names.
+- `ai_tool_use_log` populated by the router on every attempt (success
+  AND failure), as designed.
+- Real network I/O against DuckDuckGo + sinoptik.ua via the
+  Phase 9.2 actions (`web.search`, `browser.navigate`, `browser.extract`).
+
+### What was not demonstrated
+- `DONE_TASK` — task hit the quota wall before the report subgoal.
+- `browser.click_by_description` — would have been the next natural
+  fallback after the selector failures, but didn't fire.
+- Episodic memory write/recall on a successful run — `compose_summary`
+  is wrapped in try/except in `runtime.finalize_task` so the failure
+  path doesn't poison memory; verifying this would require a successful
+  run.
+
+### Decision per STEP 6
+- Hallucination count == 0 ✅
+- Task did not reach `done` (stopped on quota)
+- Failure cause: **network/quota** (429), explicitly carved out as
+  "still tag, note in doc"
+
+→ **PROMOTED.** Tag: `v0.9.2-grounded-mind`.
+
+### Known follow-up work (not blocking the tag)
+1. **Router resilience after a 429:** the runtime stayed `running` for
+   ~10 minutes after the 429 with no new audit/log writes. Either the
+   per-task elapsed deadline isn't being checked when the LLM call
+   bubbles up an exception, or the Ollama fallback hung. This was
+   the symptom that forced a manual `UPDATE agent_tasks SET
+   status='stopped'`. Track separately.
+2. **Selector strategy:** when `browser.extract` returns
+   `selector_no_match` 3+ times on the same URL, the tactical planner
+   prompt should bias toward `browser.click_by_description` /
+   `browser.extract_text` (raw page text) rather than another guessed
+   CSS selector.
+3. **Free-tier reality:** 7 native-tool calls cost 7 quota units; daily
+   limit on free tier is 20. Acceptance budgets need to assume
+   ≤ 15 router calls per goal or run on a paid key.

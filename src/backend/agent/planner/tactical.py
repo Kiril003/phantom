@@ -64,6 +64,16 @@ If sub-goal is complete: action="DONE_SUBGOAL", args={{"summary": "<what was ach
 If sub-goal is impossible or unsafe: action="DONE_SUBGOAL", args={{"summary": "<why abandoning>"}}.
 If the whole task is complete: action="DONE_TASK", args={{"summary": "<overall outcome>"}}.
 
+CRITICAL: For sub-goals whose purpose is to *summarize*, *present*, *explain*,
+*report*, *respond*, *describe*, or *answer the user* — there is NO action
+named respond_text / summarize / present / answer. You MUST use DONE_SUBGOAL
+(or DONE_TASK if it ends the task) with the prose answer inside
+args.summary. The summary string IS the answer the user sees.
+
+CRITICAL: Only use action names from the AVAILABLE ACTIONS catalog above OR
+the special DONE_SUBGOAL / DONE_TASK / REFLECT markers. Inventing other
+names will fail with unknown_action.
+
 No prose outside JSON, no markdown fences.
 """
 

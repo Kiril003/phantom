@@ -50,9 +50,16 @@ async def execute(
     risk_level = int(cls.risk_level) if cls else int(RiskLevel.SAFE)
 
     if cls is None:
+        valid = ", ".join(sorted(reg.names()))
         result = ActionResult(
             ok=False,
-            error=f"unknown_action: {step.action}",
+            error=(
+                f"unknown_action: '{step.action}' is NOT in the catalog. "
+                f"Valid action names are exactly: {valid}. "
+                f"For summarize/present/explain/respond sub-goals you MUST use "
+                f"DONE_SUBGOAL or DONE_TASK with the answer text in args.summary "
+                f"— there is no respond_text / summarize / answer action."
+            ),
             error_class="unknown_action",
             elapsed_ms=0,
         )

@@ -55,7 +55,7 @@ export default function PinPad({
               key={i}
               animate={{
                 scale: filled ? 1 : 0.9,
-                background: filled ? 'var(--accent)' : 'transparent',
+                background: filled ? 'var(--accent)' : 'var(--accent-fade)',
                 borderColor: filled || active ? 'var(--accent)' : 'var(--glass-border)',
                 boxShadow: filled
                   ? '0 0 12px var(--accent-glow), inset 0 0 0 1px var(--glass-highlight)'

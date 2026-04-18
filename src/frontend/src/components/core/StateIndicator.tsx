@@ -9,6 +9,7 @@ import {
   ShieldAlert,
   Ghost,
   Moon,
+  Cpu,
 } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
@@ -48,6 +49,11 @@ const STATE_VISUALS: Record<SystemState, StateVisual> = {
     icon: Moon,
     label: 'DREAM',
     description: 'Night mode',
+  },
+  [SystemState.OPERATOR]: {
+    icon: Cpu,
+    label: 'OPERATOR',
+    description: 'Agent task in flight',
   },
 };
 

@@ -27,6 +27,7 @@ const STATE_LABELS: Record<SystemState, string> = {
   [SystemState.SENTINEL]: 'Sentinel',
   [SystemState.GHOST]: 'Ghost',
   [SystemState.DREAM]: 'Dream',
+  [SystemState.OPERATOR]: 'Operator',
 };
 
 /**

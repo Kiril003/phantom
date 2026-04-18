@@ -16,6 +16,7 @@ const DialogueLayout = React.lazy(() => import('../layouts/DialogueLayout'));
 const SentinelLayout = React.lazy(() => import('../layouts/SentinelLayout'));
 const GhostLayout = React.lazy(() => import('../layouts/GhostLayout'));
 const DreamLayout = React.lazy(() => import('../layouts/DreamLayout'));
+const OperatorLayout = React.lazy(() => import('../layouts/OperatorLayout'));
 const LoginScreen = React.lazy(() => import('../components/auth/LoginScreen'));
 const SettingsPanel = React.lazy(() => import('../components/settings/SettingsPanel'));
 const MapLayout = React.lazy(() => import('../layouts/MapLayout'));
@@ -29,6 +30,7 @@ const LAYOUT_MAP: Record<SystemState, React.LazyExoticComponent<() => React.JSX.
   [SystemState.SENTINEL]: SentinelLayout,
   [SystemState.GHOST]: GhostLayout,
   [SystemState.DREAM]: DreamLayout,
+  [SystemState.OPERATOR]: OperatorLayout,
 };
 
 function StateRouter() {

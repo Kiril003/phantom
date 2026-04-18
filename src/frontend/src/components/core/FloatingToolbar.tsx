@@ -15,6 +15,7 @@ import {
   Camera,
   Wifi,
   Power,
+  Cpu,
 } from 'lucide-react';
 import { useSystemStore } from '../../stores/systemStore';
 import { useAuthStore } from '../../stores/authStore';
@@ -95,6 +96,13 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
     if (state === SystemState.GHOST) toolbarTransition(previousState ?? SystemState.SHADOW);
     else toolbarTransition(SystemState.GHOST);
   };
+  const goOperator = () => {
+    // OPERATOR layout shows the AgentPanel; if no task is active the panel
+    // exposes the goal input. Pressing again exits if currently OPERATOR.
+    if (location.pathname !== '/') navigate('/');
+    if (state === SystemState.OPERATOR) toolbarTransition(previousState ?? SystemState.SHADOW);
+    else toolbarTransition(SystemState.OPERATOR);
+  };
   const signOut = () => {
     clearAuth();
     setAuthenticated(false);
@@ -146,6 +154,16 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
   ];
 
   const secondary: ToolbarAction[] = [
+    {
+      id: 'agent',
+      icon: <Cpu size={16} strokeWidth={1.75} />,
+      label: 'Agent',
+      active: state === SystemState.OPERATOR,
+      onClick: () => {
+        goOperator();
+        setMoreMenuOpen(false);
+      },
+    },
     {
       id: 'terminal',
       icon: <Terminal size={16} strokeWidth={1.75} />,

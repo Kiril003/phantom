@@ -92,9 +92,9 @@ describe('State transition sequences', () => {
 });
 
 describe('SystemState enum completeness', () => {
-  it('has exactly 6 states', () => {
+  it('has exactly 7 states', () => {
     const states = Object.values(SystemState);
-    expect(states).toHaveLength(6);
+    expect(states).toHaveLength(7);
   });
 
   it('contains all required states', () => {
@@ -104,5 +104,6 @@ describe('SystemState enum completeness', () => {
     expect(SystemState.SENTINEL).toBe('SENTINEL');
     expect(SystemState.GHOST).toBe('GHOST');
     expect(SystemState.DREAM).toBe('DREAM');
+    expect(SystemState.OPERATOR).toBe('OPERATOR');
   });
 });

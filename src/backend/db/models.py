@@ -277,3 +277,73 @@ class GhostRecord(Base):
     session_id: Mapped[str] = mapped_column(String(36), nullable=False)
     size_bytes: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+# ── Agent — Phase 9.1 Cognitive Seed ──────────────────────────────────────────
+
+class AgentTask(Base):
+    __tablename__ = "agent_tasks"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    goal: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="planning")
+    track: Mapped[str] = mapped_column(String(16), nullable=False, default="foreground")
+    sub_goals_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    observations_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    self_model_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    thought_budget_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    paused_reason: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, index=True)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
+class AgentAuditEntry(Base):
+    __tablename__ = "agent_audit"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    task_id: Mapped[str] = mapped_column(String(36), index=True, nullable=False)
+    step_idx: Mapped[int] = mapped_column(Integer, nullable=False)
+    sub_goal_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    action_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    args_json: Mapped[str] = mapped_column(Text, default="{}")
+    intent: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    monologue_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    result_json: Mapped[str] = mapped_column(Text, default="{}")
+    risk_level: Mapped[int] = mapped_column(Integer, default=1)
+    elapsed_ms: Mapped[int] = mapped_column(Integer, default=0)
+    retried_from: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=_now, index=True)
+
+
+class AgentCheckpoint(Base):
+    __tablename__ = "agent_checkpoints"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    task_id: Mapped[str] = mapped_column(String(36), index=True, nullable=False)
+    reason: Mapped[str] = mapped_column(String(32), nullable=False)
+    payload_json: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+class AgentMemorySeed(Base):
+    """Bridge to future episodic memory — SQL LIKE search this phase, ChromaDB later."""
+    __tablename__ = "agent_memory_seeds"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    task_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    goal: Mapped[str] = mapped_column(Text, nullable=False)
+    outcome: Mapped[str] = mapped_column(String(16), nullable=False)
+    summary: Mapped[str] = mapped_column(Text, nullable=False)
+    key_actions: Mapped[str] = mapped_column(Text, default="[]")
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, index=True)
+
+
+class AgentFeedback(Base):
+    __tablename__ = "agent_feedback"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    audit_entry_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
+    rating: Mapped[str] = mapped_column(String(16), nullable=False)  # up | down | comment
+    comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)

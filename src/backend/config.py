@@ -166,6 +166,22 @@ class PhantomConfig(BaseSettings):
     oled_brightness: int = 200          # 0-255 UI preview dimming
     oled_frame_hz: int = 30
 
+    # ── Agent (Phase 9.1 Cognitive Seed) ─────────────────────────────────────
+    agent_enabled: bool = True
+    agent_risk_tolerance: int = 5            # caps executable actions: 1/3/5/7
+    agent_workspace_dir: str = "~/phantom/workspace"
+    agent_max_actions_per_task: int = 20
+    agent_max_elapsed_s_per_task: int = 600
+    agent_max_elapsed_s_per_action: int = 120
+    agent_max_consecutive_identical_errors: int = 3
+    agent_reflection_every_n_actions: int = 5
+    agent_thought_budget_force_reflect_ratio: float = 2.0
+    agent_strategic_warn_actions: int = 30
+    agent_browser_user_agent: str = (
+        "Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 "
+        "(KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36"
+    )
+
     # ── System ────────────────────────────────────────────────────────────────
     system_hostname: str = "phantom"
     system_sensor_log_retention_days: int = 7

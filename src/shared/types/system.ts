@@ -5,6 +5,7 @@ export enum SystemState {
   SENTINEL = 'SENTINEL',
   GHOST = 'GHOST',
   DREAM = 'DREAM',
+  OPERATOR = 'OPERATOR',
 }
 
 export interface StateTransition {

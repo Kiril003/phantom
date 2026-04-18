@@ -27,3 +27,9 @@ ghost_*.enc
 Thumbs.db
 *.log
 .claude/worktrees/
+.omc/
+*.tsbuildinfo
+src/frontend/tailwind.config.d.ts
+src/frontend/tailwind.config.js
+src/frontend/vite.config.d.ts
+src/frontend/vite.config.js

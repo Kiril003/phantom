@@ -61,7 +61,25 @@ def mock_llm(monkeypatch):
         return queue.pop(0)
 
     from agent.planner import _llm
+    from agent.memory import recall as _recall_mod
+    from agent.memory import seeds as _seeds
+    from config import config as _cfg
     monkeypatch.setattr(_llm, "_call", fake_call)
+    # Phase 9.2: force legacy free-form JSON path so the scripted queue actually
+    # gets consumed (native tool-calling routes through ai_router instead).
+    monkeypatch.setattr(_cfg, "agent_use_native_tool_calling", False)
+
+    # Phase 9.2: stub compose_summary + recall + write_episode so the loop
+    # never touches real ChromaDB / ai_router during these legacy tests.
+    async def _stub_summary(**kw):
+        return f"stub summary for {kw.get('goal','?')}: {kw.get('outcome','?')}"
+    async def _stub_recall(query, k=None):
+        return []
+    async def _stub_write_episode(**kw):
+        return ""
+    monkeypatch.setattr(_seeds, "compose_summary", _stub_summary)
+    monkeypatch.setattr(_recall_mod, "recall", _stub_recall)
+    monkeypatch.setattr(_seeds, "write_episode", _stub_write_episode)
     return queue
 
 

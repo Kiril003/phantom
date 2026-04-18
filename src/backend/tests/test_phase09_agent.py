@@ -275,7 +275,11 @@ class TestPreconditions:
 
 @pytest.fixture
 def mock_llm(monkeypatch):
-    """Patch agent.planner._llm._call with a scripted queue."""
+    """Patch agent.planner._llm._call with a scripted queue.
+
+    Also flips off Phase 9.2 native tool-calling so tactical exercises the
+    legacy free-form JSON path (which is what these tests script).
+    """
     queue: list[str] = []
 
     async def fake_call(prompt: str) -> str:
@@ -284,7 +288,9 @@ def mock_llm(monkeypatch):
         return queue.pop(0)
 
     from agent.planner import _llm
+    from config import config as _cfg
     monkeypatch.setattr(_llm, "_call", fake_call)
+    monkeypatch.setattr(_cfg, "agent_use_native_tool_calling", False)
     return queue
 
 

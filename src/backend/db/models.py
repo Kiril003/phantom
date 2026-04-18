@@ -367,4 +367,12 @@ class AiToolUseLog(Base):
     error_message: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     elapsed_ms: Mapped[int] = mapped_column(Integer, default=0)
     retry_count: Mapped[int] = mapped_column(Integer, default=1)
+    # Phase 9.2.1 — resilience telemetry. retry_after_s captures the
+    # Retry-After hint Google returns on 429s; fell_through_to_fallback marks
+    # rows produced by the fallback provider after primary was exhausted;
+    # cooling_triggered marks rows where the router put the provider into
+    # cooldown immediately after this attempt.
+    retry_after_s: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    fell_through_to_fallback: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    cooling_triggered: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     timestamp: Mapped[datetime] = mapped_column(DateTime, default=_now, index=True)

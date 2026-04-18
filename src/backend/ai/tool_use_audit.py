@@ -28,6 +28,9 @@ async def write_log(
     error_message: str | None,
     elapsed_ms: int,
     retry_count: int,
+    retry_after_s: float | None = None,
+    fell_through_to_fallback: bool = False,
+    cooling_triggered: bool = False,
 ) -> int | None:
     """Persist one tool-use attempt. Returns row id or None on failure."""
     try:
@@ -43,6 +46,9 @@ async def write_log(
                 error_message=(error_message or "")[:1000] if error_message else None,
                 elapsed_ms=int(elapsed_ms),
                 retry_count=int(retry_count),
+                retry_after_s=retry_after_s,
+                fell_through_to_fallback=bool(fell_through_to_fallback),
+                cooling_triggered=bool(cooling_triggered),
             )
             db.add(row)
             await db.flush()

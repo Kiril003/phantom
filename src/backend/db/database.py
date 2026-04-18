@@ -36,10 +36,14 @@ AsyncSessionLocal = async_sessionmaker(
 
 
 async def init_db() -> None:
-    """Create all tables on first startup."""
+    """Create all tables on first startup, then apply numbered migrations."""
     async with engine.begin() as conn:
         from db import models  # noqa: F401 — registers models with Base
         await conn.run_sync(Base.metadata.create_all)
+
+    # Phase 9.2.1 — pending column-add migrations. Idempotent; safe on fresh DBs.
+    from db.migrations import apply_pending
+    await apply_pending(engine)
 
 
 async def close_db() -> None:

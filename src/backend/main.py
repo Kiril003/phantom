@@ -196,6 +196,29 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except Exception as exc:
             logger.error("Agent startup hook failed: %s", exc)
 
+    # Phase 09.2 — episodic memory backfill (only when ChromaDB is behind)
+    if config.agent_enabled and config.agent_episodic_memory_enabled:
+        try:
+            from agent.memory.backfill import backfill_if_behind
+            stats = await backfill_if_behind()
+            if stats:
+                logger.info(
+                    "Episodic memory: backfilled %d/%d seeds (skipped %d)",
+                    stats["written"], stats["seeds_total"], stats["skipped"],
+                )
+        except Exception as exc:
+            logger.warning("Episodic memory backfill skipped: %s", exc)
+
+    # Phase 09.2 — MCP discovery (no servers active by default)
+    if config.agent_enabled and config.agent_mcp_servers:
+        try:
+            from agent.mcp.discovery import discover_all
+            counts = await discover_all()
+            for sn, n in counts.items():
+                logger.info("MCP %s: %d tools registered", sn, n)
+        except Exception as exc:
+            logger.warning("MCP discovery skipped: %s", exc)
+
     yield
 
     loop_task.cancel()
@@ -216,6 +239,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             await mark_orphans_paused("uvicorn_shutdown")
         except Exception as exc:
             logger.warning("Agent shutdown hook failed: %s", exc)
+
+    # Phase 09.2 — close any active MCP clients
+    if config.agent_enabled and config.agent_mcp_servers:
+        try:
+            from agent.mcp.discovery import shutdown_all as mcp_shutdown
+            await mcp_shutdown()
+        except Exception as exc:
+            logger.debug("MCP shutdown raised: %s", exc)
 
     if config.serial_enabled:
         from sensors.serial_bridge import serial_bridge

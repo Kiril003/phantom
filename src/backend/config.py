@@ -60,6 +60,10 @@ class PhantomConfig(BaseSettings):
     ai_streaming: bool = True
     # Phase 9.2 — total retries across primary+fallback for tool-use calls.
     ai_tool_use_max_total_retries: int = 5
+    # Phase 9.2.1 — minimum interval between successive LLM calls per provider.
+    # 3000ms keeps us well under Gemini 2.5-flash free-tier 10 RPM ceiling
+    # while still letting paid-tier deployments raise it via settings.
+    ai_call_min_interval_ms: int = 3000
 
     # Chat (Phase 5) — WS stream emission cadence
     chat_stream_chunk_chars: int = 24
@@ -176,6 +180,10 @@ class PhantomConfig(BaseSettings):
     agent_max_elapsed_s_per_task: int = 600
     agent_max_elapsed_s_per_action: int = 120
     agent_max_consecutive_identical_errors: int = 3
+    # Phase 9.2.1 — per-task LLM-call budget. Hard cap fails the task; warn
+    # threshold emits a WS event so UIs can show the user before exhaustion.
+    agent_max_llm_calls_per_task: int = 50
+    agent_warn_llm_calls_per_task: int = 30
     agent_reflection_every_n_actions: int = 5
     agent_thought_budget_force_reflect_ratio: float = 2.0
     agent_strategic_warn_actions: int = 30

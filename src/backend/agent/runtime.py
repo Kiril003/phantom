@@ -69,6 +69,10 @@ class TaskState:
     paused_reason: str | None = None
     error: str | None = None
     actions_log: list[dict[str, Any]] = field(default_factory=list)
+    # Phase 9.2.1 — per-task LLM call counter (incremented by AIRouter via
+    # the runtime callback in agent_runtime.note_llm_call).
+    llm_calls_this_task: int = 0
+    llm_call_warned: bool = False
 
 
 def expanded_workspace() -> str:
@@ -209,6 +213,35 @@ class AgentRuntime:
             # asyncio.wait_for, but for cooperative cancel we rely on the
             # action checking emergency_stop / cancel_step flags.
             pass
+        return True
+
+    async def note_llm_call(self, task_id: str | None) -> bool:
+        """
+        Phase 9.2.1 — invoked by AIRouter on every successful or attempted
+        tool-use / generate call. Returns False once the per-task hard cap
+        has been hit so callers can short-circuit; True otherwise.
+
+        Emits one agent.budget.warning WS event when the soft warn threshold
+        is first crossed (latched via TaskState.llm_call_warned).
+        """
+        if not task_id or self.foreground_slot is None or self.foreground_slot.id != task_id:
+            return True
+        state = self.foreground_slot
+        state.llm_calls_this_task += 1
+        warn_at = int(getattr(config, "agent_warn_llm_calls_per_task", 30) or 30)
+        cap_at = int(getattr(config, "agent_max_llm_calls_per_task", 50) or 50)
+
+        if state.llm_calls_this_task >= warn_at and not state.llm_call_warned:
+            state.llm_call_warned = True
+            await self._broadcast("agent.budget.warning", {
+                "task_id": state.id,
+                "llm_calls_used": state.llm_calls_this_task,
+                "warn_at": warn_at,
+                "cap_at": cap_at,
+            })
+
+        if state.llm_calls_this_task >= cap_at:
+            return False
         return True
 
     async def enter_blocked_quota(self, state: TaskState, reason: str) -> bool:

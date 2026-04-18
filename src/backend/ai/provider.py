@@ -269,6 +269,24 @@ class AIRouter:
             if self._is_provider_available(fallback_name):
                 sequence.append(fallback_name)
 
+        # Per-task call-budget guard. Runtime is asked once per outer
+        # call_with_tools (NOT per inner retry) — retries inside one logical
+        # planner call shouldn't multiply the budget cost. Returns False when
+        # the hard cap has been hit; we surface that as an UNKNOWN error
+        # carrying error_kind='call_budget_exhausted' for audit clarity.
+        if not await _runtime_note_llm_call(task_id):
+            return ToolUseError(
+                kind=ToolErrorKind.UNKNOWN,
+                message=(
+                    f"call_budget_exhausted: per-task LLM-call cap "
+                    f"({config.agent_max_llm_calls_per_task}) reached"
+                ),
+                retriable=False,
+                provider="router",
+                model="",
+                parse_attempts=0,
+            )
+
         last_error: ToolUseError | None = None
         fell_through = False
 
@@ -516,6 +534,25 @@ class AIRouter:
             context_engine.set_ai_provider(provider_name)
         except Exception as exc:
             logger.debug("_sync_context: could not update context engine: %s", exc)
+
+
+async def _runtime_note_llm_call(task_id: str | None) -> bool:
+    """
+    Phase 9.2.1 — bridge to AgentRuntime.note_llm_call without importing
+    runtime at module load (would create an import cycle: ai.provider ←
+    agent.planner.tactical ← agent.loop ← agent.runtime).
+
+    Returns True when no task is active or budget has room; False when the
+    runtime has decided this task is over-budget.
+    """
+    if not task_id:
+        return True
+    try:
+        from agent.runtime import agent_runtime
+        return await agent_runtime.note_llm_call(task_id)
+    except Exception as exc:  # pragma: no cover — never block the call path
+        logger.debug("_runtime_note_llm_call failed (allowing through): %s", exc)
+        return True
 
 
 def _utc_now_iso() -> str:

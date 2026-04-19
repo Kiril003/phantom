@@ -268,7 +268,9 @@ class AgentRuntime:
         state.status = "blocked_quota"
         state.paused_reason = reason[:128]
         await update_task_status(state.id, "blocked_quota", paused_reason=state.paused_reason)
-        await self.set_substate("waiting_user")
+        # Phase 9.2.3 (F-14): distinct substate so the operator can tell
+        # "parked on quota exhaustion" apart from "waiting for human input".
+        await self.set_substate("blocked_quota")
         base_interval = float(getattr(config, "agent_blocked_quota_probe_s", 60) or 60)
         max_interval = float(getattr(config, "agent_blocked_quota_probe_max_s", 600) or 600)
         await self._broadcast("task.blocked_quota", {

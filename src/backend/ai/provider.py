@@ -142,6 +142,10 @@ class AIRouter:
         tool-use path.
         """
         if not await _runtime_note_llm_call(task_id):
+            # Phase 9.2.3 (F-15): audit row mirrors the call_with_tools path
+            # so the ai_tool_use_log consistently records budget exhaustion
+            # regardless of which entry point was used.
+            await _write_budget_exhausted_audit(task_id, caller="generate")
             raise RuntimeError(
                 f"call_budget_exhausted: per-task LLM-call cap "
                 f"({config.agent_max_llm_calls_per_task}) reached"
@@ -265,6 +269,8 @@ class AIRouter:
         quota-exhausted so the loop can park the task.
         """
         if not await _runtime_note_llm_call(task_id):
+            # Phase 9.2.3 (F-15): audit row for the stream entry point too.
+            await _write_budget_exhausted_audit(task_id, caller="generate_stream")
             raise RuntimeError(
                 f"call_budget_exhausted: per-task LLM-call cap "
                 f"({config.agent_max_llm_calls_per_task}) reached"
@@ -427,6 +433,30 @@ class AIRouter:
         # the hard cap has been hit; we surface that as an UNKNOWN error
         # carrying error_kind='call_budget_exhausted' for audit clarity.
         if not await _runtime_note_llm_call(task_id):
+            # Phase 9.2.3 (F-15): write a router-side audit row so the
+            # ai_tool_use_log reflects that the task was capped. Without this,
+            # inspecting the log after a runaway task shows NO ROW for the
+            # stop reason — only the tactical_failed observation further
+            # upstream. An explicit row here makes the cause obvious.
+            with contextlib.suppress(Exception):
+                await write_log(
+                    task_id=task_id,
+                    step_idx=step_idx,
+                    provider="router",
+                    model="",
+                    tool_name=None,
+                    success=False,
+                    error_kind="call_budget_exhausted",
+                    error_message=(
+                        f"per-task LLM-call cap "
+                        f"({config.agent_max_llm_calls_per_task}) reached"
+                    ),
+                    elapsed_ms=0,
+                    retry_count=0,
+                    retry_after_s=None,
+                    fell_through_to_fallback=False,
+                    cooling_triggered=False,
+                )
             return ToolUseError(
                 kind=ToolErrorKind.UNKNOWN,
                 message=(
@@ -752,6 +782,34 @@ def _classify_provider_exception(provider_name: str, exc: Exception):
     if isinstance(exc, asyncio.TimeoutError):
         return ToolErrorKind.TIMEOUT, True, None
     return ToolErrorKind.NETWORK, True, None
+
+
+async def _write_budget_exhausted_audit(task_id: str | None, *, caller: str) -> None:
+    """Phase 9.2.3 (F-15) — shared audit sink for call-budget-exhausted so
+    both generate() / generate_stream() and call_with_tools record a uniform
+    router-side row before raising / returning. Always suppress failures —
+    inability to audit should never block the cap itself.
+    """
+    with contextlib.suppress(Exception):
+        from ai.tool_use_audit import write_log
+        await write_log(
+            task_id=task_id,
+            step_idx=None,
+            provider="router",
+            model="",
+            tool_name=None,
+            success=False,
+            error_kind="call_budget_exhausted",
+            error_message=(
+                f"{caller}: per-task LLM-call cap "
+                f"({config.agent_max_llm_calls_per_task}) reached"
+            ),
+            elapsed_ms=0,
+            retry_count=0,
+            retry_after_s=None,
+            fell_through_to_fallback=False,
+            cooling_triggered=False,
+        )
 
 
 async def _runtime_note_llm_call(task_id: str | None) -> bool:

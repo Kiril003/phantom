@@ -509,8 +509,29 @@ async def run_task_loop(runtime: "AgentRuntime", state: "TaskState", *, resumed:
                         f"Reply with intervene 'approve' or 'reject'."
                     ),
                 })
-                # Wait for an intervention
-                inter = await runtime.controls.intervention_queue.get()
+                # Wait for an intervention — Phase 9.2.3 (F-17) bounded so the
+                # task doesn't hang forever if the operator walks away.
+                consent_timeout = float(getattr(config, "agent_user_consent_timeout_s", 300) or 300)
+                try:
+                    inter = await asyncio.wait_for(
+                        runtime.controls.intervention_queue.get(),
+                        timeout=consent_timeout,
+                    )
+                except asyncio.TimeoutError:
+                    state.observations.append(build_system(
+                        state.step_idx, "consent_timeout",
+                        f"user did not respond within {int(consent_timeout)}s; "
+                        f"rejecting risky action {step.action}",
+                    ))
+                    await runtime._broadcast("warning.issued", {
+                        "task_id": state.id,
+                        "category": "consent_timeout",
+                        "message": f"consent request for {step.action} timed out",
+                    })
+                    state.status = "running"
+                    await update_task_status(state.id, "running")
+                    state.step_idx += 1
+                    continue
                 state.observations.append(build_user(state.step_idx, inter))
                 approved = inter.strip().lower() in {"approve", "yes", "ok", "approved"}
                 if not approved:
@@ -599,8 +620,26 @@ async def run_task_loop(runtime: "AgentRuntime", state: "TaskState", *, resumed:
                     await runtime._broadcast("task.waiting_user", {
                         "task_id": state.id, "prompt_to_user": str(result.error),
                     })
-                    inter = await runtime.controls.intervention_queue.get()
-                    state.observations.append(build_user(state.step_idx, inter))
+                    # Phase 9.2.3 (F-17): bounded wait — timing out surfaces a
+                    # system observation and returns the loop to running so
+                    # the planner can choose an alternative rather than hang.
+                    consent_timeout = float(getattr(config, "agent_user_consent_timeout_s", 300) or 300)
+                    try:
+                        inter = await asyncio.wait_for(
+                            runtime.controls.intervention_queue.get(),
+                            timeout=consent_timeout,
+                        )
+                        state.observations.append(build_user(state.step_idx, inter))
+                    except asyncio.TimeoutError:
+                        state.observations.append(build_system(
+                            state.step_idx, "consent_timeout",
+                            f"precondition ask_user timed out after {int(consent_timeout)}s",
+                        ))
+                        await runtime._broadcast("warning.issued", {
+                            "task_id": state.id,
+                            "category": "consent_timeout",
+                            "message": "ask_user precondition timed out",
+                        })
                     state.status = "running"
                     await update_task_status(state.id, "running")
 

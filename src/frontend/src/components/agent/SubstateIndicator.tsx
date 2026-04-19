@@ -8,6 +8,10 @@ const SUBSTATE_META: Record<AgentSubstate, { color: string; label: string; pulse
   waiting_user: { color: 'var(--signal-warn)', label: 'WAITING USER', pulse: 0.6 },
   paused:       { color: 'var(--ink-muted)', label: 'PAUSED',       pulse: 0 },
   idle:         { color: 'var(--ink-faint)', label: 'IDLE',         pulse: 0 },
+  // Phase 9.2.3 (F-14) — quota-parked tasks pulse slow amber and say so.
+  // Distinct label / cadence from WAITING USER so the operator can tell
+  // auto-resuming probe-loop tasks apart from tasks blocked on human input.
+  blocked_quota: { color: 'var(--signal-warn)', label: 'BLOCKED (QUOTA)', pulse: 2.0 },
 };
 
 export function SubstateIndicator({ substate }: { substate: AgentSubstate }) {

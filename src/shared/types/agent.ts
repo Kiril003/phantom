@@ -10,7 +10,10 @@ export type AgentSubstate =
   | 'reflecting'
   | 'waiting_user'
   | 'paused'
-  | 'idle';
+  | 'idle'
+  // Phase 9.2.3 (F-14) — distinct from waiting_user so the operator can
+  // tell quota-parked tasks apart from human-input-required tasks.
+  | 'blocked_quota';
 
 export type AgentTaskStatus =
   | 'planning'

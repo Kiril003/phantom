@@ -41,6 +41,10 @@ Substate = Literal[
     "waiting_user",
     "paused",
     "idle",
+    # Phase 9.2.3 (F-14): distinct from `waiting_user` so the operator can
+    # tell at a glance whether the task is parked on quota exhaustion
+    # (auto-resumes on probe) vs. a real user-input prompt.
+    "blocked_quota",
 ]
 
 TaskStatus = Literal[

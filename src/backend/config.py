@@ -189,6 +189,11 @@ class PhantomConfig(BaseSettings):
     # Phase 9.2.2 — blocked_quota probe cadence + adaptive backoff ceiling.
     agent_blocked_quota_probe_s: int = 60
     agent_blocked_quota_probe_max_s: int = 600
+    # Phase 9.2.3 (F-17) — max seconds the loop will block on
+    # intervention_queue.get() for a risky-action consent prompt or an
+    # ask_user precondition before timing out and rejecting the step. Stops
+    # tasks from hanging forever if the operator walks away from the console.
+    agent_user_consent_timeout_s: int = 300
     agent_reflection_every_n_actions: int = 5
     agent_thought_budget_force_reflect_ratio: float = 2.0
     agent_strategic_warn_actions: int = 30

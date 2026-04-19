@@ -32,6 +32,7 @@ export function AgentPanel() {
   const llmCallsUsed = useAgentStore((s) => s.llmCallsUsed);
   const llmCallsCap = useAgentStore((s) => s.llmCallsCap);
   const promptToUser = useAgentStore((s) => s.promptToUser);
+  const resumeCaveat = useAgentStore((s) => s.resumeCaveat);
   const startTask = useAgentStore((s) => s.startTask);
   const intervene = useAgentStore((s) => s.intervene);
   const setPromptToUser = useAgentStore((s) => s.setPromptToUser);
@@ -84,6 +85,36 @@ export function AgentPanel() {
 
       {/* Middle scrollable region */}
       <div className="flex-1 overflow-y-auto px-5 py-3 flex flex-col gap-3">
+        {resumeCaveat && resumeCaveat.kind === 'browser_session_lost' && (
+          <div
+            className="px-3 py-2"
+            data-testid="resume-caveat-banner"
+            style={{
+              background: 'color-mix(in srgb, var(--signal-info) 10%, transparent)',
+              border: '1px solid color-mix(in srgb, var(--signal-info) 32%, transparent)',
+              borderRadius: 10,
+              color: 'var(--ink-primary)',
+              fontSize: 'var(--fs-sm)',
+            }}
+          >
+            <span
+              className="font-mono mr-2"
+              style={{
+                color: 'var(--signal-info)',
+                fontSize: 'var(--fs-xxs)',
+                letterSpacing: 'var(--tracking-wider)',
+              }}
+            >
+              СЕСІЯ ВІДНОВЛЕНА:
+            </span>
+            Браузерна сесія була перервана. Агент повторно відкриє сторінку, якщо потрібно.
+            {resumeCaveat.lastKnownUrl && (
+              <span className="ml-2" style={{ color: 'var(--ink-muted)' }}>
+                (останній URL: {resumeCaveat.lastKnownUrl})
+              </span>
+            )}
+          </div>
+        )}
         {promptToUser && (
           <div
             className="px-3 py-2"

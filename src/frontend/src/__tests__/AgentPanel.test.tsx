@@ -57,4 +57,23 @@ describe('<AgentPanel />', () => {
     renderPanel();
     expect(screen.getByTestId('thought-budget')).toBeInTheDocument();
   });
+
+  // Phase 9.2.2 (F-05): resume_with_caveat surfaces a banner so the operator
+  // knows the browser session was lost across the restart.
+  it('shows the resume caveat banner when browser session is lost', () => {
+    useAgentStore.getState().handleEvent({
+      type: 'agent.resumed_with_caveat',
+      ts: Date.now(),
+      payload: {
+        task_id: 't1',
+        caveat: 'browser_session_lost',
+        last_known_url: 'https://example.com/dashboard',
+      },
+    });
+    renderPanel();
+    const banner = screen.getByTestId('resume-caveat-banner');
+    expect(banner).toBeInTheDocument();
+    expect(banner.textContent).toMatch(/Браузерна сесія|browser/i);
+    expect(banner.textContent).toContain('example.com/dashboard');
+  });
 });

@@ -45,6 +45,8 @@ interface AgentState {
   // Phase 9.2.1 — per-task LLM call budget surfacing
   llmCallsUsed: number;
   llmCallsCap: number;
+  // Phase 9.2.2 (F-05) — resume-from-checkpoint caveats (browser session lost, etc.)
+  resumeCaveat: { kind: string; lastKnownUrl?: string } | null;
 
   // Setters
   setWSConnected: (connected: boolean) => void;
@@ -92,6 +94,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   wsConnected: false,
   llmCallsUsed: 0,
   llmCallsCap: 50,
+  resumeCaveat: null,
 
   setWSConnected: (connected) => set({ wsConnected: connected }),
   setPromptToUser: (prompt) => set({ promptToUser: prompt }),
@@ -323,6 +326,17 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         patch.llmCallsCap = Number(e.payload.cap_at ?? 50);
         break;
       }
+      case 'agent.resumed_with_caveat': {
+        // Phase 9.2.2 (F-05) — resume restored task state but warned that
+        // some external resource (browser, etc.) was not preserved.
+        patch.resumeCaveat = {
+          kind: String(e.payload.caveat ?? 'unknown'),
+          lastKnownUrl: e.payload.last_known_url
+            ? String(e.payload.last_known_url)
+            : undefined,
+        };
+        break;
+      }
       case 'notification': {
         patch.notification = {
           title: String(e.payload.title ?? ''),
@@ -347,6 +361,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     thoughtBudget: EMPTY_BUDGET,
     llmCallsUsed: 0,
     llmCallsCap: 50,
+    resumeCaveat: null,
     reflections: [],
     observations: [],
     recentActions: [],

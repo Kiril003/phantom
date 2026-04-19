@@ -376,7 +376,9 @@ class AgentRuntime:
         return cp_id
 
     async def resume_from_checkpoint(self, task_id: str, checkpoint_id: int) -> bool:
-        from .audit import fetch_checkpoint
+        from .audit import fetch_audit, fetch_checkpoint
+        from .observations import build_system
+
         cp = await fetch_checkpoint(checkpoint_id)
         if cp is None or cp.task_id != task_id:
             return False
@@ -404,9 +406,44 @@ class AgentRuntime:
                 estimated_total_actions=cp.thought_budget.estimated_actions,
                 risk_assessment="(restored from checkpoint)",
             )
+
+        # Phase 9.2.2 (F-05): browser context is NOT preserved across resume
+        # (Playwright lifecycle is per-process). If the task touched a browser
+        # before the checkpoint, surface a hint so tactical knows to re-navigate
+        # rather than expect the prior page to still be there.
+        last_browser_url: str | None = None
+        try:
+            audit_rows = await fetch_audit(task_id, limit=200)
+            browser_rows = [r for r in audit_rows if (r.action_name or "").startswith("browser.")]
+            if browser_rows:
+                # Newest first → walk for the latest navigate URL we can find.
+                for r in browser_rows:
+                    if r.action_name == "browser.navigate":
+                        url = (r.args or {}).get("url") or (r.args or {}).get("href")
+                        if url:
+                            last_browser_url = str(url)
+                            break
+                hint_msg = (
+                    "Browser session not preserved across checkpoint resume. "
+                    "If the task requires a specific page, navigate there first."
+                )
+                if last_browser_url:
+                    hint_msg += f" Last known URL: {last_browser_url}"
+                obs = build_system(state.step_idx, "checkpoint_restore", hint_msg)
+                obs.entities = ["hint:browser_reset_after_resume"]
+                state.observations.append(obs)
+        except Exception as exc:
+            logger.debug("resume_from_checkpoint: browser-history scan failed: %s", exc)
+
         self.foreground_slot = state
         await update_task_status(task_id, "running", paused_reason=None)
         self.controls.reset()
+        if last_browser_url is not None:
+            await self._broadcast("agent.resumed_with_caveat", {
+                "task_id": task_id,
+                "caveat": "browser_session_lost",
+                "last_known_url": last_browser_url,
+            })
         from .loop import run_task_loop
         self.task_runner = asyncio.create_task(
             run_task_loop(self, state, resumed=True),

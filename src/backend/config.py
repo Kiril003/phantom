@@ -199,6 +199,14 @@ class PhantomConfig(BaseSettings):
     # ask_user precondition before timing out and rejecting the step. Stops
     # tasks from hanging forever if the operator walks away from the console.
     agent_user_consent_timeout_s: int = 300
+    # Phase 9.3a — structured emotional state decay cadence. Every
+    # `agent_emotion_decay_interval_s` seconds a background loop drifts each
+    # EmotionVector axis toward its baseline by `agent_emotion_decay_rate`
+    # of the distance. Both values are hot-reloadable (AD-02) so operators
+    # can tune responsiveness without a restart.
+    agent_emotion_enabled: bool = True
+    agent_emotion_decay_interval_s: int = 60
+    agent_emotion_decay_rate: float = 0.05
     agent_reflection_every_n_actions: int = 5
     agent_thought_budget_force_reflect_ratio: float = 2.0
     agent_strategic_warn_actions: int = 30

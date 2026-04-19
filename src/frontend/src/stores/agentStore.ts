@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type {
+  AgentEmotionVector,
   AgentEvent,
   AgentObservation,
   AgentPlanStep,
@@ -47,6 +48,8 @@ interface AgentState {
   llmCallsCap: number;
   // Phase 9.2.2 (F-05) — resume-from-checkpoint caveats (browser session lost, etc.)
   resumeCaveat: { kind: string; lastKnownUrl?: string } | null;
+  // Phase 9.3a — live emotion vector from the backend.
+  emotion: AgentEmotionVector | null;
 
   // Setters
   setWSConnected: (connected: boolean) => void;
@@ -95,6 +98,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   llmCallsUsed: 0,
   llmCallsCap: 50,
   resumeCaveat: null,
+  emotion: null,
 
   setWSConnected: (connected) => set({ wsConnected: connected }),
   setPromptToUser: (prompt) => set({ promptToUser: prompt }),
@@ -201,6 +205,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         patch.thoughtBudget = EMPTY_BUDGET;
         patch.llmCallsUsed = 0;
         patch.llmCallsCap = 50;
+        patch.emotion = sm?.emotion ?? null;
         patch.status = 'running';
         patch.connectionStatus = 'running';
         patch.promptToUser = null;
@@ -337,6 +342,11 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         };
         break;
       }
+      case 'emotion.updated': {
+        const emo = e.payload.emotion as AgentEmotionVector | undefined;
+        if (emo) patch.emotion = emo;
+        break;
+      }
       case 'notification': {
         patch.notification = {
           title: String(e.payload.title ?? ''),
@@ -362,6 +372,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     llmCallsUsed: 0,
     llmCallsCap: 50,
     resumeCaveat: null,
+    emotion: null,
     reflections: [],
     observations: [],
     recentActions: [],

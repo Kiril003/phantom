@@ -101,7 +101,7 @@ Rationale: {rationale}
 
 ОСТАННІ СПОСТЕРЕЖЕННЯ (до 10):
 {observations_block}
-
+{emotion_block}
 {stricter_note}
 """
 
@@ -121,6 +121,40 @@ def _format_active_caveats(self_model: SelfModel) -> str:
     for c in caveats:
         lines.append(f"- {c}")
     return "\n" + "\n".join(lines) + "\n"
+
+
+def _format_emotion_block(self_model: SelfModel) -> str:
+    """Phase 9.3a — render EmotionVector as a subtle prompt tone hint.
+
+    Emotion MUST colour monologue style, not decision-making. Block is
+    omitted unless some axis is notably off baseline so a default
+    just-started task doesn't pay the prompt-bloat tax.
+    """
+    emo = getattr(self_model, "emotion", None)
+    if emo is None:
+        return ""
+    # Interesting when any axis has deviated noticeably from baseline — a
+    # single criterion handles both "high focus/flow" and "high stress".
+    interesting = (
+        emo.concern >= 0.5
+        or emo.fatigue >= 0.4
+        or emo.curiosity >= 0.75
+        or emo.focus >= 0.85
+        or emo.focus <= 0.3
+    )
+    if not interesting:
+        return ""
+    summary_text = emo.summary()
+    return (
+        "\nПОТОЧНИЙ СТАН PHANTOM:\n"
+        f"{summary_text}\n"
+        f"(focus: {emo.focus:.1f}, curiosity: {emo.curiosity:.1f}, "
+        f"concern: {emo.concern:.1f}, fatigue: {emo.fatigue:.1f})\n"
+        "Враховуй цей стан у тоні міркувань (не у прийнятті рішень):\n"
+        "- Висока concern → проявляй обережність у monologue.what_could_fail\n"
+        "- Висока fatigue → коротші monologue, пріоритет простих дій\n"
+        "- Висока curiosity → можеш згадувати альтернативні підходи\n"
+    )
 
 
 def _inject_synth_args(tool: ToolSchema) -> ToolSchema:
@@ -201,6 +235,7 @@ def _build_user_message(
         expected_actions=sub_goal.expected_actions,
         actions_in_sub_goal=actions_in_sub_goal,
         observations_block=format_for_llm(observations, limit=10),
+        emotion_block=_format_emotion_block(self_model),
         stricter_note=stricter_note,
     )
 

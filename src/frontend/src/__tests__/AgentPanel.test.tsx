@@ -76,4 +76,35 @@ describe('<AgentPanel />', () => {
     expect(banner.textContent).toMatch(/Браузерна сесія|browser/i);
     expect(banner.textContent).toContain('example.com/dashboard');
   });
+
+  // Phase 9.3a: emotion indicator is hidden when idle, shows all four axes
+  // once an emotion.updated event lands.
+  it('hides the emotion indicator when no emotion is known', () => {
+    renderPanel();
+    expect(screen.queryByTestId('emotion-indicator')).toBeNull();
+  });
+
+  it('renders all four emotion axes after emotion.updated', () => {
+    useAgentStore.getState().handleEvent({
+      type: 'emotion.updated',
+      ts: Date.now(),
+      payload: {
+        task_id: 't1',
+        trigger: 'task.started',
+        emotion: {
+          focus: 0.8,
+          curiosity: 0.6,
+          concern: 0.3,
+          fatigue: 0.1,
+          updated_at: new Date().toISOString(),
+        },
+      },
+    });
+    renderPanel();
+    expect(screen.getByTestId('emotion-indicator')).toBeInTheDocument();
+    expect(screen.getByTestId('emotion-axis-focus')).toBeInTheDocument();
+    expect(screen.getByTestId('emotion-axis-curiosity')).toBeInTheDocument();
+    expect(screen.getByTestId('emotion-axis-concern')).toBeInTheDocument();
+    expect(screen.getByTestId('emotion-axis-fatigue')).toBeInTheDocument();
+  });
 });

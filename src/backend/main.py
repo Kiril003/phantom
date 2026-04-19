@@ -185,6 +185,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await oled_animator.start()
 
     # Phase 09.1 — agent cognitive layer
+    emotion_stop_event: asyncio.Event | None = None
+    emotion_task: asyncio.Task | None = None
     if config.agent_enabled:
         try:
             from agent.runtime import ensure_workspace
@@ -195,6 +197,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 logger.info("Agent: marked %d orphaned task(s) as paused", orphans)
         except Exception as exc:
             logger.error("Agent startup hook failed: %s", exc)
+
+        # Phase 9.3a — emotion decay loop drifts the foreground task's
+        # EmotionVector toward baseline every `agent_emotion_decay_interval_s`.
+        if config.agent_emotion_enabled:
+            try:
+                from agent.runtime import agent_runtime
+                from agent.emotion import decay_loop
+                emotion_stop_event = asyncio.Event()
+                emotion_task = asyncio.create_task(
+                    decay_loop(agent_runtime, emotion_stop_event),
+                    name="agent_emotion_decay",
+                )
+            except Exception as exc:
+                logger.warning("Emotion decay loop failed to start: %s", exc)
 
     # Phase 09.2 — episodic memory backfill (only when ChromaDB is behind)
     if config.agent_enabled and config.agent_episodic_memory_enabled:
@@ -239,6 +255,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             await mark_orphans_paused("uvicorn_shutdown")
         except Exception as exc:
             logger.warning("Agent shutdown hook failed: %s", exc)
+
+    # Phase 9.3a — stop emotion decay loop cleanly.
+    if emotion_task is not None:
+        if emotion_stop_event is not None:
+            emotion_stop_event.set()
+        emotion_task.cancel()
+        try:
+            await emotion_task
+        except (asyncio.CancelledError, Exception):
+            pass
 
     # Phase 09.2 — close any active MCP clients
     if config.agent_enabled and config.agent_mcp_servers:

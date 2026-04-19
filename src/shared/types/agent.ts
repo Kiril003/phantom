@@ -103,6 +103,19 @@ export interface AgentActionResult {
   side_effects: string[];
 }
 
+export interface AgentEmotionVector {
+  /** 0..1 — task concentration (high = flow state). */
+  focus: number;
+  /** 0..1 — drive to explore / learn. */
+  curiosity: number;
+  /** 0..1 — worry / alertness level. */
+  concern: number;
+  /** 0..1 — accumulated cognitive load. */
+  fatigue: number;
+  /** ISO datetime of last mutation. */
+  updated_at: string;
+}
+
 export interface AgentSelfModel {
   identity: string;
   hardware: Record<string, unknown>;
@@ -113,6 +126,9 @@ export interface AgentSelfModel {
   recent_task_summary: string | null;
   language_primary: string;
   language_fallback: string;
+  // Phase 9.3a — persistent caveats + emotion vector.
+  active_caveats?: string[];
+  emotion?: AgentEmotionVector;
 }
 
 export interface AgentThoughtBudget {
@@ -199,6 +215,10 @@ export type AgentEventType =
   | 'task.blocked_quota'
   | 'sub_goal.abandoned'
   | 'agent.budget.warning'
+  // Phase 9.2.2 (F-05) resume caveat
+  | 'agent.resumed_with_caveat'
+  // Phase 9.3a emotion vector update
+  | 'emotion.updated'
   | 'notification';
 
 export interface AgentEvent {

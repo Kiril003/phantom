@@ -7,6 +7,7 @@ import { ThoughtBudget } from './ThoughtBudget';
 import { LLMCallBudget } from './LLMCallBudget';
 import { TaskTree } from './TaskTree';
 import { SubstateIndicator } from './SubstateIndicator';
+import { EmotionIndicator } from './EmotionIndicator';
 
 const STATUS_BADGE: Record<string, { color: string; label: string }> = {
   idle:           { color: 'var(--ink-faint)', label: 'IDLE' },
@@ -33,6 +34,7 @@ export function AgentPanel() {
   const llmCallsCap = useAgentStore((s) => s.llmCallsCap);
   const promptToUser = useAgentStore((s) => s.promptToUser);
   const resumeCaveat = useAgentStore((s) => s.resumeCaveat);
+  const emotion = useAgentStore((s) => s.emotion);
   const startTask = useAgentStore((s) => s.startTask);
   const intervene = useAgentStore((s) => s.intervene);
   const setPromptToUser = useAgentStore((s) => s.setPromptToUser);
@@ -65,6 +67,7 @@ export function AgentPanel() {
             {currentTask?.task.goal || 'No active goal — type one below.'}
           </h2>
           <SubstateIndicator substate={substate} />
+          <EmotionIndicator emotion={emotion} />
           <span
             className="px-2 py-0.5 font-mono"
             style={{

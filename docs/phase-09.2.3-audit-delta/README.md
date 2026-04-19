@@ -30,7 +30,7 @@ All six questions + one run-log observation. Severity conservative:
 MEDIUM = worth a row in the main audit; LOW = worth a comment; CLEAN =
 no action.
 
-### AD-01 (LOW) — F-05 hint observation can slide off tactical window
+### AD-01 (LOW) — F-05 hint observation can slide off tactical window — **FIXED in v0.9.3a (5b278e4)**
 
 **Location:** `agent/runtime.py:~432` (build_system hint) ↔
 `agent/planner/tactical.py` observation window slicing.
@@ -55,7 +55,7 @@ re-navigation happened.
 
 **Severity:** LOW (rarely hit today, known constraint).
 
-### AD-02 (MEDIUM) — Settings table writes not hot-reloaded into config
+### AD-02 (MEDIUM) — Settings table writes not hot-reloaded into config — **FIXED in v0.9.3a (8d3d946)**
 
 **Location:** `db/settings_repo.py` ↔ `config.py`.
 
@@ -110,7 +110,7 @@ strings don't often include such numbers in-line.
 (" 500", " 502" or regex `\b(500|502|503|504)\b`). Already partially
 done — the code already prefixes with space (e.g., `" 500 "`). Good.
 
-### AD-05 (LOW) — `asyncio.sleep(interval)` in blocked_quota loop not interruptible
+### AD-05 (LOW) — `asyncio.sleep(interval)` in blocked_quota loop not interruptible — **FIXED in v0.9.3a (7141dfb)**
 
 **Location:** `agent/runtime.py:~283`.
 
@@ -127,7 +127,7 @@ idle — no user-visible damage; just a laggy STOP).
 `controls.emergency_stop.wait_interruptible(timeout=interval)`
 pattern using `asyncio.wait` or a wait_for on the event itself.
 
-### AD-06 (MEDIUM · **observed live**) — `update_task_status("blocked_quota", ...)` not persisted to DB during live parking
+### AD-06 (MEDIUM · **observed live**) — `update_task_status("blocked_quota", ...)` not persisted to DB during live parking — **FIXED in v0.9.3a (d6ecff3)**
 
 **Location:** `agent/runtime.py:262-264` ↔ `agent/audit.py:49-66`.
 
@@ -187,3 +187,9 @@ tests or by this session's live behaviour. Known rough edges are all
 LOW or MEDIUM; none block 9.3.
 
 **Proceed to 9.3 with awareness of AD-02 and AD-06.**
+
+## 9.3a update (2026-04-19)
+
+All four medium/low findings addressed in v0.9.3a. See
+`docs/phase-09.3a-acceptance/README.md` for the full breakdown. AD-03
+and AD-04 (LOW, cosmetic) remain deferred; neither blocks 9.3b.

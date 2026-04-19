@@ -90,7 +90,7 @@ Fix those before adding load on top.
 
 ## Section 2 — Findings by severity
 
-### F-01 [CRITICAL] Per-task LLM-call budget never enforced
+### F-01 [CRITICAL · FIXED in v0.9.2.2] Per-task LLM-call budget never enforced
 
 **Location**: `src/backend/agent/loop.py:362-368` ↔
 `src/backend/agent/planner/tactical.py:295-339` ↔
@@ -126,7 +126,7 @@ asserts `runtime.foreground_slot.llm_calls_this_task` increments.
 
 ---
 
-### F-02 [HIGH] `generate()` / `generate_stream()` skip 9.2.1 resilience policy
+### F-02 [HIGH · FIXED in v0.9.2.2] `generate()` / `generate_stream()` skip 9.2.1 resilience policy
 
 **Location**: `src/backend/ai/provider.py:111-202` ↔
 `src/backend/agent/planner/_llm.py:34-44` ↔
@@ -161,7 +161,7 @@ that returns `ToolUseError` so quota propagation is uniform. Plus tests.
 
 ---
 
-### F-03 [HIGH] Blocked-quota recovery probe is a false-positive every time
+### F-03 [HIGH · FIXED in v0.9.2.2] Blocked-quota recovery probe is a false-positive every time
 
 **Location**: `src/backend/agent/runtime.py:279-292`
 
@@ -199,7 +199,7 @@ to fully exercise the loop, but the data flow is unambiguous.
 
 ---
 
-### F-04 [HIGH] MCP discovery can wedge backend startup indefinitely
+### F-04 [HIGH · FIXED in v0.9.2.2] MCP discovery can wedge backend startup indefinitely
 
 **Location**: `src/backend/agent/mcp/discovery.py:27-41`,
 `src/backend/agent/mcp/adapter.py:51-59`,
@@ -241,7 +241,7 @@ hanging server.
 
 ---
 
-### F-05 [HIGH] Browser state lost on checkpoint resume, no warning
+### F-05 [HIGH · FIXED in v0.9.2.2] Browser state lost on checkpoint resume, no warning
 
 **Location**: `src/backend/agent/runtime.py:328-365`,
 `src/backend/agent/checkpoints.py:7-34`

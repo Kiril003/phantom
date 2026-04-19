@@ -43,6 +43,12 @@ class McpStdioClient:
         self.command = command if isinstance(command, list) else command.split()
         self._proc: asyncio.subprocess.Process | None = None
         self._next_id = 1
+        # Phase 9.2.3 (F-12): serialise write+readline pairs so two coroutines
+        # calling _request concurrently can't swap each other's replies. The
+        # line-delimited JSON-RPC transport has no id→future correlation; the
+        # reader takes whatever arrives next on stdout, which is only safe
+        # while exactly one request is in flight at a time.
+        self._io_lock: asyncio.Lock | None = None
 
     @property
     def connected(self) -> bool:
@@ -87,25 +93,30 @@ class McpStdioClient:
         if not self.connected:
             await self.connect()
         assert self._proc is not None and self._proc.stdin and self._proc.stdout
-        msg_id = self._next_id
-        self._next_id += 1
-        payload = {"id": msg_id, "method": method, "params": params or {}}
-        line = (json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8")
-        self._proc.stdin.write(line)
-        await self._proc.stdin.drain()
-        try:
-            raw = await asyncio.wait_for(self._proc.stdout.readline(), timeout=timeout)
-        except asyncio.TimeoutError as exc:
-            raise McpTimeout(f"mcp {self.name}: no reply within {timeout}s") from exc
-        if not raw:
-            raise McpError(f"mcp {self.name}: connection closed mid-call")
-        try:
-            decoded = json.loads(raw.decode("utf-8"))
-        except json.JSONDecodeError as exc:
-            raise McpError(f"mcp {self.name}: invalid JSON {exc}") from exc
-        if "error" in decoded:
-            raise McpError(f"mcp {self.name}: {decoded['error']}")
-        return decoded.get("result") or decoded
+        # Phase 9.2.3 (F-12): hold the io_lock across the write+readline pair
+        # so concurrent calls cannot swap each other's replies.
+        if self._io_lock is None:
+            self._io_lock = asyncio.Lock()
+        async with self._io_lock:
+            msg_id = self._next_id
+            self._next_id += 1
+            payload = {"id": msg_id, "method": method, "params": params or {}}
+            line = (json.dumps(payload, ensure_ascii=False) + "\n").encode("utf-8")
+            self._proc.stdin.write(line)
+            await self._proc.stdin.drain()
+            try:
+                raw = await asyncio.wait_for(self._proc.stdout.readline(), timeout=timeout)
+            except asyncio.TimeoutError as exc:
+                raise McpTimeout(f"mcp {self.name}: no reply within {timeout}s") from exc
+            if not raw:
+                raise McpError(f"mcp {self.name}: connection closed mid-call")
+            try:
+                decoded = json.loads(raw.decode("utf-8"))
+            except json.JSONDecodeError as exc:
+                raise McpError(f"mcp {self.name}: invalid JSON {exc}") from exc
+            if "error" in decoded:
+                raise McpError(f"mcp {self.name}: {decoded['error']}")
+            return decoded.get("result") or decoded
 
     async def list_tools(self) -> list[dict]:
         result = await self._request("list_tools", timeout=10.0)

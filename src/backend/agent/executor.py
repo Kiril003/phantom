@@ -133,44 +133,55 @@ async def execute(
     t0 = time.monotonic()
     cancelled_by_user = False
     cancelled_by_stop = False
+    # Phase 9.2.3 (F-09): wrap action.execute() in an explicit Task so
+    # runtime.cancel_step can cancel it directly. The previous implementation
+    # only set a flag that no bundled action actually polled, so the UI button
+    # was a no-op until the action finished naturally.
+    exec_task = asyncio.ensure_future(action.execute(ctx))
+    if runtime is not None:
+        runtime._current_action_task = exec_task
     try:
-        result = await asyncio.wait_for(action.execute(ctx), timeout=ceiling)
-    except asyncio.TimeoutError:
-        result = ActionResult(
-            ok=False,
-            error=f"action_timeout: {ceiling}s",
-            error_class="action_timeout",
-            elapsed_ms=int((time.monotonic() - t0) * 1000),
-        )
-    except asyncio.CancelledError:
-        # Could be cancel_step from user OR an emergency_stop teardown.
-        if runtime is not None and runtime.controls.cancel_step.is_set():
-            cancelled_by_user = True
-            runtime.controls.cancel_step.clear()
+        try:
+            result = await asyncio.wait_for(exec_task, timeout=ceiling)
+        except asyncio.TimeoutError:
             result = ActionResult(
                 ok=False,
-                error="cancelled_by_user",
-                error_class="cancelled_by_user",
+                error=f"action_timeout: {ceiling}s",
+                error_class="action_timeout",
                 elapsed_ms=int((time.monotonic() - t0) * 1000),
             )
-        elif runtime is not None and runtime.controls.emergency_stop.is_set():
-            cancelled_by_stop = True
+        except asyncio.CancelledError:
+            # Could be cancel_step from user OR an emergency_stop teardown.
+            if runtime is not None and runtime.controls.cancel_step.is_set():
+                cancelled_by_user = True
+                runtime.controls.cancel_step.clear()
+                result = ActionResult(
+                    ok=False,
+                    error="cancelled_by_user",
+                    error_class="cancelled_by_user",
+                    elapsed_ms=int((time.monotonic() - t0) * 1000),
+                )
+            elif runtime is not None and runtime.controls.emergency_stop.is_set():
+                cancelled_by_stop = True
+                result = ActionResult(
+                    ok=False,
+                    error="cancelled_by_stop",
+                    error_class="cancelled_by_stop",
+                    elapsed_ms=int((time.monotonic() - t0) * 1000),
+                )
+            else:
+                raise
+        except Exception as exc:
+            logger.exception("executor: action %s raised", step.action)
             result = ActionResult(
                 ok=False,
-                error="cancelled_by_stop",
-                error_class="cancelled_by_stop",
+                error=f"exception: {exc}",
+                error_class=type(exc).__name__,
                 elapsed_ms=int((time.monotonic() - t0) * 1000),
             )
-        else:
-            raise
-    except Exception as exc:
-        logger.exception("executor: action %s raised", step.action)
-        result = ActionResult(
-            ok=False,
-            error=f"exception: {exc}",
-            error_class=type(exc).__name__,
-            elapsed_ms=int((time.monotonic() - t0) * 1000),
-        )
+    finally:
+        if runtime is not None and runtime._current_action_task is exec_task:
+            runtime._current_action_task = None
 
     audit_id = await write_audit_entry(
         task_id=task_id, step=step, result=result, risk_level=risk_level,

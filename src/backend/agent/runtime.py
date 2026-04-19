@@ -98,6 +98,11 @@ class AgentRuntime:
         self.background_slot: TaskState | None = None  # always None in this phase
         self.substate: Substate = "idle"
         self.task_runner: asyncio.Task | None = None
+        # Phase 9.2.3 (F-09): handle on the currently in-flight Action.execute()
+        # coroutine so `cancel_step` can cancel it immediately instead of waiting
+        # for the action to return. Set by the executor before dispatch, cleared
+        # in its finally block.
+        self._current_action_task: asyncio.Task | None = None
 
         # Browser state shared across actions during a task
         self.browser = None
@@ -210,13 +215,14 @@ class AgentRuntime:
         if not self.current_task or self.current_task.id != task_id:
             return False
         self.controls.cancel_step.set()
-        # Cancel the running task — executor catches CancelledError and writes audit.
-        if self.task_runner and not self.task_runner.done():
-            # We don't cancel the loop; we cancel the in-flight action by
-            # scheduling a cooperative interrupt: the executor uses
-            # asyncio.wait_for, but for cooperative cancel we rely on the
-            # action checking emergency_stop / cancel_step flags.
-            pass
+        # Phase 9.2.3 (F-09): cancel the in-flight Action.execute() task so the
+        # cancel arrives now instead of at the action's next yield point.
+        # Executor's CancelledError handler sees cancel_step.is_set() and
+        # writes a `cancelled_by_user` audit row, then raises StepCancelled
+        # which loop.py catches and advances step_idx cleanly.
+        t = self._current_action_task
+        if t is not None and not t.done():
+            t.cancel()
         return True
 
     async def note_llm_call(self, task_id: str | None) -> bool:

@@ -248,6 +248,23 @@ async def send_message(
     # Record interaction in context engine
     context_engine.record_interaction()
 
+    # Phase 9.3a — heuristic concern extraction + relationship tracking.
+    # Only touches SelfModel when an agent task is currently active so an
+    # idle chat doesn't carry residual state between tasks. Best-effort:
+    # any failure here must NOT block chat reply.
+    try:
+        from agent.runtime import agent_runtime
+        from agent.self_model import (
+            maybe_add_concern_from_user_text,
+            note_interaction,
+        )
+        if agent_runtime.foreground_slot is not None:
+            sm = agent_runtime.foreground_slot.self_model
+            note_interaction(sm, user.id)
+            maybe_add_concern_from_user_text(sm, req.content)
+    except Exception as exc:
+        logger.debug("9.3a chat self-model hook failed: %s", exc)
+
     t_start = time.monotonic()
 
     # Generate AI response

@@ -217,6 +217,23 @@ class EmotionVector(BaseModel):
         return ", ".join(labels)
 
 
+class Relationship(BaseModel):
+    """
+    Phase 9.3a — per-user relational memory.
+
+    Populated by authenticated-call hooks (interaction count + last
+    interaction timestamp) plus explicit preference additions. Trust
+    level is a reserved axis — 9.3b will nudge it via intervention
+    feedback. Auto-inferred preferences are deferred (LLM classification
+    is out of 9.3a scope).
+    """
+    user_id: str
+    trust_level: float = 0.5
+    interaction_count: int = 0
+    last_interaction_at: datetime | None = None
+    known_preferences: list[str] = Field(default_factory=list)
+
+
 class SelfModel(BaseModel):
     identity: str = "PHANTOM, embedded AI operating system"
     hardware: dict[str, Any] = Field(default_factory=dict)
@@ -239,6 +256,18 @@ class SelfModel(BaseModel):
     # fatigue). Event-driven updates from runtime._broadcast triggers;
     # background decay loop drifts each axis toward baseline.
     emotion: EmotionVector = Field(default_factory=EmotionVector)
+    # Phase 9.3a — per-user Relationship. Keyed by user_id. Updated by
+    # auth-hooked dependency on every authenticated call that reaches the
+    # agent so the planner can tailor prompts.
+    relationships: dict[str, Relationship] = Field(default_factory=dict)
+    # Phase 9.3a — FIFO short strings, max 10. Populated by heuristics
+    # (user-text keyword match, system-state thresholds, recurring task
+    # failures). Items decay if not refreshed in 24h.
+    active_concerns: list[str] = Field(default_factory=list)
+    # Phase 9.3a — last N successful task summaries, max 5. Read-only
+    # signal for 9.3b proactive decisions ("recently on a roll → confident
+    # enough to suggest X").
+    recent_successes: list[str] = Field(default_factory=list)
 
 
 class ThoughtBudget(BaseModel):
@@ -331,6 +360,7 @@ __all__ = [
     "Precondition",
     "ActionResult",
     "EmotionVector",
+    "Relationship",
     "SelfModel",
     "ThoughtBudget",
     "ReflectionResult",

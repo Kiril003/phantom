@@ -3,6 +3,8 @@ from __future__ import annotations
 
 import logging
 import os
+import re
+from datetime import datetime, timedelta, timezone
 
 from sqlalchemy import select
 
@@ -11,9 +13,116 @@ from db.database import get_session
 from db.models import AgentMemorySeed
 
 from .actions.registry import ActionRegistry
-from .schemas import RiskLevel, SelfModel
+from .schemas import Relationship, RiskLevel, SelfModel
 
 logger = logging.getLogger(__name__)
+
+
+# Phase 9.3a — FIFO caps.
+_MAX_ACTIVE_CONCERNS = 10
+_MAX_RECENT_SUCCESSES = 5
+_MAX_KNOWN_PREFERENCES = 10
+_CONCERN_DECAY_HOURS = 24
+
+# Heuristic concern-extraction patterns. Intentionally simple (regex, no
+# LLM classification) so 9.3a doesn't add LLM calls to chat message
+# handling. 9.3b may replace with an async classification task.
+_CONCERN_PATTERNS: dict[str, str] = {
+    r"сумно|грусн|пригніч": "user mentioned feeling down",
+    r"втомив|виснажен|устал": "user mentioned fatigue",
+    r"хвор|погано себе|нездужа": "user mentioned not feeling well",
+}
+
+
+def get_or_create_relationship(self_model: SelfModel, user_id: str) -> Relationship:
+    """Return (and create if missing) the Relationship for `user_id`."""
+    rel = self_model.relationships.get(user_id)
+    if rel is None:
+        rel = Relationship(user_id=user_id)
+        self_model.relationships[user_id] = rel
+    return rel
+
+
+def note_interaction(self_model: SelfModel, user_id: str) -> None:
+    """Bump interaction counter + timestamp for `user_id`. Hook this into the
+    authenticated-call dependency so every agent-adjacent request increments.
+    """
+    rel = get_or_create_relationship(self_model, user_id)
+    rel.interaction_count += 1
+    rel.last_interaction_at = datetime.now(tz=timezone.utc)
+
+
+def update_known_preference(self_model: SelfModel, user_id: str, preference: str) -> None:
+    """Append a preference to the user's Relationship. Dedups + caps at 10."""
+    rel = get_or_create_relationship(self_model, user_id)
+    if preference in rel.known_preferences:
+        return
+    rel.known_preferences.append(preference)
+    if len(rel.known_preferences) > _MAX_KNOWN_PREFERENCES:
+        rel.known_preferences = rel.known_preferences[-_MAX_KNOWN_PREFERENCES:]
+
+
+def add_concern(self_model: SelfModel, concern: str) -> None:
+    """FIFO add with dedup + cap. Existing concerns are refreshed to the end
+    so a re-raised worry doesn't get pushed out by rotation.
+    """
+    if concern in self_model.active_concerns:
+        # Refresh by moving to the end.
+        self_model.active_concerns.remove(concern)
+    self_model.active_concerns.append(concern)
+    if len(self_model.active_concerns) > _MAX_ACTIVE_CONCERNS:
+        self_model.active_concerns = self_model.active_concerns[-_MAX_ACTIVE_CONCERNS:]
+
+
+def record_success(self_model: SelfModel, task_summary: str) -> None:
+    """FIFO append to recent_successes, max 5 items."""
+    if not task_summary:
+        return
+    self_model.recent_successes.append(task_summary[:200])
+    if len(self_model.recent_successes) > _MAX_RECENT_SUCCESSES:
+        self_model.recent_successes = self_model.recent_successes[-_MAX_RECENT_SUCCESSES:]
+
+
+def maybe_add_concern_from_user_text(self_model: SelfModel, text: str) -> list[str]:
+    """Scan Ukrainian user text for keyword hints; add each matched concern.
+    Returns the list of concerns that were added this call (empty when none).
+    """
+    if not text:
+        return []
+    low = text.lower()
+    added: list[str] = []
+    for pattern, concern in _CONCERN_PATTERNS.items():
+        if re.search(pattern, low) and concern not in self_model.active_concerns:
+            add_concern(self_model, concern)
+            added.append(concern)
+    return added
+
+
+def decay_stale_concerns(
+    self_model: SelfModel,
+    now: datetime | None = None,
+    *,
+    last_refresh: dict[str, datetime] | None = None,
+) -> int:
+    """Drop concerns whose last-refresh timestamp is older than 24h.
+
+    `last_refresh` is an optional per-concern timestamp map; when omitted
+    (current call-site), no concerns are dropped — this function exists for
+    9.3b when the runtime will carry refresh timestamps alongside concerns.
+    Returns the number of concerns removed.
+    """
+    if last_refresh is None:
+        return 0
+    now = now or datetime.now(tz=timezone.utc)
+    cutoff = now - timedelta(hours=_CONCERN_DECAY_HOURS)
+    stale = [c for c in self_model.active_concerns
+             if (last_refresh.get(c) or now) < cutoff]
+    if not stale:
+        return 0
+    self_model.active_concerns = [
+        c for c in self_model.active_concerns if c not in stale
+    ]
+    return len(stale)
 
 
 def _probe_camera() -> bool:

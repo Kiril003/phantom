@@ -581,6 +581,14 @@ class AgentRuntime:
                 key_actions=key_actions,
             )
 
+        # Phase 9.3a — log successful tasks into SelfModel.recent_successes
+        # so 9.3b proactive decisions can read "we've been on a roll lately"
+        # as a signal. Failures don't go on this list by design.
+        if outcome == "done":
+            with contextlib.suppress(Exception):
+                from .self_model import record_success
+                record_success(state.self_model, episode_summary)
+
         await self._teardown_browser()
 
         await self._broadcast(

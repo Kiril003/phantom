@@ -49,4 +49,17 @@ describe('<ControlsBar />', () => {
     rerender(<ControlsBar onIntervene={() => undefined} />);
     expect(screen.getByLabelText('Cancel step')).toBeInTheDocument();
   });
+
+  // Phase 9.2.3 (F-08): when a task parks on blocked_quota, the operator must
+  // still be able to STOP or INTERVENE. Pause is hidden (no point pausing
+  // something already parked); Cancel-step is hidden (not in 'acting' substate).
+  it('keeps STOP and Intervene reachable when status is blocked_quota', () => {
+    useAgentStore.setState({ status: 'blocked_quota', substate: 'waiting_user' });
+    render(<ControlsBar onIntervene={() => undefined} />);
+    expect(screen.getByLabelText('STOP')).toBeInTheDocument();
+    expect(screen.getByLabelText('Intervene')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Pause')).toBeNull();
+    expect(screen.queryByLabelText('Resume')).toBeNull();
+    expect(screen.queryByLabelText('Cancel step')).toBeNull();
+  });
 });

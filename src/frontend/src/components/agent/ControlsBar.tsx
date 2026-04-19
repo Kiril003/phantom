@@ -17,12 +17,17 @@ export function ControlsBar({ onIntervene }: Props) {
     status === 'running' ||
     status === 'paused' ||
     status === 'awaiting_user' ||
-    status === 'planning';
+    status === 'planning' ||
+    // Phase 9.2.3 (F-08): keep STOP / INTERVENE reachable while a task is
+    // parked on quota. Without this the operator loses the only exit path
+    // when the blocked-quota probe loop is cycling.
+    status === 'blocked_quota';
   const isPaused = status === 'paused';
+  const isBlockedQuota = status === 'blocked_quota';
 
   return (
     <div className="flex items-center gap-2" data-testid="controls-bar">
-      {taskActive && !isPaused && (
+      {taskActive && !isPaused && !isBlockedQuota && (
         <ControlButton icon={<Pause size={16} />} label="Pause" onClick={pauseTask} />
       )}
       {taskActive && isPaused && (

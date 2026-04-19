@@ -288,7 +288,20 @@ class AgentRuntime:
                 interval = min(grown, max_interval)
             else:
                 interval = base_interval
-            await asyncio.sleep(interval)
+            # Phase 9.3a (AD-05) — interruptible sleep. Previously
+            # `asyncio.sleep(interval)` blocked for up to `max_interval` (600s)
+            # even when the operator hit STOP mid-sleep. wait_for on the
+            # event short-circuits the instant emergency_stop is set.
+            try:
+                await asyncio.wait_for(
+                    self.controls.emergency_stop.wait(),
+                    timeout=interval,
+                )
+                # emergency_stop was set during the sleep — exit immediately.
+                return False
+            except asyncio.TimeoutError:
+                # Normal probe cadence — fall through to probe.
+                pass
             if self.controls.emergency_stop.is_set():
                 return False
             if await self._probe_provider_recovered():

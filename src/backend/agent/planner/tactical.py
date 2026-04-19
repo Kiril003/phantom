@@ -279,6 +279,7 @@ async def _legacy_plan(
     actions_in_sub_goal: int,
     registry_: ActionRegistry,
     stricter_note: str = "",
+    task_id: str | None = None,
 ) -> PlanStep:
     prompt = _LEGACY_PROMPT.format(
         self_model_json=json.dumps(self_model.model_dump(mode="json"), ensure_ascii=False),
@@ -289,7 +290,7 @@ async def _legacy_plan(
         actions_catalog_json=json.dumps(registry_.catalog(), ensure_ascii=False),
         stricter_note=stricter_note,
     )
-    data = await llm_json(prompt)
+    data = await llm_json(prompt, task_id=task_id)
     return _build_legacy_step(step_idx, sub_goal.id, data)
 
 
@@ -310,16 +311,18 @@ async def plan(
 
     if not config.agent_use_native_tool_calling:
         # Operator opted out — keep the prompt-based path alive.
+        # Phase 9.2.3 (F-11): task_id now threads through so the legacy path
+        # participates in the per-task LLM-call budget like native tool calling.
         step = await _legacy_plan(
             step_idx=step_idx, sub_goal=sub_goal, self_model=self_model,
             observations=observations, actions_in_sub_goal=actions_in_sub_goal,
-            registry_=reg,
+            registry_=reg, task_id=task_id,
         )
         if _required_objection_missing(step.action, step.monologue, reg):
             step = await _legacy_plan(
                 step_idx=step_idx, sub_goal=sub_goal, self_model=self_model,
                 observations=observations, actions_in_sub_goal=actions_in_sub_goal,
-                registry_=reg,
+                registry_=reg, task_id=task_id,
                 stricter_note=(
                     "STRICT: For MEDIUM/HIGH risk actions you MUST fill 'objection' "
                     "with a real concern. Try again."

@@ -32,19 +32,21 @@ class TimeWait(Action):
             slice_s = min(0.2, deadline - now)
             await asyncio.sleep(slice_s)
             if runtime is not None:
-                if getattr(runtime, "emergency_stop", None) and runtime.emergency_stop.is_set():
-                    return ActionResult(
-                        ok=False,
-                        error="interrupted_by_stop",
-                        error_class="interrupted",
-                        elapsed_ms=int((time.monotonic() - t0) * 1000),
-                    )
-                if getattr(runtime, "pause_event", None) and runtime.pause_event.is_set():
-                    return ActionResult(
-                        ok=True,
-                        output={"slept_s": time.monotonic() - t0, "interrupted_by": "pause"},
-                        elapsed_ms=int((time.monotonic() - t0) * 1000),
-                    )
+                controls = getattr(runtime, "controls", None)
+                if controls is not None:
+                    if controls.emergency_stop.is_set():
+                        return ActionResult(
+                            ok=False,
+                            error="interrupted_by_stop",
+                            error_class="interrupted",
+                            elapsed_ms=int((time.monotonic() - t0) * 1000),
+                        )
+                    if controls.pause_event.is_set():
+                        return ActionResult(
+                            ok=True,
+                            output={"slept_s": time.monotonic() - t0, "interrupted_by": "pause"},
+                            elapsed_ms=int((time.monotonic() - t0) * 1000),
+                        )
 
         return ActionResult(
             ok=True,

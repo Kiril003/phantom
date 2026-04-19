@@ -433,6 +433,22 @@ async def set_setting(
 
     _apply_runtime_side_effect(key, after)
 
+    # Phase 9.3a (AD-02) — re-sync the singleton from DB so any row changed
+    # out-of-band (sibling process, CLI, migration) also lands, then notify
+    # live clients so dashboards can refresh without a reload.
+    try:
+        await config.reload_from_db()
+    except Exception as exc:
+        logger.debug("config.reload_from_db after PUT %s failed: %s", key, exc)
+    try:
+        from api.websocket_hub import hub
+        await hub.broadcast(
+            "settings", "config.reloaded",
+            {"key": key, "value": after if key not in PASSWORD_KEYS else None},
+        )
+    except Exception as exc:
+        logger.debug("config.reloaded broadcast failed: %s", exc)
+
     return {"key": key, "value": after, "requires_restart": False}
 
 

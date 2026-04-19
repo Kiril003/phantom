@@ -16,6 +16,11 @@ class PhantomConfig(BaseSettings):
         env_file_encoding="utf-8",
         case_sensitive=False,
         extra="ignore",
+        # Phase 9.3a (AD-02) — validate on setattr so apply_overrides() and
+        # reload_from_db() actually reject values that don't match the field's
+        # declared type. Without this, Pydantic v2 BaseSettings lets any
+        # type-mismatched value sneak through setattr silently.
+        validate_assignment=True,
     )
 
     # ── Server ────────────────────────────────────────────────────────────────
@@ -251,6 +256,40 @@ class PhantomConfig(BaseSettings):
 
     # Back-compat alias — the old name lied (it never touched the DB).
     apply_db_overrides = apply_overrides
+
+    async def reload_from_db(self) -> dict[str, Any]:
+        """
+        Phase 9.3a (AD-02) — re-read the `settings` table and apply every row
+        to the in-memory singleton. Safe to call repeatedly. Returns a dict
+        of {key: new_value} for the rows that were actually applied so a
+        caller can emit a `config.reloaded` WS event per key.
+
+        Use this after an out-of-band DB write (sqlite3 CLI, live-test
+        tooling, Settings UI on a sibling process) to push the new values
+        through without a uvicorn restart. The live-update rules that
+        subsystems register via `_apply_runtime_side_effect` still fire
+        elsewhere — this method only syncs the singleton's values.
+        """
+        from db.settings_repo import load_all as _load_all
+
+        try:
+            overrides = await _load_all()
+        except Exception:
+            return {}
+        applied: dict[str, Any] = {}
+        for key, value in overrides.items():
+            key_attr = key.replace(".", "_")
+            if not hasattr(self, key_attr):
+                continue
+            before = getattr(self, key_attr)
+            try:
+                setattr(self, key_attr, value)
+            except Exception:
+                continue
+            after = getattr(self, key_attr)
+            if after != before:
+                applied[key_attr] = after
+        return applied
 
 
 # Singleton — loaded once at startup, mutated on hot-reload

@@ -285,7 +285,7 @@ resume cycle but not one mid-browser-task.
 
 ---
 
-### F-06 [HIGH] strategic.plan swallows BlockedQuotaError into RuntimeError
+### F-06 [HIGH · FIXED in v0.9.2.3 / session 1, commit 8f4f154] strategic.plan swallows BlockedQuotaError into RuntimeError
 
 **Location**: `src/backend/agent/planner/strategic.py:100-103` ↔
 `src/backend/agent/loop.py:165-174`
@@ -318,7 +318,7 @@ the BlockedQuotaError branch to loop.py's `_ensure_strategic_plan`.
 
 ---
 
-### F-07 [HIGH] `time.wait` action's interrupt check uses wrong attribute path
+### F-07 [HIGH · FIXED in v0.9.2.3 / session 1, commit 8f4f154] `time.wait` action's interrupt check uses wrong attribute path
 
 **Location**: `src/backend/agent/actions/time_.py:34-47`
 
@@ -348,7 +348,7 @@ mid-wait.
 
 ---
 
-### F-08 [HIGH] Frontend hides STOP button when task is in `blocked_quota`
+### F-08 [HIGH · FIXED in v0.9.2.3 / session 1, commit 3fbc873] Frontend hides STOP button when task is in `blocked_quota`
 
 **Location**: `src/frontend/src/components/agent/AgentPanel.tsx:41`,
 `src/frontend/src/components/agent/ControlsBar.tsx:16-20`
@@ -379,7 +379,7 @@ status=blocked_quota.
 
 ---
 
-### F-09 [MEDIUM] `cancel_step` API endpoint is a no-op for in-flight actions
+### F-09 [MEDIUM · FIXED in v0.9.2.3 / session 2, commit d6354d2] `cancel_step` API endpoint is a no-op for in-flight actions
 
 **Location**: `src/backend/api/routes_agent.py:92-95`,
 `src/backend/agent/runtime.py:205-216`,
@@ -417,7 +417,7 @@ mid-action.
 
 ---
 
-### F-10 [MEDIUM] write_episode + write_memory_seed dual-write inconsistency
+### F-10 [MEDIUM · DEFERRED to Phase 9.3] write_episode + write_memory_seed dual-write inconsistency
 
 **Location**: `src/backend/agent/runtime.py:430-456`,
 `src/backend/agent/memory/seeds.py:114-124`,
@@ -449,7 +449,7 @@ on write failure, log to a `pending_episode_writes` queue.
 
 ---
 
-### F-11 [MEDIUM] `tactical._legacy_plan` path has no quota awareness
+### F-11 [MEDIUM · FIXED in v0.9.2.3 / session 1, commit 8f4f154] `tactical._legacy_plan` path has no quota awareness
 
 **Location**: `src/backend/agent/planner/tactical.py:269-289` ↔
 `src/backend/agent/planner/_llm.py:34-44`
@@ -470,7 +470,7 @@ legacy path has tests but none for quota.
 
 ---
 
-### F-12 [MEDIUM] McpStdioClient `_request` not safe for concurrent calls
+### F-12 [MEDIUM · FIXED in v0.9.2.3 / session 2, commit d6354d2] McpStdioClient `_request` not safe for concurrent calls
 
 **Location**: `src/backend/agent/mcp/adapter.py:73-96`
 
@@ -496,7 +496,7 @@ but the contract is unsafe.
 
 ---
 
-### F-13 [MEDIUM] McpStdioClient.connect timeout parameter unused
+### F-13 [MEDIUM · FIXED in v0.9.2.2 / commit 6d2f4d5 as part of F-04] McpStdioClient.connect timeout parameter unused
 
 **Location**: `src/backend/agent/mcp/adapter.py:51-59`
 
@@ -515,7 +515,7 @@ connect blocks forever. Combines with F-04 to make startup fragile.
 
 ---
 
-### F-14 [MEDIUM] Substate has no distinct `blocked_quota` value
+### F-14 [MEDIUM · FIXED in v0.9.2.3 / session 2, commit b5f083d] Substate has no distinct `blocked_quota` value
 
 **Location**: `src/backend/agent/schemas.py:37-44`,
 `src/backend/agent/runtime.py:260` (`set_substate("waiting_user")`)
@@ -537,7 +537,7 @@ matching meta entry in `SubstateIndicator`. Mirror in
 
 ---
 
-### F-15 [MEDIUM] AIRouter early-return on call-budget exhausted writes no audit row
+### F-15 [MEDIUM · FIXED in v0.9.2.3 / session 2, commit b5f083d] AIRouter early-return on call-budget exhausted writes no audit row
 
 **Location**: `src/backend/ai/provider.py:277-288`
 
@@ -589,7 +589,7 @@ needs profiling.
 
 ---
 
-### F-17 [MEDIUM] Risky-action consent and ask_user precondition wait forever
+### F-17 [MEDIUM · FIXED in v0.9.2.3 / session 2, commit b5f083d] Risky-action consent and ask_user precondition wait forever
 
 **Location**: `src/backend/agent/loop.py:476` (`controls.intervention_queue.get()`),
 `src/backend/agent/loop.py:565` (same)

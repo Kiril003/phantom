@@ -46,9 +46,13 @@ logger = logging.getLogger(__name__)
 
 
 # Phase 9.2.1 — interval between provider-recovery probes when a task is
-# parked on `blocked_quota`. 60s matches Gemini's free-tier per-minute
-# rate-limit window so we don't probe more aggressively than the quota allows.
+# parked on `blocked_quota`. Default of 60s matches Gemini's free-tier
+# per-minute rate-limit window. Phase 9.2.2 (F-03): now configurable via
+# `agent_blocked_quota_probe_s` and adaptive — probe interval grows
+# exponentially up to `agent_blocked_quota_probe_max_s` after consecutive
+# failures so we don't burn quota during a long Google outage.
 _BLOCKED_QUOTA_PROBE_S = 60.0
+_PROBE_BACKOFF_AFTER_FAILS = 3   # extend probe interval after 3 consecutive Falses
 
 
 @dataclass
@@ -247,25 +251,36 @@ class AgentRuntime:
     async def enter_blocked_quota(self, state: TaskState, reason: str) -> bool:
         """
         Phase 9.2.1 — park a task on `blocked_quota` and probe for provider
-        recovery every `_BLOCKED_QUOTA_PROBE_S` seconds. Returns True when
-        the loop should resume (probe succeeded), False on emergency stop.
+        recovery. Returns True when the loop should resume (probe succeeded),
+        False on emergency stop.
 
-        The probe is a trivial 'ping' through the router so we don't burn
-        any tool-use quota — strategic / tactical can pick up where they
-        left off as soon as we return.
+        Phase 9.2.2 (F-03): probe interval is now configurable
+        (`agent_blocked_quota_probe_s`, default 60s) and grows exponentially
+        up to `agent_blocked_quota_probe_max_s` (default 600s) after three
+        consecutive failures so we don't burn quota during a long outage.
         """
         state.status = "blocked_quota"
         state.paused_reason = reason[:128]
         await update_task_status(state.id, "blocked_quota", paused_reason=state.paused_reason)
         await self.set_substate("waiting_user")
+        base_interval = float(getattr(config, "agent_blocked_quota_probe_s", 60) or 60)
+        max_interval = float(getattr(config, "agent_blocked_quota_probe_max_s", 600) or 600)
         await self._broadcast("task.blocked_quota", {
-            "task_id": state.id, "reason": reason, "probe_interval_s": _BLOCKED_QUOTA_PROBE_S,
+            "task_id": state.id, "reason": reason, "probe_interval_s": base_interval,
         })
 
+        consecutive_failures = 0
         while True:
             if self.controls.emergency_stop.is_set():
                 return False
-            await asyncio.sleep(_BLOCKED_QUOTA_PROBE_S)
+            # Adaptive interval: base for the first 3 failures, then double up
+            # to max_interval. Reset on any success.
+            if consecutive_failures >= _PROBE_BACKOFF_AFTER_FAILS:
+                grown = base_interval * (2 ** (consecutive_failures - _PROBE_BACKOFF_AFTER_FAILS + 1))
+                interval = min(grown, max_interval)
+            else:
+                interval = base_interval
+            await asyncio.sleep(interval)
             if self.controls.emergency_stop.is_set():
                 return False
             if await self._probe_provider_recovered():
@@ -275,21 +290,56 @@ class AgentRuntime:
                 await self.set_substate("thinking")
                 await self._broadcast("task.resumed", {"task_id": state.id, "reason": "quota_recovered"})
                 return True
+            consecutive_failures += 1
+            if consecutive_failures == _PROBE_BACKOFF_AFTER_FAILS:
+                # First time we extend the interval — surface to UI/logs.
+                await self._broadcast("task.blocked_quota_backoff", {
+                    "task_id": state.id,
+                    "consecutive_failures": consecutive_failures,
+                    "next_interval_s": min(base_interval * 2, max_interval),
+                })
 
     async def _probe_provider_recovered(self) -> bool:
-        """Cheap ping through ai_router.generate; on success clear cooldowns."""
+        """
+        Phase 9.2.2 (F-03): probe the PRIMARY provider directly, bypassing
+        the router. The previous implementation went through `ai_router.generate`
+        which fell through to Ollama (always healthy locally) and reported
+        success even when Gemini was still 429-ed — quota recovery was
+        fictional.
+
+        Returns True only when the primary really replies. A QUOTA_EXHAUSTED
+        classifier outcome means "still blocked" (False); other transient
+        errors get the benefit of the doubt and return True so we don't
+        deadlock on a flaky network.
+        """
+        from ai.provider import ai_router, _classify_provider_exception
+        from ai.tool_use import ToolErrorKind
+
+        primary_name = config.ai_primary_provider
+        provider = ai_router.get_provider(primary_name)
+        if provider is None:
+            logger.warning("blocked_quota probe: primary '%s' not registered", primary_name)
+            return False
         try:
-            from ai.provider import ai_router
-            await ai_router.generate(
-                user_message="ping",
-                system_prompt="Reply with one word: OK.",
-                history=[],
+            await asyncio.wait_for(
+                provider.generate(
+                    "ping",
+                    "Reply with one word: OK.",
+                    [],
+                ),
+                timeout=10.0,
             )
-            ai_router.clear_provider_cooling(config.ai_primary_provider)
+            ai_router.clear_provider_cooling(primary_name)
             return True
         except Exception as exc:
-            logger.debug("blocked_quota probe still failing: %s", exc)
-            return False
+            kind, _retr, _ra = _classify_provider_exception(primary_name, exc)
+            logger.debug("blocked_quota probe failing (kind=%s): %s", kind, exc)
+            if kind == ToolErrorKind.QUOTA_EXHAUSTED:
+                return False
+            # Transient (network, timeout, 5xx) — the probe itself is fragile,
+            # don't keep the task locked because of a single hiccup. Caller
+            # will continue probing.
+            return True
 
     async def stop(self, task_id: str | None = None) -> bool:
         target = self.current_task

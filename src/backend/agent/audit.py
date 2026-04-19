@@ -64,6 +64,13 @@ async def update_task_status(
         row.paused_reason = paused_reason
         if finished:
             row.finished_at = datetime.now(tz=timezone.utc)
+        # Phase 9.3a (AD-06) — belt-and-suspenders. get_session already
+        # commits on context exit, but the live 9.2.3 probe run showed an
+        # UPDATE never reaching SQLite during the blocked_quota transition.
+        # Explicit commit here ensures the write is durable the moment the
+        # function returns, removing any window where a subsequent
+        # exception/cancellation could mask the transition.
+        await db.commit()
 
 
 async def persist_task_state(

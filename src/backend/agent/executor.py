@@ -187,6 +187,23 @@ async def execute(
         task_id=task_id, step=step, result=result, risk_level=risk_level,
     )
 
+    # Phase 9.3a (AD-01) — clear the browser-session-reset caveat from
+    # SelfModel once the agent actually re-navigates after a checkpoint
+    # resume. Without this the caveat would linger across the rest of the
+    # task even after the navigate succeeded, confusing subsequent planning.
+    if (
+        result.ok
+        and step.action == "browser.navigate"
+        and runtime is not None
+        and runtime.current_task is not None
+    ):
+        sm = runtime.current_task.self_model
+        if sm.active_caveats:
+            sm.active_caveats = [
+                c for c in sm.active_caveats
+                if not c.startswith("browser_session_reset")
+            ]
+
     if cancelled_by_stop:
         raise TaskStopped()
     if cancelled_by_user:

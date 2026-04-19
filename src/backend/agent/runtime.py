@@ -141,6 +141,14 @@ class AgentRuntime:
             await hub.broadcast("agent.stream", type_, payload)
         except Exception as exc:
             logger.debug("agent runtime broadcast failed: %s", exc)
+        # Phase 9.3a — emotion vector reacts to lifecycle events. The update
+        # is fire-and-forget: a crashing emotion handler must not swallow a
+        # broadcast that already landed on WS clients.
+        try:
+            from .emotion import update_emotion_on_event
+            await update_emotion_on_event(self, type_, payload)
+        except Exception as exc:
+            logger.debug("emotion update for %s failed: %s", type_, exc)
 
     # ── Task lifecycle ───────────────────────────────────────────────────────
 
@@ -453,6 +461,15 @@ class AgentRuntime:
                 obs = build_system(state.step_idx, "checkpoint_restore", hint_msg)
                 obs.entities = ["hint:browser_reset_after_resume"]
                 state.observations.append(obs)
+                # Phase 9.3a (AD-01) — the observation slides off the
+                # tactical 10-item window on long tasks. Put the caveat on
+                # SelfModel too so it stays in every prompt until cleared
+                # by a successful browser.navigate.
+                caveat = "browser_session_reset — re-navigate if the task needs a specific page"
+                if last_browser_url:
+                    caveat += f" (last known URL: {last_browser_url})"
+                if caveat not in state.self_model.active_caveats:
+                    state.self_model.active_caveats.append(caveat)
         except Exception as exc:
             logger.debug("resume_from_checkpoint: browser-history scan failed: %s", exc)
 

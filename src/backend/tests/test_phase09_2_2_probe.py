@@ -126,15 +126,24 @@ class TestProbeAdaptiveBackoff:
         sleeps: list[float] = []
         probe_calls = {"n": 0}
 
-        async def fake_sleep(s):
-            sleeps.append(s)
+        # Phase 9.3a (AD-05) — enter_blocked_quota now uses
+        # `asyncio.wait_for(emergency_stop.wait(), timeout=interval)` instead
+        # of bare `asyncio.sleep(interval)` so STOP short-circuits. The
+        # timeout arg is still the adaptive interval; intercept wait_for to
+        # capture it and raise TimeoutError to simulate "no stop fired".
+        async def fake_wait_for(coro, timeout):
+            sleeps.append(float(timeout))
+            # Close the inner coroutine so it doesn't leak a warning.
+            if hasattr(coro, "close"):
+                coro.close()
+            raise asyncio.TimeoutError()
 
         async def fake_probe(self):
             probe_calls["n"] += 1
             # Succeed on the 5th probe; fail before that.
             return probe_calls["n"] >= 5
 
-        monkeypatch.setattr(_rt_mod.asyncio, "sleep", fake_sleep)
+        monkeypatch.setattr(_rt_mod.asyncio, "wait_for", fake_wait_for)
         monkeypatch.setattr(AgentRuntime, "_probe_provider_recovered", fake_probe)
         monkeypatch.setattr(_rt_mod.config, "agent_blocked_quota_probe_s", 60)
         monkeypatch.setattr(_rt_mod.config, "agent_blocked_quota_probe_max_s", 600)
@@ -168,15 +177,18 @@ class TestProbeAdaptiveBackoff:
         sleeps: list[float] = []
         probe_calls = {"n": 0}
 
-        async def fake_sleep(s):
-            sleeps.append(s)
+        async def fake_wait_for(coro, timeout):
+            sleeps.append(float(timeout))
+            if hasattr(coro, "close"):
+                coro.close()
+            raise asyncio.TimeoutError()
 
         async def fake_probe(self):
             probe_calls["n"] += 1
             # Succeed only after 12 calls so backoff has time to grow.
             return probe_calls["n"] >= 12
 
-        monkeypatch.setattr(_rt_mod.asyncio, "sleep", fake_sleep)
+        monkeypatch.setattr(_rt_mod.asyncio, "wait_for", fake_wait_for)
         monkeypatch.setattr(AgentRuntime, "_probe_provider_recovered", fake_probe)
         monkeypatch.setattr(_rt_mod.config, "agent_blocked_quota_probe_s", 60)
         monkeypatch.setattr(_rt_mod.config, "agent_blocked_quota_probe_max_s", 240)

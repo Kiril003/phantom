@@ -165,6 +165,58 @@ class ActionResult(BaseModel):
 
 # ── Self-model + thought-budget ──────────────────────────────────────────────
 
+class EmotionVector(BaseModel):
+    """
+    Phase 9.3a — PHANTOM's structured emotional state.
+
+    NOT a simulation of consciousness. This is a four-axis bounded modulation
+    of agent style (monologue tone, prompt emphasis). Values in [0, 1]; events
+    apply bounded deltas; a background decay loop drifts each axis back toward
+    a baseline over time. Planner prompts inject a one-line Ukrainian summary
+    + the raw numbers so the LLM can colour its reasoning but never lets
+    emotion drive action selection.
+    """
+    focus: float = 0.7       # task concentration; high = flow state
+    curiosity: float = 0.5   # drive to explore / learn
+    concern: float = 0.2     # worry / alertness level
+    fatigue: float = 0.0     # accumulated cognitive load
+    updated_at: datetime = Field(default_factory=_utcnow)
+
+    def clamp(self) -> "EmotionVector":
+        """Return a copy with every axis coerced back into [0, 1]."""
+        def _c(v: float) -> float:
+            return max(0.0, min(1.0, float(v)))
+        return EmotionVector(
+            focus=_c(self.focus),
+            curiosity=_c(self.curiosity),
+            concern=_c(self.concern),
+            fatigue=_c(self.fatigue),
+            updated_at=self.updated_at,
+        )
+
+    def summary(self) -> str:
+        """One-line human-readable summary, Ukrainian.
+
+        Label rules are conservative: only axis values >= 0.6 are called out,
+        so short summaries stay uncluttered. Combinations get a compound
+        descriptor; all-baseline yields "спокійний".
+        """
+        labels: list[str] = []
+        if self.focus >= 0.8:
+            labels.append("у потоці")
+        elif self.focus >= 0.6:
+            labels.append("зосереджений")
+        if self.curiosity >= 0.6:
+            labels.append("цікаво")
+        if self.concern >= 0.6:
+            labels.append("стурбований")
+        if self.fatigue >= 0.6:
+            labels.append("втомлений")
+        if not labels:
+            return "спокійний"
+        return ", ".join(labels)
+
+
 class SelfModel(BaseModel):
     identity: str = "PHANTOM, embedded AI operating system"
     hardware: dict[str, Any] = Field(default_factory=dict)
@@ -176,6 +228,17 @@ class SelfModel(BaseModel):
     # Phase 9.2 — Ukrainian primary persona, English technical-term fallback.
     language_primary: str = "uk"
     language_fallback: str = "en"
+    # Phase 9.3a (AD-01) — persistent caveats injected into every planner
+    # prompt. Observations slide off the 10-item tactical window on long
+    # tasks; the SelfModel is read in full every turn, so resume hints
+    # (e.g. "browser session reset") survive. Cleared by the relevant
+    # action once the caveat is no longer applicable (see executor's
+    # browser.navigate clear path).
+    active_caveats: list[str] = Field(default_factory=list)
+    # Phase 9.3a — structured emotional state (focus/curiosity/concern/
+    # fatigue). Event-driven updates from runtime._broadcast triggers;
+    # background decay loop drifts each axis toward baseline.
+    emotion: EmotionVector = Field(default_factory=EmotionVector)
 
 
 class ThoughtBudget(BaseModel):
@@ -267,6 +330,7 @@ __all__ = [
     "Observation",
     "Precondition",
     "ActionResult",
+    "EmotionVector",
     "SelfModel",
     "ThoughtBudget",
     "ReflectionResult",

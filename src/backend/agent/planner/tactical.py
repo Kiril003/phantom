@@ -92,7 +92,7 @@ _SYSTEM_PROMPT_UA = """\
 _USER_TEMPLATE = """\
 SELF:
 {self_model_json}
-
+{caveats_block}
 ПОТОЧНА ПІД-ЦІЛЬ:
 {sub_goal_description}
 Acceptance: {acceptance}
@@ -104,6 +104,23 @@ Rationale: {rationale}
 
 {stricter_note}
 """
+
+
+def _format_active_caveats(self_model: SelfModel) -> str:
+    """Phase 9.3a (AD-01) — render SelfModel.active_caveats as a prompt block.
+
+    Returns empty string when there are no caveats so normal prompts are
+    unchanged. Caveats that made it onto SelfModel are persistent hints
+    (e.g. browser session reset after checkpoint resume) that MUST survive
+    the 10-observation window sliding off the prompt tail.
+    """
+    caveats = list(getattr(self_model, "active_caveats", []) or [])
+    if not caveats:
+        return ""
+    lines = ["АКТИВНІ ЗАСТЕРЕЖЕННЯ (враховуй у плануванні):"]
+    for c in caveats:
+        lines.append(f"- {c}")
+    return "\n" + "\n".join(lines) + "\n"
 
 
 def _inject_synth_args(tool: ToolSchema) -> ToolSchema:
@@ -177,6 +194,7 @@ def _build_user_message(
 ) -> str:
     return _USER_TEMPLATE.format(
         self_model_json=json.dumps(self_model.model_dump(mode="json"), ensure_ascii=False),
+        caveats_block=_format_active_caveats(self_model),
         sub_goal_description=sub_goal.description,
         acceptance=sub_goal.acceptance_criteria,
         rationale=sub_goal.rationale,
@@ -214,7 +232,7 @@ _LEGACY_PROMPT = """\
 
 SELF:
 {self_model_json}
-
+{caveats_block}
 ПОТОЧНА ПІД-ЦІЛЬ:
 {sub_goal_description}
 Acceptance: {acceptance}
@@ -283,6 +301,7 @@ async def _legacy_plan(
 ) -> PlanStep:
     prompt = _LEGACY_PROMPT.format(
         self_model_json=json.dumps(self_model.model_dump(mode="json"), ensure_ascii=False),
+        caveats_block=_format_active_caveats(self_model),
         sub_goal_description=sub_goal.description,
         acceptance=sub_goal.acceptance_criteria,
         rationale=sub_goal.rationale,

@@ -48,15 +48,27 @@ class McpStdioClient:
     def connected(self) -> bool:
         return self._proc is not None and self._proc.returncode is None
 
-    async def connect(self, timeout: float = 5.0) -> None:
+    async def connect(self, timeout: float = 10.0) -> None:
+        """Phase 9.2.2 (F-04): wrap subprocess spawn in `asyncio.wait_for` so
+        a hanging MCP server can no longer block backend startup.
+        """
         if self.connected:
             return
-        self._proc = await asyncio.create_subprocess_exec(
-            *self.command,
-            stdin=asyncio.subprocess.PIPE,
-            stdout=asyncio.subprocess.PIPE,
-            stderr=asyncio.subprocess.PIPE,
-        )
+        try:
+            self._proc = await asyncio.wait_for(
+                asyncio.create_subprocess_exec(
+                    *self.command,
+                    stdin=asyncio.subprocess.PIPE,
+                    stdout=asyncio.subprocess.PIPE,
+                    stderr=asyncio.subprocess.PIPE,
+                ),
+                timeout=timeout,
+            )
+        except asyncio.TimeoutError as exc:
+            self._proc = None
+            raise McpTimeout(
+                f"mcp {self.name}: subprocess spawn exceeded {timeout}s"
+            ) from exc
 
     async def close(self) -> None:
         if self._proc is None:

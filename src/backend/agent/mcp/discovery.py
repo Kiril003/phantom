@@ -2,11 +2,13 @@
 MCP discovery — reads `agent_mcp_servers` config, connects to each enabled
 server, enumerates tools, registers dynamic adapters in ActionRegistry.
 
-Failure on any single server logs WARN and continues. Runtime stays operable
-without MCP.
+Phase 9.2.2 (F-04): discovery now runs in parallel with per-server timeout
+so a single hanging MCP server can't wedge backend startup. Failures on
+individual servers log WARN and skip that server only.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
@@ -24,21 +26,71 @@ _active_clients: dict[str, McpStdioClient] = {}
 _registered_action_names: dict[str, list[str]] = {}
 
 
-async def discover_all(*, registry_=None) -> dict[str, int]:
-    """Connect each enabled server, enumerate tools, register adapters.
+# Phase 9.2.2 — hard ceiling on per-server startup. Even if `timeout_s` in the
+# server config is generous (for individual call_tool requests), discovery
+# itself must finish quickly or the server is skipped.
+_DISCOVER_PER_SERVER_TIMEOUT_S = 10.0
 
-    Returns {server_name: tool_count} for what actually loaded.
+
+async def discover_all(*, registry_=None) -> dict[str, int]:
+    """Connect each enabled server in parallel, enumerate tools, register
+    adapters. Returns {server_name: tool_count} for what actually loaded.
+
+    Phase 9.2.2 (F-04):
+    - Per-server discovery wrapped in `asyncio.wait_for` so one bad server
+      can't block startup beyond `_DISCOVER_PER_SERVER_TIMEOUT_S`.
+    - All servers attempted concurrently via `asyncio.gather` — total
+      discovery latency is `max(per_server)` instead of `sum(per_server)`.
+    - Failures isolated: one server crashing leaves the rest registered.
     """
     reg = registry_ or default_registry
-    out: dict[str, int] = {}
     servers = list(config.agent_mcp_servers or [])
-    for server_cfg in servers:
-        try:
-            count = await _discover_one(server_cfg, reg)
-            out[str(server_cfg.get("name", "?"))] = count
-        except Exception as exc:
-            logger.warning("MCP discover failed for %s: %s", server_cfg.get("name"), exc)
+    if not servers:
+        return {}
+
+    tasks = [
+        asyncio.create_task(_safe_discover_one(s, reg), name=f"mcp_discover_{s.get('name', '?')}")
+        for s in servers
+    ]
+    results = await asyncio.gather(*tasks, return_exceptions=True)
+
+    out: dict[str, int] = {}
+    succeeded: list[str] = []
+    failed: list[str] = []
+    for cfg, result in zip(servers, results):
+        name = str(cfg.get("name", "?"))
+        if isinstance(result, BaseException):
+            logger.warning("MCP %s: discovery raised %s — skipping", name, result)
+            failed.append(f"{name}: {type(result).__name__}")
+            continue
+        out[name] = result
+        if result > 0:
+            succeeded.append(f"{name}({result})")
+        elif cfg.get("enabled", False):
+            failed.append(f"{name}: 0 tools")
+    if succeeded or failed:
+        logger.info(
+            "MCP discovery complete: %d/%d server(s) online: [%s]%s",
+            len(succeeded), len([s for s in servers if s.get("enabled", False)]),
+            ", ".join(succeeded) or "none",
+            (f". Failed: [{', '.join(failed)}]" if failed else ""),
+        )
     return out
+
+
+async def _safe_discover_one(server_cfg: dict, reg) -> int:
+    """Wrap _discover_one in a per-server timeout. Re-raises on failure so
+    the caller's gather() can collect the exception."""
+    name = str(server_cfg.get("name") or "?")
+    try:
+        return await asyncio.wait_for(
+            _discover_one(server_cfg, reg),
+            timeout=_DISCOVER_PER_SERVER_TIMEOUT_S,
+        )
+    except asyncio.TimeoutError as exc:
+        raise McpTimeout(
+            f"mcp {name}: discovery exceeded {_DISCOVER_PER_SERVER_TIMEOUT_S}s"
+        ) from exc
 
 
 async def _discover_one(server_cfg: dict, reg) -> int:
@@ -58,7 +110,7 @@ async def _discover_one(server_cfg: dict, reg) -> int:
     await client.connect()
     try:
         tools = await client.list_tools()
-    except (McpError, McpTimeout) as exc:
+    except (McpError, McpTimeout):
         await client.close()
         raise
 
@@ -78,7 +130,6 @@ async def _discover_one(server_cfg: dict, reg) -> int:
         except Exception as exc:
             logger.warning("MCP %s: skipping malformed tool %s: %s", name, tool, exc)
             continue
-        # Register into the live ActionRegistry so the planner sees it next loop.
         reg._by_name[cls.name] = cls
         registered.append(cls.name)
 

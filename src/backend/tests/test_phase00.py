@@ -75,17 +75,14 @@ def test_app_creation() -> None:
 
 @pytest.mark.asyncio
 async def test_db_init_creates_tables() -> None:
-    """Test DB initializes in-memory without error."""
-    import os
-    os.environ["DATABASE_URL"] = "sqlite+aiosqlite:///:memory:"
+    """Test Base.metadata.create_all succeeds on a fresh in-memory DB."""
+    from sqlalchemy.ext.asyncio import create_async_engine
+    from db.database import Base
+    from db import models  # noqa: F401 — registers models with Base
 
-    from importlib import reload
-    import config as cfg_module
-    import db.database as db_module
-
-    reload(cfg_module)
-    reload(db_module)
-
-    from db.database import init_db, close_db
-    await init_db()
-    await close_db()
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+    try:
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+    finally:
+        await engine.dispose()

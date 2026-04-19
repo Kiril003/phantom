@@ -150,28 +150,42 @@ def _next_pending_subgoal(state: "TaskState") -> SubGoal | None:
 
 async def _ensure_strategic_plan(runtime: "AgentRuntime", state: "TaskState",
                                  revise_note: str = "") -> bool:
-    """Run strategic planner and update state. Returns True on success."""
+    """Run strategic planner and update state. Returns True on success.
+
+    Phase 9.2.2 (F-02): wraps the call so a BlockedQuotaError raised by the
+    router (both providers quota-exhausted) parks the task on `blocked_quota`
+    and retries strategic.plan after recovery instead of crashing.
+    """
     await runtime.set_substate("thinking")
     await runtime._broadcast("thinking.started", {
         "task_id": state.id, "planner": "strategic", "step_idx": state.step_idx,
     })
-    try:
-        plan = await strategic.plan(
-            goal=state.goal,
-            self_model=state.self_model,
-            memory_seeds_summary=state.self_model.recent_task_summary or "",
-            revise_note=revise_note,
-        )
-    except (RuntimeError, PlannerLLMError) as exc:
-        logger.error("strategic planner failed: %s", exc)
-        await runtime._broadcast("warning.issued", {
-            "task_id": state.id,
-            "category": "strategic_planner",
-            "message": str(exc),
-        })
-        await runtime.finalize_task(state, "failed", summary="strategic planner could not produce a plan",
-                                    error=str(exc))
-        return False
+    while True:
+        try:
+            plan = await strategic.plan(
+                goal=state.goal,
+                self_model=state.self_model,
+                memory_seeds_summary=state.self_model.recent_task_summary or "",
+                revise_note=revise_note,
+                task_id=state.id,
+            )
+            break
+        except BlockedQuotaError as exc:
+            resumed = await runtime.enter_blocked_quota(state, str(exc))
+            if not resumed:
+                return False
+            # Retry strategic plan after provider recovers.
+            continue
+        except (RuntimeError, PlannerLLMError) as exc:
+            logger.error("strategic planner failed: %s", exc)
+            await runtime._broadcast("warning.issued", {
+                "task_id": state.id,
+                "category": "strategic_planner",
+                "message": str(exc),
+            })
+            await runtime.finalize_task(state, "failed", summary="strategic planner could not produce a plan",
+                                        error=str(exc))
+            return False
 
     await runtime._broadcast("thinking.completed", {
         "task_id": state.id, "planner": "strategic", "step_idx": state.step_idx,
@@ -221,13 +235,35 @@ async def _run_reflection(
     await runtime._broadcast("reflection.started", {
         "task_id": state.id, "reason": reason,
     })
-    result = await reflector_mod.reflect(
-        active_sub_goal=sub,
-        observations=state.observations,
-        recent_actions_summary=_summarize_recent_actions(state),
-        thought_budget=state.thought_budget,
-        intervention=intervention,
-    )
+    while True:
+        try:
+            result = await reflector_mod.reflect(
+                active_sub_goal=sub,
+                observations=state.observations,
+                recent_actions_summary=_summarize_recent_actions(state),
+                thought_budget=state.thought_budget,
+                intervention=intervention,
+                task_id=state.id,
+            )
+            break
+        except BlockedQuotaError as exc:
+            # Phase 9.2.2 (F-02): both providers quota-exhausted during
+            # reflection. Park the task; on recovery retry once. If the
+            # runtime gives up (emergency stop), synthesise an abandon_task
+            # verdict so the caller exits cleanly.
+            resumed = await runtime.enter_blocked_quota(state, str(exc))
+            if not resumed:
+                result = ReflectionResult(
+                    verdict="abandon_task",
+                    summary="reflection_blocked_by_quota_recovery_failed",
+                    progress_assessment="quota recovery aborted by emergency stop",
+                    recurring_errors=[],
+                    recommendations="",
+                    new_confidence=0.0,
+                )
+                break
+            # else retry once
+            continue
     state.last_reflection = result
     state.thought_budget = ThoughtBudget(
         estimated_actions=state.thought_budget.estimated_actions,
@@ -365,6 +401,7 @@ async def run_task_loop(runtime: "AgentRuntime", state: "TaskState", *, resumed:
                     self_model=state.self_model,
                     observations=state.observations,
                     actions_in_sub_goal=actions_in_subgoal,
+                    task_id=state.id,
                 )
             except BlockedQuotaError as exc:
                 # Phase 9.2.1 — both LLM providers are quota-exhausted.

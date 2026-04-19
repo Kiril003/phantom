@@ -3,6 +3,7 @@ PHANTOM OS — Ollama provider (Gemma 4 e4b local).
 """
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from typing import Any, AsyncIterator
@@ -18,6 +19,31 @@ from ai.tool_use import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+def _classify_ollama_error(exc: Exception) -> tuple[ToolErrorKind, bool, float | None]:
+    """
+    Phase 9.2.2 — map an Ollama-side exception → (kind, retriable, retry_after_s).
+
+    Local Ollama doesn't issue free-tier quotas; a 429 here means a paid
+    gateway is in front of it, so RATE_LIMIT (transient) rather than
+    QUOTA_EXHAUSTED (until midnight).
+    """
+    msg = str(exc).lower()
+    type_name = type(exc).__name__.lower()
+
+    if isinstance(exc, asyncio.TimeoutError) or "timeout" in msg or "timed out" in msg:
+        return ToolErrorKind.TIMEOUT, True, None
+    if "connectrefused" in type_name or "connectionrefused" in type_name \
+            or "connection refused" in msg or "all connection attempts failed" in msg:
+        return ToolErrorKind.PROVIDER_UNAVAILABLE, True, None
+    if isinstance(exc, ConnectionError):
+        return ToolErrorKind.PROVIDER_UNAVAILABLE, True, None
+    if "429" in msg or ("rate" in msg and "limit" in msg):
+        return ToolErrorKind.RATE_LIMIT, True, None
+    if any(c in msg for c in (" 500", " 502", " 503", " 504", "internal", "unavailable")):
+        return ToolErrorKind.PROVIDER_UNAVAILABLE, True, None
+    return ToolErrorKind.NETWORK, True, None
 
 
 def _build_ollama_tools() -> list[dict[str, Any]]:

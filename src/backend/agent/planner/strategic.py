@@ -68,6 +68,8 @@ async def plan(
     self_model: SelfModel,
     memory_seeds_summary: str = "",
     revise_note: str = "",
+    *,
+    task_id: str | None = None,
 ) -> StrategicPlan:
     # Phase 9.2 — pull top-k similar past episodes from ChromaDB.
     memory_block = ""
@@ -98,7 +100,7 @@ async def plan(
     )
 
     try:
-        data = await llm_json(prompt)
+        data = await llm_json(prompt, task_id=task_id)
     except PlannerLLMError as exc:
         raise RuntimeError(f"strategic_planner_invalid_json: {exc}") from exc
 

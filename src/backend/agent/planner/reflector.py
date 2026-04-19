@@ -65,6 +65,7 @@ async def reflect(
     recent_actions_summary: str,
     thought_budget: ThoughtBudget,
     intervention: str | None = None,
+    task_id: str | None = None,
 ) -> ReflectionResult:
     prompt = _PROMPT.format(
         sub_goal_description=active_sub_goal.description,
@@ -78,7 +79,7 @@ async def reflect(
     )
 
     try:
-        data = await llm_json(prompt)
+        data = await llm_json(prompt, task_id=task_id)
     except PlannerLLMError as exc:
         # Reflection that can't parse falls back to 'continue' so the agent
         # keeps making forward progress; the failure is logged and surfaced

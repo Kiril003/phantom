@@ -435,6 +435,7 @@ class AgentRuntime:
                 outcome=outcome_kind,
                 action_counts=action_counts,
                 last_observation=last_obs,
+                task_id=state.id,
             )
             duration_s = max(0.0, time.monotonic() - state.started_at)
             await write_episode(

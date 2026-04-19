@@ -4,6 +4,7 @@ AIProvider — abstract interface + AIRouter with primary/fallback logic.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import logging
 import time
 from abc import ABC, abstractmethod
@@ -28,6 +29,22 @@ _BACKOFF_MAX_S = 16.0              # cap on per-attempt sleep
 _BACKOFF_BASE_S = 2.0              # 2 ** attempt growth
 _RATE_LIMIT_RETRIES = 3            # extra retries on RATE_LIMIT before cooling
 _TRANSIENT_RETRIES = 1             # extra retries for NETWORK / TIMEOUT / 5xx
+
+
+# ── Phase 9.2.1 / 9.2.2 — router-level signal exception ───────────────────────
+
+
+class BlockedQuotaError(RuntimeError):
+    """
+    Raised by the router (call_with_tools, generate, generate_stream) when
+    every configured provider is currently quota-exhausted. The agent loop
+    catches this and parks the task on `blocked_quota`, then probes for
+    provider recovery before resuming.
+
+    Inherits from RuntimeError (not PlannerLLMError) so json_response /
+    llm_json's `except JsonResponseError` does NOT swallow it — quota
+    exhaustion is a control signal, not a parse problem.
+    """
 
 
 # ── Response dataclass ─────────────────────────────────────────────────────────
@@ -113,89 +130,224 @@ class AIRouter:
         user_message: str,
         system_prompt: str,
         history: list[dict],
+        *,
+        task_id: str | None = None,
     ) -> AIResponse:
-        """Generate response — primary with fallback on failure."""
-        primary_name = config.ai_primary_provider
-        primary = self._providers[primary_name]
+        """Generate response — primary with fallback, sharing the resilience
+        policy (cooling, quota lock, backoff) used by call_with_tools.
 
-        t0 = time.monotonic()
-        try:
-            result = await asyncio.wait_for(
-                primary.generate(user_message, system_prompt, history),
-                timeout=config.ai_timeout_s,
-            )
-            result.latency_ms = int((time.monotonic() - t0) * 1000)
-            self._active = primary_name
-            self._sync_context(primary_name)
-            return result
-        except (asyncio.TimeoutError, Exception) as exc:
-            logger.warning(
-                "Primary AI provider '%s' failed (%s): %s — activating fallback",
-                primary_name, type(exc).__name__, exc,
-            )
-
-        fallback_name = config.ai_fallback_provider
-        if fallback_name == "none" or fallback_name not in self._providers:
+        Phase 9.2.2 (F-02): the previous one-shot try/except fell straight to
+        fallback on any error and bypassed the 9.2.1 policy entirely. Now
+        429s drive the same backoff/cooling/quota machinery as tactical's
+        tool-use path.
+        """
+        if not await _runtime_note_llm_call(task_id):
             raise RuntimeError(
-                f"Primary AI ({primary_name}) failed and no fallback is configured."
+                f"call_budget_exhausted: per-task LLM-call cap "
+                f"({config.agent_max_llm_calls_per_task}) reached"
             )
 
-        t0 = time.monotonic()
-        fallback = self._providers[fallback_name]
-        result = await fallback.generate(user_message, system_prompt, history)
-        result.latency_ms = int((time.monotonic() - t0) * 1000)
-        self._active = fallback_name
-        self._sync_context(fallback_name)
-        return result
+        from ai.tool_use import ToolErrorKind
+
+        primary_name = config.ai_primary_provider
+        fallback_name = config.ai_fallback_provider
+        sequence = self._available_sequence()
+
+        if not sequence:
+            primary_blocked = primary_name in self._quota_exhausted
+            fallback_disabled = (
+                fallback_name == "none" or fallback_name not in self._providers
+            )
+            if primary_blocked and (
+                fallback_disabled or fallback_name in self._quota_exhausted
+            ):
+                raise BlockedQuotaError(
+                    f"all providers quota-exhausted: primary={primary_name}, "
+                    f"fallback={fallback_name}"
+                )
+            raise RuntimeError(
+                f"AIRouter.generate: no providers available "
+                f"(primary={primary_name} cooling/quota: "
+                f"{self._unavailable_reason(primary_name)})"
+            )
+
+        last_exc: Exception | None = None
+
+        for prov_idx, prov_name in enumerate(sequence):
+            provider = self._providers.get(prov_name)
+            if provider is None:
+                continue
+            is_fallback_attempt = prov_idx > 0
+            extra_retries = 0 if is_fallback_attempt else _RATE_LIMIT_RETRIES
+            tries = 0
+            while True:
+                tries += 1
+                await self._respect_min_interval(prov_name)
+                t0 = time.monotonic()
+                try:
+                    result = await asyncio.wait_for(
+                        provider.generate(user_message, system_prompt, history),
+                        timeout=config.ai_timeout_s,
+                    )
+                except Exception as exc:
+                    self._last_call_at[prov_name] = time.monotonic()
+                    kind, _retr, retry_after_s = _classify_provider_exception(prov_name, exc)
+                    self._last_call_summary[prov_name] = {
+                        "at": _utc_now_iso(), "success": False, "kind": str(kind),
+                    }
+                    last_exc = exc
+                    logger.warning(
+                        "AIRouter.generate: %s failed (%s/%s): %s",
+                        prov_name, type(exc).__name__, kind, exc,
+                    )
+                    if kind == ToolErrorKind.QUOTA_EXHAUSTED:
+                        self._mark_quota_exhausted(prov_name)
+                        break
+                    if kind == ToolErrorKind.RATE_LIMIT and tries <= extra_retries:
+                        await asyncio.sleep(self._compute_backoff(retry_after_s, tries))
+                        continue
+                    if kind == ToolErrorKind.RATE_LIMIT:
+                        self._mark_cooling(prov_name, _COOLING_RATE_LIMIT_S, "rate_limit")
+                        break
+                    if (
+                        kind in {ToolErrorKind.PROVIDER_UNAVAILABLE,
+                                 ToolErrorKind.NETWORK,
+                                 ToolErrorKind.TIMEOUT}
+                        and tries <= _TRANSIENT_RETRIES
+                    ):
+                        await asyncio.sleep(0.5 if kind != ToolErrorKind.PROVIDER_UNAVAILABLE else 1.0)
+                        continue
+                    if kind == ToolErrorKind.PROVIDER_UNAVAILABLE:
+                        self._mark_cooling(prov_name, _COOLING_PROVIDER_5XX_S, "provider_unavailable")
+                    break
+                # Success
+                result.latency_ms = int((time.monotonic() - t0) * 1000)
+                self._active = prov_name
+                self._sync_context(prov_name)
+                self._last_call_at[prov_name] = time.monotonic()
+                self._last_call_summary[prov_name] = {
+                    "at": _utc_now_iso(), "success": True, "tool": None,
+                }
+                return result
+
+        # Both providers failed.
+        primary_blocked = primary_name in self._quota_exhausted
+        fallback_disabled = (
+            fallback_name == "none" or fallback_name not in self._providers
+        )
+        fallback_blocked = (
+            fallback_disabled or fallback_name in self._quota_exhausted
+        )
+        if primary_blocked and fallback_blocked:
+            raise BlockedQuotaError(
+                f"all providers quota-exhausted: primary={primary_name}, "
+                f"fallback={fallback_name}"
+            )
+        if last_exc is not None:
+            raise last_exc
+        raise RuntimeError(
+            f"AIRouter.generate: providers exhausted "
+            f"(primary={primary_name}, fallback={fallback_name})"
+        )
 
     async def generate_stream(
         self,
         user_message: str,
         system_prompt: str,
         history: list[dict],
+        *,
+        task_id: str | None = None,
     ) -> AsyncIterator[str]:
         """
-        Stream from primary.  Falls back to chunked non-streaming if primary
-        stream raises immediately.
-
-        Each chunk is gated by `config.ai_timeout_s` via asyncio.wait_for — a
-        hung upstream (network stall, Ollama paging a cold model) can no
-        longer pin the request indefinitely; after one chunk-interval without
-        progress we raise and trigger the fallback path below.
+        Stream from primary, with cooling/quota awareness (Phase 9.2.2).
+        Falls back to chunked non-streaming if primary is unavailable or fails
+        mid-stream. Raises BlockedQuotaError when all providers are
+        quota-exhausted so the loop can park the task.
         """
-        primary_name = config.ai_primary_provider
-        primary = self._providers[primary_name]
-
-        try:
-            stream = primary.generate_stream(user_message, system_prompt, history)
-            while True:
-                try:
-                    chunk = await asyncio.wait_for(
-                        stream.__anext__(),
-                        timeout=config.ai_timeout_s,
-                    )
-                except StopAsyncIteration:
-                    break
-                self._active = primary_name
-                yield chunk
-            self._sync_context(primary_name)
-            return
-        except (asyncio.TimeoutError, Exception) as exc:
-            logger.warning(
-                "Primary stream (%s) failed: %s — falling back to non-stream",
-                primary_name, exc,
+        if not await _runtime_note_llm_call(task_id):
+            raise RuntimeError(
+                f"call_budget_exhausted: per-task LLM-call cap "
+                f"({config.agent_max_llm_calls_per_task}) reached"
             )
 
+        from ai.tool_use import ToolErrorKind
+
+        primary_name = config.ai_primary_provider
         fallback_name = config.ai_fallback_provider
+        primary_available = self._is_provider_available(primary_name)
+
+        if primary_available:
+            primary = self._providers[primary_name]
+            try:
+                await self._respect_min_interval(primary_name)
+                stream = primary.generate_stream(user_message, system_prompt, history)
+                while True:
+                    try:
+                        chunk = await asyncio.wait_for(
+                            stream.__anext__(),
+                            timeout=config.ai_timeout_s,
+                        )
+                    except StopAsyncIteration:
+                        break
+                    self._active = primary_name
+                    yield chunk
+                self._sync_context(primary_name)
+                self._last_call_at[primary_name] = time.monotonic()
+                self._last_call_summary[primary_name] = {
+                    "at": _utc_now_iso(), "success": True, "tool": None,
+                }
+                return
+            except Exception as exc:
+                self._last_call_at[primary_name] = time.monotonic()
+                kind, _retr, _ra = _classify_provider_exception(primary_name, exc)
+                self._last_call_summary[primary_name] = {
+                    "at": _utc_now_iso(), "success": False, "kind": str(kind),
+                }
+                logger.warning(
+                    "Primary stream (%s) failed (%s): %s — falling back",
+                    primary_name, kind, exc,
+                )
+                if kind == ToolErrorKind.QUOTA_EXHAUSTED:
+                    self._mark_quota_exhausted(primary_name)
+                elif kind == ToolErrorKind.RATE_LIMIT:
+                    self._mark_cooling(primary_name, _COOLING_RATE_LIMIT_S, "rate_limit")
+                elif kind == ToolErrorKind.PROVIDER_UNAVAILABLE:
+                    self._mark_cooling(primary_name, _COOLING_PROVIDER_5XX_S, "provider_unavailable")
+        else:
+            logger.info(
+                "AIRouter.generate_stream: skipping primary '%s' — %s",
+                primary_name, self._unavailable_reason(primary_name),
+            )
+
         if fallback_name == "none" or fallback_name not in self._providers:
+            if primary_name in self._quota_exhausted:
+                raise BlockedQuotaError(
+                    f"primary={primary_name} quota-exhausted and no fallback"
+                )
             raise RuntimeError("Primary stream failed and no fallback configured.")
 
+        if not self._is_provider_available(fallback_name):
+            if (primary_name in self._quota_exhausted
+                    and fallback_name in self._quota_exhausted):
+                raise BlockedQuotaError(
+                    f"all providers quota-exhausted: primary={primary_name}, "
+                    f"fallback={fallback_name}"
+                )
+            raise RuntimeError(
+                f"AIRouter.generate_stream: fallback {fallback_name} unavailable "
+                f"({self._unavailable_reason(fallback_name)})"
+            )
+
         fallback = self._providers[fallback_name]
+        await self._respect_min_interval(fallback_name)
         response = await fallback.generate(user_message, system_prompt, history)
         self._active = fallback_name
         self._sync_context(fallback_name)
+        self._last_call_at[fallback_name] = time.monotonic()
+        self._last_call_summary[fallback_name] = {
+            "at": _utc_now_iso(), "success": True, "tool": None,
+        }
 
-        # Yield in word-level chunks to simulate streaming for the client
         words = response.content.split(" ")
         for i, word in enumerate(words):
             yield word + (" " if i < len(words) - 1 else "")
@@ -442,9 +594,42 @@ class AIRouter:
         last_error.fell_through = fell_through
         return last_error
 
+    # ── Phase 9.2.2 — provider sequence + accessors ──────────────────────────
+
+    def _ensure_state_dicts(self) -> None:
+        """Phase 9.2.2: tests instantiate AIRouter via `__new__` and skip
+        __init__. Lazily install the empty state dicts so the resilience
+        helpers don't AttributeError on those code paths."""
+        for attr in ("_cooling", "_quota_exhausted", "_last_call_at", "_last_call_summary"):
+            if not hasattr(self, attr):
+                setattr(self, attr, {})
+
+    def _available_sequence(self) -> list[str]:
+        """Build (primary, fallback) call order, skipping cooling/quota-locked."""
+        out: list[str] = []
+        primary_name = config.ai_primary_provider
+        fallback_name = config.ai_fallback_provider
+        if self._is_provider_available(primary_name):
+            out.append(primary_name)
+        else:
+            logger.info(
+                "AIRouter.generate: skipping primary '%s' — %s",
+                primary_name, self._unavailable_reason(primary_name),
+            )
+        if fallback_name != "none" and fallback_name in self._providers:
+            if self._is_provider_available(fallback_name):
+                out.append(fallback_name)
+        return out
+
+    def get_provider(self, name: str):
+        """Public accessor for tests / probe — returns the underlying provider
+        instance (no router resilience wrapping). Returns None if unknown."""
+        return self._providers.get(name)
+
     # ── Cooling / quota helpers ────────────────────────────────────────────────
 
     def _is_provider_available(self, name: str) -> bool:
+        self._ensure_state_dicts()
         if name in self._quota_exhausted:
             until = self._quota_exhausted[name].get("until_utc", "")
             try:
@@ -543,6 +728,32 @@ class AIRouter:
             logger.debug("_sync_context: could not update context engine: %s", exc)
 
 
+def _classify_provider_exception(provider_name: str, exc: Exception):
+    """
+    Phase 9.2.2 — dispatch to the per-provider classifier so generate /
+    generate_stream apply the same resilience policy as call_with_tools.
+
+    Returns (kind, retriable, retry_after_s).
+    """
+    from ai.tool_use import ToolErrorKind
+
+    if provider_name == "gemini":
+        try:
+            from ai.gemini_provider import _classify_gemini_error
+            return _classify_gemini_error(exc)
+        except Exception:  # pragma: no cover — defensive
+            return ToolErrorKind.NETWORK, True, None
+    if provider_name == "ollama":
+        try:
+            from ai.ollama_provider import _classify_ollama_error
+            return _classify_ollama_error(exc)
+        except Exception:  # pragma: no cover
+            return ToolErrorKind.NETWORK, True, None
+    if isinstance(exc, asyncio.TimeoutError):
+        return ToolErrorKind.TIMEOUT, True, None
+    return ToolErrorKind.NETWORK, True, None
+
+
 async def _runtime_note_llm_call(task_id: str | None) -> bool:
     """
     Phase 9.2.1 — bridge to AgentRuntime.note_llm_call without importing
@@ -551,8 +762,40 @@ async def _runtime_note_llm_call(task_id: str | None) -> bool:
 
     Returns True when no task is active or budget has room; False when the
     runtime has decided this task is over-budget.
+
+    Phase 9.2.2: when `agent_require_task_id_for_budget` is True (default),
+    a missing task_id logs a WARNING with caller stack so we can detect new
+    code paths that bypass the budget. The call is still allowed through
+    (backwards compat).
     """
     if not task_id:
+        if bool(getattr(config, "agent_require_task_id_for_budget", True)):
+            import traceback
+
+            stack = "".join(traceback.format_stack(limit=6)[:-1])
+            logger.warning(
+                "AIRouter call invoked without task_id — per-task LLM budget "
+                "will NOT count this call. Wire task_id through the planner "
+                "call site.\nCaller stack:\n%s",
+                stack,
+            )
+            with contextlib.suppress(Exception):
+                from ai.tool_use_audit import write_log
+                await write_log(
+                    task_id=None,
+                    step_idx=None,
+                    provider="router",
+                    model="",
+                    tool_name=None,
+                    success=False,
+                    error_kind="missing_task_id_in_budget_path",
+                    error_message="router call invoked without task_id",
+                    elapsed_ms=0,
+                    retry_count=0,
+                    retry_after_s=None,
+                    fell_through_to_fallback=False,
+                    cooling_triggered=False,
+                )
         return True
     try:
         from agent.runtime import agent_runtime

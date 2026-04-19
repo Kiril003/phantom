@@ -184,6 +184,11 @@ class PhantomConfig(BaseSettings):
     # threshold emits a WS event so UIs can show the user before exhaustion.
     agent_max_llm_calls_per_task: int = 50
     agent_warn_llm_calls_per_task: int = 30
+    # Phase 9.2.2 — when True, LLM calls without task_id log a WARNING.
+    agent_require_task_id_for_budget: bool = True
+    # Phase 9.2.2 — blocked_quota probe cadence + adaptive backoff ceiling.
+    agent_blocked_quota_probe_s: int = 60
+    agent_blocked_quota_probe_max_s: int = 600
     agent_reflection_every_n_actions: int = 5
     agent_thought_budget_force_reflect_ratio: float = 2.0
     agent_strategic_warn_actions: int = 30

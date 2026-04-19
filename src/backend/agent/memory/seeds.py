@@ -40,10 +40,15 @@ async def compose_summary(
     outcome: str,
     action_counts: dict[str, int],
     last_observation: str,
+    task_id: str | None = None,
 ) -> str:
     """Call the LLM to compose a UA summary of the task. Falls back gracefully
     when no provider is reachable so episodic memory is never the reason a
-    task fails to finalise."""
+    task fails to finalise.
+
+    Phase 9.2.2: forwards task_id so this call also counts against the
+    per-task LLM budget.
+    """
     try:
         from ai.provider import ai_router
         prompt = _SUMMARY_PROMPT_UA.format(
@@ -56,6 +61,7 @@ async def compose_summary(
             user_message=prompt,
             system_prompt="Ти стислий редактор. Відповідай чистим текстом без markdown.",
             history=[],
+            task_id=task_id,
         )
         text = (response.content or "").strip()
         if text:

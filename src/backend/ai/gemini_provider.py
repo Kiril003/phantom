@@ -214,9 +214,16 @@ class GeminiProvider(AIProvider):
 
         if fn_name:
             form, content, attachments = parse_function_call(fn_name, fn_args)
-            # Merge any plain-text parts into content if content is empty
-            if not content and text_parts:
-                content = " ".join(text_parts)
+            # Gemini sometimes emits function_call with empty content; cascade through
+            # text parts, then SDK accumulator, before accepting empty reply.
+            if not content and not attachments:
+                content = " ".join(text_parts).strip() or (response.text or "").strip()
+                if not content:
+                    logger.warning(
+                        "Gemini returned empty %s function_call with no fallback text; "
+                        "model=%s tokens=%d", fn_name, config.ai_gemini_model, tokens_used,
+                    )
+                    content = "…"
         else:
             full_text = " ".join(text_parts).strip() or (response.text or "")
             form, content, attachments = parse_plain_text(full_text)

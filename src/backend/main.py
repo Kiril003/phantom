@@ -165,6 +165,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     async with get_session() as db:
         await ensure_default_user(db)
 
+    # Warm the MiniLM encoder so the first chat message doesn't pay cold-load latency.
+    try:
+        from memory.strategic_memory import _get_ef
+        def _warm() -> None:
+            _get_ef()(["warmup"])
+        await asyncio.to_thread(_warm)
+        logger.info("MiniLM encoder warmed at startup")
+    except Exception as exc:
+        logger.warning("MiniLM warmup skipped: %s", exc)
+
     # Register chat WebSocket handlers
     register_chat_ws_handlers()
 

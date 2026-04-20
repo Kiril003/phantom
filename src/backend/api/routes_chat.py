@@ -275,6 +275,21 @@ async def send_message(
     except Exception as exc:
         logger.debug("9.3b proactive note_user_interaction failed: %s", exc)
 
+    # Phase 9.4a — if PHANTOM previously asked "Чи хочеш щоб я X? (так/ні)"
+    # and the user's reply is an affirmative, fire that pending action on
+    # the background track before generating the AI reply. Non-affirmative
+    # replies clear the pending intent silently so the chat continues
+    # normally (we don't want to hold the user hostage to a confirmation
+    # they've implicitly abandoned).
+    pending_fired_task_id: str | None = None
+    try:
+        from agent.proactive import get_loop as _get_loop_p94a
+        ploop4a = _get_loop_p94a()
+        if ploop4a is not None and ploop4a.has_pending_action():
+            pending_fired_task_id = await ploop4a.resolve_pending_action(req.content)
+    except Exception as exc:
+        logger.debug("9.4a pending-action resolve failed: %s", exc)
+
     t_start = time.monotonic()
 
     # Generate AI response

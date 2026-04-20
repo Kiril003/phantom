@@ -1,17 +1,25 @@
 """
 Phase 9.3b — proactive background loop.
+Phase 9.4a — the loop can now initiate actions on the background track,
+with or without user confirmation.
 
-A background asyncio task that, every N seconds, asks "should PHANTOM say
-something unprompted?" 90% of checks → no. 10% → initiative message into
-the most recent chat session.
+A background asyncio task that, every N seconds, asks "should PHANTOM
+act or say something unprompted?" The decide prompt returns one of three
+kinds:
+  * "speak"  — emit a chat message into the most recent session
+  * "action" — dispatch a task on the background track; confirmation
+               with the user is optional (confirm_with_user flag)
+  * "none"   — mute/no-op (most decisions land here)
 
 Hard gates keep the LLM call out of obvious no-go situations (active task,
 no recent chat, cooldown, emotion fully at baseline with no triggers). Only
 when gates pass does the decide prompt actually fire.
 
-Emotion shapes the cadence (concern shortens, calm lengthens) so PHANTOM
-"checks in more often" when something looks off and "stays quiet" when the
-signal is flat.
+Pending-confirmation state is module-level + per-loop: when a decide
+returns action with confirm_with_user=true, the loop asks the user (via
+the chat UI) and parks the intent. The chat handler forwards affirmative
+replies into `resolve_pending_action()` which fires the task. Pending
+intents time out after 5 minutes to avoid indefinite "stuck ask" UX.
 
 Default DISABLED (config.agent_proactive_enabled=False per 9.3b OVERRIDE).
 Operator flips it manually via Settings UI or sqlite after observing they're
@@ -23,8 +31,10 @@ import asyncio
 import contextlib
 import json
 import logging
+import re
 import uuid
 from collections import deque
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
 
@@ -43,6 +53,34 @@ def _utcnow() -> datetime:
     return datetime.now(tz=timezone.utc)
 
 
+# ── Phase 9.4a: pending-action plumbing ─────────────────────────────────────
+
+# Conservative affirmative matcher — ambiguous replies are treated as "no"
+# so PHANTOM never fires a background action off a borderline "maybe".
+AFFIRMATIVE_RX = re.compile(
+    r"^(так|да|yes|ok|окей|давай|продовжуй|роби|го|sure|yep)[,.!?\s]*$",
+    re.IGNORECASE,
+)
+
+# A pending-confirmation times out after this many seconds. Past that the
+# user's silence is treated as refusal and the intent is dropped.
+PENDING_ACTION_TIMEOUT_S = 300
+
+
+@dataclass
+class PendingAction:
+    """Awaiting user confirmation before firing an action."""
+    action_goal: str
+    reason: str
+    priority: int
+    created_at: datetime
+    session_id: str | None = None
+
+    def expired(self, now: datetime | None = None) -> bool:
+        now = now or _utcnow()
+        return (now - self.created_at).total_seconds() > PENDING_ACTION_TIMEOUT_S
+
+
 # ── Decide prompt (Ukrainian) ────────────────────────────────────────────────
 
 _DECIDE_SYSTEM = (
@@ -52,7 +90,7 @@ _DECIDE_SYSTEM = (
 )
 
 
-_DECIDE_TEMPLATE = """Ти PHANTOM. Зараз ти у фоновому режимі — користувач не питав тебе нічого, але, можливо, варто ініціативно щось сказати.
+_DECIDE_TEMPLATE = """Ти PHANTOM. Зараз ти у фоновому режимі — користувач не питав тебе нічого, але, можливо, варто ініціативно щось зробити.
 
 ПОТОЧНИЙ СТАН:
 {emotion_summary}
@@ -66,19 +104,37 @@ focus={emotion_focus:.2f}  curiosity={emotion_curiosity:.2f}  concern={emotion_c
 
 ХВИЛИН ВІД ОСТАННЬОЇ ВЗАЄМОДІЇ: {minutes_since_user}
 
+ТИ МОЖЕШ ВИРІШИТИ:
+- "speak"  — сказати повідомлення (як раніше)
+- "action" — ініціювати фонову дію (наприклад, перевірити стан системи, прочитати файл)
+- "none"   — нічого не робити (мовчання — валідний вибір)
+
+ДІЇ:
+- Формулюй action_goal природною мовою як user task (українською або англійською).
+- Якщо дія критична або потенційно небажана — confirm_with_user=true (PHANTOM спитає дозволу).
+- Якщо дія спостережна і безпечна — confirm_with_user=false (PHANTOM виконає тихо).
+
+Приклади ДІЙ:
+- confirm_with_user=true: "виконай backup home папки", "видали тимчасові файли з /tmp"
+- confirm_with_user=false: "перевір вільне місце на диску", "подивись список активних процесів"
+
 ПРАВИЛА:
-- Говори ТІЛЬКИ якщо справді є що сказати. Мовчання — валідний вибір.
-- Не переказуй очевидне ("я готовий помагати", "як справи") — це дратує.
-- Не повторюйся.
-- Приклади ХОРОШИХ приводів: помітив щось нове у стані системи, згадав про недопрацьовану задачу користувача, хочеш запропонувати щось на основі недавніх успіхів, стурбований чимось.
-- Приклади НЕправильних приводів: загальні підбадьорливі фрази, пусті привітання.
+- Обирай ТІЛЬКИ якщо справді є що зробити. "none" — валідний вибір.
+- Не повторюйся, не пиши банальностей ("готовий помагати", "як справи").
+- Не ініціюй ті ж самі дії підряд — якщо вже недавно це робив, обирай none.
 
 Відповідай строгим JSON:
 {{
-  "should_speak": true або false,
+  "kind": "speak" | "action" | "none",
   "reason": "одне-реченневе пояснення",
-  "message": "повідомлення українською, 1-3 речення (null якщо should_speak=false)",
-  "priority": ціле число 1-10
+  "priority": ціле число 1-10,
+
+  // тільки для kind=speak:
+  "message": "українською, 1-3 речення",
+
+  // тільки для kind=action:
+  "action_goal": "опис задачі, природною мовою",
+  "confirm_with_user": true | false
 }}"""
 
 
@@ -99,6 +155,11 @@ class ProactiveLoop:
         self._success_streak: int = 0
         self._last_streak_trigger_at: datetime | None = None
         self._last_cycle_at: datetime | None = None
+        # Phase 9.4a — at most one pending action awaiting user confirmation.
+        # If a new decide returns another "confirm_with_user=true" while
+        # one is pending, we overwrite (latest wins) and log — same decision
+        # the chat flow would make if the user changed their mind.
+        self._pending_action: PendingAction | None = None
 
     # ── Lifecycle ────────────────────────────────────────────────────────────
 
@@ -224,22 +285,187 @@ class ProactiveLoop:
     # ── Gating + decide ──────────────────────────────────────────────────────
 
     async def _maybe_speak(self) -> None:
+        """Main evaluate-and-dispatch path. Clears any expired pending action
+        first so a stale "may I?" doesn't block fresh decisions."""
+        self._expire_pending_action_if_stale()
         ctx = self._build_context()
         if not self._should_consider_speaking(ctx):
             return
         decision = await self._decide(ctx)
-        if decision is None or not decision.get("should_speak"):
+        if decision is None:
             return
-        msg = (decision.get("message") or "").strip()
-        if not msg:
-            return
-        priority = int(decision.get("priority") or 5)
+
+        # Phase 9.4a — dispatch based on decide kind. Fall back to the old
+        # `should_speak` field for backward compat with any cached prompts
+        # that might still return the legacy shape.
+        kind = (decision.get("kind") or "").strip().lower()
+        if not kind:
+            # Legacy shape: {should_speak: bool, message: str}
+            kind = "speak" if decision.get("should_speak") else "none"
+
         reason = str(decision.get("reason") or "")[:200]
+        priority = int(decision.get("priority") or 5)
+
+        if kind == "speak":
+            msg = (decision.get("message") or "").strip()
+            if not msg:
+                return
+            try:
+                await self._emit_speech(msg, reason, priority, ctx)
+                self._last_speech_at = _utcnow()
+            except Exception as exc:
+                logger.warning("proactive _emit_speech failed: %s", exc)
+            return
+
+        if kind == "action":
+            goal = (decision.get("action_goal") or "").strip()
+            if not goal:
+                logger.debug("proactive decide returned action kind with empty goal")
+                return
+            confirm = bool(decision.get("confirm_with_user", True))
+            try:
+                await self._dispatch_action(goal, reason, priority, confirm)
+            except Exception as exc:
+                logger.warning("proactive _dispatch_action failed: %s", exc)
+            return
+
+        # kind == "none" or unknown — silent no-op.
+
+    async def _dispatch_action(
+        self, action_goal: str, reason: str, priority: int, confirm_with_user: bool,
+    ) -> None:
+        """Fire a background action, or park it for user confirmation first.
+
+        Both branches are best-effort — proactive never crashes if the
+        runtime rejects the task. On TrackBusyError (background queue
+        saturated) we skip this cycle; the next evaluation can try again.
+        """
+        if confirm_with_user:
+            # Park intent + ask the user via the chat UI. Latest ask wins —
+            # prior pending intents are overwritten rather than queued.
+            pending = PendingAction(
+                action_goal=action_goal,
+                reason=reason,
+                priority=priority,
+                created_at=_utcnow(),
+                session_id=await self._most_recent_session_id(),
+            )
+            self._pending_action = pending
+            prompt = f"Чи хочеш щоб я: {action_goal}? (так/ні)"
+            with contextlib.suppress(Exception):
+                await self._emit_speech(
+                    prompt, f"pending_action: {reason}", priority, self._build_context(),
+                )
+            # Broadcast for the UI so a dedicated "pending proactive action"
+            # slot can render without having to parse the chat bubble.
+            with contextlib.suppress(Exception):
+                from api.websocket_hub import hub
+                await hub.broadcast("agent.stream", "proactive.pending_action", {
+                    "action_goal": action_goal,
+                    "reason": reason,
+                    "priority": priority,
+                    "expires_in_s": PENDING_ACTION_TIMEOUT_S,
+                })
+            return
+
+        # Unconfirmed — fire directly on the background track.
+        await self._fire_action_task(action_goal, reason, priority, source="proactive_auto")
+
+    async def _fire_action_task(
+        self, action_goal: str, reason: str, priority: int, source: str,
+    ) -> str | None:
+        """Actually call runtime.start_task. Returns the task_id on success,
+        None on TrackBusyError (caller decides whether to surface)."""
+        from agent.errors import TrackBusyError
         try:
-            await self._emit_speech(msg, reason, priority, ctx)
-            self._last_speech_at = _utcnow()
+            task_id, _started = await self.runtime.start_task(
+                action_goal,
+                origin=source,
+                track="background",
+            )
+        except TrackBusyError as exc:
+            logger.info(
+                "proactive action skipped — background queue full (%d pending)",
+                exc.queue_size,
+            )
+            return None
         except Exception as exc:
-            logger.warning("proactive _emit_speech failed: %s", exc)
+            logger.warning("proactive action dispatch failed: %s", exc)
+            return None
+
+        with contextlib.suppress(Exception):
+            from api.websocket_hub import hub
+            await hub.broadcast("agent.stream", "proactive.action_fired", {
+                "task_id": task_id,
+                "action_goal": action_goal,
+                "reason": reason,
+                "priority": priority,
+                "source": source,
+            })
+        return task_id
+
+    # ── Pending-confirmation helpers ─────────────────────────────────────────
+
+    def has_pending_action(self) -> bool:
+        self._expire_pending_action_if_stale()
+        return self._pending_action is not None
+
+    def peek_pending_action(self) -> PendingAction | None:
+        self._expire_pending_action_if_stale()
+        return self._pending_action
+
+    def _expire_pending_action_if_stale(self) -> None:
+        p = self._pending_action
+        if p is not None and p.expired():
+            logger.info(
+                "proactive pending_action '%s' expired after %ds — dropping",
+                p.action_goal[:60], PENDING_ACTION_TIMEOUT_S,
+            )
+            self._pending_action = None
+
+    def clear_pending_action(self) -> None:
+        self._pending_action = None
+
+    async def resolve_pending_action(self, user_reply: str) -> str | None:
+        """Called by the chat handler. If a pending action exists and the
+        user's reply is an affirmative, fires the task on background and
+        clears pending. Any non-affirmative (or no pending) → clear and
+        return None so the chat flow continues normally.
+
+        Returns the fired task_id on success, None otherwise.
+        """
+        self._expire_pending_action_if_stale()
+        pending = self._pending_action
+        if pending is None:
+            return None
+        affirmative = bool(AFFIRMATIVE_RX.match(user_reply.strip()))
+        self._pending_action = None
+        if not affirmative:
+            logger.info(
+                "proactive pending_action '%s' declined by user reply %r",
+                pending.action_goal[:60], user_reply[:40],
+            )
+            return None
+        return await self._fire_action_task(
+            pending.action_goal, pending.reason, pending.priority,
+            source="proactive_confirmed",
+        )
+
+    async def _most_recent_session_id(self) -> str | None:
+        """Pick the last chat session so the pending prompt attaches to
+        the right conversation."""
+        from sqlalchemy import select
+        from db.database import get_session
+        from db.models import ChatSession
+        try:
+            async with get_session() as db:
+                result = await db.execute(
+                    select(ChatSession).order_by(ChatSession.started_at.desc()).limit(1)
+                )
+                session = result.scalar_one_or_none()
+                return session.id if session is not None else None
+        except Exception:
+            return None
 
     def _should_consider_speaking(self, ctx: dict[str, Any]) -> bool:
         """Cheap filters — LLM call only fires if all pass."""
@@ -487,6 +713,9 @@ def check_long_silence(threshold_min: int | None = None) -> bool:
 
 __all__ = [
     "ProactiveLoop",
+    "PendingAction",
+    "AFFIRMATIVE_RX",
+    "PENDING_ACTION_TIMEOUT_S",
     "get_loop",
     "set_loop",
     "check_long_silence",

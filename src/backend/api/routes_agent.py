@@ -193,6 +193,168 @@ async def submit_feedback(
     return {"id": fb_id}
 
 
+# ── Standing orders (Phase 9.3b) ─────────────────────────────────────────────
+
+
+class StandingOrderCreate(BaseModel):
+    description: str = Field(..., min_length=1, max_length=256)
+    kind: str = Field(..., pattern=r"^(interval|cron|conditional|one_shot_future)$")
+    schedule: dict = Field(...)
+    action: dict = Field(...)
+    enabled: bool = True
+
+
+class StandingOrderPatch(BaseModel):
+    enabled: bool | None = None
+    description: str | None = Field(default=None, max_length=256)
+    schedule: dict | None = None
+    action: dict | None = None
+
+
+def _so_to_dict(row) -> dict:
+    import json as _json
+    return {
+        "id": row.id,
+        "user_id": row.user_id,
+        "description": row.description,
+        "kind": row.kind,
+        "schedule": _json.loads(row.schedule_json),
+        "action": _json.loads(row.action_json),
+        "enabled": row.enabled,
+        "created_at": row.created_at.isoformat() if row.created_at else None,
+        "last_fired_at": row.last_fired_at.isoformat() if row.last_fired_at else None,
+        "fire_count": row.fire_count,
+        "last_outcome": row.last_outcome,
+    }
+
+
+@router.post("/standing_orders")
+async def create_standing_order(
+    req: StandingOrderCreate,
+    token_data: TokenPayload = Depends(require_auth),
+) -> dict:
+    import json as _json
+    from sqlalchemy import select
+    from agent.standing_orders.schedules import parse_schedule
+    from agent.standing_orders.conditions import evaluate_condition  # noqa: F401
+    from agent.standing_orders.schedules import ConditionalSchedule
+    from db.database import get_session
+    from db.models import StandingOrder as _SO
+
+    # Validate schedule early — rejecting at write time is better than at
+    # fire time.
+    payload = dict(req.schedule)
+    payload.setdefault("kind", req.kind)
+    try:
+        schedule = parse_schedule(payload)
+    except Exception as exc:
+        raise HTTPException(status_code=422, detail=f"invalid schedule: {exc}")
+    # Validate condition DSL up-front so bad conditions fail at creation.
+    if isinstance(schedule, ConditionalSchedule):
+        import re as _re
+        if not _re.match(
+            r"^\s*[a-z_]+\s*(==|>=|<=|>|<)\s*-?\d+(\.\d+)?\s*$",
+            schedule.condition,
+        ):
+            raise HTTPException(status_code=422, detail="invalid condition DSL")
+        # Also assert metric is known.
+        from agent.standing_orders.conditions import KNOWN_CONDITIONS
+        metric = schedule.condition.split()[0]
+        if metric not in KNOWN_CONDITIONS:
+            raise HTTPException(
+                status_code=422,
+                detail=f"unknown metric {metric!r}; supported: {sorted(KNOWN_CONDITIONS)}",
+            )
+
+    async with get_session() as db:
+        row = _SO(
+            user_id=token_data.user_id,
+            description=req.description,
+            kind=req.kind,
+            schedule_json=_json.dumps(payload),
+            action_json=_json.dumps(req.action),
+            enabled=req.enabled,
+        )
+        db.add(row)
+        await db.commit()
+        result = await db.execute(select(_SO).where(_SO.id == row.id))
+        fresh = result.scalar_one()
+    return {"order": _so_to_dict(fresh)}
+
+
+@router.get("/standing_orders")
+async def list_standing_orders(
+    token_data: TokenPayload = Depends(require_auth),
+) -> dict:
+    from sqlalchemy import select
+    from db.database import get_session
+    from db.models import StandingOrder as _SO
+
+    async with get_session() as db:
+        result = await db.execute(
+            select(_SO).where(_SO.user_id == token_data.user_id)
+            .order_by(_SO.created_at.desc())
+        )
+        rows = list(result.scalars())
+    return {"orders": [_so_to_dict(r) for r in rows]}
+
+
+@router.patch("/standing_orders/{order_id}")
+async def patch_standing_order(
+    order_id: str,
+    req: StandingOrderPatch,
+    token_data: TokenPayload = Depends(require_auth),
+) -> dict:
+    import json as _json
+    from sqlalchemy import select
+    from db.database import get_session
+    from db.models import StandingOrder as _SO
+
+    async with get_session() as db:
+        result = await db.execute(select(_SO).where(_SO.id == order_id))
+        row = result.scalar_one_or_none()
+        if row is None or row.user_id != token_data.user_id:
+            raise HTTPException(status_code=404, detail="standing order not found")
+        if req.enabled is not None:
+            row.enabled = req.enabled
+        if req.description is not None:
+            row.description = req.description
+        if req.schedule is not None:
+            from agent.standing_orders.schedules import parse_schedule
+            payload = dict(req.schedule)
+            payload.setdefault("kind", row.kind)
+            try:
+                parse_schedule(payload)
+            except Exception as exc:
+                raise HTTPException(status_code=422, detail=f"invalid schedule: {exc}")
+            row.schedule_json = _json.dumps(payload)
+        if req.action is not None:
+            row.action_json = _json.dumps(req.action)
+        await db.commit()
+        fresh_result = await db.execute(select(_SO).where(_SO.id == order_id))
+        fresh = fresh_result.scalar_one()
+    return {"order": _so_to_dict(fresh)}
+
+
+@router.delete("/standing_orders/{order_id}")
+async def delete_standing_order(
+    order_id: str,
+    token_data: TokenPayload = Depends(require_auth),
+) -> dict:
+    from sqlalchemy import delete, select
+    from db.database import get_session
+    from db.models import StandingOrder as _SO
+
+    async with get_session() as db:
+        result = await db.execute(select(_SO).where(_SO.id == order_id))
+        row = result.scalar_one_or_none()
+        if row is None or row.user_id != token_data.user_id:
+            raise HTTPException(status_code=404, detail="standing order not found")
+        await db.execute(delete(_SO).where(_SO.id == order_id))
+        await db.commit()
+    return {"deleted": True, "id": order_id}
+
+
 def _serialize_task(row: dict) -> dict:
     out = dict(row)
     for key in ("created_at", "finished_at"):

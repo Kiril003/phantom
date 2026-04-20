@@ -42,6 +42,9 @@ psutil==6.0.0
 # Agent (Phase 09.1+) — browser.navigate / browser.extract actions
 playwright>=1.47.0
 
+# Agent (Phase 09.3b) — standing orders cron schedules
+croniter==6.2.2
+
 # Async utilities
 anyio==4.4.0
 httpx==0.27.0

@@ -376,3 +376,31 @@ class AiToolUseLog(Base):
     fell_through_to_fallback: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     cooling_triggered: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     timestamp: Mapped[datetime] = mapped_column(DateTime, default=_now, index=True)
+
+
+# ── Standing orders (Phase 9.3b) ─────────────────────────────────────────────
+
+
+class StandingOrder(Base):
+    """
+    Persistent user-defined trigger. `kind` selects a schedule flavour:
+      - "interval"        — run every N seconds (every_s)
+      - "cron"            — cron expression via croniter (minute/hour/day)
+      - "conditional"     — eval a simple DSL condition on a cadence
+      - "one_shot_future" — fire once at a specific datetime
+    Goals are plain strings turned into foreground agent tasks when fired;
+    the runner declines to preempt an active user-initiated task.
+    """
+    __tablename__ = "standing_orders"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    description: Mapped[str] = mapped_column(String(256), nullable=False)
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    schedule_json: Mapped[str] = mapped_column(Text, nullable=False)
+    action_json: Mapped[str] = mapped_column(Text, nullable=False)
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, nullable=False)
+    last_fired_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    fire_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_outcome: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

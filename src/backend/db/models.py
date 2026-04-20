@@ -118,6 +118,14 @@ class MemoryFact(Base):
     access_count: Mapped[int] = mapped_column(Integer, default=0)
     is_sealed: Mapped[bool] = mapped_column(Boolean, default=False)
     decay_factor: Mapped[float] = mapped_column(Float, default=1.0)
+    # Phase 9.4b — memory-to-geo bridge. When a fact mentions or is attached
+    # to a place, these carry the geocoded coordinates + provenance. All
+    # nullable so prior facts keep working without backfill.
+    place_name: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    place_lat: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    place_lon: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    place_source: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    place_confidence: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
 
     user: Mapped["User"] = relationship("User", back_populates="memory_facts")
 

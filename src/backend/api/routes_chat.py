@@ -290,6 +290,17 @@ async def send_message(
     except Exception as exc:
         logger.debug("9.4a pending-action resolve failed: %s", exc)
 
+    # Phase 9.4b — memory-to-geo bridge. Extract + geocode place mentions,
+    # pick up "я в Одесі" style self-location statements, emit REGION_CHANGED
+    # triggers. Entirely best-effort.
+    try:
+        from memory.geo_integration import process_chat_message_for_places
+        await process_chat_message_for_places(
+            db, user_id=user.id, session_id=session.id, message_text=req.content,
+        )
+    except Exception as exc:
+        logger.debug("9.4b geo ingest failed (non-critical): %s", exc)
+
     t_start = time.monotonic()
 
     # Generate AI response
@@ -512,6 +523,15 @@ async def _ws_chat_handler(type_: str, data: dict, client: Any) -> None:
                     ploop.note_user_interaction()
             except Exception as exc:
                 logger.debug("9.3b proactive note_user_interaction (ws) failed: %s", exc)
+
+            # Phase 9.4b — WS parity with REST path.
+            try:
+                from memory.geo_integration import process_chat_message_for_places
+                await process_chat_message_for_places(
+                    db, user_id=user.id, session_id=session.id, message_text=content,
+                )
+            except Exception as exc:
+                logger.debug("9.4b geo ingest (ws) failed (non-critical): %s", exc)
 
             # Broadcast confirmed user message
             from api.websocket_hub import hub as _hub

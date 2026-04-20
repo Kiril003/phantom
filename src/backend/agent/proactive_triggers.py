@@ -30,6 +30,9 @@ class ProactiveTriggerKind(str, Enum):
     RESUMED_TASK = "resumed_task"
     SYSTEM_STATE = "system_state"
     STANDING_ORDER_FIRED = "standing_order_fired"
+    # Phase 9.4b — spatial intelligence triggers.
+    REGION_CHANGED = "region_changed"          # user moved to a new country
+    NEAR_REMEMBERED_PLACE = "near_remembered_place"  # within N m of a place in memory
 
 
 class ProactiveTrigger(BaseModel):

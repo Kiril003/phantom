@@ -20,6 +20,14 @@ export interface ContextSnapshot {
     place_known: boolean;
     place_name: string | null;
     first_visit: boolean;
+    /**
+     * Phase 9.4b — provenance of the current position. Emitted by the
+     * backend LocalizationResolver. Optional for backward compatibility
+     * with older snapshots / test fixtures.
+     */
+    source?: 'gps_hardware' | 'browser_geolocation' | 'ip_estimate' | 'user_stated' | 'none';
+    confidence?: number;
+    accuracy_m?: number | null;
   };
 
   when: {

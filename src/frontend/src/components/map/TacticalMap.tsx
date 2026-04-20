@@ -883,7 +883,40 @@ interface CtxShape {
     fix: boolean;
     satellites: number;
     speed_kmh: number;
+    source?: 'gps_hardware' | 'browser_geolocation' | 'ip_estimate' | 'user_stated' | 'none';
+    confidence?: number;
+    accuracy_m?: number | null;
   };
+}
+
+/**
+ * Phase 9.4b bug-fix — Replace the old binary "3D FIX / NO FIX" label with a
+ * source-aware readout. The resolver now supplies browser or IP positions
+ * long before hardware GPS locks, so "NO FIX" was misleading the operator
+ * into thinking nothing worked.
+ */
+function sourceLabel(
+  source: string | undefined,
+  fix: boolean,
+  confidence: number,
+): { text: string; color: string } {
+  const pct = Math.round(confidence * 100);
+  if (source === 'gps_hardware' && fix) {
+    return { text: '3D FIX', color: 'var(--signal-ok)' };
+  }
+  if (source === 'browser_geolocation') {
+    return { text: `BROWSER · ${pct}%`, color: 'var(--signal-info, #22d3ee)' };
+  }
+  if (source === 'ip_estimate') {
+    return { text: `IP · ${pct}%`, color: 'var(--signal-warn)' };
+  }
+  if (source === 'user_stated') {
+    return { text: `STATED · ${pct}%`, color: 'var(--accent)' };
+  }
+  if (source === 'gps_hardware' && !fix) {
+    return { text: 'GPS SEARCHING', color: 'var(--signal-warn)' };
+  }
+  return { text: 'NO LOCATION', color: 'var(--signal-alert)' };
 }
 
 function CoordinateReadout({ context }: { context: CtxShape | null | undefined }) {
@@ -891,6 +924,11 @@ function CoordinateReadout({ context }: { context: CtxShape | null | undefined }
   const fix = !!where?.fix;
   const lat = where?.lat;
   const lon = where?.lon;
+  const source = where?.source;
+  const confidence = where?.confidence ?? 0;
+  const hasPosition = lat != null && lon != null;
+  const label = sourceLabel(source, fix, confidence);
+  const active = hasPosition && source !== 'none';
   return (
     <div
       className="glass-card flex flex-col gap-1 px-3 py-2 rounded-2xl"
@@ -902,8 +940,8 @@ function CoordinateReadout({ context }: { context: CtxShape | null | undefined }
           style={{
             width: 6,
             height: 6,
-            background: fix ? 'var(--signal-ok)' : 'var(--signal-alert)',
-            boxShadow: fix ? '0 0 6px var(--signal-ok)' : '0 0 6px var(--signal-alert)',
+            background: label.color,
+            boxShadow: `0 0 6px ${label.color}`,
           }}
         />
         <span
@@ -911,11 +949,11 @@ function CoordinateReadout({ context }: { context: CtxShape | null | undefined }
           style={{
             fontFamily: 'var(--font-display)',
             fontSize: 'var(--fs-micro)',
-            color: fix ? 'var(--ink-primary)' : 'var(--ink-muted)',
+            color: active ? 'var(--ink-primary)' : 'var(--ink-muted)',
             letterSpacing: 'var(--tracking-widest)',
           }}
         >
-          {fix ? '3D fix' : 'No fix'}
+          {label.text}
         </span>
       </div>
       <div className="flex items-center gap-3">

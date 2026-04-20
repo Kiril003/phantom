@@ -266,6 +266,48 @@ class PhantomConfig(BaseSettings):
     voice_tts_voice_en: str = "en_US-amy-low"
     voice_tts_auto_language: bool = True
 
+    # ── Localization (Phase 9.4b — spatial intelligence) ─────────────────────
+    # Pluggable LocalizationSource chain. Sources query in trust_level order:
+    # hardware GPS (95) > user-stated (80) > browser geolocation (70) > IP (30).
+    # Sanity guard rejects any estimate that would require implausible velocity
+    # from the last accepted fix (default 1080 km/h, i.e. faster than any
+    # commercial flight — a sane ceiling for "this can't be real" filtering).
+    agent_localization_enabled: bool = True
+    agent_localization_sanity_max_speed_kmh: float = 1080.0
+    # Browser geolocation — frontend watchPosition stream, POSTed to
+    # /map/geolocation/submit. Freshness window gates how stale a submission
+    # can be before the source treats itself as unavailable.
+    agent_browser_geolocation_enabled: bool = True
+    agent_browser_geolocation_freshness_s: float = 60.0
+    # IP-based localization via ipapi.co — coarse city-level fallback. Free
+    # tier is 1000 req/day; we default to 900 for headroom. 10 min cache
+    # inside the adapter keeps most workloads under 150 req/day.
+    agent_ip_locator_enabled: bool = True
+    agent_ip_locator_rate_per_day: int = 900
+    # User-stated location ("я в Одесі") lives 24 h by default.
+    agent_user_stated_ttl_s: int = 24 * 3600
+    # Reverse / forward geocoding via Nominatim (OpenStreetMap). 1 req/s
+    # enforced by the adapter (their policy); cache TTL is 7 days for
+    # forward geocodes of static place names.
+    agent_nominatim_enabled: bool = True
+    agent_nominatim_user_agent: str = "PHANTOM-OS/0.9 (localhost)"
+    agent_nominatim_cache_ttl_s: int = 7 * 24 * 3600
+    # Overpass API — nearby OSM features. Cached 24 h per (lat,lon,radius).
+    agent_overpass_enabled: bool = True
+    agent_overpass_cache_ttl_s: int = 24 * 3600
+    # Memory-to-geo bridge (spaCy NER). Disable if the model is unavailable.
+    agent_geo_extractor_enabled: bool = True
+    agent_geo_extractor_min_entity_length: int = 3
+    # LocationHistory writer / enricher cadence + retention.
+    agent_location_history_enabled: bool = True
+    agent_location_history_min_distance_m: float = 50.0
+    agent_location_history_min_interval_s: int = 300
+    agent_location_history_retention_days: int = 90
+    agent_location_history_enricher_interval_s: int = 3600
+    # NEAR_REMEMBERED_PLACE dedup — one trigger per hour max.
+    agent_near_remembered_dedup_s: int = 3600
+    agent_near_remembered_radius_m: float = 200.0
+
     # ── System ────────────────────────────────────────────────────────────────
     system_hostname: str = "phantom"
     system_sensor_log_retention_days: int = 7

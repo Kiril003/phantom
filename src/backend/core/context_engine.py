@@ -76,6 +76,10 @@ def _empty_snapshot() -> dict:
             "place_known": False,
             "place_name": None,
             "first_visit": False,
+            # Phase 9.4b — provenance carried on every snapshot.
+            "source": "none",
+            "confidence": 0.0,
+            "accuracy_m": None,
         },
         "when": {
             "time": now.strftime("%H:%M"),
@@ -289,6 +293,57 @@ class ContextEngine:
             "satellites": g.satellites,
             "speed_kmh": g.speed_kmh,
         })
+        # Direct GPS batch surfaces as the authoritative source until the
+        # async resolver tick publishes a richer fix. Preserve prior
+        # place_known / place_name fields set by higher layers.
+        if g.fix:
+            self._snapshot["where"].update({
+                "source": "gps_hardware",
+                "confidence": 0.9,
+                "accuracy_m": 15.0,
+            })
+
+    async def resolve_localization(self) -> None:
+        """Phase 9.4b — pull the latest LocationEstimate from the resolver.
+
+        Called from the tick loop. Writes whichever source won to the
+        ``where`` block so the snapshot always carries provenance. When no
+        source resolves (offline, no hardware, no IP), the fields stay at
+        their initial "none" / 0.0 defaults.
+        """
+        try:
+            from agent.localization import get_resolver  # noqa: PLC0415
+        except Exception:  # pragma: no cover — import guard
+            return
+        try:
+            resolver = get_resolver()
+            estimate = await resolver.resolve()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("localization resolve failed: %s", exc)
+            return
+
+        async with self._lock:
+            where = self._snapshot["where"]
+            if estimate is None:
+                # Clear the provenance fields but leave raw GPS numbers
+                # alone — if hardware is pushing updates separately, those
+                # stay valid until their own cycle clears them.
+                if where.get("source") != "gps_hardware":
+                    where["source"] = "none"
+                    where["confidence"] = 0.0
+                    where["accuracy_m"] = None
+                return
+            where["source"] = estimate.source
+            where["confidence"] = estimate.confidence
+            where["accuracy_m"] = estimate.accuracy_m
+            # Only overwrite coordinates when the resolver beats the hardware
+            # source (or hardware has no fix). Hardware GPS has trust=95 so
+            # any browser/IP/user-stated result will only surface here when
+            # hardware is unavailable.
+            if not where.get("fix") or estimate.source == "gps_hardware":
+                where["lat"] = estimate.lat
+                where["lon"] = estimate.lon
+                where["fix"] = estimate.source == "gps_hardware"
 
     def _apply_env(self, batch: SensorBatch) -> None:
         e = batch.env

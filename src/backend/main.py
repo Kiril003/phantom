@@ -187,6 +187,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Phase 09.1 — agent cognitive layer
     emotion_stop_event: asyncio.Event | None = None
     emotion_task: asyncio.Task | None = None
+    # Phase 9.3b — proactive loop + standing orders runner (both start lazily
+    # when their respective config flag is truthy).
+    proactive_loop_obj = None
+    standing_orders_runner_obj = None
     if config.agent_enabled:
         try:
             from agent.runtime import ensure_workspace
@@ -211,6 +215,36 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 )
             except Exception as exc:
                 logger.warning("Emotion decay loop failed to start: %s", exc)
+
+        # Phase 9.3b — proactive loop. Always construct the singleton (hooks
+        # rely on get_loop() returning non-None to push triggers); start the
+        # actual background task only when enabled.
+        try:
+            from agent.runtime import agent_runtime
+            from agent.proactive import ProactiveLoop, set_loop
+            proactive_loop_obj = ProactiveLoop(agent_runtime)
+            set_loop(proactive_loop_obj)
+            if config.agent_proactive_enabled:
+                await proactive_loop_obj.start()
+                logger.info("Proactive loop started (initiative active)")
+            else:
+                logger.info(
+                    "Proactive loop singleton constructed; background task "
+                    "disabled (agent_proactive_enabled=False). Flip the flag "
+                    "via Settings UI or sqlite when ready."
+                )
+        except Exception as exc:
+            logger.warning("Proactive loop setup failed: %s", exc)
+
+        # Phase 9.3b — standing orders runner.
+        if config.agent_standing_orders_enabled:
+            try:
+                from agent.standing_orders.runner import StandingOrderRunner
+                standing_orders_runner_obj = StandingOrderRunner(agent_runtime)
+                await standing_orders_runner_obj.start()
+                logger.info("Standing orders runner started")
+            except Exception as exc:
+                logger.warning("Standing orders runner setup failed: %s", exc)
 
     # Phase 09.2 — episodic memory backfill (only when ChromaDB is behind)
     if config.agent_enabled and config.agent_episodic_memory_enabled:
@@ -265,6 +299,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             await emotion_task
         except (asyncio.CancelledError, Exception):
             pass
+
+    # Phase 9.3b — stop proactive loop + standing orders runner.
+    if proactive_loop_obj is not None:
+        try:
+            await proactive_loop_obj.stop()
+        except Exception as exc:
+            logger.debug("Proactive loop shutdown raised: %s", exc)
+        try:
+            from agent.proactive import set_loop as _clear_loop
+            _clear_loop(None)
+        except Exception:
+            pass
+    if standing_orders_runner_obj is not None:
+        try:
+            await standing_orders_runner_obj.stop()
+        except Exception as exc:
+            logger.debug("Standing orders runner shutdown raised: %s", exc)
 
     # Phase 09.2 — close any active MCP clients
     if config.agent_enabled and config.agent_mcp_servers:

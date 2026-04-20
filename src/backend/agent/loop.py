@@ -279,6 +279,24 @@ async def _run_reflection(
         "summary": result.summary,
         "new_confidence": result.new_confidence,
     })
+    # Phase 9.3b — emit inner monologue on reflection completion.
+    try:
+        from .monologue_emitter import MonologueEvent, emit_monologue
+        await emit_monologue(MonologueEvent(
+            kind="reflection",
+            source="reflector",
+            monologue={
+                "verdict": result.verdict,
+                "summary": result.summary,
+                "progress_assessment": result.progress_assessment,
+                "recurring_errors": result.recurring_errors,
+                "recommendations": result.recommendations,
+                "new_confidence": result.new_confidence,
+            },
+            task_id=state.id,
+        ))
+    except Exception as exc:
+        logger.debug("monologue emit (reflection) failed: %s", exc)
 
     # Auto-checkpoint after every reflection
     await _checkpoint_now(runtime, state, "auto_reflect")
@@ -426,6 +444,17 @@ async def run_task_loop(runtime: "AgentRuntime", state: "TaskState", *, resumed:
             await runtime._broadcast("plan.step_created", {
                 "task_id": state.id, "step": step.model_dump(mode="json"),
             })
+            # Phase 9.3b — emit inner monologue for the step's thinking.
+            try:
+                from .monologue_emitter import MonologueEvent, emit_monologue
+                await emit_monologue(MonologueEvent(
+                    kind="plan",
+                    source="tactical",
+                    monologue=step.monologue.model_dump(mode="json"),
+                    task_id=state.id,
+                ))
+            except Exception as exc:
+                logger.debug("monologue emit (tactical) failed: %s", exc)
 
             # Terminal markers ───────────────────────────────────────────────────
             if step.action == _TERMINAL_DONE_TASK:

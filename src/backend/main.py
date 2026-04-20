@@ -54,6 +54,13 @@ async def _context_loop() -> None:
             if time.monotonic() - _last_batch_ts < 0.4:
                 await asyncio.sleep(interval)
                 continue
+            # Phase 9.4b — resolve localization BEFORE building the snapshot
+            # so the emitted context carries fresh provenance. Cheap: the
+            # resolver only pays network cost when its caches are stale.
+            try:
+                await context_engine.resolve_localization()
+            except Exception as exc:
+                logger.debug("Localization tick raised (non-critical): %s", exc)
             snapshot = await context_engine.tick()
             transition = state_machine.evaluate(snapshot)
             if transition:
@@ -184,6 +191,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await _start_serial_bridge()
     else:
         logger.info("Serial bridge disabled (PHANTOM_SERIAL_ENABLED=false)")
+
+    # Phase 9.4b — wire the default LocalizationSource chain before the
+    # context loop starts so the first tick can already publish provenance.
+    try:
+        from agent.localization.lifecycle import wire_default_sources
+        wire_default_sources()
+    except Exception as exc:
+        logger.warning("Localization source wiring failed: %s", exc)
 
     # Start tick loop for time-driven context updates
     loop_task = asyncio.create_task(_context_loop(), name="context_loop")

@@ -49,6 +49,17 @@ class POICreate(BaseModel):
     is_secret: bool = False
 
 
+class GeolocationSubmit(BaseModel):
+    """Frontend browser geolocation watchPosition submission."""
+    lat: float = Field(..., ge=-90.0, le=90.0)
+    lon: float = Field(..., ge=-180.0, le=180.0)
+    accuracy_m: Optional[float] = Field(default=None, ge=0.0)
+    timestamp: Optional[str] = Field(
+        default=None,
+        description="ISO8601 timestamp from the browser; server uses now() if omitted",
+    )
+
+
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _parse_bounds(raw: Optional[str]) -> Optional[tuple[float, float, float, float]]:
@@ -263,6 +274,42 @@ async def delete_poi(
     await db.delete(poi)
     await db.flush()
     return {"ok": True}
+
+
+@router.post("/geolocation/submit")
+async def submit_geolocation(
+    payload: GeolocationSubmit,
+    token_data: TokenPayload = Depends(require_auth),
+) -> dict:
+    """Phase 9.4b — ingest browser geolocation readings.
+
+    Frontend `navigator.geolocation.watchPosition` posts here every few
+    seconds. The submission is cached in-memory by
+    :class:`BrowserGeolocationSource`; the localization resolver picks it
+    up on the next tick. No DB write here — :class:`LocationHistory` is
+    populated by the background writer (Part 3) from the resolver stream,
+    not from raw browser submissions.
+    """
+    if not config.agent_browser_geolocation_enabled:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Browser geolocation source disabled via config",
+        )
+    ts = _parse_since(payload.timestamp) if payload.timestamp else None
+    from agent.localization.sources.browser_geolocation import submit_browser_estimate
+    est = submit_browser_estimate(
+        lat=payload.lat,
+        lon=payload.lon,
+        accuracy_m=payload.accuracy_m,
+        timestamp=ts,
+    )
+    return {
+        "ok": True,
+        "source": est.source,
+        "confidence": est.confidence,
+        "accuracy_m": est.accuracy_m,
+        "timestamp": est.timestamp.isoformat(),
+    }
 
 
 @router.get("/track")

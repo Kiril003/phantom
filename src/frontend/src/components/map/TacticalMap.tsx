@@ -30,6 +30,7 @@ import { useSystemStore } from '../../stores/systemStore';
 import { getMapTokens, buildPhantomStyle, type PhantomMapStyle } from './mapTokens';
 import { useSettingsStore } from '../../stores/settingsStore';
 import type { Bounds } from '../../services/api';
+import { geolocationService } from '../../services/geolocation';
 
 interface TacticalMapProps {
   initialCenter?: [number, number];
@@ -237,6 +238,17 @@ export function TacticalMap({
 
   const [pendingPoi, setPendingPoi] = useState<{ lng: number; lat: number } | null>(null);
   const [pendingName, setPendingName] = useState('');
+
+  // Phase 9.4b — start the browser geolocation stream when the map mounts.
+  // Contributes a mid-trust LocationEstimate to the backend resolver. Stops
+  // on unmount; permission prompts are handled by the browser itself, the
+  // service is silent on denial and lets the resolver fall through.
+  useEffect(() => {
+    geolocationService.start();
+    return () => {
+      geolocationService.stop();
+    };
+  }, []);
 
   useEffect(() => {
     if (!ready || !mapRef.current) return;

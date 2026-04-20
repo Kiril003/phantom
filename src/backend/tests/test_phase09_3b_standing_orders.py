@@ -195,7 +195,7 @@ async def test_runner_fires_due_interval_order(isolated_db, monkeypatch):
     runtime = AgentRuntime()
     called: list[str] = []
 
-    async def _fake_start(goal: str):
+    async def _fake_start(goal: str, **kwargs):
         called.append(goal)
         return ("tid-123", True)
 
@@ -214,7 +214,9 @@ async def test_runner_fires_due_interval_order(isolated_db, monkeypatch):
 
 
 @pytest.mark.asyncio
-async def test_runner_skips_when_foreground_task_busy(isolated_db, monkeypatch):
+async def test_runner_fires_on_background_even_when_foreground_busy(isolated_db, monkeypatch):
+    """Phase 9.4a — background track is independent, so a busy foreground
+    user conversation must NOT block a due standing order."""
     from agent.runtime import AgentRuntime, TaskState
     from agent.schemas import SelfModel
     from agent.standing_orders.runner import StandingOrderRunner
@@ -241,17 +243,20 @@ async def test_runner_skips_when_foreground_task_busy(isolated_db, monkeypatch):
         id="active", goal="user-task", track="foreground",
         status="running", self_model=SelfModel(),
     )
-    started: list[str] = []
+    started: list[tuple[str, dict]] = []
 
-    async def _fake_start(_goal):  # should NOT be called
-        started.append(_goal)
-        return ("t", True)
+    async def _fake_start(goal, **kwargs):
+        started.append((goal, kwargs))
+        return ("bg-tid", True)
 
     monkeypatch.setattr(runtime, "start_task", _fake_start)
     runner = StandingOrderRunner(runtime)
     fired = await runner.check_and_fire_due_orders()
-    assert fired == []
-    assert started == []
+    assert fired != []          # order fired
+    assert len(started) == 1
+    assert started[0][0] == "x"
+    assert started[0][1].get("track") == "background"
+    assert started[0][1].get("origin") == "standing_order"
 
 
 @pytest.mark.asyncio
@@ -274,7 +279,7 @@ async def test_runner_respects_disabled_order(isolated_db, monkeypatch):
         await db.commit()
 
     runtime = AgentRuntime()
-    async def _fake_start(_g):
+    async def _fake_start(_g, **kwargs):
         return ("t", True)
     monkeypatch.setattr(runtime, "start_task", _fake_start)
     runner = StandingOrderRunner(runtime)
@@ -312,7 +317,7 @@ async def test_runner_evaluates_conditional_schedule(isolated_db, monkeypatch):
 
     # First pass: condition False (mocked to 10) → no fire.
     monkeypatch.setitem(cond_mod.KNOWN_CONDITIONS, "cpu_percent", lambda: 10.0)
-    async def _fake_start(_g):
+    async def _fake_start(_g, **kwargs):
         return ("t", True)
     monkeypatch.setattr(runtime, "start_task", _fake_start)
     runner = StandingOrderRunner(runtime)

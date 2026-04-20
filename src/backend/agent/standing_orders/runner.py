@@ -1,15 +1,18 @@
 """
 Phase 9.3b — standing orders background runner.
+Phase 9.4a — orders fire on the *background* track now, so active user
+conversations in the foreground slot never block a scheduled check.
 
 Polls the `standing_orders` table on a cadence (default 10s), evaluates
-each enabled order's schedule + condition, and fires matching orders as
-foreground agent tasks through `AgentRuntime.start_task`.
+each enabled order's schedule + condition, and fires matching orders via
+`AgentRuntime.start_task(track="background", ...)`.
 
-Firing is non-preemptive: if a user task is already in the foreground
-slot, the runner logs + skips (not queues — 9.4 will add real background
-track). `last_fired_at` / `fire_count` are updated atomically AFTER
-start_task returns so a crash during task creation doesn't leave the
-order marked as fired.
+When the background slot is busy + queue has space, start_task enqueues
+the fire; we still record it as a successful fire. When the queue is
+full, TrackBusyError is raised — we catch it, leave `last_fired_at`
+untouched so the order re-evaluates on the next tick, and log. This
+means transient congestion turns into "fire slightly later" instead of
+"fire lost" or "crash".
 
 After a fire, emits a STANDING_ORDER_FIRED proactive trigger so the
 proactive loop can decide whether to surface the outcome to the user.
@@ -128,13 +131,10 @@ class StandingOrderRunner:
                     continue
                 if not cond_true:
                     continue
-            # Don't preempt user task.
-            if self.runtime.foreground_slot is not None:
-                logger.info(
-                    "Standing order %s due but foreground task %s active — skipping",
-                    order.id, self.runtime.foreground_slot.id,
-                )
-                continue
+            # Phase 9.4a — foreground task activity no longer defers an order;
+            # we fire on background. The background slot's queue is bounded,
+            # so a TrackBusyError ends up a soft skip + retry.
+
             # One-shot orders should not fire more than once.
             if isinstance(schedule, OneShotSchedule) and order.last_fired_at is not None:
                 continue
@@ -144,6 +144,8 @@ class StandingOrderRunner:
         return fired
 
     async def _fire_order(self, order) -> bool:
+        from agent.errors import TrackBusyError
+
         try:
             action = json.loads(order.action_json or "{}")
         except json.JSONDecodeError as exc:
@@ -154,20 +156,35 @@ class StandingOrderRunner:
             logger.warning("standing order %s has empty goal — skipping", order.id)
             return False
 
-        # Start the task. The runtime's start_task refuses if the foreground
-        # slot is busy; we already checked above, but we re-guard here.
+        # Phase 9.4a — fire on the background track so foreground user
+        # conversation is not preempted. When the background queue is
+        # saturated, TrackBusyError defers the fire to the next tick
+        # without marking last_fired_at.
         try:
-            task_id, started = await self.runtime.start_task(goal)
+            task_id, started = await self.runtime.start_task(
+                goal,
+                origin="standing_order",
+                track="background",
+                order_id=order.id,
+            )
+        except TrackBusyError as exc:
+            logger.info(
+                "standing order %s deferred — background track full "
+                "(queue=%d); will retry next tick",
+                order.id, exc.queue_size,
+            )
+            return False
         except Exception as exc:
             logger.error("standing order %s start_task raised: %s", order.id, exc)
             return False
-        if not started:
-            logger.info("standing order %s not started (slot busy)", order.id)
-            return False
 
-        # Mark fired AFTER we know the task actually started.
+        # `started=False` on background means the task was queued (not refused)
+        # — still a legitimate fire; we just haven't entered the slot yet.
+        outcome = f"task={task_id}" if started else f"queued={task_id}"
+
+        # Mark fired AFTER we know the task either started or queued.
         now = _utcnow()
-        await self._update_fire_stats(order.id, now, f"task={task_id}")
+        await self._update_fire_stats(order.id, now, outcome)
 
         # Emit proactive trigger so the proactive loop can decide whether
         # to surface the outcome to the user once the task finishes. We

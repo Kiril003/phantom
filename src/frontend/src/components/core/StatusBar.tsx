@@ -135,6 +135,11 @@ export function StatusBar() {
 
       <Divider />
 
+      {/* Phase 9.4a — background-track badge. Renders only when there's
+          something going on (active slot + queue > 0). */}
+      <BackgroundTrackBadge />
+      <BackgroundTrackDivider />
+
       {/* Face recognition chip (visible only while tracking is active) */}
       <FaceChip />
 
@@ -556,6 +561,108 @@ function ConnectivityDot({
       <Component size={12} strokeWidth={2} />
     </span>
   );
+}
+
+/**
+ * BackgroundTrackBadge (Phase 9.4a).
+ *
+ * Shows "BG: N" where N = (active ? 1 : 0) + queue_size. Renders nothing
+ * when N == 0 so the bar stays clean during normal foreground-only use.
+ *
+ * Polls /agent/status every 10s. Cheap single GET.
+ */
+function useAgentStatusPolled(): import('../../services/agentApi').AgentStatusSnapshot | null {
+  const [snap, setSnap] = useState<
+    import('../../services/agentApi').AgentStatusSnapshot | null
+  >(null);
+  useEffect(() => {
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const s = await agentApi.status();
+        if (!cancelled) setSnap(s);
+      } catch {
+        // 401 / network — keep last value; the badge will dim until next tick.
+      }
+    };
+    tick();
+    const t = setInterval(tick, 10000);
+    return () => {
+      cancelled = true;
+      clearInterval(t);
+    };
+  }, []);
+  return snap;
+}
+
+export interface BackgroundTrackView {
+  total: number;        // active + queued
+  active: number;       // 0 or 1 in this phase
+  queued: number;
+  color: string;
+  title: string;
+  visible: boolean;
+}
+
+export function deriveBackgroundTrackView(
+  snap: import('../../services/agentApi').AgentStatusSnapshot | null,
+): BackgroundTrackView {
+  if (!snap) {
+    return { total: 0, active: 0, queued: 0, color: 'var(--ink-muted)', title: '', visible: false };
+  }
+  const active = snap.background.active ? 1 : 0;
+  const queued = Math.max(0, snap.background.queue_size || 0);
+  const total = active + queued;
+  const color = active > 0 ? 'var(--signal-ok)' : 'var(--ink-muted)';
+  const origin = snap.background.origin ?? '—';
+  const substate = snap.background.substate ?? '—';
+  let title: string;
+  if (active > 0 && queued > 0) {
+    title = `Background: 1 active + ${queued} queued (${origin})`;
+  } else if (active > 0) {
+    title = `Background: ${origin} — ${substate}`;
+  } else if (queued > 0) {
+    title = `Background: ${queued} queued`;
+  } else {
+    title = 'Background: idle';
+  }
+  return { total, active, queued, color, title, visible: total > 0 };
+}
+
+function BackgroundTrackBadge() {
+  const snap = useAgentStatusPolled();
+  const view = deriveBackgroundTrackView(snap);
+  if (!view.visible) return null;
+  return (
+    <span
+      data-testid="background-track-badge"
+      data-count={view.total}
+      className="inline-flex items-center gap-1 px-2 rounded-full"
+      style={{
+        height: 20,
+        background: `color-mix(in srgb, ${view.color} 14%, transparent)`,
+        border: `1px solid color-mix(in srgb, ${view.color} 40%, transparent)`,
+        color: view.color,
+        fontFamily: 'var(--font-display)',
+        fontSize: 'var(--fs-micro)',
+        letterSpacing: 'var(--tracking-wider)',
+      }}
+      title={view.title}
+    >
+      <span aria-hidden>🌙</span>
+      <span className="tabular-nums">BG: {view.total}</span>
+    </span>
+  );
+}
+
+function BackgroundTrackDivider() {
+  // Divider only appears when the badge does, so the bar doesn't have a
+  // floating separator when BG is idle.
+  const snap = useAgentStatusPolled();
+  if (!snap) return null;
+  const total = (snap.background.active ? 1 : 0) + (snap.background.queue_size || 0);
+  if (total === 0) return null;
+  return <Divider />;
 }
 
 /**

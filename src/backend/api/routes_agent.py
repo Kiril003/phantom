@@ -162,6 +162,42 @@ async def get_audit(
     return {"audit": [a.model_dump(mode="json") for a in rows]}
 
 
+@router.get("/status")
+async def get_agent_status(_: TokenPayload = Depends(require_auth)) -> dict:
+    """
+    Phase 9.4a — multi-track runtime status.
+
+    Reports per-track slot state + queue depth so UIs can show "PHANTOM
+    is watching N things in the background" without racing the WS
+    background_events channel. Substate is foreground-canonical (the
+    StatusBar already shows it); background substate is included but
+    may be stale since it's log-only.
+    """
+    def _slot_view(state, substate):
+        if state is None:
+            return {"active": False, "task_id": None, "substate": substate,
+                    "goal": None, "origin": None}
+        return {
+            "active": True,
+            "task_id": state.id,
+            "substate": substate,
+            "goal": (state.goal or "")[:200],
+            "origin": getattr(state, "origin", "user"),
+            "status": state.status,
+        }
+
+    return {
+        "foreground": {
+            **_slot_view(agent_runtime.foreground_slot, agent_runtime.foreground_substate),
+            "queue_size": agent_runtime.queue_size("foreground"),
+        },
+        "background": {
+            **_slot_view(agent_runtime.background_slot, agent_runtime.background_substate),
+            "queue_size": agent_runtime.queue_size("background"),
+        },
+    }
+
+
 @router.get("/router_state")
 async def get_router_state(_: TokenPayload = Depends(require_auth)) -> dict:
     """

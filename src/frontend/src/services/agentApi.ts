@@ -56,6 +56,22 @@ export interface RouterStateSnapshot {
   last_calls: Record<string, { at: string; success: boolean; tool?: string; kind?: string }>;
 }
 
+/** Phase 9.4a — multi-track runtime snapshot. */
+export interface AgentTrackSlotView {
+  active: boolean;
+  task_id: string | null;
+  substate: string;
+  goal: string | null;
+  origin: string | null;
+  status?: string;
+  queue_size: number;
+}
+
+export interface AgentStatusSnapshot {
+  foreground: AgentTrackSlotView;
+  background: AgentTrackSlotView;
+}
+
 export const agentApi = {
   startTask: (goal: string) => req<StartTaskResponse>('POST', '/agent/task', { goal }),
   pause: (id: string) => req<{ paused: boolean }>('POST', `/agent/task/${id}/pause`),
@@ -82,6 +98,7 @@ export const agentApi = {
   },
   selfModel: () => req<{ self_model: AgentSelfModel; substate: AgentSubstate }>('GET', '/agent/self_model'),
   routerState: () => req<RouterStateSnapshot>('GET', '/agent/router_state'),
+  status: () => req<AgentStatusSnapshot>('GET', '/agent/status'),
   feedback: (audit_entry_id: number, rating: 'up' | 'down' | 'comment', comment?: string) =>
     req<{ id: number }>('POST', '/agent/feedback', { audit_entry_id, rating, comment: comment ?? null }),
 };

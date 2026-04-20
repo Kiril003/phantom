@@ -75,13 +75,23 @@ describe('NearbyPanel', () => {
     expect(container.firstChild).toBeNull();
   });
 
-  it('hides itself when nothing nearby', async () => {
+  it('shows empty-state pill when nothing nearby (does not disappear)', async () => {
     vi.mocked(mapApi.getNearby).mockResolvedValue(emptyResponse);
-    const { container } = render(
-      <NearbyPanel lat={50.45} lon={30.52} zoom={16} />
-    );
+    render(<NearbyPanel lat={50.45} lon={30.52} zoom={16} />);
     await waitFor(() => expect(mapApi.getNearby).toHaveBeenCalled());
-    expect(container.firstChild).toBeNull();
+    await waitFor(() => {
+      expect(screen.getByText(/No nearby features/i)).toBeInTheDocument();
+    });
+  });
+
+  it('shows retry pill on fetch error', async () => {
+    vi.mocked(mapApi.getNearby).mockRejectedValue(new Error('overpass timeout'));
+    render(<NearbyPanel lat={50.45} lon={30.52} zoom={16} />);
+    await waitFor(() => {
+      expect(
+        screen.getByRole('button', { name: /Nearby lookup failed — retry/i })
+      ).toBeInTheDocument();
+    });
   });
 
   it('shows collapsed pill with combined count', async () => {

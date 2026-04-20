@@ -117,7 +117,7 @@ export function TimelineDrawer({ open, onClose, onSelect }: TimelineDrawerProps)
                         <div className="text-white truncate">
                           {e.place_name ||
                             e.city ||
-                            `${e.lat.toFixed(4)}, ${e.lon.toFixed(4)}`}
+                            `${e.lat.toFixed(5)}, ${e.lon.toFixed(5)}`}
                         </div>
                         <div className="text-white/50 text-xs flex items-center gap-2">
                           <span>

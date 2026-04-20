@@ -81,7 +81,7 @@ describe('TimelineDrawer', () => {
     });
     render(<TimelineDrawer open={true} onClose={() => {}} />);
     await waitFor(() => expect(mapApi.getLocationHistory).toHaveBeenCalled());
-    expect(screen.getByText(/50\.4600, 30\.5300/)).toBeInTheDocument();
+    expect(screen.getByText(/50\.46000, 30\.53000/)).toBeInTheDocument();
   });
 
   it('empty state hint renders when no entries', async () => {

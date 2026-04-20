@@ -222,7 +222,77 @@ export const mapApi = {
     request<{ ok: boolean }>('DELETE', `/map/pois/${id}`),
   getTrack: (hours = 2) =>
     request<{ points: TrackPoint[] }>('GET', `/map/track?hours=${hours}`),
+  getLocationHistory: (fromIso?: string, toIso?: string, limit = 500) => {
+    const params = new URLSearchParams();
+    if (fromIso) params.set('from', fromIso);
+    if (toIso) params.set('to', toIso);
+    params.set('limit', String(limit));
+    return request<{ entries: LocationHistoryEntry[]; total: number }>(
+      'GET',
+      `/map/location_history?${params}`,
+    );
+  },
+  getNearby: (lat: number, lon: number, radiusM = 500) => {
+    const params = new URLSearchParams();
+    params.set('lat', String(lat));
+    params.set('lon', String(lon));
+    params.set('radius_m', String(radiusM));
+    return request<NearbyResponse>('GET', `/map/nearby?${params}`);
+  },
 };
+
+export interface LocationHistoryEntry {
+  id: string;
+  lat: number;
+  lon: number;
+  source: string;
+  confidence: number;
+  accuracy_m: number | null;
+  place_name: string | null;
+  country: string | null;
+  country_code: string | null;
+  city: string | null;
+  timestamp: string;
+}
+
+export interface NearbyRememberedItem {
+  id: string;
+  content: string;
+  category: string;
+  importance: number;
+  place_name: string | null;
+  place_lat: number | null;
+  place_lon: number | null;
+  place_source: string | null;
+  place_confidence: number | null;
+  distance_m: number;
+  created_at: string;
+}
+
+export interface NearbyOsmItem {
+  osm_id: number;
+  name: string | null;
+  type: string | null;
+  lat: number;
+  lon: number;
+  tags: Record<string, string>;
+  distance_m: number;
+}
+
+export interface NearbyPoiItem {
+  id: string;
+  name: string;
+  category: string;
+  lat: number;
+  lon: number;
+  distance_m: number;
+}
+
+export interface NearbyResponse {
+  remembered: NearbyRememberedItem[];
+  osm: NearbyOsmItem[];
+  pois: NearbyPoiItem[];
+}
 
 /* ─── Linux ───────────────────────────────────────────────────────────────── */
 

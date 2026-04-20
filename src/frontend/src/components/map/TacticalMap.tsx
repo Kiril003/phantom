@@ -16,7 +16,10 @@ import {
   Flame,
   Eye,
   EyeOff,
+  Clock,
 } from 'lucide-react';
+import { TimelineDrawer } from './TimelineDrawer';
+import { NearbyPanel } from './NearbyPanel';
 import { MapContext } from './MapContext';
 import { BaseLayer } from './layers/BaseLayer';
 import { PresenceLayer } from './layers/PresenceLayer';
@@ -149,7 +152,9 @@ export function TacticalMap({
     const onMove = () => {
       const c = map.getCenter();
       setCenter([c.lat, c.lng]);
-      setZoom(map.getZoom());
+      const z = map.getZoom();
+      setZoom(z);
+      setCurrentZoom(z);
     };
     const onClick = () => select(null);
 
@@ -238,6 +243,8 @@ export function TacticalMap({
 
   const [pendingPoi, setPendingPoi] = useState<{ lng: number; lat: number } | null>(null);
   const [pendingName, setPendingName] = useState('');
+  const [timelineOpen, setTimelineOpen] = useState(false);
+  const [currentZoom, setCurrentZoom] = useState<number>(initialZoom);
 
   // Phase 9.4b — start the browser geolocation stream when the map mounts.
   // Contributes a mid-trust LocationEstimate to the backend resolver. Stops
@@ -379,6 +386,12 @@ export function TacticalMap({
           <LateralButton
             icon={<Compass size={18} strokeWidth={1.75} />}
             label="Compass"
+          />
+          <LateralButton
+            icon={<Clock size={18} strokeWidth={1.75} />}
+            label="Timeline"
+            active={timelineOpen}
+            onClick={() => setTimelineOpen((v) => !v)}
           />
         </div>
       </aside>
@@ -737,6 +750,33 @@ export function TacticalMap({
           }}
         />
       </div>
+
+      <NearbyPanel
+        lat={context?.where?.lat ?? null}
+        lon={context?.where?.lon ?? null}
+        zoom={currentZoom}
+        onSelect={(sel) => {
+          const map = mapRef.current;
+          if (!map) return;
+          if (sel.kind === 'remembered') {
+            if (sel.item.place_lat != null && sel.item.place_lon != null) {
+              map.flyTo({
+                center: [sel.item.place_lon, sel.item.place_lat],
+                zoom: 17,
+              });
+            }
+          } else {
+            map.flyTo({ center: [sel.item.lon, sel.item.lat], zoom: 17 });
+          }
+        }}
+      />
+      <TimelineDrawer
+        open={timelineOpen}
+        onClose={() => setTimelineOpen(false)}
+        onSelect={(e) => {
+          mapRef.current?.flyTo({ center: [e.lon, e.lat], zoom: 16 });
+        }}
+      />
     </div>
   );
 }

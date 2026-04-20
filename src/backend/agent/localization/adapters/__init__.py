@@ -10,6 +10,13 @@ from .nominatim import (
     get_default_nominatim,
     set_default_nominatim,
 )
+from .overpass import (
+    DEFAULT_FEATURE_TYPES,
+    OSMFeature,
+    OverpassQuery,
+    get_default_overpass,
+    set_default_overpass,
+)
 
 __all__ = [
     "DailyRateLimiter",
@@ -22,4 +29,9 @@ __all__ = [
     "ReverseGeocodeResult",
     "get_default_nominatim",
     "set_default_nominatim",
+    "OverpassQuery",
+    "OSMFeature",
+    "DEFAULT_FEATURE_TYPES",
+    "get_default_overpass",
+    "set_default_overpass",
 ]

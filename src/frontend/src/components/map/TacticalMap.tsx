@@ -34,6 +34,7 @@ import { getMapTokens, buildPhantomStyle, type PhantomMapStyle } from './mapToke
 import { useSettingsStore } from '../../stores/settingsStore';
 import type { Bounds } from '../../services/api';
 import { geolocationService } from '../../services/geolocation';
+import { expandQuery } from '../../services/translit';
 
 interface TacticalMapProps {
   initialCenter?: [number, number];
@@ -106,20 +107,25 @@ export function TacticalMap({
   }, [toast, setToast]);
 
   const searchResults = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    if (!q) return null;
+    // Phase 9.4b bug-fix — `expandQuery` adds Cyrillic↔Latin transliterations
+    // so "парк" matches "Park Komenského" and vice versa. The original query
+    // is always first in the list so an exact match still ranks highest.
+    const rawQueries = expandQuery(searchQuery).map((q) => q.toLowerCase());
+    if (rawQueries.length === 0) return null;
+    const matches = (haystack: string) =>
+      rawQueries.some((q) => haystack.includes(q));
     const nets = wardrivingRecords
       .filter(
         (r) =>
-          (r.ssid ?? '').toLowerCase().includes(q) ||
-          r.mac.toLowerCase().includes(q)
+          matches((r.ssid ?? '').toLowerCase()) ||
+          matches(r.mac.toLowerCase()),
       )
       .slice(0, 8);
     const intel = pois
       .filter(
         (p) =>
-          p.name.toLowerCase().includes(q) ||
-          (p.notes ?? '').toLowerCase().includes(q)
+          matches(p.name.toLowerCase()) ||
+          matches((p.notes ?? '').toLowerCase()),
       )
       .slice(0, 6);
     return { nets, intel, total: nets.length + intel.length };

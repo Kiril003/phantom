@@ -94,4 +94,28 @@ describe('agentStore.handleEvent', () => {
     await mod.useAgentStore.getState().pauseTask();
     expect(pause).toHaveBeenCalledWith('T9');
   });
+
+  it('captures proactive.cycle heartbeat into proactive state', () => {
+    const handle = useAgentStore.getState().handleEvent;
+    handle(ev('proactive.cycle', {
+      at: '2026-04-20T10:00:00Z',
+      enabled: true,
+      has_triggers: true,
+    }));
+    const s = useAgentStore.getState();
+    expect(s.proactive.enabled).toBe(true);
+    expect(s.proactive.hasTriggers).toBe(true);
+    expect(s.proactive.lastCycleAt).toBe('2026-04-20T10:00:00Z');
+  });
+
+  it('reset() clears proactive heartbeat', () => {
+    const handle = useAgentStore.getState().handleEvent;
+    handle(ev('proactive.cycle', { at: '2026-04-20T10:00:00Z', enabled: true }));
+    expect(useAgentStore.getState().proactive.enabled).toBe(true);
+    useAgentStore.getState().reset();
+    const s = useAgentStore.getState();
+    expect(s.proactive.enabled).toBe(false);
+    expect(s.proactive.lastCycleAt).toBeNull();
+    expect(s.proactive.hasTriggers).toBe(false);
+  });
 });

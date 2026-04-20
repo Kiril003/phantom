@@ -65,13 +65,30 @@ def update_known_preference(self_model: SelfModel, user_id: str, preference: str
 def add_concern(self_model: SelfModel, concern: str) -> None:
     """FIFO add with dedup + cap. Existing concerns are refreshed to the end
     so a re-raised worry doesn't get pushed out by rotation.
+
+    Phase 9.3b — pushes a CONCERN_ADDED trigger into the proactive loop
+    iff the concern is genuinely new (not just a refresh). Best-effort.
     """
-    if concern in self_model.active_concerns:
+    is_new = concern not in self_model.active_concerns
+    if not is_new:
         # Refresh by moving to the end.
         self_model.active_concerns.remove(concern)
     self_model.active_concerns.append(concern)
     if len(self_model.active_concerns) > _MAX_ACTIVE_CONCERNS:
         self_model.active_concerns = self_model.active_concerns[-_MAX_ACTIVE_CONCERNS:]
+    if is_new:
+        try:
+            from .proactive import get_loop
+            from .proactive_triggers import ProactiveTrigger, ProactiveTriggerKind
+            loop = get_loop()
+            if loop is not None:
+                loop.push_trigger(ProactiveTrigger(
+                    kind=ProactiveTriggerKind.CONCERN_ADDED,
+                    context={"concern": concern[:200]},
+                    priority=6,
+                ))
+        except Exception as exc:
+            logger.debug("proactive trigger push on add_concern failed: %s", exc)
 
 
 def record_success(self_model: SelfModel, task_summary: str) -> None:

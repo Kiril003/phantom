@@ -219,6 +219,8 @@ export type AgentEventType =
   | 'agent.resumed_with_caveat'
   // Phase 9.3a emotion vector update
   | 'emotion.updated'
+  // Phase 9.3b proactive loop heartbeat (light cycle ping)
+  | 'proactive.cycle'
   | 'notification';
 
 export interface AgentEvent {

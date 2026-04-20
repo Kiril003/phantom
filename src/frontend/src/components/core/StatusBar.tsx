@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { useSystemStore } from '../../stores/systemStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useFaceStore } from '../../stores/faceStore';
+import { useAgentStore } from '../../stores/agentStore';
 import { agentApi } from '../../services/agentApi';
 import { SystemState } from '@shared/types';
 import {
@@ -125,6 +126,12 @@ export function StatusBar() {
 
       {/* AI — Phase 9.2.1: cooling/quota-aware. */}
       <ProviderBadge provider={provider} routerState={routerState} />
+
+      <Divider />
+
+      {/* Proactive breathing indicator (Phase 9.3b) — pulses when the
+          proactive loop evaluates. Subtle by design. */}
+      <ProactiveIndicator />
 
       <Divider />
 
@@ -547,6 +554,63 @@ function ConnectivityDot({
       style={{ color: ok ? 'var(--signal-ok)' : 'var(--ink-muted)' }}
     >
       <Component size={12} strokeWidth={2} />
+    </span>
+  );
+}
+
+/**
+ * ProactiveIndicator (Phase 9.3b).
+ *
+ * Shows a 💭 glyph with three states:
+ *   - active: proactive loop enabled, last cycle within 5 min → pulses
+ *   - cooling: enabled but no cycle in last 5 min → dim
+ *   - idle: loop disabled (agent_proactive_enabled=false) → muted
+ */
+function ProactiveIndicator() {
+  const proactive = useAgentStore((s) => s.proactive);
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 15000);
+    return () => clearInterval(t);
+  }, []);
+  const lastCycleMs = proactive.lastCycleAt
+    ? Date.parse(proactive.lastCycleAt)
+    : null;
+  const recent = lastCycleMs != null && now - lastCycleMs < 5 * 60 * 1000;
+  const status: 'active' | 'cooling' | 'idle' =
+    !proactive.enabled && lastCycleMs == null
+      ? 'idle'
+      : recent
+      ? 'active'
+      : 'cooling';
+  const color =
+    status === 'active'
+      ? 'var(--signal-ok)'
+      : status === 'cooling'
+      ? 'var(--ink-muted)'
+      : 'var(--ink-faint)';
+  const pulse = status === 'active' && proactive.hasTriggers;
+  const title =
+    status === 'active'
+      ? `Proactive: active${proactive.hasTriggers ? ' (triggers pending)' : ''}`
+      : status === 'cooling'
+      ? 'Proactive: cooling'
+      : 'Proactive: idle';
+  return (
+    <span
+      data-testid="proactive-indicator"
+      data-status={status}
+      className="inline-flex items-center select-none"
+      style={{
+        color,
+        fontSize: 12,
+        lineHeight: 1,
+        animation: pulse ? 'pulse 2s ease-in-out infinite' : undefined,
+        opacity: status === 'idle' ? 0.4 : 1,
+      }}
+      title={title}
+    >
+      💭
     </span>
   );
 }

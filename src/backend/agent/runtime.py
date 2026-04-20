@@ -318,6 +318,19 @@ class AgentRuntime:
                 await update_task_status(state.id, "running", paused_reason=None)
                 await self.set_substate("thinking")
                 await self._broadcast("task.resumed", {"task_id": state.id, "reason": "quota_recovered"})
+                # Phase 9.3b — let the proactive loop know a stuck task is
+                # unblocked. The loop decides separately whether to tell
+                # the user.
+                with contextlib.suppress(Exception):
+                    from .proactive import get_loop
+                    from .proactive_triggers import ProactiveTrigger, ProactiveTriggerKind
+                    loop = get_loop()
+                    if loop is not None:
+                        loop.push_trigger(ProactiveTrigger(
+                            kind=ProactiveTriggerKind.RESUMED_TASK,
+                            context={"task_id": state.id, "reason": "quota_recovered"},
+                            priority=5,
+                        ))
                 return True
             consecutive_failures += 1
             if consecutive_failures == _PROBE_BACKOFF_AFTER_FAILS:
@@ -588,6 +601,25 @@ class AgentRuntime:
             with contextlib.suppress(Exception):
                 from .self_model import record_success
                 record_success(state.self_model, episode_summary)
+            # Phase 9.3b — streak success trigger (3+ consecutive done).
+            with contextlib.suppress(Exception):
+                from .proactive import get_loop
+                from .proactive_triggers import ProactiveTrigger, ProactiveTriggerKind
+                loop = get_loop()
+                if loop is not None and loop.record_success_for_streak():
+                    loop.push_trigger(ProactiveTrigger(
+                        kind=ProactiveTriggerKind.STREAK_SUCCESS,
+                        context={"streak": loop._success_streak,
+                                 "last_summary": episode_summary[:120]},
+                        priority=4,
+                    ))
+        elif outcome in ("failed", "stopped"):
+            # Break the streak — any non-done outcome resets.
+            with contextlib.suppress(Exception):
+                from .proactive import get_loop
+                loop = get_loop()
+                if loop is not None:
+                    loop.reset_streak()
 
         await self._teardown_browser()
 

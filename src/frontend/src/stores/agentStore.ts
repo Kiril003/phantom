@@ -50,6 +50,12 @@ interface AgentState {
   resumeCaveat: { kind: string; lastKnownUrl?: string } | null;
   // Phase 9.3a — live emotion vector from the backend.
   emotion: AgentEmotionVector | null;
+  // Phase 9.3b — proactive loop heartbeat (breathing indicator in StatusBar).
+  proactive: {
+    enabled: boolean;
+    lastCycleAt: string | null;
+    hasTriggers: boolean;
+  };
 
   // Setters
   setWSConnected: (connected: boolean) => void;
@@ -99,6 +105,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   llmCallsCap: 50,
   resumeCaveat: null,
   emotion: null,
+  proactive: { enabled: false, lastCycleAt: null, hasTriggers: false },
 
   setWSConnected: (connected) => set({ wsConnected: connected }),
   setPromptToUser: (prompt) => set({ promptToUser: prompt }),
@@ -347,6 +354,14 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         if (emo) patch.emotion = emo;
         break;
       }
+      case 'proactive.cycle': {
+        patch.proactive = {
+          enabled: Boolean(e.payload.enabled ?? true),
+          lastCycleAt: String(e.payload.at ?? new Date(e.ts).toISOString()),
+          hasTriggers: Boolean(e.payload.has_triggers ?? false),
+        };
+        break;
+      }
       case 'notification': {
         patch.notification = {
           title: String(e.payload.title ?? ''),
@@ -373,6 +388,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     llmCallsCap: 50,
     resumeCaveat: null,
     emotion: null,
+    proactive: { enabled: false, lastCycleAt: null, hasTriggers: false },
     reflections: [],
     observations: [],
     recentActions: [],

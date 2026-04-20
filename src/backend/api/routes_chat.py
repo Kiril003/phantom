@@ -264,6 +264,16 @@ async def send_message(
             maybe_add_concern_from_user_text(sm, req.content)
     except Exception as exc:
         logger.debug("9.3a chat self-model hook failed: %s", exc)
+    # Phase 9.3b — tell the proactive loop a real user message landed so
+    # it can reset its silence clock. Independent of whether a task is
+    # active — proactive respects "no recent chat" across tasks.
+    try:
+        from agent.proactive import get_loop
+        ploop = get_loop()
+        if ploop is not None:
+            ploop.note_user_interaction()
+    except Exception as exc:
+        logger.debug("9.3b proactive note_user_interaction failed: %s", exc)
 
     t_start = time.monotonic()
 
@@ -465,6 +475,28 @@ async def _ws_chat_handler(type_: str, data: dict, client: Any) -> None:
             db.add(user_msg)
             await db.flush()
             context_engine.record_interaction()
+
+            # Phase 9.3b — mirror the REST path's self-model + proactive hooks
+            # so WS chat updates the loop's silence clock too.
+            try:
+                from agent.runtime import agent_runtime
+                from agent.self_model import (
+                    maybe_add_concern_from_user_text,
+                    note_interaction,
+                )
+                if agent_runtime.foreground_slot is not None:
+                    sm = agent_runtime.foreground_slot.self_model
+                    note_interaction(sm, user.id)
+                    maybe_add_concern_from_user_text(sm, content)
+            except Exception as exc:
+                logger.debug("9.3a chat self-model hook (ws) failed: %s", exc)
+            try:
+                from agent.proactive import get_loop
+                ploop = get_loop()
+                if ploop is not None:
+                    ploop.note_user_interaction()
+            except Exception as exc:
+                logger.debug("9.3b proactive note_user_interaction (ws) failed: %s", exc)
 
             # Broadcast confirmed user message
             from api.websocket_hub import hub as _hub

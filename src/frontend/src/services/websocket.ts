@@ -13,7 +13,11 @@ export type WSChannel =
   | 'settings'
   | 'oled'
   | 'face'
-  | 'agent.stream';
+  | 'agent.stream'
+  // Phase 9.3b — inner monologue stream. Dedicated channel so main
+  // agent.stream subscribers don't get flooded with per-step thinking.
+  // No consumer in 9.3b; a future Inspector panel will subscribe.
+  | 'inner_monologue.stream';
 
 export interface WSMessage {
   channel: WSChannel;

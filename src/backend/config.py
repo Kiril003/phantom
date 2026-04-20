@@ -207,6 +207,24 @@ class PhantomConfig(BaseSettings):
     agent_emotion_enabled: bool = True
     agent_emotion_decay_interval_s: int = 60
     agent_emotion_decay_rate: float = 0.05
+    # Phase 9.3b — proactive loop (background "should I speak unprompted?"
+    # evaluator). Default DISABLED per OVERRIDE — operator enables via
+    # SQLite / Settings UI when ready to observe PHANTOM initiating.
+    # All keys hot-reloadable via AD-02 reload_from_db.
+    agent_proactive_enabled: bool = False
+    agent_proactive_interval_s: int = 60
+    agent_proactive_interval_min_s: int = 30
+    agent_proactive_interval_max_s: int = 300
+    agent_proactive_cooldown_s: int = 300
+    agent_proactive_long_silence_threshold_min: int = 120
+    agent_proactive_require_recent_chat: bool = True
+    # Phase 9.3b — standing orders (persistent triggers). Runner checks every
+    # `agent_standing_orders_poll_s` seconds; disabled by default so nothing
+    # fires without operator opt-in. Hot-reloadable.
+    agent_standing_orders_enabled: bool = True
+    agent_standing_orders_poll_s: int = 10
+    # Phase 9.3b — inner monologue channel rate limit (events per second).
+    agent_monologue_rate_limit_eps: int = 10
     agent_reflection_every_n_actions: int = 5
     agent_thought_budget_force_reflect_ratio: float = 2.0
     agent_strategic_warn_actions: int = 30

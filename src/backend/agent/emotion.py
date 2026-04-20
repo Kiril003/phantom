@@ -144,6 +144,41 @@ async def update_emotion_on_event(
         })
     except Exception as exc:
         logger.debug("emotion.updated broadcast failed: %s", exc)
+    # Phase 9.3b — push HIGH_FATIGUE trigger when crossing 0.8. Deduped
+    # to at most one per 10 min by the proactive loop itself.
+    try:
+        from .proactive import get_loop
+        loop = get_loop()
+        if loop is not None:
+            loop.record_fatigue_spike(new_emotion.fatigue)
+    except Exception as exc:
+        logger.debug("proactive fatigue spike hook failed: %s", exc)
+    # Phase 9.3b — emit monologue on significant threshold crossings so the
+    # inner_monologue.stream subscriber (future Inspector) can track
+    # emotional trajectory. Threshold: concern/fatigue crossing 0.5.
+    try:
+        from .monologue_emitter import MonologueEvent, emit_monologue
+        shifts: list[tuple[str, float, float]] = []
+        for axis in ("focus", "curiosity", "concern", "fatigue"):
+            before = getattr(current, axis)
+            after = getattr(new_emotion, axis)
+            # Only report axes that crossed the 0.5 midpoint in either direction.
+            if (before < 0.5 <= after) or (after < 0.5 <= before):
+                shifts.append((axis, before, after))
+        for axis, before, after in shifts:
+            await emit_monologue(MonologueEvent(
+                kind="emotion_shift",
+                source="emotion_engine",
+                monologue={
+                    "dimension": axis,
+                    "from": round(before, 2),
+                    "to": round(after, 2),
+                    "trigger": event_type,
+                },
+                task_id=runtime.foreground_slot.id,
+            ))
+    except Exception as exc:
+        logger.debug("emotion_shift monologue emit failed: %s", exc)
 
 
 async def decay_loop(runtime: "AgentRuntime", stop_event: asyncio.Event) -> None:

@@ -321,10 +321,24 @@ class TestBackgroundTimeout:
             "slow bg", track="background", timeout_s=1,
         )
         assert started is True
-        # Wait up to 3s for the timeout path to finalize.
-        await _wait_for_done(lambda: rt.background_slot, timeout=4.0)
-        row = await get_task(task_id)
-        assert row is not None
+        # The timeout path cancels the inner loop (first finalize runs as
+        # "stopped") and then the outer handler overrides the row to
+        # "timeout". Poll the DB directly so we wait for the *final*
+        # status, not just slot release — avoids a race under load.
+        async def _poll_status():
+            start = asyncio.get_event_loop().time()
+            while True:
+                row = await get_task(task_id)
+                if row is not None and row["status"] == "timeout":
+                    return row
+                if asyncio.get_event_loop().time() - start > 6.0:
+                    raise AssertionError(
+                        f"task {task_id} status is "
+                        f"{row['status'] if row else None}, not 'timeout'"
+                    )
+                await asyncio.sleep(0.05)
+
+        row = await _poll_status()
         assert row["status"] == "timeout"
 
 

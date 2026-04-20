@@ -239,13 +239,16 @@ class TestBudgetThreadThrough:
 
     @pytest.mark.asyncio
     async def test_loop_passes_task_id_to_tactical(self):
-        """Source-level guarantee: agent.loop's tactical.plan call carries task_id=state.id."""
+        """Source-level guarantee: the agent loop's tactical.plan call
+        carries task_id=state.id. Phase 9.4a split the outer
+        `run_task_loop` (track routing + timeout wrapper) from
+        `_run_task_loop_impl` (actual ReAct body); the F-01 invariant
+        now lives on the impl."""
         import inspect
 
         from agent import loop
 
-        src = inspect.getsource(loop.run_task_loop)
-        # The exact token that broke F-01 — make sure it's threaded.
+        src = inspect.getsource(loop._run_task_loop_impl)
         assert "task_id=state.id" in src, (
-            "agent.loop.run_task_loop must pass task_id=state.id to tactical.plan"
+            "agent.loop._run_task_loop_impl must pass task_id=state.id to tactical.plan"
         )

@@ -189,6 +189,15 @@ class PhantomConfig(BaseSettings):
     # threshold emits a WS event so UIs can show the user before exhaustion.
     agent_max_llm_calls_per_task: int = 50
     agent_warn_llm_calls_per_task: int = 30
+    # Phase 9.4a — background track runs under tighter limits than foreground:
+    # smaller per-task LLM-call cap + harder wall-clock timeout. Rationale:
+    # background work is best-effort "watch and act"; it must not burn the
+    # provider budget or dominate the single background slot for >5 min.
+    # Both hot-reloadable.
+    agent_max_llm_calls_per_background_task: int = 10
+    agent_warn_llm_calls_per_background_task: int = 6
+    agent_background_task_timeout_s: int = 300
+    agent_background_queue_max: int = 20
     # Phase 9.2.2 — when True, LLM calls without task_id log a WARNING.
     agent_require_task_id_for_budget: bool = True
     # Phase 9.2.2 — blocked_quota probe cadence + adaptive backoff ceiling.

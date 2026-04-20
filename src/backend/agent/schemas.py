@@ -59,6 +59,10 @@ TaskStatus = Literal[
     "done",
     "failed",
     "stopped",
+    # Phase 9.4a — background task exceeded its configured timeout and was
+    # finalized by the runtime. Distinct from `failed` so the UI + analytics
+    # can distinguish "code broke" from "ran out of wall-clock budget".
+    "timeout",
 ]
 
 SubGoalStatus = Literal[

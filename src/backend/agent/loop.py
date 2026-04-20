@@ -17,6 +17,7 @@ from config import config
 
 from .audit import persist_task_state, save_checkpoint, update_task_status
 from .checkpoints import build as build_checkpoint
+from .errors import BackgroundTimeoutError
 from .executor import StepCancelled, TaskStopped, execute as execute_action
 from .observations import (
     build_from_action_result,
@@ -304,12 +305,54 @@ async def _run_reflection(
 
 
 async def run_task_loop(runtime: "AgentRuntime", state: "TaskState", *, resumed: bool = False) -> None:
-    """Drive a single foreground task to completion."""
+    """Drive a single task (foreground or background) to completion.
+
+    Phase 9.4a — sets the track ContextVar on entry so every
+    `runtime._broadcast` / `set_substate` downstream routes correctly. For
+    background tasks, wraps the core loop in a wall-clock timeout governed
+    by `state.timeout_s` (per-task override) or
+    `config.agent_background_task_timeout_s` (default 300s).
+    """
+    from config import config as _cfg
+    from .runtime import current_track as _track_cv
+    token = _track_cv.set(state.track)
+    try:
+        if state.track == "background":
+            timeout_s = int(
+                state.timeout_s
+                if state.timeout_s is not None
+                else getattr(_cfg, "agent_background_task_timeout_s", 300) or 300
+            )
+            try:
+                await asyncio.wait_for(
+                    _run_task_loop_impl(runtime, state, resumed=resumed),
+                    timeout=timeout_s,
+                )
+            except asyncio.TimeoutError:
+                logger.info(
+                    "background task %s exceeded timeout_s=%d — finalizing",
+                    state.id[:8], timeout_s,
+                )
+                with contextlib.suppress(Exception):
+                    await runtime.finalize_task(
+                        state, "timeout",
+                        summary=f"background task exceeded {timeout_s}s timeout",
+                        error="background_timeout",
+                    )
+        else:
+            await _run_task_loop_impl(runtime, state, resumed=resumed)
+    finally:
+        _track_cv.reset(token)
+
+
+async def _run_task_loop_impl(runtime: "AgentRuntime", state: "TaskState", *, resumed: bool = False) -> None:
+    """Actual ReAct + Reflect + Checkpoint orchestration. Extracted from
+    run_task_loop so the background-track timeout can wrap it cleanly."""
     budget = TaskBudget()
     state.status = "running"
     await update_task_status(state.id, "running")
     await runtime._broadcast("task.started", {
-        "task_id": state.id, "goal": state.goal,
+        "task_id": state.id, "goal": state.goal, "track": state.track,
         "self_model": state.self_model.model_dump(mode="json"),
         "resumed": resumed,
     })

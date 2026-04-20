@@ -312,6 +312,123 @@ async def submit_geolocation(
     }
 
 
+@router.get("/location_history")
+async def get_location_history(
+    from_: str | None = Query(default=None, alias="from", description="ISO8601 lower bound"),
+    to: str | None = Query(default=None, description="ISO8601 upper bound"),
+    limit: int = Query(default=500, ge=1, le=5000),
+    token_data: TokenPayload = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Phase 9.4b — chronological location history for the timeline drawer."""
+    from db.models import LocationHistory
+
+    from_dt = _parse_since(from_)
+    to_dt = _parse_since(to)
+
+    stmt = (
+        select(LocationHistory)
+        .where(LocationHistory.user_id == token_data.user_id)
+        .order_by(LocationHistory.timestamp.desc())
+        .limit(limit)
+    )
+    if from_dt is not None:
+        stmt = stmt.where(LocationHistory.timestamp >= from_dt)
+    if to_dt is not None:
+        stmt = stmt.where(LocationHistory.timestamp <= to_dt)
+
+    result = await db.execute(stmt)
+    rows = list(result.scalars().all())
+    return {
+        "entries": [
+            {
+                "id": r.id,
+                "lat": r.lat,
+                "lon": r.lon,
+                "source": r.source,
+                "confidence": r.confidence,
+                "accuracy_m": r.accuracy_m,
+                "place_name": r.place_name,
+                "country": r.country,
+                "country_code": r.country_code,
+                "city": r.city,
+                "timestamp": r.timestamp.isoformat(),
+            }
+            for r in rows
+        ],
+        "total": len(rows),
+    }
+
+
+@router.get("/nearby")
+async def get_nearby(
+    lat: float = Query(..., ge=-90.0, le=90.0),
+    lon: float = Query(..., ge=-180.0, le=180.0),
+    radius_m: int = Query(default=500, ge=10, le=5000),
+    token_data: TokenPayload = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Phase 9.4b — unified "what's here" lookup.
+
+    Combines three sources:
+      * remembered: MemoryFact rows with place coordinates in range
+      * osm:        Overpass API features (cafes/parks/shops/etc.)
+      * pois:       user-saved MapPOI rows within range
+
+    Every external call is guarded — cache hits are free, misses respect
+    the adapter's rate limit, and any error returns an empty slice for
+    that source rather than raising.
+    """
+    radius_km = radius_m / 1000.0
+
+    from memory.geo_query import find_memories_near
+    remembered = await find_memories_near(
+        db, user_id=token_data.user_id, lat=lat, lon=lon, radius_km=radius_km,
+    )
+
+    osm: list[dict[str, Any]] = []
+    if config.agent_overpass_enabled:
+        try:
+            from agent.localization.adapters.overpass import get_default_overpass
+            overpass = get_default_overpass()
+            features = await overpass.features_near(lat, lon, radius_m=radius_m)
+            osm = [
+                {
+                    "osm_id": f.osm_id,
+                    "name": f.name,
+                    "type": f.type,
+                    "lat": f.lat,
+                    "lon": f.lon,
+                    "tags": f.tags,
+                    "distance_m": f.distance_m,
+                }
+                for f in features
+            ]
+        except Exception as exc:
+            logger.info("overpass nearby lookup failed: %s", exc)
+
+    # MapPOI scan — small table, user-scoped.
+    from agent.localization.base import haversine_km
+    poi_result = await db.execute(
+        select(MapPOI).where(MapPOI.user_id == token_data.user_id)
+    )
+    pois: list[dict[str, Any]] = []
+    for p in poi_result.scalars().all():
+        d_km = haversine_km(lat, lon, p.lat, p.lon)
+        if d_km * 1000.0 <= radius_m:
+            pois.append({
+                "id": p.id,
+                "name": p.name,
+                "category": p.category,
+                "lat": p.lat,
+                "lon": p.lon,
+                "distance_m": int(round(d_km * 1000.0)),
+            })
+    pois.sort(key=lambda r: r["distance_m"])
+
+    return {"remembered": remembered, "osm": osm, "pois": pois}
+
+
 @router.get("/track")
 async def get_track(
     hours: float = Query(default=2.0, ge=0.01, le=168.0),

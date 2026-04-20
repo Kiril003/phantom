@@ -167,6 +167,30 @@ class WardrivingRecord(Base):
     seen_count: Mapped[int] = mapped_column(Integer, default=1)
 
 
+class LocationHistory(Base):
+    """Phase 9.4b — persistent location log driven by the resolver.
+
+    Writer appends an entry only when the user has moved > N metres OR
+    N minutes have elapsed since the last entry. Reverse-geocode enricher
+    lazily populates ``place_name``/``country`` on a cadence that respects
+    Nominatim's 1 req/s policy. Retention: 90 days by default.
+    """
+    __tablename__ = "location_history"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    lat: Mapped[float] = mapped_column(Float, nullable=False)
+    lon: Mapped[float] = mapped_column(Float, nullable=False)
+    source: Mapped[str] = mapped_column(String(32), nullable=False)
+    confidence: Mapped[float] = mapped_column(Float, nullable=False, default=0.0)
+    accuracy_m: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    place_name: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    country: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    country_code: Mapped[Optional[str]] = mapped_column(String(8), nullable=True)
+    city: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    timestamp: Mapped[datetime] = mapped_column(DateTime, default=_now, index=True)
+
+
 class MapPOI(Base):
     __tablename__ = "map_pois"
 

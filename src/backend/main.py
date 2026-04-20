@@ -200,6 +200,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as exc:
         logger.warning("Localization source wiring failed: %s", exc)
 
+    # Phase 9.4b — LocationHistory writer + reverse-geocode enricher.
+    history_writer_obj = None
+    history_enricher_obj = None
+    if config.agent_location_history_enabled:
+        try:
+            from agent.localization.history_writer import get_writer, get_enricher
+            history_writer_obj = get_writer()
+            await history_writer_obj.start()
+            history_enricher_obj = get_enricher()
+            await history_enricher_obj.start()
+            logger.info("LocationHistory writer + enricher started")
+        except Exception as exc:
+            logger.warning("LocationHistory setup failed: %s", exc)
+
     # Start tick loop for time-driven context updates
     loop_task = asyncio.create_task(_context_loop(), name="context_loop")
 
@@ -349,6 +363,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             await mcp_shutdown()
         except Exception as exc:
             logger.debug("MCP shutdown raised: %s", exc)
+
+    # Phase 9.4b — stop LocationHistory writer + enricher cleanly.
+    if history_writer_obj is not None:
+        try:
+            await history_writer_obj.stop()
+        except Exception as exc:
+            logger.debug("LocationHistory writer shutdown raised: %s", exc)
+    if history_enricher_obj is not None:
+        try:
+            await history_enricher_obj.stop()
+        except Exception as exc:
+            logger.debug("LocationHistory enricher shutdown raised: %s", exc)
 
     if config.serial_enabled:
         from sensors.serial_bridge import serial_bridge

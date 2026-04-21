@@ -793,11 +793,31 @@ class AgentRuntime:
         summary: str,
         error: str | None,
     ) -> None:
+        """Phase 9.4c audit C1 — orchestrator. Semantics unchanged; the
+        heavy lifting lives in three focused helpers so each concern is
+        testable and greppable on its own.
+        """
         state.status = outcome
         state.error = error
+        episode_summary = await self._finalize_persist(state, outcome, summary)
+        await self._finalize_broadcast(state, outcome, summary, error)
+        self._finalize_release_slot(state)
+        # Keep episode_summary accessible for any future caller-level logging.
+        _ = episode_summary
+
+    async def _finalize_persist(
+        self,
+        state: TaskState,
+        outcome: TaskStatus,
+        summary: str,
+    ) -> str:
+        """Write task status, observation buffer, self-model, thought budget,
+        and the memory seed/episode to storage. Returns the composed
+        ``episode_summary`` so the caller can reuse it for downstream
+        logging without re-composing."""
         await update_task_status(
             state.id, outcome,
-            error=error,
+            error=state.error,
             paused_reason=state.paused_reason,
             finished=True,
         )
@@ -813,7 +833,6 @@ class AgentRuntime:
             thought_budget_json=json.dumps(state.thought_budget.model_dump(mode="json")),
         )
 
-        # Memory seed — outcome-kind string used by seed + memory subsystems.
         outcome_kind = (
             "done" if outcome == "done"
             else "failed" if outcome == "failed"
@@ -884,6 +903,19 @@ class AgentRuntime:
                 if loop is not None:
                     loop.reset_streak()
 
+        return episode_summary
+
+    async def _finalize_broadcast(
+        self,
+        state: TaskState,
+        outcome: TaskStatus,
+        summary: str,
+        error: str | None,
+    ) -> None:
+        """Tear down the browser (foreground only), emit the terminal WS
+        event, flip substate back to idle, and, for foreground tasks,
+        exit OPERATOR → previous system state with a state.transition
+        broadcast."""
         # Browser teardown is global — both foreground and background share the
         # Playwright instance in this phase.
         if state.track == "foreground":
@@ -917,7 +949,10 @@ class AgentRuntime:
                         "auto": transition.auto,
                     })
 
-        # Free the slot so the next task can start.
+    def _finalize_release_slot(self, state: TaskState) -> None:
+        """Clear the track's slot + runner handle and kick off a queue
+        drain coroutine so the next task's planning phase can start
+        without the caller awaiting it here."""
         if state.track == "foreground":
             if self.foreground_slot is state:
                 self.foreground_slot = None

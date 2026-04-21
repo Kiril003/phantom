@@ -13,16 +13,22 @@ errors, parse errors, and rate-limit exhaustion all surface as ``None``
 from __future__ import annotations
 
 import logging
-import time
 from datetime import datetime, timezone
 from typing import Optional
 
 import httpx
+from cachetools import TTLCache
 
 from config import config
 
 from ..base import LocationEstimate
 from .rate_limiter import DailyRateLimiter
+
+# Phase 9.4c audit C3 — replace manual time-based cache with a bounded
+# TTLCache. maxsize=4 covers the handful of recent egress-IP estimates we
+# ever hold (main + test/mock instances); TTL preserves the 10 min policy.
+_CACHE_MAX = 4
+_CURRENT_KEY = "current"
 
 logger = logging.getLogger(__name__)
 
@@ -34,13 +40,14 @@ class IpApiLocator:
     def __init__(self, rate_limit: Optional[DailyRateLimiter] = None) -> None:
         cap = int(getattr(config, "agent_ip_locator_rate_per_day", 900) or 900)
         self._rate_limit = rate_limit if rate_limit is not None else DailyRateLimiter(cap)
-        self._cache_value: Optional[LocationEstimate] = None
-        self._cache_at: float = 0.0
+        self._cache: TTLCache[str, LocationEstimate] = TTLCache(
+            maxsize=_CACHE_MAX, ttl=self.CACHE_TTL_S,
+        )
 
     # ── Introspection ────────────────────────────────────────────────────────
 
     def can_request_or_has_cache(self) -> bool:
-        if self._cache_value is not None and (time.time() - self._cache_at) < self.CACHE_TTL_S:
+        if _CURRENT_KEY in self._cache:
             return True
         return self._rate_limit.can_request()
 
@@ -48,8 +55,7 @@ class IpApiLocator:
         return self._rate_limit.remaining()
 
     def reset_cache(self) -> None:
-        self._cache_value = None
-        self._cache_at = 0.0
+        self._cache.clear()
 
     # ── Lookup ───────────────────────────────────────────────────────────────
 
@@ -60,9 +66,9 @@ class IpApiLocator:
         miss. Network/parse failures return None and do not mark the rate
         limiter (so transient outages don't cost budget).
         """
-        now = time.time()
-        if self._cache_value is not None and (now - self._cache_at) < self.CACHE_TTL_S:
-            return self._cache_value
+        cached = self._cache.get(_CURRENT_KEY)
+        if cached is not None:
+            return cached
 
         if not self._rate_limit.can_request():
             logger.info("ipapi budget exhausted — skipping lookup")
@@ -99,8 +105,7 @@ class IpApiLocator:
             timestamp=datetime.now(tz=timezone.utc),
             trust_level=30,
         )
-        self._cache_value = estimate
-        self._cache_at = now
+        self._cache[_CURRENT_KEY] = estimate
         return estimate
 
 

@@ -15,15 +15,22 @@ Network failures return `[]` / `None`; they do not raise.
 from __future__ import annotations
 
 import logging
-import time
 from dataclasses import dataclass
 from typing import Optional
 
 import httpx
+from cachetools import TTLCache
 
 from config import config
 
 from .rate_limiter import PerSecondRateLimiter
+
+# Phase 9.4c audit C1 — bounded caches prevent unbounded memory growth over
+# long-running sessions. Capacity keeps the top N hottest queries resident;
+# TTL honours Nominatim's "cache aggressively" policy without staleness.
+_FWD_CACHE_MAX = 1024
+_REV_CACHE_MAX = 1024
+_DEFAULT_TTL_S = 7 * 24 * 3600
 
 logger = logging.getLogger(__name__)
 
@@ -59,8 +66,11 @@ class NominatimGeocoder:
 
     def __init__(self, rate_limit: Optional[PerSecondRateLimiter] = None) -> None:
         self._rate_limit = rate_limit if rate_limit is not None else PerSecondRateLimiter(1.0)
-        self._fwd_cache: dict[str, tuple[list[GeocodeResult], float]] = {}
-        self._rev_cache: dict[tuple[int, int], tuple[Optional[ReverseGeocodeResult], float]] = {}
+        ttl = float(getattr(config, "agent_nominatim_cache_ttl_s", _DEFAULT_TTL_S) or _DEFAULT_TTL_S)
+        self._fwd_cache: TTLCache[str, list[GeocodeResult]] = TTLCache(maxsize=_FWD_CACHE_MAX, ttl=ttl)
+        self._rev_cache: TTLCache[tuple[int, int], Optional[ReverseGeocodeResult]] = TTLCache(
+            maxsize=_REV_CACHE_MAX, ttl=ttl,
+        )
 
     # ── Introspection ────────────────────────────────────────────────────────
 
@@ -78,11 +88,9 @@ class NominatimGeocoder:
             return []
 
         key = query.casefold().strip()
-        now = time.time()
-        ttl = float(getattr(config, "agent_nominatim_cache_ttl_s", 7 * 24 * 3600) or 7 * 24 * 3600)
         cached = self._fwd_cache.get(key)
-        if cached is not None and (now - cached[1]) < ttl:
-            return cached[0]
+        if cached is not None:
+            return cached
 
         await self._rate_limit.wait()
         ua = str(getattr(config, "agent_nominatim_user_agent", "PHANTOM-OS/0.9") or "PHANTOM-OS/0.9")
@@ -114,7 +122,7 @@ class NominatimGeocoder:
                 ))
             except (KeyError, TypeError, ValueError):
                 continue
-        self._fwd_cache[key] = (results, now)
+        self._fwd_cache[key] = results
         return results
 
     # ── Reverse ──────────────────────────────────────────────────────────────
@@ -129,11 +137,8 @@ class NominatimGeocoder:
         if not getattr(config, "agent_nominatim_enabled", True):
             return None
         key = (int(lat * 1e4), int(lon * 1e4))
-        now = time.time()
-        ttl = float(getattr(config, "agent_nominatim_cache_ttl_s", 7 * 24 * 3600) or 7 * 24 * 3600)
-        cached = self._rev_cache.get(key)
-        if cached is not None and (now - cached[1]) < ttl:
-            return cached[0]
+        if key in self._rev_cache:
+            return self._rev_cache[key]
 
         await self._rate_limit.wait()
         ua = str(getattr(config, "agent_nominatim_user_agent", "PHANTOM-OS/0.9") or "PHANTOM-OS/0.9")
@@ -153,7 +158,7 @@ class NominatimGeocoder:
             return None
 
         if not isinstance(data, dict) or "lat" not in data:
-            self._rev_cache[key] = (None, now)
+            self._rev_cache[key] = None
             return None
         addr = data.get("address") or {}
         result = ReverseGeocodeResult(
@@ -170,7 +175,7 @@ class NominatimGeocoder:
             ),
             state=addr.get("state") or addr.get("region"),
         )
-        self._rev_cache[key] = (result, now)
+        self._rev_cache[key] = result
         return result
 
 

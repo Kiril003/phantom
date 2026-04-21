@@ -49,6 +49,9 @@ croniter==6.2.2
 anyio==4.4.0
 httpx==0.27.0
 
+# Bounded caches for external adapters (Phase 9.4c — audit C1-C3)
+cachetools==7.0.6
+
 # Testing
 pytest==8.3.2
 pytest-asyncio==0.23.8

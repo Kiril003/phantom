@@ -9,16 +9,22 @@ for 24 h keyed on (lat, lon, radius, feature_types).
 from __future__ import annotations
 
 import logging
-import time
 from dataclasses import dataclass, field
 from typing import Optional
 
 import httpx
+from cachetools import TTLCache
 
 from agent.localization.base import haversine_km
 from config import config
 
 from .rate_limiter import PerSecondRateLimiter
+
+# Phase 9.4c audit C2 — bounded cache. 512 slots covers the realistic
+# "tiles visited in a day" count many times over; TTL tracks the 24 h
+# recommendation from Overpass usage policy.
+_CACHE_MAX = 512
+_DEFAULT_TTL_S = 24 * 3600
 
 logger = logging.getLogger(__name__)
 
@@ -54,7 +60,8 @@ class OverpassQuery:
 
     def __init__(self, rate_limit: Optional[PerSecondRateLimiter] = None) -> None:
         self._rate_limit = rate_limit if rate_limit is not None else PerSecondRateLimiter(1.0)
-        self._cache: dict[tuple, tuple[list[OSMFeature], float]] = {}
+        ttl = float(getattr(config, "agent_overpass_cache_ttl_s", _DEFAULT_TTL_S) or _DEFAULT_TTL_S)
+        self._cache: TTLCache[tuple, list[OSMFeature]] = TTLCache(maxsize=_CACHE_MAX, ttl=ttl)
 
     def reset_cache(self) -> None:
         self._cache.clear()
@@ -78,11 +85,9 @@ class OverpassQuery:
             return []
         types = tuple(feature_types) if feature_types else DEFAULT_FEATURE_TYPES
         key = (round(lat, 4), round(lon, 4), int(radius_m), types)
-        now = time.time()
-        ttl = float(getattr(config, "agent_overpass_cache_ttl_s", 24 * 3600) or 24 * 3600)
         cached = self._cache.get(key)
-        if cached is not None and (now - cached[1]) < ttl:
-            return cached[0]
+        if cached is not None:
+            return cached
 
         filters = "\n".join(
             f'  node[{ft.replace("=", "=\"", 1)}\"](around:{radius_m},{lat},{lon});'
@@ -121,7 +126,7 @@ class OverpassQuery:
             ))
 
         features.sort(key=lambda f: f.distance_m)
-        self._cache[key] = (features, now)
+        self._cache[key] = features
         return features
 
 

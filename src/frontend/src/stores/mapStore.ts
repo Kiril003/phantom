@@ -2,6 +2,11 @@ import { create } from 'zustand';
 import type { WardrivingRecord, MapPOI, HeatmapPoint, TrackPoint } from '@shared/types';
 import { mapApi, type Bounds } from '../services/api';
 
+// Keep the most recent N track points client-side. Older points are
+// dropped on append; full history is re-hydrated from the backend via
+// `loadTrack(hours)` when the user widens the time window.
+export const MAX_TRACK_HISTORY = 1000;
+
 export type MapLayerKey = 'base' | 'presence' | 'wardriving' | 'heatmap' | 'intel' | 'recon';
 
 export type MapSelection =
@@ -86,7 +91,7 @@ export const useMapStore = create<MapStoreState>((set, get) => ({
     set((s) => ({ pois: s.pois.filter((p) => p.id !== id) })),
   setTrack: (points) => set({ track: points }),
   appendTrackPoint: (point) =>
-    set((s) => ({ track: [...s.track.slice(-999), point] })),
+    set((s) => ({ track: [...s.track.slice(-(MAX_TRACK_HISTORY - 1)), point] })),
   setCenter: (center) => set({ center }),
   setZoom: (zoom) => set({ zoom }),
 

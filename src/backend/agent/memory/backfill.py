@@ -78,7 +78,7 @@ async def backfill_if_behind() -> dict[str, int] | None:
 async def _main_cli() -> None:
     await init_db()
     stats = await backfill_all()
-    print(f"backfill_all: {stats}")
+    logger.info("backfill_all: %s", stats)
 
 
 if __name__ == "__main__":

@@ -313,7 +313,7 @@ class ContextEngine:
         """
         try:
             from agent.localization import get_resolver  # noqa: PLC0415
-        except Exception:  # pragma: no cover — import guard
+        except ImportError:  # pragma: no cover — import guard
             return
         try:
             resolver = get_resolver()
@@ -360,7 +360,7 @@ class ContextEngine:
             cpu = psutil.cpu_percent(interval=None)
             ram = psutil.virtual_memory().percent
             disk = psutil.disk_usage("/").percent
-        except Exception:
+        except (psutil.Error, OSError):
             cpu, ram, disk = 0.0, 0.0, 0.0
 
         uptime = time.monotonic() - self._start_time
@@ -391,7 +391,7 @@ class ContextEngine:
             we_h, we_m = [int(x) for x in work_end.split(":")]
             work_minutes = now.hour * 60 + now.minute
             work_hours = (wh * 60 + wm) <= work_minutes <= (we_h * 60 + we_m)
-        except Exception:
+        except (ValueError, TypeError, AttributeError):
             work_hours = False
 
         self._snapshot["when"].update({

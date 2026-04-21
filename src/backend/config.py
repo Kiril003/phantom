@@ -297,8 +297,12 @@ class PhantomConfig(BaseSettings):
     agent_nominatim_user_agent: str = "PHANTOM-OS/0.9 (localhost)"
     agent_nominatim_cache_ttl_s: int = 7 * 24 * 3600
     # Overpass API — nearby OSM features. Cached 24 h per (lat,lon,radius).
+    # The Overpass public mirror blocks httpx's default User-Agent with
+    # HTTP 406 Not Acceptable, so we must send an identifiable UA string
+    # (same policy as Nominatim).
     agent_overpass_enabled: bool = True
     agent_overpass_cache_ttl_s: int = 24 * 3600
+    agent_overpass_user_agent: str = "PHANTOM-OS/0.9 (localhost)"
     # Memory-to-geo bridge (spaCy NER). Disable if the model is unavailable.
     agent_geo_extractor_enabled: bool = True
     agent_geo_extractor_min_entity_length: int = 3

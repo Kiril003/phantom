@@ -101,6 +101,39 @@ class TestOverpassQuery:
         q = OverpassQuery()
         assert await q.features_near(50.45, 30.52) == []
 
+    @pytest.mark.asyncio
+    async def test_sends_custom_user_agent(self, monkeypatch):
+        """Phase 9.4c.1 hotfix — the Overpass public mirror returns 406
+        Not Acceptable for httpx's default UA. Verify we pass a custom UA
+        header into the httpx.AsyncClient constructor."""
+        from agent.localization.adapters import overpass as op_mod
+        import httpx as _httpx
+
+        captured_headers: dict = {}
+        real_async_client = _httpx.AsyncClient
+
+        class _Spy(real_async_client):
+            def __init__(self, *args, headers=None, **kwargs):
+                if headers:
+                    captured_headers.update(headers)
+                super().__init__(*args, headers=headers, **kwargs)
+
+            async def post(self, url, *args, **kwargs):  # type: ignore[override]
+                return _httpx.Response(
+                    200, json={"elements": []},
+                    request=_httpx.Request("POST", url),
+                )
+
+        monkeypatch.setattr(op_mod.httpx, "AsyncClient", _Spy)
+        q = OverpassQuery()
+        await q.features_near(50.45, 30.52, radius_m=500)
+        ua = captured_headers.get("User-Agent", "")
+        assert ua, "Overpass adapter must set a User-Agent header"
+        assert "PHANTOM" in ua or "phantom" in ua, f"UA looks wrong: {ua!r}"
+        assert "python-httpx" not in ua, (
+            "UA still looks like the httpx default — Overpass will 406"
+        )
+
 
 # ═════════════════════════════════════════════════════════════════════════════
 # /map/nearby endpoint

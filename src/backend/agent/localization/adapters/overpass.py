@@ -97,8 +97,15 @@ class OverpassQuery:
         query = f"[out:json][timeout:10];\n(\n{filters}\n);\nout tags center;"
 
         await self._rate_limit.wait()
+        # Phase 9.4c.1 hotfix — Overpass's public mirror rejects the
+        # default ``python-httpx/*`` User-Agent with HTTP 406. Send a
+        # custom UA like the Nominatim adapter already does.
+        ua = str(
+            getattr(config, "agent_overpass_user_agent", "PHANTOM-OS/0.9")
+            or "PHANTOM-OS/0.9"
+        )
         try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
+            async with httpx.AsyncClient(timeout=15.0, headers={"User-Agent": ua}) as client:
                 resp = await client.post(self.URL, data={"data": query})
             resp.raise_for_status()
             data = resp.json()

@@ -464,3 +464,17 @@ async def get_track(
         last_lat, last_lon = lat, lon
 
     return {"points": points}
+
+
+# ── Phase 9.4c audit Q6 — external services health ──────────────────────────
+
+
+@router.get("/services_health")
+async def get_services_health() -> dict[str, Any]:
+    """Expose the per-service health snapshot so the frontend can render an
+    "enrichment offline" banner when Nominatim / Overpass / ipapi.co are
+    unreachable. Public (no-auth) because the map UI polls every 60 s and
+    the payload contains only outage timestamps + short reason strings.
+    """
+    from agent.localization import service_health
+    return {"services": service_health.snapshot()}

@@ -18,6 +18,7 @@ from cachetools import TTLCache
 from agent.localization.base import haversine_km
 from config import config
 
+from .. import service_health
 from .rate_limiter import PerSecondRateLimiter
 
 # Phase 9.4c audit C2 — bounded cache. 512 slots covers the realistic
@@ -103,6 +104,7 @@ class OverpassQuery:
             data = resp.json()
         except (httpx.HTTPError, ValueError) as exc:
             logger.info("Overpass query failed: %s", exc)
+            service_health.mark_failure("overpass", str(exc))
             return []
 
         features: list[OSMFeature] = []
@@ -127,6 +129,7 @@ class OverpassQuery:
 
         features.sort(key=lambda f: f.distance_m)
         self._cache[key] = features
+        service_health.mark_success("overpass")
         return features
 
 

@@ -23,6 +23,7 @@ from cachetools import TTLCache
 
 from config import config
 
+from .. import service_health
 from .rate_limiter import PerSecondRateLimiter
 
 # Phase 9.4c audit C1 — bounded caches prevent unbounded memory growth over
@@ -106,6 +107,7 @@ class NominatimGeocoder:
             data = resp.json()
         except (httpx.HTTPError, ValueError) as exc:
             logger.info("Nominatim geocode failure for %r: %s", key[:40], exc)
+            service_health.mark_failure("nominatim", f"geocode: {exc}")
             return []
 
         results: list[GeocodeResult] = []
@@ -123,6 +125,7 @@ class NominatimGeocoder:
             except (KeyError, TypeError, ValueError):
                 continue
         self._fwd_cache[key] = results
+        service_health.mark_success("nominatim")
         return results
 
     # ── Reverse ──────────────────────────────────────────────────────────────
@@ -155,6 +158,7 @@ class NominatimGeocoder:
             data = resp.json()
         except (httpx.HTTPError, ValueError) as exc:
             logger.info("Nominatim reverse failure for %.4f,%.4f: %s", lat, lon, exc)
+            service_health.mark_failure("nominatim", f"reverse: {exc}")
             return None
 
         if not isinstance(data, dict) or "lat" not in data:
@@ -176,6 +180,7 @@ class NominatimGeocoder:
             state=addr.get("state") or addr.get("region"),
         )
         self._rev_cache[key] = result
+        service_health.mark_success("nominatim")
         return result
 
 

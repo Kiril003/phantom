@@ -21,6 +21,7 @@ import {
 import { TimelineDrawer } from './TimelineDrawer';
 import { NearbyPanel } from './NearbyPanel';
 import { MapContext } from './MapContext';
+import { ServicesHealthBanner } from './ServicesHealthBanner';
 import { BaseLayer } from './layers/BaseLayer';
 import { PresenceLayer } from './layers/PresenceLayer';
 import { WardrivingLayer } from './layers/WardrivingLayer';
@@ -356,6 +357,14 @@ export function TacticalMap({
         {layers.recon && <ReconLayer />}
         <MarkerCard />
       </MapContext.Provider>
+
+      {/* Phase 9.4c audit Q6 — surfaces Nominatim/Overpass/ipapi outages
+          so the operator can tell "empty search" from "service down". */}
+      <div className="absolute top-0 left-0 right-0 z-30 pointer-events-none">
+        <div className="pointer-events-auto">
+          <ServicesHealthBanner />
+        </div>
+      </div>
 
       {/* Dark overlay gradient around edges */}
       <div

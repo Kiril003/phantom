@@ -239,7 +239,20 @@ export const mapApi = {
     params.set('radius_m', String(radiusM));
     return request<NearbyResponse>('GET', `/map/nearby?${params}`);
   },
+  // Phase 9.4c audit Q6 — offline banner source-of-truth.
+  getServicesHealth: () =>
+    request<{ services: Record<string, ServiceHealth> }>('GET', '/map/services_health'),
 };
+
+export type ServiceStatus = 'ok' | 'stale' | 'down' | 'unknown';
+
+export interface ServiceHealth {
+  status: ServiceStatus;
+  last_success_at: number | null;
+  last_failure_at: number | null;
+  last_failure_reason: string | null;
+  seconds_since_success: number | null;
+}
 
 export interface LocationHistoryEntry {
   id: string;

@@ -21,6 +21,7 @@ from cachetools import TTLCache
 
 from config import config
 
+from .. import service_health
 from ..base import LocationEstimate
 from .rate_limiter import DailyRateLimiter
 
@@ -81,6 +82,7 @@ class IpApiLocator:
             data = resp.json()
         except (httpx.HTTPError, ValueError) as exc:
             logger.warning("ipapi lookup network/parse failure: %s", exc)
+            service_health.mark_failure("ipapi", str(exc))
             return None
 
         try:
@@ -106,6 +108,7 @@ class IpApiLocator:
             trust_level=30,
         )
         self._cache[_CURRENT_KEY] = estimate
+        service_health.mark_success("ipapi")
         return estimate
 
 

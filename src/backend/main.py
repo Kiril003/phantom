@@ -270,7 +270,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 logger.info(
                     "Proactive loop singleton constructed; background task "
                     "disabled (agent_proactive_enabled=False). Flip the flag "
-                    "via Settings UI or sqlite when ready."
+                    "via Settings UI or sqlite to enable."
                 )
         except Exception as exc:
             logger.warning("Proactive loop setup failed: %s", exc)

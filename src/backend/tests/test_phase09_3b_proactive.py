@@ -76,8 +76,8 @@ async def test_loop_start_stop_cleanly():
 
     r = _build_bare_runtime()
     loop = ProactiveLoop(r)
-    # Proactive disabled by default per OVERRIDE — but we still want start/stop
-    # to work: enable for this test.
+    # Proactive enabled by default as of 9.4c (audit G2); kept explicit for
+    # clarity on what this test requires.
     config.agent_proactive_enabled = True
     config.agent_proactive_interval_min_s = 1
     config.agent_proactive_interval_s = 1
@@ -89,7 +89,7 @@ async def test_loop_start_stop_cleanly():
         await loop.stop()
         assert loop._task is None
     finally:
-        config.agent_proactive_enabled = False
+        config.agent_proactive_enabled = True
 
 
 @pytest.mark.asyncio
@@ -113,7 +113,7 @@ async def test_shutdown_during_sleep_exits_quickly():
         elapsed = asyncio.get_event_loop().time() - t_start
         assert elapsed < 2.0, f"shutdown took {elapsed:.2f}s (expected <2s)"
     finally:
-        config.agent_proactive_enabled = False
+        config.agent_proactive_enabled = True
         config.agent_proactive_interval_min_s = 30
         config.agent_proactive_interval_s = 60
 

@@ -198,6 +198,10 @@ class PhantomConfig(BaseSettings):
     agent_warn_llm_calls_per_background_task: int = 6
     agent_background_task_timeout_s: int = 300
     agent_background_queue_max: int = 20
+    # Phase 9.4c audit E1 — foreground queue is never enqueued in current
+    # code (foreground refuses when busy) but the deque is bounded so a
+    # future code path can't blow memory.
+    agent_foreground_queue_max: int = 50
     # Phase 9.2.2 — when True, LLM calls without task_id log a WARNING.
     agent_require_task_id_for_budget: bool = True
     # Phase 9.2.2 — blocked_quota probe cadence + adaptive backoff ceiling.
@@ -217,10 +221,10 @@ class PhantomConfig(BaseSettings):
     agent_emotion_decay_interval_s: int = 60
     agent_emotion_decay_rate: float = 0.05
     # Phase 9.3b — proactive loop (background "should I speak unprompted?"
-    # evaluator). Default DISABLED per OVERRIDE — operator enables via
-    # SQLite / Settings UI when ready to observe PHANTOM initiating.
+    # evaluator). Default ENABLED as of phase-09.4c consolidation (audit G2):
+    # PHANTOM initiates conversation on long-silence / high-fatigue triggers.
     # All keys hot-reloadable via AD-02 reload_from_db.
-    agent_proactive_enabled: bool = False
+    agent_proactive_enabled: bool = True
     agent_proactive_interval_s: int = 60
     agent_proactive_interval_min_s: int = 30
     agent_proactive_interval_max_s: int = 300

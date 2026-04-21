@@ -163,10 +163,12 @@ class AgentRuntime:
         self.background_runner: asyncio.Task | None = None     # Phase 9.4a
         # Queues are track-scoped. Foreground exists for symmetry but is
         # never populated (foreground refuses when busy, to preserve the
-        # Phase 9.1 contract).
+        # Phase 9.1 contract). Both deques are bounded so a hypothetical
+        # future code path that enqueues can't blow memory (audit E1).
         bg_max = int(getattr(config, "agent_background_queue_max", 20) or 20)
+        fg_max = int(getattr(config, "agent_foreground_queue_max", 50) or 50)
         self._track_queues: dict[Track, deque[QueuedTask]] = {
-            "foreground": deque(),
+            "foreground": deque(maxlen=fg_max),
             "background": deque(maxlen=bg_max),
         }
         # Phase 9.2.3 (F-09): handle on the currently in-flight Action.execute()

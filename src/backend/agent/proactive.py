@@ -21,9 +21,9 @@ the chat UI) and parks the intent. The chat handler forwards affirmative
 replies into `resolve_pending_action()` which fires the task. Pending
 intents time out after 5 minutes to avoid indefinite "stuck ask" UX.
 
-Default DISABLED (config.agent_proactive_enabled=False per 9.3b OVERRIDE).
-Operator flips it manually via Settings UI or sqlite after observing they're
-OK with the cadence.
+Default ENABLED as of 9.4c consolidation (audit finding G2). Operator can
+flip `agent_proactive_enabled` to False via Settings UI or sqlite to mute
+PHANTOM's initiative without a restart (config is hot-reloadable).
 """
 from __future__ import annotations
 

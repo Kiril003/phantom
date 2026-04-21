@@ -13,6 +13,7 @@ from sqlalchemy import (
     DateTime,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -104,6 +105,12 @@ class ChatMessage(Base):
 
 class MemoryFact(Base):
     __tablename__ = "memory_facts"
+    # Phase 9.4c audit B2 — composite index accelerates the common
+    # "facts near me" query in `memory.geo_query.get_facts_near_user`
+    # which filters on (user_id, place_lat, place_lon) simultaneously.
+    __table_args__ = (
+        Index("ix_memory_facts_user_geo", "user_id", "place_lat", "place_lon"),
+    )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)

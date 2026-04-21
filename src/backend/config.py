@@ -6,7 +6,7 @@ from __future__ import annotations
 
 from typing import Any, Literal
 
-from pydantic import AliasChoices, Field
+from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -337,6 +337,49 @@ class PhantomConfig(BaseSettings):
 
     # Back-compat alias — the old name lied (it never touched the DB).
     apply_db_overrides = apply_overrides
+
+    # ── Cross-field validators (Phase 9.4c audit §7) ─────────────────────────
+    @model_validator(mode="after")
+    def _validate_provider_distinction(self) -> "PhantomConfig":
+        """Primary and fallback AI providers must differ unless fallback is
+        explicitly 'none'. Routing falls through silently if the two match,
+        masking outages as successful calls."""
+        if (
+            self.ai_fallback_provider != "none"
+            and self.ai_primary_provider == self.ai_fallback_provider
+        ):
+            raise ValueError(
+                f"ai_primary_provider and ai_fallback_provider cannot both be "
+                f"{self.ai_primary_provider!r}. Set ai_fallback_provider to "
+                f"'none' or pick a distinct provider."
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_proactive_interval(self) -> "PhantomConfig":
+        """The proactive loop uses a randomised interval in
+        [min_s, max_s]; zero would either busy-loop or hang depending on
+        asyncio semantics."""
+        if self.agent_proactive_enabled and self.agent_proactive_interval_min_s <= 0:
+            raise ValueError(
+                "agent_proactive_interval_min_s must be > 0 when "
+                "agent_proactive_enabled is True"
+            )
+        if self.agent_proactive_enabled and self.agent_proactive_interval_max_s < self.agent_proactive_interval_min_s:
+            raise ValueError(
+                "agent_proactive_interval_max_s must be >= agent_proactive_interval_min_s"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_tts_voice(self) -> "PhantomConfig":
+        """voice_tts_enabled=True with an empty voice_tts_voice would crash
+        the pipeline the first time the operator sends a speak command."""
+        if self.voice_tts_enabled and not self.voice_tts_voice.strip():
+            raise ValueError(
+                "voice_tts_voice must be non-empty when voice_tts_enabled is True"
+            )
+        return self
 
     async def reload_from_db(self) -> dict[str, Any]:
         """

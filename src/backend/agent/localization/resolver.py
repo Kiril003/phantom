@@ -87,6 +87,12 @@ class LocalizationResolver:
                     continue
                 if estimate is None:
                     continue
+                if self._is_identity_duplicate(estimate):
+                    # Same source + same coordinates as the last accepted
+                    # fix — an idempotent re-read, not a replay. Return it
+                    # without double-appending to history (keeps the deque
+                    # free for genuine motion).
+                    return estimate
                 if not self._passes_sanity(estimate):
                     logger.warning(
                         "rejecting implausible fix from %s: %.5f,%.5f",
@@ -99,16 +105,43 @@ class LocalizationResolver:
 
     # ── Sanity ───────────────────────────────────────────────────────────────
 
+    def _is_identity_duplicate(self, estimate: LocationEstimate) -> bool:
+        """True when this estimate has the same source and coordinates as the
+        most recent accepted fix.
+
+        Phase 9.4c.1 hotfix — previously the resolver treated any
+        ``dt_s <= 0`` reading as a replay attack and rejected it. That
+        misfired on cached ``LocationEstimate`` objects whose timestamp
+        was frozen at construction, trapping the chain in a 500 ms
+        rejection loop. Matching by identity first lets genuinely
+        idempotent re-reads pass through while still letting the velocity
+        check catch real clock-skew replays (different coords, older
+        timestamp) below.
+        """
+        if not self._history:
+            return False
+        last = self._history[-1]
+        return (
+            estimate.source == last.source
+            and estimate.lat == last.lat
+            and estimate.lon == last.lon
+        )
+
     def _passes_sanity(self, estimate: LocationEstimate) -> bool:
         """Reject any estimate that would require implausible velocity from the
         last accepted position (within SANITY_WINDOW_S). Past that window any
-        motion is physically plausible so we don't penalise it."""
+        motion is physically plausible so we don't penalise it.
+
+        Identity-duplicate estimates are handled upstream in :meth:`resolve`
+        and never reach this method, so ``dt_s <= 0`` here means a genuine
+        backwards-clock situation with different coordinates.
+        """
         if not self._history:
             return True
         last = self._history[-1]
         dt_s = (estimate.timestamp - last.timestamp).total_seconds()
         if dt_s <= 0:
-            # Replay or clock skew — reject.
+            # Replay or clock skew with different coords — reject.
             return False
         if dt_s >= self.SANITY_WINDOW_S:
             return True

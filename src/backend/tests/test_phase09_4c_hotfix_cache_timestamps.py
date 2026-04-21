@@ -169,6 +169,90 @@ class TestUserStatedSourceTimestampFreshness:
 # ═════════════════════════════════════════════════════════════════════════════
 
 
+class TestResolverIdentityNoOp:
+    """B.2 — resolver must treat identical consecutive fixes as no-op,
+    not replay, even when timestamps collide. Also: a genuine
+    backwards-clock replay with *different* coords must still be rejected."""
+
+    @pytest.mark.asyncio
+    async def test_identical_fix_is_accepted_without_growing_history(self):
+        from agent.localization.base import LocationEstimate, LocalizationSource
+
+        shared_ts = datetime.now(tz=timezone.utc)
+
+        class _Stub(LocalizationSource):
+            name = "stub"
+            trust_level = 50
+
+            def is_available(self) -> bool:
+                return True
+
+            async def get_position(self):
+                return LocationEstimate(
+                    lat=49.8382,
+                    lon=18.1564,
+                    source="stub",
+                    confidence=0.7,
+                    accuracy_m=25.0,
+                    timestamp=shared_ts,  # frozen; mimics pre-hotfix bug shape
+                    trust_level=50,
+                )
+
+        r = LocalizationResolver([_Stub()])
+        # Seed history with the first resolve.
+        first = await r.resolve()
+        assert first is not None
+        assert len(r.recent_history(50)) == 1
+
+        # Ten more resolves at the same (source, lat, lon) — all must
+        # succeed (not treated as replay) and history must NOT grow.
+        for _ in range(10):
+            result = await r.resolve()
+            assert result is not None
+            assert result.source == "stub"
+        assert len(r.recent_history(50)) == 1, (
+            "identity-duplicate estimates should not accumulate in history"
+        )
+
+    @pytest.mark.asyncio
+    async def test_backwards_clock_with_different_coords_still_rejected(self):
+        """Genuine clock-skew + coord mismatch must still be rejected."""
+        from agent.localization.base import LocationEstimate, LocalizationSource
+
+        t0 = datetime.now(tz=timezone.utc)
+
+        class _First(LocalizationSource):
+            name = "first"
+            trust_level = 95
+            def is_available(self) -> bool: return True
+            async def get_position(self):
+                return LocationEstimate(
+                    lat=50.0, lon=30.0, source="first",
+                    confidence=0.9, accuracy_m=10.0, timestamp=t0, trust_level=95,
+                )
+
+        class _BackwardsReplay(LocalizationSource):
+            name = "replay"
+            trust_level = 95
+            def is_available(self) -> bool: return True
+            async def get_position(self):
+                return LocationEstimate(
+                    lat=50.5, lon=30.0, source="replay",  # DIFFERENT coords
+                    confidence=0.9, accuracy_m=10.0,
+                    timestamp=t0 - timedelta(seconds=5),  # backwards
+                    trust_level=95,
+                )
+
+        r = LocalizationResolver([_First()])
+        assert await r.resolve() is not None
+
+        r.remove_source("first")
+        r.add_source(_BackwardsReplay())
+        assert await r.resolve() is None, (
+            "clock-skew replay with different coordinates must still reject"
+        )
+
+
 class TestResolverReplayLoopRegression:
     @pytest.mark.asyncio
     async def test_ipapi_repeat_resolutions_do_not_trigger_replay_rejection(self, monkeypatch):

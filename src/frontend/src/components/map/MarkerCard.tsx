@@ -1,10 +1,11 @@
 import { useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Trash2, Navigation, Signal, Shield, Wifi } from 'lucide-react';
+import { X, Trash2, Navigation, Signal, Shield, Wifi, Sparkles } from 'lucide-react';
 import { useMapStore } from '../../stores/mapStore';
 import { EASE_PHANTOM } from '../../styles/motion';
 import { poiColor, getMapTokens } from './mapTokens';
 import type { MapPOI, WardrivingRecord } from '@shared/types';
+import type { GeoTaggedFact } from '../../services/api';
 
 const CATEGORY_LABELS: Record<MapPOI['category'], string> = {
   intel: 'INTEL',
@@ -26,7 +27,13 @@ export function MarkerCard() {
     <AnimatePresence>
       {selection && (
         <motion.aside
-          key={`${selection.kind}-${selection.kind === 'poi' ? selection.poi.id : selection.record.id}`}
+          key={`${selection.kind}-${
+            selection.kind === 'poi'
+              ? selection.poi.id
+              : selection.kind === 'wardriving'
+                ? selection.record.id
+                : selection.fact.id
+          }`}
           initial={{ x: 320, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
           exit={{ x: 320, opacity: 0 }}
@@ -47,7 +54,11 @@ export function MarkerCard() {
               className="font-mono tracking-wider uppercase flex-1"
               style={{ color: 'var(--accent)', fontSize: 'var(--fs-micro)' }}
             >
-              {selection.kind === 'poi' ? 'POI' : 'WIFI AP'}
+              {selection.kind === 'poi'
+                ? 'POI'
+                : selection.kind === 'wardriving'
+                  ? 'WIFI AP'
+                  : 'MEMORY'}
             </span>
             <button
               type="button"
@@ -67,8 +78,10 @@ export function MarkerCard() {
           <div className="flex-1 overflow-y-auto px-3 py-3 flex flex-col gap-3">
             {selection.kind === 'poi' ? (
               <PoiDetails poi={selection.poi} onDelete={() => deletePOI(selection.poi.id)} />
-            ) : (
+            ) : selection.kind === 'wardriving' ? (
               <WardrivingDetails record={selection.record} />
+            ) : (
+              <FactDetails fact={selection.fact} />
             )}
           </div>
         </motion.aside>
@@ -210,6 +223,71 @@ function WardrivingDetails({ record }: { record: WardrivingRecord }) {
       <MetaRow label="Seen" value={`${record.seen_count} times`} />
       <MetaRow label="First seen" value={new Date(record.first_seen).toLocaleString('uk-UA')} />
       <MetaRow label="Last seen" value={new Date(record.last_seen).toLocaleString('uk-UA')} />
+    </>
+  );
+}
+
+function FactDetails({ fact }: { fact: GeoTaggedFact }) {
+  return (
+    <>
+      <div className="flex items-center gap-2">
+        <div
+          className="flex items-center justify-center rounded"
+          style={{
+            width: 36,
+            height: 36,
+            background: 'var(--surface-glass)',
+            color: 'var(--accent)',
+            border: '1px solid var(--line-default)',
+          }}
+        >
+          <Sparkles size={18} strokeWidth={1.75} />
+        </div>
+        <div className="flex flex-col flex-1 min-w-0">
+          <span
+            className="truncate"
+            style={{ color: 'var(--ink-primary)', fontSize: 'var(--fs-md)' }}
+          >
+            {fact.place_name || 'Remembered place'}
+          </span>
+          <span
+            className="font-mono tracking-wider uppercase"
+            style={{ color: 'var(--ink-muted)', fontSize: 'var(--fs-micro)' }}
+          >
+            {fact.category}
+          </span>
+        </div>
+      </div>
+
+      <CoordinatesRow lat={fact.place_lat} lon={fact.place_lon} />
+
+      <div
+        className="p-3 rounded"
+        style={{
+          background: 'var(--surface-glass)',
+          border: '1px solid var(--line-subtle)',
+          color: 'var(--ink-secondary)',
+          fontSize: 'var(--fs-xs)',
+          lineHeight: 'var(--lh-normal)',
+          whiteSpace: 'pre-wrap',
+        }}
+      >
+        {fact.content}
+      </div>
+
+      {fact.place_source && (
+        <MetaRow label="Source" value={fact.place_source} />
+      )}
+      {fact.place_confidence != null && (
+        <MetaRow
+          label="Confidence"
+          value={`${Math.round(fact.place_confidence * 100)}%`}
+        />
+      )}
+      <MetaRow
+        label="Created"
+        value={new Date(fact.created_at).toLocaleString('uk-UA')}
+      />
     </>
   );
 }

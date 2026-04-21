@@ -242,7 +242,26 @@ export const mapApi = {
   // Phase 9.4c audit Q6 — offline banner source-of-truth.
   getServicesHealth: () =>
     request<{ services: Record<string, ServiceHealth> }>('GET', '/map/services_health'),
+  // Phase 9.4c audit G6 — geo-tagged MemoryFacts for the FactMarkerLayer.
+  getGeoTaggedFacts: (limit = 500) =>
+    request<{ facts: GeoTaggedFact[]; total: number }>(
+      'GET',
+      `/map/geo_tagged_facts?limit=${limit}`,
+    ),
 };
+
+export interface GeoTaggedFact {
+  id: string;
+  content: string;
+  category: string;
+  importance: number;
+  place_name: string | null;
+  place_lat: number;
+  place_lon: number;
+  place_source: string | null;
+  place_confidence: number | null;
+  created_at: string;
+}
 
 export type ServiceStatus = 'ok' | 'stale' | 'down' | 'unknown';
 

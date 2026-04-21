@@ -27,6 +27,7 @@ import { PresenceLayer } from './layers/PresenceLayer';
 import { WardrivingLayer } from './layers/WardrivingLayer';
 import { IntelLayer } from './layers/IntelLayer';
 import { ReconLayer } from './layers/ReconLayer';
+import { FactMarkerLayer } from './layers/FactMarkerLayer';
 import { HeatmapLayer } from './HeatmapLayer';
 import { MarkerCard } from './MarkerCard';
 import { useMapStore, type MapLayerKey } from '../../stores/mapStore';
@@ -68,6 +69,8 @@ const LATERAL_ITEMS: Array<{ key: MapLayerKey; icon: React.ReactNode; label: str
   { key: 'heatmap',    icon: <Flame size={18} strokeWidth={1.75} />,   label: 'Heatmap' },
   { key: 'intel',      icon: <MapPin size={18} strokeWidth={1.75} />,  label: 'Intel' },
   { key: 'recon',      icon: <Route size={18} strokeWidth={1.75} />,   label: 'Recon' },
+  // Phase 9.4c audit G6 — geo-tagged memory facts.
+  { key: 'facts',      icon: <Sparkles size={18} strokeWidth={1.75} />, label: 'Facts' },
 ];
 
 export function TacticalMap({
@@ -92,6 +95,7 @@ export function TacticalMap({
   const loadHeatmap = useMapStore((s) => s.loadHeatmap);
   const loadPOIs = useMapStore((s) => s.loadPOIs);
   const loadTrack = useMapStore((s) => s.loadTrack);
+  const loadGeoTaggedFacts = useMapStore((s) => s.loadGeoTaggedFacts);
   const savePOI = useMapStore((s) => s.savePOI);
   const loading = useMapStore((s) => s.loading);
   const searchQuery = useMapStore((s) => s.searchQuery);
@@ -272,7 +276,17 @@ export function TacticalMap({
     if (layers.heatmap) loadHeatmap(bounds).catch(() => {});
     if (layers.intel) loadPOIs().catch(() => {});
     if (layers.recon) loadTrack(2).catch(() => {});
-  }, [ready, layers.wardriving, layers.heatmap, layers.intel, layers.recon, loadWardriving, loadHeatmap, loadPOIs, loadTrack]);
+    if (layers.facts) loadGeoTaggedFacts().catch(() => {});
+  }, [ready, layers.wardriving, layers.heatmap, layers.intel, layers.recon, layers.facts, loadWardriving, loadHeatmap, loadPOIs, loadTrack, loadGeoTaggedFacts]);
+
+  // Refresh facts every 5 minutes while the layer is visible (audit G6 spec).
+  useEffect(() => {
+    if (!layers.facts) return;
+    const handle = window.setInterval(() => {
+      loadGeoTaggedFacts().catch(() => {});
+    }, 5 * 60_000);
+    return () => window.clearInterval(handle);
+  }, [layers.facts, loadGeoTaggedFacts]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -355,6 +369,7 @@ export function TacticalMap({
         {layers.heatmap && <HeatmapLayer />}
         {layers.intel && <IntelLayer />}
         {layers.recon && <ReconLayer />}
+        {layers.facts && <FactMarkerLayer />}
         <MarkerCard />
       </MapContext.Provider>
 

@@ -83,4 +83,51 @@ async def find_memories_near(
     ]
 
 
-__all__ = ["find_memories_near"]
+async def list_geo_tagged_memories(
+    db: AsyncSession,
+    user_id: str,
+    limit: int = 500,
+    include_sealed: bool = False,
+) -> list[dict[str, Any]]:
+    """Phase 9.4c audit G6 — all memories with geo coordinates for this user.
+
+    Used by the Tactical Map FactMarkerLayer: renders every remembered
+    place as a subtle marker so the operator can see where PHANTOM's
+    recollections live geographically. ``limit`` caps the payload so a
+    long-lived user doesn't over-fetch; 500 covers months of daily use.
+    """
+    from db.models import MemoryFact  # local import avoids circular import
+
+    stmt = (
+        select(MemoryFact)
+        .where(
+            MemoryFact.user_id == user_id,
+            MemoryFact.place_lat.is_not(None),
+            MemoryFact.place_lon.is_not(None),
+        )
+        .order_by(MemoryFact.created_at.desc())
+        .limit(limit)
+    )
+    if not include_sealed:
+        stmt = stmt.where(MemoryFact.is_sealed == False)  # noqa: E712
+
+    result = await db.execute(stmt)
+    facts = list(result.scalars().all())
+    return [
+        {
+            "id": fact.id,
+            "content": fact.content,
+            "category": fact.category,
+            "importance": fact.importance,
+            "place_name": fact.place_name,
+            "place_lat": fact.place_lat,
+            "place_lon": fact.place_lon,
+            "place_source": fact.place_source,
+            "place_confidence": fact.place_confidence,
+            "created_at": fact.created_at.isoformat(),
+        }
+        for fact in facts
+    ]
+
+
+__all__ = ["find_memories_near", "list_geo_tagged_memories"]

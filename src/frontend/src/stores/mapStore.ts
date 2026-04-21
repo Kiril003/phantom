@@ -1,17 +1,26 @@
 import { create } from 'zustand';
 import type { WardrivingRecord, MapPOI, HeatmapPoint, TrackPoint } from '@shared/types';
-import { mapApi, type Bounds } from '../services/api';
+import { mapApi, type Bounds, type GeoTaggedFact } from '../services/api';
 
 // Keep the most recent N track points client-side. Older points are
 // dropped on append; full history is re-hydrated from the backend via
 // `loadTrack(hours)` when the user widens the time window.
 export const MAX_TRACK_HISTORY = 1000;
 
-export type MapLayerKey = 'base' | 'presence' | 'wardriving' | 'heatmap' | 'intel' | 'recon';
+export type MapLayerKey =
+  | 'base'
+  | 'presence'
+  | 'wardriving'
+  | 'heatmap'
+  | 'intel'
+  | 'recon'
+  // Phase 9.4c audit G6 — geo-tagged memory facts rendered as subtle markers.
+  | 'facts';
 
 export type MapSelection =
   | { kind: 'poi'; poi: MapPOI }
   | { kind: 'wardriving'; record: WardrivingRecord }
+  | { kind: 'fact'; fact: GeoTaggedFact }
   | null;
 
 interface MapStoreState {
@@ -19,6 +28,7 @@ interface MapStoreState {
   heatmap: HeatmapPoint[];
   pois: MapPOI[];
   track: TrackPoint[];
+  geoTaggedFacts: GeoTaggedFact[];
   center: [number, number] | null;
   zoom: number;
   layers: Record<MapLayerKey, boolean>;
@@ -51,6 +61,7 @@ interface MapStoreState {
   loadHeatmap: (bounds?: Bounds, minWeight?: number) => Promise<void>;
   loadPOIs: (category?: string) => Promise<void>;
   loadTrack: (hours?: number) => Promise<void>;
+  loadGeoTaggedFacts: () => Promise<void>;
   savePOI: (poi: Omit<MapPOI, 'id' | 'created_at' | 'user_id'>) => Promise<MapPOI | null>;
   deletePOI: (id: string) => Promise<boolean>;
 }
@@ -62,6 +73,7 @@ const DEFAULT_LAYERS: Record<MapLayerKey, boolean> = {
   heatmap: false,
   intel: true,
   recon: false,
+  facts: true,
 };
 
 export const useMapStore = create<MapStoreState>((set, get) => ({
@@ -69,6 +81,7 @@ export const useMapStore = create<MapStoreState>((set, get) => ({
   heatmap: [],
   pois: [],
   track: [],
+  geoTaggedFacts: [],
   center: null,
   zoom: 15,
   layers: DEFAULT_LAYERS,
@@ -156,6 +169,16 @@ export const useMapStore = create<MapStoreState>((set, get) => ({
         loading: false,
         error: err instanceof Error ? err.message : 'Failed to load track',
       });
+    }
+  },
+
+  loadGeoTaggedFacts: async () => {
+    try {
+      const resp = await mapApi.getGeoTaggedFacts();
+      set({ geoTaggedFacts: resp.facts });
+    } catch (err) {
+      // Non-critical — silently leave previous facts in place.
+      console.warn('Failed to load geo-tagged facts:', err);
     }
   },
 

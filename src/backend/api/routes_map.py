@@ -429,6 +429,25 @@ async def get_nearby(
     return {"remembered": remembered, "osm": osm, "pois": pois}
 
 
+@router.get("/geo_tagged_facts")
+async def get_geo_tagged_facts(
+    limit: int = Query(default=500, ge=1, le=2000),
+    token_data: TokenPayload = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Phase 9.4c audit G6 — every remembered fact with place_lat/lon.
+
+    Feeds the map's FactMarkerLayer so operators can see where PHANTOM's
+    memory lives. Scoped to the requesting user and the limit guards
+    long-lived accounts against oversized payloads.
+    """
+    from memory.geo_query import list_geo_tagged_memories
+    facts = await list_geo_tagged_memories(
+        db, user_id=token_data.user_id, limit=limit,
+    )
+    return {"facts": facts, "total": len(facts)}
+
+
 @router.get("/track")
 async def get_track(
     hours: float = Query(default=2.0, ge=0.01, le=168.0),

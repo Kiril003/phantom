@@ -8,6 +8,7 @@ import { LLMCallBudget } from './LLMCallBudget';
 import { TaskTree } from './TaskTree';
 import { SubstateIndicator } from './SubstateIndicator';
 import { EmotionIndicator } from './EmotionIndicator';
+import { InnerMonologueStream } from './InnerMonologueStream';
 
 const STATUS_BADGE: Record<string, { color: string; label: string }> = {
   idle:           { color: 'var(--ink-faint)', label: 'IDLE' },
@@ -140,6 +141,9 @@ export function AgentPanel() {
         )}
         <TaskTree subGoals={subGoals} recentActions={recentActions} />
       </div>
+
+      {/* Phase 9.4c audit G3 — live backend monologue stream. */}
+      <InnerMonologueStream />
 
       {/* Bottom controls */}
       <div

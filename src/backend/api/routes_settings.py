@@ -360,12 +360,18 @@ def _build_definition(key: str, category_id: str) -> SettingDefinitionOut | None
 
 
 def _collect_categories() -> list[SettingsCategoryOut]:
+    """Return settings grouped by category. Phase 9.4c audit D4 — keys in
+    ``UNIMPLEMENTED_KEYS`` are filtered out so the UI never renders rows
+    whose toggle does nothing. They remain persistable via the REST API
+    for operators who want to stage values ahead of a subsystem landing.
+    """
     out: list[SettingsCategoryOut] = []
     for spec in CATEGORY_SPEC:
         defs = [
             d
             for key in spec["keys"]
-            if (d := _build_definition(key, spec["id"])) is not None
+            if key not in UNIMPLEMENTED_KEYS
+            and (d := _build_definition(key, spec["id"])) is not None
         ]
         out.append(
             SettingsCategoryOut(
@@ -401,6 +407,15 @@ async def set_setting(
 ) -> dict[str, Any]:
     if not hasattr(config, key):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"Unknown key: {key}")
+
+    # Phase 9.4c audit D4 — the key may be staged ahead of its owning phase.
+    # We still let the write through (persist survives a restart) but log a
+    # warning so the operator knows the toggle has no runtime effect yet.
+    if key in UNIMPLEMENTED_KEYS:
+        logger.warning(
+            "settings: %r is not wired to any runtime code yet — value persisted but inactive",
+            key,
+        )
 
     # Apply in-memory first so validation rejects bad values before we persist.
     before = getattr(config, key)

@@ -43,11 +43,19 @@ async function submit(sub: GeolocationSubmission): Promise<void> {
 
 export class BrowserGeolocationService {
   private watchId: number | null = null;
+  private keepAliveId: number | null = null;
   private events: GeolocationServiceEvents;
   private lastSentAt: number = 0;
+  private lastSub: GeolocationSubmission | null = null;
   // Throttle server submissions: browsers fire watchPosition often, we
   // don't need more than one POST every ~3 s.
   private minSubmitIntervalMs: number = 3000;
+  // Phase 9.4c.1 hotfix — on a stationary device `watchPosition` fires
+  // exactly once at subscription, then stays quiet. That starves the
+  // backend `BrowserGeolocationSource`, which goes stale after its 60 s
+  // freshness window. Re-submit the last known position on this interval
+  // to keep the source live even when the device isn't moving.
+  private keepAliveIntervalMs: number = 20_000;
 
   constructor(events: GeolocationServiceEvents = {}) {
     this.events = events;
@@ -84,6 +92,13 @@ export class BrowserGeolocationService {
         maximumAge: 30_000,
       }
     );
+    // Keep-alive: re-submit the most recent fix on a timer so the backend
+    // source does not go stale on a stationary device where watchPosition
+    // never fires a second time. `timestamp` is refreshed on each resend
+    // to anchor the freshness window.
+    if (typeof window !== 'undefined' && this.keepAliveId === null) {
+      this.keepAliveId = window.setInterval(() => this.resendLast(), this.keepAliveIntervalMs);
+    }
   }
 
   /** Stop watching. Safe to call even if not started. */
@@ -92,6 +107,11 @@ export class BrowserGeolocationService {
       navigator.geolocation.clearWatch(this.watchId);
     }
     this.watchId = null;
+    if (this.keepAliveId !== null && typeof window !== 'undefined') {
+      window.clearInterval(this.keepAliveId);
+    }
+    this.keepAliveId = null;
+    this.lastSub = null;
   }
 
   private handlePosition(pos: GeolocationPosition): void {
@@ -101,12 +121,25 @@ export class BrowserGeolocationService {
       accuracy_m: Number.isFinite(pos.coords.accuracy) ? pos.coords.accuracy : null,
       timestamp: new Date(pos.timestamp).toISOString(),
     };
+    this.lastSub = sub;
     this.events.onUpdate?.(sub);
 
     const now = Date.now();
     if (now - this.lastSentAt < this.minSubmitIntervalMs) return;
     this.lastSentAt = now;
     void submit(sub);
+  }
+
+  private resendLast(): void {
+    if (this.lastSub === null) return;
+    // Freshen the timestamp so the backend's freshness window resets; the
+    // lat/lon stay pinned to the last actual fix.
+    const resent: GeolocationSubmission = {
+      ...this.lastSub,
+      timestamp: new Date().toISOString(),
+    };
+    this.lastSentAt = Date.now();
+    void submit(resent);
   }
 }
 

@@ -74,6 +74,16 @@ class BrowserGeolocationSource(LocalizationSource):
         return self._fresh_estimate() is not None
 
     def _fresh_estimate(self) -> Optional[LocationEstimate]:
+        """Return a LocationEstimate with a fresh timestamp if the stored
+        submission is still within the freshness window.
+
+        Phase 9.4c.1 hotfix — previously returned the cached ``_latest``
+        object unchanged. That object's ``timestamp`` was fixed at submit
+        time, so every resolver tick saw the same moment and the sanity
+        check rejected it as ``dt_s == 0`` replay. We now mint a new
+        estimate with ``datetime.now(UTC)`` while keeping the submission's
+        own timestamp as the freshness anchor.
+        """
         if _latest is None:
             return None
         freshness_s = float(
@@ -82,7 +92,7 @@ class BrowserGeolocationSource(LocalizationSource):
         age = (datetime.now(tz=timezone.utc) - _latest.timestamp).total_seconds()
         if age > freshness_s:
             return None
-        return _latest
+        return _latest.model_copy(update={"timestamp": datetime.now(tz=timezone.utc)})
 
     async def get_position(self) -> Optional[LocationEstimate]:
         return self._fresh_estimate()

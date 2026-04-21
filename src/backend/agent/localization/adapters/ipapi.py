@@ -28,6 +28,13 @@ from .rate_limiter import DailyRateLimiter
 # Phase 9.4c audit C3 — replace manual time-based cache with a bounded
 # TTLCache. maxsize=4 covers the handful of recent egress-IP estimates we
 # ever hold (main + test/mock instances); TTL preserves the 10 min policy.
+#
+# Phase 9.4c.1 hotfix — cache the raw coordinates tuple, not the
+# LocationEstimate itself. The estimate carries its own ``timestamp``
+# field, and returning the same object twice made the resolver's sanity
+# check see ``dt_s == 0`` and reject every repeat as a replay. By caching
+# raw data and minting a fresh estimate on each retrieval we preserve the
+# 10-min dedup policy without freezing the timestamp.
 _CACHE_MAX = 4
 _CURRENT_KEY = "current"
 
@@ -41,7 +48,7 @@ class IpApiLocator:
     def __init__(self, rate_limit: Optional[DailyRateLimiter] = None) -> None:
         cap = int(getattr(config, "agent_ip_locator_rate_per_day", 900) or 900)
         self._rate_limit = rate_limit if rate_limit is not None else DailyRateLimiter(cap)
-        self._cache: TTLCache[str, LocationEstimate] = TTLCache(
+        self._cache: TTLCache[str, tuple[float, float, float]] = TTLCache(
             maxsize=_CACHE_MAX, ttl=self.CACHE_TTL_S,
         )
 
@@ -69,7 +76,8 @@ class IpApiLocator:
         """
         cached = self._cache.get(_CURRENT_KEY)
         if cached is not None:
-            return cached
+            lat, lon, accuracy_m = cached
+            return self._build_estimate(lat, lon, accuracy_m)
 
         if not self._rate_limit.can_request():
             logger.info("ipapi budget exhausted — skipping lookup")
@@ -98,18 +106,22 @@ class IpApiLocator:
             return None
 
         self._rate_limit.mark_request()
-        estimate = LocationEstimate(
+        accuracy_m = 50_000.0  # city-level
+        self._cache[_CURRENT_KEY] = (lat, lon, accuracy_m)
+        service_health.mark_success("ipapi")
+        return self._build_estimate(lat, lon, accuracy_m)
+
+    @staticmethod
+    def _build_estimate(lat: float, lon: float, accuracy_m: float) -> LocationEstimate:
+        return LocationEstimate(
             lat=lat,
             lon=lon,
             source="ip_estimate",
             confidence=0.3,
-            accuracy_m=50_000.0,  # city-level
+            accuracy_m=accuracy_m,
             timestamp=datetime.now(tz=timezone.utc),
             trust_level=30,
         )
-        self._cache[_CURRENT_KEY] = estimate
-        service_health.mark_success("ipapi")
-        return estimate
 
 
 # ── Singleton ───────────────────────────────────────────────────────────────

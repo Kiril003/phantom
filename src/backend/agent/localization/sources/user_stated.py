@@ -64,6 +64,14 @@ class UserStatedSource(LocalizationSource):
         return self._fresh() is not None
 
     def _fresh(self) -> Optional[LocationEstimate]:
+        """Return a LocationEstimate with a fresh timestamp if the stored
+        statement is still within the TTL window.
+
+        Phase 9.4c.1 hotfix — returning the cached ``_cache`` unchanged
+        would trip the resolver's ``dt_s <= 0`` replay guard on every
+        subsequent tick. Mint a copy with ``datetime.now(UTC)`` while
+        using the stored timestamp only for TTL bookkeeping.
+        """
         if _cache is None:
             return None
         ttl_s = float(
@@ -72,7 +80,7 @@ class UserStatedSource(LocalizationSource):
         age = (datetime.now(tz=timezone.utc) - _cache.timestamp).total_seconds()
         if age > ttl_s:
             return None
-        return _cache
+        return _cache.model_copy(update={"timestamp": datetime.now(tz=timezone.utc)})
 
     async def get_position(self) -> Optional[LocationEstimate]:
         return self._fresh()

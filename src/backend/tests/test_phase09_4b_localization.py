@@ -289,6 +289,133 @@ class TestIpApiLocator:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+# IpApiLocator circuit breaker — Phase 9.4c-qw-hotfix
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+class TestIpApiCircuitBreaker:
+    @pytest.mark.asyncio
+    async def test_three_failures_open_breaker_for_ten_minutes(self, monkeypatch):
+        from datetime import datetime, timedelta, timezone
+        mock = _MockHttpx(raise_error=httpx.HTTPStatusError(
+            "429", request=httpx.Request("GET", "x"),
+            response=httpx.Response(429, request=httpx.Request("GET", "x")),
+        ))
+        from agent.localization.adapters import ipapi as ipapi_mod
+        monkeypatch.setattr(ipapi_mod.httpx, "AsyncClient", mock)
+
+        loc = IpApiLocator(DailyRateLimiter(100))
+        assert loc.can_request_or_has_cache() is True
+        for _ in range(3):
+            assert await loc.locate_current_ip() is None
+
+        failures, until = loc.breaker_state()
+        assert failures == 3
+        assert until is not None
+        # ~10 min cooldown (allow a 5 s slop for clock).
+        delta = until - datetime.now(tz=timezone.utc)
+        assert timedelta(minutes=9, seconds=55) <= delta <= timedelta(minutes=10, seconds=5)
+
+        # While breaker is open, can_request_or_has_cache is False — so
+        # the resolver's IpEstimateSource.is_available() returns False
+        # and the resolver skips this source entirely.
+        assert loc.can_request_or_has_cache() is False
+        # And a direct probe is a no-op — no extra HTTP call.
+        prev_calls = mock.calls
+        assert await loc.locate_current_ip() is None
+        assert mock.calls == prev_calls
+
+    @pytest.mark.asyncio
+    async def test_breaker_escalates_with_more_failures(self, monkeypatch):
+        from datetime import datetime, timedelta, timezone
+        mock = _MockHttpx(raise_error=httpx.ConnectError("dead"))
+        from agent.localization.adapters import ipapi as ipapi_mod
+        monkeypatch.setattr(ipapi_mod.httpx, "AsyncClient", mock)
+
+        loc = IpApiLocator(DailyRateLimiter(100))
+
+        for _ in range(3):
+            await loc.locate_current_ip()
+        # Force the breaker to think its cooldown has elapsed so the next
+        # call counts as another retry attempt rather than being blocked.
+        for target_failures, expected_min in ((6, 30), (10, 60)):
+            while loc.breaker_state()[0] < target_failures:
+                loc._disabled_until = datetime.now(tz=timezone.utc) - timedelta(seconds=1)
+                await loc.locate_current_ip()
+            _, until = loc.breaker_state()
+            assert until is not None
+            delta = until - datetime.now(tz=timezone.utc)
+            assert (
+                timedelta(minutes=expected_min - 1) <= delta
+                <= timedelta(minutes=expected_min + 1)
+            ), f"expected ~{expected_min}min, got {delta}"
+
+    @pytest.mark.asyncio
+    async def test_success_resets_breaker(self, monkeypatch):
+        from agent.localization.adapters import ipapi as ipapi_mod
+
+        # Trip the breaker first.
+        bad_mock = _MockHttpx(raise_error=httpx.ConnectError("dead"))
+        monkeypatch.setattr(ipapi_mod.httpx, "AsyncClient", bad_mock)
+        loc = IpApiLocator(DailyRateLimiter(100))
+        for _ in range(3):
+            await loc.locate_current_ip()
+        assert loc.breaker_state()[0] == 3
+        assert loc.can_request_or_has_cache() is False
+
+        # Pretend cooldown elapsed.
+        from datetime import datetime, timedelta, timezone
+        loc._disabled_until = datetime.now(tz=timezone.utc) - timedelta(seconds=1)
+
+        # Swap in a working response and try again.
+        good_mock = _MockHttpx({"latitude": 50.45, "longitude": 30.52})
+        monkeypatch.setattr(ipapi_mod.httpx, "AsyncClient", good_mock)
+        result = await loc.locate_current_ip()
+        assert result is not None
+        # Breaker is fully reset on success.
+        failures, until = loc.breaker_state()
+        assert failures == 0
+        assert until is None
+
+    @pytest.mark.asyncio
+    async def test_first_two_failures_do_not_trip_breaker(self, monkeypatch):
+        mock = _MockHttpx(raise_error=httpx.ConnectError("dead"))
+        from agent.localization.adapters import ipapi as ipapi_mod
+        monkeypatch.setattr(ipapi_mod.httpx, "AsyncClient", mock)
+
+        loc = IpApiLocator(DailyRateLimiter(100))
+        for _ in range(2):
+            assert await loc.locate_current_ip() is None
+        failures, until = loc.breaker_state()
+        assert failures == 2
+        assert until is None
+        # Still allowed to try again.
+        assert loc.can_request_or_has_cache() is True
+
+    @pytest.mark.asyncio
+    async def test_cached_result_bypasses_breaker_check(self, monkeypatch):
+        from agent.localization.adapters import ipapi as ipapi_mod
+
+        # Prime the cache with a successful call.
+        good_mock = _MockHttpx({"latitude": 50.45, "longitude": 30.52})
+        monkeypatch.setattr(ipapi_mod.httpx, "AsyncClient", good_mock)
+        loc = IpApiLocator(DailyRateLimiter(100))
+        first = await loc.locate_current_ip()
+        assert first is not None
+
+        # Manually trip the breaker as if a later call had failed.
+        from datetime import datetime, timedelta, timezone
+        loc._consecutive_failures = 5
+        loc._disabled_until = datetime.now(tz=timezone.utc) + timedelta(minutes=20)
+
+        # Cache hits must still serve — the cache is the entire point.
+        cached = await loc.locate_current_ip()
+        assert cached is not None
+        # Resolver-facing predicate sees True because cache exists.
+        assert loc.can_request_or_has_cache() is True
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 # BrowserGeolocationSource — freshness window
 # ═════════════════════════════════════════════════════════════════════════════
 

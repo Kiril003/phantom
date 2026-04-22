@@ -13,7 +13,7 @@ errors, parse errors, and rate-limit exhaustion all surface as ``None``
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 import httpx
@@ -38,7 +38,28 @@ from .rate_limiter import DailyRateLimiter
 _CACHE_MAX = 4
 _CURRENT_KEY = "current"
 
+# Phase 9.4c-qw-hotfix — circuit-breaker thresholds. Without this, every
+# context_engine tick (~500 ms) that found no cache + budget remaining
+# fired another HTTP GET, got 429 from ipapi.co, returned None without
+# burning the daily budget, and re-fired on the next tick. Result: log
+# spam at 1-2 lines/sec for hours. Backoff stages live as a sorted list
+# of (consecutive_failures_required, cooldown_seconds) so the policy is
+# tweakable without touching the trip logic.
+_BREAKER_BACKOFF_STAGES: tuple[tuple[int, int], ...] = (
+    (10, 60 * 60),   # 10+ failures → 60 min
+    (6, 30 * 60),    # 6-9 failures → 30 min
+    (3, 10 * 60),    # 3-5 failures → 10 min
+)
+
 logger = logging.getLogger(__name__)
+
+
+def _cooldown_for_failures(consecutive_failures: int) -> int:
+    """Return cooldown in seconds for the given failure streak. 0 = don't trip yet."""
+    for threshold, seconds in _BREAKER_BACKOFF_STAGES:
+        if consecutive_failures >= threshold:
+            return seconds
+    return 0
 
 
 class IpApiLocator:
@@ -51,12 +72,17 @@ class IpApiLocator:
         self._cache: TTLCache[str, tuple[float, float, float]] = TTLCache(
             maxsize=_CACHE_MAX, ttl=self.CACHE_TTL_S,
         )
+        # Phase 9.4c-qw-hotfix — circuit breaker state.
+        self._consecutive_failures: int = 0
+        self._disabled_until: Optional[datetime] = None
 
     # ── Introspection ────────────────────────────────────────────────────────
 
     def can_request_or_has_cache(self) -> bool:
         if _CURRENT_KEY in self._cache:
             return True
+        if self._circuit_open():
+            return False
         return self._rate_limit.can_request()
 
     def remaining_budget(self) -> int:
@@ -65,6 +91,54 @@ class IpApiLocator:
     def reset_cache(self) -> None:
         self._cache.clear()
 
+    def reset_breaker(self) -> None:
+        """Tests / operator action: clear the circuit-breaker state."""
+        self._consecutive_failures = 0
+        self._disabled_until = None
+
+    def breaker_state(self) -> tuple[int, Optional[datetime]]:
+        """Introspection helper for tests + diagnostics."""
+        return (self._consecutive_failures, self._disabled_until)
+
+    # ── Circuit breaker ─────────────────────────────────────────────────────
+
+    def _circuit_open(self) -> bool:
+        """True while the breaker is in its cooldown window."""
+        if self._disabled_until is None:
+            return False
+        if datetime.now(tz=timezone.utc) >= self._disabled_until:
+            # Cooldown elapsed; let exactly one retry through. Caller
+            # mutates state again on success or further failure.
+            return False
+        return True
+
+    def _record_failure(self, exc: Exception) -> None:
+        """Increment the failure streak and arm the breaker if past a threshold."""
+        self._consecutive_failures += 1
+        cooldown_s = _cooldown_for_failures(self._consecutive_failures)
+        if cooldown_s > 0:
+            self._disabled_until = datetime.now(tz=timezone.utc) + timedelta(seconds=cooldown_s)
+            logger.warning(
+                "IpApiLocator circuit breaker OPEN: %d consecutive failures, "
+                "disabled for %d min. Last error: %s",
+                self._consecutive_failures, cooldown_s // 60, exc,
+            )
+        else:
+            logger.debug(
+                "IpApiLocator transient failure %d/3: %s",
+                self._consecutive_failures, exc,
+            )
+
+    def _record_success(self) -> None:
+        """Clear breaker state after a successful API call."""
+        if self._consecutive_failures or self._disabled_until is not None:
+            logger.info(
+                "IpApiLocator circuit breaker CLOSED after %d failures",
+                self._consecutive_failures,
+            )
+        self._consecutive_failures = 0
+        self._disabled_until = None
+
     # ── Lookup ───────────────────────────────────────────────────────────────
 
     async def locate_current_ip(self) -> Optional[LocationEstimate]:
@@ -72,12 +146,20 @@ class IpApiLocator:
 
         Returns the cached value when fresh. Burns a budget slot on cache
         miss. Network/parse failures return None and do not mark the rate
-        limiter (so transient outages don't cost budget).
+        limiter (so transient outages don't cost budget). Repeated failures
+        trip a circuit breaker so the resolver stops re-firing each tick.
         """
         cached = self._cache.get(_CURRENT_KEY)
         if cached is not None:
             lat, lon, accuracy_m = cached
             return self._build_estimate(lat, lon, accuracy_m)
+
+        # Phase 9.4c-qw-hotfix — bail out fast when the breaker is open.
+        # Without this, a 429-returning ipapi.co would keep getting hit
+        # at every snapshot tick and spam the log.
+        if self._circuit_open():
+            logger.debug("ipapi circuit breaker open — skipping lookup")
+            return None
 
         if not self._rate_limit.can_request():
             logger.info("ipapi budget exhausted — skipping lookup")
@@ -91,6 +173,7 @@ class IpApiLocator:
         except (httpx.HTTPError, ValueError) as exc:
             logger.warning("ipapi lookup network/parse failure: %s", exc)
             service_health.mark_failure("ipapi", str(exc))
+            self._record_failure(exc)
             return None
 
         try:
@@ -98,17 +181,20 @@ class IpApiLocator:
             lon = float(data["longitude"])
         except (KeyError, TypeError, ValueError) as exc:
             logger.warning("ipapi lookup malformed payload: %s", exc)
+            self._record_failure(exc)
             return None
 
         # Some error responses still come back HTTP 200 with an "error" key.
         if data.get("error"):
             logger.info("ipapi lookup error=%s reason=%s", data.get("error"), data.get("reason"))
+            self._record_failure(RuntimeError(str(data.get("reason") or data.get("error"))))
             return None
 
         self._rate_limit.mark_request()
         accuracy_m = 50_000.0  # city-level
         self._cache[_CURRENT_KEY] = (lat, lon, accuracy_m)
         service_health.mark_success("ipapi")
+        self._record_success()
         return self._build_estimate(lat, lon, accuracy_m)
 
     @staticmethod

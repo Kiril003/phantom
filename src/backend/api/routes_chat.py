@@ -122,7 +122,11 @@ async def _build_ai_response(
       5. Post: extract/store facts, update behavioral model
     Returns (content, response_form, attachments, provider, tokens_used).
     """
-    from ai.prompt_builder import build_system_prompt, build_history_messages
+    from ai.prompt_builder import (
+        build_system_prompt,
+        build_history_messages,
+        fetch_recent_places,
+    )
     from memory.session_memory import session_memory
     from memory.strategic_memory import retrieve_relevant, extract_and_store_facts
     from memory.user_model import (
@@ -144,6 +148,9 @@ async def _build_ai_response(
     context_engine.set_memory_hints(hints)
     snapshot["memory_hints"] = hints
 
+    # 1b. Recent places — Phase 9.4c-qw fix #2 ("де я був вчора?")
+    recent_places = await fetch_recent_places(db, user.id, hours=24, limit=5)
+
     # 2. Build user dict for prompt builder
     user_dict: dict[str, Any] = {
         "username": user.username,
@@ -157,6 +164,7 @@ async def _build_ai_response(
         user_dict=user_dict,
         behavioral_model=behavioral_model.to_dict(),
         memory_hints=hints,
+        recent_places=recent_places,
     )
 
     # 4. Get history from session memory (already in RAM from this session)

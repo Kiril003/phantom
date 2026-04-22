@@ -5,7 +5,12 @@ behavioral model, and memory hints.
 """
 from __future__ import annotations
 
+import logging
+from datetime import datetime, timedelta, timezone
 from typing import Any
+
+from sqlalchemy import desc, func, select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import config
 from ai.personality import (
@@ -14,6 +19,8 @@ from ai.personality import (
     ToneVector,
     calculate_tone,
 )
+
+logger = logging.getLogger(__name__)
 
 
 _SOURCE_LABELS = {
@@ -63,11 +70,68 @@ def _format_location_block(where: dict[str, Any]) -> str:
     return f"LOCATION: {place} ({suffix}), speed={speed_f:.1f}km/h"
 
 
+async def fetch_recent_places(
+    db: AsyncSession | None,
+    user_id: str,
+    *,
+    hours: int = 24,
+    limit: int = 5,
+) -> list[tuple[str, datetime]]:
+    """Phase 9.4c quick-win #2 — pull distinct LocationHistory places.
+
+    Returns up to ``limit`` (place_name, first_seen) tuples ordered by
+    most-recently-first-visited. Same-place rows are collapsed by
+    GROUP BY so consecutive duplicates from the resolver writer don't
+    pad the list. Best-effort: any DB error returns ``[]`` so a slow or
+    locked SQLite never blocks chat reply.
+    """
+    if db is None:
+        return []
+    try:
+        from db.models import LocationHistory  # noqa: PLC0415
+        since = datetime.now(tz=timezone.utc) - timedelta(hours=hours)
+        stmt = (
+            select(
+                LocationHistory.place_name,
+                func.min(LocationHistory.timestamp).label("first_seen"),
+            )
+            .where(
+                LocationHistory.user_id == user_id,
+                LocationHistory.timestamp >= since,
+                LocationHistory.place_name.isnot(None),
+            )
+            .group_by(LocationHistory.place_name)
+            .order_by(desc("first_seen"))
+            .limit(limit)
+        )
+        result = await db.execute(stmt)
+        return [(row.place_name, row.first_seen) for row in result.all()]
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("fetch_recent_places failed: %s", exc)
+        return []
+
+
+def _format_recent_places_block(
+    places: list[tuple[str, datetime]] | None,
+) -> str | None:
+    if not places:
+        return None
+    lines = []
+    for name, ts in places:
+        try:
+            stamp = ts.strftime("%H:%M %a")
+        except Exception:
+            stamp = "?"
+        lines.append(f"  • {name} ({stamp})")
+    return "RECENT PLACES (last 24h):\n" + "\n".join(lines)
+
+
 def build_system_prompt(
     snapshot: dict[str, Any],
     user_dict: dict[str, Any],
     behavioral_model: dict[str, Any],
     memory_hints: list[str] | None = None,
+    recent_places: list[tuple[str, datetime]] | None = None,
 ) -> str:
     """
     Build the full dynamic system prompt for one AI turn.
@@ -118,6 +182,11 @@ def build_system_prompt(
     if hints:
         hints_str = "; ".join(hints[:5])
         parts.append(f"\nRELEVANT MEMORY: {hints_str}")
+
+    # 5b. Recent visited places (Phase 9.4c-qw fix #2)
+    recent_block = _format_recent_places_block(recent_places)
+    if recent_block:
+        parts.append("\n" + recent_block)
 
     # 6. Environment context
     when = snapshot.get("when", {})

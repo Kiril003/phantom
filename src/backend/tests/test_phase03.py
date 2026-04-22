@@ -317,6 +317,38 @@ class TestPromptBuilder:
         result = build_system_prompt(snap, self._user_dict(), _default_bmodel())
         assert "LOCATION: unknown" in result
 
+    def test_build_recent_places_block_renders(self):
+        """Phase 9.4c-qw fix #2: RECENT PLACES block lists distinct names + times."""
+        from ai.prompt_builder import build_system_prompt
+        from datetime import datetime, timezone
+        snap = _make_snapshot()
+        ts1 = datetime(2026, 4, 22, 14, 30, tzinfo=timezone.utc)
+        ts2 = datetime(2026, 4, 22, 11, 5, tzinfo=timezone.utc)
+        result = build_system_prompt(
+            snap, self._user_dict(), _default_bmodel(),
+            recent_places=[("Cafe Pravda", ts1), ("Lviv Library", ts2)],
+        )
+        assert "RECENT PLACES" in result
+        assert "Cafe Pravda" in result
+        assert "Lviv Library" in result
+        assert "14:30" in result
+        assert "11:05" in result
+
+    def test_build_recent_places_block_skipped_when_empty(self):
+        from ai.prompt_builder import build_system_prompt
+        result = build_system_prompt(
+            _make_snapshot(), self._user_dict(), _default_bmodel(),
+            recent_places=[],
+        )
+        assert "RECENT PLACES" not in result
+
+    def test_build_recent_places_block_skipped_when_none(self):
+        from ai.prompt_builder import build_system_prompt
+        result = build_system_prompt(
+            _make_snapshot(), self._user_dict(), _default_bmodel(),
+        )
+        assert "RECENT PLACES" not in result
+
     def test_build_history_messages_trims(self):
         from ai.prompt_builder import build_history_messages
         msgs = [

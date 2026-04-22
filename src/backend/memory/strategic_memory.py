@@ -110,7 +110,25 @@ def _sync_retrieve(
             where=where,
         )
         docs = results.get("documents", [[]])[0]
-        return [str(d) for d in docs if d]
+        metas = results.get("metadatas", [[]])[0] or [{} for _ in docs]
+        # Phase 9.4c-qw fix #4 — defensive filter against test-fixture
+        # leakage. Pre-cleanup the prod DB had ~70 rows of the form
+        # ("Fact N", "Place N") at (50.0, 30.0) that competed with
+        # real geo facts for top-K slots.
+        out: list[str] = []
+        for doc, meta in zip(docs, metas):
+            if not doc:
+                continue
+            place_name = (meta or {}).get("place_name") if isinstance(meta, dict) else None
+            if (
+                isinstance(doc, str)
+                and doc.startswith("Fact ")
+                and isinstance(place_name, str)
+                and place_name.startswith("Place ")
+            ):
+                continue
+            out.append(str(doc))
+        return out
     except Exception as exc:
         logger.warning("ChromaDB query failed for user %s: %s", user_id, exc)
         return []

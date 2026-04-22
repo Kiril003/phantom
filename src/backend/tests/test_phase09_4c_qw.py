@@ -149,6 +149,75 @@ class TestFetchRecentPlaces:
 
 
 # ═════════════════════════════════════════════════════════════════════════════
+# Fix #4 — defensive filter against test-fixture pollution
+# ═════════════════════════════════════════════════════════════════════════════
+
+
+class _FakeChromaCollection:
+    def __init__(self, docs, metas):
+        self._docs = docs
+        self._metas = metas
+
+    def count(self):
+        return len(self._docs)
+
+    def query(self, *, query_texts, n_results, where):  # noqa: ARG002
+        return {
+            "documents": [self._docs[:n_results]],
+            "metadatas": [self._metas[:n_results]],
+        }
+
+
+class _FakeChromaClient:
+    def __init__(self, collection):
+        self._coll = collection
+
+    def get_collection(self, *, name, embedding_function):  # noqa: ARG002
+        return self._coll
+
+
+class TestStrategicMemoryDefensiveFilter:
+    def test_filters_test_fixture_pattern(self, monkeypatch):
+        from memory import strategic_memory as sm
+        coll = _FakeChromaCollection(
+            docs=["Fact 0", "Fact 1", "User loves espresso"],
+            metas=[
+                {"place_name": "Place 0"},
+                {"place_name": "Place 1"},
+                {"place_name": "Cafe Aroma"},
+            ],
+        )
+        monkeypatch.setattr(sm, "_get_client", lambda: _FakeChromaClient(coll))
+        monkeypatch.setattr(sm, "_get_ef", lambda: object())
+        out = sm._sync_retrieve("u1", "anything", k=10, min_importance=0.0)
+        assert out == ["User loves espresso"]
+
+    def test_keeps_real_facts(self, monkeypatch):
+        from memory import strategic_memory as sm
+        coll = _FakeChromaCollection(
+            docs=["User dislikes mornings", "Plans Lviv trip"],
+            metas=[{"category": "preference"}, {"category": "decision"}],
+        )
+        monkeypatch.setattr(sm, "_get_client", lambda: _FakeChromaClient(coll))
+        monkeypatch.setattr(sm, "_get_ef", lambda: object())
+        out = sm._sync_retrieve("u2", "trip", k=10, min_importance=0.0)
+        assert "User dislikes mornings" in out
+        assert "Plans Lviv trip" in out
+
+    def test_keeps_fact_prefix_when_place_does_not_match(self, monkeypatch):
+        """A real fact that happens to start with 'Fact' but has no 'Place N' meta survives."""
+        from memory import strategic_memory as sm
+        coll = _FakeChromaCollection(
+            docs=["Fact about Lviv weather"],
+            metas=[{"place_name": "Lviv"}],
+        )
+        monkeypatch.setattr(sm, "_get_client", lambda: _FakeChromaClient(coll))
+        monkeypatch.setattr(sm, "_get_ef", lambda: object())
+        out = sm._sync_retrieve("u3", "weather", k=10, min_importance=0.0)
+        assert out == ["Fact about Lviv weather"]
+
+
+# ═════════════════════════════════════════════════════════════════════════════
 # Fix #3 — context_engine nearby cache
 # ═════════════════════════════════════════════════════════════════════════════
 

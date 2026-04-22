@@ -111,6 +111,46 @@ async def fetch_recent_places(
         return []
 
 
+def _format_emotion_block(emotion: dict | None) -> str | None:
+    """Phase 9.4c-qw fix #5 — render PHANTOM's emotion when notably off baseline.
+
+    Ported from agent.planner.tactical._format_emotion_block but tuned for
+    chat: only one short labelled line, no full coaching paragraph. Skipped
+    entirely on near-neutral state so a default chat doesn't pay the
+    prompt-bloat tax.
+    """
+    if not emotion:
+        return None
+    try:
+        focus = float(emotion.get("focus", 0.5))
+        curiosity = float(emotion.get("curiosity", 0.5))
+        concern = float(emotion.get("concern", 0.0))
+        fatigue = float(emotion.get("fatigue", 0.0))
+    except (TypeError, ValueError):
+        return None
+
+    if max(focus, curiosity) < 0.6 and max(concern, fatigue) < 0.3:
+        return None
+
+    labels: list[str] = []
+    if focus > 0.7:
+        labels.append("focused")
+    if curiosity > 0.7:
+        labels.append("curious")
+    if concern > 0.5:
+        labels.append("concerned")
+    if fatigue > 0.5:
+        labels.append("tired")
+    if not labels:
+        return None
+
+    return (
+        f"INNER STATE: {', '.join(labels)} "
+        f"(focus={focus:.1f} curiosity={curiosity:.1f} "
+        f"concern={concern:.1f} fatigue={fatigue:.1f})"
+    )
+
+
 def _format_nearby_block(features: list[dict]) -> str | None:
     """Phase 9.4c-qw fix #3 — render top-N nearby OSM features."""
     if not features:
@@ -154,6 +194,7 @@ def build_system_prompt(
     behavioral_model: dict[str, Any],
     memory_hints: list[str] | None = None,
     recent_places: list[tuple[str, datetime]] | None = None,
+    emotion: dict | None = None,
 ) -> str:
     """
     Build the full dynamic system prompt for one AI turn.
@@ -244,6 +285,11 @@ def build_system_prompt(
         f"ram={sys.get('ram_percent', 0):.0f}%, "
         f"ai={sys.get('ai_provider', 'unknown')}"
     )
+
+    # 7b. Emotion (Phase 9.4c-qw fix #5) — only when notably off baseline.
+    emotion_block = _format_emotion_block(emotion)
+    if emotion_block:
+        parts.append("\n" + emotion_block)
 
     # 8. Extra prompt from user settings
     if config.ai_system_prompt_extra.strip():

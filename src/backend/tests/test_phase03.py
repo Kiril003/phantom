@@ -378,6 +378,61 @@ class TestPromptBuilder:
         result = build_system_prompt(snap, self._user_dict(), _default_bmodel())
         assert "NEARBY" not in result
 
+    def test_build_emotion_block_focused(self):
+        """Phase 9.4c-qw fix #5: high focus surfaces a 'focused' label."""
+        from ai.prompt_builder import build_system_prompt
+        result = build_system_prompt(
+            _make_snapshot(), self._user_dict(), _default_bmodel(),
+            emotion={"focus": 0.85, "curiosity": 0.5, "concern": 0.1, "fatigue": 0.0},
+        )
+        assert "INNER STATE" in result
+        assert "focused" in result
+
+    def test_build_emotion_block_concerned(self):
+        from ai.prompt_builder import build_system_prompt
+        result = build_system_prompt(
+            _make_snapshot(), self._user_dict(), _default_bmodel(),
+            emotion={"focus": 0.5, "curiosity": 0.4, "concern": 0.7, "fatigue": 0.2},
+        )
+        assert "concerned" in result
+
+    def test_build_emotion_block_multiple_labels(self):
+        from ai.prompt_builder import build_system_prompt
+        result = build_system_prompt(
+            _make_snapshot(), self._user_dict(), _default_bmodel(),
+            emotion={"focus": 0.8, "curiosity": 0.85, "concern": 0.6, "fatigue": 0.6},
+        )
+        assert "focused" in result
+        assert "curious" in result
+        assert "concerned" in result
+        assert "tired" in result
+
+    def test_build_emotion_block_skipped_when_neutral(self):
+        from ai.prompt_builder import build_system_prompt
+        result = build_system_prompt(
+            _make_snapshot(), self._user_dict(), _default_bmodel(),
+            emotion={"focus": 0.5, "curiosity": 0.4, "concern": 0.1, "fatigue": 0.1},
+        )
+        assert "INNER STATE" not in result
+
+    def test_build_emotion_block_skipped_when_none(self):
+        from ai.prompt_builder import build_system_prompt
+        result = build_system_prompt(
+            _make_snapshot(), self._user_dict(), _default_bmodel(),
+            emotion=None,
+        )
+        assert "INNER STATE" not in result
+
+    def test_build_emotion_block_includes_axes_numbers(self):
+        from ai.prompt_builder import build_system_prompt
+        result = build_system_prompt(
+            _make_snapshot(), self._user_dict(), _default_bmodel(),
+            emotion={"focus": 0.9, "curiosity": 0.5, "concern": 0.15, "fatigue": 0.0},
+        )
+        assert "focus=0.9" in result
+        assert "concern=0.1" in result
+        assert "fatigue=0.0" in result
+
     def test_build_nearby_block_caps_at_five(self):
         from ai.prompt_builder import build_system_prompt
         snap = _make_snapshot()

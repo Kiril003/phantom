@@ -151,6 +151,25 @@ async def _build_ai_response(
     # 1b. Recent places — Phase 9.4c-qw fix #2 ("де я був вчора?")
     recent_places = await fetch_recent_places(db, user.id, hours=24, limit=5)
 
+    # 1c. Emotion — Phase 9.4c-qw fix #5. Best-effort: only populated
+    # when an agent task currently owns the foreground slot. Mirrors the
+    # gating already used by the 9.3a self-model hook above.
+    emotion_dict: dict | None = None
+    try:
+        from agent.runtime import agent_runtime  # noqa: PLC0415
+        slot = agent_runtime.foreground_slot
+        if slot is not None and slot.self_model is not None:
+            emo = getattr(slot.self_model, "emotion", None)
+            if emo is not None:
+                emotion_dict = {
+                    "focus": float(emo.focus),
+                    "curiosity": float(emo.curiosity),
+                    "concern": float(emo.concern),
+                    "fatigue": float(emo.fatigue),
+                }
+    except Exception as exc:
+        logger.debug("emotion fetch failed (non-critical): %s", exc)
+
     # 2. Build user dict for prompt builder
     user_dict: dict[str, Any] = {
         "username": user.username,
@@ -165,6 +184,7 @@ async def _build_ai_response(
         behavioral_model=behavioral_model.to_dict(),
         memory_hints=hints,
         recent_places=recent_places,
+        emotion=emotion_dict,
     )
 
     # 4. Get history from session memory (already in RAM from this session)

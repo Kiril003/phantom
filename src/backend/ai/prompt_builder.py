@@ -16,6 +16,53 @@ from ai.personality import (
 )
 
 
+_SOURCE_LABELS = {
+    "gps_hardware": "GPS",
+    "browser_geolocation": "browser",
+    "ip_estimate": "IP estimate",
+    "user_stated": "user-stated",
+}
+
+
+def _format_location_block(where: dict[str, Any]) -> str:
+    """Render LOCATION line. Includes any non-empty source, not just hardware GPS.
+
+    Phase 9.4c quick-win #1: pre-fix gate read `where.get("fix")` which is True
+    only for hardware GPS. Browser/IP/user-stated populate lat/lon/source but
+    leave fix=False, so chat reported "unknown" despite knowing the city.
+    """
+    source = where.get("source")
+    lat = where.get("lat")
+    lon = where.get("lon")
+
+    if not source or source == "none" or lat is None or lon is None:
+        return "LOCATION: unknown (no localization)"
+
+    place = where.get("place_name") or f"({lat:.4f}, {lon:.4f})"
+    label = _SOURCE_LABELS.get(source, source)
+    conf = where.get("confidence") or 0.0
+    conf_pct = int(round(float(conf) * 100))
+    suffix = f"{label}, {conf_pct}% confidence"
+
+    accuracy_m = where.get("accuracy_m")
+    if accuracy_m:
+        try:
+            acc = float(accuracy_m)
+        except (TypeError, ValueError):
+            acc = 0.0
+        if 0 < acc < 1000:
+            suffix += f", ±{int(round(acc))}m"
+        elif acc >= 1000:
+            suffix += f", ±{acc / 1000:.1f}km"
+
+    speed = where.get("speed_kmh") or 0.0
+    try:
+        speed_f = float(speed)
+    except (TypeError, ValueError):
+        speed_f = 0.0
+    return f"LOCATION: {place} ({suffix}), speed={speed_f:.1f}km/h"
+
+
 def build_system_prompt(
     snapshot: dict[str, Any],
     user_dict: dict[str, Any],
@@ -82,11 +129,7 @@ def build_system_prompt(
     if when.get("is_night"):
         parts.append("(night mode — be minimal)")
 
-    if where.get("fix"):
-        place = where.get("place_name") or f"({where['lat']:.4f}, {where['lon']:.4f})"
-        parts.append(f"LOCATION: {place}, speed={where.get('speed_kmh', 0):.1f}km/h")
-    else:
-        parts.append("LOCATION: unknown (no GPS fix)")
+    parts.append(_format_location_block(where))
 
     bpm = body.get("breathing_bpm")
     stress = body.get("stress_level")

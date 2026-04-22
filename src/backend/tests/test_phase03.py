@@ -54,7 +54,8 @@ def _make_snapshot(state: str = "DIALOGUE", hour: int = 14) -> dict[str, Any]:
                 "auth_method": "pin", "role": "ROOT"},
         "where": {"lat": 50.45, "lon": 30.52, "fix": True, "satellites": 8,
                   "speed_kmh": 0.0, "place_known": True, "place_name": "Home",
-                  "first_visit": False},
+                  "first_visit": False, "source": "gps_hardware",
+                  "confidence": 0.9, "accuracy_m": 15.0},
         "when": {"time": f"{hour:02d}:30", "hour": hour, "day_of_week": "mon",
                  "date": "2026-04-15", "work_hours": True, "is_night": False},
         "body": {"breathing_bpm": 16, "breathing_state": "calm",
@@ -236,8 +237,85 @@ class TestPromptBuilder:
         from ai.prompt_builder import build_system_prompt
         snap = _make_snapshot()
         snap["where"]["fix"] = False
+        snap["where"]["source"] = "none"
+        snap["where"]["lat"] = None
+        snap["where"]["lon"] = None
         result = build_system_prompt(snap, self._user_dict(), _default_bmodel())
         assert "unknown" in result
+
+    def test_build_location_renders_browser_source(self):
+        """Phase 9.4c-qw fix #1: browser geolocation must surface in prompt."""
+        from ai.prompt_builder import build_system_prompt
+        snap = _make_snapshot()
+        snap["where"].update({
+            "fix": False,
+            "source": "browser_geolocation",
+            "confidence": 0.75,
+            "accuracy_m": 2000.0,
+            "place_name": "Ostrava",
+            "lat": 49.83,
+            "lon": 18.27,
+        })
+        result = build_system_prompt(snap, self._user_dict(), _default_bmodel())
+        assert "Ostrava" in result
+        assert "browser" in result
+        assert "75%" in result
+        assert "unknown" not in result.split("LOCATION:")[1].split("\n")[0]
+
+    def test_build_location_renders_ip_estimate_source(self):
+        from ai.prompt_builder import build_system_prompt
+        snap = _make_snapshot()
+        snap["where"].update({
+            "fix": False,
+            "source": "ip_estimate",
+            "confidence": 0.5,
+            "accuracy_m": 25000.0,
+            "place_name": "Kyiv",
+            "lat": 50.45,
+            "lon": 30.52,
+        })
+        result = build_system_prompt(snap, self._user_dict(), _default_bmodel())
+        assert "Kyiv" in result
+        assert "IP estimate" in result
+        assert "25.0km" in result
+
+    def test_build_location_renders_user_stated_source(self):
+        from ai.prompt_builder import build_system_prompt
+        snap = _make_snapshot()
+        snap["where"].update({
+            "fix": False,
+            "source": "user_stated",
+            "confidence": 0.75,
+            "accuracy_m": 2000.0,
+            "place_name": "Lviv",
+            "lat": 49.84,
+            "lon": 24.03,
+        })
+        result = build_system_prompt(snap, self._user_dict(), _default_bmodel())
+        assert "Lviv" in result
+        assert "user-stated" in result
+
+    def test_build_location_renders_gps_with_accuracy(self):
+        from ai.prompt_builder import build_system_prompt
+        snap = _make_snapshot()
+        # Default fixture is GPS with 90% confidence, 15m accuracy.
+        result = build_system_prompt(snap, self._user_dict(), _default_bmodel())
+        assert "Home" in result
+        assert "GPS" in result
+        assert "90%" in result
+        assert "15m" in result
+
+    def test_build_location_unknown_when_source_none(self):
+        from ai.prompt_builder import build_system_prompt
+        snap = _make_snapshot()
+        snap["where"].update({
+            "fix": False,
+            "source": "none",
+            "lat": None,
+            "lon": None,
+        })
+        result = build_system_prompt(snap, self._user_dict(), _default_bmodel())
+        assert "LOCATION: unknown" in result
 
     def test_build_history_messages_trims(self):
         from ai.prompt_builder import build_history_messages

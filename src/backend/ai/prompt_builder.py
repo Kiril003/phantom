@@ -111,6 +111,28 @@ async def fetch_recent_places(
         return []
 
 
+def _format_nearby_block(features: list[dict]) -> str | None:
+    """Phase 9.4c-qw fix #3 — render top-N nearby OSM features."""
+    if not features:
+        return None
+    lines = []
+    for f in features[:5]:
+        name = f.get("name") or ""
+        if not name:
+            continue
+        ftype = f.get("type") or ""
+        dist = f.get("distance_m")
+        try:
+            dist_i = int(dist)
+        except (TypeError, ValueError):
+            dist_i = 0
+        type_part = f"{ftype}, " if ftype else ""
+        lines.append(f"  • {name} ({type_part}{dist_i}m)")
+    if not lines:
+        return None
+    return "NEARBY (within 500m):\n" + "\n".join(lines)
+
+
 def _format_recent_places_block(
     places: list[tuple[str, datetime]] | None,
 ) -> str | None:
@@ -199,6 +221,11 @@ def build_system_prompt(
         parts.append("(night mode — be minimal)")
 
     parts.append(_format_location_block(where))
+
+    # Nearby OSM features (Phase 9.4c-qw fix #3)
+    nearby_block = _format_nearby_block(snapshot.get("nearby") or [])
+    if nearby_block:
+        parts.append(nearby_block)
 
     bpm = body.get("breathing_bpm")
     stress = body.get("stress_level")

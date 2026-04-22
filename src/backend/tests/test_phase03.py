@@ -349,6 +349,49 @@ class TestPromptBuilder:
         )
         assert "RECENT PLACES" not in result
 
+    def test_build_nearby_block_renders(self):
+        """Phase 9.4c-qw fix #3: NEARBY block lists features with type + distance."""
+        from ai.prompt_builder import build_system_prompt
+        snap = _make_snapshot()
+        snap["nearby"] = [
+            {"name": "Cafe Aroma", "type": "amenity=cafe", "distance_m": 120},
+            {"name": "Stryiskyi Park", "type": "leisure=park", "distance_m": 350},
+        ]
+        result = build_system_prompt(snap, self._user_dict(), _default_bmodel())
+        assert "NEARBY" in result
+        assert "Cafe Aroma" in result
+        assert "Stryiskyi Park" in result
+        assert "120m" in result
+        assert "350m" in result
+
+    def test_build_nearby_block_skipped_when_empty(self):
+        from ai.prompt_builder import build_system_prompt
+        snap = _make_snapshot()
+        snap["nearby"] = []
+        result = build_system_prompt(snap, self._user_dict(), _default_bmodel())
+        assert "NEARBY" not in result
+
+    def test_build_nearby_block_skipped_when_unset(self):
+        from ai.prompt_builder import build_system_prompt
+        snap = _make_snapshot()
+        snap.pop("nearby", None)
+        result = build_system_prompt(snap, self._user_dict(), _default_bmodel())
+        assert "NEARBY" not in result
+
+    def test_build_nearby_block_caps_at_five(self):
+        from ai.prompt_builder import build_system_prompt
+        snap = _make_snapshot()
+        snap["nearby"] = [
+            {"name": f"Place{i}", "type": "amenity=cafe", "distance_m": 100 + i}
+            for i in range(8)
+        ]
+        result = build_system_prompt(snap, self._user_dict(), _default_bmodel())
+        nearby_lines = [
+            l for l in result.split("\n")
+            if l.strip().startswith("• Place")
+        ]
+        assert len(nearby_lines) == 5
+
     def test_build_history_messages_trims(self):
         from ai.prompt_builder import build_history_messages
         msgs = [

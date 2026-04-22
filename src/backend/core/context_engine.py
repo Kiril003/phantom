@@ -116,6 +116,10 @@ def _empty_snapshot() -> dict:
             "pending_events_1h": 0,
         },
         "memory_hints": [],
+        # Phase 9.4c-qw fix #3 — best-effort nearby OSM features cache
+        # populated by resolve_localization(). Empty until the resolver
+        # has a fix and Overpass returns at least one named feature.
+        "nearby": [],
         "system": {
             "state": "SHADOW",
             "uptime_s": 0,
@@ -149,6 +153,12 @@ class ContextEngine:
         # Track "other person" detection with hysteresis
         self._other_detected_count = 0
         self._user_detected_count = 0
+
+        # Phase 9.4c-qw fix #3 — nearby OSM cache (60 s TTL keyed on
+        # rounded coords so small GPS jitter doesn't blow the cache).
+        self._nearby_cache_ts: float = 0.0
+        self._nearby_cache_key: tuple[float, float] | None = None
+        self._nearby_cache_data: list[dict] = []
 
         self._lock = asyncio.Lock()
 
@@ -303,6 +313,43 @@ class ContextEngine:
                 "accuracy_m": 15.0,
             })
 
+    async def _refresh_nearby(self, lat: float, lon: float) -> list[dict]:
+        """Phase 9.4c-qw fix #3 — refresh and cache top-5 OSM features near a point.
+
+        60 s TTL keyed on coords rounded to 3 decimals (~110 m). On
+        Overpass error returns the prior cache (or empty). Never raises.
+        """
+        key = (round(lat, 3), round(lon, 3))
+        now = time.monotonic()
+        if (
+            self._nearby_cache_key == key
+            and (now - self._nearby_cache_ts) < 60.0
+            and self._nearby_cache_data is not None
+        ):
+            return self._nearby_cache_data
+        try:
+            from agent.localization.adapters.overpass import (  # noqa: PLC0415
+                get_default_overpass,
+            )
+            overpass = get_default_overpass()
+            features = await overpass.features_near(lat, lon, radius_m=500)
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("nearby fetch failed: %s", exc)
+            return self._nearby_cache_data or []
+        top5 = [
+            {
+                "name": f.name,
+                "type": f.type or "",
+                "distance_m": int(f.distance_m),
+            }
+            for f in features
+            if f.name
+        ][:5]
+        self._nearby_cache_key = key
+        self._nearby_cache_ts = now
+        self._nearby_cache_data = top5
+        return top5
+
     async def resolve_localization(self) -> None:
         """Phase 9.4b — pull the latest LocationEstimate from the resolver.
 
@@ -344,6 +391,15 @@ class ContextEngine:
                 where["lat"] = estimate.lat
                 where["lon"] = estimate.lon
                 where["fix"] = estimate.source == "gps_hardware"
+            cur_lat = where.get("lat")
+            cur_lon = where.get("lon")
+
+        # Phase 9.4c-qw fix #3 — refresh nearby OSM features outside the
+        # snapshot lock; the helper has its own caching + best-effort path.
+        if cur_lat is not None and cur_lon is not None:
+            nearby = await self._refresh_nearby(float(cur_lat), float(cur_lon))
+            async with self._lock:
+                self._snapshot["nearby"] = nearby
 
     def _apply_env(self, batch: SensorBatch) -> None:
         e = batch.env

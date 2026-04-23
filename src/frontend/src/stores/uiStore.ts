@@ -76,6 +76,15 @@ interface UIStoreState {
   setPrimaryToolbarOnly: (v: boolean) => void;
   moreMenuOpen: boolean;
   setMoreMenuOpen: (v: boolean) => void;
+
+  /**
+   * Phase 9.5 — transient flag: the Voice button in FloatingToolbar sets this
+   * when routing to DIALOGUE, and ChatWindow consumes it on mount to auto-fire
+   * the mic toggle. Cleared immediately after consumption so subsequent
+   * Dialogue visits don't auto-record.
+   */
+  pendingVoiceActivation: boolean;
+  setPendingVoiceActivation: (v: boolean) => void;
 }
 
 /**
@@ -285,4 +294,7 @@ export const useUIStore = create<UIStoreState>((set, get) => ({
   setPrimaryToolbarOnly: (v) => set({ primaryToolbarOnly: v }),
   moreMenuOpen: false,
   setMoreMenuOpen: (v) => set({ moreMenuOpen: v }),
+
+  pendingVoiceActivation: false,
+  setPendingVoiceActivation: (v) => set({ pendingVoiceActivation: v }),
 }));

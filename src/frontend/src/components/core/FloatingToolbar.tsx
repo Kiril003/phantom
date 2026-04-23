@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
@@ -27,6 +27,8 @@ export interface ToolbarAction {
   id: string;
   icon: React.ReactNode;
   label: string;
+  /** Optional hover/long-press tooltip; falls back to `label` when absent. */
+  tooltip?: string;
   active?: boolean;
   onClick?: () => void;
   tone?: 'default' | 'alert';
@@ -62,6 +64,7 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
   const toggleOverlay = useUIStore((s) => s.toggleOverlay);
   const moreMenuOpen = useUIStore((s) => s.moreMenuOpen);
   const setMoreMenuOpen = useUIStore((s) => s.setMoreMenuOpen);
+  const setPendingVoiceActivation = useUIStore((s) => s.setPendingVoiceActivation);
 
   const isOverlayOpen = (name: OverlayName) => windows[name].open && !windows[name].minimized;
   const isRoot = user?.role === 'ROOT';
@@ -109,9 +112,14 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
     useUIStore.getState().closeAll();
     navigate('/');
   };
-  /** Voice entry point: route user to DIALOGUE where the chat pill's mic is
-   *  the single, authoritative voice control. No separate floating pill. */
+  /** Voice entry point: route user to DIALOGUE and signal ChatWindow to
+   *  auto-fire its mic toggle on mount. The chat pill's mic is still the
+   *  single, authoritative voice control; this is just a shortcut.
+   *  Phase 9.5 — previously Voice just switched state and did nothing else,
+   *  which duplicated Dialogue exactly. Now clicking Voice = "open chat and
+   *  start listening" in one gesture. */
   const openVoice = () => {
+    setPendingVoiceActivation(true);
     if (state !== SystemState.DIALOGUE) goDialogue();
   };
 
@@ -134,6 +142,7 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
       id: 'map',
       icon: <Map size={18} strokeWidth={1.75} />,
       label: 'Map',
+      tooltip: 'Tactical map',
       active: location.pathname.startsWith('/map'),
       onClick: goMap,
     },
@@ -153,7 +162,7 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
     },
   ];
 
-  const secondary: ToolbarAction[] = [
+  const secondaryAll: ToolbarAction[] = [
     {
       id: 'agent',
       icon: <Cpu size={16} strokeWidth={1.75} />,
@@ -185,21 +194,29 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
         setMoreMenuOpen(false);
       },
     },
+    // Phase 9.5 — Ghost is ROOT-only. Previously the menu item rendered as
+    // disabled with label "Ghost (root only)" for non-ROOT, which leaked the
+    // feature's existence (violates CLAUDE.md rule #6 — secret features stay
+    // native). It is now filtered out below for non-ROOT users so they see
+    // nothing at all.
     {
       id: 'ghost',
       icon: <Shield size={16} strokeWidth={1.75} />,
-      label: isRoot ? 'Ghost' : 'Ghost (root only)',
+      label: 'Ghost',
       active: state === SystemState.GHOST,
       onClick: () => {
         goGhost();
         setMoreMenuOpen(false);
       },
-      disabled: !isRoot,
     },
     {
+      // Phase 9.5 — renamed from "System core" to "System" + explicit tooltip
+      // to disambiguate from the Map button (both route through FOCUS state
+      // but target different surfaces).
       id: 'grid',
       icon: <Grid3x3 size={16} strokeWidth={1.75} />,
-      label: 'System core',
+      label: 'System',
+      tooltip: 'System — CPU / RAM / processes',
       active: state === SystemState.FOCUS && location.pathname === '/',
       onClick: () => {
         goFocus();
@@ -237,6 +254,11 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
       },
     },
   ];
+  // Phase 9.5 — filter Ghost out entirely for non-ROOT. Prior code rendered it
+  // disabled with label "Ghost (root only)" which leaked the feature.
+  const secondary: ToolbarAction[] = secondaryAll.filter(
+    (item) => item.id !== 'ghost' || isRoot,
+  );
 
   /* Long-press on Home opens secondary menu too. */
   const homePressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -393,7 +415,7 @@ function ToolbarIcon({
       }}
       aria-label={item.label}
       aria-pressed={item.active}
-      title={item.label}
+      title={item.tooltip ?? item.label}
     >
       {item.icon}
     </button>
@@ -439,6 +461,7 @@ function MoreMenuItem({ action }: { action: ToolbarAction }) {
         (e.currentTarget as HTMLElement).style.background = 'transparent';
       }}
       aria-label={action.label}
+      title={action.tooltip ?? action.label}
     >
       <span style={{ display: 'inline-flex', color: 'inherit' }}>{action.icon}</span>
       <span className="flex-1">{action.label}</span>

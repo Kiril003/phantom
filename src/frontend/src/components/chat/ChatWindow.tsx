@@ -13,6 +13,7 @@ import { MessageBubble } from './MessageBubble';
 import { useChatStore } from '../../stores/chatStore';
 import { useChatStream } from '../../hooks/useChatStream';
 import { useSystemStore } from '../../stores/systemStore';
+import { useUIStore } from '../../stores/uiStore';
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { voiceApi } from '../../services/voiceApi';
@@ -85,6 +86,8 @@ export function ChatWindow({
   const stickyBottomRef = useRef(true);
 
   const recorder = useVoiceRecorder();
+  const pendingVoiceActivation = useUIStore((s) => s.pendingVoiceActivation);
+  const setPendingVoiceActivation = useUIStore((s) => s.setPendingVoiceActivation);
   const voiceActive = recorder.state === 'recording' || recorder.state === 'requesting';
   const ttsEnabled = useSettingsStore((s) => Boolean(s.values.voice_tts_enabled ?? true));
   const ttsVoice = useSettingsStore((s) => String(s.values.voice_tts_voice ?? ''));
@@ -177,6 +180,18 @@ export function ChatWindow({
       }
     }
   }, [recorder, onVoiceToggle, sendMessage, systemState]);
+
+  // Phase 9.5 — consume pendingVoiceActivation set by FloatingToolbar Voice
+  // button. Clear the flag BEFORE awaiting toggleVoice so a re-render in
+  // between cannot re-fire. Only triggers when idle so we never stop an
+  // already-running recording by accident.
+  useEffect(() => {
+    if (!pendingVoiceActivation) return;
+    setPendingVoiceActivation(false);
+    if (recorder.state === 'idle' || recorder.state === 'error') {
+      void toggleVoice();
+    }
+  }, [pendingVoiceActivation, setPendingVoiceActivation, recorder.state, toggleVoice]);
 
   // Play TTS for any newly-arrived assistant reply when the previous user
   // turn came from voice input. Keeps playback scoped to voice sessions —

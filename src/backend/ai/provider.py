@@ -70,8 +70,16 @@ class AIProvider(ABC):
         user_message: str,
         system_prompt: str,
         history: list[dict],
+        *,
+        user_id: str | None = None,
     ) -> AIResponse:
-        """Return a complete AIResponse (non-streaming)."""
+        """Return a complete AIResponse (non-streaming).
+
+        Phase 10 — ``user_id`` is passed through so providers that support
+        chat data-tools (see ``ai.chat_tools``) can query user-scoped
+        resources inside the generate loop. Providers that don't implement
+        tool-use should accept and ignore the kwarg.
+        """
 
     @abstractmethod
     async def generate_stream(
@@ -132,6 +140,7 @@ class AIRouter:
         history: list[dict],
         *,
         task_id: str | None = None,
+        user_id: str | None = None,
     ) -> AIResponse:
         """Generate response — primary with fallback, sharing the resilience
         policy (cooling, quota lock, backoff) used by call_with_tools.
@@ -190,7 +199,9 @@ class AIRouter:
                 t0 = time.monotonic()
                 try:
                     result = await asyncio.wait_for(
-                        provider.generate(user_message, system_prompt, history),
+                        provider.generate(
+                            user_message, system_prompt, history, user_id=user_id,
+                        ),
                         timeout=config.ai_timeout_s,
                     )
                 except Exception as exc:

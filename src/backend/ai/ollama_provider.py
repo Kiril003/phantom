@@ -96,7 +96,13 @@ class OllamaProvider(AIProvider):
         user_message: str,
         system_prompt: str,
         history: list[dict],
+        *,
+        user_id: str | None = None,
     ) -> AIResponse:
+        # Phase 10 — Ollama fallback does NOT participate in the chat
+        # data-tool roundtrip; it produces a best-effort plain response.
+        # `user_id` is accepted for interface parity and ignored.
+        del user_id
         client = self._client()
         messages = _build_messages(user_message, system_prompt, history)
         tools = _build_ollama_tools()

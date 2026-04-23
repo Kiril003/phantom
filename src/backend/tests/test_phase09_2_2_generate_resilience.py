@@ -50,7 +50,7 @@ class _ScriptedGenerateProvider:
         self._seq = list(sequence)
         self.calls = 0
 
-    async def generate(self, user_message, system_prompt, history):
+    async def generate(self, user_message, system_prompt, history, *, user_id=None, **_ignored):
         from ai.provider import AIResponse
         self.calls += 1
         if not self._seq:
@@ -60,7 +60,7 @@ class _ScriptedGenerateProvider:
             raise out
         return out
 
-    async def generate_stream(self, user_message, system_prompt, history):
+    async def generate_stream(self, user_message, system_prompt, history, **_ignored):
         # Not used by the generate() tests but required by the interface.
         yield "ok"
 

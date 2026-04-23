@@ -9,7 +9,9 @@ from typing import AsyncIterator, Any
 
 from config import config
 from ai.provider import AIProvider, AIResponse
+from ai.chat_tools import CHAT_DATA_TOOLS, DATA_TOOL_NAMES
 from ai.response_formatter import RESPONSE_FORM_TOOLS, parse_function_call, parse_plain_text
+from ai.tool_executor import MAX_TOOL_CALLS_PER_TURN, execute_tool
 from ai.tool_use import (
     ToolCallResult,
     ToolErrorKind,
@@ -81,12 +83,17 @@ _SAFETY_OFF = [
 ]
 
 
-def _build_gemini_tools() -> list[Any]:
-    """Convert RESPONSE_FORM_TOOLS to google-genai FunctionDeclaration objects."""
+def _build_gemini_tools(tool_dicts: list[dict[str, Any]] | None = None) -> list[Any]:
+    """Convert tool dicts to google-genai FunctionDeclaration objects.
+
+    Default catalog is ``RESPONSE_FORM_TOOLS``. Pass a merged list (e.g.
+    ``RESPONSE_FORM_TOOLS + CHAT_DATA_TOOLS``) to include chat data tools.
+    """
     from google.genai import types
 
+    catalog = RESPONSE_FORM_TOOLS if tool_dicts is None else tool_dicts
     declarations: list[types.FunctionDeclaration] = []
-    for tool in RESPONSE_FORM_TOOLS:
+    for tool in catalog:
         params_schema = tool["parameters"]
         properties: dict[str, types.Schema] = {}
         required: list[str] = params_schema.get("required", [])
@@ -95,7 +102,9 @@ def _build_gemini_tools() -> list[Any]:
             prop_type_str = prop_def.get("type", "string")
             if prop_type_str == "string":
                 prop_type = types.Type.STRING
-            elif prop_type_str in ("number", "integer"):
+            elif prop_type_str == "integer":
+                prop_type = types.Type.INTEGER
+            elif prop_type_str == "number":
                 prop_type = types.Type.NUMBER
             elif prop_type_str == "boolean":
                 prop_type = types.Type.BOOLEAN
@@ -110,19 +119,33 @@ def _build_gemini_tools() -> list[Any]:
             if "description" in prop_def:
                 schema_kwargs["description"] = prop_def["description"]
             if prop_type_str == "array":
-                schema_kwargs["items"] = types.Schema(type=types.Type.OBJECT)
+                items = prop_def.get("items") or {"type": "object"}
+                item_type_str = items.get("type", "object")
+                item_type = {
+                    "string": types.Type.STRING,
+                    "integer": types.Type.INTEGER,
+                    "number": types.Type.NUMBER,
+                    "boolean": types.Type.BOOLEAN,
+                    "object": types.Type.OBJECT,
+                }.get(item_type_str, types.Type.OBJECT)
+                schema_kwargs["items"] = types.Schema(type=item_type)
 
             properties[prop_name] = types.Schema(**schema_kwargs)
+
+        # Only pass `required` when it's non-empty — Gemini rejects an empty
+        # required list paired with an empty properties map.
+        schema_kwargs_outer: dict[str, Any] = {
+            "type": types.Type.OBJECT,
+            "properties": properties,
+        }
+        if required:
+            schema_kwargs_outer["required"] = required
 
         declarations.append(
             types.FunctionDeclaration(
                 name=tool["name"],
                 description=tool["description"],
-                parameters=types.Schema(
-                    type=types.Type.OBJECT,
-                    properties=properties,
-                    required=required,
-                ),
+                parameters=types.Schema(**schema_kwargs_outer),
             )
         )
     return [types.Tool(function_declarations=declarations)]
@@ -164,77 +187,140 @@ class GeminiProvider(AIProvider):
         user_message: str,
         system_prompt: str,
         history: list[dict],
+        *,
+        user_id: str | None = None,
     ) -> AIResponse:
+        """
+        Chat response with optional data-tool roundtrip (Phase 10).
+
+        When ``user_id`` is provided, ``CHAT_DATA_TOOLS`` are merged into the
+        function catalog. If Gemini picks a data tool, we execute it, attach
+        the result as a tool_response Part, and call the model again (up to
+        ``MAX_TOOL_CALLS_PER_TURN`` data calls). After the cap is reached we
+        force a final call WITHOUT data tools so the model must pick a
+        response form or reply with text.
+        """
         from google.genai import types
 
         client = _get_client()
         contents = _build_contents(user_message, history)
-        tools = _build_gemini_tools()
 
-        gen_config = types.GenerateContentConfig(
+        with_data_tools = user_id is not None
+        catalog = (
+            [*RESPONSE_FORM_TOOLS, *CHAT_DATA_TOOLS] if with_data_tools
+            else list(RESPONSE_FORM_TOOLS)
+        )
+        tools = _build_gemini_tools(catalog)
+        tools_no_data = _build_gemini_tools(list(RESPONSE_FORM_TOOLS))
+
+        base_gen_kwargs = dict(
             system_instruction=system_prompt,
             temperature=config.ai_temperature,
             top_p=config.ai_top_p,
             top_k=40,
             max_output_tokens=config.ai_max_tokens,
-            tools=tools,
             tool_config=types.ToolConfig(
                 function_calling_config=types.FunctionCallingConfig(mode="AUTO"),
             ),
-            safety_settings=[
-                types.SafetySetting(**s) for s in _SAFETY_OFF
-            ],
+            safety_settings=[types.SafetySetting(**s) for s in _SAFETY_OFF],
         )
 
-        response = await client.aio.models.generate_content(
-            model=config.ai_gemini_model,
-            contents=contents,
-            config=gen_config,
-        )
+        data_calls_made = 0
+        tool_trace: list[dict[str, Any]] = []
+        tokens_total = 0
 
-        # Extract function call or plain text
-        fn_name: str | None = None
-        fn_args: dict[str, Any] = {}
-        text_parts: list[str] = []
-
-        candidate = response.candidates[0] if response.candidates else None
-        if candidate and candidate.content and candidate.content.parts:
-            for part in candidate.content.parts:
-                if hasattr(part, "function_call") and part.function_call:
-                    fn_name = part.function_call.name
-                    fn_args = dict(part.function_call.args) if part.function_call.args else {}
-                elif hasattr(part, "text") and part.text:
-                    text_parts.append(part.text)
-
-        tokens_used = 0
-        if hasattr(response, "usage_metadata") and response.usage_metadata:
-            tokens_used = (
-                getattr(response.usage_metadata, "total_token_count", 0) or 0
+        while True:
+            current_tools = (
+                tools if (with_data_tools and data_calls_made < MAX_TOOL_CALLS_PER_TURN)
+                else tools_no_data
+            )
+            gen_config = types.GenerateContentConfig(
+                tools=current_tools, **base_gen_kwargs,
+            )
+            response = await client.aio.models.generate_content(
+                model=config.ai_gemini_model,
+                contents=contents,
+                config=gen_config,
             )
 
-        if fn_name:
-            form, content, attachments = parse_function_call(fn_name, fn_args)
-            # Gemini sometimes emits function_call with empty content; cascade through
-            # text parts, then SDK accumulator, before accepting empty reply.
-            if not content and not attachments:
-                content = " ".join(text_parts).strip() or (response.text or "").strip()
-                if not content:
-                    logger.warning(
-                        "Gemini returned empty %s function_call with no fallback text; "
-                        "model=%s tokens=%d", fn_name, config.ai_gemini_model, tokens_used,
-                    )
-                    content = "…"
-        else:
-            full_text = " ".join(text_parts).strip() or (response.text or "")
-            form, content, attachments = parse_plain_text(full_text)
+            if hasattr(response, "usage_metadata") and response.usage_metadata:
+                tokens_total += (
+                    getattr(response.usage_metadata, "total_token_count", 0) or 0
+                )
 
-        return AIResponse(
-            content=content,
-            response_form=form,
-            attachments=attachments,
-            provider="gemini",
-            tokens_used=tokens_used,
-        )
+            fn_name: str | None = None
+            fn_args: dict[str, Any] = {}
+            text_parts: list[str] = []
+            candidate = response.candidates[0] if response.candidates else None
+            if candidate and candidate.content and candidate.content.parts:
+                for part in candidate.content.parts:
+                    if hasattr(part, "function_call") and part.function_call:
+                        fn_name = part.function_call.name
+                        fn_args = dict(part.function_call.args) if part.function_call.args else {}
+                    elif hasattr(part, "text") and part.text:
+                        text_parts.append(part.text)
+
+            # Data tool? Execute, push tool_response, loop.
+            if (
+                with_data_tools
+                and fn_name in DATA_TOOL_NAMES
+                and data_calls_made < MAX_TOOL_CALLS_PER_TURN
+            ):
+                data_calls_made += 1
+                tool_result = await execute_tool(fn_name, fn_args, user_id)
+                tool_trace.append({
+                    "tool": fn_name,
+                    "ok": bool(tool_result.get("ok")),
+                    "error_kind": tool_result.get("error_kind"),
+                    "elapsed_ms": tool_result.get("_elapsed_ms"),
+                })
+                logger.info(
+                    "chat tool-use: %s (%d/%d) -> %s",
+                    fn_name, data_calls_made, MAX_TOOL_CALLS_PER_TURN,
+                    "ok" if tool_result.get("ok") else tool_result.get("error_kind", "err"),
+                )
+                # Append the model turn (with function_call) and the user turn
+                # (with function_response) so the follow-up call has full context.
+                contents.append({
+                    "role": "model",
+                    "parts": [{"function_call": {"name": fn_name, "args": fn_args}}],
+                })
+                contents.append({
+                    "role": "user",
+                    "parts": [
+                        {
+                            "function_response": {
+                                "name": fn_name,
+                                "response": tool_result,
+                            }
+                        }
+                    ],
+                })
+                continue
+
+            # Response form OR plain text — finalize.
+            if fn_name:
+                form, content, attachments = parse_function_call(fn_name, fn_args)
+                if not content and not attachments:
+                    content = " ".join(text_parts).strip() or (response.text or "").strip()
+                    if not content:
+                        logger.warning(
+                            "Gemini returned empty %s function_call with no fallback text; "
+                            "model=%s tokens=%d",
+                            fn_name, config.ai_gemini_model, tokens_total,
+                        )
+                        content = "…"
+            else:
+                full_text = " ".join(text_parts).strip() or (response.text or "")
+                form, content, attachments = parse_plain_text(full_text)
+
+            return AIResponse(
+                content=content,
+                response_form=form,
+                attachments=attachments,
+                provider="gemini",
+                tokens_used=tokens_total,
+            )
 
     async def generate_stream(
         self,

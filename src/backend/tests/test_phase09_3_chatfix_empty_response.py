@@ -59,7 +59,7 @@ class _FakeClient:
 def _disable_gemini_tools(monkeypatch):
     # Avoid pulling in google.genai.types just to build tool declarations.
     from ai import gemini_provider as gp
-    monkeypatch.setattr(gp, "_build_gemini_tools", lambda: [])
+    monkeypatch.setattr(gp, "_build_gemini_tools", lambda *a, **kw: [])
     # GenerateContentConfig ends up called with tools=[] + types.ToolConfig(...).
     # Stub out types usage by replacing generate_content's config path — easiest:
     # stub out types.GenerateContentConfig, ToolConfig, FunctionCallingConfig,

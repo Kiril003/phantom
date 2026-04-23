@@ -197,6 +197,7 @@ async def _build_ai_response(
         user_message=user_message,
         system_prompt=system_prompt,
         history=history,
+        user_id=user.id,
     )
 
     # 6. Post-turn: vocabulary + language stats update

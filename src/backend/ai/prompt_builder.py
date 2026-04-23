@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from config import config
 from ai.personality import (
     PHANTOM_IDENTITY,
+    RESPONSE_FORMS_GUIDANCE,
     STATE_BEHAVIORS,
     ToneVector,
     calculate_tone,
@@ -294,6 +295,9 @@ def build_system_prompt(
     # 8. Extra prompt from user settings
     if config.ai_system_prompt_extra.strip():
         parts.append(f"\nEXTRA INSTRUCTIONS:\n{config.ai_system_prompt_extra.strip()}")
+
+    # 9. Response-form guidance (Phase 9.5) — chat only. See personality.py.
+    parts.append("\n" + RESPONSE_FORMS_GUIDANCE)
 
     return "\n".join(parts)
 

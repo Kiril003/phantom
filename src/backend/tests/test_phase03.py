@@ -176,6 +176,30 @@ class TestPersonality:
         assert "PHANTOM" in PHANTOM_IDENTITY
         assert len(PHANTOM_IDENTITY) > 50
 
+    def test_phantom_identity_no_response_form_line(self):
+        """Phase 9.5 — identity must NOT mention response forms (moved to
+        chat-scoped RESPONSE_FORMS_GUIDANCE so tactical planner isn't
+        polluted)."""
+        from ai.personality import PHANTOM_IDENTITY
+        lowered = PHANTOM_IDENTITY.lower()
+        assert "форму відповіді" not in lowered
+        assert "respond_" not in lowered
+
+    def test_response_forms_guidance_has_triggers(self):
+        """Phase 9.5 — chat prompt guidance block must name the structured
+        forms AND push back against defaulting to plain text."""
+        from ai.personality import RESPONSE_FORMS_GUIDANCE
+        assert "ФОРМИ ВІДПОВІДІ" in RESPONSE_FORMS_GUIDANCE
+        for form in (
+            "respond_map", "respond_metrics", "respond_code",
+            "respond_terminal", "respond_chart", "respond_diagram",
+            "respond_mixed",
+        ):
+            assert form in RESPONSE_FORMS_GUIDANCE, f"missing form {form}"
+        # Negative nudge away from text
+        lowered = RESPONSE_FORMS_GUIDANCE.lower()
+        assert "текст" in lowered
+
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # 2. Prompt Builder
@@ -195,6 +219,17 @@ class TestPromptBuilder:
             _make_snapshot(), self._user_dict(), _default_bmodel()
         )
         assert "PHANTOM" in result
+
+    def test_build_contains_response_forms_guidance(self):
+        """Phase 9.5 — chat prompt must carry the response-form guidance
+        block so Gemini actually picks structured forms."""
+        from ai.prompt_builder import build_system_prompt
+        result = build_system_prompt(
+            _make_snapshot(), self._user_dict(), _default_bmodel()
+        )
+        assert "ФОРМИ ВІДПОВІДІ" in result
+        assert "respond_map" in result
+        assert "respond_metrics" in result
 
     def test_build_contains_state(self):
         from ai.prompt_builder import build_system_prompt
@@ -554,13 +589,19 @@ class TestResponseFormatter:
         assert content == "Just a plain sentence."
 
     def test_tools_list_has_all_forms(self):
+        # Phase 9.5 — `respond_text` intentionally NOT in the catalog; plain
+        # text now flows through the no-tool-call path (parse_plain_text).
+        # See ai/response_formatter.py comment for rationale.
         from ai.response_formatter import RESPONSE_FORM_TOOLS
         names = {t["name"] for t in RESPONSE_FORM_TOOLS}
         expected = {
-            "respond_text", "respond_chart", "respond_map",
-            "respond_terminal", "respond_code", "respond_metrics",
+            "respond_chart", "respond_map", "respond_terminal",
+            "respond_code", "respond_metrics",
         }
         assert expected.issubset(names)
+        assert "respond_text" not in names, (
+            "respond_text must stay out of the tool catalog (Phase 9.5)"
+        )
 
 
 # ═══════════════════════════════════════════════════════════════════════════════

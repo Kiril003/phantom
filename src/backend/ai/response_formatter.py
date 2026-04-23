@@ -10,24 +10,13 @@ from typing import Any
 # ── Tool definitions (provider-agnostic schema) ───────────────────────────────
 
 RESPONSE_FORM_TOOLS: list[dict[str, Any]] = [
-    {
-        "name": "respond_text",
-        "description": "Коротка текстова відповідь або markdown",
-        "parameters": {
-            "type": "object",
-            "properties": {
-                "content": {
-                    "type": "string",
-                    "description": "Текст відповіді (підтримує markdown)",
-                },
-                "use_markdown": {
-                    "type": "boolean",
-                    "description": "True якщо відповідь містить markdown форматування",
-                },
-            },
-            "required": ["content"],
-        },
-    },
+    # Phase 9.5 — `respond_text` removed from tool catalog. Audit
+    # docs/phase-09.5-scope-audit/README.md showed Gemini in mode="AUTO"
+    # defaults to respond_text for any conversational Ukrainian turn,
+    # producing 100% `response_form=text` in the DB (25/25). Without a
+    # text tool, AUTO mode now either picks a structured form from the
+    # remaining 7 or returns plain text via the no-tool-call path
+    # (handled by parse_plain_text()).
     {
         "name": "respond_chart",
         "description": "Дані з динамікою або порівнянням — Recharts графік",
@@ -234,7 +223,10 @@ RESPONSE_FORM_TOOLS: list[dict[str, Any]] = [
     },
 ]
 
-# Map function name → ResponseForm string
+# Map function name → ResponseForm string.
+# `respond_text` is retained here (not in the tool catalog) because Gemini
+# occasionally emits it as a stray function_call name even when the tool is
+# absent; parse_function_call uses this mapping to coerce that back to "text".
 _FORM_MAP: dict[str, str] = {
     "respond_text":     "text",
     "respond_chart":    "chart",

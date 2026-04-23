@@ -15,6 +15,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from config import config
 from ai.personality import (
     PHANTOM_IDENTITY,
+    DATA_TOOLS_GUIDANCE,
     RESPONSE_FORMS_GUIDANCE,
     STATE_BEHAVIORS,
     ToneVector,
@@ -298,6 +299,11 @@ def build_system_prompt(
 
     # 9. Response-form guidance (Phase 9.5) — chat only. See personality.py.
     parts.append("\n" + RESPONSE_FORMS_GUIDANCE)
+
+    # 10. Data-tool guidance (Phase 10) — chat only. Tells the model when
+    # to reach for a CHAT_DATA_TOOLS function before picking a response
+    # form. Appended LAST so it's the freshest instruction in context.
+    parts.append("\n" + DATA_TOOLS_GUIDANCE)
 
     return "\n".join(parts)
 

@@ -49,6 +49,35 @@ respond_mixed
 жарт, коротке підтвердження). Не обирай текст за замовчуванням."""
 
 
+# ── Data tools (Phase 10, chat only) ──────────────────────────────────────────
+# Injected after RESPONSE_FORMS_GUIDANCE in build_system_prompt. Tells the
+# model when to reach for a data-fetching tool BEFORE picking a response
+# form. Without this, Gemini reliably refused to call tools for "де я був
+# вчора?" / "покажи CPU" types of queries even when the tool was available.
+
+DATA_TOOLS_GUIDANCE = """ДАНІ СИСТЕМИ:
+Ти маєш доступ до систем даних користувача. Коли потрібні реальні дані — \
+використовуй інструменти (це function call):
+
+• питання про місця / переміщення ("де я був вчора", "куди ходив", \
+"коли був у X") → search_locationhistory
+• питання про емоційні стани / моменти у часі ("коли я нервував", \
+"що робив у стані FOCUS") → query_temporal_anchors
+• "що ти знаєш про X", "памʼятаєш X", "які факти про Y" → recall_memory_facts
+• "покажи CPU / RAM / диск", "навантаження", "скільки вільно" → \
+get_system_metrics (після цього поверни respond_metrics)
+• "хто поруч", "радар", "температура зараз", "GPS", "скільки людей" → \
+get_sensor_status
+• "що у новинах", "знайди X", "хто така Y", актуальні події → search_web
+• "плани на сьогодні / завтра / тиждень", "що у календарі" → get_calendar_events
+• "додай зустріч", "запам'ятай що X о часі Y", "постав подію" → \
+create_calendar_event
+
+ВАЖЛИВО: спочатку виклич інструмент для отримання даних, потім формуй \
+відповідь з respond_*. Не вигадуй дані яких не маєш. Максимум 3 виклики \
+інструментів за одну відповідь."""
+
+
 # ── State Behaviors ────────────────────────────────────────────────────────────
 
 STATE_BEHAVIORS: dict[str, str] = {

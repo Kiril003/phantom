@@ -50,7 +50,7 @@ class PhantomConfig(BaseSettings):
     )
     ai_fallback_provider: Literal["gemini", "ollama", "none"] = "ollama"
     ai_timeout_s: float = 120.0
-    ai_gemini_model: str = "gemini-2.5-flash"
+    ai_gemini_model: str = "gemini-2.5-flash-lite"
     ai_gemini_api_key: str = ""
     ai_ollama_model: str = "llama3.2:3b"
     ai_ollama_host: str = "http://localhost:11434"

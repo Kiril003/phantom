@@ -23,7 +23,11 @@ class Base(DeclarativeBase):
 engine = create_async_engine(
     config.database_url,
     echo=config.debug,
-    connect_args={"check_same_thread": False},
+    # Phase 10 — `timeout=30.0` bumps SQLite's BUSY wait from the default 5s
+    # so a tool handler opening a second session during a chat turn (which
+    # already holds the request's write session) doesn't get "database is
+    # locked" instantly. Single-writer SQLite + chat + tools = contention.
+    connect_args={"check_same_thread": False, "timeout": 30.0},
 )
 
 AsyncSessionLocal = async_sessionmaker(

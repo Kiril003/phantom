@@ -273,6 +273,11 @@ async def send_message(
     )
     db.add(user_msg)
     await db.flush()
+    # Phase 10 — commit the user-message write now so SQLite drops the write
+    # lock BEFORE we call ai_router.generate(), whose data-tool handlers open
+    # their own sessions. Otherwise tool INSERTs block on the chat session's
+    # open transaction and SQLite deadlocks inside one request.
+    await db.commit()
 
     # Record interaction in context engine
     context_engine.record_interaction()
@@ -331,6 +336,12 @@ async def send_message(
         logger.debug("9.4b geo ingest failed (non-critical): %s", exc)
 
     t_start = time.monotonic()
+
+    # Phase 10 — final commit before handing off to generate(). Any writes
+    # queued by the pre-generate steps (memory facts from geo_integration,
+    # proactive state, etc.) must settle before tool-executor handlers try
+    # to open their own sessions, or SQLite single-writer deadlocks.
+    await db.commit()
 
     # Generate AI response
     try:

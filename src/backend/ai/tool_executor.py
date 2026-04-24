@@ -35,8 +35,14 @@ def _session_factory():
 logger = logging.getLogger(__name__)
 
 
-TOOL_TIMEOUT_S: float = 5.0
+TOOL_TIMEOUT_S: float = 10.0
 MAX_TOOL_CALLS_PER_TURN: int = 3
+
+# Why 10s, not 5s: chat routes hold an open AsyncSession for the whole turn
+# (user write → LLM loop → assistant write), so a tool handler that opens a
+# second SQLite session can wait on BUSY for a few seconds while the first
+# session settles. 5s was not enough during live tests. With the 3-call
+# cap, worst case is ~30s of tool wall-clock.
 
 
 # ── Error helpers ─────────────────────────────────────────────────────────────

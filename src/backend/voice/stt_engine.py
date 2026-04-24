@@ -23,6 +23,8 @@ import json
 import logging
 import os
 import re
+import shutil
+import subprocess
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
@@ -36,6 +38,22 @@ from config import config
 logger = logging.getLogger(__name__)
 
 TARGET_SAMPLE_RATE = 16_000
+
+# ── ffmpeg fallback (Phase 10.4 fix 4) ────────────────────────────────────────
+# soundfile/libsndfile has no WebM decoder, and the browser MediaRecorder
+# emits audio/webm;codecs=opus by default on Chromium/Firefox. Rather than
+# adding a native Python codec dep, we shell out to ffmpeg (a system package
+# on Debian/Ubuntu/Radxa) as the fallback decoder when soundfile chokes.
+#
+# Resolved once at module load; `None` means ffmpeg is not on PATH and the
+# fallback chain skips straight to ValueError.
+
+_FFMPEG_BIN: Optional[str] = shutil.which("ffmpeg")
+if _FFMPEG_BIN is None:
+    logger.warning(
+        "ffmpeg not found on PATH — voice STT will 400 on WebM/Opus inputs "
+        "(MediaRecorder default). Install via `apt install ffmpeg`."
+    )
 
 
 # ── Response dataclass ────────────────────────────────────────────────────────
@@ -60,10 +78,61 @@ class STTResult:
 # ── Audio normalisation ───────────────────────────────────────────────────────
 
 
+def _ffmpeg_decode_to_mono16k(raw: bytes) -> np.ndarray:
+    """Pipe ``raw`` through ffmpeg → mono 16 kHz float32 PCM ndarray.
+
+    Phase 10.4 fix 4. Used as the fallback when ``soundfile.read`` can't
+    decode a container (primarily WebM/Opus from the browser
+    MediaRecorder). Produces WAV on stdout which ``soundfile.read``
+    *can* parse — lets us keep a single float32 conversion path.
+    """
+    if _FFMPEG_BIN is None:
+        raise ValueError("ffmpeg not available for fallback decode")
+    try:
+        proc = subprocess.run(
+            [
+                _FFMPEG_BIN,
+                "-hide_banner",
+                "-loglevel", "error",
+                "-i", "pipe:0",
+                "-f", "wav",
+                "-ar", str(TARGET_SAMPLE_RATE),
+                "-ac", "1",
+                "pipe:1",
+            ],
+            input=raw,
+            capture_output=True,
+            timeout=10,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as exc:
+        raise ValueError("ffmpeg decode timed out (>10s)") from exc
+    except Exception as exc:  # noqa: BLE001
+        raise ValueError(f"ffmpeg decode failed to launch: {exc}") from exc
+
+    if proc.returncode != 0:
+        stderr = (proc.stderr or b"").decode(errors="replace")[:200]
+        raise ValueError(f"ffmpeg decode failed (rc={proc.returncode}): {stderr}")
+    if not proc.stdout:
+        raise ValueError("ffmpeg decode produced no output")
+
+    data, sr = sf.read(io.BytesIO(proc.stdout), dtype="float32", always_2d=False)
+    if data.ndim == 2:
+        data = data.mean(axis=1)
+    if sr != TARGET_SAMPLE_RATE:
+        # ffmpeg's -ar is authoritative but guard against an unexpected header.
+        data = _resample_linear(data.astype(np.float32, copy=False), sr, TARGET_SAMPLE_RATE)
+    return data.astype(np.float32, copy=False)
+
+
 def decode_to_mono16k(raw: bytes) -> np.ndarray:
     """
     Decode any libsndfile-supported container (WAV/OGG/FLAC/…) to mono
     float32 at 16 kHz. Returns a 1-D ndarray in [-1, 1].
+
+    Phase 10.4 fix 4: on libsndfile failure (e.g. browser MediaRecorder's
+    WebM/Opus default), falls back to ffmpeg transcoding if ffmpeg is
+    present on the host.
 
     Raises ValueError on empty / unreadable payloads — routes catch this
     and surface a 400 to the client.
@@ -72,7 +141,13 @@ def decode_to_mono16k(raw: bytes) -> np.ndarray:
         raise ValueError("Empty audio payload")
     try:
         data, sr = sf.read(io.BytesIO(raw), dtype="float32", always_2d=False)
-    except Exception as exc:  # sf raises RuntimeError for unknown formats
+    except Exception as exc:  # sf raises LibsndfileError/RuntimeError on unknown formats
+        if _FFMPEG_BIN is not None:
+            logger.info(
+                "decode_to_mono16k: soundfile failed (%s) — trying ffmpeg fallback",
+                str(exc)[:120],
+            )
+            return _ffmpeg_decode_to_mono16k(raw)
         raise ValueError(f"Could not decode audio: {exc}") from exc
 
     if data.ndim == 2:

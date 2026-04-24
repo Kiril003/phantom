@@ -57,16 +57,73 @@ def get_tts_provider() -> TTSProvider:
 def reset_providers() -> None:
     """Force a rebuild of both providers — call after a voice_* setting
     changes in /settings so the new mode / voice takes effect."""
-    global _stt, _tts
+    global _stt, _tts, _vosk_model
     with _lock:
         _stt = None
         _tts = None
+        _vosk_model = None
 
 
 async def transcribe_blob(raw: bytes, language: str) -> STTResult:
     """Decode and transcribe a caller-supplied audio blob."""
     audio = decode_to_mono16k(raw)
     return await get_stt_provider().transcribe(audio, language)
+
+
+_vosk_model = None
+
+
+def get_vosk_model():
+    """Return a shared ``vosk.Model`` instance, loading it on first call.
+
+    Phase 11b always-on voice needs Vosk for wake-word spotting and for
+    post-wake utterance transcription, regardless of which mode
+    ``voice_stt_mode`` selects for push-to-talk. If the active STT
+    provider is Vosk we reuse the model it already loaded; otherwise we
+    load it fresh via the same path resolver.
+
+    Raises ``RuntimeError`` if the model directory isn't found on disk
+    so callers can disable always-on cleanly.
+    """
+    global _vosk_model
+    if _vosk_model is not None:
+        return _vosk_model
+    with _lock:
+        if _vosk_model is not None:
+            return _vosk_model
+        provider = get_stt_provider()
+        if hasattr(provider, "get_model"):
+            try:
+                _vosk_model = provider.get_model()
+                logger.info("always-on: reusing Vosk model from STT provider")
+                return _vosk_model
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "always-on: STT provider's Vosk model unavailable (%s); "
+                    "loading fresh",
+                    exc,
+                )
+        from voice.stt_engine import _resolve_vosk_model_path
+
+        path = _resolve_vosk_model_path()
+        if path is None:
+            raise RuntimeError(
+                "always-on voice: Vosk model directory not found on disk"
+            )
+        import vosk
+
+        vosk.SetLogLevel(-1)
+        logger.info("always-on: loading fresh Vosk model from %s", path)
+        _vosk_model = vosk.Model(str(path))
+        return _vosk_model
+
+
+def reset_vosk_model() -> None:
+    """Drop the cached Vosk reference — called by reset_providers()
+    when voice settings change."""
+    global _vosk_model
+    with _lock:
+        _vosk_model = None
 
 
 async def synthesize_text(text: str, voice: str, speed: float) -> TTSResult:

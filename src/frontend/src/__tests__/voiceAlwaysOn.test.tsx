@@ -8,8 +8,10 @@
  * status='error' when they're missing (default jsdom behaviour).
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
-import { act, render, screen } from '@testing-library/react';
+import { act, render, screen, waitFor } from '@testing-library/react';
 import { useVoiceAlwaysOn, type FinalTranscript } from '../hooks/useVoiceAlwaysOn';
+import { __resetMicStream } from '../hooks/useMicStream';
+import { useInputMode } from '../stores/inputModeStore';
 
 // The hook imports a `?url`-suffixed module which vitest doesn't
 // resolve; stub it before the hook module pulls it in.
@@ -18,6 +20,7 @@ vi.mock('../workers/voice-capture.worklet.js?url', () => ({
 }));
 
 interface HarnessProps {
+  enabled?: boolean;
   wsUrl?: string;
   onFinalTranscript?: (t: FinalTranscript) => void;
   onWake?: (transcript: string, confidence: number) => void;
@@ -25,7 +28,9 @@ interface HarnessProps {
 }
 
 function Harness(props: HarnessProps) {
-  const hook = useVoiceAlwaysOn({ ...props, debug: false });
+  // Default to enabled:true for legacy tests; new tests can pass false to
+  // exercise the settings-gate path.
+  const hook = useVoiceAlwaysOn({ enabled: true, ...props, debug: false });
   return (
     <div>
       <span data-testid="status">{hook.status}</span>
@@ -110,6 +115,8 @@ class FakeWebSocket {
 
 // Install once. Each test clears the instance list.
 beforeEach(() => {
+  __resetMicStream();
+  useInputMode.setState({ mode: 'idle' });
   FakeWebSocket.instances = [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (globalThis as any).WebSocket = FakeWebSocket;
@@ -142,12 +149,23 @@ beforeEach(() => {
 // ---- Tests ------------------------------------------------------------------
 
 describe('useVoiceAlwaysOn — initial state', () => {
-  it('starts disconnected with empty error/partial', () => {
-    render(<Harness />);
-    expect(screen.getByTestId('status').textContent).toBe('disconnected');
+  it('stays in disabled when enabled=false (the default path for Phase 11b.1)', () => {
+    render(<Harness enabled={false} />);
+    expect(screen.getByTestId('status').textContent).toBe('disabled');
     expect(screen.getByTestId('error').textContent).toBe('');
     expect(screen.getByTestId('partial').textContent).toBe('');
     expect(screen.getByTestId('conf').textContent).toBe('null');
+    expect(FakeWebSocket.instances.length).toBe(0);
+  });
+
+  it('does not open a WS when enabled=false even if the consumer calls start() manually', async () => {
+    render(<Harness enabled={false} />);
+    await act(async () => {
+      screen.getByTestId('start').click();
+      await Promise.resolve();
+    });
+    expect(screen.getByTestId('status').textContent).toBe('disabled');
+    expect(FakeWebSocket.instances.length).toBe(0);
   });
 });
 
@@ -180,17 +198,19 @@ describe('useVoiceAlwaysOn — auth & media availability', () => {
 
 describe('useVoiceAlwaysOn — server event handling', () => {
   async function _startAndOpen() {
-    render(<Harness onFinalTranscript={finalSpy} onWake={wakeSpy} />);
+    render(<Harness enabled={true} onFinalTranscript={finalSpy} onWake={wakeSpy} />);
+    // Auto-start fires on mount; give it a microtask to create the ws,
+    // then simulate the server handshake so the open-promise resolves.
+    await waitFor(() => {
+      expect(FakeWebSocket.instances.length).toBeGreaterThan(0);
+    });
+    const ws = FakeWebSocket.instances[FakeWebSocket.instances.length - 1];
     await act(async () => {
-      screen.getByTestId('start').click();
-      // Let the hook install ws event listeners.
+      ws._open();
       await Promise.resolve();
-      await Promise.resolve();
-      // Simulate server handshake to resolve the open-promise.
-      FakeWebSocket.instances[FakeWebSocket.instances.length - 1]?._open();
       await Promise.resolve();
     });
-    return FakeWebSocket.instances[FakeWebSocket.instances.length - 1];
+    return ws;
   }
 
   const finalSpy = vi.fn();
@@ -329,5 +349,95 @@ describe('useVoiceAlwaysOn — outgoing commands', () => {
       ws.sent.filter((x): x is string => typeof x === 'string')
         .some((s) => s.includes('"cmd":"stop"'))
     ).toBe(true);
+  });
+});
+
+describe('useVoiceAlwaysOn — input mode arbitration', () => {
+  const finalSpy = vi.fn();
+  const wakeSpy = vi.fn();
+
+  beforeEach(() => {
+    finalSpy.mockClear();
+    wakeSpy.mockClear();
+    // Succeed at getUserMedia so the hook keeps the WS open — we need
+    // to verify that a server-side reset cmd flows out to the server.
+    const fakeTrack = { stop: vi.fn() };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (navigator as any).mediaDevices = {
+      getUserMedia: () =>
+        Promise.resolve({ getTracks: () => [fakeTrack] }),
+    };
+  });
+
+  it('suppresses wake callback when tap-to-talk owns the turn', async () => {
+    render(<Harness enabled={true} onFinalTranscript={finalSpy} onWake={wakeSpy} />);
+    await waitFor(() => {
+      expect(FakeWebSocket.instances.length).toBeGreaterThan(0);
+    });
+    const ws = FakeWebSocket.instances[FakeWebSocket.instances.length - 1];
+    await act(async () => {
+      ws._open();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    // Simulate tap-to-talk claiming the mic first.
+    act(() => {
+      useInputMode.setState({ mode: 'tap' });
+    });
+    await act(async () => {
+      ws._receive({ type: 'ready' });
+      ws._receive({ type: 'wake', transcript: 'фантом', confidence: 0.8 });
+    });
+    expect(wakeSpy).not.toHaveBeenCalled();
+    // Server reset command must have been sent so the server doesn't
+    // keep capturing continuation frames behind the user's back.
+    const sentStrings = ws.sent.filter((x): x is string => typeof x === 'string');
+    expect(sentStrings.some((s) => s.includes('"cmd":"reset"'))).toBe(true);
+  });
+
+  it('suppresses final callback when tap-to-talk owns the turn', async () => {
+    render(<Harness enabled={true} onFinalTranscript={finalSpy} onWake={wakeSpy} />);
+    await waitFor(() => {
+      expect(FakeWebSocket.instances.length).toBeGreaterThan(0);
+    });
+    const ws = FakeWebSocket.instances[FakeWebSocket.instances.length - 1];
+    await act(async () => {
+      ws._open();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    act(() => {
+      useInputMode.setState({ mode: 'tap' });
+    });
+    await act(async () => {
+      ws._receive({ type: 'ready' });
+      ws._receive({
+        type: 'final',
+        transcript: 'привіт',
+        source: 'wake',
+        confidence: 0.9,
+      });
+    });
+    expect(finalSpy).not.toHaveBeenCalled();
+  });
+
+  it('wake in idle mode flips input mode to always_on', async () => {
+    render(<Harness enabled={true} onFinalTranscript={finalSpy} onWake={wakeSpy} />);
+    await waitFor(() => {
+      expect(FakeWebSocket.instances.length).toBeGreaterThan(0);
+    });
+    const ws = FakeWebSocket.instances[FakeWebSocket.instances.length - 1];
+    await act(async () => {
+      ws._open();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    expect(useInputMode.getState().mode).toBe('idle');
+    await act(async () => {
+      ws._receive({ type: 'ready' });
+      ws._receive({ type: 'wake', transcript: 'фантом', confidence: 0.8 });
+    });
+    expect(wakeSpy).toHaveBeenCalled();
+    expect(useInputMode.getState().mode).toBe('always_on');
   });
 });

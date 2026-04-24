@@ -26,8 +26,11 @@
  */
 import { useCallback, useEffect, useRef, useState } from 'react';
 import workletUrl from '../workers/voice-capture.worklet.js?url';
+import { useMicStream } from './useMicStream';
+import { useInputMode } from '../stores/inputModeStore';
 
 export type AlwaysOnStatus =
+  | 'disabled'          // settings toggle is off; hook inert
   | 'disconnected'
   | 'connecting'
   | 'ready'
@@ -43,6 +46,9 @@ export interface FinalTranscript {
 }
 
 export interface AlwaysOnConfig {
+  /** Gate — when false the hook stays in 'disabled' and never opens
+   *  the mic or WS. Toggle via Settings ``voice_always_on_enabled``. */
+  enabled?: boolean;
   /** Override the default ws URL. Used by tests. */
   wsUrl?: string;
   /** Bearer token. Falls back to `localStorage.phantom_token`. */
@@ -54,6 +60,8 @@ export interface AlwaysOnConfig {
   /** Opt-in verbose logging. */
   debug?: boolean;
 }
+
+const CONSUMER_ID = 'always-on';
 
 interface ServerEvent {
   type: string;
@@ -84,19 +92,27 @@ function _resolveToken(explicit?: string): string | null {
 
 
 export function useVoiceAlwaysOn(config: AlwaysOnConfig = {}) {
-  const { wsUrl, token, onFinalTranscript, onWake, debug } = config;
+  const { enabled = false, wsUrl, token, onFinalTranscript, onWake, debug } = config;
 
-  const [status, setStatus] = useState<AlwaysOnStatus>('disconnected');
+  const [status, setStatus] = useState<AlwaysOnStatus>(
+    enabled ? 'disconnected' : 'disabled',
+  );
   const [partialTranscript, setPartialTranscript] = useState<string>('');
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [confidenceMin, setConfidenceMin] = useState<number | null>(null);
   const [continuationWindowS, setContinuationWindowS] = useState<number | null>(null);
 
+  const { acquire: micAcquire, release: micRelease } = useMicStream();
+  const inputMode = useInputMode((s) => s.mode);
+  const setInputMode = useInputMode((s) => s.setMode);
+  const inputModeRef = useRef(inputMode);
+  useEffect(() => { inputModeRef.current = inputMode; }, [inputMode]);
+
   const wsRef = useRef<WebSocket | null>(null);
   const audioCtxRef = useRef<AudioContext | null>(null);
   const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const workletRef = useRef<AudioWorkletNode | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
+  const hasStreamRef = useRef(false);
   const manualStopRef = useRef(false);
 
   const log = useCallback(
@@ -122,11 +138,11 @@ export function useVoiceAlwaysOn(config: AlwaysOnConfig = {}) {
       try { void audioCtxRef.current.close(); } catch { /* ignore */ }
       audioCtxRef.current = null;
     }
-    if (streamRef.current) {
-      for (const track of streamRef.current.getTracks()) track.stop();
-      streamRef.current = null;
+    if (hasStreamRef.current) {
+      micRelease(CONSUMER_ID);
+      hasStreamRef.current = false;
     }
-  }, []);
+  }, [micRelease]);
 
   const _teardown = useCallback(() => {
     _teardownAudio();
@@ -162,7 +178,21 @@ export function useVoiceAlwaysOn(config: AlwaysOnConfig = {}) {
           // stays in listening until wake/final event flips us
           break;
         case 'wake':
+          // Input mode arbitration — if tap-to-talk is currently owning
+          // the turn, the user is holding the mic themselves; the wake
+          // event MUST NOT flip the UI into armed state or fire the
+          // callback, or we'd race-send two messages for one utterance.
+          if (inputModeRef.current === 'tap') {
+            log('wake suppressed — tap-to-talk active');
+            // Server-side reset so the wake spotter doesn't keep
+            // capturing while tap-to-talk records in parallel.
+            try {
+              wsRef.current?.send(JSON.stringify({ cmd: 'reset' }));
+            } catch { /* ignore */ }
+            break;
+          }
           setStatus('armed');
+          setInputMode('always_on');
           if (onWake) {
             onWake(
               typeof ev.transcript === 'string' ? ev.transcript : '',
@@ -171,6 +201,12 @@ export function useVoiceAlwaysOn(config: AlwaysOnConfig = {}) {
           }
           break;
         case 'final': {
+          // Same arbitration — discard final events that were in-flight
+          // when the user grabbed tap-to-talk.
+          if (inputModeRef.current === 'tap') {
+            log('final suppressed — tap-to-talk active');
+            break;
+          }
           const transcript = typeof ev.transcript === 'string' ? ev.transcript : '';
           const source = (ev.source === 'continuation' ? 'continuation' : 'wake') as
             | 'wake'
@@ -187,6 +223,8 @@ export function useVoiceAlwaysOn(config: AlwaysOnConfig = {}) {
           break;
         case 'cooldown_end':
           setStatus('ready');
+          // Hand input mode back to idle so tap-to-talk is free to claim.
+          if (inputModeRef.current === 'always_on') setInputMode('idle');
           break;
         case 'error':
           setErrorMessage(typeof ev.message === 'string' ? ev.message : 'unknown');
@@ -196,10 +234,17 @@ export function useVoiceAlwaysOn(config: AlwaysOnConfig = {}) {
           break;
       }
     },
-    [status, onWake, onFinalTranscript, log],
+    [status, onWake, onFinalTranscript, log, setInputMode],
   );
 
   const start = useCallback(async (): Promise<void> => {
+    // Settings gate — when the user has disabled always-on we MUST NOT
+    // open the mic or WS. This is the primary fix for Phase 11b's bug
+    // where the hook could run even with voice_always_on_enabled=False.
+    if (!enabled) {
+      setStatus('disabled');
+      return;
+    }
     if (status === 'connecting' || status === 'ready' || status === 'listening') {
       return;
     }
@@ -265,19 +310,10 @@ export function useVoiceAlwaysOn(config: AlwaysOnConfig = {}) {
       return;
     }
 
-    // WS is open. Spin up mic + worklet.
+    // WS is open. Spin up mic (via shared stream) + worklet.
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: {
-          channelCount: 1,
-          sampleRate: 16000,    // hint; Chrome often ignores this
-          echoCancellation: true,
-          noiseSuppression: true,
-          autoGainControl: true,
-        },
-        video: false,
-      });
-      streamRef.current = stream;
+      const stream = await micAcquire(CONSUMER_ID);
+      hasStreamRef.current = true;
 
       const audioCtx = new AudioContext();
       audioCtxRef.current = audioCtx;
@@ -311,7 +347,7 @@ export function useVoiceAlwaysOn(config: AlwaysOnConfig = {}) {
       setStatus('error');
       _teardown();
     }
-  }, [status, wsUrl, token, _handleServerEvent, _teardown, _teardownAudio, log]);
+  }, [enabled, status, wsUrl, token, _handleServerEvent, _teardown, _teardownAudio, log, micAcquire]);
 
   const stop = useCallback((): void => {
     manualStopRef.current = true;
@@ -343,6 +379,26 @@ export function useVoiceAlwaysOn(config: AlwaysOnConfig = {}) {
       } catch { /* ignore */ }
     }
   }, []);
+
+  // Auto-start / auto-stop tied to the `enabled` prop. When settings
+  // flips `voice_always_on_enabled` the hook reacts without requiring
+  // the consumer to call start/stop manually. When `enabled` is false
+  // the hook sits in 'disabled' state and releases any mic/WS it held.
+  useEffect(() => {
+    if (!enabled) {
+      manualStopRef.current = true;
+      _teardown();
+      setStatus('disabled');
+      setErrorMessage(null);
+      return;
+    }
+    setStatus((prev) => (prev === 'disabled' ? 'disconnected' : prev));
+    // Kick off start once when toggle flips on. start() itself is idempotent.
+    void start();
+    // We intentionally only depend on `enabled` and the stable start
+    // reference — a `status` change shouldn't re-run this (would loop).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [enabled]);
 
   useEffect(() => () => {
     manualStopRef.current = true;

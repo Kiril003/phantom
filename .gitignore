@@ -37,3 +37,10 @@ src/frontend/vite.config.js
 # ChromaDB per-collection data dirs (UUID-named); chroma.sqlite3 itself
 # stays tracked because it carries the schema + collection metadata.
 src/backend/chroma_data/*/
+
+# Voice models: large pretrained blobs (Piper UA ~73 MB, Vosk UK ~400 MB)
+# stay out of git; fetched via setup / manual download. Silero VAD
+# (~2.3 MB) is small enough to commit for a self-contained repo (Phase 11b).
+src/backend/voice/models/piper/
+src/backend/voice/models/vosk-model-uk-v3/
+src/backend/voice/models/vosk-model-uk-v3.zip

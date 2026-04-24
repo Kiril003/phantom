@@ -274,6 +274,13 @@ class VoskSTTProvider(STTProvider):
         logger.info("Loading Vosk model from %s", self._model_path)
         self._model = vosk.Model(str(self._model_path))
 
+    def get_model(self):
+        """Public accessor used by the always-on wake spotter (Phase 11b)
+        to share the already-loaded vosk.Model instead of paying the
+        ~300 MB RAM cost again. Triggers lazy load on first call."""
+        self._ensure_model()
+        return self._model
+
     async def transcribe(self, audio: np.ndarray, language: str) -> STTResult:
         # Vosk is blocking C++ → run in a worker thread so we don't stall
         # the event loop.

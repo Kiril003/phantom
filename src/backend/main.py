@@ -24,6 +24,7 @@ from api.routes_map import router as map_router
 from api.routes_linux import router as linux_router
 from api.routes_tools import router as tools_router
 from api.routes_voice import router as voice_router
+from api.routes_voice_stream import register_voice_ws
 from api.routes_ai import router as ai_router
 from api.routes_face import router as face_router
 from api.routes_agent import router as agent_router
@@ -429,6 +430,7 @@ def create_app() -> FastAPI:
     app.include_router(agent_router, prefix=prefix)
 
     _register_ws(app)
+    register_voice_ws(app)
     _register_health(app)
 
     return app

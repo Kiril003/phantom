@@ -14,7 +14,7 @@ import uuid
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -32,10 +32,40 @@ router = APIRouter(prefix="/chat", tags=["chat"])
 
 # ── Schemas ────────────────────────────────────────────────────────────────────
 
+_ALLOWED_INPUT_METHODS = ("text", "voice", "encoder")
+_ALLOWED_VOICE_SOURCES = ("wake", "continuation")
+
+
 class SendMessageRequest(BaseModel):
     content: str
     input_method: str = "text"  # voice | text | encoder
     session_id: str | None = None
+    # Phase 11b — always-on voice pipeline. Populated only when
+    # input_method == "voice". voice_source distinguishes the first
+    # post-wake utterance from subsequent utterances in the cooldown
+    # continuation window so we can telemeter / debug which gate fired.
+    voice_source: str | None = None
+    voice_confidence: float | None = None
+
+    @field_validator("input_method")
+    @classmethod
+    def _validate_input_method(cls, v: str) -> str:
+        if v not in _ALLOWED_INPUT_METHODS:
+            raise ValueError(
+                f"input_method must be one of {_ALLOWED_INPUT_METHODS}"
+            )
+        return v
+
+    @field_validator("voice_source")
+    @classmethod
+    def _validate_voice_source(cls, v: str | None) -> str | None:
+        if v is None:
+            return v
+        if v not in _ALLOWED_VOICE_SOURCES:
+            raise ValueError(
+                f"voice_source must be one of {_ALLOWED_VOICE_SOURCES}"
+            )
+        return v
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -268,6 +298,14 @@ async def send_message(
         metadata_json=json.dumps({
             "input_method": req.input_method,
             "state_at_time": context_engine.get_snapshot().get("system", {}).get("state", "SHADOW"),
+            **(
+                {
+                    "voice_source": req.voice_source,
+                    "voice_confidence": req.voice_confidence,
+                }
+                if req.input_method == "voice"
+                else {}
+            ),
         }),
         attachments_json="[]",
     )
@@ -428,9 +466,17 @@ async def send_message(
     except Exception as exc:
         logger.debug("WS chat broadcast failed (non-critical): %s", exc)
 
+    # Phase 11b — tell the frontend to auto-play TTS for voice-originated
+    # turns. Text/encoder turns keep the current opt-in behaviour.
+    auto_tts = (
+        req.input_method == "voice"
+        and config.voice_tts_enabled
+    )
+
     return {
         "message": _serialize_message(assistant_msg),
         "session_id": session.id,
+        "auto_tts": auto_tts,
     }
 
 

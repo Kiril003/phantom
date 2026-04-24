@@ -154,8 +154,23 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         currentSessionId: s.currentSessionId === sessionId ? null : s.currentSessionId,
         messages: s.currentSessionId === sessionId ? [] : s.messages,
       }));
+      // Phase 10.4 fix 2: defensive re-sync from server so optimistic
+      // filter can't drift out of step with DB state.
+      void get().loadSessions();
     } catch (err) {
-      set({ error: err instanceof Error ? err.message : 'Failed to delete session' });
+      // Phase 10.4 fix 2: actionable error copy. Most delete failures in
+      // practice have been silent 401s (expired JWT); mention re-auth.
+      const status =
+        err && typeof err === 'object' && 'status' in err
+          ? (err as { status: number }).status
+          : 0;
+      const friendly =
+        status === 401
+          ? 'Сесія авторизації завершилась — увійди знову.'
+          : err instanceof Error
+            ? `Не вдалось видалити сесію: ${err.message}`
+            : 'Не вдалось видалити сесію.';
+      set({ error: friendly });
     }
   },
 

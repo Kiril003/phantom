@@ -44,6 +44,18 @@ async function request<T>(
   });
 
   if (!res.ok) {
+    // Phase 10.4 fix 2: on expired/invalid token, drop it so the next
+    // navigation hits the login screen instead of silently 401-ing again.
+    // authApi.me() is the existing auto-login probe — excluded so it
+    // can still fail-normal when no valid token exists.
+    if (res.status === 401 && path !== '/auth/me') {
+      try {
+        localStorage.removeItem('phantom_token');
+        localStorage.removeItem('phantom_token_expires');
+      } catch {
+        /* SSR / restricted storage: ignore */
+      }
+    }
     const err = await res.json().catch(() => ({ detail: 'Unknown error', code: 'UNKNOWN' }));
     throw new ApiError(res.status, err.code ?? 'UNKNOWN', err.detail ?? 'Unknown error');
   }

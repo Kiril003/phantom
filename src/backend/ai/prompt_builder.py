@@ -16,6 +16,7 @@ from config import config
 from ai.personality import (
     PHANTOM_IDENTITY,
     DATA_TOOLS_GUIDANCE,
+    REGISTER_GUIDANCE,
     RESPONSE_FORMS_GUIDANCE,
     STATE_BEHAVIORS,
     ToneVector,
@@ -302,8 +303,13 @@ def build_system_prompt(
 
     # 10. Data-tool guidance (Phase 10) — chat only. Tells the model when
     # to reach for a CHAT_DATA_TOOLS function before picking a response
-    # form. Appended LAST so it's the freshest instruction in context.
+    # form.
     parts.append("\n" + DATA_TOOLS_GUIDANCE)
+
+    # 11. Conversational register (Phase 10.3) — chat only. Teaches the
+    # model to read playful / informal / testing intent instead of being
+    # literal. Appended LAST so it's the freshest instruction in context.
+    parts.append("\n" + REGISTER_GUIDANCE)
 
     return "\n".join(parts)
 

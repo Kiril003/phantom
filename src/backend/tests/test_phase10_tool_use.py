@@ -190,8 +190,12 @@ class TestPromptGuidance:
         )
         assert "ДАНІ СИСТЕМИ" in prompt
         # Must come AFTER the response-forms block so data-tool guidance is
-        # the freshest instruction in Gemini's context.
+        # above the registers block but below form guidance.
         assert prompt.index("ДАНІ СИСТЕМИ") > prompt.index("ФОРМИ ВІДПОВІДІ")
+        # Phase 10.3 — register guidance is appended LAST so it's the
+        # freshest instruction in Gemini's context.
+        assert "РЕГІСТР І ТОН" in prompt
+        assert prompt.index("РЕГІСТР І ТОН") > prompt.index("ДАНІ СИСТЕМИ")
 
 
 # ── Date parser ───────────────────────────────────────────────────────────────
@@ -207,15 +211,22 @@ class TestDateParsers:
             assert w[0] < w[1]
 
     def test_parse_date_range_iso_date_and_range(self):
-        from ai.tool_executor import _parse_date_range
+        from ai.tool_executor import _parse_date_range, _local_tz
+
+        tz = _local_tz()
 
         single = _parse_date_range("2026-04-25")
-        assert single is not None and single[0].date().isoformat() == "2026-04-25"
+        assert single is not None
+        # Phase 10.3 — range is computed in user's LOCAL tz; viewing the
+        # returned UTC timestamps through that tz must recover the requested
+        # local date.
+        assert single[0].astimezone(tz).date().isoformat() == "2026-04-25"
+        assert single[1].astimezone(tz).date().isoformat() == "2026-04-25"
 
         rng = _parse_date_range("2026-04-25..2026-04-30")
         assert rng is not None
-        assert rng[0].date().isoformat() == "2026-04-25"
-        assert rng[1].date().isoformat() == "2026-04-30"
+        assert rng[0].astimezone(tz).date().isoformat() == "2026-04-25"
+        assert rng[1].astimezone(tz).date().isoformat() == "2026-04-30"
 
     def test_parse_date_range_invalid(self):
         from ai.tool_executor import _parse_date_range
@@ -225,24 +236,34 @@ class TestDateParsers:
         assert _parse_date_range("2099-13-40") is None
 
     def test_parse_datetime_freeform_iso(self):
-        from ai.tool_executor import _parse_datetime_freeform
+        from ai.tool_executor import _parse_datetime_freeform, _local_tz
 
         dt = _parse_datetime_freeform("2026-04-25T14:30")
-        assert dt is not None and dt.year == 2026 and dt.hour == 14 and dt.minute == 30
+        assert dt is not None
+        # Phase 10.3 — naive ISO is interpreted as local wall clock and
+        # returned normalised to UTC. Convert back to local to verify.
+        local = dt.astimezone(_local_tz())
+        assert local.year == 2026
+        assert local.month == 4
+        assert local.day == 25
+        assert local.hour == 14 and local.minute == 30
 
     def test_parse_datetime_freeform_ukrainian(self):
-        from ai.tool_executor import _parse_datetime_freeform
+        from ai.tool_executor import _parse_datetime_freeform, _local_tz, _today_local
 
         dt = _parse_datetime_freeform("завтра о 14:00")
-        assert dt is not None and dt.hour == 14 and dt.minute == 0
-        tomorrow = (datetime.now(tz=timezone.utc).date() + timedelta(days=1))
-        assert dt.date() == tomorrow
+        assert dt is not None
+        local = dt.astimezone(_local_tz())
+        assert local.hour == 14 and local.minute == 0
+        assert local.date() == _today_local() + timedelta(days=1)
 
     def test_parse_datetime_freeform_english(self):
-        from ai.tool_executor import _parse_datetime_freeform
+        from ai.tool_executor import _parse_datetime_freeform, _local_tz
 
         dt = _parse_datetime_freeform("tomorrow at 9")
-        assert dt is not None and dt.hour == 9
+        assert dt is not None
+        local = dt.astimezone(_local_tz())
+        assert local.hour == 9
 
     def test_parse_datetime_freeform_garbage(self):
         from ai.tool_executor import _parse_datetime_freeform
@@ -356,16 +377,27 @@ async def _test_db(monkeypatch):
 class TestCalendarRoundTrip:
     @pytest.mark.asyncio
     async def test_create_then_read_events(self, _test_db):
-        from ai.tool_executor import execute_tool
+        from datetime import time as _dtime
+
+        from ai.tool_executor import _local_tz, _today_local, execute_tool
 
         user_id = str(uuid.uuid4())
 
-        tomorrow = datetime.now(tz=timezone.utc) + timedelta(days=1)
-        start_iso = tomorrow.replace(hour=14, minute=0, second=0, microsecond=0).isoformat()
+        # Phase 10.3 — express "tomorrow 14:00 local" explicitly so the
+        # round-trip is tz-correct regardless of where the test host is.
+        tomorrow_local = _today_local() + timedelta(days=1)
+        start_local = datetime.combine(tomorrow_local, _dtime(14, 0)).replace(
+            tzinfo=_local_tz()
+        )
+        start_iso = start_local.isoformat()
 
         created = await execute_tool(
             "create_calendar_event",
-            {"title": "Phase 10 test meeting", "start_at": start_iso},
+            {
+                "title": "Phase 10 test meeting",
+                "start_at": start_iso,
+                "notes": "Phase 10.3 description round-trip",
+            },
             user_id=user_id,
         )
         assert created["ok"] is True
@@ -379,6 +411,8 @@ class TestCalendarRoundTrip:
         assert read["ok"] is True
         assert read["count"] == 1
         assert read["events"][0]["title"] == "Phase 10 test meeting"
+        # Fix 2 — description/notes write-through must survive the round trip.
+        assert read["events"][0]["notes"] == "Phase 10.3 description round-trip"
 
     @pytest.mark.asyncio
     async def test_get_calendar_events_empty_range(self, _test_db):
@@ -572,6 +606,193 @@ class TestGenerateToolLoop:
         result = await provider.generate("news?", "system", [], user_id="u1")
         assert result.content.startswith("sorry")
         assert result.response_form == "text"
+
+
+# ── Phase 10.3 — timezone, description, logging regressions ───────────────────
+
+
+class TestPhase10_3Timezone:
+    """The 'завтра' lookup bug the user hit on 2026-04-24: event created for
+    local-tomorrow was not returned by get_calendar_events(date_range='tomorrow')
+    because boundary math used UTC. These tests pin the local-tz contract."""
+
+    def test_today_and_tomorrow_differ_by_one_local_day(self):
+        from ai.tool_executor import _local_tz, _parse_date_range
+
+        tz = _local_tz()
+        today = _parse_date_range("today")
+        tomorrow = _parse_date_range("tomorrow")
+        assert today is not None and tomorrow is not None
+        today_local_date = today[0].astimezone(tz).date()
+        tomorrow_local_date = tomorrow[0].astimezone(tz).date()
+        assert tomorrow_local_date == today_local_date + timedelta(days=1)
+
+    def test_tomorrow_bounds_span_full_local_day(self):
+        from ai.tool_executor import _local_tz, _parse_date_range
+
+        tz = _local_tz()
+        bounds = _parse_date_range("tomorrow")
+        assert bounds is not None
+        start_local = bounds[0].astimezone(tz)
+        end_local = bounds[1].astimezone(tz)
+        assert start_local.hour == 0 and start_local.minute == 0
+        assert end_local.hour == 23 and end_local.minute == 59
+        assert start_local.date() == end_local.date()
+
+    def test_this_week_spans_seven_local_days(self):
+        from ai.tool_executor import _local_tz, _parse_date_range
+
+        tz = _local_tz()
+        bounds = _parse_date_range("this_week")
+        assert bounds is not None
+        start_local = bounds[0].astimezone(tz)
+        end_local = bounds[1].astimezone(tz)
+        assert (end_local.date() - start_local.date()).days == 6
+        # Week starts on Monday (tools_calendar_first_day default).
+        assert start_local.weekday() == 0
+
+    @pytest.mark.asyncio
+    async def test_tomorrow_query_finds_event_created_for_local_tomorrow(
+        self, _test_db,
+    ):
+        """Reproduces the user live-test bug: create 'завтра 18:00', then
+        query 'plany na zavtra?'. Pre-fix this returned empty."""
+        from ai.tool_executor import execute_tool
+
+        user_id = str(uuid.uuid4())
+
+        created = await execute_tool(
+            "create_calendar_event",
+            {
+                "title": "Відпочити",
+                "start_at": "завтра о 18:00",
+                "notes": "що я обіцяв відпочити",
+            },
+            user_id=user_id,
+        )
+        assert created["ok"] is True
+
+        read = await execute_tool(
+            "get_calendar_events",
+            {"date_range": "tomorrow"},
+            user_id=user_id,
+        )
+        assert read["ok"] is True
+        assert read["count"] == 1
+        assert read["events"][0]["title"] == "Відпочити"
+        # Fix 2 — notes → description is persisted and comes back.
+        assert read["events"][0]["notes"] == "що я обіцяв відпочити"
+
+    @pytest.mark.asyncio
+    async def test_today_query_does_not_return_tomorrows_event(self, _test_db):
+        """Regression: tomorrow's event must NOT leak into today's window."""
+        from ai.tool_executor import execute_tool
+
+        user_id = str(uuid.uuid4())
+        await execute_tool(
+            "create_calendar_event",
+            {"title": "Tomorrow thing", "start_at": "завтра о 10:00"},
+            user_id=user_id,
+        )
+        read = await execute_tool(
+            "get_calendar_events",
+            {"date_range": "today"},
+            user_id=user_id,
+        )
+        assert read["ok"] is True
+        assert read["count"] == 0
+
+
+class TestPhase10_3DescriptionField:
+    @pytest.mark.asyncio
+    async def test_description_column_written_via_notes(self, _test_db):
+        """Handler maps tool param `notes` → DB column `description`."""
+        from ai.tool_executor import execute_tool
+        from db import database as _db_mod
+        from db.models import CalendarEvent
+        from sqlalchemy import select
+
+        user_id = str(uuid.uuid4())
+        r = await execute_tool(
+            "create_calendar_event",
+            {
+                "title": "coffee with ada",
+                "start_at": "завтра о 09:30",
+                "notes": "розмова про Phase 10.3",
+            },
+            user_id=user_id,
+        )
+        assert r["ok"] is True
+
+        async with _db_mod.AsyncSessionLocal() as db:
+            row = (await db.execute(
+                select(CalendarEvent).where(CalendarEvent.user_id == user_id)
+            )).scalar_one()
+        assert row.description == "розмова про Phase 10.3"
+
+    @pytest.mark.asyncio
+    async def test_description_empty_when_no_notes(self, _test_db):
+        """Empty-string default is preserved when user omits notes."""
+        from ai.tool_executor import execute_tool
+        from db import database as _db_mod
+        from db.models import CalendarEvent
+        from sqlalchemy import select
+
+        user_id = str(uuid.uuid4())
+        r = await execute_tool(
+            "create_calendar_event",
+            {"title": "standup", "start_at": "завтра о 10:00"},
+            user_id=user_id,
+        )
+        assert r["ok"] is True
+
+        async with _db_mod.AsyncSessionLocal() as db:
+            row = (await db.execute(
+                select(CalendarEvent).where(CalendarEvent.user_id == user_id)
+            )).scalar_one()
+        assert row.description == ""
+
+    def test_tool_schema_emphasises_notes_for_context(self):
+        """The chat system prompt must instruct the LLM to populate notes."""
+        from ai.chat_tools import get_tool_schema
+
+        schema = get_tool_schema("create_calendar_event")
+        assert schema is not None
+        desc = schema["description"].lower()
+        # Guidance must mention both title-vs-notes separation AND timezone.
+        assert "notes" in desc
+        assert "title" in desc
+        assert "локальн" in desc  # локальний / локальному
+
+
+class TestPhase10_3ToolLogging:
+    @pytest.mark.asyncio
+    async def test_invocation_log_includes_tool_user_and_args(self, caplog):
+        """Gate 6 contract: every dispatch emits `invoked tool=X user=Y args=...`."""
+        import logging
+
+        from ai.tool_executor import execute_tool
+
+        caplog.set_level(logging.INFO, logger="ai.tool_executor")
+        await execute_tool("definitely_unknown_tool", {"x": 1}, user_id="tester")
+        # Unknown tools return before logging (no dispatch); positive case:
+        caplog.clear()
+        await execute_tool("get_system_metrics", {}, user_id="tester")
+        messages = " | ".join(r.getMessage() for r in caplog.records)
+        assert "invoked tool=get_system_metrics" in messages
+        assert "user=tester" in messages
+
+    def test_args_snippet_truncates_long_values(self):
+        from ai.tool_executor import _args_snippet
+
+        s = _args_snippet({"query": "x" * 500})
+        assert len(s) <= 200
+        assert "..." in s
+
+    def test_args_snippet_handles_empty_args(self):
+        from ai.tool_executor import _args_snippet
+
+        assert _args_snippet({}) == "{}"
 
 
 __all__: list[str] = []

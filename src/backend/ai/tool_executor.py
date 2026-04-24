@@ -328,27 +328,63 @@ async def _tool_search_web(args: dict[str, Any], user_id: str) -> dict[str, Any]
     if not summary and not sources:
         return _err("network", "grounded search returned empty result")
 
-    return _ok(summary=summary, sources=sources)
+    grounded = bool(sources)
+    logger.info(
+        "search_web: query=%r grounded=%s sources=%d summary_len=%d",
+        query.strip()[:80], grounded, len(sources), len(summary),
+    )
+    return _ok(summary=summary, sources=sources, grounded=grounded)
 
 
 # ── Date parsing for calendar tools ───────────────────────────────────────────
+#
+# Phase 10.3 — natural-language date keywords ("today", "tomorrow", "завтра",
+# бла бла) and bare ISO dates are interpreted in the USER's local timezone, not
+# UTC. The Radxa device is colocated with the user, so the system's local tz
+# is a correct proxy. Storage and query comparison still use UTC — we convert
+# at the boundary so SQLite's naive DATETIME columns stay consistent.
 
 
-def _today_utc() -> date:
-    return datetime.now(tz=timezone.utc).date()
+def _local_tz():
+    """System's current local timezone (UTC offset is resolved at call time so
+    DST transitions don't stick on an old offset)."""
+    return datetime.now().astimezone().tzinfo
+
+
+def _today_local() -> date:
+    """User's local 'today' date."""
+    return datetime.now().astimezone().date()
+
+
+def _local_to_utc(dt: datetime) -> datetime:
+    """Convert a tz-aware datetime to UTC. Naive input is treated as local."""
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=_local_tz())
+    return dt.astimezone(timezone.utc)
 
 
 def _parse_date_range(expr: str) -> tuple[datetime, datetime] | None:
-    """Resolve a textual date range to (start_utc, end_utc). None on failure."""
+    """Resolve a textual date range to (start_utc, end_utc). None on failure.
+
+    Keywords like "today"/"tomorrow"/"this_week"/"next_week" and bare
+    YYYY-MM-DD dates are interpreted in the user's LOCAL timezone, then
+    converted to UTC for DB comparison.
+    """
     if not isinstance(expr, str) or not expr.strip():
         return None
     e = expr.strip().lower()
-    today = _today_utc()
+    today = _today_local()
+    tz = _local_tz()
 
     def day_bounds(d: date) -> tuple[datetime, datetime]:
-        start = datetime.combine(d, dtime.min).replace(tzinfo=timezone.utc)
-        end = datetime.combine(d, dtime.max).replace(tzinfo=timezone.utc)
-        return start, end
+        start_local = datetime.combine(d, dtime.min).replace(tzinfo=tz)
+        end_local = datetime.combine(d, dtime.max).replace(tzinfo=tz)
+        return start_local.astimezone(timezone.utc), end_local.astimezone(timezone.utc)
+
+    def range_bounds(d0: date, d1: date) -> tuple[datetime, datetime]:
+        start_local = datetime.combine(d0, dtime.min).replace(tzinfo=tz)
+        end_local = datetime.combine(d1, dtime.max).replace(tzinfo=tz)
+        return start_local.astimezone(timezone.utc), end_local.astimezone(timezone.utc)
 
     if e == "today":
         return day_bounds(today)
@@ -359,17 +395,11 @@ def _parse_date_range(expr: str) -> tuple[datetime, datetime] | None:
     if e == "this_week":
         start_d = today - timedelta(days=today.weekday())
         end_d = start_d + timedelta(days=6)
-        return (
-            datetime.combine(start_d, dtime.min).replace(tzinfo=timezone.utc),
-            datetime.combine(end_d, dtime.max).replace(tzinfo=timezone.utc),
-        )
+        return range_bounds(start_d, end_d)
     if e == "next_week":
         start_d = today - timedelta(days=today.weekday()) + timedelta(days=7)
         end_d = start_d + timedelta(days=6)
-        return (
-            datetime.combine(start_d, dtime.min).replace(tzinfo=timezone.utc),
-            datetime.combine(end_d, dtime.max).replace(tzinfo=timezone.utc),
-        )
+        return range_bounds(start_d, end_d)
 
     # YYYY-MM-DD..YYYY-MM-DD range
     m = re.match(r"^(\d{4}-\d{2}-\d{2})\.\.(\d{4}-\d{2}-\d{2})$", e)
@@ -379,10 +409,7 @@ def _parse_date_range(expr: str) -> tuple[datetime, datetime] | None:
             d1 = date.fromisoformat(m.group(2))
         except ValueError:
             return None
-        return (
-            datetime.combine(d0, dtime.min).replace(tzinfo=timezone.utc),
-            datetime.combine(d1, dtime.max).replace(tzinfo=timezone.utc),
-        )
+        return range_bounds(d0, d1)
 
     # Single YYYY-MM-DD
     m = re.match(r"^\d{4}-\d{2}-\d{2}$", e)
@@ -400,23 +427,30 @@ _HOUR_RE = re.compile(r"(?:о|об|at)?\s*(\d{1,2})(?::(\d{2}))?")
 
 
 def _parse_datetime_freeform(expr: str) -> datetime | None:
-    """Resolve a single datetime from ISO 8601 or a small UA/EN natural form."""
+    """Resolve a single datetime from ISO 8601 or a small UA/EN natural form.
+
+    Returns a tz-aware UTC datetime. ISO 8601 input without a tz offset and
+    natural-language forms ("завтра 14:00", "tomorrow at 9") are interpreted
+    as the user's LOCAL wall-clock time before being normalised to UTC.
+    """
     if not isinstance(expr, str) or not expr.strip():
         return None
     s = expr.strip()
+    tz = _local_tz()
 
     # Try ISO 8601 first (full timestamp or YYYY-MM-DD[ T]HH:MM).
     for candidate in (s, s.replace(" ", "T")):
         try:
             dt = datetime.fromisoformat(candidate)
             if dt.tzinfo is None:
-                dt = dt.replace(tzinfo=timezone.utc)
-            return dt
+                # Naive ISO → user meant local wall clock.
+                dt = dt.replace(tzinfo=tz)
+            return dt.astimezone(timezone.utc)
         except ValueError:
             pass
 
     lower = s.lower()
-    today = _today_utc()
+    today = _today_local()
     base: date | None = None
     if "завтра" in lower or "tomorrow" in lower:
         base = today + timedelta(days=1)
@@ -426,14 +460,18 @@ def _parse_datetime_freeform(expr: str) -> datetime | None:
         base = today + timedelta(days=2)
 
     if base is None:
-        # Last-resort — YYYY-MM-DD without time (default 09:00).
+        # Last-resort — YYYY-MM-DD without time (default 09:00 local).
         m = re.search(r"(\d{4}-\d{2}-\d{2})", lower)
         if m:
             try:
                 d = date.fromisoformat(m.group(1))
             except ValueError:
                 return None
-            return datetime.combine(d, dtime(9, 0)).replace(tzinfo=timezone.utc)
+            return (
+                datetime.combine(d, dtime(9, 0))
+                .replace(tzinfo=tz)
+                .astimezone(timezone.utc)
+            )
         return None
 
     m = _HOUR_RE.search(lower)
@@ -445,7 +483,11 @@ def _parse_datetime_freeform(expr: str) -> datetime | None:
             minute = max(0, min(59, int(m.group(2)))) if m.group(2) else 0
         except ValueError:
             return None
-    return datetime.combine(base, dtime(hour, minute)).replace(tzinfo=timezone.utc)
+    return (
+        datetime.combine(base, dtime(hour, minute))
+        .replace(tzinfo=tz)
+        .astimezone(timezone.utc)
+    )
 
 
 async def _tool_get_calendar_events(args: dict[str, Any], user_id: str) -> dict[str, Any]:
@@ -549,6 +591,24 @@ _HANDLERS: dict[str, Any] = {
 }
 
 
+def _args_snippet(args: dict[str, Any], *, max_len: int = 200) -> str:
+    """Compact, safe repr of tool args for log lines. Truncated to max_len chars."""
+    try:
+        parts: list[str] = []
+        for k, v in args.items():
+            if isinstance(v, str):
+                sv = v if len(v) < 60 else v[:57] + "..."
+                parts.append(f"{k}={sv!r}")
+            else:
+                parts.append(f"{k}={v!r}")
+        snippet = "{" + ", ".join(parts) + "}"
+    except Exception:
+        snippet = "<unrepr>"
+    if len(snippet) > max_len:
+        snippet = snippet[: max_len - 3] + "..."
+    return snippet
+
+
 async def execute_tool(
     tool_name: str,
     args: dict[str, Any] | None,
@@ -567,6 +627,14 @@ async def execute_tool(
         return _err("unknown_tool", f"no handler for tool '{tool_name}'")
 
     safe_args = dict(args) if isinstance(args, dict) else {}
+    snippet = _args_snippet(safe_args)
+    # Pre-invocation line so Phase 10.3 Gate 6 (grep the log for 'invoked
+    # tool=<name>') can verify *which* tool actually fired, independent of
+    # whether it succeeded.
+    logger.info(
+        "tool_executor: invoked tool=%s user=%s args=%s",
+        tool_name, user_id, snippet,
+    )
     t0 = time.monotonic()
     try:
         result = await asyncio.wait_for(handler(safe_args, user_id), timeout=timeout_s)

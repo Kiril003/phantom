@@ -11,6 +11,7 @@ import { act, renderHook } from '@testing-library/react';
 
 import { voiceApi } from '../services/voiceApi';
 import { useVoiceRecorder } from '../hooks/useVoiceRecorder';
+import { __resetMicStream } from '../hooks/useMicStream';
 
 /* ─── fetch stubbing helpers ────────────────────────────────────────────── */
 
@@ -150,6 +151,10 @@ class FakeMediaRecorder {
 
   stop() {
     this.state = 'inactive';
+    // Real MediaRecorder emits a final dataavailable before onstop.
+    // Emit synchronously so the onstop handler observes a non-empty
+    // chunksRef regardless of prior setTimeout(0) scheduling order.
+    this.ondataavailable?.({ data: new Blob([new Uint8Array([9, 9, 9])]) });
     // Asynchronously fire onstop so stop() remains a promise resolver.
     setTimeout(() => this.onstop?.(), 0);
   }
@@ -179,6 +184,7 @@ class FakeAudioContext {
 
 describe('useVoiceRecorder', () => {
   beforeEach(() => {
+    __resetMicStream();
     Object.defineProperty(navigator, 'mediaDevices', {
       value: {
         getUserMedia: vi.fn().mockResolvedValue(new FakeStream()),

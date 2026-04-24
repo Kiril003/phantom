@@ -1,17 +1,23 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { useMicStream } from './useMicStream';
+import { useInputMode } from '../stores/inputModeStore';
 
 /**
  * useVoiceRecorder — MediaRecorder-backed tap-to-talk hook.
  *
  * Lifecycle:
- *   start()  → requests mic, starts recording, spins up an AnalyserNode so
- *              consumers can poll `amplitude` for orb-pulse animation.
+ *   start()  → requests mic (via shared useMicStream), starts recording,
+ *              spins up an AnalyserNode so consumers can poll `amplitude`
+ *              for orb-pulse animation.
  *   stop()   → stops the recorder, resolves the returned promise with the
  *              captured Blob (webm/opus by default on Chromium).
  *   cancel() → aborts without producing a blob.
  *
  * Amplitude is a scalar in [0, 1] updated ~30 Hz while recording. When not
  * recording it is 0 so any consumer animation settles to rest.
+ *
+ * Phase 11b.1: mic stream is acquired from `useMicStream` instead of a
+ * direct `getUserMedia` call so the always-on worklet can co-exist.
  */
 
 export type RecorderState = 'idle' | 'requesting' | 'recording' | 'stopping' | 'error';
@@ -23,6 +29,8 @@ interface Options {
   amplitudeIntervalMs?: number;
 }
 
+const CONSUMER_ID = 'tap-to-talk';
+
 export function useVoiceRecorder(options: Options = {}) {
   const { mimeType = 'audio/webm;codecs=opus', amplitudeIntervalMs = 33 } = options;
 
@@ -30,13 +38,17 @@ export function useVoiceRecorder(options: Options = {}) {
   const [error, setError] = useState<string | null>(null);
   const [amplitude, setAmplitude] = useState(0);
 
+  const { acquire: micAcquire, release: micRelease } = useMicStream();
+  const setInputMode = useInputMode((s) => s.setMode);
+
   const recorderRef = useRef<MediaRecorder | null>(null);
-  const streamRef = useRef<MediaStream | null>(null);
   const chunksRef = useRef<Blob[]>([]);
   const resolveRef = useRef<((blob: Blob | null) => void) | null>(null);
+  const hasStreamRef = useRef(false);
 
   const audioCtxRef = useRef<AudioContext | null>(null);
   const analyserRef = useRef<AnalyserNode | null>(null);
+  const sourceRef = useRef<MediaStreamAudioSourceNode | null>(null);
   const rafRef = useRef<number | null>(null);
   const lastAmpTickRef = useRef(0);
 
@@ -53,6 +65,14 @@ export function useVoiceRecorder(options: Options = {}) {
       }
       analyserRef.current = null;
     }
+    if (sourceRef.current) {
+      try {
+        sourceRef.current.disconnect();
+      } catch {
+        /* ignore */
+      }
+      sourceRef.current = null;
+    }
     if (audioCtxRef.current) {
       try {
         void audioCtxRef.current.close();
@@ -61,14 +81,15 @@ export function useVoiceRecorder(options: Options = {}) {
       }
       audioCtxRef.current = null;
     }
-    if (streamRef.current) {
-      for (const track of streamRef.current.getTracks()) track.stop();
-      streamRef.current = null;
+    if (hasStreamRef.current) {
+      micRelease(CONSUMER_ID);
+      hasStreamRef.current = false;
     }
     recorderRef.current = null;
     chunksRef.current = [];
     setAmplitude(0);
-  }, []);
+    setInputMode('idle');
+  }, [micRelease, setInputMode]);
 
   useEffect(() => () => cleanup(), [cleanup]);
 
@@ -96,14 +117,12 @@ export function useVoiceRecorder(options: Options = {}) {
     if (state === 'recording' || state === 'requesting') return;
     setError(null);
     setState('requesting');
+    // Mark this turn as owned by tap-to-talk BEFORE the mic resolves so
+    // a racing wake from always-on is discarded.
+    setInputMode('tap');
     try {
-      if (!navigator.mediaDevices?.getUserMedia) {
-        throw new Error('Browser has no getUserMedia — voice disabled.');
-      }
-      const stream = await navigator.mediaDevices.getUserMedia({
-        audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 },
-      });
-      streamRef.current = stream;
+      const stream = await micAcquire(CONSUMER_ID);
+      hasStreamRef.current = true;
 
       // Feed the mic into an AnalyserNode for amplitude pulse.
       const AudioCtx =
@@ -112,6 +131,7 @@ export function useVoiceRecorder(options: Options = {}) {
       const ctx = new AudioCtx();
       audioCtxRef.current = ctx;
       const source = ctx.createMediaStreamSource(stream);
+      sourceRef.current = source;
       const analyser = ctx.createAnalyser();
       analyser.fftSize = 512;
       source.connect(analyser);
@@ -154,7 +174,7 @@ export function useVoiceRecorder(options: Options = {}) {
       cleanup();
       throw err;
     }
-  }, [state, mimeType, cleanup, tickAmplitude]);
+  }, [state, mimeType, cleanup, tickAmplitude, micAcquire, setInputMode]);
 
   /** Stop and resolve with the captured Blob (or null on empty capture). */
   const stop = useCallback((): Promise<Blob | null> => {

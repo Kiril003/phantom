@@ -25,6 +25,11 @@ ollama==0.3.1
 faster-whisper==1.0.3
 vosk==0.3.45
 
+# Voice / TTS (Phase 07+) — Piper neural text-to-speech
+# Silero VAD (Phase 11b) is shipped as an ONNX file in voice/models/silero-vad/,
+# not a pip package; it runs via the already-installed onnxruntime.
+piper-tts==1.4.2
+
 # Serial
 pyserial-asyncio==0.6
 

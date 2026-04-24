@@ -5,6 +5,7 @@ import { AmbientGlows } from '../components/core/AmbientGlows';
 import { FloatingToolbar } from '../components/core/FloatingToolbar';
 import { Orb } from '../components/core/Orb';
 import { ChatWindow } from '../components/chat/ChatWindow';
+import { VoiceAlwaysOnGate } from '../components/chat/VoiceAlwaysOnGate';
 import { useSystemStore } from '../stores/systemStore';
 import { useChatStore } from '../stores/chatStore';
 import { EASE_PHANTOM } from '../styles/motion';
@@ -19,12 +20,19 @@ export default function DialogueLayout() {
   const isTyping = useChatStore((s) => s.isTyping);
   const streaming = useChatStore((s) => s.streaming);
   const [voiceActive, setVoiceActive] = useState(false);
+  const [alwaysOnStatus, setAlwaysOnStatus] = useState<string>('disabled');
 
   const handleVoiceToggle = useCallback((active: boolean) => {
     setVoiceActive(active);
   }, []);
 
-  const pulsing = isTyping || !!streaming || voiceActive;
+  const alwaysOnActive = alwaysOnStatus === 'ready'
+    || alwaysOnStatus === 'listening'
+    || alwaysOnStatus === 'armed'
+    || alwaysOnStatus === 'cooldown';
+
+  const pulsing = isTyping || !!streaming || voiceActive
+    || alwaysOnStatus === 'armed' || alwaysOnStatus === 'cooldown';
 
   return (
     <motion.div
@@ -37,6 +45,7 @@ export default function DialogueLayout() {
     >
       <AmbientGlows />
       <StatusBar />
+      <VoiceAlwaysOnGate onStatusChange={setAlwaysOnStatus} />
 
       <main className="flex-1 flex min-h-0 z-10 relative">
         {/* Left — Orb + context whisper */}
@@ -61,7 +70,17 @@ export default function DialogueLayout() {
                   letterSpacing: 'var(--tracking-tight)',
                 }}
               >
-                {voiceActive ? 'Listening' : pulsing ? 'Thinking' : 'Ready'}
+                {voiceActive
+                  ? 'Listening'
+                  : alwaysOnStatus === 'armed'
+                    ? 'Armed'
+                    : alwaysOnStatus === 'cooldown'
+                      ? 'Cooldown'
+                      : pulsing
+                        ? 'Thinking'
+                        : alwaysOnActive
+                          ? 'Awake'
+                          : 'Ready'}
               </p>
               <p
                 className="italic mt-1"

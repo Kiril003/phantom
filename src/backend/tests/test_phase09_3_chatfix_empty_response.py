@@ -81,7 +81,11 @@ def _disable_gemini_tools(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_empty_function_call_with_no_text_returns_placeholder_and_warns(caplog, monkeypatch):
-    """fn returns content='' AND no text_parts AND no response.text → '…' + WARNING."""
+    """fn returns content='' AND no text_parts AND no response.text → Ukrainian filler + WARNING.
+
+    Phase 10.4: text/markdown forms now get a user-friendly Ukrainian filler
+    rather than the cryptic "…" — see gemini_provider.py:313-326.
+    """
     from ai import gemini_provider as gp
 
     response = _make_response(
@@ -94,7 +98,7 @@ async def test_empty_function_call_with_no_text_returns_placeholder_and_warns(ca
     with caplog.at_level("WARNING", logger="ai.gemini_provider"):
         result = await provider.generate("привіт", "system", [])
 
-    assert result.content == "…"
+    assert result.content == "Не встиг сформулювати — перепитай?"
     assert result.response_form == "text"
     assert result.attachments == []
     warnings = [r for r in caplog.records if r.levelname == "WARNING"]

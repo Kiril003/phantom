@@ -299,20 +299,40 @@ class GeminiProvider(AIProvider):
                 continue
 
             # Response form OR plain text — finalize.
+            finish_reason = (
+                getattr(candidate, "finish_reason", None) if candidate else None
+            )
             if fn_name:
                 form, content, attachments = parse_function_call(fn_name, fn_args)
-                if not content and not attachments:
+                # Text-like forms (text/markdown) need content even when
+                # attachments are present, otherwise the bubble renders blank.
+                expects_content = form in ("text", "markdown")
+                if not content and (not attachments or expects_content):
                     content = " ".join(text_parts).strip() or (response.text or "").strip()
                     if not content:
                         logger.warning(
                             "Gemini returned empty %s function_call with no fallback text; "
-                            "model=%s tokens=%d",
-                            fn_name, config.ai_gemini_model, tokens_total,
+                            "model=%s tokens=%d finish_reason=%s",
+                            fn_name, config.ai_gemini_model, tokens_total, finish_reason,
                         )
-                        content = "…"
+                        content = (
+                            "Не встиг сформулювати — перепитай?"
+                            if expects_content
+                            else "…"
+                        )
             else:
                 full_text = " ".join(text_parts).strip() or (response.text or "")
                 form, content, attachments = parse_plain_text(full_text)
+                # Plain-text branch had NO empty-content guard pre-10.4 —
+                # empty Gemini turns (e.g. MAX_TOKENS with system prompt
+                # eating budget) leaked content="" straight into the DB.
+                if not content and not attachments:
+                    logger.warning(
+                        "Gemini returned empty plain-text response; "
+                        "model=%s tokens=%d finish_reason=%s",
+                        config.ai_gemini_model, tokens_total, finish_reason,
+                    )
+                    content = "Не встиг сформулювати — перепитай?"
 
             return AIResponse(
                 content=content,

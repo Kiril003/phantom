@@ -185,6 +185,11 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         session_id: sessionId || null,
       });
 
+      // Phase 10.4 fix 3: detect whether this response introduced a NEW
+      // session (first message of a fresh chat). If so, refetch sessions
+      // so the sidebar shows it without a page reload.
+      const sessionIsNew = !get().sessions.some((x) => x.id === resp.session_id);
+
       set((s) => {
         // Replace the optimistic placeholder IN PLACE with the confirmed
         // user message. Previously we rebuilt the array as
@@ -209,6 +214,13 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           streaming: null,
         };
       });
+
+      if (sessionIsNew) {
+        // Fire-and-forget — UI already shows the new message; the sidebar
+        // entry catches up a beat later. Any error is swallowed by
+        // loadSessions itself (sets state.error).
+        void get().loadSessions();
+      }
     } catch (err) {
       // Surface AI-provider outages as actionable copy pointing to Settings.
       const maybeStatus =

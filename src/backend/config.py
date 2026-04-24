@@ -98,6 +98,17 @@ class PhantomConfig(BaseSettings):
     voice_wake_words: str = "фантом"
     voice_wake_word_enabled: bool = True
     voice_auto_listen_in_dialogue: bool = True
+    # ── Voice / Always-on (Phase 11b) ─────────────────────────────────────────
+    # Opt-in. When False the tap-to-talk path is the only way to reach STT.
+    voice_always_on_enabled: bool = False
+    # Minimum averaged Vosk per-word confidence for a wake match to count.
+    voice_wake_confidence_min: float = 0.6
+    # After PHANTOM replies, how long we keep the mic "armed" so the user can
+    # continue without re-saying the wake word.
+    voice_continuation_window_s: int = 10
+    # Drop incoming mic frames while PHANTOM is speaking, to avoid self-wakes
+    # when TTS audio leaks through the ReSpeaker near-field.
+    voice_mic_duck_on_tts: bool = True
 
     # ── Sensors / Serial ──────────────────────────────────────────────────────
     sensor_batch_interval_ms: int = 500

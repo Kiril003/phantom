@@ -157,6 +157,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         # env/defaults.
         logger.error("Settings: failed to load DB overrides: %s", exc)
 
+    # Phase 11b.1 — reconcile the ContextEngine's cached ai_provider with the
+    # just-loaded config. Without this, the very first WS broadcast can ship
+    # the env-default provider (typically "ollama") even though the user has
+    # persisted "gemini" in Settings, causing a visible flicker in StatusBar
+    # before the next 500 ms reconcile tick fixes it.
+    try:
+        from core.context_engine import context_engine
+        context_engine.set_ai_provider(config.ai_primary_provider)
+    except Exception as exc:
+        logger.debug("context_engine: initial ai_provider sync skipped: %s", exc)
+
     # Reconfigure root logger in case log_level or hostname was overridden in
     # DB. Hostname goes into the log prefix so multi-node log streams can be
     # distinguished on a shared journal.

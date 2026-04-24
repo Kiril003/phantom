@@ -186,6 +186,11 @@ CATEGORY_SPEC: list[dict[str, Any]] = [
             "voice_tts_state_adaptation",
             "voice_wake_word_enabled",
             "voice_wake_words",
+            # Phase 11b — always-on voice
+            "voice_always_on_enabled",
+            "voice_wake_confidence_min",
+            "voice_continuation_window_s",
+            "voice_mic_duck_on_tts",
         ],
     },
     {
@@ -278,6 +283,10 @@ LABEL_OVERRIDES: dict[str, str] = {
     "voice_tts_state_adaptation": "Адаптація до стану",
     "voice_wake_word_enabled": "Wake-word",
     "voice_wake_words": "Wake-word фрази",
+    "voice_always_on_enabled": "Always-on голос",
+    "voice_wake_confidence_min": "Мін. впевненість wake",
+    "voice_continuation_window_s": "Вікно продовження (с)",
+    "voice_mic_duck_on_tts": "Заглушити мікрофон під час TTS",
     "face_tracking_enabled": "Face tracking",
     "face_tracking_auto_switch_profile": "Auto-switch profile",
     "face_tracking_privacy_mode": "Privacy mode",
@@ -302,18 +311,18 @@ PASSWORD_KEYS = {"ai_gemini_api_key", "jwt_secret_key"}
 # will only come online once the owning phase ships. Keep this list tight:
 # a key that is actually wired must NOT appear here.
 UNIMPLEMENTED_KEYS = {
-    # Voice pipeline — Phase 07 shipped push-to-talk STT/TTS wiring, so
-    # voice_stt_mode / voice_stt_language / voice_tts_enabled /
-    # voice_tts_voice / voice_tts_speed now land. What's still [soon]:
-    #   - Whisper-specific knobs (no faster-whisper on dev image).
+    # Voice pipeline — Phase 07 shipped push-to-talk STT/TTS wiring;
+    # Phase 11b shipped always-on wake word + continuous streaming, so
+    # voice_wake_word_enabled / voice_wake_words / voice_always_on_* /
+    # voice_wake_confidence_min / voice_continuation_window_s /
+    # voice_mic_duck_on_tts now land too. What's still [soon]:
+    #   - Whisper-specific knobs (faster-whisper kept for 11c multi-
+    #     lang on-demand; the knobs themselves stay UI-only until 11c).
     #   - emotion_scale / state_adaptation → piper doesn't consume them.
-    #   - wake_word family → always-on hotword is a separate phase.
     "voice_stt_whisper_model",
     "voice_stt_whisper_device",
     "voice_tts_emotion_scale",
     "voice_tts_state_adaptation",
-    "voice_wake_word_enabled",
-    "voice_wake_words",
     # ESP32-side sensors — need a command in firmware/protocol.h before
     # toggling them from the OS has any effect.
     "sensor_radar_sensitivity",

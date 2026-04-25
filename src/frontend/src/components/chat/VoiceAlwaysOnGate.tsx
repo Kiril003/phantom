@@ -17,6 +17,10 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { useChatStore } from '../../stores/chatStore';
 import { useSystemStore } from '../../stores/systemStore';
 import { useInputMode } from '../../stores/inputModeStore';
+import {
+  useVoiceAlwaysOnStatusStore,
+  type VoiceAlwaysOnStatus,
+} from '../../stores/voiceAlwaysOnStatusStore';
 
 interface Props {
   /** Optional hook callbacks (e.g., for layouts that want to render
@@ -32,6 +36,7 @@ export function VoiceAlwaysOnGate({ onStatusChange }: Props = {}) {
   const sendMessage = useChatStore((s) => s.sendMessage);
   const systemState = useSystemStore((s) => s.state);
   const setInputMode = useInputMode((s) => s.setMode);
+  const setGlobalStatus = useVoiceAlwaysOnStatusStore((s) => s.setStatus);
 
   const onFinalTranscript = useCallback(
     (t: FinalTranscript) => {
@@ -53,7 +58,8 @@ export function VoiceAlwaysOnGate({ onStatusChange }: Props = {}) {
 
   useEffect(() => {
     onStatusChange?.(status);
-  }, [status, onStatusChange]);
+    setGlobalStatus(status as VoiceAlwaysOnStatus);
+  }, [status, onStatusChange, setGlobalStatus]);
 
   // Log hook-level errors once per change so they land in the browser
   // console during manual testing without forcing a banner on users.

@@ -9,6 +9,7 @@ import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { act, render, waitFor } from '@testing-library/react';
 import { VoiceAlwaysOnGate } from '../components/chat/VoiceAlwaysOnGate';
 import { useSettingsStore } from '../stores/settingsStore';
+import { useVoiceAlwaysOnStatusStore } from '../stores/voiceAlwaysOnStatusStore';
 import { __resetMicStream } from '../hooks/useMicStream';
 import { useInputMode } from '../stores/inputModeStore';
 
@@ -125,6 +126,43 @@ describe('VoiceAlwaysOnGate — settings reactivity', () => {
     // called _teardown which closes the WS.
     await waitFor(() => {
       expect(ws.readyState).toBe(FakeWebSocket.CLOSED);
+    });
+  });
+});
+
+describe('VoiceAlwaysOnGate — phase 11c.3 global status store', () => {
+  beforeEach(() => {
+    useVoiceAlwaysOnStatusStore.setState({ status: 'disabled' });
+  });
+
+  it('writes initial "disabled" to the global status store on mount when off', async () => {
+    render(<VoiceAlwaysOnGate />);
+    await waitFor(() => {
+      expect(useVoiceAlwaysOnStatusStore.getState().status).toBe('disabled');
+    });
+  });
+
+  it('updates the global status store as the underlying hook progresses', async () => {
+    render(<VoiceAlwaysOnGate />);
+    act(() => {
+      useSettingsStore.setState({
+        values: { voice_always_on_enabled: true },
+      });
+    });
+    // Hook moves through 'connecting' → ready when the WS opens.
+    await waitFor(() => {
+      const s = useVoiceAlwaysOnStatusStore.getState().status;
+      expect(['connecting', 'ready', 'listening']).toContain(s);
+    });
+    const ws = FakeWebSocket.instances[0];
+    act(() => { ws._open(); });
+    await waitFor(() => {
+      // After WS opens hook eventually reaches 'ready' (or 'listening' if
+      // a server status message lands first). Either is fine for this
+      // assertion — what matters is that the global store mirrors the
+      // hook's state, not the exact label.
+      const s = useVoiceAlwaysOnStatusStore.getState().status;
+      expect(s).not.toBe('disabled');
     });
   });
 });

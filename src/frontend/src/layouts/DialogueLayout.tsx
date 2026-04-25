@@ -5,9 +5,9 @@ import { AmbientGlows } from '../components/core/AmbientGlows';
 import { FloatingToolbar } from '../components/core/FloatingToolbar';
 import { Orb } from '../components/core/Orb';
 import { ChatWindow } from '../components/chat/ChatWindow';
-import { VoiceAlwaysOnGate } from '../components/chat/VoiceAlwaysOnGate';
 import { useSystemStore } from '../stores/systemStore';
 import { useChatStore } from '../stores/chatStore';
+import { useVoiceAlwaysOnStatusStore } from '../stores/voiceAlwaysOnStatusStore';
 import { EASE_PHANTOM } from '../styles/motion';
 
 /**
@@ -20,7 +20,8 @@ export default function DialogueLayout() {
   const isTyping = useChatStore((s) => s.isTyping);
   const streaming = useChatStore((s) => s.streaming);
   const [voiceActive, setVoiceActive] = useState(false);
-  const [alwaysOnStatus, setAlwaysOnStatus] = useState<string>('disabled');
+  // Phase 11c.3 — gate is mounted at App level; read its status here.
+  const alwaysOnStatus = useVoiceAlwaysOnStatusStore((s) => s.status);
 
   const handleVoiceToggle = useCallback((active: boolean) => {
     setVoiceActive(active);
@@ -45,7 +46,6 @@ export default function DialogueLayout() {
     >
       <AmbientGlows />
       <StatusBar />
-      <VoiceAlwaysOnGate onStatusChange={setAlwaysOnStatus} />
 
       <main className="flex-1 flex min-h-0 z-10 relative">
         {/* Left — Orb + context whisper */}

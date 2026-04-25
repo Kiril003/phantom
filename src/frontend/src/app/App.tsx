@@ -5,6 +5,7 @@ import { Providers } from './providers';
 import { StateTransitionController } from './StateTransitionController';
 import { ViewportFrame } from './ViewportFrame';
 import { Overlays } from '../components/core/Overlays';
+import { VoiceAlwaysOnGate } from '../components/chat/VoiceAlwaysOnGate';
 import { useSystemStore } from '../stores/systemStore';
 import { SystemState } from '@shared/types';
 
@@ -81,6 +82,21 @@ function PhantomLoader() {
   );
 }
 
+/* ─── App-level Always-On gate ───────────────────────────────────────────────
+ *
+ * Phase 11c.3 — `VoiceAlwaysOnGate` used to live inside `DialogueLayout`, so
+ * the always-on listener only ran while the user happened to be in the chat.
+ * The whole point of always-on is to listen *always*, regardless of state, so
+ * we mount the gate here at App-level the moment the operator authenticates.
+ * Any layout that wants to show the gate's status reads it from
+ * `voiceAlwaysOnStatusStore`.
+ */
+function GlobalAlwaysOnGate() {
+  const authenticated = useSystemStore((s) => s.authenticated);
+  if (!authenticated) return null;
+  return <VoiceAlwaysOnGate />;
+}
+
 /* ─── App Root ────────────────────────────────────────────────────────────── */
 
 export function App() {
@@ -88,6 +104,7 @@ export function App() {
     <Providers>
       <BrowserRouter>
         <StateTransitionController />
+        <GlobalAlwaysOnGate />
         <ViewportFrame>
           <div
             className="w-[1024px] h-[600px] overflow-hidden relative"

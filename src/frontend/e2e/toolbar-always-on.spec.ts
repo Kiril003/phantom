@@ -94,6 +94,49 @@ async function pinLogin(page: Page): Promise<void> {
   await page.waitForLoadState('domcontentloaded');
 }
 
+/**
+ * Phase 11c.3 — `VoiceAlwaysOnGate` is now mounted globally, so clicking
+ * the Always-On button immediately tries to open `/ws/voice` and stream
+ * audio frames. The backend always-on STT/wake-word pipeline blocks the
+ * event loop while ingesting frames (a separate, pre-existing bug from
+ * Phase 11c.1 — see docs/phase-11c.3/README.md "Known issues"). Until
+ * that backend bug is fixed (Phase 11c.4), this e2e stubs the WS
+ * constructor for `/ws/voice` URLs so the click only exercises the
+ * frontend toggle path — which is what this test cares about anyway.
+ * The voice-always-on.spec.ts uses pure API/HTTP and is unaffected.
+ */
+async function stubVoiceWS(page: Page): Promise<void> {
+  await page.addInitScript(() => {
+    const Original = window.WebSocket;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const Stub: any = function (url: string) {
+      if (typeof url === 'string' && url.includes('/ws/voice')) {
+        return {
+          binaryType: 'arraybuffer',
+          readyState: 0,
+          url,
+          send: () => {},
+          close: () => {},
+          addEventListener: () => {},
+          removeEventListener: () => {},
+          dispatchEvent: () => false,
+          onopen: null,
+          onmessage: null,
+          onerror: null,
+          onclose: null,
+        };
+      }
+      return new Original(url);
+    };
+    Stub.OPEN = Original.OPEN;
+    Stub.CLOSED = Original.CLOSED;
+    Stub.CONNECTING = Original.CONNECTING;
+    Stub.CLOSING = Original.CLOSING;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).WebSocket = Stub;
+  });
+}
+
 test.describe('Toolbar Always-On toggle (phase 11c.2)', () => {
   test('clicking the Always-On button flips voice_always_on_enabled in the backend', async ({
     page,
@@ -103,6 +146,7 @@ test.describe('Toolbar Always-On toggle (phase 11c.2)', () => {
     const original = await readValue(request, token);
 
     try {
+      await stubVoiceWS(page);
       await pinLogin(page);
 
       const button = page.getByLabel('Always-On', { exact: true });

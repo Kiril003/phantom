@@ -61,6 +61,13 @@ const STATE_CONFIGS: Record<SystemState, AvatarConfig> = {
     glowIntensity: 0.3,
     ringRotation: false,
   },
+  [SystemState.OPERATOR]: {
+    coreSize: 48,
+    ringCount: 2,
+    pulseSpeed: 2.5,
+    glowIntensity: 0.5,
+    ringRotation: true,
+  },
 };
 
 interface AvatarProps {

@@ -179,6 +179,7 @@ function resetStores() {
       heatmap: false,
       intel: true,
       recon: false,
+      facts: true,
     },
     selection: null,
     loading: false,

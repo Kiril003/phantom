@@ -27,7 +27,13 @@ from voice.tts_engine import (
 logger = logging.getLogger(__name__)
 
 
-_lock = threading.Lock()
+# Phase 11c.4 — RLock (reentrant) instead of Lock. `get_vosk_model()` is
+# called while still holding `_lock` from `get_stt_provider()` (or vice
+# versa) on the same thread; with a non-reentrant Lock the second
+# acquire deadlocks indefinitely, freezing the worker building the
+# always-on orchestrator and (transitively, before the to_thread fixes)
+# the entire event loop.
+_lock = threading.RLock()
 _stt: Optional[STTProvider] = None
 _tts: Optional[TTSProvider] = None
 

@@ -1,7 +1,6 @@
 import { defineConfig, devices } from '@playwright/test';
 
 const PORT = 4173;
-const BACKEND = process.env.PHANTOM_BACKEND ?? 'http://127.0.0.1:8000';
 
 export default defineConfig({
   testDir: './e2e',
@@ -18,9 +17,6 @@ export default defineConfig({
     trace: 'retain-on-failure',
     video: 'retain-on-failure',
     screenshot: 'only-on-failure',
-    extraHTTPHeaders: {
-      'x-phantom-backend': BACKEND,
-    },
     launchOptions: {
       args: [
         '--use-fake-ui-for-media-stream',

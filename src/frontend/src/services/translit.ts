@@ -105,11 +105,11 @@ function transliterateCharLevel(text: string): string {
   let prevIsLetter = false;
   for (const ch of text) {
     const lower = ch.toLowerCase();
-    const atWordStart = !prevIsLetter;
+    const atWordStart: boolean = !prevIsLetter;
     const mapping = UK_CHAR_MAP[lower];
     if (mapping !== undefined) {
       const [startForm, restForm] = mapping;
-      let latin = atWordStart ? startForm : restForm;
+      let latin: string = atWordStart ? startForm : restForm;
       if (ch !== lower && latin) {
         latin = latin.slice(0, 1).toUpperCase() + latin.slice(1);
       }

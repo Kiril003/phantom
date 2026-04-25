@@ -1,6 +1,6 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { Minus, Square, Maximize2, X, Minimize2 } from 'lucide-react';
+import { Minus, Square, X, Minimize2 } from 'lucide-react';
 import { useUIStore, type OverlayName } from '../../stores/uiStore';
 import { EASE_PHANTOM } from '../../styles/motion';
 

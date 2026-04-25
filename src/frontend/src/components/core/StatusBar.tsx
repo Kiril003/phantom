@@ -19,6 +19,7 @@ import {
   Sparkles,
   UserCheck,
   HelpCircle,
+  type LucideIcon,
 } from 'lucide-react';
 import { OledEyePreview } from './OledEyePreview';
 
@@ -547,10 +548,7 @@ function ConnectivityDot({
   Icon,
 }: {
   ok: boolean;
-  Icon: {
-    on: React.ComponentType<{ size?: number; strokeWidth?: number; style?: React.CSSProperties }>;
-    off: React.ComponentType<{ size?: number; strokeWidth?: number; style?: React.CSSProperties }>;
-  };
+  Icon: { on: LucideIcon; off: LucideIcon };
 }) {
   const Component = ok ? Icon.on : Icon.off;
   return (

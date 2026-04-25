@@ -15,6 +15,7 @@ Persistence contract:
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 from datetime import datetime, timezone
 from typing import Any, Iterable, Literal, get_args, get_origin
@@ -455,7 +456,14 @@ async def set_setting(
             detail=f"Failed to persist {key}: {exc}",
         ) from exc
 
-    _apply_runtime_side_effect(key, after)
+    # Phase 11c.4 — _apply_runtime_side_effect for voice_* keys calls
+    # voice.pipeline.reset_providers() which acquires a threading.Lock.
+    # That same lock is held by voice.pipeline.get_vosk_model() during a
+    # ~10s+ Vosk model load on first /ws/voice connect. Running side_effect
+    # synchronously on the event loop would block the entire loop (and
+    # /health) waiting for that lock. Off-load to a worker thread so only
+    # the worker waits while the event loop stays responsive.
+    await asyncio.to_thread(_apply_runtime_side_effect, key, after)
 
     # Phase 9.3a (AD-02) — re-sync the singleton from DB so any row changed
     # out-of-band (sibling process, CLI, migration) also lands, then notify

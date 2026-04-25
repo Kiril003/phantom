@@ -228,7 +228,11 @@ async def voice_ws_handler(ws: WebSocket, token: Optional[str] = None) -> None:
     )
 
     try:
-        orch = _build_orchestrator()
+        # Phase 11c.4 — _build_orchestrator() loads SileroVAD ONNX
+        # (ort.InferenceSession is synchronous, ~1-3s per connection on
+        # Radxa ARM64) and may load the 300MB Vosk model on first call.
+        # Off-load both to keep the event loop responsive during connect.
+        orch = await asyncio.to_thread(_build_orchestrator)
     except RuntimeError as exc:
         logger.warning("voice WS unavailable: %s", exc)
         await session.send(

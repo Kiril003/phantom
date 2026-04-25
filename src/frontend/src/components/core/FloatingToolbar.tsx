@@ -10,6 +10,7 @@ import {
   MoreHorizontal,
   Terminal,
   Radar,
+  Radio,
   Shield,
   Grid3x3,
   Camera,
@@ -20,6 +21,8 @@ import {
 import { useSystemStore } from '../../stores/systemStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useUIStore, type OverlayName } from '../../stores/uiStore';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { settingsApi } from '../../services/api';
 import { SystemState } from '@shared/types';
 import { EASE_PHANTOM } from '../../styles/motion';
 
@@ -65,6 +68,11 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
   const moreMenuOpen = useUIStore((s) => s.moreMenuOpen);
   const setMoreMenuOpen = useUIStore((s) => s.setMoreMenuOpen);
   const setPendingVoiceActivation = useUIStore((s) => s.setPendingVoiceActivation);
+
+  const alwaysOnEnabled = useSettingsStore(
+    (s) => Boolean(s.values.voice_always_on_enabled ?? false),
+  );
+  const applyRemote = useSettingsStore((s) => s.applyRemote);
 
   const isOverlayOpen = (name: OverlayName) => windows[name].open && !windows[name].minimized;
   const isRoot = user?.role === 'ROOT';
@@ -123,6 +131,19 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
     if (state !== SystemState.DIALOGUE) goDialogue();
   };
 
+  /** Phase 11c.2 — toggle voice_always_on_enabled without changing route or
+   *  state. Optimistic local flip + persist via settingsApi.set; on failure
+   *  we revert so the button reflects backend truth. The VoiceAlwaysOnGate
+   *  reacts to settingsStore.values.voice_always_on_enabled changes and
+   *  starts/stops the AudioWorklet + WS independently. */
+  const toggleAlwaysOn = () => {
+    const next = !alwaysOnEnabled;
+    applyRemote('voice_always_on_enabled', next);
+    void settingsApi
+      .set('voice_always_on_enabled', next)
+      .catch(() => applyRemote('voice_always_on_enabled', !next));
+  };
+
   const primary: ToolbarAction[] = [
     {
       id: 'home',
@@ -152,6 +173,16 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
       label: 'Voice',
       active: state === SystemState.DIALOGUE,
       onClick: openVoice,
+    },
+    {
+      id: 'always-on',
+      icon: <Radio size={18} strokeWidth={1.75} />,
+      label: 'Always-On',
+      tooltip: alwaysOnEnabled
+        ? 'Always-on listening: ON (tap to disable)'
+        : 'Always-on listening: OFF (tap to enable)',
+      active: alwaysOnEnabled,
+      onClick: toggleAlwaysOn,
     },
     {
       id: 'settings',

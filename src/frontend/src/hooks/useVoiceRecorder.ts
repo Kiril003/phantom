@@ -31,6 +31,14 @@ interface Options {
 
 const CONSUMER_ID = 'tap-to-talk';
 
+/**
+ * Phase 11c.1.1: hard cap on `getUserMedia` so a hung browser permission
+ * prompt or a busy mic device cannot leave the recorder stuck in
+ * 'requesting' indefinitely (which makes the sphere read "Listening" with
+ * no path back to idle).
+ */
+export const MIC_ACQUIRE_TIMEOUT_MS = 6000;
+
 export function useVoiceRecorder(options: Options = {}) {
   const { mimeType = 'audio/webm;codecs=opus', amplitudeIntervalMs = 33 } = options;
 
@@ -120,8 +128,18 @@ export function useVoiceRecorder(options: Options = {}) {
     // Mark this turn as owned by tap-to-talk BEFORE the mic resolves so
     // a racing wake from always-on is discarded.
     setInputMode('tap');
+    let timeoutId: ReturnType<typeof setTimeout> | null = null;
     try {
-      const stream = await micAcquire(CONSUMER_ID);
+      const stream = await Promise.race([
+        micAcquire(CONSUMER_ID),
+        new Promise<never>((_, reject) => {
+          timeoutId = setTimeout(
+            () => reject(new Error('mic_timeout')),
+            MIC_ACQUIRE_TIMEOUT_MS,
+          );
+        }),
+      ]);
+      if (timeoutId !== null) clearTimeout(timeoutId);
       hasStreamRef.current = true;
 
       // Feed the mic into an AnalyserNode for amplitude pulse.
@@ -168,13 +186,27 @@ export function useVoiceRecorder(options: Options = {}) {
       lastAmpTickRef.current = 0;
       rafRef.current = requestAnimationFrame(tickAmplitude);
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Recorder failed to start';
+      if (timeoutId !== null) clearTimeout(timeoutId);
+      const isTimeout = err instanceof Error && err.message === 'mic_timeout';
+      const msg = isTimeout
+        ? 'Mic permission timed out — check browser settings'
+        : err instanceof Error
+          ? err.message
+          : 'Recorder failed to start';
       setError(msg);
       setState('error');
+      // The shared mic stream may have registered our consumer before the
+      // timeout fired. Drop the reference so a future acquire isn't blocked
+      // by a stale refcount.
+      try {
+        micRelease(CONSUMER_ID);
+      } catch {
+        /* ignore */
+      }
       cleanup();
       throw err;
     }
-  }, [state, mimeType, cleanup, tickAmplitude, micAcquire, setInputMode]);
+  }, [state, mimeType, cleanup, tickAmplitude, micAcquire, micRelease, setInputMode]);
 
   /** Stop and resolve with the captured Blob (or null on empty capture). */
   const stop = useCallback((): Promise<Blob | null> => {

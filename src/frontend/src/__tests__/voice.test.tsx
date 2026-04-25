@@ -251,4 +251,55 @@ describe('useVoiceRecorder', () => {
     });
     expect(result.current.state).toBe('idle');
   });
+
+  it('phase 11c.1.1: transitions to error if mic acquire hangs past 6s', async () => {
+    // Never-resolving getUserMedia simulates a stalled permission prompt
+    // or a busy mic device. Without the timeout the recorder would sit in
+    // 'requesting' forever and the sphere would read "Listening" with no
+    // path back to idle.
+    Object.defineProperty(navigator, 'mediaDevices', {
+      value: {
+        getUserMedia: vi.fn(() => new Promise<MediaStream>(() => { /* never */ })),
+      },
+      configurable: true,
+    });
+    vi.useFakeTimers();
+    try {
+      const { result } = renderHook(() => useVoiceRecorder());
+      let startError: unknown = null;
+      await act(async () => {
+        const p = result.current.start().catch((err) => {
+          startError = err;
+        });
+        await vi.advanceTimersByTimeAsync(6500);
+        await p;
+      });
+      expect(result.current.state).toBe('error');
+      expect(result.current.error).toMatch(/timed out/i);
+      expect(startError).toBeInstanceOf(Error);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('phase 11c.1.1: transitions to error when mic acquire rejects', async () => {
+    // NotAllowedError-style rejection — verify we surface the rejection
+    // message and end up in 'error' (not stuck in 'requesting').
+    Object.defineProperty(navigator, 'mediaDevices', {
+      value: {
+        getUserMedia: vi.fn().mockRejectedValue(new Error('NotAllowedError')),
+      },
+      configurable: true,
+    });
+    const { result } = renderHook(() => useVoiceRecorder());
+    await act(async () => {
+      try {
+        await result.current.start();
+      } catch {
+        /* expected */
+      }
+    });
+    expect(result.current.state).toBe('error');
+    expect(result.current.error).toMatch(/NotAllowedError/);
+  });
 });

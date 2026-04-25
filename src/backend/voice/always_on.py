@@ -110,7 +110,10 @@ class AlwaysOnOrchestrator:
             return
 
         try:
-            vad_events = self._vad.process(pcm_bytes)
+            # Phase 11c.4 — Silero ONNX inference is CPU-bound (5-15ms per
+            # 30ms frame); running it on the event loop blocks all HTTP
+            # handlers including /health. Off-load to the default thread pool.
+            vad_events = await asyncio.to_thread(self._vad.process, pcm_bytes)
         except ValueError as exc:
             logger.warning("orchestrator: VAD rejected frame: %s", exc)
             await self._emit_error(f"vad: {exc}")
@@ -125,7 +128,9 @@ class AlwaysOnOrchestrator:
             # Keep the wake spotter informed; ignore its return value —
             # VAD owns the final decision.
             try:
-                self._wake.process(pcm_bytes)
+                # Phase 11c.4 — Vosk AcceptWaveform is synchronous C++,
+                # ~10-30ms per frame; same to_thread treatment as VAD.
+                await asyncio.to_thread(self._wake.process, pcm_bytes)
             except ValueError as exc:
                 logger.warning("orchestrator: wake spotter rejected frame: %s", exc)
             self._utterance_pcm.extend(pcm_bytes)
@@ -172,13 +177,16 @@ class AlwaysOnOrchestrator:
 
     async def _enter_speech_detected(self) -> None:
         self._state = STATE_SPEECH_DETECTED
-        self._wake.reset()
+        # Phase 11c.4 — KaldiRecognizer construction is C++ allocation
+        # (~5-20ms); off-load to keep the event loop free.
+        await asyncio.to_thread(self._wake.reset)
         self._utterance_pcm = bytearray()
         await self._send({"type": "speech_start"})
 
     async def _handle_utterance_end(self) -> None:
         await self._send({"type": "speech_end"})
-        wake_result = self._wake.finalise()
+        # Phase 11c.4 — Vosk FinalResult + recognizer rebuild (~20-50ms).
+        wake_result = await asyncio.to_thread(self._wake.finalise)
 
         if wake_result is None or not wake_result.matched:
             # No wake word — return to IDLE, discard buffer.

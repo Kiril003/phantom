@@ -34,6 +34,11 @@ src/frontend/tailwind.config.js
 src/frontend/vite.config.d.ts
 src/frontend/vite.config.js
 
+# Playwright e2e artifacts
+src/frontend/playwright-report/
+src/frontend/test-results/
+src/frontend/.playwright/
+
 # ChromaDB per-collection data dirs (UUID-named); chroma.sqlite3 itself
 # stays tracked because it carries the schema + collection metadata.
 src/backend/chroma_data/*/

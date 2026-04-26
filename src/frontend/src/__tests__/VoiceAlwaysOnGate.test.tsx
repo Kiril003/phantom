@@ -1,9 +1,10 @@
 /**
- * Phase 11b.1 — VoiceAlwaysOnGate reactivity test.
+ * Phase 12.0 — VoiceAlwaysOnGate reactivity test.
  *
- * The gate reads `values.voice_always_on_enabled` from settingsStore
- * and drives the `enabled` prop of useVoiceAlwaysOn. Flipping the
- * setting MUST start/stop the WS without the user refreshing the app.
+ * The gate reads ``values.voice_mode`` from settingsStore (replacing the
+ * legacy voice_always_on_enabled boolean). Mode "off" keeps the hook
+ * inert; "continuous" or "wake_word" flips ``enabled`` to true so the
+ * underlying useVoiceAlwaysOn opens its WS without a refresh.
  */
 import { describe, expect, it, beforeEach, vi } from 'vitest';
 import { act, render, waitFor } from '@testing-library/react';
@@ -11,6 +12,7 @@ import { VoiceAlwaysOnGate } from '../components/chat/VoiceAlwaysOnGate';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useVoiceAlwaysOnStatusStore } from '../stores/voiceAlwaysOnStatusStore';
 import { __resetMicStream } from '../hooks/useMicStream';
+import { __resetVoiceAlwaysOnWS } from '../hooks/useVoiceAlwaysOn';
 import { useInputMode } from '../stores/inputModeStore';
 
 // ---- WebSocket fake mirroring the always-on test harness --------------------
@@ -54,6 +56,7 @@ class FakeWebSocket {
 
 beforeEach(() => {
   __resetMicStream();
+  __resetVoiceAlwaysOnWS();
   useInputMode.setState({ mode: 'idle' });
   FakeWebSocket.instances = [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -81,13 +84,8 @@ beforeEach(() => {
   useSettingsStore.setState({ values: {}, loaded: true });
 });
 
-describe('VoiceAlwaysOnGate — Phase 11c.5 freeze', () => {
-  // Pre-11c.5 the gate reacted to settingsStore.values.voice_always_on_enabled
-  // and started/stopped a WS. After Phase 11c.5 the feature is disabled at
-  // the gate itself (FEATURE_DISABLED constant) so no WS opens regardless
-  // of what the setting says. See docs/phase-11c.5/known-issues.md.
-
-  it('does NOT open a WS when voice_always_on_enabled is undefined / false', async () => {
+describe('VoiceAlwaysOnGate — Phase 12.0 voice_mode reactivity', () => {
+  it('does NOT open a WS when voice_mode is undefined (default off)', async () => {
     render(<VoiceAlwaysOnGate />);
     await act(async () => {
       await Promise.resolve();
@@ -95,48 +93,67 @@ describe('VoiceAlwaysOnGate — Phase 11c.5 freeze', () => {
     expect(FakeWebSocket.instances.length).toBe(0);
   });
 
-  it('does NOT open a WS even when the setting flips to true (freeze)', async () => {
+  it('does NOT open a WS when voice_mode === "off"', async () => {
     render(<VoiceAlwaysOnGate />);
     act(() => {
       useSettingsStore.setState({
-        values: { voice_always_on_enabled: true },
+        values: { voice_mode: 'off' },
       });
     });
-    // Give effects a tick to run.
     await act(async () => {
       await Promise.resolve();
       await Promise.resolve();
     });
-    // Phase 11c.5 — FEATURE_DISABLED forces `enabled` to false at the gate
-    // so the hook stays idle. If this assertion ever flips, that means
-    // FEATURE_DISABLED was unfrozen — make sure the bugs in
-    // docs/phase-11c.5/known-issues.md are addressed first.
     expect(FakeWebSocket.instances.length).toBe(0);
   });
 
-  it('does NOT open a WS when the setting toggles true → false (freeze)', async () => {
+  it('opens a WS when voice_mode flips to "continuous"', async () => {
     render(<VoiceAlwaysOnGate />);
     act(() => {
       useSettingsStore.setState({
-        values: { voice_always_on_enabled: true },
+        values: { voice_mode: 'continuous' },
       });
     });
-    await act(async () => {
-      await Promise.resolve();
+    await waitFor(() => {
+      expect(FakeWebSocket.instances.length).toBe(1);
     });
+  });
+
+  it('opens a WS when voice_mode flips to "wake_word"', async () => {
+    render(<VoiceAlwaysOnGate />);
     act(() => {
       useSettingsStore.setState({
-        values: { voice_always_on_enabled: false },
+        values: { voice_mode: 'wake_word', voice_wake_phrase: 'фантом' },
       });
     });
-    await act(async () => {
-      await Promise.resolve();
+    await waitFor(() => {
+      expect(FakeWebSocket.instances.length).toBe(1);
     });
-    expect(FakeWebSocket.instances.length).toBe(0);
+  });
+
+  it('closes the WS when voice_mode flips back to "off"', async () => {
+    render(<VoiceAlwaysOnGate />);
+    act(() => {
+      useSettingsStore.setState({
+        values: { voice_mode: 'continuous' },
+      });
+    });
+    await waitFor(() => {
+      expect(FakeWebSocket.instances.length).toBe(1);
+    });
+    const ws = FakeWebSocket.instances[0];
+    act(() => {
+      useSettingsStore.setState({
+        values: { voice_mode: 'off' },
+      });
+    });
+    await waitFor(() => {
+      expect(ws.readyState).toBe(FakeWebSocket.CLOSED);
+    });
   });
 });
 
-describe('VoiceAlwaysOnGate — phase 11c.3 global status store (post 11c.5 freeze)', () => {
+describe('VoiceAlwaysOnGate — global status store reflects voice_mode', () => {
   beforeEach(() => {
     useVoiceAlwaysOnStatusStore.setState({ status: 'disabled' });
   });
@@ -148,20 +165,15 @@ describe('VoiceAlwaysOnGate — phase 11c.3 global status store (post 11c.5 free
     });
   });
 
-  it('keeps the global status at "disabled" even if the setting flips to true (freeze)', async () => {
+  it('moves out of "disabled" when voice_mode becomes "continuous"', async () => {
     render(<VoiceAlwaysOnGate />);
     act(() => {
       useSettingsStore.setState({
-        values: { voice_always_on_enabled: true },
+        values: { voice_mode: 'continuous' },
       });
     });
-    // Phase 11c.5 — FEATURE_DISABLED keeps the underlying hook idle, so
-    // the global status store must stay at 'disabled'. If this fails, the
-    // freeze flag was unintentionally lifted somewhere.
-    await act(async () => {
-      await Promise.resolve();
-      await Promise.resolve();
+    await waitFor(() => {
+      expect(useVoiceAlwaysOnStatusStore.getState().status).not.toBe('disabled');
     });
-    expect(useVoiceAlwaysOnStatusStore.getState().status).toBe('disabled');
   });
 });

@@ -8,6 +8,7 @@ import { ChatWindow } from '../components/chat/ChatWindow';
 import { useSystemStore } from '../stores/systemStore';
 import { useChatStore } from '../stores/chatStore';
 import { useVoiceAlwaysOnStatusStore } from '../stores/voiceAlwaysOnStatusStore';
+import { useSettingsStore } from '../stores/settingsStore';
 import { EASE_PHANTOM } from '../styles/motion';
 
 /**
@@ -22,6 +23,10 @@ export default function DialogueLayout() {
   const [voiceActive, setVoiceActive] = useState(false);
   // Phase 11c.3 — gate is mounted at App level; read its status here.
   const alwaysOnStatus = useVoiceAlwaysOnStatusStore((s) => s.status);
+  // Phase 12.0 — sphere label depends on the current voice mode.
+  const voiceMode = useSettingsStore(
+    (s) => (s.values.voice_mode as 'off' | 'continuous' | 'wake_word' | undefined) ?? 'off',
+  );
 
   const handleVoiceToggle = useCallback((active: boolean) => {
     setVoiceActive(active);
@@ -71,16 +76,22 @@ export default function DialogueLayout() {
                 }}
               >
                 {voiceActive
-                  ? 'Listening'
+                  ? 'Recording'
                   : alwaysOnStatus === 'armed'
                     ? 'Armed'
                     : alwaysOnStatus === 'cooldown'
                       ? 'Cooldown'
                       : pulsing
                         ? 'Thinking'
-                        : alwaysOnActive
-                          ? 'Awake'
-                          : 'Ready'}
+                        : alwaysOnStatus === 'listening'
+                          ? 'Listening'
+                          : alwaysOnActive
+                            ? voiceMode === 'wake_word'
+                              ? 'Awake'
+                              : voiceMode === 'continuous'
+                                ? 'Listening'
+                                : 'Ready'
+                            : 'Ready'}
               </p>
               <p
                 className="italic mt-1"

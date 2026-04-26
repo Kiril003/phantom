@@ -1,14 +1,14 @@
 /**
- * Phase 11c.2 — FloatingToolbar Always-On toggle.
+ * Phase 12.0 — FloatingToolbar voice-mode cycle.
  *
- * The toolbar grew a new primary button "Always-On" that:
- *  - reads `voice_always_on_enabled` from settingsStore
- *  - on click, optimistically flips the value in the store and PUTs the
- *    new value to the backend via settingsApi.set
- *  - reverts the optimistic flip if the PUT rejects
+ * The toolbar's voice-mode button cycles voice_mode through
+ *   off → continuous → wake_word → off
+ * Each click optimistically flips the local store and PUTs the new value
+ * via settingsApi.set; on rejection the optimistic flip is reverted so the
+ * button reflects backend truth.
  *
- * The Voice button is intentionally NOT involved — it remains a
- * tap-to-talk shortcut that routes to DIALOGUE.
+ * The Voice button (push-to-talk shortcut) is unrelated — it routes to
+ * DIALOGUE and is unaffected by this cycle.
  */
 import { describe, expect, it, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen, fireEvent, act } from '@testing-library/react';
@@ -41,23 +41,17 @@ function renderToolbar() {
   );
 }
 
-describe('FloatingToolbar — Always-On button (Phase 11c.5 freeze)', () => {
-  // Phase 11c.2 wired the Always-On toolbar button to flip
-  // voice_always_on_enabled and PUT to the backend. Phase 11c.5 froze the
-  // feature pending docs/phase-11c.5/known-issues.md fixes — the button is
-  // still visible (so users see the affordance returning in Phase 12) but
-  // disabled. Click is a no-op; aria-pressed is always false.
-
+describe('FloatingToolbar — Voice mode cycle (Phase 12.0)', () => {
   beforeEach(() => {
     setMock.mockReset();
     setMock.mockResolvedValue({
-      key: 'voice_always_on_enabled',
-      value: true,
+      key: 'voice_mode',
+      value: 'continuous',
       requires_restart: false,
     });
     useSettingsStore.setState({
       categories: [],
-      values: { voice_always_on_enabled: false },
+      values: { voice_mode: 'off' },
       dirty: new Set(),
       loaded: true,
     });
@@ -81,43 +75,93 @@ describe('FloatingToolbar — Always-On button (Phase 11c.5 freeze)', () => {
     });
   });
 
-  it('renders the Always-On button in the primary toolbar (disabled)', () => {
+  it('renders the voice-mode button as enabled, off-state by default', () => {
     renderToolbar();
-    const btn = screen.getByLabelText('Always-On') as HTMLButtonElement;
+    const btn = screen.getByLabelText('Voice mode') as HTMLButtonElement;
     expect(btn).toBeTruthy();
-    expect(btn.disabled).toBe(true);
+    expect(btn.disabled).toBe(false);
+    // off-state → not active
     expect(btn.getAttribute('aria-pressed')).toBe('false');
   });
 
-  it('shows the freeze tooltip', () => {
+  it('cycles off → continuous on first click', async () => {
     renderToolbar();
-    const btn = screen.getByLabelText('Always-On');
-    expect(btn.getAttribute('title') ?? '').toContain('Phase 11c.5');
-  });
-
-  it('does NOT call the settings API when clicked (freeze)', async () => {
-    renderToolbar();
-    const btn = screen.getByLabelText('Always-On');
+    const btn = screen.getByLabelText('Voice mode');
     await act(async () => {
       fireEvent.click(btn);
     });
-    expect(setMock).not.toHaveBeenCalled();
-    expect(useSettingsStore.getState().values.voice_always_on_enabled).toBe(false);
+    expect(setMock).toHaveBeenCalledWith('voice_mode', 'continuous');
+    expect(useSettingsStore.getState().values.voice_mode).toBe('continuous');
   });
 
-  it('does NOT show "active" styling even if the setting is true under the hood', () => {
+  it('cycles continuous → wake_word on next click', async () => {
     useSettingsStore.setState({
       categories: [],
-      values: { voice_always_on_enabled: true },
+      values: { voice_mode: 'continuous' },
       dirty: new Set(),
       loaded: true,
     });
     renderToolbar();
-    const btn = screen.getByLabelText('Always-On');
-    // Phase 11c.5 — the button reflects the freeze, not the setting. If
-    // a stale row in the DB has true (e.g. from an older build), the
-    // toolbar must still show off so the user knows the feature is not
-    // running.
-    expect(btn.getAttribute('aria-pressed')).toBe('false');
+    const btn = screen.getByLabelText('Voice mode');
+    await act(async () => {
+      fireEvent.click(btn);
+    });
+    expect(setMock).toHaveBeenCalledWith('voice_mode', 'wake_word');
+    expect(useSettingsStore.getState().values.voice_mode).toBe('wake_word');
+  });
+
+  it('cycles wake_word → off on third click', async () => {
+    useSettingsStore.setState({
+      categories: [],
+      values: { voice_mode: 'wake_word' },
+      dirty: new Set(),
+      loaded: true,
+    });
+    renderToolbar();
+    const btn = screen.getByLabelText('Voice mode');
+    await act(async () => {
+      fireEvent.click(btn);
+    });
+    expect(setMock).toHaveBeenCalledWith('voice_mode', 'off');
+    expect(useSettingsStore.getState().values.voice_mode).toBe('off');
+  });
+
+  it('shows aria-pressed=true when mode is continuous', () => {
+    useSettingsStore.setState({
+      categories: [],
+      values: { voice_mode: 'continuous' },
+      dirty: new Set(),
+      loaded: true,
+    });
+    renderToolbar();
+    const btn = screen.getByLabelText('Voice mode');
+    expect(btn.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('shows aria-pressed=true when mode is wake_word', () => {
+    useSettingsStore.setState({
+      categories: [],
+      values: { voice_mode: 'wake_word' },
+      dirty: new Set(),
+      loaded: true,
+    });
+    renderToolbar();
+    const btn = screen.getByLabelText('Voice mode');
+    expect(btn.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('reverts the optimistic flip when the PUT rejects', async () => {
+    setMock.mockReset();
+    setMock.mockRejectedValue(new Error('500'));
+    renderToolbar();
+    const btn = screen.getByLabelText('Voice mode');
+    await act(async () => {
+      fireEvent.click(btn);
+      // give the rejection a tick to land
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    // Optimistic flip set continuous; rejection reverts to off.
+    expect(useSettingsStore.getState().values.voice_mode).toBe('off');
   });
 });

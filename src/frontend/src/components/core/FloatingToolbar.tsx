@@ -69,8 +69,8 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
   const setMoreMenuOpen = useUIStore((s) => s.setMoreMenuOpen);
   const setPendingVoiceActivation = useUIStore((s) => s.setPendingVoiceActivation);
 
-  const alwaysOnEnabled = useSettingsStore(
-    (s) => Boolean(s.values.voice_always_on_enabled ?? false),
+  const voiceMode = useSettingsStore(
+    (s) => (s.values.voice_mode as 'off' | 'continuous' | 'wake_word' | undefined) ?? 'off',
   );
   const applyRemote = useSettingsStore((s) => s.applyRemote);
 
@@ -131,28 +131,32 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
     if (state !== SystemState.DIALOGUE) goDialogue();
   };
 
-  /** Phase 11c.2 — toggle voice_always_on_enabled without changing route or
-   *  state. Optimistic local flip + persist via settingsApi.set; on failure
+  /** Phase 12.0 — cycle voice_mode: off → continuous → wake_word → off.
+   *  Optimistic local flip + persist via settingsApi.set; on failure
    *  we revert so the button reflects backend truth. The VoiceAlwaysOnGate
-   *  reacts to settingsStore.values.voice_always_on_enabled changes and
-   *  starts/stops the AudioWorklet + WS independently.
-   *
-   *  Phase 11c.5 — feature is frozen pending a future Phase 12; the toolbar
-   *  button is rendered disabled so toggleAlwaysOn never runs. Kept here
-   *  (instead of deleted) so re-enabling in Phase 12 is a single-line
-   *  change to ALWAYS_ON_DISABLED below. */
-  const toggleAlwaysOn = () => {
-    const next = !alwaysOnEnabled;
-    applyRemote('voice_always_on_enabled', next);
+   *  reacts to settingsStore.values.voice_mode changes and starts/stops
+   *  the AudioWorklet + WS independently. */
+  const cycleVoiceMode = () => {
+    const next: 'off' | 'continuous' | 'wake_word' =
+      voiceMode === 'off'
+        ? 'continuous'
+        : voiceMode === 'continuous'
+          ? 'wake_word'
+          : 'off';
+    const previous = voiceMode;
+    applyRemote('voice_mode', next);
     void settingsApi
-      .set('voice_always_on_enabled', next)
-      .catch(() => applyRemote('voice_always_on_enabled', !next));
+      .set('voice_mode', next)
+      .catch(() => applyRemote('voice_mode', previous));
   };
 
-  // Phase 11c.5 — single point of truth for the freeze. Set to false in a
-  // future Phase 12 once the bugs in docs/phase-11c.5/known-issues.md are
-  // addressed.
-  const ALWAYS_ON_DISABLED = true;
+  const voiceModeActive = voiceMode === 'continuous' || voiceMode === 'wake_word';
+  const voiceModeTooltip =
+    voiceMode === 'continuous'
+      ? 'Голос: постійний (тап → wake-фраза)'
+      : voiceMode === 'wake_word'
+        ? 'Голос: wake-фраза (тап → вимкнути)'
+        : 'Голос: вимкнено (тап → постійний)';
 
   const primary: ToolbarAction[] = [
     {
@@ -187,15 +191,10 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
     {
       id: 'always-on',
       icon: <Radio size={18} strokeWidth={1.75} />,
-      label: 'Always-On',
-      tooltip: ALWAYS_ON_DISABLED
-        ? 'Always-on голос — у розробці (Phase 11c.5)'
-        : alwaysOnEnabled
-          ? 'Always-on listening: ON (tap to disable)'
-          : 'Always-on listening: OFF (tap to enable)',
-      active: ALWAYS_ON_DISABLED ? false : alwaysOnEnabled,
-      disabled: ALWAYS_ON_DISABLED,
-      onClick: ALWAYS_ON_DISABLED ? undefined : toggleAlwaysOn,
+      label: 'Voice mode',
+      tooltip: voiceModeTooltip,
+      active: voiceModeActive,
+      onClick: cycleVoiceMode,
     },
     {
       id: 'settings',

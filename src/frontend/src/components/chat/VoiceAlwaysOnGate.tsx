@@ -1,21 +1,12 @@
 /**
- * VoiceAlwaysOnGate — Phase 11b.1 settings-gated always-on wrapper.
+ * VoiceAlwaysOnGate — Phase 12.0 mode-driven always-on wrapper.
  *
- * The hook `useVoiceAlwaysOn` was built in Phase 11b but never wired
- * into any component — so toggling the setting did nothing. This
- * component is the missing wiring: it reads
- * `values.voice_always_on_enabled` from the settings store and starts
- * / stops the hook accordingly, forwarding final transcripts to the
- * chat store.
+ * Reads ``values.voice_mode`` from the settings store: when it's
+ * "continuous" or "wake_word" the hook is started; "off" tears it
+ * down. Final transcripts are forwarded to the chat store.
  *
  * Renders nothing — voice feedback lives in the sphere label and chat
  * flow, not in this gate.
- *
- * Phase 11c.5 — voice always-on is frozen pending a future Phase 12
- * (see docs/phase-11c.5/known-issues.md). The Gate short-circuits
- * before any hook call so no WS opens even if upstream guards (settings
- * flag, toolbar button, backend write-lock) are bypassed somehow. To
- * re-enable in Phase 12, flip FEATURE_DISABLED to false.
  */
 import { useCallback, useEffect } from 'react';
 import { useVoiceAlwaysOn, type FinalTranscript } from '../../hooks/useVoiceAlwaysOn';
@@ -28,11 +19,6 @@ import {
   type VoiceAlwaysOnStatus,
 } from '../../stores/voiceAlwaysOnStatusStore';
 
-// Phase 11c.5 freeze flag. Belt-and-suspenders: settings is forced to
-// false on the backend AND the toolbar button is disabled, but if any
-// future code path bypasses both, the Gate itself refuses to mount.
-const FEATURE_DISABLED = true;
-
 interface Props {
   /** Optional hook callbacks (e.g., for layouts that want to render
    *  the current hook status next to the orb). Hook keeps ownership
@@ -41,15 +27,14 @@ interface Props {
 }
 
 export function VoiceAlwaysOnGate({ onStatusChange }: Props = {}) {
-  // Phase 11c.5 — even if upstream guards are bypassed, force `enabled` to
-  // false here so useVoiceAlwaysOn never opens a WS, never claims the mic
-  // and never spins up the AudioWorklet. Hook order is preserved so this
-  // stays rules-of-hooks compliant; flipping FEATURE_DISABLED to false in
-  // a future Phase 12 restores the original settings-driven behaviour.
-  const settingEnabled = useSettingsStore((s) =>
-    Boolean(s.values.voice_always_on_enabled ?? false),
+  // Phase 12.0 — voice_mode drives the gate. Anything other than "off"
+  // (continuous / wake_word) starts the hook. The store may briefly
+  // hold undefined before the first /settings load completes, in which
+  // case we treat it as "off" — fail closed.
+  const voiceMode = useSettingsStore(
+    (s) => (s.values.voice_mode as string | undefined) ?? 'off',
   );
-  const enabled = FEATURE_DISABLED ? false : settingEnabled;
+  const enabled = voiceMode === 'continuous' || voiceMode === 'wake_word';
   const sendMessage = useChatStore((s) => s.sendMessage);
   const systemState = useSystemStore((s) => s.state);
   const setInputMode = useInputMode((s) => s.setMode);

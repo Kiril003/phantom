@@ -372,15 +372,22 @@ export default function SettingsPanel() {
                     No settings yet for this category.
                   </div>
                 )}
-                {activeCategory.settings.map((def) => (
-                  <SettingRow
-                    key={def.key}
-                    def={def}
-                    value={values[def.key]}
-                    dirty={dirty.has(def.key)}
-                    onChange={(v) => setValue(def.key, v)}
-                  />
-                ))}
+                {activeCategory.settings
+                  // Phase 11c.5 — voice always-on is frozen until a future
+                  // Phase 12 (see docs/phase-11c.5/known-issues.md). Hide
+                  // the master toggle from the panel so operators don't
+                  // try to flip it. Backend rejects the write anyway, but
+                  // surfacing a control that 400s is bad UX.
+                  .filter((def) => def.key !== 'voice_always_on_enabled')
+                  .map((def) => (
+                    <SettingRow
+                      key={def.key}
+                      def={def}
+                      value={values[def.key]}
+                      dirty={dirty.has(def.key)}
+                      onChange={(v) => setValue(def.key, v)}
+                    />
+                  ))}
               </div>
             )}
           </section>

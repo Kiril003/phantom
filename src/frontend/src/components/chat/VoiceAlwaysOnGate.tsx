@@ -10,6 +10,12 @@
  *
  * Renders nothing — voice feedback lives in the sphere label and chat
  * flow, not in this gate.
+ *
+ * Phase 11c.5 — voice always-on is frozen pending a future Phase 12
+ * (see docs/phase-11c.5/known-issues.md). The Gate short-circuits
+ * before any hook call so no WS opens even if upstream guards (settings
+ * flag, toolbar button, backend write-lock) are bypassed somehow. To
+ * re-enable in Phase 12, flip FEATURE_DISABLED to false.
  */
 import { useCallback, useEffect } from 'react';
 import { useVoiceAlwaysOn, type FinalTranscript } from '../../hooks/useVoiceAlwaysOn';
@@ -22,6 +28,11 @@ import {
   type VoiceAlwaysOnStatus,
 } from '../../stores/voiceAlwaysOnStatusStore';
 
+// Phase 11c.5 freeze flag. Belt-and-suspenders: settings is forced to
+// false on the backend AND the toolbar button is disabled, but if any
+// future code path bypasses both, the Gate itself refuses to mount.
+const FEATURE_DISABLED = true;
+
 interface Props {
   /** Optional hook callbacks (e.g., for layouts that want to render
    *  the current hook status next to the orb). Hook keeps ownership
@@ -30,9 +41,15 @@ interface Props {
 }
 
 export function VoiceAlwaysOnGate({ onStatusChange }: Props = {}) {
-  const enabled = useSettingsStore((s) =>
+  // Phase 11c.5 — even if upstream guards are bypassed, force `enabled` to
+  // false here so useVoiceAlwaysOn never opens a WS, never claims the mic
+  // and never spins up the AudioWorklet. Hook order is preserved so this
+  // stays rules-of-hooks compliant; flipping FEATURE_DISABLED to false in
+  // a future Phase 12 restores the original settings-driven behaviour.
+  const settingEnabled = useSettingsStore((s) =>
     Boolean(s.values.voice_always_on_enabled ?? false),
   );
+  const enabled = FEATURE_DISABLED ? false : settingEnabled;
   const sendMessage = useChatStore((s) => s.sendMessage);
   const systemState = useSystemStore((s) => s.state);
   const setInputMode = useInputMode((s) => s.setMode);

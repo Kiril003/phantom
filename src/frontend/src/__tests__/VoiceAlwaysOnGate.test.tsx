@@ -81,7 +81,12 @@ beforeEach(() => {
   useSettingsStore.setState({ values: {}, loaded: true });
 });
 
-describe('VoiceAlwaysOnGate — settings reactivity', () => {
+describe('VoiceAlwaysOnGate — Phase 11c.5 freeze', () => {
+  // Pre-11c.5 the gate reacted to settingsStore.values.voice_always_on_enabled
+  // and started/stopped a WS. After Phase 11c.5 the feature is disabled at
+  // the gate itself (FEATURE_DISABLED constant) so no WS opens regardless
+  // of what the setting says. See docs/phase-11c.5/known-issues.md.
+
   it('does NOT open a WS when voice_always_on_enabled is undefined / false', async () => {
     render(<VoiceAlwaysOnGate />);
     await act(async () => {
@@ -90,47 +95,48 @@ describe('VoiceAlwaysOnGate — settings reactivity', () => {
     expect(FakeWebSocket.instances.length).toBe(0);
   });
 
-  it('opens a WS when the setting flips to true', async () => {
+  it('does NOT open a WS even when the setting flips to true (freeze)', async () => {
     render(<VoiceAlwaysOnGate />);
-    // Flip setting ON — the gate's hook useEffect MUST react.
     act(() => {
       useSettingsStore.setState({
         values: { voice_always_on_enabled: true },
       });
     });
-    await waitFor(() => {
-      expect(FakeWebSocket.instances.length).toBeGreaterThan(0);
+    // Give effects a tick to run.
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
     });
+    // Phase 11c.5 — FEATURE_DISABLED forces `enabled` to false at the gate
+    // so the hook stays idle. If this assertion ever flips, that means
+    // FEATURE_DISABLED was unfrozen — make sure the bugs in
+    // docs/phase-11c.5/known-issues.md are addressed first.
+    expect(FakeWebSocket.instances.length).toBe(0);
   });
 
-  it('closes the WS when the setting flips back to false', async () => {
+  it('does NOT open a WS when the setting toggles true → false (freeze)', async () => {
     render(<VoiceAlwaysOnGate />);
     act(() => {
       useSettingsStore.setState({
         values: { voice_always_on_enabled: true },
       });
     });
-    await waitFor(() => {
-      expect(FakeWebSocket.instances.length).toBeGreaterThan(0);
+    await act(async () => {
+      await Promise.resolve();
     });
-    const ws = FakeWebSocket.instances[0];
-    // Simulate server open so teardown path exercises the close branch.
-    act(() => { ws._open(); });
-
     act(() => {
       useSettingsStore.setState({
         values: { voice_always_on_enabled: false },
       });
     });
-    // After the toggle-off, the gate's hook useEffect should have
-    // called _teardown which closes the WS.
-    await waitFor(() => {
-      expect(ws.readyState).toBe(FakeWebSocket.CLOSED);
+    await act(async () => {
+      await Promise.resolve();
     });
+    expect(FakeWebSocket.instances.length).toBe(0);
   });
 });
 
-describe('VoiceAlwaysOnGate — phase 11c.3 global status store', () => {
+describe('VoiceAlwaysOnGate — phase 11c.3 global status store (post 11c.5 freeze)', () => {
   beforeEach(() => {
     useVoiceAlwaysOnStatusStore.setState({ status: 'disabled' });
   });
@@ -142,27 +148,20 @@ describe('VoiceAlwaysOnGate — phase 11c.3 global status store', () => {
     });
   });
 
-  it('updates the global status store as the underlying hook progresses', async () => {
+  it('keeps the global status at "disabled" even if the setting flips to true (freeze)', async () => {
     render(<VoiceAlwaysOnGate />);
     act(() => {
       useSettingsStore.setState({
         values: { voice_always_on_enabled: true },
       });
     });
-    // Hook moves through 'connecting' → ready when the WS opens.
-    await waitFor(() => {
-      const s = useVoiceAlwaysOnStatusStore.getState().status;
-      expect(['connecting', 'ready', 'listening']).toContain(s);
+    // Phase 11c.5 — FEATURE_DISABLED keeps the underlying hook idle, so
+    // the global status store must stay at 'disabled'. If this fails, the
+    // freeze flag was unintentionally lifted somewhere.
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
     });
-    const ws = FakeWebSocket.instances[0];
-    act(() => { ws._open(); });
-    await waitFor(() => {
-      // After WS opens hook eventually reaches 'ready' (or 'listening' if
-      // a server status message lands first). Either is fine for this
-      // assertion — what matters is that the global store mirrors the
-      // hook's state, not the exact label.
-      const s = useVoiceAlwaysOnStatusStore.getState().status;
-      expect(s).not.toBe('disabled');
-    });
+    expect(useVoiceAlwaysOnStatusStore.getState().status).toBe('disabled');
   });
 });

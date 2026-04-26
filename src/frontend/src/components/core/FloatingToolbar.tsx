@@ -135,7 +135,12 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
    *  state. Optimistic local flip + persist via settingsApi.set; on failure
    *  we revert so the button reflects backend truth. The VoiceAlwaysOnGate
    *  reacts to settingsStore.values.voice_always_on_enabled changes and
-   *  starts/stops the AudioWorklet + WS independently. */
+   *  starts/stops the AudioWorklet + WS independently.
+   *
+   *  Phase 11c.5 — feature is frozen pending a future Phase 12; the toolbar
+   *  button is rendered disabled so toggleAlwaysOn never runs. Kept here
+   *  (instead of deleted) so re-enabling in Phase 12 is a single-line
+   *  change to ALWAYS_ON_DISABLED below. */
   const toggleAlwaysOn = () => {
     const next = !alwaysOnEnabled;
     applyRemote('voice_always_on_enabled', next);
@@ -143,6 +148,11 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
       .set('voice_always_on_enabled', next)
       .catch(() => applyRemote('voice_always_on_enabled', !next));
   };
+
+  // Phase 11c.5 — single point of truth for the freeze. Set to false in a
+  // future Phase 12 once the bugs in docs/phase-11c.5/known-issues.md are
+  // addressed.
+  const ALWAYS_ON_DISABLED = true;
 
   const primary: ToolbarAction[] = [
     {
@@ -178,11 +188,14 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
       id: 'always-on',
       icon: <Radio size={18} strokeWidth={1.75} />,
       label: 'Always-On',
-      tooltip: alwaysOnEnabled
-        ? 'Always-on listening: ON (tap to disable)'
-        : 'Always-on listening: OFF (tap to enable)',
-      active: alwaysOnEnabled,
-      onClick: toggleAlwaysOn,
+      tooltip: ALWAYS_ON_DISABLED
+        ? 'Always-on голос — у розробці (Phase 11c.5)'
+        : alwaysOnEnabled
+          ? 'Always-on listening: ON (tap to disable)'
+          : 'Always-on listening: OFF (tap to enable)',
+      active: ALWAYS_ON_DISABLED ? false : alwaysOnEnabled,
+      disabled: ALWAYS_ON_DISABLED,
+      onClick: ALWAYS_ON_DISABLED ? undefined : toggleAlwaysOn,
     },
     {
       id: 'settings',

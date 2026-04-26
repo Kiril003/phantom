@@ -41,7 +41,13 @@ function renderToolbar() {
   );
 }
 
-describe('FloatingToolbar — Always-On toggle (phase 11c.2)', () => {
+describe('FloatingToolbar — Always-On button (Phase 11c.5 freeze)', () => {
+  // Phase 11c.2 wired the Always-On toolbar button to flip
+  // voice_always_on_enabled and PUT to the backend. Phase 11c.5 froze the
+  // feature pending docs/phase-11c.5/known-issues.md fixes — the button is
+  // still visible (so users see the affordance returning in Phase 12) but
+  // disabled. Click is a no-op; aria-pressed is always false.
+
   beforeEach(() => {
     setMock.mockReset();
     setMock.mockResolvedValue({
@@ -49,7 +55,6 @@ describe('FloatingToolbar — Always-On toggle (phase 11c.2)', () => {
       value: true,
       requires_restart: false,
     });
-    // Reset stores to a known-clean state.
     useSettingsStore.setState({
       categories: [],
       values: { voice_always_on_enabled: false },
@@ -76,14 +81,31 @@ describe('FloatingToolbar — Always-On toggle (phase 11c.2)', () => {
     });
   });
 
-  it('renders the Always-On button in the primary toolbar', () => {
+  it('renders the Always-On button in the primary toolbar (disabled)', () => {
     renderToolbar();
-    const btn = screen.getByLabelText('Always-On');
+    const btn = screen.getByLabelText('Always-On') as HTMLButtonElement;
     expect(btn).toBeTruthy();
+    expect(btn.disabled).toBe(true);
     expect(btn.getAttribute('aria-pressed')).toBe('false');
   });
 
-  it('reflects the current voice_always_on_enabled value via aria-pressed', () => {
+  it('shows the freeze tooltip', () => {
+    renderToolbar();
+    const btn = screen.getByLabelText('Always-On');
+    expect(btn.getAttribute('title') ?? '').toContain('Phase 11c.5');
+  });
+
+  it('does NOT call the settings API when clicked (freeze)', async () => {
+    renderToolbar();
+    const btn = screen.getByLabelText('Always-On');
+    await act(async () => {
+      fireEvent.click(btn);
+    });
+    expect(setMock).not.toHaveBeenCalled();
+    expect(useSettingsStore.getState().values.voice_always_on_enabled).toBe(false);
+  });
+
+  it('does NOT show "active" styling even if the setting is true under the hood', () => {
     useSettingsStore.setState({
       categories: [],
       values: { voice_always_on_enabled: true },
@@ -92,57 +114,10 @@ describe('FloatingToolbar — Always-On toggle (phase 11c.2)', () => {
     });
     renderToolbar();
     const btn = screen.getByLabelText('Always-On');
-    expect(btn.getAttribute('aria-pressed')).toBe('true');
-  });
-
-  it('on click: flips the store value optimistically and PUTs new value', async () => {
-    renderToolbar();
-    const btn = screen.getByLabelText('Always-On');
-
-    await act(async () => {
-      fireEvent.click(btn);
-    });
-
-    // Store flipped optimistically.
-    expect(useSettingsStore.getState().values.voice_always_on_enabled).toBe(true);
-    // API was called with the new value.
-    expect(setMock).toHaveBeenCalledTimes(1);
-    expect(setMock).toHaveBeenCalledWith('voice_always_on_enabled', true);
-    // Button reflects new state.
-    expect(btn.getAttribute('aria-pressed')).toBe('true');
-  });
-
-  it('on PUT failure: reverts the optimistic flip', async () => {
-    setMock.mockRejectedValueOnce(new Error('boom'));
-    renderToolbar();
-    const btn = screen.getByLabelText('Always-On');
-
-    await act(async () => {
-      fireEvent.click(btn);
-      // Let the rejected promise + revert microtask flush.
-      await Promise.resolve();
-      await Promise.resolve();
-    });
-
-    expect(useSettingsStore.getState().values.voice_always_on_enabled).toBe(false);
+    // Phase 11c.5 — the button reflects the freeze, not the setting. If
+    // a stale row in the DB has true (e.g. from an older build), the
+    // toolbar must still show off so the user knows the feature is not
+    // running.
     expect(btn.getAttribute('aria-pressed')).toBe('false');
-  });
-
-  it('toggles back to false when clicked while currently true', async () => {
-    useSettingsStore.setState({
-      categories: [],
-      values: { voice_always_on_enabled: true },
-      dirty: new Set(),
-      loaded: true,
-    });
-    renderToolbar();
-    const btn = screen.getByLabelText('Always-On');
-
-    await act(async () => {
-      fireEvent.click(btn);
-    });
-
-    expect(useSettingsStore.getState().values.voice_always_on_enabled).toBe(false);
-    expect(setMock).toHaveBeenCalledWith('voice_always_on_enabled', false);
   });
 });

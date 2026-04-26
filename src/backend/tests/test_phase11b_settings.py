@@ -14,6 +14,7 @@ from __future__ import annotations
 import os
 
 import pytest
+from fastapi import HTTPException
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-phase11b-settings")
 os.environ.setdefault("AI_GEMINI_API_KEY", "fake-api-key-for-tests")
@@ -22,6 +23,8 @@ from api.routes_settings import (  # noqa: E402
     LABEL_OVERRIDES,
     CATEGORY_SPEC,
     UNIMPLEMENTED_KEYS,
+    SetValueRequest,
+    set_setting,
 )
 
 
@@ -75,3 +78,53 @@ class TestWakeWordSettingsGraduated:
             "the real always-on implementation so the label should not "
             "carry the [soon] badge any more"
         )
+
+
+class TestPhase11c5AlwaysOnWriteLock:
+    """Phase 11c.5 — the always-on feature was disabled after real-user
+    testing on 2026-04-26 surfaced unresolved bugs (see
+    docs/phase-11c.5/known-issues.md). The PUT handler must reject any
+    attempt to set ``voice_always_on_enabled`` to True with HTTP 400 so
+    the feature stays off even if an older client tries to flip it."""
+
+    @pytest.mark.asyncio
+    async def test_set_voice_always_on_to_true_is_rejected(self) -> None:
+        with pytest.raises(HTTPException) as excinfo:
+            await set_setting(
+                key="voice_always_on_enabled",
+                req=SetValueRequest(value=True),
+                user=None,  # type: ignore[arg-type]
+            )
+        assert excinfo.value.status_code == 400
+        detail = excinfo.value.detail
+        assert isinstance(detail, dict)
+        assert detail.get("error") == "feature_disabled"
+        assert "Phase 11c.5" in detail.get("message", "")
+
+    @pytest.mark.asyncio
+    async def test_set_voice_always_on_to_false_is_not_rejected_by_lock(
+        self,
+    ) -> None:
+        """The write-lock must only fire on True. A False write should pass
+        the lock (it may still fail later for other reasons — auth, DB —
+        but those are out of scope here; the lock itself must let it
+        through)."""
+        # The handler will fail later (no User → AttributeError) but the
+        # write-lock MUST NOT be the failure mode. We assert that no
+        # HTTPException with status 400 / feature_disabled bubbles up.
+        try:
+            await set_setting(
+                key="voice_always_on_enabled",
+                req=SetValueRequest(value=False),
+                user=None,  # type: ignore[arg-type]
+            )
+        except HTTPException as exc:
+            assert not (
+                exc.status_code == 400
+                and isinstance(exc.detail, dict)
+                and exc.detail.get("error") == "feature_disabled"
+            ), "write-lock fired on False — it must only fire on True"
+        except Exception:
+            # Any other failure (auth, DB, side-effect) is fine for this
+            # test — we only care that the write-lock didn't fire.
+            pass

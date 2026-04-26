@@ -418,6 +418,24 @@ async def set_setting(
     if not hasattr(config, key):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"Unknown key: {key}")
 
+    # Phase 11c.5 — always-on voice freeze. Real-user testing on 2026-04-26
+    # surfaced two unresolved bugs (duplicate WS connections per click;
+    # Vosk/Silero models reload on every WS connect) plus an unverified
+    # real-mic wake detection path. The feature is preserved in the codebase
+    # but disabled at the boundary so a future Phase 12 has a single point to
+    # re-enable. See docs/phase-11c.5/known-issues.md.
+    if key == "voice_always_on_enabled" and req.value is True:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            detail={
+                "error": "feature_disabled",
+                "message": (
+                    "voice_always_on_enabled is disabled in this build "
+                    "(Phase 11c.5). See docs/phase-11c.5/known-issues.md."
+                ),
+            },
+        )
+
     # Phase 9.4c audit D4 — the key may be staged ahead of its owning phase.
     # We still let the write through (persist survives a restart) but log a
     # warning so the operator knows the toggle has no runtime effect yet.

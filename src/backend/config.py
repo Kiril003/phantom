@@ -109,6 +109,25 @@ class PhantomConfig(BaseSettings):
     # Drop incoming mic frames while PHANTOM is speaking, to avoid self-wakes
     # when TTS audio leaks through the ReSpeaker near-field.
     voice_mic_duck_on_tts: bool = True
+    # ── Voice / Modes (Phase 12.0 — VAD-driven voice + optional wake) ────────
+    # Replaces voice_always_on_enabled. The old key stays in the schema as a
+    # deprecated alias — it is still settable / readable so existing rows
+    # don't break startup, but routes_voice_stream.py ignores it at runtime
+    # and uses voice_mode instead. Three modes:
+    #   "off"        — orchestrator no-op on frames; push-to-talk only.
+    #   "continuous" — VAD detects speech → silence_timeout_ms → STT → final.
+    #   "wake_word"  — same VAD+STT pipeline but transcripts not containing
+    #                  voice_wake_phrase (case-insensitive substring match)
+    #                  are silently dropped.
+    voice_mode: Literal["off", "continuous", "wake_word"] = "off"
+    # Wake phrase used when voice_mode == "wake_word". Case-insensitive
+    # substring match against the Whisper transcript; phrase is stripped
+    # from the message before chat send.
+    voice_wake_phrase: str = "фантом"
+    # End-of-utterance silence threshold (ms) used in continuous + wake_word
+    # modes. After this much VAD-below-threshold time the buffer is sent to
+    # Whisper STT.
+    voice_silence_timeout_ms: int = 1500
 
     # ── Sensors / Serial ──────────────────────────────────────────────────────
     sensor_batch_interval_ms: int = 500
@@ -383,6 +402,24 @@ class PhantomConfig(BaseSettings):
         if self.agent_proactive_enabled and self.agent_proactive_interval_max_s < self.agent_proactive_interval_min_s:
             raise ValueError(
                 "agent_proactive_interval_max_s must be >= agent_proactive_interval_min_s"
+            )
+        return self
+
+    @model_validator(mode="after")
+    def _validate_voice_mode_keys(self) -> "PhantomConfig":
+        """Phase 12.0 — keep the three new mode-related keys self-consistent.
+        voice_wake_phrase must be non-empty + ≤ 50 chars, and the silence
+        timeout must lie in 500..5000 ms so the orchestrator never waits
+        forever (or fires after a single inter-word pause)."""
+        phrase = (self.voice_wake_phrase or "").strip()
+        if not phrase:
+            raise ValueError("voice_wake_phrase must be non-empty")
+        if len(phrase) > 50:
+            raise ValueError("voice_wake_phrase must be ≤ 50 characters")
+        if not (500 <= self.voice_silence_timeout_ms <= 5000):
+            raise ValueError(
+                "voice_silence_timeout_ms must be in [500, 5000] (got "
+                f"{self.voice_silence_timeout_ms})"
             )
         return self
 

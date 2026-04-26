@@ -187,11 +187,16 @@ CATEGORY_SPEC: list[dict[str, Any]] = [
             "voice_tts_state_adaptation",
             "voice_wake_word_enabled",
             "voice_wake_words",
-            # Phase 11b — always-on voice
+            # Phase 11b — always-on voice (legacy; voice_always_on_enabled is
+            # a deprecated alias as of Phase 12.0 and ignored at runtime).
             "voice_always_on_enabled",
             "voice_wake_confidence_min",
             "voice_continuation_window_s",
             "voice_mic_duck_on_tts",
+            # Phase 12.0 — VAD-driven voice modes
+            "voice_mode",
+            "voice_wake_phrase",
+            "voice_silence_timeout_ms",
         ],
     },
     {
@@ -284,10 +289,13 @@ LABEL_OVERRIDES: dict[str, str] = {
     "voice_tts_state_adaptation": "Адаптація до стану",
     "voice_wake_word_enabled": "Wake-word",
     "voice_wake_words": "Wake-word фрази",
-    "voice_always_on_enabled": "Always-on голос",
+    "voice_always_on_enabled": "Always-on голос (deprecated)",
     "voice_wake_confidence_min": "Мін. впевненість wake",
     "voice_continuation_window_s": "Вікно продовження (с)",
     "voice_mic_duck_on_tts": "Заглушити мікрофон під час TTS",
+    "voice_mode": "Голосовий режим",
+    "voice_wake_phrase": "Wake-фраза",
+    "voice_silence_timeout_ms": "Тиша до кінця фрази (мс)",
     "face_tracking_enabled": "Face tracking",
     "face_tracking_auto_switch_profile": "Auto-switch profile",
     "face_tracking_privacy_mode": "Privacy mode",
@@ -418,22 +426,15 @@ async def set_setting(
     if not hasattr(config, key):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"Unknown key: {key}")
 
-    # Phase 11c.5 — always-on voice freeze. Real-user testing on 2026-04-26
-    # surfaced two unresolved bugs (duplicate WS connections per click;
-    # Vosk/Silero models reload on every WS connect) plus an unverified
-    # real-mic wake detection path. The feature is preserved in the codebase
-    # but disabled at the boundary so a future Phase 12 has a single point to
-    # re-enable. See docs/phase-11c.5/known-issues.md.
-    if key == "voice_always_on_enabled" and req.value is True:
-        raise HTTPException(
-            status.HTTP_400_BAD_REQUEST,
-            detail={
-                "error": "feature_disabled",
-                "message": (
-                    "voice_always_on_enabled is disabled in this build "
-                    "(Phase 11c.5). See docs/phase-11c.5/known-issues.md."
-                ),
-            },
+    # Phase 12.0 — voice_always_on_enabled is now a deprecated alias. The
+    # 11c.5 write-lock is gone; the field still persists so existing rows
+    # don't break, but routes_voice_stream.py reads voice_mode (off /
+    # continuous / wake_word) instead. Logging the deprecation here helps
+    # operators migrating off the old toggle.
+    if key == "voice_always_on_enabled":
+        logger.info(
+            "settings: voice_always_on_enabled is deprecated as of Phase 12.0 "
+            "— use voice_mode (off | continuous | wake_word) instead"
         )
 
     # Phase 9.4c audit D4 — the key may be staged ahead of its owning phase.

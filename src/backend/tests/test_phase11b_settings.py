@@ -80,42 +80,112 @@ class TestWakeWordSettingsGraduated:
         )
 
 
-class TestPhase11c5AlwaysOnWriteLock:
-    """Phase 11c.5 — the always-on feature was disabled after real-user
-    testing on 2026-04-26 surfaced unresolved bugs (see
-    docs/phase-11c.5/known-issues.md). The PUT handler must reject any
-    attempt to set ``voice_always_on_enabled`` to True with HTTP 400 so
-    the feature stays off even if an older client tries to flip it."""
+class TestPhase12VoiceModeSettings:
+    """Phase 12.0 — replaces the 11c.5 write-lock on voice_always_on_enabled.
+    Three new keys (voice_mode / voice_wake_phrase / voice_silence_timeout_ms)
+    drive the orchestrator. The legacy key persists as a deprecated alias
+    so existing rows don't break startup."""
+
+    PHASE_12_KEYS = [
+        "voice_mode",
+        "voice_wake_phrase",
+        "voice_silence_timeout_ms",
+    ]
+
+    @pytest.mark.parametrize("key", PHASE_12_KEYS)
+    def test_key_in_voice_group(self, key: str) -> None:
+        assert key in _voice_group()["keys"], (
+            f"{key} must be listed in the voice group so SettingsPanel can "
+            "render the new mode-selection UI"
+        )
+
+    @pytest.mark.parametrize("key", PHASE_12_KEYS)
+    def test_key_has_label(self, key: str) -> None:
+        assert key in LABEL_OVERRIDES, (
+            f"{key} needs a Ukrainian label override"
+        )
+
+    @pytest.mark.parametrize("key", PHASE_12_KEYS)
+    def test_key_is_not_marked_unimplemented(self, key: str) -> None:
+        assert key not in UNIMPLEMENTED_KEYS, (
+            f"{key} ships wired in Phase 12.0 — [soon] badge is wrong"
+        )
+
+    def test_voice_mode_default_is_off(self) -> None:
+        from config import config
+        assert config.voice_mode == "off", (
+            "voice_mode must default to 'off' so push-to-talk is the only "
+            "active path until the user opts in"
+        )
+
+    def test_voice_wake_phrase_has_default(self) -> None:
+        from config import config
+        assert isinstance(config.voice_wake_phrase, str)
+        assert len(config.voice_wake_phrase.strip()) > 0
+
+    def test_voice_silence_timeout_default_is_1500(self) -> None:
+        from config import config
+        assert config.voice_silence_timeout_ms == 1500
+
+
+class TestPhase12VoiceModeValidation:
+    """voice_mode is a Literal — Pydantic must reject anything else.
+    voice_silence_timeout_ms is bounded [500, 5000] by the model validator.
+    voice_wake_phrase must be non-empty and ≤ 50 chars."""
+
+    def test_voice_mode_rejects_invalid_value(self) -> None:
+        from config import PhantomConfig
+        with pytest.raises(Exception):
+            PhantomConfig(voice_mode="garbage")  # type: ignore[arg-type]
+
+    @pytest.mark.parametrize("mode", ["off", "continuous", "wake_word"])
+    def test_voice_mode_accepts_all_three(self, mode: str) -> None:
+        from config import PhantomConfig
+        cfg = PhantomConfig(voice_mode=mode)  # type: ignore[arg-type]
+        assert cfg.voice_mode == mode
+
+    def test_silence_timeout_below_min_rejected(self) -> None:
+        from config import PhantomConfig
+        with pytest.raises(Exception):
+            PhantomConfig(voice_silence_timeout_ms=400)
+
+    def test_silence_timeout_above_max_rejected(self) -> None:
+        from config import PhantomConfig
+        with pytest.raises(Exception):
+            PhantomConfig(voice_silence_timeout_ms=6000)
+
+    @pytest.mark.parametrize("ms", [500, 1500, 3000, 5000])
+    def test_silence_timeout_in_range_accepted(self, ms: int) -> None:
+        from config import PhantomConfig
+        cfg = PhantomConfig(voice_silence_timeout_ms=ms)
+        assert cfg.voice_silence_timeout_ms == ms
+
+    def test_wake_phrase_empty_rejected(self) -> None:
+        from config import PhantomConfig
+        with pytest.raises(Exception):
+            PhantomConfig(voice_wake_phrase="")
+
+    def test_wake_phrase_too_long_rejected(self) -> None:
+        from config import PhantomConfig
+        with pytest.raises(Exception):
+            PhantomConfig(voice_wake_phrase="x" * 51)
+
+
+class TestPhase12LegacyAliasUnlocked:
+    """The 11c.5 write-lock on voice_always_on_enabled=True is gone — the
+    field is now a deprecated alias that still persists but is ignored at
+    runtime. PUT-ing it must not raise feature_disabled any more."""
 
     @pytest.mark.asyncio
-    async def test_set_voice_always_on_to_true_is_rejected(self) -> None:
-        with pytest.raises(HTTPException) as excinfo:
-            await set_setting(
-                key="voice_always_on_enabled",
-                req=SetValueRequest(value=True),
-                user=None,  # type: ignore[arg-type]
-            )
-        assert excinfo.value.status_code == 400
-        detail = excinfo.value.detail
-        assert isinstance(detail, dict)
-        assert detail.get("error") == "feature_disabled"
-        assert "Phase 11c.5" in detail.get("message", "")
-
-    @pytest.mark.asyncio
-    async def test_set_voice_always_on_to_false_is_not_rejected_by_lock(
+    async def test_set_voice_always_on_no_longer_blocked_by_feature_lock(
         self,
     ) -> None:
-        """The write-lock must only fire on True. A False write should pass
-        the lock (it may still fail later for other reasons — auth, DB —
-        but those are out of scope here; the lock itself must let it
-        through)."""
-        # The handler will fail later (no User → AttributeError) but the
-        # write-lock MUST NOT be the failure mode. We assert that no
-        # HTTPException with status 400 / feature_disabled bubbles up.
+        """The write must not fail with the 11c.5 feature_disabled error.
+        It may still fail downstream (auth/db) — only the lock matters."""
         try:
             await set_setting(
                 key="voice_always_on_enabled",
-                req=SetValueRequest(value=False),
+                req=SetValueRequest(value=True),
                 user=None,  # type: ignore[arg-type]
             )
         except HTTPException as exc:
@@ -123,8 +193,10 @@ class TestPhase11c5AlwaysOnWriteLock:
                 exc.status_code == 400
                 and isinstance(exc.detail, dict)
                 and exc.detail.get("error") == "feature_disabled"
-            ), "write-lock fired on False — it must only fire on True"
+            ), (
+                "Phase 11c.5 feature_disabled lock must be removed in 12.0 "
+                "— voice_always_on_enabled is a deprecated alias, not a gate"
+            )
         except Exception:
-            # Any other failure (auth, DB, side-effect) is fine for this
-            # test — we only care that the write-lock didn't fire.
+            # Any other failure is fine — only the lock matters here.
             pass

@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { render, screen, fireEvent, waitFor, act } from '@testing-library/react';
 import { ChatMessage, SystemState } from '@shared/types';
 import { useChatStore } from '../stores/chatStore';
@@ -85,7 +85,11 @@ vi.mock('recharts', async () => {
   };
 });
 
-function baseMessage(over: Partial<ChatMessage> = {}): ChatMessage {
+type BaseMessageOverrides = Omit<Partial<ChatMessage>, 'metadata'> & {
+  metadata?: Partial<ChatMessage['metadata']>;
+};
+
+function baseMessage(over: BaseMessageOverrides = {}): ChatMessage {
   return {
     id: over.id ?? 'm1',
     session_id: over.session_id ?? 's1',
@@ -545,6 +549,261 @@ describe('ChatWindow', () => {
       fireEvent.click(btn);
     });
     expect(spy).toHaveBeenCalledWith(true);
+  });
+});
+
+/* ─── ChatWindow TTS feedback prevention (Phase 12.2) ───────────────────────── */
+
+describe('ChatWindow TTS playback ducks the always-on mic', () => {
+  // Captured Audio instances — the test drives 'ended' / 'error' events
+  // by hand because jsdom never fires them on its own.
+  interface FakeAudio {
+    src: string;
+    listeners: Map<string, ((ev?: unknown) => void)[]>;
+    fireEnded: () => void;
+    fireError: () => void;
+  }
+  let audioInstances: FakeAudio[];
+  let originalAudio: typeof window.Audio;
+  let timeline: string[];
+
+  beforeEach(() => {
+    audioInstances = [];
+    timeline = [];
+    originalAudio = window.Audio;
+
+    // Minimal Audio stub. play() resolves on next microtask so the test
+    // can observe ordering: duck() must record into `timeline` BEFORE
+    // play() does.
+    class FakeAudioImpl {
+      src: string;
+      listeners = new Map<string, ((ev?: unknown) => void)[]>();
+      constructor(src: string) {
+        this.src = src;
+        const inst: FakeAudio = {
+          src,
+          listeners: this.listeners,
+          fireEnded: () => {
+            (this.listeners.get('ended') ?? []).forEach((cb) => cb());
+          },
+          fireError: () => {
+            (this.listeners.get('error') ?? []).forEach((cb) => cb());
+          },
+        };
+        audioInstances.push(inst);
+      }
+      addEventListener(name: string, cb: (ev?: unknown) => void) {
+        const arr = this.listeners.get(name) ?? [];
+        arr.push(cb);
+        this.listeners.set(name, arr);
+      }
+      removeEventListener(name: string, cb: (ev?: unknown) => void) {
+        const arr = (this.listeners.get(name) ?? []).filter((c) => c !== cb);
+        this.listeners.set(name, arr);
+      }
+      async play() {
+        timeline.push('play');
+        return Promise.resolve();
+      }
+      pause() {
+        /* noop */
+      }
+    }
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).Audio = FakeAudioImpl as unknown as typeof window.Audio;
+
+    // URL.createObjectURL exists in jsdom but stub for determinism.
+    const origCreate = URL.createObjectURL;
+    URL.createObjectURL = vi.fn(() => 'blob:mock-tts');
+    URL.revokeObjectURL = vi.fn();
+    // restore on teardown
+    (window as unknown as { __origCreate: typeof origCreate }).__origCreate =
+      origCreate;
+
+    useChatStore.setState({
+      sessions: [],
+      currentSessionId: null,
+      messages: [],
+      streaming: null,
+      isTyping: false,
+      loading: false,
+      sending: false,
+      error: null,
+      loadSessions: async () => {
+        /* noop */
+      },
+    });
+    useSystemStore.setState({
+      state: SystemState.DIALOGUE,
+      previousState: null,
+      stateHistory: [],
+      context: null,
+      authenticated: true,
+      wsConnected: true,
+    });
+  });
+
+  afterEach(() => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (window as any).Audio = originalAudio;
+  });
+
+  it('calls voiceAlwaysOnDuck before audioEl.play() and voiceAlwaysOnUnduck on ended', async () => {
+    // Mock voice API + ducking primitives. The duck/unduck symbols
+    // record into the shared `timeline` so the test can verify ordering
+    // against the FakeAudio.play() entry.
+    const voiceApiMod = await import('../services/voiceApi');
+    vi.spyOn(voiceApiMod.voiceApi, 'synthesize').mockResolvedValue({
+      blob: new Blob(['x'], { type: 'audio/wav' }),
+      engine: 'fake',
+      sampleRate: 22050,
+    });
+
+    const alwaysOnMod = await import('../hooks/useVoiceAlwaysOn');
+    const duckSpy = vi
+      .spyOn(alwaysOnMod, 'voiceAlwaysOnDuck')
+      .mockImplementation(() => {
+        timeline.push('duck');
+      });
+    const unduckSpy = vi
+      .spyOn(alwaysOnMod, 'voiceAlwaysOnUnduck')
+      .mockImplementation(() => {
+        timeline.push('unduck');
+      });
+
+    // Pre-populate: a voice-input user message followed by an assistant
+    // reply. The TTS effect should trigger because the previous user
+    // turn used voice (input_method='voice' in metadata).
+    useChatStore.setState({
+      messages: [
+        baseMessage({
+          id: 'u1',
+          role: 'user',
+          content: 'привіт',
+          metadata: { input_method: 'voice' },
+        }),
+        baseMessage({
+          id: 'a1',
+          role: 'assistant',
+          content: 'Привіт, операторе.',
+        }),
+      ],
+    });
+
+    const { ChatWindow } = await import('../components/chat/ChatWindow');
+    render(<ChatWindow minimalChrome />);
+
+    // Audio constructed AND play called.
+    await waitFor(() => {
+      expect(audioInstances.length).toBe(1);
+      expect(timeline).toContain('play');
+    });
+
+    expect(duckSpy).toHaveBeenCalledTimes(1);
+    // Order: duck must precede play in the timeline.
+    const duckIdx = timeline.indexOf('duck');
+    const playIdx = timeline.indexOf('play');
+    expect(duckIdx).toBeGreaterThanOrEqual(0);
+    expect(playIdx).toBeGreaterThanOrEqual(0);
+    expect(duckIdx).toBeLessThan(playIdx);
+
+    // unduck has not yet fired — audio is still playing.
+    expect(unduckSpy).not.toHaveBeenCalled();
+
+    // Simulate the audio finishing.
+    act(() => {
+      audioInstances[0].fireEnded();
+    });
+    expect(unduckSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls voiceAlwaysOnUnduck on audio error', async () => {
+    const voiceApiMod = await import('../services/voiceApi');
+    vi.spyOn(voiceApiMod.voiceApi, 'synthesize').mockResolvedValue({
+      blob: new Blob(['x'], { type: 'audio/wav' }),
+      engine: 'fake',
+      sampleRate: 22050,
+    });
+    const alwaysOnMod = await import('../hooks/useVoiceAlwaysOn');
+    vi.spyOn(alwaysOnMod, 'voiceAlwaysOnDuck').mockImplementation(() => {
+      timeline.push('duck');
+    });
+    const unduckSpy = vi
+      .spyOn(alwaysOnMod, 'voiceAlwaysOnUnduck')
+      .mockImplementation(() => {
+        timeline.push('unduck');
+      });
+
+    useChatStore.setState({
+      messages: [
+        baseMessage({
+          id: 'u2',
+          role: 'user',
+          content: 'тест',
+          metadata: { input_method: 'voice' },
+        }),
+        baseMessage({
+          id: 'a2',
+          role: 'assistant',
+          content: 'Все добре.',
+        }),
+      ],
+    });
+
+    const { ChatWindow } = await import('../components/chat/ChatWindow');
+    render(<ChatWindow minimalChrome />);
+    await waitFor(() => expect(audioInstances.length).toBe(1));
+
+    act(() => {
+      audioInstances[0].fireError();
+    });
+    expect(unduckSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not duck when previous user message was text', async () => {
+    const voiceApiMod = await import('../services/voiceApi');
+    const synthSpy = vi
+      .spyOn(voiceApiMod.voiceApi, 'synthesize')
+      .mockResolvedValue({
+        blob: new Blob(['x'], { type: 'audio/wav' }),
+        engine: 'fake',
+        sampleRate: 22050,
+      });
+    const alwaysOnMod = await import('../hooks/useVoiceAlwaysOn');
+    const duckSpy = vi
+      .spyOn(alwaysOnMod, 'voiceAlwaysOnDuck')
+      .mockImplementation(() => {
+        timeline.push('duck');
+      });
+
+    useChatStore.setState({
+      messages: [
+        baseMessage({
+          id: 'u3',
+          role: 'user',
+          content: 'typed',
+          metadata: { input_method: 'text' },
+        }),
+        baseMessage({
+          id: 'a3',
+          role: 'assistant',
+          content: 'Reply to typed message.',
+        }),
+      ],
+    });
+
+    const { ChatWindow } = await import('../components/chat/ChatWindow');
+    render(<ChatWindow minimalChrome />);
+
+    // Give effects a tick.
+    await act(async () => {
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+
+    expect(synthSpy).not.toHaveBeenCalled();
+    expect(duckSpy).not.toHaveBeenCalled();
+    expect(audioInstances.length).toBe(0);
   });
 });
 

@@ -17,6 +17,10 @@ import { useUIStore } from '../../stores/uiStore';
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { voiceApi } from '../../services/voiceApi';
+import {
+  voiceAlwaysOnDuck,
+  voiceAlwaysOnUnduck,
+} from '../../hooks/useVoiceAlwaysOn';
 import type { ChatMessage } from '@shared/types';
 
 interface ChatWindowProps {
@@ -196,19 +200,47 @@ export function ChatWindow({
   // Play TTS for any newly-arrived assistant reply when the previous user
   // turn came from voice input. Keeps playback scoped to voice sessions —
   // we don't want the assistant talking over the operator's text chats.
+  // Phase 12.2: also duck the always-on mic across playback. Without
+  // this the backend Silero VAD picks up the assistant's own audio and
+  // self-feedbacks (it transcribes PHANTOM speaking, treats it as a new
+  // user turn, replies again).
   const lastSpokenMessageIdRef = useRef<string | null>(null);
   useEffect(() => {
     if (!ttsEnabled) return;
-    if (lastUserInputMethodRef.current !== 'voice') return;
     const last = messages[messages.length - 1];
     if (!last || last.role !== 'assistant') return;
     if (!last.content.trim()) return;
     if (last.id === lastSpokenMessageIdRef.current) return;
+
+    // Gate: assistant must be replying to a voice user turn. Tap-to-talk
+    // updates `lastUserInputMethodRef` synchronously; always-on flows
+    // arrive via VoiceAlwaysOnGate (different component) so we also
+    // walk back through messages to consult the prior user turn's
+    // input_method metadata.
+    let priorUserVoice = lastUserInputMethodRef.current === 'voice';
+    if (!priorUserVoice) {
+      for (let i = messages.length - 2; i >= 0; i--) {
+        const m = messages[i];
+        if (m.role === 'user') {
+          priorUserVoice = m.metadata?.input_method === 'voice';
+          break;
+        }
+      }
+    }
+    if (!priorUserVoice) return;
     lastSpokenMessageIdRef.current = last.id;
 
     let cancelled = false;
+    let ducked = false;
     let audioEl: HTMLAudioElement | null = null;
     let objectUrl: string | null = null;
+    const releaseDuck = () => {
+      if (!ducked) return;
+      ducked = false;
+      voiceAlwaysOnUnduck();
+    };
+    const onEnded = () => releaseDuck();
+    const onError = () => releaseDuck();
     (async () => {
       try {
         const { blob } = await voiceApi.synthesize(last.content, {
@@ -218,8 +250,15 @@ export function ChatWindow({
         if (cancelled) return;
         objectUrl = URL.createObjectURL(blob);
         audioEl = new Audio(objectUrl);
+        audioEl.addEventListener('ended', onEnded);
+        audioEl.addEventListener('error', onError);
+        // Mute backend before audio.play() — the goal is that no PCM
+        // captured during the playback window reaches the orchestrator.
+        voiceAlwaysOnDuck();
+        ducked = true;
         await audioEl.play();
       } catch (err) {
+        releaseDuck();
         // Non-fatal — TTS failures shouldn't block the chat flow.
         // eslint-disable-next-line no-console
         console.warn('[voice] TTS playback failed:', err);
@@ -228,10 +267,13 @@ export function ChatWindow({
     return () => {
       cancelled = true;
       if (audioEl) {
+        audioEl.removeEventListener('ended', onEnded);
+        audioEl.removeEventListener('error', onError);
         audioEl.pause();
         audioEl.src = '';
       }
       if (objectUrl) URL.revokeObjectURL(objectUrl);
+      releaseDuck();
     };
   }, [messages, ttsEnabled, ttsVoice, ttsSpeed]);
 

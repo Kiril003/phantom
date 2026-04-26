@@ -164,6 +164,36 @@ function _releaseWS(): void {
   }
 }
 
+/**
+ * Send a ``mic_duck`` command on the singleton WS so the backend
+ * orchestrator drops further frames until ``mic_unduck``. Safe to call
+ * even when no WS is open (no-ops). Used by the chat TTS playback to
+ * stop the assistant's own voice feeding back into the always-on
+ * pipeline (Phase 12.2 self-feedback fix).
+ */
+export function voiceAlwaysOnDuck(): void {
+  const ws = _wsInstance;
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    try {
+      ws.send(JSON.stringify({ cmd: 'mic_duck' }));
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
+/** Counterpart of ``voiceAlwaysOnDuck``. Releases the backend mic. */
+export function voiceAlwaysOnUnduck(): void {
+  const ws = _wsInstance;
+  if (ws && ws.readyState === WebSocket.OPEN) {
+    try {
+      ws.send(JSON.stringify({ cmd: 'mic_unduck' }));
+    } catch {
+      /* ignore */
+    }
+  }
+}
+
 /** Test-only: forcibly drop the singleton between tests so each test
  *  starts from a clean state. */
 export function __resetVoiceAlwaysOnWS(): void {

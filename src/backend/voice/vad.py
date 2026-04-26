@@ -41,13 +41,60 @@ ONNX Runtime only — no torch dependency on the hot path.
 from __future__ import annotations
 
 import logging
+import threading
 from dataclasses import dataclass
-from typing import Iterable
+from typing import Iterable, Optional
 
 import numpy as np
 import onnxruntime as ort
 
 logger = logging.getLogger(__name__)
+
+
+# ─── Phase 12.0 — Module-level Silero VAD singleton (Bug 2 fix) ─────────────
+# 11c.4 hot-path was already off-loaded to a worker thread via to_thread, but
+# every new WS connection still constructed a fresh ``ort.InferenceSession``
+# (1-3s on Radxa ARM64), blocking the orchestrator setup. The session itself
+# holds the loaded ONNX graph; per-connection state (state tensor, pending
+# samples, hysteresis) lives on the SileroVAD instance, so sharing the
+# session across connections is safe.
+_vad_session: Optional[ort.InferenceSession] = None
+_vad_session_path: Optional[str] = None
+_vad_session_lock = threading.Lock()
+
+
+def get_vad_session(model_path: str) -> ort.InferenceSession:
+    """Return the cached ORT InferenceSession, loading it on first call.
+    Subsequent calls with the same path are no-ops; calls with a different
+    path rebuild the session (rare — model path is fixed in routes_voice_stream).
+    """
+    global _vad_session, _vad_session_path
+    path_str = str(model_path)
+    if _vad_session is not None and _vad_session_path == path_str:
+        return _vad_session
+    with _vad_session_lock:
+        if _vad_session is not None and _vad_session_path == path_str:
+            return _vad_session
+        logger.info(
+            "Loading Silero VAD ONNX model from %s (singleton)", path_str
+        )
+        # Force CPU provider — onnxruntime's GPU provider probing has been
+        # flagging /sys/class/drm warnings on Radxa; CPU is fast enough
+        # for 512-sample Silero (<1 ms inference).
+        _vad_session = ort.InferenceSession(
+            path_str, providers=["CPUExecutionProvider"],
+        )
+        _vad_session_path = path_str
+        return _vad_session
+
+
+def reset_vad_session() -> None:
+    """Drop the cached ORT session — used by tests and reset_providers()
+    when a path change is needed."""
+    global _vad_session, _vad_session_path
+    with _vad_session_lock:
+        _vad_session = None
+        _vad_session_path = None
 
 
 SPEECH_START = "speech_start"
@@ -170,17 +217,16 @@ class SileroVAD:
             silence_windows=silence_windows,
         )
 
-        logger.info(
-            "Loading Silero VAD ONNX model from %s (sr=%d, window=%d samples, "
-            "silence_windows=%d)",
-            model_path, sample_rate, self._window_samples, silence_windows,
+        logger.debug(
+            "Wiring SileroVAD wrapper (sr=%d, window=%d samples, "
+            "silence_windows=%d) — using cached ORT session",
+            sample_rate, self._window_samples, silence_windows,
         )
-        # Force CPU provider — onnxruntime's GPU provider probing has
-        # been flagging /sys/class/drm warnings on Radxa; CPU is more
-        # than fast enough for 512-sample Silero (<1 ms inference).
-        self._session = ort.InferenceSession(
-            model_path, providers=["CPUExecutionProvider"],
-        )
+        # Phase 12.0 — share the underlying ORT session across all WS
+        # connections via get_vad_session(). The session itself holds the
+        # loaded ONNX graph; per-connection state (state tensor, pending,
+        # hysteresis) lives on this wrapper, so sharing is safe.
+        self._session = get_vad_session(model_path)
         self._state = np.zeros((2, 1, 128), dtype=np.float32)
         # Int16 pending samples that didn't yet fill a full window.
         self._pending = np.zeros(0, dtype=np.int16)

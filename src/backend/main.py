@@ -194,6 +194,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as exc:
         logger.warning("MiniLM warmup skipped: %s", exc)
 
+    # Phase 12.0 — preload voice singletons so the first /ws/voice connect
+    # doesn't pay 8-10 s of cold model loading on the event-loop's worker
+    # thread. 11c.5 Bug 2.
+    try:
+        from pathlib import Path as _Path
+        from voice.pipeline import preload_voice_models
+        silero_path = (
+            _Path(__file__).resolve().parent
+            / "voice" / "models" / "silero-vad" / "silero_vad.onnx"
+        )
+        statuses = await asyncio.to_thread(
+            preload_voice_models, str(silero_path) if silero_path.is_file() else None
+        )
+        logger.info("voice models preload: %s", statuses)
+    except Exception as exc:
+        logger.warning("voice model preload skipped: %s", exc)
+
     # Register chat WebSocket handlers
     register_chat_ws_handlers()
 

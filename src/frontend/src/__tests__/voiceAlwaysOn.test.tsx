@@ -9,7 +9,12 @@
  */
 import { describe, expect, it, vi, beforeEach } from 'vitest';
 import { act, render, screen, waitFor } from '@testing-library/react';
-import { useVoiceAlwaysOn, type FinalTranscript } from '../hooks/useVoiceAlwaysOn';
+import {
+  useVoiceAlwaysOn,
+  type FinalTranscript,
+  __resetVoiceAlwaysOnWS,
+  __getVoiceAlwaysOnWSRefCount,
+} from '../hooks/useVoiceAlwaysOn';
 import { __resetMicStream } from '../hooks/useMicStream';
 import { useInputMode } from '../stores/inputModeStore';
 
@@ -98,10 +103,15 @@ class FakeWebSocket {
     (this._listeners.get('open') ?? []).forEach((cb) => cb(ev));
   }
 
-  /** Test helper: simulate server sending a JSON frame. */
+  /** Test helper: simulate server sending a JSON frame. Phase 12.0
+   *  switched the hook from ``ws.onmessage = ...`` to
+   *  ``ws.addEventListener('message', ...)`` so multiple hook instances
+   *  sharing the singleton WS each get their own listener. Fan out to
+   *  both paths so legacy tests that asserted on onmessage still work. */
   _receive(payload: object) {
     const ev = new MessageEvent('message', { data: JSON.stringify(payload) });
     this.onmessage?.(ev);
+    (this._listeners.get('message') ?? []).forEach((cb) => cb(ev));
   }
 
   /** Test helper: simulate server-driven close. */
@@ -116,6 +126,7 @@ class FakeWebSocket {
 // Install once. Each test clears the instance list.
 beforeEach(() => {
   __resetMicStream();
+  __resetVoiceAlwaysOnWS();
   useInputMode.setState({ mode: 'idle' });
   FakeWebSocket.instances = [];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -439,5 +450,94 @@ describe('useVoiceAlwaysOn — input mode arbitration', () => {
     });
     expect(wakeSpy).toHaveBeenCalled();
     expect(useInputMode.getState().mode).toBe('always_on');
+  });
+});
+
+describe('useVoiceAlwaysOn — singleton WS (Phase 12.0 Bug 1 fix)', () => {
+  beforeEach(() => {
+    // The WS singleton state is module-level, so each test must reset
+    // it explicitly to avoid bleed.
+    __resetVoiceAlwaysOnWS();
+    // Permissive mic stub so two parallel hooks both reach WS open.
+    const fakeTrack = { stop: vi.fn() };
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (navigator as any).mediaDevices = {
+      getUserMedia: () =>
+        Promise.resolve({ getTracks: () => [fakeTrack] }),
+    };
+  });
+
+  it('two concurrent consumers share one WebSocket and refcount = 2', async () => {
+    // Render TWO Harness instances at once — simulates either two
+    // components calling the hook OR React StrictMode's double-effect.
+    render(
+      <>
+        <Harness enabled />
+        <Harness enabled />
+      </>,
+    );
+    // Auto-effect fires start() on each mount; both should see the
+    // singleton, so only ONE WebSocket ctor call happens.
+    await waitFor(() => {
+      expect(FakeWebSocket.instances.length).toBe(1);
+    });
+    expect(__getVoiceAlwaysOnWSRefCount()).toBe(2);
+  });
+
+  it('two start() calls on the same harness instance do not duplicate the WS', async () => {
+    const { rerender } = render(<Harness enabled />);
+    await waitFor(() => {
+      expect(FakeWebSocket.instances.length).toBe(1);
+    });
+    // A second mount of a sibling consumer should NOT spawn a second WS.
+    rerender(
+      <>
+        <Harness enabled />
+        <Harness enabled />
+      </>,
+    );
+    // Still exactly one WS construction.
+    expect(FakeWebSocket.instances.length).toBe(1);
+    // Refcount reflects however many consumers ended up alive.
+    expect(__getVoiceAlwaysOnWSRefCount()).toBeGreaterThanOrEqual(1);
+  });
+
+  it('refcount drops to 0 and WS closes when all consumers tear down', async () => {
+    const { unmount } = render(
+      <>
+        <Harness enabled />
+        <Harness enabled />
+      </>,
+    );
+    await waitFor(() => {
+      expect(FakeWebSocket.instances.length).toBe(1);
+    });
+    expect(__getVoiceAlwaysOnWSRefCount()).toBe(2);
+    const ws = FakeWebSocket.instances[0];
+    const closeSpy = vi.spyOn(ws, 'close');
+    unmount();
+    // After both unmount, refcount → 0 and the singleton closes the
+    // underlying WebSocket exactly once.
+    expect(__getVoiceAlwaysOnWSRefCount()).toBe(0);
+    expect(closeSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('StrictMode-style mount→unmount→mount keeps at most one active WS', async () => {
+    const { unmount } = render(<Harness enabled />);
+    await waitFor(() => {
+      expect(FakeWebSocket.instances.length).toBeGreaterThanOrEqual(1);
+    });
+    const before = FakeWebSocket.instances.length;
+    // Tear the consumer down — refcount → 0, WS closes.
+    unmount();
+    expect(__getVoiceAlwaysOnWSRefCount()).toBe(0);
+    // Re-mount: a fresh acquire happens. The total ctor count grows,
+    // but the *active* count is still one.
+    render(<Harness enabled />);
+    await waitFor(() => {
+      expect(FakeWebSocket.instances.length).toBeGreaterThan(before);
+    });
+    // Refcount is back to 1 — one active consumer, one underlying WS.
+    expect(__getVoiceAlwaysOnWSRefCount()).toBe(1);
   });
 });

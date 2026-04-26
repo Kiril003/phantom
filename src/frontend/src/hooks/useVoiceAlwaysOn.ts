@@ -72,6 +72,118 @@ interface ServerEvent {
 
 const BACKEND_FRAME_BYTES = 960;  // 30 ms @ 16 kHz s16le — advisory
 
+// ─── Phase 12.0 — Module-level WS singleton (Bug 1 fix) ─────────────────────
+// React StrictMode (and rapid toolbar clicks) used to spawn a fresh WebSocket
+// per mount, leaking sockets and triggering a fresh model load on the
+// backend each time. The singleton + refcount pattern dedups across all
+// hook instances: the first acquire creates the WS, subsequent acquires
+// share it, and only the last release closes it.
+let _wsInstance: WebSocket | null = null;
+let _wsState: 'idle' | 'connecting' | 'connected' = 'idle';
+let _wsRefCount = 0;
+
+interface AcquiredWS {
+  ws: WebSocket;
+  ready: Promise<void>;
+  /** Whether THIS acquire created the underlying WS (vs reusing an
+   *  existing one). Tests assert the WebSocket constructor was called
+   *  exactly once for two concurrent acquires. */
+  fresh: boolean;
+}
+
+function _acquireWS(url: string): AcquiredWS {
+  if (_wsInstance && (_wsState === 'connecting' || _wsState === 'connected')) {
+    _wsRefCount += 1;
+    const ws = _wsInstance;
+    const ready = new Promise<void>((resolve, reject) => {
+      if (_wsState === 'connected') {
+        // Already open — schedule resolve so callers always observe an
+        // async settlement (matches the fresh-WS code path).
+        queueMicrotask(() => resolve());
+        return;
+      }
+      const onOpen = () => resolve();
+      const onClose = (ev: CloseEvent) =>
+        reject(new Error(`ws closed: ${ev.code} ${ev.reason || ''}`));
+      ws.addEventListener('open', onOpen, { once: true });
+      ws.addEventListener('close', onClose, { once: true });
+    });
+    return { ws, ready, fresh: false };
+  }
+
+  _wsState = 'connecting';
+  const ws = new WebSocket(url);
+  _wsInstance = ws;
+  _wsRefCount = 1;
+
+  const ready = new Promise<void>((resolve, reject) => {
+    ws.addEventListener(
+      'open',
+      () => {
+        // Guard: if a later acquire already replaced us, don't clobber.
+        if (_wsInstance === ws) {
+          _wsState = 'connected';
+        }
+        resolve();
+      },
+      { once: true },
+    );
+    ws.addEventListener(
+      'close',
+      (ev) => {
+        // Only reset module state when THIS ws is still the singleton.
+        // A late close event from a previously-released ws must not wipe
+        // the new one's refcount.
+        if (_wsInstance === ws) {
+          _wsState = 'idle';
+          _wsInstance = null;
+          _wsRefCount = 0;
+        }
+        reject(new Error(`ws closed: ${ev.code} ${ev.reason || ''}`));
+      },
+      { once: true },
+    );
+  });
+  return { ws, ready, fresh: true };
+}
+
+function _releaseWS(): void {
+  _wsRefCount = Math.max(0, _wsRefCount - 1);
+  if (_wsRefCount === 0 && _wsInstance) {
+    try {
+      // Close regardless of readyState — the 11c.5 bug was that a
+      // CONNECTING socket leaked on teardown because the close branch
+      // gated on readyState === OPEN. Closing a CONNECTING socket is
+      // a noop on already-closed and a clean abort otherwise.
+      _wsInstance.close();
+    } catch {
+      /* ignore */
+    }
+    _wsInstance = null;
+    _wsState = 'idle';
+  }
+}
+
+/** Test-only: forcibly drop the singleton between tests so each test
+ *  starts from a clean state. */
+export function __resetVoiceAlwaysOnWS(): void {
+  if (_wsInstance) {
+    try {
+      _wsInstance.close();
+    } catch {
+      /* ignore */
+    }
+  }
+  _wsInstance = null;
+  _wsState = 'idle';
+  _wsRefCount = 0;
+}
+
+/** Test-only: snapshot the singleton refcount. */
+export function __getVoiceAlwaysOnWSRefCount(): number {
+  return _wsRefCount;
+}
+
 
 function _resolveWsUrl(explicit?: string): string {
   if (explicit) return explicit;
@@ -144,16 +256,19 @@ export function useVoiceAlwaysOn(config: AlwaysOnConfig = {}) {
     }
   }, [micRelease]);
 
+  // Tracks whether THIS hook instance currently holds a refcount on the
+  // singleton WS. Without this guard, a teardown after a failed acquire
+  // (e.g. token missing) would still decrement the refcount and prematurely
+  // close a WS that another consumer relies on.
+  const wsHeldRef = useRef(false);
+
   const _teardown = useCallback(() => {
     _teardownAudio();
-    if (wsRef.current) {
-      try {
-        if (wsRef.current.readyState === WebSocket.OPEN) {
-          wsRef.current.close();
-        }
-      } catch { /* ignore */ }
-      wsRef.current = null;
+    if (wsHeldRef.current) {
+      _releaseWS();
+      wsHeldRef.current = false;
     }
+    wsRef.current = null;
     setPartialTranscript('');
   }, [_teardownAudio]);
 
@@ -270,12 +385,18 @@ export function useVoiceAlwaysOn(config: AlwaysOnConfig = {}) {
     }
 
     // Open WS first so a token rejection fails fast without the mic prompt.
+    // Acquire via singleton so React StrictMode double-mounts and rapid
+    // toolbar clicks don't spawn duplicate sockets (Phase 11c.5 Bug 1).
     const url = `${_resolveWsUrl(wsUrl)}?token=${encodeURIComponent(resolvedToken)}`;
-    const ws = new WebSocket(url);
+    const { ws, ready } = _acquireWS(url);
     ws.binaryType = 'arraybuffer';
     wsRef.current = ws;
+    wsHeldRef.current = true;
 
-    ws.onmessage = (ev) => {
+    // Use addEventListener so multiple hook instances sharing the singleton
+    // WS each get their own message/error/close listener, instead of the
+    // last consumer's onmessage assignment clobbering earlier ones.
+    const messageListener = (ev: MessageEvent) => {
       if (typeof ev.data !== 'string') return;
       try {
         const msg: ServerEvent = JSON.parse(ev.data);
@@ -284,26 +405,22 @@ export function useVoiceAlwaysOn(config: AlwaysOnConfig = {}) {
         log('bad json', err, ev.data);
       }
     };
-    ws.onerror = () => {
+    const errorListener = () => {
       setErrorMessage('websocket error');
       setStatus('error');
     };
-    ws.onclose = () => {
+    const closeListener = () => {
       if (!manualStopRef.current && status !== 'error') {
         setStatus('disconnected');
       }
       _teardownAudio();
     };
+    ws.addEventListener('message', messageListener);
+    ws.addEventListener('error', errorListener);
+    ws.addEventListener('close', closeListener);
 
     try {
-      await new Promise<void>((resolve, reject) => {
-        ws.addEventListener('open', () => resolve(), { once: true });
-        ws.addEventListener(
-          'close',
-          (e) => reject(new Error(`ws closed: ${e.code} ${e.reason || ''}`)),
-          { once: true },
-        );
-      });
+      await ready;
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'ws open failed');
       setStatus('error');

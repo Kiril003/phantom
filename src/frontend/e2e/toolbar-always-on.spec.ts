@@ -1,29 +1,35 @@
 import { test, expect, type APIRequestContext, type Page } from '@playwright/test';
 
 /**
- * Phase 11c.2 — toolbar Always-On toggle button.
+ * Phase 12.0 — toolbar Voice mode cycle button.
  *
- * The new primary-toolbar button mirrors `voice_always_on_enabled` and
- * lets the operator toggle the always-on listener without diving into
- * Settings. This test exercises the real button in a real browser by
- * doing a PIN login through the UI (auto-login is not wired so just
+ * The toolbar button (formerly "Always-On") cycles voice_mode through
+ *   off → continuous → wake_word → off
+ * Each click optimistically flips the local store and PUTs the new value
+ * to the backend. This test exercises the real button in a real browser
+ * by doing a PIN login through the UI (auto-login is not wired so just
  * stuffing the JWT into localStorage is not enough — the auth store
  * stays empty until `setUser` is called by the login flow).
  *
  * Flow:
- *   1. Read the current backend value via API.
+ *   1. Read the current backend voice_mode via API.
  *   2. PIN-login through the UI (default test PIN = 000000).
- *   3. Click the toolbar button (aria-label="Always-On").
- *   4. Poll the backend until the new value is observed.
- *   5. Click again, poll back to the original value.
- *   6. Defensive restore in `finally` so a failed assertion never
- *      leaks `voice_always_on_enabled = true` into the next session.
+ *   3. Click the toolbar button (aria-label="Voice mode").
+ *   4. Poll the backend until the new mode is observed.
+ *   5. Defensive restore in `finally` so a failed assertion never
+ *      leaks the test's mode into the next session.
  */
 
 const BACKEND = process.env.PHANTOM_BACKEND ?? 'http://127.0.0.1:8000';
 const USERNAME = process.env.PHANTOM_TEST_USER ?? 'phantom';
 const PIN = process.env.PHANTOM_TEST_PIN ?? '000000';
-const KEY = 'voice_always_on_enabled';
+const KEY = 'voice_mode';
+
+type VoiceMode = 'off' | 'continuous' | 'wake_word';
+
+function nextMode(mode: VoiceMode): VoiceMode {
+  return mode === 'off' ? 'continuous' : mode === 'continuous' ? 'wake_word' : 'off';
+}
 
 async function login(request: APIRequestContext): Promise<string> {
   const res = await request.post(`${BACKEND}/api/v1/auth/login/pin`, {
@@ -38,19 +44,19 @@ async function login(request: APIRequestContext): Promise<string> {
 async function readValue(
   request: APIRequestContext,
   token: string,
-): Promise<boolean> {
+): Promise<VoiceMode> {
   const res = await request.get(
     `${BACKEND}/api/v1/settings/_value/${encodeURIComponent(KEY)}`,
     { headers: { Authorization: `Bearer ${token}` } },
   );
   expect(res.status()).toBe(200);
-  return Boolean((await res.json()).value);
+  return (await res.json()).value as VoiceMode;
 }
 
 async function writeValue(
   request: APIRequestContext,
   token: string,
-  value: boolean,
+  value: VoiceMode,
 ): Promise<void> {
   const res = await request.put(
     `${BACKEND}/api/v1/settings/${encodeURIComponent(KEY)}`,
@@ -68,9 +74,9 @@ async function writeValue(
 async function pollValue(
   request: APIRequestContext,
   token: string,
-  expected: boolean,
+  expected: VoiceMode,
   timeoutMs = 5000,
-): Promise<boolean> {
+): Promise<VoiceMode> {
   const deadline = Date.now() + timeoutMs;
   let last = await readValue(request, token);
   while (last !== expected && Date.now() < deadline) {
@@ -137,41 +143,53 @@ async function stubVoiceWS(page: Page): Promise<void> {
   });
 }
 
-test.describe('Toolbar Always-On toggle (phase 11c.2)', () => {
-  test('clicking the Always-On button flips voice_always_on_enabled in the backend', async ({
+test.describe('Toolbar Voice mode cycle (Phase 12.0)', () => {
+  test('clicking the Voice mode button cycles voice_mode in the backend', async ({
     page,
     request,
   }) => {
     const token = await login(request);
+    // Force a known starting state so the cycle assertions are deterministic.
+    await writeValue(request, token, 'off');
     const original = await readValue(request, token);
+    expect(original).toBe('off');
 
     try {
       await stubVoiceWS(page);
       await pinLogin(page);
 
-      const button = page.getByLabel('Always-On', { exact: true });
+      const button = page.getByLabel('Voice mode', { exact: true });
       await expect(button).toBeVisible({ timeout: 10_000 });
-      // Initial state should mirror the backend.
-      await expect(button).toHaveAttribute('aria-pressed', String(original));
+      // off → not active in the toolbar.
+      await expect(button).toHaveAttribute('aria-pressed', 'false');
 
-      // Click → optimistic flip on the client + PUT.
+      // Click 1 → continuous (active).
       await button.click();
-      const afterFirstClick = await pollValue(request, token, !original);
-      expect(afterFirstClick).toBe(!original);
-      await expect(button).toHaveAttribute('aria-pressed', String(!original));
+      const afterFirstClick = await pollValue(request, token, 'continuous');
+      expect(afterFirstClick).toBe('continuous');
+      await expect(button).toHaveAttribute('aria-pressed', 'true');
 
-      // Click again → flip back.
+      // Click 2 → wake_word (still active — both non-off modes are active).
       await button.click();
-      const afterSecondClick = await pollValue(request, token, original);
-      expect(afterSecondClick).toBe(original);
-      await expect(button).toHaveAttribute('aria-pressed', String(original));
+      const afterSecondClick = await pollValue(request, token, 'wake_word');
+      expect(afterSecondClick).toBe('wake_word');
+      await expect(button).toHaveAttribute('aria-pressed', 'true');
+
+      // Click 3 → back to off.
+      await button.click();
+      const afterThirdClick = await pollValue(request, token, 'off');
+      expect(afterThirdClick).toBe('off');
+      await expect(button).toHaveAttribute('aria-pressed', 'false');
     } finally {
-      // Defensive restore — covers the case where an expect() above bailed
-      // partway through and left the backend in the flipped state.
+      // Defensive restore — leave the backend at "off" regardless of how
+      // the test exited so the next session starts from a known state.
       const final = await readValue(request, token);
-      if (final !== original) {
-        await writeValue(request, token, original);
+      if (final !== 'off') {
+        await writeValue(request, token, 'off');
       }
+      // Suppress the unused-helper lint — nextMode is a documentation
+      // helper for readers.
+      void nextMode;
     }
   });
 });

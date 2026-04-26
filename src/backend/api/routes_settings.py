@@ -530,14 +530,31 @@ def _apply_runtime_side_effect(key: str, value: Any) -> None:
         for h in logging.getLogger().handlers:
             h.setFormatter(new_fmt)
     elif key.startswith("voice_"):
-        # A voice_* mutation may have changed the active STT mode or TTS
-        # voice; drop the cached provider so the next request rebuilds with
-        # the new config.
-        try:
-            from voice.pipeline import reset_providers
-            reset_providers()
-        except Exception as exc:
-            logger.debug("voice.reset_providers() failed: %s", exc)
+        # Phase 12.0 — only reset providers when the key genuinely
+        # invalidates a loaded model. Phase-12 mode keys (voice_mode,
+        # voice_wake_phrase, voice_silence_timeout_ms) are runtime params
+        # the orchestrator reads at WS connect time; resetting on them
+        # would defeat the singleton preload (Bug 2). Reset only when
+        # the STT engine, the Whisper config, the Vosk model path, or
+        # the TTS voice changes.
+        invalidating_keys = {
+            "voice_stt_mode",
+            "voice_stt_vosk_model",
+            "voice_stt_whisper_model",
+            "voice_stt_whisper_device",
+            "voice_stt_whisper_compute",
+            "voice_stt_language",
+            "voice_tts_enabled",
+            "voice_tts_voice",
+            "voice_tts_voice_uk",
+            "voice_tts_voice_en",
+        }
+        if key in invalidating_keys:
+            try:
+                from voice.pipeline import reset_providers
+                reset_providers()
+            except Exception as exc:
+                logger.debug("voice.reset_providers() failed: %s", exc)
 
 
 @router.post("/reset")

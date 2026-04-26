@@ -86,25 +86,22 @@ test.describe('Voice always-on infrastructure', () => {
     expect(voiceErrors).toEqual([]);
   });
 
-  test('voice_always_on_enabled setting round-trips', async ({ request }) => {
+  test('voice_mode setting round-trips through PUT/GET (Phase 12.0)', async ({
+    request,
+  }) => {
     const token = await login(request);
-    const original = (await readValue(
-      request,
-      token,
-      'voice_always_on_enabled',
-    )) as boolean;
-    const flipped = !original;
+    const original = (await readValue(request, token, 'voice_mode')) as string;
 
     try {
-      await writeValue(request, token, 'voice_always_on_enabled', flipped);
-      const after = await readValue(
-        request,
-        token,
-        'voice_always_on_enabled',
-      );
-      expect(after).toBe(flipped);
+      // Cycle through every Phase 12 mode and confirm the GET reads it back.
+      for (const mode of ['continuous', 'wake_word', 'off']) {
+        await writeValue(request, token, 'voice_mode', mode);
+        const after = await readValue(request, token, 'voice_mode');
+        expect(after).toBe(mode);
+      }
     } finally {
-      await writeValue(request, token, 'voice_always_on_enabled', original);
+      // Restore whatever the test session started with — typically "off".
+      await writeValue(request, token, 'voice_mode', original);
     }
   });
 

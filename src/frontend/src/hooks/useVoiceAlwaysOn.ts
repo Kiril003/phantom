@@ -188,6 +188,19 @@ export function __getVoiceAlwaysOnWSRefCount(): number {
 function _resolveWsUrl(explicit?: string): string {
   if (explicit) return explicit;
   const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+  // Phase 12.1 — bypass the Vite WebSocket proxy for `/ws/voice`. Vite's
+  // ws-proxy crashes (EPIPE / 1006) under the combined load of:
+  //   * 30 ms-cadence binary PCM frames flowing client → backend, and
+  //   * concurrent OLED / sensor / chat traffic on the central /ws hub.
+  // The chat hub stays on Vite (text-only, low rate). For voice we go
+  // direct to the backend port. Backend `cors_origins` lists the dev
+  // host; FastAPI doesn't gate WebSocket upgrades on Origin by default,
+  // so this works without extra middleware. Production builds (where
+  // import.meta.env.DEV is false) keep using the same-origin URL.
+  if (import.meta.env.DEV) {
+    const host = `${window.location.hostname}:8000`;
+    return `${proto}//${host}/ws/voice`;
+  }
   const host = window.location.host;
   return `${proto}//${host}/ws/voice`;
 }

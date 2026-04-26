@@ -377,13 +377,15 @@ class TestVoiceSettingsIntegration:
         )
 
     def test_voice_settings_put_resets_pipeline_cache(self, client, tmp_path):
-        """Mutating a voice_* setting must invalidate the cached provider."""
-        # Prime the cache.
-        voice_pipeline._stt = _MockSTT()
-        voice_pipeline._tts = _MockTTS()
-        assert voice_pipeline._stt is not None
+        """An *invalidating* voice_* PUT must drop the cached provider.
 
-        # Authenticate and PUT a voice setting.
+        Phase 12.0 (commit 00fc745) narrowed reset_providers() to keys
+        that genuinely change the loaded model. Runtime params like
+        voice_tts_speed must NOT trash the singleton — that defeats the
+        startup preload (Bug 2 in phase-11c.5/known-issues.md). This
+        test pins both halves of the contract.
+        """
+        # Authenticate.
         r = client.post(
             "/api/v1/auth/login/pin",
             json={"username": "phantom", "pin": "000000"},
@@ -391,19 +393,37 @@ class TestVoiceSettingsIntegration:
         assert r.status_code == 200, r.text
         token = r.json()["token"]
 
+        # Half A — runtime-only key (voice_tts_speed) MUST NOT reset cache.
+        voice_pipeline._stt = _MockSTT()
+        voice_pipeline._tts = _MockTTS()
         r = client.put(
             "/api/v1/settings/voice_tts_speed",
             headers={"Authorization": f"Bearer {token}"},
             json={"value": 1.2},
         )
         assert r.status_code == 200, r.text
-        # Cache was blown away.
-        assert voice_pipeline._stt is None
+        assert voice_pipeline._stt is not None, (
+            "voice_tts_speed is a runtime-only key — must not invalidate "
+            "the singleton (see Phase 12.0 invalidating_keys allow-list)"
+        )
+        assert voice_pipeline._tts is not None
+
+        # Half B — invalidating key (voice_stt_language) MUST reset.
+        r = client.put(
+            "/api/v1/settings/voice_stt_language",
+            headers={"Authorization": f"Bearer {token}"},
+            json={"value": "uk"},
+        )
+        assert r.status_code == 200, r.text
+        assert voice_pipeline._stt is None, (
+            "voice_stt_language is in the invalidating allow-list and must "
+            "drop the cached STT provider"
+        )
         assert voice_pipeline._tts is None
 
-        # Clean up persisted override.
+        # Clean up persisted overrides.
         from db import settings_repo
         import asyncio as _asyncio
         _asyncio.get_event_loop().run_until_complete(
-            settings_repo.delete(["voice_tts_speed"])
+            settings_repo.delete(["voice_tts_speed", "voice_stt_language"])
         )

@@ -228,12 +228,22 @@ class SileroVAD:
         # hysteresis) lives on this wrapper, so sharing is safe.
         self._session = get_vad_session(model_path)
         self._state = np.zeros((2, 1, 128), dtype=np.float32)
+        # Phase 12.1 — Silero v5 ONNX expects (batch, 576) for 16 kHz
+        # (= 64 context samples carried over from the previous call +
+        # 512 fresh samples) and (batch, 288) for 8 kHz. Without the
+        # context prefix the model is fed only the 512-sample window
+        # and its LSTM never warms up, so probabilities stay pinned
+        # near zero on real speech (max 0.012 vs 0.99 expected). This
+        # mirrors the official OnnxWrapper in silero_vad/utils_vad.py.
+        self._context_size = 64 if sample_rate == 16_000 else 32
+        self._context = np.zeros((1, self._context_size), dtype=np.float32)
         # Int16 pending samples that didn't yet fill a full window.
         self._pending = np.zeros(0, dtype=np.int16)
 
     def reset(self) -> None:
         self._hysteresis.reset()
         self._state = np.zeros((2, 1, 128), dtype=np.float32)
+        self._context = np.zeros((1, self._context_size), dtype=np.float32)
         self._pending = np.zeros(0, dtype=np.int16)
 
     @property
@@ -276,7 +286,13 @@ class SileroVAD:
         return events
 
     def _infer(self, pcm_int16: np.ndarray) -> float:
-        audio = (pcm_int16.astype(np.float32) / 32768.0).reshape(1, -1)
+        # Phase 12.1 — concatenate the carried-over context with the
+        # current 512-sample window, mirroring the reference
+        # ``silero_vad.OnnxWrapper.__call__``. Without this prefix the
+        # ONNX graph runs on a truncated input and the speech probability
+        # is permanently floored.
+        chunk = (pcm_int16.astype(np.float32) / 32768.0).reshape(1, -1)
+        audio = np.concatenate([self._context, chunk], axis=1)
         outputs = self._session.run(
             None,
             {
@@ -287,6 +303,9 @@ class SileroVAD:
         )
         prob = float(outputs[0][0, 0])
         self._state = outputs[1]
+        # Save the tail of the combined input so the next call sees the
+        # last `context_size` samples as its prefix.
+        self._context = audio[:, -self._context_size:]
         return prob
 
     # Exposed for tests that want to feed synthetic probabilities without

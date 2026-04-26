@@ -75,8 +75,12 @@ def valid_token(monkeypatch):
 
 @pytest.fixture
 def always_on_enabled(monkeypatch):
+    """Phase 12.0 — voice_mode replaces voice_always_on_enabled. Setting
+    mode to 'continuous' enables the binary-frame path the same way the
+    legacy True flag did pre-12.0."""
     from config import config
 
+    monkeypatch.setattr(config, "voice_mode", "continuous", raising=False)
     monkeypatch.setattr(config, "voice_always_on_enabled", True, raising=False)
 
 
@@ -84,6 +88,7 @@ def always_on_enabled(monkeypatch):
 def always_on_disabled(monkeypatch):
     from config import config
 
+    monkeypatch.setattr(config, "voice_mode", "off", raising=False)
     monkeypatch.setattr(config, "voice_always_on_enabled", False, raising=False)
 
 

@@ -93,17 +93,32 @@ async def _accept_authenticated(
 def _build_orchestrator() -> AlwaysOnOrchestrator:
     """Construct a per-connection orchestrator. Raises RuntimeError when
     a required resource (Silero ONNX, Vosk model) is missing so the WS
-    handler can close the connection with a helpful reason."""
+    handler can close the connection with a helpful reason.
+
+    Phase 12.0 — picks the orchestrator mode from ``config.voice_mode``
+    (off / continuous / wake_word). The legacy 11b FSM only runs when
+    voice_mode is one of the legacy values (currently never set in
+    production); when voice_mode is "off" we still build the orchestrator
+    so the WS can advertise readiness, but every frame is a no-op.
+    """
     if not SILERO_MODEL_PATH.is_file():
         raise RuntimeError(
             f"Silero VAD ONNX not found at {SILERO_MODEL_PATH} "
             "(expected from phase-11b task 0)"
         )
     vosk_model = get_vosk_model()  # may raise RuntimeError
+    # Phase 12.0 — wire voice_silence_timeout_ms into the VAD so SPEECH_END
+    # fires after the operator-configured pause length. The 11b default
+    # (voice_vad_silence_ms = 500) only kicks in for the legacy FSM.
+    mode = config.voice_mode
+    if mode in ("continuous", "wake_word"):
+        silence_ms = config.voice_silence_timeout_ms
+    else:
+        silence_ms = config.voice_vad_silence_ms
     vad = SileroVAD(
         _safe_path(),
         sample_rate=16_000,
-        silence_ms=config.voice_vad_silence_ms,
+        silence_ms=silence_ms,
     )
     spotter = WakeSpotter(
         vosk_model,
@@ -117,6 +132,9 @@ def _build_orchestrator() -> AlwaysOnOrchestrator:
         vosk_model=vosk_model,
         sample_rate=16_000,
         continuation_window_s=config.voice_continuation_window_s,
+        mode=mode if mode in ("off", "continuous", "wake_word") else "legacy",
+        wake_phrase=config.voice_wake_phrase,
+        silence_timeout_ms=config.voice_silence_timeout_ms,
     )
 
 
@@ -223,8 +241,8 @@ async def voice_ws_handler(ws: WebSocket, token: Optional[str] = None) -> None:
     client_id = str(uuid.uuid4())
     session = _VoiceSession(ws, user_id, client_id)
     logger.info(
-        "voice WS connected: client=%s user=%s always_on_enabled=%s",
-        client_id, user_id, config.voice_always_on_enabled,
+        "voice WS connected: client=%s user=%s voice_mode=%s",
+        client_id, user_id, config.voice_mode,
     )
 
     try:
@@ -242,12 +260,19 @@ async def voice_ws_handler(ws: WebSocket, token: Optional[str] = None) -> None:
         return
 
     await session.attach_orchestrator(orch)
+    # Phase 12.0 — ``enabled`` reflects voice_mode != "off". The frontend
+    # uses voice_mode directly now but we keep the boolean for older clients.
+    mode = config.voice_mode
+    enabled = mode in ("continuous", "wake_word")
     await session.send(
         {
             "type": "ready",
             "sample_rate": 16_000,
             "frame_size_recommended": EXPECTED_FRAME_SIZE_BYTES,
-            "enabled": config.voice_always_on_enabled,
+            "enabled": enabled,
+            "mode": mode,
+            "wake_phrase": config.voice_wake_phrase,
+            "silence_timeout_ms": config.voice_silence_timeout_ms,
             "wake_words": config.voice_wake_words,
             "confidence_min": config.voice_wake_confidence_min,
             "continuation_window_s": config.voice_continuation_window_s,
@@ -261,9 +286,11 @@ async def voice_ws_handler(ws: WebSocket, token: Optional[str] = None) -> None:
                 break
             # Either 'bytes' (binary frame) or 'text' (JSON command).
             if "bytes" in message and message["bytes"] is not None:
-                if config.voice_always_on_enabled:
+                # Phase 12.0 — frame gate is voice_mode != "off". The
+                # orchestrator itself also short-circuits on MODE_OFF so the
+                # check is belt-and-suspenders.
+                if config.voice_mode != "off":
                     await session.handle_binary(message["bytes"])
-                # else: silently drop — client sees no events, IDLE state
             elif "text" in message and message["text"] is not None:
                 await session.handle_command(message["text"])
     except WebSocketDisconnect:

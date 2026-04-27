@@ -42,7 +42,17 @@ export type AlwaysOnStatus =
 
 export interface FinalTranscript {
   transcript: string;
-  source: 'wake' | 'continuation' | 'continuous' | 'wake_word';
+  source:
+    | 'wake'
+    | 'continuation'
+    | 'continuous'
+    | 'wake_word'
+    // Phase 13b — Vosk fast-path final emitted directly from streaming
+    // KaldiRecognizer.FinalResult (no Whisper hop on the realtime path).
+    | 'vosk_fast'
+    // Phase 13b — Whisper background-refine result that differs from the
+    // Vosk fast final. Delivered via ``final_revised`` event.
+    | 'whisper_quality';
   confidence: number;
 }
 
@@ -56,6 +66,10 @@ export interface AlwaysOnConfig {
   token?: string;
   /** Fired when the orchestrator emits a `final` event. */
   onFinalTranscript?: (t: FinalTranscript) => void;
+  /** Phase 13b — fired when the optional Whisper-refine pass produces a
+   *  meaningfully different transcript from Vosk's fast final. The
+   *  consumer typically calls chatStore.replaceLastUserMessage. */
+  onRevisedTranscript?: (t: FinalTranscript) => void;
   /** Fired when a wake is detected. Useful for haptic / visual beep. */
   onWake?: (transcript: string, confidence: number) => void;
   /** Opt-in verbose logging. */
@@ -305,6 +319,7 @@ export function useVoiceAlwaysOn(config: AlwaysOnConfig = {}) {
     wsUrl,
     token,
     onFinalTranscript,
+    onRevisedTranscript,
     onWake,
     debug,
     clientVadEnabled = true,
@@ -412,6 +427,16 @@ export function useVoiceAlwaysOn(config: AlwaysOnConfig = {}) {
         case 'speech_end':
           // stays in listening until wake/final event flips us
           break;
+        case 'partial': {
+          // Phase 13b — Vosk streaming partial transcript. Updates the
+          // ghost-bubble preview as the user speaks. Suppressed when
+          // tap-to-talk owns the turn so the partials don't bleed into a
+          // parallel push-to-talk capture.
+          if (inputModeRef.current === 'tap') break;
+          if (typeof ev.transcript !== 'string') break;
+          setPartialTranscript(ev.transcript);
+          break;
+        }
         case 'wake':
           // Input mode arbitration — if tap-to-talk is currently owning
           // the turn, the user is holding the mic themselves; the wake
@@ -444,20 +469,48 @@ export function useVoiceAlwaysOn(config: AlwaysOnConfig = {}) {
           }
           const transcript = typeof ev.transcript === 'string' ? ev.transcript : '';
           const rawSource = ev.source as string;
+          const knownSources = [
+            'continuation', 'wake', 'continuous', 'wake_word',
+            // Phase 13b — Vosk fast-path final event.
+            'vosk_fast',
+          ];
           const source = (
-            ['continuation', 'wake', 'continuous', 'wake_word'].includes(rawSource) 
-              ? rawSource 
-              : 'wake'
+            knownSources.includes(rawSource) ? rawSource : 'wake'
           ) as FinalTranscript['source'];
           const confidence = typeof ev.confidence === 'number' ? ev.confidence : 0;
+          // Keep the final transcript visible until the next utterance
+          // starts — tests assert this and it gives the user a brief
+          // "your words got captured as X" before the chat round-trip.
           setPartialTranscript(transcript);
           if (onFinalTranscript) {
             onFinalTranscript({ transcript, source, confidence });
           }
-          // Phase 12 modes do not trigger cooldown, return to ready directly.
-          if (source === 'continuous' || source === 'wake_word') {
+          // Phase 12/13b modes do not trigger cooldown, return to ready directly.
+          if (
+            source === 'continuous'
+            || source === 'wake_word'
+            || source === 'vosk_fast'
+          ) {
             setStatus('ready');
             if (inputModeRef.current === 'always_on') setInputMode('idle');
+          }
+          break;
+        }
+        case 'final_revised': {
+          // Phase 13b — Whisper-refine background result. Only fires when
+          // Whisper differed from Vosk by more than the configured ratio.
+          // We do NOT change the input mode or status — by the time a
+          // refine arrives the user has already moved on.
+          if (inputModeRef.current === 'tap') break;
+          if (typeof ev.transcript !== 'string') break;
+          const transcript = ev.transcript;
+          const confidence = typeof ev.confidence === 'number' ? ev.confidence : 0;
+          if (onRevisedTranscript) {
+            onRevisedTranscript({
+              transcript,
+              source: 'whisper_quality',
+              confidence,
+            });
           }
           break;
         }
@@ -482,7 +535,7 @@ export function useVoiceAlwaysOn(config: AlwaysOnConfig = {}) {
           break;
       }
     },
-    [status, onWake, onFinalTranscript, log, setInputMode],
+    [status, onWake, onFinalTranscript, onRevisedTranscript, log, setInputMode],
   );
 
   const start = useCallback(async (): Promise<void> => {

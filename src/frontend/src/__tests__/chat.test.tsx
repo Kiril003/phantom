@@ -354,6 +354,68 @@ describe('chatStore', () => {
     // appendMessage is naive — accepts duplicate; the dedup lives inside sendMessage
     expect(useChatStore.getState().messages.length).toBe(before + 1);
   });
+
+  // ─── Phase 13b — userPreview + replaceLastUserMessage ──────────────────────
+
+  it('setUserPreview updates the preview slot, null clears it', () => {
+    useChatStore.getState().setUserPreview('при');
+    expect(useChatStore.getState().userPreview).toBe('при');
+    useChatStore.getState().setUserPreview('привіт');
+    expect(useChatStore.getState().userPreview).toBe('привіт');
+    useChatStore.getState().setUserPreview(null);
+    expect(useChatStore.getState().userPreview).toBeNull();
+  });
+
+  it('replaceLastUserMessage rewrites the most recent user message in place', () => {
+    const userOriginal = baseMessage({ id: 'u-1', role: 'user', content: 'приві' });
+    const assistantReply = baseMessage({ id: 'a-1', role: 'assistant', content: 'reply' });
+    useChatStore.setState({ messages: [userOriginal, assistantReply] });
+
+    useChatStore.getState().replaceLastUserMessage('привіт як справи', { revised_by: 'whisper' });
+
+    const after = useChatStore.getState().messages;
+    expect(after).toHaveLength(2);
+    // Order preserved.
+    expect(after[0].id).toBe('u-1');
+    expect(after[1].id).toBe('a-1');
+    // User message text replaced.
+    expect(after[0].content).toBe('привіт як справи');
+    // Metadata merged, not replaced.
+    expect(after[0].metadata.input_method).toBe('text');
+    expect((after[0].metadata as unknown as { revised_by?: string }).revised_by).toBe('whisper');
+    // Assistant message untouched.
+    expect(after[1].content).toBe('reply');
+  });
+
+  it('replaceLastUserMessage targets the LAST user message even if assistant comes after', () => {
+    const u1 = baseMessage({ id: 'u-1', role: 'user', content: 'first' });
+    const a1 = baseMessage({ id: 'a-1', role: 'assistant', content: 'reply-1' });
+    const u2 = baseMessage({ id: 'u-2', role: 'user', content: 'second' });
+    const a2 = baseMessage({ id: 'a-2', role: 'assistant', content: 'reply-2' });
+    useChatStore.setState({ messages: [u1, a1, u2, a2] });
+
+    useChatStore.getState().replaceLastUserMessage('second-revised');
+
+    const after = useChatStore.getState().messages;
+    expect(after[0].content).toBe('first');           // earlier user untouched
+    expect(after[2].content).toBe('second-revised');  // last user replaced
+    expect(after[3].content).toBe('reply-2');         // assistant untouched
+  });
+
+  it('replaceLastUserMessage is a no-op when there are no user messages', () => {
+    const a1 = baseMessage({ id: 'a-1', role: 'assistant', content: 'only assistant' });
+    useChatStore.setState({ messages: [a1] });
+
+    useChatStore.getState().replaceLastUserMessage('should-not-apply');
+
+    expect(useChatStore.getState().messages).toEqual([a1]);
+  });
+
+  it('replaceLastUserMessage is a no-op when the message list is empty', () => {
+    useChatStore.setState({ messages: [] });
+    useChatStore.getState().replaceLastUserMessage('whatever');
+    expect(useChatStore.getState().messages).toHaveLength(0);
+  });
 });
 
 /* ─── ChatWindow integration ────────────────────────────────────────────────── */

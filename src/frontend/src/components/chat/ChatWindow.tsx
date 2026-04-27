@@ -66,6 +66,10 @@ export function ChatWindow({
   const streaming = useChatStore((s) => s.streaming);
   const isTyping = useChatStore((s) => s.isTyping);
   const sending = useChatStore((s) => s.sending);
+  // Phase 13b — live partial transcript from the always-on mic.
+  // Rendered as a "ghost" user bubble so the user sees their words
+  // appear in real time while still speaking.
+  const userPreview = useChatStore((s) => s.userPreview);
   const currentSessionId = useChatStore((s) => s.currentSessionId);
   const sessions = useChatStore((s) => s.sessions);
   const error = useChatStore((s) => s.error);
@@ -530,6 +534,37 @@ export function ChatWindow({
               streaming
               compact
             />
+          )}
+
+          {userPreview && !sending && (
+            // Phase 13b — live ghost bubble for the user's still-in-progress
+            // utterance. Subtle (italic, dimmed cyan, animated dot) to make
+            // clear it is not yet committed. Disappears on `sending` so the
+            // committed user message renders without a duplicate.
+            <motion.div
+              className="self-end max-w-[80%] rounded-2xl px-4 py-2 italic border"
+              initial={{ opacity: 0, y: 4 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              aria-label="Розпізнавання у процесі"
+              style={{
+                color: 'var(--accent-cyan-soft, rgba(72, 220, 252, 0.7))',
+                background: 'rgba(72, 220, 252, 0.06)',
+                borderColor: 'rgba(72, 220, 252, 0.18)',
+                fontFamily: 'var(--font-body)',
+                fontSize: 'var(--fs-sm)',
+                letterSpacing: 'var(--tracking-normal)',
+              }}
+            >
+              {userPreview}
+              <motion.span
+                aria-hidden
+                className="ml-1 inline-block h-1.5 w-1.5 rounded-full align-middle"
+                style={{ background: 'rgba(72, 220, 252, 0.7)' }}
+                animate={{ opacity: [0.3, 1, 0.3] }}
+                transition={{ duration: 1.2, repeat: Infinity }}
+              />
+            </motion.div>
           )}
 
           {isTyping && !streaming && (

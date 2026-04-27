@@ -19,6 +19,10 @@ interface ChatStoreState {
   loading: boolean;
   sending: boolean;
   error: string | null;
+  // Phase 13b — text rendered as a "ghost" user bubble while the always-on
+  // mic is mid-utterance. Updated by the partial-transcript stream and
+  // cleared once the message is committed via sendMessage.
+  userPreview: string | null;
 
   // Setters
   setSessions: (sessions: ChatSession[]) => void;
@@ -29,6 +33,11 @@ interface ChatStoreState {
   clearStreaming: () => void;
   setTyping: (v: boolean) => void;
   setError: (e: string | null) => void;
+  setUserPreview: (content: string | null) => void;
+  // Phase 13b — used by ``final_revised`` to swap a Whisper-quality
+  // transcript into the most recent user message in place. No-op when
+  // there are no user messages yet.
+  replaceLastUserMessage: (content: string, extraMetadata?: Record<string, unknown>) => void;
 
   // Async actions
   loadSessions: () => Promise<void>;
@@ -79,10 +88,33 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   loading: false,
   sending: false,
   error: null,
+  userPreview: null,
 
   setSessions: (sessions) => set({ sessions }),
   setCurrentSession: (id) => set({ currentSessionId: id }),
   setMessages: (messages) => set({ messages }),
+  setUserPreview: (content) => set({ userPreview: content }),
+  replaceLastUserMessage: (content, extraMetadata) =>
+    set((s) => {
+      const idx = (() => {
+        for (let i = s.messages.length - 1; i >= 0; i--) {
+          if (s.messages[i].role === 'user') return i;
+        }
+        return -1;
+      })();
+      if (idx < 0) return s;
+      const prev = s.messages[idx];
+      const updated: ChatMessage = {
+        ...prev,
+        content,
+        metadata: extraMetadata
+          ? { ...prev.metadata, ...extraMetadata }
+          : prev.metadata,
+      };
+      const nextMessages = s.messages.slice();
+      nextMessages[idx] = updated;
+      return { messages: nextMessages };
+    }),
 
   appendMessage: (msg) => set((s) => ({ messages: [...s.messages, msg] })),
 
@@ -191,6 +223,10 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       isTyping: true,
       error: null,
       messages: [...s.messages, optimistic],
+      // Phase 13b — committed message has landed; ghost preview must clear
+      // so the chat list does not render the same text twice (real bubble
+      // + ghost).
+      userPreview: null,
     }));
 
     try {

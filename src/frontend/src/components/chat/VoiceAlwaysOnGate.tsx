@@ -36,6 +36,14 @@ export function VoiceAlwaysOnGate({ onStatusChange }: Props = {}) {
   );
   const enabled = voiceMode === 'continuous' || voiceMode === 'wake_word';
   const sendMessage = useChatStore((s) => s.sendMessage);
+  // Phase 13b — ghost-bubble preview during streaming partials.
+  const setUserPreview = useChatStore((s) => s.setUserPreview);
+  // Phase 13b — Whisper background-refine swaps the user message in place.
+  const replaceLastUserMessage = useChatStore((s) => s.replaceLastUserMessage);
+  // Phase 13b — once the chat round-trip starts, suppress ghost preview
+  // updates so the real user bubble does not coexist with a ghost copy
+  // of the same text.
+  const sending = useChatStore((s) => s.sending);
   const systemState = useSystemStore((s) => s.state);
   const setInputMode = useInputMode((s) => s.setMode);
   const setGlobalStatus = useVoiceAlwaysOnStatusStore((s) => s.setStatus);
@@ -53,10 +61,40 @@ export function VoiceAlwaysOnGate({ onStatusChange }: Props = {}) {
     [sendMessage, systemState, setInputMode],
   );
 
-  const { status, errorMessage } = useVoiceAlwaysOn({
+  // Phase 13b — Whisper background refine arrived with a transcript that
+  // differs from Vosk's fast-final by more than the configured ratio.
+  // Update the most recent user message in place so the chat reflects
+  // the higher-quality text without a duplicate row.
+  const onRevisedTranscript = useCallback(
+    (t: FinalTranscript) => {
+      const text = (t.transcript ?? '').trim();
+      if (!text) return;
+      replaceLastUserMessage(text, {
+        revised_by: 'whisper',
+        revised_confidence: t.confidence,
+      });
+    },
+    [replaceLastUserMessage],
+  );
+
+  const { status, errorMessage, partialTranscript } = useVoiceAlwaysOn({
     enabled,
     onFinalTranscript,
+    onRevisedTranscript,
   });
+
+  // Phase 13b — pipe the partial transcript into the chat store so
+  // ChatWindow can render the ghost bubble. Skipped while ``sending`` so
+  // the committed user bubble is not visually duplicated by the ghost
+  // (final-event leaves partialTranscript set to the captured text for a
+  // brief moment, and chatStore.sendMessage clears userPreview itself).
+  useEffect(() => {
+    if (!enabled || sending) {
+      setUserPreview(null);
+      return;
+    }
+    setUserPreview(partialTranscript ? partialTranscript : null);
+  }, [enabled, sending, partialTranscript, setUserPreview]);
 
   useEffect(() => {
     onStatusChange?.(status);

@@ -28,6 +28,7 @@ interface HarnessProps {
   enabled?: boolean;
   wsUrl?: string;
   onFinalTranscript?: (t: FinalTranscript) => void;
+  onRevisedTranscript?: (t: FinalTranscript) => void;
   onWake?: (transcript: string, confidence: number) => void;
   token?: string;
 }
@@ -569,5 +570,143 @@ describe('useVoiceAlwaysOn — singleton WS (Phase 12.0 Bug 1 fix)', () => {
       expect(FakeWebSocket.instances.length).toBeGreaterThan(before);
     });
     expect(__getVoiceAlwaysOnWSRefCount()).toBe(1);
+  });
+});
+
+// ────────────────── Phase 13b — streaming partials & refine ───────────────────
+
+describe('useVoiceAlwaysOn — Phase 13b streaming partials', () => {
+  const finalSpy = vi.fn();
+  const revisedSpy = vi.fn();
+
+  beforeEach(() => {
+    finalSpy.mockClear();
+    revisedSpy.mockClear();
+    // Reject getUserMedia so the WS stays open and the audio setup
+    // failure does not prevent the message handler from running.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (navigator as any).mediaDevices = {
+      getUserMedia: () => Promise.reject(new Error('no mic in jsdom')),
+    };
+  });
+
+  async function _startAndOpen() {
+    render(
+      <Harness
+        enabled
+        onFinalTranscript={finalSpy}
+        onRevisedTranscript={revisedSpy}
+      />,
+    );
+    await waitFor(() => {
+      expect(FakeWebSocket.instances.length).toBeGreaterThan(0);
+    });
+    const ws = FakeWebSocket.instances[FakeWebSocket.instances.length - 1];
+    await act(async () => {
+      ws._open();
+      await Promise.resolve();
+      await Promise.resolve();
+    });
+    return ws;
+  }
+
+  it('partial event updates the visible partialTranscript', async () => {
+    const ws = await _startAndOpen();
+    await act(async () => {
+      ws._receive({ type: 'ready' });
+      ws._receive({ type: 'speech_start' });
+      ws._receive({ type: 'partial', transcript: 'при', is_committed: false });
+    });
+    expect(screen.getByTestId('partial').textContent).toBe('при');
+    await act(async () => {
+      ws._receive({ type: 'partial', transcript: 'привіт', is_committed: false });
+    });
+    expect(screen.getByTestId('partial').textContent).toBe('привіт');
+  });
+
+  it('partial events are suppressed while tap-to-talk owns the turn', async () => {
+    const ws = await _startAndOpen();
+    act(() => {
+      useInputMode.setState({ mode: 'tap' });
+    });
+    await act(async () => {
+      ws._receive({ type: 'ready' });
+      ws._receive({ type: 'partial', transcript: 'при', is_committed: false });
+    });
+    // Should remain blank — partial dropped because tap owns input.
+    expect(screen.getByTestId('partial').textContent).toBe('');
+  });
+
+  it('vosk_fast final event is forwarded to onFinalTranscript with correct source', async () => {
+    const ws = await _startAndOpen();
+    await act(async () => {
+      ws._receive({ type: 'ready' });
+      ws._receive({
+        type: 'final',
+        transcript: 'привіт',
+        source: 'vosk_fast',
+        confidence: 0.88,
+      });
+    });
+    expect(finalSpy).toHaveBeenCalledTimes(1);
+    const arg = finalSpy.mock.calls[0][0] as FinalTranscript;
+    expect(arg.source).toBe('vosk_fast');
+    expect(arg.transcript).toBe('привіт');
+  });
+
+  it('final_revised fires onRevisedTranscript callback (Whisper-quality)', async () => {
+    const ws = await _startAndOpen();
+    await act(async () => {
+      ws._receive({ type: 'ready' });
+      ws._receive({
+        type: 'final',
+        transcript: 'приві',
+        source: 'vosk_fast',
+        confidence: 0.6,
+      });
+      ws._receive({
+        type: 'final_revised',
+        transcript: 'привіт як справи',
+        source: 'whisper_quality',
+        confidence: 0.94,
+        diff_ratio: 0.4,
+      });
+    });
+    expect(revisedSpy).toHaveBeenCalledTimes(1);
+    const arg = revisedSpy.mock.calls[0][0] as FinalTranscript;
+    expect(arg.transcript).toBe('привіт як справи');
+    expect(arg.source).toBe('whisper_quality');
+    expect(arg.confidence).toBe(0.94);
+  });
+
+  it('final_revised is suppressed while tap-to-talk owns the turn', async () => {
+    const ws = await _startAndOpen();
+    act(() => {
+      useInputMode.setState({ mode: 'tap' });
+    });
+    await act(async () => {
+      ws._receive({ type: 'ready' });
+      ws._receive({
+        type: 'final_revised',
+        transcript: 'привіт',
+        source: 'whisper_quality',
+        confidence: 0.9,
+      });
+    });
+    expect(revisedSpy).not.toHaveBeenCalled();
+  });
+
+  it('final_revised with non-string transcript is silently ignored', async () => {
+    const ws = await _startAndOpen();
+    await act(async () => {
+      ws._receive({ type: 'ready' });
+      ws._receive({
+        type: 'final_revised',
+        // transcript missing — server bug; hook must not crash.
+        source: 'whisper_quality',
+        confidence: 0.9,
+      });
+    });
+    expect(revisedSpy).not.toHaveBeenCalled();
   });
 });

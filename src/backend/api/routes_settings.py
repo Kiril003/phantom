@@ -197,6 +197,11 @@ CATEGORY_SPEC: list[dict[str, Any]] = [
             "voice_mode",
             "voice_wake_phrase",
             "voice_silence_timeout_ms",
+            # Phase 13b — streaming partials + Whisper refine.
+            "voice_streaming_partials",
+            "voice_partial_debounce_ms",
+            "voice_refine_with_whisper",
+            "voice_refine_diff_threshold",
         ],
     },
     {
@@ -296,6 +301,10 @@ LABEL_OVERRIDES: dict[str, str] = {
     "voice_mode": "Голосовий режим",
     "voice_wake_phrase": "Wake-фраза",
     "voice_silence_timeout_ms": "Тиша до кінця фрази (мс)",
+    "voice_streaming_partials": "Streaming partials (живий текст)",
+    "voice_partial_debounce_ms": "Дебаунс partials (мс)",
+    "voice_refine_with_whisper": "Whisper refine (advanced)",
+    "voice_refine_diff_threshold": "Поріг різниці refine (0..1)",
     "face_tracking_enabled": "Face tracking",
     "face_tracking_auto_switch_profile": "Auto-switch profile",
     "face_tracking_privacy_mode": "Privacy mode",

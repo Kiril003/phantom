@@ -148,6 +148,28 @@ class PhantomConfig(BaseSettings):
     # 0.005 ≈ -46 dBFS, well below typical conversational speech levels.
     voice_energy_skip_threshold: float = 0.005
 
+    # ── Phase 13b — Streaming partial transcripts ────────────────────────────
+    # When True (default), the always-on orchestrator emits ``partial``
+    # events while the user is still speaking, driven by Vosk's native
+    # KaldiRecognizer.PartialResult. Frontend renders a "ghost bubble"
+    # so the user sees their words appear in real time. False = legacy
+    # 12.x behaviour (silence → final-only).
+    voice_streaming_partials: bool = True
+    # Minimum gap between consecutive ``partial`` events. Vosk can produce
+    # a fresh hypothesis every ~50 ms; that flickers in the UI. 200 ms is
+    # a compromise between "feels live" and "stable to read".
+    voice_partial_debounce_ms: int = 200
+    # When True, after the Vosk fast-final has been emitted, run a Whisper
+    # pass on the same audio buffer in the background. If the resulting
+    # transcript differs from Vosk's by more than the configured ratio,
+    # emit a ``final_revised`` event so the chat store can update the
+    # already-displayed user message. OFF by default — opt-in advanced.
+    voice_refine_with_whisper: bool = False
+    # Levenshtein-ratio threshold below which Whisper's transcript is
+    # considered "meaningfully different" from Vosk's. 0.85 = ~15%
+    # character delta. Only used when voice_refine_with_whisper is True.
+    voice_refine_diff_threshold: float = 0.85
+
     # ── Sensors / Serial ──────────────────────────────────────────────────────
     sensor_batch_interval_ms: int = 500
     sensor_serial_port: str = "/dev/ttyUSB0"
@@ -439,6 +461,17 @@ class PhantomConfig(BaseSettings):
             raise ValueError(
                 "voice_silence_timeout_ms must be in [500, 5000] (got "
                 f"{self.voice_silence_timeout_ms})"
+            )
+        # Phase 13b — partial debounce + refine threshold bounds.
+        if not (50 <= self.voice_partial_debounce_ms <= 1000):
+            raise ValueError(
+                "voice_partial_debounce_ms must be in [50, 1000] (got "
+                f"{self.voice_partial_debounce_ms})"
+            )
+        if not (0.0 <= self.voice_refine_diff_threshold <= 1.0):
+            raise ValueError(
+                "voice_refine_diff_threshold must be in [0.0, 1.0] (got "
+                f"{self.voice_refine_diff_threshold})"
             )
         return self
 

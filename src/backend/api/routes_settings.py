@@ -202,6 +202,10 @@ CATEGORY_SPEC: list[dict[str, Any]] = [
             "voice_partial_debounce_ms",
             "voice_refine_with_whisper",
             "voice_refine_diff_threshold",
+            # Phase 15 — NPU (Hexagon HTP) Whisper encoder.
+            "voice_stt_npu_enabled",
+            "voice_stt_npu_model_path",
+            "voice_stt_npu_compute",
         ],
     },
     {
@@ -305,6 +309,9 @@ LABEL_OVERRIDES: dict[str, str] = {
     "voice_partial_debounce_ms": "Дебаунс partials (мс)",
     "voice_refine_with_whisper": "Whisper refine (advanced)",
     "voice_refine_diff_threshold": "Поріг різниці refine (0..1)",
+    "voice_stt_npu_enabled": "STT на NPU (Hexagon)",
+    "voice_stt_npu_model_path": "NPU модель — шлях",
+    "voice_stt_npu_compute": "NPU precision (int8/fp16)",
     "face_tracking_enabled": "Face tracking",
     "face_tracking_auto_switch_profile": "Auto-switch profile",
     "face_tracking_privacy_mode": "Privacy mode",
@@ -557,6 +564,11 @@ def _apply_runtime_side_effect(key: str, value: Any) -> None:
             "voice_tts_voice",
             "voice_tts_voice_uk",
             "voice_tts_voice_en",
+            # Phase 15 — toggling NPU re-routes the factory chain entirely;
+            # rebuild on the next request so the new provider is used.
+            "voice_stt_npu_enabled",
+            "voice_stt_npu_model_path",
+            "voice_stt_npu_compute",
         }
         if key in invalidating_keys:
             try:

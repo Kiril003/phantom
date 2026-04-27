@@ -167,6 +167,27 @@ def _warm_whisper(provider) -> None:
         logger.warning("whisper warm-up failed: %s", exc)
 
 
+def _warm_npu(provider) -> None:
+    """Phase 15 — pre-load encoder QNN session and tokenizer.
+
+    First transcribe through ``WhisperNPUProvider`` pays:
+      * Optimum model construction (~1.5–3 s for whisper-small)
+      * QNN encoder session build / context-binary load (~0.3–3 s
+        depending on whether the .bin context is on disk)
+      * Tokenizer load (~ms)
+
+    Calling ``_ensure_model`` here pays all of that on startup so the
+    first user utterance lands in the warm path.
+    """
+    try:
+        ensure = getattr(provider, "_ensure_model", None)
+        if not callable(ensure):
+            return
+        ensure()
+    except Exception as exc:
+        logger.warning("NPU warm-up failed: %s", exc)
+
+
 def _warm_vosk(model) -> None:
     """Phase 13a.4 — force Vosk Kaldi to allocate internal lattice arrays.
 
@@ -224,18 +245,25 @@ def preload_voice_models(silero_vad_path: Optional[str] = None) -> dict[str, str
     except Exception as exc:
         statuses["vosk"] = f"failed: {exc}"
 
-    # Whisper — only the FasterWhisper provider has ``_ensure_model``.
-    # Other providers (vosk-only) just touch their cached model so this
-    # is a noop for them.
+    # Whisper / NPU — only the providers with ``_ensure_model`` have a
+    # warmable session. Vosk-only providers are a noop for this branch.
     try:
         provider = get_stt_provider()
         ensure = getattr(provider, "_ensure_model", None)
         if callable(ensure):
             ensure()
-            # Phase 13a.4 — first transcribe call lazily allocates ~200-500 ms
-            # of CTranslate2 working buffers; do it on a 1 s silence dummy now.
-            _warm_whisper(provider)
-            statuses["whisper"] = "warmed"
+            # Phase 15 — when the active provider is NPU, transcribe-warm
+            # is paid by Optimum on first generate(), not in _ensure_model;
+            # we still preload the encoder session here so the WS first hit
+            # is fast. Otherwise (faster-whisper) pay the CTranslate2 lazy
+            # buffer cost on a 1 s silence dummy.
+            if provider.name == "whisper_npu":
+                _warm_npu(provider)
+                statuses["whisper_npu"] = "warmed"
+                statuses["whisper"] = f"skipped: active engine is {provider.name}"
+            else:
+                _warm_whisper(provider)
+                statuses["whisper"] = "warmed"
         else:
             statuses["whisper"] = f"skipped: {provider.name} has no whisper model"
     except Exception as exc:

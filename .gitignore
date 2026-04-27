@@ -49,3 +49,11 @@ src/backend/chroma_data/*/
 src/backend/voice/models/piper/
 src/backend/voice/models/vosk-model-uk-v3/
 src/backend/voice/models/vosk-model-uk-v3.zip
+
+# Phase 15: HuggingFace Whisper checkpoints (large) and converted ONNX/QNN
+# bundles. Both fetched/built locally via scripts/convert_whisper_to_qnn.py.
+src/backend/voice/models/whisper-turbo-hf/
+src/backend/voice/models/whisper-small-qnn/
+src/backend/voice/models/whisper-small-hf/
+src/backend/test_script/
+src/frontend/chroma_data/

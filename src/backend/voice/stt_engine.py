@@ -402,19 +402,44 @@ def _try_vosk() -> Optional[STTProvider]:
         return None
 
 
+def _try_npu() -> Optional[STTProvider]:
+    """Phase 15 — try the Hexagon HTP/QNN encoder path.
+
+    Honors ``config.voice_stt_npu_enabled``; returns None silently when the
+    operator hasn't opted in. The module import is lazy because it pulls in
+    optimum + transformers + onnxruntime which we don't want in the cold
+    path on hardware where NPU isn't relevant.
+    """
+    if not getattr(config, "voice_stt_npu_enabled", False):
+        return None
+    try:
+        from voice.whisper_npu_provider import WhisperNPUProvider
+        return WhisperNPUProvider()
+    except Exception as exc:
+        logger.info("NPU STT unavailable: %s", exc)
+        return None
+
+
 def build_stt_provider() -> STTProvider:
     """
     Pick an STT provider based on `config.voice_stt_mode`. Falls back
     through the chain: requested mode → other engine → noop.
+
+    Phase 15 — when ``voice_stt_npu_enabled`` is True, the NPU path is tried
+    first regardless of mode (except explicit "vosk", which stays Vosk-only
+    to honor the operator's intent).
     """
     mode = config.voice_stt_mode
+    npu_first = bool(getattr(config, "voice_stt_npu_enabled", False))
     chain: list = []
-    if mode == "whisper":
-        chain = [_try_whisper, _try_vosk]
-    elif mode == "vosk":
+    if mode == "vosk":
         chain = [_try_vosk]  # explicit Vosk-only; don't silently upgrade
+    elif mode == "npu":
+        chain = [_try_npu, _try_whisper, _try_vosk]
+    elif mode == "whisper":
+        chain = [_try_npu, _try_whisper, _try_vosk] if npu_first else [_try_whisper, _try_vosk]
     else:  # "hybrid" and anything unknown
-        chain = [_try_whisper, _try_vosk]
+        chain = [_try_npu, _try_whisper, _try_vosk] if npu_first else [_try_whisper, _try_vosk]
     for builder in chain:
         provider = builder()
         if provider is not None:

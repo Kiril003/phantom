@@ -76,7 +76,10 @@ class PhantomConfig(BaseSettings):
     chat_max_session_history: int = 50
 
     # ── Voice / STT ───────────────────────────────────────────────────────────
-    voice_stt_mode: Literal["hybrid", "vosk", "whisper"] = "hybrid"
+    # Phase 15 — "npu" added. When voice_stt_npu_enabled is True the factory
+    # tries WhisperNPUProvider before faster-whisper regardless of mode; the
+    # explicit "npu" mode value just makes the intent visible in /settings.
+    voice_stt_mode: Literal["hybrid", "vosk", "whisper", "npu"] = "hybrid"
     voice_stt_vosk_model: str = "uk-v3-lgraph"
     # Phase 13a.1 — default lowered "medium" → "small". On Radxa Q6A ARM CPU
     # (no GPU/CUDA) "medium" INT8 ≈ 1.5–3 s per utterance; "small" INT8
@@ -90,6 +93,20 @@ class PhantomConfig(BaseSettings):
     voice_stt_hybrid_threshold: float = 0.3
     voice_vad_silence_ms: int = 500
     voice_vad_speech_pad_ms: int = 200
+
+    # ── Voice / STT — Phase 15 NPU (Hexagon HTP via QNN) ─────────────────────
+    # Opt-in. When True the factory tries WhisperNPUProvider first and falls
+    # back to faster-whisper / vosk if the bundle, EP plugin, or HTP runtime
+    # isn't available. Off by default until a converted bundle ships.
+    voice_stt_npu_enabled: bool = False
+    # Directory holding the converted bundle: encoder_int8.{onnx,bin},
+    # decoder_model.onnx, decoder_with_past_model.onnx, tokenizer assets.
+    # Built by scripts/convert_whisper_to_qnn.py.
+    voice_stt_npu_model_path: str = "src/backend/voice/models/whisper-small-qnn"
+    # Encoder precision toggle. INT8 needs the matching quantised ONNX +
+    # context binary; FP16 lets the QNN EP do online compile against the
+    # FP32 encoder (slower cold start, no calibration step required).
+    voice_stt_npu_compute: Literal["int8", "fp16"] = "int8"
 
     # ── Voice / TTS ───────────────────────────────────────────────────────────
     voice_tts_enabled: bool = True

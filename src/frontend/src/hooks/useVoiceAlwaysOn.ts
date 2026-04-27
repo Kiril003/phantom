@@ -28,6 +28,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import workletUrl from '../workers/voice-capture.worklet.js?url';
 import { useMicStream } from './useMicStream';
 import { useInputMode } from '../stores/inputModeStore';
+import { MicVAD } from '@ricky0123/vad-web';
 
 export type AlwaysOnStatus =
   | 'disabled'          // settings toggle is off; hook inert
@@ -59,9 +60,22 @@ export interface AlwaysOnConfig {
   onWake?: (transcript: string, confidence: number) => void;
   /** Opt-in verbose logging. */
   debug?: boolean;
+  /** Phase 13a.2 — disable client-side VAD gate (sends every frame to backend).
+   *  Default true. Set false for tests / browsers where MicVAD load fails. */
+  clientVadEnabled?: boolean;
 }
 
 const CONSUMER_ID = 'always-on';
+
+// Phase 13a.2 — public/vad/ holds the Silero VAD ONNX models, the worklet
+// bundle, and the onnxruntime-web WASM artifacts so MicVAD initialises
+// without an external CDN call (Radxa boots offline).
+const VAD_ASSET_BASE = '/vad/';
+
+// Number of 30 ms (960-byte) frames to keep around so the leading audio
+// just before VAD triggers is sent to the backend on speech_start. Without
+// this preroll, Vosk/Whisper miss the first 100-300 ms of the utterance.
+const VAD_PREROLL_FRAMES = 12;  // ≈ 360 ms
 
 interface ServerEvent {
   type: string;
@@ -286,7 +300,15 @@ function _resolveToken(explicit?: string): string | null {
 
 
 export function useVoiceAlwaysOn(config: AlwaysOnConfig = {}) {
-  const { enabled = false, wsUrl, token, onFinalTranscript, onWake, debug } = config;
+  const {
+    enabled = false,
+    wsUrl,
+    token,
+    onFinalTranscript,
+    onWake,
+    debug,
+    clientVadEnabled = true,
+  } = config;
 
   const [status, setStatus] = useState<AlwaysOnStatus>(
     enabled ? 'disconnected' : 'disabled',
@@ -308,6 +330,14 @@ export function useVoiceAlwaysOn(config: AlwaysOnConfig = {}) {
   const workletRef = useRef<AudioWorkletNode | null>(null);
   const hasStreamRef = useRef(false);
   const manualStopRef = useRef(false);
+  // Phase 13a.2 — client-side VAD instance, speaking flag, and a tiny
+  // preroll ring buffer so the leading audio before MicVAD triggers makes
+  // it onto the wire. ``clientSpeakingRef.current === true`` is the gate
+  // that decides whether worklet-emitted PCM frames are forwarded to the
+  // backend or accumulated as preroll for the next speech_start.
+  const micVadRef = useRef<MicVAD | null>(null);
+  const clientSpeakingRef = useRef<boolean>(false);
+  const prerollRef = useRef<ArrayBuffer[]>([]);
 
   const log = useCallback(
     (...args: unknown[]) => {
@@ -332,6 +362,14 @@ export function useVoiceAlwaysOn(config: AlwaysOnConfig = {}) {
       try { void audioCtxRef.current.close(); } catch { /* ignore */ }
       audioCtxRef.current = null;
     }
+    // Phase 13a.2 — destroy MicVAD before releasing the shared mic so
+    // its internal AudioContext closes cleanly and ORT releases tensors.
+    if (micVadRef.current) {
+      try { void micVadRef.current.destroy(); } catch { /* ignore */ }
+      micVadRef.current = null;
+    }
+    clientSpeakingRef.current = false;
+    prerollRef.current = [];
     if (hasStreamRef.current) {
       micRelease(CONSUMER_ID);
       hasStreamRef.current = false;
@@ -538,11 +576,28 @@ export function useVoiceAlwaysOn(config: AlwaysOnConfig = {}) {
 
       worklet.port.onmessage = (ev: MessageEvent<ArrayBuffer>) => {
         if (!(ev.data instanceof ArrayBuffer)) return;
-        if (wsRef.current?.readyState === WebSocket.OPEN) {
-          // Defensive: only send the expected length to catch worklet
-          // bugs early. Silently skip short frames.
-          if (ev.data.byteLength === BACKEND_FRAME_BYTES) {
-            wsRef.current.send(ev.data);
+        // Defensive: only act on the expected frame length to catch
+        // worklet bugs early. Silently skip short frames.
+        if (ev.data.byteLength !== BACKEND_FRAME_BYTES) return;
+
+        const ws = wsRef.current;
+        if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+        // Phase 13a.2 — when client VAD is enabled, gate forwarding on
+        // the speaking flag. Frames during silence are accumulated in a
+        // small ring buffer and flushed on the next speech_start so the
+        // leading audio (~360 ms) makes it to the backend. When client
+        // VAD is disabled, forward every frame (legacy behaviour).
+        if (!clientVadEnabled) {
+          ws.send(ev.data);
+          return;
+        }
+        if (clientSpeakingRef.current) {
+          ws.send(ev.data);
+        } else {
+          prerollRef.current.push(ev.data);
+          if (prerollRef.current.length > VAD_PREROLL_FRAMES) {
+            prerollRef.current.shift();
           }
         }
       };
@@ -554,12 +609,71 @@ export function useVoiceAlwaysOn(config: AlwaysOnConfig = {}) {
       const silent = audioCtx.createGain();
       silent.gain.value = 0;
       worklet.connect(silent).connect(audioCtx.destination);
+
+      // Phase 13a.2 — start MicVAD on the same MediaStream. This decides
+      // when speech starts/ends in the browser so the worklet's frames
+      // are only forwarded during real speech. Backend Silero VAD remains
+      // active as belt-and-braces. We pass stub pause/resume so MicVAD
+      // does not disable the shared mic tracks during its own lifecycle.
+      if (clientVadEnabled) {
+        try {
+          const sharedStream = stream;
+          const vad = await MicVAD.new({
+            model: 'v5',
+            // Local Silero ONNX + worklet bundle (in public/vad/). The
+            // onnxruntime-web WASM artifacts are NOT colocated locally
+            // (~37 MB) — vad-web's default CDN path serves them, which
+            // is fine because PHANTOM already needs WiFi for Gemini.
+            baseAssetPath: VAD_ASSET_BASE,
+            startOnLoad: true,
+            getStream: async () => sharedStream,
+            // No-op pause/resume — we never want MicVAD to disable
+            // the tracks because the worklet is still feeding from them.
+            pauseStream: async () => { /* no-op */ },
+            resumeStream: async () => sharedStream,
+            onSpeechStart: () => {
+              clientSpeakingRef.current = true;
+              const pending = prerollRef.current;
+              prerollRef.current = [];
+              const wsNow = wsRef.current;
+              if (wsNow && wsNow.readyState === WebSocket.OPEN) {
+                for (const buf of pending) {
+                  try { wsNow.send(buf); } catch { /* ignore */ }
+                }
+                try {
+                  wsNow.send(JSON.stringify({ cmd: 'client_speech_start' }));
+                } catch { /* ignore */ }
+              }
+              log('client VAD: speech_start (preroll', pending.length, 'frames)');
+            },
+            onSpeechEnd: () => {
+              clientSpeakingRef.current = false;
+              const wsNow = wsRef.current;
+              if (wsNow && wsNow.readyState === WebSocket.OPEN) {
+                try {
+                  wsNow.send(JSON.stringify({ cmd: 'client_speech_end' }));
+                } catch { /* ignore */ }
+              }
+              log('client VAD: speech_end');
+            },
+            onVADMisfire: () => {
+              clientSpeakingRef.current = false;
+            },
+          });
+          micVadRef.current = vad;
+        } catch (vadErr) {
+          // Failure to load MicVAD is non-fatal — we degrade to
+          // "send every frame" mode so the user still gets always-on.
+          log('client VAD init failed, degrading to passthrough:', vadErr);
+          clientSpeakingRef.current = true;  // forward all frames
+        }
+      }
     } catch (err) {
       setErrorMessage(err instanceof Error ? err.message : 'mic init failed');
       setStatus('error');
       _teardown();
     }
-  }, [enabled, status, wsUrl, token, _handleServerEvent, _teardown, _teardownAudio, log, micAcquire]);
+  }, [enabled, status, wsUrl, token, _handleServerEvent, _teardown, _teardownAudio, log, micAcquire, clientVadEnabled]);
 
   const stop = useCallback((): void => {
     manualStopRef.current = true;

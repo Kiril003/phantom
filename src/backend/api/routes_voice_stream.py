@@ -135,6 +135,9 @@ def _build_orchestrator() -> AlwaysOnOrchestrator:
         mode=mode if mode in ("off", "continuous", "wake_word") else "legacy",
         wake_phrase=config.voice_wake_phrase,
         silence_timeout_ms=config.voice_silence_timeout_ms,
+        # Phase 13a.3 — backend energy fast-path; skipped frames don't even
+        # touch Silero VAD so idle-state CPU drops noticeably.
+        energy_skip_threshold=config.voice_energy_skip_threshold,
     )
 
 
@@ -218,6 +221,20 @@ class _VoiceSession:
             await self.send({"type": "stopped"})
             await self.ws.close(code=WS_CODE_NORMAL, reason="client stop")
             self.closed = True
+        elif cmd == "client_speech_start":
+            # Phase 13a.2 — frontend MicVAD reports speech onset. We log
+            # for diagnostics; the backend Silero VAD remains authoritative
+            # so we do not change orchestrator state. Hook can later be
+            # extended to short-circuit silence_windows on this signal.
+            logger.debug(
+                "voice WS %s: client_speech_start hint", self.client_id
+            )
+            await self.send({"type": "client_speech_ack", "phase": "start"})
+        elif cmd == "client_speech_end":
+            logger.debug(
+                "voice WS %s: client_speech_end hint", self.client_id
+            )
+            await self.send({"type": "client_speech_ack", "phase": "end"})
         else:
             await self.send({"type": "error", "message": f"unknown cmd: {cmd}"})
 

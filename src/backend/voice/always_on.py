@@ -72,6 +72,26 @@ EventCallback = Callable[[dict], Awaitable[None]]
 TranscribeFn = Callable[[bytes], Awaitable[tuple[str, float]]]
 
 
+def _peak_energy_normalised(pcm_bytes: bytes) -> float:
+    """Cheap peak-amplitude check on raw s16le PCM. 1.0 = full-scale.
+
+    Phase 13a.3 — used by the orchestrator's idle fast-path to skip the
+    Silero VAD ONNX inference (~5-15 ms per frame on Radxa A78) when the
+    incoming PCM is clearly silent. Peak (max abs) is cheaper than RMS
+    and a single non-zero sample lets Silero make its own better decision.
+    """
+    if not pcm_bytes:
+        return 0.0
+    try:
+        import numpy as np
+        arr = np.frombuffer(pcm_bytes, dtype=np.int16)
+        if arr.size == 0:
+            return 0.0
+        return float(np.abs(arr).max()) / 32768.0
+    except Exception:  # noqa: BLE001 — defensive; fall back to "not silent"
+        return 1.0
+
+
 class AlwaysOnOrchestrator:
     """Owns the always-on audio pipeline for one WebSocket connection.
 
@@ -95,6 +115,9 @@ class AlwaysOnOrchestrator:
         wake_phrase: str = "",
         silence_timeout_ms: int = 1500,
         transcribe_fn: Optional[TranscribeFn] = None,
+        # Phase 13a.3 — peak-amplitude threshold below which idle frames
+        # are dropped without invoking Silero VAD. 0.0 disables the fast-path.
+        energy_skip_threshold: float = 0.0,
     ) -> None:
         self._vad = vad
         self._wake = wake_spotter
@@ -106,6 +129,7 @@ class AlwaysOnOrchestrator:
         self._mode = mode
         self._wake_phrase = (wake_phrase or "").lower().strip()
         self._silence_timeout_ms = int(silence_timeout_ms)
+        self._energy_skip_threshold = max(0.0, float(energy_skip_threshold))
         # Tests inject a stub; production callers leave it None and we
         # delegate to voice.pipeline.transcribe at finalisation time.
         self._transcribe_fn = transcribe_fn
@@ -302,6 +326,17 @@ class AlwaysOnOrchestrator:
         We accumulate PCM during the utterance and emit either a final
         transcript (continuous) or a substring-gated transcript (wake_word).
         """
+        # Phase 13a.3 — energy fast-path. When idle (not yet inside an
+        # utterance) AND peak amplitude is below threshold, skip Silero
+        # ONNX entirely. Frames inside an utterance always go through VAD
+        # so SPEECH_END is never lost. The browser-side VAD (Phase 13a.2)
+        # already drops most silence; this is the backend belt-and-braces.
+        if (
+            not self._in_utterance
+            and self._energy_skip_threshold > 0.0
+            and _peak_energy_normalised(pcm_bytes) < self._energy_skip_threshold
+        ):
+            return
         try:
             vad_events = await asyncio.to_thread(self._vad.process, pcm_bytes)
         except ValueError as exc:

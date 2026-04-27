@@ -146,6 +146,43 @@ async def synthesize_text(text: str, voice: str, speed: float) -> TTSResult:
 # ─── Phase 12.0 — startup preload (Bug 2 fix) ───────────────────────────────
 
 
+def _warm_whisper(provider) -> None:
+    """Phase 13a.4 — force CTranslate2 to allocate working buffers.
+
+    First ``WhisperModel.transcribe`` call lazily allocates internal
+    encoder/decoder state and warm-caches; subsequent calls are 200-500 ms
+    faster. Run a 1 s silence transcribe at startup to pay that cost
+    before the first user utterance arrives.
+    """
+    try:
+        import numpy as np
+        silence = np.zeros(16_000, dtype=np.float32)
+        # transcribe returns an iterator of segments — drain it.
+        segments, _ = provider._model.transcribe(  # type: ignore[attr-defined]
+            silence, language="uk", beam_size=1, vad_filter=False,
+        )
+        for _ in segments:
+            pass
+    except Exception as exc:
+        logger.warning("whisper warm-up failed: %s", exc)
+
+
+def _warm_vosk(model) -> None:
+    """Phase 13a.4 — force Vosk Kaldi to allocate internal lattice arrays.
+
+    KaldiRecognizer first AcceptWaveform allocates ~50-100 ms of internal
+    state. Disposable recognizer over 1 s of silence pays that cost up
+    front so the first wake spotter / streaming session is fast.
+    """
+    try:
+        import vosk
+        rec = vosk.KaldiRecognizer(model, 16_000)
+        rec.AcceptWaveform(b"\x00" * 32_000)  # 1 s of s16le silence
+        rec.FinalResult()
+    except Exception as exc:
+        logger.warning("vosk warm-up failed: %s", exc)
+
+
 def preload_voice_models(silero_vad_path: Optional[str] = None) -> dict[str, str]:
     """Pre-load the Silero VAD ORT session, the Vosk model, and (when the
     active STT provider has one) the Whisper model. Returns a status map
@@ -155,6 +192,10 @@ def preload_voice_models(silero_vad_path: Optional[str] = None) -> dict[str, str
     ``_stt`` / ``_vosk_model`` / ``_vad_session`` module-level globals.
     Without this preload, the first WS connection paid 8-10s of cold load
     on the event loop's worker thread (11c.5 Bug 2).
+
+    Phase 13a.4 — also warms up the lazy internal buffers of Whisper and
+    Vosk so the first real transcription doesn't pay an extra 200-500 ms
+    cold-cache penalty.
     """
     statuses: dict[str, str] = {}
 
@@ -176,8 +217,10 @@ def preload_voice_models(silero_vad_path: Optional[str] = None) -> dict[str, str
     # Vosk model — used by the wake-spotter and the always-on transcribe
     # fallback. ``get_vosk_model`` already memoises via the module lock.
     try:
-        get_vosk_model()
-        statuses["vosk"] = "loaded"
+        vosk_model = get_vosk_model()
+        # Phase 13a.4 — pay the lazy AcceptWaveform allocation up front.
+        _warm_vosk(vosk_model)
+        statuses["vosk"] = "warmed"
     except Exception as exc:
         statuses["vosk"] = f"failed: {exc}"
 
@@ -189,7 +232,10 @@ def preload_voice_models(silero_vad_path: Optional[str] = None) -> dict[str, str
         ensure = getattr(provider, "_ensure_model", None)
         if callable(ensure):
             ensure()
-            statuses["whisper"] = "loaded"
+            # Phase 13a.4 — first transcribe call lazily allocates ~200-500 ms
+            # of CTranslate2 working buffers; do it on a 1 s silence dummy now.
+            _warm_whisper(provider)
+            statuses["whisper"] = "warmed"
         else:
             statuses["whisper"] = f"skipped: {provider.name} has no whisper model"
     except Exception as exc:

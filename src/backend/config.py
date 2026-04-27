@@ -78,7 +78,12 @@ class PhantomConfig(BaseSettings):
     # ── Voice / STT ───────────────────────────────────────────────────────────
     voice_stt_mode: Literal["hybrid", "vosk", "whisper"] = "hybrid"
     voice_stt_vosk_model: str = "uk-v3-lgraph"
-    voice_stt_whisper_model: Literal["small", "medium", "large-v3"] = "medium"
+    # Phase 13a.1 — default lowered "medium" → "small". On Radxa Q6A ARM CPU
+    # (no GPU/CUDA) "medium" INT8 ≈ 1.5–3 s per utterance; "small" INT8
+    # ≈ 500–900 ms. WER on Ukrainian short utterances differs by ~3–5 %,
+    # acceptable for conversational use. "tiny" added as last-resort fast
+    # option (~200–400 ms, lower accuracy). Operator can pick any via UI.
+    voice_stt_whisper_model: Literal["tiny", "small", "medium", "large-v3"] = "small"
     voice_stt_whisper_device: Literal["auto", "cpu", "cuda"] = "auto"
     voice_stt_whisper_compute: Literal["int8", "float16", "float32"] = "int8"
     voice_stt_language: Literal["uk", "en", "auto"] = "uk"
@@ -133,6 +138,15 @@ class PhantomConfig(BaseSettings):
     # enough that a back-and-forth chat is workable. Operator can still
     # tune via Settings (allowed range stays [500, 5000]).
     voice_silence_timeout_ms: int = 800
+
+    # Phase 13a.3 — backend energy fast-path skip. When the orchestrator is
+    # idle (not inside an utterance) AND the incoming PCM frame's peak
+    # amplitude is below this normalised threshold (1.0 = full-scale s16),
+    # skip Silero VAD inference entirely. Saves ~80% of idle-time CPU on
+    # the event loop's worker thread when client-side VAD is also dropping
+    # silence (Phase 13a.2). Set to 0.0 to disable the optimisation.
+    # 0.005 ≈ -46 dBFS, well below typical conversational speech levels.
+    voice_energy_skip_threshold: float = 0.005
 
     # ── Sensors / Serial ──────────────────────────────────────────────────────
     sensor_batch_interval_ms: int = 500

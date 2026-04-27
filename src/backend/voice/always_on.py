@@ -72,6 +72,21 @@ EventCallback = Callable[[dict], Awaitable[None]]
 TranscribeFn = Callable[[bytes], Awaitable[tuple[str, float]]]
 
 
+def _string_similarity(a: str, b: str) -> float:
+    """SequenceMatcher ratio in [0, 1]. 1 = identical. Used by Phase 13b
+    background Whisper refine to decide if the Whisper transcript differs
+    from Vosk's enough to publish a `final_revised` event. stdlib only —
+    no Levenshtein dependency for one comparison per utterance."""
+    if not a and not b:
+        return 1.0
+    if not a or not b:
+        return 0.0
+    import difflib
+    return float(
+        difflib.SequenceMatcher(None, a.strip().lower(), b.strip().lower()).ratio()
+    )
+
+
 def _peak_energy_normalised(pcm_bytes: bytes) -> float:
     """Cheap peak-amplitude check on raw s16le PCM. 1.0 = full-scale.
 
@@ -118,6 +133,20 @@ class AlwaysOnOrchestrator:
         # Phase 13a.3 — peak-amplitude threshold below which idle frames
         # are dropped without invoking Silero VAD. 0.0 disables the fast-path.
         energy_skip_threshold: float = 0.0,
+        # ── Phase 13b — streaming partial transcripts ──────────────────────
+        # When True, on speech_start the orchestrator allocates a
+        # StreamingVoskRecognizer and emits ``partial`` events as the
+        # user speaks. ``final`` is then sourced from Vosk's FinalResult
+        # (fast path) instead of a Whisper full-utterance call.
+        streaming_partials: bool = False,
+        partial_debounce_ms: int = 200,
+        # When True (and streaming_partials is True), kick off a
+        # background Whisper pass on the buffered audio after the Vosk
+        # final has been emitted. If Whisper's transcript differs from
+        # Vosk's by more than (1 - refine_diff_threshold), emit a
+        # ``final_revised`` event with the Whisper text.
+        refine_with_whisper: bool = False,
+        refine_diff_threshold: float = 0.85,
     ) -> None:
         self._vad = vad
         self._wake = wake_spotter
@@ -140,6 +169,16 @@ class AlwaysOnOrchestrator:
         self._cooldown_task: Optional[asyncio.Task] = None
         # Phase 12 modes track whether we're inside an utterance buffer.
         self._in_utterance: bool = False
+
+        # Phase 13b — streaming partials configuration + per-utterance state.
+        self._streaming_partials = bool(streaming_partials)
+        self._partial_debounce_ms = max(0, int(partial_debounce_ms))
+        self._refine_with_whisper = bool(refine_with_whisper)
+        self._refine_diff_threshold = float(refine_diff_threshold)
+        # Active streaming recognizer for the current utterance; None when idle.
+        self._streaming_rec = None
+        # Pending Whisper background refinement task. Cancelled on reset.
+        self._refine_task: Optional[asyncio.Task] = None
 
     # ───────────────────── public contract ─────────────────────
 
@@ -348,16 +387,61 @@ class AlwaysOnOrchestrator:
             self._in_utterance = True
             self._utterance_pcm = bytearray()
             self._utterance_pcm.extend(pcm_bytes)
+            # Phase 13b — fresh streaming recognizer per utterance. The
+            # underlying vosk.Model is shared (singleton); only the
+            # KaldiRecognizer instance is per-utterance.
+            if self._streaming_partials and self._vosk_model is not None:
+                try:
+                    from voice.streaming_recognizer import StreamingVoskRecognizer
+                    self._streaming_rec = await asyncio.to_thread(
+                        StreamingVoskRecognizer,
+                        self._vosk_model,
+                        sample_rate=self._sample_rate,
+                        debounce_ms=self._partial_debounce_ms,
+                    )
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "orchestrator(p12): streaming recognizer build "
+                        "failed (%s); falling back to non-streaming",
+                        exc,
+                    )
+                    self._streaming_rec = None
             await self._send({"type": "speech_start"})
         elif self._in_utterance:
             self._utterance_pcm.extend(pcm_bytes)
+
+        # Phase 13b — feed the streaming recognizer if we have one.
+        # Off-load to to_thread because Vosk AcceptWaveform is blocking C++.
+        if self._in_utterance and self._streaming_rec is not None:
+            try:
+                partial_event = await asyncio.to_thread(
+                    self._streaming_rec.feed, pcm_bytes
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "orchestrator(p12): streaming feed failed: %s", exc
+                )
+                partial_event = None
+            if partial_event is not None and partial_event.text:
+                await self._send({
+                    "type": "partial",
+                    "transcript": partial_event.text,
+                    "is_committed": partial_event.is_committed,
+                    "stability": partial_event.stability,
+                })
 
         if SPEECH_END in vad_events and self._in_utterance:
             self._in_utterance = False
             await self._send({"type": "speech_end"})
             audio = bytes(self._utterance_pcm)
             self._utterance_pcm = bytearray()
-            await self._finalise_phase12_utterance(audio)
+            # Phase 13b — fast-path final from Vosk if streaming is on.
+            if self._streaming_rec is not None:
+                rec = self._streaming_rec
+                self._streaming_rec = None
+                await self._finalise_streaming(rec, audio)
+            else:
+                await self._finalise_phase12_utterance(audio)
 
     async def _finalise_phase12_utterance(self, audio: bytes) -> None:
         if not audio:
@@ -400,6 +484,89 @@ class AlwaysOnOrchestrator:
                 "confidence": confidence,
             }
         )
+
+    # ─────────────── Phase 13b — streaming finalise ─────────────────────
+
+    async def _finalise_streaming(self, rec, audio: bytes) -> None:
+        """Drain the streaming recognizer to produce a fast-path Vosk
+        ``final`` event. Optionally schedule a background Whisper pass
+        whose result may emit ``final_revised`` when it disagrees enough.
+        """
+        try:
+            final_event = await asyncio.to_thread(rec.finalise)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("orchestrator(p13b): finalise failed: %s", exc)
+            await self._emit_error(f"stt: {exc}")
+            await self._send({"type": "rejected"})
+            return
+
+        text = (final_event.text or "").strip()
+        if not text:
+            await self._send({"type": "rejected"})
+            return
+
+        # Wake-word gating. Identical to the non-streaming Whisper path
+        # so behaviour stays consistent regardless of voice_streaming_partials.
+        if self._mode == MODE_WAKE_WORD:
+            if not self._wake_phrase or self._wake_phrase not in text.lower():
+                await self._send({"type": "rejected"})
+                return
+            stripped = self._strip_wake_phrase(text)
+            if not stripped:
+                await self._send({"type": "rejected"})
+                return
+            text = stripped
+
+        await self._send(
+            {
+                "type": "final",
+                "transcript": text,
+                "source": "vosk_fast",
+                "confidence": float(final_event.confidence),
+            }
+        )
+
+        # Phase 13b — opt-in background Whisper refinement. Fired off as
+        # a fire-and-forget task so the chat / LLM round-trip already in
+        # flight on the frontend is not blocked.
+        if self._refine_with_whisper and audio:
+            self._cancel_refine_task()
+            self._refine_task = asyncio.create_task(
+                self._background_whisper_refine(audio, text)
+            )
+
+    async def _background_whisper_refine(
+        self, audio: bytes, vosk_text: str
+    ) -> None:
+        """Run Whisper on the buffered audio. If the transcript differs from
+        Vosk's by more than the configured ratio, emit ``final_revised``."""
+        try:
+            whisper_text, whisper_conf = await self._transcribe_phase12(audio)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("whisper refine failed: %s", exc)
+            return
+        whisper_text = (whisper_text or "").strip()
+        if not whisper_text:
+            return
+        ratio = _string_similarity(vosk_text, whisper_text)
+        if ratio >= self._refine_diff_threshold:
+            return  # close enough — Vosk transcript stays
+        await self._send(
+            {
+                "type": "final_revised",
+                "transcript": whisper_text,
+                "source": "whisper_quality",
+                "confidence": float(whisper_conf),
+                "diff_ratio": ratio,
+            }
+        )
+
+    def _cancel_refine_task(self) -> None:
+        if self._refine_task is not None and not self._refine_task.done():
+            self._refine_task.cancel()
+        self._refine_task = None
 
     async def _transcribe_phase12(self, audio: bytes) -> tuple[str, float]:
         """Use the injected ``transcribe_fn`` if present (tests do this);
@@ -484,6 +651,11 @@ class AlwaysOnOrchestrator:
         self._vad.reset()
         self._wake.reset()
         self._cancel_cooldown_task()
+        # Phase 13b — drop in-progress streaming recognizer + cancel any
+        # pending Whisper refinement task. Mid-utterance reset / duck must
+        # not leak background work into the next session.
+        self._streaming_rec = None
+        self._cancel_refine_task()
 
     async def _send(self, event: dict) -> None:
         if self._emit is None:

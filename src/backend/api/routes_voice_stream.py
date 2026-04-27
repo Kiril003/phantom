@@ -138,6 +138,11 @@ def _build_orchestrator() -> AlwaysOnOrchestrator:
         # Phase 13a.3 — backend energy fast-path; skipped frames don't even
         # touch Silero VAD so idle-state CPU drops noticeably.
         energy_skip_threshold=config.voice_energy_skip_threshold,
+        # Phase 13b — Vosk streaming partials + optional Whisper refine.
+        streaming_partials=config.voice_streaming_partials,
+        partial_debounce_ms=config.voice_partial_debounce_ms,
+        refine_with_whisper=config.voice_refine_with_whisper,
+        refine_diff_threshold=config.voice_refine_diff_threshold,
     )
 
 
@@ -293,6 +298,12 @@ async def voice_ws_handler(ws: WebSocket, token: Optional[str] = None) -> None:
             "wake_words": config.voice_wake_words,
             "confidence_min": config.voice_wake_confidence_min,
             "continuation_window_s": config.voice_continuation_window_s,
+            # Phase 13b — frontend can adapt UI (ghost bubble, etc.)
+            # to whether streaming is active and whether Whisper-refine
+            # may emit late-arriving final_revised events.
+            "streaming_partials": config.voice_streaming_partials,
+            "partial_debounce_ms": config.voice_partial_debounce_ms,
+            "refine_with_whisper": config.voice_refine_with_whisper,
         }
     )
 

@@ -232,6 +232,7 @@ class AlwaysOnOrchestrator:
             # No wake word — return to IDLE, discard buffer.
             self._utterance_pcm = bytearray()
             self._state = STATE_IDLE
+            await self._send({"type": "rejected"})
             return
 
         await self._send(
@@ -331,10 +332,12 @@ class AlwaysOnOrchestrator:
         except Exception as exc:  # noqa: BLE001 — provider may fail mid-call
             logger.warning("orchestrator(p12): transcribe failed: %s", exc)
             await self._emit_error(f"stt: {exc}")
+            await self._send({"type": "rejected"})
             return
 
         text = (text or "").strip()
         if not text:
+            await self._send({"type": "rejected"})
             return
 
         if self._mode == MODE_WAKE_WORD:
@@ -342,12 +345,15 @@ class AlwaysOnOrchestrator:
                 # Defensive — config validator forbids empty, but if we
                 # got here with an empty phrase, drop everything to avoid
                 # accidentally publishing private speech.
+                await self._send({"type": "rejected"})
                 return
             if self._wake_phrase not in text.lower():
                 # Wake phrase missing — silently drop, no chat message.
+                await self._send({"type": "rejected"})
                 return
             stripped = self._strip_wake_phrase(text)
             if not stripped:
+                await self._send({"type": "rejected"})
                 return
             text = stripped
 

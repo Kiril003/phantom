@@ -41,7 +41,7 @@ export type AlwaysOnStatus =
 
 export interface FinalTranscript {
   transcript: string;
-  source: 'wake' | 'continuation';
+  source: 'wake' | 'continuation' | 'continuous' | 'wake_word';
   confidence: number;
 }
 
@@ -366,16 +366,29 @@ export function useVoiceAlwaysOn(config: AlwaysOnConfig = {}) {
             break;
           }
           const transcript = typeof ev.transcript === 'string' ? ev.transcript : '';
-          const source = (ev.source === 'continuation' ? 'continuation' : 'wake') as
-            | 'wake'
-            | 'continuation';
+          const rawSource = ev.source as string;
+          const source = (
+            ['continuation', 'wake', 'continuous', 'wake_word'].includes(rawSource) 
+              ? rawSource 
+              : 'wake'
+          ) as FinalTranscript['source'];
           const confidence = typeof ev.confidence === 'number' ? ev.confidence : 0;
           setPartialTranscript(transcript);
           if (onFinalTranscript) {
             onFinalTranscript({ transcript, source, confidence });
           }
+          // Phase 12 modes do not trigger cooldown, return to ready directly.
+          if (source === 'continuous' || source === 'wake_word') {
+            setStatus('ready');
+            if (inputModeRef.current === 'always_on') setInputMode('idle');
+          }
           break;
         }
+        case 'rejected':
+          // STT finished but no text or wake word didn't match. Reset to ready.
+          setStatus('ready');
+          if (inputModeRef.current === 'always_on') setInputMode('idle');
+          break;
         case 'cooldown_start':
           setStatus('cooldown');
           break;

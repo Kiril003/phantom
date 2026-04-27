@@ -127,7 +127,12 @@ class PhantomConfig(BaseSettings):
     # End-of-utterance silence threshold (ms) used in continuous + wake_word
     # modes. After this much VAD-below-threshold time the buffer is sent to
     # Whisper STT.
-    voice_silence_timeout_ms: int = 1500
+    # Phase 12.4 — lowered 1500 → 800. The 1500 default felt unresponsive
+    # in conversational use ("speak, then wait two seconds for the reply"),
+    # 800 keeps brief intra-sentence pauses safe while turning around fast
+    # enough that a back-and-forth chat is workable. Operator can still
+    # tune via Settings (allowed range stays [500, 5000]).
+    voice_silence_timeout_ms: int = 800
 
     # ── Sensors / Serial ──────────────────────────────────────────────────────
     sensor_batch_interval_ms: int = 500

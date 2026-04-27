@@ -81,6 +81,17 @@ const BACKEND_FRAME_BYTES = 960;  // 30 ms @ 16 kHz s16le — advisory
 let _wsInstance: WebSocket | null = null;
 let _wsState: 'idle' | 'connecting' | 'connected' = 'idle';
 let _wsRefCount = 0;
+// Phase 12.4 — deferred close timer. React StrictMode (and HMR) unmount→
+// remount the auto-start useEffect within ~10ms, so an immediate close on
+// refcount=0 produces the 6ms-life pattern observed in production logs:
+//   t=0   first acquire creates WS, refcount=1
+//   t=4   StrictMode unmount → release → close()  ← the 6ms close
+//   t=18  remount → acquire creates a *second* WS
+// Holding the close for ~50ms lets a remount within that window cancel the
+// pending close and reuse the still-open singleton, so the backend sees one
+// stable connection across the StrictMode cycle.
+let _wsCloseTimer: ReturnType<typeof setTimeout> | null = null;
+const _WS_CLOSE_GRACE_MS = 50;
 
 interface AcquiredWS {
   ws: WebSocket;
@@ -92,6 +103,13 @@ interface AcquiredWS {
 }
 
 function _acquireWS(url: string): AcquiredWS {
+  // Phase 12.4 — cancel any pending deferred close. A remount inside the
+  // 50ms grace window means we're picking the singleton back up, not
+  // tearing it down.
+  if (_wsCloseTimer !== null) {
+    clearTimeout(_wsCloseTimer);
+    _wsCloseTimer = null;
+  }
   if (_wsInstance && (_wsState === 'connecting' || _wsState === 'connected')) {
     _wsRefCount += 1;
     const ws = _wsInstance;
@@ -150,17 +168,34 @@ function _acquireWS(url: string): AcquiredWS {
 function _releaseWS(): void {
   _wsRefCount = Math.max(0, _wsRefCount - 1);
   if (_wsRefCount === 0 && _wsInstance) {
-    try {
-      // Close regardless of readyState — the 11c.5 bug was that a
-      // CONNECTING socket leaked on teardown because the close branch
-      // gated on readyState === OPEN. Closing a CONNECTING socket is
-      // a noop on already-closed and a clean abort otherwise.
-      _wsInstance.close();
-    } catch {
-      /* ignore */
+    // Phase 12.4 — defer close by 50ms instead of closing immediately. A
+    // synchronous close fires the close event before a StrictMode/HMR
+    // remount has a chance to call _acquireWS, so the next mount has to
+    // build a fresh WS (the 6ms-close + new client_id pattern). A
+    // pending timer is replaced — only the latest release wins.
+    if (_wsCloseTimer !== null) {
+      clearTimeout(_wsCloseTimer);
     }
-    _wsInstance = null;
-    _wsState = 'idle';
+    const ws = _wsInstance;
+    _wsCloseTimer = setTimeout(() => {
+      _wsCloseTimer = null;
+      // Re-check both: another acquire may have raced in, or _wsInstance
+      // may already be a different socket scheduled by a later release.
+      if (_wsRefCount === 0 && _wsInstance === ws) {
+        try {
+          // Close regardless of readyState — the 11c.5 bug was that a
+          // CONNECTING socket leaked on teardown because the close
+          // branch gated on readyState === OPEN. Closing a CONNECTING
+          // socket is a noop on already-closed and a clean abort
+          // otherwise.
+          ws.close();
+        } catch {
+          /* ignore */
+        }
+        _wsInstance = null;
+        _wsState = 'idle';
+      }
+    }, _WS_CLOSE_GRACE_MS);
   }
 }
 
@@ -197,6 +232,10 @@ export function voiceAlwaysOnUnduck(): void {
 /** Test-only: forcibly drop the singleton between tests so each test
  *  starts from a clean state. */
 export function __resetVoiceAlwaysOnWS(): void {
+  if (_wsCloseTimer !== null) {
+    clearTimeout(_wsCloseTimer);
+    _wsCloseTimer = null;
+  }
   if (_wsInstance) {
     try {
       _wsInstance.close();

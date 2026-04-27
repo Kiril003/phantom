@@ -112,20 +112,30 @@ class TestPhase12VoiceModeSettings:
         )
 
     def test_voice_mode_default_is_off(self) -> None:
-        from config import config
-        assert config.voice_mode == "off", (
+        # Phase 12.4 — read the field default off the class, not the
+        # process-wide ``config`` singleton. Other tests in the suite
+        # mutate the singleton (monkeypatch.setattr against a
+        # pydantic-settings instance with validate_assignment=True can
+        # leave the override in place after teardown), and what we
+        # actually want to pin here is the *default*, not the live
+        # value.
+        from config import PhantomConfig
+        assert PhantomConfig.model_fields["voice_mode"].default == "off", (
             "voice_mode must default to 'off' so push-to-talk is the only "
             "active path until the user opts in"
         )
 
     def test_voice_wake_phrase_has_default(self) -> None:
-        from config import config
-        assert isinstance(config.voice_wake_phrase, str)
-        assert len(config.voice_wake_phrase.strip()) > 0
+        from config import PhantomConfig
+        default = PhantomConfig.model_fields["voice_wake_phrase"].default
+        assert isinstance(default, str)
+        assert len(default.strip()) > 0
 
-    def test_voice_silence_timeout_default_is_1500(self) -> None:
-        from config import config
-        assert config.voice_silence_timeout_ms == 1500
+    def test_voice_silence_timeout_default(self) -> None:
+        # Phase 12.4 — default lowered 1500 → 800 ms for conversational
+        # responsiveness. Range stays [500, 5000].
+        from config import PhantomConfig
+        assert PhantomConfig.model_fields["voice_silence_timeout_ms"].default == 800
 
 
 class TestPhase12VoiceModeValidation:

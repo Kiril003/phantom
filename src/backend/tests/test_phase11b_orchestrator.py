@@ -183,8 +183,10 @@ class TestSpeechDetectedFlow:
         await orch.process_frame(FRAME_640)  # mid-utterance
         await orch.process_frame(FRAME_640)  # speech_end, no wake
         assert orch.state == STATE_IDLE
-        # speech_start + speech_end only; no wake, no final
-        assert _event_types(cb) == ["speech_start", "speech_end"]
+        # Phase 12.3 — orchestrator now emits a "rejected" event after a
+        # no-wake-match utterance so the frontend can flip the indicator
+        # back to ready without waiting on a final/cooldown_end.
+        assert _event_types(cb) == ["speech_start", "speech_end", "rejected"]
 
     async def test_wake_match_triggers_final_and_cooldown(
         self, fake_vosk_module

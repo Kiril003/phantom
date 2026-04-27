@@ -502,7 +502,7 @@ describe('useVoiceAlwaysOn — singleton WS (Phase 12.0 Bug 1 fix)', () => {
     expect(__getVoiceAlwaysOnWSRefCount()).toBeGreaterThanOrEqual(1);
   });
 
-  it('refcount drops to 0 and WS closes when all consumers tear down', async () => {
+  it('refcount drops to 0 and WS closes after the deferred grace window', async () => {
     const { unmount } = render(
       <>
         <Harness enabled />
@@ -516,28 +516,58 @@ describe('useVoiceAlwaysOn — singleton WS (Phase 12.0 Bug 1 fix)', () => {
     const ws = FakeWebSocket.instances[0];
     const closeSpy = vi.spyOn(ws, 'close');
     unmount();
-    // After both unmount, refcount → 0 and the singleton closes the
-    // underlying WebSocket exactly once.
+    // Phase 12.4 — refcount drops immediately, but close() is deferred
+    // by 50ms so a StrictMode remount inside the window can reuse the
+    // same socket.
     expect(__getVoiceAlwaysOnWSRefCount()).toBe(0);
+    expect(closeSpy).not.toHaveBeenCalled();
+    await new Promise((r) => setTimeout(r, 80));
     expect(closeSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('StrictMode-style mount→unmount→mount keeps at most one active WS', async () => {
+  it('Phase 12.4 — StrictMode unmount→remount within 50ms reuses the same WS', async () => {
+    // The production bug: every StrictMode cycle tore down the WS and
+    // built a fresh one (logged as 6ms-life "voice WS connected" /
+    // "voice WS closed" pairs). With the deferred close, a remount
+    // inside the grace window cancels the pending close and bumps the
+    // refcount back up — same socket, no backend reconnect.
+    const { unmount } = render(<Harness enabled />);
+    await waitFor(() => {
+      expect(FakeWebSocket.instances.length).toBe(1);
+    });
+    const ws = FakeWebSocket.instances[0];
+    const closeSpy = vi.spyOn(ws, 'close');
+    unmount();
+    expect(__getVoiceAlwaysOnWSRefCount()).toBe(0);
+    // Synchronous remount mirrors React 18's StrictMode timing — the
+    // cleanup and re-mount fire in the same task tick.
+    render(<Harness enabled />);
+    // Sit through the grace window. If F1 didn't take, the 50ms timer
+    // would have fired close() and a fresh WS would have been built.
+    await new Promise((r) => setTimeout(r, 80));
+    expect(FakeWebSocket.instances.length).toBe(1);  // ← still one socket
+    expect(closeSpy).not.toHaveBeenCalled();
+    expect(__getVoiceAlwaysOnWSRefCount()).toBe(1);
+  });
+
+  it('Phase 12.4 — full unmount with no remount eventually closes after grace', async () => {
     const { unmount } = render(<Harness enabled />);
     await waitFor(() => {
       expect(FakeWebSocket.instances.length).toBeGreaterThanOrEqual(1);
     });
     const before = FakeWebSocket.instances.length;
-    // Tear the consumer down — refcount → 0, WS closes.
+    const ws = FakeWebSocket.instances[before - 1];
+    const closeSpy = vi.spyOn(ws, 'close');
     unmount();
     expect(__getVoiceAlwaysOnWSRefCount()).toBe(0);
-    // Re-mount: a fresh acquire happens. The total ctor count grows,
-    // but the *active* count is still one.
+    // Wait past the grace window without a remount.
+    await new Promise((r) => setTimeout(r, 80));
+    expect(closeSpy).toHaveBeenCalledTimes(1);
+    // A fresh mount AFTER the grace window does build a new WS.
     render(<Harness enabled />);
     await waitFor(() => {
       expect(FakeWebSocket.instances.length).toBeGreaterThan(before);
     });
-    // Refcount is back to 1 — one active consumer, one underlying WS.
     expect(__getVoiceAlwaysOnWSRefCount()).toBe(1);
   });
 });

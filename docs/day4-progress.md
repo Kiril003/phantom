@@ -268,5 +268,35 @@ vitest motion + chat regression 48/48 green; tsc clean.
 Wave-1 progress: 10/13. Remaining: X-3 (AST gate), T-4 (UTC
 schedules), IDB-1 (multi-user pytest).
 
+## 2026-05-01 — X-3 DONE (11/13 Wave-1)
+
+Pre-emptive AST import gate over `src/backend/ai/**` at
+`tests/test_phase_x3_ai_agents_import_gate.py`. Closes audit
+U3-ORCH-G3 (TM-17B-E4 dimension). The gate walks every `*.py`
+under `ai/` (and `ai/agents/` once X-1 lands it), parses with
+`ast.parse`, and yields a finding for any unauthorised path
+into `ai.tool_executor.execute_tool` / `_HANDLERS` —
+including absolute, relative, wildcard, and whole-module
+import shapes.
+
+Allow-list (locked at 3 entries): `chat_tool_dispatcher.py`,
+`gemini_provider.py`, `tool_executor.py` itself. Adding a
+fourth caller is a wire-break — requires an ADR amendment
++ explicit edit. Constant-only imports (e.g.,
+`MAX_TOOL_CALLS_PER_TURN`) remain allowed everywhere — they
+don't bypass the dispatcher's safe-tool filter.
+
+9 tests cover: live ai/ tree clean, allow-list size pinned at
+3, allow-list entries exist on disk, today's `ai/agents/`
+absence (breadcrumb test that flips when X-1 lands),
+end-to-end synthetic positive (forbidden import caught) and
+negative (dispatcher-routed import accepted), wildcard import
+caught, whole-module import caught, constant-only import
+NOT flagged.
+
+Pytest 9/9 green. Wave-1 progress: 11/13. Remaining: T-4
+(UTC normalize OneShotSchedule + croniter early check),
+IDB-1 (multi-user single-mode pytest).
+
 ---
 

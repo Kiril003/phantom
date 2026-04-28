@@ -121,11 +121,49 @@ async def _touch_last_seen(db: AsyncSession, user: User) -> None:
 # the right value lands here.
 
 
-def _ip_key(request: Request) -> str:
+def _resolve_client_ip(request: Request) -> str:
+    """Day-3 D3-A-2: XFF-aware client-IP resolution.
+
+    When ``security_trust_xff`` is False (default), the immediate TCP
+    peer is the only thing we trust — same behaviour as the F-15 Day-2
+    landing. When enabled AND the immediate peer is in
+    ``security_trusted_proxies``, we walk ``X-Forwarded-For`` from
+    right-to-left and return the first IP that is NOT itself a trusted
+    proxy. That's the standard reverse-proxy resolution: a chain
+    ``client, edge_proxy, internal_proxy`` lands as ``client`` once
+    every hop on the right is trusted.
+
+    The function returns ``"unknown"`` only when there's no usable peer
+    info at all — testing seam, never reached in production.
+    """
     client = request.client
-    if client and client.host:
-        return f"ip:{client.host}"
-    return "ip:unknown"
+    direct = client.host if (client and client.host) else None
+    if not direct:
+        return "unknown"
+
+    from config import config
+    if not config.security_trust_xff:
+        return direct
+    trusted = set(config.security_trusted_proxies or [])
+    if direct not in trusted:
+        # Immediate peer isn't a configured proxy — XFF is therefore
+        # unreliable (could be spoofed by the peer). Fall through to
+        # the direct peer; lockout still keys on what we observed.
+        return direct
+    xff = request.headers.get("x-forwarded-for")
+    if not xff:
+        return direct
+    # XFF: "client, proxy1, proxy2"  (left = original, right = closest)
+    candidates = [c.strip() for c in xff.split(",") if c.strip()]
+    for ip in reversed(candidates):
+        if ip not in trusted:
+            return ip
+    # All hops are trusted — degenerate chain; treat as direct.
+    return direct
+
+
+def _ip_key(request: Request) -> str:
+    return f"ip:{_resolve_client_ip(request)}"
 
 
 def _user_key(username: str) -> str:
@@ -212,8 +250,9 @@ async def login_pin(
     # Day-3 D3-A-1: bootstrap default-PIN login is loopback-only.
     # `phantom`/`000000` MUST NOT be reachable from a remote host even
     # though the underlying password hash matches — operator rotates
-    # via the console, then remote login resumes.
-    client_host = (request.client.host if request.client else None)
+    # via the console, then remote login resumes. D3-A-2 makes this
+    # reverse-proxy-aware: resolved IP (post-XFF) is what we judge.
+    client_host = _resolve_client_ip(request)
     if is_default_pin(user.pin_hash) and not is_loopback_host(client_host):
         login_lockout.register_failure(ip_key)
         login_lockout.register_failure(user_key)

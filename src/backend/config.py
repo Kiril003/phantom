@@ -268,6 +268,25 @@ class PhantomConfig(BaseSettings):
     security_dangerous_cmd_confirm: bool = True
     security_ghost_auto_encrypt: bool = True
     security_rate_limit_ai: int = 10
+    # Day-3 D3-A-2 (audit-2026-04-30 Tier A) — XFF-aware lockout keying.
+    #
+    # Out of the box `request.client.host` is the immediate TCP peer. When
+    # PHANTOM sits behind a reverse proxy (Caddy / Traefik / k8s ingress)
+    # that peer is always the proxy, so per-IP lockout collapses every
+    # remote attacker into a single `127.0.0.1` key — system-wide DoS
+    # amplifier AND no-op against the actual attacker.
+    #
+    # ``security_trust_xff`` enables right-to-left XFF resolution. Only
+    # set this when you control the proxy AND the proxy strips/replaces
+    # `X-Forwarded-For` (a malicious client behind an untrusted proxy
+    # could otherwise spoof their IP). ``security_trusted_proxies`` is
+    # the allowlist of immediate-peer hosts whose XFF the daemon will
+    # parse — typically the loopback aliases when the proxy is on the
+    # same host, or the bridge gateway IP for a docker network.
+    security_trust_xff: bool = False
+    security_trusted_proxies: list[str] = [
+        "127.0.0.1", "::1", "localhost",
+    ]
 
     # ── Tools ─────────────────────────────────────────────────────────────────
     tools_calendar_first_day: Literal["mon", "sun"] = "mon"

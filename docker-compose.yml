@@ -1,0 +1,57 @@
+# PHANTOM OS — single-tenant production deploy.
+#
+# Quick start:
+#     cp .env.example .env   # fill in JWT_SECRET_KEY + AI_GEMINI_API_KEY
+#     docker compose up -d
+#     curl http://localhost:8000/healthz
+#
+# This is the deployment target audit-2026-04-28 Block E ships against. It
+# omits the on-device voice stack (faster-whisper / vosk / NPU) because
+# those run on Radxa hardware; cloud variants lean on Gemini → Ollama for
+# AI and either drop voice entirely or accept 503s on /voice/stt.
+
+services:
+  phantom:
+    image: phantom-os:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: phantom
+    restart: unless-stopped
+    init: true
+    ports:
+      - "${PHANTOM_PORT:-8000}:8000"
+    environment:
+      # Inherit operator's JWT secret + Gemini key from .env (NEVER commit).
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:?must be set in .env}
+      AI_GEMINI_API_KEY: ${AI_GEMINI_API_KEY:-}
+      # Productisation defaults — bind to 0.0.0.0 inside the container only,
+      # operator's reverse proxy terminates TLS in front. Audit F-07 default
+      # `phantom`/`000000` is still in place; rotate on first boot.
+      PHANTOM_LOG_LEVEL: ${PHANTOM_LOG_LEVEL:-INFO}
+    volumes:
+      # Persist chroma vector store across container restarts. Single-tenant
+      # default; multi-tenant deploys swap chroma for an external service.
+      - phantom_chroma:/app/src/backend/chroma_data
+      - phantom_db:/app/src/backend/db
+      # Operator drops Vosk / Whisper / NPU bundles here so the existing
+      # _resolve_*_model_path probe finds them at runtime.
+      - phantom_voice_models:/app/src/backend/voice/models
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://127.0.0.1:8000/healthz || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 30s
+    # Workload runs as uid 10001 (Dockerfile USER). Lock down further with
+    # read-only root + tmpfs for /tmp once you've confirmed your tools don't
+    # need to write outside the volumes above.
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+
+volumes:
+  phantom_chroma:
+  phantom_db:
+  phantom_voice_models:

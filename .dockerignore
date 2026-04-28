@@ -1,0 +1,35 @@
+# Heavy / sensitive things that must never reach the build context.
+
+.git/
+.github/
+.venv/
+venv/
+node_modules/
+dist/
+build/
+.pio/
+__pycache__/
+*.pyc
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+htmlcov/
+.coverage
+coverage/
+
+# Editors / OS
+.idea/
+.vscode/
+.DS_Store
+
+# Secrets / persistent state — operators mount these as volumes.
+.env
+.env.local
+src/backend/chroma_data/
+src/backend/db/phantom.db
+src/backend/voice/models/
+
+# Already built tooling — heavy and re-built inside the frontend stage.
+src/frontend/dist/
+src/frontend/node_modules/

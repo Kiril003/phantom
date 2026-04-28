@@ -492,6 +492,21 @@ def create_app() -> FastAPI:
     app.middleware("http")(correlation_id_middleware)
     _register_observability(app)
 
+    # Phase 18 — serve the built frontend bundle when the operator deploys
+    # via the multi-stage Dockerfile. The path is the build target the
+    # frontend stage of that Dockerfile produces; on dev it doesn't exist
+    # so we silently skip. Mounted last so /api/v1, /healthz, /readyz,
+    # /metrics, /ws, and /docs all win route resolution.
+    import os as _os
+    from fastapi.staticfiles import StaticFiles  # noqa: PLC0415
+    _dist_path = _os.environ.get("PHANTOM_FRONTEND_DIST", "/app/dist")
+    if _os.path.isdir(_dist_path):
+        app.mount(
+            "/",
+            StaticFiles(directory=_dist_path, html=True),
+            name="frontend",
+        )
+
     return app
 
 

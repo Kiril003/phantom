@@ -208,12 +208,71 @@ def _refuse_unsupported_deployment_mode() -> None:
     )
 
 
+def _refuse_lan_bind_in_packaged_mode() -> None:
+    """Day-4 Block V-4 / audit-2026-05-01 U5-PKG-H4 (ADR-DSH-003):
+    refuse to start when ``PHANTOM_PACKAGED=1`` AND ``config.host`` is
+    not the loopback ``127.0.0.1``.
+
+    The default ``host = "0.0.0.0"`` is correct for a headless device
+    daemon (Radxa on the LAN) but disastrous inside a packaged desktop
+    build: a Tauri sidecar shipping the FastAPI backend would expose
+    the entire backend — chat, /linux, voice — to anyone on the local
+    Wi-Fi. The D3-A-1 default-PIN guard does not compensate (an
+    operator who set a real PIN once is still on a route that any
+    LAN-attacker can probe). Refuse rather than silently rewrite the
+    config — silent mutation breaks the audit trail and the operator
+    can fix the env once.
+
+    Activation signal: ``PHANTOM_PACKAGED=1`` set by Tauri's sidecar
+    ``Command`` spawn (positive signal — a developer running
+    ``uvicorn main:app`` locally never trips the guard).
+
+    Tests are exempt — pytest leaves ``PHANTOM_PACKAGED`` unset.
+    Operators who need a non-loopback bind under a packaged build (rare;
+    e.g., diagnosing a kiosk over LAN with a colleague) can set
+    ``PHANTOM_ALLOW_PACKAGED_LAN_BIND=1`` to acknowledge the risk.
+    """
+    import os as _os
+    import sys as _sys
+
+    if _os.environ.get("PHANTOM_PACKAGED") != "1":
+        return
+    host = (config.host or "").strip()
+    # Loopback set: literal 127.0.0.1, IPv6 ::1, or the empty string
+    # (uvicorn coerces empty → loopback).
+    if host in {"127.0.0.1", "::1", "localhost", ""}:
+        return
+    # Test runs that pin PHANTOM_PACKAGED=1 explicitly to exercise the
+    # guard handle the assertion themselves; CI / dev pytest never sets
+    # the env so this branch is unreachable from the conftest path.
+    if "pytest" in _sys.modules and _os.environ.get("PHANTOM_TEST_PACKAGED_BIND") != "1":
+        return
+    if _os.environ.get("PHANTOM_ALLOW_PACKAGED_LAN_BIND") == "1":
+        logger.warning(
+            "PHANTOM_ALLOW_PACKAGED_LAN_BIND=1 — booting packaged build "
+            "with host=%r despite the V-4 invariant. Anyone on the LAN "
+            "can reach the backend. Operator's call.",
+            host,
+        )
+        return
+    raise RuntimeError(
+        f"Refusing to start packaged build with host={host!r}: a "
+        "PHANTOM_PACKAGED=1 (Tauri-spawned) backend MUST bind to "
+        "127.0.0.1 only — otherwise the entire backend is reachable "
+        "from the LAN. Set host='127.0.0.1' (default for desktop "
+        "builds) or set PHANTOM_ALLOW_PACKAGED_LAN_BIND=1 to acknowledge "
+        "the exposure risk. See docs/architecture/desktop-shell.md "
+        "ADR-DSH-003."
+    )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Startup / shutdown lifecycle."""
     logger.info("PHANTOM OS starting...")
     _refuse_ci_default_secret()
     _refuse_unsupported_deployment_mode()
+    _refuse_lan_bind_in_packaged_mode()
     await init_db()
     logger.info("Database initialized")
 

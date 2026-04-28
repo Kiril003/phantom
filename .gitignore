@@ -83,3 +83,8 @@ src/frontend/chroma_data/
 .swarm-temp/
 .ruflo-cache/
 .swarm.backup-*/
+
+# Day-4 V-2 (ADR-DSH-002) — dev-mode data root for chroma / sqlite /
+# voice_models / workspace caches. Packaged builds resolve under
+# platformdirs.user_data_dir, which lives outside the repo by design.
+.phantom-data/

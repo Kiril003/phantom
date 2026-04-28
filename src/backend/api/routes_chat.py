@@ -259,12 +259,35 @@ async def _build_ai_response(
     )
 
     # 5. Generate AI response
-    ai_response = await ai_router.generate(
-        user_message=user_message,
-        system_prompt=system_prompt,
-        history=history,
-        user_id=user.id,
-    )
+    #
+    # Day-3 Q-2 (audit-2026-04-30 Phase 17b): when the operator opts
+    # into chat tool-use, route through `ai.chat_pipeline.run` for a
+    # bounded tool-use turn (read-only catalog only, nonced envelope,
+    # output_safety sanitize, wall-clock + depth caps). Default flag
+    # stays False — operators flip it on per deploy after reading
+    # docs/phases/PHASE_17_CHAT_TOOLS.md (D2-I2 multi-tenant
+    # invariant gates this).
+    # `is True` (not truthy) so legacy tests that patch `config` with a
+    # MagicMock — whose default attribute access returns a truthy Mock
+    # — don't accidentally route through chat_pipeline. The real
+    # PhantomConfig field is `bool = False`; production deploys flip it
+    # to `True` explicitly via Settings UI.
+    if config.chat_tools_enabled is True:
+        from ai.chat_pipeline import run as chat_pipeline_run
+        ai_response = await chat_pipeline_run(
+            user_message=user_message,
+            system_prompt=system_prompt,
+            history=history,
+            user_id=user.id,
+            db=db,
+        )
+    else:
+        ai_response = await ai_router.generate(
+            user_message=user_message,
+            system_prompt=system_prompt,
+            history=history,
+            user_id=user.id,
+        )
 
     # 5b. Phase 16 (audit-2026-04-28 step 4) — best-effort prompt
     # observability. Off by default; when enabled, write one row to

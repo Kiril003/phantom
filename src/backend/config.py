@@ -467,6 +467,15 @@ class PhantomConfig(BaseSettings):
     # chroma + nominatim retries can complete; tighten to 5 s if the
     # tier-D wall-clock budget pressure forces it.
     chat_tool_call_timeout_s: float = 10.0
+    # Day-2 PERF-17b: per-turn wall-clock ceiling for the entire chat
+    # tool-use loop (sum of all iterations: LLM ⇄ tool ⇄ LLM …). 4
+    # iterations × Gemini ~2.1 s p50 = 8.4 s typical; p99 reaches 25 s
+    # without a cap. Phase 17b's call_with_tools loop must abort and
+    # surface the last-good response when this is exceeded — Tier D's
+    # chat_pipeline.py reads this before each iteration. 12 s leaves
+    # headroom over the typical case while keeping p99 within the
+    # tolerable chat-turn budget.
+    chat_tool_max_total_ms: int = 12_000
 
     # ── System ────────────────────────────────────────────────────────────────
     system_hostname: str = "phantom"

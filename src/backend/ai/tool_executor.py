@@ -316,7 +316,14 @@ async def _tool_get_system_metrics(args: dict[str, Any], user_id: str) -> dict[s
     try:
         import psutil
 
-        cpu_pct = psutil.cpu_percent(interval=None)
+        # Day-2 D2-D-cpu (audit-2026-04-29): read the 1 Hz background
+        # sample instead of paying the cpu_percent(interval=...) cost
+        # on the chat hot path. With 4 call_with_tools iterations per
+        # turn the dispatcher would otherwise have stacked enough cpu
+        # reads to drift the chat-turn budget by hundreds of ms even
+        # though interval=None is technically non-blocking.
+        from system_metrics_sampler import get_cpu_percent
+        cpu_pct = float(get_cpu_percent())
         vm = psutil.virtual_memory()
         disk = psutil.disk_usage("/")
         boot_ts = psutil.boot_time()

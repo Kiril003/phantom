@@ -214,6 +214,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as exc:
         logger.warning("Chroma eager init skipped: %s", exc)
 
+    # Day-2 D2-D-cpu / PERF-17b: 1 Hz CPU sampler so the chat-tool
+    # `get_system_metrics` handler reads a cached value instead of
+    # blocking on psutil.cpu_percent(interval=...) per call. Cheap
+    # background task — one psutil read per second.
+    try:
+        import system_metrics_sampler
+        await system_metrics_sampler.start()
+    except Exception as exc:
+        logger.warning("CPU sampler failed to start: %s", exc)
+
     # Phase 12.0 — preload voice singletons so the first /ws/voice connect
     # doesn't pay 8-10 s of cold model loading on the event-loop's worker
     # thread. 11c.5 Bug 2.
@@ -364,6 +374,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await loop_task
     except asyncio.CancelledError:
         pass
+
+    # Day-2 D2-D-cpu — graceful CPU sampler shutdown.
+    try:
+        import system_metrics_sampler
+        await system_metrics_sampler.stop()
+    except Exception as exc:
+        logger.debug("CPU sampler stop raised: %s", exc)
 
     await oled_animator.stop()
 

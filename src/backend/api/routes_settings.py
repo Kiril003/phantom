@@ -435,12 +435,17 @@ def _collect_categories() -> list[SettingsCategoryOut]:
 
 
 @router.get("", response_model=CategoriesResponse)
-async def get_all_settings() -> CategoriesResponse:
+async def get_all_settings(
+    _user: User = Depends(get_current_user),  # Day-2 D2-A2 (audit F-09)
+) -> CategoriesResponse:
     return CategoriesResponse(categories=_collect_categories())
 
 
 @router.get("/_value/{key:path}")
-async def get_setting(key: str) -> dict[str, Any]:
+async def get_setting(
+    key: str,
+    _user: User = Depends(get_current_user),  # Day-2 D2-A2 (audit F-09)
+) -> dict[str, Any]:
     if not hasattr(config, key):
         raise HTTPException(status.HTTP_404_NOT_FOUND, detail=f"Unknown key: {key}")
     return {"key": key, "value": getattr(config, key)}
@@ -634,7 +639,9 @@ async def reset_settings(
 
 
 @router.post("/export")
-async def export_settings() -> dict[str, Any]:
+async def export_settings(
+    _user: User = Depends(get_current_user),  # Day-2 D2-A2 (audit F-09)
+) -> dict[str, Any]:
     exportable: dict[str, Any] = {}
     for spec in CATEGORY_SPEC:
         for key in spec["keys"]:

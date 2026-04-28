@@ -16,10 +16,12 @@ from __future__ import annotations
 
 import logging
 
-from fastapi import APIRouter, File, HTTPException, Response, UploadFile, status
+from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile, status
 from pydantic import BaseModel, Field
 
 from config import config
+from security.auth import require_auth
+from security.jwt_manager import TokenPayload
 from voice.pipeline import (
     get_stt_provider,
     get_tts_provider,
@@ -74,7 +76,10 @@ class StatusResponse(BaseModel):
 
 
 @router.post("/stt", response_model=STTResponse)
-async def transcribe_speech(file: UploadFile = File(...)) -> STTResponse:
+async def transcribe_speech(
+    file: UploadFile = File(...),
+    _token: TokenPayload = Depends(require_auth),  # Day-2 D2-A1 (audit F-08)
+) -> STTResponse:
     """Transcribe a single audio clip. Non-streaming — suitable for the
     browser's MediaRecorder tap-to-speak flow."""
     raw = await file.read()
@@ -117,7 +122,10 @@ async def transcribe_speech(file: UploadFile = File(...)) -> STTResponse:
 
 
 @router.post("/tts")
-async def synthesize_speech(req: TTSRequest) -> Response:
+async def synthesize_speech(
+    req: TTSRequest,
+    _token: TokenPayload = Depends(require_auth),  # Day-2 D2-A1 (audit F-08)
+) -> Response:
     """Render text to a WAV blob. Respects voice_tts_enabled (returns 100 ms
     of silence when disabled) and voice_tts_voice (falls back to the
     settings default when `req.voice` is empty)."""
@@ -162,7 +170,9 @@ async def synthesize_speech(req: TTSRequest) -> Response:
 
 
 @router.get("/status", response_model=StatusResponse)
-async def voice_status() -> StatusResponse:
+async def voice_status(
+    _token: TokenPayload = Depends(require_auth),  # Day-2 D2-A1 (audit F-08)
+) -> StatusResponse:
     """Live snapshot of the voice subsystem — surfaces which provider
     actually loaded so a [soon]-vs-wired mismatch is obvious.
 

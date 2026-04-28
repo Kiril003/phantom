@@ -34,9 +34,14 @@ from vision.oled_animator import (  # noqa: E402
 # ── Fixtures ──────────────────────────────────────────────────────────────────
 
 @pytest.fixture
-def client():
+def client(auth_root_user, auth_root_token):
+    """Day-2 D2-A2 (audit F-09): /settings GETs now require auth. The
+    conftest fixture pair (auth_root_user creates the row, auth_root_token
+    issues the JWT) lets pre-existing call sites in this file stay
+    unchanged — the bearer header is preset on every request."""
     from main import app
     with TestClient(app) as c:
+        c.headers.update({"Authorization": f"Bearer {auth_root_token}"})
         yield c
 
 

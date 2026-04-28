@@ -108,9 +108,14 @@ def _reset_providers():
 
 
 @pytest.fixture
-def client():
+def client(auth_root_user, auth_root_token):
+    """Day-2 D2-A1 (audit F-08): voice routes now require auth. The
+    conftest fixture auth_root_user creates the User row + auth_root_token
+    issues a JWT for it. Pre-existing test bodies stay unchanged — the
+    bearer header is just always present now."""
     from main import app
     with TestClient(app) as c:
+        c.headers.update({"Authorization": f"Bearer {auth_root_token}"})
         yield c
 
 

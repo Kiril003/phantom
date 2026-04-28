@@ -489,13 +489,24 @@ def create_app() -> FastAPI:
     # /healthz liveness, /readyz readiness, /metrics Prometheus exposition,
     # correlation-id middleware + http_requests_total counter middleware
     # on every response.
+    #
+    # Day-2 D2-A4 (audit-2026-04-29) — Starlette/FastAPI registers
+    # @app.middleware("http") in LIFO order: the LAST-registered call
+    # ends up the OUTERMOST wrapper. Day-1 had correlation-id registered
+    # first and counter second, which inverted the documented invariant —
+    # the counter ran outer, so by the time it bumped phantom_http_requests_total
+    # the correlation_id contextvar had already been reset. Now register
+    # counter first, then correlation-id last, so correlation-id is
+    # outermost: contextvar is set during the counter's processing AND
+    # the response carries X-Correlation-Id when the counter middleware
+    # is the one that fails.
     from observability import (
         _register_observability,
         correlation_id_middleware,
         http_requests_counter_middleware,
     )
-    app.middleware("http")(correlation_id_middleware)
     app.middleware("http")(http_requests_counter_middleware)
+    app.middleware("http")(correlation_id_middleware)
     _register_observability(app)
 
     # Phase 18 — serve the built frontend bundle when the operator deploys

@@ -281,10 +281,12 @@ class MMSNPUProvider(STTProvider):
                 None, {self._session.get_inputs()[0].name: framed}
             )[0]
         except Exception as exc:
-            # Audit-2026-04-28 F-25: surface the failure so silent NPU
-            # wedging stops being indistinguishable from silence at the
-            # route layer.
-            logger.warning("MMSNPU forward failed: %s", exc)
+            # Audit-2026-04-28 F-25 + Day-2 D2-A3: surface failure via
+            # engine_error so the route returns 503. Reset the session
+            # so the next call rebuilds — a wedged HTP session
+            # otherwise stays wedged for the daemon's lifetime.
+            logger.warning("MMSNPU forward failed: %s — resetting session", exc)
+            self._session = None
             return STTResult(
                 text="",
                 confidence=0.0,

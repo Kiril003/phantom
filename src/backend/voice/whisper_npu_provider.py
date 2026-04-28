@@ -371,11 +371,13 @@ class WhisperNPUProvider(STTProvider):
                 max_new_tokens=224,
             )
         except Exception as exc:
-            # Audit-2026-04-28 F-25: surface the failure on `engine_error`
-            # so the route returns 503 and the operator sees "STT
-            # unavailable" instead of a silent empty transcript that
-            # looks indistinguishable from "user said nothing".
-            logger.warning("WhisperNPU generate() failed: %s", exc)
+            # Audit-2026-04-28 F-25 + Day-2 D2-A3: surface failure via
+            # engine_error so the route returns 503. Reset the model
+            # ref so the next call rebuilds — a wedged HTP session
+            # otherwise stays wedged for the daemon's lifetime.
+            logger.warning("WhisperNPU generate() failed: %s — resetting session", exc)
+            self._model = None
+            self._processor = None
             return STTResult(
                 text="",
                 confidence=0.0,

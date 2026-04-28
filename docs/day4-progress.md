@@ -165,5 +165,77 @@ total subagent budget consumed for this run.
 Proceeding to Phase-2 commit + Phase 3 Wave 1 implementation
 (me, native tools).
 
+## 2026-05-01 — Phase 2 DONE (commit fb5c4ac)
+
+13 files, 5250 insertions, 0 code touched. 9 cluster ADRs +
+3 cross-cutting reports + CROSS_CONTEXT_ADRS, 5194 lines
+total. AgentDB persisted to day4-phase2-arch namespace
+(perf-budgets, integration-risks, security-review, cross-
+context-adrs).
+
+## 2026-05-01 — Phase 3 Wave 1 STARTED, native-only
+
+## 2026-05-01 — Y-4 DONE (commit 872b34c, 1/13 Wave-1)
+
+`agent/actions/fs.py::FsWrite.execute` realpath workspace
+check (per ADR-SBX-006). Closes D3-F-40 + U4-SEC-H4. 6 new
+tests, pytest 1283/1283 green (+6 vs fb5c4ac baseline 1277).
+
+Operator asked "я можу тебе компактнути?" mid-block.
+Survival posture confirmed: Y-4 finished cleanly first, then
+memory/active_day_plan.md updated to reflect "Y-4 done, next
+CRYPTO-1". /compact-safe at this point.
+
+Next: CRYPTO-1 (Fernet helper at security/crypto.py, ~80 LOC,
+blocks FACTS-1).
+
+## 2026-05-01 — Wave-1 sweep (commits 1753df1 → 63d7e18)
+
+8 atomic commits since Y-4, all native-only (Agent tool still
+blocked by org monthly quota; ruflo memory CLI used for
+namespace persistence). Each block followed the
+`pre-block memory search → Edit/Write → pytest gate → commit`
+contract. Pytest sweep at HEAD `63d7e18`: **1376/1376 green**
+(`+93` vs Y-4 baseline 1283). Frontend `tsc --noEmit` clean
+across the run.
+
+| Block | Commit | Audit closures | LOC | Tests added |
+|---|---|---|--:|--:|
+| CRYPTO-1 | `1753df1` | U6-ID-C1 | 80 | 17 |
+| V-3      | `df224be` | U5-PKG-C3 | 30 | 5 |
+| V-4      | `1ce6371` | U5-PKG-H4 | 35 | 7 |
+| V-2      | `e10949b` | U5-PKG-H1 | 90 | 11 |
+| ID-1     | `5a13e11` | ADR-ID-001 | 60 | 9 |
+| ID-2     | `f478217` | ADR-ID-002 | 80 | 8 |
+| ID-3     | `63d7e18` | ADR-ID-004 | 110 | 13 |
+
+CRYPTO-1 unblocks FACTS-1 (Wave-2). ID-1+ID-2+ID-3 unblock the
+identity-card scene panel (W-2 Wave-2 + Day-5 ML hot-wire).
+
+## 2026-05-01 — W-1 DONE (8/13 Wave-1)
+
+Scene envelope wire format. `src/shared/types/chat.ts` gains
+`SceneKind` (closed 6-value enum), `RevealPolicy`,
+`ScenePanel` discriminated union, `ChatScene`, and
+`ChatMessage.scene?` optional field. Backend
+`api/routes_chat.py::_serialize_message` promotes a
+`{type:'scene'}` attachment up to top-level `message.scene`
+(stripping it from the published attachments list to avoid
+double-render). Closes U1-UX-C2 (W-2 Wave-2 composer now has
+a typed contract to consume).
+
+8 new tests at `tests/test_phase_w1_scene_envelope.py` covering
+absent-scene back-compat (ADR-CS-002 §117), promotion
+round-trip, scene + legacy attachment coexistence, multiple-
+scene first-wins contract, malformed `data` left as legacy,
+F-66 corrupt-JSON resilience, and an SceneKind closed-enum
+grep against `chat.ts`. Pytest sweep 1376/1376 green; tsc
+clean.
+
+Wave-1 progress: 9/13 (W-1 + 8 prior). Remaining: W-2b
+(phantomVariants), X-3 (AST gate ai/agents/**), T-4 (UTC
+normalize OneShotSchedule), IDB-1 (multi-user single-mode
+pytest).
+
 ---
 

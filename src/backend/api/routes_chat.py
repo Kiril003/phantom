@@ -117,7 +117,30 @@ def _serialize_message(msg: ChatMessage) -> dict[str, Any]:
             "chat.serialize: attachments_json corrupt for msg=%s — %s",
             msg.id, exc,
         )
-    return {
+    # Day-4 W-1 (ADR-CS-002): the scene envelope rides as a single
+    # attachment of `type: 'scene'`. Promote it to a top-level
+    # `message.scene` key so the frontend ChatScene composer (W-2)
+    # consumes the contract from `src/shared/types/chat.ts`. The
+    # underlying attachment is stripped from the published list so
+    # legacy renderers don't double-handle it. Absent → no `scene`
+    # key on the wire (back-compat invariant ADR-CS-002 §117).
+    scene: dict[str, Any] | None = None
+    surfaced_attachments: list[Any] = []
+    for att in attachments:
+        if (
+            isinstance(att, dict)
+            and att.get("type") == "scene"
+            and isinstance(att.get("data"), dict)
+        ):
+            # ADR-CS-002: Day-4 closed contract — one scene per
+            # message. Subsequent scene attachments are silently
+            # consumed (NOT re-classified as legacy attachments,
+            # which would crash the frontend's typed renderer).
+            if scene is None:
+                scene = att["data"]
+            continue
+        surfaced_attachments.append(att)
+    out: dict[str, Any] = {
         "id": msg.id,
         "session_id": msg.session_id,
         "user_id": msg.user_id,
@@ -125,9 +148,12 @@ def _serialize_message(msg: ChatMessage) -> dict[str, Any]:
         "content": msg.content,
         "response_form": msg.response_form,
         "metadata": meta,
-        "attachments": attachments,
+        "attachments": surfaced_attachments,
         "created_at": msg.created_at.isoformat(),
     }
+    if scene is not None:
+        out["scene"] = scene
+    return out
 
 
 def _serialize_session(session: ChatSession) -> dict[str, Any]:

@@ -423,6 +423,13 @@ class AiToolUseLog(Base):
     prompt_excerpt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     response_excerpt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     prompt_sections: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    # Day-2 D2-R1 (audit-2026-04-29) — chat-tool audit completeness.
+    # Populated by the chat_tool_dispatcher path on every dispatch attempt
+    # (success and failure both). tool_args_json is the LLM's argument
+    # dict serialised + truncated; tool_result_summary is a short
+    # operator-readable verdict ("ok rows=12", "error invalid_args").
+    tool_args_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    tool_result_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     timestamp: Mapped[datetime] = mapped_column(DateTime, default=_now, index=True)
 
 

@@ -36,6 +36,11 @@ async def write_log(
     prompt_excerpt: str | None = None,
     response_excerpt: str | None = None,
     prompt_sections: str | None = None,
+    # Day-2 D2-R1 — chat-tool dispatch audit fields. Both nullable for
+    # legacy call_with_tools callers; the chat_tool_dispatcher fills
+    # them in on every chat-side row.
+    tool_args_json: str | None = None,
+    tool_result_summary: str | None = None,
 ) -> int | None:
     """Persist one tool-use attempt. Returns row id or None on failure."""
     try:
@@ -58,6 +63,8 @@ async def write_log(
                 prompt_excerpt=prompt_excerpt,
                 response_excerpt=response_excerpt,
                 prompt_sections=prompt_sections,
+                tool_args_json=(tool_args_json or "")[:1000] if tool_args_json else None,
+                tool_result_summary=(tool_result_summary or "")[:200] if tool_result_summary else None,
             )
             db.add(row)
             await db.flush()

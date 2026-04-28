@@ -90,11 +90,20 @@ async def dispatch(
     Never raises — failures are captured as ``ok=False``. The caller
     embeds the dict in the next LLM turn or surfaces it on a debug
     channel.
+
+    Day-2 D2-R1 + D2-R3 (audit-2026-04-29): every attempt writes one
+    row to ``ai_tool_use_log`` with user_id ALWAYS populated (so
+    per-tenant queries don't drop chat-tool rows the way they used to
+    drop chat-prompt rows whenever ``chat_prompt_logging_enabled`` was
+    off), plus the truncated args dict and a short result summary.
+    Audit failures never block the dispatch.
     """
     handler = _HANDLERS.get(name)
     started = time.monotonic()
     if handler is None:
-        return _err(name, started, f"unknown_tool:{name}")
+        out = _err(name, started, f"unknown_tool:{name}")
+        await _audit_dispatch(name, args, user_id, out)
+        return out
     # Day-2 D2-D1: per-call wall-clock cap. tool_executor's own
     # asyncio.wait_for guards the SQL/IO step inside execute_tool, but
     # a stand-in handler installed by tests or by future Phase 17b paths
@@ -113,10 +122,14 @@ async def dispatch(
             "chat_tool_dispatcher: %s exceeded %.1fs ceiling",
             name, timeout_s,
         )
-        return _err(name, started, f"timeout:{timeout_s:.1f}s")
+        out = _err(name, started, f"timeout:{timeout_s:.1f}s")
+        await _audit_dispatch(name, args, user_id, out)
+        return out
     except Exception as exc:  # noqa: BLE001
         logger.warning("chat_tool_dispatcher: %s failed: %s", name, exc)
-        return _err(name, started, f"{type(exc).__name__}: {exc}"[:200])
+        out = _err(name, started, f"{type(exc).__name__}: {exc}"[:200])
+        await _audit_dispatch(name, args, user_id, out)
+        return out
 
     elapsed_ms = int((time.monotonic() - started) * 1000)
 
@@ -129,28 +142,34 @@ async def dispatch(
         payload = {
             k: v for k, v in raw.items() if k not in ("ok", "_elapsed_ms")
         }
-        return {
+        out = {
             "ok": True,
             "name": name,
             "result": payload,
             "elapsed_ms": elapsed_ms,
         }
+        await _audit_dispatch(name, args, user_id, out)
+        return out
     if isinstance(raw, dict) and "error" in raw:
-        return _err(
+        out = _err(
             name,
             started,
             f"{raw.get('error_kind', 'error')}:{raw.get('error', '')}"[:200],
         )
+        await _audit_dispatch(name, args, user_id, out)
+        return out
 
     # Handler was monkeypatched to return something we can't classify
     # (e.g. a Phase 17a test stand-in). Pass it through as raw `result`
     # so the test can introspect its own shape.
-    return {
+    out = {
         "ok": True,
         "name": name,
         "result": raw,
         "elapsed_ms": elapsed_ms,
     }
+    await _audit_dispatch(name, args, user_id, out)
+    return out
 
 
 def _err(name: str, started: float, message: str) -> dict[str, Any]:
@@ -160,6 +179,81 @@ def _err(name: str, started: float, message: str) -> dict[str, Any]:
         "error": message,
         "elapsed_ms": int((time.monotonic() - started) * 1000),
     }
+
+
+def _summarise_result(out: dict[str, Any]) -> str:
+    """Short operator-readable verdict for the audit row.
+
+    Examples:
+      ``ok rows=12``   — a 12-row results list landed
+      ``ok``           — success without an obvious row-count
+      ``error invalid_args:hours_ago must be …`` — failure
+    """
+    if out.get("ok") is True:
+        result = out.get("result")
+        if isinstance(result, dict):
+            for row_key in ("count", "results"):
+                v = result.get(row_key)
+                if isinstance(v, int):
+                    return f"ok rows={v}"
+                if isinstance(v, list):
+                    return f"ok rows={len(v)}"
+        return "ok"
+    err = out.get("error", "")[:160]
+    return f"error {err}"
+
+
+async def _audit_dispatch(
+    name: str,
+    args: dict[str, Any] | None,
+    user_id: str,
+    out: dict[str, Any],
+) -> None:
+    """Best-effort audit row for one dispatch attempt.
+
+    D2-R3: user_id is ALWAYS set (no chat_prompt_logging gate). D2-R1:
+    args + summary land on the row so a later operator review can see
+    what the LLM asked for and what it got back without re-reading the
+    upstream prompt log.
+
+    Failures are swallowed — telemetry must never block the chat turn.
+    """
+    try:
+        import json as _json
+        from ai.tool_use_audit import write_log
+
+        try:
+            args_json = _json.dumps(args or {}, ensure_ascii=False, default=str)
+        except Exception:
+            args_json = "<unencodable>"
+        ok = bool(out.get("ok"))
+        elapsed_ms = int(out.get("elapsed_ms", 0))
+        if ok:
+            error_kind = None
+            error_message = None
+        else:
+            err = str(out.get("error", ""))
+            head, _, tail = err.partition(":")
+            error_kind = head.strip() or "error"
+            error_message = (tail.strip() or err)[:1000]
+
+        await write_log(
+            task_id=None,
+            step_idx=None,
+            provider="chat",
+            model="",
+            tool_name=name,
+            success=ok,
+            error_kind=error_kind,
+            error_message=error_message,
+            elapsed_ms=elapsed_ms,
+            retry_count=1,
+            user_id=user_id,
+            tool_args_json=args_json,
+            tool_result_summary=_summarise_result(out),
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("chat_tool_dispatcher audit suppressed: %s", exc)
 
 
 def supported_tools() -> list[str]:

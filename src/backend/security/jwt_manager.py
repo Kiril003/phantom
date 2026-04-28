@@ -1,6 +1,15 @@
 """
 JWT Manager — create / verify / refresh tokens.
 Uses python-jose with HS256. Secret from config.jwt_secret_key.
+
+Day-2 F-14 (audit-2026-04-29 Tier E): the refresh chain used to walk
+forward indefinitely — every refresh issued a new token with `exp =
+now + session_timeout`, so a stolen valid token could be refreshed
+forever. The audit asks for a 30-day absolute cap from the FIRST
+issuance: a refresh chain dies after 30 days regardless of activity.
+
+The cap is anchored on `orig_iat` (carried verbatim through every
+refresh) so we don't have to track session lineage in the DB.
 """
 from __future__ import annotations
 
@@ -17,6 +26,12 @@ logger = logging.getLogger(__name__)
 
 _ALGORITHM = "HS256"
 
+# F-14 absolute lifetime cap. 30 days mirrors common SaaS "session
+# anchored to login event" defaults (e.g. AWS IAM, GitHub web). A
+# refresh chain that crosses this boundary is rejected even if every
+# individual token along the way is structurally valid.
+ABSOLUTE_LIFETIME_DAYS: int = 30
+
 
 @dataclass
 class TokenPayload:
@@ -25,6 +40,11 @@ class TokenPayload:
     role: str
     exp: int   # unix timestamp
     iat: int   # unix timestamp
+    # F-14 — first-issuance timestamp; preserved across the refresh
+    # chain so the absolute-lifetime ceiling is enforceable. None on
+    # legacy tokens issued before the cap shipped (see verify_token
+    # for the back-fill behaviour).
+    orig_iat: Optional[int] = None
 
 
 def _secret() -> str:
@@ -41,21 +61,30 @@ def create_token(
     username: str,
     role: str,
     expires_minutes: Optional[int] = None,
+    *,
+    orig_iat: Optional[int] = None,
 ) -> tuple[str, str]:
     """
     Create a signed JWT.
     Returns (token_string, expires_at_iso8601).
+
+    F-14: when ``orig_iat`` is None this is a fresh login — `orig_iat`
+    is anchored to the new `iat`. When passed (refresh path), the
+    caller's original first-issuance timestamp is preserved so the
+    30-day absolute cap stays anchored to the login event.
     """
     now = datetime.now(tz=timezone.utc)
     ttl = expires_minutes or config.security_session_timeout_m
     expire = now + timedelta(minutes=ttl)
+    iat_ts = int(now.timestamp())
 
     payload = {
         "sub": user_id,
         "username": username,
         "role": role,
-        "iat": int(now.timestamp()),
+        "iat": iat_ts,
         "exp": int(expire.timestamp()),
+        "orig_iat": int(orig_iat) if orig_iat is not None else iat_ts,
     }
 
     token = jwt.encode(payload, _secret(), algorithm=_ALGORITHM)
@@ -67,14 +96,29 @@ def verify_token(token: str) -> TokenPayload:
     """
     Verify and decode a JWT.
     Raises jose.JWTError on invalid token, ExpiredSignatureError on expiry.
+
+    F-14: rejects tokens whose ``orig_iat`` is older than
+    ``ABSOLUTE_LIFETIME_DAYS`` regardless of the per-token ``exp``.
+    Legacy tokens (issued before this cap shipped) lack the field —
+    they are accepted but treated as if `orig_iat == iat`, so they
+    decay naturally as their issuance timestamp ages.
     """
     payload = jwt.decode(token, _secret(), algorithms=[_ALGORITHM])
+    iat_ts = int(payload["iat"])
+    orig_iat_ts = int(payload.get("orig_iat", iat_ts))
+    now_ts = int(datetime.now(tz=timezone.utc).timestamp())
+    if now_ts - orig_iat_ts > ABSOLUTE_LIFETIME_DAYS * 86400:
+        raise JWTError(
+            f"Refresh chain exceeded {ABSOLUTE_LIFETIME_DAYS}-day cap "
+            f"from first issuance. Re-authenticate to start a new session."
+        )
     return TokenPayload(
         user_id=payload["sub"],
         username=payload["username"],
         role=payload["role"],
         exp=payload["exp"],
-        iat=payload["iat"],
+        iat=iat_ts,
+        orig_iat=orig_iat_ts,
     )
 
 
@@ -82,12 +126,18 @@ def refresh_token(token: str) -> tuple[str, str]:
     """
     Verify existing token and issue a new one with fresh TTL.
     Raises JWTError if token is invalid (but allows expired within 1h grace).
+
+    F-14: the new token preserves the ORIGINAL `orig_iat`, NOT the
+    refresh moment, so the absolute-lifetime cap can't be cleared by
+    chaining refreshes.
     """
     try:
-        # Try normal verify first
+        # Try normal verify first — this also enforces the F-14 cap.
         payload_data = verify_token(token)
     except ExpiredSignatureError:
-        # Allow refresh within 1h after expiry (grace period)
+        # Allow refresh within 1h after expiry (grace period). We still
+        # have to enforce the absolute cap here — the grace path skips
+        # `verify_token` entirely.
         payload = jwt.decode(
             token,
             _secret(),
@@ -98,12 +148,25 @@ def refresh_token(token: str) -> tuple[str, str]:
         grace_s = 3600
         if now_ts - payload["exp"] > grace_s:
             raise
+        iat_ts = int(payload["iat"])
+        orig_iat_ts = int(payload.get("orig_iat", iat_ts))
+        if now_ts - orig_iat_ts > ABSOLUTE_LIFETIME_DAYS * 86400:
+            raise JWTError(
+                f"Refresh chain exceeded {ABSOLUTE_LIFETIME_DAYS}-day cap; "
+                f"re-authenticate."
+            )
         payload_data = TokenPayload(
             user_id=payload["sub"],
             username=payload["username"],
             role=payload["role"],
             exp=payload["exp"],
-            iat=payload["iat"],
+            iat=iat_ts,
+            orig_iat=orig_iat_ts,
         )
 
-    return create_token(payload_data.user_id, payload_data.username, payload_data.role)
+    return create_token(
+        payload_data.user_id,
+        payload_data.username,
+        payload_data.role,
+        orig_iat=payload_data.orig_iat,
+    )

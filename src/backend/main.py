@@ -135,10 +135,44 @@ async def _start_serial_bridge() -> None:
     asyncio.create_task(serial_bridge.start(), name="serial_bridge")
 
 
+_CI_FIXED_SECRET: str = "ci-fixed-secret-do-not-reuse"
+
+
+def _refuse_ci_default_secret() -> None:
+    """Day-2 D2-CI1 (audit-2026-04-29 Tier E): the CI workflow's
+    JWT_SECRET_KEY is in public Git history. A daemon that boots with
+    that exact value would issue forgeable tokens. Refuse to start.
+
+    Test runs are exempt — pytest's process loads the same module but
+    sets a different secret in tests/conftest.py. The CI workflow runs
+    pytest with the public secret; we detect ``pytest`` as the active
+    test runner via a sentinel env var the CI workflow already sets,
+    plus a fallback check on ``sys.modules`` so a developer running
+    pytest locally also bypasses the guard.
+    """
+    import os as _os
+    import sys as _sys
+
+    if config.jwt_secret_key != _CI_FIXED_SECRET:
+        return
+    # Test contexts: don't refuse — let pytest run.
+    if "pytest" in _sys.modules:
+        return
+    if _os.environ.get("PHANTOM_ALLOW_CI_SECRET") == "1":
+        return
+    raise RuntimeError(
+        "Refusing to start: JWT_SECRET_KEY equals the CI workflow's "
+        "public placeholder ('ci-fixed-secret-do-not-reuse'). Generate "
+        "a real secret and set it via the JWT_SECRET_KEY environment "
+        "variable. See docs/OPERATIONS.md for guidance."
+    )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Startup / shutdown lifecycle."""
     logger.info("PHANTOM OS starting...")
+    _refuse_ci_default_secret()
     await init_db()
     logger.info("Database initialized")
 

@@ -74,18 +74,50 @@ async def authenticate_pin(
     return user
 
 
+# Day-2 F-7 (audit-2026-04-29 Tier E): the seeded `ensure_default_user`
+# row ships with PIN '000000' so the operator can log in once and rotate
+# it. Auto-login MUST refuse that bootstrap PIN — otherwise a daemon left
+# at the kiosk with auto-login on grants the next person to touch it ROOT
+# without the rotation step ever happening. The user must explicitly log
+# in (PIN/RFID), be told to rotate, and only then does auto-login take
+# over for subsequent boots.
+_DEFAULT_PIN: str = "000000"
+
+
+def is_default_pin(pin_hash: Optional[str]) -> bool:
+    """True iff the stored bcrypt hash matches the bootstrap PIN
+    `'000000'`. Bcrypt is constant-time so this is safe to call per
+    auto-login attempt."""
+    if not pin_hash:
+        return False
+    return verify_secret(_DEFAULT_PIN, pin_hash)
+
+
 async def get_auto_login_user(db: AsyncSession) -> Optional[User]:
     """
     Return the single ROOT user if only one user exists and auto-login is enabled.
     Used on system startup when no one has logged in yet.
+
+    Day-2 F-7: refuses to surface a user whose PIN is still the default
+    `'000000'` — forces the operator through the explicit login flow
+    where the UI can prompt for rotation.
     """
     if not config.security_auto_login:
         return None
     result = await db.execute(select(User))
     users = result.scalars().all()
-    if len(users) == 1 and users[0].role == "ROOT":
-        return users[0]
-    return None
+    if len(users) != 1 or users[0].role != "ROOT":
+        return None
+    user = users[0]
+    if is_default_pin(user.pin_hash):
+        logger.warning(
+            "Auto-login refused for user %s (id=%s) — PIN is still the "
+            "bootstrap default '000000'. Operator must rotate via "
+            "Settings before auto-login resumes.",
+            user.username, user.id,
+        )
+        return None
+    return user
 
 
 async def ensure_default_user(db: AsyncSession) -> None:

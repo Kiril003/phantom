@@ -110,20 +110,64 @@ async def _touch_last_seen(db: AsyncSession, user: User) -> None:
 
 # ── Auth routes ────────────────────────────────────────────────────────────────
 
+# ── Day-2 F-15 — login lockout enforcement ────────────────────────────────────
+#
+# Two keys are tracked independently so neither IP-rotation NOR username-
+# spray bypass the gate. The IP key uses the X-Forwarded-For-aware
+# `request.client.host` fallback chain; behind a trusted reverse proxy
+# the operator sets ``security_trust_xff`` (existing config knob) so
+# the right value lands here.
+
+
+def _ip_key(request: Request) -> str:
+    client = request.client
+    if client and client.host:
+        return f"ip:{client.host}"
+    return "ip:unknown"
+
+
+def _user_key(username: str) -> str:
+    return f"user:{(username or '').strip().lower()}"
+
+
+def _lockout_response(remaining_s: int) -> HTTPException:
+    return HTTPException(
+        status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+        detail=(
+            f"Too many failed login attempts. Try again in "
+            f"{max(1, remaining_s)} s."
+        ),
+        headers={
+            "Retry-After": str(max(1, remaining_s)),
+            "X-Error-Code": "LOCKED_OUT",
+        },
+    )
+
+
 @router.post("/login/rfid", response_model=AuthResponse)
 async def login_rfid(
     req: RFIDLoginRequest,
+    request: Request,
     response: Response,
     db: AsyncSession = Depends(get_db),
 ) -> AuthResponse:
     """Authenticate using raw RFID UID. Verifies against stored bcrypt hash."""
+    from security import login_lockout
+
+    ip_key = _ip_key(request)
+    locked, remaining = login_lockout.is_locked(ip_key)
+    if locked:
+        raise _lockout_response(remaining)
+
     user = await authenticate_rfid(db, req.uid)
     if user is None:
+        login_lockout.register_failure(ip_key)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Unknown RFID",
             headers={"X-Error-Code": "RFID_UNKNOWN"},
         )
+    login_lockout.register_success(ip_key)
     token, expires_at = create_token(user.id, user.username, user.role)
     await _touch_last_seen(db, user)
     response.set_cookie(
@@ -137,17 +181,34 @@ async def login_rfid(
 @router.post("/login/pin", response_model=AuthResponse)
 async def login_pin(
     req: PINLoginRequest,
+    request: Request,
     response: Response,
     db: AsyncSession = Depends(get_db),
 ) -> AuthResponse:
     """Authenticate using username + PIN."""
+    from security import login_lockout
+
+    ip_key = _ip_key(request)
+    user_key = _user_key(req.username)
+    for key in (ip_key, user_key):
+        locked, remaining = login_lockout.is_locked(key)
+        if locked:
+            raise _lockout_response(remaining)
+
     user = await authenticate_pin(db, req.username, req.pin)
     if user is None:
+        # Record on BOTH keys so an attacker can't dodge by switching
+        # IPs (username gate fires) or by spraying usernames (IP gate
+        # fires).
+        login_lockout.register_failure(ip_key)
+        login_lockout.register_failure(user_key)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid username or PIN",
             headers={"X-Error-Code": "PIN_INVALID"},
         )
+    login_lockout.register_success(ip_key)
+    login_lockout.register_success(user_key)
     token, expires_at = create_token(user.id, user.username, user.role)
     await _touch_last_seen(db, user)
     response.set_cookie(

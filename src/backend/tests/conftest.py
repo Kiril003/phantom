@@ -50,6 +50,77 @@ os.environ.setdefault(
 )
 
 
+# ── Day-2 L-3 (audit-2026-04-29 F-15) — login lockout test isolation ─────────
+#
+# `security.login_lockout` is a process-local in-memory module. Tests
+# that hit `/api/v1/auth/login/pin` with bad credentials trip the
+# lockout after `LOCKOUT_THRESHOLD` attempts and the next test inherits
+# the locked state — manifesting as a 429 instead of the 401 the test
+# expected. Reset the module's deques/until-map between tests.
+
+
+@pytest.fixture(autouse=True)
+def _reset_login_lockout_per_test():
+    from security import login_lockout
+    login_lockout.reset_for_tests()
+    yield
+    login_lockout.reset_for_tests()
+
+
+# ── Seed-user idempotence for tests that depend on phantom/000000 ─────────────
+#
+# Several pre-existing test files (`test_phase08_face.py::auth_token`,
+# `test_phase07_voice.py` voice route fixtures) call `/api/v1/auth/login/pin`
+# with `phantom`/`000000` to obtain a token. That works only when the
+# bootstrap row created by `ensure_default_user` is in the DB. Other
+# tests in this session can have already populated the `users` table
+# (the conftest `_ensure_user` helper creates per-role test rows), which
+# makes `ensure_default_user`'s "no users exist" gate skip the seed.
+#
+# This session-scoped autouse fixture restores the invariant by creating
+# the `phantom` row up-front when missing — idempotent, no-op when it
+# already exists.
+
+
+@pytest.fixture(scope="session", autouse=True)
+def _ensure_seed_phantom_user():
+    import asyncio as _asyncio
+    import uuid as _uuid
+
+    async def _run():
+        from db.database import init_db, get_session
+        from db.models import User
+        from security.auth import hash_secret
+        from sqlalchemy import select
+
+        await init_db()
+        async with get_session() as db:
+            existing = (await db.execute(
+                select(User).where(User.username == "phantom")
+            )).scalar_one_or_none()
+            if existing is not None:
+                return
+            db.add(User(
+                id=str(_uuid.uuid4()),
+                username="phantom",
+                role="ROOT",
+                pin_hash=hash_secret("000000"),
+                rfid_uid_hash=None,
+                avatar_url=None,
+                preferences_json="{}",
+            ))
+            await db.commit()
+
+    try:
+        _asyncio.run(_run())
+    except RuntimeError:
+        # Another loop is already running (rare under pytest-asyncio).
+        # Best-effort — the test that needs the seed will surface the
+        # missing-row issue and the operator can re-run.
+        pass
+    yield
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 

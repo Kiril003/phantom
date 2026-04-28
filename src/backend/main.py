@@ -174,11 +174,46 @@ def _refuse_ci_default_secret() -> None:
     )
 
 
+def _refuse_unsupported_deployment_mode() -> None:
+    """Day-3 R-2 (audit-2026-04-30 NEW-OPS-03): the D2-I2 invariant
+    forbids multi-tenant deploys until per-tenant ``ContextEngine``
+    ships (Phase 17b open). Day-2 documented this in OPERATIONS.md
+    but did not enforce in code; an operator who set
+    ``DEPLOYMENT_MODE=multi`` got no guardrail and would silently
+    leak cross-tenant ``get_sensor_status`` content.
+
+    Tests are exempt: pytest runs with the default single-tenant
+    config and never sets the env override. CI workflows that need
+    the override may set ``PHANTOM_ALLOW_MULTI_TENANT_PREVIEW=1``.
+    """
+    import os as _os
+
+    if config.deployment_mode == "single":
+        return
+    if _os.environ.get("PHANTOM_ALLOW_MULTI_TENANT_PREVIEW") == "1":
+        logger.warning(
+            "PHANTOM_ALLOW_MULTI_TENANT_PREVIEW=1 — booting with "
+            "deployment_mode=%r despite the D2-I2 invariant. Per-tenant "
+            "ContextEngine still not implemented; cross-tenant leakage "
+            "is on the operator's head.",
+            config.deployment_mode,
+        )
+        return
+    raise RuntimeError(
+        "Refusing to start with deployment_mode='multi': per-tenant "
+        "ContextEngine has not landed yet (audit-2026-04-30 NEW-OPS-03 / "
+        "Phase 17b D2-I2 invariant). Either set deployment_mode='single' "
+        "or set PHANTOM_ALLOW_MULTI_TENANT_PREVIEW=1 to acknowledge the "
+        "leakage risk."
+    )
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Startup / shutdown lifecycle."""
     logger.info("PHANTOM OS starting...")
     _refuse_ci_default_secret()
+    _refuse_unsupported_deployment_mode()
     await init_db()
     logger.info("Database initialized")
 

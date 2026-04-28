@@ -103,7 +103,17 @@ CATEGORY_SPEC: list[dict[str, Any]] = [
         "id": "general",
         "label": "Загальні",
         "icon": "⚙",
-        "keys": ["system_hostname", "log_level", "debug", "serial_enabled"],
+        "keys": [
+            "system_hostname", "log_level", "debug", "serial_enabled",
+            # Day-3 R-1 (audit-2026-04-30 D2-FE1): Day-2 productisation
+            # added a JSON-formatter knob. Surfacing it here lets the
+            # operator flip the format without redeploying.
+            "log_json_enabled",
+            # Day-3 R-2 (audit-2026-04-30 NEW-OPS-03): deployment-mode
+            # gate. Surfaced read-only here so the operator can confirm
+            # the daemon believes it's single-tenant.
+            "deployment_mode",
+        ],
     },
     {
         "id": "theme",
@@ -132,6 +142,29 @@ CATEGORY_SPEC: list[dict[str, Any]] = [
             "security_lockout_duration_m",
             "security_dangerous_cmd_confirm",
             "security_ghost_auto_encrypt",
+            # Day-3 R-1 (audit-2026-04-30 D2-FE1 + D3-A-2): XFF
+            # awareness lockout knobs land here so the operator can
+            # tell the daemon "I have a reverse proxy in front; trust
+            # X-Forwarded-For from this peer set".
+            "security_trust_xff",
+            "security_trusted_proxies",
+        ],
+    },
+    # Day-3 R-1 (audit-2026-04-30 D2-FE1): chat tool-use knobs that
+    # land with Phase 17b's `chat_pipeline`. The operator opts into
+    # chat tools per-deploy (D2-I2 invariant) and tunes the per-call
+    # + per-turn timeouts here without touching .env.
+    {
+        "id": "chat",
+        "label": "Чат",
+        "icon": "💬",
+        "keys": [
+            "chat_tools_enabled",
+            "chat_tool_call_timeout_s",
+            "chat_tool_max_total_ms",
+            "chat_tool_max_calls_per_turn",
+            "chat_prompt_logging_enabled",
+            "chat_prompt_excerpt_max_chars",
         ],
     },
     {

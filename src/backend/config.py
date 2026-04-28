@@ -284,6 +284,13 @@ class PhantomConfig(BaseSettings):
     # parse — typically the loopback aliases when the proxy is on the
     # same host, or the bridge gateway IP for a docker network.
     chroma_janitor_at_startup: bool = True
+    # Day-3 R-2 (audit-2026-04-30 NEW-OPS-03 / D2-I2): explicit
+    # deployment-mode knob so the daemon enforces the multi-tenant
+    # invariant in code rather than docs alone. Setting this to
+    # ``"multi"`` raises at lifespan startup until per-tenant
+    # ``ContextEngine`` ships (Phase 17b D2-I2 invariant). Single-
+    # tenant Radxa / single-VM deploys keep the default.
+    deployment_mode: Literal["single", "multi"] = "single"
     security_trust_xff: bool = False
     security_trusted_proxies: list[str] = [
         "127.0.0.1", "::1", "localhost",

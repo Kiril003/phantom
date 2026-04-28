@@ -290,23 +290,130 @@ Operator-facing utilities:
   automatically at FastAPI lifespan startup so `/readyz` cold first
   hit no longer pays the 2-3 s `list_collections` scan.
 
-## What this guide doesn't cover yet
+## Day-3 audit closures (2026-04-30) — `v0.19.0-jarvis-online`
 
-Tracked under future phases:
+The Day-3 swarm (8 reviewers vs 6 on Day-2) flagged 12 Tier-A false-
+completions plus 4 Critical TM-17B threats gating Phase 17b. All
+twelve Tier-A items closed in the seven Block-O commits; Phase 17b
+ships with the four TM-17B Critical mitigations in
+`ai/chat_pipeline.py`.
 
-* **Phase 17b chat `call_with_tools` loop** — Tier D from the Day-2
-  audit. The dispatcher is consolidated and the 5 read-only handlers
-  ready; `routes_chat._build_ai_response` swap pending. Tag
-  `v0.19.0-jarvis-online` lands here.
+### Phase 17b — chat tool-use, opt-in
+
+Set `chat_tools_enabled = true` (Settings → Чат → Chat tool-use)
+to enable the bounded loop. Default is OFF — the existing v0.18.x
+chat path is untouched until you flip the knob.
+
+When enabled, `routes_chat._build_ai_response` routes through
+`ai.chat_pipeline.run`:
+
+1. LLM picks one tool from the 5-name read-only catalog (search_locationhistory,
+   query_temporal_anchors, recall_memory_facts, get_system_metrics,
+   get_sensor_status). `bash`/`shell`/`exec`/`create_calendar_event`/
+   `search_web` are NEVER advertised to the chat model (D2-E2 +
+   TM-17B-E2 invariants).
+2. Dispatch via `chat_tool_dispatcher.dispatch` with the per-call
+   timeout cap (`chat_tool_call_timeout_s`, default 10 s).
+3. Result wrapped in a nonced envelope `{_phantom_tool_<nonce>: name,
+   ok, name, content}` (TM-17B-S1 — the 8-byte process nonce
+   prevents an LLM from forging a tool-result marker in plain text).
+4. Content capped at 4000 chars (TM-17B-S1 cap).
+5. LLM produces final answer with envelope appended to history.
+6. `output_safety.sanitize` runs before the WS broadcast (TM-17B-I1).
+
+Wall-clock budget: `chat_tool_max_total_ms` (default 12 s). Counter:
+`phantom_chat_tool_calls_total{tool=...,ok=...}`.
+
+### Multi-tenant runtime guard
+
+Day-3 R-2 enforces the D2-I2 invariant in code: setting
+`deployment_mode=multi` raises `RuntimeError` at lifespan startup.
+The single-tenant default boots normally. Operators who genuinely
+want multi-tenant preview (cross-tenant `get_sensor_status` leakage
+remains until per-tenant `ContextEngine` ships) acknowledge the risk
+via `PHANTOM_ALLOW_MULTI_TENANT_PREVIEW=1`.
+
+### Day-3 new config keys
+
+| Key | Default | Purpose |
+|---|---|---|
+| `chat_tools_enabled` | `false` | Master flag for Phase 17b chat tool-use loop. |
+| `chat_tool_max_calls_per_turn` | `4` | Tool dispatch budget per chat turn (Q-1 single-call scope; future plural-call call_with_tools will respect this). |
+| `security_trust_xff` | `false` | Trust `X-Forwarded-For` for IP-key lockout. Flip on when behind a reverse proxy that strips/replaces XFF. |
+| `security_trusted_proxies` | `["127.0.0.1", "::1", "localhost"]` | Allowlist of immediate-peer hosts whose XFF the daemon parses. |
+| `deployment_mode` | `single` | Multi-tenant runtime guard. `multi` refused unless `PHANTOM_ALLOW_MULTI_TENANT_PREVIEW=1`. |
+| `chroma_janitor_at_startup` | `true` | Run `prune_orphan_collections` + `prune_orphan_dirs` at lifespan startup. |
+
+### Strict JWT cap (Day-3 D3-C-2)
+
+Tokens MUST carry `orig_iat`. Pre-v0.18.1 tokens (issued before the
+F-14 cap shipped) are now refused — clients see 401 once and re-auth.
+The 30-day absolute lifetime ceiling from Day-2 is unchanged.
+
+### XFF-aware lockout (Day-3 D3-A-2)
+
+`request.client.host` collapses every remote attacker into a single
+key behind a reverse proxy — Day-2's lockout was a system-wide DoS
+amplifier. The new `_resolve_client_ip` walks `X-Forwarded-For`
+right-to-left, skipping trusted-proxy hops, and returns the leftmost
+untrusted IP. Only enabled when `security_trust_xff=true` AND the
+immediate peer is in `security_trusted_proxies` (the peer must be
+trusted before XFF is parsed; otherwise a malicious LAN host could
+spoof their IP).
+
+### ChromaDB backup procedure
+
+```bash
+# Stop the daemon to quiesce writes (or use a snapshot-capable FS).
+docker compose stop phantom
+
+# Tar the chroma_data volume.
+tar -czf chroma-$(date +%F).tgz \
+    /var/lib/docker/volumes/phantom_chroma/_data/
+
+# Restart.
+docker compose start phantom
+```
+
+`chroma_data/chroma.sqlite3` is now untracked from git
+(Day-3 D3-C-8) — the persistent client recreates it at lifespan.
+Backups need to capture the whole `_data/` tree, not just the
+sqlite file.
+
+### Day-3 Tier-A false-completions resolved
+
+Each closed under audit-finding ID for grep-able verification:
+
+| ID | Closure |
+|---|---|
+| D3-A-1 | `/auth/login/pin` refuses default PIN from non-loopback (single source of truth via `is_loopback_host`). |
+| D3-A-2 | XFF-aware lockout keying via `_resolve_client_ip`. |
+| D3-A-3 | `/auth/refresh` lockout-wired (IP key + sub-claim user key). |
+| D3-A-4 | `_VERSION` bumped to `0.18.2-fixup` (Day-3 fixup tier). |
+| D3-A-5 | Chroma janitor wired to lifespan + opt-out flag. |
+| D3-A-6 | `_probe_chroma` now does a `client.heartbeat()` ping. |
+| D3-A-8 | OPERATIONS.md stale "metrics counters unwired" claim corrected. |
+| D3-A-9 | Programmatic `app.routes` walker against public allowlist. |
+| D3-A-10 | Lifespan-integrated sampler start/stop test. |
+| D3-A-11 | Async autouse fixture resetting sampler (FLAKE-01). |
+| D3-A-12 | Threaded seed bootstrap (FLAKE-02). |
+
+D3-A-7 (WS subprotocol JWT transport) deferred to follow-up.
+
+## What this guide still doesn't cover
+
 * **F-58 subprocess sandbox** — `agent/actions/{net,bash,notify}` and
   `agent/mcp/adapter` to route through a future `safety/sandbox.py`.
-  Tier E follow-up.
+  Tier E follow-up. R-be lane in Block R deferred.
 * **F-40 `realpath`-based workspace check** — `fs.write` should reject
   symlink path components via `realpath` rather than `abspath`. Tier E
   follow-up.
-* **Frontend Settings UI auto-render** — D2-FE1..FE5; the new Day-2
-  config keys (`chat_tool_call_timeout_s`, `chat_tool_max_total_ms`,
-  `log_json_enabled`) need to surface in the SettingsPanel via the
-  `CATEGORY_SPEC` metadata path.
-* **Per-tenant `ContextEngine`** — required before any multi-tenant
-  cloud deploy (Day-2 D2-I2 invariant).
+* **Frontend D2-FE2..FE5** — touch-target rewrites, agent_risk_tolerance
+  legal-values constraint, setContext shallow-equality bail, per-field
+  selectors in `StatusBar.tsx:42`. Backend side of D2-FE1 (auto-render
+  metadata) closed in Day-3 R-1.
+* **Per-tenant `ContextEngine`** — required before flipping
+  `deployment_mode=multi` without the env override.
+* **Tier F latents** — F-29..F-41 + D3-F-1..F-3 deferred to Day-4
+  follow-up. Day-3 docs/audit-2026-04-30-day3/FINDINGS.md catalogues
+  them.

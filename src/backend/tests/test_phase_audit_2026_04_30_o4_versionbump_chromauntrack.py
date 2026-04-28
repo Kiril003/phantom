@@ -37,7 +37,9 @@ class TestD3A4VersionBump:
         # opens with this tier; further bumps within Day 3 land in O-7
         # (JWT cap hardening), Block Q (chat tool-use → v0.19), and
         # Block R (frontend Settings → v0.20 if both lanes green).
-        assert _VERSION == "0.18.2-fixup", (
+        # Day-3 Block-T capstone: bumped from 0.18.2-fixup → 0.19.0-jarvis-online
+        # at tag time. The _VERSION literal is the tagged release line.
+        assert _VERSION == "0.19.0-jarvis-online", (
             f"D3-A-4 regression: _VERSION drifted ({_VERSION!r}) — "
             f"phantom_build_info will lie about the running build."
         )

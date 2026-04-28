@@ -35,6 +35,202 @@ def _get_client() -> Any:
     return _chroma_client
 
 
+def client_initialized() -> bool:
+    """True when `_get_client` has been invoked at least once. Cheap check
+    used by readiness probes so /readyz doesn't trigger a cold scan over
+    leaked-collection dirs (audit-2026-04-29 D2-A6 / G-1)."""
+    return _chroma_client is not None
+
+
+async def init_chroma_eager() -> dict[str, Any]:
+    """Open the chroma client + enumerate collections at lifespan startup
+    so the first /readyz hit doesn't pay the 2-3 s cold-scan cost.
+
+    Returns ``{"collections": int, "elapsed_ms": int}``. Never raises —
+    if chroma is unavailable the call returns ``{"ok": False, "error":
+    ...}`` and the daemon continues; readyz will then 503.
+    """
+    import time as _t
+
+    def _warm() -> dict[str, Any]:
+        t0 = _t.monotonic()
+        client = _get_client()
+        cols = client.list_collections()
+        return {
+            "collections": len(cols),
+            "elapsed_ms": int((_t.monotonic() - t0) * 1000),
+        }
+
+    try:
+        return await asyncio.to_thread(_warm)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("init_chroma_eager failed: %s", exc)
+        return {"ok": False, "error": f"{type(exc).__name__}: {exc}"}
+
+
+def _sync_prune_orphans(
+    known_user_ids: set[str], dry_run: bool
+) -> dict[str, Any]:
+    client = _get_client()
+    cols = client.list_collections()
+    deleted: list[str] = []
+    kept: list[str] = []
+    failures: list[dict[str, str]] = []
+    for col in cols:
+        # PersistentClient returns Collection objects; the .name attribute
+        # is the canonical lookup key for delete_collection.
+        name = getattr(col, "name", None) or str(col)
+        if not name.startswith("user_"):
+            kept.append(name)
+            continue
+        # Strip the prefix and compare against known users. The prefix
+        # safe_id is sanitised in `_collection_name` so this is a direct
+        # match — no test-fixture leakage logic here, that lives in
+        # `_sync_retrieve`.
+        suffix = name[len("user_") :]
+        if suffix in known_user_ids:
+            kept.append(name)
+            continue
+        if dry_run:
+            deleted.append(name)
+            continue
+        try:
+            client.delete_collection(name=name)
+            deleted.append(name)
+        except Exception as exc:  # noqa: BLE001
+            failures.append({"name": name, "error": f"{type(exc).__name__}: {exc}"})
+    return {
+        "scanned": len(cols),
+        "kept": len(kept),
+        "deleted": deleted,
+        "failures": failures,
+        "dry_run": dry_run,
+    }
+
+
+async def prune_orphan_collections(
+    known_user_ids: set[str], *, dry_run: bool = False
+) -> dict[str, Any]:
+    """Delete `user_*` ChromaDB collections whose suffix isn't a known
+    user id. Closes audit F-17 — the leaked-collection backlog (633 dirs
+    on the dev box at the time of the Day-2 audit) was caused by tests
+    that create a transient user collection and never delete it.
+
+    `known_user_ids` is the caller's responsibility — typically the
+    distinct `User.id` set from the SQL DB. `dry_run=True` reports what
+    would be deleted without touching anything.
+    """
+    return await asyncio.to_thread(_sync_prune_orphans, known_user_ids, dry_run)
+
+
+# ── Filesystem-level orphan cleanup (F-17) ─────────────────────────────────────
+#
+# Per-collection HNSW indices live in `<chroma_path>/<collection-uuid>/`. When
+# tests delete the SQLite metadata without cleaning the dir (or when the
+# operator wipes the DB but not the path), those dirs persist as 100s of MB
+# of dead weight. `list_collections()` doesn't iterate them — but the disk
+# pressure still hurts cold start, backups, and Docker image size. The
+# CLI janitor calls `prune_orphan_dirs` after `prune_orphan_collections`
+# so the two layers stay in sync.
+
+
+_UUID_RE = re.compile(
+    r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+)
+
+
+def _live_collection_ids(client: Any) -> set[str]:
+    """Return the set of UUID directory names that the persistent client
+    currently considers live. Each Collection object exposes `.id` —
+    str(UUID) — which matches the on-disk dir name."""
+    out: set[str] = set()
+    for col in client.list_collections():
+        cid = getattr(col, "id", None)
+        if cid is not None:
+            out.add(str(cid))
+    return out
+
+
+def _sync_prune_orphan_dirs(dry_run: bool) -> dict[str, Any]:
+    import shutil
+    from pathlib import Path as _Path
+
+    base = _Path(config.chroma_path)
+    if not base.is_dir():
+        return {
+            "scanned": 0,
+            "live": 0,
+            "deleted_dirs": [],
+            "freed_bytes": 0,
+            "failures": [],
+            "dry_run": dry_run,
+        }
+
+    client = _get_client()
+    live = _live_collection_ids(client)
+
+    deleted: list[str] = []
+    failures: list[dict[str, str]] = []
+    freed_bytes = 0
+    scanned = 0
+    for entry in base.iterdir():
+        if not entry.is_dir():
+            continue
+        if not _UUID_RE.match(entry.name):
+            # Some chromadb versions also create a `metadata` or
+            # similarly-named dir — leave anything that's not a UUID alone.
+            continue
+        scanned += 1
+        if entry.name in live:
+            continue
+        # Compute size before delete so the summary reports actual freed
+        # bytes — useful when running in dry-run mode to size the impact.
+        size = 0
+        try:
+            for sub in entry.rglob("*"):
+                if sub.is_file():
+                    try:
+                        size += sub.stat().st_size
+                    except OSError:
+                        pass
+        except OSError:
+            pass
+
+        if dry_run:
+            deleted.append(entry.name)
+            freed_bytes += size
+            continue
+
+        try:
+            shutil.rmtree(entry)
+            deleted.append(entry.name)
+            freed_bytes += size
+        except Exception as exc:  # noqa: BLE001
+            failures.append({"name": entry.name, "error": f"{type(exc).__name__}: {exc}"})
+
+    return {
+        "scanned": scanned,
+        "live": len(live),
+        "deleted_dirs": deleted,
+        "freed_bytes": freed_bytes,
+        "failures": failures,
+        "dry_run": dry_run,
+    }
+
+
+async def prune_orphan_dirs(*, dry_run: bool = False) -> dict[str, Any]:
+    """Remove UUID-named subdirs of `config.chroma_path` that no longer
+    correspond to a live collection. These are HNSW index leftovers
+    from tests / DB resets that the SQL-side `prune_orphan_collections`
+    pass can't see — without them, audit F-17's "533 dirs / 110 MB"
+    backlog stays on disk forever.
+
+    Returns ``{"scanned", "live", "deleted_dirs", "freed_bytes",
+    "failures", "dry_run"}``. Idempotent.
+    """
+    return await asyncio.to_thread(_sync_prune_orphan_dirs, dry_run)
+
+
 def _get_ef() -> Any:
     global _embedding_fn
     if _embedding_fn is None:

@@ -194,6 +194,26 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as exc:
         logger.warning("MiniLM warmup skipped: %s", exc)
 
+    # Day-2 D2-A6 / G-1: eagerly open the ChromaDB PersistentClient and
+    # enumerate collections so the FIRST /readyz hit no longer pays the
+    # 2-3 s cold-scan cost over leaked-collection dirs (audit F-17).
+    # Without this, K8s default 1 s livenessProbe times out on cold
+    # boot and the LB pulls a healthy daemon out of rotation. Done after
+    # MiniLM warmup since both share the chroma_path I/O bandwidth.
+    try:
+        from memory.strategic_memory import init_chroma_eager
+        chroma_init = await init_chroma_eager()
+        if chroma_init.get("ok") is False:
+            logger.warning("Chroma eager init failed: %s", chroma_init.get("error"))
+        else:
+            logger.info(
+                "Chroma client warmed at startup (%d collections, %d ms)",
+                int(chroma_init.get("collections", 0)),
+                int(chroma_init.get("elapsed_ms", 0)),
+            )
+    except Exception as exc:
+        logger.warning("Chroma eager init skipped: %s", exc)
+
     # Phase 12.0 — preload voice singletons so the first /ws/voice connect
     # doesn't pay 8-10 s of cold model loading on the event-loop's worker
     # thread. 11c.5 Bug 2.

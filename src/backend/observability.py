@@ -246,11 +246,25 @@ async def _probe_db() -> tuple[bool, str]:
 
 
 async def _probe_chroma() -> tuple[bool, str]:
+    """Day-2 D2-A6 / G-1: do NOT call `list_collections()` per probe.
+
+    With ~600 leaked test collection dirs on the dev box that scan was
+    a 2-3 s wall-clock hit on every /readyz call, blowing the K8s 1 s
+    livenessProbe default. After lifespan startup eagerly opens the
+    client (`init_chroma_eager`), this probe just confirms the client
+    object exists. Genuine corruption is caught at next read/write —
+    not at probe time.
+    """
     try:
-        from memory.strategic_memory import _get_client
-        client = _get_client()
-        # cheap call — just enumerates collections without loading them
-        client.list_collections()
+        from memory.strategic_memory import client_initialized, _get_client
+        if not client_initialized():
+            # Lifespan has not yet completed `init_chroma_eager` (or it
+            # failed). Surface as not-ready so the LB pulls us out of
+            # rotation rather than serving cold-scan latency to clients.
+            return False, "chroma: not_initialized"
+        # Touch the client — confirms the persistent backing file is
+        # still openable without scanning all collection dirs.
+        _ = _get_client()
         return True, "ok"
     except Exception as exc:  # noqa: BLE001
         return False, f"chroma: {type(exc).__name__}"

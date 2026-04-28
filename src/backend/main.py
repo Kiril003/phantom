@@ -487,9 +487,15 @@ def create_app() -> FastAPI:
 
     # Phase 18 (audit-2026-04-28 Block E) — productisation observability:
     # /healthz liveness, /readyz readiness, /metrics Prometheus exposition,
-    # correlation-id middleware on every response.
-    from observability import _register_observability, correlation_id_middleware
+    # correlation-id middleware + http_requests_total counter middleware
+    # on every response.
+    from observability import (
+        _register_observability,
+        correlation_id_middleware,
+        http_requests_counter_middleware,
+    )
     app.middleware("http")(correlation_id_middleware)
+    app.middleware("http")(http_requests_counter_middleware)
     _register_observability(app)
 
     # Phase 18 — serve the built frontend bundle when the operator deploys

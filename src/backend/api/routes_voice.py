@@ -101,6 +101,12 @@ async def transcribe_speech(file: UploadFile = File(...)) -> STTResponse:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"STT pipeline error: {exc}",
         ) from exc
+    # Phase 18 E-5 — STT engine usage counter for /metrics.
+    try:
+        from observability import voice_stt_total
+        voice_stt_total.inc(engine=result.engine)
+    except Exception:  # noqa: BLE001
+        pass
     return STTResponse(
         text=result.text,
         confidence=result.confidence,
@@ -138,6 +144,12 @@ async def synthesize_speech(req: TTSRequest) -> Response:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"TTS pipeline error: {exc}",
         ) from exc
+    # Phase 18 E-5 — TTS counter for /metrics.
+    try:
+        from observability import voice_tts_total
+        voice_tts_total.inc()
+    except Exception:  # noqa: BLE001
+        pass
     return Response(
         content=result.audio_wav,
         media_type="audio/wav",

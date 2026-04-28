@@ -767,6 +767,15 @@ class AIRouter:
             context_engine.set_ai_provider(provider_name)
         except Exception as exc:
             logger.debug("_sync_context: could not update context engine: %s", exc)
+        # Phase 18 E-5 — count successful provider selections for /metrics.
+        # Failures are tracked separately via ai_router_fallthrough_total
+        # (incremented at the actual fall-through site) so this counter
+        # cleanly reads "primary served the call".
+        try:
+            from observability import ai_provider_used_total
+            ai_provider_used_total.inc(name=provider_name)
+        except Exception:  # noqa: BLE001 — observability never crashes a chat turn
+            pass
 
 
 def _classify_provider_exception(provider_name: str, exc: Exception):

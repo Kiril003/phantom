@@ -147,6 +147,17 @@ class TestCorrelationId:
         assert cid != "x" * 5000
         assert len(cid) <= 64
 
+    def test_http_requests_counter_bumped_on_call(self, client):
+        # E-5 — every served request must register on the
+        # phantom_http_requests_total counter, bucketed by method + route
+        # prefix + status. Confirm via a follow-up /metrics scrape.
+        client.get("/healthz")
+        body = client.get("/metrics").text
+        assert "phantom_http_requests_total" in body
+        # The /healthz call should appear as a row.
+        assert 'method="GET"' in body
+        assert "/healthz" in body
+
     def test_correlation_filter_attaches_dash_outside_request(self):
         # Outside an HTTP request the contextvar default "-" applies, so
         # log records emitted by background workers stay deterministic.

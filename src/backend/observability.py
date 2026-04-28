@@ -61,6 +61,27 @@ async def correlation_id_middleware(request: Request, call_next: Callable):
     return response
 
 
+async def http_requests_counter_middleware(request: Request, call_next: Callable):
+    """Phase 18 E-5 — bump phantom_http_requests_total per request, bucketed
+    by HTTP method and route prefix (e.g. ``/api/v1/chat`` rather than the
+    full templated path) so cardinality stays bounded under user IDs / UUIDs."""
+    response = await call_next(request)
+    try:
+        path = request.url.path or "/"
+        # Collapse to the first two segments — keeps cardinality flat
+        # under e.g. /api/v1/chat/sessions/<uuid>/messages.
+        parts = [p for p in path.split("/", 4) if p]
+        bucket = "/" + "/".join(parts[:3]) if parts else "/"
+        http_requests_total.inc(
+            method=request.method,
+            route=bucket,
+            status=str(response.status_code)[:3],
+        )
+    except Exception as exc:  # noqa: BLE001 — middleware never raises
+        logger.debug("http_requests_counter_middleware: %s", exc)
+    return response
+
+
 def _short_uuid() -> str:
     import uuid
     return uuid.uuid4().hex[:16]
@@ -300,6 +321,7 @@ __all__ = [
     "chat_messages_total",
     "correlation_id_middleware",
     "get_correlation_id",
+    "http_requests_counter_middleware",
     "http_requests_total",
     "render_metrics",
     "voice_stt_total",

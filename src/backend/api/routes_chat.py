@@ -295,6 +295,14 @@ async def _build_ai_response(
         except Exception as exc:
             logger.debug("chat prompt logging failed (non-critical): %s", exc)
 
+    # Phase 18 E-5 — chat counters surface in /metrics.
+    try:
+        from observability import chat_messages_total
+        chat_messages_total.inc(role="user")
+        chat_messages_total.inc(role="assistant")
+    except Exception:  # noqa: BLE001 — observability never blocks chat
+        pass
+
     # 6. Post-turn: vocabulary + language stats update
     update_vocabulary(behavioral_model, user_message)
     update_language_stats(behavioral_model, user_message)

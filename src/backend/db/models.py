@@ -414,6 +414,15 @@ class AiToolUseLog(Base):
     retry_after_s: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
     fell_through_to_fallback: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     cooling_triggered: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    # Phase 16 (audit-2026-04-28 step 4) — per-chat-turn observability.
+    # Populated only when chat_prompt_logging_enabled is on; truncated to
+    # chat_prompt_excerpt_max_chars before write so we never persist the
+    # full user message / AI response. user_id is indexed so operator
+    # dashboards can scope queries per-tenant.
+    user_id: Mapped[Optional[str]] = mapped_column(String(36), index=True, nullable=True)
+    prompt_excerpt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    response_excerpt: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    prompt_sections: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     timestamp: Mapped[datetime] = mapped_column(DateTime, default=_now, index=True)
 
 

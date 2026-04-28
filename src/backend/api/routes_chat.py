@@ -70,6 +70,32 @@ class SendMessageRequest(BaseModel):
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
+_PROMPT_SECTION_MARKERS: tuple[tuple[str, str], ...] = (
+    ("identity", "PHANTOM"),
+    ("state", "CURRENT STATE:"),
+    ("tone", "TONE:"),
+    ("user", "USER:"),
+    ("memory", "RELEVANT MEMORY:"),
+    ("recent_places", "RECENT PLACES"),
+    ("nearby", "NEARBY"),
+    ("emotion", "INNER STATE:"),
+    ("body", "BODY:"),
+    ("env", "ENV:"),
+    ("system_meta", "SYSTEM:"),
+)
+
+
+def _detect_prompt_sections(prompt: str) -> str:
+    """Phase 16 (audit-2026-04-28 step 4) — derive section-flag string from
+    a built system prompt. Used for ops correlation: "responses got vague
+    after we stopped including RECENT PLACES" is observable from the log
+    table without re-running the prompt builder.
+    """
+    if not prompt:
+        return ""
+    return ",".join(name for name, marker in _PROMPT_SECTION_MARKERS if marker in prompt)
+
+
 def _serialize_message(msg: ChatMessage) -> dict[str, Any]:
     # Audit-2026-04-28 F-66: previously these blocks swallowed JSON parse
     # errors silently, masking corrupted rows as empty bubbles. Log at
@@ -239,6 +265,35 @@ async def _build_ai_response(
         history=history,
         user_id=user.id,
     )
+
+    # 5b. Phase 16 (audit-2026-04-28 step 4) — best-effort prompt
+    # observability. Off by default; when enabled, write one row to
+    # ai_tool_use_log with the truncated system prompt + AI response +
+    # which sections fired. Truncation honours
+    # chat_prompt_excerpt_max_chars so we never persist full content
+    # against the operator's privacy expectation.
+    if config.chat_prompt_logging_enabled:
+        try:
+            from ai.tool_use_audit import write_log as _write_chat_log
+            max_chars = max(0, int(config.chat_prompt_excerpt_max_chars))
+            await _write_chat_log(
+                task_id=None,
+                step_idx=None,
+                provider=ai_response.provider or "unknown",
+                model="",
+                tool_name=f"chat:{ai_response.response_form}",
+                success=True,
+                error_kind=None,
+                error_message=None,
+                elapsed_ms=0,
+                retry_count=1,
+                user_id=user.id,
+                prompt_excerpt=(system_prompt or "")[:max_chars] if max_chars else None,
+                response_excerpt=(ai_response.content or "")[:max_chars] if max_chars else None,
+                prompt_sections=_detect_prompt_sections(system_prompt or ""),
+            )
+        except Exception as exc:
+            logger.debug("chat prompt logging failed (non-critical): %s", exc)
 
     # 6. Post-turn: vocabulary + language stats update
     update_vocabulary(behavioral_model, user_message)

@@ -440,6 +440,14 @@ class PhantomConfig(BaseSettings):
     agent_near_remembered_dedup_s: int = 3600
     agent_near_remembered_radius_m: float = 200.0
 
+    # ── Chat observability (Phase 16, audit-2026-04-28 step 4) ────────────────
+    # Off by default — chat content is sensitive, operator opts in via UI.
+    # When enabled, every chat turn writes a row to ai_tool_use_log with
+    # truncated system prompt, user message, AI response, plus a
+    # comma-separated `prompt_sections` flag for ops dashboards.
+    chat_prompt_logging_enabled: bool = False
+    chat_prompt_excerpt_max_chars: int = 800
+
     # ── System ────────────────────────────────────────────────────────────────
     system_hostname: str = "phantom"
     system_sensor_log_retention_days: int = 7

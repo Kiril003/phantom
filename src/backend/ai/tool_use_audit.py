@@ -31,6 +31,11 @@ async def write_log(
     retry_after_s: float | None = None,
     fell_through_to_fallback: bool = False,
     cooling_triggered: bool = False,
+    # Phase 16 chat observability — see AiToolUseLog docstring for semantics.
+    user_id: str | None = None,
+    prompt_excerpt: str | None = None,
+    response_excerpt: str | None = None,
+    prompt_sections: str | None = None,
 ) -> int | None:
     """Persist one tool-use attempt. Returns row id or None on failure."""
     try:
@@ -49,6 +54,10 @@ async def write_log(
                 retry_after_s=retry_after_s,
                 fell_through_to_fallback=bool(fell_through_to_fallback),
                 cooling_triggered=bool(cooling_triggered),
+                user_id=user_id,
+                prompt_excerpt=prompt_excerpt,
+                response_excerpt=response_excerpt,
+                prompt_sections=prompt_sections,
             )
             db.add(row)
             await db.flush()

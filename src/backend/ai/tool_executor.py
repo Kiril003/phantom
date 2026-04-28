@@ -58,18 +58,113 @@ def _ok(**kwargs: Any) -> dict[str, Any]:
     return out
 
 
+# ── Argument validation (Day-2 D2-T1 + D2-S2) ────────────────────────────────
+#
+# These helpers harden the LLM-controlled args before they hit SQL. The
+# Day-2 audit threat-modelled three concrete bypasses against the
+# previous chat_tool_dispatcher implementation; H-5 collapsed that
+# implementation onto tool_executor, so this is now the single place to
+# patch all consumers.
+
+
+def _safe_int(value: Any, *, lo: int, hi: int, default: int) -> int | None:
+    """Parse an LLM-supplied integer.
+
+    Day-2 D2-T1: ``int(True) → 1`` / ``int(False) → 0`` — Python's
+    bool-to-int coercion silently passes a category mistake. Reject
+    bools explicitly so an LLM that hallucinates ``"hours_ago": true``
+    doesn't quietly become "1 hour" without anyone noticing.
+
+    Returns ``None`` on rejection so callers can short-circuit with
+    invalid_args; clamps to ``[lo, hi]`` on success. ``default`` is
+    used when value is ``None`` (LLM omitted the arg).
+    """
+    if value is None:
+        return max(lo, min(hi, default))
+    if isinstance(value, bool):
+        return None
+    try:
+        v = int(value)
+    except (TypeError, ValueError):
+        return None
+    return max(lo, min(hi, v))
+
+
+# Unicode RTL-override / zero-width / bidi-mark codepoints. An LLM that
+# echoes user input back into a tool arg can be tricked into hiding
+# wildcards inside an RTL-override block (`‮ ... ‬`) or a
+# zero-width-space sandwich. Reject any of these so the SQL layer gets
+# a flat ASCII-or-printable string.
+_UNICODE_DANGER = "".join(
+    chr(cp)
+    for cp in (
+        0x200B,  # ZERO WIDTH SPACE
+        0x200C,  # ZERO WIDTH NON-JOINER
+        0x200D,  # ZERO WIDTH JOINER
+        0x200E,  # LEFT-TO-RIGHT MARK
+        0x200F,  # RIGHT-TO-LEFT MARK
+        0x202A,  # LEFT-TO-RIGHT EMBEDDING
+        0x202B,  # RIGHT-TO-LEFT EMBEDDING
+        0x202C,  # POP DIRECTIONAL FORMATTING
+        0x202D,  # LEFT-TO-RIGHT OVERRIDE
+        0x202E,  # RIGHT-TO-LEFT OVERRIDE
+        0x2066,  # LEFT-TO-RIGHT ISOLATE
+        0x2067,  # RIGHT-TO-LEFT ISOLATE
+        0x2068,  # FIRST STRONG ISOLATE
+        0x2069,  # POP DIRECTIONAL ISOLATE
+        0xFEFF,  # ZERO WIDTH NO-BREAK SPACE / BOM
+    )
+)
+_UNICODE_DANGER_SET = frozenset(_UNICODE_DANGER)
+
+
+def _safe_query_str(value: Any, *, max_len: int = 200) -> tuple[str | None, str | None]:
+    """Validate + normalise an LLM-supplied substring used in an SQL
+    ``ILIKE`` clause.
+
+    Returns ``(cleaned, error_kind)`` — exactly one of the two is None.
+
+    Rejections (Day-2 D2-S2):
+
+    * non-string arg → ``invalid_args`` (LLM asked the wrong type)
+    * empty after strip → ``(None, None)`` (treat as "no filter")
+    * any RTL/zero-width codepoint → ``invalid_args``
+    * length > max_len after strip → ``invalid_args``
+
+    Escapes ``%`` and ``_`` and ``\\`` so the LLM cannot widen its own
+    filter to a full-table scan or evade a substring constraint with a
+    wildcard. The caller passes the result through SQLAlchemy with a
+    matching ``escape="\\\\"`` argument on ``ilike``.
+    """
+    if value is None:
+        return None, None
+    if not isinstance(value, str):
+        return None, "invalid_args"
+    s = value.strip()
+    if not s:
+        return None, None
+    if len(s) > max_len:
+        return None, "invalid_args"
+    if any(ch in _UNICODE_DANGER_SET for ch in s):
+        return None, "invalid_args"
+    # Escape ILIKE wildcards. Order matters: backslash first so we don't
+    # double-escape the substitutions we add. Caller MUST pass
+    # ``escape="\\"`` to ilike() so the backslashes are interpreted as
+    # escapes rather than literal characters.
+    cleaned = s.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return cleaned, None
+
+
 # ── Individual tool handlers ─────────────────────────────────────────────────
 
 
 async def _tool_search_locationhistory(args: dict[str, Any], user_id: str) -> dict[str, Any]:
-    hours_ago = args.get("hours_ago")
+    hours_ago = _safe_int(args.get("hours_ago"), lo=1, hi=720, default=24)
     if hours_ago is None:
-        hours_ago = 24
-    try:
-        hours_ago = max(1, min(720, int(hours_ago)))
-    except (TypeError, ValueError):
         return _err("invalid_args", "hours_ago must be an integer 1..720")
-    query_sub = args.get("query")
+    query_sub_clean, qerr = _safe_query_str(args.get("query"))
+    if qerr:
+        return _err(qerr, "query has invalid characters or shape")
     cutoff = datetime.now(tz=timezone.utc) - timedelta(hours=hours_ago)
 
     async with _session_factory()() as db:
@@ -77,8 +172,12 @@ async def _tool_search_locationhistory(args: dict[str, Any], user_id: str) -> di
             LocationHistory.user_id == user_id,
             LocationHistory.timestamp >= cutoff,
         ]
-        if isinstance(query_sub, str) and query_sub.strip():
-            conditions.append(LocationHistory.place_name.ilike(f"%{query_sub.strip()}%"))
+        if query_sub_clean:
+            conditions.append(
+                LocationHistory.place_name.ilike(
+                    f"%{query_sub_clean}%", escape="\\"
+                )
+            )
         stmt = (
             select(LocationHistory)
             .where(and_(*conditions))
@@ -102,13 +201,20 @@ async def _tool_search_locationhistory(args: dict[str, Any], user_id: str) -> di
 
 
 async def _tool_query_temporal_anchors(args: dict[str, Any], user_id: str) -> dict[str, Any]:
-    state = args.get("state")
-    mood_sub = args.get("mood")
-    hours_ago = args.get("hours_ago", 168)
-    try:
-        hours_ago = max(1, min(720, int(hours_ago)))
-    except (TypeError, ValueError):
+    hours_ago = _safe_int(args.get("hours_ago"), lo=1, hi=720, default=168)
+    if hours_ago is None:
         return _err("invalid_args", "hours_ago must be an integer 1..720")
+
+    state = args.get("state")
+    if state is not None and not isinstance(state, str):
+        return _err("invalid_args", "state must be a string")
+    state_norm = state.strip() if isinstance(state, str) and state.strip() else None
+    if state_norm is not None and any(ch in _UNICODE_DANGER_SET for ch in state_norm):
+        return _err("invalid_args", "state has invalid characters")
+
+    mood_clean, merr = _safe_query_str(args.get("mood"))
+    if merr:
+        return _err(merr, "mood has invalid characters or shape")
 
     cutoff = datetime.now(tz=timezone.utc) - timedelta(hours=hours_ago)
 
@@ -117,10 +223,12 @@ async def _tool_query_temporal_anchors(args: dict[str, Any], user_id: str) -> di
             TemporalAnchor.user_id == user_id,
             TemporalAnchor.timestamp >= cutoff,
         ]
-        if isinstance(state, str) and state.strip():
-            conditions.append(TemporalAnchor.state == state.strip())
-        if isinstance(mood_sub, str) and mood_sub.strip():
-            conditions.append(TemporalAnchor.mood.ilike(f"%{mood_sub.strip()}%"))
+        if state_norm:
+            conditions.append(TemporalAnchor.state == state_norm)
+        if mood_clean:
+            conditions.append(
+                TemporalAnchor.mood.ilike(f"%{mood_clean}%", escape="\\")
+            )
 
         stmt = (
             select(TemporalAnchor)
@@ -149,6 +257,14 @@ async def _tool_recall_memory_facts(args: dict[str, Any], user_id: str) -> dict[
     query = args.get("query")
     if not isinstance(query, str) or not query.strip():
         return _err("invalid_args", "query is required and must be non-empty")
+    # Day-2 D2-S2: same Unicode/length floor as the ILIKE-bound tools.
+    # ChromaDB's vector index doesn't care about wildcards but the audit-
+    # log row stores the raw query, so RTL-override hides exfil intent
+    # from any later operator review.
+    if any(ch in _UNICODE_DANGER_SET for ch in query):
+        return _err("invalid_args", "query has invalid characters")
+    if len(query) > 500:
+        return _err("invalid_args", "query exceeds 500 chars")
     layer = args.get("layer")
 
     # Layer 'strategic' = ChromaDB vector search. 'tactical'/'archive' = SQL layer.

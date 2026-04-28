@@ -459,6 +459,14 @@ class PhantomConfig(BaseSettings):
     chat_tool_locationhistory_limit: int = 20
     chat_tool_anchors_limit: int = 30
     chat_tool_max_calls_per_turn: int = 4
+    # Day-2 D2-D1: per-call wall-clock cap for one chat-tool dispatch.
+    # tool_executor's own asyncio.wait_for already covers the SQL/IO path;
+    # this is the dispatcher-layer fallback that fires if a delegate
+    # mock-installed by tests or by future call_with_tools paths hangs
+    # outside tool_executor. 10 s mirrors TOOL_TIMEOUT_S so legitimate
+    # chroma + nominatim retries can complete; tighten to 5 s if the
+    # tier-D wall-clock budget pressure forces it.
+    chat_tool_call_timeout_s: float = 10.0
 
     # ── System ────────────────────────────────────────────────────────────────
     system_hostname: str = "phantom"

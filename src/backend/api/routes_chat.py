@@ -313,13 +313,24 @@ async def _build_ai_response(
     update_trust(behavioral_model, interaction)
     await save_behavioral_model(db, user.id, behavioral_model)
 
-    # 7. Async background: extract facts from new assistant message
+    # 7. Async background: extract facts from this turn.
+    #
+    # Day-2 D2-T2 (audit-2026-04-29): only the user's own utterance is
+    # persisted into the memory layer. The assistant's response can
+    # legitimately quote a tool-result verbatim (locationhistory rows,
+    # recall_memory hits, sensor snapshot fields), and persisting that
+    # back into ChromaDB creates a self-poisoning loop — the next turn's
+    # retrieve_relevant() pulls back the AI's own paraphrase as a "fact"
+    # and the LLM treats it as ground truth. Until the D2-I1 output-
+    # safety classifier lands, the safe default is "store user words
+    # only". Operator-stated facts are recoverable; tool-echo facts are
+    # not separable from genuine assistant inferences without the
+    # classifier.
     try:
-        combined_text = f"{user_message} {ai_response.content}"
         await extract_and_store_facts(
             user_id=user.id,
             session_id=session_id,
-            conversation_summary=combined_text,
+            conversation_summary=user_message,
             db=db,
         )
     except Exception as exc:

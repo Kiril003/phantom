@@ -23,11 +23,14 @@ work and the contract-test enforcement of name-set parity.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 from typing import Any, Awaitable, Callable
 
 from sqlalchemy.ext.asyncio import AsyncSession
+
+from config import config
 
 logger = logging.getLogger(__name__)
 
@@ -92,8 +95,25 @@ async def dispatch(
     started = time.monotonic()
     if handler is None:
         return _err(name, started, f"unknown_tool:{name}")
+    # Day-2 D2-D1: per-call wall-clock cap. tool_executor's own
+    # asyncio.wait_for guards the SQL/IO step inside execute_tool, but
+    # a stand-in handler installed by tests or by future Phase 17b paths
+    # that bypass tool_executor would otherwise be unbounded. The
+    # dispatcher therefore enforces its own ceiling unconditionally.
     try:
-        raw = await handler(args=args or {}, user_id=user_id, db=db)
+        timeout_s = float(config.chat_tool_call_timeout_s)
+        if timeout_s <= 0:
+            timeout_s = 10.0
+        raw = await asyncio.wait_for(
+            handler(args=args or {}, user_id=user_id, db=db),
+            timeout=timeout_s,
+        )
+    except asyncio.TimeoutError:
+        logger.warning(
+            "chat_tool_dispatcher: %s exceeded %.1fs ceiling",
+            name, timeout_s,
+        )
+        return _err(name, started, f"timeout:{timeout_s:.1f}s")
     except Exception as exc:  # noqa: BLE001
         logger.warning("chat_tool_dispatcher: %s failed: %s", name, exc)
         return _err(name, started, f"{type(exc).__name__}: {exc}"[:200])

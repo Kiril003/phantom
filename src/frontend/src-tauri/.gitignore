@@ -1,0 +1,4 @@
+# Tauri build artefacts (rebuildable). Keep manifest + Rust source under VCS.
+/target
+/binaries
+Cargo.lock

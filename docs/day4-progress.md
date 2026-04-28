@@ -393,3 +393,64 @@ T-1/T-2/T-3.
 
 ---
 
+## 2026-05-01 23:55 CEST — Wave-2 V-1 DONE (Tauri 2.x scaffold)
+
+Closes audit U5-PKG-C1 (no desktop scaffold exists today). ADR-DSH-001
+(`docs/architecture/desktop-shell.md`) is now the on-disk contract: a
+Tauri 2.x crate at `src/frontend/src-tauri/` hosting the existing React
+bundle (`../dist/index.html`) inside the OS-native WebView (Edge
+WebView2 on Windows, WebKitGTK on Linux), with a PyInstaller
+`--onedir` Python sidecar for the FastAPI backend.
+
+Files shipped:
+
+- `src/frontend/src-tauri/Cargo.toml` — Tauri 2.x + tauri-plugin-shell
+  2.x dependency pin; size-optimised release profile (lto, opt-level=s,
+  strip=true, codegen-units=1, panic=abort) — Q6A is mobile-class.
+- `src/frontend/src-tauri/tauri.conf.json` — `identifier=ai.phantom.os`,
+  `frontendDist=../dist`, window opens splash.html (NOT the React bundle
+  directly — the /readyz gate must run first), `minWidth=1024 /
+  minHeight=600` enforced (Q6A 7" panel, CLAUDE.md rule 3),
+  `bundle.externalBin=["binaries/phantom-backend"]`,
+  `bundle.targets=[appimage,deb,msi,nsis]`. CSP locks connect-src to
+  127.0.0.1:8000 only — defence in depth alongside V-4. Shell plugin
+  `open=false` + empty scope so the WebView cannot launch external
+  processes.
+- `src/frontend/src-tauri/src/main.rs` — spawns the sidecar through
+  `tauri_plugin_shell::ShellExt::sidecar("phantom-backend")` with
+  `PHANTOM_PACKAGED=1` env (V-4 refuse-LAN-bind activates) +
+  `PHANTOM_HOST=127.0.0.1` (defence in depth). On `RunEvent::Exit`
+  the stored `CommandChild` handle is `kill()`-ed so port :8000
+  doesn't leak across re-launches. `windows_subsystem = "windows"`
+  cfg_attr suppresses the console-window pop on Windows release.
+- `src/frontend/src-tauri/splash.html` — static splash gate (no
+  framework, no build step). Polls `http://127.0.0.1:8000/readyz`
+  every 250 ms, navigates to `../dist/index.html` on 200. Hard
+  cap at 30 s (otherwise a stuck sidecar = forever black screen).
+  Uses 127.0.0.1 explicitly (Windows IPv6 may resolve `localhost`
+  to `::1` and the backend binds 127.0.0.1 only).
+- `src/frontend/src-tauri/build.rs` + `.gitignore`.
+- `scripts/build_sidecar.sh` (executable) — Day-4 stub that drops a
+  POSIX placeholder at `binaries/phantom-backend-<triple>` so the
+  manifest parses without a PyInstaller dependency. Day-5 plumbs the
+  real `--onedir` build + signing.
+
+25 contract tests at `tests/test_phase_v1_tauri_scaffold.py` pin:
+files exist; Cargo.toml pins tauri 2.x + plugin-shell 2.x;
+tauri.conf.json identifier + window minimums + splash entrypoint +
+externalBin + bundle targets + locked-down CSP + shell plugin can't
+escape; main.rs sets PHANTOM_PACKAGED=1 + uses sidecar API + kills
+on exit; splash polls /readyz on loopback only and has a 30 s
+timeout guard; ADR-DSH-001 still on disk.
+
+Tauri toolchain is NOT a CI dependency — the test pins the
+*manifest shape* (the contract V-5 splash gate, W-3b launcher,
+and AB capstone tag depend on). Rust build verification belongs
+on Day-5 alongside Authenticode + Apple notarisation.
+
+Pytest 25/25 green. Day-4 ship target Linux .AppImage; Windows
+cross-build remains in `DAY4_DEFERRED.md`. Next: V-5 (lifespan
+asyncio.gather staged groups → /readyz under 2 s).
+
+---
+

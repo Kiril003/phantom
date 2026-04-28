@@ -1,0 +1,53 @@
+# PHANTOM OS — Tauri 2.x desktop shell crate (Day-4 Wave-2 V-1).
+#
+# Per ADR-DSH-001 (`docs/architecture/desktop-shell.md`):
+# Tauri 2.x hosts the existing React bundle (`src/frontend/dist/`) inside the
+# OS-native WebView (Edge WebView2 on Windows, WebKitGTK on Linux). A
+# PyInstaller `--onedir` Python sidecar runs `uvicorn main:app` (see
+# `src/backend/main.py:766-778`) bound to 127.0.0.1 ONLY — enforced
+# server-side by `_refuse_lan_bind_in_packaged_mode` (`main.py:211`,
+# shipped at V-4 commit `1ce6371`). The shell sets `PHANTOM_PACKAGED=1`
+# on sidecar spawn so the refuse-guard activates.
+#
+# Day-4 ship contract: scaffold + signed-manifest stub. Code-signing
+# (Authenticode + Apple notarisation) deferred to Day-5 per
+# `docs/PHASE1_CONTEXTS.md:19`.
+
+[package]
+name = "phantom-os-shell"
+version = "0.20.0"
+description = "PHANTOM OS desktop shell (Tauri 2.x + Python sidecar)"
+authors = ["PHANTOM OS contributors"]
+edition = "2021"
+rust-version = "1.77"
+
+# Single binary entry; Tauri convention.
+[[bin]]
+name = "phantom-os-shell"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build = { version = "2.0", features = [] }
+
+[dependencies]
+tauri = { version = "2.0", features = ["protocol-asset"] }
+tauri-plugin-shell = "2.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+log = "0.4"
+env_logger = "0.11"
+
+# Shipped without crypto deps in V-1; updater + signing arrives Day-5.
+
+[features]
+# `default` keeps the windowed shell. `headless` is reserved for CI smoke
+# (loads the WebView in offscreen mode for screenshot diffs). Day-5+ work.
+default = ["custom-protocol"]
+custom-protocol = ["tauri/custom-protocol"]
+
+[profile.release]
+panic = "abort"
+codegen-units = 1
+lto = true
+opt-level = "s"
+strip = true

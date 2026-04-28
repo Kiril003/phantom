@@ -298,6 +298,17 @@ http_requests_total: Counter = _register(
         "HTTP requests handled, by method and route prefix.",
     )
 )
+# Day-3 Q (audit-2026-04-30 Phase 17b): chat tool-use loop dispatch
+# count, labelled by tool name AND ok-flag so a dashboard can split
+# success-vs-error per tool. Operators reading this counter get a
+# real-time view of which chat-tool surfaces the LLM exercises and
+# how often each fails.
+chat_tool_calls_total: Counter = _register(
+    Counter(
+        "phantom_chat_tool_calls_total",
+        "Chat tool-use dispatch count by tool name and success.",
+    )
+)
 
 
 def _uptime_seconds() -> float:
@@ -437,6 +448,7 @@ __all__ = [
     "ai_provider_used_total",
     "ai_router_fallthrough_total",
     "chat_messages_total",
+    "chat_tool_calls_total",
     "correlation_id_middleware",
     "get_correlation_id",
     "http_requests_counter_middleware",

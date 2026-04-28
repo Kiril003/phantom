@@ -93,9 +93,13 @@ phantom_ai_router_fallthrough_total          counter
 phantom_http_requests_total{method=...}      counter
 ```
 
-Counters live but are not yet incremented from the chat / voice paths;
-integration is the next phase-18 commit. The endpoint is already
-scraping-safe.
+Counters are wired into the hot paths as of `v0.18.1-saas-base`:
+`phantom_chat_messages_total`, `phantom_voice_stt_total`,
+`phantom_voice_tts_total`, and `phantom_ai_provider_used_total` all
+increment from `routes_chat`, `routes_voice`, and `ai/provider.py`.
+`phantom_ai_router_fallthrough_total` is registered but is wired in
+the Day-3 O-6 commit (Tier-E follow-up). The endpoint is
+scraping-safe at all times.
 
 ### Prometheus scrape config snippet
 

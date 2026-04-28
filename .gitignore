@@ -39,8 +39,18 @@ src/frontend/playwright-report/
 src/frontend/test-results/
 src/frontend/.playwright/
 
-# ChromaDB per-collection data dirs (UUID-named); chroma.sqlite3 itself
-# stays tracked because it carries the schema + collection metadata.
+# ChromaDB per-collection data dirs (UUID-named) AND the chroma.sqlite3
+# metadata DB. Day-3 D3-C-8 (audit-2026-04-30): chroma.sqlite3 was
+# previously tracked "for the schema" — but the schema is created by
+# the persistent client on first instantiation (`init_chroma_eager`
+# at lifespan), so checking it in only meant operator data (collection
+# metadata, sealed embeddings) ended up in the commit graph. The
+# audit's recommendation was to untrack and rely on lifespan
+# bootstrap; that's what the gitignore now enforces.
+src/backend/chroma_data/chroma.sqlite3
+src/backend/chroma_data/chroma.sqlite3-journal
+src/backend/chroma_data/chroma.sqlite3-shm
+src/backend/chroma_data/chroma.sqlite3-wal
 src/backend/chroma_data/*/
 
 # Voice models: large pretrained blobs (Piper UA ~73 MB, Vosk UK ~400 MB)

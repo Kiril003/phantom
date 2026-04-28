@@ -36,7 +36,7 @@ logger = logging.getLogger(__name__)
 # ── Process-start anchor ──────────────────────────────────────────────────────
 
 _PROCESS_STARTED_AT: float = time.time()
-_VERSION: str = "0.18.0-saas-base"
+_VERSION: str = "0.18.2-fixup"
 
 
 # ── Correlation-id plumbing ───────────────────────────────────────────────────

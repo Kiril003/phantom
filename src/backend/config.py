@@ -79,7 +79,7 @@ class PhantomConfig(BaseSettings):
     # Phase 15 — "npu" added. When voice_stt_npu_enabled is True the factory
     # tries WhisperNPUProvider before faster-whisper regardless of mode; the
     # explicit "npu" mode value just makes the intent visible in /settings.
-    voice_stt_mode: Literal["hybrid", "vosk", "whisper", "npu"] = "hybrid"
+    voice_stt_mode: Literal["hybrid", "vosk", "whisper", "npu", "mms"] = "hybrid"
     voice_stt_vosk_model: str = "uk-v3-lgraph"
     # Phase 13a.1 — default lowered "medium" → "small". On Radxa Q6A ARM CPU
     # (no GPU/CUDA) "medium" INT8 ≈ 1.5–3 s per utterance; "small" INT8
@@ -107,6 +107,34 @@ class PhantomConfig(BaseSettings):
     # context binary; FP16 lets the QNN EP do online compile against the
     # FP32 encoder (slower cold start, no calibration step required).
     voice_stt_npu_compute: Literal["int8", "fp16"] = "int8"
+
+    # ── Voice / STT — Phase 15b MMS NPU (instant-tier, fully on Hexagon) ─────
+    # Massively Multilingual Speech (facebook/mms-1b-all) compiled per-language
+    # into a single QNN context binary. CTC head + wav2vec2 backbone fuse into
+    # one forward pass — no autoregressive decoder, no CPU hop. End-to-end
+    # latency ~60–90 ms on Q6A for short utterances; that's the "instant tier"
+    # in the dual-tier voice pipeline (MMS instant → optional Whisper-Turbo
+    # refine on low-confidence transcripts). Off by default until a bundle
+    # ships at voice_stt_mms_bundle_dir / mms-<lang>-qnn/.
+    voice_stt_mms_enabled: bool = False
+    # ISO-639-3 code matching MMS adapter naming (ukr, eng, rus, deu, fra, ...).
+    # Each language has its own bundle dir because the LM head and adapter
+    # weights are merged into the compiled graph at AI Hub time.
+    voice_stt_mms_lang: str = "ukr"
+    # Parent dir for per-language bundles. Resolver looks for
+    # <bundle_dir>/mms-<lang>-qnn/ first, falls back to project-rooted paths.
+    voice_stt_mms_bundle_dir: str = "src/backend/voice/models"
+    # Quantisation regime baked into the .bin. INT8 is the standard HTP
+    # recipe; FP16 is left as a knob for V79+ where FP16 HTP is supported.
+    voice_stt_mms_compute: Literal["int8", "fp16"] = "int8"
+    # When enabled, the dual-tier orchestrator calls Whisper-Turbo
+    # (encoder-NPU + decoder-CPU) in the background after MMS emits its
+    # instant transcript. If MMS confidence is below this threshold, the
+    # turbo result replaces the message via a final_revised event. Same
+    # pattern as Phase 13b's vosk→whisper refine, just with NPU on both
+    # tiers.
+    voice_stt_mms_refine_with_turbo: bool = False
+    voice_stt_mms_refine_confidence_min: float = 0.85
 
     # ── Voice / TTS ───────────────────────────────────────────────────────────
     voice_tts_enabled: bool = True
@@ -489,6 +517,18 @@ class PhantomConfig(BaseSettings):
             raise ValueError(
                 "voice_refine_diff_threshold must be in [0.0, 1.0] (got "
                 f"{self.voice_refine_diff_threshold})"
+            )
+        # Phase 15b — MMS bundle keys.
+        lang = (self.voice_stt_mms_lang or "").strip().lower()
+        if not lang or not lang.isascii() or not (2 <= len(lang) <= 5):
+            raise ValueError(
+                "voice_stt_mms_lang must be a 2-5 char ASCII code (e.g. 'ukr', "
+                f"'eng', 'rus'); got {self.voice_stt_mms_lang!r}"
+            )
+        if not (0.0 <= self.voice_stt_mms_refine_confidence_min <= 1.0):
+            raise ValueError(
+                "voice_stt_mms_refine_confidence_min must be in [0.0, 1.0] "
+                f"(got {self.voice_stt_mms_refine_confidence_min})"
             )
         return self
 

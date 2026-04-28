@@ -420,26 +420,60 @@ def _try_npu() -> Optional[STTProvider]:
         return None
 
 
+def _try_mms() -> Optional[STTProvider]:
+    """Phase 15b — instant-tier CTC NPU path.
+
+    MMS-1B with per-language adapter compiled into a single QNN context
+    binary; non-autoregressive forward pass yields a transcript in
+    ~60–90 ms. Tried before WhisperNPUProvider in the chain when the
+    operator has opted in via voice_stt_mms_enabled.
+    """
+    if not getattr(config, "voice_stt_mms_enabled", False):
+        return None
+    try:
+        from voice.mms_npu_provider import MMSNPUProvider
+        return MMSNPUProvider()
+    except Exception as exc:
+        logger.info("MMS NPU STT unavailable: %s", exc)
+        return None
+
+
 def build_stt_provider() -> STTProvider:
     """
     Pick an STT provider based on `config.voice_stt_mode`. Falls back
     through the chain: requested mode → other engine → noop.
 
-    Phase 15 — when ``voice_stt_npu_enabled`` is True, the NPU path is tried
-    first regardless of mode (except explicit "vosk", which stays Vosk-only
-    to honor the operator's intent).
+    Phase 15  — voice_stt_npu_enabled  → WhisperNPUProvider tried first.
+    Phase 15b — voice_stt_mms_enabled  → MMSNPUProvider tried before Whisper-NPU
+                                          (it's the lower-latency primary).
+
+    Explicit "vosk" still pins Vosk-only — operator intent wins over auto-
+    upgrade.
     """
     mode = config.voice_stt_mode
+    mms_first = bool(getattr(config, "voice_stt_mms_enabled", False))
     npu_first = bool(getattr(config, "voice_stt_npu_enabled", False))
+
+    def _full_chain() -> list:
+        c: list = []
+        if mms_first:
+            c.append(_try_mms)
+        if npu_first:
+            c.append(_try_npu)
+        c.extend([_try_whisper, _try_vosk])
+        return c
+
     chain: list = []
     if mode == "vosk":
-        chain = [_try_vosk]  # explicit Vosk-only; don't silently upgrade
+        chain = [_try_vosk]  # explicit Vosk-only
+    elif mode == "mms":
+        chain = [_try_mms, _try_npu, _try_whisper, _try_vosk]
     elif mode == "npu":
-        chain = [_try_npu, _try_whisper, _try_vosk]
+        chain = [_try_mms, _try_npu, _try_whisper, _try_vosk] if mms_first else [_try_npu, _try_whisper, _try_vosk]
     elif mode == "whisper":
-        chain = [_try_npu, _try_whisper, _try_vosk] if npu_first else [_try_whisper, _try_vosk]
-    else:  # "hybrid" and anything unknown
-        chain = [_try_npu, _try_whisper, _try_vosk] if npu_first else [_try_whisper, _try_vosk]
+        chain = _full_chain() if (mms_first or npu_first) else [_try_whisper, _try_vosk]
+    else:  # "hybrid" + anything unknown
+        chain = _full_chain() if (mms_first or npu_first) else [_try_whisper, _try_vosk]
     for builder in chain:
         provider = builder()
         if provider is not None:

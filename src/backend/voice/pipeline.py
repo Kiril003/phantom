@@ -188,6 +188,31 @@ def _warm_npu(provider) -> None:
         logger.warning("NPU warm-up failed: %s", exc)
 
 
+def _warm_mms_npu(provider) -> None:
+    """Phase 15b — pre-load MMS QNN session AND run one forward pass.
+
+    Unlike Whisper-NPU (where the first transcribe lazily warms decoder
+    KV-cache buffers via Optimum), MMS is a single-graph forward — the
+    whole hot path is the InferenceSession. Run a 1-sec silence forward
+    so HTP context-binary load and any one-shot session caches are
+    paid before the first user utterance.
+    """
+    try:
+        ensure = getattr(provider, "_ensure_model", None)
+        if callable(ensure):
+            ensure()
+        # ``_pad_or_trim`` + ``_session.run`` is the entire hot path.
+        sess = getattr(provider, "_session", None)
+        if sess is None:
+            return
+        import numpy as np
+        max_samples = getattr(provider, "_max_samples", 16_000 * 30)
+        silence = np.zeros(max_samples, dtype=np.float32).reshape(1, -1)
+        sess.run(None, {sess.get_inputs()[0].name: silence})
+    except Exception as exc:
+        logger.warning("MMS NPU warm-up failed: %s", exc)
+
+
 def _warm_vosk(model) -> None:
     """Phase 13a.4 — force Vosk Kaldi to allocate internal lattice arrays.
 
@@ -257,7 +282,11 @@ def preload_voice_models(silero_vad_path: Optional[str] = None) -> dict[str, str
             # we still preload the encoder session here so the WS first hit
             # is fast. Otherwise (faster-whisper) pay the CTranslate2 lazy
             # buffer cost on a 1 s silence dummy.
-            if provider.name == "whisper_npu":
+            if provider.name == "mms_npu":
+                _warm_mms_npu(provider)
+                statuses["mms_npu"] = "warmed"
+                statuses["whisper"] = f"skipped: active engine is {provider.name}"
+            elif provider.name == "whisper_npu":
                 _warm_npu(provider)
                 statuses["whisper_npu"] = "warmed"
                 statuses["whisper"] = f"skipped: active engine is {provider.name}"

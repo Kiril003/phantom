@@ -94,17 +94,27 @@ def _peak_energy_normalised(pcm_bytes: bytes) -> float:
     Silero VAD ONNX inference (~5-15 ms per frame on Radxa A78) when the
     incoming PCM is clearly silent. Peak (max abs) is cheaper than RMS
     and a single non-zero sample lets Silero make its own better decision.
+
+    Audit-2026-04-28 F-62: previously this allocated a numpy array per
+    frame (33 Hz/connection during continuous voice). `audioop.max` is
+    a single stdlib C call with no allocation. audioop is deprecated in
+    Python 3.13 and removed in 3.14, so we keep a numpy fallback for
+    forward compatibility.
     """
     if not pcm_bytes:
         return 0.0
     try:
-        import numpy as np
-        arr = np.frombuffer(pcm_bytes, dtype=np.int16)
-        if arr.size == 0:
-            return 0.0
-        return float(np.abs(arr).max()) / 32768.0
-    except Exception:  # noqa: BLE001 — defensive; fall back to "not silent"
-        return 1.0
+        import audioop  # type: ignore[import-not-found]
+        return audioop.max(pcm_bytes, 2) / 32768.0
+    except Exception:  # noqa: BLE001 — fall back to numpy on Python ≥ 3.14
+        try:
+            import numpy as np
+            arr = np.frombuffer(pcm_bytes, dtype=np.int16)
+            if arr.size == 0:
+                return 0.0
+            return float(np.abs(arr).max()) / 32768.0
+        except Exception:  # noqa: BLE001 — last-resort: assume not silent
+            return 1.0
 
 
 class AlwaysOnOrchestrator:

@@ -527,6 +527,11 @@ async def _broadcast_message_stream(hub: Any, user_id: str, message: dict, sessi
 def _chunk_content(text: str, chunk_size: int = 24) -> list[str]:
     if chunk_size <= 0:
         return [text] if text else []
+    # Audit-2026-04-28 F-43: chunk_stream_chunk_chars is operator-tunable;
+    # values < 4 produce visible half-syllable cuts and break multi-byte
+    # boundaries on Cyrillic. Clamp the lower bound so the streaming
+    # smoothness stays usable regardless of the configured value.
+    chunk_size = max(chunk_size, 4)
     chunks: list[str] = []
     cursor = 0
     while cursor < len(text):

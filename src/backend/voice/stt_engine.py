@@ -25,10 +25,11 @@ import os
 import re
 import shutil
 import subprocess
+import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Literal, Optional
 
 import numpy as np
 import soundfile as sf
@@ -45,34 +46,73 @@ TARGET_SAMPLE_RATE = 16_000
 # adding a native Python codec dep, we shell out to ffmpeg (a system package
 # on Debian/Ubuntu/Radxa) as the fallback decoder when soundfile chokes.
 #
-# Resolved once at module load; `None` means ffmpeg is not on PATH and the
-# fallback chain skips straight to ValueError.
+# Audit-2026-04-28 F-37: previously `shutil.which("ffmpeg")` ran at module
+# import time, so an operator who installed ffmpeg post-boot ("install
+# missing dep, refresh") kept getting 400s on WebM until the daemon was
+# restarted. Resolve lazily with a 60 s cache so a fresh install is
+# detected within one minute, and a removed binary is also re-checked.
 
-_FFMPEG_BIN: Optional[str] = shutil.which("ffmpeg")
-if _FFMPEG_BIN is None:
-    logger.warning(
-        "ffmpeg not found on PATH — voice STT will 400 on WebM/Opus inputs "
-        "(MediaRecorder default). Install via `apt install ffmpeg`."
-    )
+_FFMPEG_CACHE_TTL_S = 60.0
+_ffmpeg_cache: tuple[float, Optional[str]] = (-_FFMPEG_CACHE_TTL_S, None)
+
+
+def _resolve_ffmpeg_bin() -> Optional[str]:
+    global _ffmpeg_cache
+    ts, cached = _ffmpeg_cache
+    now = time.monotonic()
+    if (now - ts) < _FFMPEG_CACHE_TTL_S:
+        return cached
+    found = shutil.which("ffmpeg")
+    _ffmpeg_cache = (now, found)
+    if found is None and cached is None and ts < 0:
+        # Only log on the cold-boot resolve so we don't spam every minute.
+        logger.warning(
+            "ffmpeg not found on PATH — voice STT will 400 on WebM/Opus "
+            "inputs (MediaRecorder default). Install via `apt install ffmpeg`."
+        )
+    elif found is not None and cached is None:
+        logger.info("ffmpeg now available at %s — WebM/Opus decode re-enabled", found)
+    return found
+
+
+# Compatibility shim — kept so any external import that grabbed _FFMPEG_BIN
+# at module load still resolves to *something* useful. Internal callers go
+# through _resolve_ffmpeg_bin() directly.
+_FFMPEG_BIN: Optional[str] = _resolve_ffmpeg_bin()
 
 
 # ── Response dataclass ────────────────────────────────────────────────────────
+
+
+STTEngineName = Literal["whisper", "vosk", "noop", "whisper_npu", "mms_npu"]
 
 
 @dataclass
 class STTResult:
     text: str
     confidence: float
-    engine: str  # "whisper" | "vosk" | "noop"
+    # Audit-2026-04-28 F-39: tighten the type. Previous string-typed comment
+    # said "whisper | vosk | noop" but the codebase now also emits
+    # "whisper_npu" and "mms_npu", and frontend switches were probably
+    # missing those branches.
+    engine: STTEngineName
     language: str
+    # Audit-2026-04-28 F-25: NPU/MMS providers can no longer report
+    # inference failures as "successful empty transcript". When forward
+    # fails, populate `engine_error` with a short reason; the route
+    # handler returns 503 instead of pretending the user said nothing.
+    engine_error: Optional[str] = None
 
     def to_dict(self) -> dict:
-        return {
+        out: dict = {
             "text": self.text,
             "confidence": self.confidence,
             "engine": self.engine,
             "language": self.language,
         }
+        if self.engine_error:
+            out["engine_error"] = self.engine_error
+        return out
 
 
 # ── Audio normalisation ───────────────────────────────────────────────────────
@@ -86,12 +126,13 @@ def _ffmpeg_decode_to_mono16k(raw: bytes) -> np.ndarray:
     MediaRecorder). Produces WAV on stdout which ``soundfile.read``
     *can* parse — lets us keep a single float32 conversion path.
     """
-    if _FFMPEG_BIN is None:
+    ffmpeg_bin = _resolve_ffmpeg_bin()
+    if ffmpeg_bin is None:
         raise ValueError("ffmpeg not available for fallback decode")
     try:
         proc = subprocess.run(
             [
-                _FFMPEG_BIN,
+                ffmpeg_bin,
                 "-hide_banner",
                 "-loglevel", "error",
                 "-i", "pipe:0",
@@ -142,7 +183,9 @@ def decode_to_mono16k(raw: bytes) -> np.ndarray:
     try:
         data, sr = sf.read(io.BytesIO(raw), dtype="float32", always_2d=False)
     except Exception as exc:  # sf raises LibsndfileError/RuntimeError on unknown formats
-        if _FFMPEG_BIN is not None:
+        # Audit-2026-04-28 F-37: probe via the lazy resolver so a
+        # post-boot ffmpeg install is picked up without a daemon restart.
+        if _resolve_ffmpeg_bin() is not None:
             logger.info(
                 "decode_to_mono16k: soundfile failed (%s) — trying ffmpeg fallback",
                 str(exc)[:120],

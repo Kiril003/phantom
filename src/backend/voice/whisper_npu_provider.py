@@ -371,13 +371,17 @@ class WhisperNPUProvider(STTProvider):
                 max_new_tokens=224,
             )
         except Exception as exc:
-            logger.warning(
-                "WhisperNPU generate() failed (%s); returning empty transcript "
-                "so the route can fall through gracefully",
-                exc,
-            )
+            # Audit-2026-04-28 F-25: surface the failure on `engine_error`
+            # so the route returns 503 and the operator sees "STT
+            # unavailable" instead of a silent empty transcript that
+            # looks indistinguishable from "user said nothing".
+            logger.warning("WhisperNPU generate() failed: %s", exc)
             return STTResult(
-                text="", confidence=0.0, engine="whisper_npu", language=lang_token,
+                text="",
+                confidence=0.0,
+                engine="whisper_npu",
+                language=lang_token,
+                engine_error=f"whisper_npu_generate_failed: {exc}",
             )
 
         text = self._processor.batch_decode(

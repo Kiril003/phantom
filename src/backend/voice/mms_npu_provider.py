@@ -281,13 +281,16 @@ class MMSNPUProvider(STTProvider):
                 None, {self._session.get_inputs()[0].name: framed}
             )[0]
         except Exception as exc:
-            logger.warning(
-                "MMSNPU forward failed (%s); returning empty so chain falls "
-                "through cleanly",
-                exc,
-            )
+            # Audit-2026-04-28 F-25: surface the failure so silent NPU
+            # wedging stops being indistinguishable from silence at the
+            # route layer.
+            logger.warning("MMSNPU forward failed: %s", exc)
             return STTResult(
-                text="", confidence=0.0, engine="mms_npu", language=self._lang,
+                text="",
+                confidence=0.0,
+                engine="mms_npu",
+                language=self._lang,
+                engine_error=f"mms_npu_forward_failed: {exc}",
             )
 
         # Squeeze batch.

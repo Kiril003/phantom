@@ -112,7 +112,9 @@ def test_ffmpeg_missing_falls_through_to_value_error(monkeypatch):
     """When ffmpeg is absent, WebM input produces a clear ValueError, not a crash."""
     from voice import stt_engine
 
-    monkeypatch.setattr(stt_engine, "_FFMPEG_BIN", None)
+    # Audit-2026-04-28 F-37: lazy resolver replaces the module-level
+    # `_FFMPEG_BIN` constant. Patch the resolver instead.
+    monkeypatch.setattr(stt_engine, "_resolve_ffmpeg_bin", lambda: None)
 
     # Minimal WebM header (libsndfile rejects this immediately).
     garbage = b"\x1a\x45\xdf\xa3" + b"webm-but-not-readable" + b"\x00" * 100
@@ -124,7 +126,7 @@ def test_ffmpeg_missing_falls_through_to_value_error(monkeypatch):
 def test_ffmpeg_decode_helper_rejects_when_binary_missing(monkeypatch):
     from voice import stt_engine
 
-    monkeypatch.setattr(stt_engine, "_FFMPEG_BIN", None)
+    monkeypatch.setattr(stt_engine, "_resolve_ffmpeg_bin", lambda: None)
 
     with pytest.raises(ValueError, match="ffmpeg not available"):
         stt_engine._ffmpeg_decode_to_mono16k(b"anything")

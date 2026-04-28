@@ -283,6 +283,7 @@ class PhantomConfig(BaseSettings):
     # the allowlist of immediate-peer hosts whose XFF the daemon will
     # parse — typically the loopback aliases when the proxy is on the
     # same host, or the bridge gateway IP for a docker network.
+    chroma_janitor_at_startup: bool = True
     security_trust_xff: bool = False
     security_trusted_proxies: list[str] = [
         "127.0.0.1", "::1", "localhost",

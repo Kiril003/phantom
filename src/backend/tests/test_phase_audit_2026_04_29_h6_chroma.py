@@ -35,8 +35,12 @@ class TestG1ProbeChroma:
     async def test_probe_does_not_call_list_collections(self, monkeypatch):
         # After lifespan startup the client is bound; the probe must
         # NOT call list_collections — that's the expensive scan G-1 was
-        # tripping over. Stand a fake client up and assert the method
-        # is never invoked.
+        # tripping over.
+        #
+        # Day-3 D3-A-6 follow-up: the probe DOES call heartbeat() now
+        # so a runtime client collapse surfaces as 503 rather than the
+        # Day-2 cached-flag false-positive. The fake stub therefore
+        # provides BOTH methods and asserts the right ones fire.
         from memory import strategic_memory as sm
         from observability import _probe_chroma
 
@@ -47,13 +51,21 @@ class TestG1ProbeChroma:
                 calls.append("list_collections")
                 return []
 
+            def heartbeat(self) -> int:
+                calls.append("heartbeat")
+                return 1
+
         monkeypatch.setattr(sm, "_chroma_client", _FakeClient())
         ok, detail = await _probe_chroma()
         assert ok is True
         assert detail == "ok"
-        assert calls == [], (
+        assert "list_collections" not in calls, (
             "D2-A6 regression: _probe_chroma still calls list_collections() "
             "on the hot path; cold-scan latency leaks into /readyz."
+        )
+        assert "heartbeat" in calls, (
+            "D3-A-6 regression: probe stopped pinging the client — a "
+            "runtime collapse would now report healthy."
         )
 
     @pytest.mark.asyncio

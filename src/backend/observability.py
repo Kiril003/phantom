@@ -22,6 +22,7 @@ small enough to render in a screenful of code.
 """
 from __future__ import annotations
 
+import asyncio
 import contextvars
 import logging
 import time
@@ -346,12 +347,14 @@ async def _probe_db() -> tuple[bool, str]:
 async def _probe_chroma() -> tuple[bool, str]:
     """Day-2 D2-A6 / G-1: do NOT call `list_collections()` per probe.
 
-    With ~600 leaked test collection dirs on the dev box that scan was
-    a 2-3 s wall-clock hit on every /readyz call, blowing the K8s 1 s
-    livenessProbe default. After lifespan startup eagerly opens the
-    client (`init_chroma_eager`), this probe just confirms the client
-    object exists. Genuine corruption is caught at next read/write —
-    not at probe time.
+    Day-3 D3-A-6 follow-up: the original Day-2 probe trusted the
+    `client_initialized()` cached flag and never re-validated the
+    backing client at probe time. After a runtime collapse (chroma
+    backing file deleted, persistent client process crashed, FS
+    permissions changed) the flag stays True forever and `/readyz`
+    keeps reporting healthy. Now the probe issues a `client.heartbeat()`
+    — a single nanosecond-timestamp call that touches the client
+    without any per-collection scan. Cheap, but catches corruption.
     """
     try:
         from memory.strategic_memory import client_initialized, _get_client
@@ -360,9 +363,12 @@ async def _probe_chroma() -> tuple[bool, str]:
             # failed). Surface as not-ready so the LB pulls us out of
             # rotation rather than serving cold-scan latency to clients.
             return False, "chroma: not_initialized"
-        # Touch the client — confirms the persistent backing file is
-        # still openable without scanning all collection dirs.
-        _ = _get_client()
+        client = _get_client()
+        # `heartbeat()` is the chromadb persistent-client probe — a
+        # single ns-timestamp roundtrip, no collection enumeration.
+        # Run it on the worker thread because some chromadb backends
+        # take a sqlite read-lock under the hood.
+        await asyncio.to_thread(client.heartbeat)
         return True, "ok"
     except Exception as exc:  # noqa: BLE001
         return False, f"chroma: {type(exc).__name__}"

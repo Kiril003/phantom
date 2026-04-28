@@ -259,6 +259,44 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as exc:
         logger.warning("Chroma eager init skipped: %s", exc)
 
+    # Day-3 D3-A-5 (audit-2026-04-30 Tier A) — chroma janitor lifespan
+    # wire-up. Day-2 shipped `prune_orphan_collections` +
+    # `prune_orphan_dirs` as a CLI-only entry point; nothing called it
+    # automatically. Test fixtures kept leaking transient `user_*`
+    # collections AND their UUID-named filesystem dirs, so the
+    # `chroma_data/` payload grew monotonically (105 MB → 122 MB / 609
+    # → 705 dirs in the 24 h between Day-2 and Day-3 audits). One sweep
+    # at lifespan keeps the on-disk footprint bounded.
+    #
+    # Operator opt-out via `chroma_janitor_at_startup` for deploys
+    # whose chroma volume is too large for the scan budget; off by
+    # default would re-introduce the regression so the knob defaults
+    # to True.
+    if config.chroma_janitor_at_startup:
+        try:
+            from memory.strategic_memory import (
+                prune_orphan_collections,
+                prune_orphan_dirs,
+            )
+            from db.database import get_session
+            from db.models import User
+            from sqlalchemy import select as _select
+            async with get_session() as db:
+                rows = await db.execute(_select(User.id))
+                known_user_ids = {row[0] for row in rows.all()}
+            sql_pass = await prune_orphan_collections(known_user_ids)
+            fs_pass = await prune_orphan_dirs()
+            logger.info(
+                "Chroma janitor: SQL deleted=%d kept=%d; FS deleted=%d "
+                "freed=%.1f MB",
+                len(sql_pass.get("deleted") or []),
+                int(sql_pass.get("kept", 0)),
+                len(fs_pass.get("deleted_dirs") or []),
+                (fs_pass.get("freed_bytes") or 0) / (1024 * 1024),
+            )
+        except Exception as exc:
+            logger.warning("Chroma janitor at startup skipped: %s", exc)
+
     # Day-2 D2-D-cpu / PERF-17b: 1 Hz CPU sampler so the chat-tool
     # `get_system_metrics` handler reads a cached value instead of
     # blocking on psutil.cpu_percent(interval=...) per call. Cheap

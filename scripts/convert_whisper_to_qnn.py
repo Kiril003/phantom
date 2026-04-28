@@ -128,16 +128,23 @@ def _run(cmd: List[str], cwd: Optional[Path] = None) -> None:
 def export_hf_to_onnx(src: str, out_dir: Path) -> None:
     """``optimum-cli export onnx`` wrapper.
 
-    The CLI writes encoder/decoder/decoder_with_past split out of the box for
-    speech-to-text task type. We force ``--device cpu`` because we may run on
-    a headless Radxa where torch.cuda is absent.
+    Uses ``automatic-speech-recognition-with-past`` so the export produces
+    *both* ``decoder_model.onnx`` (initial step) AND
+    ``decoder_with_past_model.onnx`` (subsequent KV-cache steps). Optimum's
+    runtime ``ORTModelForSpeechSeq2Seq.from_pretrained`` requires both
+    files when ``use_cache=True``; without past, every decoder step has
+    to re-encode all prior tokens which is quadratic and effectively
+    hangs ``generate()`` on Whisper-small.
+
+    We force ``--device cpu`` because we may run on a headless Radxa
+    where torch.cuda is absent.
     """
     optimum_cli = _which_or_die("optimum-cli")
     out_dir.mkdir(parents=True, exist_ok=True)
     cmd = [
         optimum_cli, "export", "onnx",
         "--model", src,
-        "--task", "automatic-speech-recognition",
+        "--task", "automatic-speech-recognition-with-past",
         "--device", "cpu",
         str(out_dir),
     ]
@@ -145,6 +152,16 @@ def export_hf_to_onnx(src: str, out_dir: Path) -> None:
     if not (out_dir / ENCODER_FP32).is_file():
         logger.error("Expected %s after export, not found", ENCODER_FP32)
         sys.exit(2)
+    if not (out_dir / DECODER_PAST_FP32).is_file():
+        # Some optimum versions emit only `decoder_model_merged.onnx` with the
+        # past path bundled in. The provider tolerates either layout.
+        if not (out_dir / "decoder_model_merged.onnx").is_file():
+            logger.warning(
+                "%s and decoder_model_merged.onnx both absent — "
+                "Optimum's KV-cache path will fall back to non-cached "
+                "generation, which is slow on the decoder.",
+                DECODER_PAST_FP32,
+            )
 
 
 # ── Step 2: INT8 quant (encoder only) ─────────────────────────────────────────
@@ -264,16 +281,31 @@ def _resolve_qnn_htp_backend() -> Path:
     return htp
 
 
-def gen_qnn_context(out_dir: Path, htp_arch: str) -> None:
-    """``qnn-context-binary-generator`` — pre-compile encoder for the target
-    HTP arch. Output ``encoder_int8.bin`` is loaded directly by ORT QNN EP at
-    runtime, skipping online compilation (saves ~3 s on cold start)."""
-    qnn_bin = _which_or_die(QNN_CONTEXT_GEN)
+def gen_qnn_context(out_dir: Path, htp_arch: str) -> bool:
+    """Best-effort: pre-compile encoder for the target HTP arch.
+
+    ``qnn-context-binary-generator`` operates on a QNN ``.so`` model library
+    (output of ``qnn-onnx-converter`` → ``qnn-model-lib-generator``), not on
+    raw ONNX. On Radxa Ubuntu images those upstream converters are not
+    packaged with ``libqnn-tools`` (only the binary generator is). Rather
+    than require the operator to install the proprietary Qualcomm AI Stack,
+    we skip pre-compile and rely on ORT QNN EP's runtime context-cache:
+    the EP plugin captures the HTP context on the first session create and
+    writes it to ``ep.context_file_path`` (set in WhisperNPUProvider), so
+    cold start pays the compile once and warm starts are near-instant.
+
+    Returns True on success, False when the step was skipped or failed —
+    failure is *not* fatal: the bundle is fully usable without the .bin.
+    """
+    qnn_bin = shutil.which(QNN_CONTEXT_GEN)
+    if qnn_bin is None:
+        logger.info("[3/4] qnn-context-binary-generator not on PATH — skipping pre-compile")
+        return False
     htp_backend = _resolve_qnn_htp_backend()
     encoder_int8 = out_dir / ENCODER_INT8
     if not encoder_int8.is_file():
-        logger.error("INT8 encoder not found at %s — run quant step first", encoder_int8)
-        sys.exit(2)
+        logger.warning("INT8 encoder not found at %s — skipping pre-compile", encoder_int8)
+        return False
 
     with tempfile.TemporaryDirectory(prefix="qnn-ctx-") as tmp:
         tmp_path = Path(tmp)
@@ -285,17 +317,29 @@ def gen_qnn_context(out_dir: Path, htp_arch: str) -> None:
             "--binary_file", "encoder_int8",
             "--htp_arch", htp_arch,
         ]
-        _run(cmd)
+        logger.info("$ %s", " ".join(str(c) for c in cmd))
+        proc = subprocess.run(cmd, check=False)
+        if proc.returncode != 0:
+            logger.warning(
+                "qnn-context-binary-generator returned rc=%s — skipping .bin "
+                "(ORT QNN EP will compile context lazily at runtime)",
+                proc.returncode,
+            )
+            return False
         produced = tmp_path / "encoder_int8.bin"
         if not produced.is_file():
-            logger.error("qnn-context-binary-generator did not produce encoder_int8.bin")
-            sys.exit(2)
+            logger.warning(
+                "qnn-context-binary-generator produced no .bin — skipping "
+                "(ORT QNN EP will compile context lazily at runtime)"
+            )
+            return False
         target = out_dir / ENCODER_QNN_BIN
         shutil.move(str(produced), target)
         logger.info(
             "QNN context binary: %s (%.1f MB) for HTP V%s",
             target, target.stat().st_size / 1e6, htp_arch,
         )
+        return True
 
 
 # ── Step 4: bundle tokenizer + preprocessor ───────────────────────────────────
@@ -337,9 +381,9 @@ def main() -> int:
     else:
         quantise_encoder(out_dir, args.src, args.calibration)
 
-    # Step 3: QNN context binary
+    # Step 3: QNN context binary (best-effort — non-fatal on failure)
     if args.skip_qnn or args.skip_quant:
-        logger.info("[3/4] QNN context binary skipped")
+        logger.info("[3/4] QNN context binary skipped (--skip-qnn)")
     else:
         gen_qnn_context(out_dir, args.htp_arch)
 

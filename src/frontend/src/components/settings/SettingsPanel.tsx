@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, RotateCcw, Loader2, Plug, CheckCircle2, AlertTriangle } from 'lucide-react';
+import { ArrowLeft, Save, RotateCcw, Loader2, Plug, CheckCircle2, AlertTriangle, Cpu } from 'lucide-react';
 import { StatusBar } from '../core/StatusBar';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { settingsApi, aiApi, type OllamaModelInfo, type AITestResponse } from '../../services/api';
+import { voiceApi, type VoiceStatusResponse } from '../../services/voiceApi';
 import { applyUISettings } from '../../services/settingsBootstrap';
 import type { SettingDefinition } from '@shared/types';
 
@@ -360,6 +361,7 @@ export default function SettingsPanel() {
             {loaded && activeCategory && activeCategory.id !== 'about' && (
               <div className="flex flex-col gap-2">
                 {activeCategory.id === 'ai' && <AIProviderDiagnostics />}
+                {activeCategory.id === 'voice' && <NPUDiagnostics />}
                 {activeCategory.settings.length === 0 && (
                   <div
                     className="italic"
@@ -894,6 +896,194 @@ function StatusPill({ status }: { status: { kind: string; msg?: string } }) {
     >
       {label}
     </span>
+  );
+}
+
+/* ─── NPU diagnostics (Phase 15) ───────────────────────────────────── */
+
+function NPUDiagnostics() {
+  const [state, setState] = useState<{
+    loading: boolean;
+    error: string | null;
+    status: VoiceStatusResponse | null;
+  }>({ loading: true, error: null, status: null });
+
+  const refresh = useCallback(async () => {
+    setState((s) => ({ ...s, loading: true, error: null }));
+    try {
+      const status = await voiceApi.status();
+      setState({ loading: false, error: null, status });
+    } catch (err) {
+      setState({
+        loading: false,
+        error: err instanceof Error ? err.message : 'voice/status failed',
+        status: null,
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  const status = state.status;
+  // Pick a single signal colour summarising the NPU health state. Order:
+  //   error  → alert  (failed to fetch)
+  //   off    → muted  (operator hasn't opted in)
+  //   active → ok     (whisper_npu provider is the loaded STT engine)
+  //   ready  → accent (toggle on, bundle on disk, but NPU isn't currently
+  //                    serving — usually because mode keeps Whisper first)
+  //   gap    → warn   (toggle on but bundle missing / EP plugin failure)
+  let tone: 'idle' | 'ok' | 'warn' | 'err' | 'off' = 'idle';
+  let summary = 'Не перевірено';
+  if (state.error) {
+    tone = 'err';
+    summary = state.error;
+  } else if (status) {
+    if (!status.npu_enabled) {
+      tone = 'off';
+      summary = 'NPU вимкнено в налаштуваннях';
+    } else if (status.npu_active && status.npu_encoder_loaded) {
+      tone = 'ok';
+      summary = `Активний · encoder на QNN HTP · ${status.stt_engine}`;
+    } else if (status.npu_active) {
+      tone = 'warn';
+      summary = 'Провайдер активний, encoder на CPU (QNN session не піднявся)';
+    } else if (status.npu_available) {
+      tone = 'ok';
+      summary = `Готовий · поточний engine: ${status.stt_engine}`;
+    } else {
+      tone = 'warn';
+      summary = 'Bundle або EP плагін не доступні — система впаде на faster-whisper';
+    }
+  } else if (state.loading) {
+    summary = 'Перевіряємо стан…';
+  }
+
+  const color =
+    tone === 'ok'
+      ? 'var(--signal-ok)'
+      : tone === 'warn'
+        ? 'var(--signal-warn)'
+        : tone === 'err'
+          ? 'var(--signal-alert)'
+          : tone === 'off'
+            ? 'var(--ink-muted)'
+            : 'var(--accent)';
+
+  return (
+    <div
+      className="glass-card flex flex-col gap-3 mb-2 px-4 py-3"
+      style={{ borderRadius: 14, border: '1px solid var(--glass-border)' }}
+    >
+      <div className="flex items-center gap-2">
+        <Cpu size={14} strokeWidth={1.75} style={{ color: 'var(--ink-muted)' }} />
+        <span
+          className="uppercase"
+          style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 'var(--fs-micro)',
+            color: 'var(--ink-muted)',
+            letterSpacing: 'var(--tracking-widest)',
+          }}
+        >
+          NPU · Hexagon HTP
+        </span>
+        <span
+          className="px-2 rounded-full"
+          style={{
+            background: `color-mix(in srgb, ${color} 18%, transparent)`,
+            color,
+            border: `1px solid color-mix(in srgb, ${color} 50%, transparent)`,
+            fontFamily: 'var(--font-display)',
+            fontSize: 'var(--fs-micro)',
+            letterSpacing: 'var(--tracking-wider)',
+            textTransform: 'uppercase',
+            lineHeight: '20px',
+          }}
+        >
+          {tone === 'ok'
+            ? 'OK'
+            : tone === 'warn'
+              ? 'Warn'
+              : tone === 'err'
+                ? 'Error'
+                : tone === 'off'
+                  ? 'Off'
+                  : '…'}
+        </span>
+        <button
+          type="button"
+          onClick={refresh}
+          disabled={state.loading}
+          className="ml-auto active:scale-95"
+          style={{
+            minHeight: 32,
+            padding: '0 10px',
+            borderRadius: 9999,
+            background: 'var(--glass-subtle)',
+            color: 'var(--ink-secondary)',
+            border: '1px solid var(--glass-border)',
+            fontFamily: 'var(--font-display)',
+            fontSize: 'var(--fs-micro)',
+            letterSpacing: 'var(--tracking-wide)',
+            opacity: state.loading ? 0.5 : 1,
+          }}
+          title="Re-check /voice/status"
+        >
+          {state.loading ? (
+            <Loader2 size={12} strokeWidth={1.75} className="animate-spin" />
+          ) : (
+            'Refresh'
+          )}
+        </button>
+      </div>
+
+      <div
+        style={{
+          fontFamily: 'var(--font-display)',
+          fontSize: 'var(--fs-xs)',
+          color: 'var(--ink-secondary)',
+        }}
+      >
+        {summary}
+      </div>
+
+      {status && (
+        <div
+          className="grid"
+          style={{
+            gridTemplateColumns: '120px 1fr',
+            rowGap: 4,
+            columnGap: 12,
+            fontFamily: 'var(--font-mono)',
+            fontSize: 'var(--fs-micro)',
+            color: 'var(--ink-muted)',
+          }}
+        >
+          <span>Bundle</span>
+          <span style={{ color: 'var(--ink-primary)' }}>
+            {status.npu_model_path || '—'}
+          </span>
+          <span>Compute</span>
+          <span style={{ color: 'var(--ink-primary)' }}>{status.npu_compute || '—'}</span>
+          <span>Encoder · QNN</span>
+          <span
+            style={{
+              color: status.npu_encoder_loaded ? 'var(--signal-ok)' : 'var(--ink-primary)',
+            }}
+          >
+            {status.npu_encoder_loaded ? 'loaded' : 'not loaded'}
+          </span>
+          <span>Providers</span>
+          <span style={{ color: 'var(--ink-primary)', overflowWrap: 'anywhere' }}>
+            {status.npu_providers || 'unknown'}
+          </span>
+          <span>Active engine</span>
+          <span style={{ color: 'var(--ink-primary)' }}>{status.stt_engine}</span>
+        </div>
+      )}
+    </div>
   );
 }
 

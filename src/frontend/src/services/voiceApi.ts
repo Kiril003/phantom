@@ -33,6 +33,14 @@ export interface VoiceStatusResponse {
   tts_voice: string;
   wake_word_enabled: boolean;
   wake_words: string;
+  /** Phase 15 — Hexagon NPU diagnostic. */
+  npu_enabled: boolean;
+  npu_available: boolean;
+  npu_active: boolean;
+  npu_encoder_loaded: boolean;
+  npu_model_path: string;
+  npu_compute: string;
+  npu_providers: string;
 }
 
 export const voiceApi = {

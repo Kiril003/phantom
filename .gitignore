@@ -55,5 +55,13 @@ src/backend/voice/models/vosk-model-uk-v3.zip
 src/backend/voice/models/whisper-turbo-hf/
 src/backend/voice/models/whisper-small-qnn/
 src/backend/voice/models/whisper-small-hf/
+src/backend/voice/models/whisper-turbo-qnn/
+
+# Phase 15b: MMS-1B per-language bundles (one ~280 MB .bin per lang) and
+# raw AI Hub compile assets. All built locally via
+# scripts/aihub_compile_mms.py / aihub_compile_whisper_turbo.py.
+src/backend/voice/models/mms-*-qnn/
+aihub_assets/
+aihub_assets_*/
 src/backend/test_script/
 src/frontend/chroma_data/

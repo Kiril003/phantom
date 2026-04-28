@@ -61,6 +61,16 @@ class StatusResponse(BaseModel):
     tts_voice: str
     wake_word_enabled: bool
     wake_words: str
+    # Phase 15 — NPU diagnostic. Operators see at a glance whether the
+    # Hexagon HTP path is actually carrying traffic vs silently fallen
+    # back to faster-whisper.
+    npu_enabled: bool
+    npu_available: bool
+    npu_active: bool
+    npu_encoder_loaded: bool
+    npu_model_path: str
+    npu_compute: str
+    npu_providers: str
 
 
 @router.post("/stt", response_model=STTResponse)
@@ -142,14 +152,53 @@ async def synthesize_speech(req: TTSRequest) -> Response:
 @router.get("/status", response_model=StatusResponse)
 async def voice_status() -> StatusResponse:
     """Live snapshot of the voice subsystem — surfaces which provider
-    actually loaded so a [soon]-vs-wired mismatch is obvious."""
+    actually loaded so a [soon]-vs-wired mismatch is obvious.
+
+    Phase 15 — also surfaces NPU diagnostic info: enabled flag (config),
+    availability (bundle + EP plugin reachable), active flag (current
+    STT provider is actually whisper_npu), and the encoder-session
+    state once the model has been ensured.
+    """
+    stt = get_stt_provider()
+    tts = get_tts_provider()
+
+    # NPU diagnostic — pulled from the live provider when active, otherwise
+    # from the static availability probe so the panel still tells the truth
+    # before the first request.
+    npu_enabled = bool(getattr(config, "voice_stt_npu_enabled", False))
+    npu_available = False
+    npu_encoder_loaded = False
+    npu_providers = ""
+    npu_model_path = str(getattr(config, "voice_stt_npu_model_path", ""))
+    npu_compute = str(getattr(config, "voice_stt_npu_compute", "int8"))
+    try:
+        from voice.whisper_npu_provider import is_npu_path_available
+        npu_available = is_npu_path_available()
+    except Exception:
+        npu_available = False
+    if stt.name == "whisper_npu":
+        try:
+            info = stt.diagnostic_info()  # type: ignore[attr-defined]
+            npu_encoder_loaded = info.get("encoder_qnn_loaded") == "yes"
+            npu_providers = info.get("providers", "")
+            npu_model_path = info.get("model_path", npu_model_path)
+        except Exception:
+            pass
+
     return StatusResponse(
-        stt_engine=get_stt_provider().name,
-        tts_engine=get_tts_provider().name,
+        stt_engine=stt.name,
+        tts_engine=tts.name,
         stt_mode=config.voice_stt_mode,
         language=config.voice_stt_language,
         tts_enabled=config.voice_tts_enabled,
         tts_voice=config.voice_tts_voice,
         wake_word_enabled=config.voice_wake_word_enabled,
         wake_words=config.voice_wake_words,
+        npu_enabled=npu_enabled,
+        npu_available=npu_available,
+        npu_active=stt.name == "whisper_npu",
+        npu_encoder_loaded=npu_encoder_loaded,
+        npu_model_path=npu_model_path,
+        npu_compute=npu_compute,
+        npu_providers=npu_providers,
     )

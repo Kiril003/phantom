@@ -64,3 +64,38 @@ Tag `v0.17.0-chat-tools` lands on 17b commit.
 ## Block D budget note
 
 Block D's wall-clock window in `docs/AUTONOMOUS_DAY_PLAN.md` was 90 min (08:00 → 09:30 CEST). Phase 17a took ~30 min including tests. Phase 17b is the productisation-blocking work, so it should land before Block E even if it pushes the SaaS layer's allocated start.
+
+## Day-2 (audit-2026-04-29) hardening — invariants 17b MUST honour
+
+The Day-2 audit's threat model (`docs/audit-2026-04-29-day2/FINDINGS.md`) constrained Phase 17b's wiring with three hard invariants. Tier C closed the supporting code (input validation, dispatcher timeout, audit columns, output classifier, CPU sampler); Phase 17b's commit MUST NOT relax these.
+
+### Invariant 1 — Multi-tenant deploy is forbidden until per-tenant ContextEngine lands (D2-I2)
+
+`chat_tool_dispatcher`'s `get_sensor_status` handler reads `core.context_engine.get_snapshot()` — a process-global. In a multi-tenant cloud deploy, every tenant would read every other tenant's sensors. Until per-tenant ContextEngine wiring exists, **PHANTOM OS daemons MUST run single-tenant**. The README + OPERATIONS doc carry the operational rule; Phase 17b's commit message must restate it. The audit calls this a deferred-architecture item — when per-tenant ContextEngine ships, retire this invariant.
+
+### Invariant 2 — Phase 17b ships only the 5 read-only tools (D2-E1)
+
+The dispatcher's `_HANDLERS` and `supported_tools()` are the choke point. As of Day-2 H-5 the dispatcher delegates each name to `tool_executor.execute_tool`; the production `tool_executor` knows about additional tools (`search_web`, `create_calendar_event`, `get_calendar_events`) that the dispatcher deliberately hides. Phase 17b MUST NOT add those names to `chat_tool_dispatcher._CHAT_SAFE_TOOL_NAMES` until:
+
+1. `create_calendar_event` — per-tool consent flow (operator UI confirm before any mutating call), mutating-tool risk gate (mirroring `agent_risk_tolerance`), and an unconditional audit row even on dispatcher failure;
+2. `search_web` — query-provenance check + chain-depth cap (audit F-11 prompt-injection exfil chain);
+3. `get_calendar_events` — read path is safe; ships once the calendar service hook lands.
+
+Tier C's drift contract test (`TestDelegationContract.test_no_handler_drift_with_executor`) freezes the chat-side name set; widening it requires an explicit code change a reviewer will see.
+
+### Invariant 3 — `bash.run` is NEVER reachable from chat (D2-E2)
+
+`agent/actions/bash.py` is exposed to the agent runtime via the agent's `tool_executor` catalog. The chat path's `chat_tool_dispatcher` MUST NOT register a delegate for any name that resolves to `bash.run` or any subprocess-launching handler. This invariant is permanent — there is no future phase where the chat user gets shell access.
+
+The dispatcher's `_CHAT_SAFE_TOOL_NAMES` constant is the enforcement point. A reviewer who sees `bash`, `shell`, `subprocess`, `exec`, or `run` in that tuple should immediately revert the change.
+
+### Pre-flight checklist for the Phase 17b commit
+
+The Tier D plan in the audit calls these out as gates before tagging `v0.19.0-jarvis-online`:
+
+- `tool_config_mode: Literal["AUTO","ANY"]` threaded through `AIProvider.call_with_tools` (closes audit F-52). Chat passes `"AUTO"`; the agent's tactical planner keeps `"ANY"`.
+- Tool-result envelope: every dispatcher result wrapped in `{"_phantom_tool": "<name>", "ok": bool, "content": ...}` so the LLM cannot fake a tool-result marker by quoting one in plain text.
+- `phantom_chat_tool_calls_total{tool=...,ok=...}` counter integrated.
+- Output classifier (`ai/output_safety.sanitize`) called exactly once between final LLM response and `chat_broadcast` / TTS.
+- `chat_tool_max_total_ms` per-turn ceiling honoured by the loop; abort to last-good response on overrun.
+- `extract_and_store_facts` continues to receive `user_message` only — the AI-echo persistence path (D2-T2) stays closed.

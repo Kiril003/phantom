@@ -298,5 +298,54 @@ Pytest 9/9 green. Wave-1 progress: 11/13. Remaining: T-4
 (UTC normalize OneShotSchedule + croniter early check),
 IDB-1 (multi-user single-mode pytest).
 
+## 2026-05-01 — T-4 DONE (12/13 Wave-1)
+
+Standing-orders schedule hardening per ADR-SO-002 — closes
+audit U7-TIME-H2 (naive datetimes leaking into persisted
+standing orders) + U7-TIME-M3 (croniter missing surfaces only
+at first fire, not at order creation).
+
+`agent/standing_orders/schedules.py` changes:
+
+- Module-load probe of `croniter`. Best-effort import (no
+  crash on missing) plus `_HAS_CRONITER` flag. Environments
+  that never use cron specs don't pay an install cost; envs
+  that do use cron get a clear miss signal at parse time
+  instead of a runtime fire failure hours later.
+- `OneShotSchedule.at` field validator (mode='before') that
+  coerces a naive `datetime` → UTC and emits a one-time WARN
+  log identifying the offending order. The persisted
+  `model_dump_json()` now ALWAYS carries an explicit `+00:00`
+  offset (or `Z`), eliminating ambiguity for post-mortem
+  audits when the operator's box ran a non-UTC TZ.
+- `parse_schedule({"kind":"cron",...})` raises a clear
+  `ValueError` immediately when croniter is missing — fail at
+  order-creation, not at first fire.
+- `next_fire_time` keeps a defensive naive→UTC guard for the
+  one-shot path so callers that bypass `parse_schedule` (via
+  `model_construct` etc.) still get total tz-aware output.
+
+12 tests at `tests/test_phase_t4_schedule_utc_normalize.py`
+cover: naive→UTC coercion + WARN log, UTC-aware passthrough,
+non-UTC offset preservation, persisted JSON carries explicit
+offset, cron-spec rejected when croniter missing, cron-spec
+accepted when present, interval/conditional/one-shot specs
+unaffected by croniter absence, defensive next_fire_time
+guard for naive `at` constructed via model_construct,
+post-fire None invariant preserved, RuntimeError on cron
+path without croniter, _HAS_CRONITER flag is bool, module
+exposes the optional-croniter contract via attribute checks
+(no importlib.reload — that breaks cached references in the
+runner).
+
+Found + fixed flaky-test interaction: an early draft used
+`importlib.reload(sched)` which dangling cached references in
+the standing-orders runner, breaking the conditional-schedule
+test downstream. Switched to attribute-only inspection.
+
+Pytest sweep 1397/1397 green (`+21` vs HEAD~ baseline 1376
+post-W-2b/X-3). Wave-1 progress: 12/13. Remaining: IDB-1
+(multi-user single-mode pytest).
+
 ---
 

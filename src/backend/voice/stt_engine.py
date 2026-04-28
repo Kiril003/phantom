@@ -25,6 +25,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import time
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -452,7 +453,15 @@ def _try_npu() -> Optional[STTProvider]:
     operator hasn't opted in. The module import is lazy because it pulls in
     optimum + transformers + onnxruntime which we don't want in the cold
     path on hardware where NPU isn't relevant.
+
+    Day-4 Block V-3 (ADR-DSH-001 / U5-PKG-C3): win32 hard-skip is a
+    *factory branch, not an import-time check*. The audit established
+    that ``onnxruntime-qnn`` import alone segfaults on x86_64 Windows;
+    we must never even attempt the import there. Linux/macOS continue
+    unchanged. This guards the packaged Windows desktop build.
     """
+    if sys.platform == "win32":
+        return None
     if not getattr(config, "voice_stt_npu_enabled", False):
         return None
     try:
@@ -470,7 +479,13 @@ def _try_mms() -> Optional[STTProvider]:
     binary; non-autoregressive forward pass yields a transcript in
     ~60–90 ms. Tried before WhisperNPUProvider in the chain when the
     operator has opted in via voice_stt_mms_enabled.
+
+    Day-4 Block V-3 (ADR-DSH-001 / U5-PKG-C3): same win32 hard-skip
+    rationale as ``_try_npu`` — ``mms_npu_provider`` re-uses the QNN EP
+    plugin and would inherit the same x86_64 Windows segfault.
     """
+    if sys.platform == "win32":
+        return None
     if not getattr(config, "voice_stt_mms_enabled", False):
         return None
     try:

@@ -120,6 +120,11 @@ def _empty_snapshot() -> dict:
         # populated by resolve_localization(). Empty until the resolver
         # has a fix and Overpass returns at least one named feature.
         "nearby": [],
+        # Audit-2026-04-28 F-04: GHOST trigger reads these. Populated by
+        # _apply_encoder / _apply_buttons; left None until first batch
+        # carries encoder/buttons data.
+        "encoder": None,
+        "buttons": None,
         "system": {
             "state": "SHADOW",
             "uptime_s": 0,
@@ -144,7 +149,11 @@ class ContextEngine:
         self._snapshot: dict = _empty_snapshot()
         self._history: deque[dict] = deque(maxlen=720)   # 6 min @ 500ms
         self._start_time = time.monotonic()
-        self._last_interaction_ts = time.monotonic()
+        # Audit-2026-04-28 F-05: backdate so first tick reports 999 s idle
+        # (matches _empty_snapshot default), letting idle guards trip
+        # immediately on cold boot instead of waiting for the first user
+        # interaction to advance the clock.
+        self._last_interaction_ts = time.monotonic() - 999.0
         self._last_state_change_ts = time.monotonic()
         self._mood_window: deque[float] = deque(maxlen=20)
         self._system_state = "SHADOW"
@@ -238,6 +247,32 @@ class ContextEngine:
         self._apply_radar(batch)
         self._apply_gps(batch)
         self._apply_env(batch)
+        self._apply_encoder(batch)
+        self._apply_buttons(batch)
+
+    def _apply_encoder(self, batch: SensorBatch) -> None:
+        # Audit-2026-04-28 F-04: lift parsed EncoderData onto the snapshot
+        # so state_machine._ghost_trigger and any future encoder consumer
+        # can read it. Persists between batches — firmware ships encoder
+        # frames only when state changes.
+        enc = batch.encoder
+        if enc is None:
+            return
+        self._snapshot["encoder"] = {
+            "position": enc.position,
+            "delta": enc.delta,
+            "button": enc.button,
+            "long_press": enc.long_press,
+        }
+
+    def _apply_buttons(self, batch: SensorBatch) -> None:
+        btns = batch.buttons
+        if btns is None:
+            return
+        self._snapshot["buttons"] = {
+            "rgb_states": list(btns.rgb_states),
+            "any_pressed": btns.any_pressed,
+        }
 
     def _apply_radar(self, batch: SensorBatch) -> None:
         r = batch.radar

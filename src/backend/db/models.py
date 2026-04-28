@@ -98,6 +98,19 @@ class ChatMessage(Base):
     attachments_json: Mapped[str] = mapped_column(Text, default="[]")
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
+    # MIGRATION_NOTE: speaker_user_id added Day-4 (Block ID-3 / ADR-ID-004).
+    # Day-4 leaves it NULL forever — Day-5 ML resolver populates it from
+    # `STTResult.speaker_id`. Index is implicit via `index=True`. The
+    # column is NULLABLE because most messages (text input, voice with
+    # no enrolled match) won't carry a speaker. Migration:
+    # `db/migrations/006_chat_message_speaker_user_id.py`.
+    speaker_user_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("users.id"),
+        nullable=True,
+        index=True,
+        default=None,
+    )
+
     session: Mapped["ChatSession"] = relationship("ChatSession", back_populates="messages")
 
 

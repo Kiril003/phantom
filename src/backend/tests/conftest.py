@@ -84,7 +84,15 @@ def _reset_login_lockout_per_test():
 
 @pytest.fixture(scope="session", autouse=True)
 def _ensure_seed_phantom_user():
+    """Day-3 D3-A-12 (FLAKE-02): the previous implementation called
+    `asyncio.run()` inside a `try/except RuntimeError: pass`. Under
+    pytest-asyncio's session loop the run could raise and be silently
+    swallowed → seed row missing → sporadic 401s in `test_phase07_voice`
+    and `test_phase08_face`. The fix is to run the bootstrap in a
+    dedicated worker thread that owns its own event loop, so the parent
+    loop state never matters and exceptions surface."""
     import asyncio as _asyncio
+    import threading as _threading
     import uuid as _uuid
 
     async def _run():
@@ -111,14 +119,51 @@ def _ensure_seed_phantom_user():
             ))
             await db.commit()
 
-    try:
-        _asyncio.run(_run())
-    except RuntimeError:
-        # Another loop is already running (rare under pytest-asyncio).
-        # Best-effort — the test that needs the seed will surface the
-        # missing-row issue and the operator can re-run.
-        pass
+    # Run in a dedicated thread so the seed-bootstrap never collides
+    # with any in-flight pytest-asyncio session loop.
+    err_box: list[BaseException] = []
+
+    def _worker() -> None:
+        try:
+            _asyncio.run(_run())
+        except BaseException as exc:  # noqa: BLE001
+            err_box.append(exc)
+
+    t = _threading.Thread(target=_worker, daemon=False, name="seed-worker")
+    t.start()
+    t.join(timeout=30)
+    if err_box:
+        raise RuntimeError(
+            f"_ensure_seed_phantom_user failed: {err_box[0]!r}"
+        ) from err_box[0]
+    if t.is_alive():
+        raise RuntimeError(
+            "_ensure_seed_phantom_user timed out after 30 s"
+        )
     yield
+
+
+# Day-3 D3-A-11 (FLAKE-01): the system_metrics_sampler is a module-
+# level singleton that lifespan starts during app boot. Tests that mount
+# `TestClient(create_app())` therefore start ONE sampler per app — and
+# the asyncio task is bound to whatever loop pytest-asyncio is running
+# at the time. The next test creates a new event loop; the old sampler
+# task is on the dead loop, raising
+# `RuntimeError: Task attached to a different loop` on every read.
+# Reset the sampler module state between tests so each test starts
+# clean.
+
+
+@pytest.fixture(autouse=True)
+def _reset_system_metrics_sampler_per_test():
+    import system_metrics_sampler as _sms
+    yield
+    # Best-effort tear-down — `_reset_for_tests` is idempotent and
+    # resilient to "no sampler ever started".
+    try:
+        _sms._reset_for_tests()
+    except Exception:
+        pass
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────

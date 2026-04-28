@@ -92,10 +92,16 @@ class TestJWTManager:
     def test_refresh_token_recently_expired_succeeds(self):
         from security.jwt_manager import _secret, _ALGORITHM, refresh_token, verify_token
         now_ts = int(datetime.now(tz=timezone.utc).timestamp())
+        # Day-3 D3-C-2 (audit-2026-04-30 NEW-SEC-03) — strict cap
+        # requires orig_iat. Hand-rolled tokens that previously omitted
+        # the field would now be refused even within grace; this test
+        # uses the canonical shape (orig_iat == iat) as v0.18.1+
+        # produces it.
         payload = {
             "sub": "u3", "username": "dana", "role": "OPERATOR",
             "iat": now_ts - 60,
             "exp": now_ts - 30,  # expired 30s ago — within 1h grace
+            "orig_iat": now_ts - 60,
         }
         token = jose_jwt.encode(payload, _secret(), algorithm=_ALGORITHM)
         new_token, _ = refresh_token(token)

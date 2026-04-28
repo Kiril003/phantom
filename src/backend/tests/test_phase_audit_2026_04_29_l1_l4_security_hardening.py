@@ -200,36 +200,55 @@ class TestL2JwtAbsoluteCap:
             refresh_token(token)
 
     def test_legacy_token_without_orig_iat_decays_naturally(self):
-        # Tokens issued before F-14 shipped don't carry orig_iat. The
-        # verifier treats them as if `orig_iat == iat`, so they're
-        # accepted while still inside the cap and rejected once the
-        # implied lifetime passes.
+        # Day-2 F-14 originally treated legacy tokens (no orig_iat) as
+        # `orig_iat == iat` — letting them refresh past the cap. The
+        # Day-3 D3-C-2 (audit-2026-04-30 NEW-SEC-03) hardening makes
+        # the cap strict: missing orig_iat ALWAYS rejects, regardless
+        # of the iat freshness. Operators on pre-v0.18.1 client builds
+        # are forced to re-auth — bounded by the front-end's existing
+        # 401 handler.
         from jose import JWTError, jwt
         from security.jwt_manager import _secret, _ALGORITHM, verify_token
 
         now = datetime.now(tz=timezone.utc)
-        # Legacy iat ~31 days ago — implied orig_iat is also old.
-        payload_old = {
-            "sub": "u1",
-            "username": "phantom",
-            "role": "ROOT",
-            "iat": int((now - timedelta(days=31)).timestamp()),
-            "exp": int((now + timedelta(minutes=30)).timestamp()),
-            # NO orig_iat key
-        }
-        token_old = jwt.encode(payload_old, _secret(), algorithm=_ALGORITHM)
-        with pytest.raises(JWTError):
-            verify_token(token_old)
-
-        # Legacy iat fresh — implied orig_iat is also fresh; should pass.
+        # Even a fresh legacy token (no orig_iat) MUST be refused now.
         payload_fresh = {
             "sub": "u1",
             "username": "phantom",
             "role": "ROOT",
             "iat": int(now.timestamp()),
             "exp": int((now + timedelta(minutes=30)).timestamp()),
+            # NO orig_iat key
         }
-        token_fresh = jwt.encode(payload_fresh, _secret(), algorithm=_ALGORITHM)
+        token_fresh_legacy = jwt.encode(payload_fresh, _secret(), algorithm=_ALGORITHM)
+        with pytest.raises(JWTError, match="orig_iat"):
+            verify_token(token_fresh_legacy)
+
+        # Old legacy token: same refusal — but the assertion still
+        # fires "orig_iat" not "exceeded" because the missing-field
+        # check now runs BEFORE the time-based cap.
+        payload_old = {
+            "sub": "u1",
+            "username": "phantom",
+            "role": "ROOT",
+            "iat": int((now - timedelta(days=31)).timestamp()),
+            "exp": int((now + timedelta(minutes=30)).timestamp()),
+        }
+        token_old = jwt.encode(payload_old, _secret(), algorithm=_ALGORITHM)
+        with pytest.raises(JWTError, match="orig_iat"):
+            verify_token(token_old)
+
+        # Modern token (orig_iat present, fresh) MUST still pass — the
+        # baseline path is preserved.
+        payload_fresh_modern = {
+            "sub": "u1",
+            "username": "phantom",
+            "role": "ROOT",
+            "iat": int(now.timestamp()),
+            "exp": int((now + timedelta(minutes=30)).timestamp()),
+            "orig_iat": int(now.timestamp()),
+        }
+        token_fresh = jwt.encode(payload_fresh_modern, _secret(), algorithm=_ALGORITHM)
         result = verify_token(token_fresh)
         assert result.orig_iat == result.iat
 

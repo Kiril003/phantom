@@ -99,13 +99,26 @@ def verify_token(token: str) -> TokenPayload:
 
     F-14: rejects tokens whose ``orig_iat`` is older than
     ``ABSOLUTE_LIFETIME_DAYS`` regardless of the per-token ``exp``.
-    Legacy tokens (issued before this cap shipped) lack the field —
-    they are accepted but treated as if `orig_iat == iat`, so they
-    decay naturally as their issuance timestamp ages.
+
+    Day-3 D3-C-2 (audit-2026-04-30 NEW-SEC-03): the previous "fall back
+    to iat when orig_iat absent" rule grandfathered legacy tokens
+    forever — a token issued before v0.18.1 (when orig_iat shipped)
+    would refresh past the 30-day cap because each refresh re-anchors
+    iat. The cap is now strict: tokens MUST carry `orig_iat`. Legacy
+    tokens are refused with a clear "re-auth required" error so the
+    front-end can prompt the operator. The transition window is
+    naturally bounded: operators running pre-v0.18.1 have already had
+    days to re-issue, and the next request from a stale client just
+    surfaces the expected 401.
     """
     payload = jwt.decode(token, _secret(), algorithms=[_ALGORITHM])
     iat_ts = int(payload["iat"])
-    orig_iat_ts = int(payload.get("orig_iat", iat_ts))
+    if "orig_iat" not in payload:
+        raise JWTError(
+            "Token is missing orig_iat (issued before v0.18.1's "
+            "absolute-lifetime cap landed). Re-authenticate."
+        )
+    orig_iat_ts = int(payload["orig_iat"])
     now_ts = int(datetime.now(tz=timezone.utc).timestamp())
     if now_ts - orig_iat_ts > ABSOLUTE_LIFETIME_DAYS * 86400:
         raise JWTError(
@@ -149,7 +162,14 @@ def refresh_token(token: str) -> tuple[str, str]:
         if now_ts - payload["exp"] > grace_s:
             raise
         iat_ts = int(payload["iat"])
-        orig_iat_ts = int(payload.get("orig_iat", iat_ts))
+        # Day-3 D3-C-2 strict cap — same logic as verify_token: refuse
+        # legacy tokens that lack the orig_iat anchor rather than
+        # re-anchoring on iat (which would silently extend the chain).
+        if "orig_iat" not in payload:
+            raise JWTError(
+                "Token is missing orig_iat. Re-authenticate."
+            )
+        orig_iat_ts = int(payload["orig_iat"])
         if now_ts - orig_iat_ts > ABSOLUTE_LIFETIME_DAYS * 86400:
             raise JWTError(
                 f"Refresh chain exceeded {ABSOLUTE_LIFETIME_DAYS}-day cap; "

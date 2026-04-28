@@ -1,0 +1,114 @@
+name: ci
+
+# Audit-2026-04-28 Block E-3 — production-grade CI pipeline.
+# Runs backend pytest + frontend typecheck + frontend build on every push and
+# every PR against main. The two jobs run in parallel so the slowest leg
+# (backend installs faster-whisper, chromadb, sentence-transformers, etc.)
+# doesn't gate the cheap frontend gates.
+
+on:
+  push:
+    branches: [main, autonomous-run]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: backend / pytest
+    runs-on: ubuntu-22.04
+    timeout-minutes: 25
+    defaults:
+      run:
+        working-directory: src/backend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: pip
+          cache-dependency-path: src/backend/requirements.txt
+
+      - name: System packages (ffmpeg for STT WebM/Opus fallback)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends ffmpeg libsndfile1
+
+      - name: Install backend deps
+        run: |
+          python -m pip install --upgrade pip
+          pip install --no-cache-dir -r requirements.txt
+
+      - name: pytest
+        env:
+          # Tests touch a temp SQLite under PHANTOM_DB_URL; default is fine
+          # when env is unset, but pin it explicitly so a future runner-side
+          # change doesn't surprise us.
+          PYTHONUNBUFFERED: "1"
+          JWT_SECRET_KEY: "ci-fixed-secret-do-not-reuse"
+        run: |
+          python -m pytest -q --maxfail=1 --tb=short
+
+  frontend:
+    name: frontend / typecheck + build
+    runs-on: ubuntu-22.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: src/frontend
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: src/frontend/package-lock.json
+
+      - name: Install frontend deps
+        run: |
+          if [ -f package-lock.json ]; then
+            npm ci --no-audit --no-fund
+          else
+            npm install --no-audit --no-fund
+          fi
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build (vite production)
+        run: npm run build
+
+  docker:
+    name: docker / build smoke
+    runs-on: ubuntu-22.04
+    timeout-minutes: 30
+    needs: [backend, frontend]
+    # Only smoke-build the image after the cheap gates pass — keeps PRs
+    # snappy for typo-only edits.
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Build (linux/amd64 only, no push)
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: Dockerfile
+          push: false
+          load: false
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

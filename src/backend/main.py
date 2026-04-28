@@ -485,6 +485,13 @@ def create_app() -> FastAPI:
     register_voice_ws(app)
     _register_health(app)
 
+    # Phase 18 (audit-2026-04-28 Block E) — productisation observability:
+    # /healthz liveness, /readyz readiness, /metrics Prometheus exposition,
+    # correlation-id middleware on every response.
+    from observability import _register_observability, correlation_id_middleware
+    app.middleware("http")(correlation_id_middleware)
+    _register_observability(app)
+
     return app
 
 

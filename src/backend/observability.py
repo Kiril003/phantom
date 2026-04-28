@@ -1,0 +1,307 @@
+"""
+PHANTOM OS — Phase 18 productisation: observability primitives.
+
+Self-contained — no extra runtime deps. Provides:
+
+* `Counter` / `Gauge` — minimal Prometheus-style metric primitives. Render
+  via :func:`render_metrics` to the standard text exposition format.
+* `correlation_id_middleware` — FastAPI HTTP middleware that ensures every
+  request carries an `X-Correlation-Id`, generating one if absent and
+  echoing it on the response. The id is also bound to a contextvar so
+  the logging filter `CorrelationFilter` can attach it to every log record
+  produced inside the request.
+* `_register_observability(app)` — wires `/healthz`, `/readyz`, `/metrics`
+  routes onto the FastAPI app. Liveness `/healthz` is dependency-free.
+  Readiness `/readyz` probes DB + chroma + AI provider; failures return
+  503 so a load balancer can drain the instance without taking it down.
+
+The hand-rolled exposition is intentional: a Prometheus-client dep would
+be the obvious choice but the audit budget rejects "broad pip install
+everything" without justification. The text format is well-defined and
+small enough to render in a screenful of code.
+"""
+from __future__ import annotations
+
+import contextvars
+import logging
+import time
+from typing import Any, Callable, Iterable
+
+from fastapi import FastAPI, Request
+from fastapi.responses import JSONResponse, PlainTextResponse
+
+logger = logging.getLogger(__name__)
+
+# ── Process-start anchor ──────────────────────────────────────────────────────
+
+_PROCESS_STARTED_AT: float = time.time()
+_VERSION: str = "0.18.0-saas-base"
+
+
+# ── Correlation-id plumbing ───────────────────────────────────────────────────
+
+_correlation_id: contextvars.ContextVar[str | None] = contextvars.ContextVar(
+    "phantom_correlation_id", default=None
+)
+
+
+def get_correlation_id() -> str | None:
+    return _correlation_id.get()
+
+
+async def correlation_id_middleware(request: Request, call_next: Callable):
+    incoming = request.headers.get("x-correlation-id")
+    cid = incoming.strip() if (incoming and len(incoming.strip()) <= 64) else _short_uuid()
+    token = _correlation_id.set(cid)
+    try:
+        response = await call_next(request)
+    finally:
+        _correlation_id.reset(token)
+    response.headers.setdefault("X-Correlation-Id", cid)
+    return response
+
+
+def _short_uuid() -> str:
+    import uuid
+    return uuid.uuid4().hex[:16]
+
+
+class CorrelationFilter(logging.Filter):
+    """Attach the current correlation id to every log record. Safe to
+    install on the root logger — outside an HTTP request the value is
+    `-` (single dash) so log formatters can stay deterministic."""
+
+    def filter(self, record: logging.LogRecord) -> bool:  # type: ignore[override]
+        record.correlation_id = get_correlation_id() or "-"
+        return True
+
+
+# ── Metric primitives ─────────────────────────────────────────────────────────
+
+
+def _format_labels(labels: dict[str, str] | None) -> str:
+    if not labels:
+        return ""
+    items = ",".join(
+        f'{k}="{_escape(str(v))}"' for k, v in sorted(labels.items())
+    )
+    return "{" + items + "}"
+
+
+def _escape(s: str) -> str:
+    return s.replace("\\", "\\\\").replace('"', '\\"').replace("\n", "\\n")
+
+
+class Counter:
+    """Monotonic counter — labelled, all-time-cumulative. Negative deltas
+    are clamped to zero so a buggy caller can't decrement."""
+
+    def __init__(self, name: str, help_text: str) -> None:
+        self.name = name
+        self.help = help_text
+        self._values: dict[tuple[tuple[str, str], ...], float] = {}
+
+    def inc(self, value: float = 1.0, **labels: str) -> None:
+        if value < 0:
+            return
+        key = tuple(sorted(labels.items()))
+        self._values[key] = self._values.get(key, 0.0) + value
+
+    def render(self) -> Iterable[str]:
+        yield f"# HELP {self.name} {self.help}"
+        yield f"# TYPE {self.name} counter"
+        if not self._values:
+            yield f"{self.name} 0"
+            return
+        for key, value in self._values.items():
+            label_dict = dict(key)
+            yield f"{self.name}{_format_labels(label_dict)} {value}"
+
+
+class Gauge:
+    """Live gauge — value pulled from a getter at render time. Useful for
+    "current ws clients" / "uptime seconds" without caller bookkeeping."""
+
+    def __init__(self, name: str, help_text: str, getter: Callable[[], float]) -> None:
+        self.name = name
+        self.help = help_text
+        self.getter = getter
+
+    def render(self) -> Iterable[str]:
+        try:
+            value = float(self.getter())
+        except Exception:  # noqa: BLE001
+            value = 0.0
+        yield f"# HELP {self.name} {self.help}"
+        yield f"# TYPE {self.name} gauge"
+        yield f"{self.name} {value}"
+
+
+# ── Registry ──────────────────────────────────────────────────────────────────
+
+
+_REGISTRY: list[Any] = []
+
+
+def _register(metric: Any) -> Any:
+    _REGISTRY.append(metric)
+    return metric
+
+
+# ── Concrete metrics ──────────────────────────────────────────────────────────
+
+
+chat_messages_total: Counter = _register(
+    Counter("phantom_chat_messages_total", "Total chat messages produced (by role).")
+)
+voice_stt_total: Counter = _register(
+    Counter("phantom_voice_stt_total", "Total STT invocations (by engine).")
+)
+voice_tts_total: Counter = _register(
+    Counter("phantom_voice_tts_total", "Total TTS invocations.")
+)
+ai_provider_used_total: Counter = _register(
+    Counter(
+        "phantom_ai_provider_used_total",
+        "AI provider invocations by name.",
+    )
+)
+ai_router_fallthrough_total: Counter = _register(
+    Counter(
+        "phantom_ai_router_fallthrough_total",
+        "Times AIRouter fell through primary→fallback.",
+    )
+)
+http_requests_total: Counter = _register(
+    Counter(
+        "phantom_http_requests_total",
+        "HTTP requests handled, by method and route prefix.",
+    )
+)
+
+
+def _uptime_seconds() -> float:
+    return max(0.0, time.time() - _PROCESS_STARTED_AT)
+
+
+def _ws_clients() -> float:
+    try:
+        from api.websocket_hub import hub
+        return float(hub.client_count)
+    except Exception:  # noqa: BLE001
+        return 0.0
+
+
+_register(Gauge("phantom_uptime_seconds", "Process uptime in seconds.", _uptime_seconds))
+_register(Gauge("phantom_ws_clients", "Connected WebSocket clients.", _ws_clients))
+
+
+def render_metrics() -> str:
+    """Render every registered metric to the Prometheus text exposition
+    format, plus a single-cell `phantom_build_info` so dashboards can
+    template by version."""
+    lines: list[str] = [
+        "# HELP phantom_build_info Static build info (one timeseries per build).",
+        "# TYPE phantom_build_info gauge",
+        f'phantom_build_info{{version="{_VERSION}"}} 1',
+    ]
+    for metric in _REGISTRY:
+        lines.extend(metric.render())
+    return "\n".join(lines) + "\n"
+
+
+# ── Readyz probes ─────────────────────────────────────────────────────────────
+
+
+async def _probe_db() -> tuple[bool, str]:
+    try:
+        from sqlalchemy import text
+        from db.database import get_session
+        async with get_session() as db:
+            await db.execute(text("SELECT 1"))
+        return True, "ok"
+    except Exception as exc:  # noqa: BLE001
+        return False, f"db: {type(exc).__name__}"
+
+
+async def _probe_chroma() -> tuple[bool, str]:
+    try:
+        from memory.strategic_memory import _get_client
+        client = _get_client()
+        # cheap call — just enumerates collections without loading them
+        client.list_collections()
+        return True, "ok"
+    except Exception as exc:  # noqa: BLE001
+        return False, f"chroma: {type(exc).__name__}"
+
+
+def _probe_ai_provider() -> tuple[bool, str]:
+    try:
+        from config import config
+        from ai.provider import ai_router
+        # AIRouter knows whether the configured primary is currently
+        # quota-exhausted or cooling. We treat "primary cooling but
+        # fallback live" as ready — readiness is operational, not perfect.
+        primary = config.ai_primary_provider
+        fallback = config.ai_fallback_provider
+        if ai_router._is_provider_available(primary):
+            return True, f"primary:{primary}"
+        if fallback != "none" and ai_router._is_provider_available(fallback):
+            return True, f"fallback:{fallback}"
+        return False, "ai: no provider available"
+    except Exception as exc:  # noqa: BLE001
+        return False, f"ai: {type(exc).__name__}"
+
+
+# ── Route registration ────────────────────────────────────────────────────────
+
+
+def _register_observability(app: FastAPI) -> None:
+    @app.get("/healthz", include_in_schema=False)
+    async def _healthz() -> dict:
+        # Liveness: process is up. No deps. Used by container orchestrators
+        # to decide whether to restart the pod.
+        return {
+            "status": "ok",
+            "version": _VERSION,
+            "uptime_s": int(_uptime_seconds()),
+        }
+
+    @app.get("/readyz", include_in_schema=False)
+    async def _readyz() -> Any:
+        # Readiness: DB, chroma, AI provider all reachable. A 503 here
+        # signals the LB to stop routing new traffic without restarting.
+        checks: dict[str, dict[str, Any]] = {}
+        db_ok, db_detail = await _probe_db()
+        checks["db"] = {"ok": db_ok, "detail": db_detail}
+        chroma_ok, chroma_detail = await _probe_chroma()
+        checks["chroma"] = {"ok": chroma_ok, "detail": chroma_detail}
+        ai_ok, ai_detail = _probe_ai_provider()
+        checks["ai"] = {"ok": ai_ok, "detail": ai_detail}
+        all_ok = all(c["ok"] for c in checks.values())
+        body: dict[str, Any] = {"status": "ready" if all_ok else "not_ready", "checks": checks}
+        return JSONResponse(content=body, status_code=200 if all_ok else 503)
+
+    @app.get("/metrics", include_in_schema=False)
+    async def _metrics() -> PlainTextResponse:
+        return PlainTextResponse(
+            content=render_metrics(),
+            media_type="text/plain; version=0.0.4",
+        )
+
+
+__all__ = [
+    "Counter",
+    "Gauge",
+    "CorrelationFilter",
+    "_register_observability",
+    "ai_provider_used_total",
+    "ai_router_fallthrough_total",
+    "chat_messages_total",
+    "correlation_id_middleware",
+    "get_correlation_id",
+    "http_requests_total",
+    "render_metrics",
+    "voice_stt_total",
+    "voice_tts_total",
+]

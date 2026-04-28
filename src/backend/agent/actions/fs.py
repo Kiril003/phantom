@@ -94,7 +94,19 @@ class FsWrite(Action):
         path = os.path.abspath(os.path.expanduser(self.path))
         workspace = os.path.abspath(os.path.expanduser(ctx.workspace_dir))
 
-        in_workspace = path.startswith(workspace + os.sep) or path == workspace
+        # Y-4 / D3-F-40 / U4-SEC-H4: realpath BOTH sides + commonpath equality.
+        # Pure abspath followed by startswith is symlink-vulnerable: an attacker
+        # could plant <workspace>/escape -> /etc and the prefix check would pass,
+        # then open() follows the link. realpath resolves through symlinks first.
+        # For non-existent leaves realpath resolves what it can and appends the
+        # literal tail — still anchored to the resolved parent.
+        workspace_real = os.path.realpath(workspace)
+        path_real = os.path.realpath(path)
+        try:
+            common = os.path.commonpath([path_real, workspace_real])
+        except ValueError:
+            common = ""
+        in_workspace = path_real == workspace_real or common == workspace_real
 
         # SECURITY: LLM-supplied confirm always overridden to False — only the
         # workspace check determines whether the write proceeds without
@@ -105,7 +117,7 @@ class FsWrite(Action):
             return ActionResult(
                 ok=False,
                 error=(
-                    f"requires_confirm: refusing to write outside workspace ({workspace}). "
+                    f"requires_confirm: refusing to write outside workspace ({workspace_real}). "
                     f"Pick a path under the workspace or ask the user."
                 ),
                 error_class="requires_confirm",
@@ -113,7 +125,28 @@ class FsWrite(Action):
             )
 
         try:
-            os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+            parent = os.path.dirname(path) or "."
+            os.makedirs(parent, exist_ok=True)
+            # Y-4: re-check parent realpath after makedirs to catch an attacker
+            # who swapped an intermediate dir to a symlink between our first
+            # realpath() and now (TOCTOU). Bulletproof closure would require
+            # O_NOFOLLOW per path component (openat dance) — Day-4 ships this
+            # narrower mitigation; the residual race is documented.
+            parent_real = os.path.realpath(parent)
+            try:
+                parent_common = os.path.commonpath([parent_real, workspace_real])
+            except ValueError:
+                parent_common = ""
+            if parent_common != workspace_real and parent_real != workspace_real:
+                return ActionResult(
+                    ok=False,
+                    error=(
+                        f"symlink_escape: parent {parent_real!r} resolved outside "
+                        f"workspace {workspace_real!r} after makedirs"
+                    ),
+                    error_class="symlink_escape",
+                    elapsed_ms=int((time.monotonic() - t0) * 1000),
+                )
             with open(path, "w", encoding="utf-8") as f:
                 f.write(self.content)
         except PermissionError as exc:

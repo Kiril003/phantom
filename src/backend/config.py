@@ -448,6 +448,18 @@ class PhantomConfig(BaseSettings):
     chat_prompt_logging_enabled: bool = False
     chat_prompt_excerpt_max_chars: int = 800
 
+    # ── Chat tool-use (Phase 17a, audit-2026-04-28 F-01) ──────────────────────
+    # The chat path can call data-fetching tools (search_locationhistory,
+    # query_temporal_anchors, recall_memory_facts, get_system_metrics,
+    # get_sensor_status) before answering. Off by default; flip on once
+    # the call_with_tools wiring lands in Phase 17b. Per-tool result-row
+    # caps below shape the response size that goes back to the LLM —
+    # higher = more recall but more tokens.
+    chat_tools_enabled: bool = False
+    chat_tool_locationhistory_limit: int = 20
+    chat_tool_anchors_limit: int = 30
+    chat_tool_max_calls_per_turn: int = 4
+
     # ── System ────────────────────────────────────────────────────────────────
     system_hostname: str = "phantom"
     system_sensor_log_retention_days: int = 7

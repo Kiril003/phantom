@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { User, Sparkles, Mic, Hash, Info } from 'lucide-react';
 import type { ChatMessage } from '@shared/types';
 import { ResponseRenderer } from './ResponseRenderer';
+import { getPhantomTransition } from '../../styles/motion';
 
 interface MessageBubbleProps {
   message: ChatMessage;
@@ -42,7 +43,7 @@ export function MessageBubble({ message, streaming = false, compact = false }: M
         }}
         initial={{ opacity: 0, y: 4 }}
         animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.2 }}
+        transition={getPhantomTransition('ghostPreview')}
       >
         <Info size={11} strokeWidth={1.5} />
         <span>{message.content}</span>
@@ -56,7 +57,7 @@ export function MessageBubble({ message, streaming = false, compact = false }: M
       style={{ maxWidth: '82%' }}
       initial={{ opacity: 0, y: 6 }}
       animate={{ opacity: 1, y: 0 }}
-      transition={{ duration: 0.24, ease: [0.16, 1, 0.3, 1] }}
+      transition={getPhantomTransition('bubbleEnter')}
     >
       {/* Avatar */}
       <div

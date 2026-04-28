@@ -237,5 +237,36 @@ Wave-1 progress: 9/13 (W-1 + 8 prior). Remaining: W-2b
 normalize OneShotSchedule), IDB-1 (multi-user single-mode
 pytest).
 
+## 2026-05-01 — W-2b DONE (10/13 Wave-1)
+
+phantomVariants motion vocab + getPhantomTransition helper
+landed in `src/frontend/src/styles/motion.ts` (ADR-CP-001
+§213-§253). Closed 8-key vocab: bubbleEnter, panelReveal,
+panelStagger, scenePresence, ghostPreview, thinkingPulse,
+pingDot, cursorBlink. The helper reads `--motion-scale` ×
+`--motion-scale-user` via the existing `getScaledDuration` so
+*every* call site honours both axes (state + user) at once —
+closes U2-ANIM-G1 / H1 / M1 dialect drift.
+
+Smoke migration on `MessageBubble.tsx`: replaced two inline
+`transition={{ ... }}` literals (system bubble at line 45 →
+`getPhantomTransition('ghostPreview')`; user/assistant bubble
+at line 59 → `getPhantomTransition('bubbleEnter')`). Wave-2 W-2
+will sweep the rest of the chat surface; W-2b proves the helper
+is reachable without rewiring every site Day-4.
+
+10 vitest tests in `src/frontend/src/__tests__/motion.test.ts`
+pin: closed-vocab keys (catches a 9th key landing without an
+ADR), positive baseMs, panelStagger.stagger=80, Framer
+transition shape, EASE_PHANTOM forwarding, equality with
+`phantomTransition(getScaledDuration(baseMs))`,
+`--motion-scale=1` identity, state-scale=2 halving,
+`state × user` multiplicative composition, and garbage-CSS
+fallback to 1×.
+
+vitest motion + chat regression 48/48 green; tsc clean.
+Wave-1 progress: 10/13. Remaining: X-3 (AST gate), T-4 (UTC
+schedules), IDB-1 (multi-user pytest).
+
 ---
 

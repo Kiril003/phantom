@@ -109,5 +109,61 @@ workers — keeps the topology metadata for `hive-mind status`
 inspection. Will post-fact import worker outputs via memory if
 operator returns and wants to see the hive consume them.
 
+## 2026-05-01 — Phase 1 DONE (commit 53d16bc)
+
+8 cluster probers + inline synthesis = 16 contexts, 41 blocks
+(post-dedup), DAG validated, all 17 Critical audit findings
+mapped to ≥1 Phase-3 block. One missing block (W-3b for
+U1-UX-C1) caught and added inline. pytest 1277/1277 green.
+
+## 2026-05-01 — Phase 2 in progress
+
+8 native cluster architects launched in parallel. After 4 returned,
+3 cross-cutting reviewers spawned. Operator midway said "запускай
+ще додатково агентів клауд код, де не вдається запустити від
+ruflo" — confirmed hybrid pattern (ruflo memory + native Agent
+orchestration).
+
+Architects done (8/8): desktop-shell (423), chat-liveness (483),
+sandbox-runtime (518), agent-orchestration (341), ai-hub (408),
+profile-cards (699), identity-recognition (472), time-events
+(611). Plus inline CROSS_CONTEXT_ADRS (215) by me.
+
+Cross-cutting: PERF (CC3) returned cleanly (194 lines, 12 SLOs,
+14 risks, 4 HIGH).
+
+## 2026-05-01 — RATE LIMIT EVENT (org monthly subagent quota hit)
+
+CC1 (integration) and CC2 (security) reviewers BOTH hit
+"You've hit your org's monthly usage limit" after 25-28 tool
+calls each. Crucially: **both wrote their full files to disk
+BEFORE the failure** (PHASE2_INTEGRATION_RISKS.md 586 lines,
+PHASE2_SECURITY_REVIEW.md 244 lines). The error is on the
+sub-agent return path, not the work itself.
+
+**Posture change**: native `Agent` tool is BLOCKED until org
+quota resets (likely next month). My own continuation budget
+(this conversation thread) is intact — I can still use Read /
+Edit / Write / Bash directly. ruflo memory CLI doesn't use
+Anthropic API, so AgentDB layer is unaffected.
+
+**Per operator P10** ("60% excellent > 100% mediocre"):
+- Phase 3 was already planned single-agent (me) per block — NO
+  IMPACT.
+- Phase 4 was 25 parallel validators — IMPACT: I do validation
+  inline myself OR trim aggressively.
+- Phase 5 was single agent (release-manager) — NO IMPACT.
+
+**Per E6**: not escalating; logging here and continuing.
+
+Worker quota effectively converted: I am the sole "agent" until
+reset. The 22 native subagents already spawned across Day 4
+(8 probers, 8 architects, 3 reviewers, 3 cross-cutting) is the
+total subagent budget consumed for this run.
+
+**Mission survives**. Phase 2 has all 12 docs on disk.
+Proceeding to Phase-2 commit + Phase 3 Wave 1 implementation
+(me, native tools).
+
 ---
 

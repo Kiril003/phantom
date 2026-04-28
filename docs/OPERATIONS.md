@@ -243,17 +243,66 @@ docker buildx build --platform linux/amd64 .
 
 ---
 
+## Day-2 audit closures (2026-04-29)
+
+The Day-2 multi-perspective audit (`docs/audit-2026-04-29-day2/FINDINGS.md`)
+flagged 5 false-completions in `v0.18.0-saas-base` plus 13 Tier C
+chat-tool security items and 6 Tier E auth/ops items. All shipped in
+`v0.18.1-saas-base`.
+
+New config keys (set via env or Settings UI):
+
+| Key | Default | Purpose |
+|---|---|---|
+| `chat_tool_call_timeout_s` | `10.0` | Per-call wall-clock cap on the chat-tool dispatcher. |
+| `chat_tool_max_total_ms` | `12000` | Per-turn ceiling for the entire `call_with_tools` loop (Phase 17b reads this). |
+| `log_json_enabled` | `false` | Flip on for production: stdlib JSON formatter on every root-logger handler, with `correlation_id` as a top-level field. |
+
+Auth-boundary invariants (enforced in code):
+
+* **Default-PIN auto-login refused** — daemon will not surface a
+  single-ROOT user whose PIN is still bootstrap `'000000'`. Operator
+  must explicitly log in once before auto-login resumes.
+* **JWT 30-day absolute cap** — tokens carry `orig_iat`; refresh
+  preserves it. Refresh chains die at 30 days regardless of per-token
+  TTL — re-auth required.
+* **Login lockout** — 5 failures inside 60 s on either the IP or the
+  username locks for 15 min. Client gets HTTP 429 + `Retry-After` +
+  `X-Error-Code: LOCKED_OUT`.
+* **CI placeholder secret refused at startup** — daemon won't boot
+  with `JWT_SECRET_KEY=ci-fixed-secret-do-not-reuse`. Set
+  `PHANTOM_ALLOW_CI_SECRET=1` to override (CI runs only).
+* **Multi-tenant deploys forbidden** — `chat_tool_dispatcher.get_sensor_status`
+  reads a process-global `ContextEngine`. Single-tenant only until
+  per-tenant `ContextEngine` lands. See `docs/phases/PHASE_17_CHAT_TOOLS.md`.
+
+Operator-facing utilities:
+
+* `python scripts/chroma_janitor.py [--dry-run]` — removes leaked
+  per-user collections AND orphan UUID-named filesystem dirs from
+  `chroma_data/`. Reports freed-bytes. Audit F-17 backlog (110 MiB on
+  the dev box) cleared with one run.
+* `python -m memory.strategic_memory.init_chroma_eager` warm-up runs
+  automatically at FastAPI lifespan startup so `/readyz` cold first
+  hit no longer pays the 2-3 s `list_collections` scan.
+
 ## What this guide doesn't cover yet
 
-Tracked under future phase-18 commits:
+Tracked under future phases:
 
-* **`structlog` JSON renderer** — the correlation filter is in place;
-  the renderer swap is one wiring change.
-* **Per-user rate limiter** — audit F-15. Will mount on `/auth/login/*`,
-  `/api/v1/chat/message`, and `/api/v1/voice/*` once those routes are
-  authenticated (F-08, F-09 deferred work).
-* **Authenticated-TestClient fixture** — unblocks F-08 / F-09 voice +
-  settings auth gates.
-* **Counter integration** — chat / voice paths must call
-  `chat_messages_total.inc(role=...)` etc. so `/metrics` carries real
-  signal. Today the counters are wired but always zero.
+* **Phase 17b chat `call_with_tools` loop** — Tier D from the Day-2
+  audit. The dispatcher is consolidated and the 5 read-only handlers
+  ready; `routes_chat._build_ai_response` swap pending. Tag
+  `v0.19.0-jarvis-online` lands here.
+* **F-58 subprocess sandbox** — `agent/actions/{net,bash,notify}` and
+  `agent/mcp/adapter` to route through a future `safety/sandbox.py`.
+  Tier E follow-up.
+* **F-40 `realpath`-based workspace check** — `fs.write` should reject
+  symlink path components via `realpath` rather than `abspath`. Tier E
+  follow-up.
+* **Frontend Settings UI auto-render** — D2-FE1..FE5; the new Day-2
+  config keys (`chat_tool_call_timeout_s`, `chat_tool_max_total_ms`,
+  `log_json_enabled`) need to surface in the SettingsPanel via the
+  `CATEGORY_SPEC` metadata path.
+* **Per-tenant `ContextEngine`** — required before any multi-tenant
+  cloud deploy (Day-2 D2-I2 invariant).

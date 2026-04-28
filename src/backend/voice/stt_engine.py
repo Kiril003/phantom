@@ -103,6 +103,12 @@ class STTResult:
     # fails, populate `engine_error` with a short reason; the route
     # handler returns 503 instead of pretending the user said nothing.
     engine_error: Optional[str] = None
+    # Day-4 Block ID-1 (ADR-ID-001): the schema slot for the Day-5 ML
+    # speaker resolver. UUID string when matched against an enrolled
+    # User row, ``None`` when no match / no enrolment / disabled. Day-4
+    # leaves this at the default — no provider code mutates it; the
+    # resolver call lives in `voice.pipeline` (ADR-ID-002 / Day-5 wires).
+    speaker_id: Optional[str] = None
 
     def to_dict(self) -> dict:
         out: dict = {
@@ -113,6 +119,11 @@ class STTResult:
         }
         if self.engine_error:
             out["engine_error"] = self.engine_error
+        # ADR-ID-001: omit when ``None`` so the WS frame size on the hot
+        # path is unchanged for the 99 % case (no enrolled speakers).
+        # Legacy clients that don't know about the field stay unaffected.
+        if self.speaker_id is not None:
+            out["speaker_id"] = self.speaker_id
         return out
 
 

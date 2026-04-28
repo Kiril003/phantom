@@ -8,3 +8,4 @@ export * from './memory';
 export * from './wardriving';
 export * from './settings';
 export * from './agent';
+export * from './voice';

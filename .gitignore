@@ -75,3 +75,11 @@ aihub_assets/
 aihub_assets_*/
 src/backend/test_script/
 src/frontend/chroma_data/
+
+# Ruflo / claude-flow swarm artifacts (Day-4 onwards)
+.claude/
+.claude-flow/
+.swarm/
+.swarm-temp/
+.ruflo-cache/
+.swarm.backup-*/

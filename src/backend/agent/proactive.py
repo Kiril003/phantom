@@ -155,6 +155,11 @@ class ProactiveLoop:
         self._success_streak: int = 0
         self._last_streak_trigger_at: datetime | None = None
         self._last_cycle_at: datetime | None = None
+        # Day-3 D3-D-2 — tick counter for the every-5th-cycle WS
+        # heartbeat. The original Day-2 implementation had the comment
+        # but emitted on every cycle — at the 30 s minimum interval
+        # that meant 120 broadcasts/h instead of 24.
+        self._cycle_n: int = 0
         # Phase 9.4a — at most one pending action awaiting user confirmation.
         # If a new decide returns another "confirm_with_user=true" while
         # one is pending, we overwrite (latest wins) and log — same decision
@@ -242,15 +247,19 @@ class ProactiveLoop:
                 continue
 
             self._last_cycle_at = _utcnow()
-            # Light indicator — rate-limited: only emit every 5th cycle so
-            # UIs can show "breathing" without log spam.
-            with contextlib.suppress(Exception):
-                from api.websocket_hub import hub
-                await hub.broadcast("agent.stream", "proactive.cycle", {
-                    "at": self._last_cycle_at.isoformat(),
-                    "enabled": True,
-                    "has_triggers": bool(self._recent_triggers),
-                })
+            self._cycle_n += 1
+            # Light indicator — rate-limited: only emit every 5th cycle
+            # so UIs can show "breathing" without log spam. Day-3 D3-D-2
+            # makes the comment match the behaviour — Day-2's tickcam
+            # emit was every cycle.
+            if self._cycle_n % 5 == 1:
+                with contextlib.suppress(Exception):
+                    from api.websocket_hub import hub
+                    await hub.broadcast("agent.stream", "proactive.cycle", {
+                        "at": self._last_cycle_at.isoformat(),
+                        "enabled": True,
+                        "has_triggers": bool(self._recent_triggers),
+                    })
 
             try:
                 await self._maybe_speak()

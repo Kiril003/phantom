@@ -98,6 +98,21 @@ def _safe_int(value: Any, *, lo: int, hi: int, default: int) -> int | None:
 _UNICODE_DANGER = "".join(
     chr(cp)
     for cp in (
+        # Day-3 D3-C-6 (audit-2026-04-30 NEW-SEC-07) extends the Day-2
+        # set with NUL, tab, soft hyphen, line / paragraph separators,
+        # and the Mongolian zero-width vowel separator. The N-sec
+        # walker found these slipping through `_safe_query_str` and
+        # landing in the SQL ILIKE clause; the bytestream reaches
+        # SQLite's bound-parameter layer fine but the LLM-side log /
+        # audit row can be visually corrupted by them. Normalise input
+        # to NFC at the entry point so attackers can't construct
+        # decomposed-form spoofs of allowed characters.
+        0x0000,  # NUL — SQLite bound params handle it but log lines truncate
+        0x0009,  # HORIZONTAL TAB — visual layout corruption in logs
+        0x00AD,  # SOFT HYPHEN — invisible inside Cyrillic substrings
+        0x180E,  # MONGOLIAN VOWEL SEPARATOR — zero-width, missed Day-2
+        0x2028,  # LINE SEPARATOR — splits log lines mid-row
+        0x2029,  # PARAGRAPH SEPARATOR — same as LINE SEPARATOR
         0x200B,  # ZERO WIDTH SPACE
         0x200C,  # ZERO WIDTH NON-JOINER
         0x200D,  # ZERO WIDTH JOINER
@@ -140,7 +155,12 @@ def _safe_query_str(value: Any, *, max_len: int = 200) -> tuple[str | None, str 
         return None, None
     if not isinstance(value, str):
         return None, "invalid_args"
-    s = value.strip()
+    # Day-3 D3-C-6: normalise to NFC before character-class checks so
+    # an attacker can't bypass the Cyrillic-homoglyph or RTL filter by
+    # supplying a decomposed form (LATIN A + COMBINING) that visually
+    # matches an allowed glyph but bypasses the codepoint blocklist.
+    import unicodedata as _ud
+    s = _ud.normalize("NFC", value).strip()
     if not s:
         return None, None
     if len(s) > max_len:

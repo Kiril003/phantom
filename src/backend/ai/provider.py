@@ -243,6 +243,19 @@ class AIRouter:
                 self._last_call_summary[prov_name] = {
                     "at": _utc_now_iso(), "success": True, "tool": None,
                 }
+                # Day-3 D3-E-6 (audit-2026-04-30 NEW-PERF-07): the
+                # `phantom_ai_router_fallthrough_total` counter has been
+                # registered since v0.18 but never incremented. Bump it
+                # whenever a fallback provider serves the call (i.e.
+                # primary failed first). Operators reading the metric
+                # can finally distinguish "primary stable" from "primary
+                # always cooling, fallback carrying load".
+                if is_fallback_attempt:
+                    try:
+                        from observability import ai_router_fallthrough_total
+                        ai_router_fallthrough_total.inc()
+                    except Exception:  # noqa: BLE001
+                        pass
                 return result
 
         # Both providers failed.

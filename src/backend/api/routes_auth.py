@@ -22,6 +22,8 @@ from security.auth import (
     authenticate_rfid,
     get_current_user,
     hash_secret,
+    is_default_pin,
+    is_loopback_host,
     require_auth,
 )
 from security.jwt_manager import TokenPayload, create_token, refresh_token as jwt_refresh
@@ -207,6 +209,27 @@ async def login_pin(
             detail="Invalid username or PIN",
             headers={"X-Error-Code": "PIN_INVALID"},
         )
+    # Day-3 D3-A-1: bootstrap default-PIN login is loopback-only.
+    # `phantom`/`000000` MUST NOT be reachable from a remote host even
+    # though the underlying password hash matches — operator rotates
+    # via the console, then remote login resumes.
+    client_host = (request.client.host if request.client else None)
+    if is_default_pin(user.pin_hash) and not is_loopback_host(client_host):
+        login_lockout.register_failure(ip_key)
+        login_lockout.register_failure(user_key)
+        logger.warning(
+            "Default-PIN login refused from %r (user=%s) — rotate via "
+            "console before allowing remote login.",
+            client_host, user.username,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=(
+                "Bootstrap default PIN cannot be used from a remote "
+                "host. Rotate via console first."
+            ),
+            headers={"X-Error-Code": "PIN_DEFAULT_REMOTE_FORBIDDEN"},
+        )
     login_lockout.register_success(ip_key)
     login_lockout.register_success(user_key)
     token, expires_at = create_token(user.id, user.username, user.role)
@@ -230,8 +253,23 @@ async def refresh(
     Accepts tokens expired within the 1-hour grace period (uses jwt_refresh).
     Does NOT require a valid (non-expired) token — this is intentional so
     the client can silently refresh shortly after expiry.
+
+    Day-3 D3-A-3: lockout enforced here too. F-15's Day-2 closure missed
+    this third unauthenticated auth route, so an attacker who'd burned
+    through the `/login/pin` lockout could pivot to spraying tokens
+    against `/refresh` (signature-only failures cost the same as PIN
+    failures from the attacker's perspective). We register failures on
+    BOTH the IP key and the token's `sub` claim when extractable.
     """
-    from jose import JWTError
+    from jose import JWTError, jwt
+    from security import login_lockout
+    from security.jwt_manager import _ALGORITHM, _secret
+
+    ip_key = _ip_key(request)
+    locked, remaining = login_lockout.is_locked(ip_key)
+    if locked:
+        raise _lockout_response(remaining)
+
     # Extract raw token the same way require_auth does
     raw: Optional[str] = None
     if creds:
@@ -241,19 +279,48 @@ async def refresh(
     if not raw:
         raw = request.cookies.get("phantom_token")
     if not raw:
+        # No token at all → IP-only attempt (no user to attribute).
+        login_lockout.register_failure(ip_key)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="No token provided",
             headers={"WWW-Authenticate": "Bearer"},
         )
+
+    # Best-effort user-key extraction — verify signature + algorithm,
+    # skip exp so we can attribute failures even when the token is just
+    # expired. A signature-invalid token still attributes to ip_key
+    # only (we cannot trust the embedded `sub`).
+    user_key: Optional[str] = None
+    try:
+        sig_ok = jwt.decode(
+            raw, _secret(),
+            algorithms=[_ALGORITHM],
+            options={"verify_exp": False},
+        )
+        sub = sig_ok.get("sub")
+        if sub:
+            user_key = f"user_id:{sub}"
+            locked, remaining = login_lockout.is_locked(user_key)
+            if locked:
+                raise _lockout_response(remaining)
+    except JWTError:
+        user_key = None  # signature invalid → cannot trust `sub`
+
     try:
         new_token, expires_at = jwt_refresh(raw)
     except JWTError as exc:
+        login_lockout.register_failure(ip_key)
+        if user_key:
+            login_lockout.register_failure(user_key)
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail=f"Cannot refresh token: {exc}",
             headers={"WWW-Authenticate": "Bearer"},
         ) from exc
+    login_lockout.register_success(ip_key)
+    if user_key:
+        login_lockout.register_success(user_key)
     response.set_cookie(
         "phantom_token", new_token,
         httponly=True, samesite="lax",

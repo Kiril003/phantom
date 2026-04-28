@@ -93,6 +93,36 @@ def is_default_pin(pin_hash: Optional[str]) -> bool:
     return verify_secret(_DEFAULT_PIN, pin_hash)
 
 
+# Day-3 D3-A-1 (audit-2026-04-30 Tier A): F-07's Day-2 closure only
+# patched the auto-login path; the explicit `/auth/login/pin` route
+# still accepts `phantom`/`000000` from anyone on the LAN. The fix is
+# loopback-only bootstrap login: the operator sitting at the kiosk (or
+# `docker compose exec`'d into the container) can rotate, but a remote
+# attacker that hits `/login/pin` from a non-loopback origin gets 403.
+# After rotation `is_default_pin` returns False → all hosts accepted.
+_LOOPBACK_HOSTS: frozenset[str] = frozenset({
+    "127.0.0.1",
+    "::1",
+    "localhost",
+    # Starlette TestClient emits this in `request.client.host`; tests
+    # MUST keep working without per-test loopback monkeypatching.
+    "testclient",
+})
+
+
+def is_loopback_host(host: Optional[str]) -> bool:
+    """True iff ``host`` is one of the loopback aliases (or the in-process
+    Starlette TestClient sentinel). Used by `/auth/login/pin` to gate the
+    bootstrap default-PIN login to console operators only.
+
+    Single source of truth so D3-A-2 (XFF awareness in O-2) can extend
+    it without touching the route.
+    """
+    if not host:
+        return False
+    return host in _LOOPBACK_HOSTS
+
+
 async def get_auto_login_user(db: AsyncSession) -> Optional[User]:
     """
     Return the single ROOT user if only one user exists and auto-login is enabled.

@@ -24,10 +24,19 @@ coverage/
 .DS_Store
 
 # Secrets / persistent state — operators mount these as volumes.
+# Day-2 D2-D-G2 (audit-2026-04-29): exhaustive SQLite exclusion. The
+# dev daemon writes phantom.db at whatever cwd `init_db` runs from, so
+# the repo accumulates copies under src/backend/, src/frontend/,
+# src/backend/db/ over time. Each is potentially seeded with operator
+# data (sealed memories, behavioural model, audit-log rows) and MUST
+# NOT reach the image. Glob covers future locations.
 .env
 .env.local
 src/backend/chroma_data/
-src/backend/db/phantom.db
+**/phantom.db
+**/phantom.db-journal
+**/phantom.db-shm
+**/phantom.db-wal
 src/backend/voice/models/
 
 # Already built tooling — heavy and re-built inside the frontend stage.

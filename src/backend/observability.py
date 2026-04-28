@@ -97,6 +97,104 @@ class CorrelationFilter(logging.Filter):
         return True
 
 
+# ── Day-2 (audit-2026-04-29 Tier E) — structured JSON log formatter ──────────
+#
+# The audit asked for "structlog JSON renderer wired on top of existing
+# CorrelationFilter". A full structlog adoption would touch every
+# logging call site; the pragmatic alternative is a stdlib-only JSON
+# `logging.Formatter` that ALSO honours CorrelationFilter (so existing
+# `logger.info(...)` calls flip to JSON without any code change) and a
+# config knob to opt in. Operators on a journal/Loki pipeline get
+# parsable output; local-dev keeps the human-readable default.
+
+
+class JsonFormatter(logging.Formatter):
+    """Render LogRecord as a single-line JSON object.
+
+    Fields:
+      - ``ts``: ISO-8601 UTC timestamp (millisecond precision).
+      - ``level``: standard level name (INFO/WARNING/...).
+      - ``logger``: dotted logger name.
+      - ``message``: rendered (interpolated) message string.
+      - ``correlation_id``: present when CorrelationFilter is installed
+        (otherwise omitted so a raw `logger.warning` call from a
+        startup hook doesn't carry a misleading "-").
+      - ``exc``: traceback text on `logger.exception(...)` calls.
+      - extra structured fields the caller passed via the `extra={}`
+        kwarg are merged in (only JSON-serialisable types — others are
+        coerced via `str()`).
+
+    Designed to be cheap: no `json.dumps` configuration tax — uses
+    ``ensure_ascii=False`` so Cyrillic / Ukrainian content lands intact
+    in the operator's grep window.
+    """
+
+    # The set of attributes the stdlib LogRecord constructor sets. Any
+    # *other* attribute on the record is treated as an `extra={}` field
+    # the caller wants surfaced in JSON.
+    _STD_ATTRS = frozenset({
+        "name", "msg", "args", "levelname", "levelno", "pathname",
+        "filename", "module", "exc_info", "exc_text", "stack_info",
+        "lineno", "funcName", "created", "msecs", "relativeCreated",
+        "thread", "threadName", "processName", "process", "message",
+        "asctime", "taskName",
+    })
+
+    def format(self, record: logging.LogRecord) -> str:
+        import json
+        from datetime import datetime, timezone as _tz
+
+        payload: dict[str, object] = {
+            "ts": datetime.fromtimestamp(record.created, tz=_tz.utc)
+                .isoformat(timespec="milliseconds")
+                .replace("+00:00", "Z"),
+            "level": record.levelname,
+            "logger": record.name,
+            "message": record.getMessage(),
+        }
+        cid = getattr(record, "correlation_id", None)
+        if cid is not None and cid != "-":
+            payload["correlation_id"] = cid
+        if record.exc_info:
+            payload["exc"] = self.formatException(record.exc_info)
+
+        for key, value in record.__dict__.items():
+            if key in self._STD_ATTRS or key.startswith("_"):
+                continue
+            if key in payload:  # don't clobber the canonical fields
+                continue
+            # `correlation_id` is handled by the canonical-fields block
+            # above; the `-` placeholder MUST stay out of the JSON row.
+            if key == "correlation_id":
+                continue
+            try:
+                json.dumps(value)
+                payload[key] = value
+            except (TypeError, ValueError):
+                payload[key] = str(value)
+
+        return json.dumps(payload, ensure_ascii=False, default=str)
+
+
+def install_json_logging(level: str | int = logging.INFO) -> None:
+    """Replace every root-logger handler's formatter with JsonFormatter.
+
+    Idempotent — calling twice doesn't double-install. Adds a
+    CorrelationFilter on the root logger if one isn't already attached
+    so JSON rows always carry the per-request correlation id when the
+    middleware has it.
+    """
+    root = logging.getLogger()
+    if isinstance(level, str):
+        level = getattr(logging, level.upper(), logging.INFO)
+    root.setLevel(level)
+    fmt = JsonFormatter()
+    for handler in root.handlers:
+        handler.setFormatter(fmt)
+    if not any(isinstance(f, CorrelationFilter) for f in root.filters):
+        root.addFilter(CorrelationFilter())
+
+
 # ── Metric primitives ─────────────────────────────────────────────────────────
 
 

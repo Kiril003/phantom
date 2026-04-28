@@ -477,6 +477,14 @@ class PhantomConfig(BaseSettings):
     # tolerable chat-turn budget.
     chat_tool_max_total_ms: int = 12_000
 
+    # Day-2 (audit-2026-04-29 Tier E): structured JSON log output.
+    # Defaults to off so local-dev keeps the human-readable line format
+    # (`HH:MM:SS [host] [LEVEL] logger: message`); production deploys
+    # flip this on so journal/Loki/CloudWatch pipelines get parsable
+    # rows with correlation_id surfaced as a top-level field. Wired in
+    # main.py lifespan after the standard reconfigure; idempotent.
+    log_json_enabled: bool = False
+
     # ── System ────────────────────────────────────────────────────────────────
     system_hostname: str = "phantom"
     system_sensor_log_retention_days: int = 7

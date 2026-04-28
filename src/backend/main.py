@@ -212,6 +212,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     for h in logging.getLogger().handlers:
         h.setFormatter(new_fmt)
 
+    # Day-2 (audit-2026-04-29 Tier E): production deploys opt into a
+    # stdlib JSON formatter that surfaces correlation_id as a top-level
+    # field. Local dev keeps the human-readable Formatter set above.
+    if config.log_json_enabled:
+        try:
+            from observability import install_json_logging
+            install_json_logging(level=config.log_level)
+            logger.info("JSON log formatter installed")
+        except Exception as exc:
+            logger.warning("JSON log formatter setup failed: %s", exc)
+
     # Ensure at least one user exists (creates default ROOT 'phantom'/000000)
     from db.database import get_session
     from security.auth import ensure_default_user

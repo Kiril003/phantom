@@ -66,20 +66,23 @@ async def _context_loop() -> None:
             transition = state_machine.evaluate(snapshot)
             if transition:
                 context_engine.set_state(transition.to_state)
-                await hub.broadcast("state", "transition", {
-                    "from": transition.from_state,
-                    "to": transition.to_state,
-                    "trigger": transition.trigger,
-                    "timestamp": transition.timestamp,
-                    "auto": transition.auto,
-                })
-                # Drive OLED eyes with the new state so the face animator
-                # transitions within one frame of the FSM decision.
-                try:
-                    from vision.oled_animator import oled_animator
-                    oled_animator.set_system_state(transition.to_state)
-                except Exception:
-                    pass
+                # Day-3 P-3 (audit-2026-04-30 F-02/F-03): emit on the
+                # canonical event so the single `dispatch/state_broadcaster`
+                # subscriber handles both WS broadcast + OLED eye drive.
+                # The duplicated inline payload at the active-batch site
+                # below is replaced by the same emit call.
+                from core.event_bus import event_bus
+                from dispatch.state_broadcaster import StateTransitionEvent
+                event_bus.emit(
+                    "state.transition",
+                    StateTransitionEvent(
+                        from_state=transition.from_state,
+                        to_state=transition.to_state,
+                        trigger=transition.trigger,
+                        timestamp=transition.timestamp,
+                        auto=transition.auto,
+                    ),
+                )
             decision_tree.evaluate(snapshot)
             await hub.broadcast("sensor", "snapshot", {"snapshot": snapshot})
         except Exception as exc:
@@ -102,18 +105,21 @@ async def _start_serial_bridge() -> None:
         transition = state_machine.evaluate(snapshot)
         if transition:
             context_engine.set_state(transition.to_state)
-            await hub.broadcast("state", "transition", {
-                "from": transition.from_state,
-                "to": transition.to_state,
-                "trigger": transition.trigger,
-                "timestamp": transition.timestamp,
-                "auto": transition.auto,
-            })
-            try:
-                from vision.oled_animator import oled_animator
-                oled_animator.set_system_state(transition.to_state)
-            except Exception:
-                pass
+            # Day-3 P-3: same emit as the background-batch loop above.
+            # Single subscriber → no duplicated payload, single source
+            # of truth for the WS contract + OLED side effect.
+            from core.event_bus import event_bus
+            from dispatch.state_broadcaster import StateTransitionEvent
+            event_bus.emit(
+                "state.transition",
+                StateTransitionEvent(
+                    from_state=transition.from_state,
+                    to_state=transition.to_state,
+                    trigger=transition.trigger,
+                    timestamp=transition.timestamp,
+                    auto=transition.auto,
+                ),
+            )
         await hub.broadcast("sensor", "snapshot", {"snapshot": snapshot})
 
         # Ingest wardriving data when WiFi + GPS fix present
@@ -326,6 +332,32 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Register chat WebSocket handlers
     register_chat_ws_handlers()
+
+    # Day-3 P-3 (audit-2026-04-30 F-02 + F-03): collapse the two
+    # duplicated state-transition broadcasts (background-batch loop
+    # above + active-batch loop in `_start_serial_bridge.on_batch`)
+    # into a single subscriber on the EventBus's `state.transition`
+    # event. The two loops now `event_bus.emit(...)`; this subscriber
+    # ships the WS broadcast + OLED eye drive once.
+    try:
+        from core.event_bus import event_bus
+        from dispatch import register_state_broadcaster
+
+        def _set_oled_state(state: str) -> None:
+            try:
+                from vision.oled_animator import oled_animator
+                oled_animator.set_system_state(state)
+            except Exception:
+                # OLED dep missing on cloud / dev deploys is acceptable;
+                # the subscriber's own try/except logs the path.
+                raise
+
+        register_state_broadcaster(
+            event_bus, hub.broadcast, set_oled_state=_set_oled_state,
+        )
+        logger.info("dispatch.state_broadcaster wired")
+    except Exception as exc:
+        logger.warning("dispatch state_broadcaster wiring failed: %s", exc)
 
     # Start serial bridge (non-blocking, will retry on error).
     # Skipped on dev machines via PHANTOM_SERIAL_ENABLED=false.

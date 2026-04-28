@@ -778,17 +778,30 @@ def _classify_provider_exception(provider_name: str, exc: Exception):
     """
     from ai.tool_use import ToolErrorKind
 
+    # Audit-2026-04-28 F-34: previously these blocks swallowed every
+    # exception silently. A bad import (Pydantic upgrade, missing dep)
+    # would mask quota cooling — the router would then hammer the
+    # provider at full rate and burn the API key. Narrow to ImportError
+    # and log loudly so the failure is observable.
     if provider_name == "gemini":
         try:
             from ai.gemini_provider import _classify_gemini_error
             return _classify_gemini_error(exc)
-        except Exception:  # pragma: no cover — defensive
+        except ImportError:
+            logger.exception(
+                "provider.classify: gemini classifier unavailable — "
+                "treating %r as NETWORK (quota cooling disabled)", exc,
+            )
             return ToolErrorKind.NETWORK, True, None
     if provider_name == "ollama":
         try:
             from ai.ollama_provider import _classify_ollama_error
             return _classify_ollama_error(exc)
-        except Exception:  # pragma: no cover
+        except ImportError:
+            logger.exception(
+                "provider.classify: ollama classifier unavailable — "
+                "treating %r as NETWORK", exc,
+            )
             return ToolErrorKind.NETWORK, True, None
     if isinstance(exc, asyncio.TimeoutError):
         return ToolErrorKind.TIMEOUT, True, None

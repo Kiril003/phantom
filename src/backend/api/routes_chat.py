@@ -71,16 +71,26 @@ class SendMessageRequest(BaseModel):
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
 def _serialize_message(msg: ChatMessage) -> dict[str, Any]:
-    meta = {}
-    attachments = []
+    # Audit-2026-04-28 F-66: previously these blocks swallowed JSON parse
+    # errors silently, masking corrupted rows as empty bubbles. Log at
+    # WARNING with the offending message id so future schema bugs are
+    # observable instead of degrading the UI invisibly.
+    meta: dict[str, Any] = {}
+    attachments: list[Any] = []
     try:
         meta = json.loads(msg.metadata_json or "{}")
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning(
+            "chat.serialize: metadata_json corrupt for msg=%s — %s",
+            msg.id, exc,
+        )
     try:
         attachments = json.loads(msg.attachments_json or "[]")
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning(
+            "chat.serialize: attachments_json corrupt for msg=%s — %s",
+            msg.id, exc,
+        )
     return {
         "id": msg.id,
         "session_id": msg.session_id,

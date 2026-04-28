@@ -667,11 +667,21 @@ async def import_settings(
                 continue
             await settings_repo.save(key, after, user_id=user.id)
             imported += 1
-        except Exception:
-            # Best-effort rollback of in-memory mutation.
+        except Exception as exc:
+            # Best-effort rollback of in-memory mutation. Audit-2026-04-28
+            # F-42: surface the failure so operators can tell which rows
+            # actually didn't roll back instead of just bumping the
+            # "skipped" count opaquely.
+            logger.warning(
+                "settings.import: failed for key=%r value=%r — %s",
+                key, value, exc,
+            )
             try:
                 config.apply_overrides({key: before})
-            except Exception:
-                pass
+            except Exception as rb_exc:
+                logger.warning(
+                    "settings.import: rollback failed for key=%r — %s",
+                    key, rb_exc,
+                )
             skipped += 1
     return {"ok": True, "imported_count": imported, "skipped": skipped}

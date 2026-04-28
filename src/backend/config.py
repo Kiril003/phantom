@@ -4,10 +4,13 @@ All settings come from environment, .env file, or SQLite DB overrides.
 """
 from __future__ import annotations
 
+import logging
 from typing import Any, Literal
 
 from pydantic import AliasChoices, Field, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+_logger = logging.getLogger(__name__)
 
 
 class PhantomConfig(BaseSettings):
@@ -447,18 +450,27 @@ class PhantomConfig(BaseSettings):
     def apply_overrides(self, overrides: dict[str, Any]) -> None:
         """
         In-place mutate config fields. Values that fail Pydantic validation are
-        silently skipped (kept as the existing value) so a single bad override
-        can't crash startup.
+        skipped (kept as the existing value) so a single bad override can't
+        crash startup. Failures are logged at WARNING (audit-2026-04-28 F-38);
+        previously they were swallowed silently, so a malformed PUT/import
+        was reported as accepted while the value silently rolled back.
 
         Persistence is handled separately by `db.settings_repo.save(...)`.
         """
         for key, value in overrides.items():
             key_attr = key.replace(".", "_")
-            if hasattr(self, key_attr):
-                try:
-                    setattr(self, key_attr, value)
-                except Exception:
-                    pass
+            if not hasattr(self, key_attr):
+                _logger.warning(
+                    "config.apply_overrides: unknown key %r — skipped", key
+                )
+                continue
+            try:
+                setattr(self, key_attr, value)
+            except Exception as exc:
+                _logger.warning(
+                    "config.apply_overrides: rejected %s=%r — %s",
+                    key_attr, value, exc,
+                )
 
     # Back-compat alias — the old name lied (it never touched the DB).
     apply_db_overrides = apply_overrides

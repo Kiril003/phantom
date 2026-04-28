@@ -347,5 +347,49 @@ Pytest sweep 1397/1397 green (`+21` vs HEAD~ baseline 1376
 post-W-2b/X-3). Wave-1 progress: 12/13. Remaining: IDB-1
 (multi-user single-mode pytest).
 
+## 2026-05-01 — IDB-1 DONE (13/13 Wave-1, **WAVE-1 COMPLETE**)
+
+Multi-user pytest under deployment_mode='single' per
+ADR-IDB-001. Closes audit `IDB-D-1` (multi-user invariants
+unpinned). The phrase "multi-tenant" in the Day-2 D2-I2
+invariant is loaded — multiple SEPARATE customer organisations
+on one daemon. PHANTOM's single-device case is *single-tenant,
+multi-USER*: one Radxa box running for a family of 4, each
+with their own User row + chat history + standing orders. The
+schema has always supported it (every chat / SO row keys on
+`User.id`); IDB-1 PINS the contract so a future refactor that
+regresses cross-user isolation fails CI immediately.
+
+5 tests at `tests/test_phase_idb1_multi_user_single_mode.py`:
+
+- `config.deployment_mode` defaults to `'single'`.
+- `_refuse_unsupported_deployment_mode()` does NOT raise just
+  because >1 User row exists — single-tenant + multi-user is a
+  legitimate deployment topology.
+- Two distinct users (root + operator from conftest fixtures)
+  each list ONLY their own sessions through GET
+  `/chat/sessions` — no cross-user leak in payload OR
+  serialised user_id field.
+- User A asking for User B's session messages returns 404
+  (NOT 200 with leaked content). The 404 body is also asserted
+  not to contain the private content as a belt-and-braces
+  check.
+- GET `/auth/me` returns the bearer-token's user, not the
+  first User row in the table; bodies for two distinct tokens
+  must differ.
+
+Test seeds rows directly via SQLAlchemy + `get_session()`
+(avoiding the heavy AI-provider call path of `send_message`)
+and tears down on each test exit so no cross-test pollution.
+
+Pytest 5/5 green. **Wave-1 13/13 COMPLETE.** Wave-2 next:
+V-1 (Tauri scaffold), V-5 (lifespan asyncio.gather), V-6
+(Histogram primitive), W-2 (ChatScene composer + 6 presets),
+W-2c (backend scene_kind picker), W-3 (+ button + AttachDrawer),
+W-3b (Settings accordions), W-4 (DynamicPicker), W-5 (hardware
+tier + voice rAF), Y-1/Y-2/Y-5 (sandbox), X-1/X-2/X-4
+(orchestrator), Z-1/Z-2 (AI Hub), FACTS-1, IDB-2/IDB-3,
+T-1/T-2/T-3.
+
 ---
 

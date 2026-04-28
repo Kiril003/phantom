@@ -422,14 +422,49 @@ def create_app() -> FastAPI:
         redoc_url="/redoc" if config.debug else None,
     )
 
-    # CORS
+    # CORS — audit-2026-04-28 F-12: drop wildcard methods/headers in favour of
+    # an explicit allow-list. Combined with `samesite="lax"` cookies and
+    # `allow_credentials=True`, the wildcard previously let any allow-listed
+    # origin drive arbitrary state-changing requests with the user's session.
     app.add_middleware(
         CORSMiddleware,
         allow_origins=config.cors_origins,
         allow_credentials=True,
-        allow_methods=["*"],
-        allow_headers=["*"],
+        allow_methods=["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+        allow_headers=[
+            "authorization",
+            "content-type",
+            "x-error-code",
+            "x-correlation-id",
+            "x-requested-with",
+        ],
     )
+
+    # Audit-2026-04-28 F-13 — baseline security headers on every response.
+    # Defence-in-depth for the embedded UI on the device today and a hard
+    # requirement before any cloud / multi-tenant exposure.
+    @app.middleware("http")
+    async def _phantom_security_headers(request, call_next):
+        response = await call_next(request)
+        response.headers.setdefault("X-Frame-Options", "DENY")
+        response.headers.setdefault("X-Content-Type-Options", "nosniff")
+        response.headers.setdefault("Referrer-Policy", "no-referrer")
+        response.headers.setdefault(
+            "Strict-Transport-Security",
+            "max-age=31536000; includeSubDomains",
+        )
+        response.headers.setdefault(
+            "Content-Security-Policy",
+            "default-src 'self'; "
+            "connect-src 'self' ws: wss: http: https:; "
+            "img-src 'self' data: blob: https:; "
+            "media-src 'self' blob: data:; "
+            "style-src 'self' 'unsafe-inline'; "
+            "script-src 'self' 'unsafe-inline'; "
+            "font-src 'self' data:",
+        )
+        response.headers.setdefault("Permissions-Policy", "interest-cohort=()")
+        return response
 
     # API routers
     prefix = "/api/v1"

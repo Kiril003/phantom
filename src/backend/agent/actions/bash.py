@@ -28,12 +28,26 @@ class BashRun(Action):
         argv, sandbox_active = wrap_shell_cmd(self.cmd, self.sandboxed)
         timeout = min(self.timeout_s, _HARD_TIMEOUT_S)
 
+        # Audit-2026-04-28 F-10c: scrub environment so the spawned shell
+        # cannot read JWT_SECRET_KEY / AI_GEMINI_API_KEY / etc. inherited
+        # from the daemon process. Keep PATH so firejail and /bin/sh
+        # resolve, plus a sane HOME (the agent workspace) and a UTF-8
+        # locale so common tools don't garble output.
+        scrubbed_env = {
+            "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+            "HOME": ctx.workspace_dir,
+            "LANG": "C.UTF-8",
+            "LC_ALL": "C.UTF-8",
+            "TERM": "dumb",
+        }
+
         proc: asyncio.subprocess.Process | None = None
         try:
             proc = await asyncio.create_subprocess_exec(
                 *argv,
                 stdout=asyncio.subprocess.PIPE,
                 stderr=asyncio.subprocess.PIPE,
+                env=scrubbed_env,
             )
             try:
                 stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=timeout)

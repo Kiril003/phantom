@@ -295,7 +295,12 @@ class PhantomConfig(BaseSettings):
 
     # ── Agent (Phase 9.1 Cognitive Seed) ─────────────────────────────────────
     agent_enabled: bool = True
-    agent_risk_tolerance: int = 5            # caps executable actions: 1/3/5/7
+    # Audit-2026-04-28 F-10c: default tolerance lowered from 5 (MEDIUM) to
+    # 3 (LOW). The agent loop now blocks bash.run / net.scan / fs.write
+    # by default; operator must explicitly raise the slider in Settings
+    # to authorise MEDIUM actions. Mitigates blast radius until the full
+    # linux/dangerous_patterns.py blocklist + UI confirm pipeline lands.
+    agent_risk_tolerance: int = 3            # caps executable actions: 1/3/5/7
     agent_workspace_dir: str = "~/phantom/workspace"
     agent_max_actions_per_task: int = 20
     agent_max_elapsed_s_per_task: int = 600

@@ -579,3 +579,86 @@ components/chat/scenes/`).
 
 ---
 
+## 2026-05-02 02:50 CEST — Wave-2 W-2 DONE (ChatScene composer + 6 panels)
+
+Closes ADR-CS-001 / ADR-CS-002 (chat-liveness cluster). The W-1
+type contract grows React surfaces: every ChatMessage with a
+`scene` envelope renders through a typed composer instead of
+the legacy ResponseRenderer switch.
+
+Files (frontend):
+
+  src/frontend/src/components/chat/scenes/
+    ChatScene.tsx                — composer; exhaustive panel switch;
+                                    stagger clamp [0, 240] ms;
+                                    sequential | cascade | instant
+                                    reveal policies; data-* attrs
+                                    expose scene.kind / reveal.policy /
+                                    stagger so downstream styling can
+                                    target without re-reading props.
+    panels/SceneTextPanel.tsx           — pre-formatted markdown body.
+    panels/SceneListPanel.tsx           — label/value list with
+                                          aria-labelled trend glyphs
+                                          (up/down/stable).
+    panels/SceneMapPinPanel.tsx         — text marker manifest with
+                                          empty-state placeholder
+                                          ("no markers"). Day-5 swaps
+                                          for live MapLibre embed
+                                          BEHIND the same data shape.
+    panels/ScenePlanStepPanel.tsx       — title + state badge + ETA
+                                          formatter (ms / s / m / h).
+                                          NB: feeder = T-3 (Wave-2
+                                          standing-orders WS event
+                                          fan-out), so plan-scenes
+                                          stay sparse until then —
+                                          flagged in D-1 of
+                                          DAY4_BACKLOG_EXTENSIONS.md.
+    panels/SceneCodePreviewPanel.tsx    — flat <pre>; data-runnable
+                                          attr exposed for the future
+                                          Y-2 sandbox-run wiring.
+    panels/SceneIdentityCardPanel.tsx   — avatar + display_name +
+                                          5-segment trust bar (clamps
+                                          [0,1] defensively) + facts
+                                          list. **Privacy default:**
+                                          sensitive facts render as
+                                          ••• with no value in the
+                                          DOM until explicitly revealed
+                                          (Day-5 reveal interaction).
+    index.ts                            — barrel.
+
+  src/frontend/src/components/chat/MessageBubble.tsx
+    — when `message.scene` is present → `<ChatScene>`. Otherwise the
+      pre-existing `<ResponseRenderer>` path renders byte-identical
+      to e12188f (ADR-CS-002 §60 invariant).
+
+17 vitest specs at `src/frontend/src/__tests__/scenes.test.tsx`:
+- All 6 panel kinds render without throwing (closed-enum
+  exhaustiveness empirically proven, complementing the TS
+  `_exhaustive: never` check).
+- Panel order from envelope → DOM preserved across all 6 kinds.
+- Stagger clamp: `9999` → 240; `-50` → 0; default 80 when reveal
+  omitted.
+- Scene root carries data-scene-kind / data-reveal-policy /
+  data-stagger-ms.
+- List trend glyphs have aria-labels for screen readers
+  ("trend: up" etc.).
+- Identity card sensitive-facts: literal value NOT in DOM,
+  ••• placeholder present, non-sensitive facts readable.
+- Identity card trust=99 (out of range) → clamp + render
+  without throwing.
+- MapPin empty markers → "no markers" placeholder.
+- PlanStep ETA formatter: 750ms / 2.4s / 3m / 2h buckets;
+  negative values omitted.
+- CodePreview runnable=true → data-runnable=1; runnable
+  omitted → data-runnable=0; data-language reflected.
+
+Vitest 17/17 green. tsc --noEmit clean across the run. No
+behavioural drift to legacy MessageBubble path (scene? optional;
+ResponseRenderer untouched).
+
+Next: W-2c (response_formatter scene_kind picker — backend
+counterpart that auto-promotes a chat reply into a typed scene
+envelope based on response_form / content shape).
+
+---
+

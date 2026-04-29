@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { User, Sparkles, Mic, Hash, Info } from 'lucide-react';
 import type { ChatMessage } from '@shared/types';
 import { ResponseRenderer } from './ResponseRenderer';
+import { ChatScene } from './scenes';
 import { getPhantomTransition } from '../../styles/motion';
 
 interface MessageBubbleProps {
@@ -95,7 +96,17 @@ export function MessageBubble({ message, streaming = false, compact = false }: M
               : '0 4px 20px -4px color-mix(in srgb, var(--accent) 10%, transparent), inset 0 1px 0 var(--glass-highlight)',
           }}
         >
-          <ResponseRenderer message={message} streaming={streaming} />
+          {/*
+            Day-4 W-2: when the message carries a typed `scene` envelope,
+            the ChatScene composer takes over from ResponseRenderer. Per
+            ADR-CS-002 §60 back-compat invariant, messages WITHOUT a scene
+            still render byte-identical to e12188f via ResponseRenderer.
+          */}
+          {message.scene ? (
+            <ChatScene scene={message.scene} />
+          ) : (
+            <ResponseRenderer message={message} streaming={streaming} />
+          )}
           {streaming && (
             <motion.span
               className="inline-block align-middle ml-1"

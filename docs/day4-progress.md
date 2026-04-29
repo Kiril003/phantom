@@ -1252,3 +1252,57 @@ will activate when X-3 ships).
 
 ---
 
+## 2026-05-02 08:55 CEST — Wave-2 X-4 DONE (budget split + gather-no-cancel)
+
+ADR-ORC-004 + ADR-ORC-005. Closes audit U3-ORCH-H4 (budget
+exhaustion failure mode).
+
+  src/backend/ai/agents/budget.py (NEW):
+    BudgetSplit dataclass — (per_sub_ms, merge_reserve_ms).
+    PER_SUB_FLOOR_MS = 500.
+    split(total_ms, k, merge_reserve_ms, *, floor_ms=500)
+      Canonical split: split(12000, 3, 1500) → (3500, 1500).
+      Floor enforcement: when natural split < 500, BOTH fields
+      clamp to floor so decide_mode can spot the degenerate case
+      and route to single-turn.
+      Defensive: k=0 → (floor, floor); negative total → (floor,
+      floor); non-int inputs raise TypeError.
+    LeafTimeout sentinel.
+    gather_with_deadline(coros, *, deadline_s)
+      Uses asyncio.wait(timeout=, return_when=ALL_COMPLETED) —
+      NEVER cancels surviving tasks (ADR-ORC-005 invariant).
+      Returns (results: list, timed_out: list[int]).
+        - completed coro → its result in the slot
+        - completed-with-exception → exception object in the slot
+          (orchestrator merge fold reads .ok=False from this)
+        - timed-out → LeafTimeout sentinel + index in timed_out
+      deadline_s ≤ 0 → synthesises LeafTimeout for every coro
+      without spawning work.
+      Outer cancel cascades to children (proper cleanup).
+
+13 X-4 contract tests: budget split happy path, floor clamp, k=0,
+negative total, dataclass shape, type errors, gather completes-in-
+time, partial-timeout preserves done leaves, exception-in-slot,
+empty coros, zero-deadline synthesis, timed_out indices match
+results indices.
+
+47/47 X-1+X-2+X-3+X-4 sweep green.
+
+The orchestrator scaffold is now feature-complete for the X-3 wiring:
+- decide_mode() picks single | parallel-K (X-1)
+- fresh_sub_nonce() + envelope_key_for_sub() per leaf (X-2)
+- sanitize_leaf_draft() defence in depth (X-2)
+- merge_envelope_key() for the merge LLM (X-2)
+- split() computes per-leaf budget (X-4)
+- gather_with_deadline() runs leaves with no-cancel timeout (X-4)
+- AST gate guards every ai/agents/** file (X-3, shipped)
+
+Day-4 ships the SCAFFOLD; routes_chat wiring + sub_agent.run_leaf
+implementation are X-3+ work (Day-5 if Wave-2 doesn't reach X-3).
+The decide_mode hard-coded 'single' default keeps behavioural drift
+at ZERO until then.
+
+Next: Z-1 (AIHub class + ProviderCapability + locality-first stub).
+
+---
+

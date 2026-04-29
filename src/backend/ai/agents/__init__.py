@@ -19,6 +19,13 @@ import from `agent.actions`, `agent.runtime`, `agent.proactive`,
 to `ai/agents/**` per ADR-IGD-001 (X-3 enforces this with an AST gate
 that's already shipped at tests/test_phase_x3_ai_agents_import_gate.py).
 """
+from .budget import (
+    BudgetSplit,
+    LeafTimeout,
+    PER_SUB_FLOOR_MS,
+    gather_with_deadline,
+    split,
+)
 from .nonce import (
     envelope_key_for_sub,
     fresh_sub_nonce,
@@ -32,11 +39,16 @@ from .orchestrator import (
 )
 
 __all__ = [
+    "BudgetSplit",
+    "LeafTimeout",
     "OrchestratorMode",
+    "PER_SUB_FLOOR_MS",
     "decide_mode",
     "envelope_key_for_sub",
     "fresh_sub_nonce",
+    "gather_with_deadline",
     "merge_envelope_key",
     "run_orchestrator",
     "sanitize_leaf_draft",
+    "split",
 ]

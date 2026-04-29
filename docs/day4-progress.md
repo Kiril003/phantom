@@ -1306,3 +1306,75 @@ Next: Z-1 (AIHub class + ProviderCapability + locality-first stub).
 
 ---
 
+## 2026-05-02 09:15 CEST — Wave-2 Z-1 DONE (AIHub + locality-first pick)
+
+ADR-HUB-001..003. AIHub is a PEER of AIRouter (not a wrapper) — when
+the hub picks Gemini/Ollama for chat, dispatch (Z-3, Day-5) delegates
+back to ai_router.generate so the cooling/quota state machine
+remains the single source of truth.
+
+  src/backend/ai/hub.py (NEW):
+    ProviderCapability dataclass (frozen, 7 fields per ADR):
+      provider, task_class, modality, latency_ms_p50, quality_tier,
+      locality, available.
+    NoCapabilityError                — raised when no capability
+                                        matches; distinct from
+                                        BlockedQuotaError.
+    AIHub class:
+      register(cap)                  — idempotent (re-register on the
+                                        same (provider, task_class)
+                                        key OVERWRITES). Rejects
+                                        non-ProviderCapability arg,
+                                        empty provider, negative
+                                        latency.
+      pick(task_class, prefer)       — locality-first auto policy
+                                        (prefers local; within bucket
+                                        prefers lowest p50). Explicit
+                                        prefer="local"/"remote"
+                                        filters to that bucket.
+                                        Records each pick in the
+                                        decision ring with `changed`
+                                        flag set on FIRST observation
+                                        of a new provider for the
+                                        task_class (the route_decision
+                                        Counter only fires on flips).
+      list_providers()               — snapshot for /api/v1/hub/providers.
+      route_state(limit)             — last N decisions (clamped
+                                        [1, 200]).
+      dispatch(...)                  — Day-4 STUB; raises
+                                        NotImplementedError until Z-3
+                                        (Day-5) wires it through.
+      reset_for_tests()              — pin helper.
+    ProviderHandle dataclass.
+    register_default_capabilities()  — registers Gemini (remote
+                                        balanced) + Ollama (local
+                                        fast) for chat + chat_subtask.
+                                        Idempotent so the lifespan
+                                        hook never blows up.
+    Lazy singleton get_ai_hub() + module-level __getattr__ so
+    `from ai.hub import ai_hub` resolves to the singleton.
+
+17 Z-1 contract tests:
+  - ProviderCapability frozen + 7 ADR fields exact set.
+  - register validates the 3 invariants (instance type, non-empty
+    provider, non-negative latency).
+  - register idempotent on (provider, task_class) key.
+  - pick auto prefers local; within bucket picks lowest p50;
+    explicit local/remote filters; raises NoCapabilityError on no
+    match AND on all-unavailable.
+  - route_state ring records changed=True on first pick, False on
+    repeated; limit clamped (no raise on degenerate inputs).
+  - dispatch stub raises NotImplementedError.
+  - get_ai_hub returns the same instance across calls.
+  - register_default_capabilities populates Gemini + Ollama for
+    chat + chat_subtask, all available.
+
+The hub is callable + tested but no production code path imports it
+yet — Z-2 (next) wires the /api/v1/hub/providers + /hub/route_state
+HTTP routes; Z-3 (Day-5) wires the dispatch path. Day-4 behavioural
+drift = ZERO.
+
+Next: Z-2 (/api/v1/hub/providers + /hub/route_state routes).
+
+---
+

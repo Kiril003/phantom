@@ -1,64 +1,100 @@
-/* PHANTOM OS — Design Tokens
- * Glass + Orb aesthetic per docs/VISUAL_SYSTEM.md.
- * Components use var(--...) exclusively — zero hardcoded colors.
+/* PHANTOM OS — Design Tokens (v2 — Sunrise Build)
+ *
+ * Two themes via [data-theme] attribute on <html>:
+ *   - "sunrise-warm" (default): bright amber/cream palette per Claude Design
+ *     handoff `docs/design-handoff/project/phantom-dna.css` — operator's
+ *     directive 2026-04-29 ("яскравий як життя").
+ *   - "cyberdeck-cold": legacy dark cyberdeck palette (kept as opt-in so
+ *     individual operators can swap from Settings › Theme without losing
+ *     the previous look entirely).
+ *
+ * Components keep using existing token NAMES (--surface-*, --glass-*,
+ * --ink-*, --line-*, --signal-*, --accent*) — only their VALUES move
+ * with the active theme. Net effect: zero call-site changes for the
+ * inversion; the whole UI follows.
  */
 
-:root {
-  /* ── Surfaces — depth layers ───────────────────────────────────────── */
-  --surface-base:     #020617;                 /* primary bg — deep slate */
-  --surface-deep:     #0a0f1a;                 /* panel bases */
-  --surface-raised:   #0f172a;                 /* raised cards */
-  --surface-void:     #000000;                 /* pure black — SHADOW / GHOST */
+:root,
+[data-theme="sunrise-warm"] {
+  /* ── Sunrise primary ramp (from phantom-dna.css) ──────────────────── */
+  --primary:           #f4af25;
+  --primary-soft:      #fbc66a;
+  --primary-deep:      #b07a10;
+  --primary-shadow:    #8a5e0a;
+  --orange:            #fb923c;
+  --coral:             #ef4444;
+  --coral-soft:        #f87171;
+  --coral-deep:        #b9201f;
 
-  /* ── Glass — translucent panels ───────────────────────────────────── */
-  --glass-subtle:       rgba(15, 23, 42, 0.4);
-  --glass-panel:        rgba(15, 23, 42, 0.6);
-  --glass-card:         rgba(15, 23, 42, 0.7);
-  --glass-elevated:     rgba(15, 23, 42, 0.85);
+  /* ── Surfaces — warm cream with amber highlights ──────────────────── */
+  --surface-base:      #f8f7f5;                 /* primary bg — warm off-white */
+  --surface-deep:      #f5f1ea;                 /* slightly cooler base */
+  --surface-raised:    #fdf6e9;                 /* raised cards — cream */
+  --surface-void:      #221c10;                 /* deep warm — SHADOW/GHOST stealth */
+  --surface-sunrise:   radial-gradient(ellipse 90% 70% at 50% -10%, #f4af25 0%, rgba(244,175,37,0) 70%),
+                       linear-gradient(180deg, #fdf6e9 0%, #f8f7f5 60%, #f5f1ea 100%);
+  --surface-coral:     radial-gradient(ellipse 90% 70% at 50% -10%, #ef4444 0%, rgba(239,68,68,0) 60%),
+                       radial-gradient(ellipse 80% 60% at 50% 120%, #f4af25 0%, rgba(244,175,37,0) 50%),
+                       linear-gradient(180deg, #fdf6e9 0%, #faf3ec 100%);
 
-  --glass-border:       rgba(255, 255, 255, 0.08);
-  --glass-border-hover: rgba(255, 255, 255, 0.16);
-  --glass-highlight:    rgba(255, 255, 255, 0.05);
+  /* ── Glass — bright translucent panels (per design DNA) ───────────── */
+  --glass-subtle:       rgba(255, 255, 255, 0.40);
+  --glass-panel:        rgba(255, 255, 255, 0.60);
+  --glass-card:         rgba(255, 255, 255, 0.70);
+  --glass-elevated:     rgba(255, 255, 255, 0.78);
 
-  /* ── Ambient glows — soft gradient blobs on background ────────────── */
-  --glow-primary:       rgba(34, 211, 238, 0.30);
-  --glow-secondary:     rgba(139, 92, 246, 0.25);
-  --glow-warm:          rgba(244, 175, 37, 0.25);
+  --glass-border:       rgba(255, 255, 255, 0.55);
+  --glass-border-hover: rgba(255, 255, 255, 0.75);
+  --glass-highlight:    rgba(255, 255, 255, 0.90);
 
-  /* ── Ink — text ───────────────────────────────────────────────────── */
-  --ink-primary:        #f1f5f9;
-  --ink-secondary:      #94a3b8;
-  --ink-muted:          #64748b;
-  --ink-faint:          #475569;
-  --ink-inverse:        #020617;
+  /* ── Ambient glows ────────────────────────────────────────────────── */
+  --glow-primary:       rgba(244, 175, 37, 0.30);
+  --glow-secondary:     rgba(251, 146, 60, 0.25);
+  --glow-warm:          rgba(244, 175, 37, 0.30);
+  --glow-coral:         rgba(239, 68, 68, 0.30);
 
-  /* ── Lines — dividers / borders ───────────────────────────────────── */
-  --line-subtle:        rgba(255, 255, 255, 0.06);
-  --line-default:       rgba(255, 255, 255, 0.10);
-  --line-strong:        rgba(255, 255, 255, 0.18);
+  /* ── Ink — warm dark text on cream ────────────────────────────────── */
+  --ink-primary:        #1a1612;                 /* near-black warm */
+  --ink-secondary:      #5b5147;
+  --ink-muted:          #8a7f72;
+  --ink-faint:          #b3a99a;
+  --ink-inverse:        #fdf6e9;                 /* cream — for text on dark */
 
-  /* ── Semantic signals ─────────────────────────────────────────────── */
-  --signal-ok:          #10b981;
+  /* ── Lines — dark-on-cream dividers ───────────────────────────────── */
+  --line-subtle:        rgba(0, 0, 0, 0.06);
+  --line-default:       rgba(0, 0, 0, 0.10);
+  --line-strong:        rgba(0, 0, 0, 0.18);
+
+  /* ── Semantic signals (slightly warmed for the cream backdrop) ────── */
+  --signal-ok:          #16a34a;
   --signal-warn:        #f59e0b;
-  --signal-alert:       #f43f5e;
-  --signal-info:        #22d3ee;
+  --signal-alert:       #ef4444;
+  --signal-info:        #2563eb;
 
   /* ── Chart palette ────────────────────────────────────────────────── */
-  --chart-1: #22d3ee;
-  --chart-2: #8b5cf6;
-  --chart-3: #10b981;
-  --chart-4: #f59e0b;
-  --chart-5: #f43f5e;
+  --chart-1: #f4af25;                            /* amber */
+  --chart-2: #fb923c;                            /* orange */
+  --chart-3: #16a34a;                            /* green */
+  --chart-4: #2563eb;                            /* blue */
+  --chart-5: #ef4444;                            /* coral */
+
+  /* ── Shadows (per design DNA) ─────────────────────────────────────── */
+  --shadow-sm:          0 2px 8px rgba(120, 70, 10, 0.04);
+  --shadow-md:          0 4px 14px rgba(120, 70, 10, 0.10);
+  --shadow-lg:          0 8px 30px rgba(120, 70, 10, 0.08), 0 2px 8px rgba(120, 70, 10, 0.04);
+  --shadow-xl:          0 14px 38px rgba(120, 70, 10, 0.14);
+  --shadow-glow:        0 0 0 1px rgba(244, 175, 37, 0.28), 0 12px 40px rgba(244, 175, 37, 0.18);
+  --shadow-glow-coral:  0 0 0 1px rgba(239, 68, 68, 0.20), 0 12px 40px rgba(239, 68, 68, 0.18);
 
   /* ── Typography ───────────────────────────────────────────────────── */
-  --font-display:   "Space Grotesk", "Outfit", system-ui, sans-serif;
-  --font-body:      "Space Grotesk", "Outfit", system-ui, sans-serif;
+  --font-display:   "Manrope", "Space Grotesk", system-ui, sans-serif;
+  --font-body:      "Manrope", "Space Grotesk", system-ui, sans-serif;
   --font-mono:      "JetBrains Mono", ui-monospace, "SF Mono", monospace;
   --font-tech:      "JetBrains Mono", ui-monospace, "SF Mono", monospace;
   --font-serif:     "Playfair Display", Georgia, serif;
 
-  /* Type scale — multiplied by the per-user --fs-scale (settings UI).
-   * Default 1 so behaviour is identical when the setting isn't applied. */
+  /* Type scale — multiplied by per-user --fs-scale (Settings › Theme).
+   * Default 1 so identical behaviour when unset. */
   --fs-scale:   1;
   --fs-micro:   calc(12px * var(--fs-scale, 1));
   --fs-xs:      calc(13px * var(--fs-scale, 1));
@@ -68,7 +104,7 @@
   --fs-lg:      calc(23px * var(--fs-scale, 1));
   --fs-xl:      calc(33px * var(--fs-scale, 1));
   --fs-2xl:     calc(48px * var(--fs-scale, 1));
-  --fs-xxl:     calc(56px * var(--fs-scale, 1));  /* legacy alias */
+  --fs-xxl:     calc(56px * var(--fs-scale, 1));
   --fs-display: calc(64px * var(--fs-scale, 1));
 
   --tracking-tight:    -0.02em;
@@ -88,9 +124,14 @@
   --grid-padding:   16px;
   --safe-w:         960px;
   --safe-h:         568px;
-  --status-bar-h:   36px;
+  --status-bar-h:   44px;
   --touch-min:      44px;
   --touch-key:      56px;
+  --radius-sm:      6px;
+  --radius-md:      10px;
+  --radius-lg:      14px;
+  --radius-xl:      18px;
+  --radius-pill:    999px;
 
   /* ── Z-index ──────────────────────────────────────────────────────── */
   --z-base:     0;
@@ -100,80 +141,151 @@
   --z-modal:    40;
   --z-toast:    50;
 
-  /* State-driven defaults (overridden by [data-state]) */
-  --accent:         #64748b;
-  --accent-rgb:     100, 116, 139;
-  --accent-fade:    rgba(100, 116, 139, 0);
-  --accent-glow:    rgba(100, 116, 139, 0.2);
-  --accent-radial:  radial-gradient(circle at 30% 30%, #475569, #1e293b);
+  /* State-driven defaults (overridden below by [data-state]) */
+  --accent:         #b07a10;
+  --accent-rgb:     176, 122, 16;
+  --accent-fade:    rgba(176, 122, 16, 0);
+  --accent-glow:    rgba(244, 175, 37, 0.20);
+  --accent-radial:  radial-gradient(circle at 30% 30%, #fde9b8, #f4af25, #fb923c);
   --ui-opacity:     1;
   --motion-scale:   1;
-  /* User-set motion multiplier from Settings › Theme › Швидкість анімацій.
-   * motion.ts multiplies this with the state-driven --motion-scale, so a
-   * value of 1 leaves behaviour untouched. */
   --motion-scale-user: 1;
 }
 
-/* ─── State accent overrides ─────────────────────────────────────────── */
+/* ─── Legacy cyberdeck-cold theme (opt-in) ────────────────────────────
+ * Operators who prefer the old dark slate aesthetic can flip
+ * <html data-theme="cyberdeck-cold">. The same token NAMES carry the
+ * pre-v2 VALUES so every existing component renders the legacy look
+ * without code changes. */
 
-[data-state="SHADOW"] {
+[data-theme="cyberdeck-cold"] {
+  --primary:           #22d3ee;
+  --primary-soft:      #67e8f9;
+  --primary-deep:      #0891b2;
+  --primary-shadow:    #155e75;
+  --orange:            #f59e0b;
+  --coral:             #f43f5e;
+  --coral-soft:        #fb7185;
+  --coral-deep:        #be123c;
+
+  --surface-base:      #020617;
+  --surface-deep:      #0a0f1a;
+  --surface-raised:    #0f172a;
+  --surface-void:      #000000;
+  --surface-sunrise:   radial-gradient(ellipse 90% 70% at 50% -10%, rgba(34,211,238,0.2) 0%, rgba(34,211,238,0) 70%),
+                       linear-gradient(180deg, #0a0f1a 0%, #020617 100%);
+  --surface-coral:     radial-gradient(ellipse 90% 70% at 50% -10%, rgba(244,63,94,0.25) 0%, rgba(244,63,94,0) 60%),
+                       linear-gradient(180deg, #0a0f1a 0%, #020617 100%);
+
+  --glass-subtle:       rgba(15, 23, 42, 0.40);
+  --glass-panel:        rgba(15, 23, 42, 0.60);
+  --glass-card:         rgba(15, 23, 42, 0.70);
+  --glass-elevated:     rgba(15, 23, 42, 0.85);
+
+  --glass-border:       rgba(255, 255, 255, 0.08);
+  --glass-border-hover: rgba(255, 255, 255, 0.16);
+  --glass-highlight:    rgba(255, 255, 255, 0.05);
+
+  --glow-primary:       rgba(34, 211, 238, 0.30);
+  --glow-secondary:     rgba(139, 92, 246, 0.25);
+  --glow-warm:          rgba(244, 175, 37, 0.25);
+  --glow-coral:         rgba(244, 63, 94, 0.30);
+
+  --ink-primary:        #f1f5f9;
+  --ink-secondary:      #94a3b8;
+  --ink-muted:          #64748b;
+  --ink-faint:          #475569;
+  --ink-inverse:        #020617;
+
+  --line-subtle:        rgba(255, 255, 255, 0.06);
+  --line-default:       rgba(255, 255, 255, 0.10);
+  --line-strong:        rgba(255, 255, 255, 0.18);
+
+  --signal-ok:          #10b981;
+  --signal-warn:        #f59e0b;
+  --signal-alert:       #f43f5e;
+  --signal-info:        #22d3ee;
+
+  --chart-1: #22d3ee;
+  --chart-2: #8b5cf6;
+  --chart-3: #10b981;
+  --chart-4: #f59e0b;
+  --chart-5: #f43f5e;
+
+  --shadow-sm:          0 2px 8px rgba(0, 0, 0, 0.30);
+  --shadow-md:          0 4px 14px rgba(0, 0, 0, 0.40);
+  --shadow-lg:          0 10px 32px -8px rgba(0, 0, 0, 0.55);
+  --shadow-xl:          0 24px 60px -12px rgba(0, 0, 0, 0.65);
+  --shadow-glow:        0 0 0 1px rgba(34, 211, 238, 0.20), 0 12px 40px rgba(34, 211, 238, 0.18);
+  --shadow-glow-coral:  0 0 0 1px rgba(244, 63, 94, 0.20), 0 12px 40px rgba(244, 63, 94, 0.18);
+
   --accent:         #64748b;
   --accent-rgb:     100, 116, 139;
   --accent-fade:    rgba(100, 116, 139, 0);
   --accent-glow:    rgba(100, 116, 139, 0.2);
   --accent-radial:  radial-gradient(circle at 30% 30%, #475569, #1e293b);
-  --ui-opacity:     0.85;
-  --motion-scale:   0.5;
-  --surface-base:   #000000;
+}
+
+/* ─── State accent overrides — sunrise palette ───────────────────────── */
+
+[data-state="SHADOW"] {
+  --accent:         #8a7f72;
+  --accent-rgb:     138, 127, 114;
+  --accent-fade:    rgba(138, 127, 114, 0);
+  --accent-glow:    rgba(244, 175, 37, 0.18);
+  --accent-radial:  radial-gradient(circle at 30% 30%, #fde9b8, #f4af25, #fb923c);
+  --ui-opacity:     0.92;
+  --motion-scale:   0.6;
 }
 
 [data-state="FOCUS"] {
-  --accent:         var(--accent-override-focus, #22d3ee);
-  --accent-rgb:     34, 211, 238;
-  --accent-fade:    rgba(34, 211, 238, 0);
-  --accent-glow:    rgba(34, 211, 238, 0.4);
-  --accent-radial:  radial-gradient(circle at 30% 30%, #22d3ee, #0ea5e9, #6366f1);
+  --accent:         var(--accent-override-focus, #b07a10);
+  --accent-rgb:     176, 122, 16;
+  --accent-fade:    rgba(176, 122, 16, 0);
+  --accent-glow:    rgba(244, 175, 37, 0.40);
+  --accent-radial:  radial-gradient(circle at 30% 30%, #fff8e0, #f4af25, #fb923c);
   --ui-opacity:     1;
   --motion-scale:   1;
 }
 
 [data-state="DIALOGUE"] {
-  --accent:         #8b5cf6;
-  --accent-rgb:     139, 92, 246;
-  --accent-fade:    rgba(139, 92, 246, 0);
-  --accent-glow:    rgba(139, 92, 246, 0.4);
-  --accent-radial:  radial-gradient(circle at 30% 30%, #a78bfa, #8b5cf6, #6366f1);
+  --accent:         #b07a10;
+  --accent-rgb:     176, 122, 16;
+  --accent-fade:    rgba(176, 122, 16, 0);
+  --accent-glow:    rgba(244, 175, 37, 0.45);
+  --accent-radial:  radial-gradient(circle at 30% 30%, #fff8e0, #f4af25, #fb923c);
   --ui-opacity:     1;
   --motion-scale:   1.1;
 }
 
 [data-state="SENTINEL"] {
-  --accent:         var(--accent-override-sentinel, #f43f5e);
-  --accent-rgb:     244, 63, 94;
-  --accent-fade:    rgba(244, 63, 94, 0);
-  --accent-glow:    rgba(244, 63, 94, 0.5);
-  --accent-radial:  radial-gradient(circle at 30% 30%, #fb7185, #f43f5e, #be123c);
+  --accent:         var(--accent-override-sentinel, #b9201f);
+  --accent-rgb:     185, 32, 31;
+  --accent-fade:    rgba(185, 32, 31, 0);
+  --accent-glow:    rgba(239, 68, 68, 0.50);
+  --accent-radial:  radial-gradient(circle at 30% 30%, #fda4af, #ef4444, #7f1d1d);
   --ui-opacity:     1;
   --motion-scale:   1.3;
 }
 
 [data-state="GHOST"] {
-  --accent:         var(--accent-override-ghost, #10b981);
-  --accent-rgb:     16, 185, 129;
-  --accent-fade:    rgba(16, 185, 129, 0);
-  --accent-glow:    rgba(16, 185, 129, 0.3);
+  --accent:         var(--accent-override-ghost, #16a34a);
+  --accent-rgb:     22, 163, 74;
+  --accent-fade:    rgba(22, 163, 74, 0);
+  --accent-glow:    rgba(22, 163, 74, 0.30);
   --accent-radial:  radial-gradient(circle at 30% 30%, #34d399, #10b981, #047857);
   --ui-opacity:     0.9;
   --motion-scale:   0.8;
-  --surface-base:   #000000;
+  --surface-base:   #1a1612;                     /* stay dim in stealth */
 }
 
 [data-state="DREAM"] {
-  --accent:         var(--accent-override-dream, #f4af25);
-  --accent-rgb:     244, 175, 37;
-  --accent-fade:    rgba(244, 175, 37, 0);
-  --accent-glow:    rgba(244, 175, 37, 0.2);
+  --accent:         var(--accent-override-dream, #b07a10);
+  --accent-rgb:     176, 122, 16;
+  --accent-fade:    rgba(176, 122, 16, 0);
+  --accent-glow:    rgba(244, 175, 37, 0.20);
   --accent-radial:  radial-gradient(circle at 30% 30%, #fbbf24, #f59e0b, #b45309);
   --ui-opacity:     0.75;
   --motion-scale:   0.4;
+  --surface-base:   #221c10;                     /* warm-dark for sleep */
 }

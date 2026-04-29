@@ -28,6 +28,7 @@ from api.routes_voice_stream import register_voice_ws
 from api.routes_ai import router as ai_router
 from api.routes_face import router as face_router
 from api.routes_agent import router as agent_router
+from api.routes_dynamic_source import router as dynamic_source_router
 
 logging.basicConfig(
     level=getattr(logging, config.log_level),
@@ -642,6 +643,10 @@ def create_app() -> FastAPI:
     app.include_router(ai_router, prefix=prefix)
     app.include_router(face_router, prefix=prefix)
     app.include_router(agent_router, prefix=prefix)
+    # Day-4 W-4 (ADR-XC-007): /api/v1/dynamic_source/{source} for the
+    # frontend <DynamicPicker> consumer (chat-input ModelCard, future
+    # Settings dynamic dropdowns).
+    app.include_router(dynamic_source_router, prefix=prefix)
 
     _register_ws(app)
     register_voice_ws(app)

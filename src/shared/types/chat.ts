@@ -166,3 +166,39 @@ export interface ChatSession {
   summary: string | null;
   state_history: StateTransition[];
 }
+
+// ─── DynamicPicker — Day-4 Wave-2 W-4 (ADR-XC-007 + chat-liveness §402) ──────
+//
+// Cross-context contract between `chat-input` (W-3 ModelCard consumer) and
+// `dynamic-source-picker` (W-4 producer). Sources are a CLOSED enum at the
+// cluster boundary; backend resolvers MUST mirror this exact list at
+// `src/backend/api/schemas/dynamic_source.py`. Adding a 6th source requires
+// (a) extending this union, (b) the backend resolver, (c) a vitest mock,
+// (d) an ADR amendment.
+
+/** Closed enum, Day-4. */
+export type DynamicPickerSource =
+  | 'ollama_models'
+  | 'voice_voices'
+  | 'mms_languages'
+  | 'serial_ports'
+  | 'tts_speakers';
+
+export interface DynamicPickerOption {
+  value: string;
+  label: string;
+  /** Optional metadata; ModelCard uses `provider` for the colour tag. */
+  meta?: { provider?: string; size_mb?: number; lang?: string };
+}
+
+export interface DynamicPickerProps {
+  source: DynamicPickerSource;
+  value: string | null;
+  onChange: (next: string) => void;
+  /** Placeholder while options resolve; touch-friendly 44px row. */
+  placeholder?: string;
+  /** Force-refresh trigger; bump on operator action like "I just plugged a device". */
+  refreshKey?: number;
+  /** Disable interactions during async resolution. */
+  disabled?: boolean;
+}

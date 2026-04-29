@@ -828,3 +828,75 @@ charter "less text input, more pickers").
 
 ---
 
+## 2026-05-02 05:35 CEST — Wave-2 W-4 DONE (DynamicPicker + 5 resolvers)
+
+Closes ADR-XC-007 cross-context contract. Operator's "less text
+input, more pickers" directive lands the foundation.
+
+Files:
+  src/shared/types/chat.ts            — DynamicPickerSource closed
+                                          enum + Option + Props.
+  src/backend/api/routes_dynamic_source.py (NEW) — Pydantic mirror
+                                          of the closed enum + 5
+                                          resolvers + GET
+                                          /api/v1/dynamic_source/
+                                          {source} route. Per-source
+                                          ttl cache (5s..3600s). All
+                                          resolvers DEFENSIVE — failed
+                                          import / downed sub-service /
+                                          permission denial → empty
+                                          option list (NOT 500). Belt-
+                                          and-braces in the route too.
+  src/backend/main.py (modified)      — wires the router under
+                                          /api/v1 prefix.
+  src/frontend/src/components/chat/DynamicPicker.tsx (NEW) — touch-
+                                          friendly select; 44×44 tap
+                                          targets; defensive fallback
+                                          to raw value when an option
+                                          was removed; aria-haspopup +
+                                          aria-expanded + role=listbox
+                                          + role=option + aria-selected
+                                          chain.
+
+Resolvers:
+  ollama_models — ai.ollama_provider.list_local_models, cap 50,
+                   meta carries provider + size_mb.
+  voice_voices  — voice.tts_engine.list_available_voices, cap 30,
+                   meta.lang="uk".
+  mms_languages — closed list of 10 operator-relevant codes.
+  serial_ports  — pyserial.tools.list_ports.comports, cap 20, meta
+                   carries port description.
+  tts_speakers  — alias of voice_voices today; separate source so
+                   Day-5 per-user persona voices can diverge.
+
+12 backend pytest:
+  - five sources expose envelope shape; unknown → 404/422.
+  - mms_languages closed list pinned (ukr+eng minimum).
+  - ollama_models / serial_ports defensive when dep missing.
+  - resolver exception caught at route → empty.
+  - ttl cache hit/expire round-trip.
+
+10 frontend vitest:
+  - mount fetches + renders options when opened.
+  - empty server → placeholder li in dropdown (scoped via within() —
+    the trigger label ALSO renders the placeholder when no value
+    matches; the test asserts the empty-state branch ran by scoping
+    to the listbox testid).
+  - network failure → console.warn + empty state.
+  - selecting an option fires onChange + closes list.
+  - trigger label = option.label when value matches, raw value
+    otherwise (defensive contract for removed-model recovery).
+  - disabled prop disables the trigger.
+  - refreshKey bump re-fetches.
+  - 44×44 trigger minimum.
+  - aria chain sound.
+
+Backend 12/12, frontend 10/10 + 36/36 chat regression, tsc clean.
+The DynamicPicker is ready for ModelCard integration (Z-1 AI Hub),
+Settings dynamic dropdowns, Day-5+ chat-input source picker.
+
+Next: W-5 (hardware-tier flag + voice-amp rAF + drop
+chat_stream_delay_s).
+
+---
+

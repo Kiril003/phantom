@@ -59,7 +59,7 @@ function coerceTarget(raw: unknown): FamiliarTarget | undefined {
  * tracks this style of cleanup).
  */
 export function registerFamiliarWsHandler(): () => void {
-  return wsClient.on('familiar' as never, (msg) => {
+  return wsClient.on('familiar', (msg) => {
     if (msg.type !== 'manifestation') return;
     const data = msg.data as FamiliarManifestationWsPayload;
     const pose: FamiliarPose =

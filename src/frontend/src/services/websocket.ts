@@ -22,7 +22,11 @@ export type WSChannel =
   // Phase 9.3b — inner monologue stream. Dedicated channel so main
   // agent.stream subscribers don't get flooded with per-step thinking.
   // No consumer in 9.3b; a future Inspector panel will subscribe.
-  | 'inner_monologue.stream';
+  | 'inner_monologue.stream'
+  // Phase 5 R1 FAMILIAR — AI-summoned wisp manifestation events.
+  // Backend `routes_familiar.py` POST /familiar/manifest broadcasts here;
+  // FE `wsHandlers.ts` translates into a familiarStore.manifest('ai-summon').
+  | 'familiar';
 
 export interface WSMessage {
   channel: WSChannel;

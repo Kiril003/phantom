@@ -15,7 +15,7 @@ import {
   Sun,
   Moon,
   Cog,
-  Tune,
+  SlidersHorizontal as Tune,
 } from 'lucide-react';
 import { StatusBar } from '../core/StatusBar';
 import { FloatingToolbar } from '../core/FloatingToolbar';

@@ -5,23 +5,25 @@ import { useFaceStore } from '../../stores/faceStore';
 import { useAgentStore } from '../../stores/agentStore';
 import { agentApi } from '../../services/agentApi';
 import { SystemState } from '@shared/types';
-import {
-  Wifi,
-  WifiOff,
-  Cloud,
-  CloudOff,
-  Activity,
-  Thermometer,
-  Cpu,
-  MemoryStick,
-  HardDrive,
-  User as UserIcon,
-  Sparkles,
-  UserCheck,
-  HelpCircle,
-  type LucideIcon,
-} from 'lucide-react';
 import { OledEyePreview } from './OledEyePreview';
+
+/**
+ * StatusBar (sunrise build).
+ *
+ * Layout (44px tall, .glass strip):
+ *   [State pill] · [Operator avatar+name] · [HR] · [°C] · [RAM] · [CPU] · [Disk]
+ *   · [provider] · [proactive] · [BG track] · [face chip] · [oled eye]
+ *   · [wifi/cloud/ws dots] · [tabular clock]
+ *
+ * Hidden in GHOST / DREAM (stealth / sleep).
+ *
+ * Design DNA references:
+ *   - .glass / .status-pill / .micro-label / .tabular / Material Symbols Outlined
+ *   - tokens: var(--ink-*), var(--accent), var(--signal-*), var(--font-*).
+ *
+ * Hook order: every hook MUST run before the GHOST/DREAM early-return so the
+ * order stays stable across renders (audit fix H-MM-1).
+ */
 
 const STATE_LABELS: Record<SystemState, string> = {
   [SystemState.SHADOW]: 'Shadow',
@@ -33,11 +35,43 @@ const STATE_LABELS: Record<SystemState, string> = {
   [SystemState.OPERATOR]: 'Operator',
 };
 
-/**
- * StatusBar — 36px glass strip with rounded pill segments.
- * Icons from lucide; labels in Space Grotesk with subtle tracking.
- * Hidden in GHOST / DREAM per VISUAL_SYSTEM.md (stealth / offline modes).
- */
+/** State → status-pill tone (amber default, coral for SENTINEL/GHOST, green for OPERATOR). */
+function stateTone(state: SystemState): 'amber' | 'coral' | 'green' {
+  if (state === SystemState.SENTINEL || state === SystemState.GHOST) return 'coral';
+  if (state === SystemState.OPERATOR) return 'green';
+  return 'amber';
+}
+
+/** Material Symbols Outlined inline glyph. */
+function MSym({
+  name,
+  size = 16,
+  fill = 0,
+  weight = 400,
+  color,
+}: {
+  name: string;
+  size?: number;
+  fill?: 0 | 1;
+  weight?: 300 | 400 | 500 | 600;
+  color?: string;
+}) {
+  return (
+    <span
+      className="msym"
+      aria-hidden
+      style={{
+        fontSize: size,
+        lineHeight: 1,
+        color,
+        fontVariationSettings: `'FILL' ${fill}, 'wght' ${weight}, 'GRAD' 0, 'opsz' 24`,
+      }}
+    >
+      {name}
+    </span>
+  );
+}
+
 export function StatusBar() {
   const { state, wsConnected, context, esp32 } = useSystemStore();
   const { user } = useAuthStore();
@@ -48,17 +82,10 @@ export function StatusBar() {
     return () => clearInterval(t);
   }, []);
 
-  const timeStr = now.toLocaleTimeString('uk-UA', {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  });
-
-  // Audit H-MM-1 fix — all hooks must run BEFORE any early return so the
-  // hook order stays stable across re-renders. Pre-fix the GHOST/DREAM
-  // early-return ran before `useRouterStatePolled()`, so the very first
-  // GHOST mount tripped React's "Rendered fewer hooks than expected"
-  // invariant and crashed the layout.
+  // Audit H-MM-1 fix — every hook runs BEFORE the GHOST/DREAM early-return so
+  // the hook order remains stable. Pre-fix the early-return ran before
+  // useRouterStatePolled() and React tripped on "Rendered fewer hooks than
+  // expected" the first time GHOST mounted.
   const routerState = useRouterStatePolled();
 
   if (state === SystemState.GHOST || state === SystemState.DREAM) return null;
@@ -69,118 +96,194 @@ export function StatusBar() {
   const ram = context?.system.ram_percent;
   const disk = context?.system.disk_percent;
   const provider = context?.system.ai_provider ?? '—';
-  /* ESP32 tri-state comes from /health polling; fallback derived from sensor data. */
+
+  // ESP32 tri-state from /health polling; fall back to "online" once we see
+  // sensor data even if the explicit tri-state is still unknown.
   const esp32DerivedOnline = bpm != null || tempC != null;
   const esp32Effective: 'disabled' | 'offline' | 'online' | 'unknown' =
     esp32 === 'unknown' && esp32DerivedOnline ? 'online' : esp32;
 
+  const timeStr = now.toLocaleTimeString('uk-UA', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  });
+
+  const tone = stateTone(state);
+  const operatorName = user?.username ?? 'guest';
+  const operatorRole = user?.role ?? 'GUEST';
+
   return (
     <div
-      className="w-[1024px] flex items-center shrink-0 relative gap-2 px-4 glass-panel"
+      data-testid="status-bar"
+      className="glass w-[1024px] flex items-center shrink-0 relative"
       style={{
         height: 'var(--status-bar-h)',
+        padding: '0 14px',
+        gap: 10,
+        borderRadius: 0,
+        // Override .glass border-radius: the status-bar is a flush strip at top.
         borderLeft: 'none',
         borderRight: 'none',
         borderTop: 'none',
         opacity: 'var(--ui-opacity)',
       }}
     >
-      {/* State pill (left-most) */}
-      <StatePill state={state} />
+      {/* ── State pill ──────────────────────────────────────────────── */}
+      <span
+        className={`status-pill ${tone === 'coral' ? 'coral' : tone === 'green' ? 'green' : ''}`}
+        style={{ height: 26 }}
+        title={`State: ${STATE_LABELS[state]}`}
+      >
+        <span className="dot" aria-hidden />
+        {STATE_LABELS[state]}
+      </span>
 
       <Divider />
 
-      {/* Operator */}
-      {user && (
+      {/* ── Operator avatar + name ──────────────────────────────────── */}
+      <span className="inline-flex items-center" style={{ gap: 8 }}>
+        <span
+          aria-hidden
+          style={{
+            width: 22,
+            height: 22,
+            borderRadius: 999,
+            background: 'linear-gradient(135deg,#f4af25,#fb923c)',
+            boxShadow:
+              'inset 0 0 0 1px rgba(255,255,255,0.55), 0 0 8px rgba(244,175,37,0.35)',
+          }}
+        />
+        <span
+          style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 12,
+            fontWeight: 600,
+            color: 'var(--ink-primary)',
+          }}
+        >
+          {operatorName}
+        </span>
+        <span
+          style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 10,
+            fontWeight: 700,
+            letterSpacing: '0.16em',
+            textTransform: 'uppercase',
+            color: 'var(--ink-muted)',
+          }}
+        >
+          · {operatorRole}
+        </span>
+      </span>
+
+      <Divider />
+
+      {/* ── Sensor chips ────────────────────────────────────────────── */}
+      <SensorChip
+        icon="favorite"
+        value={bpm != null ? `${bpm}` : '—'}
+        unit="bpm"
+        accent="#b07a10"
+        title={bpm != null ? `Heart rate: ${bpm} bpm` : 'Heart rate not available'}
+      />
+      <SensorChip
+        icon="device_thermostat"
+        value={tempC != null ? tempC.toFixed(1) : '—'}
+        unit="°C"
+        accent="#b07a10"
+        title={tempC != null ? `Ambient ${tempC.toFixed(1)} °C` : 'Temperature offline'}
+      />
+      <SensorChip
+        icon="memory"
+        value={ram != null ? `${Math.round(ram)}` : '—'}
+        unit="%"
+        accent={pctTone(ram)}
+        title={`RAM ${ram != null ? Math.round(ram) + '%' : 'unknown'}`}
+      />
+      <SensorChip
+        icon="developer_board"
+        value={cpu != null ? `${Math.round(cpu)}` : '—'}
+        unit="%"
+        accent={pctTone(cpu)}
+        title={`CPU ${cpu != null ? Math.round(cpu) + '%' : 'unknown'}`}
+      />
+      <SensorChip
+        icon="storage"
+        value={disk != null ? `${Math.round(disk)}` : '—'}
+        unit="%"
+        accent={pctTone(disk)}
+        title={`Disk ${disk != null ? Math.round(disk) + '%' : 'unknown'}`}
+      />
+
+      {/* ESP32 tri-state pill: only render if known. */}
+      {esp32Effective !== 'unknown' && (
         <>
-          <Segment
-            icon={<UserIcon size={12} strokeWidth={2} />}
-            label={user.username}
-            sub={user.role}
-          />
           <Divider />
+          <Esp32Pill status={esp32Effective} />
         </>
       )}
 
-      {/* Biosignal */}
-      <Segment
-        icon={<Activity size={12} strokeWidth={2} />}
-        value={bpm != null ? `${bpm}` : '—'}
-        unit="bpm"
-      />
       <Divider />
 
-      {/* Environment */}
-      <Segment
-        icon={<Thermometer size={12} strokeWidth={2} />}
-        value={tempC != null ? tempC.toFixed(1) : '—'}
-        unit="°C"
-      />
-      <Divider />
-
-      {/* ESP32 tri-state pill: disabled (muted) / offline (amber) / online (green) */}
-      {esp32Effective !== 'unknown' && <Esp32Pill status={esp32Effective} />}
-      {esp32Effective !== 'unknown' && <Divider />}
-
-      <div className="flex-1" />
-
-      {/* Resource load (CPU/RAM/Disk come from Radxa psutil — these are live locally even without ESP32) */}
-      <Resource icon={<Cpu size={12} strokeWidth={2} />} label="CPU" pct={cpu} />
-      <Resource icon={<MemoryStick size={12} strokeWidth={2} />} label="RAM" pct={ram} />
-      <Resource icon={<HardDrive size={12} strokeWidth={2} />} label="Disk" pct={disk} />
-
-      <Divider />
-
-      {/* AI — Phase 9.2.1: cooling/quota-aware. */}
+      {/* ── Provider status ─────────────────────────────────────────── */}
       <ProviderBadge provider={provider} routerState={routerState} />
 
       <Divider />
 
-      {/* Proactive breathing indicator (Phase 9.3b) — pulses when the
-          proactive loop evaluates. Subtle by design. */}
+      {/* ── Proactive breathing dot ─────────────────────────────────── */}
       <ProactiveIndicator />
 
-      <Divider />
+      {/* ── Background-track badge (only when activity) ─────────────── */}
+      <BackgroundTrackSection />
 
-      {/* Phase 9.4a — background-track badge. Renders only when there's
-          something going on (active slot + queue > 0). */}
-      <BackgroundTrackBadge />
-      <BackgroundTrackDivider />
-
-      {/* Face recognition chip (visible only while tracking is active) */}
+      {/* ── Face recognition chip ───────────────────────────────────── */}
       <FaceChip />
 
-      {/* OLED eye preview — mirrors the hardware face animator */}
+      {/* ── OLED eye preview (mirrors hardware face animator) ───────── */}
       <OledEyePreview />
 
-      <Divider />
+      <span style={{ flex: 1 }} />
 
-      {/* Connectivity */}
-      <ConnectivityDot ok={!!context?.system.wifi_connected} Icon={{ on: Wifi, off: WifiOff }} />
-      <ConnectivityDot ok={!!context?.system.internet_available} Icon={{ on: Cloud, off: CloudOff }} />
-      <div
-        className="rounded-full"
+      {/* ── Connectivity dots ───────────────────────────────────────── */}
+      <ConnectivityIcon
+        ok={!!context?.system.wifi_connected}
+        iconOn="wifi"
+        iconOff="wifi_off"
+        label="WiFi"
+      />
+      <ConnectivityIcon
+        ok={!!context?.system.internet_available}
+        iconOn="cloud_done"
+        iconOff="cloud_off"
+        label="Internet"
+      />
+      <span
+        aria-hidden
+        title={wsConnected ? 'Realtime connected' : 'Realtime offline'}
         style={{
-          width: 6,
-          height: 6,
+          width: 7,
+          height: 7,
+          borderRadius: 999,
           background: wsConnected ? 'var(--signal-ok)' : 'var(--signal-alert)',
           boxShadow: wsConnected
-            ? '0 0 6px var(--signal-ok)'
+            ? '0 0 8px var(--signal-ok)'
             : '0 0 6px var(--signal-alert)',
         }}
-        title={wsConnected ? 'Realtime connected' : 'Realtime offline'}
       />
 
       <Divider />
 
-      {/* Time */}
+      {/* ── Clock — large tabular ───────────────────────────────────── */}
       <span
-        className="tabular-nums"
+        className="tabular"
         style={{
           fontFamily: 'var(--font-mono)',
-          fontSize: 'var(--fs-xs)',
+          fontSize: 16,
+          fontWeight: 600,
+          letterSpacing: '0.02em',
           color: 'var(--ink-primary)',
-          letterSpacing: 'var(--tracking-wide)',
         }}
       >
         {timeStr}
@@ -189,13 +292,115 @@ export function StatusBar() {
   );
 }
 
+/* ─── Helpers ──────────────────────────────────────────────────────── */
+
+function pctTone(v: number | undefined): string {
+  if (v == null || !Number.isFinite(v)) return 'var(--ink-muted)';
+  if (v > 85) return 'var(--signal-alert)';
+  if (v > 60) return 'var(--signal-warn)';
+  return '#b07a10';
+}
+
+function Divider() {
+  return (
+    <span
+      aria-hidden
+      className="block self-center"
+      style={{ width: 1, height: 16, background: 'var(--line-default)' }}
+    />
+  );
+}
+
+interface SensorChipProps {
+  icon: string;
+  value: string;
+  unit?: string;
+  accent?: string;
+  title?: string;
+}
+
+function SensorChip({ icon, value, unit, accent, title }: SensorChipProps) {
+  return (
+    <span
+      title={title}
+      className="inline-flex items-center"
+      style={{
+        gap: 6,
+        padding: '0 8px',
+        height: 26,
+        borderRadius: 8,
+        background: 'rgba(255,255,255,0.55)',
+        border: '1px solid var(--glass-border)',
+        boxShadow: '0 1px 0 rgba(255,255,255,0.5) inset',
+      }}
+    >
+      <MSym name={icon} size={14} color={accent ?? 'var(--ink-muted)'} />
+      <span
+        className="tabular"
+        style={{
+          fontFamily: 'var(--font-mono)',
+          fontSize: 12,
+          fontWeight: 600,
+          color: 'var(--ink-primary)',
+        }}
+      >
+        {value}
+      </span>
+      {unit && (
+        <span
+          style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 10,
+            color: 'var(--ink-muted)',
+          }}
+        >
+          {unit}
+        </span>
+      )}
+    </span>
+  );
+}
+
+function Esp32Pill({ status }: { status: 'disabled' | 'offline' | 'online' }) {
+  const tone =
+    status === 'online'
+      ? 'green'
+      : status === 'offline'
+        ? 'amber'
+        : 'amber';
+  const label =
+    status === 'online' ? 'ESP32' : status === 'offline' ? 'ESP32 off' : 'ESP32 ·';
+  const title =
+    status === 'online'
+      ? 'Serial bridge connected; sensor batches incoming'
+      : status === 'offline'
+        ? 'Serial bridge enabled but no ESP32 device connected'
+        : 'Serial bridge disabled (dev mode or no hardware)';
+  const muted = status === 'disabled';
+  return (
+    <span
+      className={`status-pill ${tone === 'green' ? 'green' : ''}`}
+      style={{
+        height: 22,
+        opacity: muted ? 0.55 : 1,
+        fontSize: 9,
+        padding: '2px 8px',
+      }}
+      title={title}
+    >
+      <span className="dot" aria-hidden />
+      {label}
+    </span>
+  );
+}
+
 function FaceChip() {
   const recognized = useFaceStore((s) => s.recognized);
   const unknownSince = useFaceStore((s) => s.unknownSince);
   const detection = useFaceStore((s) => s.lastDetection);
 
-  // Only render when a face has been seen recently; otherwise the chip
-  // flickers every time the detector briefly loses track.
+  // Render only when something has been seen recently — otherwise the chip
+  // flickers every time the detector loses track for a frame.
   const active = !!detection || !!recognized || !!unknownSince;
   if (!active) return null;
 
@@ -211,269 +416,42 @@ function FaceChip() {
       ? 'Unknown'
       : 'Scanning';
 
-  const Icon = matched ? UserCheck : HelpCircle;
   return (
-    <span
-      className="inline-flex items-center gap-1.5 px-2 rounded-full"
-      style={{
-        height: 20,
-        background: `color-mix(in srgb, ${color} 12%, transparent)`,
-        border: `1px solid color-mix(in srgb, ${color} 40%, transparent)`,
-        color,
-        fontFamily: 'var(--font-display)',
-        fontSize: 'var(--fs-micro)',
-        letterSpacing: 'var(--tracking-wider)',
-      }}
-      title={
-        matched
-          ? `Recognized ${recognized.username} at ${(recognized.confidence * 100).toFixed(0)}%`
-          : unknownSince
-            ? 'Face detected but no enrolled user matched'
-            : 'Face detector online'
-      }
-    >
-      <Icon size={11} strokeWidth={2} />
-      {label}
-    </span>
-  );
-}
-
-function Esp32Pill({ status }: { status: 'disabled' | 'offline' | 'online' }) {
-  const color =
-    status === 'online'
-      ? 'var(--signal-ok)'
-      : status === 'offline'
-        ? 'var(--signal-warn)'
-        : 'var(--ink-muted)';
-  const label =
-    status === 'online' ? 'ESP32 online' : status === 'offline' ? 'ESP32 offline' : 'ESP32 disabled';
-  const title =
-    status === 'online'
-      ? 'Serial bridge connected; sensor batches incoming'
-      : status === 'offline'
-        ? 'Serial bridge enabled but no ESP32 device connected'
-        : 'Serial bridge disabled (dev mode or no hardware)';
-  return (
-    <span
-      className="uppercase px-2 rounded-full inline-flex items-center gap-1.5"
-      style={{
-        height: 20,
-        lineHeight: '18px',
-        background: `color-mix(in srgb, ${color} 14%, transparent)`,
-        border: `1px solid color-mix(in srgb, ${color} 40%, transparent)`,
-        color,
-        fontFamily: 'var(--font-display)',
-        fontSize: 'var(--fs-micro)',
-        letterSpacing: 'var(--tracking-widest)',
-      }}
-      title={title}
-    >
+    <>
+      <Divider />
       <span
-        aria-hidden
-        className="rounded-full"
+        className="inline-flex items-center"
         style={{
-          width: 5,
-          height: 5,
-          background: color,
-          boxShadow: status === 'online' ? `0 0 6px ${color}` : 'none',
-          display: 'inline-block',
-        }}
-      />
-      {label}
-    </span>
-  );
-}
-
-function StatePill({ state }: { state: SystemState }) {
-  return (
-    <div
-      className="flex items-center gap-2 px-3 rounded-full"
-      style={{
-        height: 24,
-        minHeight: 24,
-        background: 'color-mix(in srgb, var(--accent) 16%, transparent)',
-        border: '1px solid color-mix(in srgb, var(--accent) 50%, transparent)',
-        boxShadow: 'inset 0 0 12px color-mix(in srgb, var(--accent) 18%, transparent)',
-      }}
-    >
-      <span
-        aria-hidden
-        className="rounded-full"
-        style={{
-          width: 6,
-          height: 6,
-          background: 'var(--accent)',
-          boxShadow: '0 0 8px var(--accent-glow)',
-          animation: state === SystemState.SENTINEL
-            ? 'pulse-state 0.6s ease-in-out infinite'
-            : 'pulse-state 2s ease-in-out infinite',
-        }}
-      />
-      <span
-        style={{
+          gap: 6,
+          padding: '0 8px',
+          height: 22,
+          borderRadius: 999,
+          background: `color-mix(in srgb, ${color} 14%, transparent)`,
+          border: `1px solid color-mix(in srgb, ${color} 40%, transparent)`,
+          color,
           fontFamily: 'var(--font-display)',
-          fontSize: 'var(--fs-micro)',
-          color: 'var(--accent)',
-          letterSpacing: 'var(--tracking-widest)',
+          fontSize: 10,
+          letterSpacing: '0.12em',
           textTransform: 'uppercase',
-          fontWeight: 500,
+          fontWeight: 700,
         }}
+        title={
+          matched
+            ? `Recognized ${recognized.username} at ${(recognized.confidence * 100).toFixed(0)}%`
+            : unknownSince
+              ? 'Face detected but no enrolled user matched'
+              : 'Face detector online'
+        }
       >
-        {STATE_LABELS[state]}
-      </span>
-    </div>
-  );
-}
-
-function Divider() {
-  return (
-    <span
-      aria-hidden
-      className="block self-center"
-      style={{ width: 1, height: 14, background: 'var(--line-default)' }}
-    />
-  );
-}
-
-interface SegmentProps {
-  icon?: React.ReactNode;
-  label?: string;
-  value?: string;
-  unit?: string;
-  sub?: string;
-  capitalize?: boolean;
-}
-
-function Segment({ icon, label, value, unit, sub, capitalize }: SegmentProps) {
-  return (
-    <div className="flex items-center gap-1.5">
-      {icon && (
-        <span style={{ color: 'var(--ink-muted)' }} className="inline-flex">
-          {icon}
-        </span>
-      )}
-      {value && (
-        <span
-          className="tabular-nums"
-          style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 'var(--fs-xs)',
-            color: 'var(--ink-primary)',
-          }}
-        >
-          {value}
-        </span>
-      )}
-      {unit && (
-        <span
-          style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 'var(--fs-micro)',
-            color: 'var(--ink-muted)',
-          }}
-        >
-          {unit}
-        </span>
-      )}
-      {label && (
-        <span
-          style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 'var(--fs-micro)',
-            color: 'var(--ink-primary)',
-            textTransform: capitalize ? 'capitalize' : 'none',
-          }}
-        >
-          {label}
-        </span>
-      )}
-      {sub && (
-        <span
-          style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 'var(--fs-micro)',
-            color: 'var(--ink-muted)',
-            letterSpacing: 'var(--tracking-wider)',
-            textTransform: 'uppercase',
-          }}
-        >
-          · {sub}
-        </span>
-      )}
-    </div>
-  );
-}
-
-function Resource({
-  icon,
-  label,
-  pct,
-}: {
-  icon: React.ReactNode;
-  label: string;
-  pct: number | undefined;
-}) {
-  const hasValue = typeof pct === 'number' && Number.isFinite(pct);
-  const v = hasValue ? (pct as number) : 0;
-  const color = !hasValue
-    ? 'var(--ink-muted)'
-    : v > 85
-      ? 'var(--signal-alert)'
-      : v > 60
-        ? 'var(--signal-warn)'
-        : 'var(--ink-primary)';
-  const width = Math.max(3, Math.min(100, v));
-  return (
-    <div className="flex items-center gap-1.5">
-      <span style={{ color: 'var(--ink-muted)' }}>{icon}</span>
-      <span
-        style={{
-          fontFamily: 'var(--font-display)',
-          fontSize: 'var(--fs-micro)',
-          color: 'var(--ink-muted)',
-          letterSpacing: 'var(--tracking-wide)',
-        }}
-      >
+        <MSym name={matched ? 'face_6' : 'face'} size={12} fill={matched ? 1 : 0} color={color} />
         {label}
       </span>
-      <span
-        className="block"
-        style={{
-          width: 28,
-          height: 3,
-          borderRadius: 9999,
-          background: 'var(--line-subtle)',
-          position: 'relative',
-          overflow: 'hidden',
-        }}
-      >
-        <span
-          className="block absolute left-0 top-0 bottom-0"
-          style={{
-            width: hasValue ? `${width}%` : '0%',
-            background: color,
-            borderRadius: 9999,
-          }}
-        />
-      </span>
-      <span
-        className="tabular-nums"
-        style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 'var(--fs-micro)',
-          color,
-          minWidth: 20,
-          textAlign: 'right',
-        }}
-      >
-        {hasValue ? Math.round(v) : '—'}
-      </span>
-    </div>
+    </>
   );
 }
 
-// Phase 9.2.1 — poll /agent/router_state every 15s. Cheap (single GET, no body)
-// and gives the operator visibility into AI provider cooldowns / quota state.
+/* ─── Provider badge ─────────────────────────────────────────────── */
+
 import type { RouterStateSnapshot } from '../../services/agentApi';
 import { deriveProviderSummary } from '../../utils/providerSummary';
 
@@ -506,30 +484,34 @@ function ProviderBadge({
   provider: string;
   routerState: RouterStateSnapshot | null;
 }) {
-  const summary = useMemo(() => deriveProviderSummary(provider, routerState), [provider, routerState]);
-
+  const summary = useMemo(
+    () => deriveProviderSummary(provider, routerState),
+    [provider, routerState],
+  );
   return (
-    <div className="flex items-center gap-1.5" title={summary.tooltip}>
-      <span style={{ color: 'var(--ink-muted)' }} className="inline-flex">
-        <Sparkles size={12} strokeWidth={2} />
-      </span>
+    <span
+      className="inline-flex items-center"
+      style={{ gap: 6 }}
+      title={summary.tooltip}
+    >
+      <MSym name="auto_awesome" size={13} color="var(--ink-muted)" />
       <span
         aria-hidden
-        className="rounded-full"
         style={{
           width: 6,
           height: 6,
+          borderRadius: 999,
           background: summary.color,
           boxShadow: `0 0 6px ${summary.color}`,
-          display: 'inline-block',
         }}
       />
       <span
         style={{
           fontFamily: 'var(--font-display)',
-          fontSize: 'var(--fs-micro)',
+          fontSize: 11,
           color: 'var(--ink-primary)',
           textTransform: 'capitalize',
+          fontWeight: 600,
         }}
       >
         {summary.label}
@@ -538,43 +520,43 @@ function ProviderBadge({
         <span
           style={{
             fontFamily: 'var(--font-display)',
-            fontSize: 'var(--fs-micro)',
+            fontSize: 10,
             color: 'var(--ink-muted)',
           }}
         >
           →
         </span>
       )}
-    </div>
-  );
-}
-
-function ConnectivityDot({
-  ok,
-  Icon,
-}: {
-  ok: boolean;
-  Icon: { on: LucideIcon; off: LucideIcon };
-}) {
-  const Component = ok ? Icon.on : Icon.off;
-  return (
-    <span
-      className="inline-flex items-center"
-      style={{ color: ok ? 'var(--signal-ok)' : 'var(--ink-muted)' }}
-    >
-      <Component size={12} strokeWidth={2} />
     </span>
   );
 }
 
-/**
- * BackgroundTrackBadge (Phase 9.4a).
- *
- * Shows "BG: N" where N = (active ? 1 : 0) + queue_size. Renders nothing
- * when N == 0 so the bar stays clean during normal foreground-only use.
- *
- * Polls /agent/status every 10s. Cheap single GET.
- */
+/* ─── Connectivity dots ──────────────────────────────────────────── */
+
+function ConnectivityIcon({
+  ok,
+  iconOn,
+  iconOff,
+  label,
+}: {
+  ok: boolean;
+  iconOn: string;
+  iconOff: string;
+  label: string;
+}) {
+  return (
+    <span
+      className="inline-flex items-center"
+      title={ok ? `${label} online` : `${label} offline`}
+      style={{ color: ok ? 'var(--signal-ok)' : 'var(--ink-muted)' }}
+    >
+      <MSym name={ok ? iconOn : iconOff} size={14} color="currentColor" />
+    </span>
+  );
+}
+
+/* ─── Background-track badge ─────────────────────────────────────── */
+
 function useAgentStatusPolled(): import('../../services/agentApi').AgentStatusSnapshot | null {
   const [snap, setSnap] = useState<
     import('../../services/agentApi').AgentStatusSnapshot | null
@@ -633,50 +615,41 @@ export function deriveBackgroundTrackView(
   return { total, active, queued, color, title, visible: total > 0 };
 }
 
-function BackgroundTrackBadge() {
+function BackgroundTrackSection() {
   const snap = useAgentStatusPolled();
   const view = deriveBackgroundTrackView(snap);
   if (!view.visible) return null;
   return (
-    <span
-      data-testid="background-track-badge"
-      data-count={view.total}
-      className="inline-flex items-center gap-1 px-2 rounded-full"
-      style={{
-        height: 20,
-        background: `color-mix(in srgb, ${view.color} 14%, transparent)`,
-        border: `1px solid color-mix(in srgb, ${view.color} 40%, transparent)`,
-        color: view.color,
-        fontFamily: 'var(--font-display)',
-        fontSize: 'var(--fs-micro)',
-        letterSpacing: 'var(--tracking-wider)',
-      }}
-      title={view.title}
-    >
-      <span aria-hidden>🌙</span>
-      <span className="tabular-nums">BG: {view.total}</span>
-    </span>
+    <>
+      <Divider />
+      <span
+        data-testid="background-track-badge"
+        data-count={view.total}
+        className="inline-flex items-center"
+        style={{
+          gap: 4,
+          padding: '0 8px',
+          height: 22,
+          borderRadius: 999,
+          background: `color-mix(in srgb, ${view.color} 14%, transparent)`,
+          border: `1px solid color-mix(in srgb, ${view.color} 40%, transparent)`,
+          color: view.color,
+          fontFamily: 'var(--font-display)',
+          fontSize: 10,
+          letterSpacing: '0.10em',
+          fontWeight: 700,
+        }}
+        title={view.title}
+      >
+        <MSym name="bedtime" size={11} color="currentColor" />
+        <span className="tabular">BG: {view.total}</span>
+      </span>
+    </>
   );
 }
 
-function BackgroundTrackDivider() {
-  // Divider only appears when the badge does, so the bar doesn't have a
-  // floating separator when BG is idle.
-  const snap = useAgentStatusPolled();
-  if (!snap) return null;
-  const total = (snap.background.active ? 1 : 0) + (snap.background.queue_size || 0);
-  if (total === 0) return null;
-  return <Divider />;
-}
+/* ─── Proactive breathing indicator ─────────────────────────────── */
 
-/**
- * ProactiveIndicator (Phase 9.3b).
- *
- * Shows a 💭 glyph with three states:
- *   - active: proactive loop enabled, last cycle within 5 min → pulses
- *   - cooling: enabled but no cycle in last 5 min → dim
- *   - idle: loop disabled (agent_proactive_enabled=false) → muted
- */
 function ProactiveIndicator() {
   const proactive = useAgentStore((s) => s.proactive);
   const [now, setNow] = useState(() => Date.now());
@@ -684,29 +657,27 @@ function ProactiveIndicator() {
     const t = setInterval(() => setNow(Date.now()), 15000);
     return () => clearInterval(t);
   }, []);
-  const lastCycleMs = proactive.lastCycleAt
-    ? Date.parse(proactive.lastCycleAt)
-    : null;
+  const lastCycleMs = proactive.lastCycleAt ? Date.parse(proactive.lastCycleAt) : null;
   const recent = lastCycleMs != null && now - lastCycleMs < 5 * 60 * 1000;
   const status: 'active' | 'cooling' | 'idle' =
     !proactive.enabled && lastCycleMs == null
       ? 'idle'
       : recent
-      ? 'active'
-      : 'cooling';
+        ? 'active'
+        : 'cooling';
   const color =
     status === 'active'
       ? 'var(--signal-ok)'
       : status === 'cooling'
-      ? 'var(--ink-muted)'
-      : 'var(--ink-faint)';
+        ? 'var(--ink-muted)'
+        : 'var(--ink-faint)';
   const pulse = status === 'active' && proactive.hasTriggers;
   const title =
     status === 'active'
       ? `Proactive: active${proactive.hasTriggers ? ' (triggers pending)' : ''}`
       : status === 'cooling'
-      ? 'Proactive: cooling'
-      : 'Proactive: idle';
+        ? 'Proactive: cooling'
+        : 'Proactive: idle';
   return (
     <span
       data-testid="proactive-indicator"
@@ -714,14 +685,12 @@ function ProactiveIndicator() {
       className="inline-flex items-center select-none"
       style={{
         color,
-        fontSize: 12,
-        lineHeight: 1,
-        animation: pulse ? 'pulse 2s ease-in-out infinite' : undefined,
-        opacity: status === 'idle' ? 0.4 : 1,
+        animation: pulse ? 'pulse-state 2s ease-in-out infinite' : undefined,
+        opacity: status === 'idle' ? 0.45 : 1,
       }}
       title={title}
     >
-      💭
+      <MSym name="psychology_alt" size={14} color="currentColor" />
     </span>
   );
 }

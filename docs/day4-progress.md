@@ -710,3 +710,58 @@ Next: W-3 (`+` button + AttachDrawer + ModelCard).
 
 ---
 
+## 2026-05-02 04:10 CEST — Wave-2 W-3 DONE (+ button + AttachDrawer + ModelCard)
+
+Operator's "картки замість довгого тексту" directive now has its
+chat-input surface. Three frontend additions:
+
+  src/frontend/src/components/chat/AttachDrawer.tsx
+    Glass-panel drawer over the input rail. Five entries (closed
+    enum AttachKind = file | screenshot | recall | code | sandbox);
+    each tap target ≥ 44x44 (CLAUDE.md rule 3). Selection emits
+    {kind, hint} via onSelect + auto-closes (single-shot semantics).
+    Escape key closes; auto-focus on first entry for keyboard /
+    screen-reader users.
+
+  src/frontend/src/components/chat/ModelCard.tsx
+    Compact badge above the input rail showing the active provider
+    + STT engine the next message will route through. Reads from the
+    live ContextSnapshot (systemStore.context.system.{ai_provider,
+    stt_engine}). Provider dot colour-coded: gemini=info, ollama=ok,
+    other=muted. Optional overlay slot for future Z-1 (AI Hub)
+    locality echoes ("ctx 2.4k tok" etc.).
+
+  src/frontend/src/components/chat/ChatWindow.tsx (modified)
+    + button between voice/textarea opens the drawer.
+    + ModelCard echo above the input rail (hidden in minimalChrome
+      mode — StatusBar already shows the same info there).
+    + Pending-attachment chip strip — selections accumulate as
+      removable chips; X glyph on each chip clears it; chips ride
+      with the next send (Day-5 wires to backend payload).
+    + Drawer is absolute-positioned via a relative wrapper so the
+      animated overlay doesn't reflow the chat-list above.
+
+9 vitest specs at src/__tests__/attach-drawer.test.tsx pin:
+- AttachDrawer renders 5 entries (file/screenshot/recall/code/
+  sandbox) when open.
+- Renders nothing when open=false.
+- Selecting an entry calls onSelect with kind + hint AND onClose
+  exactly once (single-shot semantics).
+- X button calls onClose.
+- Every tap target meets 44x44 minimum.
+- ModelCard exposes provider + stt as data attrs and renders the
+  text content.
+- Null provider → '—' placeholder + data-provider="unknown".
+- Null sttEngine → STT chip hidden; data-stt="none".
+- Optional overlay text rendered when provided.
+
+Vitest 9/9 W-3 + 36/36 chat.test.tsx regression green. tsc clean.
+
+Day-4 attachments are local UI state; backend handoff (multipart
+upload, screenshot capture, recall query) ships Day-5 behind the
+same AttachKind keys so the UI surface stays stable.
+
+Next: W-3b (Settings subgroup accordions, closes U1-UX-C1).
+
+---
+

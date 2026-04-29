@@ -8,8 +8,11 @@ import {
   Trash2,
   MessageCircle,
   Sparkles,
+  X,
 } from 'lucide-react';
 import { MessageBubble } from './MessageBubble';
+import { AttachDrawer, type AttachSelection } from './AttachDrawer';
+import { ModelCard } from './ModelCard';
 import { useChatStore } from '../../stores/chatStore';
 import { useChatStream } from '../../hooks/useChatStream';
 import { useSystemStore } from '../../stores/systemStore';
@@ -88,10 +91,22 @@ export function ChatWindow({
   const [input, setInput] = useState('');
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [transcribing, setTranscribing] = useState(false);
+  // Day-4 W-3: AttachDrawer open-state + pending attachment chips.
+  // The chips are local UI state; Day-5 wires them through to the
+  // backend send_message payload as typed attachments.
+  const [attachOpen, setAttachOpen] = useState(false);
+  const [pendingAttachments, setPendingAttachments] = useState<
+    AttachSelection[]
+  >([]);
   const lastUserInputMethodRef = useRef<'text' | 'voice' | 'encoder'>('text');
   const endRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
   const stickyBottomRef = useRef(true);
+  // Day-4 W-3: ModelCard echo reads from the live context snapshot so
+  // the user sees which provider+engine the next turn will route through.
+  const systemContext = useSystemStore((s) => s.context);
+  const activeProvider = systemContext?.system?.ai_provider ?? null;
+  const activeStt = systemContext?.system?.stt_engine ?? null;
 
   const recorder = useVoiceRecorder();
   const pendingVoiceActivation = useUIStore((s) => s.pendingVoiceActivation);
@@ -635,19 +650,118 @@ export function ChatWindow({
           </div>
         )}
 
-        {/* Input bar — glass card rounded-full */}
+        {/* Input bar — glass card rounded-full. Day-4 W-3 wraps it
+            in a relative container so the AttachDrawer can absolute-
+            position above the input rail. ModelCard echo + pending-
+            attachment chips render above the rail too. */}
         <div className="px-5 pb-4 pt-2 shrink-0">
-          <div
-            className="glass-card flex items-center gap-2 pl-2 pr-2"
-            style={{
-              borderRadius: 9999,
-              height: 52,
-            }}
-          >
-            {showVoice && (
+          {/* Day-4 W-3 — ModelCard echo. Hidden in minimalChrome
+              layouts (e.g. embedded chat tile) since the StatusBar
+              already shows the same data. */}
+          {!minimalChrome && (
+            <div className="px-3 pb-1.5">
+              <ModelCard provider={activeProvider} sttEngine={activeStt} />
+            </div>
+          )}
+          {/* Day-4 W-3 — pending-attachment chip strip. Removable via
+              the X glyph; sent as part of the next message metadata
+              (Day-5 wires to backend). */}
+          {pendingAttachments.length > 0 && (
+            <div
+              className="flex flex-wrap gap-1 px-3 pb-2"
+              data-testid="attach-chip-strip"
+            >
+              {pendingAttachments.map((att, idx) => (
+                <span
+                  key={`${att.kind}-${idx}`}
+                  className="inline-flex items-center gap-1 rounded-full px-2 py-0.5"
+                  style={{
+                    background: 'var(--glass-subtle)',
+                    border: '1px solid var(--glass-border)',
+                    fontFamily: 'var(--font-display)',
+                    fontSize: 'var(--fs-micro)',
+                    color: 'var(--ink-secondary)',
+                    letterSpacing: 'var(--tracking-wide)',
+                  }}
+                  data-attach-kind={att.kind}
+                >
+                  <span className="capitalize">{att.kind}</span>
+                  <button
+                    type="button"
+                    onClick={() =>
+                      setPendingAttachments((curr) =>
+                        curr.filter((_, i) => i !== idx)
+                      )
+                    }
+                    className="flex items-center justify-center"
+                    style={{
+                      width: 16,
+                      height: 16,
+                      minWidth: 44,
+                      minHeight: 44,
+                      borderRadius: 9999,
+                      background: 'transparent',
+                      border: 'none',
+                      color: 'var(--ink-muted)',
+                    }}
+                    aria-label={`Remove ${att.kind} attachment`}
+                  >
+                    <X size={10} strokeWidth={1.75} />
+                  </button>
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="relative">
+            <AttachDrawer
+              open={attachOpen}
+              onClose={() => setAttachOpen(false)}
+              onSelect={(sel) =>
+                setPendingAttachments((curr) => [...curr, sel])
+              }
+            />
+            <div
+              className="glass-card flex items-center gap-2 pl-2 pr-2"
+              style={{
+                borderRadius: 9999,
+                height: 52,
+              }}
+            >
+              {showVoice && (
+                <button
+                  type="button"
+                  onClick={toggleVoice}
+                  className="flex items-center justify-center shrink-0 transition-all active:scale-95"
+                  style={{
+                    width: 40,
+                    height: 40,
+                    minWidth: 44,
+                    minHeight: 44,
+                    borderRadius: 9999,
+                    background: voiceActive
+                      ? 'var(--accent)'
+                      : 'var(--glass-subtle)',
+                    color: voiceActive ? 'var(--ink-inverse)' : 'var(--ink-secondary)',
+                    border: voiceActive
+                      ? '1px solid var(--accent)'
+                      : '1px solid var(--glass-border)',
+                    boxShadow: voiceActive
+                      ? '0 0 16px var(--accent-glow)'
+                      : 'none',
+                  }}
+                  aria-label={voiceActive ? 'Stop listening' : 'Start listening'}
+                  aria-pressed={voiceActive}
+                >
+                  {voiceActive ? <MicOff size={16} strokeWidth={1.75} /> : <Mic size={16} strokeWidth={1.75} />}
+                </button>
+              )}
+
+              {/* Day-4 W-3 — `+` attach button. Toggles the drawer above
+                  the input rail. Disabled while a turn is in flight. */}
               <button
                 type="button"
-                onClick={toggleVoice}
+                onClick={() => setAttachOpen((v) => !v)}
+                disabled={sending}
                 className="flex items-center justify-center shrink-0 transition-all active:scale-95"
                 style={{
                   width: 40,
@@ -655,71 +769,70 @@ export function ChatWindow({
                   minWidth: 44,
                   minHeight: 44,
                   borderRadius: 9999,
-                  background: voiceActive
-                    ? 'var(--accent)'
+                  background: attachOpen
+                    ? 'color-mix(in srgb, var(--accent) 18%, transparent)'
                     : 'var(--glass-subtle)',
-                  color: voiceActive ? 'var(--ink-inverse)' : 'var(--ink-secondary)',
-                  border: voiceActive
+                  color: attachOpen ? 'var(--accent)' : 'var(--ink-secondary)',
+                  border: attachOpen
                     ? '1px solid var(--accent)'
                     : '1px solid var(--glass-border)',
-                  boxShadow: voiceActive
-                    ? '0 0 16px var(--accent-glow)'
-                    : 'none',
+                  opacity: sending ? 0.5 : 1,
                 }}
-                aria-label={voiceActive ? 'Stop listening' : 'Start listening'}
-                aria-pressed={voiceActive}
+                aria-label="Open attach drawer"
+                aria-expanded={attachOpen}
+                data-testid="chat-attach-button"
               >
-                {voiceActive ? <MicOff size={16} strokeWidth={1.75} /> : <Mic size={16} strokeWidth={1.75} />}
+                <Plus size={16} strokeWidth={2} />
               </button>
-            )}
 
-            <textarea
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              placeholder={placeholder}
-              rows={1}
-              aria-label="Chat input"
-              className="flex-1 resize-none outline-none bg-transparent"
-              style={{
-                minHeight: 40,
-                maxHeight: 120,
-                padding: '10px 12px',
-                color: 'var(--ink-primary)',
-                fontFamily: 'var(--font-display)',
-                fontSize: 'var(--fs-base)',
-                lineHeight: 'var(--lh-normal)',
-                border: 'none',
-              }}
-            />
+              <textarea
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                placeholder={placeholder}
+                rows={1}
+                aria-label="Chat input"
+                className="flex-1 resize-none outline-none bg-transparent"
+                style={{
+                  minHeight: 40,
+                  maxHeight: 120,
+                  padding: '10px 12px',
+                  color: 'var(--ink-primary)',
+                  fontFamily: 'var(--font-display)',
+                  fontSize: 'var(--fs-base)',
+                  lineHeight: 'var(--lh-normal)',
+                  border: 'none',
+                }}
+              />
 
-            <button
-              type="button"
-              onClick={handleSend}
-              disabled={!input.trim() || sending}
-              className="flex items-center justify-center shrink-0 transition-all active:scale-95"
-              style={{
-                width: 40,
-                height: 40,
-                minWidth: 44,
-                minHeight: 44,
-                borderRadius: 9999,
-                background:
-                  input.trim() && !sending ? 'var(--accent)' : 'var(--glass-subtle)',
-                color:
-                  input.trim() && !sending ? 'var(--ink-inverse)' : 'var(--ink-muted)',
-                border:
-                  input.trim() && !sending
-                    ? '1px solid var(--accent)'
-                    : '1px solid var(--glass-border)',
-                boxShadow:
-                  input.trim() && !sending ? '0 0 16px var(--accent-glow)' : 'none',
-                opacity: input.trim() && !sending ? 1 : 0.6,
-              }}
-              aria-label="Send message"
-            >
-              <Send size={16} strokeWidth={2} />
-            </button>
+              <button
+                type="button"
+                onClick={handleSend}
+                disabled={!input.trim() || sending}
+                className="flex items-center justify-center shrink-0 transition-all active:scale-95"
+                style={{
+                  width: 40,
+                  height: 40,
+                  minWidth: 44,
+                  minHeight: 44,
+                  borderRadius: 9999,
+                  background:
+                    input.trim() && !sending ? 'var(--accent)' : 'var(--glass-subtle)',
+                  color:
+                    input.trim() && !sending ? 'var(--ink-inverse)' : 'var(--ink-muted)',
+                  border:
+                    input.trim() && !sending
+                      ? '1px solid var(--accent)'
+                      : '1px solid var(--glass-border)',
+                  boxShadow:
+                    input.trim() && !sending ? '0 0 16px var(--accent-glow)' : 'none',
+                  opacity: input.trim() && !sending ? 1 : 0.6,
+                }}
+                aria-label="Send message"
+              >
+                <Send size={16} strokeWidth={2} />
+              </button>
+            </div>
           </div>
         </div>
       </div>

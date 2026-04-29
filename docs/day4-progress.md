@@ -1584,3 +1584,74 @@ Next: T-1 (StandingOrder lease columns + recover_stale_leases).
 
 ---
 
+## 2026-05-02 11:25 CEST — Wave-2 T-1 DONE (StandingOrder lease columns + boot reconciliation)
+
+ADR-SOH-001 + ADR-SOH-002. Closes audit U7-TIME class — a runner
+that crashed mid-`start_task` no longer leaves `in_flight_task_id`
+pinned forever.
+
+  db/models.py StandingOrder         — 2 new columns:
+                                        in_flight_task_id (String 36,
+                                          indexed, nullable)
+                                        claimed_at (DateTime, nullable)
+  db/migrations/008_standing_order_lease.py (NEW) — idempotent
+                                        ALTER TABLE for pre-Day-4
+                                        Wave-2 DBs.
+  config.py                          — agent_standing_orders_lease_ttl_s
+                                        : int = 300 (5 min default).
+  agent/audit.py task_status()      — read-only sibling of
+                                        update_task_status. Returns
+                                        "running" | "done" | "error" |
+                                        "cancelled" | "missing".
+                                        Maps in-progress states
+                                        ("planning", "blocked_quota",
+                                        etc.) to "running".
+  agent/standing_orders/runner.py
+    .start()                         — invokes recover_stale_leases()
+                                        BEFORE the poll loop (best-
+                                        effort; failure logs WARN +
+                                        continues).
+    .recover_stale_leases()          — selects rows with
+                                        in_flight_task_id IS NOT NULL
+                                        AND claimed_at < now - ttl.
+                                        For each:
+                                          done | cancelled → clear
+                                            lease + last_outcome=
+                                            "recovered:<status>",
+                                            count++.
+                                          error | missing → clear
+                                            lease (next tick re-
+                                            fires; idempotent because
+                                            last_fired_at was set by
+                                            the original dispatch),
+                                            count++.
+                                          running → leave the lease
+                                            intact (still legitimate;
+                                            only stale by clock).
+                                        Per-row failure logs WARN
+                                        and continues to the next
+                                        row.
+
+10 T-1 contract tests:
+  - schema columns + index present.
+  - lease_ttl default = 300.
+  - task_status: missing for unknown id; "" → "missing"; round-trip
+    "planning" → "running" → "done".
+  - recover_stale_leases happy paths: stale done (cleared +
+    last_outcome=recovered:done), stale missing (cleared, runner
+    will re-fire), running (preserved), fresh lease (not touched).
+  - All test rows uuid-tagged so cross-test SQLite contamination
+    cannot collide on shared task IDs.
+
+44/44 standing-orders + schedule sweep green (T-1 + Day-3 P-3 +
+Day-4 T-4 + Day-3 9.3b runner suite).
+
+Behavioural drift = ZERO outside the new boot-recovery path.
+Atomic-claim wiring inside `_fire_order` (the SOH-001 lease-claim
+SQL path that prevents double-fires within a single uptime) is
+deferred to Day-5 — too invasive for the Wave-2 scope.
+
+Next: T-2 (action-kind discriminator: speak/notify/task/webhook).
+
+---
+

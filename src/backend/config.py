@@ -411,6 +411,14 @@ class PhantomConfig(BaseSettings):
     # fires without operator opt-in. Hot-reloadable.
     agent_standing_orders_enabled: bool = True
     agent_standing_orders_poll_s: int = 10
+    # Day-4 Wave-2 T-1 (ADR-SOH-001): lease TTL for standing-order
+    # crash recovery. After this many seconds the
+    # `recover_stale_leases()` startup pass treats a lingering
+    # `in_flight_task_id` as orphaned and reconciles via
+    # agent.runtime.task_status. Default 5 minutes — generous for
+    # cron/interval headroom yet short enough that boot recovery is
+    # immediate (we run reconcile at runner.start, not just by TTL).
+    agent_standing_orders_lease_ttl_s: int = 300
     # Phase 9.3b — inner monologue channel rate limit (events per second).
     agent_monologue_rate_limit_eps: int = 10
     agent_reflection_every_n_actions: int = 5

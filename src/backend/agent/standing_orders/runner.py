@@ -57,9 +57,107 @@ class StandingOrderRunner:
     async def start(self) -> None:
         if self._task is not None and not self._task.done():
             return
+        # Day-4 Wave-2 T-1 (ADR-SOH-002): boot reconciliation. A
+        # runner that crashed mid-`start_task` would otherwise leave
+        # `in_flight_task_id` pinned forever. Reconcile every stale
+        # lease against agent.audit.task_status before the poll loop
+        # begins. Best-effort — a failure here logs WARN but never
+        # blocks startup (Day-3 lifespan invariant: runner.start must
+        # succeed for the rest of the agent runtime).
+        try:
+            recovered = await self.recover_stale_leases()
+            if recovered:
+                logger.info(
+                    "Standing orders: recovered %d stale lease(s) at boot",
+                    recovered,
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.warning(
+                "Standing orders: stale-lease recovery raised at boot "
+                "(continuing): %s",
+                exc,
+            )
+
         self._stop_event.clear()
         self._task = asyncio.create_task(self._run(), name="standing_orders_runner")
         logger.info("Standing orders runner started")
+
+    async def recover_stale_leases(self) -> int:
+        """Day-4 Wave-2 T-1 (ADR-SOH-002): reconcile lingering
+        ``StandingOrder.in_flight_task_id`` against reality.
+
+        Selects rows where ``in_flight_task_id IS NOT NULL`` AND
+        ``claimed_at < now - lease_ttl``; for each, calls
+        ``agent.audit.task_status(task_id)`` and reconciles:
+
+          - ``done | cancelled`` → clear lease columns; set
+            ``last_outcome = "recovered:<status>"``.
+          - ``error | missing`` → clear lease; the runner re-fires on
+            the next tick (idempotent because `last_fired_at` is
+            already set).
+          - ``running`` → leave as-is (lease still legitimate; only
+            stale by clock).
+
+        Returns the number of leases released. Best-effort under load:
+        a per-row failure logs WARN and continues to the next row.
+        """
+        from datetime import datetime, timedelta, timezone
+        from sqlalchemy import select
+
+        from agent.audit import task_status
+        from db.database import get_session
+        from db.models import StandingOrder
+
+        ttl_s = max(
+            1,
+            int(
+                getattr(config, "agent_standing_orders_lease_ttl_s", 300) or 300
+            ),
+        )
+        cutoff = datetime.now(timezone.utc) - timedelta(seconds=ttl_s)
+        # SQLAlchemy stores DateTime without TZ on SQLite; the cutoff
+        # comparison still works because the persisted column is the
+        # `_now` UTC value (db.models._now returns naive UTC).
+        cutoff_naive = cutoff.replace(tzinfo=None)
+
+        released = 0
+        async with get_session() as db:
+            rows = (
+                await db.execute(
+                    select(StandingOrder).where(
+                        StandingOrder.in_flight_task_id.is_not(None),
+                        StandingOrder.claimed_at.is_not(None),
+                        StandingOrder.claimed_at < cutoff_naive,
+                    )
+                )
+            ).scalars().all()
+            for row in rows:
+                tid = row.in_flight_task_id
+                try:
+                    status = await task_status(tid or "")
+                except Exception as exc:  # noqa: BLE001
+                    logger.warning(
+                        "recover_stale_leases: task_status(%s) raised "
+                        "(treating as missing): %s",
+                        tid,
+                        exc,
+                    )
+                    status = "missing"
+
+                if status == "running":
+                    # Live; lease is legitimately old (long-running
+                    # task). Leave as-is.
+                    continue
+                # Reconcile: clear lease columns regardless of failure
+                # vs success branch — the runner re-fires on the next
+                # tick if status was error/missing.
+                row.in_flight_task_id = None
+                row.claimed_at = None
+                if status in ("done", "cancelled"):
+                    row.last_outcome = f"recovered:{status}"
+                released += 1
+            await db.commit()
+        return released
 
     async def stop(self) -> None:
         self._stop_event.set()

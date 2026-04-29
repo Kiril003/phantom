@@ -46,6 +46,34 @@ async def create_task_row(task_id: str, goal: str, track: Track = "foreground") 
         db.add(row)
 
 
+async def task_status(task_id: str) -> str:
+    """Day-4 Wave-2 T-1 (ADR-SOH-002): read-only sibling of
+    `update_task_status`. Used by `recover_stale_leases` to reconcile
+    a stranded `in_flight_task_id` against reality.
+
+    Returns one of: ``"running" | "done" | "error" | "cancelled" |
+    "missing"``. ``"missing"`` covers the case where the runner crashed
+    BEFORE persisting the AgentTask row — the lease must be cleared so
+    the next tick can re-fire (idempotent because last_fired_at is
+    already set when the runner reaches the dispatch path).
+
+    The DB column is also "blocked_quota" / "planning" / etc., but the
+    SOH-002 reconcile only cares about the four life-cycle states; we
+    map any non-terminal in-progress status to ``"running"`` so the
+    caller treats it as a legitimate live lease.
+    """
+    if not task_id:
+        return "missing"
+    async with get_session() as db:
+        row = await db.get(AgentTask, task_id)
+        if row is None:
+            return "missing"
+        s = (row.status or "").lower()
+        if s in ("done", "error", "cancelled"):
+            return s
+        return "running"
+
+
 async def update_task_status(
     task_id: str,
     status: TaskStatus,

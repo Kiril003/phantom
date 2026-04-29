@@ -472,6 +472,15 @@ class StandingOrder(Base):
     last_fired_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     fire_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     last_outcome: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # Day-4 Wave-2 T-1 (ADR-SOH-001): lease columns. The runner's
+    # `_fire_order` claims a row via atomic UPDATE WHERE
+    # in_flight_task_id IS NULL; release happens via task_status
+    # reconciliation (SOH-002). Both default NULL so existing rows +
+    # tests stay byte-compatible (Day-3 contract preserved).
+    in_flight_task_id: Mapped[Optional[str]] = mapped_column(
+        String(36), nullable=True, index=True
+    )
+    claimed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
 
 # Day-4 Wave-2 FACTS-1 (ADR-FCT-001): UserFact ORM (closes U6-ID-* class)
 # - Profile facts (email, phone, telegram, discord, file_pointer) attached

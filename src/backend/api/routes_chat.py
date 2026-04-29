@@ -642,7 +642,13 @@ async def _broadcast_message_stream(hub: Any, user_id: str, message: dict, sessi
                 {"message_id": message_id, "delta": chunk, "done": False},
                 user_id=user_id,
             )
-            await asyncio.sleep(config.chat_stream_delay_s)
+            # Day-4 W-5 (audit U8-PERF-C2): skip the inter-chunk sleep
+            # when the operator left the new 0.0 default in place.
+            # Calling asyncio.sleep(0) is a yield-point that costs an
+            # event-loop hop per chunk (5-10 hops × ~1 ms = 5-10 ms);
+            # the strict-positive guard avoids that on every turn.
+            if config.chat_stream_delay_s > 0:
+                await asyncio.sleep(config.chat_stream_delay_s)
 
     await hub.broadcast(
         "chat", "stream",

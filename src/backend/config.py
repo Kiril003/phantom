@@ -73,9 +73,17 @@ class PhantomConfig(BaseSettings):
     # while still letting paid-tier deployments raise it via settings.
     ai_call_min_interval_ms: int = 3000
 
-    # Chat (Phase 5) — WS stream emission cadence
+    # Chat (Phase 5) — WS stream emission cadence.
+    # Day-4 Wave-2 W-5 (audit U8-PERF-C2): default chat_stream_delay_s
+    # FLIPPED 0.05 → 0.0. The 50 ms inter-chunk sleep was inserting
+    # 250-500 ms of artificial latency per response (5-10 chunks per
+    # turn). Real network jitter alone is the rate-limiter operators
+    # actually want. Operators with deliberately-throttled deploys can
+    # set the knob >0 in Settings; the hot path checks
+    # `if delay > 0:` before calling asyncio.sleep so the new default
+    # skips the sleep entirely.
     chat_stream_chunk_chars: int = 24
-    chat_stream_delay_s: float = 0.05
+    chat_stream_delay_s: float = 0.0
     chat_max_session_history: int = 50
 
     # ── Voice / STT ───────────────────────────────────────────────────────────
@@ -246,6 +254,14 @@ class PhantomConfig(BaseSettings):
     # ── UI ────────────────────────────────────────────────────────────────────
     ui_theme: Literal["dark", "light", "auto"] = "dark"
     ui_density: Literal["compact", "normal", "comfortable"] = "normal"
+    # Day-4 Wave-2 W-5 (audit U2-ANIM-C2 + U8-PERF): hardware-tier
+    # gate. Frontend reads this and disables backdrop-filter / caps
+    # animation framerate / drops AmbientGlows when "low" so weaker
+    # GPUs (Adreno on cheap Win mini-PCs, integrated Intel) don't jank.
+    # Default "mid" matches the Q6A baseline; operators on a fully
+    # capable desktop can flip to "high"; CI / VM deploys flip to
+    # "low".
+    ui_hardware_tier: Literal["low", "mid", "high"] = "mid"
     ui_color_cyan: str = "#00D4FF"
     ui_color_warning: str = "#FF6B35"
     ui_color_success: str = "#39FF14"

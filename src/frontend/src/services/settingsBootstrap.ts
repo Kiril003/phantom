@@ -55,6 +55,19 @@ export function applyUISettings(values: Record<string, unknown>): void {
     root.setAttribute('data-density', density);
   }
 
+  // Day-4 W-5 (audit U2-ANIM-C2 + U8-PERF) — hardware tier gate. CSS
+  // matches `[data-tier="low"] .glass-panel { backdrop-filter: none }`
+  // etc. so weaker GPUs (Adreno on cheap Win mini-PCs, integrated
+  // Intel) don't burn frame budget on stacked filters. Closed enum
+  // (low | mid | high); defaults to mid when unset/garbage so a
+  // missing config never strips chrome.
+  const tier = values.ui_hardware_tier;
+  if (tier === 'low' || tier === 'mid' || tier === 'high') {
+    root.setAttribute('data-tier', tier);
+  } else {
+    root.setAttribute('data-tier', 'mid');
+  }
+
   const speed = values.ui_animation_speed;
   if (typeof speed === 'number' && Number.isFinite(speed) && speed > 0) {
     root.style.setProperty('--motion-scale-user', String(speed));

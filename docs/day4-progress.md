@@ -900,3 +900,57 @@ chat_stream_delay_s).
 
 ---
 
+## 2026-05-02 06:10 CEST — Wave-2 W-5 DONE (hardware tier + chat-stream delay = 0.0)
+
+Closes audit U2-ANIM-C2 + U8-PERF-C2.
+
+Three deliverables:
+
+1. config.chat_stream_delay_s flipped 0.05 → 0.0 (default). Audit
+   measured 250-500 ms artificial latency per turn (5-10 chunks ×
+   50 ms). routes_chat hot-path now guards
+   `if config.chat_stream_delay_s > 0:` so the new default skips the
+   asyncio.sleep entirely (no event-loop hop on every chunk).
+   Operators with deliberately-throttled deploys set the knob via
+   Settings; the path stays available.
+
+2. config.ui_hardware_tier: Literal["low","mid","high"] = "mid"
+   (NEW). Frontend gate for backdrop-filter / animation framerate /
+   AmbientGlows opt-out. Default "mid" matches Q6A baseline; weaker
+   GPUs flip to "low", capable desktops flip to "high".
+
+3. settingsBootstrap.applyUISettings now writes
+   <html data-tier="..."> from ui_hardware_tier (defensive
+   fallback to "mid" on garbage / missing). useHardwareTier() hook
+   reads the attribute on mount + subscribes via MutationObserver
+   so settings saves propagate to every consumer without prop drilling.
+   isLowTier(tier) helper for component-side branches.
+
+NB: voice-amp throttle was ALREADY rAF-driven via the existing
+`amplitudeIntervalMs` gate in useVoiceRecorder.tickAmplitude (33ms /
+~30fps cap). No new throttle layer needed; the W-5 plan had an
+overlap with shipped-Day-3 work.
+
+4 W-5 backend pytest:
+- chat_stream_delay_s default = 0.0
+- routes_chat guards "if config.chat_stream_delay_s > 0:"
+- ui_hardware_tier default = "mid"
+- ui_hardware_tier closed to {low,mid,high}; "ultra" rejected
+
+9 W-5 frontend vitest:
+- applyUISettings writes data-tier="low" / "high" correctly
+- garbage / undefined → fallback "mid"
+- useHardwareTier reads attribute on mount + reflects "high"
+- missing attribute → "mid"
+- garbage attribute → "mid"
+- MutationObserver path: applyUISettings("low") propagates to hook
+  consumers within microtask + 5ms grace
+- isLowTier helper: true only for "low"
+
+Backend 4/4 + frontend 9/9 + tsc clean. No regression on chat-stream
+suites (delay=0 just skips the sleep).
+
+Next: Y-1 (bwrap retarget + SandboxProfile + clean_env).
+
+---
+

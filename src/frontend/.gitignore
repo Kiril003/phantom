@@ -1,0 +1,11 @@
+# Dev / build artefacts
+node_modules/
+dist/
+.vite/
+*.log
+
+# ONNX runtime WASM / ESM blobs (vendored at install time, ~50MB total)
+public/ort.*
+public/ort-wasm-*
+public/vad/ort-wasm-*
+public/vad/ort.*

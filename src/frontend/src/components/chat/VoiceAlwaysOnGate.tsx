@@ -52,6 +52,25 @@ export function VoiceAlwaysOnGate({ onStatusChange }: Props = {}) {
     (t: FinalTranscript) => {
       const text = (t.transcript ?? '').trim();
       if (!text) return;
+      // Day-5 quality gate — drop low-signal transcripts BEFORE they
+      // become a /chat/messages call. Uses Whisper/Vosk's own
+      // pseudo-confidence (avg_logprob → exp clamp [0,1]) so we never
+      // need a noise-word allow-list. Two-tier threshold: 1-2-char
+      // transcripts ("у", "ok") need a much higher confidence to ship,
+      // because Whisper most often hallucinates short fillers from
+      // silence; longer transcripts use a relaxed floor.
+      // Operator-tunable via Settings later (key: voice_min_confidence).
+      const confidence = typeof t.confidence === 'number' ? t.confidence : 0;
+      const minConfidence = text.length <= 2 ? 0.55 : 0.4;
+      if (confidence < minConfidence) {
+        // eslint-disable-next-line no-console
+        console.debug(
+          '[voice-gate] dropped low-confidence',
+          { text, confidence, threshold: minConfidence, source: t.source },
+        );
+        setInputMode('idle');
+        return;
+      }
       // Fire-and-forget — the chat store handles errors (banner).
       void sendMessage(text, 'voice', systemState);
       // Hand input mode back to idle so tap-to-talk is free to claim

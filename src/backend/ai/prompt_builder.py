@@ -212,17 +212,23 @@ def build_system_prompt(
     Returns:
         Assembled system prompt string.
     """
+    # Day-5 perf — Gemini implicit prompt-cache wants a STABLE prefix.
+    # Pre-Day-5 layout interleaved dynamic data (state, time, body) into
+    # the static guidance, so the first byte of every turn could differ
+    # and the model paid a fresh ~3.5K-token tokenisation pass each time.
+    # Now: ALL static text first (deterministic prefix → cache hit on
+    # turn N+1), THEN per-turn dynamic data. Test contracts preserved
+    # — the relative order ФОРМИ → ДАНІ → РЕГІСТР is unchanged.
     parts: list[str] = []
 
-    # 1. Core identity
+    # ── STATIC PREFIX (cacheable across turns) ────────────────────────
     parts.append(PHANTOM_IDENTITY)
-
-    # 1b. Brevity discipline (Day-5 — operator: "відповіді стали довші").
-    #     Concrete + counter-examples; placed early so it dominates over
-    #     later guidance blocks that, by themselves, can encourage
-    #     verbose elaboration of structured forms.
     parts.append("\n" + BREVITY_DISCIPLINE)
+    parts.append("\n" + RESPONSE_FORMS_GUIDANCE)
+    parts.append("\n" + DATA_TOOLS_GUIDANCE)
+    parts.append("\n" + REGISTER_GUIDANCE)
 
+    # ── DYNAMIC TAIL (per-turn) ───────────────────────────────────────
     # 2. Current state behavior
     state: str = snapshot.get("system", {}).get("state", "SHADOW")
     parts.append(f"\nCURRENT STATE: {state}")
@@ -301,22 +307,11 @@ def build_system_prompt(
     if emotion_block:
         parts.append("\n" + emotion_block)
 
-    # 8. Extra prompt from user settings
+    # 8. Extra prompt from user settings — placed at the very tail so a
+    # user's custom directive (the most concrete intent) is the freshest
+    # instruction in context.
     if config.ai_system_prompt_extra.strip():
         parts.append(f"\nEXTRA INSTRUCTIONS:\n{config.ai_system_prompt_extra.strip()}")
-
-    # 9. Response-form guidance (Phase 9.5) — chat only. See personality.py.
-    parts.append("\n" + RESPONSE_FORMS_GUIDANCE)
-
-    # 10. Data-tool guidance (Phase 10) — chat only. Tells the model when
-    # to reach for a CHAT_DATA_TOOLS function before picking a response
-    # form.
-    parts.append("\n" + DATA_TOOLS_GUIDANCE)
-
-    # 11. Conversational register (Phase 10.3) — chat only. Teaches the
-    # model to read playful / informal / testing intent instead of being
-    # literal. Appended LAST so it's the freshest instruction in context.
-    parts.append("\n" + REGISTER_GUIDANCE)
 
     return "\n".join(parts)
 

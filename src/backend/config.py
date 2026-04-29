@@ -507,6 +507,18 @@ class PhantomConfig(BaseSettings):
     # caps below shape the response size that goes back to the LLM —
     # higher = more recall but more tokens.
     chat_tools_enabled: bool = False
+    # Day-4 Wave-2 X-1 (ADR-ORC-001): orchestrator scaffold flag. When
+    # OFF (default), routes_chat calls chat_pipeline.run unchanged —
+    # back-compat invariant preserved. When ON AND the active provider
+    # is Gemini, the orchestrator becomes the entry point (single-turn
+    # only on Day-4; parallel-K fan-out lands in X-3/X-4). Ollama path
+    # always falls through to chat_pipeline.run regardless of the flag
+    # because the Ollama tool-use path string-concats FunctionResponse
+    # JSON and re-spawns the TM-17B-S1 nonce-injection threat.
+    chat_orchestrator_enabled: bool = False
+    chat_orchestrator_max_subagents: int = 3
+    chat_orchestrator_per_subagent_ms: int = 3500
+    chat_orchestrator_merge_reserve_ms: int = 1500
     chat_tool_locationhistory_limit: int = 20
     chat_tool_anchors_limit: int = 30
     chat_tool_max_calls_per_turn: int = 4

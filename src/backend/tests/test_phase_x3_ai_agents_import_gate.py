@@ -212,16 +212,38 @@ class TestFutureAgentsLayer:
     the skeleton. These tests document the gate so the first commit that
     lands a file under `ai/agents/**` MUST also keep the contract."""
 
-    def test_agents_dir_absent_today_xfail_when_x1_lands(self):
-        """If `ai/agents/` materialises, the gate above ALREADY scans
-        it (via rglob). This test snapshots the current Day-4 layout
-        — when X-1 lands, this assertion needs flipping. Treat the
-        failure as a TODO breadcrumb, not a regression."""
-        assert not _AGENTS_ROOT.exists(), (
-            "X-3 follow-up: ai/agents/ now exists — Block X-1 has landed. "
-            "Flip this assertion to `_AGENTS_ROOT.is_dir()` and add at "
-            "least one positive-case test that confirms a new agents/ "
-            "file is scanned + clean."
+    def test_agents_dir_present_after_x1_landed(self):
+        """X-1 (Wave-2, commit `375d159`+) shipped the orchestrator
+        scaffold under `ai/agents/`. The gate above already scans
+        every *.py via rglob; this test snapshots the post-X-1
+        invariant: the directory exists AND the gate sweep below
+        produces zero forbidden imports across all real agents/ files."""
+        assert _AGENTS_ROOT.is_dir(), (
+            "X-1 regression: ai/agents/ disappeared. The orchestrator "
+            "scaffold lives there per ADR-ORC-001 §"
+            "Module layout."
+        )
+        # At least the scaffold pair must be present.
+        assert (_AGENTS_ROOT / "__init__.py").is_file()
+        assert (_AGENTS_ROOT / "orchestrator.py").is_file()
+
+    def test_real_agents_files_pass_the_gate(self):
+        """Positive-case: walk every real `ai/agents/**.py` through the
+        same AST gate. Catches a future X-2 / X-3 / X-4 file that
+        accidentally `from agent.runtime import ...` before code review
+        notices."""
+        import ast as _ast
+
+        violations: list[tuple[str, str]] = []
+        for py in sorted(_AGENTS_ROOT.rglob("*.py")):
+            tree = _ast.parse(py.read_text(encoding="utf-8"), filename=str(py))
+            for _node, msg in _scan_imports(tree):
+                violations.append((py.name, msg))
+        assert not violations, (
+            f"X-3 import-gate violations under ai/agents/**: {violations!r}. "
+            "Each file in ai/agents/** is inside the cluster boundary; "
+            "callers in agent.runtime / agent.actions / etc. must inject "
+            "callables, NEVER be imported here."
         )
 
     def test_synthetic_agents_file_with_forbidden_import_is_caught(self, tmp_path):

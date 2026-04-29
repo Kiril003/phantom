@@ -1122,3 +1122,75 @@ gate).
 
 ---
 
+## 2026-05-02 08:15 CEST — Wave-2 X-1 DONE (orchestrator scaffold)
+
+ADR-ORC-001..005. The chat-orchestrator cluster lives entirely under
+`src/backend/ai/agents/`. Day-4 ships the SCAFFOLD only — feature
+flag default OFF, Gemini-only gate, single-turn always.
+
+  src/backend/ai/agents/__init__.py       — barrel export.
+  src/backend/ai/agents/orchestrator.py   — `OrchestratorMode` Enum
+                                             (single | parallel-K),
+                                             `decide_mode(provider,
+                                             flag_enabled, user_text)`
+                                             pure decision, and
+                                             `run_orchestrator(...)`
+                                             entry that routes_chat
+                                             will call once X-3 wires
+                                             it into the live chat
+                                             path. Day-4 contract:
+                                             `mode == single` → calls
+                                             `chat_pipeline_run(**kw)`
+                                             unchanged + returns its
+                                             result by IDENTITY (not
+                                             equality) so the legacy
+                                             single-turn behaviour is
+                                             byte-perfect.
+
+  src/backend/config.py                  — 4 new keys:
+    chat_orchestrator_enabled: bool = False
+    chat_orchestrator_max_subagents: int = 3
+    chat_orchestrator_per_subagent_ms: int = 3500
+    chat_orchestrator_merge_reserve_ms: int = 1500
+
+Decision rules (per ADR-ORC-001):
+  1. flag OFF → single (back-compat invariant)
+  2. provider != "gemini" → single (TM-17B-S2: Ollama tool-use
+     string-concats FunctionResponse JSON → re-spawns the
+     nonce-injection threat)
+  3. otherwise (Day-4): single. X-3 lands the heuristic that flips
+     this to parallel-K for tool-heavy queries.
+
+11 X-1 contract tests:
+  - OrchestratorMode closed enum {single, parallel_k} with
+    string values "single" / "parallel-K".
+  - flag default OFF; budget defaults match PHASE1_CONTEXTS
+    (K=3, per_subagent_ms=3500, merge_reserve_ms=1500).
+  - decide_mode flag-OFF returns single for any provider.
+  - decide_mode flag-ON + ollama → single (Gemini-only gate).
+  - decide_mode flag-ON + gemini → single (Day-4 default).
+  - decide_mode reads from config.chat_orchestrator_enabled when
+    flag_enabled=None (production path).
+  - run_orchestrator(single) returns chat_pipeline_run's result
+    by IDENTITY + calls it with the same kwargs.
+  - AST-based import gate: __init__.py + orchestrator.py do NOT
+    import from agent.runtime / agent.actions / agent.proactive /
+    agent.standing_orders / agent.mcp.
+
+X-3 import-gate breadcrumb FLIPPED: `test_agents_dir_absent_today
+_xfail_when_x1_lands` renamed → `test_agents_dir_present_after_x1
+_landed`; new positive-case `test_real_agents_files_pass_the_gate`
+walks every `ai/agents/**.py` through the same AST gate so a future
+X-2/X-3/X-4 file that accidentally `from agent.runtime import ...`
+fails CI.
+
+21/21 X-1 + X-3 import-gate sweep green.
+
+Behavioural drift = ZERO. The orchestrator is a callable spec; no
+call site invokes `run_orchestrator()` yet. Routes_chat wiring is
+X-3 work.
+
+Next: X-2 (per-sub-agent nonce + leaf+merge sanitize).
+
+---
+

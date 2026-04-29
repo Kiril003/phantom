@@ -145,6 +145,82 @@ a {
   }
 }
 
+/* ─── State transition choreography (D5-DSGN4) ───────────────────────────
+ * StateTransitionController sets `body.state-transitioning` for 600ms
+ * whenever SystemState changes. We use that window to:
+ *   1. apply a temporary global transition on color / background /
+ *      border / box-shadow so accent-driven surfaces cross-fade
+ *      instead of flipping abruptly when the [data-state] attribute
+ *      changes the underlying tokens.
+ *   2. wash a fullscreen flash of the new accent over the surface
+ *      (very dim, 600ms ease-out) so the operator perceives the
+ *      "system character has shifted" beat.
+ *
+ * Registered <color> custom property — keeps Chromium animating the
+ * --accent token value smoothly even outside the transition window.
+ * Other browsers degrade gracefully (hard-flip, then static) per the
+ * @property fallback rules.
+ */
+@property --accent {
+  syntax: '<color>';
+  inherits: true;
+  initial-value: #64748b;
+}
+@property --accent-glow {
+  syntax: '*';
+  inherits: true;
+  initial-value: rgba(100, 116, 139, 0.2);
+}
+
+body.state-transitioning,
+body.state-transitioning * {
+  /* Use a property-list (rather than `all`) so static CSS animations
+   * keep their own timings — only the colour-bearing chain participates
+   * in the choreography. */
+  transition:
+    color 600ms cubic-bezier(0.16, 1, 0.3, 1),
+    background-color 600ms cubic-bezier(0.16, 1, 0.3, 1),
+    background 600ms cubic-bezier(0.16, 1, 0.3, 1),
+    border-color 600ms cubic-bezier(0.16, 1, 0.3, 1),
+    box-shadow 600ms cubic-bezier(0.16, 1, 0.3, 1),
+    fill 600ms cubic-bezier(0.16, 1, 0.3, 1),
+    stroke 600ms cubic-bezier(0.16, 1, 0.3, 1),
+    --accent 600ms cubic-bezier(0.16, 1, 0.3, 1),
+    --accent-glow 600ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes phantom-state-flash {
+  0%   { opacity: 0; }
+  18%  { opacity: 0.32; }
+  100% { opacity: 0; }
+}
+
+body.state-transitioning::after {
+  content: '';
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 60;
+  background: radial-gradient(
+    ellipse 70% 60% at 50% 45%,
+    var(--accent-glow),
+    transparent 70%
+  );
+  animation: phantom-state-flash 600ms cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+/* Reduced-motion respect — operators with prefers-reduced-motion get
+ * an instant accent swap (no timed crossfade, no flash overlay). */
+@media (prefers-reduced-motion: reduce) {
+  body.state-transitioning,
+  body.state-transitioning * {
+    transition: none !important;
+  }
+  body.state-transitioning::after {
+    display: none;
+  }
+}
+
 /* ─── Animations ──────────────────────────────────────────────────────── */
 
 @keyframes pulse-state {

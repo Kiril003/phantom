@@ -204,6 +204,8 @@ async def _build_ai_response(
     session_id: str,
     user: Any,
     db: AsyncSession,
+    *,
+    on_delta: Any = None,
 ) -> tuple[str, str, list[dict], str, int]:
     """
     Run the full AI pipeline:
@@ -213,6 +215,14 @@ async def _build_ai_response(
       4. Generate AI response (primary → fallback)
       5. Post: extract/store facts, update behavioral model
     Returns (content, response_form, attachments, provider, tokens_used).
+
+    Day-5 streaming — when ``on_delta`` is supplied AND chat tools are
+    disabled AND ``config.ai_streaming`` is on, route through
+    ``ai_router.generate_stream`` instead of ``generate``. Each text
+    chunk fires ``on_delta(chunk)`` so the chat handler can broadcast
+    a WS delta live, instead of waiting for the whole response and
+    simulating chunks afterwards. Tool path stays non-streaming until
+    we plumb tool_call_chunks through chat_pipeline.
     """
     from ai.prompt_builder import (
         build_system_prompt,
@@ -307,6 +317,72 @@ async def _build_ai_response(
             user_id=user.id,
             db=db,
         )
+    elif on_delta is not None and config.ai_streaming is True:
+        # Day-5 — true streaming: yield text deltas to the WS as Gemini
+        # generates them. The visible bubble grows live; final
+        # response_form / attachments / scene envelope are computed from
+        # the fully-assembled text via parse_plain_text below. Function-
+        # calling won't fire on this path (Gemini's streaming function
+        # call surface needs a different consumer); the chat-tools path
+        # above stays non-streaming until we wire tool_call_chunks.
+        from ai.provider import AIResponse
+        from ai.response_formatter import parse_plain_text
+        full_text_chunks: list[str] = []
+        try:
+            async for chunk in ai_router.generate_stream(
+                user_message=user_message,
+                system_prompt=system_prompt,
+                history=history,
+            ):
+                if not chunk:
+                    continue
+                full_text_chunks.append(chunk)
+                # Best-effort fan-out — a failing WS broadcast (client
+                # gone, hub blocked) MUST NOT cancel generation.
+                try:
+                    await on_delta(chunk)
+                except Exception as exc:  # noqa: BLE001
+                    logger.debug("on_delta fan-out failed: %s", exc)
+        except Exception as exc:
+            # Streaming path failed — fall back to non-streaming so the
+            # operator still gets an answer. This mirrors the resilience
+            # promise of ai_router.generate which already retries with
+            # the fallback provider on primary failure.
+            logger.warning("chat stream failed (%s) — falling back to generate()", exc)
+            ai_response = await ai_router.generate(
+                user_message=user_message,
+                system_prompt=system_prompt,
+                history=history,
+                user_id=user.id,
+            )
+        else:
+            full_text = "".join(full_text_chunks).strip()
+            if not full_text:
+                # The streaming path yielded nothing (mocked ai_router in
+                # tests, provider returned an empty stream, etc.). Fall
+                # through to non-streaming generate() so the operator
+                # still gets a real reply.
+                ai_response = await ai_router.generate(
+                    user_message=user_message,
+                    system_prompt=system_prompt,
+                    history=history,
+                    user_id=user.id,
+                )
+            else:
+                response_form, content, attachments = parse_plain_text(full_text)
+                # Active provider was tracked by the router during the
+                # stream. Defensive: tests may mock ai_router and
+                # `_active` returns a MagicMock — coerce to a JSON-safe
+                # string fallback.
+                _maybe = getattr(ai_router, "_active", None)
+                active_provider = _maybe if isinstance(_maybe, str) else "gemini"
+                ai_response = AIResponse(
+                    content=content,
+                    response_form=response_form,
+                    attachments=attachments,
+                    provider=active_provider,
+                    tokens_used=0,  # stream path doesn't surface usage counts
+                )
     else:
         ai_response = await ai_router.generate(
             user_message=user_message,
@@ -375,15 +451,35 @@ async def _build_ai_response(
     # only". Operator-stated facts are recoverable; tool-echo facts are
     # not separable from genuine assistant inferences without the
     # classifier.
+    #
+    # Day-5 perf — fact extraction (ChromaDB write) routinely costs
+    # 200-700ms and was awaited inline, blocking the response. The
+    # operator's chat reply is already in `ai_response`; moving this
+    # into a fire-and-forget background task removes that wait from
+    # perceived latency. We open a fresh session so the request's `db`
+    # can be released back to the pool independently.
+    async def _bg_extract_facts() -> None:
+        # Open a fresh AsyncSession so we don't tangle with the
+        # request-scoped `db` after it's been closed by FastAPI's
+        # Depends() lifecycle.
+        try:
+            from db.database import get_session as _get_bg_session
+            async with _get_bg_session() as bg_db:
+                await extract_and_store_facts(
+                    user_id=user.id,
+                    session_id=session_id,
+                    conversation_summary=user_message,
+                    db=bg_db,
+                )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("Background fact extraction failed (non-critical): %s", exc)
+
     try:
-        await extract_and_store_facts(
-            user_id=user.id,
-            session_id=session_id,
-            conversation_summary=user_message,
-            db=db,
-        )
-    except Exception as exc:
-        logger.debug("Fact extraction failed (non-critical): %s", exc)
+        # Day-5 perf — fire-and-forget. Failure inside the task is
+        # logged at DEBUG; the chat handler returns without waiting.
+        asyncio.create_task(_bg_extract_facts())
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("Failed to schedule background fact extraction: %s", exc)
 
     return (
         ai_response.content,
@@ -514,10 +610,33 @@ async def send_message(
     # to open their own sessions, or SQLite single-writer deadlocks.
     await db.commit()
 
-    # Generate AI response
+    # Day-5 — true live streaming: pre-generate a stable assistant
+    # message_id, broadcast each generate_stream chunk via WS as it
+    # arrives, then save the assembled text to DB and broadcast the
+    # final 'message' event. Operator perceives sub-500ms TTFT instead
+    # of waiting for the full reply before seeing anything.
+    assistant_msg_id = str(uuid.uuid4())
+    streaming_active = False
+
+    async def _send_delta(chunk: str) -> None:
+        nonlocal streaming_active
+        streaming_active = True
+        try:
+            from api.websocket_hub import hub as _hub
+            await _hub.broadcast(
+                "chat", "stream",
+                {"message_id": assistant_msg_id, "delta": chunk, "done": False},
+                user_id=user.id,
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("WS chunk broadcast failed: %s", exc)
+
+    # Generate AI response (streaming when on_delta is set + tools off)
     try:
         content, response_form, attachments, provider, tokens_used = \
-            await _build_ai_response(req.content, session.id, user, db)
+            await _build_ai_response(
+                req.content, session.id, user, db, on_delta=_send_delta,
+            )
     except Exception as exc:
         logger.error("AI generation failed: %s", exc)
         raise HTTPException(
@@ -549,7 +668,10 @@ async def send_message(
         pass
 
     assistant_msg = ChatMessage(
-        id=str(uuid.uuid4()),
+        # Day-5 streaming: use the pre-generated id we've been
+        # broadcasting deltas under so the frontend can dedupe the
+        # final 'message' event against the in-flight bubble.
+        id=assistant_msg_id,
         session_id=session.id,
         user_id=user.id,
         role="assistant",
@@ -563,6 +685,7 @@ async def send_message(
             "tokens_used": tokens_used,
             "tone": tone_desc,
             "input_method": req.input_method,
+            "streamed": streaming_active,
         }),
         attachments_json=json.dumps(attachments),
     )
@@ -600,11 +723,18 @@ async def send_message(
     except Exception as exc:
         logger.debug("TemporalAnchor creation failed (non-critical): %s", exc)
 
-    # Push to WebSocket chat channel — simulated stream deltas + final message
+    # Push to WebSocket chat channel — when the response was streamed
+    # live, skip the per-chunk simulation (deltas already arrived) and
+    # only broadcast the final 'message' event for dedupe + scene
+    # envelope replacement. Non-streamed turns keep the legacy
+    # chunked-simulation behaviour.
     try:
         from api.websocket_hub import hub
         serialized = _serialize_message(assistant_msg)
-        await _broadcast_message_stream(hub, user.id, serialized, session.id)
+        await _broadcast_message_stream(
+            hub, user.id, serialized, session.id,
+            already_streamed=streaming_active,
+        )
     except Exception as exc:
         logger.debug("WS chat broadcast failed (non-critical): %s", exc)
 
@@ -622,7 +752,14 @@ async def send_message(
     }
 
 
-async def _broadcast_message_stream(hub: Any, user_id: str, message: dict, session_id: str) -> None:
+async def _broadcast_message_stream(
+    hub: Any,
+    user_id: str,
+    message: dict,
+    session_id: str,
+    *,
+    already_streamed: bool = False,
+) -> None:
     """
     Broadcast an assistant message as a short series of WS stream events
     followed by a final 'message' broadcast.  Front-end dedupes via message_id.
@@ -630,11 +767,18 @@ async def _broadcast_message_stream(hub: Any, user_id: str, message: dict, sessi
     When `config.ai_streaming` is disabled the per-chunk deltas are skipped
     and clients receive only the final message — this matches the UX the
     setting promises ("turn streaming off and get the full reply at once").
+
+    Day-5 — when ``already_streamed=True`` the chat handler has already
+    pushed real deltas to the user's WS channel during generation. We
+    skip the post-hoc chunk simulation entirely and emit only the
+    final done=True + message events so the frontend can finalise the
+    bubble (and replace it with a scene envelope if response_form is
+    structured).
     """
     message_id = message["id"]
     content = message.get("content") or ""
     # Stream the content in word-ish chunks to preserve UX parity with a true streaming provider.
-    if content and config.ai_streaming:
+    if content and config.ai_streaming and not already_streamed:
         chunks = _chunk_content(content, chunk_size=config.chat_stream_chunk_chars)
         for chunk in chunks:
             await hub.broadcast(

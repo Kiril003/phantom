@@ -7,6 +7,16 @@ import { poiColor, getMapTokens } from './mapTokens';
 import type { MapPOI, WardrivingRecord } from '@shared/types';
 import type { GeoTaggedFact } from '../../services/api';
 
+/**
+ * MarkerCard — sunrise-warm glass slide-over for selected map markers.
+ *
+ * Design DNA (CONTRACTS_R1.md + screen-5-map.jsx): the card slides in from
+ * the right edge, sits on a `--glass-elevated` surface with cream rim,
+ * uses Manrope display + Playfair italic for the marker label, and amber
+ * `--primary` chips/icons. The deletion CTA stays coral so a destructive
+ * action reads instantly even on warm cream.
+ */
+
 const CATEGORY_LABELS: Record<MapPOI['category'], string> = {
   intel: 'INTEL',
   threat: 'THREAT',
@@ -38,36 +48,56 @@ export function MarkerCard() {
           animate={{ x: 0, opacity: 1 }}
           exit={{ x: 320, opacity: 0 }}
           transition={{ duration: 0.28, ease: EASE_PHANTOM as unknown as number[] }}
-          className="absolute top-0 right-0 h-full w-[320px] flex flex-col z-20"
-          style={{
-            background: 'var(--surface-raised)',
-            borderLeft: '1px solid var(--line-default)',
-          }}
+          className="glass-elevated absolute top-3 right-3 bottom-3 w-[300px] flex flex-col z-20"
+          style={{ borderRadius: 18 }}
           role="dialog"
           aria-label="Marker details"
         >
           <header
-            className="flex items-center gap-2 px-3 py-2 shrink-0"
-            style={{ borderBottom: '1px solid var(--line-subtle)' }}
+            className="flex items-center gap-2 px-3 shrink-0"
+            style={{
+              height: 48,
+              borderBottom: '1px solid var(--line-subtle)',
+            }}
           >
             <span
-              className="font-mono tracking-wider uppercase flex-1"
-              style={{ color: 'var(--accent)', fontSize: 'var(--fs-micro)' }}
+              className="status-pill"
+              style={{
+                background:
+                  selection.kind === 'wardriving'
+                    ? 'rgba(37,99,235,0.10)'
+                    : 'rgba(244,175,37,0.18)',
+                borderColor:
+                  selection.kind === 'wardriving'
+                    ? 'rgba(37,99,235,0.32)'
+                    : 'rgba(244,175,37,0.36)',
+                color:
+                  selection.kind === 'wardriving'
+                    ? '#1d4ed8'
+                    : 'var(--primary-shadow)',
+              }}
             >
+              <span className="dot" />
               {selection.kind === 'poi'
                 ? 'POI'
                 : selection.kind === 'wardriving'
                   ? 'WIFI AP'
                   : 'MEMORY'}
             </span>
+            <span className="flex-1" />
             <button
               type="button"
               onClick={handleClose}
-              className="flex items-center justify-center rounded transition-colors"
+              className="flex items-center justify-center transition-colors active:scale-95"
               style={{
                 minWidth: 44,
                 minHeight: 44,
+                width: 44,
+                height: 44,
+                borderRadius: 12,
                 color: 'var(--ink-muted)',
+                background: 'transparent',
+                border: '1px solid transparent',
               }}
               aria-label="Close"
             >
@@ -94,32 +124,38 @@ function PoiDetails({ poi, onDelete }: { poi: MapPOI; onDelete: () => void }) {
   const tokens = getMapTokens();
   return (
     <>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
         <div
-          className="flex items-center justify-center rounded"
+          className="flex items-center justify-center"
           style={{
-            width: 36,
-            height: 36,
+            width: 44,
+            height: 44,
+            borderRadius: 14,
             background: poiColor(tokens, poi.category),
-            color: tokens.surfaceDeep,
+            color: tokens.theme === 'cyberdeck-cold' ? tokens.surfaceDeep : '#fdf6e9',
+            boxShadow: '0 4px 14px rgba(120,70,10,0.18)',
           }}
         >
           {poi.icon && poi.icon.length <= 2 ? (
-            <span style={{ fontSize: 18 }}>{poi.icon}</span>
+            <span style={{ fontSize: 20 }}>{poi.icon}</span>
           ) : (
-            <Navigation size={18} strokeWidth={2} />
+            <Navigation size={20} strokeWidth={2} />
           )}
         </div>
         <div className="flex flex-col flex-1 min-w-0">
           <span
-            className="truncate"
-            style={{ color: 'var(--ink-primary)', fontSize: 'var(--fs-md)' }}
+            className="playfair truncate"
+            style={{
+              color: 'var(--ink-primary)',
+              fontSize: 'var(--fs-md)',
+              lineHeight: 1.2,
+            }}
           >
             {poi.name}
           </span>
           <span
-            className="font-mono tracking-wider uppercase"
-            style={{ color: 'var(--ink-muted)', fontSize: 'var(--fs-micro)' }}
+            className="micro-label"
+            style={{ color: 'var(--primary-shadow)' }}
           >
             {CATEGORY_LABELS[poi.category] ?? poi.category.toUpperCase()}
           </span>
@@ -130,14 +166,13 @@ function PoiDetails({ poi, onDelete }: { poi: MapPOI; onDelete: () => void }) {
 
       {poi.notes && (
         <div
-          className="p-3 rounded"
+          className="sub-glass p-3"
           style={{
-            background: 'var(--surface-glass)',
-            border: '1px solid var(--line-subtle)',
             color: 'var(--ink-secondary)',
             fontSize: 'var(--fs-xs)',
             lineHeight: 'var(--lh-normal)',
             whiteSpace: 'pre-wrap',
+            fontFamily: 'var(--font-display)',
           }}
         >
           {poi.notes}
@@ -149,19 +184,24 @@ function PoiDetails({ poi, onDelete }: { poi: MapPOI; onDelete: () => void }) {
       <button
         type="button"
         onClick={onDelete}
-        className="mt-auto flex items-center justify-center gap-2 rounded transition-colors font-mono tracking-wider"
+        className="mt-auto flex items-center justify-center gap-2 transition-colors active:scale-95"
         style={{
           minHeight: 44,
-          padding: '0 12px',
-          background: 'color-mix(in srgb, var(--signal-alert) 8%, transparent)',
-          color: 'var(--signal-alert)',
-          border: '1px solid var(--signal-alert)',
+          padding: '0 14px',
+          borderRadius: 9999,
+          background: 'rgba(239, 68, 68, 0.10)',
+          color: 'var(--coral-deep)',
+          border: '1px solid rgba(239, 68, 68, 0.36)',
+          fontFamily: 'var(--font-display)',
           fontSize: 'var(--fs-xs)',
+          letterSpacing: 'var(--tracking-wider)',
+          textTransform: 'uppercase',
+          fontWeight: 700,
         }}
         aria-label="Delete POI"
       >
         <Trash2 size={14} strokeWidth={1.75} />
-        DELETE POI
+        Delete POI
       </button>
     </>
   );
@@ -174,29 +214,38 @@ function WardrivingDetails({ record }: { record: WardrivingRecord }) {
 
   return (
     <>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
         <div
-          className="flex items-center justify-center rounded"
+          className="flex items-center justify-center"
           style={{
-            width: 36,
-            height: 36,
-            background: 'var(--surface-glass)',
-            color: 'var(--accent)',
-            border: '1px solid var(--line-default)',
+            width: 44,
+            height: 44,
+            borderRadius: 14,
+            background: 'rgba(37,99,235,0.10)',
+            color: '#1d4ed8',
+            border: '1px solid rgba(37,99,235,0.30)',
           }}
         >
-          <Wifi size={18} strokeWidth={1.75} />
+          <Wifi size={20} strokeWidth={1.75} />
         </div>
         <div className="flex flex-col flex-1 min-w-0">
           <span
-            className="truncate font-mono"
-            style={{ color: 'var(--ink-primary)', fontSize: 'var(--fs-md)' }}
+            className="truncate playfair"
+            style={{
+              color: 'var(--ink-primary)',
+              fontSize: 'var(--fs-md)',
+              lineHeight: 1.2,
+            }}
           >
             {record.ssid || '<hidden>'}
           </span>
           <span
-            className="font-mono"
-            style={{ color: 'var(--ink-muted)', fontSize: 'var(--fs-micro)' }}
+            className="mono"
+            style={{
+              color: 'var(--ink-muted)',
+              fontSize: 'var(--fs-micro)',
+              letterSpacing: '0.04em',
+            }}
           >
             {record.mac}
           </span>
@@ -230,29 +279,34 @@ function WardrivingDetails({ record }: { record: WardrivingRecord }) {
 function FactDetails({ fact }: { fact: GeoTaggedFact }) {
   return (
     <>
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-3">
         <div
-          className="flex items-center justify-center rounded"
+          className="flex items-center justify-center"
           style={{
-            width: 36,
-            height: 36,
-            background: 'var(--surface-glass)',
-            color: 'var(--accent)',
-            border: '1px solid var(--line-default)',
+            width: 44,
+            height: 44,
+            borderRadius: 14,
+            background: 'rgba(244,175,37,0.18)',
+            color: 'var(--primary-shadow)',
+            border: '1px solid rgba(244,175,37,0.36)',
           }}
         >
-          <Sparkles size={18} strokeWidth={1.75} />
+          <Sparkles size={20} strokeWidth={1.75} />
         </div>
         <div className="flex flex-col flex-1 min-w-0">
           <span
-            className="truncate"
-            style={{ color: 'var(--ink-primary)', fontSize: 'var(--fs-md)' }}
+            className="truncate playfair"
+            style={{
+              color: 'var(--ink-primary)',
+              fontSize: 'var(--fs-md)',
+              lineHeight: 1.2,
+            }}
           >
             {fact.place_name || 'Remembered place'}
           </span>
           <span
-            className="font-mono tracking-wider uppercase"
-            style={{ color: 'var(--ink-muted)', fontSize: 'var(--fs-micro)' }}
+            className="micro-label"
+            style={{ color: 'var(--primary-shadow)' }}
           >
             {fact.category}
           </span>
@@ -262,14 +316,13 @@ function FactDetails({ fact }: { fact: GeoTaggedFact }) {
       <CoordinatesRow lat={fact.place_lat} lon={fact.place_lon} />
 
       <div
-        className="p-3 rounded"
+        className="sub-glass p-3"
         style={{
-          background: 'var(--surface-glass)',
-          border: '1px solid var(--line-subtle)',
           color: 'var(--ink-secondary)',
           fontSize: 'var(--fs-xs)',
           lineHeight: 'var(--lh-normal)',
           whiteSpace: 'pre-wrap',
+          fontFamily: 'var(--font-display)',
         }}
       >
         {fact.content}
@@ -295,17 +348,21 @@ function FactDetails({ fact }: { fact: GeoTaggedFact }) {
 function CoordinatesRow({ lat, lon }: { lat: number; lon: number }) {
   return (
     <div
-      className="flex items-center gap-2 p-2 rounded font-mono"
+      className="sub-glass flex items-center gap-2 px-3 mono tabular"
       style={{
-        background: 'var(--surface-void)',
-        border: '1px solid var(--line-subtle)',
+        height: 36,
         color: 'var(--ink-secondary)',
         fontSize: 'var(--fs-xs)',
       }}
     >
-      <span style={{ color: 'var(--ink-muted)' }}>LAT</span>
+      <span className="micro-label" style={{ color: 'var(--ink-muted)' }}>
+        LAT
+      </span>
       <span>{lat.toFixed(5)}</span>
-      <span style={{ color: 'var(--ink-muted)' }}>· LON</span>
+      <span style={{ color: 'var(--ink-muted)' }}>·</span>
+      <span className="micro-label" style={{ color: 'var(--ink-muted)' }}>
+        LON
+      </span>
       <span>{lon.toFixed(5)}</span>
     </div>
   );
@@ -314,14 +371,9 @@ function CoordinatesRow({ lat, lon }: { lat: number; lon: number }) {
 function MetaRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between">
+      <span className="micro-label">{label}</span>
       <span
-        className="font-mono tracking-wider uppercase"
-        style={{ color: 'var(--ink-muted)', fontSize: 'var(--fs-micro)' }}
-      >
-        {label}
-      </span>
-      <span
-        className="font-mono"
+        className="mono tabular"
         style={{ color: 'var(--ink-secondary)', fontSize: 'var(--fs-xs)' }}
       >
         {value}
@@ -343,27 +395,32 @@ function StatTile({
 }) {
   return (
     <div
-      className="flex flex-col gap-1 p-2 rounded"
-      style={{
-        background: 'var(--surface-glass)',
-        border: '1px solid var(--line-subtle)',
-      }}
+      className="sub-glass flex flex-col gap-1 p-2"
+      style={{ borderRadius: 12 }}
     >
       <div
-        className="flex items-center gap-1 font-mono tracking-wider uppercase"
-        style={{ color: 'var(--ink-muted)', fontSize: 'var(--fs-micro)' }}
+        className="micro-label flex items-center gap-1"
+        style={{ color: 'var(--primary-shadow)' }}
       >
         {icon}
         {label}
       </div>
       <span
-        className="font-mono"
+        className="mono tabular"
         style={{ color: 'var(--ink-primary)', fontSize: 'var(--fs-sm)' }}
       >
         {value}
       </span>
       {sub && (
-        <span style={{ color: 'var(--ink-muted)', fontSize: 'var(--fs-micro)' }}>{sub}</span>
+        <span
+          style={{
+            color: 'var(--ink-muted)',
+            fontSize: 'var(--fs-micro)',
+            fontFamily: 'var(--font-display)',
+          }}
+        >
+          {sub}
+        </span>
       )}
     </div>
   );

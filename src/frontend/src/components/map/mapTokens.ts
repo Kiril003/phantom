@@ -25,90 +25,228 @@ export interface MapTokens {
   signalInfo: string;
   lineSubtle: string;
   lineDefault: string;
+  /** Active theme attribute on <html> — "sunrise-warm" | "amber-night" | "cyberdeck-cold". */
+  theme: string;
+  /** Warm cream backdrop for the map canvas gutter (read in non-cold themes). */
+  mapBackdrop: string;
+}
+
+/**
+ * Resolve the active theme directly from <html data-theme=…> so non-React
+ * map primitives (raster paint expressions) can branch on theme without
+ * subscribing to settingsStore.
+ */
+function resolveTheme(): string {
+  if (typeof document === 'undefined') return 'sunrise-warm';
+  return document.documentElement.getAttribute('data-theme') || 'sunrise-warm';
 }
 
 export function getMapTokens(): MapTokens {
+  const theme = resolveTheme();
+  // The cyberdeck legacy palette wants the dark void as gutter; sunrise &
+  // amber-night both want the warm cream/espresso gradient. Falling back
+  // to surface-base means a fresh boot before the theme attribute is set
+  // still picks the right side per token defaults.
+  const fallbackAccent = theme === 'cyberdeck-cold' ? '#22d3ee' : '#b07a10';
+  const fallbackInkPrimary = theme === 'cyberdeck-cold' ? '#f1f5f9' : '#1a1612';
+  const fallbackInkMuted = theme === 'cyberdeck-cold' ? '#64748b' : '#8a7f72';
+  const fallbackSurfaceDeep =
+    theme === 'cyberdeck-cold' ? '#0a0f1a' : '#f5f1ea';
   return {
-    accent: resolveCssVar('--accent', '#22d3ee'),
-    accentGlow: resolveCssVar('--accent-glow', 'rgba(34,211,238,0.4)'),
+    accent: resolveCssVar('--accent', fallbackAccent),
+    accentGlow: resolveCssVar(
+      '--accent-glow',
+      theme === 'cyberdeck-cold'
+        ? 'rgba(34,211,238,0.4)'
+        : 'rgba(244,175,37,0.4)',
+    ),
     surfaceVoid: resolveCssVar('--surface-void', '#000000'),
-    surfaceDeep: resolveCssVar('--surface-deep', '#0a0f1a'),
-    surfaceRaised: resolveCssVar('--surface-raised', '#0f172a'),
-    inkPrimary: resolveCssVar('--ink-primary', '#f1f5f9'),
-    inkSecondary: resolveCssVar('--ink-secondary', '#94a3b8'),
-    inkMuted: resolveCssVar('--ink-muted', '#64748b'),
-    signalOk: resolveCssVar('--signal-ok', '#10b981'),
+    surfaceDeep: resolveCssVar('--surface-deep', fallbackSurfaceDeep),
+    surfaceRaised: resolveCssVar(
+      '--surface-raised',
+      theme === 'cyberdeck-cold' ? '#0f172a' : '#fdf6e9',
+    ),
+    inkPrimary: resolveCssVar('--ink-primary', fallbackInkPrimary),
+    inkSecondary: resolveCssVar(
+      '--ink-secondary',
+      theme === 'cyberdeck-cold' ? '#94a3b8' : '#5b5147',
+    ),
+    inkMuted: resolveCssVar('--ink-muted', fallbackInkMuted),
+    signalOk: resolveCssVar('--signal-ok', '#16a34a'),
     signalWarn: resolveCssVar('--signal-warn', '#f59e0b'),
-    signalAlert: resolveCssVar('--signal-alert', '#f43f5e'),
-    signalInfo: resolveCssVar('--signal-info', '#22d3ee'),
-    lineSubtle: resolveCssVar('--line-subtle', 'rgba(255,255,255,0.06)'),
-    lineDefault: resolveCssVar('--line-default', 'rgba(255,255,255,0.10)'),
+    signalAlert: resolveCssVar('--signal-alert', '#ef4444'),
+    signalInfo: resolveCssVar(
+      '--signal-info',
+      theme === 'cyberdeck-cold' ? '#22d3ee' : '#2563eb',
+    ),
+    lineSubtle: resolveCssVar(
+      '--line-subtle',
+      theme === 'cyberdeck-cold'
+        ? 'rgba(255,255,255,0.06)'
+        : 'rgba(0,0,0,0.06)',
+    ),
+    lineDefault: resolveCssVar(
+      '--line-default',
+      theme === 'cyberdeck-cold'
+        ? 'rgba(255,255,255,0.10)'
+        : 'rgba(0,0,0,0.10)',
+    ),
+    theme,
+    mapBackdrop:
+      theme === 'cyberdeck-cold'
+        ? '#020617'
+        : theme === 'amber-night'
+          ? '#0e0a05'
+          : '#fef6e6',
   };
 }
 
 export type PhantomMapStyle = 'dark' | 'satellite' | 'streets';
 
 /**
- * Per-style raster paint presets. 'dark' is the original desaturated phantom
- * look; 'streets' is an almost-neutral OSM view; 'satellite' swaps the source
- * to ESRI world imagery and pulls the paint ops back so labels stay legible.
+ * Per-(style × theme) raster paint presets.
+ *
+ * The map has three "style" choices visible to the operator (`dark`,
+ * `streets`, `satellite`), but the WARM theme inverts what `dark` should
+ * mean. On sunrise-warm we render a luminous warm-paper print — high
+ * brightness, gently boosted saturation, slight warm cast via a small
+ * negative `raster-hue-rotate` toward amber. On cyberdeck-cold we keep
+ * the legacy desaturated near-black look. amber-night dims tiles further
+ * so amber overlays remain the focal point.
+ *
+ * `streets` and `satellite` stay consistent across themes (the operator
+ * explicitly asked for them), but the background colour follows the
+ * theme so the gutter never flashes the wrong palette.
  */
-const STYLE_PAINT: Record<
-  PhantomMapStyle,
-  {
-    source: { tiles: string[]; attribution: string };
-    paint: Record<string, number>;
+const OSM_TILES = [
+  'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
+  'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
+  'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png',
+];
+
+const SATELLITE_TILES = [
+  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
+];
+
+interface PaintPreset {
+  source: { tiles: string[]; attribution: string };
+  paint: Record<string, number>;
+}
+
+function darkPresetForTheme(theme: string): PaintPreset {
+  const source = { tiles: OSM_TILES, attribution: '© OpenStreetMap' };
+  if (theme === 'cyberdeck-cold') {
+    // Original desaturated phantom look — dark slate baseline.
+    return {
+      source,
+      paint: {
+        'raster-opacity': 0.45,
+        'raster-brightness-min': 0.0,
+        'raster-brightness-max': 0.55,
+        'raster-saturation': -0.85,
+        'raster-contrast': 0.2,
+      },
+    };
   }
-> = {
-  dark: {
-    source: {
-      tiles: [
-        'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
-        'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
-        'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png',
-      ],
-      attribution: '© OpenStreetMap',
-    },
+  if (theme === 'amber-night') {
+    // Espresso night — dim tiles, gentle warm tilt; amber roads/markers
+    // become the only luminous element.
+    return {
+      source,
+      paint: {
+        'raster-opacity': 0.55,
+        'raster-brightness-min': 0.0,
+        'raster-brightness-max': 0.45,
+        'raster-saturation': -0.40,
+        'raster-contrast': 0.30,
+        'raster-hue-rotate': -8,
+      },
+    };
+  }
+  // Default — sunrise-warm. Bright cream-paper feel with a touch of warm
+  // cast so OSM neutrals read amber-friendly without obscuring labels.
+  return {
+    source,
     paint: {
-      'raster-opacity': 0.45,
-      'raster-brightness-min': 0.0,
-      'raster-brightness-max': 0.55,
-      'raster-saturation': -0.85,
-      'raster-contrast': 0.2,
+      'raster-opacity': 0.92,
+      'raster-brightness-min': 0.20,
+      'raster-brightness-max': 1.0,
+      'raster-saturation': 0.18,
+      'raster-contrast': 0.10,
+      'raster-hue-rotate': -10,
     },
-  },
-  streets: {
-    source: {
-      tiles: [
-        'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
-        'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
-        'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png',
-      ],
-      attribution: '© OpenStreetMap',
-    },
+  };
+}
+
+function streetsPresetForTheme(theme: string): PaintPreset {
+  const source = { tiles: OSM_TILES, attribution: '© OpenStreetMap' };
+  if (theme === 'amber-night') {
+    return {
+      source,
+      paint: {
+        'raster-opacity': 0.85,
+        'raster-brightness-min': 0.0,
+        'raster-brightness-max': 0.55,
+        'raster-saturation': -0.20,
+        'raster-contrast': 0.18,
+      },
+    };
+  }
+  return {
+    source,
     paint: {
       'raster-opacity': 0.95,
       'raster-saturation': 0,
       'raster-contrast': 0,
     },
-  },
-  satellite: {
-    source: {
-      tiles: [
-        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-      ],
-      attribution: '© Esri, Maxar, Earthstar Geographics',
-    },
+  };
+}
+
+function satellitePresetForTheme(theme: string): PaintPreset {
+  const source = {
+    tiles: SATELLITE_TILES,
+    attribution: '© Esri, Maxar, Earthstar Geographics',
+  };
+  if (theme === 'amber-night') {
+    return {
+      source,
+      paint: {
+        'raster-opacity': 0.85,
+        'raster-brightness-min': 0.0,
+        'raster-brightness-max': 0.65,
+        'raster-saturation': -0.10,
+        'raster-contrast': 0.12,
+      },
+    };
+  }
+  return {
+    source,
     paint: {
       'raster-opacity': 0.95,
       'raster-saturation': -0.1,
       'raster-contrast': 0.0,
     },
-  },
-};
+  };
+}
+
+function presetFor(style: PhantomMapStyle, theme: string): PaintPreset {
+  switch (style) {
+    case 'satellite':
+      return satellitePresetForTheme(theme);
+    case 'streets':
+      return streetsPresetForTheme(theme);
+    case 'dark':
+    default:
+      return darkPresetForTheme(theme);
+  }
+}
 
 export function buildPhantomStyle(tokens: MapTokens, style: PhantomMapStyle = 'dark') {
-  const preset = STYLE_PAINT[style] ?? STYLE_PAINT.dark;
+  const preset = presetFor(style, tokens.theme);
+  // Background colour matches the theme's gutter so the brief flash
+  // before tiles paint never breaks the warm-cream look.
+  const bgColor =
+    tokens.theme === 'cyberdeck-cold' ? tokens.surfaceVoid : tokens.mapBackdrop;
   return {
     version: 8,
     sources: {
@@ -123,7 +261,7 @@ export function buildPhantomStyle(tokens: MapTokens, style: PhantomMapStyle = 'd
       {
         id: 'bg',
         type: 'background',
-        paint: { 'background-color': tokens.surfaceVoid },
+        paint: { 'background-color': bgColor },
       },
       {
         id: 'osm',

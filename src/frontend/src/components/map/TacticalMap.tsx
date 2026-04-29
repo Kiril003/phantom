@@ -348,8 +348,7 @@ export function TacticalMap({
 
   return (
     <div
-      className={`relative w-full h-full overflow-hidden ${className}`}
-      style={{ background: 'var(--surface-base)' }}
+      className={`phantom-map-frame relative w-full h-full overflow-hidden ${className}`}
     >
       <div
         ref={containerRef}
@@ -369,21 +368,27 @@ export function TacticalMap({
         <MarkerCard />
       </MapContext.Provider>
 
-      {/* Phase 9.4c audit Q6 — surfaces Nominatim/Overpass/ipapi outages
-          so the operator can tell "empty search" from "service down". */}
-      <div className="absolute top-0 left-0 right-0 z-30 pointer-events-none">
+      {/* Phase 9.4c audit Q6 (B-WK-3 fix 2026-04-30) — surfaces Nominatim/
+          Overpass/ipapi outages so the operator can tell "empty search"
+          from "service down". The banner is now suppressed on cold-boot
+          stale (no recorded failure) so the warning isn't permanently
+          lit on a healthy session. */}
+      <div className="absolute top-0 left-0 right-0 z-30 pointer-events-none flex justify-center pt-1">
         <div className="pointer-events-auto">
           <ServicesHealthBanner />
         </div>
       </div>
 
-      {/* Dark overlay gradient around edges */}
+      {/* Edge vignette — warm cream wash on the borders so glass HUD
+          chips read crisply over busy cartography. The colour follows
+          `--surface-base` so cyberdeck-cold falls back to the dark
+          edge fade automatically. */}
       <div
         aria-hidden
         className="absolute inset-0 pointer-events-none"
         style={{
           background:
-            'radial-gradient(ellipse at center, transparent 55%, color-mix(in srgb, var(--surface-base) 85%, transparent) 100%)',
+            'radial-gradient(ellipse at center, transparent 60%, color-mix(in srgb, var(--surface-base) 35%, transparent) 100%)',
         }}
       />
 
@@ -422,7 +427,9 @@ export function TacticalMap({
         </div>
       </aside>
 
-      {/* Floating search bar — top */}
+      {/* Floating search bar — top. Placeholder is rendered in Playfair
+          italic to match the design DNA "voice-first" feel; once the
+          operator types, the input switches to Manrope display. */}
       <div
         className="absolute top-3 left-1/2 -translate-x-1/2 z-20 pointer-events-auto"
         style={{ width: 440 }}
@@ -431,14 +438,14 @@ export function TacticalMap({
           className="glass-card flex items-center gap-2 px-3"
           style={{ height: 44, borderRadius: 9999 }}
         >
-          <Search size={16} strokeWidth={1.75} style={{ color: 'var(--ink-muted)' }} />
+          <Search size={16} strokeWidth={1.75} style={{ color: 'var(--primary-shadow)' }} />
           <input
             type="text"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search locations, networks, intel…"
+            placeholder="Знайти місце / мережу / точку…"
             aria-label="Map search"
-            className="flex-1 bg-transparent outline-none border-none"
+            className="flex-1 bg-transparent outline-none border-none phantom-map-search"
             style={{
               color: 'var(--ink-primary)',
               fontFamily: 'var(--font-display)',
@@ -590,11 +597,19 @@ export function TacticalMap({
         )}
       </div>
 
-      {/* POI confirm dialog */}
+      {/* POI confirm dialog. Backdrop blends with the warm theme so the
+          modal reads as "the map is paused" rather than "you've left the
+          surface". cyberdeck-cold automatically picks up the darker
+          surface-void via the inline mix below. */}
       {pendingPoi && (
         <div
           className="absolute inset-0 z-30 flex items-center justify-center pointer-events-auto"
-          style={{ background: 'rgba(0,0,0,0.45)' }}
+          style={{
+            background:
+              'color-mix(in srgb, var(--surface-void) 55%, transparent)',
+            backdropFilter: 'blur(2px)',
+            WebkitBackdropFilter: 'blur(2px)',
+          }}
           onClick={() => {
             setPendingPoi(null);
             setPendingName('');

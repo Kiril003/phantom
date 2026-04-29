@@ -1,0 +1,149 @@
+/* PHANTOM OS — Tactical Map (sunrise warm) overrides
+ *
+ * MapLibre GL exposes its DOM canvas + control surfaces in plain CSS, not
+ * tokens. To make the map fit the sunrise-warm DNA we:
+ *   1. Tint the maplibre wrapper background to the warm cream gradient
+ *      so the brief flash before tiles paint matches the rest of the UI.
+ *   2. Apply CSS filters to the raster tile canvas at the wrapper level
+ *      (`hue-rotate` toward amber, `saturate` boost, `contrast` lift).
+ *      MapLibre paint ops handle saturation per-style, but a CSS filter
+ *      on the canvas adds the warm cast that no per-style raster op
+ *      reproduces with raw OSM tiles.
+ *   3. Hide MapLibre's default attribution / logo / popup chrome
+ *      (we render our own glass cards) so nothing breaks the warm look.
+ *   4. Style the marker DOM elements (`.phantom-presence`,
+ *      `.phantom-wardriving`) with sunrise glow.
+ *
+ * Reduce-motion: every animation declared here is gated on
+ * `(prefers-reduced-motion: no-preference)` so dialed-down operators
+ * see static frames only.
+ *
+ * `.phantom-map-frame` is the root wrapper applied by `TacticalMap`. */
+
+.phantom-map-frame {
+  /* Cream paper backdrop visible during tile load + map gutters. */
+  background:
+    radial-gradient(
+      ellipse 60% 50% at 30% 60%,
+      rgba(244, 175, 37, 0.16) 0%,
+      rgba(244, 175, 37, 0) 70%
+    ),
+    radial-gradient(
+      ellipse 70% 50% at 80% 30%,
+      rgba(251, 146, 60, 0.10) 0%,
+      rgba(251, 146, 60, 0) 70%
+    ),
+    linear-gradient(180deg, #fef6e6 0%, #f6ead4 100%);
+  position: absolute;
+  inset: 0;
+  isolation: isolate;
+}
+
+/* Cyberdeck-cold opt-in: keep the original near-black void so the legacy
+ * desaturated dark style still reads correctly. */
+[data-theme="cyberdeck-cold"] .phantom-map-frame {
+  background: var(--surface-base);
+}
+
+/* Amber-night opt-in: deep warm-dark cream-rim so amber roads still pop. */
+[data-theme="amber-night"] .phantom-map-frame {
+  background:
+    radial-gradient(
+      ellipse 60% 50% at 30% 60%,
+      rgba(244, 175, 37, 0.18) 0%,
+      rgba(244, 175, 37, 0) 70%
+    ),
+    radial-gradient(
+      ellipse 70% 50% at 80% 30%,
+      rgba(251, 146, 60, 0.10) 0%,
+      rgba(251, 146, 60, 0) 70%
+    ),
+    linear-gradient(180deg, #1a120a 0%, #0e0a05 100%);
+}
+
+/* Warm tile cast on the raster canvas itself. The MapLibre paint ops
+ * (raster-saturation/contrast in mapTokens.ts) only desaturate; this
+ * filter pushes hue toward amber so OSM streets read like a warm
+ * cartographic print. Light, never gaudy. */
+.phantom-map-frame .maplibregl-canvas {
+  filter: sepia(0.08) saturate(1.05) contrast(1.02) brightness(1.02);
+  transition: filter 600ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+[data-theme="cyberdeck-cold"] .phantom-map-frame .maplibregl-canvas {
+  filter: none;
+}
+
+[data-theme="amber-night"] .phantom-map-frame .maplibregl-canvas {
+  /* Espresso night: pull tiles dim + warm so amber roads read as
+   * the only bright element. */
+  filter: sepia(0.18) saturate(1.10) contrast(1.18) brightness(0.55);
+}
+
+/* Hide MapLibre's default chrome — we render our own glass attribution. */
+.phantom-map-frame .maplibregl-ctrl-attrib,
+.phantom-map-frame .maplibregl-ctrl-bottom-right,
+.phantom-map-frame .maplibregl-ctrl-bottom-left,
+.phantom-map-frame .maplibregl-ctrl-top-right,
+.phantom-map-frame .maplibregl-ctrl-top-left {
+  display: none !important;
+}
+
+/* Marker reset — our markers carry their own boxshadow / pulse */
+.phantom-map-frame .maplibregl-marker {
+  cursor: pointer;
+}
+
+/* Pulsing operator-presence halo — meaningful: indicates live position fix. */
+@keyframes phantom-presence-pulse {
+  0% {
+    transform: scale(1);
+    opacity: 0.8;
+  }
+  60% {
+    transform: scale(1.55);
+    opacity: 0.05;
+  }
+  100% {
+    transform: scale(1.55);
+    opacity: 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .phantom-map-frame .phantom-presence > div:first-child {
+    animation: none !important;
+  }
+  .phantom-map-frame .maplibregl-canvas {
+    transition: none !important;
+  }
+}
+
+/* Warm route-line gradient stroke (used by ReconLayer if it adopts the
+ * `--phantom-route-stroke` paint expression — kept as a documented hook
+ * for layer authors who want the design DNA gradient). */
+.phantom-map-frame {
+  --phantom-route-start: var(--primary, #f4af25);
+  --phantom-route-end: var(--orange, #fb923c);
+}
+
+/* `cyberdeck-cover` is rendered by MapLayout but only painted opaque
+ * when the legacy cold theme is active. Sunrise-warm and amber-night
+ * leave it transparent so the warm fixtures show through. */
+.cyberdeck-cover {
+  background: transparent;
+}
+[data-theme="cyberdeck-cold"] .cyberdeck-cover {
+  background: var(--surface-base);
+}
+
+/* Search-input placeholder — Playfair italic, gentle muted bronze.
+ * Switches off cleanly in cyberdeck-cold (cyan ink-muted) by reading
+ * `--ink-muted` and overriding only the font. */
+.phantom-map-search::placeholder {
+  font-family: var(--font-serif);
+  font-style: italic;
+  color: var(--ink-muted);
+  opacity: 1;
+}
+

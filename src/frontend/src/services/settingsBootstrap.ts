@@ -12,7 +12,36 @@ import { useFaceStore } from '../stores/faceStore';
 
 const DEFAULT_FONT_SIZE = 14; // matches config.ui_font_size default
 
+let inFlight: Promise<void> | null = null;
+let lastBootstrapAt = 0;
+// Dedupe window for rapid-fire calls (React StrictMode double-effect,
+// providers + post-login retrigger landing in the same tick, etc).
+const DEDUPE_WINDOW_MS = 1000;
+
 export async function bootstrapSettings(): Promise<void> {
+  // Audit D-H6 — don't fire `/settings` before auth. The endpoint requires
+  // a session, so a pre-login mount used to produce four chained 401s in
+  // the console (StrictMode + providers + autoLogin retries). After
+  // successful auth, `authStore.setUser` / `authStore.autoLogin` call
+  // this again, so the gate is "skip if no token *yet*", not "skip
+  // forever".
+  if (typeof localStorage !== 'undefined' && !localStorage.getItem('phantom_token')) {
+    return;
+  }
+  if (inFlight) return inFlight;
+  if (Date.now() - lastBootstrapAt < DEDUPE_WINDOW_MS) return;
+  inFlight = (async () => {
+    try {
+      await _runBootstrap();
+    } finally {
+      lastBootstrapAt = Date.now();
+      inFlight = null;
+    }
+  })();
+  return inFlight;
+}
+
+async function _runBootstrap(): Promise<void> {
   const data = await settingsApi.getAll();
   const values: Record<string, unknown> = {};
   for (const cat of data.categories) {

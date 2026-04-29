@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import type { User } from '@shared/types';
 import { authApi } from '../services/api';
+import { bootstrapSettings } from '../services/settingsBootstrap';
 
 interface AuthStoreState {
   user: User | null;
@@ -34,6 +35,10 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
     localStorage.setItem('phantom_token', token);
     localStorage.setItem('phantom_token_expires', expiresAt);
     set({ user, token, expiresAt, loginAttempts: 0, lockedUntil: null });
+    // Audit D-H6 — bootstrap is gated on a token, so it has to retrigger
+    // here once auth succeeds. settingsBootstrap dedupes a rapid-fire
+    // second call, so this is safe even if providers also triggered it.
+    void bootstrapSettings().catch(() => undefined);
   },
 
   clearAuth: () => {
@@ -84,6 +89,10 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
     try {
       const user = await authApi.me();
       set({ user });
+      // Audit D-H6 — first chance to load /settings now that the token
+      // has been validated. The pre-auth mount call no-ops, so if we
+      // skip this nothing else will fire it on the auto-login path.
+      void bootstrapSettings().catch(() => undefined);
       return true;
     } catch {
       get().clearAuth();

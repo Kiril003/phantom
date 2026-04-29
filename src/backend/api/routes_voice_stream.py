@@ -159,6 +159,22 @@ class _VoiceSession:
     async def send(self, payload: dict) -> None:
         if self.closed:
             return
+        # Audit-2026-04-29 — wire OLED eye state to voice events.
+        # pulse_surprised() and set_voice() existed in oled_animator but
+        # were never called from any code path. Now the eyes react to
+        # voice activity (surprise on wake detection, "thinking" during
+        # listening, idle when speech processing ends).
+        try:
+            from vision.oled_animator import oled_animator
+            event_type = payload.get("type")
+            if event_type == "wake":
+                oled_animator.pulse_surprised(duration_s=0.6)
+            elif event_type == "speech_start":
+                oled_animator.set_voice(listening=True)
+            elif event_type in ("final", "rejected", "cooldown_end", "speech_end"):
+                oled_animator.set_voice(listening=False)
+        except Exception:
+            pass  # OLED dep missing on cloud / dev deploys is acceptable
         try:
             await self.ws.send_text(json.dumps(payload, ensure_ascii=False))
         except Exception as exc:

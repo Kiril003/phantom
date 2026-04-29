@@ -1035,3 +1035,57 @@ Next: Y-2.
 
 ---
 
+## 2026-05-02 07:30 CEST — Wave-2 Y-2 DONE (callers retargeted through wrap_argv)
+
+Closes audit U4-SEC-G1 (caller-drift). bash.run + the MCP stdio
+adapter both consume the new Y-1 API directly.
+
+  agent/actions/bash.py — wrap_shell_cmd import dropped; calls
+                           wrap_argv(SandboxProfile.compute, /bin/sh
+                           -c …) when sandboxed=True. clean_env() +
+                           assert_env_safe() at every call site
+                           (replaces inline 5-key dict).
+  agent/mcp/adapter.py  — McpStdioClient.connect() wraps the server
+                           argv via wrap_argv(SandboxProfile.compute,
+                           …) + scrubs env via clean_env() +
+                           assert_env_safe(). New `sandbox=True`
+                           kwarg on the client (default True) lets
+                           callers in venv-Python deployments opt out
+                           when the server binary lives outside /usr.
+                           `_sandboxed: bool|None` tri-state attr
+                           records whether bwrap was actually applied
+                           (None = pre-connect; True = bwrap active;
+                           False = primitive missing OR opt-out).
+  agent/mcp/discovery.py — reads `sandbox` field from each
+                           server_cfg (default True). Production
+                           deploys get bwrap; venv-stub fixtures
+                           opt out via `"sandbox": false` in config.
+  tests/test_phase09_2_mcp.py — 3 tests updated to set
+                           `"sandbox": False` on monkey-patched
+                           server configs (the venv Python that
+                           hosts the test stubs lives outside /usr,
+                           which bwrap's RO-bind cannot reach).
+
+6 Y-2 contract tests:
+  - bash.py imports the Y-1 API + does NOT import wrap_shell_cmd.
+  - bash.py call site uses wrap_argv + SandboxProfile.compute +
+    assert_env_safe(scrubbed_env).
+  - adapter.py imports the Y-1 API + uses the same.
+  - McpStdioClient._sandboxed starts as None (tri-state).
+  - End-to-end smoke: BashRun(sandboxed=True) returns
+    ActionResult.sandboxed=False when bwrap missing (audit-truth
+    invariant carries through).
+
+86/86 sandbox/firejail/bash/test_phase09_agent/mcp/adapter
+regression sweep green.
+
+Behavioural drift: the MCP discovery path now spawns servers under
+bwrap by default. Production servers that already run from /usr
+(typical apt-installed MCP runtimes) get free isolation. Venv-Python
+stubs need an explicit `"sandbox": false` opt-out — flagged with a
+WARN comment per server config.
+
+Next: Y-5 (Sandbox settings surface).
+
+---
+

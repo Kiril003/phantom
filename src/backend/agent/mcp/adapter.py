@@ -19,6 +19,12 @@ from typing import Any, ClassVar, Type
 from pydantic import Field, create_model
 
 from ..actions.base import Action, ActionContext
+from ..safety.sandbox import (
+    SandboxProfile,
+    assert_env_safe,
+    clean_env,
+    wrap_argv,
+)
 from ..schemas import ActionResult, Precondition, RiskLevel
 
 logger = logging.getLogger(__name__)
@@ -38,10 +44,27 @@ class McpTimeout(McpError):
 class McpStdioClient:
     """Spawns an MCP server as a subprocess; talks line-delimited JSON."""
 
-    def __init__(self, *, name: str, command: str | list[str]) -> None:
+    def __init__(
+        self,
+        *,
+        name: str,
+        command: str | list[str],
+        sandbox: bool = True,
+    ) -> None:
         self.name = name
         self.command = command if isinstance(command, list) else command.split()
         self._proc: asyncio.subprocess.Process | None = None
+        # Day-4 Y-2: connect() flips this from None → True/False
+        # depending on whether bwrap was actually applied. None means
+        # "not yet attempted" (pre-connect); checking for None lets
+        # observability surfaces distinguish a never-connected client
+        # from one explicitly running unsandboxed.
+        self._sandboxed: bool | None = None
+        # `sandbox=False` opt-out for environments where the spawned
+        # MCP server lives outside `/usr` (the bwrap base only RO-binds
+        # /usr + /etc). The Day-4 venv-based test stubs hit this; the
+        # production discovery path keeps the default `sandbox=True`.
+        self._sandbox_request = bool(sandbox)
         self._next_id = 1
         # Phase 9.2.3 (F-12): serialise write+readline pairs so two coroutines
         # calling _request concurrently can't swap each other's replies. The
@@ -57,16 +80,36 @@ class McpStdioClient:
     async def connect(self, timeout: float = 10.0) -> None:
         """Phase 9.2.2 (F-04): wrap subprocess spawn in `asyncio.wait_for` so
         a hanging MCP server can no longer block backend startup.
+
+        Day-4 Y-2 (ADR-SBX-002 / ADR-SBX-003): the MCP server argv is
+        wrapped through bwrap under the ``compute`` profile (--unshare-
+        net, --cap-drop ALL, fresh /tmp tmpfs, --die-with-parent so
+        kill(parent) reaps the whole PID-namespace tree). The env is
+        scrubbed via ``clean_env`` so the child cannot read JWT_SECRET_KEY
+        / AI_GEMINI_API_KEY (audit U4-SEC-H3 named leaks).
+        ``self._sandboxed`` records whether bwrap was actually applied
+        so an operator-visible /metrics gauge can flag a Linux box
+        without bubblewrap installed.
         """
         if self.connected:
             return
+        if self._sandbox_request:
+            wrapped_argv, sandbox_active = wrap_argv(
+                SandboxProfile.compute, list(self.command)
+            )
+        else:
+            wrapped_argv, sandbox_active = list(self.command), False
+        self._sandboxed = sandbox_active
+        scrubbed_env = clean_env()
+        assert_env_safe(scrubbed_env)
         try:
             self._proc = await asyncio.wait_for(
                 asyncio.create_subprocess_exec(
-                    *self.command,
+                    *wrapped_argv,
                     stdin=asyncio.subprocess.PIPE,
                     stdout=asyncio.subprocess.PIPE,
                     stderr=asyncio.subprocess.PIPE,
+                    env=scrubbed_env,
                 ),
                 timeout=timeout,
             )

@@ -106,7 +106,13 @@ async def _discover_one(server_cfg: dict, reg) -> int:
     if not command:
         raise ValueError(f"MCP server {name!r}: stdio transport needs 'command'")
 
-    client = McpStdioClient(name=name, command=command)
+    # Day-4 Y-2: per-server `sandbox` flag (default True). Production
+    # MCP servers run inside the bwrap `compute` profile; the rare
+    # case where the operator deploys a server whose binary lives
+    # outside `/usr` (e.g., a Python venv stub during development) can
+    # opt out by setting `"sandbox": false` in the server config.
+    sandbox_flag = bool(server_cfg.get("sandbox", True))
+    client = McpStdioClient(name=name, command=command, sandbox=sandbox_flag)
     await client.connect()
     try:
         tools = await client.list_tools()

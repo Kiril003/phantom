@@ -1,4 +1,13 @@
-"""bash.run — sandboxed (when firejail is on PATH) shell command runner."""
+"""bash.run — sandboxed (bwrap when on PATH) shell command runner.
+
+Day-4 Wave-2 Y-2 (ADR-SBX-002 / ADR-SBX-003): the legacy
+``wrap_shell_cmd`` shim is replaced by direct ``wrap_argv`` calls
+under the ``compute`` profile + the centralised ``clean_env`` allow-
+list (start-from-empty, never ``os.environ.copy()``). The
+defence-in-depth ``assert_env_safe`` catches a future allowlist
+drift before it can leak ``JWT_SECRET_KEY`` / ``AI_GEMINI_API_KEY``
+into a child process.
+"""
 from __future__ import annotations
 
 import asyncio
@@ -7,7 +16,12 @@ from typing import ClassVar
 
 from pydantic import Field
 
-from ..safety.sandbox import wrap_shell_cmd
+from ..safety.sandbox import (
+    SandboxProfile,
+    assert_env_safe,
+    clean_env,
+    wrap_argv,
+)
 from ..schemas import ActionResult, RiskLevel
 from .base import Action, ActionContext
 
@@ -25,21 +39,30 @@ class BashRun(Action):
 
     async def execute(self, ctx: ActionContext) -> ActionResult:
         t0 = time.monotonic()
-        argv, sandbox_active = wrap_shell_cmd(self.cmd, self.sandboxed)
+        # Day-4 Y-2: wrap argv via the closed `compute` profile when
+        # `sandboxed=True`. The bwrap base flags (--unshare-net,
+        # --cap-drop ALL, --tmpfs /tmp, --ro-bind /usr|/etc, etc.) come
+        # from `_BWRAP_BASE_FLAGS` in agent.safety.sandbox so callers
+        # never hand-assemble flags (cluster invariant U4-SEC-G1).
+        if self.sandboxed:
+            argv, sandbox_active = wrap_argv(
+                SandboxProfile.compute,
+                ["/bin/sh", "-c", self.cmd],
+                workspace_dir=ctx.workspace_dir,
+            )
+        else:
+            argv, sandbox_active = ["/bin/sh", "-c", self.cmd], False
         timeout = min(self.timeout_s, _HARD_TIMEOUT_S)
 
-        # Audit-2026-04-28 F-10c: scrub environment so the spawned shell
-        # cannot read JWT_SECRET_KEY / AI_GEMINI_API_KEY / etc. inherited
-        # from the daemon process. Keep PATH so firejail and /bin/sh
-        # resolve, plus a sane HOME (the agent workspace) and a UTF-8
-        # locale so common tools don't garble output.
-        scrubbed_env = {
-            "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
-            "HOME": ctx.workspace_dir,
-            "LANG": "C.UTF-8",
-            "LC_ALL": "C.UTF-8",
-            "TERM": "dumb",
-        }
+        # Audit-2026-04-28 F-10c + Day-4 Y-2 (ADR-SBX-003): scrub
+        # environment so the spawned shell cannot read JWT_SECRET_KEY /
+        # AI_GEMINI_API_KEY / etc. inherited from the daemon process.
+        # `clean_env` is the start-from-empty allowlist (PATH/HOME/
+        # LANG/LC_ALL/TERM); `assert_env_safe` is the defence-in-depth
+        # invariant that fires if a future refactor widens the
+        # allowlist.
+        scrubbed_env = clean_env(workspace_dir=ctx.workspace_dir)
+        assert_env_safe(scrubbed_env)
 
         proc: asyncio.subprocess.Process | None = None
         try:

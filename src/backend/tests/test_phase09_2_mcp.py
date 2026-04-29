@@ -120,7 +120,12 @@ class TestDiscovery:
         monkeypatch.setattr(config, "agent_mcp_servers", [
             {"name": "stub", "transport": "stdio",
              "command": _stub_command(_STUB_SERVER_SCRIPT),
-             "default_risk": 1, "enabled": True, "timeout_s": 5.0},
+             "default_risk": 1, "enabled": True, "timeout_s": 5.0,
+             # Day-4 Y-2: opt out of bwrap because the test stub runs
+             # under the venv-Python (sys.executable lives outside
+             # /usr → bwrap's RO-bind can't reach it). Production
+             # MCP servers default to sandbox=True.
+             "sandbox": False},
         ])
         reg = ActionRegistry()
         before = set(reg.names())
@@ -171,7 +176,9 @@ class TestAdapter:
         monkeypatch.setattr(config, "agent_mcp_servers", [
             {"name": "stub", "transport": "stdio",
              "command": _stub_command(_STUB_SERVER_SCRIPT),
-             "default_risk": 1, "enabled": True, "timeout_s": 5.0},
+             "default_risk": 1, "enabled": True, "timeout_s": 5.0,
+             # Day-4 Y-2 — see test_discovery_registers_tools.
+             "sandbox": False},
         ])
         reg = ActionRegistry()
         try:
@@ -207,6 +214,10 @@ class TestAdapter:
         client = McpStdioClient(
             name="timeoutsrv",
             command=_stub_command(_STUB_TIMEOUT_SERVER_SCRIPT),
+            # Day-4 Y-2: stub Python lives in the venv outside /usr —
+            # bwrap can't reach sys.executable. Production servers run
+            # sandboxed; tests opt out.
+            sandbox=False,
         )
         await client.connect()
         try:

@@ -14,6 +14,11 @@ export type WSChannel =
   | 'oled'
   | 'face'
   | 'agent.stream'
+  // agent/runtime.py:255-285 splits foreground vs background ticks across
+  // two channels — pre-fix the type union only listed agent.stream so any
+  // FE listener typed against WSChannel could not subscribe to background
+  // events at all (audit B-23).
+  | 'background_events'
   // Phase 9.3b — inner monologue stream. Dedicated channel so main
   // agent.stream subscribers don't get flooded with per-step thinking.
   // No consumer in 9.3b; a future Inspector panel will subscribe.

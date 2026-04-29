@@ -1,9 +1,31 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Save, RotateCcw, Loader2, Plug, CheckCircle2, AlertTriangle, Cpu } from 'lucide-react';
+import {
+  ArrowLeft,
+  Save,
+  RotateCcw,
+  Loader2,
+  Plug,
+  CheckCircle2,
+  AlertTriangle,
+  Cpu,
+  ChevronRight,
+  GitCompareArrows,
+  KeyRound,
+  Sun,
+  Moon,
+  Cog,
+  Tune,
+} from 'lucide-react';
 import { StatusBar } from '../core/StatusBar';
+import { FloatingToolbar } from '../core/FloatingToolbar';
 import { useSettingsStore } from '../../stores/settingsStore';
-import { settingsApi, aiApi, type OllamaModelInfo, type AITestResponse } from '../../services/api';
+import {
+  settingsApi,
+  aiApi,
+  type OllamaModelInfo,
+  type AITestResponse,
+} from '../../services/api';
 import { voiceApi, type VoiceStatusResponse } from '../../services/voiceApi';
 import { applyUISettings } from '../../services/settingsBootstrap';
 import type { SettingDefinition } from '@shared/types';
@@ -14,6 +36,15 @@ import {
   writeAccordionState,
 } from './SettingsAccordion';
 
+type ThemeId = 'sunrise-warm' | 'amber-night' | 'cyberdeck-cold';
+
+/* ─── SettingsPanel — sunrise repaint (phase-5-R1-FE-SET) ─────────────
+ * Preserves ALL existing Zustand selectors, store actions, and API
+ * calls (settingsApi.getAll/set/reset, applyUISettings, etc.). Only
+ * the visual chrome and theme-picker tile UI are new. THEME-NIGHT
+ * agent owns the active-theme writeback through the same setValue/
+ * settingsApi.set pipeline; this file just renders the picker so the
+ * operator can choose. */
 export default function SettingsPanel() {
   const navigate = useNavigate();
   const categories = useSettingsStore((s) => s.categories);
@@ -26,11 +57,12 @@ export default function SettingsPanel() {
 
   const [activeCategoryId, setActiveCategoryId] = useState<string>('');
   const [status, setStatus] = useState<
-    { kind: 'idle' } | { kind: 'loading' } | { kind: 'saving' } | { kind: 'error'; msg: string } | { kind: 'saved' }
+    | { kind: 'idle' }
+    | { kind: 'loading' }
+    | { kind: 'saving' }
+    | { kind: 'error'; msg: string }
+    | { kind: 'saved' }
   >({ kind: 'idle' });
-  // Day-4 W-3b — accordion-open state, persisted per category in
-  // localStorage. Default behaviour on first visit: expand the FIRST
-  // bucket only so the panel fits 1024×600 (closes audit U1-UX-C1).
   const [accordionState, setAccordionState] = useState<
     Record<string, Record<string, boolean>>
   >({});
@@ -71,8 +103,29 @@ export default function SettingsPanel() {
 
   const dirtyInCategory = useMemo(() => {
     if (!activeCategory) return [] as string[];
-    return activeCategory.settings.map((d) => d.key).filter((k) => dirty.has(k));
+    return activeCategory.settings
+      .map((d) => d.key)
+      .filter((k) => dirty.has(k));
   }, [activeCategory, dirty]);
+
+  /* ── Aggregate progress (configured / total) across all categories.
+     A setting counts as "configured" if its current value differs from
+     its registered default — otherwise it's pristine. Mirrors the
+     "83 / 88" pill in the design comp. ────────────────────────────── */
+  const overallProgress = useMemo(() => {
+    let total = 0;
+    let configured = 0;
+    for (const cat of categories) {
+      for (const def of cat.settings) {
+        total += 1;
+        const cur = values[def.key];
+        if (cur !== undefined && JSON.stringify(cur) !== JSON.stringify(def.default)) {
+          configured += 1;
+        }
+      }
+    }
+    return { total, configured, ratio: total === 0 ? 0 : configured / total };
+  }, [categories, values]);
 
   const handleSave = useCallback(async () => {
     if (!activeCategory || dirtyInCategory.length === 0) return;
@@ -84,8 +137,6 @@ export default function SettingsPanel() {
         appliedPatch[key] = values[key];
         markClean(key);
       }
-      // Re-apply UI-affecting values to the DOM immediately so the user sees
-      // the change without a reload. Non-UI keys are no-ops here.
       applyUISettings(appliedPatch);
       setStatus({ kind: 'saved' });
       setTimeout(() => setStatus({ kind: 'idle' }), 1200);
@@ -103,8 +154,6 @@ export default function SettingsPanel() {
       await settingsApi.reset(activeCategory.id);
       const fresh = await settingsApi.getAll();
       setCategories(fresh.categories);
-      // Same reason as handleSave: flush UI-affecting defaults back to DOM so
-      // a theme reset is visible without a page reload.
       const all: Record<string, unknown> = {};
       for (const cat of fresh.categories) {
         for (const def of cat.settings) {
@@ -122,288 +171,547 @@ export default function SettingsPanel() {
     }
   }, [activeCategory, setCategories]);
 
+  /* ── Pending-changes diff summary (3 PENDING CHANGES · …). Shows
+     up to 2 keys verbatim then "+N more" so the strip stays inside
+     the main pane width. ─────────────────────────────────────────── */
+  const diffSummary = useMemo(() => {
+    if (!activeCategory) return null;
+    const dirtyKeys = activeCategory.settings.filter((d) => dirty.has(d.key));
+    if (dirtyKeys.length === 0) return null;
+    const head = dirtyKeys.slice(0, 2);
+    const rest = dirtyKeys.length - head.length;
+    const parts = head.map((d) => {
+      const next = values[d.key];
+      const prev = d.value;
+      const fmt = (v: unknown) =>
+        typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean'
+          ? String(v)
+          : '…';
+      return `${d.key} · ${fmt(prev)}→${fmt(next)}`;
+    });
+    return {
+      count: dirtyKeys.length,
+      caption:
+        parts.join(' · ') + (rest > 0 ? ` · +${rest} more` : ''),
+    };
+  }, [activeCategory, dirty, values]);
+
+  const sectionIndex = useMemo(() => {
+    if (!activeCategory) return { now: 0, total: categories.length };
+    const idx = categories.findIndex((c) => c.id === activeCategory.id);
+    return { now: idx + 1, total: categories.length };
+  }, [activeCategory, categories]);
+
   return (
     <div
-      className="w-[1024px] h-[600px] flex flex-col"
-      style={{ background: 'var(--surface-base)' }}
+      className="sunrise-frame relative"
+      style={{
+        width: 1024,
+        height: 600,
+        background: 'var(--surface-base)',
+        overflow: 'hidden',
+      }}
     >
       <StatusBar />
 
-      <div className="flex-1 flex min-h-0">
-        {/* Sidebar */}
-        <aside
-          className="w-[220px] h-full flex flex-col glass-panel"
-          style={{ borderLeft: 'none', borderTop: 'none', borderBottom: 'none' }}
+      {/* === SIDEBAR === */}
+      <aside
+        className="glass"
+        style={{
+          position: 'absolute',
+          left: 12,
+          top: 68,
+          bottom: 76,
+          width: 260,
+          padding: 14,
+          zIndex: 3,
+          display: 'flex',
+          flexDirection: 'column',
+          borderRadius: 14,
+        }}
+      >
+        <div className="eyebrow">НАЛАШТУВАННЯ</div>
+        <div
+          className="playfair"
+          style={{
+            fontSize: 17,
+            color: 'var(--ink-secondary)',
+            lineHeight: 1.15,
+            marginTop: 2,
+            marginBottom: 8,
+          }}
+        >
+          Usage shaped
+          <br />
+          to taste.
+        </div>
+
+        {/* Overall progress pill */}
+        <div
+          style={{
+            marginBottom: 10,
+            padding: '8px 10px',
+            borderRadius: 10,
+            background: 'rgba(244,175,37,0.10)',
+            border: '1px solid rgba(244,175,37,0.20)',
+          }}
         >
           <div
-            className="px-4 py-3 shrink-0"
-            style={{ borderBottom: '1px solid var(--glass-border)' }}
-          >
-            <div
-              className="flex items-center gap-2 uppercase"
-              style={{
-                fontFamily: 'var(--font-display)',
-                fontSize: 'var(--fs-micro)',
-                letterSpacing: 'var(--tracking-widest)',
-                color: 'var(--ink-secondary)',
-              }}
-            >
-              Налаштування
-            </div>
-            <div
-              className="italic mt-1"
-              style={{
-                fontFamily: 'var(--font-serif)',
-                fontSize: 'var(--fs-xs)',
-                color: 'var(--ink-muted)',
-              }}
-            >
-              Usage shaped to taste.
-            </div>
-          </div>
-          <div className="flex-1 overflow-y-auto py-2">
-            {categories.map((cat) => {
-              const active = cat.id === activeCategoryId;
-              const dirtyCount = cat.settings.filter((d) => dirty.has(d.key)).length;
-              return (
-                <button
-                  key={cat.id}
-                  type="button"
-                  onClick={() => setActiveCategoryId(cat.id)}
-                  className="w-full flex items-center gap-2 px-4 active:scale-[0.99] transition-all"
-                  style={{
-                    minHeight: 44,
-                    background: active
-                      ? 'color-mix(in srgb, var(--accent) 14%, transparent)'
-                      : 'transparent',
-                    borderLeft: `2px solid ${active ? 'var(--accent)' : 'transparent'}`,
-                    color: active ? 'var(--ink-primary)' : 'var(--ink-secondary)',
-                    fontFamily: 'var(--font-display)',
-                    fontSize: 'var(--fs-xs)',
-                    letterSpacing: 'var(--tracking-wide)',
-                  }}
-                >
-                  <span
-                    style={{
-                      color: active ? 'var(--accent)' : 'var(--ink-muted)',
-                      width: 16,
-                      textAlign: 'center',
-                    }}
-                  >
-                    {cat.icon}
-                  </span>
-                  <span className="flex-1 text-left">{cat.label}</span>
-                  {dirtyCount > 0 && (
-                    <span
-                      className="rounded-full tabular-nums"
-                      style={{
-                        minWidth: 16,
-                        height: 16,
-                        padding: '0 6px',
-                        fontSize: 10,
-                        background: 'var(--signal-warn)',
-                        color: 'var(--ink-inverse)',
-                        fontFamily: 'var(--font-mono)',
-                        textAlign: 'center',
-                        lineHeight: '16px',
-                      }}
-                    >
-                      {dirtyCount}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
-          </div>
-          <div
-            className="shrink-0 px-3 py-2"
-            style={{ borderTop: '1px solid var(--glass-border)' }}
-          >
-            <button
-              type="button"
-              onClick={() => navigate(-1)}
-              className="w-full flex items-center gap-2 active:scale-95"
-              style={{
-                minHeight: 44,
-                padding: '0 10px',
-                borderRadius: 10,
-                background: 'var(--glass-subtle)',
-                color: 'var(--ink-secondary)',
-                fontFamily: 'var(--font-display)',
-                fontSize: 'var(--fs-xs)',
-                letterSpacing: 'var(--tracking-wide)',
-                border: '1px solid var(--glass-border)',
-              }}
-            >
-              <ArrowLeft size={14} strokeWidth={1.75} />
-              Назад
-            </button>
-          </div>
-        </aside>
-
-        {/* Main */}
-        <main className="flex-1 min-h-0 flex flex-col">
-          <header
-            className="flex items-center gap-3 px-6 shrink-0"
             style={{
-              height: 56,
-              borderBottom: '1px solid var(--glass-border)',
-              background: 'var(--glass-subtle)',
+              display: 'flex',
+              justifyContent: 'space-between',
+              alignItems: 'center',
             }}
           >
-            <div className="flex-1 min-w-0">
-              <div
-                className="uppercase"
+            <span className="micro-label" style={{ color: '#b07a10' }}>
+              CONFIGURED
+            </span>
+            <span
+              className="tabular"
+              style={{ fontSize: 11, fontWeight: 700, color: '#b07a10' }}
+            >
+              {overallProgress.configured} / {overallProgress.total}
+            </span>
+          </div>
+          <div
+            style={{
+              marginTop: 5,
+              height: 3,
+              background: 'rgba(244,175,37,0.18)',
+              borderRadius: 2,
+              overflow: 'hidden',
+            }}
+          >
+            <div
+              style={{
+                width: `${Math.round(overallProgress.ratio * 100)}%`,
+                height: '100%',
+                background: 'linear-gradient(90deg,#f4af25,#fb923c)',
+                transition: 'width 240ms ease',
+              }}
+            />
+          </div>
+        </div>
+
+        {/* Category list */}
+        <div
+          className="no-scrollbar"
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 2,
+            flex: 1,
+            overflowY: 'auto',
+            minHeight: 0,
+          }}
+        >
+          {categories.map((cat) => {
+            const active = cat.id === activeCategoryId;
+            const dirtyCount = cat.settings.filter((d) =>
+              dirty.has(d.key)
+            ).length;
+            const total = cat.settings.length;
+            const done = total - dirtyCount;
+            const pillBg = dirtyCount > 0
+              ? 'rgba(244,175,37,0.20)'
+              : 'rgba(34,197,94,0.18)';
+            const pillFg = dirtyCount > 0 ? '#b07a10' : '#16a34a';
+            return (
+              <button
+                key={cat.id}
+                type="button"
+                onClick={() => setActiveCategoryId(cat.id)}
+                className="active:scale-[0.99]"
                 style={{
-                  fontFamily: 'var(--font-display)',
-                  fontSize: 'var(--fs-micro)',
-                  color: 'var(--ink-muted)',
-                  letterSpacing: 'var(--tracking-widest)',
+                  minHeight: 44,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 10,
+                  padding: '8px 10px',
+                  borderRadius: 10,
+                  background: active ? 'rgba(244,175,37,0.18)' : 'transparent',
+                  borderLeft: active
+                    ? '3px solid #f4af25'
+                    : '3px solid transparent',
+                  color: active ? '#8a5e0a' : 'var(--ink-secondary)',
+                  cursor: 'pointer',
+                  fontSize: 12,
+                  fontWeight: active ? 600 : 500,
+                  textAlign: 'left',
                 }}
               >
-                Секція
-              </div>
-              <div
-                className="truncate"
+                <span
+                  aria-hidden
+                  style={{
+                    width: 16,
+                    textAlign: 'center',
+                    color: active ? '#b07a10' : 'var(--ink-muted)',
+                  }}
+                >
+                  {cat.icon}
+                </span>
+                <span style={{ flex: 1 }}>{cat.label}</span>
+                <span
+                  className="tabular"
+                  style={{
+                    fontSize: 9,
+                    fontWeight: 700,
+                    padding: '1px 6px',
+                    borderRadius: 999,
+                    background: pillBg,
+                    color: pillFg,
+                  }}
+                >
+                  {done}/{total}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {/* Bottom — back button */}
+        <button
+          type="button"
+          onClick={() => navigate(-1)}
+          style={{
+            marginTop: 8,
+            minHeight: 44,
+            padding: '8px 12px',
+            borderRadius: 999,
+            background: 'rgba(255,255,255,0.6)',
+            border: '1px solid rgba(255,255,255,0.6)',
+            cursor: 'pointer',
+            fontSize: 11,
+            fontWeight: 600,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            justifyContent: 'center',
+            color: 'var(--ink-secondary)',
+          }}
+        >
+          <ArrowLeft size={12} strokeWidth={1.75} />
+          Назад до Shadow
+        </button>
+      </aside>
+
+      {/* === MAIN PANE === */}
+      <div
+        style={{
+          position: 'absolute',
+          left: 284,
+          right: 12,
+          top: 68,
+          bottom: 76,
+          display: 'flex',
+          flexDirection: 'column',
+          zIndex: 2,
+          gap: 10,
+        }}
+      >
+        {/* Breadcrumb header */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            padding: '4px 4px 0',
+          }}
+        >
+          <span style={{ fontSize: 10, color: 'var(--ink-muted)' }}>
+            Налаштування
+          </span>
+          <ChevronRight
+            size={12}
+            strokeWidth={1.75}
+            style={{ color: 'var(--ink-muted)' }}
+          />
+          <span
+            style={{
+              fontSize: 10,
+              color: '#b07a10',
+              fontWeight: 600,
+            }}
+          >
+            {activeCategory?.label ?? '—'}
+          </span>
+          <span style={{ flex: 1 }} />
+          <StatusPill status={status} />
+          <button
+            type="button"
+            onClick={handleReset}
+            style={{
+              minHeight: 44,
+              padding: '6px 12px',
+              borderRadius: 999,
+              background: 'transparent',
+              border: '1.5px solid rgba(0,0,0,0.12)',
+              fontSize: 11,
+              fontWeight: 600,
+              cursor: 'pointer',
+              color: 'var(--ink-secondary)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+            }}
+            title="Reset category to defaults"
+          >
+            <RotateCcw size={12} strokeWidth={1.75} />
+            Reset
+          </button>
+          <button
+            type="button"
+            onClick={handleSave}
+            disabled={
+              dirtyInCategory.length === 0 || status.kind === 'saving'
+            }
+            style={{
+              minHeight: 44,
+              padding: '6px 14px',
+              borderRadius: 999,
+              background:
+                dirtyInCategory.length > 0
+                  ? 'linear-gradient(135deg,#f4af25,#fb923c)'
+                  : 'rgba(0,0,0,0.04)',
+              border: 'none',
+              cursor: dirtyInCategory.length > 0 ? 'pointer' : 'default',
+              color:
+                dirtyInCategory.length > 0
+                  ? 'white'
+                  : 'var(--ink-muted)',
+              fontSize: 11,
+              fontWeight: 700,
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              opacity: dirtyInCategory.length > 0 ? 1 : 0.6,
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
+              boxShadow:
+                dirtyInCategory.length > 0
+                  ? '0 4px 14px rgba(244,175,37,0.40)'
+                  : 'none',
+            }}
+          >
+            {status.kind === 'saving' ? (
+              <Loader2
+                size={14}
+                strokeWidth={1.75}
+                className="animate-spin"
+              />
+            ) : (
+              <Save size={14} strokeWidth={1.75} />
+            )}
+            SAVE
+            {dirtyInCategory.length > 0 && (
+              <span
                 style={{
-                  fontFamily: 'var(--font-display)',
-                  fontSize: 'var(--fs-md)',
-                  color: 'var(--ink-primary)',
-                  fontWeight: 500,
-                  letterSpacing: 'var(--tracking-tight)',
+                  background: 'rgba(255,255,255,0.30)',
+                  padding: '1px 6px',
+                  borderRadius: 999,
+                  fontSize: 9,
                 }}
               >
-                {activeCategory?.label ?? '—'}
+                {dirtyInCategory.length}
+              </span>
+            )}
+          </button>
+        </div>
+
+        {/* Hero glass row */}
+        <div
+          className="glass"
+          style={{
+            padding: '14px 16px',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 14,
+          }}
+        >
+          <div
+            style={{
+              width: 44,
+              height: 44,
+              borderRadius: 12,
+              background: 'linear-gradient(135deg,#f4af25,#fb923c)',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'white',
+              boxShadow: '0 4px 14px rgba(244,175,37,0.35)',
+            }}
+            aria-hidden
+          >
+            <CategoryGlyph icon={activeCategory?.icon ?? '⚙'} />
+          </div>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="micro-label">
+              СЕКЦІЯ ·{' '}
+              <span className="tabular">
+                {String(sectionIndex.now).padStart(2, '0')}/
+                {String(sectionIndex.total).padStart(2, '0')}
+              </span>
+            </div>
+            <div
+              style={{
+                fontSize: 22,
+                fontWeight: 600,
+                letterSpacing: '-0.01em',
+                color: 'var(--ink-primary)',
+              }}
+            >
+              {activeCategory?.label ?? '—'}
+            </div>
+          </div>
+          <div
+            style={{ display: 'flex', alignItems: 'center', gap: 12 }}
+          >
+            <div style={{ textAlign: 'right' }}>
+              <div className="micro-label">CONFIG SCORE</div>
+              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+                <span
+                  className="tabular"
+                  style={{
+                    fontSize: 24,
+                    fontWeight: 700,
+                    color: '#16a34a',
+                  }}
+                >
+                  {Math.round(overallProgress.ratio * 100)}
+                </span>
+                <span style={{ fontSize: 11, color: 'var(--ink-muted)' }}>
+                  / 100
+                </span>
               </div>
             </div>
+            <CircularScore ratio={overallProgress.ratio} />
+          </div>
+        </div>
 
-            <StatusPill status={status} />
+        {/* Settings list (scrollable inside main only) */}
+        <div
+          className="glass"
+          style={{
+            padding: 14,
+            flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 8,
+            overflow: 'hidden',
+            minHeight: 0,
+          }}
+        >
+          <div
+            style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+          >
+            <KeyRound
+              size={14}
+              strokeWidth={1.75}
+              style={{ color: '#b07a10' }}
+            />
+            <span className="eyebrow-amber">
+              {(activeCategory?.label ?? 'SETTINGS').toUpperCase()}
+            </span>
+            {dirtyInCategory.length > 0 && (
+              <span
+                className="tabular"
+                style={{
+                  fontSize: 9,
+                  padding: '1px 7px',
+                  borderRadius: 999,
+                  background: 'rgba(244,175,37,0.18)',
+                  color: '#8a5e0a',
+                  fontWeight: 700,
+                }}
+              >
+                {dirtyInCategory.length} edited
+              </span>
+            )}
+          </div>
 
-            <button
-              type="button"
-              onClick={handleReset}
-              className="flex items-center gap-2 active:scale-95"
-              style={{
-                minHeight: 44,
-                padding: '0 12px',
-                borderRadius: 9999,
-                background: 'var(--glass-subtle)',
-                color: 'var(--ink-secondary)',
-                border: '1px solid var(--glass-border)',
-                fontFamily: 'var(--font-display)',
-                fontSize: 'var(--fs-xs)',
-                letterSpacing: 'var(--tracking-wide)',
-              }}
-              title="Reset category to defaults"
-            >
-              <RotateCcw size={14} strokeWidth={1.75} />
-              Reset
-            </button>
-            <button
-              type="button"
-              onClick={handleSave}
-              disabled={dirtyInCategory.length === 0 || status.kind === 'saving'}
-              className="flex items-center gap-2 active:scale-95"
-              style={{
-                minHeight: 44,
-                padding: '0 14px',
-                borderRadius: 9999,
-                background:
-                  dirtyInCategory.length > 0
-                    ? 'var(--accent)'
-                    : 'var(--glass-subtle)',
-                color:
-                  dirtyInCategory.length > 0
-                    ? 'var(--ink-inverse)'
-                    : 'var(--ink-muted)',
-                border: '1px solid var(--accent)',
-                opacity: dirtyInCategory.length > 0 ? 1 : 0.4,
-                cursor: dirtyInCategory.length > 0 ? 'pointer' : 'default',
-                fontFamily: 'var(--font-display)',
-                fontSize: 'var(--fs-xs)',
-                letterSpacing: 'var(--tracking-wider)',
-                textTransform: 'uppercase',
-              }}
-            >
-              {status.kind === 'saving' ? (
-                <Loader2 size={14} strokeWidth={1.75} className="animate-spin" />
-              ) : (
-                <Save size={14} strokeWidth={1.75} />
-              )}
-              Save ({dirtyInCategory.length})
-            </button>
-          </header>
-
-          <section className="flex-1 overflow-y-auto px-6 py-5">
+          <div
+            style={{
+              flex: 1,
+              overflowY: 'auto',
+              minHeight: 0,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8,
+              paddingRight: 4,
+            }}
+          >
             {!loaded && status.kind === 'loading' && (
-              <div className="h-full flex flex-col items-center justify-center gap-3">
+              <div
+                style={{
+                  flex: 1,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  gap: 10,
+                }}
+              >
                 <Loader2
                   size={20}
                   strokeWidth={1.5}
                   className="animate-spin"
                   style={{ color: 'var(--accent)' }}
                 />
-                <span
-                  style={{
-                    fontFamily: 'var(--font-display)',
-                    fontSize: 'var(--fs-xs)',
-                    color: 'var(--ink-muted)',
-                    letterSpacing: 'var(--tracking-widest)',
-                  }}
-                >
-                  Завантаження…
-                </span>
+                <span className="micro-label">Завантаження…</span>
               </div>
             )}
+
             {status.kind === 'error' && (
               <div
-                className="px-3 py-2 rounded mb-3"
                 style={{
-                  background: 'color-mix(in srgb, var(--signal-alert) 10%, transparent)',
-                  border: '1px solid color-mix(in srgb, var(--signal-alert) 40%, transparent)',
+                  padding: '8px 12px',
+                  borderRadius: 10,
+                  background:
+                    'color-mix(in srgb, var(--signal-alert) 10%, transparent)',
+                  border:
+                    '1px solid color-mix(in srgb, var(--signal-alert) 40%, transparent)',
                   color: 'var(--signal-alert)',
                   fontFamily: 'var(--font-display)',
-                  fontSize: 'var(--fs-xs)',
+                  fontSize: 12,
                 }}
               >
                 {status.msg}
               </div>
             )}
-            {loaded && activeCategory && activeCategory.id === 'about' && <AboutSection />}
+
+            {/* Theme picker tiles in the Theme group ────────────────── */}
+            {loaded && activeCategory && activeCategory.id === 'theme' && (
+              <ThemePicker values={values} onChange={setValue} />
+            )}
+
+            {loaded && activeCategory && activeCategory.id === 'about' && (
+              <AboutSection />
+            )}
+
             {loaded && activeCategory && activeCategory.id !== 'about' && (
-              <div className="flex flex-col gap-2">
+              <>
                 {activeCategory.id === 'ai' && <AIProviderDiagnostics />}
                 {activeCategory.id === 'voice' && <NPUDiagnostics />}
                 {activeCategory.settings.length === 0 && (
                   <div
-                    className="italic"
+                    className="playfair"
                     style={{
-                      fontFamily: 'var(--font-serif)',
-                      fontSize: 'var(--fs-sm)',
+                      fontSize: 13,
                       color: 'var(--ink-muted)',
+                      fontStyle: 'italic',
                     }}
                   >
                     No settings yet for this category.
                   </div>
                 )}
                 {(() => {
-                  const visible = activeCategory.settings
-                    // Phase 12.0 — voice_always_on_enabled is a deprecated
-                    // alias of voice_mode (off / continuous / wake_word).
-                    // Hide it from the UI so operators only see the new
-                    // mode dropdown; legacy DB rows remain readable via
-                    // the REST API but never surface as a toggle.
-                    .filter((def) => def.key !== 'voice_always_on_enabled');
-                  // Day-4 W-3b — group by inferred subgroup. Categories
-                  // with no rule produce a single "General" bucket; the
-                  // accordion still works, it just has one section.
+                  const visible = activeCategory.settings.filter(
+                    (def) => def.key !== 'voice_always_on_enabled'
+                  );
                   const groups = groupByInferredSubgroup(
                     activeCategory.id,
                     visible
                   );
-                  // Bootstrap accordion state on first render for this
-                  // category: read localStorage; if missing, default to
-                  // the first bucket open + the rest collapsed.
                   const stateForCategory =
                     accordionState[activeCategory.id] ??
                     (() => {
@@ -415,9 +723,6 @@ export default function SettingsPanel() {
                       });
                       return seed;
                     })();
-                  // If a single-group category, render flat (no
-                  // accordion chrome) — preserves the legacy look for
-                  // small categories like `system` and `ui`.
                   if (groups.length <= 1) {
                     return groups[0]?.items.map((def) => (
                       <SettingRow
@@ -470,16 +775,58 @@ export default function SettingsPanel() {
                     );
                   });
                 })()}
-              </div>
+              </>
             )}
-          </section>
-        </main>
+          </div>
+
+          {/* Diff strip — sticky to the bottom of the glass */}
+          {diffSummary && (
+            <div
+              style={{
+                marginTop: 'auto',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 10,
+                padding: '8px 10px',
+                borderRadius: 10,
+                background: 'rgba(244,175,37,0.08)',
+                border: '1px dashed rgba(244,175,37,0.32)',
+              }}
+            >
+              <GitCompareArrows
+                size={14}
+                strokeWidth={1.75}
+                style={{ color: '#b07a10' }}
+              />
+              <span className="micro-label" style={{ color: '#b07a10' }}>
+                {diffSummary.count} PENDING CHANGES
+              </span>
+              <span style={{ flex: 1 }} />
+              <span
+                className="mono"
+                style={{
+                  fontSize: 10,
+                  color: 'var(--ink-secondary)',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                  maxWidth: 420,
+                }}
+                title={diffSummary.caption}
+              >
+                {diffSummary.caption}
+              </span>
+            </div>
+          )}
+        </div>
       </div>
+
+      <FloatingToolbar />
     </div>
   );
 }
 
-/* ─── Row ──────────────────────────────────────────────────────────── */
+/* ─── Setting row ────────────────────────────────────────────────────── */
 
 function SettingRow({
   def,
@@ -494,45 +841,114 @@ function SettingRow({
 }) {
   return (
     <div
-      className="flex items-center gap-3 px-4"
       style={{
+        position: 'relative',
+        padding: '10px 12px',
+        borderRadius: 10,
+        background: 'rgba(255,255,255,0.50)',
+        border: dirty
+          ? '1px solid rgba(244,175,37,0.40)'
+          : '1px solid rgba(255,255,255,0.50)',
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
         minHeight: 52,
-        padding: '10px 14px',
-        borderRadius: 12,
-        background: dirty
-          ? 'color-mix(in srgb, var(--signal-warn) 8%, var(--glass-subtle))'
-          : 'var(--glass-subtle)',
-        border: `1px solid ${dirty ? 'color-mix(in srgb, var(--signal-warn) 40%, transparent)' : 'var(--glass-border)'}`,
       }}
     >
-      <div className="flex-1 min-w-0">
-        <div
-          className="truncate"
+      {dirty && (
+        <span
+          aria-hidden
           style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 'var(--fs-xs)',
-            color: 'var(--ink-primary)',
+            position: 'absolute',
+            left: -3,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            width: 6,
+            height: 6,
+            borderRadius: 999,
+            background: '#f4af25',
+            boxShadow: '0 0 6px rgba(244,175,37,0.60)',
+          }}
+        />
+      )}
+      <Tune
+        size={16}
+        strokeWidth={1.75}
+        style={{ color: '#b07a10', flexShrink: 0 }}
+      />
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
           }}
         >
-          {def.label}
+          <span
+            style={{
+              fontSize: 13,
+              fontWeight: 600,
+              color: 'var(--ink-primary)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {def.label}
+          </span>
+          {dirty && (
+            <span
+              style={{
+                fontSize: 8,
+                padding: '1px 5px',
+                borderRadius: 4,
+                background: 'rgba(244,175,37,0.22)',
+                color: '#8a5e0a',
+                fontWeight: 700,
+                letterSpacing: '0.10em',
+              }}
+            >
+              EDITED
+            </span>
+          )}
         </div>
         <div
-          className="truncate"
+          className="mono"
           style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 'var(--fs-micro)',
+            fontSize: 9,
             color: 'var(--ink-muted)',
+            marginTop: 1,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
           }}
         >
           {def.key}
         </div>
+        {def.description && (
+          <div
+            style={{
+              fontSize: 11,
+              color: 'var(--ink-muted)',
+              marginTop: 2,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+            title={def.description}
+          >
+            {def.description}
+          </div>
+        )}
       </div>
-      <div className="shrink-0" style={{ minWidth: 180 }}>
+      <div style={{ flexShrink: 0, minWidth: 180 }}>
         <ValueEditor def={def} value={value} onChange={onChange} />
       </div>
     </div>
   );
 }
+
+/* ─── Value editor ───────────────────────────────────────────────────── */
 
 function ValueEditor({
   def,
@@ -543,8 +959,6 @@ function ValueEditor({
   value: unknown;
   onChange: (v: unknown) => void;
 }) {
-  // Ollama model: dynamic dropdown backed by `/api/v1/ai/models`. Falls back
-  // to a plain text input when the daemon isn't reachable.
   if (def.key === 'ai_ollama_model') {
     return <OllamaModelEditor value={value} onChange={onChange} />;
   }
@@ -556,28 +970,35 @@ function ValueEditor({
         type="button"
         onClick={() => onChange(!on)}
         aria-pressed={on}
-        className="flex items-center active:scale-95"
         style={{
           minHeight: 44,
           minWidth: 64,
-          padding: '0 4px',
           width: 64,
           height: 28,
+          padding: '0 4px',
           borderRadius: 9999,
-          background: on ? 'var(--accent)' : 'var(--glass-subtle)',
-          border: `1px solid ${on ? 'var(--accent)' : 'var(--glass-border)'}`,
+          background: on
+            ? 'linear-gradient(135deg,#f4af25,#fb923c)'
+            : 'rgba(0,0,0,0.12)',
+          border: 'none',
           position: 'relative',
-          transition: 'all 0.2s ease',
+          cursor: 'pointer',
+          boxShadow: on
+            ? '0 0 0 1px rgba(244,175,37,0.50), inset 0 0 8px rgba(255,255,255,0.30)'
+            : 'inset 0 0 0 1px rgba(0,0,0,0.06)',
         }}
       >
         <span
-          className="rounded-full"
           style={{
-            width: 20,
-            height: 20,
-            background: on ? 'var(--ink-inverse)' : 'var(--ink-secondary)',
-            transform: on ? 'translateX(36px)' : 'translateX(0)',
-            transition: 'transform 0.2s ease',
+            position: 'absolute',
+            top: 2,
+            left: on ? 38 : 2,
+            width: 22,
+            height: 22,
+            borderRadius: 9999,
+            background: 'white',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.20)',
+            transition: 'left 200ms ease',
           }}
         />
       </button>
@@ -589,17 +1010,17 @@ function ValueEditor({
       <select
         value={String(value ?? '')}
         onChange={(e) => onChange(e.target.value)}
-        className="bg-transparent outline-none"
         style={{
           minHeight: 44,
           width: '100%',
           padding: '0 12px',
           borderRadius: 10,
           color: 'var(--ink-primary)',
-          background: 'var(--surface-deep)',
-          border: '1px solid var(--glass-border)',
+          background: 'rgba(255,255,255,0.60)',
+          border: '1px solid rgba(0,0,0,0.06)',
           fontFamily: 'var(--font-display)',
-          fontSize: 'var(--fs-xs)',
+          fontSize: 13,
+          outline: 'none',
         }}
       >
         {def.options.map((opt) => (
@@ -620,17 +1041,18 @@ function ValueEditor({
           const n = e.target.value === '' ? 0 : Number(e.target.value);
           onChange(Number.isFinite(n) ? n : 0);
         }}
-        className="bg-transparent outline-none tabular-nums"
+        className="tabular"
         style={{
           minHeight: 44,
           width: '100%',
           padding: '0 12px',
           borderRadius: 10,
           color: 'var(--ink-primary)',
-          background: 'var(--surface-deep)',
-          border: '1px solid var(--glass-border)',
+          background: 'rgba(255,255,255,0.60)',
+          border: '1px solid rgba(0,0,0,0.06)',
           fontFamily: 'var(--font-mono)',
-          fontSize: 'var(--fs-xs)',
+          fontSize: 13,
+          outline: 'none',
         }}
       />
     );
@@ -643,17 +1065,17 @@ function ValueEditor({
         placeholder="••••••••"
         value={String(value ?? '')}
         onChange={(e) => onChange(e.target.value)}
-        className="bg-transparent outline-none"
         style={{
           minHeight: 44,
           width: '100%',
           padding: '0 12px',
           borderRadius: 10,
           color: 'var(--ink-primary)',
-          background: 'var(--surface-deep)',
-          border: '1px solid var(--glass-border)',
+          background: 'rgba(255,255,255,0.60)',
+          border: '1px solid rgba(0,0,0,0.06)',
           fontFamily: 'var(--font-mono)',
-          fontSize: 'var(--fs-xs)',
+          fontSize: 13,
+          outline: 'none',
         }}
       />
     );
@@ -664,23 +1086,292 @@ function ValueEditor({
       type="text"
       value={String(value ?? '')}
       onChange={(e) => onChange(e.target.value)}
-      className="bg-transparent outline-none"
       style={{
         minHeight: 44,
         width: '100%',
         padding: '0 12px',
         borderRadius: 10,
         color: 'var(--ink-primary)',
-        background: 'var(--surface-deep)',
-        border: '1px solid var(--glass-border)',
+        background: 'rgba(255,255,255,0.60)',
+        border: '1px solid rgba(0,0,0,0.06)',
         fontFamily: 'var(--font-mono)',
-        fontSize: 'var(--fs-xs)',
+        fontSize: 13,
+        outline: 'none',
       }}
     />
   );
 }
 
-/* ─── AI diagnostics ───────────────────────────────────────────────── */
+/* ─── Theme picker tiles ─────────────────────────────────────────────── */
+
+interface ThemePickerProps {
+  values: Record<string, unknown>;
+  onChange: (key: string, value: unknown) => void;
+}
+
+const THEME_KEY = 'theme_active';
+
+function ThemePicker({ values, onChange }: ThemePickerProps) {
+  // The active-theme key landed by THEME-NIGHT is `theme_active`. We
+  // tolerate it being absent (e.g. on a fresh install) by falling
+  // back to the root <html> attribute, then "sunrise-warm".
+  const active: ThemeId =
+    (values[THEME_KEY] as ThemeId) ??
+    ((document.documentElement.getAttribute('data-theme') as ThemeId) ||
+      'sunrise-warm');
+
+  const tiles: Array<{
+    id: ThemeId;
+    label: string;
+    blurb: string;
+    swatch: string;
+    icon: React.ReactNode;
+  }> = [
+    {
+      id: 'sunrise-warm',
+      label: 'Sunrise · Warm',
+      blurb: 'Cream + amber. Bright as life.',
+      swatch:
+        'linear-gradient(135deg,#fdf6e9 0%, #f4af25 50%, #fb923c 100%)',
+      icon: <Sun size={16} strokeWidth={2} />,
+    },
+    {
+      id: 'amber-night',
+      label: 'Amber · Night',
+      blurb: 'Warm-dark. Amber accents.',
+      swatch:
+        'linear-gradient(135deg,#221c10 0%, #b07a10 60%, #f4af25 100%)',
+      icon: <Moon size={16} strokeWidth={2} />,
+    },
+    {
+      id: 'cyberdeck-cold',
+      label: 'Cyberdeck · Cold',
+      blurb: 'Slate + cyan. Legacy.',
+      swatch:
+        'linear-gradient(135deg,#020617 0%, #0891b2 60%, #22d3ee 100%)',
+      icon: <Cog size={16} strokeWidth={2} />,
+    },
+  ];
+
+  const handleSelect = (id: ThemeId) => {
+    // Apply optimistically so the operator sees the change instantly;
+    // THEME-NIGHT's settings setter persists it, applyUISettings (run
+    // on save) would re-apply identically.
+    document.documentElement.setAttribute('data-theme', id);
+    onChange(THEME_KEY, id);
+  };
+
+  return (
+    <div
+      style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(3, 1fr)',
+        gap: 10,
+      }}
+    >
+      {tiles.map((t) => {
+        const selected = active === t.id;
+        return (
+          <button
+            key={t.id}
+            type="button"
+            onClick={() => handleSelect(t.id)}
+            aria-pressed={selected}
+            style={{
+              minHeight: 110,
+              padding: 12,
+              borderRadius: 14,
+              background: 'rgba(255,255,255,0.55)',
+              border: selected
+                ? '2px solid #f4af25'
+                : '1px solid rgba(255,255,255,0.55)',
+              boxShadow: selected
+                ? '0 8px 24px rgba(244,175,37,0.30)'
+                : 'var(--shadow-md)',
+              cursor: 'pointer',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 8,
+              textAlign: 'left',
+              position: 'relative',
+            }}
+          >
+            <div
+              aria-hidden
+              style={{
+                width: '100%',
+                height: 36,
+                borderRadius: 10,
+                background: t.swatch,
+                boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.06)',
+              }}
+            />
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                color: '#b07a10',
+              }}
+            >
+              {t.icon}
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: 'var(--ink-primary)',
+                  letterSpacing: '0.02em',
+                }}
+              >
+                {t.label}
+              </span>
+            </div>
+            <div
+              style={{
+                fontSize: 10,
+                color: 'var(--ink-muted)',
+                lineHeight: 1.4,
+              }}
+            >
+              {t.blurb}
+            </div>
+            {selected && (
+              <span
+                className="micro-label"
+                style={{
+                  position: 'absolute',
+                  top: 8,
+                  right: 8,
+                  color: '#b07a10',
+                  background: 'rgba(244,175,37,0.18)',
+                  padding: '2px 6px',
+                  borderRadius: 999,
+                }}
+              >
+                ACTIVE
+              </span>
+            )}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ─── Status pill ────────────────────────────────────────────────────── */
+
+function StatusPill({
+  status,
+}: {
+  status: { kind: string; msg?: string };
+}) {
+  if (status.kind === 'idle' || status.kind === 'loading') return null;
+  const color =
+    status.kind === 'saved'
+      ? 'var(--signal-ok)'
+      : status.kind === 'error'
+        ? 'var(--signal-alert)'
+        : 'var(--accent)';
+  const label =
+    status.kind === 'saving'
+      ? 'Saving…'
+      : status.kind === 'saved'
+        ? 'Saved'
+        : status.kind === 'error'
+          ? 'Error'
+          : '';
+  return (
+    <span
+      className="tabular"
+      style={{
+        padding: '4px 10px',
+        borderRadius: 999,
+        background: `color-mix(in srgb, ${color} 14%, transparent)`,
+        color,
+        border: `1px solid ${color}`,
+        fontFamily: 'var(--font-display)',
+        fontSize: 10,
+        letterSpacing: '0.14em',
+        textTransform: 'uppercase',
+      }}
+    >
+      {label}
+    </span>
+  );
+}
+
+/* ─── Circular score ─────────────────────────────────────────────────── */
+
+function CircularScore({ ratio }: { ratio: number }) {
+  const r = 18;
+  const c = 2 * Math.PI * r;
+  const dash = c * Math.max(0, Math.min(1, ratio));
+  return (
+    <div style={{ position: 'relative', width: 44, height: 44 }}>
+      <svg
+        viewBox="0 0 44 44"
+        style={{ position: 'absolute', inset: 0 }}
+        aria-hidden
+      >
+        <circle
+          cx="22"
+          cy="22"
+          r={r}
+          fill="none"
+          stroke="rgba(0,0,0,0.06)"
+          strokeWidth="3"
+        />
+        <circle
+          cx="22"
+          cy="22"
+          r={r}
+          fill="none"
+          stroke="#16a34a"
+          strokeWidth="3"
+          strokeLinecap="round"
+          strokeDasharray={`${dash} ${c}`}
+          transform="rotate(-90 22 22)"
+        />
+      </svg>
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          fontSize: 10,
+          fontWeight: 700,
+          color: '#16a34a',
+        }}
+      >
+        {Math.round(ratio * 100)}
+      </div>
+    </div>
+  );
+}
+
+/* ─── Category glyph ─────────────────────────────────────────────────── */
+
+function CategoryGlyph({ icon }: { icon: string }) {
+  // Categories carry a single-glyph icon string in the schema (e.g.
+  // "tune", "palette"). Rendering them as text inside the gradient
+  // tile keeps zero new asset loads. A real icon font lookup would
+  // belong in a shared <Icon> component — out of scope here.
+  return (
+    <span
+      style={{
+        fontFamily: 'Material Symbols Outlined, system-ui',
+        fontSize: 22,
+        lineHeight: 1,
+      }}
+    >
+      {icon}
+    </span>
+  );
+}
+
+/* ─── AI diagnostics ─────────────────────────────────────────────────── */
 
 function AIProviderDiagnostics() {
   const [state, setState] = useState<{
@@ -714,21 +1405,17 @@ function AIProviderDiagnostics() {
 
   return (
     <div
-      className="glass-card flex flex-col gap-3 mb-2 px-4 py-3"
-      style={{ borderRadius: 14, border: '1px solid var(--glass-border)' }}
+      className="sub-glass"
+      style={{
+        padding: '12px 14px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10,
+        borderRadius: 12,
+      }}
     >
-      <div
-        className="uppercase"
-        style={{
-          fontFamily: 'var(--font-display)',
-          fontSize: 'var(--fs-micro)',
-          color: 'var(--ink-muted)',
-          letterSpacing: 'var(--tracking-widest)',
-        }}
-      >
-        Connectivity
-      </div>
-      <div className="flex flex-wrap gap-2">
+      <div className="eyebrow-amber">Connectivity</div>
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
         <ProviderTestButton
           label="Test Ollama"
           onClick={() => run('ollama')}
@@ -759,7 +1446,11 @@ function ProviderTestButton({
 }) {
   const tone = result == null ? 'idle' : result.ok ? 'ok' : 'err';
   const color =
-    tone === 'ok' ? 'var(--signal-ok)' : tone === 'err' ? 'var(--signal-alert)' : 'var(--accent)';
+    tone === 'ok'
+      ? 'var(--signal-ok)'
+      : tone === 'err'
+        ? 'var(--signal-alert)'
+        : 'var(--accent)';
   const summary = result
     ? result.ok
       ? `Connected · ${result.latency_ms}ms`
@@ -767,23 +1458,26 @@ function ProviderTestButton({
     : 'Not tested';
 
   return (
-    <div className="flex items-center gap-2">
+    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
       <button
         type="button"
         onClick={onClick}
         disabled={busy}
-        className="flex items-center gap-2 px-3 rounded-full active:scale-95"
         style={{
           minHeight: 44,
           padding: '0 14px',
           background: `color-mix(in srgb, ${color} 14%, transparent)`,
           color,
           border: `1px solid color-mix(in srgb, ${color} 50%, transparent)`,
+          borderRadius: 9999,
           fontFamily: 'var(--font-display)',
-          fontSize: 'var(--fs-xs)',
-          letterSpacing: 'var(--tracking-wide)',
+          fontSize: 12,
+          letterSpacing: '0.05em',
           opacity: busy ? 0.6 : 1,
-          transition: 'all 200ms ease',
+          cursor: busy ? 'default' : 'pointer',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
         }}
         aria-label={label}
       >
@@ -799,12 +1493,14 @@ function ProviderTestButton({
         {label}
       </button>
       <span
-        className="truncate"
+        className="mono"
         style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 'var(--fs-micro)',
+          fontSize: 11,
           color: 'var(--ink-muted)',
           maxWidth: 340,
+          overflow: 'hidden',
+          textOverflow: 'ellipsis',
+          whiteSpace: 'nowrap',
         }}
         title={result?.error ?? summary}
       >
@@ -859,16 +1555,18 @@ function OllamaModelEditor({
   if (loading) {
     return (
       <div
-        className="flex items-center gap-2"
         style={{
           minHeight: 44,
           padding: '0 12px',
           borderRadius: 10,
-          background: 'var(--surface-deep)',
-          border: '1px solid var(--glass-border)',
+          background: 'rgba(255,255,255,0.60)',
+          border: '1px solid rgba(0,0,0,0.06)',
           color: 'var(--ink-muted)',
           fontFamily: 'var(--font-mono)',
-          fontSize: 'var(--fs-xs)',
+          fontSize: 13,
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
         }}
       >
         <Loader2 size={12} strokeWidth={1.75} className="animate-spin" />
@@ -878,33 +1576,34 @@ function OllamaModelEditor({
   }
 
   if (!showDropdown) {
-    // Fallback: manual input + an inline hint about Ollama being offline.
     return (
-      <div className="flex flex-col gap-1">
+      <div
+        style={{ display: 'flex', flexDirection: 'column', gap: 4 }}
+      >
         <input
           type="text"
           value={current}
           onChange={(e) => onChange(e.target.value)}
           placeholder="e.g. llama3.2:3b"
-          className="bg-transparent outline-none"
           style={{
             minHeight: 44,
             width: '100%',
             padding: '0 12px',
             borderRadius: 10,
             color: 'var(--ink-primary)',
-            background: 'var(--surface-deep)',
-            border: '1px solid var(--glass-border)',
+            background: 'rgba(255,255,255,0.60)',
+            border: '1px solid rgba(0,0,0,0.06)',
             fontFamily: 'var(--font-mono)',
-            fontSize: 'var(--fs-xs)',
+            fontSize: 13,
+            outline: 'none',
           }}
         />
         <span
           style={{
             fontFamily: 'var(--font-display)',
-            fontSize: 'var(--fs-micro)',
+            fontSize: 10,
             color: 'var(--signal-warn)',
-            letterSpacing: 'var(--tracking-wide)',
+            letterSpacing: '0.05em',
           }}
         >
           {offlineMessage ?? 'No models installed — run `ollama pull <name>`'}
@@ -918,17 +1617,17 @@ function OllamaModelEditor({
     <select
       value={current}
       onChange={(e) => onChange(e.target.value)}
-      className="bg-transparent outline-none"
       style={{
         minHeight: 44,
         width: '100%',
         padding: '0 12px',
         borderRadius: 10,
         color: 'var(--ink-primary)',
-        background: 'var(--surface-deep)',
-        border: '1px solid var(--glass-border)',
+        background: 'rgba(255,255,255,0.60)',
+        border: '1px solid rgba(0,0,0,0.06)',
         fontFamily: 'var(--font-mono)',
-        fontSize: 'var(--fs-xs)',
+        fontSize: 13,
+        outline: 'none',
       }}
     >
       {!hasCurrent && current && (
@@ -945,41 +1644,7 @@ function OllamaModelEditor({
   );
 }
 
-function StatusPill({ status }: { status: { kind: string; msg?: string } }) {
-  if (status.kind === 'idle' || status.kind === 'loading') return null;
-  const color =
-    status.kind === 'saved'
-      ? 'var(--signal-ok)'
-      : status.kind === 'error'
-        ? 'var(--signal-alert)'
-        : 'var(--accent)';
-  const label =
-    status.kind === 'saving'
-      ? 'Saving…'
-      : status.kind === 'saved'
-        ? 'Saved'
-        : status.kind === 'error'
-          ? 'Error'
-          : '';
-  return (
-    <span
-      className="px-2 py-1 rounded tabular-nums"
-      style={{
-        background: `color-mix(in srgb, ${color} 14%, transparent)`,
-        color,
-        border: `1px solid ${color}`,
-        fontFamily: 'var(--font-display)',
-        fontSize: 'var(--fs-micro)',
-        letterSpacing: 'var(--tracking-widest)',
-        textTransform: 'uppercase',
-      }}
-    >
-      {label}
-    </span>
-  );
-}
-
-/* ─── NPU diagnostics (Phase 15) ───────────────────────────────────── */
+/* ─── NPU diagnostics (Phase 15) ─────────────────────────────────────── */
 
 function NPUDiagnostics() {
   const [state, setState] = useState<{
@@ -1007,13 +1672,6 @@ function NPUDiagnostics() {
   }, [refresh]);
 
   const status = state.status;
-  // Pick a single signal colour summarising the NPU health state. Order:
-  //   error  → alert  (failed to fetch)
-  //   off    → muted  (operator hasn't opted in)
-  //   active → ok     (whisper_npu provider is the loaded STT engine)
-  //   ready  → accent (toggle on, bundle on disk, but NPU isn't currently
-  //                    serving — usually because mode keeps Whisper first)
-  //   gap    → warn   (toggle on but bundle missing / EP plugin failure)
   let tone: 'idle' | 'ok' | 'warn' | 'err' | 'off' = 'idle';
   let summary = 'Не перевірено';
   if (state.error) {
@@ -1028,13 +1686,15 @@ function NPUDiagnostics() {
       summary = `Активний · encoder на QNN HTP · ${status.stt_engine}`;
     } else if (status.npu_active) {
       tone = 'warn';
-      summary = 'Провайдер активний, encoder на CPU (QNN session не піднявся)';
+      summary =
+        'Провайдер активний, encoder на CPU (QNN session не піднявся)';
     } else if (status.npu_available) {
       tone = 'ok';
       summary = `Готовий · поточний engine: ${status.stt_engine}`;
     } else {
       tone = 'warn';
-      summary = 'Bundle або EP плагін не доступні — система впаде на faster-whisper';
+      summary =
+        'Bundle або EP плагін не доступні — система впаде на faster-whisper';
     }
   } else if (state.loading) {
     summary = 'Перевіряємо стан…';
@@ -1053,33 +1713,30 @@ function NPUDiagnostics() {
 
   return (
     <div
-      className="glass-card flex flex-col gap-3 mb-2 px-4 py-3"
-      style={{ borderRadius: 14, border: '1px solid var(--glass-border)' }}
+      className="sub-glass"
+      style={{
+        padding: '12px 14px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10,
+        borderRadius: 12,
+      }}
     >
-      <div className="flex items-center gap-2">
-        <Cpu size={14} strokeWidth={1.75} style={{ color: 'var(--ink-muted)' }} />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <Cpu
+          size={14}
+          strokeWidth={1.75}
+          style={{ color: 'var(--ink-muted)' }}
+        />
+        <span className="eyebrow-amber">NPU · Hexagon HTP</span>
         <span
-          className="uppercase"
+          className="micro-label"
           style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 'var(--fs-micro)',
-            color: 'var(--ink-muted)',
-            letterSpacing: 'var(--tracking-widest)',
-          }}
-        >
-          NPU · Hexagon HTP
-        </span>
-        <span
-          className="px-2 rounded-full"
-          style={{
+            padding: '1px 7px',
+            borderRadius: 999,
             background: `color-mix(in srgb, ${color} 18%, transparent)`,
             color,
             border: `1px solid color-mix(in srgb, ${color} 50%, transparent)`,
-            fontFamily: 'var(--font-display)',
-            fontSize: 'var(--fs-micro)',
-            letterSpacing: 'var(--tracking-wider)',
-            textTransform: 'uppercase',
-            lineHeight: '20px',
           }}
         >
           {tone === 'ok'
@@ -1096,23 +1753,29 @@ function NPUDiagnostics() {
           type="button"
           onClick={refresh}
           disabled={state.loading}
-          className="ml-auto active:scale-95"
           style={{
+            marginLeft: 'auto',
             minHeight: 32,
+            minWidth: 0,
             padding: '0 10px',
             borderRadius: 9999,
-            background: 'var(--glass-subtle)',
+            background: 'rgba(255,255,255,0.60)',
             color: 'var(--ink-secondary)',
-            border: '1px solid var(--glass-border)',
+            border: '1px solid rgba(0,0,0,0.06)',
             fontFamily: 'var(--font-display)',
-            fontSize: 'var(--fs-micro)',
-            letterSpacing: 'var(--tracking-wide)',
+            fontSize: 10,
+            letterSpacing: '0.05em',
+            cursor: state.loading ? 'default' : 'pointer',
             opacity: state.loading ? 0.5 : 1,
           }}
           title="Re-check /voice/status"
         >
           {state.loading ? (
-            <Loader2 size={12} strokeWidth={1.75} className="animate-spin" />
+            <Loader2
+              size={12}
+              strokeWidth={1.75}
+              className="animate-spin"
+            />
           ) : (
             'Refresh'
           )}
@@ -1122,7 +1785,7 @@ function NPUDiagnostics() {
       <div
         style={{
           fontFamily: 'var(--font-display)',
-          fontSize: 'var(--fs-xs)',
+          fontSize: 12,
           color: 'var(--ink-secondary)',
         }}
       >
@@ -1131,13 +1794,13 @@ function NPUDiagnostics() {
 
       {status && (
         <div
-          className="grid"
           style={{
+            display: 'grid',
             gridTemplateColumns: '120px 1fr',
             rowGap: 4,
             columnGap: 12,
             fontFamily: 'var(--font-mono)',
-            fontSize: 'var(--fs-micro)',
+            fontSize: 10,
             color: 'var(--ink-muted)',
           }}
         >
@@ -1146,92 +1809,90 @@ function NPUDiagnostics() {
             {status.npu_model_path || '—'}
           </span>
           <span>Compute</span>
-          <span style={{ color: 'var(--ink-primary)' }}>{status.npu_compute || '—'}</span>
+          <span style={{ color: 'var(--ink-primary)' }}>
+            {status.npu_compute || '—'}
+          </span>
           <span>Encoder · QNN</span>
           <span
             style={{
-              color: status.npu_encoder_loaded ? 'var(--signal-ok)' : 'var(--ink-primary)',
+              color: status.npu_encoder_loaded
+                ? 'var(--signal-ok)'
+                : 'var(--ink-primary)',
             }}
           >
             {status.npu_encoder_loaded ? 'loaded' : 'not loaded'}
           </span>
           <span>Providers</span>
-          <span style={{ color: 'var(--ink-primary)', overflowWrap: 'anywhere' }}>
+          <span
+            style={{
+              color: 'var(--ink-primary)',
+              overflowWrap: 'anywhere',
+            }}
+          >
             {status.npu_providers || 'unknown'}
           </span>
           <span>Active engine</span>
-          <span style={{ color: 'var(--ink-primary)' }}>{status.stt_engine}</span>
+          <span style={{ color: 'var(--ink-primary)' }}>
+            {status.stt_engine}
+          </span>
         </div>
       )}
     </div>
   );
 }
 
-/* ─── About ────────────────────────────────────────────────────────── */
+/* ─── About ──────────────────────────────────────────────────────────── */
 
 function AboutSection() {
   return (
-    <div className="flex flex-col gap-4">
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
       <div
-        className="glass-card"
-        style={{ borderRadius: 16, padding: '20px 22px' }}
+        className="sub-glass"
+        style={{ borderRadius: 14, padding: '16px 18px' }}
       >
-        <div
-          className="uppercase"
-          style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 'var(--fs-micro)',
-            color: 'var(--ink-muted)',
-            letterSpacing: 'var(--tracking-widest)',
-          }}
-        >
-          Version
-        </div>
+        <div className="eyebrow-amber">Version</div>
         <div
           style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 'var(--fs-xl)',
+            fontSize: 28,
             fontWeight: 300,
             color: 'var(--ink-primary)',
-            letterSpacing: 'var(--tracking-tight)',
+            letterSpacing: '-0.02em',
+            marginTop: 4,
           }}
         >
-          PHANTOM OS <span style={{ color: 'var(--accent)' }}>0.6 · Phase 06</span>
+          PHANTOM OS{' '}
+          <span style={{ color: '#b07a10' }}>0.6 · Phase 06</span>
         </div>
         <div
-          className="italic mt-2"
+          className="playfair"
           style={{
-            fontFamily: 'var(--font-serif)',
-            fontSize: 'var(--fs-sm)',
+            fontSize: 14,
             color: 'var(--ink-secondary)',
-            lineHeight: 'var(--lh-relaxed)',
+            lineHeight: 1.5,
             maxWidth: 520,
+            marginTop: 8,
+            fontStyle: 'italic',
           }}
         >
-          A dual-node assistant, part brain (Radxa Dragon Q6A) and part nerves
-          (ESP32-S3). Quiet by default. Louder when it matters.
+          A dual-node assistant, part brain (Radxa Dragon Q6A) and part
+          nerves (ESP32-S3). Quiet by default. Louder when it matters.
         </div>
       </div>
 
       <div
-        className="glass-card"
-        style={{ borderRadius: 16, padding: '16px 20px' }}
+        className="sub-glass"
+        style={{ borderRadius: 14, padding: '14px 18px' }}
       >
-        <div
-          className="uppercase mb-2"
-          style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 'var(--fs-micro)',
-            color: 'var(--ink-muted)',
-            letterSpacing: 'var(--tracking-widest)',
-          }}
-        >
+        <div className="eyebrow-amber" style={{ marginBottom: 6 }}>
           Runtime
         </div>
         <AboutRow label="Frontend" value="React 18 · Vite 5 · Tailwind 3" />
         <AboutRow label="Backend" value="FastAPI · SQLite · ChromaDB" />
         <AboutRow label="AI" value="Gemini 2.0 Flash → Ollama Gemma 4" />
-        <AboutRow label="Voice" value="faster-whisper → Vosk · StyleTTS2 UA" />
+        <AboutRow
+          label="Voice"
+          value="faster-whisper → Vosk · StyleTTS2 UA"
+        />
       </div>
     </div>
   );
@@ -1240,25 +1901,26 @@ function AboutSection() {
 function AboutRow({ label, value }: { label: string; value: string }) {
   return (
     <div
-      className="flex items-center gap-3"
-      style={{ padding: '6px 0', borderBottom: '1px solid var(--line-subtle)' }}
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 12,
+        padding: '6px 0',
+        borderBottom: '1px solid var(--line-subtle)',
+      }}
     >
       <span
-        className="uppercase"
+        className="micro-label"
         style={{
           width: 120,
-          fontFamily: 'var(--font-display)',
-          fontSize: 'var(--fs-micro)',
-          color: 'var(--ink-muted)',
-          letterSpacing: 'var(--tracking-widest)',
         }}
       >
         {label}
       </span>
       <span
+        className="mono"
         style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 'var(--fs-xs)',
+          fontSize: 12,
           color: 'var(--ink-primary)',
         }}
       >

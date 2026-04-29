@@ -8,10 +8,59 @@
  */
 import { settingsApi } from './api';
 import { wsClient } from './websocket';
-import { useSettingsStore } from '../stores/settingsStore';
+import { useSettingsStore, THEME_STORAGE_KEY } from '../stores/settingsStore';
 import { useFaceStore } from '../stores/faceStore';
+import { isThemeId, type ThemeId } from '@shared/types';
 
 const DEFAULT_FONT_SIZE = 14; // matches config.ui_font_size default
+
+/* phase-5-R0-3-THEME-NIGHT — pre-network theme hint.
+ *
+ * Run synchronously before any layout mounts so the cream → amber-night
+ * jump never happens. Resolution order:
+ *
+ *   1. Explicit localStorage choice — operator-set, always wins.
+ *   2. Daytime hint by local clock (06:00–21:00 → sunrise-warm,
+ *      otherwise amber-night). Paired with `prefers-color-scheme: dark`
+ *      so a system-wide dark-mode flag also pulls amber-night.
+ *   3. Hard fallback: sunrise-warm (matches the static attribute on
+ *      `<html>` in index.html).
+ *
+ * The backend value still wins at the end of `_runBootstrap` once the
+ * authenticated `/settings` GET resolves; this hint is purely about
+ * the very first paint, before login completes.
+ */
+function _resolveBootstrapTheme(): ThemeId {
+  if (typeof localStorage !== 'undefined') {
+    const stored = localStorage.getItem(THEME_STORAGE_KEY);
+    if (isThemeId(stored)) return stored;
+  }
+  let prefersDark = false;
+  if (typeof window !== 'undefined' && typeof window.matchMedia === 'function') {
+    try {
+      prefersDark = window.matchMedia('(prefers-color-scheme: dark)').matches;
+    } catch {
+      /* very old WebView — fall through to clock heuristic */
+    }
+  }
+  let isDayHour = true;
+  try {
+    const h = new Date().getHours();
+    isDayHour = h >= 6 && h < 21;
+  } catch {
+    /* Date always exists; keep it defensive for SSR-style hosts */
+  }
+  if (!isDayHour || prefersDark) return 'amber-night';
+  return 'sunrise-warm';
+}
+
+export function applyBootstrapTheme(): ThemeId {
+  const id = _resolveBootstrapTheme();
+  if (typeof document !== 'undefined') {
+    document.documentElement.setAttribute('data-theme', id);
+  }
+  return id;
+}
 
 let inFlight: Promise<void> | null = null;
 let lastBootstrapAt = 0;

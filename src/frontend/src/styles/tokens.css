@@ -152,6 +152,96 @@
   --motion-scale-user: 1;
 }
 
+/* ─── Amber-night theme (deep warm-dark) ──────────────────────────────
+ * phase-5-R0-3-THEME-NIGHT — operator-requested companion to
+ * sunrise-warm. Same DNA, inverted lightness. Surfaces are deep warm
+ * espresso instead of cream; ink flips to cream-on-dark; amber/orange
+ * accents are preserved (the coral is gently desaturated to cut
+ * dark-room glare). Glow ramps and shadows are tuned for night use:
+ * shadows go heavy black, glows go amber-bright.
+ *
+ * Token NAMES match every other theme — components stay untouched. */
+
+[data-theme="amber-night"] {
+  /* ── Amber-night primary ramp ─────────────────────────────────────── */
+  --primary:           #f4af25;
+  --primary-soft:      #fbc66a;
+  --primary-deep:      #ffc34a;
+  --primary-shadow:    #b07a10;
+  --orange:            #fb923c;
+  /* Slightly desaturated coral so SENTINEL doesn't blow out a dark room. */
+  --coral:             #e35858;
+  --coral-soft:        #f87171;
+  --coral-deep:        #7f1d1d;
+
+  /* ── Surfaces — deep warm-dark ────────────────────────────────────── */
+  --surface-base:      #0e0a05;                  /* primary bg — espresso */
+  --surface-deep:      #080502;                  /* deeper still — input wells */
+  --surface-raised:    #1a120a;                  /* raised cards — warm umber */
+  --surface-void:      #000000;                  /* true void for stealth */
+  --surface-sunrise:   radial-gradient(ellipse 90% 70% at 50% -10%, rgba(244,175,37,0.40) 0%, rgba(244,175,37,0) 70%),
+                       linear-gradient(180deg, #1a120a 0%, #0e0a05 60%, #080502 100%);
+  --surface-coral:     radial-gradient(ellipse 90% 70% at 50% -10%, rgba(227,88,88,0.36) 0%, rgba(227,88,88,0) 60%),
+                       radial-gradient(ellipse 80% 60% at 50% 120%, rgba(244,175,37,0.30) 0%, rgba(244,175,37,0) 50%),
+                       linear-gradient(180deg, #1a120a 0%, #0e0a05 100%);
+
+  /* ── Glass — translucent warm-dark panels ─────────────────────────── */
+  --glass-subtle:       rgba(20, 15, 8, 0.45);
+  --glass-panel:        rgba(20, 15, 8, 0.65);
+  --glass-card:         rgba(20, 15, 8, 0.72);
+  --glass-elevated:     rgba(20, 15, 8, 0.78);
+
+  --glass-border:       rgba(255, 200, 120, 0.10);
+  --glass-border-hover: rgba(255, 200, 120, 0.22);
+  --glass-highlight:    rgba(255, 220, 160, 0.06);
+
+  /* ── Ambient glows — warmer, brighter for the dark backdrop ───────── */
+  --glow-primary:       rgba(244, 175, 37, 0.45);
+  --glow-secondary:     rgba(251, 146, 60, 0.38);
+  --glow-warm:          rgba(244, 175, 37, 0.42);
+  --glow-coral:         rgba(227, 88, 88, 0.36);
+
+  /* ── Ink — cream on dark ──────────────────────────────────────────── */
+  --ink-primary:        #f4ead4;                  /* primary cream */
+  --ink-secondary:      #c8b894;                  /* secondary cream-tan */
+  --ink-muted:          #8a7758;                  /* muted bronze */
+  --ink-faint:          #5e5037;                  /* faint umber */
+  --ink-inverse:        #0e0a05;                  /* dark — for text on amber */
+
+  /* ── Lines — warm dividers on dark ────────────────────────────────── */
+  --line-subtle:        rgba(255, 210, 140, 0.08);
+  --line-default:       rgba(255, 210, 140, 0.16);
+  --line-strong:        rgba(255, 210, 140, 0.28);
+
+  /* ── Semantic signals — slightly brightened so they read on espresso */
+  --signal-ok:          #34d399;
+  --signal-warn:        #fbbf24;
+  --signal-alert:       #f87171;
+  --signal-info:        #60a5fa;
+
+  /* ── Chart palette — warm-leaning for dark-mode dashboards ────────── */
+  --chart-1: #f4af25;                             /* amber */
+  --chart-2: #fb923c;                             /* orange */
+  --chart-3: #34d399;                             /* mint */
+  --chart-4: #60a5fa;                             /* azure */
+  --chart-5: #e35858;                             /* coral (desat) */
+
+  /* ── Shadows — heavy black for night, tinted amber rim glow ───────── */
+  --shadow-sm:          0 2px 8px rgba(0, 0, 0, 0.45);
+  --shadow-md:          0 4px 14px rgba(0, 0, 0, 0.55);
+  --shadow-lg:          0 10px 32px -8px rgba(0, 0, 0, 0.70), 0 2px 8px rgba(0, 0, 0, 0.40);
+  --shadow-xl:          0 24px 60px -12px rgba(0, 0, 0, 0.80);
+  --shadow-glow:        0 0 0 1px rgba(244, 175, 37, 0.35), 0 14px 44px rgba(244, 175, 37, 0.30);
+  --shadow-glow-coral:  0 0 0 1px rgba(227, 88, 88, 0.32), 0 14px 44px rgba(227, 88, 88, 0.30);
+
+  /* State default — picked back up by [data-state] overrides below. */
+  --accent:         #f4af25;
+  --accent-rgb:     244, 175, 37;
+  --accent-fade:    rgba(244, 175, 37, 0);
+  --accent-glow:    rgba(244, 175, 37, 0.34);
+  --accent-radial:  radial-gradient(circle at 30% 30%, #fde9b8, #f4af25, #b07a10);
+}
+
 /* ─── Legacy cyberdeck-cold theme (opt-in) ────────────────────────────
  * Operators who prefer the old dark slate aesthetic can flip
  * <html data-theme="cyberdeck-cold">. The same token NAMES carry the
@@ -288,4 +378,63 @@
   --ui-opacity:     0.75;
   --motion-scale:   0.4;
   --surface-base:   #221c10;                     /* warm-dark for sleep */
+}
+
+/* ─── Amber-night state-accent overrides ─────────────────────────────
+ * phase-5-R0-3-THEME-NIGHT — only the lightness/opacity of the state
+ * tone changes; hue stays amber-family. Crucially SHADOW dims FURTHER
+ * on dark (we're already on espresso, so 0.92 opacity reads fine) and
+ * GHOST keeps the green hue but adds a warmer amber tint so it doesn't
+ * feel ice-cold in a warm palette.
+ *
+ * Cascade rules: more specific selectors win, so these override the
+ * generic [data-state="…"] block above ONLY when the active theme is
+ * amber-night. Sunrise-warm and cyberdeck-cold are untouched. */
+
+[data-theme="amber-night"][data-state="SHADOW"],
+[data-theme="amber-night"] [data-state="SHADOW"] {
+  --accent:         #6f5e3c;                     /* deep dim bronze */
+  --accent-rgb:     111, 94, 60;
+  --accent-fade:    rgba(111, 94, 60, 0);
+  --accent-glow:    rgba(244, 175, 37, 0.16);
+  --ui-opacity:     0.85;
+}
+
+[data-theme="amber-night"][data-state="FOCUS"],
+[data-theme="amber-night"] [data-state="FOCUS"] {
+  --accent:         var(--accent-override-focus, #f4af25);
+  --accent-rgb:     244, 175, 37;
+  --accent-glow:    rgba(244, 175, 37, 0.55);
+}
+
+[data-theme="amber-night"][data-state="DIALOGUE"],
+[data-theme="amber-night"] [data-state="DIALOGUE"] {
+  --accent:         #f4af25;
+  --accent-rgb:     244, 175, 37;
+  --accent-glow:    rgba(244, 175, 37, 0.60);
+}
+
+[data-theme="amber-night"][data-state="SENTINEL"],
+[data-theme="amber-night"] [data-state="SENTINEL"] {
+  --accent:         var(--accent-override-sentinel, #ef4444);
+  --accent-rgb:     239, 68, 68;
+  --accent-glow:    rgba(239, 68, 68, 0.55);
+}
+
+[data-theme="amber-night"][data-state="GHOST"],
+[data-theme="amber-night"] [data-state="GHOST"] {
+  --accent:         var(--accent-override-ghost, #34d399);
+  --accent-rgb:     52, 211, 153;
+  --accent-glow:    rgba(52, 211, 153, 0.34);
+  --accent-radial:  radial-gradient(circle at 30% 30%, #34d399, #10b981, #115e59);
+  --surface-base:   #0a0703;                     /* even deeper for stealth */
+}
+
+[data-theme="amber-night"][data-state="DREAM"],
+[data-theme="amber-night"] [data-state="DREAM"] {
+  --accent:         var(--accent-override-dream, #8a5e0a);
+  --accent-rgb:     138, 94, 10;
+  --accent-glow:    rgba(244, 175, 37, 0.14);
+  --ui-opacity:     0.65;                         /* very dim warm — sleep */
+  --surface-base:   #0c0703;
 }

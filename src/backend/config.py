@@ -252,7 +252,22 @@ class PhantomConfig(BaseSettings):
     sensor_buzzer_volume: int = 50
 
     # ── UI ────────────────────────────────────────────────────────────────────
-    ui_theme: Literal["dark", "light", "auto"] = "dark"
+    # phase-5-R0-3-THEME-NIGHT — three named themes ship with the sunrise
+    # redesign. "sunrise-warm" is the bright cream daytime palette,
+    # "amber-night" is the deep warm-dark night palette (THEME-NIGHT
+    # agent), and "cyberdeck-cold" is the legacy slate look kept as
+    # opt-in. The legacy aliases ("dark", "light", "auto") remain in
+    # the Literal so persisted settings rows from earlier builds load
+    # without rejection — the frontend treats them as "amber-night",
+    # "sunrise-warm", and "auto" (prefers-color-scheme) respectively.
+    ui_theme: Literal[
+        "sunrise-warm",
+        "amber-night",
+        "cyberdeck-cold",
+        "dark",
+        "light",
+        "auto",
+    ] = "sunrise-warm"
     ui_density: Literal["compact", "normal", "comfortable"] = "normal"
     # Day-4 Wave-2 W-5 (audit U2-ANIM-C2 + U8-PERF): hardware-tier
     # gate. Frontend reads this and disables backdrop-filter / caps
@@ -276,7 +291,6 @@ class PhantomConfig(BaseSettings):
 
     # ── Security ──────────────────────────────────────────────────────────────
     jwt_secret_key: str = ""  # REQUIRED: set via JWT_SECRET_KEY env var or .env
-    jwt_algorithm: str = "HS256"
     security_auto_login: bool = True
     security_session_timeout_m: int = 480
     security_max_pin_attempts: int = 5
@@ -559,7 +573,6 @@ class PhantomConfig(BaseSettings):
     # ── System ────────────────────────────────────────────────────────────────
     system_hostname: str = "phantom"
     system_sensor_log_retention_days: int = 7
-    system_backup_enabled: bool = True
     system_backup_interval_h: int = 24
     system_temporal_anchor_interval_s: int = 300
 

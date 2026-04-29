@@ -7,6 +7,7 @@ import {
   Wifi,
   WifiOff,
   Cpu,
+  ChevronLeft,
 } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { useSystemStore } from '../../stores/systemStore';
@@ -15,7 +16,7 @@ import { AmbientGlows } from '../core/AmbientGlows';
 import { Orb } from '../core/Orb';
 import PinPad from './PinPad';
 import RFIDScanner from './RFIDScanner';
-import { UserPicker } from './UserPicker';
+import { ProfileSelector } from './ProfileSelector';
 
 type LoginMode = 'pin' | 'rfid';
 
@@ -27,6 +28,16 @@ export default function LoginScreen() {
   const [maxPinAttempts, setMaxPinAttempts] = useState(5);
   const [lockoutDurationM, setLockoutDurationM] = useState(15);
   const [now, setNow] = useState(() => new Date());
+  // Day-5 redesign: gate the PIN card behind ProfileSelector when the
+  // public picker reports ≥2 operators. State `picker` tri-state:
+  //   - 'unknown'   → still fetching, render quiet shell
+  //   - 'single'    → 0/1 users, skip selector entirely (legacy behaviour)
+  //   - 'choosing'  → ≥2 users + no choice yet, full-surface selector
+  //   - 'chosen'    → ≥2 users + operator picked, PIN card revealed
+  const [pickerPhase, setPickerPhase] = useState<
+    'unknown' | 'single' | 'choosing' | 'chosen'
+  >('unknown');
+  const [pickerCount, setPickerCount] = useState(0);
 
   const {
     setUser,
@@ -49,6 +60,28 @@ export default function LoginScreen() {
       .catch(() => {
         /* defaults */
       });
+  }, []);
+
+  // Day-5 — single picker fetch decides whether to show ProfileSelector.
+  // The selector itself does its OWN fetch for the cards (it owns the
+  // tile state); this fetch is just the gating signal so we don't
+  // mount the selector for a single-user install.
+  useEffect(() => {
+    let cancelled = false;
+    authApi
+      .picker()
+      .then((rows) => {
+        if (cancelled) return;
+        setPickerCount(rows.length);
+        setPickerPhase(rows.length >= 2 ? 'choosing' : 'single');
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setPickerPhase('single');
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -123,6 +156,25 @@ export default function LoginScreen() {
     month: 'long',
   });
 
+  // Day-5 — full-surface ProfileSelector for multi-user installs.
+  // While `pickerPhase === 'unknown'` we still render the PIN card
+  // (legacy fallback) but with the picker fetch in flight; if it
+  // resolves to multi-user the selector swaps in via key change. Once
+  // an operator is chosen, we transition to 'chosen' which reveals
+  // the PIN card with username pre-filled.
+  if (pickerPhase === 'choosing') {
+    return (
+      <ProfileSelector
+        onSelect={(u) => {
+          setUsername(u);
+          setPickerPhase('chosen');
+          setError('');
+        }}
+        disabled={loading || isLocked()}
+      />
+    );
+  }
+
   return (
     <div
       className="w-[1024px] h-[600px] relative overflow-hidden flex items-center justify-center"
@@ -147,16 +199,19 @@ export default function LoginScreen() {
         />
       </div>
 
-      {/* Floating time — top-left */}
+      {/* Floating time — top-left. Day-5 polish: bigger, colder,
+          serif-italic date. The time is a tabular-nums display so
+          digit-flip doesn't reflow the layout each second. */}
       <div
         className="absolute top-5 left-6 flex flex-col"
         style={{ zIndex: 10 }}
       >
         <span
+          className="tabular-nums"
           style={{
             fontFamily: 'var(--font-display)',
-            fontSize: 'var(--fs-xl)',
-            fontWeight: 300,
+            fontSize: 'var(--fs-2xl)',
+            fontWeight: 200,
             letterSpacing: 'var(--tracking-tight)',
             color: 'var(--ink-primary)',
             lineHeight: 1,
@@ -165,9 +220,9 @@ export default function LoginScreen() {
           {timeStr}
         </span>
         <span
-          className="mt-1 capitalize"
+          className="mt-1 capitalize italic"
           style={{
-            fontFamily: 'var(--font-display)',
+            fontFamily: 'var(--font-serif)',
             fontSize: 'var(--fs-xs)',
             color: 'var(--ink-secondary)',
             letterSpacing: 'var(--tracking-wide)',
@@ -176,6 +231,40 @@ export default function LoginScreen() {
           {dateStr}
         </span>
       </div>
+
+      {/* Switch-operator affordance — visible only after the operator
+          chose from ProfileSelector (multi-user install). One-tap
+          return to the gallery. */}
+      {pickerPhase === 'chosen' && (
+        <button
+          type="button"
+          onClick={() => {
+            setUsername('phantom');
+            setPickerPhase('choosing');
+            setError('');
+          }}
+          className="absolute flex items-center gap-1.5 px-3 rounded-full transition-colors active:scale-95"
+          style={{
+            top: 22,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            height: 28,
+            background: 'var(--glass-subtle)',
+            border: '1px solid var(--glass-border)',
+            color: 'var(--ink-secondary)',
+            fontFamily: 'var(--font-display)',
+            fontSize: 'var(--fs-micro)',
+            letterSpacing: 'var(--tracking-widest)',
+            zIndex: 10,
+          }}
+          data-testid="switch-operator"
+        >
+          <ChevronLeft size={12} strokeWidth={2} />
+          <span className="uppercase">
+            Switch operator{pickerCount > 0 ? ` · ${pickerCount}` : ''}
+          </span>
+        </button>
+      )}
 
       {/* Main glass card */}
       <motion.main
@@ -228,17 +317,39 @@ export default function LoginScreen() {
           </div>
         </div>
 
-        {/* Heading */}
+        {/* Heading — split-letter stagger reveal. Each glyph fades +
+            lifts independently with a slight cyan→ink wash so the
+            wordmark feels typed-into-existence rather than flashed. */}
         <h1
-          className="text-gradient"
+          className="flex items-center"
           style={{
             fontFamily: 'var(--font-display)',
             fontSize: 'var(--fs-lg)',
             fontWeight: 600,
             letterSpacing: 'var(--tracking-tight)',
           }}
+          aria-label="PHANTOM OS"
         >
-          PHANTOM OS
+          {Array.from('PHANTOM OS').map((ch, i) => (
+            <motion.span
+              key={`${ch}-${i}`}
+              initial={{ opacity: 0, y: 8 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{
+                delay: 0.4 + i * 0.04,
+                duration: 0.55,
+                ease: [0.16, 1, 0.3, 1],
+              }}
+              className="text-gradient"
+              style={{
+                display: 'inline-block',
+                whiteSpace: ch === ' ' ? 'pre' : 'normal',
+              }}
+              aria-hidden
+            >
+              {ch === ' ' ? ' ' : ch}
+            </motion.span>
+          ))}
         </h1>
         <p
           className="mt-1 text-center"
@@ -250,7 +361,9 @@ export default function LoginScreen() {
             lineHeight: 'var(--lh-normal)',
           }}
         >
-          Please verify your identity to continue.
+          {pickerPhase === 'chosen'
+            ? `Вітаю, ${username}. Підтвердьте PIN.`
+            : 'Підтвердьте свою особу, оператор.'}
         </p>
 
         {/* Mode tabs */}
@@ -285,33 +398,51 @@ export default function LoginScreen() {
               transition={{ duration: 0.2 }}
               className="w-full flex flex-col items-center mt-5 gap-5"
             >
-              {/* Day-4 IDB-3 — UserPicker rendered when picker has
-                  >=2 users. Tap pre-fills the username input below. */}
-              <UserPicker
-                onPick={(u) => setUsername(u)}
-                activeUsername={username}
-                disabled={loading || isLocked()}
-              />
-              <input
-                type="text"
-                autoComplete="username"
-                value={username}
-                onChange={(e) => setUsername(e.target.value)}
-                disabled={loading || isLocked()}
-                placeholder="operator id"
-                className="w-full text-center outline-none transition-colors"
-                style={{
-                  height: 44,
-                  padding: '0 16px',
-                  background: 'var(--glass-subtle)',
-                  border: '1px solid var(--glass-border)',
-                  borderRadius: 12,
-                  color: 'var(--ink-primary)',
-                  fontFamily: 'var(--font-display)',
-                  fontSize: 'var(--fs-sm)',
-                  letterSpacing: 'var(--tracking-wide)',
-                }}
-              />
+              {/* Day-5 — username input only renders when the picker
+                  is single-user (no ProfileSelector ahead of us). For
+                  multi-user installs the username arrived from the
+                  selector tap and is already locked-in; the user
+                  re-chooses via the "Switch operator" pill above. */}
+              {pickerPhase !== 'chosen' && (
+                <input
+                  type="text"
+                  autoComplete="username"
+                  value={username}
+                  onChange={(e) => setUsername(e.target.value)}
+                  disabled={loading || isLocked()}
+                  placeholder="operator id"
+                  className="w-full text-center outline-none transition-colors"
+                  style={{
+                    height: 44,
+                    padding: '0 16px',
+                    background: 'var(--glass-subtle)',
+                    border: '1px solid var(--glass-border)',
+                    borderRadius: 12,
+                    color: 'var(--ink-primary)',
+                    fontFamily: 'var(--font-display)',
+                    fontSize: 'var(--fs-sm)',
+                    letterSpacing: 'var(--tracking-wide)',
+                  }}
+                />
+              )}
+              {pickerPhase === 'chosen' && (
+                <div
+                  className="w-full text-center px-4 py-2 rounded-full"
+                  style={{
+                    background:
+                      'color-mix(in srgb, var(--accent) 12%, transparent)',
+                    border: '1px solid color-mix(in srgb, var(--accent) 40%, transparent)',
+                    color: 'var(--accent)',
+                    fontFamily: 'var(--font-display)',
+                    fontSize: 'var(--fs-sm)',
+                    fontWeight: 500,
+                    letterSpacing: 'var(--tracking-wide)',
+                  }}
+                  data-testid="locked-username"
+                >
+                  {username}
+                </div>
+              )}
               <PinPad
                 onSubmit={handlePinSubmit}
                 disabled={loading || isLocked()}

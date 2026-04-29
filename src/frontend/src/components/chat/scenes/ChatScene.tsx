@@ -39,6 +39,7 @@ import { WardrivingScene } from './WardrivingScene';
 import { LocationScene } from './LocationScene';
 import { CheckpointScene } from './CheckpointScene';
 import { SandboxScene } from './SandboxScene';
+import { PhantomManifestScene } from './PhantomManifestScene';
 
 export { STAGGER_CLAMP_MAX_MS };
 
@@ -81,6 +82,8 @@ export function ChatScene({ scene, reduceMotion = false }: ChatSceneProps) {
       return <CheckpointScene data={scene.data} />;
     case 'sandbox':
       return <SandboxScene data={scene.data} />;
+    case 'phantom_manifest':
+      return <PhantomManifestScene data={scene.data} />;
     default: {
       // Exhaustiveness check — adding a new ToolSceneKind without a case
       // here triggers a compile error at `_exhaustive: never`.

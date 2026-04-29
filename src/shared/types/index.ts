@@ -9,3 +9,4 @@ export * from './wardriving';
 export * from './settings';
 export * from './agent';
 export * from './voice';
+export * from './familiar';

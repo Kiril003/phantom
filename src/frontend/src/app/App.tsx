@@ -9,6 +9,8 @@ import { VoiceAlwaysOnGate } from '../components/chat/VoiceAlwaysOnGate';
 import { useSystemStore } from '../stores/systemStore';
 import { SystemState } from '@shared/types';
 import { geolocationService, BrowserGeolocationService } from '../services/geolocation';
+import { PhantomFamiliar } from '../components/familiar/PhantomFamiliar';
+import { useFamiliarTriggers } from '../hooks/useFamiliarTriggers';
 
 function GlobalGeolocationManager() {
   const authenticated = useSystemStore((s) => s.authenticated);
@@ -113,6 +115,17 @@ function GlobalAlwaysOnGate() {
   return <VoiceAlwaysOnGate />;
 }
 
+/* ─── Familiar trigger wiring ────────────────────────────────────────────────
+ *
+ * Phase-5 R1-FAMILIAR-1 — `<PhantomFamiliar />` is the visual; this side
+ * mounts the trigger hook (state-transition / idle-timeout / greeting). The
+ * trigger hook is a no-render component so we can colocate it next to other
+ * App-level wiring without a wrapper div. */
+function FamiliarTriggers() {
+  useFamiliarTriggers();
+  return null;
+}
+
 /* ─── App Root ────────────────────────────────────────────────────────────── */
 
 export function App() {
@@ -147,6 +160,11 @@ export function App() {
               <Route path="/*" element={<StateRouter />} />
             </Routes>
             <Overlays />
+            {/* Familiar overlay — sits above content, below modals (z=35).
+                The trigger hook lives next to it so unmounting the App
+                shell tears both down together. */}
+            <FamiliarTriggers />
+            <PhantomFamiliar />
           </div>
         </ViewportFrame>
       </BrowserRouter>

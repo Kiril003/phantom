@@ -31,6 +31,7 @@ from api.routes_agent import router as agent_router
 from api.routes_dynamic_source import router as dynamic_source_router
 from api.routes_hub import router as hub_router
 from api.routes_user_facts import router as user_facts_router
+from api.routes_familiar import router as familiar_router
 
 logging.basicConfig(
     level=getattr(logging, config.log_level),
@@ -741,6 +742,11 @@ def create_app() -> FastAPI:
     # ROOT-only writes; self-or-ROOT reads. Plaintext NEVER persisted —
     # values pass through security.crypto.encrypt_pii (Fernet).
     app.include_router(user_facts_router, prefix=prefix)
+    # Phase-5 R1-FAMILIAR-1 — POST /api/v1/familiar/manifest summons the
+    # PHANTOM Familiar wisp. ROOT/OPERATOR-only; emits a WS broadcast on
+    # the `familiar` channel which the frontend store turns into an
+    # `ai-summon` manifestation.
+    app.include_router(familiar_router, prefix=prefix)
 
     _register_ws(app)
     register_voice_ws(app)

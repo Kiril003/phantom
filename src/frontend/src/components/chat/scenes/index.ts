@@ -15,3 +15,4 @@ export { SceneMapPinPanel } from './panels/SceneMapPinPanel';
 export { ScenePlanStepPanel } from './panels/ScenePlanStepPanel';
 export { SceneCodePreviewPanel } from './panels/SceneCodePreviewPanel';
 export { SceneIdentityCardPanel } from './panels/SceneIdentityCardPanel';
+export { PhantomManifestScene } from './PhantomManifestScene';

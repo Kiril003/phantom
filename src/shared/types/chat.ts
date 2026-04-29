@@ -1,4 +1,5 @@
 import { SystemState, StateTransition } from './system';
+import type { FamiliarPose, FamiliarTarget } from './familiar';
 
 export type ResponseForm =
   | 'text'
@@ -147,7 +148,25 @@ export type ToolSceneKind =
   | 'wardriving'
   | 'location'
   | 'checkpoint'
-  | 'sandbox';
+  | 'sandbox'
+  | 'phantom_manifest';
+
+// ─── Phantom Familiar ────────────────────────────────────────────────────────
+//
+// Phase-5 R1-FAMILIAR-1 — when the AI explicitly summons the Familiar inside a
+// chat reply, the assistant emits a `phantom_manifest` scene. The chat router
+// has a dedicated component (`PhantomManifestScene`) that delegates to the
+// global `familiarStore` (the actual creature lives as an App-level overlay).
+// `data` is the smallest possible envelope; the store fills in defaults.
+//
+// Owner: FAMILIAR (this file) + AI tool registry (`backend/ai/scenes.py`).
+
+export interface PhantomManifestSceneData {
+  pose: FamiliarPose;
+  message?: string;
+  durationMs?: number;
+  target?: FamiliarTarget;
+}
 
 // ─── Timer ────────────────────────────────────────────────────────────────────
 export type TimerStatus = 'active' | 'paused' | 'done' | 'cancelled';
@@ -441,7 +460,8 @@ export type ChatToolScene =
   | { kind: 'wardriving'; data: WardrivingSceneData }
   | { kind: 'location'; data: LocationSceneData }
   | { kind: 'checkpoint'; data: CheckpointSceneData }
-  | { kind: 'sandbox'; data: SandboxSceneData };
+  | { kind: 'sandbox'; data: SandboxSceneData }
+  | { kind: 'phantom_manifest'; data: PhantomManifestSceneData };
 
 /**
  * Phase-5 — `ChatScene` is the super-union of (a) the Day-4 W-2 panel

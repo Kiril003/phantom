@@ -5,6 +5,7 @@ import type { SensorMessage, StateMessage } from '../services/websocket';
 import { useSystemStore } from '../stores/systemStore';
 import { useOledStore, type OledFrame } from '../stores/oledStore';
 import { bootstrapSettings } from '../services/settingsBootstrap';
+import { registerWsHandlers } from '../services/wsHandlers';
 import { SystemState } from '@shared/types';
 
 /* ─── QueryClient ─────────────────────────────────────────────────────────── */
@@ -130,6 +131,11 @@ function WebSocketProvider({ children }: { children: React.ReactNode }) {
         }
       })
     );
+
+    // Phase-5 R1-FAMILIAR-1 — register peripheral WS handlers (Familiar
+    // and any future channels) through the wsHandlers barrel so this
+    // file doesn't keep growing per-channel inline subscribers.
+    unsubs.push(registerWsHandlers());
 
     wsMountState.mounts += 1;
     if (wsMountState.pendingDisconnect) {

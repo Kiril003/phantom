@@ -213,6 +213,9 @@ export type AgentEventType =
   | 'task.failed'
   // Phase 9.2.1
   | 'task.blocked_quota'
+  // Audit B-18 — backoff retry envelope. runtime.py:584 emits when the
+  // recovery probe has back-to-back failed N times.
+  | 'task.blocked_quota_backoff'
   | 'sub_goal.abandoned'
   | 'agent.budget.warning'
   // Phase 9.2.2 (F-05) resume caveat
@@ -221,6 +224,10 @@ export type AgentEventType =
   | 'emotion.updated'
   // Phase 9.3b proactive loop heartbeat (light cycle ping)
   | 'proactive.cycle'
+  // Audit B-18 — proactive cycle wants user confirmation before firing.
+  | 'proactive.pending_action'
+  // Audit B-18 — proactive action spawned a background task.
+  | 'proactive.action_fired'
   | 'notification';
 
 export interface AgentEvent {

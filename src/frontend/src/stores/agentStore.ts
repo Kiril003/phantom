@@ -56,6 +56,28 @@ interface AgentState {
     lastCycleAt: string | null;
     hasTriggers: boolean;
   };
+  // Audit B-18 — surfaces backoff / pending-action / fired / checkpoint
+  // events that the BE was emitting on agent.stream but had no FE
+  // handler. Each has its own slot so a panel can render the most
+  // recent value without having to scrape the events array.
+  quotaBackoff: {
+    consecutiveFailures: number;
+    nextIntervalS: number;
+    at: string;
+  } | null;
+  pendingProactiveAction: {
+    actionGoal: string;
+    reason: string;
+    priority: number;
+    expiresInS: number;
+    at: string;
+  } | null;
+  lastCheckpoint: {
+    taskId: string;
+    checkpointId: string | number;
+    reason: string;
+    at: string;
+  } | null;
 
   // Setters
   setWSConnected: (connected: boolean) => void;
@@ -106,6 +128,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   resumeCaveat: null,
   emotion: null,
   proactive: { enabled: false, lastCycleAt: null, hasTriggers: false },
+  quotaBackoff: null,
+  pendingProactiveAction: null,
+  lastCheckpoint: null,
 
   setWSConnected: (connected) => set({ wsConnected: connected }),
   setPromptToUser: (prompt) => set({ promptToUser: prompt }),
@@ -331,6 +356,52 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           e.payload.reason ??
             'AI provider quota exhausted — waiting for recovery probe.',
         );
+        break;
+      }
+      // Audit B-18 — runtime.py:584 fires this once the recovery probe
+      // has back-to-back failed N times. Surface the next retry window
+      // so the UI can render a "next attempt in Xs" countdown.
+      case 'task.blocked_quota_backoff': {
+        patch.quotaBackoff = {
+          consecutiveFailures: Number(e.payload.consecutive_failures ?? 0),
+          nextIntervalS: Number(e.payload.next_interval_s ?? 60),
+          at: new Date(e.ts).toISOString(),
+        };
+        break;
+      }
+      // Audit B-18 — proactive.py:372 emits when the cycle wants the
+      // operator to confirm an action before it fires (priority gates).
+      case 'proactive.pending_action': {
+        patch.pendingProactiveAction = {
+          actionGoal: String(e.payload.action_goal ?? ''),
+          reason: String(e.payload.reason ?? ''),
+          priority: Number(e.payload.priority ?? 0),
+          expiresInS: Number(e.payload.expires_in_s ?? 0),
+          at: new Date(e.ts).toISOString(),
+        };
+        break;
+      }
+      // Audit B-18 — proactive.py:407 emits after a confirmed/auto
+      // action has been spawned on the background track. Clear the
+      // pending slot and surface a toast-friendly notification.
+      case 'proactive.action_fired': {
+        patch.pendingProactiveAction = null;
+        patch.notification = {
+          title: 'Proactive action fired',
+          message: String(e.payload.action_goal ?? ''),
+          urgency: 'normal',
+        };
+        break;
+      }
+      // Audit B-18 — runtime.py:666 + loop.py:125 broadcast each time a
+      // checkpoint is written. Used by ResumeFromCheckpoint UX (B-9).
+      case 'checkpoint.created': {
+        patch.lastCheckpoint = {
+          taskId: String(e.payload.task_id ?? ''),
+          checkpointId: (e.payload.checkpoint_id as string | number) ?? '',
+          reason: String(e.payload.reason ?? 'manual'),
+          at: new Date(e.ts).toISOString(),
+        };
         break;
       }
       case 'agent.budget.warning': {

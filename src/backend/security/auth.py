@@ -123,6 +123,55 @@ def is_loopback_host(host: Optional[str]) -> bool:
     return host in _LOOPBACK_HOSTS
 
 
+# Day-5 phase-5-R3-BE-IDN-2 (C-4 audit + multi-modal fusion bridge):
+# the auth route can now consult the fusion resolver in
+# ``voice.identity_resolver`` for soft-confidence identification
+# (voice + face + RFID + context). The PIN path stays the canonical
+# hard-credential fallback — so when fusion comes back below
+# ``PIN_FALLBACK_THRESHOLD`` AND the operator typed the bootstrap PIN
+# at the kiosk, we let them through (and surface the rotation prompt
+# the same way ``is_default_pin`` does today). The helper below is the
+# tiny policy lookup the route uses; the actual fusion call lives in
+# the route handler so this module stays free of voice/CV imports.
+
+
+def fusion_unlocks_pin_fallback(
+    *,
+    fusion_confidence: Optional[float],
+    pin_supplied: Optional[str],
+) -> bool:
+    """True iff the operator typed the bootstrap PIN AND the fusion
+    resolver was either silent or under the fallback threshold.
+
+    Inputs:
+        ``fusion_confidence`` — the ``IdentityResolution.confidence`` from
+            ``voice.identity_resolver.resolve``, or ``None`` when no
+            modalities fired (fresh boot, no enrolment data, etc.).
+        ``pin_supplied`` — the raw PIN string the kiosk operator typed,
+            or ``None`` if no PIN field was on the form.
+
+    Returns:
+        ``True`` only when ``pin_supplied == "000000"`` AND
+        (``fusion_confidence is None`` OR
+         ``fusion_confidence < PIN_FALLBACK_THRESHOLD``).
+
+    Anywhere fusion is confidently identifying somebody (≥ 0.5), the
+    PIN bypass is denied — that's the "no PIN reuse when the system
+    knows you" guarantee. Anywhere fusion is silent, the PIN is the
+    only way in and we honour it.
+    """
+    if pin_supplied != _DEFAULT_PIN:
+        return False
+    # PIN_FALLBACK_THRESHOLD lives in voice.identity_resolver; importing
+    # locally keeps security/auth.py free of the voice module at import
+    # time (and protects callers in tests that haven't installed CV
+    # dependencies).
+    from voice.identity_resolver import PIN_FALLBACK_THRESHOLD
+    if fusion_confidence is None:
+        return True
+    return fusion_confidence < PIN_FALLBACK_THRESHOLD
+
+
 async def get_auto_login_user(db: AsyncSession) -> Optional[User]:
     """
     Return the single ROOT user if only one user exists and auto-login is enabled.

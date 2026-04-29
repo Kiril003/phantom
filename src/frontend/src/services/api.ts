@@ -85,6 +85,14 @@ export const authApi = {
       'GET',
       '/auth/config'
     ),
+  // Day-4 Wave-2 IDB-3 (ADR-IDB-003): pre-PinPad picker tiles. Public —
+  // safe to call WITHOUT a bearer token. Whitelist contract pinned at
+  // backend tests/test_phase_idb2_shared_pin_picker.py.
+  picker: () =>
+    request<Array<{ id: string; username: string; avatar_url: string | null }>>(
+      'GET',
+      '/auth/users/picker'
+    ),
 };
 
 /* ─── Chat ────────────────────────────────────────────────────────────────── */

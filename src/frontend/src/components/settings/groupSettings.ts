@@ -134,7 +134,7 @@ const _KNOWN_SUBGROUPS: ReadonlyArray<SubgroupRule> = [
 ];
 
 /** Pure: returns the SubgroupBucket for a given `(category, key)`. */
-export function inferSubgroup(category: string, key: string): SubgroupBucket {
+export function inferSubgroup(_category: string, key: string): SubgroupBucket {
   for (const { match, bucket } of _KNOWN_SUBGROUPS) {
     if (match.test(key)) {
       return bucket;

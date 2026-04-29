@@ -15,6 +15,7 @@ import { AmbientGlows } from '../core/AmbientGlows';
 import { Orb } from '../core/Orb';
 import PinPad from './PinPad';
 import RFIDScanner from './RFIDScanner';
+import { UserPicker } from './UserPicker';
 
 type LoginMode = 'pin' | 'rfid';
 
@@ -284,6 +285,13 @@ export default function LoginScreen() {
               transition={{ duration: 0.2 }}
               className="w-full flex flex-col items-center mt-5 gap-5"
             >
+              {/* Day-4 IDB-3 — UserPicker rendered when picker has
+                  >=2 users. Tap pre-fills the username input below. */}
+              <UserPicker
+                onPick={(u) => setUsername(u)}
+                activeUsername={username}
+                disabled={loading || isLocked()}
+              />
               <input
                 type="text"
                 autoComplete="username"

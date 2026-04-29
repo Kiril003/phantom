@@ -1531,3 +1531,56 @@ Next: IDB-3 (UserPicker React + LoginScreen integration).
 
 ---
 
+## 2026-05-02 10:55 CEST — Wave-2 IDB-3 DONE (UserPicker React + LoginScreen integration)
+
+ADR-IDB-004. Pre-PinPad operator picker lands.
+
+  src/frontend/src/services/api.ts authApi.picker() — public/no-auth
+                                    GET /auth/users/picker.
+  src/frontend/src/components/auth/UserPicker.tsx (NEW)
+                                  — fetches on mount, renders one
+                                    44+px tile per user. Avatar
+                                    image OR first-letter fallback.
+                                    activeUsername highlights the
+                                    matching tile + sets aria-
+                                    selected. role="listbox" wrapper
+                                    + role="option" tiles. <2 users
+                                    → renders nothing (single-user
+                                    installs skip the picker UI).
+                                    Network failure → empty state
+                                    (no toast; the parent's username
+                                    input still works).
+
+  src/frontend/src/components/auth/LoginScreen.tsx
+                                  — UserPicker rendered above the
+                                    username input in PIN mode. Tap
+                                    a tile → setUsername(tile.username)
+                                    pre-fills the input + the
+                                    operator can immediately type
+                                    their PIN. activeUsername prop
+                                    keeps the highlight in sync with
+                                    typed edits.
+
+9 IDB-3 vitest specs:
+  - one tile per user; 3 users → 3 tiles.
+  - <2 users (1 or 0) → renders nothing.
+  - tile tap calls onPick(username) once with the right value.
+  - activeUsername sets data-active=1 + aria-selected=true on the
+    matching tile.
+  - fetch failure → component renders nothing (length<2 fallback).
+  - 44+px tap target on each tile.
+  - avatar fallback: null avatar_url → first uppercase letter of
+    username.
+  - aria roles wired (listbox + option).
+
+Vitest 9/9 green; tsc --noEmit clean.
+
+The full multi-user login flow now works end-to-end:
+  IDB-1 (Day-4) — multi-user data isolation pinned.
+  IDB-2 (Wave-2) — shared-PIN guard + /users/picker route.
+  IDB-3 (Wave-2) — UserPicker React + LoginScreen integration.
+
+Next: T-1 (StandingOrder lease columns + recover_stale_leases).
+
+---
+

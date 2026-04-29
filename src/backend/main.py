@@ -329,100 +329,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     async with get_session() as db:
         await ensure_default_user(db)
 
-    # Warm the MiniLM encoder so the first chat message doesn't pay cold-load latency.
-    try:
-        from memory.strategic_memory import _get_ef
-        def _warm() -> None:
-            _get_ef()(["warmup"])
-        await asyncio.to_thread(_warm)
-        logger.info("MiniLM encoder warmed at startup")
-    except Exception as exc:
-        logger.warning("MiniLM warmup skipped: %s", exc)
-
-    # Day-2 D2-A6 / G-1: eagerly open the ChromaDB PersistentClient and
-    # enumerate collections so the FIRST /readyz hit no longer pays the
-    # 2-3 s cold-scan cost over leaked-collection dirs (audit F-17).
-    # Without this, K8s default 1 s livenessProbe times out on cold
-    # boot and the LB pulls a healthy daemon out of rotation. Done after
-    # MiniLM warmup since both share the chroma_path I/O bandwidth.
-    try:
-        from memory.strategic_memory import init_chroma_eager
-        chroma_init = await init_chroma_eager()
-        if chroma_init.get("ok") is False:
-            logger.warning("Chroma eager init failed: %s", chroma_init.get("error"))
-        else:
-            logger.info(
-                "Chroma client warmed at startup (%d collections, %d ms)",
-                int(chroma_init.get("collections", 0)),
-                int(chroma_init.get("elapsed_ms", 0)),
-            )
-    except Exception as exc:
-        logger.warning("Chroma eager init skipped: %s", exc)
-
-    # Day-3 D3-A-5 (audit-2026-04-30 Tier A) — chroma janitor lifespan
-    # wire-up. Day-2 shipped `prune_orphan_collections` +
-    # `prune_orphan_dirs` as a CLI-only entry point; nothing called it
-    # automatically. Test fixtures kept leaking transient `user_*`
-    # collections AND their UUID-named filesystem dirs, so the
-    # `chroma_data/` payload grew monotonically (105 MB → 122 MB / 609
-    # → 705 dirs in the 24 h between Day-2 and Day-3 audits). One sweep
-    # at lifespan keeps the on-disk footprint bounded.
-    #
-    # Operator opt-out via `chroma_janitor_at_startup` for deploys
-    # whose chroma volume is too large for the scan budget; off by
-    # default would re-introduce the regression so the knob defaults
-    # to True.
-    if config.chroma_janitor_at_startup:
-        try:
-            from memory.strategic_memory import (
-                prune_orphan_collections,
-                prune_orphan_dirs,
-            )
-            from db.database import get_session
-            from db.models import User
-            from sqlalchemy import select as _select
-            async with get_session() as db:
-                rows = await db.execute(_select(User.id))
-                known_user_ids = {row[0] for row in rows.all()}
-            sql_pass = await prune_orphan_collections(known_user_ids)
-            fs_pass = await prune_orphan_dirs()
-            logger.info(
-                "Chroma janitor: SQL deleted=%d kept=%d; FS deleted=%d "
-                "freed=%.1f MB",
-                len(sql_pass.get("deleted") or []),
-                int(sql_pass.get("kept", 0)),
-                len(fs_pass.get("deleted_dirs") or []),
-                (fs_pass.get("freed_bytes") or 0) / (1024 * 1024),
-            )
-        except Exception as exc:
-            logger.warning("Chroma janitor at startup skipped: %s", exc)
-
-    # Day-2 D2-D-cpu / PERF-17b: 1 Hz CPU sampler so the chat-tool
-    # `get_system_metrics` handler reads a cached value instead of
-    # blocking on psutil.cpu_percent(interval=...) per call. Cheap
-    # background task — one psutil read per second.
-    try:
-        import system_metrics_sampler
-        await system_metrics_sampler.start()
-    except Exception as exc:
-        logger.warning("CPU sampler failed to start: %s", exc)
-
-    # Phase 12.0 — preload voice singletons so the first /ws/voice connect
-    # doesn't pay 8-10 s of cold model loading on the event-loop's worker
-    # thread. 11c.5 Bug 2.
-    try:
-        from pathlib import Path as _Path
-        from voice.pipeline import preload_voice_models
-        silero_path = (
-            _Path(__file__).resolve().parent
-            / "voice" / "models" / "silero-vad" / "silero_vad.onnx"
-        )
-        statuses = await asyncio.to_thread(
-            preload_voice_models, str(silero_path) if silero_path.is_file() else None
-        )
-        logger.info("voice models preload: %s", statuses)
-    except Exception as exc:
-        logger.warning("voice model preload skipped: %s", exc)
+    # Day-4 Wave-2 V-5 (ADR-RTP-001) — five independent warmup lanes
+    # (MiniLM, Chroma eager, Chroma janitor, CPU sampler, voice preload)
+    # collapse into one ``asyncio.gather`` orchestration. Each lane wraps
+    # its own try/except → WARN + ``phantom_lifespan_g2_failures_total``
+    # counter bump. Wall-clock = max(lane) instead of sum(lanes); the
+    # 8-15 s serial cold boot drops to ≤ 2 s on warm SSD. See
+    # `lifespan_warmup.py` for individual lane bodies and the
+    # ``docs/architecture/desktop-shell.md`` ADR-RTP-001 budget.
+    from lifespan_warmup import run_g2_parallel
+    await run_g2_parallel()
 
     # Register chat WebSocket handlers
     register_chat_ws_handlers()

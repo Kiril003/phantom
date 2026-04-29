@@ -309,6 +309,15 @@ chat_tool_calls_total: Counter = _register(
         "Chat tool-use dispatch count by tool name and success.",
     )
 )
+# Day-4 Wave-2 V-5 (ADR-RTP-001): per-lane G2 warmup failures during
+# lifespan. Operators tailing /metrics see a regression (e.g., voice
+# preload broken on a new image) without grepping logs. Labels: lane.
+lifespan_g2_failures_total: Counter = _register(
+    Counter(
+        "phantom_lifespan_g2_failures_total",
+        "G2 lifespan warmup lane failures (lane=minilm|chroma_eager|chroma_janitor|cpu_sampler|voice_preload).",
+    )
+)
 
 
 def _uptime_seconds() -> float:

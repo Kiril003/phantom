@@ -454,3 +454,63 @@ asyncio.gather staged groups → /readyz under 2 s).
 
 ---
 
+## 2026-05-02 00:35 CEST — Wave-2 V-5 DONE (lifespan G2 parallel)
+
+Closes audit U8-PERF-C1 ("cold boot 8-15 s; lanes are independent
+and should run via asyncio.gather"). ADR-RTP-001 lands on disk.
+
+`src/backend/lifespan_warmup.py` (NEW, ~165 LOC) extracts the five
+historically-serial G2 warmup lanes into individual coroutines,
+each wrapping its own try/except → WARN log + counter bump:
+
+  - `_lane_minilm`         — sentence-transformers encoder warmup
+  - `_lane_chroma_eager`   — ChromaDB PersistentClient + collection scan
+  - `_lane_chroma_janitor` — orphan SQL row + UUID-dir prune (gated by
+                              `config.chroma_janitor_at_startup`, default ON)
+  - `_lane_cpu_sampler`    — 1 Hz psutil sampler for chat-tool
+                              `get_system_metrics`
+  - `_lane_voice_preload`  — Vosk + faster-whisper + StyleTTS2 + silero VAD
+
+`run_g2_parallel()` orchestrates via
+`asyncio.gather(..., return_exceptions=True)` (defence-in-depth in
+case a future refactor lets a lane exception escape). Wall-clock
+drops from `sum(lanes)` (8-15 s cold) to `max(lane)` (≤ 2000 ms target
+per ADR-RTP-001).
+
+`observability.py` gains `phantom_lifespan_g2_failures_total` Counter
+labelled by `lane`. Operators tailing `/metrics` see a regression
+(broken voice preload on a new image, broken Chroma after schema
+upgrade) without grepping logs.
+
+`main.py` lifespan body:
+- 5 inline blocks (MiniLM + Chroma eager + Chroma janitor + CPU
+  sampler + voice preload, ~85 LOC inline) → `await run_g2_parallel()`.
+- G1 (init_db → settings → context_engine reconcile → logger
+  reconfigure → ensure_default_user → refuse-triple) preserved
+  serial — those touch the same SQLite cursor and can't parallelise.
+- G3 (state broadcaster, serial bridge, location wiring, context
+  loop, OLED, agent runtime) untouched — already `asyncio.create_task`.
+
+6 contract tests at `tests/test_phase_v5_lifespan_g2_parallel.py`:
+- five fake lanes × 0.3 s each parallelise to < 0.8 s wall-clock
+  (proves gather wiring vs serial)
+- patched bad-lane raises → `run_g2_parallel` does NOT raise +
+  counter bumps `lane="chroma_eager"` exactly +1 + escape-guard WARN
+  fires
+- chroma janitor lane is no-op when `chroma_janitor_at_startup=False`
+- main.py imports + calls `run_g2_parallel`; old inline phrases
+  ("MiniLM encoder warmed at startup", "voice models preload") are
+  GONE (catches accidental re-inlining + double-warmup regression)
+- Counter is registered with `_REGISTRY` and renders Prometheus
+  text-format
+
+Pytest 6/6 V-5 green. Regression sweep over lifespan/chroma/healthz/
+readyz/smoke/boot suites: 47/47 green (incl. Day-2 D2-A6 / F-17,
+Day-3 D3-A-5 / D3-A-6 / D3-A-10 / P-3, Day-4 V-1 / V-2 / V-4). No
+behavioural drift.
+
+Next: V-6 (Histogram primitive + 3 latency instruments → p50 SLO
+acceptance test on /metrics).
+
+---
+

@@ -1,5 +1,6 @@
 import { motion } from 'framer-motion';
 import { StatusBar } from '../components/core/StatusBar';
+import { FloatingToolbar } from '../components/core/FloatingToolbar';
 import { Avatar } from '../components/core/Avatar';
 import { useSystemStore } from '../stores/systemStore';
 import { EASE_PHANTOM } from '../styles/motion';
@@ -215,6 +216,15 @@ export default function SentinelLayout() {
           </div>
         </motion.aside>
       </div>
+
+      {/* Audit H-MM-2 — SENTINEL had no FloatingToolbar so the operator
+          had no way out except long-pressing into More then tapping
+          Sentinel a second time to toggle. Add the toolbar; the alert
+          flash overlay above is `pointer-events-none` so taps still
+          reach the buttons. GHOST/DREAM both have tap-anywhere
+          `goShadow` already, so they're fine without the toolbar
+          (stealth modes per VISUAL_SYSTEM.md). */}
+      <FloatingToolbar />
     </motion.div>
   );
 }

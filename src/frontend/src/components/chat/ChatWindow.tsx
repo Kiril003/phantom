@@ -91,6 +91,10 @@ export function ChatWindow({
   const [input, setInput] = useState('');
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [transcribing, setTranscribing] = useState(false);
+  // Day-5 input-pill redesign D5-DSGN3: track focus + textarea ref so
+  // we can drive autosize + a focus-within ambient glow on the rail.
+  const [inputFocused, setInputFocused] = useState(false);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
   // Day-4 W-3: AttachDrawer open-state + pending attachment chips.
   // The chips are local UI state; Day-5 wires them through to the
   // backend send_message payload as typed attachments.
@@ -134,6 +138,17 @@ export function ChatWindow({
       endRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }
   }, [messages, streaming, isTyping]);
+
+  // Day-5 — textarea autosize. Reset to single-line height first
+  // (otherwise scrollHeight stays inflated after a delete) then
+  // expand to content up to the 120px max from the inline style.
+  useEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    const next = Math.min(el.scrollHeight, 120);
+    el.style.height = `${next}px`;
+  }, [input]);
 
   const handleScroll = useCallback(() => {
     const el = listRef.current;
@@ -721,17 +736,30 @@ export function ChatWindow({
               }
             />
             <div
-              className="glass-card flex items-center gap-2 pl-2 pr-2"
+              className="glass-card flex items-end gap-2 pl-2 pr-2 transition-all"
               style={{
-                borderRadius: 9999,
-                height: 52,
+                // Day-5 D5-DSGN3 — pill morphs from rounded-full
+                // (single-line) to rounded-3xl (multi-line) and lifts
+                // with an accent glow when focused. Both moves are
+                // pure CSS so no animation jank on re-render.
+                borderRadius: inputFocused ? 22 : 9999,
+                minHeight: 52,
+                paddingTop: 6,
+                paddingBottom: 6,
+                borderColor: inputFocused
+                  ? 'color-mix(in srgb, var(--accent) 65%, transparent)'
+                  : 'var(--glass-border)',
+                boxShadow: inputFocused
+                  ? '0 0 0 1px color-mix(in srgb, var(--accent) 40%, transparent), 0 12px 36px -12px var(--accent-glow), inset 0 1px 0 var(--glass-highlight)'
+                  : '0 14px 36px -10px rgba(0, 0, 0, 0.45), 0 2px 6px rgba(0, 0, 0, 0.2), inset 0 1px 0 var(--glass-highlight)',
               }}
+              data-focus={inputFocused ? '1' : '0'}
             >
               {showVoice && (
                 <button
                   type="button"
                   onClick={toggleVoice}
-                  className="flex items-center justify-center shrink-0 transition-all active:scale-95"
+                  className="flex items-center justify-center shrink-0 transition-all active:scale-95 self-end"
                   style={{
                     width: 40,
                     height: 40,
@@ -762,7 +790,7 @@ export function ChatWindow({
                 type="button"
                 onClick={() => setAttachOpen((v) => !v)}
                 disabled={sending}
-                className="flex items-center justify-center shrink-0 transition-all active:scale-95"
+                className="flex items-center justify-center shrink-0 transition-all active:scale-95 self-end"
                 style={{
                   width: 40,
                   height: 40,
@@ -786,9 +814,12 @@ export function ChatWindow({
               </button>
 
               <textarea
+                ref={textareaRef}
                 value={input}
                 onChange={(e) => setInput(e.target.value)}
                 onKeyDown={handleKeyDown}
+                onFocus={() => setInputFocused(true)}
+                onBlur={() => setInputFocused(false)}
                 placeholder={placeholder}
                 rows={1}
                 aria-label="Chat input"
@@ -805,11 +836,33 @@ export function ChatWindow({
                 }}
               />
 
+              {/* Day-5 D5-DSGN3 — Enter-to-send hint pill. Renders only
+                  when the rail has content + focus, so empty pre-typing
+                  state stays clean. */}
+              {inputFocused && input.trim().length > 0 && (
+                <span
+                  aria-hidden
+                  className="hidden md:inline-flex items-center gap-1 self-end mb-2 px-2 rounded-full uppercase shrink-0"
+                  style={{
+                    height: 22,
+                    background: 'var(--glass-subtle)',
+                    border: '1px solid var(--glass-border)',
+                    color: 'var(--ink-muted)',
+                    fontFamily: 'var(--font-display)',
+                    fontSize: 'var(--fs-micro)',
+                    letterSpacing: 'var(--tracking-widest)',
+                    transition: 'opacity 200ms',
+                  }}
+                >
+                  Enter
+                </span>
+              )}
+
               <button
                 type="button"
                 onClick={handleSend}
                 disabled={!input.trim() || sending}
-                className="flex items-center justify-center shrink-0 transition-all active:scale-95"
+                className="flex items-center justify-center shrink-0 self-end active:scale-95"
                 style={{
                   width: 40,
                   height: 40,
@@ -817,18 +870,30 @@ export function ChatWindow({
                   minHeight: 44,
                   borderRadius: 9999,
                   background:
-                    input.trim() && !sending ? 'var(--accent)' : 'var(--glass-subtle)',
+                    input.trim() && !sending
+                      ? 'linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 60%, var(--ink-inverse)))'
+                      : 'var(--glass-subtle)',
                   color:
                     input.trim() && !sending ? 'var(--ink-inverse)' : 'var(--ink-muted)',
                   border:
                     input.trim() && !sending
-                      ? '1px solid var(--accent)'
+                      ? '1px solid color-mix(in srgb, var(--accent) 70%, transparent)'
                       : '1px solid var(--glass-border)',
                   boxShadow:
-                    input.trim() && !sending ? '0 0 16px var(--accent-glow)' : 'none',
+                    input.trim() && !sending
+                      ? '0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent), 0 0 22px var(--accent-glow)'
+                      : 'none',
                   opacity: input.trim() && !sending ? 1 : 0.6,
+                  // Day-5 D5-DSGN3 — pure-CSS state-driven transition
+                  // (don't use motion.button: framer mock in chat.test
+                  // collapses motion.* → <div>, breaking .disabled).
+                  transform:
+                    input.trim() && !sending ? 'scale(1)' : 'scale(0.94)',
+                  transition:
+                    'background 200ms, color 200ms, box-shadow 220ms, border-color 200ms, opacity 200ms, transform 180ms cubic-bezier(0.16, 1, 0.3, 1)',
                 }}
                 aria-label="Send message"
+                data-active={input.trim() && !sending ? '1' : '0'}
               >
                 <Send size={16} strokeWidth={2} />
               </button>

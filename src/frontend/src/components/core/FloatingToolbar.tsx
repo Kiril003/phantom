@@ -3,7 +3,6 @@ import { useNavigate, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import {
   Map,
-  Mic,
   Home,
   Settings,
   MessageSquare,
@@ -67,7 +66,6 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
   const toggleOverlay = useUIStore((s) => s.toggleOverlay);
   const moreMenuOpen = useUIStore((s) => s.moreMenuOpen);
   const setMoreMenuOpen = useUIStore((s) => s.setMoreMenuOpen);
-  const setPendingVoiceActivation = useUIStore((s) => s.setPendingVoiceActivation);
 
   const voiceMode = useSettingsStore(
     (s) => (s.values.voice_mode as 'off' | 'continuous' | 'wake_word' | undefined) ?? 'off',
@@ -120,17 +118,6 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
     useUIStore.getState().closeAll();
     navigate('/');
   };
-  /** Voice entry point: route user to DIALOGUE and signal ChatWindow to
-   *  auto-fire its mic toggle on mount. The chat pill's mic is still the
-   *  single, authoritative voice control; this is just a shortcut.
-   *  Phase 9.5 — previously Voice just switched state and did nothing else,
-   *  which duplicated Dialogue exactly. Now clicking Voice = "open chat and
-   *  start listening" in one gesture. */
-  const openVoice = () => {
-    setPendingVoiceActivation(true);
-    if (state !== SystemState.DIALOGUE) goDialogue();
-  };
-
   /** Phase 12.0 — cycle voice_mode: off → continuous → wake_word → off.
    *  Optimistic local flip + persist via settingsApi.set; on failure
    *  we revert so the button reflects backend truth. The VoiceAlwaysOnGate
@@ -174,27 +161,26 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
       onClick: goDialogue,
     },
     {
+      id: 'apps',
+      icon: <Grid3x3 size={18} strokeWidth={1.75} />,
+      label: 'Apps',
+      active: isOverlayOpen('apps'),
+      onClick: () => toggleOverlay('apps'),
+    },
+    {
+      id: 'terminal',
+      icon: <Terminal size={18} strokeWidth={1.75} />,
+      label: 'Terminal',
+      active: isOverlayOpen('terminal'),
+      onClick: () => toggleOverlay('terminal'),
+    },
+    {
       id: 'map',
       icon: <Map size={18} strokeWidth={1.75} />,
       label: 'Map',
       tooltip: 'Tactical map',
       active: location.pathname.startsWith('/map'),
       onClick: goMap,
-    },
-    {
-      id: 'voice',
-      icon: <Mic size={18} strokeWidth={1.75} />,
-      label: 'Voice',
-      active: state === SystemState.DIALOGUE,
-      onClick: openVoice,
-    },
-    {
-      id: 'always-on',
-      icon: <Radio size={18} strokeWidth={1.75} />,
-      label: 'Voice mode',
-      tooltip: voiceModeTooltip,
-      active: voiceModeActive,
-      onClick: cycleVoiceMode,
     },
     {
       id: 'settings',
@@ -217,12 +203,13 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
       },
     },
     {
-      id: 'terminal',
-      icon: <Terminal size={16} strokeWidth={1.75} />,
-      label: 'Terminal',
-      active: isOverlayOpen('terminal'),
+      id: 'always-on',
+      icon: <Radio size={16} strokeWidth={1.75} />,
+      label: 'Voice mode',
+      tooltip: voiceModeTooltip,
+      active: voiceModeActive,
       onClick: () => {
-        toggleOverlay('terminal');
+        cycleVoiceMode();
         setMoreMenuOpen(false);
       },
     },

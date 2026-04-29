@@ -35,7 +35,8 @@ import { useSystemStore } from '../../stores/systemStore';
 import { getMapTokens, buildPhantomStyle, type PhantomMapStyle } from './mapTokens';
 import { useSettingsStore } from '../../stores/settingsStore';
 import type { Bounds } from '../../services/api';
-import { geolocationService } from '../../services/geolocation';
+// `geolocationService` is owned by `App.GlobalGeolocationManager` —
+// TacticalMap consumes results via `mapStore` polling, no direct import.
 import { expandQuery } from '../../services/translit';
 
 interface TacticalMapProps {
@@ -261,12 +262,7 @@ export function TacticalMap({
   // Contributes a mid-trust LocationEstimate to the backend resolver. Stops
   // on unmount; permission prompts are handled by the browser itself, the
   // service is silent on denial and lets the resolver fall through.
-  useEffect(() => {
-    geolocationService.start();
-    return () => {
-      geolocationService.stop();
-    };
-  }, []);
+
 
   useEffect(() => {
     if (!ready || !mapRef.current) return;

@@ -44,6 +44,21 @@ MAX_TOOL_CALLS_PER_TURN: int = 3
 # session settles. 5s was not enough during live tests. With the 3-call
 # cap, worst case is ~30s of tool wall-clock.
 
+# Day-5 fix — per-tool overrides for network IO. The default 10s is fine
+# for in-process tools (DB lookups, memory queries) but external HTTP
+# (search, fetch) routinely needs 12-20s on first connect (DNS + TLS
+# handshake + Google response). The inner web action keeps its own
+# 15s httpx timeout; we just keep the outer guard wider than the inner
+# so a network-slow path returns "search exceeded N seconds" with
+# context instead of a generic "tool timeout".
+PER_TOOL_TIMEOUT_S: dict[str, float] = {
+    "web_search": 25.0,
+    "web_fetch":  20.0,
+    # Voice/STT path occasionally re-warms a faster-whisper instance
+    # off the request thread; give it room before the outer guard cuts.
+    "transcribe": 25.0,
+}
+
 
 # ── Error helpers ─────────────────────────────────────────────────────────────
 
@@ -757,13 +772,18 @@ async def execute_tool(
     args: dict[str, Any] | None,
     user_id: str,
     *,
-    timeout_s: float = TOOL_TIMEOUT_S,
+    timeout_s: float | None = None,
 ) -> dict[str, Any]:
     """
     Dispatch a tool call. NEVER raises — always returns a result dict.
 
     On success: ``{"ok": True, ...}``.
     On failure: ``{"error": "...", "error_kind": "..."}``.
+
+    The effective timeout is, in order:
+      1. ``timeout_s`` argument (explicit override).
+      2. ``PER_TOOL_TIMEOUT_S[tool_name]`` (network IO bumps).
+      3. ``TOOL_TIMEOUT_S`` (10s in-process default).
     """
     handler = _HANDLERS.get(tool_name)
     if handler is None:
@@ -778,12 +798,25 @@ async def execute_tool(
         "tool_executor: invoked tool=%s user=%s args=%s",
         tool_name, user_id, snippet,
     )
+    effective_timeout = (
+        timeout_s
+        if timeout_s is not None
+        else PER_TOOL_TIMEOUT_S.get(tool_name, TOOL_TIMEOUT_S)
+    )
     t0 = time.monotonic()
     try:
-        result = await asyncio.wait_for(handler(safe_args, user_id), timeout=timeout_s)
+        result = await asyncio.wait_for(
+            handler(safe_args, user_id),
+            timeout=effective_timeout,
+        )
     except asyncio.TimeoutError:
-        logger.warning("tool_executor: %s timed out after %.1fs", tool_name, timeout_s)
-        return _err("timeout", f"tool '{tool_name}' exceeded {timeout_s:.1f}s")
+        logger.warning(
+            "tool_executor: %s timed out after %.1fs", tool_name, effective_timeout
+        )
+        return _err(
+            "timeout",
+            f"tool '{tool_name}' exceeded {effective_timeout:.1f}s",
+        )
     except Exception as exc:
         logger.exception("tool_executor: %s raised", tool_name)
         return _err("exception", f"{type(exc).__name__}: {exc}")

@@ -14,6 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import config
 from ai.personality import (
+    BREVITY_DISCIPLINE,
     PHANTOM_IDENTITY,
     DATA_TOOLS_GUIDANCE,
     REGISTER_GUIDANCE,
@@ -215,6 +216,12 @@ def build_system_prompt(
 
     # 1. Core identity
     parts.append(PHANTOM_IDENTITY)
+
+    # 1b. Brevity discipline (Day-5 — operator: "відповіді стали довші").
+    #     Concrete + counter-examples; placed early so it dominates over
+    #     later guidance blocks that, by themselves, can encourage
+    #     verbose elaboration of structured forms.
+    parts.append("\n" + BREVITY_DISCIPLINE)
 
     # 2. Current state behavior
     state: str = snapshot.get("system", {}).get("state", "SHADOW")

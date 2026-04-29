@@ -9,6 +9,17 @@ interface ChatMessageEvent extends WSMessage {
   data: { message: ChatMessage; session_id: string };
 }
 
+interface ChatProactiveEvent extends WSMessage {
+  channel: 'chat';
+  type: 'message.proactive';
+  data: {
+    message: ChatMessage;
+    session_id: string;
+    origin: 'proactive';
+    priority?: string;
+  };
+}
+
 /**
  * Subscribes to the chat WebSocket channel for both streaming deltas
  * and final message broadcasts. Call once (e.g. in ChatWindow).
@@ -32,6 +43,19 @@ export function useChatStream(): void {
         }
         if (state.streaming && state.streaming.id === m.data.message.id) {
           state.clearStreaming();
+        }
+      }
+
+      // Proactive bubbles (`agent/proactive.py:652`) arrive with the same
+      // payload shape as a regular message plus `origin: 'proactive'`.
+      // Pre-fix the switch only handled `'message'` so the bubble never
+      // landed in chat — closes audit-2026-04-29-day5-holes B-19.
+      if (msg.type === 'message.proactive') {
+        const m = msg as ChatProactiveEvent;
+        const state = useChatStore.getState();
+        const existing = state.messages.find((x) => x.id === m.data.message.id);
+        if (!existing) {
+          state.appendMessage(m.data.message);
         }
       }
 

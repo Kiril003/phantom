@@ -1194,3 +1194,61 @@ Next: X-2 (per-sub-agent nonce + leaf+merge sanitize).
 
 ---
 
+## 2026-05-02 08:35 CEST — Wave-2 X-2 DONE (per-sub-agent nonce + leaf sanitize)
+
+Closes audit U3-ORCH-C1 (forged leaf envelopes) + U3-ORCH-C2
+(cross-agent prompt injection). ADR-ORC-002 + ADR-ORC-003 land.
+
+  src/backend/ai/agents/nonce.py (NEW):
+    fresh_sub_nonce()           — secrets.token_hex(8) → 16-char hex.
+    envelope_key_for_sub(idx, n) — `_phantom_sub_<idx>_<nonce>` shape;
+                                    rejects negative idx + non-16-char
+                                    nonce.
+    merge_envelope_key()        — `_phantom_merge_<_PROCESS_NONCE>`;
+                                    reuses the existing module-level
+                                    chat_pipeline._PROCESS_NONCE so a
+                                    forged leaf cannot also forge the
+                                    merge marker.
+    sanitize_leaf_draft(text,
+                         user_id, db) — async wrapper around
+                                    ai.output_safety.sanitize. Runs at
+                                    every leaf BEFORE its draft enters
+                                    the merge history (defence in
+                                    depth — sensitive MemoryFact
+                                    content redacted at the leaf so
+                                    the merge LLM never sees the
+                                    verbatim quote). Fail-open: a
+                                    sanitize crash returns the original
+                                    draft + logs WARN with X-2 marker.
+
+  src/backend/ai/agents/__init__.py — re-exports the 4 helpers.
+
+13 X-2 contract tests:
+  - fresh_sub_nonce returns a 16-char hex string.
+  - 3 consecutive nonces are pairwise unique (collision guard).
+  - leaf nonces never collide with the merge envelope key (cross-
+    pollination guard).
+  - envelope_key_for_sub shape pinned; rejects negative idx, non-int
+    idx, short nonce, non-string nonce.
+  - merge_envelope_key embeds chat_pipeline._PROCESS_NONCE +
+    starts with "_phantom_merge_".
+  - sanitize_leaf_draft empty input → empty output.
+  - normal path forwards to output_safety.sanitize and returns
+    `.text` from the result.
+  - fail-open on sanitize crash returns the original draft + WARN
+    log with the X-2 marker fires.
+  - defensive: sanitize returning empty text falls back to the
+    ORIGINAL draft (zero-out guard).
+
+34/34 X-1 + X-2 + X-3 import-gate sweep green.
+
+Behavioural drift = ZERO. The helpers are callable specs; X-3 (when
+it lands sub_agent.run_leaf) wires them in. Until then they sit
+behind the chat_orchestrator_enabled flag (default OFF).
+
+Next: X-4 (orchestrator config keys + budget split + asyncio.wait
+gather-no-cancel — the budget scaffolding the parallel-K branch
+will activate when X-3 ships).
+
+---
+

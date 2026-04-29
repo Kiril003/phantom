@@ -178,13 +178,19 @@ class TestActions:
         assert not res.ok and res.error_class == "timeout"
 
     @pytest.mark.asyncio
-    async def test_bash_run_sandboxed_falls_back_when_firejail_missing(self, ctx, monkeypatch):
-        from agent.safety import sandbox as sb
+    async def test_bash_run_sandboxed_falls_back_when_sandbox_primitive_missing(
+        self, ctx, monkeypatch
+    ):
+        """Day-4 Y-1: firejail dropped → bwrap is the primitive. The
+        fallback contract is identical: when the primitive is missing,
+        bash.run runs unsandboxed AND `res.sandboxed=False` so the
+        audit trail tells the truth."""
+        import agent.safety.sandbox as sb
         from agent.actions.bash import BashRun
-        monkeypatch.setattr(sb, "firejail_available", lambda: False)
+        monkeypatch.setattr(sb.shutil, "which", lambda *_a, **_kw: None)
         res = await BashRun(cmd="echo OK", timeout_s=5, sandboxed=True).execute(ctx)
         assert res.ok
-        assert res.sandboxed is False  # honest report
+        assert res.sandboxed is False  # honest report — primitive missing
 
     @pytest.mark.asyncio
     async def test_process_list_filter(self, ctx):
@@ -496,15 +502,33 @@ class TestSafety:
         v = evaluate(b)
         assert v.force_reflect
 
-    def test_sandbox_wraps_only_when_firejail(self, monkeypatch):
+    def test_sandbox_wraps_only_when_primitive_present(self, monkeypatch):
+        """Day-4 Y-1: bwrap replaces firejail. wrap_shell_cmd is now a
+        legacy shim that routes through wrap_argv(SandboxProfile.compute);
+        contract still: sandboxed=False when primitive missing,
+        sandboxed=True with the right argv leader otherwise."""
         from agent.safety import sandbox
-        monkeypatch.setattr(sandbox, "firejail_available", lambda: False)
+
+        # Primitive missing → unwrapped, sandboxed=False.
+        monkeypatch.setattr(sandbox.shutil, "which", lambda *_a, **_kw: None)
         argv, sb = sandbox.wrap_shell_cmd("echo a", True)
         assert sb is False and argv[:2] == ["/bin/sh", "-c"]
 
-        monkeypatch.setattr(sandbox, "firejail_available", lambda: True)
+        # Primitive available → wrapped via bwrap (or prlimit→bwrap when
+        # the memory cap path resolves).
+        def _which(cmd, *_a, **_kw):
+            if cmd == "bwrap":
+                return "/usr/bin/bwrap"
+            if cmd == "prlimit":
+                return "/usr/bin/prlimit"
+            return None
+        monkeypatch.setattr(sandbox.shutil, "which", _which)
         argv, sb = sandbox.wrap_shell_cmd("echo a", True)
-        assert sb is True and argv[0] == "firejail"
+        assert sb is True
+        assert argv[0] in ("bwrap", "prlimit"), (
+            f"Y-1: wrap_shell_cmd argv[0]={argv[0]!r}; expected bwrap "
+            "or prlimit (the prlimit→bwrap memory-cap chain)."
+        )
 
     @pytest.mark.asyncio
     async def test_executor_blocks_risk_above_tolerance(self, isolated_db, monkeypatch, workspace):

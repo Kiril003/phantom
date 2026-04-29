@@ -954,3 +954,84 @@ Next: Y-1 (bwrap retarget + SandboxProfile + clean_env).
 
 ---
 
+## 2026-05-02 06:55 CEST — Wave-2 Y-1 DONE (bwrap sandbox primitive)
+
+Closes audit U4-SEC-C2 (firejail not on Radxa kernel 6.17.1 →
+"sandbox" was a no-op fall-through). ADR-SBX-001 / -002 / -003 land.
+
+`src/backend/agent/safety/sandbox.py` rewritten end-to-end:
+
+  SandboxProfile           — closed Enum {compute, net_observe,
+                              radio_privileged}. Adding a value =
+                              ADR amendment.
+  wrap_argv(profile, argv) — single public builder. Returns
+                              (argv, sandboxed). Canonical bwrap
+                              flags ('--die-with-parent',
+                              '--unshare-pid/ipc/uts/cgroup',
+                              '--ro-bind /usr|/etc',
+                              '--proc /proc', '--dev /dev',
+                              '--tmpfs /tmp', '--clearenv',
+                              '--cap-drop ALL'). compute adds
+                              '--unshare-net'; net_observe
+                              retains net; radio_privileged is
+                              NotImplementedError on Day-4.
+                              workspace_dir → '--bind <dir>
+                              /workspace --chdir /workspace'.
+                              memory_limit_bytes → wrap with
+                              prlimit --as=N (bubblewrap has no
+                              rlimit-as analogue per ADR-SBX-001).
+                              Missing primitive → unwrapped argv +
+                              sandboxed=False + WARN log (audit
+                              tells the truth via ActionResult).
+  clean_env()              — start-from-empty allowlist (PATH /
+                              HOME / LANG / LC_ALL / TERM); never
+                              calls os.environ.copy(); workspace_dir
+                              optional → HOME=workspace.
+  assert_env_safe(env)     — defence-in-depth audit. Raises if any
+                              JWT_*, AI_*, PHANTOM_*, PYTHON*,
+                              LD_PRELOAD, LD_LIBRARY_PATH leaks
+                              into a child env.
+  bwrap_available()        — operator visibility (Y-5 Settings).
+  firejail_available()     — preserved as STALE-CONFIG DETECTOR
+                              returning False (catches old configs
+                              that still reference the legacy flag).
+  wrap_shell_cmd()         — back-compat shim that routes through
+                              wrap_argv(SandboxProfile.compute) for
+                              sandboxed=True. Removed in Day-5
+                              after Y-2 retargets all callers.
+
+23 Y-1 contract tests at tests/test_phase_y1_sandbox_bwrap.py:
+- enum closed to 3 values; radio_privileged raises on Day-4.
+- clean_env keys + workspace HOME; secrets in os.environ never
+  leak into child.
+- assert_env_safe parametrised over 9 sensitive prefixes/exact
+  names (JWT_SECRET_KEY, JWT_ALGORITHM, AI_GEMINI_API_KEY,
+  AI_PRIMARY_PROVIDER, PHANTOM_PACKAGED, PHANTOM_DATA_DIR,
+  PYTHONPATH, LD_PRELOAD, LD_LIBRARY_PATH).
+- compute profile drops --unshare-net; net_observe retains it.
+- workspace_dir adds --bind + --chdir /workspace.
+- memory_limit_bytes wraps with prlimit --as=N.
+- bwrap missing → unwrapped argv + sandboxed=False + WARN.
+- firejail_available always False.
+- wrap_shell_cmd shim: sandboxed=False bypass; sandboxed=True
+  routes through wrap_argv when bwrap available.
+
+2 phase-09 baseline tests UPDATED to reflect the bwrap contract:
+- test_bash_run_sandboxed_falls_back_when_sandbox_primitive_missing
+  (renamed from _firejail_missing) — monkeypatches shutil.which to
+  None instead of firejail_available.
+- test_sandbox_wraps_only_when_primitive_present (renamed) —
+  asserts argv[0] in ('bwrap', 'prlimit') instead of 'firejail'.
+
+23 Y-1 + 65/65 sandbox/firejail/bash/phase-09 regression sweep
+green. Behavioural drift: every caller of wrap_shell_cmd now gets
+a real namespace isolation when bwrap is on PATH; the legacy
+firejail-installed path is dead.
+
+Y-2 Wave-2 next: bash + mcp adapter retarget through wrap_argv +
+clean_env (drops the back-compat shim wrap_shell_cmd).
+
+Next: Y-2.
+
+---
+

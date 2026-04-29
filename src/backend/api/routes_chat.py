@@ -199,6 +199,69 @@ async def _get_or_create_session(
     return session
 
 
+# Day-5 fix — trivial / noise-transcript filter. Cuts a 22s + 3861-token
+# turn down to ~50ms when the user "said" a single letter, when the STT
+# returned a 1-2-character noise burst, or when the chat content is
+# pure punctuation. Picks one of a small canned-reply pool so the user
+# still sees presence (not a hard 4xx).
+_TRIVIAL_NOISE_TOKENS: frozenset[str] = frozenset({
+    # Ukrainian filler / hesitation
+    "у", "ну", "а", "е", "ой", "ох", "м", "мм", "ммм",
+    "ем", "емм", "ах", "ага", "угу", "ого", "о", "ок",
+    # English filler that whisper occasionally hallucinates
+    "uh", "um", "hmm", "ok", "yeah", "ah",
+})
+
+_TRIVIAL_VOICE_REPLIES: tuple[str, ...] = (
+    "Слухаю.",
+    "Так?",
+    "Тут.",
+)
+_TRIVIAL_TEXT_REPLIES: tuple[str, ...] = (
+    "Так?",
+    "Слухаю.",
+)
+
+
+def _trivial_input_canned_reply(content: str, input_method: str) -> str | None:
+    """Return a canned reply when the user's input carries no actionable
+    content; ``None`` means "let the AI handle it" (the normal path).
+
+    Trivial criteria — ANY of:
+      • whitespace-stripped content is empty.
+      • content is exactly one whitespace-separated token AND that
+        token (lower-cased, alpha-only) is in the noise-token allow-list.
+      • content is 1 character and not a digit/sentence-ender.
+    """
+    stripped = content.strip()
+    if not stripped:
+        # Pure whitespace — pick the bluntest acknowledgement.
+        pool = _TRIVIAL_VOICE_REPLIES if input_method == "voice" else _TRIVIAL_TEXT_REPLIES
+        return pool[0]
+
+    # Single-character barge-ins — a transcribed cough, a stray keypress.
+    # Skip digits (the user might be saying a number aloud) and the
+    # closing punctuation ("." / "!" / "?") that a chat client may auto-
+    # append on Enter.
+    if len(stripped) == 1 and not stripped.isdigit() and stripped not in {".", "!", "?"}:
+        pool = _TRIVIAL_VOICE_REPLIES if input_method == "voice" else _TRIVIAL_TEXT_REPLIES
+        return pool[hash(stripped) % len(pool)]
+
+    # Single-token noise word.
+    tokens = stripped.split()
+    if len(tokens) == 1:
+        normalised = "".join(ch for ch in tokens[0].lower() if ch.isalpha())
+        if normalised and normalised in _TRIVIAL_NOISE_TOKENS:
+            pool = (
+                _TRIVIAL_VOICE_REPLIES
+                if input_method == "voice"
+                else _TRIVIAL_TEXT_REPLIES
+            )
+            return pool[hash(normalised) % len(pool)]
+
+    return None
+
+
 async def _build_ai_response(
     user_message: str,
     session_id: str,
@@ -514,16 +577,31 @@ async def send_message(
     # to open their own sessions, or SQLite single-writer deadlocks.
     await db.commit()
 
-    # Generate AI response
-    try:
-        content, response_form, attachments, provider, tokens_used = \
-            await _build_ai_response(req.content, session.id, user, db)
-    except Exception as exc:
-        logger.error("AI generation failed: %s", exc)
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=f"AI unavailable: {exc}",
-        )
+    # Day-5 fix — trivial-input fast path. Operator hit a 22s / 3861-token
+    # turn on a single-letter "у" voice transcript: faster-whisper handed
+    # garbage to chat, the full system prompt loaded, Gemini tried to
+    # treat it as a real query. Short-circuit BEFORE _build_ai_response
+    # for inputs the model can't meaningfully act on.
+    trivial_reply = _trivial_input_canned_reply(
+        req.content, req.input_method
+    )
+    if trivial_reply is not None:
+        content = trivial_reply
+        response_form = "text"
+        attachments = []
+        provider = "local"
+        tokens_used = 0
+    else:
+        # Generate AI response
+        try:
+            content, response_form, attachments, provider, tokens_used = \
+                await _build_ai_response(req.content, session.id, user, db)
+        except Exception as exc:
+            logger.error("AI generation failed: %s", exc)
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail=f"AI unavailable: {exc}",
+            )
 
     latency_ms = int((time.monotonic() - t_start) * 1000)
     # Day-4 V-6 (ADR-RTP-002): chat response latency histogram. Wired

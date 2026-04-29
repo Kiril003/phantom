@@ -265,15 +265,31 @@ CATEGORY_SPEC: list[dict[str, Any]] = [
         ],
     },
     {
+        "id": "agent",
+        "label": "Агент",
+        "icon": "🤖",
+        "keys": [
+            "agent_enabled",
+            "agent_risk_tolerance",
+            "agent_max_actions_per_task",
+            "agent_max_llm_calls_per_task",
+            "agent_proactive_enabled",
+            "agent_standing_orders_enabled",
+            "agent_episodic_memory_enabled",
+            "agent_localization_enabled",
+        ],
+    },
+    {
         "id": "map",
         "label": "Карта",
         "icon": "◎",
         "keys": [
             "ui_map_default_zoom",
             "ui_map_style",
+            "agent_localization_enabled",
+            "agent_browser_geolocation_enabled",
             "wardriving_cell_precision",
             "wardriving_heatmap_precision",
-            "wardriving_max_records_query",
         ],
     },
     {
@@ -286,8 +302,8 @@ CATEGORY_SPEC: list[dict[str, Any]] = [
 
 LABEL_OVERRIDES: dict[str, str] = {
     "system_hostname": "Hostname",
-    "log_level": "Log level",
-    "debug": "Debug mode",
+    "log_level": "Рівень логування",
+    "debug": "Режим налагодження",
     "serial_enabled": "ESP32 serial bridge",
     "ui_theme": "Тема",
     "ui_density": "Щільність",
@@ -372,6 +388,15 @@ LABEL_OVERRIDES: dict[str, str] = {
     "wardriving_cell_precision": "Wardriving cell precision",
     "wardriving_heatmap_precision": "Heatmap precision",
     "wardriving_max_records_query": "Max query records",
+    "agent_enabled": "Агент увімкнено",
+    "agent_risk_tolerance": "Толерантність до ризику (1-7)",
+    "agent_max_actions_per_task": "Макс. дій на задачу",
+    "agent_max_llm_calls_per_task": "Ліміт викликів LLM",
+    "agent_proactive_enabled": "Проактивна ініціатива",
+    "agent_standing_orders_enabled": "Постійні протоколи (Standing Orders)",
+    "agent_episodic_memory_enabled": "Епізодична пам'ять",
+    "agent_localization_enabled": "Геолокація агента",
+    "agent_browser_geolocation_enabled": "Використовувати GPS браузера",
 }
 
 PASSWORD_KEYS = {"ai_gemini_api_key", "jwt_secret_key"}
@@ -403,7 +428,6 @@ UNIMPLEMENTED_KEYS = {
     "sensor_wifi_scan_interval_s",
     "sensor_oled_brightness",
     # Linux subsystem stubbed until Phase 09; GHOST pipeline not hooked yet.
-    "security_dangerous_cmd_confirm",
     "security_ghost_auto_encrypt",
 }
 
@@ -643,7 +667,19 @@ async def reset_settings(
     """
     Restore defaults for a category (or all). Mutates in-memory config AND
     deletes DB overrides so next restart truly falls back to env/defaults.
+
+    Audit smoke-test fix — pre-fix the loop did `setattr(config, key, fresh_value)`
+    which re-triggered Pydantic `validate_assignment=True` for each field. The
+    cross-field validators (e.g. ai_primary_provider != ai_fallback_provider)
+    would see the half-applied config mid-loop and raise `ValidationError`,
+    which surfaced as a bare 500 because the handler had no `except`. Fix:
+    merge the target keys into a snapshot dict, validate the WHOLE snapshot
+    once, then assign each field via `object.__setattr__` — bypassing
+    per-field assignment validation since the merged dict was just proven
+    consistent as a unit.
     """
+    from pydantic import ValidationError
+
     from config import PhantomConfig
 
     fresh = PhantomConfig()
@@ -653,10 +689,36 @@ async def reset_settings(
         target_keys = spec["keys"] if spec else []
     else:
         target_keys = [k for c in CATEGORY_SPEC for k in c["keys"]]
+    target_keys = list(target_keys)
+
+    # Build the post-reset snapshot in a dict, validate once, then apply.
+    current_snapshot = config.model_dump()
+    fresh_snapshot = fresh.model_dump()
+    merged = {
+        **current_snapshot,
+        **{k: fresh_snapshot[k] for k in target_keys if k in fresh_snapshot},
+    }
+    try:
+        validated = PhantomConfig.model_validate(merged)
+    except ValidationError as exc:
+        # Partial reset (one category) can leave cross-field invariants
+        # broken — surface as 422, not 500, so the FE can show the actual
+        # validation error rather than a bare "Internal Server Error".
+        raise HTTPException(
+            status.HTTP_422_UNPROCESSABLE_ENTITY,
+            detail={
+                "message": "Reset would produce an invalid configuration",
+                "errors": exc.errors(),
+            },
+        ) from exc
+
     reset_keys: list[str] = []
     for key in target_keys:
-        if hasattr(fresh, key):
-            setattr(config, key, getattr(fresh, key))
+        if hasattr(validated, key):
+            # Bypass `validate_assignment` — `validated` is the whole-model
+            # validation result, so per-field re-validation isn't needed
+            # and would re-introduce the cross-field crash.
+            object.__setattr__(config, key, getattr(validated, key))
             reset_keys.append(key)
 
     try:

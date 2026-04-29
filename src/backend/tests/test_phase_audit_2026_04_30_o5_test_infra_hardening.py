@@ -61,6 +61,20 @@ PUBLIC_ROUTE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset({
     # 60 s. Payload is outage timestamps + reason strings (no PII, no
     # location data). N-sec NEW-SEC-08 re-eval same as face/status.
     ("GET",  "/api/v1/map/services_health"),
+    # Day-4 Wave-2 IDB-2 (ADR-IDB-003): pre-PinPad picker tile list.
+    # Whitelist {id, username, avatar_url} only — every sensitive
+    # field stripped. The LoginScreen consumes this BEFORE auth so
+    # multi-user installs can show their operator tiles. Audit M-1/M-2
+    # flagged forward-leak class — addressed at the route via the
+    # whitelist, AST-pinned by tests/test_phase_idb2_shared_pin_picker.
+    ("GET",  "/api/v1/auth/users/picker"),
+    # Day-4 Wave-2 W-4 (ADR-XC-007): dynamic-source picker resolver.
+    # Public-by-design — the chat-input ModelCard reads provider /
+    # voice / mms-language lists pre-auth so the splash → ready →
+    # first-query path renders without a token. Per-source ttl cache
+    # caps cost; defensive resolvers return empty list (NEVER 500)
+    # so an attacker can't probe internal state via 5xx differentials.
+    ("GET",  "/api/v1/dynamic_source/{source}"),
 })
 
 

@@ -1655,3 +1655,138 @@ Next: T-2 (action-kind discriminator: speak/notify/task/webhook).
 
 ---
 
+## 2026-05-02 11:50 CEST — Wave-2 T-2 DONE (action-kind discriminator)
+
+ADR-SOH-003. Closed-vocabulary union for the four standing-order
+action kinds: speak / notify / task / webhook. The Day-5 dispatcher
+(SOH-004) will match-table on `action.kind` without re-touching the
+runner. Day-4 ships TYPES + parser + denorm `action_kind` column;
+dispatcher wiring is Day-5.
+
+  agent/standing_orders/actions.py (NEW) — 4 Pydantic models +
+    discriminated union; parse_action accepts the typed `kind`
+    field AND the legacy {"goal": "..."} shorthand (one-shot
+    DeprecationWarning per process); action_kind_for_row defensive
+    extractor for migration backfill.
+  db/models.py StandingOrder         — +action_kind: String(16),
+    nullable, indexed.
+  db/migrations/009                  — idempotent ALTER TABLE +
+    json_extract backfill (legacy {"goal": ...} → "task"). Audit-
+    fix: 009 now gates on 008's columns being present so a half-
+    applied migration chain doesn't poison subsequent reads.
+
+18 T-2 contract tests. Pytest 18/18 green.
+
+---
+
+## 2026-05-02 14:30 CEST — Wave-2 audit-fixes (8-reviewer team feedback)
+
+Spawned 9 sub-agents in parallel for cross-cutting review (1 critic
+team-lead + 3 designers + 5 senior reviewers). 8/9 returned with
+substantive findings; 1 (test-strategist) hit org quota with no
+output. Top blocking findings actioned in commit `40c8e0a`:
+
+  Security H-1 (timing oracle in shared-PIN guard) — full-iterate-
+    and-collect bcrypt walk + asyncio.to_thread offload + cap N
+    at 200 with 503 too_many_pin_users + try/except so malformed
+    pin_hash="x" fixtures don't poison the walk.
+  Security M-3 (env prefix gap) — extend SENSITIVE_ENV_PREFIXES
+    with OPENAI_/ANTHROPIC_/GOOGLE_/GEMINI_/HF_/HUGGINGFACE_.
+  Architect R1 (migration ordering) — gate 009 backfill on 008's
+    columns being present.
+  Tree hygiene — extend .gitignore with chroma_data/ +
+    **/chroma_data/.
+  Test-DB cross-pollution — IDB-2 tests use uuid-tagged usernames
+    + uuid-derived PINs.
+
+Parked-for-Day-5 findings (operator-reviewable in
+docs/DAY4_BACKLOG_EXTENSIONS.md):
+  C-4 per-user RAG isolation in ChromaDB — RICE 2.00 highest.
+  T-1 atomic-claim wiring inside _fire_order — boot recovery
+    shipped; intra-uptime double-fire window remains.
+  X-3 routes_chat orchestrator wiring — scaffold only.
+  Z-3 AIHub.dispatch implementation — registry+pick shipped,
+    dispatch raises NotImplementedError.
+  Plus per-discipline polish (designer naming, perf bucket
+    resolution, frontend onPick→onSelect convergence).
+
+---
+
+## 2026-05-02 15:10 CEST — Wave-2 T-3 DONE (standing-order WS broadcaster)
+
+ADR-SOH-005. Closes the chat-liveness path D-1 from
+DAY4_BACKLOG_EXTENSIONS.md: plan-step ScenePanels can now render
+live status from a WS topic instead of staying empty.
+
+Three event_bus topics emitted by the runner:
+  standing_order.tick    — once per cycle: {cycle_at_iso, evaluated,
+                            fired, skipped} (heartbeat even with zero
+                            orders).
+  standing_order.fired   — successful dispatch payload.
+  standing_order.skipped — closed reason vocab.
+
+  dispatch/standing_order_broadcaster.py (NEW) — subscribes 3
+    topics + forwards through ws hub broadcast as
+    channel="standing_orders" + type=tick|fired|skipped. Failure
+    contained.
+  agent/standing_orders/runner.py — emits all three at the right
+    points in check_and_fire_due_orders + _fire_order helpers.
+  main.py — wires register_standing_order_broadcaster.
+
+7 T-3 contract tests. Pytest 7/7 green.
+
+**Wave-2 23/23 COMPLETE.**
+
+---
+
+## 2026-05-02 15:55 CEST — Wave-2 capstone (v0.20.0-living-os tag)
+
+Final pre-tag full sweep over Wave-1 + Wave-2 backend tests:
+**524/525 passed**, 1 fixed in commit fix-up (D3-A-9 public-route
+allowlist updated for 2 new public-by-design routes:
+/auth/users/picker and /dynamic_source/{source}). Re-run: 525/525.
+
+23 atomic Wave-2 commits since baseline 2c8e2a4 (counting backwards
+from HEAD): T-3, audit-fixes, T-2, T-1, IDB-3, IDB-2, FACTS-1, Z-2,
+Z-1, X-4, X-2, X-1, Y-5, Y-2, Y-1, W-5, W-4, W-3b, W-3, W-2c, W-2,
+V-6, V-5, V-1.
+
+Tag scope (operator-honest annotation):
+  ✓ Tauri 2.x desktop scaffold (V-1)
+  ✓ Lifespan G2 parallel warmup (V-5)
+  ✓ Histogram primitive + 3 latency instruments (V-6)
+  ✓ ChatScene composer + 6 typed panels (W-2)
+  ✓ Backend scene_kind picker (W-2c)
+  ✓ + button + AttachDrawer + ModelCard (W-3)
+  ✓ Settings subgroup accordions (W-3b, closes U1-UX-C1)
+  ✓ DynamicPicker + 5 backend resolvers (W-4)
+  ✓ Hardware-tier flag + chat_stream_delay = 0.0 (W-5)
+  ✓ bwrap sandbox primitive + bash/mcp retarget (Y-1, Y-2)
+  ✓ Sandbox profile setting (Y-5)
+  ✓ Orchestrator scaffold + nonce + budget + import gate
+    (X-1, X-2, X-3, X-4) — feature-flagged OFF
+  ✓ AIHub registry + locality-first pick + diagnostic routes
+    (Z-1, Z-2) — dispatch path is Day-5
+  ✓ FACTS-1 encrypted UserFact CRUD with require_self_or_root
+  ✓ Multi-user login: shared-PIN guard + picker route + React
+    UserPicker (IDB-2, IDB-3) on top of Day-4 IDB-1 isolation
+  ✓ Standing-orders crash recovery (T-1) + action-kind
+    discriminator (T-2) + WS event fan-out (T-3)
+  ✓ Audit-team feedback applied (security H-1/M-3, architect R1,
+    tree hygiene, test-DB cross-pollution).
+
+Honest tag annotation calls out the four scaffolds gated for
+Day-5: orchestrator wiring, AI Hub dispatch, atomic-claim within
+single uptime, per-user ChromaDB collection isolation (C-4 RICE
+2.00 — highest backlog item, picked up Day-5).
+
+Tag: `v0.20.0-living-os`.
+Branch: `autonomous-run` (NOT promoted to `main` per team-lead R5
+recommendation: independent security review on Y-1/Y-2/X-2/FACTS-1/
+IDB-2 should run when sub-agent quota resets before main-branch
+promotion).
+
+Wave-2 + Day-4 CLOSED.
+
+---
+

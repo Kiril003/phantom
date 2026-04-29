@@ -7,6 +7,12 @@ import { settingsApi, aiApi, type OllamaModelInfo, type AITestResponse } from '.
 import { voiceApi, type VoiceStatusResponse } from '../../services/voiceApi';
 import { applyUISettings } from '../../services/settingsBootstrap';
 import type { SettingDefinition } from '@shared/types';
+import { groupByInferredSubgroup } from './groupSettings';
+import {
+  SettingsAccordion,
+  readAccordionState,
+  writeAccordionState,
+} from './SettingsAccordion';
 
 export default function SettingsPanel() {
   const navigate = useNavigate();
@@ -22,6 +28,12 @@ export default function SettingsPanel() {
   const [status, setStatus] = useState<
     { kind: 'idle' } | { kind: 'loading' } | { kind: 'saving' } | { kind: 'error'; msg: string } | { kind: 'saved' }
   >({ kind: 'idle' });
+  // Day-4 W-3b — accordion-open state, persisted per category in
+  // localStorage. Default behaviour on first visit: expand the FIRST
+  // bucket only so the panel fits 1024×600 (closes audit U1-UX-C1).
+  const [accordionState, setAccordionState] = useState<
+    Record<string, Record<string, boolean>>
+  >({});
 
   useEffect(() => {
     let cancelled = false;
@@ -374,22 +386,90 @@ export default function SettingsPanel() {
                     No settings yet for this category.
                   </div>
                 )}
-                {activeCategory.settings
-                  // Phase 12.0 — voice_always_on_enabled is a deprecated
-                  // alias of voice_mode (off / continuous / wake_word).
-                  // Hide it from the UI so operators only see the new
-                  // mode dropdown; legacy DB rows remain readable via the
-                  // REST API but never surface as a toggle.
-                  .filter((def) => def.key !== 'voice_always_on_enabled')
-                  .map((def) => (
-                    <SettingRow
-                      key={def.key}
-                      def={def}
-                      value={values[def.key]}
-                      dirty={dirty.has(def.key)}
-                      onChange={(v) => setValue(def.key, v)}
-                    />
-                  ))}
+                {(() => {
+                  const visible = activeCategory.settings
+                    // Phase 12.0 — voice_always_on_enabled is a deprecated
+                    // alias of voice_mode (off / continuous / wake_word).
+                    // Hide it from the UI so operators only see the new
+                    // mode dropdown; legacy DB rows remain readable via
+                    // the REST API but never surface as a toggle.
+                    .filter((def) => def.key !== 'voice_always_on_enabled');
+                  // Day-4 W-3b — group by inferred subgroup. Categories
+                  // with no rule produce a single "General" bucket; the
+                  // accordion still works, it just has one section.
+                  const groups = groupByInferredSubgroup(
+                    activeCategory.id,
+                    visible
+                  );
+                  // Bootstrap accordion state on first render for this
+                  // category: read localStorage; if missing, default to
+                  // the first bucket open + the rest collapsed.
+                  const stateForCategory =
+                    accordionState[activeCategory.id] ??
+                    (() => {
+                      const stored = readAccordionState(activeCategory.id);
+                      if (stored) return stored;
+                      const seed: Record<string, boolean> = {};
+                      groups.forEach((g, idx) => {
+                        seed[g.bucket.id] = idx === 0;
+                      });
+                      return seed;
+                    })();
+                  // If a single-group category, render flat (no
+                  // accordion chrome) — preserves the legacy look for
+                  // small categories like `system` and `ui`.
+                  if (groups.length <= 1) {
+                    return groups[0]?.items.map((def) => (
+                      <SettingRow
+                        key={def.key}
+                        def={def}
+                        value={values[def.key]}
+                        dirty={dirty.has(def.key)}
+                        onChange={(v) => setValue(def.key, v)}
+                      />
+                    ));
+                  }
+                  return groups.map((g) => {
+                    const open = stateForCategory[g.bucket.id] ?? false;
+                    const dirtyCount = g.items.filter((d) =>
+                      dirty.has(d.key)
+                    ).length;
+                    return (
+                      <SettingsAccordion
+                        key={g.bucket.id}
+                        id={g.bucket.id}
+                        label={g.bucket.label}
+                        count={g.items.length}
+                        dirtyCount={dirtyCount}
+                        open={open}
+                        onToggle={() => {
+                          const nextForCategory = {
+                            ...stateForCategory,
+                            [g.bucket.id]: !open,
+                          };
+                          setAccordionState((curr) => ({
+                            ...curr,
+                            [activeCategory.id]: nextForCategory,
+                          }));
+                          writeAccordionState(
+                            activeCategory.id,
+                            nextForCategory
+                          );
+                        }}
+                      >
+                        {g.items.map((def) => (
+                          <SettingRow
+                            key={def.key}
+                            def={def}
+                            value={values[def.key]}
+                            dirty={dirty.has(def.key)}
+                            onChange={(v) => setValue(def.key, v)}
+                          />
+                        ))}
+                      </SettingsAccordion>
+                    );
+                  });
+                })()}
               </div>
             )}
           </section>

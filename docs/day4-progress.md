@@ -765,3 +765,66 @@ Next: W-3b (Settings subgroup accordions, closes U1-UX-C1).
 
 ---
 
+## 2026-05-02 04:50 CEST — Wave-2 W-3b DONE (Settings subgroup accordions)
+
+Closes audit U1-UX-C1: voice category overflowed the 1024×600
+viewport with 25+ keys; operator had to scroll past unrelated
+knobs to reach the one they wanted. Three frontend additions:
+
+  src/frontend/src/components/settings/groupSettings.ts
+    Pure helper — `inferSubgroup(category, key)` returns a
+    SubgroupBucket from a closed-vocabulary table indexing by
+    key-prefix regex. Buckets defined for voice (stt/tts/always_on/
+    pipeline), agent (emotion/proactive/standing_orders/episodic/mcp/
+    localization/core), ai (gemini/ollama/routing), chat (tools/core),
+    security (auth/network/core); fallback "General" for unmatched
+    keys (system/ui/about). `groupByInferredSubgroup` partitions a
+    SettingDefinition list, preserves within-group order, sorts
+    groups by bucket.order.
+
+  src/frontend/src/components/settings/SettingsAccordion.tsx
+    Collapsible section component. Renders chevron + label + count
+    badge + dirty dot+count when dirtyCount > 0. State (open/closed)
+    is parent-owned for persistence. ARIA contract: aria-expanded,
+    aria-controls (panel id), aria-labelledby (header id),
+    role=region on the body. Header tap-target ≥ 44×44 (CLAUDE.md
+    rule 3). `readAccordionState` / `writeAccordionState` localStorage
+    helpers — defensive against missing keys, corrupt JSON, and
+    non-boolean values.
+
+  src/frontend/src/components/settings/SettingsPanel.tsx (modified)
+    Replaces the flat list-of-rows render with `groupByInferredSubgroup`
+    output. When a category has only ONE bucket (e.g. system, ui),
+    renders flat — preserves the legacy small-category look. When a
+    category has 2+ buckets, renders an accordion stack with the
+    FIRST bucket open by default + others collapsed (overrideable via
+    localStorage). Toggle persists per-category to
+    `phantom.settings.accordion.<categoryId>` so reopening Settings
+    restores the operator's layout.
+
+24 vitest specs at `src/__tests__/settings-accordion.test.tsx`:
+- inferSubgroup: 10 cases — voice/agent/ai/chat keys → expected
+  bucket ids; unknown key → "general" fallback.
+- groupByInferredSubgroup: preserves within-group key order; sorts
+  groups by bucket.order; produces single General bucket for
+  unmatched categories.
+- SettingsAccordion: hides children when closed; shows them when
+  open; aria-expanded reflects open; aria-controls + aria-labelledby
+  chain sound; dirty badge surfaces when dirtyCount > 0; clicking
+  fires onToggle exactly once; header meets 44×44 minimum.
+- localStorage persistence: round-trip via writeAccordionState/
+  readAccordionState; missing key → null; corrupt JSON → null
+  without raising; non-boolean values filtered defensively.
+
+Vitest 24/24 green. tsc --noEmit clean.
+
+The accordion id namespace (e.g. `voice.stt`, `agent.proactive`) is
+deliberately stable — those ids are the localStorage persistence
+contract. Future bucket additions append to the rule table; existing
+ids must NOT be renamed without a migration.
+
+Next: W-4 (dynamic_source schema + 5 resolvers + DynamicPicker —
+charter "less text input, more pickers").
+
+---
+

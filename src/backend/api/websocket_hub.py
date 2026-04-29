@@ -89,6 +89,11 @@ class WebSocketHub:
         user_id: str | None = None,
     ) -> None:
         """Broadcast to all clients (or to specific user if user_id provided)."""
+        # Day-4 V-6 (ADR-RTP-002): WS broadcast fan-out latency histogram.
+        # Observed end-to-end: lock-snapshot + per-client send gather +
+        # disconnected cleanup. Closes audit U8-PERF-M1.
+        import time as _time
+        _t0 = _time.monotonic()
         async with self._lock:
             targets = list(self._clients.values())
 
@@ -105,6 +110,14 @@ class WebSocketHub:
         for cid in disconnected:
             async with self._lock:
                 self._clients.pop(cid, None)
+        try:
+            from observability import ws_broadcast_latency_ms
+            ws_broadcast_latency_ms.observe(
+                (_time.monotonic() - _t0) * 1000.0
+            )
+        except Exception:  # noqa: BLE001
+            # Observability never blocks the broadcast.
+            pass
 
     async def handle_client(self, client: WSClient) -> None:
         """Main receive loop for a connected client."""

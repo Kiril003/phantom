@@ -79,8 +79,22 @@ def reset_providers() -> None:
 
 async def transcribe_blob(raw: bytes, language: str) -> STTResult:
     """Decode and transcribe a caller-supplied audio blob."""
+    import time as _time
+    from observability import voice_stt_latency_ms
+
     audio = decode_to_mono16k(raw)
-    return await get_stt_provider().transcribe(audio, language)
+    t0 = _time.monotonic()
+    result = await get_stt_provider().transcribe(audio, language)
+    elapsed_ms = (_time.monotonic() - t0) * 1000.0
+    # Day-4 V-6 (ADR-RTP-002): histogram observation labelled by engine
+    # so the dashboard can split p50/p95/p99 per backend
+    # (vosk fast-fallback vs faster-whisper vs whisper_npu vs mms_npu).
+    try:
+        voice_stt_latency_ms.observe(elapsed_ms, engine=result.engine)
+    except Exception:  # noqa: BLE001
+        # Observability never raises — STT must keep functioning.
+        pass
+    return result
 
 
 _vosk_model = None

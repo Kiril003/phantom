@@ -514,3 +514,68 @@ acceptance test on /metrics).
 
 ---
 
+## 2026-05-02 01:10 CEST — Wave-2 V-6 DONE (Histogram primitive + 3 SLO instruments)
+
+Closes audit U8-PERF-G1 ("no SLO defined, no histogram, no
+acceptance test that asserts a p50") + U8-PERF-H3 ("chat / STT /
+TTS / AI all log latency_ms into JSON metadata but never
+aggregate"). ADR-RTP-002 lands on disk.
+
+`src/backend/observability.py`:
+- `Histogram` class peers Counter / Gauge — same `_REGISTRY` shape,
+  same `.render()` line-yielding contract. Cumulative buckets
+  (Prometheus convention), `_sum` + `_count` exposition rounded
+  out. Negative + non-numeric observations silently dropped (the
+  metric is non-load-bearing — chat must keep responding even if
+  observability breaks).
+- `DEFAULT_BUCKETS_MS = (5, 10, 25, 50, 100, 250, 500, 1000,
+  2500, 5000, 10000)` — chat-turn / STT / WS-broadcast latency
+  in milliseconds, K8s/multi-instance forward-compatible (Summary
+  quantiles can't aggregate across instances; Histogram buckets
+  can).
+- 3 concrete instruments registered: `chat_response_latency_ms`,
+  `voice_stt_latency_ms` (engine label), `ws_broadcast_latency_ms`.
+- Hand-rolled because pulling `prometheus_client` was rejected at
+  Day-2 (audit budget refuses 'broad pip install' without
+  justification — the Counter / Gauge precedent already established).
+
+Three observation points wired:
+- `routes_chat._build_ai_response` REST POST + WS branches both
+  call `chat_response_latency_ms.observe(latency_ms)` after the
+  existing `latency_ms = int(time.monotonic() - t_start) * 1000)`
+  computation. So a client using either transport contributes to
+  the same SLO.
+- `voice/pipeline.transcribe_blob` times the underlying provider
+  call and observes into `voice_stt_latency_ms` labelled by
+  `engine` (vosk / whisper / whisper_npu / mms_npu) so dashboards
+  can split p50/p95 per backend.
+- `api/websocket_hub.WebSocketHub.broadcast` observes end-to-end:
+  lock-snapshot + per-client send gather + disconnected cleanup.
+  Closes U8-PERF-M1.
+
+Each observation point is wrapped in a `try/except` → `pass` —
+observability never raises into the chat hot-path.
+
+12 contract tests at `tests/test_phase_v6_histogram_primitive.py`:
+- Histogram primitive: cumulative-bucket invariant, negative drop,
+  non-numeric drop, multi-observation cumulative correctness,
+  labelled partitioning per label-key, cold histogram still
+  yields `_count 0`, default buckets match ADR.
+- Concrete instruments: 3 histograms in `_REGISTRY`, `# TYPE …
+  histogram` line emitted.
+- Observation points: `transcribe_blob` records with `engine`
+  label after a stub provider returns; `WebSocketHub.broadcast`
+  records on empty-target broadcast (operator baseline ping);
+  `routes_chat` source-grep asserts `chat_response_latency_ms.observe`
+  appears ≥ 2 times so a refactor dropping one path is caught at
+  static-pin.
+
+Pytest 12/12 V-6 green. Operators can now plot p50/p95/p99 chat /
+STT / WS broadcast latency from `/metrics` in any Prometheus
+backend without an extra exporter dep.
+
+Next: W-2 (ChatScene composer + 6 presets in `src/frontend/src/
+components/chat/scenes/`).
+
+---
+

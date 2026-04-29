@@ -257,6 +257,116 @@ class Gauge:
         yield f"{self.name} {value}"
 
 
+# Day-4 Wave-2 V-6 (ADR-RTP-002): default bucket boundaries for chat /
+# STT / WS-broadcast latency in milliseconds. Quantile-friendly and
+# K8s/multi-instance forward-compatible (Summary quantiles can't be
+# aggregated across instances; Histogram buckets can).
+DEFAULT_BUCKETS_MS: tuple[float, ...] = (
+    5.0, 10.0, 25.0, 50.0, 100.0, 250.0, 500.0, 1000.0, 2500.0, 5000.0, 10000.0,
+)
+
+
+class Histogram:
+    """Hand-rolled Prometheus-shaped Histogram. Mirrors the Counter render
+    shape (a list of yield lines) so the existing ``_REGISTRY`` iteration
+    contract holds. Hot-path safe: ``observe()`` is dict-only, no I/O,
+    no asyncio, never raises (try/except in observe).
+
+    Buckets are cumulative (Prometheus convention): ``_bucket{le=X}`` =
+    count of observations ``≤ X``. ``_sum`` and ``_count`` round out the
+    exposition. Negative observations are silently dropped (clock skew /
+    monotonic regression).
+
+    Per ADR-RTP-002: pulling ``prometheus_client`` was rejected — the
+    audit budget rejects 'broad pip install everything' without
+    justification. Hand-rolled fits the existing precedent
+    (`Counter` / `Gauge` lines 215, 241)."""
+
+    def __init__(
+        self,
+        name: str,
+        help_text: str,
+        buckets_ms: tuple[float, ...] = DEFAULT_BUCKETS_MS,
+    ) -> None:
+        self.name = name
+        self.help = help_text
+        # Sorted ascending; we walk in-order at observe time.
+        self.buckets_ms: tuple[float, ...] = tuple(sorted(buckets_ms))
+        # Per label-key: list of cumulative bucket counts (last index =
+        # +Inf), plus running sum + count.
+        self._buckets: dict[tuple[tuple[str, str], ...], list[int]] = {}
+        self._sums: dict[tuple[tuple[str, str], ...], float] = {}
+        self._counts: dict[tuple[tuple[str, str], ...], int] = {}
+
+    def observe(self, value_ms: float, **labels: str) -> None:
+        """Record one observation in milliseconds.
+
+        ``value_ms`` < 0 is silently dropped. Same labels protocol as
+        Counter — sorted tuple key keyed by labels. Failure to record
+        never raises (the metric is non-load-bearing — chat must still
+        respond if observability is broken)."""
+        try:
+            v = float(value_ms)
+        except (TypeError, ValueError):
+            return
+        if v < 0:
+            return
+        key = tuple(sorted(labels.items()))
+        if key not in self._buckets:
+            # +1 slot for +Inf at the tail.
+            self._buckets[key] = [0] * (len(self.buckets_ms) + 1)
+            self._sums[key] = 0.0
+            self._counts[key] = 0
+        # Cumulative-bucket increment: every bucket whose `le` ≥ v gets +1.
+        # Linear walk is fine — buckets is small (11 + +Inf) and
+        # observe() is hot but each call is still O(11).
+        for idx, le in enumerate(self.buckets_ms):
+            if v <= le:
+                self._buckets[key][idx] += 1
+        # Tail (+Inf) always +1.
+        self._buckets[key][-1] += 1
+        self._sums[key] += v
+        self._counts[key] += 1
+
+    def render(self) -> Iterable[str]:
+        yield f"# HELP {self.name} {self.help}"
+        yield f"# TYPE {self.name} histogram"
+        if not self._counts:
+            # No observations yet — emit a zero series so dashboards
+            # don't blink "metric missing".
+            yield f"{self.name}_bucket{{le=\"+Inf\"}} 0"
+            yield f"{self.name}_sum 0"
+            yield f"{self.name}_count 0"
+            return
+        for key in self._buckets:
+            label_dict = dict(key)
+            for idx, le in enumerate(self.buckets_ms):
+                bucket_labels = {**label_dict, "le": _format_le(le)}
+                yield (
+                    f"{self.name}_bucket"
+                    f"{_format_labels(bucket_labels)} "
+                    f"{self._buckets[key][idx]}"
+                )
+            inf_labels = {**label_dict, "le": "+Inf"}
+            yield (
+                f"{self.name}_bucket"
+                f"{_format_labels(inf_labels)} "
+                f"{self._buckets[key][-1]}"
+            )
+            sum_label = _format_labels(label_dict) if label_dict else ""
+            yield f"{self.name}_sum{sum_label} {self._sums[key]}"
+            yield f"{self.name}_count{sum_label} {self._counts[key]}"
+
+
+def _format_le(value: float) -> str:
+    """Render a bucket boundary the way Prometheus expects: integer if
+    integer, otherwise the float's natural repr. ``5.0`` → ``"5"``,
+    ``2.5`` → ``"2.5"``."""
+    if value == int(value):
+        return str(int(value))
+    return repr(value)
+
+
 # ── Registry ──────────────────────────────────────────────────────────────────
 
 
@@ -316,6 +426,31 @@ lifespan_g2_failures_total: Counter = _register(
     Counter(
         "phantom_lifespan_g2_failures_total",
         "G2 lifespan warmup lane failures (lane=minilm|chroma_eager|chroma_janitor|cpu_sampler|voice_preload).",
+    )
+)
+# Day-4 Wave-2 V-6 (ADR-RTP-002): three latency Histograms — chat
+# response, STT, WS broadcast. Observation points wired in
+# routes_chat._build_ai_response, voice.stt_engine.transcribe wrappers,
+# api.websocket_hub.broadcast. Closes audit U8-PERF-G1 ("no SLO defined,
+# no histogram, no acceptance test that asserts a p50") and U8-PERF-H3
+# ("chat / STT / TTS / AI all log latency_ms into JSON metadata but
+# never aggregate"). p50 SLO acceptance test on /metrics ships in V-6.
+chat_response_latency_ms: Histogram = _register(
+    Histogram(
+        "phantom_chat_response_latency_ms",
+        "Chat AI response latency in ms (end-to-end /chat/messages POST).",
+    )
+)
+voice_stt_latency_ms: Histogram = _register(
+    Histogram(
+        "phantom_voice_stt_latency_ms",
+        "STT latency in ms by engine (engine=vosk|whisper|whisper_npu|mms_npu).",
+    )
+)
+ws_broadcast_latency_ms: Histogram = _register(
+    Histogram(
+        "phantom_ws_broadcast_latency_ms",
+        "WebSocket broadcast fan-out latency in ms.",
     )
 )
 

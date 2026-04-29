@@ -526,6 +526,15 @@ async def send_message(
         )
 
     latency_ms = int((time.monotonic() - t_start) * 1000)
+    # Day-4 V-6 (ADR-RTP-002): chat response latency histogram. Wired
+    # here (after the AI provider returns + the response forms compute)
+    # so the bucket reflects the full /chat/messages POST budget the
+    # operator promises in the SLO. Failure to record never raises.
+    try:
+        from observability import chat_response_latency_ms
+        chat_response_latency_ms.observe(float(latency_ms))
+    except Exception:  # noqa: BLE001
+        pass
     snap = context_engine.get_snapshot()
 
     # Store assistant message in DB
@@ -776,6 +785,14 @@ async def _ws_chat_handler(type_: str, data: dict, client: Any) -> None:
                 return
 
             latency_ms = int((time.monotonic() - t_start) * 1000)
+            # Day-4 V-6 (ADR-RTP-002): chat response latency histogram —
+            # WS path mirror of the REST observation point above so a
+            # client using either transport contributes to the same SLO.
+            try:
+                from observability import chat_response_latency_ms
+                chat_response_latency_ms.observe(float(latency_ms))
+            except Exception:  # noqa: BLE001
+                pass
             snap = context_engine.get_snapshot()
 
             tone_desc = ""

@@ -472,3 +472,26 @@ class StandingOrder(Base):
     last_fired_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     fire_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     last_outcome: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+
+# Day-4 Wave-2 FACTS-1 (ADR-FCT-001): UserFact ORM (closes U6-ID-* class)
+# - Profile facts (email, phone, telegram, discord, file_pointer) attached
+#   to a User. `value_encrypted` holds a Fernet token from
+#   `security.crypto.encrypt_pii`; raw plaintext is never persisted.
+# - Composite index (user_id, category) accelerates 'all phones for user X'.
+# - ondelete=CASCADE: deleting a User vacates their facts.
+
+class UserFact(Base):
+    __tablename__ = "user_facts"
+    __table_args__ = (
+        Index("ix_user_facts_user_category", "user_id", "category"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    category: Mapped[str] = mapped_column(String(32), nullable=False)
+    label: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    value_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)

@@ -1424,3 +1424,65 @@ Next: FACTS-1 (UserFact ORM + CRUD route + require_self_or_root).
 
 ---
 
+## 2026-05-02 09:55 CEST — Wave-2 FACTS-1 DONE (UserFact CRUD + RBAC)
+
+ADR-FCT-001..004. Closes audit U6-ID-G1 (guests can read own profile
+facts but cannot pivot to others') and the U6-ID schema gap (no
+encrypted-PII storage for email/phone/telegram/discord/file_pointer).
+
+  src/backend/db/models.py        — UserFact ORM appended (7 columns:
+                                     id/user_id/category/label/
+                                     value_encrypted/created_at/
+                                     updated_at). Composite index
+                                     (user_id, category). FK
+                                     ondelete=CASCADE.
+  src/backend/db/migrations/007_user_facts.py (NEW) — idempotent
+                                     upgrade migration for pre-Day-4
+                                     DBs (auto-runs at lifespan via
+                                     migrations/__init__.py rglob).
+  src/backend/security/permissions.py
+                                  — require_self_or_root() function-
+                                     based dep (Path injection needs
+                                     a function, not a class).
+  src/backend/api/routes_user_facts.py (NEW) — 5 endpoints:
+                                     POST/PUT/DELETE → require_root +
+                                       audit row via AgentAuditEntry
+                                       with action_name="user_fact"
+                                       (best-effort; never crashes
+                                       the route)
+                                     GET (list/single) →
+                                       require_self_or_root
+                                  — Plaintext NEVER persisted: every
+                                     value passes through Fernet via
+                                     security.crypto.encrypt_pii.
+                                     decrypt_pii at the read path
+                                     surfaces plaintext to the
+                                     caller. Corrupt token →
+                                     "[corrupt]" placeholder + WARN.
+                                     PUT body must carry value or
+                                     label; empty body → 400.
+  src/backend/main.py             — wires user_facts_router under
+                                     /api/v1.
+
+14 FACTS-1 contract tests:
+  - UserFact ORM has 7 columns + composite index.
+  - require_self_or_root: ROOT passes, self passes, OPERATOR pivot
+    → 403 with X-Error-Code=RBAC_NOT_SELF_OR_ROOT.
+  - POST requires ROOT (OPERATOR → 403; unknown user → 404).
+  - Plaintext round-trips via the read path; second POST yields a
+    different id (round-trip with randomised Fernet IV indirection).
+  - GET self-or-ROOT: list returns decrypted values; pivot → 403.
+  - PUT rotates value-only or label-only; empty body → 400.
+  - DELETE → 204 + GET → 404 confirmed.
+
+14/14 FACTS-1 green.
+
+The UserFact surface is ready for the W-2 identity-card panel
+consumer + the Day-5 chat-tool dispatcher's `recall_user_facts`
+adapter. Day-4 ships the storage + RBAC layer; visualisation +
+chat-tool wiring are Day-5.
+
+Next: IDB-2 (shared-PIN guard + /api/auth/users/picker route).
+
+---
+

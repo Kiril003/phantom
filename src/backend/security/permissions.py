@@ -4,7 +4,7 @@ Role hierarchy: ROOT > OPERATOR > GUEST
 """
 from __future__ import annotations
 
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Path, status
 
 from db.models import User
 from security.auth import get_current_user
@@ -37,3 +37,33 @@ class RoleChecker:
 require_guest = RoleChecker("GUEST")
 require_operator = RoleChecker("OPERATOR")
 require_root = RoleChecker("ROOT")
+
+
+# ── Day-4 Wave-2 FACTS-1 (ADR-FCT-004) ────────────────────────────────────────
+
+
+async def require_self_or_root(
+    user_id: str = Path(..., description="Path-param user id"),
+    current_user: User = Depends(get_current_user),
+) -> User:
+    """Allow the request when the caller is ROOT OR the user_id in
+    the path matches the caller's own id.
+
+    This is a FUNCTION (not a class instance like RoleChecker) because
+    FastAPI's dependency resolver only injects ``Path``/``Query``/
+    ``Header`` parameters into plain async functions, not class
+    ``__call__`` methods.
+
+    Returns the resolved User so the route handler doesn't re-resolve
+    via another `get_current_user` Depends.
+
+    Closes audit U6-ID-G1 — guests can read their own profile facts
+    but cannot pivot to another user's.
+    """
+    if current_user.role == "ROOT" or current_user.id == user_id:
+        return current_user
+    raise HTTPException(
+        status_code=status.HTTP_403_FORBIDDEN,
+        detail="Requires ROOT role or matching user id",
+        headers={"X-Error-Code": "RBAC_NOT_SELF_OR_ROOT"},
+    )

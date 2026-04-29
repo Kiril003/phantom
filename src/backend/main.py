@@ -93,6 +93,74 @@ async def _context_loop() -> None:
         await asyncio.sleep(interval)
 
 
+async def _tactical_memory_janitor_loop() -> None:
+    """Audit-2026-04-29 — tactical memory janitor.
+
+    Runs once per hour. For each user:
+      1. Promotes expired tactical facts (importance ≥ threshold) to
+         strategic memory (ChromaDB) so they survive the 24-h window.
+      2. Prunes expired facts below the threshold from SQLite outright.
+
+    Without this loop, the tactical layer grows unboundedly — the
+    ``promote_expired_facts`` and ``prune_old_facts`` functions in
+    ``memory/tactical_memory.py`` existed but were never called.
+    """
+    JANITOR_INTERVAL_S = 3600  # 1 hour
+
+    # Let the rest of the system stabilise before the first sweep.
+    await asyncio.sleep(60)
+
+    while True:
+        try:
+            from db.database import get_session
+            from db.models import User
+            from sqlalchemy import select as _select
+            from memory.tactical_memory import promote_expired_facts, prune_old_facts
+            from memory.strategic_memory import store_fact as strategic_store
+
+            async with get_session() as db:
+                rows = await db.execute(_select(User.id))
+                user_ids = [row[0] for row in rows.all()]
+
+            for uid in user_ids:
+                try:
+                    async with get_session() as db:
+                        promotable = await promote_expired_facts(db, uid)
+                        pruned = await prune_old_facts(db, uid)
+                        await db.commit()
+
+                    # Store promoted facts in ChromaDB (outside the SQL
+                    # session — ChromaDB is sync-in-thread, not a DB txn).
+                    for fact in promotable:
+                        try:
+                            await strategic_store(
+                                user_id=uid,
+                                fact_id=fact["id"],
+                                content=fact["content"],
+                                category=fact.get("category", "fact"),
+                                importance=fact.get("importance", 0.5),
+                            )
+                        except Exception as exc:
+                            logger.debug(
+                                "Tactical janitor: strategic store failed "
+                                "for fact %s: %s", fact["id"], exc,
+                            )
+
+                    if promotable or pruned:
+                        logger.info(
+                            "Tactical janitor [%s]: promoted=%d pruned=%d",
+                            uid, len(promotable), pruned,
+                        )
+                except Exception as exc:
+                    logger.debug(
+                        "Tactical janitor: user %s sweep failed: %s", uid, exc,
+                    )
+        except Exception as exc:
+            logger.error("Tactical janitor loop error: %s", exc)
+
+        await asyncio.sleep(JANITOR_INTERVAL_S)
+
+
 async def _start_serial_bridge() -> None:
     """Start serial bridge if port is available."""
     from sensors.serial_bridge import serial_bridge
@@ -410,6 +478,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Start tick loop for time-driven context updates
     loop_task = asyncio.create_task(_context_loop(), name="context_loop")
 
+    # Audit-2026-04-29 — tactical memory janitor (promotes expired facts
+    # to strategic memory + prunes stale rows, once per hour).
+    janitor_task = asyncio.create_task(
+        _tactical_memory_janitor_loop(), name="tactical_memory_janitor",
+    )
+
     # Start OLED face animator (Phase 08). It self-gates on
     # oled_animation_enabled inside its loop so a setting flip is picked up
     # without restarting the task.
@@ -504,8 +578,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     yield
 
     loop_task.cancel()
+    janitor_task.cancel()
     try:
         await loop_task
+    except asyncio.CancelledError:
+        pass
+    try:
+        await janitor_task
     except asyncio.CancelledError:
         pass
 

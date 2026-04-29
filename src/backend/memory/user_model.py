@@ -19,8 +19,6 @@ logger = logging.getLogger(__name__)
 
 @dataclass
 class BehavioralModel:
-    response_preference: str = ""
-    stress_patterns: str = ""
     vocabulary: list[str] = field(default_factory=list)
     decision_style: str = "analytical"
     trust_level: float = 0.5
@@ -29,7 +27,6 @@ class BehavioralModel:
     avoid_topics: list[str] = field(default_factory=list)
     interaction_count: int = 0
     days_active: int = 0
-    breathing_signature: list[float] | None = None
     language_stats: dict[str, float] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:

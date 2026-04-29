@@ -55,9 +55,20 @@ async def init_chroma_eager() -> dict[str, Any]:
     def _warm() -> dict[str, Any]:
         t0 = _t.monotonic()
         client = _get_client()
-        cols = client.list_collections()
+        try:
+            cols = client.list_collections()
+            count = len(cols)
+        except (KeyError, Exception) as exc:
+            # Phase 9.4c audit hotfix — Chroma 0.5.x raises KeyError: '_type'
+            # if the metadata JSON in chroma.sqlite3 was written by an
+            # incompatible older version. Log it and return 0 so the
+            # system continues; readyz will report 503 if strict health
+            # is required.
+            logger.error("Chroma list_collections failed (likely metadata version mismatch): %s", exc)
+            count = 0
+
         return {
-            "collections": len(cols),
+            "collections": count,
             "elapsed_ms": int((_t.monotonic() - t0) * 1000),
         }
 
@@ -144,8 +155,18 @@ def _live_collection_ids(client: Any) -> set[str]:
     currently considers live. Each Collection object exposes `.id` —
     str(UUID) — which matches the on-disk dir name."""
     out: set[str] = set()
-    for col in client.list_collections():
-        cid = getattr(col, "id", None)
+    try:
+        cols = client.list_collections()
+    except (KeyError, Exception) as exc:
+        logger.error("Chroma list_collections failed in janitor: %s", exc)
+        return out
+
+    for col in cols:
+        # Defensive check: some versions return dicts, some return objects.
+        if isinstance(col, dict):
+            cid = col.get("id")
+        else:
+            cid = getattr(col, "id", None)
         if cid is not None:
             out.add(str(cid))
     return out

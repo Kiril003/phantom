@@ -32,7 +32,6 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.database import get_db
 from db.models import User, UserFact
-from security.auth import get_current_user
 from security.crypto import InvalidToken, decrypt_pii, encrypt_pii
 from security.permissions import require_root, require_self_or_root
 
@@ -258,7 +257,9 @@ async def update_fact(
 
 
 @router.delete(
-    "/users/{user_id}/facts/{fact_id}", status_code=status.HTTP_204_NO_CONTENT
+    "/users/{user_id}/facts/{fact_id}",
+    status_code=status.HTTP_204_NO_CONTENT,
+    response_model=None,
 )
 async def delete_fact(
     user_id: str,

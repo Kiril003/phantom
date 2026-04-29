@@ -481,6 +481,14 @@ class StandingOrder(Base):
         String(36), nullable=True, index=True
     )
     claimed_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # Day-4 Wave-2 T-2 (ADR-SOH-003): denormalised action kind for
+    # fast filtering (operator console, per-kind metrics) and for the
+    # Day-5 dispatcher's match-table on kind. action_json continues
+    # to hold the full payload; this column is populated on POST +
+    # backfilled by migration 009 (legacy {"goal": "..."} → "task").
+    action_kind: Mapped[Optional[str]] = mapped_column(
+        String(16), nullable=True, index=True
+    )
 
 # Day-4 Wave-2 FACTS-1 (ADR-FCT-001): UserFact ORM (closes U6-ID-* class)
 # - Profile facts (email, phone, telegram, discord, file_pointer) attached

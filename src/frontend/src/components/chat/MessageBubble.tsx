@@ -1,5 +1,6 @@
+import { useCallback, useState } from 'react';
 import { motion } from 'framer-motion';
-import { User, Sparkles, Mic, Hash, Info } from 'lucide-react';
+import { User, Sparkles, Mic, Hash, Info, Copy, Check } from 'lucide-react';
 import type { ChatMessage } from '@shared/types';
 import { ResponseRenderer } from './ResponseRenderer';
 import { ChatScene } from './scenes';
@@ -30,6 +31,24 @@ export function MessageBubble({ message, streaming = false, compact = false }: M
   const provider = (meta as { ai_provider?: string }).ai_provider;
   const latency = (meta as { latency_ms?: number }).latency_ms;
   const tokens = (meta as { tokens_used?: number }).tokens_used;
+
+  // Day-5 D5-DSGN5 — copy-to-clipboard. Touch-device-friendly: tap
+  // toggles to a "Copied" state for ~1.4s then resets. We copy the
+  // raw `content` string; rich scenes still get a plain-text dump
+  // through their own data fields downstream (good enough for now).
+  const [copied, setCopied] = useState(false);
+  const handleCopy = useCallback(() => {
+    const text =
+      typeof message.content === 'string' ? message.content : String(message.content ?? '');
+    if (!text) return;
+    if (navigator.clipboard && typeof navigator.clipboard.writeText === 'function') {
+      navigator.clipboard.writeText(text).catch(() => {
+        /* clipboard API guarded; nothing to do */
+      });
+    }
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1400);
+  }, [message.content]);
 
   if (isSystem) {
     return (
@@ -78,7 +97,7 @@ export function MessageBubble({ message, streaming = false, compact = false }: M
         {isUser ? <User size={15} strokeWidth={1.75} /> : <Sparkles size={15} strokeWidth={1.75} />}
       </div>
 
-      <div className="flex flex-col gap-1 min-w-0">
+      <div className="flex flex-col gap-1 min-w-0 group">
         {/* Bubble */}
         <div
           className={`relative ${isUser ? 'glass-subtle' : 'glass-panel'}`}
@@ -87,15 +106,58 @@ export function MessageBubble({ message, streaming = false, compact = false }: M
             borderRadius: 18,
             borderTopLeftRadius: isUser ? 18 : 6,
             borderTopRightRadius: isUser ? 6 : 18,
+            // Day-5 D5-DSGN5 — user bubbles get a subtle accent tint
+            // on the trailing edge so the side-of-conversation reads
+            // immediately even at a glance. Assistant keeps the
+            // standard glass-panel + accent-glow halo.
+            background: isUser
+              ? 'linear-gradient(135deg, color-mix(in srgb, var(--accent) 8%, var(--glass-subtle)), var(--glass-subtle))'
+              : undefined,
+            borderColor: isUser
+              ? 'color-mix(in srgb, var(--accent) 22%, var(--glass-border))'
+              : undefined,
             fontFamily: 'var(--font-display)',
             fontSize: 'var(--fs-base)',
             color: 'var(--ink-primary)',
             lineHeight: 'var(--lh-normal)',
             boxShadow: isUser
-              ? 'inset 0 1px 0 var(--glass-highlight)'
+              ? 'inset 0 1px 0 var(--glass-highlight), 0 6px 18px -8px color-mix(in srgb, var(--accent) 14%, transparent)'
               : '0 4px 20px -4px color-mix(in srgb, var(--accent) 10%, transparent), inset 0 1px 0 var(--glass-highlight)',
           }}
         >
+          {/* Day-5 D5-DSGN5 — copy button. Sits just inside the bubble
+              corner opposite the avatar; appears on hover for desktop
+              and is always tappable on touch (44x44 hit area). */}
+          {!streaming && message.content && (
+            <button
+              type="button"
+              onClick={handleCopy}
+              aria-label={copied ? 'Copied' : 'Copy message'}
+              data-testid="message-copy-button"
+              data-copied={copied ? '1' : '0'}
+              className="absolute flex items-center justify-center transition-all opacity-0 group-hover:opacity-100 focus:opacity-100 active:scale-95"
+              style={{
+                top: -6,
+                [isUser ? 'left' : 'right']: -6,
+                width: 28,
+                height: 28,
+                minWidth: 28,
+                minHeight: 28,
+                borderRadius: 9999,
+                background: copied
+                  ? 'color-mix(in srgb, var(--signal-ok) 18%, transparent)'
+                  : 'var(--glass-elevated)',
+                border: copied
+                  ? '1px solid color-mix(in srgb, var(--signal-ok) 60%, transparent)'
+                  : '1px solid var(--glass-border)',
+                color: copied ? 'var(--signal-ok)' : 'var(--ink-secondary)',
+                backdropFilter: 'blur(12px)',
+                boxShadow: '0 4px 12px -4px rgba(0,0,0,0.45)',
+              }}
+            >
+              {copied ? <Check size={13} strokeWidth={2} /> : <Copy size={12} strokeWidth={1.75} />}
+            </button>
+          )}
           {/*
             Day-4 W-2: when the message carries a typed `scene` envelope,
             the ChatScene composer takes over from ResponseRenderer. Per

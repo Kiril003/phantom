@@ -131,56 +131,12 @@ export const contextApi = {
 };
 
 /* ─── Voice ───────────────────────────────────────────────────────────────── */
-
-export interface TTSRequest {
-  text: string;
-  voice: string;
-  speed: number;
-  emotion_scale: number;
-}
-
-export interface STTResponse {
-  text: string;
-  confidence: number;
-  engine: 'whisper' | 'vosk';
-  language: string;
-}
-
-export const voiceApi = {
-  tts: async (req: TTSRequest): Promise<Blob> => {
-    const token = localStorage.getItem('phantom_token');
-    const headers: Record<string, string> = {
-      'Content-Type': 'application/json',
-    };
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-
-    const res = await fetch(`${BASE}/voice/tts`, {
-      method: 'POST',
-      headers,
-      credentials: 'include',
-      body: JSON.stringify(req),
-    });
-    if (!res.ok) throw new ApiError(res.status, 'TTS_ERROR', 'TTS request failed');
-    return res.blob();
-  },
-  stt: async (audioBlob: Blob): Promise<STTResponse> => {
-    const token = localStorage.getItem('phantom_token');
-    const headers: Record<string, string> = {};
-    if (token) headers['Authorization'] = `Bearer ${token}`;
-
-    const form = new FormData();
-    form.append('file', audioBlob, 'audio.wav');
-
-    const res = await fetch(`${BASE}/voice/stt`, {
-      method: 'POST',
-      headers,
-      credentials: 'include',
-      body: form,
-    });
-    if (!res.ok) throw new ApiError(res.status, 'STT_ERROR', 'STT request failed');
-    return res.json();
-  },
-};
+// Voice client lives in `services/voiceApi.ts` — it owns the canonical
+// `voiceApi.transcribe` / `voiceApi.synthesize` / `voiceApi.status` shape
+// (typed `VoiceSTTResponse` with `wake_word_matched`, multi-engine union).
+// The previous `voiceApi`/`TTSRequest`/`STTResponse` block lived here too
+// but was never imported anywhere — only the voiceApi.ts copy was used —
+// so the api.ts duplicate was dropped. Closes audit B-15 + B-16.
 
 /* ─── Settings ────────────────────────────────────────────────────────────── */
 

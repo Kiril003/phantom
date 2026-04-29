@@ -20,6 +20,8 @@ import {
 import { StatusBar } from '../core/StatusBar';
 import { FloatingToolbar } from '../core/FloatingToolbar';
 import { useSettingsStore } from '../../stores/settingsStore';
+import { useFamiliarStore } from '../../stores/familiarStore';
+import type { FamiliarRarity } from '@shared/types';
 import {
   settingsApi,
   aiApi,
@@ -692,6 +694,10 @@ export default function SettingsPanel() {
               <>
                 {activeCategory.id === 'ai' && <AIProviderDiagnostics />}
                 {activeCategory.id === 'voice' && <NPUDiagnostics />}
+                {(activeCategory.id === 'profile' ||
+                  activeCategory.id === 'personality') && (
+                  <FamiliarControlSection />
+                )}
                 {activeCategory.settings.length === 0 && (
                   <div
                     className="playfair"
@@ -1926,6 +1932,213 @@ function AboutRow({ label, value }: { label: string; value: string }) {
       >
         {value}
       </span>
+    </div>
+  );
+}
+
+/* ─── Familiar control (Phase-5 R1-FAMILIAR-1) ───────────────────────────
+ *
+ * Embedded inside the Profile / Personality category. Lets the operator:
+ *   - pick how often the Familiar appears (off / rare / normal / often)
+ *   - test-summon the creature on demand (bypasses the rarity gate)
+ *
+ * The rarity is mirrored into localStorage so the choice survives a hard
+ * refresh; the familiarStore reads it back on next bootstrap. We keep the
+ * persistence inside this component because the wisp is a pure-FE feature
+ * — there's no backend setting row to mirror. */
+
+const FAMILIAR_RARITY_LS_KEY = 'phantom-familiar-rarity';
+
+function loadFamiliarRarity(): FamiliarRarity {
+  if (typeof window === 'undefined') return 'normal';
+  try {
+    const raw = window.localStorage.getItem(FAMILIAR_RARITY_LS_KEY);
+    if (raw === 'off' || raw === 'rare' || raw === 'normal' || raw === 'often') {
+      return raw;
+    }
+  } catch {
+    /* ignore */
+  }
+  return 'normal';
+}
+
+function saveFamiliarRarity(r: FamiliarRarity): void {
+  if (typeof window === 'undefined') return;
+  try {
+    window.localStorage.setItem(FAMILIAR_RARITY_LS_KEY, r);
+  } catch {
+    /* quota — ignore */
+  }
+}
+
+function FamiliarControlSection() {
+  const rarity = useFamiliarStore((s) => s.rarity);
+  const setRarity = useFamiliarStore((s) => s.setRarity);
+  const manifest = useFamiliarStore((s) => s.manifest);
+
+  // Hydrate from localStorage on first mount.
+  useEffect(() => {
+    const stored = loadFamiliarRarity();
+    if (stored !== rarity) setRarity(stored);
+    // Run once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const options: Array<{ id: FamiliarRarity; label: string; blurb: string }> = [
+    { id: 'off', label: 'Off', blurb: 'Familiar dormant.' },
+    { id: 'rare', label: 'Rare', blurb: '~1 in 8 attempts.' },
+    { id: 'normal', label: 'Normal', blurb: '~1 in 3 attempts.' },
+    { id: 'often', label: 'Often', blurb: '~2 in 3 attempts.' },
+  ];
+
+  const handleSelect = (r: FamiliarRarity) => {
+    setRarity(r);
+    saveFamiliarRarity(r);
+  };
+
+  const handleTestSummon = () => {
+    manifest('easter-egg', { force: true });
+  };
+
+  return (
+    <div
+      className="sub-glass"
+      style={{
+        padding: '12px 14px',
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 10,
+        borderRadius: 12,
+      }}
+      data-testid="familiar-control"
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span
+          aria-hidden
+          style={{
+            width: 12,
+            height: 12,
+            borderRadius: 999,
+            background:
+              'radial-gradient(circle at 30% 30%, #ffffff, #f4af25 70%)',
+            boxShadow: '0 0 12px rgba(244,175,37,0.55)',
+          }}
+        />
+        <span className="eyebrow-amber">PHANTOM Familiar</span>
+        <span
+          className="micro-label"
+          style={{
+            padding: '1px 7px',
+            borderRadius: 999,
+            background: 'rgba(244,175,37,0.18)',
+            color: '#8a5e0a',
+            fontWeight: 700,
+          }}
+        >
+          {rarity.toUpperCase()}
+        </span>
+      </div>
+
+      <div
+        className="playfair"
+        style={{
+          fontSize: 11,
+          color: 'var(--ink-secondary)',
+          fontStyle: 'italic',
+          lineHeight: 1.4,
+        }}
+      >
+        A small wisp that occasionally appears, points at things, and waves.
+        Set how often it manifests — or summon one now.
+      </div>
+
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
+        {options.map((opt) => {
+          const selected = opt.id === rarity;
+          return (
+            <button
+              key={opt.id}
+              type="button"
+              onClick={() => handleSelect(opt.id)}
+              aria-pressed={selected}
+              style={{
+                minHeight: 44,
+                padding: '6px 8px',
+                borderRadius: 10,
+                border: selected
+                  ? '2px solid #f4af25'
+                  : '1px solid rgba(0,0,0,0.08)',
+                background: selected
+                  ? 'rgba(244,175,37,0.18)'
+                  : 'rgba(255,255,255,0.50)',
+                cursor: 'pointer',
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'flex-start',
+                gap: 2,
+                textAlign: 'left',
+              }}
+            >
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: selected ? '#8a5e0a' : 'var(--ink-primary)',
+                }}
+              >
+                {opt.label}
+              </span>
+              <span
+                style={{
+                  fontSize: 9,
+                  color: 'var(--ink-muted)',
+                  letterSpacing: '0.02em',
+                }}
+              >
+                {opt.blurb}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <button
+          type="button"
+          onClick={handleTestSummon}
+          style={{
+            minHeight: 44,
+            padding: '0 14px',
+            borderRadius: 9999,
+            background: 'linear-gradient(135deg,#f4af25,#fb923c)',
+            color: 'white',
+            border: 'none',
+            cursor: 'pointer',
+            fontFamily: 'var(--font-display)',
+            fontSize: 11,
+            fontWeight: 700,
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            boxShadow: '0 4px 14px rgba(244,175,37,0.40)',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+          }}
+          title="Force-summon the Familiar (bypasses rarity gate)"
+        >
+          Test summon
+        </button>
+        <span
+          className="mono"
+          style={{
+            fontSize: 10,
+            color: 'var(--ink-muted)',
+          }}
+        >
+          Honours `prefers-reduced-motion: reduce` — the wisp fades in/out
+          instead of drifting when motion is reduced.
+        </span>
+      </div>
     </div>
   );
 }

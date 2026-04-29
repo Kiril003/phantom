@@ -233,7 +233,38 @@ class CheckpointSceneData(_SceneBase):
 ToolSceneKind = Literal[
     "timer", "alarm", "calendar", "files",
     "audit", "wardriving", "location", "checkpoint",
+    "phantom_manifest",
 ]
+
+
+# ── Phantom Familiar (R1-FAMILIAR-1) ────────────────────────────────────────
+
+
+FamiliarPose = Literal[
+    "idle", "floating", "pointing", "peeking",
+    "sleeping", "waving", "vanishing",
+]
+
+
+class FamiliarTargetData(_SceneBase):
+    """Anchor for a `pointing` summon. Either a CSS selector OR a
+    viewport coordinate; both fields are optional and the FE applies a
+    sensible fallback when neither is supplied."""
+    selector: Optional[str] = None
+    x: Optional[Annotated[float, Field(ge=0.0, le=4096.0)]] = None
+    y: Optional[Annotated[float, Field(ge=0.0, le=4096.0)]] = None
+
+
+class PhantomManifestSceneData(_SceneBase):
+    """Body of a `phantom_manifest` chat scene — when the AI explicitly
+    summons the Familiar inside a reply. The FE renderer (the chat
+    `PhantomManifestScene` component) calls
+    `familiarStore.manifest('ai-summon', …)` on mount, which bypasses
+    the rarity gate so the creature is guaranteed to appear."""
+    pose: FamiliarPose = "waving"
+    message: Optional[Annotated[str, Field(max_length=240)]] = None
+    duration_ms: Optional[Annotated[int, Field(ge=500, le=30_000)]] = None
+    target: Optional[FamiliarTargetData] = None
 
 
 class ChatToolScene(_SceneBase):
@@ -244,7 +275,7 @@ class ChatToolScene(_SceneBase):
     data: (
         TimerSceneData | AlarmSceneData | CalendarSceneData | FilesSceneData
         | AuditSceneData | WardrivingSceneData | LocationSceneData
-        | CheckpointSceneData
+        | CheckpointSceneData | PhantomManifestSceneData
     )
 
 
@@ -280,6 +311,9 @@ __all__ = [
     "LocationStop",
     "CheckpointSceneData",
     "CheckpointInclusion",
+    "PhantomManifestSceneData",
+    "FamiliarTargetData",
+    "FamiliarPose",
     "ChatToolScene",
     "ToolResult",
     "ToolSceneKind",

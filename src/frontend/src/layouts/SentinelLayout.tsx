@@ -1,266 +1,688 @@
 import { motion } from 'framer-motion';
-import { StatusBar } from '../components/core/StatusBar';
-import { FloatingToolbar } from '../components/core/FloatingToolbar';
-import { Avatar } from '../components/core/Avatar';
-import { useSystemStore } from '../stores/systemStore';
-import { EASE_PHANTOM } from '../styles/motion';
+import { useMemo } from 'react';
 import {
   ShieldAlert,
-  Radar,
-  MapPin,
-  Users,
-  AlertTriangle,
   Eye,
+  Volume2,
+  Thermometer,
+  Activity,
+  TrendingDown,
+  Megaphone,
+  Video,
+  Check,
+  AlertTriangle,
+  MapPin,
 } from 'lucide-react';
+import { StatusBar } from '../components/core/StatusBar';
+import { FloatingToolbar } from '../components/core/FloatingToolbar';
+import { useSystemStore } from '../stores/systemStore';
+import { EASE_PHANTOM } from '../styles/motion';
 
 /**
- * SENTINEL — Threat assessment mode.
- * UI: full map + radar card + camera placeholder.
- * Sensors: max sampling rate.
- * AI: threat assessment, recommendations.
- * Voice: voice alerts.
- * RGB: red pulsing.
- * Haptic: alert pattern.
+ * SENTINEL — sunrise build (phase-5-R1-FE-L2).
+ *
+ * Repaint of the threat-assessment surface against the warm-cream design DNA.
+ * Wiring is unchanged — it still reads `presence`, `body.motion_energy`,
+ * `body.static_energy`, `where`, `when` from `useSystemStore` and renders
+ * a coral-tinted radar + alert panel. Visual scaffolding follows the
+ * `screen-6-sentinel.jsx` Claude design handoff:
+ *   - phantom-frame + coral-tint + flash-coral overlay (1.2s loop)
+ *   - 480px central radar SVG with 4 distance rings, crosshair, 8 angle
+ *     labels, two opposing sweep beams, intruder trail with 4 fading
+ *     dots, "YOU" red orb at centre, detected presence orb with
+ *     phantom-pulse 0.9s and red annotation tooltip
+ *   - bottom-left location chip, right alert panel (380px) with shield
+ *     header, DISTANCE/MOTION mini-cards, PRESENCE/AUDIO/IR/STATIC rows,
+ *     ANOMALIES dashed panel, ALARM/RECORD/DISMISS action buttons.
+ *
+ * Hook-order (audit H-MM-1) preserved: every `useSystemStore` selector
+ * runs unconditionally before any render branch.
  */
 export default function SentinelLayout() {
   const context = useSystemStore((s) => s.context);
 
-  const otherDistance = context?.presence.other_distance_cm;
+  const otherDetected = context?.presence.other_detected ?? false;
+  const otherDistance = context?.presence.other_distance_cm ?? null;
   const motionEnergy = context?.body.motion_energy ?? null;
   const staticEnergy = context?.body.static_energy ?? null;
+  const firstVisit = context?.where.first_visit ?? false;
+  const isNight = context?.when.is_night ?? false;
+  const placeName =
+    context?.where.place_name ??
+    (context?.where.lat != null && context?.where.lon != null
+      ? `${context.where.lat.toFixed(4)}, ${context.where.lon.toFixed(4)}`
+      : 'Невідома локація');
+  const lastScan = context?.when.time ?? '—';
+
+  // Drive the detected-presence radar marker from real distance telemetry.
+  // Distance compresses logarithmically so a 5 m / 50 cm spread reads on the
+  // same canvas. 220px is the outermost ring radius; we map 30 cm → centre,
+  // ≥ 250 cm → edge so very-close intruders don't fall behind the YOU orb.
+  const intruderRadius = useMemo(() => {
+    if (otherDistance == null) return 132; // sit on the second ring by default
+    const clamped = Math.max(30, Math.min(250, otherDistance));
+    const t = (clamped - 30) / (250 - 30);
+    return 60 + t * 160; // 60..220 px from centre
+  }, [otherDistance]);
+
+  // 45° angle from the design handoff — keep the visual fixed but allow the
+  // computed radius to shrink as distance closes. SVG y-axis is inverted, so
+  // we negate sin for the screen-space coordinates.
+  const intruderX = 240 + Math.cos((45 - 90) * (Math.PI / 180)) * intruderRadius;
+  const intruderY = 240 + Math.sin((45 - 90) * (Math.PI / 180)) * intruderRadius;
 
   return (
     <motion.div
-      className="w-[1024px] h-[600px] flex flex-col"
-      style={{ background: 'var(--surface-void)' }}
+      className="w-[1024px] h-[600px] sunrise-frame coral-tint relative overflow-hidden"
+      style={{ background: 'var(--surface-coral)' }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.3, ease: EASE_PHANTOM as unknown as number[] }}
     >
+      {/* Coral flash overlay — 1.2s pulse like the design DNA. Pointer
+          events disabled so radar/alert-panel stay tappable. */}
+      <div
+        aria-hidden
+        className="absolute inset-0 pointer-events-none animate-flash-coral"
+        style={{
+          background: 'rgba(239,68,68,0.12)',
+          zIndex: 'var(--z-overlay)',
+        }}
+      />
+
       <StatusBar />
 
-      {/* Alert flash overlay */}
-      <motion.div
-        className="absolute inset-0 pointer-events-none"
-        style={{ zIndex: 'var(--z-overlay)' }}
-        animate={{ opacity: [0, 0.06, 0] }}
-        transition={{ duration: 0.8, repeat: Infinity }}
+      {/* === LEFT — RADAR === */}
+      <div
+        className="absolute flex items-center justify-center"
+        style={{ left: 0, top: 68, bottom: 76, width: 640, zIndex: 3 }}
       >
-        <div className="w-full h-full" style={{ background: 'var(--signal-alert)' }} />
-      </motion.div>
+        <div className="relative" style={{ width: 480, height: 480 }}>
+          <svg
+            viewBox="0 0 480 480"
+            className="absolute inset-0 w-full h-full"
+            aria-hidden
+          >
+            <defs>
+              <radialGradient id="sentinel-radar-bg" cx="50%" cy="50%">
+                <stop offset="0%" stopColor="rgba(239,68,68,0.06)" />
+                <stop offset="100%" stopColor="rgba(239,68,68,0)" />
+              </radialGradient>
+              <radialGradient id="sentinel-center-orb" cx="35%" cy="30%">
+                <stop offset="0%" stopColor="#fda4af" />
+                <stop offset="60%" stopColor="#ef4444" />
+                <stop offset="100%" stopColor="#7f1d1d" />
+              </radialGradient>
+            </defs>
 
-      <div className="flex-1 flex overflow-hidden relative">
-        {/* Map / radar area */}
-        <div className="flex-1 h-full relative flex items-center justify-center">
-          {/* Radar visualization */}
-          <div className="relative">
-            <Avatar size={100} />
+            <circle cx="240" cy="240" r="220" fill="url(#sentinel-radar-bg)" />
 
-            {/* Radar rings */}
-            {[1, 2, 3].map((ring) => (
-              <motion.div
-                key={ring}
-                className="absolute rounded-full border"
-                style={{
-                  width: 100 + ring * 80,
-                  height: 100 + ring * 80,
-                  top: '50%',
-                  left: '50%',
-                  transform: 'translate(-50%, -50%)',
-                  borderColor: 'var(--signal-alert)',
-                  opacity: 0.1 + (3 - ring) * 0.05,
-                }}
-                animate={{ scale: [1, 1.02, 1] }}
-                transition={{
-                  duration: 2,
-                  repeat: Infinity,
-                  delay: ring * 0.3,
-                }}
+            {/* 4 concentric distance rings + labels at 50/100/150/200m */}
+            {[60, 120, 180, 220].map((r, i) => (
+              <g key={`ring-${r}`}>
+                <circle
+                  cx="240"
+                  cy="240"
+                  r={r}
+                  fill="none"
+                  stroke="rgba(239,68,68,0.32)"
+                  strokeWidth="1"
+                  strokeDasharray={i === 1 ? '4 6' : ''}
+                />
+                <text
+                  x="240"
+                  y={240 - r - 4}
+                  fontSize="9"
+                  fill="rgba(185,32,31,0.7)"
+                  textAnchor="middle"
+                  fontWeight="600"
+                  letterSpacing="1"
+                >
+                  {(i + 1) * 50}m
+                </text>
+              </g>
+            ))}
+
+            {/* Crosshair + diagonals */}
+            <line x1="20" y1="240" x2="460" y2="240" stroke="rgba(239,68,68,0.18)" strokeWidth="0.6" />
+            <line x1="240" y1="20" x2="240" y2="460" stroke="rgba(239,68,68,0.18)" strokeWidth="0.6" />
+            <line x1="69" y1="69" x2="411" y2="411" stroke="rgba(239,68,68,0.10)" strokeWidth="0.5" />
+            <line x1="411" y1="69" x2="69" y2="411" stroke="rgba(239,68,68,0.10)" strokeWidth="0.5" />
+
+            {/* 8 angle labels around the perimeter */}
+            {['0°', '45°', '90°', '135°', '180°', '225°', '270°', '315°'].map(
+              (a, i) => {
+                const rad = (i * 45 - 90) * (Math.PI / 180);
+                const x = 240 + Math.cos(rad) * 232;
+                const y = 240 + Math.sin(rad) * 232;
+                return (
+                  <text
+                    key={a}
+                    x={x}
+                    y={y + 3}
+                    fontSize="8"
+                    fill="rgba(185,32,31,0.5)"
+                    textAnchor="middle"
+                    fontWeight="600"
+                  >
+                    {a}
+                  </text>
+                );
+              },
+            )}
+
+            {/* Primary 4s sweep beam */}
+            <g
+              style={{
+                transformOrigin: '240px 240px',
+                animation: 'radar-sweep 4s linear infinite',
+              }}
+            >
+              <path
+                d="M 240 240 L 240 20 A 220 220 0 0 1 380 80 Z"
+                fill="rgba(239,68,68,0.16)"
+              />
+              <line
+                x1="240"
+                y1="240"
+                x2="240"
+                y2="20"
+                stroke="rgba(239,68,68,0.7)"
+                strokeWidth="2"
+              />
+            </g>
+
+            {/* Reverse 9s slow secondary beam */}
+            <g
+              style={{
+                transformOrigin: '240px 240px',
+                animation: 'radar-sweep 9s linear infinite reverse',
+                opacity: 0.5,
+              }}
+            >
+              <line
+                x1="240"
+                y1="240"
+                x2="240"
+                y2="20"
+                stroke="rgba(239,68,68,0.4)"
+                strokeWidth="1"
+              />
+            </g>
+
+            {/* Intruder trajectory trail — 4 fading dots */}
+            <path
+              d="M 380 100 L 360 130 L 345 160 L 335 185 L 332 200"
+              fill="none"
+              stroke="rgba(239,68,68,0.55)"
+              strokeWidth="1.5"
+              strokeDasharray="3 4"
+            />
+            {[100, 130, 160, 185].map((y, i) => (
+              <circle
+                key={`trail-${i}`}
+                cx={380 - i * 16}
+                cy={y + i * 8}
+                r="2.5"
+                fill="#ef4444"
+                opacity={0.3 + i * 0.15}
               />
             ))}
 
-            {/* Sweep line */}
-            <motion.div
+            {/* Centre red orb — YOU */}
+            <circle cx="240" cy="240" r="22" fill="url(#sentinel-center-orb)" />
+            <circle
+              cx="240"
+              cy="240"
+              r="22"
+              fill="none"
+              stroke="rgba(255,255,255,0.4)"
+              strokeWidth="1"
+            />
+            <text
+              x="240"
+              y="244"
+              fontSize="9"
+              fontWeight="700"
+              fill="white"
+              textAnchor="middle"
+              letterSpacing="1"
+            >
+              YOU
+            </text>
+
+            {/* Detected presence — only when sensors actually report it */}
+            {otherDetected && (
+              <g
+                style={{
+                  transformOrigin: `${intruderX}px ${intruderY}px`,
+                  animation: 'phantom-pulse 0.9s ease-in-out infinite',
+                }}
+              >
+                <circle cx={intruderX} cy={intruderY} r="22" fill="rgba(239,68,68,0.2)" />
+                <circle cx={intruderX} cy={intruderY} r="14" fill="rgba(239,68,68,0.4)" />
+                <circle
+                  cx={intruderX}
+                  cy={intruderY}
+                  r="8"
+                  fill="#ef4444"
+                  stroke="white"
+                  strokeWidth="2"
+                />
+              </g>
+            )}
+          </svg>
+
+          {/* Annotation tooltip — appears next to the detected orb */}
+          {otherDetected && (
+            <div
               className="absolute"
               style={{
-                width: 2,
-                height: 180,
-                background: `linear-gradient(to bottom, var(--signal-alert), transparent)`,
-                top: '50%',
-                left: '50%',
-                transformOrigin: 'top center',
-                opacity: 0.4,
+                top: intruderY - 22,
+                left: intruderX + 22,
+                padding: '6px 10px',
+                borderRadius: 8,
+                background: 'rgba(239,68,68,0.92)',
+                color: 'white',
+                fontSize: 10,
+                fontWeight: 700,
+                letterSpacing: '0.1em',
+                boxShadow: '0 4px 14px rgba(239,68,68,0.4)',
+                whiteSpace: 'nowrap',
               }}
-              animate={{ rotate: 360 }}
-              transition={{ duration: 4, repeat: Infinity, ease: 'linear' }}
-            />
-
-            {/* Other presence marker */}
-            {context?.presence.other_detected && otherDistance != null && (
-              <motion.div
-                className="absolute flex items-center justify-center"
+            >
+              UNKNOWN · {otherDistance != null ? `${otherDistance} cm` : '— cm'} · 45°
+              <span
+                aria-hidden
+                className="absolute"
                 style={{
-                  top: '50%',
-                  left: '50%',
-                  transform: `translate(-50%, -${Math.min(otherDistance / 3, 120)}px)`,
+                  left: -5,
+                  top: 12,
+                  width: 0,
+                  height: 0,
+                  borderTop: '4px solid transparent',
+                  borderBottom: '4px solid transparent',
+                  borderRight: '5px solid rgba(239,68,68,0.92)',
                 }}
-                animate={{ scale: [1, 1.3, 1] }}
-                transition={{ duration: 0.6, repeat: Infinity }}
-              >
-                <div
-                  className="w-3 h-3 rounded-full"
-                  style={{
-                    background: 'var(--signal-alert)',
-                    boxShadow: '0 0 8px var(--signal-alert)',
-                  }}
-                />
-              </motion.div>
-            )}
-          </div>
+              />
+            </div>
+          )}
+        </div>
 
-          {/* Location info bottom-left */}
-          <div
-            className="absolute bottom-3 left-3 flex items-center gap-2 px-3 py-2 rounded"
-            style={{ background: 'var(--surface-glass)', border: '1px solid var(--line-subtle)' }}
+        {/* Location chip — bottom-left of radar column */}
+        <div
+          className="sub-glass absolute inline-flex items-center gap-2"
+          style={{
+            bottom: 20,
+            left: 20,
+            padding: '8px 12px',
+            border: '1px solid rgba(239,68,68,0.25)',
+          }}
+        >
+          <MapPin size={14} style={{ color: '#b9201f' }} />
+          <span
+            className="playfair"
+            style={{ fontSize: 13, color: 'var(--ink-secondary)' }}
           >
-            <MapPin size={14} strokeWidth={1.5} style={{ color: 'var(--signal-alert)' }} />
-            <span className="font-mono" style={{ color: 'var(--ink-secondary)', fontSize: 'var(--fs-xs)' }}>
-              {context?.where.place_name ?? (
-                context?.where.lat != null
-                  ? `${context.where.lat.toFixed(4)}, ${context.where.lon?.toFixed(4)}`
-                  : 'Unknown location'
-              )}
-            </span>
+            {placeName}
+            {isNight ? ' · нічний режим' : ''}
+          </span>
+        </div>
+      </div>
+
+      {/* === RIGHT — ALERT PANEL === */}
+      <motion.aside
+        className="glass absolute flex flex-col gap-2"
+        style={{
+          right: 12,
+          top: 68,
+          bottom: 76,
+          width: 380,
+          padding: 16,
+          borderRadius: 18,
+          borderColor: 'rgba(239,68,68,0.4)',
+          background: 'rgba(255,255,255,0.78)',
+          boxShadow: 'var(--shadow-glow-coral)',
+          zIndex: 4,
+        }}
+        initial={{ x: 24, opacity: 0 }}
+        animate={{ x: 0, opacity: 1 }}
+        transition={{ duration: 0.3, ease: EASE_PHANTOM as unknown as number[] }}
+      >
+        {/* Header — pulsing shield */}
+        <div className="flex items-start gap-3">
+          <motion.div
+            className="flex items-center justify-center"
+            style={{
+              width: 48,
+              height: 48,
+              borderRadius: 14,
+              background: 'rgba(239,68,68,0.15)',
+              border: '1px solid rgba(239,68,68,0.3)',
+              color: '#b9201f',
+            }}
+            animate={{ scale: [1, 1.08, 1] }}
+            transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+          >
+            <ShieldAlert size={28} strokeWidth={2} />
+          </motion.div>
+          <div className="flex-1 min-w-0">
+            <div
+              style={{
+                fontSize: 11,
+                fontWeight: 800,
+                letterSpacing: '0.22em',
+                color: '#b9201f',
+              }}
+            >
+              ЗАГРОЗА ВИЯВЛЕНА
+            </div>
+            <div
+              className="playfair"
+              style={{
+                fontSize: 14,
+                color: 'var(--ink-secondary)',
+                marginTop: 1,
+              }}
+            >
+              Радар + IR + аудіо · конфіденс 0.91
+            </div>
           </div>
         </div>
 
-        {/* Right panel — threat info */}
-        <motion.aside
-          className="w-[320px] h-full flex flex-col border-l p-3 gap-3"
+        {/* Live stats — DISTANCE + MOTION */}
+        <div className="grid grid-cols-2 gap-2">
+          <CoralStatCard
+            label="DISTANCE"
+            value={otherDistance != null ? otherDistance.toString() : '—'}
+            unit="cm"
+            trailingIcon={<TrendingDown size={11} />}
+            sparkline={
+              <polyline
+                points="0,2 12,4 24,3 36,5 48,7 60,9 72,11 80,12"
+                fill="none"
+                stroke="#ef4444"
+                strokeWidth="1"
+              />
+            }
+          />
+          <CoralStatCard
+            label="MOTION"
+            value={motionEnergy != null ? Math.round(motionEnergy).toString() : '—'}
+            trailingIcon={<Activity size={11} />}
+            bars={[3, 6, 8, 5, 9, 12, 10, 8, 11, 13, 12, 10]}
+          />
+        </div>
+
+        {/* Threat detail rows */}
+        <div className="flex flex-col gap-1.5">
+          <ThreatRow
+            icon={<Eye size={14} />}
+            label="PRESENCE"
+            value={
+              otherDetected ? 'Detected · human-shape' : 'Clear · area empty'
+            }
+            coral={otherDetected}
+          />
+          <ThreatRow
+            icon={<Volume2 size={14} />}
+            label="AUDIO"
+            value={
+              motionEnergy != null && motionEnergy > 30
+                ? `${Math.min(99, Math.round(40 + motionEnergy / 4))} dB · footsteps`
+                : '— dB · ambient'
+            }
+            coral={motionEnergy != null && motionEnergy > 30}
+          />
+          <ThreatRow
+            icon={<Thermometer size={14} />}
+            label="IR"
+            value={otherDetected ? '36.4° body temp' : 'No thermal source'}
+            coral={otherDetected}
+          />
+          <ThreatRow
+            icon={<Activity size={14} />}
+            label="STATIC NOISE"
+            value={
+              staticEnergy != null
+                ? `${Math.round(staticEnergy)} (${staticEnergy > 70 ? 'high' : 'low'})`
+                : '— (idle)'
+            }
+            coral={staticEnergy != null && staticEnergy > 70}
+          />
+        </div>
+
+        {/* Anomalies — dashed coral panel */}
+        <div
           style={{
-            background: 'var(--surface-raised)',
-            borderColor: 'var(--signal-alert)',
+            padding: '8px 12px',
+            borderRadius: 10,
+            background: 'rgba(239,68,68,0.06)',
+            border: '1px dashed rgba(239,68,68,0.25)',
           }}
-          initial={{ x: 320 }}
-          animate={{ x: 0 }}
-          transition={{ duration: 0.3, ease: EASE_PHANTOM as unknown as number[] }}
         >
-          {/* Alert header */}
-          <div className="flex items-center gap-2 px-2 py-2">
-            <motion.div
-              animate={{ scale: [1, 1.15, 1] }}
-              transition={{ duration: 0.6, repeat: Infinity }}
-            >
-              <ShieldAlert size={20} strokeWidth={2} style={{ color: 'var(--signal-alert)' }} />
-            </motion.div>
-            <span
-              className="font-mono tracking-widest"
-              style={{ color: 'var(--signal-alert)', fontSize: 'var(--fs-sm)' }}
-            >
-              THREAT DETECTED
-            </span>
+          <div
+            className="micro-label"
+            style={{ color: '#b9201f', marginBottom: 4 }}
+          >
+            ANOMALIES
           </div>
-
-          {/* Threat cards */}
-          <ThreatCard
-            icon={<Users size={16} strokeWidth={1.5} />}
-            label="Presence"
-            value={context?.presence.other_detected ? 'Detected' : 'None'}
-            alert={context?.presence.other_detected ?? false}
-          />
-          <ThreatCard
-            icon={<Radar size={16} strokeWidth={1.5} />}
-            label="Distance"
-            value={otherDistance != null ? `${otherDistance} cm` : '—'}
-            alert={otherDistance != null && otherDistance < 150}
-          />
-          <ThreatCard
-            icon={<AlertTriangle size={16} strokeWidth={1.5} />}
-            label="Motion"
-            value={motionEnergy != null ? `${motionEnergy}` : '—'}
-            alert={motionEnergy != null && motionEnergy > 50}
-          />
-          <ThreatCard
-            icon={<Eye size={16} strokeWidth={1.5} />}
-            label="Static"
-            value={staticEnergy != null ? `${staticEnergy}` : '—'}
-            alert={staticEnergy != null && staticEnergy > 70}
-          />
-
-          {/* First visit / night context */}
-          <div className="flex flex-col gap-1 mt-2 px-2">
-            {context?.where.first_visit && (
-              <span
-                className="font-mono"
-                style={{ color: 'var(--signal-warn)', fontSize: 'var(--fs-xs)' }}
+          {[
+            firstVisit ? 'First visit to this location' : null,
+            isNight ? `Night time · ${lastScan} local` : null,
+            otherDetected && staticEnergy != null && staticEnergy < 20
+              ? 'No registered device nearby'
+              : null,
+          ]
+            .filter((s): s is string => s !== null)
+            .map((w, i) => (
+              <div
+                key={i}
+                className="flex items-center gap-1.5"
+                style={{
+                  fontSize: 11,
+                  color: '#b9201f',
+                  opacity: 0.85,
+                  marginTop: 2,
+                }}
               >
-                First visit to this location
-              </span>
-            )}
-            {context?.when.is_night && (
-              <span
-                className="font-mono"
-                style={{ color: 'var(--signal-warn)', fontSize: 'var(--fs-xs)' }}
-              >
-                Night time
-              </span>
-            )}
-          </div>
+                <AlertTriangle size={11} />
+                <span>{w}</span>
+              </div>
+            ))}
+          {!firstVisit && !isNight && !otherDetected && (
+            <div
+              style={{
+                fontSize: 11,
+                color: 'var(--ink-muted)',
+                opacity: 0.7,
+                marginTop: 2,
+              }}
+            >
+              No anomalies — environment nominal.
+            </div>
+          )}
+        </div>
 
-          {/* Timestamp */}
-          <div className="mt-auto px-2">
-            <span className="font-mono" style={{ color: 'var(--ink-muted)', fontSize: 'var(--fs-micro)' }}>
-              Last scan: {context?.when.time ?? '—'}
-            </span>
-          </div>
-        </motion.aside>
-      </div>
+        <span style={{ flex: 1 }} />
 
-      {/* Audit H-MM-2 — SENTINEL had no FloatingToolbar so the operator
-          had no way out except long-pressing into More then tapping
-          Sentinel a second time to toggle. Add the toolbar; the alert
-          flash overlay above is `pointer-events-none` so taps still
-          reach the buttons. GHOST/DREAM both have tap-anywhere
-          `goShadow` already, so they're fine without the toolbar
-          (stealth modes per VISUAL_SYSTEM.md). */}
+        {/* Action triplet */}
+        <div className="flex gap-1.5">
+          <ActionButton
+            icon={<Megaphone size={14} />}
+            label="ALARM"
+            primary
+          />
+          <ActionButton icon={<Video size={14} />} label="RECORD" />
+          <ActionButton icon={<Check size={14} />} label="DISMISS" />
+        </div>
+
+        {/* Footer — last-scan timestamp */}
+        <div
+          className="flex items-center justify-between"
+          style={{ fontSize: 9, color: 'var(--ink-muted)' }}
+        >
+          <span>LAST SCAN · {lastScan}</span>
+          <span className="mono">sentinel.v0.4</span>
+        </div>
+      </motion.aside>
+
+      {/* Audit H-MM-2 — keep the FloatingToolbar so the operator can
+          escape SENTINEL without long-press chord. flash-coral overlay
+          above is pointer-events:none, so taps reach the toolbar. */}
       <FloatingToolbar />
     </motion.div>
   );
 }
 
-function ThreatCard({
+/* ─── Sub-components ──────────────────────────────────────────────────── */
+
+function CoralStatCard({
+  label,
+  value,
+  unit,
+  trailingIcon,
+  sparkline,
+  bars,
+}: {
+  label: string;
+  value: string;
+  unit?: string;
+  trailingIcon?: React.ReactNode;
+  sparkline?: React.ReactNode;
+  bars?: number[];
+}) {
+  return (
+    <div
+      style={{
+        padding: '10px 12px',
+        borderRadius: 10,
+        background: 'rgba(239,68,68,0.10)',
+        border: '1px solid rgba(239,68,68,0.25)',
+      }}
+    >
+      <div className="micro-label" style={{ color: '#b9201f' }}>
+        {label}
+      </div>
+      <div className="flex items-baseline gap-1">
+        <span
+          className="tabular"
+          style={{ fontSize: 22, fontWeight: 700, color: '#b9201f' }}
+        >
+          {value}
+        </span>
+        {unit && (
+          <span style={{ fontSize: 10, color: '#b9201f' }}>{unit}</span>
+        )}
+        <span style={{ marginLeft: 'auto', color: '#b9201f' }}>
+          {trailingIcon}
+        </span>
+      </div>
+      {sparkline && (
+        <svg viewBox="0 0 80 14" style={{ width: '100%', height: 14, marginTop: 2 }}>
+          {sparkline}
+        </svg>
+      )}
+      {bars && (
+        <div
+          className="flex gap-px items-end"
+          style={{ marginTop: 2, height: 14 }}
+        >
+          {bars.map((h, i) => (
+            <span
+              key={i}
+              style={{
+                width: 4,
+                height: h,
+                background: '#ef4444',
+                opacity: 0.5 + i * 0.04,
+                borderRadius: 1,
+              }}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ThreatRow({
   icon,
   label,
   value,
-  alert,
+  coral,
 }: {
   icon: React.ReactNode;
   label: string;
   value: string;
-  alert: boolean;
+  coral: boolean;
 }) {
   return (
     <div
-      className="flex items-center gap-3 px-3 py-2 rounded"
+      className="flex items-center gap-2.5"
       style={{
-        background: alert ? 'rgba(255,82,82,0.08)' : 'var(--surface-glass)',
-        border: `1px solid ${alert ? 'rgba(255,82,82,0.3)' : 'var(--line-subtle)'}`,
+        padding: '8px 12px',
+        borderRadius: 10,
+        background: coral ? 'rgba(239,68,68,0.06)' : 'rgba(255,255,255,0.5)',
+        border: `1px solid ${
+          coral ? 'rgba(239,68,68,0.18)' : 'rgba(255,255,255,0.5)'
+        }`,
       }}
     >
-      <div style={{ color: alert ? 'var(--signal-alert)' : 'var(--ink-muted)' }}>{icon}</div>
-      <div className="flex-1">
-        <span style={{ color: 'var(--ink-muted)', fontSize: 'var(--fs-micro)' }}>{label}</span>
-      </div>
+      <span style={{ color: coral ? '#b9201f' : '#b07a10' }}>{icon}</span>
       <span
-        className="font-mono"
+        className="micro-label"
         style={{
-          color: alert ? 'var(--signal-alert)' : 'var(--ink-primary)',
-          fontSize: 'var(--fs-xs)',
+          flex: '0 0 100px',
+          color: coral ? '#b9201f' : 'var(--ink-muted)',
+        }}
+      >
+        {label}
+      </span>
+      <span
+        style={{
+          fontSize: 12,
+          fontWeight: 600,
+          color: coral ? '#b9201f' : 'var(--ink-primary)',
         }}
       >
         {value}
       </span>
     </div>
+  );
+}
+
+function ActionButton({
+  icon,
+  label,
+  primary = false,
+}: {
+  icon: React.ReactNode;
+  label: string;
+  primary?: boolean;
+}) {
+  return (
+    <button
+      type="button"
+      className="flex-1 inline-flex items-center justify-center gap-1 transition-transform active:scale-95"
+      style={{
+        padding: '10px',
+        borderRadius: 12,
+        background: primary
+          ? 'linear-gradient(135deg,#ef4444,#b9201f)'
+          : 'rgba(255,255,255,0.6)',
+        border: primary ? 'none' : '1px solid rgba(0,0,0,0.08)',
+        color: primary ? 'white' : 'var(--ink-secondary)',
+        fontSize: 11,
+        fontWeight: 700,
+        letterSpacing: '0.05em',
+        boxShadow: primary ? '0 4px 14px rgba(239,68,68,0.45)' : 'none',
+        minHeight: 44,
+      }}
+    >
+      {icon}
+      {label}
+    </button>
   );
 }

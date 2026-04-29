@@ -26,6 +26,10 @@ test seam stays clean (no module-level `event_bus.subscribe(...)` at
 import time).
 """
 
+from dispatch.standing_order_broadcaster import (
+    register_standing_order_broadcaster,
+    topic_to_ws_type,
+)
 from dispatch.state_broadcaster import (
     StateBroadcaster,
     register_state_broadcaster,
@@ -33,5 +37,7 @@ from dispatch.state_broadcaster import (
 
 __all__ = [
     "StateBroadcaster",
+    "register_standing_order_broadcaster",
     "register_state_broadcaster",
+    "topic_to_ws_type",
 ]

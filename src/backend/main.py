@@ -369,6 +369,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             event_bus, hub.broadcast, set_oled_state=_set_oled_state,
         )
         logger.info("dispatch.state_broadcaster wired")
+        # Day-4 Wave-2 T-3 (ADR-SOH-005): subscribe the WS hub to the
+        # 3 standing-order topics emitted by the runner. Frontend
+        # `useStandingOrders` hook gets live tick/fired/skipped status
+        # without short-poll endpoints.
+        from dispatch import register_standing_order_broadcaster
+        register_standing_order_broadcaster(event_bus, hub.broadcast)
     except Exception as exc:
         logger.warning("dispatch state_broadcaster wiring failed: %s", exc)
 

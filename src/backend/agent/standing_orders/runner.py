@@ -189,10 +189,22 @@ class StandingOrderRunner:
         """
         Fetch enabled orders, fire those whose schedule + condition are due.
         Returns the list of fired order IDs (useful for tests).
+
+        Day-4 Wave-2 T-3 (ADR-SOH-005): emits ``standing_order.tick``
+        on the EventBus once per cycle so the dispatch broadcaster
+        can fan out live status to the WS hub without short-poll
+        endpoints. The payload carries `{cycle_at_iso, evaluated,
+        fired, skipped}` per the ADR.
         """
         fired: list[str] = []
+        skipped_count = 0
+        from datetime import datetime as _datetime
+
+        from core.event_bus import event_bus as _event_bus
         from db.database import get_session
         from db.models import StandingOrder
+
+        cycle_at_iso = _datetime.now(timezone.utc).isoformat()
 
         async with get_session() as db:
             result = await db.execute(
@@ -226,8 +238,12 @@ class StandingOrderRunner:
                         "standing order %s condition invalid: %s",
                         order.id, exc,
                     )
+                    skipped_count += 1
+                    self._emit_skipped(_event_bus, order, "condition_invalid")
                     continue
                 if not cond_true:
+                    skipped_count += 1
+                    self._emit_skipped(_event_bus, order, "condition_false")
                     continue
             # Phase 9.4a — foreground task activity no longer defers an order;
             # we fire on background. The background slot's queue is bounded,
@@ -239,7 +255,68 @@ class StandingOrderRunner:
             ok = await self._fire_order(order)
             if ok:
                 fired.append(order.id)
+                self._emit_fired(_event_bus, order)
+            else:
+                skipped_count += 1
+                self._emit_skipped(_event_bus, order, "dispatch_error")
+        # T-3 tick payload — operators see live cycle accounting via
+        # WS without short-poll. Fire-and-forget; failure inside the
+        # bus emit is contained.
+        try:
+            _event_bus.emit(
+                "standing_order.tick",
+                {
+                    "cycle_at_iso": cycle_at_iso,
+                    "evaluated": len(orders),
+                    "fired": len(fired),
+                    "skipped": skipped_count,
+                },
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("standing_order.tick emit raised: %s", exc)
         return fired
+
+    @staticmethod
+    def _emit_fired(bus, order) -> None:
+        """T-3 helper: emit `standing_order.fired` after a successful
+        `_fire_order`. action_kind read from the denorm column added in
+        T-2; falls back to "task" for legacy rows."""
+        from datetime import datetime as _dt
+
+        try:
+            bus.emit(
+                "standing_order.fired",
+                {
+                    "order_id": order.id,
+                    "action_kind": getattr(order, "action_kind", None) or "task",
+                    "task_id": getattr(order, "in_flight_task_id", None),
+                    "outcome_summary": "ok",
+                    "fired_at_iso": _dt.now(timezone.utc).isoformat(),
+                },
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("standing_order.fired emit raised: %s", exc)
+
+    @staticmethod
+    def _emit_skipped(bus, order, reason: str) -> None:
+        """T-3 helper: emit `standing_order.skipped` with a closed
+        reason vocabulary {condition_false, condition_invalid,
+        dispatch_error, lease_conflict, track_busy, cron_no_schedule}.
+        See ADR-SOH-005."""
+        from datetime import datetime as _dt
+
+        try:
+            bus.emit(
+                "standing_order.skipped",
+                {
+                    "order_id": order.id,
+                    "action_kind": getattr(order, "action_kind", None) or "task",
+                    "reason": reason,
+                    "at_iso": _dt.now(timezone.utc).isoformat(),
+                },
+            )
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("standing_order.skipped emit raised: %s", exc)
 
     async def _fire_order(self, order) -> bool:
         from agent.errors import TrackBusyError

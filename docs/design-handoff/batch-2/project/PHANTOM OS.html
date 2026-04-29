@@ -1,0 +1,140 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>PHANTOM OS — 8 Screens</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Manrope:wght@200;300;400;500;600;700;800&family=Playfair+Display:ital,wght@1,500;1,600;1,700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet" />
+<link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,200..700,0..1,-50..200" rel="stylesheet" />
+<link rel="stylesheet" href="phantom-dna.css" />
+<style>
+  html, body {
+    margin: 0; padding: 0;
+    background: #1a1612;
+    font-family: 'Manrope', system-ui, sans-serif;
+  }
+  body { min-height: 100vh; }
+</style>
+</head>
+<body>
+<div id="root"></div>
+
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
+
+<script type="text/babel" src="design-canvas.jsx"></script>
+<script type="text/babel" src="phantom-shared.jsx"></script>
+<script type="text/babel" src="screen-1-profile.jsx"></script>
+<script type="text/babel" src="screen-2-shadow.jsx"></script>
+<script type="text/babel" src="screen-3-dialogue.jsx"></script>
+<script type="text/babel" src="screen-4-settings.jsx"></script>
+<script type="text/babel" src="screen-5-map.jsx"></script>
+<script type="text/babel" src="screen-6-sentinel.jsx"></script>
+<script type="text/babel" src="screen-7-operator.jsx"></script>
+<script type="text/babel" src="screen-8-inline.jsx"></script>
+<script type="text/babel" src="screen-9-wellbeing.jsx"></script>
+<script type="text/babel" src="screen-10-wellbeing-nebula.jsx"></script>
+<script type="text/babel" src="screen-11-auth.jsx"></script>
+<script type="text/babel" src="screen-12-sensors.jsx"></script>
+<script type="text/babel" src="screen-13-sandbox.jsx"></script>
+<script type="text/babel" src="screen-14-inline-batch2.jsx"></script>
+
+<script type="text/babel">
+const { DesignCanvas, DCSection, DCArtboard } = window;
+
+const App = () => (
+  <DesignCanvas
+    title="PHANTOM OS"
+    subtitle="Sunrise build · 8 screens · 1024×600"
+    background="#1a1612"
+  >
+    <DCSection id="welcome" title="01 · Welcome & Ambient">
+      <DCArtboard id="profile" label="ProfileSelector — multi-operator picker" width={1024} height={600}>
+        <ScreenProfileSelector />
+      </DCArtboard>
+      <DCArtboard id="shadow" label="Shadow — ambient idle (default home)" width={1024} height={600}>
+        <ScreenShadow />
+      </DCArtboard>
+    </DCSection>
+
+    <DCSection id="conversation" title="02 · Conversation & Configuration">
+      <DCArtboard id="dialogue" label="Dialogue — voice-first chat" width={1024} height={600}>
+        <ScreenDialogue />
+      </DCArtboard>
+      <DCArtboard id="settings" label="Settings — single-screen accordion" width={1024} height={600}>
+        <ScreenSettings />
+      </DCArtboard>
+    </DCSection>
+
+    <DCSection id="awareness" title="03 · Spatial & Awareness">
+      <DCArtboard id="map" label="Map — warm tactical navigation" width={1024} height={600}>
+        <ScreenMap />
+      </DCArtboard>
+      <DCArtboard id="sentinel" label="Sentinel — alert state, threat detected" width={1024} height={600}>
+        <ScreenSentinel />
+      </DCArtboard>
+    </DCSection>
+
+    <DCSection id="agent" title="04 · Agent & Inline Results">
+      <DCArtboard id="operator" label="Operator — agent panel, goal input" width={1024} height={600}>
+        <ScreenOperator />
+      </DCArtboard>
+      <DCArtboard id="scenes" label="Inline AI Scenes — 4 result cards" width={1024} height={600}>
+        <ScreenInlineScenes />
+      </DCArtboard>
+    </DCSection>
+
+    <DCSection id="wellbeing" title="05 · Neural Wellbeing">
+      <DCArtboard id="wellbeing" label="Wellbeing — mood & bio-feedback analytics" width={1024} height={600}>
+        <ScreenWellbeing />
+      </DCArtboard>
+      <DCArtboard id="wellbeing-nebula" label="Wellbeing · Nebula — dark theme variant (toggle inline)" width={1024} height={600}>
+        <ScreenWellbeingNebula />
+      </DCArtboard>
+    </DCSection>
+
+    <DCSection id="auth" title="06 · Authentication">
+      <DCArtboard id="pin-empty" label="PIN · empty — passcode lock screen" width={1024} height={600}>
+        <ScreenPinEmpty />
+      </DCArtboard>
+      <DCArtboard id="pin-typing" label="PIN · typing 3/6 — partial entry" width={1024} height={600}>
+        <ScreenPinTyping />
+      </DCArtboard>
+      <DCArtboard id="pin-error-rfid" label="PIN error · shake + RFID waiting (split)" width={1024} height={600}>
+        <ScreenPinErrorRfid />
+      </DCArtboard>
+    </DCSection>
+
+    <DCSection id="sensors" title="07 · Sensor Overlays">
+      <DCArtboard id="camera-overlay" label="Camera — face tracking fullscreen HUD" width={1024} height={600}>
+        <ScreenCameraOverlay />
+      </DCArtboard>
+      <DCArtboard id="networks-overlay" label="Networks — WiFi list + aggregate" width={1024} height={600}>
+        <ScreenNetworksOverlay />
+      </DCArtboard>
+    </DCSection>
+
+    <DCSection id="sandbox" title="08 · Sandbox & Terminal">
+      <DCArtboard id="sandbox-fullscreen" label="Sandbox · ROOT executor + live STDOUT" width={1024} height={600}>
+        <ScreenSandboxFullscreen />
+      </DCArtboard>
+      <DCArtboard id="inline-sandbox" label="Inline sandbox result — in-chat scene" width={1024} height={600}>
+        <ScreenInlineSandbox />
+      </DCArtboard>
+    </DCSection>
+
+    <DCSection id="scenes-batch2" title="09 · Tools-as-Skills · Inline Scenes">
+      <DCArtboard id="scenes-batch2" label="Alarm · Wardriving · Location · Checkpoint" width={1024} height={600}>
+        <ScreenInlineScenesBatch2 />
+      </DCArtboard>
+    </DCSection>
+  </DesignCanvas>
+);
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App />);
+</script>
+</body>
+</html>

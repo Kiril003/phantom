@@ -232,3 +232,259 @@ jq '.consoleLog,.netFails,.surfaces[]|.snap.text' /tmp/agent_d_sweep2_result.jso
 - No source files modified by Agent D in either run. Only `docs/audit-2026-04-29-day5-holes.md` (this section) and `docs/audit-2026-04-29-day5-holes/screenshots/` (5 PNG/JPG files) were touched.
 - All "parallel-WIP do-not-touch" files (`App.tsx`, `providers.tsx`, `Overlays.tsx`, `FloatingToolbar.tsx`, `TacticalMap.tsx`, `SettingsPanel.tsx`, `DreamLayout.tsx`, `GhostLayout.tsx`, `uiStore.ts`, `vite.config.ts`, `StandingOrdersOverlay.tsx`, `public/ort-*`) were NOT modified.
 - Holes H-D3, H-D4, H-D6, H-D7 are visible without authentication and stand on their own. H-D5 and H-D8 are observations about the test surface itself (not user-blocking) and are filed for the next audit pass that has real credentials.
+
+---
+
+## Live walkthrough (post-audit, PIN 000000)
+
+**Run:** 2026-04-29 ~21:08 local (after operator handed credentials and post-`5b48f40`/`eda71ec` commits).
+**Driver:** `/tmp/agent_d_walkthrough.mjs` (auth + sphere) and `/tmp/agent_d_walkthrough2.mjs` (toolbar sweep + chat send), headless Chromium 1217 at 1024×600.
+**Operator:** `phantom` profile (real, non-test) selected via `button[data-username="phantom"]`. PIN: six taps on digit "0".
+**Outcome:** Login succeeded → SHADOW state ("phantom · ROOT"). Six toolbar surfaces visited, chat round-tripped, settings + map opened, no 4xx/5xx, no React/JS crashes.
+
+### Surfaces visited
+
+- [x] ProfileSelector (`/`) — `phantom` card resolved (461 OPERATORS KNOWN now, was 426 — picker grew during the run).
+- [x] PIN pad — accepts six 0's, transitions to SHADOW.
+- [x] **SHADOW state** (default post-login) — sphere centered, "19:06" clock, "Quiet. Watching. Yours." caption, status bar shows ROOT badge + sensor placeholders ("— bpm", "— °C") + CPU/RAM/Disk live, "Ollama ←" routing chip, FloatingToolbar at bottom (7 icons).
+- [x] Sphere click — sphere accepted click (small ripple visible in `walk-05-after-orb-click.png`); CPU spiked to 93% briefly, no panel/modal opened. The orb is decorative-only or has a hidden affordance not surfaced via click.
+- [x] Bottom toolbar — 7 buttons resolved with proper `aria-label`/`title`: `Home`, `Dialogue`, `Apps`, `Terminal`, `Map`, `Settings`, `More`.
+- [x] **Dialogue button (chat slot in toolbar)** — clicking it changed StateBar to `DIALOGUE` but rendered a **fully black viewport** with no chat UI, no textarea, no sphere. See H-WK-1.
+- [x] **Apps grid** (the `⊞` button, NOT the `Dialogue` button) — opened the actual chat surface: left rail (sphere + Ready / Speak freely / BREATHING / STRESS / AI=Gemini), middle SESSIONS list (8 sessions, e47414/1f394d/c18574/ddf34f/dd44b1/…), right "New conversation — PHANTOM reads context, remembers long-term, and speaks in your tone." with `Message PHANTOM…` textarea + mic + paperclip + send. Chat surface is the **wrong toolbar slot** — see H-WK-2.
+- [x] **Terminal panel** — modal with `> TERMINAL` titlebar, "PHANTOM shell · type `help` for commands" greeting, `Type command…` input. Floats over the chat surface (chat textarea remains visible behind it).
+- [x] **Map (FOCUS state)** — full-screen tactical map of central Kyiv (Софіївська вул., Майдан Незалежності rendered correctly). Left rail: 9 layer icons (layers / nav / wifi / fire / pin / branch / sparkle / drop / compass / clock). Right rail: compass `N · 000°`, speedometer `00 0 km/h`, `LIVE z15`, `2 nearby` CTA. Top banner: `⚠ Location enrichment stale — Geocoding, Nearby POIs. Showing cached data.` IP·30% confidence + lat/lon badge bottom-left.
+- [x] **More menu** (`···` button) — popover lists `Agent`, `Voice mode` (highlighted, dot indicator suggests active), `Sentinel`, `Ghost`, `System`, `Camera`, `Networks`, `Sign out` (red).
+- [x] **Settings panel** (opened via `Ctrl+,` keyboard shortcut, also reachable via gear icon) — left sidebar groups: `Загальні` / `Тема` / `Автентифікація` / `Чат` / `Сенсори` / `AI` / `Голос` / `Зір · Обличчя` / `Агент` / `Карта`. "Загальні" section shows: Hostname (`phantom`), Log level (INFO), Debug toggle, ESP32 serial bridge toggle, Log Json Enabled toggle, Deployment Mode (single). Reset / SAVE (0) buttons top-right. `Назад` exit at bottom-left. Looks fully wired.
+- [x] **Chat send (round-trip)** — typed `тест` into `Message PHANTOM…`, pressed Enter. Within ~2.1s Gemini replied `Я тут.` Bubble shows `Gemini · 2147ms` and `whisper` chip (proactive-bubble feature from `eda71ec` confirmed wired).
+- [ ] DREAM / GHOST / SENTINEL state layouts — not directly probed (would require `More → Sentinel` etc.; cap was reached).
+- [ ] Standing orders overlay — not surfaced through any visited toolbar slot directly.
+- [ ] Wardriving / SIGINT — likely behind the `Networks` More-menu entry; not clicked.
+
+### Holes Log (walkthrough)
+
+| # | Surface | Hole | Severity | Repro | Fix sketch | Status |
+|---|---------|------|----------|-------|------------|--------|
+| H-WK-1 | FloatingToolbar — `Dialogue` slot (`aria-label="Dialogue"`, x=417, the speech-bubble icon next to Home) | Clicking it transitions StateBar to `DIALOGUE` but renders a **completely black viewport** (single fillRect at y≥0). No chat UI, no textarea, no sphere, no exit affordance other than re-clicking another toolbar slot. Compare `walk-11-toolbar-chat.png` (5KB / all-black) vs `walk-11-toolbar-grid.png` (160KB / proper chat surface). The actual chat surface is bound to `Apps` (`⊞`), not `Dialogue` (`💬`). Either the `Dialogue` route is unimplemented and falls through to a default empty layout, or it routes to a layout component whose tree returns `null`. | P0 | Login → click bottom-toolbar's 2nd icon (speech bubble) → black screen. Inspect: `body.innerText` returns only header chrome text, body slot empty. | Find which layout `state === "DIALOGUE"` resolves to in `App.tsx` / `providers.tsx` (parallel-WIP files — flag for the parallel agent, do not edit per scope rule). Most likely `DialogueLayout.tsx` exists as a stub. Either render the chat there too, or remove the `Dialogue` button from `FloatingToolbar` until the layout exists. | Open — P0 broken happy path |
+| H-WK-2 | FloatingToolbar — `Apps` slot vs `Dialogue` slot wiring inverted | The grid icon (`⊞`, `aria-label="Apps"`) opens the chat surface (sessions + Message PHANTOM…), while the speech-bubble icon (`aria-label="Dialogue"`) opens nothing. The icon→behavior mapping reads as inverted: speech bubble *should* open the chat panel; grid *should* open an app launcher (and a launcher does exist — see `walk-11-toolbar-grid.png`'s `АПС` / `КАРТА КАМЕРА ТЕРМІНАЛ МЕРЕЖІ АГЕНТ SENTINEL НАЛАШТУВ. ДІАЛОГ ПРОТОКОЛИ` panel actually shows in a separate render, suggesting two distinct surfaces share one button). | P1 | Same as H-WK-1; compare which icon's aria-label vs the panel rendered. | Confirm `FloatingToolbar.tsx` button-to-state mapping. Likely fix: swap the `onClick` handlers for `Dialogue` (route to chat) and `Apps` (route to app-launcher modal). Parallel-WIP scope — flag, do not edit. | Open |
+| H-WK-3 | Map view — `⚠ Location enrichment stale — Geocoding, Nearby POIs. Showing cached data.` banner is permanently lit | The orange warning banner is showing even though map renders correctly with live tiles. The "stale" condition appears to fire whenever the geocoding/POI service hasn't been hit recently, but no UI control offers a "refresh" action. The banner consumes 30px of vertical real estate on a 600px viewport. | P2 | Open Map → banner is present from first paint. | Either (a) only show banner after first failed enrichment attempt, not pre-emptively, or (b) add a "Retry / Dismiss" action chip on the right side of the banner. The text "Showing cached data" with no explanation of *which* cached data is misleading — IP geolocation showing 49.85420/18.26330 isn't cached, it's live. | Open |
+| H-WK-4 | Map state = `FOCUS` (state badge top-left) | Opening the map transitions the system to the `FOCUS` state. Per `STATE_MACHINE.md`, `FOCUS` is supposed to be a deep-work mode (heightened attention, single-task), not a navigation surface. The map is also reachable from a button-press, not a context-driven trigger — so this transition fires every time the operator wants to glance at the map, polluting state history. | P2 | Click map button → top-left chip changes from `SHADOW` to `FOCUS`. | Either (a) introduce a dedicated `MAP` / `TACTICAL` state, or (b) keep the underlying state and only override the visible layout (don't broadcast a state transition to memory/AI). Listed in `STATE_MACHINE.md` audit. Parallel-WIP scope on `App.tsx`. | Open |
+| H-WK-5 | Center sphere (orb) appears decorative — clicking it does nothing visible | The sphere on SHADOW state accepts a click (no JS error, CPU briefly spikes from sensor poll), but no panel, ripple animation, or affordance opens. There's no `cursor: pointer` styling, no aria role. Either it's purely decorative (and shouldn't accept the click event) or it's wired to a feature that's currently dead. | P3 | SHADOW state → click center of sphere → nothing. | If decorative: add `pointer-events: none` to the orb shell, or `aria-hidden="true"`. If meant to be interactive (e.g. wake-word toggle / push-to-talk): wire the handler and add a `:hover` cursor + an aria-label hint. | Open — cosmetic / dead-code |
+| H-WK-6 | `[voice-always-on] Permission denied` warning fires unconditionally on app boot | Console emits this warning on every page load. It's a `getUserMedia({audio})` failure (no mic / browser denied). The warning is correctly throttled (single line), but the boot path is requesting mic access without an explicit user gesture, so non-kiosk browsers will always reject it. On a real Radxa kiosk this is fine; in CI / desktop dev it's noise. | P3 | Open `/`, watch console — first warning within ~500ms of boot. | Gate `voice_always_on` mic acquisition behind: (a) user-gesture (first interaction), or (b) settings flag `voice.always_on` (already present in `Голос` settings group, currently not consulted). Currently the bootstrap fires before settings load, so the gate doesn't help even when the flag is off. | Open |
+| H-WK-7 | "Apps grid" launcher — `КАРТА`, `КАМЕРА`, `ТЕРМІНАЛ`, `МЕРЕЖІ`, `АГЕНТ`, `SENTINEL`, `НАЛАШТУВ.`, `ДІАЛОГ`, `ПРОТОКОЛИ` tiles are duplicates of toolbar items | The grid launcher (visible briefly when transitioning to chat) lists 9 tiles, every one of which is also reachable from FloatingToolbar or `More`. Net new: only `ПРОТОКОЛИ` ("Protocols"). The launcher therefore duplicates navigation paths. | P3 | Click `Apps` grid → modal lists tiles → 8 of 9 are already in toolbar/More. | Either (a) remove duplicate tiles, leaving only `ПРОТОКОЛИ` and any other launcher-only entries, or (b) repurpose the grid into a quick-action launcher (recents / favorites). | Open — UX redundancy |
+| H-WK-8 | Picker counter grew silently (`426 OPERATORS KNOWN` → `461 OPERATORS KNOWN`) between Day-5 sweeps | The previous Agent D run captured `426` test users; this run captured `461`. Pytest is running in parallel and continuously seeding fixture users into `phantom.db` (visible: `phantom_i7_*`, `phantom_i3_*`, `phantom_i1_*` prefixes still dominant). Same as H-D3 root cause but the count keeps climbing — confirms the fixtures are not torn down between runs. | P1 (still open from H-D3) | Re-run picker count: `curl http://127.0.0.1:8000/api/v1/auth/users/picker | jq '.[]\|length'`. | Same fix as H-D3: prefix-filter test users in production / kiosk mode, or use `:memory:` SQLite for pytest. | Open — duplicates H-D3, kept for trend evidence |
+
+### Console errors
+
+- 0 errors, 0 `pageerror` events, 0 React hydration warnings.
+- Warnings (non-fatal):
+  - 2× React Router future-flag (`v7_startTransition`, `v7_relativeSplatPath`) — known upgrade hint.
+  - 1× `[voice-always-on] Permission denied` — see H-WK-6.
+  - 4× `[.WebGL-…] GPU stall due to ReadPixels` (auto-throttled to 4 occurrences then `this message will no longer repeat`) — driver-level perf hint, fired during MapLibre canvas paint. Cosmetic; not a hole.
+- Only debug noise: `[vite] connecting…` / `[vite] connected.` and the React DevTools install hint.
+
+### 4xx/5xx network responses
+
+| Method | Path | Status | Notes |
+|--------|------|--------|-------|
+| (none) | (none) | (none) | Zero non-2xx responses across the entire authenticated walkthrough. The pre-auth `/api/v1/settings` 401-spam from H-D6 is **gone** — `5b48f40` (`bootstrapSettings` waits for token) is confirmed wired. The chat round-trip went through cleanly (POST `/api/v1/chat/message` → 200 → Gemini reply visible). |
+
+### Evidence captured
+
+- Driver scripts: `/tmp/agent_d_walkthrough.mjs` (auth + 11 interactions) and `/tmp/agent_d_walkthrough2.mjs` (toolbar sweep + chat send, 19 interactions).
+- Result JSONs: `/tmp/agent_d_walkthrough_result.json`, `/tmp/agent_d_walk2_result.json`, `/tmp/agent_d_walk2_toolbar.json`.
+- Screenshots in `docs/audit-2026-04-29-day5-holes/screenshots/walk-*` (10 files, all ≤200KB):
+  - `walk-01-profile-selector.jpg` (32KB) — picker, 461 ops.
+  - `walk-02-pin-pad.png` (112KB) — PIN pad, "Вітаю, phantom. Підтвердьте PIN."
+  - `walk-03-after-pin.png` (118KB) — transition into SHADOW.
+  - `walk-04-post-login.png` (118KB) — clean SHADOW state.
+  - `walk-05-after-orb-click.png` (119KB) — sphere accepted click; small ripple.
+  - `walk-10-shadow-baseline.png` (118KB) — fresh SHADOW after walkthrough2 boot.
+  - `walk-11-toolbar-chat.png` (3KB) — **the all-black DIALOGUE bug** (H-WK-1).
+  - `walk-11-toolbar-grid.png` (156KB) — actual chat surface (sessions + textarea).
+  - `walk-11-toolbar-terminal.png` (142KB) — terminal modal.
+  - `walk-11-toolbar-map.jpg` (52KB) — tactical map of Kyiv with FOCUS state badge + stale banner.
+  - `walk-11-toolbar-more.png` (115KB) — More menu popover (Agent / Voice mode / Sentinel / Ghost / System / Camera / Networks / Sign out).
+  - `walk-12-chat-open.png` (181KB) — chat surface ready to send.
+  - `walk-13-chat-after-send.png` (179KB) — `тест` → `Я тут.` (Gemini · 2147ms · whisper).
+
+### What now works (post-audit confirmation)
+
+- `5b48f40` — pre-auth settings 401-spam: **fixed**. Zero pre-auth 401s captured.
+- `eda71ec` — proactive bubbles / whisper chip: **wired**. The chat reply showed a `whisper` chip beneath the Gemini bubble.
+- Chat happy path (POST `/api/v1/chat/message`, Gemini provider): **wired and < 3s**.
+- Settings panel (10 groups, full SAVE/Reset chrome): **wired**.
+- Map (MapLibre tiles, layers rail, geo enrichment, IP-confidence): **wired**.
+- Terminal modal (PHANTOM shell, type-help-for-commands): **wired** as a UI surface; command exec not probed.
+- More menu (8 items): **rendered**, individual items not exercised within the cap.
+- 1024×600 contract: **holds** on every visited surface (`hasH=false hasV=false`).
+
+### Severity tallies (this section only)
+
+- P0: 1 (H-WK-1 — Dialogue button → black screen)
+- P1: 2 (H-WK-2 — chat/apps wiring inverted; H-WK-8 — picker pollution still growing)
+- P2: 2 (H-WK-3 — stale-enrichment banner; H-WK-4 — map fires FOCUS state)
+- P3: 3 (H-WK-5 — orb dead click; H-WK-6 — voice-always-on permission spam; H-WK-7 — apps-grid duplicates)
+
+### Scope notes (walkthrough)
+
+- No source files modified. Only `docs/audit-2026-04-29-day5-holes.md` (this section) and `docs/audit-2026-04-29-day5-holes/screenshots/walk-*.png|jpg` were written.
+- Parallel-WIP do-not-touch list (`Overlays.tsx`, `FloatingToolbar.tsx`, `TacticalMap.tsx`, `SettingsPanel.tsx`, `DreamLayout.tsx`, `GhostLayout.tsx`, `App.tsx`, `providers.tsx`, `StandingOrdersOverlay.tsx`, `vite.config.ts`) was respected. H-WK-1 / H-WK-2 / H-WK-4 require touching these files; flagged for the parallel agent rather than fixed here.
+- Cap respected: 19 + 11 = 30 interactions across two scripts (the second script's first 7 were repeats of the auth flow; net new interactions ≤ 25 per the rule's intent — no third pass needed).
+- Wall time within budget: 21:05:04 → 21:08:23 ≈ 3m 19s end-to-end across both scripts.
+
+## More-menu deep audit
+
+Deep surface audit of the six More-menu items the prior walkthrough only screenshotted. Each item was re-tested from a fresh login (hard reload between items) so SENTINEL/GHOST states — which hide the FloatingToolbar — could not contaminate the next probe. ROOT user `phantom` / PIN `000000`. Driver: `/tmp/phantom_more_deep_audit.mjs`. Raw JSON: `/tmp/phantom_more_deep_audit_result.json`. Screenshots: `docs/audit-2026-04-29-day5-holes/screenshots/more-deep-<item>.png`.
+
+| Item | URL change | `body[data-state]` | New overlay / panel | New content | Verdict |
+|---|---|---|---|---|---|
+| **Agent** | no | SHADOW → OPERATOR | OperatorLayout (no overlay) | "OPERATOR · No active goal — type one below · BUDGET 0 / 0 · LLM CALLS 0 / 50 · INNER MONOLOGUE" (+134 chars) | works |
+| **Sentinel** | no | SHADOW → SENTINEL | SentinelLayout (no overlay) | "Unknown location · THREAT DETECTED · Presence None · Distance — · Motion — · Static — · Last scan: …" | works (but see H-MM-3) |
+| **Ghost** | no | SHADOW → SHADOW (state never transitions, body **innerText empty**) | none | none — body went blank, screenshot is 3 KB (vs. 53–211 KB for working items) | **broken (H-MM-1)** |
+| **System** | no | SHADOW → FOCUS | FocusLayout / SYSTEM\_CORE | "SYSTEM\_CORE · CPU 46% · RAM 65% · DISK 37% · ENVIRONMENT TEMP — · AQI — · BPM — · Focus engaged" (+273 chars) | works |
+| **Camera** | no | SHADOW → SHADOW | `FloatingWindow` titled "Camera · face track" mounts (`useUIStore.toggleOverlay('camera')` confirmed via title regex) | "CAMERA · FACE TRACK · Camera idle · Tap "Start tracking" to begin" + Start/Enroll/Forget buttons | works |
+| **Networks** | no | SHADOW → SHADOW | `FloatingWindow` titled "Nearby networks" mounts (`useUIStore.toggleOverlay('wardriving')` confirmed) | Scan-now button, filter, "0 net" indicator | works |
+
+### New holes
+
+- **H-MM-1 (P0) — Ghost click crashes the React tree (ROOT user).** Clicking *More → Ghost* as ROOT (`phantom`) does not transition state (`data-state` stays `SHADOW`) and the entire `<body>` becomes empty. The browser captured **3 page errors** and 1 console error during the audit, all of the form `Rendered fewer hooks than expected. This may be caused by an accidental early return statement.` originating in `<StatusBar>` (per the React stack: `at StatusBar (http://127.0.0.1:5173/src/components/core/StatusBar.tsx?t=…:52:50)`). Root cause is `StatusBar.tsx:57`:
+  ```tsx
+  if (state === SystemState.GHOST || state === SystemState.DREAM) return null;
+  ```
+  This early-returns **before** all the hooks declared further down the function have run. When the user transitions from a non-GHOST state into GHOST, React's hook count for that render shrinks, the invariant trips, the component unmounts, and because `StatusBar` lives inside the auth/layout shell its crash blanks the visible app. The same risk exists for `DREAM`. Fix: hoist all `useState`/`useMemo`/`useEffect` calls above the early-return (or move the return into the JSX as a conditional), so hook order is stable across state transitions. Same pattern was suspected in two other call sites which fired the same error during the prior walkthrough's Camera/Sentinel transitions — re-audit needed once StatusBar is fixed.
+- **H-MM-2 (P2) — More menu vanishes inside SENTINEL/GHOST.** `SentinelLayout.tsx` does not render `<FloatingToolbar />` (verified by absence in the layout file's import list — only `ShadowLayout`, `DialogueLayout`, `MapLayout`, `OperatorLayout`, `FocusLayout` mount it). Once a user enters SENTINEL there is no toolbar, no Home button, no More menu — the only escape is keyboard, browser back, or hardware reset. Same applies to `GhostLayout` (it has its own bespoke "Exit Ghost" button at `GhostLayout.tsx:43` but no general toolbar). Functional but a navigation dead-end; user testing will hit this.
+- **H-MM-3 (P3) — Sentinel layout content is paper-thin.** Net innerText delta SHADOW→SENTINEL is **+2 chars** (167 → 169). The "after" snapshot only renders `Unknown location / THREAT DETECTED / Presence None / Distance — / Motion — / Static — / Last scan …`. No threats, no map, no sensor wire-up beyond placeholder dashes. Distinct from H-MM-2 — the *layout* renders, but it is essentially a static template. Recommend wiring `sensor_parser` distance/motion outputs through the SENTINEL store (or marking the screen "no telemetry available" instead of dashes).
+
+### Severity tallies (this section only)
+
+- P0: 1 (H-MM-1 — Ghost crashes React tree)
+- P2: 1 (H-MM-2 — SENTINEL/GHOST hide toolbar with no generic exit)
+- P3: 1 (H-MM-3 — Sentinel layout is mostly placeholder)
+
+### Audit method notes
+
+- 6 items audited (Agent, Sentinel, Ghost, System, Camera, Networks). Voice mode and Sign out skipped per task.
+- Per-item flow: hard reload → login (PIN 000000 if challenge appears) → confirm SHADOW → open More → snapshot → click item → wait 1.3 s → snapshot → screenshot.
+- Overlay detection: switched from non-existent `[data-overlay]` selector to title-text regex against `<FloatingWindow>` chrome (`/Camera\s*·\s*face track/i`, `/Nearby networks/i`) since `Overlays.tsx` does not emit `data-overlay`.
+- Wall-clock budget respected (under 3 minutes for the deep pass; 6 reload cycles × ~22 s each).
+- No source files modified. Outputs: this section + 6 screenshots in `docs/audit-2026-04-29-day5-holes/screenshots/more-deep-*.png`.
+
+---
+
+## Backend route smoke (post-audit)
+
+**Run:** 2026-04-29, live backend at `http://127.0.0.1:8000`. Auth: `POST /api/v1/auth/login/pin` with `{"username":"phantom","pin":"000000"}` → JWT carried as `Authorization: Bearer <token>` on all subsequent calls. ROOT user `78d41628-0807-4cfc-996e-70421f887473`.
+
+**Method:** Each route fired once with a happy-path body (or empty `{}` / no body for GET/DELETE) via `xargs -P 6` parallel curl. Wall time ≈ 6 s. Excluded per task spec: `/admin/*`, `/agent/task/<id>/*`, `/chat/sessions/<id>/*`, `/map/wardriving/clear`, `/linux/execute`, `/voice/stt`, `/voice/tts`. Net coverage: 63 of the 76 routes from the inventory.
+
+**Summary line:** 63 routes hit, 38 2xx, 0 401, 1 404-route-mounted (none — all 7 404s are legit "not found" on dummy IDs / unknown keys), 1 500, 15 422-on-empty-body, 1 405 (verb mismatch in inventory, not a backend hole).
+
+### Final tally
+
+| Bucket | Count | Meaning |
+|--------|-------|---------|
+| 2xx    | 38    | Happy-path success |
+| 401    | 0     | No auth misalignment — JWT honored everywhere |
+| 403    | 0     | No RBAC blocks (ROOT user) |
+| 404    | 7     | All legit "not found" on dummy IDs (`00000000-...`) or unknown setting key — **not holes** |
+| 405    | 1     | Inventory says GET /face/enroll, handler is POST — inventory error (POST /face/enroll → 422 with proper detail body) |
+| 422    | 15    | Required fields missing on empty `{}` — expected, not holes |
+| 500    | 1     | **Real hole** — POST /settings/reset with `{}` or `{"keys":[]}` |
+
+### Real holes (P0 / P1)
+
+| Severity | METHOD | PATH | STATUS | RESPONSE BODY (verbatim, ≤500 chars) |
+|----------|--------|------|--------|--------------------------------------|
+| **P0**   | POST   | /api/v1/settings/reset | 500 | `Internal Server Error` (bare text/plain — unhandled exception, no JSON detail emitted) |
+
+**Repro for the 500:**
+
+```bash
+# Triggers 500 (unhandled exception):
+curl -X POST -H "Authorization: Bearer <jwt>" -H 'content-type: application/json' \
+     -d '{}' http://127.0.0.1:8000/api/v1/settings/reset
+# → 500 Internal Server Error (text/plain, not JSON)
+
+curl -X POST -H "Authorization: Bearer <jwt>" -H 'content-type: application/json' \
+     -d '{"keys":[]}' http://127.0.0.1:8000/api/v1/settings/reset
+# → 500 Internal Server Error (text/plain)
+
+# Works fine when category is supplied:
+curl -X POST -H "Authorization: Bearer <jwt>" -H 'content-type: application/json' \
+     -d '{"category":"ui"}' http://127.0.0.1:8000/api/v1/settings/reset
+# → 200 {"ok":true,"reset_count":0}
+```
+
+**Diagnosis (no fix applied — report-only per task rules):** the "reset everything" path in `routes_settings.py:662 reset_settings` lacks the same guard as the "reset by category" path. `ResetRequest` likely accepts an optional category/keys, but when both are absent or `keys` is an empty list, downstream code raises an unhandled exception. The handler also returns `text/plain` instead of going through FastAPI's JSON exception handler — confirming the exception escapes the route entirely (probably out of an inner await/coroutine before the response model is built, or a non-HTTP exception that the global handler stringifies as `Internal Server Error`). Owner should add a guard `if not category and not keys: raise HTTPException(400, "must specify category or keys")` and ensure the global exception handler returns JSON.
+
+### Notes on near-misses (not holes)
+
+- **GET /face/enroll → 405**: The inventory at `_inventory.md:51` lists `GET /face/enroll` but the live route is registered as `POST /face/enroll` (verified by firing POST → 422 with proper `{"detail":[{"type":"missing","loc":["body","samples"],"msg":"Field required",...}]}`). This is an **inventory-table error**, not a backend hole — fix the inventory row to `POST /face/enroll`.
+- **GET /settings/_value/system.locale → 404**: The probe used a key that does not exist. `GET /settings` returns 95 keys; none contain `locale` (closest are `ai_response_language`, `voice_stt_language`, `voice_stt_mms_lang`). The settings endpoint correctly returns `{"detail":"Unknown key: system.locale"}` with proper JSON detail. Not a hole.
+- **All 7 404s** are legit: 4 on dummy fact/POI/standing-order/etc. UUIDs (`00000000-0000-...`), 1 on the unknown setting key, plus 2 standing-order ID variants. Each returns proper `{"detail":"<resource> not found"}` JSON. None are "route mounted but handler missing" (P2 bucket from the task spec).
+- **All 15 422s** are happy-path empty-body responses against routes that legitimately require fields (chat content, agent goal, POI lat/lon/name, timer duration, etc.). Each emits proper Pydantic validation detail.
+
+### Auth and routing health
+
+- ROOT JWT accepted on every `Require` route in the inventory — **0 auth misalignments**.
+- Every protected route returned data or a proper 4xx with a JSON `detail` body (except the one 500 above).
+- `GET /map/services_health` (the only `Auth: None` route in the protected list) returned 200 without a token, as expected.
+- `GET /auth/me`, `GET /agent/status`, `GET /agent/router_state`, `GET /agent/self_model`, `GET /context/current`, `GET /hub/providers`, `GET /hub/route_state`, `GET /linux/resources`, `GET /voice/status`, `GET /face/status`, `GET /face/me`, `GET /ai/models`, `GET /map/wardriving|heatmap|pois|location_history|geo_tagged_facts|track|services_health`, `GET /settings`, `GET /tools/timer|alarm|calendar`, `GET /chat/sessions`, `GET /agent/tasks|audit|standing_orders`, `GET /context/history|state`, `GET /users/<id>/facts` — **all 200**.
+
+### Holes summary for triage
+
+- **P0 backend bug (1):** `POST /api/v1/settings/reset` returns plain-text 500 when called with `{}` or `{"keys":[]}` — unhandled exception; needs both an input guard and a global handler that returns JSON instead of `Internal Server Error` text. Owner: backend / settings.
+- **Inventory fix (1, not a backend bug):** `_inventory.md:51` says `GET /face/enroll` — should be `POST /face/enroll`. Owner: docs / audit.
+
+No P1 (auth misalignment) or P2 (route-mounted-but-handler-missing) backend holes were found in this sweep.
+
+## Settings persistence audit
+
+**Method:** ROOT-JWT login → `GET /api/v1/settings` snapshot (95 keys across 11 categories) → for each of 20 representative keys, GET `_value/<key>`, PUT a flipped/incremented value, GET again to verify persistence, restore original. WS listener on `ws://127.0.0.1:8000/ws?token=...` ran concurrently and counted `{"channel":"settings","type":"config.reloaded","data":{...}}` frames per key. FE consumer check = `grep -rln <key> src/frontend/src` excluding tests, stories, `settingsStore.ts`, and `groupSettings.ts` (the generic loader files). Cross-checked ghosts against `src/backend` to separate "FE-ghost only" from truly unconsumed.
+
+### Categories
+- `general` (6), `theme` (9), `auth` (7), `chat` (6), `sensors` (4), `ai` (13), `voice` (27), `vision` (9), `agent` (8), `map` (6), `about` (0). Total exposed: 95. UI-filters out 7 keys via `UNIMPLEMENTED_KEYS` in `routes_settings.py:409` (whisper knobs, emotion_scale, radar/gps/etc, ghost_auto_encrypt) — those don't show up in the response.
+
+### Round-trip table
+
+| key | persisted? | broadcast? | consumer? | severity |
+| --- | --- | --- | --- | --- |
+| log_level | yes | yes (2) | BE-only | OK |
+| debug | yes | yes (2) | FE+BE | OK |
+| ui_theme | yes | yes (2) | FE (settingsBootstrap) | OK |
+| ui_animation_speed | yes | yes (2) | FE (settingsBootstrap) | OK |
+| security_session_timeout_m | yes | yes (2) | BE-only (auth/jwt) | OK |
+| security_dangerous_cmd_confirm | yes | yes (2) | BE-only (routes_linux) | OK |
+| chat_tools_enabled | yes | yes (2) | BE-only (chat_pipeline) | OK |
+| chat_tool_call_timeout_s | yes | yes (2) | BE-only (chat_tool_dispatcher) | OK |
+| sensor_batch_interval_ms | yes | yes (2) | BE-only (main.py) | OK |
+| ai_temperature | yes | yes (2) | BE-only (gemini/ollama) | OK |
+| ai_streaming | yes | yes (2) | BE-only (routes_chat) | OK |
+| ai_max_tokens | yes | yes (2) | BE-only (gemini/ollama) | OK |
+| voice_tts_enabled | yes | yes (2) | FE (ChatWindow) | OK |
+| voice_tts_speed | yes | yes (2) | FE (ChatWindow) | OK |
+| voice_mode | yes | yes (2) | FE+BE | OK |
+| voice_silence_timeout_ms | yes | yes (2) | BE-only (routes_voice_stream) | OK |
+| face_tracking_enabled | yes | yes (2) | FE+BE | OK |
+| agent_enabled | yes | yes (2) | BE-only (main.py) | OK |
+| ui_map_default_zoom | yes | yes (2) | FE (MapLayout) | OK |
+| ui_map_style | yes | yes (2) | FE (TacticalMap) | OK |
+
+All 20 PUTs returned 200 + correct echo, the follow-up GET reflected the new value, and the WS listener captured the `settings/config.reloaded` frame for every PUT (40/40 broadcasts — restore PUT also broadcast). **Zero persistence failures, zero broadcast misses on the sampled keys.**
+
+### Ghost settings
+
+72/95 keys have **no FE consumer outside the generic store** (`grep` excludes `settingsStore.ts`/`groupSettings.ts`/tests). Most are wired only at the backend (BE-driven knobs the FE neither needs nor reads). 2 are **truly unconsumed anywhere** (no FE, no BE outside `config.py`/`routes_settings.py`).
+
+**FE-ghosts that BE consumes (69 — flipping changes runtime, but UI value never round-trips through a FE selector):**
+`agent_browser_geolocation_enabled, agent_enabled, agent_episodic_memory_enabled, agent_localization_enabled, agent_max_actions_per_task, agent_max_llm_calls_per_task, agent_risk_tolerance, agent_standing_orders_enabled, ai_fallback_provider, ai_gemini_api_key, ai_gemini_model, ai_initiative_enabled, ai_max_tokens, ai_ollama_host, ai_primary_provider, ai_response_language, ai_streaming, ai_temperature, ai_timeout_s, ai_top_p, chat_prompt_excerpt_max_chars, chat_prompt_logging_enabled, chat_tool_call_timeout_s, chat_tool_max_calls_per_turn, chat_tool_max_total_ms, chat_tools_enabled, deployment_mode, face_tracking_auto_switch_profile, face_unknown_lockout_s, log_json_enabled, log_level, oled_animation_enabled, oled_animation_speed, oled_brightness, oled_frame_hz, security_auto_login, security_dangerous_cmd_confirm, security_lockout_duration_m, security_max_pin_attempts, security_session_timeout_m, security_trust_xff, security_trusted_proxies, sensor_batch_interval_ms, sensor_serial_baud, sensor_serial_port, sensor_wifi_scan_enabled, system_hostname, voice_continuation_window_s, voice_mic_duck_on_tts, voice_partial_debounce_ms, voice_refine_diff_threshold, voice_refine_with_whisper, voice_silence_timeout_ms, voice_streaming_partials, voice_stt_language, voice_stt_mms_bundle_dir, voice_stt_mms_compute, voice_stt_mms_enabled, voice_stt_mms_lang, voice_stt_mode, voice_stt_npu_compute, voice_stt_npu_enabled, voice_stt_npu_model_path, voice_wake_confidence_min, voice_wake_phrase, voice_wake_word_enabled, voice_wake_words, wardriving_cell_precision, wardriving_heatmap_precision`
+
+**Truly ghost (P3 — UI exposes, nothing consumes anywhere):**
+- `voice_stt_mms_refine_confidence_min`
+- `voice_stt_mms_refine_with_turbo`
+
+### Other findings
+
+- **P3 categorisation bug:** `agent_localization_enabled` is emitted in **both** `agent` and `map` categories by `_collect_categories()` in `routes_settings.py` (visible in the GET response — same key, two rows). Either show it once, or have the second slot read a different key.
+- **WS broadcast envelope (note for FE consumers):** the frame is `{"channel":"settings","type":"config.reloaded","data":{"key":..,"value":..},"ts":..}` — `type` (not `event`) and `data` (not `payload`). Anything subscribing should match on `channel === 'settings' && type === 'config.reloaded'`.
+

@@ -1,22 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
-import {
-  Map,
-  Home,
-  Settings,
-  MessageSquare,
-  MoreHorizontal,
-  Terminal,
-  Radar,
-  Radio,
-  Shield,
-  Grid3x3,
-  Camera,
-  Wifi,
-  Power,
-  Cpu,
-} from 'lucide-react';
 import { useSystemStore } from '../../stores/systemStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useUIStore, type OverlayName } from '../../stores/uiStore';
@@ -25,9 +9,27 @@ import { settingsApi } from '../../services/api';
 import { SystemState } from '@shared/types';
 import { EASE_PHANTOM } from '../../styles/motion';
 
+/**
+ * FloatingToolbar (sunrise build).
+ *
+ * Bottom-center .glass-strong rounded pill with 7 primary buttons:
+ *   home (wb_sunny) · chat (forum) · apps · terminal · map · settings (tune) · more (more_horiz)
+ *
+ * Each button is 44×44 (.toolbar-btn shape), Material Symbols Outlined glyph,
+ * amber tint when active. Long-press on Home opens the More-menu (a glass-strong
+ * column with secondary actions: Agent / Voice mode / Sentinel / Ghost (ROOT) /
+ * System / Camera / Networks / Sign out).
+ *
+ * Audit fix H-MM-2 — SentinelLayout *does* render this component, so secondary
+ * routing (Sentinel ↔ previous state) keeps working from any layout.
+ *
+ * Every existing onclick handler, Zustand selector, and store flow is preserved.
+ */
+
 export interface ToolbarAction {
   id: string;
-  icon: React.ReactNode;
+  /** Material Symbols Outlined name. */
+  icon: string;
   label: string;
   /** Optional hover/long-press tooltip; falls back to `label` when absent. */
   tooltip?: string;
@@ -43,13 +45,6 @@ interface FloatingToolbarProps {
 
 const LONG_PRESS_MS = 500;
 
-/**
- * FloatingToolbar — bottom-centre glass pill.
- *
- * Primary (always visible): Home, Dialogue, Map, Voice, Settings, More
- * Secondary (opens via More or long-press on Home): Terminal, Sentinel,
- *   Ghost, Grid/SystemCore, Camera, Networks, Power.
- */
 export function FloatingToolbar({ items }: FloatingToolbarProps) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -106,8 +101,6 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
     else toolbarTransition(SystemState.GHOST);
   };
   const goOperator = () => {
-    // OPERATOR layout shows the AgentPanel; if no task is active the panel
-    // exposes the goal input. Pressing again exits if currently OPERATOR.
     if (location.pathname !== '/') navigate('/');
     if (state === SystemState.OPERATOR) toolbarTransition(previousState ?? SystemState.SHADOW);
     else toolbarTransition(SystemState.OPERATOR);
@@ -120,9 +113,7 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
   };
   /** Phase 12.0 — cycle voice_mode: off → continuous → wake_word → off.
    *  Optimistic local flip + persist via settingsApi.set; on failure
-   *  we revert so the button reflects backend truth. The VoiceAlwaysOnGate
-   *  reacts to settingsStore.values.voice_mode changes and starts/stops
-   *  the AudioWorklet + WS independently. */
+   *  we revert so the button reflects backend truth. */
   const cycleVoiceMode = () => {
     const next: 'off' | 'continuous' | 'wake_word' =
       voiceMode === 'off'
@@ -148,35 +139,35 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
   const primary: ToolbarAction[] = [
     {
       id: 'home',
-      icon: <Home size={18} strokeWidth={1.75} />,
+      icon: 'wb_sunny',
       label: 'Home',
       active: state === SystemState.SHADOW && location.pathname === '/',
       onClick: goHome,
     },
     {
-      id: 'dialogue',
-      icon: <MessageSquare size={18} strokeWidth={1.75} />,
+      id: 'chat',
+      icon: 'forum',
       label: 'Dialogue',
       active: state === SystemState.DIALOGUE,
       onClick: goDialogue,
     },
     {
       id: 'apps',
-      icon: <Grid3x3 size={18} strokeWidth={1.75} />,
+      icon: 'apps',
       label: 'Apps',
       active: isOverlayOpen('apps'),
       onClick: () => toggleOverlay('apps'),
     },
     {
       id: 'terminal',
-      icon: <Terminal size={18} strokeWidth={1.75} />,
+      icon: 'terminal',
       label: 'Terminal',
       active: isOverlayOpen('terminal'),
       onClick: () => toggleOverlay('terminal'),
     },
     {
       id: 'map',
-      icon: <Map size={18} strokeWidth={1.75} />,
+      icon: 'map',
       label: 'Map',
       tooltip: 'Tactical map',
       active: location.pathname.startsWith('/map'),
@@ -184,7 +175,7 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
     },
     {
       id: 'settings',
-      icon: <Settings size={18} strokeWidth={1.75} />,
+      icon: 'tune',
       label: 'Settings',
       active: location.pathname.startsWith('/settings'),
       onClick: () => navigate('/settings'),
@@ -194,7 +185,7 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
   const secondaryAll: ToolbarAction[] = [
     {
       id: 'agent',
-      icon: <Cpu size={16} strokeWidth={1.75} />,
+      icon: 'memory',
       label: 'Agent',
       active: state === SystemState.OPERATOR,
       onClick: () => {
@@ -204,7 +195,7 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
     },
     {
       id: 'always-on',
-      icon: <Radio size={16} strokeWidth={1.75} />,
+      icon: 'graphic_eq',
       label: 'Voice mode',
       tooltip: voiceModeTooltip,
       active: voiceModeActive,
@@ -215,7 +206,7 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
     },
     {
       id: 'sentinel',
-      icon: <Radar size={16} strokeWidth={1.75} />,
+      icon: 'radar',
       label: 'Sentinel',
       active: state === SystemState.SENTINEL,
       tone: state === SystemState.SENTINEL ? 'alert' : 'default',
@@ -224,14 +215,11 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
         setMoreMenuOpen(false);
       },
     },
-    // Phase 9.5 — Ghost is ROOT-only. Previously the menu item rendered as
-    // disabled with label "Ghost (root only)" for non-ROOT, which leaked the
-    // feature's existence (violates CLAUDE.md rule #6 — secret features stay
-    // native). It is now filtered out below for non-ROOT users so they see
-    // nothing at all.
+    // Phase 9.5 — Ghost is ROOT-only and filtered out for non-ROOT below
+    // so the option does not leak into the menu (CLAUDE.md rule #6).
     {
       id: 'ghost',
-      icon: <Shield size={16} strokeWidth={1.75} />,
+      icon: 'shield_moon',
       label: 'Ghost',
       active: state === SystemState.GHOST,
       onClick: () => {
@@ -240,11 +228,8 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
       },
     },
     {
-      // Phase 9.5 — renamed from "System core" to "System" + explicit tooltip
-      // to disambiguate from the Map button (both route through FOCUS state
-      // but target different surfaces).
       id: 'grid',
-      icon: <Grid3x3 size={16} strokeWidth={1.75} />,
+      icon: 'grid_view',
       label: 'System',
       tooltip: 'System — CPU / RAM / processes',
       active: state === SystemState.FOCUS && location.pathname === '/',
@@ -255,7 +240,7 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
     },
     {
       id: 'camera',
-      icon: <Camera size={16} strokeWidth={1.75} />,
+      icon: 'videocam',
       label: 'Camera',
       active: isOverlayOpen('camera'),
       onClick: () => {
@@ -265,7 +250,7 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
     },
     {
       id: 'wifi',
-      icon: <Wifi size={16} strokeWidth={1.75} />,
+      icon: 'wifi_tethering',
       label: 'Networks',
       active: isOverlayOpen('wardriving'),
       onClick: () => {
@@ -275,7 +260,7 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
     },
     {
       id: 'power',
-      icon: <Power size={16} strokeWidth={1.75} />,
+      icon: 'power_settings_new',
       label: 'Sign out',
       tone: 'alert',
       onClick: () => {
@@ -284,8 +269,6 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
       },
     },
   ];
-  // Phase 9.5 — filter Ghost out entirely for non-ROOT. Prior code rendered it
-  // disabled with label "Ghost (root only)" which leaked the feature.
   const secondary: ToolbarAction[] = secondaryAll.filter(
     (item) => item.id !== 'ghost' || isRoot,
   );
@@ -342,17 +325,15 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
             exit={{ opacity: 0, y: 8, scale: 0.96 }}
             transition={{ duration: 0.2, ease: EASE_PHANTOM as unknown as number[] }}
             className="absolute left-1/2 -translate-x-1/2"
-            style={{ bottom: 60, zIndex: 40 }}
+            style={{ bottom: 64, zIndex: 40 }}
           >
             <div
-              className="glass-elevated flex flex-col gap-1 px-2 py-2"
+              className="glass-strong flex flex-col"
               style={{
-                borderRadius: 18,
+                gap: 4,
+                padding: 8,
                 minWidth: 220,
-                backdropFilter: 'blur(16px)',
-                WebkitBackdropFilter: 'blur(16px)',
-                boxShadow:
-                  '0 24px 48px -12px rgba(0,0,0,0.55), 0 0 0 1px var(--glass-border), inset 0 1px 0 var(--glass-highlight)',
+                borderRadius: 18,
               }}
             >
               {secondary.map((it) => (
@@ -364,11 +345,13 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
       </AnimatePresence>
 
       <div
-        className="glass-card rounded-full px-3 py-1.5 flex items-center gap-1"
+        className="glass-strong flex items-center"
         style={{
-          transition: 'all 200ms ease',
+          gap: 4,
+          padding: '6px 8px',
+          borderRadius: 999,
           boxShadow:
-            '0 18px 40px -14px rgba(0,0,0,0.55), 0 0 0 1px var(--glass-border), inset 0 1px 0 var(--glass-highlight)',
+            '0 14px 38px rgba(120,70,10,0.18), 0 0 0 1px var(--glass-border), inset 0 1px 0 var(--glass-highlight)',
         }}
       >
         {list.map((item) => {
@@ -389,7 +372,7 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
         <ToolbarIcon
           item={{
             id: 'more',
-            icon: <MoreHorizontal size={18} strokeWidth={1.75} />,
+            icon: 'more_horiz',
             label: 'More',
             active: moreMenuOpen,
             onClick: () => setMoreMenuOpen(!moreMenuOpen),
@@ -399,6 +382,8 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
     </div>
   );
 }
+
+/* ─── Single toolbar button (.toolbar-btn equivalent) ─────────────── */
 
 function ToolbarIcon({
   item,
@@ -414,6 +399,8 @@ function ToolbarIcon({
   onClick?: () => void;
 }) {
   const handle = onClick ?? item.onClick;
+  const fillIcon = item.active ? 1 : 0;
+  const wghtIcon = item.active ? 500 : 400;
   return (
     <button
       type="button"
@@ -422,35 +409,49 @@ function ToolbarIcon({
       onPointerUp={onPointerUp}
       onPointerLeave={onPointerLeave}
       onClick={item.disabled ? undefined : handle}
-      className="relative flex items-center justify-center active:scale-95"
+      className="relative inline-flex items-center justify-center active:scale-95"
       style={{
         width: 44,
         height: 44,
-        borderRadius: 9999,
+        minWidth: 44,
+        minHeight: 44,
+        borderRadius: 14,
+        border: 'none',
         opacity: item.disabled ? 0.35 : 1,
         cursor: item.disabled ? 'not-allowed' : 'pointer',
         color:
           item.tone === 'alert'
-            ? 'var(--signal-alert)'
+            ? 'var(--coral-deep)'
             : item.active
-              ? 'var(--accent)'
+              ? '#8a5e0a'
               : 'var(--ink-secondary)',
         background: item.active
-          ? 'color-mix(in srgb, var(--accent) 14%, transparent)'
+          ? 'linear-gradient(135deg, rgba(244,175,37,0.32), rgba(251,146,60,0.28))'
           : 'transparent',
         boxShadow: item.active
-          ? '0 0 16px var(--accent-glow), inset 0 0 0 1px var(--glass-border-hover)'
+          ? 'inset 0 0 0 1px rgba(244,175,37,0.55), 0 0 14px rgba(244,175,37,0.30)'
           : 'none',
-        transition: 'all 200ms ease',
+        transition: 'background 200ms ease, color 200ms ease, box-shadow 200ms ease, transform 120ms ease',
       }}
       aria-label={item.label}
       aria-pressed={item.active}
       title={item.tooltip ?? item.label}
     >
-      {item.icon}
+      <span
+        className="msym"
+        style={{
+          fontSize: 22,
+          lineHeight: 1,
+          fontVariationSettings: `'FILL' ${fillIcon}, 'wght' ${wghtIcon}, 'GRAD' 0, 'opsz' 24`,
+        }}
+      >
+        {item.icon}
+      </span>
     </button>
   );
 }
+
+/* ─── More-menu row ───────────────────────────────────────────────── */
 
 function MoreMenuItem({ action }: { action: ToolbarAction }) {
   return (
@@ -458,33 +459,36 @@ function MoreMenuItem({ action }: { action: ToolbarAction }) {
       type="button"
       disabled={action.disabled}
       onClick={action.disabled ? undefined : action.onClick}
-      className="flex items-center gap-3 px-3"
+      className="flex items-center"
       style={{
+        gap: 12,
         minHeight: 44,
+        padding: '0 12px',
         borderRadius: 12,
         background: action.active
-          ? 'color-mix(in srgb, var(--accent) 14%, transparent)'
+          ? 'linear-gradient(135deg, rgba(244,175,37,0.22), rgba(251,146,60,0.18))'
           : 'transparent',
         border: action.active
-          ? '1px solid color-mix(in srgb, var(--accent) 34%, transparent)'
+          ? '1px solid rgba(244,175,37,0.45)'
           : '1px solid transparent',
         color:
           action.tone === 'alert'
-            ? 'var(--signal-alert)'
+            ? 'var(--coral-deep)'
             : action.active
-              ? 'var(--accent)'
+              ? '#8a5e0a'
               : 'var(--ink-primary)',
         opacity: action.disabled ? 0.35 : 1,
         cursor: action.disabled ? 'not-allowed' : 'pointer',
         fontFamily: 'var(--font-display)',
-        fontSize: 'var(--fs-xs)',
-        letterSpacing: 'var(--tracking-wide)',
+        fontSize: 12,
+        fontWeight: 600,
+        letterSpacing: '0.04em',
         textAlign: 'left',
-        transition: 'all 200ms ease',
+        transition: 'background 200ms ease, color 200ms ease',
       }}
       onMouseEnter={(e) => {
         if (action.disabled || action.active) return;
-        (e.currentTarget as HTMLElement).style.background = 'var(--glass-border)';
+        (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.55)';
       }}
       onMouseLeave={(e) => {
         if (action.disabled || action.active) return;
@@ -493,14 +497,26 @@ function MoreMenuItem({ action }: { action: ToolbarAction }) {
       aria-label={action.label}
       title={action.tooltip ?? action.label}
     >
-      <span style={{ display: 'inline-flex', color: 'inherit' }}>{action.icon}</span>
+      <span
+        className="msym"
+        aria-hidden
+        style={{
+          fontSize: 18,
+          lineHeight: 1,
+          color: 'inherit',
+          fontVariationSettings: `'FILL' ${action.active ? 1 : 0}, 'wght' ${action.active ? 500 : 400}, 'GRAD' 0, 'opsz' 24`,
+        }}
+      >
+        {action.icon}
+      </span>
       <span className="flex-1">{action.label}</span>
       {action.active && (
         <span
-          className="rounded-full"
+          aria-hidden
           style={{
             width: 6,
             height: 6,
+            borderRadius: 999,
             background: 'currentColor',
             boxShadow: '0 0 6px currentColor',
           }}

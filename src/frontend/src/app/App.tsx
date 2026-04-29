@@ -8,6 +8,22 @@ import { Overlays } from '../components/core/Overlays';
 import { VoiceAlwaysOnGate } from '../components/chat/VoiceAlwaysOnGate';
 import { useSystemStore } from '../stores/systemStore';
 import { SystemState } from '@shared/types';
+import { geolocationService, BrowserGeolocationService } from '../services/geolocation';
+
+function GlobalGeolocationManager() {
+  const authenticated = useSystemStore((s) => s.authenticated);
+
+  useEffect(() => {
+    if (authenticated && BrowserGeolocationService.isSupported()) {
+      geolocationService.start();
+    }
+    return () => {
+      geolocationService.stop();
+    };
+  }, [authenticated]);
+
+  return null;
+}
 
 /* ─── Lazy layouts ────────────────────────────────────────────────────────── */
 
@@ -105,6 +121,7 @@ export function App() {
       <BrowserRouter>
         <StateTransitionController />
         <GlobalAlwaysOnGate />
+        <GlobalGeolocationManager />
         <ViewportFrame>
           <div
             className="w-[1024px] h-[600px] overflow-hidden relative"

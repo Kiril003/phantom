@@ -17,10 +17,19 @@ import { useSystemStore } from '../stores/systemStore';
 import { EASE_PHANTOM } from '../styles/motion';
 
 /**
- * FOCUS — SYSTEM_CORE composition.
- * Left panel: CPU / RAM / ENV / SPATIAL cards in glass chrome.
- * Centre: Orb hovering inside a halo.
- * Right panel: SYS_LOG (recent activity) + CAM preview placeholder.
+ * FOCUS — system-core composition, repainted with sunrise design DNA.
+ *
+ * The prototypes ship two ambient screens (Shadow, Dialogue) plus a
+ * tactical Sentinel; Focus has no dedicated mock. Per FE-LAYOUTS-1
+ * scope: treat Focus as the "deep work" sibling of Shadow — same warm
+ * cream palette and `.glass` panels, but a stronger amber accent on the
+ * orb and a tighter ambient stack so the operator can read the system
+ * pulse at a glance while staying productive.
+ *
+ * All Zustand selectors and prop wiring from the prior implementation
+ * are preserved verbatim. Only the visual scaffolding is swapped to
+ * sunrise: `.glass` / `.sub-glass` chrome, `.micro-label` / `.tabular`
+ * typography, amber gauges, and Playfair italic for the centre quote.
  */
 export default function FocusLayout() {
   const context = useSystemStore((s) => s.context);
@@ -33,6 +42,8 @@ export default function FocusLayout() {
   const tempC = context?.env.temp_c;
   const aqi = context?.env.aqi;
   const bpm = context?.body.breathing_bpm;
+  const placeName = context?.where.place_name;
+  const pending = context?.history.pending_events_1h ?? 0;
   const esp32Disabled = esp32 === 'disabled';
   const esp32Offline = esp32 === 'offline';
 
@@ -49,7 +60,7 @@ export default function FocusLayout() {
       <StatusBar />
 
       <main className="flex-1 grid grid-cols-12 gap-4 px-4 py-4 min-h-0 z-10">
-        {/* Left — system cards */}
+        {/* ─── Left — system + environment ─────────────────────────────── */}
         <section className="col-span-3 flex flex-col gap-3 min-h-0">
           <SectionLabel>SYSTEM_CORE</SectionLabel>
 
@@ -64,7 +75,7 @@ export default function FocusLayout() {
           </Card>
 
           <Card>
-            <CardHead icon={<HardDrive size={14} strokeWidth={1.75} />} label="Disk" />
+            <CardHead icon={<HardDrive size={14} strokeWidth={1.75} />} label="DISK" />
             <Gauge1 value={disk} unit="%" />
           </Card>
 
@@ -115,8 +126,22 @@ export default function FocusLayout() {
           </Card>
         </section>
 
-        {/* Centre — orb */}
+        {/* ─── Centre — orb halo ───────────────────────────────────────── */}
         <section className="col-span-6 flex flex-col items-center justify-center relative">
+          {/* Soft amber halo behind the orb — picks up the FOCUS accent
+              automatically because it draws from --accent-glow. */}
+          <div
+            aria-hidden
+            className="absolute rounded-full animate-pulse-slow"
+            style={{
+              width: 380,
+              height: 380,
+              background: 'var(--accent-glow)',
+              filter: 'blur(80px)',
+              opacity: 0.55,
+            }}
+          />
+
           <Orb size="lg" />
 
           <motion.div
@@ -126,33 +151,34 @@ export default function FocusLayout() {
             transition={{ delay: 0.3, duration: 0.6 }}
           >
             <p
-              className="text-gradient"
+              className="playfair"
               style={{
-                fontFamily: 'var(--font-display)',
-                fontSize: 'var(--fs-xl)',
-                fontWeight: 300,
-                letterSpacing: 'var(--tracking-tight)',
+                fontSize: 26,
+                color: 'var(--ink-secondary)',
+                letterSpacing: '-0.01em',
+                fontWeight: 600,
+                textShadow: '0 1px 0 rgba(255,255,255,0.5)',
               }}
             >
-              {context?.where.place_name ?? 'Focus engaged'}
+              {placeName ?? 'Deep work window'}
             </p>
             <p
-              className="italic"
               style={{
-                fontFamily: 'var(--font-serif)',
-                fontSize: 'var(--fs-sm)',
-                color: 'var(--ink-secondary)',
-                maxWidth: 320,
+                fontFamily: 'var(--font-display)',
+                fontSize: 11,
+                color: 'var(--ink-muted)',
+                letterSpacing: '0.18em',
+                textTransform: 'uppercase',
               }}
             >
-              {context?.history.pending_events_1h != null && context.history.pending_events_1h > 0
-                ? `${context.history.pending_events_1h} thing${context.history.pending_events_1h > 1 ? 's' : ''} waiting for you in the next hour.`
-                : 'All clear in the next hour. Deep work window.'}
+              {pending > 0
+                ? `${pending} thing${pending > 1 ? 's' : ''} queued · stay sharp`
+                : 'no interrupts · breath in'}
             </p>
           </motion.div>
         </section>
 
-        {/* Right — spatial / log */}
+        {/* ─── Right — spatial + log ───────────────────────────────────── */}
         <section className="col-span-3 flex flex-col gap-3 min-h-0">
           <SectionLabel>SPATIAL</SectionLabel>
           <Card>
@@ -165,11 +191,13 @@ export default function FocusLayout() {
               icon={<Gauge size={14} strokeWidth={1.75} />}
               label="Motion"
               value={context?.body.motion_energy != null ? String(context.body.motion_energy) : '—'}
+              muted={context?.body.motion_energy == null}
             />
             <CardRow
               icon={<Gauge size={14} strokeWidth={1.75} />}
               label="Static"
               value={context?.body.static_energy != null ? String(context.body.static_energy) : '—'}
+              muted={context?.body.static_energy == null}
             />
           </Card>
 
@@ -228,19 +256,13 @@ export default function FocusLayout() {
   );
 }
 
-/* ─── Primitives ──────────────────────────────────────────────────────── */
+/* ─── Primitives (sunrise design DNA) ─────────────────────────────────── */
 
 function SectionLabel({ children }: { children: React.ReactNode }) {
   return (
     <span
-      className="uppercase"
-      style={{
-        fontFamily: 'var(--font-display)',
-        fontSize: 'var(--fs-micro)',
-        color: 'var(--ink-muted)',
-        letterSpacing: 'var(--tracking-widest)',
-        fontWeight: 500,
-      }}
+      className="micro-label"
+      style={{ color: 'var(--primary-deep)', letterSpacing: '0.22em' }}
     >
       {children}
     </span>
@@ -250,11 +272,8 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
     <div
-      className={`glass-card flex flex-col gap-2 ${className}`}
-      style={{
-        borderRadius: 16,
-        padding: '10px 12px',
-      }}
+      className={`glass flex flex-col gap-2 ${className}`}
+      style={{ padding: '12px 14px' }}
     >
       {children}
     </div>
@@ -263,19 +282,9 @@ function Card({ children, className = '' }: { children: React.ReactNode; classNa
 
 function CardHead({ icon, label }: { icon: React.ReactNode; label: string }) {
   return (
-    <div className="flex items-center gap-2" style={{ color: 'var(--ink-secondary)' }}>
-      <span style={{ color: 'var(--accent)' }}>{icon}</span>
-      <span
-        className="uppercase"
-        style={{
-          fontFamily: 'var(--font-display)',
-          fontSize: 'var(--fs-micro)',
-          letterSpacing: 'var(--tracking-widest)',
-          color: 'var(--ink-secondary)',
-        }}
-      >
-        {label}
-      </span>
+    <div className="flex items-center gap-2">
+      <span style={{ color: 'var(--primary-deep)' }}>{icon}</span>
+      <span className="micro-label">{label}</span>
     </div>
   );
 }
@@ -294,19 +303,11 @@ function CardRow({
   return (
     <div className="flex items-center gap-2">
       <span style={{ color: 'var(--ink-muted)' }}>{icon}</span>
-      <span
-        className="flex-1 uppercase"
-        style={{
-          fontFamily: 'var(--font-display)',
-          fontSize: 'var(--fs-micro)',
-          color: 'var(--ink-muted)',
-          letterSpacing: 'var(--tracking-widest)',
-        }}
-      >
+      <span className="flex-1 micro-label" style={{ letterSpacing: '0.18em' }}>
         {label}
       </span>
       <span
-        className="tabular-nums"
+        className="tabular"
         style={{
           fontFamily: 'var(--font-mono)',
           fontSize: 'var(--fs-xs)',
@@ -328,15 +329,22 @@ function Gauge1({ value, unit }: { value: number | undefined; unit?: string }) {
       ? 'var(--signal-alert)'
       : v > 60
         ? 'var(--signal-warn)'
-        : 'var(--accent)';
+        : 'var(--primary-deep)';
+  const fill = !hasValue
+    ? 'var(--ink-muted)'
+    : v > 85
+      ? 'linear-gradient(90deg,#ef4444,#b9201f)'
+      : v > 60
+        ? 'linear-gradient(90deg,#f59e0b,#fb923c)'
+        : 'linear-gradient(90deg,#f4af25,#fb923c)';
   return (
     <div className="flex flex-col gap-1">
       <div className="flex items-baseline gap-1">
         <span
-          className="tabular-nums"
+          className="tabular"
           style={{
             fontFamily: 'var(--font-display)',
-            fontSize: 'var(--fs-lg)',
+            fontSize: 26,
             fontWeight: 600,
             color,
             letterSpacing: 'var(--tracking-tight)',
@@ -370,9 +378,9 @@ function Gauge1({ value, unit }: { value: number | undefined; unit?: string }) {
           className="block absolute left-0 top-0 bottom-0"
           style={{
             width: hasValue ? `${Math.max(3, Math.min(100, v))}%` : '0%',
-            background: color,
+            background: fill,
             borderRadius: 9999,
-            boxShadow: hasValue ? `0 0 8px ${color}` : 'none',
+            boxShadow: hasValue ? '0 0 8px rgba(244,175,37,0.45)' : 'none',
           }}
         />
       </span>
@@ -393,7 +401,7 @@ function LogLine({
     tone === 'ok'    ? 'var(--signal-ok)' :
     tone === 'warn'  ? 'var(--signal-warn)' :
     tone === 'alert' ? 'var(--signal-alert)' :
-    tone === 'info'  ? 'var(--accent)' :
+    tone === 'info'  ? 'var(--primary-deep)' :
     'var(--ink-muted)';
   const textColor =
     tone === 'muted' ? 'var(--ink-secondary)' : 'var(--ink-primary)';
@@ -418,7 +426,7 @@ function LogLine({
         </p>
         {sub && (
           <p
-            className="tabular-nums"
+            className="tabular"
             style={{
               fontFamily: 'var(--font-mono)',
               fontSize: 'var(--fs-micro)',

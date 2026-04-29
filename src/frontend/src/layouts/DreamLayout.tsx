@@ -1,4 +1,5 @@
 import { motion } from 'framer-motion';
+import { Sun } from 'lucide-react';
 import { useSystemStore } from '../stores/systemStore';
 import { EASE_PHANTOM } from '../styles/motion';
 
@@ -13,6 +14,7 @@ import { EASE_PHANTOM } from '../styles/motion';
  */
 export default function DreamLayout() {
   const context = useSystemStore((s) => s.context);
+  const goShadow = useSystemStore((s) => s.goShadow);
 
   const breathingBpm = context?.body.breathing_bpm;
   const breathingState = context?.body.breathing_state;
@@ -32,6 +34,26 @@ export default function DreamLayout() {
       exit={{ opacity: 0 }}
       transition={{ duration: 1, ease: EASE_PHANTOM as unknown as number[] }}
     >
+      {/* Exit button — improved for touchscreens */}
+      <motion.button
+        type="button"
+        onClick={goShadow}
+        className="absolute top-8 left-8 p-4 rounded-full z-50 active:opacity-100"
+        style={{
+          background: 'radial-gradient(circle, rgba(149,117,205,0.1) 0%, transparent 70%)',
+          color: 'var(--accent)',
+          border: 'none',
+        }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 0.35 }}
+        whileHover={{ opacity: 0.8, scale: 1.05 }}
+        whileTap={{ scale: 0.9, opacity: 1 }}
+        transition={{ duration: 0.2 }}
+        aria-label="Wake up"
+      >
+        <Sun size={24} strokeWidth={1} />
+      </motion.button>
+
       {/* Ambient glow orb — synced to breathing */}
       <div className="absolute inset-0 flex items-center justify-center">
         <motion.div

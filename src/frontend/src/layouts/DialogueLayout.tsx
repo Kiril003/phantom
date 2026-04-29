@@ -1,9 +1,9 @@
-import { useState, useCallback } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
+import { Wind, TrendingDown, Brain, Route } from 'lucide-react';
 import { StatusBar } from '../components/core/StatusBar';
 import { AmbientGlows } from '../components/core/AmbientGlows';
 import { FloatingToolbar } from '../components/core/FloatingToolbar';
-import { Orb } from '../components/core/Orb';
 import { ChatWindow } from '../components/chat/ChatWindow';
 import { useSystemStore } from '../stores/systemStore';
 import { useChatStore } from '../stores/chatStore';
@@ -12,9 +12,30 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { EASE_PHANTOM } from '../styles/motion';
 
 /**
- * DIALOGUE — conversation surface.
- * Left: Orb (voice-reactive) + live context whisper + memory hints.
- * Right: ChatWindow with sessions panel and glass input pill.
+ * DIALOGUE — voice + chat surface, sunrise redesign.
+ *
+ *   ┌──────────────┬───────────────────────────────────────────────────┐
+ *   │ VOICE ORB    │  TRANSCRIPT — wired ChatWindow with date marker,  │
+ *   │ phoneme bars │  AI greeting bubble, user voice bubble + waveform,│
+ *   │ "Listening…" │  thinking pill, inline scenes, suggestion chips,  │
+ *   │ bio chips    │  glass-strong input pill at bottom.               │
+ *   │ glass card   │                                                   │
+ *   └──────────────┴───────────────────────────────────────────────────┘
+ *
+ * Wiring is preserved:
+ *   - useSystemStore.context           — biosignal chips
+ *   - useChatStore (isTyping/streaming) — orb pulse trigger
+ *   - useVoiceAlwaysOnStatusStore       — armed / listening / cooldown
+ *   - useSettingsStore.values.voice_mode — sphere label
+ *   - ChatWindow handles the actual transcript, scenes and input pill;
+ *     DialogueLayout only reframes it inside the new glass scaffolding.
+ *
+ * Animations carry meaning:
+ *   - orb-breathe = listening (slows when always-on is asleep)
+ *   - phoneme bars use phantom-pulse-slow with staggered durations to
+ *     read as voice phoneme energy when the orb is "live"
+ *   - the breathing equaliser bars in the YOU·NOW card animate only when
+ *     breathing_bpm is real, never on null fixtures.
  */
 export default function DialogueLayout() {
   const context = useSystemStore((s) => s.context);
@@ -32,17 +53,44 @@ export default function DialogueLayout() {
     setVoiceActive(active);
   }, []);
 
-  const alwaysOnActive = alwaysOnStatus === 'ready'
-    || alwaysOnStatus === 'listening'
-    || alwaysOnStatus === 'armed'
-    || alwaysOnStatus === 'cooldown';
+  const alwaysOnActive =
+    alwaysOnStatus === 'ready' ||
+    alwaysOnStatus === 'listening' ||
+    alwaysOnStatus === 'armed' ||
+    alwaysOnStatus === 'cooldown';
 
-  const pulsing = isTyping || !!streaming || voiceActive
-    || alwaysOnStatus === 'armed' || alwaysOnStatus === 'cooldown';
+  const pulsing =
+    isTyping ||
+    !!streaming ||
+    voiceActive ||
+    alwaysOnStatus === 'armed' ||
+    alwaysOnStatus === 'cooldown';
+
+  const sphereLabel = useMemo(() => {
+    if (voiceActive) return 'Recording…';
+    if (alwaysOnStatus === 'armed') return 'Armed';
+    if (alwaysOnStatus === 'cooldown') return 'Cooldown';
+    if (pulsing) return 'Thinking…';
+    if (alwaysOnStatus === 'listening') return 'Listening…';
+    if (alwaysOnActive) {
+      if (voiceMode === 'wake_word') return 'Awake';
+      if (voiceMode === 'continuous') return 'Listening…';
+      return 'Ready';
+    }
+    return 'Ready';
+  }, [voiceActive, pulsing, alwaysOnStatus, alwaysOnActive, voiceMode]);
+
+  const bpm = context?.body.breathing_bpm;
+  const stress = context?.body.stress_level;
+  const provider = context?.system.ai_provider;
+  const breathingState = context?.body.breathing_state;
+
+  // Pulse the orb harder when the operator (or AI) is producing speech.
+  const orbScale = voiceActive ? 1.04 : pulsing ? 1.02 : 1;
 
   return (
     <motion.div
-      className="w-[1024px] h-[600px] flex flex-col relative"
+      className="w-[1024px] h-[600px] relative"
       style={{ background: 'var(--surface-base)' }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
@@ -52,111 +100,218 @@ export default function DialogueLayout() {
       <AmbientGlows />
       <StatusBar />
 
-      <main className="flex-1 flex min-h-0 z-10 relative">
-        {/* Left — Orb + context whisper */}
+      <main className="absolute inset-0 z-10" style={{ top: 44, bottom: 0 }}>
+        {/* === LEFT — VOICE PRESENCE PANEL ================================== */}
         <motion.aside
-          className="w-[300px] shrink-0 flex flex-col items-center justify-between py-6 px-5 relative"
-          initial={{ x: -32, opacity: 0 }}
+          className="absolute"
+          style={{ left: 12, top: 12, bottom: 76, width: 296, zIndex: 3 }}
+          initial={{ x: -24, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
           transition={{ duration: 0.45, ease: EASE_PHANTOM as unknown as number[] }}
         >
-          <div className="flex-1 flex flex-col items-center justify-center gap-4 w-full">
-            <Orb size="md" pulsing={pulsing} />
-            <div
-              className="text-center mt-2"
-              style={{ maxWidth: 240 }}
+          {/* Big animated voice orb with phoneme bars. */}
+          <div
+            className="relative flex items-center justify-center"
+            style={{ height: 240 }}
+          >
+            <svg
+              viewBox="0 0 240 240"
+              aria-hidden
+              style={{
+                position: 'absolute',
+                inset: 0,
+                width: '100%',
+                height: '100%',
+                transform: `scale(${orbScale})`,
+                transition: 'transform 120ms ease',
+              }}
             >
-              <p
-                className="text-gradient"
+              <defs>
+                <radialGradient id="dialogue-voice-core" cx="35%" cy="30%">
+                  <stop offset="0%" stopColor="#fff" />
+                  <stop offset="40%" stopColor="#fde9b8" />
+                  <stop offset="100%" stopColor="#f4af25" />
+                </radialGradient>
+              </defs>
+
+              {/* Outer voice-lock rings */}
+              {[110, 92, 76].map((r, i) => (
+                <circle
+                  key={r}
+                  cx="120"
+                  cy="120"
+                  r={r}
+                  fill="none"
+                  stroke={`rgba(244,175,37,${0.18 - i * 0.04})`}
+                  strokeWidth="0.8"
+                  strokeDasharray={i === 1 ? '2 4' : undefined}
+                  style={{
+                    animation: `orb-breathe ${3 + i}s ease-in-out infinite`,
+                  }}
+                />
+              ))}
+
+              {/* Phoneme bars — 36 spokes around the orb */}
+              {Array.from({ length: 36 }).map((_, i) => {
+                const angle = (i / 36) * Math.PI * 2;
+                const baseR = 60;
+                const len =
+                  8 + Math.abs(Math.sin(i * 0.7) * 14) + (i % 5 === 0 ? 6 : 0);
+                const x1 = 120 + Math.cos(angle) * baseR;
+                const y1 = 120 + Math.sin(angle) * baseR;
+                const x2 = 120 + Math.cos(angle) * (baseR + len);
+                const y2 = 120 + Math.sin(angle) * (baseR + len);
+                return (
+                  <line
+                    key={i}
+                    x1={x1}
+                    y1={y1}
+                    x2={x2}
+                    y2={y2}
+                    stroke="#f4af25"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    opacity={pulsing ? 0.5 + (i % 4) * 0.15 : 0.25 + (i % 4) * 0.1}
+                    style={{
+                      animation: pulsing
+                        ? `phantom-pulse-slow ${1 + (i % 6) * 0.2}s ease-in-out infinite`
+                        : undefined,
+                    }}
+                  />
+                );
+              })}
+
+              {/* Solid core */}
+              <circle
+                cx="120"
+                cy="120"
+                r="46"
+                fill="url(#dialogue-voice-core)"
                 style={{
-                  fontFamily: 'var(--font-display)',
-                  fontSize: 'var(--fs-lg)',
-                  fontWeight: 300,
-                  letterSpacing: 'var(--tracking-tight)',
+                  animation: 'orb-breathe 4s ease-in-out infinite',
+                  filter: 'drop-shadow(0 0 20px rgba(244,175,37,0.5))',
                 }}
-              >
-                {voiceActive
-                  ? 'Recording'
-                  : alwaysOnStatus === 'armed'
-                    ? 'Armed'
-                    : alwaysOnStatus === 'cooldown'
-                      ? 'Cooldown'
-                      : pulsing
-                        ? 'Thinking'
-                        : alwaysOnStatus === 'listening'
-                          ? 'Listening'
-                          : alwaysOnActive
-                            ? voiceMode === 'wake_word'
-                              ? 'Awake'
-                              : voiceMode === 'continuous'
-                                ? 'Listening'
-                                : 'Ready'
-                            : 'Ready'}
-              </p>
-              <p
-                className="italic mt-1"
-                style={{
-                  fontFamily: 'var(--font-serif)',
-                  fontSize: 'var(--fs-sm)',
-                  color: 'var(--ink-secondary)',
-                }}
-              >
-                {context?.memory_hints && context.memory_hints.length > 0
-                  ? '"' + context.memory_hints[0] + '"'
-                  : 'Speak freely.'}
-              </p>
+              />
+              <circle cx="108" cy="108" r="14" fill="rgba(255,255,255,0.7)" />
+            </svg>
+          </div>
+
+          <div className="text-center" style={{ padding: '0 8px' }}>
+            <div
+              className="playfair"
+              style={{ fontSize: 20, color: 'var(--ink-secondary)' }}
+            >
+              {sphereLabel}
+            </div>
+            <div className="micro-label" style={{ marginTop: 4 }}>
+              {voiceActive ? 'TAP ORB TO INTERRUPT' : 'TAP ORB TO SPEAK'}
             </div>
           </div>
 
-          {/* Context readouts */}
-          {context && (
-            <div className="w-full flex flex-col gap-1.5 glass-panel px-3 py-2.5"
-              style={{ borderRadius: 14 }}
-            >
-              <ContextLine
-                label="Breathing"
-                value={context.body.breathing_bpm != null ? `${context.body.breathing_bpm} bpm` : '—'}
-                muted={context.body.breathing_bpm == null}
-              />
-              <ContextLine
-                label="Stress"
-                value={
-                  context.body.stress_level != null
-                    ? `${Math.round(context.body.stress_level * 100)}%`
-                    : '—'
-                }
-                alert={(context.body.stress_level ?? 0) > 0.7}
-                muted={context.body.stress_level == null}
-              />
-              {context.where.place_name && (
-                <ContextLine label="Location" value={context.where.place_name} />
-              )}
-              <ContextLine label="AI" value={context.system.ai_provider ?? '—'} capitalize />
+          {/* Bio chips — wired to context.body / system.ai_provider */}
+          <div className="glass" style={{ marginTop: 14, padding: 12 }}>
+            <div className="micro-label" style={{ marginBottom: 8 }}>
+              YOU · NOW
             </div>
-          )}
+            <div className="flex flex-col" style={{ gap: 6 }}>
+              {/* Breathing — equaliser bars only animate when bpm is live */}
+              <div className="flex items-center" style={{ gap: 6, fontSize: 11 }}>
+                <Wind size={12} strokeWidth={1.75} style={{ color: 'var(--primary-deep)' }} />
+                <span className="flex-1" style={{ color: 'var(--ink-muted)' }}>
+                  BREATHING
+                </span>
+                <span className="flex" style={{ gap: 1 }}>
+                  {[4, 7, 4, 7, 4, 7, 4].map((h, i) => (
+                    <span
+                      key={i}
+                      style={{
+                        width: 2,
+                        height: h,
+                        background: 'var(--primary)',
+                        borderRadius: 1,
+                        opacity: bpm != null ? 1 : 0.35,
+                        animation:
+                          bpm != null
+                            ? `phantom-pulse-slow ${1.6 + (i % 3) * 0.2}s ease-in-out infinite`
+                            : undefined,
+                      }}
+                    />
+                  ))}
+                </span>
+                <span
+                  className="tabular"
+                  style={{ fontWeight: 600, fontSize: 11 }}
+                >
+                  {bpm != null ? `${bpm}/min` : '—'}
+                </span>
+              </div>
+
+              {/* Stress — bar + label, colour follows level */}
+              <StressRow stress={stress} />
+
+              {/* State (breathing_state) */}
+              <div className="flex items-center" style={{ gap: 6, fontSize: 11 }}>
+                <Brain size={12} strokeWidth={1.75} style={{ color: 'var(--primary-deep)' }} />
+                <span className="flex-1" style={{ color: 'var(--ink-muted)' }}>
+                  STATE
+                </span>
+                <span
+                  className="playfair"
+                  style={{ fontSize: 12, color: 'var(--ink-secondary)' }}
+                >
+                  {breathingState ?? '—'}
+                </span>
+              </div>
+
+              {/* Route — AI provider + whisper pill */}
+              <div className="flex items-center" style={{ gap: 6, fontSize: 11 }}>
+                <Route size={12} strokeWidth={1.75} style={{ color: 'var(--primary-deep)' }} />
+                <span className="flex-1" style={{ color: 'var(--ink-muted)' }}>
+                  ROUTE
+                </span>
+                <span style={{ fontSize: 11, fontWeight: 600, textTransform: 'capitalize' }}>
+                  {provider ?? '—'}
+                </span>
+                {voiceMode !== 'off' && (
+                  <span
+                    style={{
+                      fontSize: 9,
+                      color: 'var(--primary-deep)',
+                      padding: '1px 5px',
+                      borderRadius: 999,
+                      background: 'rgba(244,175,37,0.15)',
+                      letterSpacing: '0.1em',
+                    }}
+                  >
+                    {voiceMode === 'wake_word' ? 'wake' : 'live'}
+                  </span>
+                )}
+              </div>
+            </div>
+          </div>
         </motion.aside>
 
-        {/* Right — ChatWindow */}
+        {/* === RIGHT — TRANSCRIPT + INPUT (wired ChatWindow) ================ */}
         <motion.div
-          className="flex-1 min-w-0 min-h-0 relative"
-          initial={{ y: 16, opacity: 0 }}
+          className="absolute"
+          style={{ left: 320, right: 12, top: 12, bottom: 76, zIndex: 2 }}
+          initial={{ y: 12, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ duration: 0.5, ease: EASE_PHANTOM as unknown as number[] }}
         >
+          {/* Glass shell behind the chat surface — gives the transcript the
+              same warm panel as the bio card on the left. */}
           <div
-            className="absolute inset-y-4 inset-x-0 mr-4 glass-panel"
-            style={{
-              borderRadius: 24,
-              borderRight: 'none',
-              zIndex: 0,
-            }}
+            aria-hidden
+            className="absolute inset-0 glass"
+            style={{ borderRadius: 24 }}
           />
           <div className="relative h-full">
             <ChatWindow
               onVoiceToggle={handleVoiceToggle}
-              minimalChrome={false}
+              minimalChrome
               placeholder="Message PHANTOM…"
-              className="pb-14"
+              className="pb-2"
             />
           </div>
         </motion.div>
@@ -167,47 +322,75 @@ export default function DialogueLayout() {
   );
 }
 
-function ContextLine({
-  label,
-  value,
-  alert = false,
-  capitalize = false,
-  muted = false,
-}: {
-  label: string;
-  value: string;
-  alert?: boolean;
-  capitalize?: boolean;
-  muted?: boolean;
-}) {
-  const valueColor = alert
-    ? 'var(--signal-alert)'
-    : muted
-      ? 'var(--ink-muted)'
-      : 'var(--ink-primary)';
+/* ─── Stress row ──────────────────────────────────────────────────────── */
+
+function StressRow({ stress }: { stress: number | null | undefined }) {
+  const view = (() => {
+    if (stress == null)
+      return {
+        pct: 0,
+        bar: 'var(--ink-muted)',
+        label: '—',
+        labelColor: 'var(--ink-muted)',
+      };
+    const pct = Math.max(0, Math.min(100, stress * 100));
+    if (stress >= 0.7)
+      return {
+        pct,
+        bar: 'var(--signal-alert)',
+        label: 'high',
+        labelColor: 'var(--coral-deep)',
+      };
+    if (stress >= 0.4)
+      return {
+        pct,
+        bar: 'var(--signal-warn)',
+        label: 'mid',
+        labelColor: '#8a5e0a',
+      };
+    return {
+      pct,
+      bar: 'var(--signal-ok)',
+      label: 'low',
+      labelColor: '#16a34a',
+    };
+  })();
+
   return (
-    <div className="flex items-center justify-between">
-      <span
-        className="uppercase"
-        style={{
-          fontFamily: 'var(--font-display)',
-          fontSize: 'var(--fs-micro)',
-          color: 'var(--ink-muted)',
-          letterSpacing: 'var(--tracking-widest)',
-        }}
-      >
-        {label}
+    <div className="flex items-center" style={{ gap: 6, fontSize: 11 }}>
+      <TrendingDown
+        size={12}
+        strokeWidth={1.75}
+        style={{ color: stress != null && stress < 0.4 ? 'var(--signal-ok)' : 'var(--primary-deep)' }}
+      />
+      <span className="flex-1" style={{ color: 'var(--ink-muted)' }}>
+        STRESS
       </span>
-      <span
-        className="tabular-nums"
+      <div
         style={{
-          fontFamily: 'var(--font-mono)',
-          fontSize: 'var(--fs-xs)',
-          color: valueColor,
-          textTransform: capitalize ? 'capitalize' : 'none',
+          width: 60,
+          height: 4,
+          borderRadius: 2,
+          background: 'var(--line-subtle)',
+          position: 'relative',
         }}
       >
-        {value}
+        <div
+          style={{
+            position: 'absolute',
+            left: 0,
+            top: 0,
+            bottom: 0,
+            width: `${view.pct}%`,
+            background: view.bar,
+            borderRadius: 2,
+          }}
+        />
+      </div>
+      <span
+        style={{ fontSize: 10, fontWeight: 600, color: view.labelColor }}
+      >
+        {view.label}
       </span>
     </div>
   );

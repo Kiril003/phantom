@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 
-export type OverlayName = 'terminal' | 'wardriving' | 'camera' | 'apps';
+export type OverlayName = 'terminal' | 'wardriving' | 'camera' | 'apps' | 'standing_orders';
 
 // Logical frame size used when positioning overlays. Matches App shell.
 const FRAME_W = 1024;
@@ -93,13 +93,14 @@ interface UIStoreState {
  */
 const STORAGE_KEY = 'phantom.ui.windows.v2';
 
-const ALL_IDS: OverlayName[] = ['terminal', 'wardriving', 'camera', 'apps'];
+const ALL_IDS: OverlayName[] = ['terminal', 'wardriving', 'camera', 'apps', 'standing_orders'];
 
 const DEFAULT_RECT: Record<OverlayName, WindowRect> = {
   terminal: defaultRectFor('terminal'),
   wardriving: defaultRectFor('wardriving'),
   camera: defaultRectFor('camera'),
   apps: defaultRectFor('apps'),
+  standing_orders: defaultRectFor('standing_orders'),
 };
 
 function loadPersisted(): Partial<Record<OverlayName, WindowRect>> {

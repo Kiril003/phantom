@@ -10,7 +10,13 @@ import {
   UserCheck,
   UserX,
   Shield,
+  Map,
+  Cpu,
+  Radar,
+  Settings,
+  MessageSquare,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { FloatingWindow } from './FloatingWindow';
 import { useUIStore, type OverlayName } from '../../stores/uiStore';
 import { useMapStore } from '../../stores/mapStore';
@@ -19,12 +25,15 @@ import { useFaceStore } from '../../stores/faceStore';
 import { useFaceDetection } from '../../hooks/useFaceDetection';
 import { faceApi } from '../../services/faceApi';
 import { SystemState } from '@shared/types';
+import { StandingOrdersOverlay } from './StandingOrdersOverlay';
+import { Zap } from 'lucide-react';
 
 const TITLES: Record<OverlayName, string> = {
   terminal: 'Terminal',
   wardriving: 'Nearby networks',
   camera: 'Camera · face track',
   apps: 'Apps',
+  standing_orders: 'Protocols · standing orders',
 };
 
 function iconFor(name: OverlayName): React.ReactNode {
@@ -37,6 +46,8 @@ function iconFor(name: OverlayName): React.ReactNode {
       return <Camera size={14} strokeWidth={1.75} />;
     case 'apps':
       return <Grid3x3 size={14} strokeWidth={1.75} />;
+    case 'standing_orders':
+      return <Zap size={14} strokeWidth={1.75} />;
   }
 }
 
@@ -135,6 +146,8 @@ function OverlayBody({ name }: { name: OverlayName }) {
       return <CameraOverlay />;
     case 'apps':
       return <AppsOverlay />;
+    case 'standing_orders':
+      return <StandingOrdersOverlay />;
   }
 }
 
@@ -157,25 +170,68 @@ function TerminalOverlay() {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth', block: 'end' });
   }, [lines]);
 
-  const onSubmit = useCallback((cmd: string) => {
+  const onSubmit = useCallback(async (cmd: string) => {
     const id = Math.random().toString(36).slice(2);
     const trimmed = cmd.trim();
     if (!trimmed) return;
+
     setLines((l) => [...l, { id: id + '_p', kind: 'prompt', text: `› ${trimmed}` }]);
     setInput('');
-    const out =
-      trimmed === 'help'
-        ? 'Available: help, state, ws, clear'
-        : trimmed === 'state'
-          ? `state=${useSystemStore.getState().state}`
-          : trimmed === 'ws'
-            ? `ws=${useSystemStore.getState().wsConnected ? 'connected' : 'offline'}`
-            : trimmed === 'clear'
-              ? null
-              : `unknown: ${trimmed}`;
-    if (trimmed === 'clear') setLines([]);
-    else if (out != null)
-      setLines((l) => [...l, { id: id + '_o', kind: 'stdout', text: out }]);
+
+    if (trimmed === 'clear') {
+      setLines([]);
+      return;
+    }
+
+    if (trimmed === 'help') {
+      setLines((l) => [
+        ...l,
+        { id: id + '_h', kind: 'info', text: 'PHANTOM sandboxed shell. Run any linux command.' },
+      ]);
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('phantom_token');
+      const res = await fetch('/api/v1/linux/execute', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({ command: trimmed }),
+      });
+
+      const data = await res.json();
+      if (!res.ok) {
+        setLines((l) => [...l, { id: id + '_e', kind: 'stderr', text: data.detail || 'Error' }]);
+        return;
+      }
+
+      if (data.needs_confirmation) {
+        setLines((l) => [...l, { id: id + '_o', kind: 'info', text: data.message }]);
+        return;
+      }
+
+      const { stdout, stderr, return_code } = data.output || {};
+      if (stdout) {
+        setLines((l) => [...l, { id: id + '_o', kind: 'stdout', text: stdout }]);
+      }
+      if (stderr) {
+        setLines((l) => [...l, { id: id + '_e', kind: 'stderr', text: stderr }]);
+      }
+      if (return_code !== 0 && !stderr) {
+        setLines((l) => [
+          ...l,
+          { id: id + '_e', kind: 'stderr', text: `Process exited with code ${return_code}` },
+        ]);
+      }
+    } catch (err) {
+      setLines((l) => [
+        ...l,
+        { id: id + '_e', kind: 'stderr', text: 'System offline or connection refused' },
+      ]);
+    }
   }, []);
 
   return (
@@ -730,18 +786,118 @@ function CameraOverlay() {
 /* ─── Apps ────────────────────────────────────────────────────────────── */
 
 function AppsOverlay() {
+  const navigate = useNavigate();
+  const toggleOverlay = useUIStore((s) => s.toggleOverlay);
+  const goOperator = useSystemStore((s) => s.goOperator);
+  const goSentinel = useSystemStore((s) => s.goSentinel);
+
+  const apps = [
+    {
+      id: 'map',
+      label: 'Карта',
+      icon: <Map size={24} />,
+      onClick: () => {
+        navigate('/map');
+        toggleOverlay('apps');
+      },
+    },
+    {
+      id: 'camera',
+      label: 'Камера',
+      icon: <Camera size={24} />,
+      onClick: () => {
+        toggleOverlay('camera');
+        toggleOverlay('apps');
+      },
+    },
+    {
+      id: 'terminal',
+      label: 'Термінал',
+      icon: <TerminalIcon size={24} />,
+      onClick: () => {
+        toggleOverlay('terminal');
+        toggleOverlay('apps');
+      },
+    },
+    {
+      id: 'wifi',
+      label: 'Мережі',
+      icon: <Wifi size={24} />,
+      onClick: () => {
+        toggleOverlay('wardriving');
+        toggleOverlay('apps');
+      },
+    },
+    {
+      id: 'agent',
+      label: 'Агент',
+      icon: <Cpu size={24} />,
+      onClick: () => {
+        goOperator();
+        toggleOverlay('apps');
+      },
+    },
+    {
+      id: 'sentinel',
+      label: 'Sentinel',
+      icon: <Radar size={24} />,
+      onClick: () => {
+        goSentinel();
+        toggleOverlay('apps');
+      },
+    },
+    {
+      id: 'settings',
+      label: 'Налаштув.',
+      icon: <Settings size={24} />,
+      onClick: () => {
+        navigate('/settings');
+        toggleOverlay('apps');
+      },
+    },
+    {
+      id: 'dialogue',
+      label: 'Діалог',
+      icon: <MessageSquare size={24} />,
+      onClick: () => {
+        navigate('/');
+        toggleOverlay('apps');
+      },
+    },
+    {
+      id: 'protocols',
+      label: 'Протоколи',
+      icon: <Zap size={24} />,
+      onClick: () => {
+        toggleOverlay('standing_orders');
+        toggleOverlay('apps');
+      },
+    },
+  ];
+
   return (
-    <div className="h-full flex items-center justify-center p-6 text-center">
-      <span
-        style={{
-          fontFamily: 'var(--font-serif)',
-          fontSize: 'var(--fs-sm)',
-          color: 'var(--ink-muted)',
-          fontStyle: 'italic',
-        }}
-      >
-        Apps grid arrives in a later phase.
-      </span>
+    <div className="h-full grid grid-cols-4 gap-4 p-6 overflow-y-auto">
+      {apps.map((app) => (
+        <button
+          key={app.id}
+          type="button"
+          onClick={app.onClick}
+          className="flex flex-col items-center gap-2 p-3 rounded-xl hover:bg-white/5 active:scale-95 transition-all"
+        >
+          <div
+            className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white/5 text-accent shadow-lg shadow-accent/10 border border-white/5"
+            style={{ color: 'var(--accent)' }}
+          >
+            {app.icon}
+          </div>
+          <span
+            className="font-display uppercase tracking-wider text-center"
+            style={{ fontSize: 'var(--fs-micro)', color: 'var(--ink-secondary)' }}
+          >
+            {app.label}
+          </span>
+        </button>
+      ))}
     </div>
   );
 }

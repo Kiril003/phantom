@@ -1,7 +1,7 @@
-import React, { createContext, useContext, useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { wsClient } from '../services/websocket';
-import type { WSMessage, SensorMessage, StateMessage } from '../services/websocket';
+import type { SensorMessage, StateMessage } from '../services/websocket';
 import { useSystemStore } from '../stores/systemStore';
 import { useOledStore, type OledFrame } from '../stores/oledStore';
 import { bootstrapSettings } from '../services/settingsBootstrap';
@@ -21,19 +21,9 @@ const queryClient = new QueryClient({
 
 /* ─── WebSocket Context ───────────────────────────────────────────────────── */
 
-interface WSContextValue {
-  connected: boolean;
-  send: (msg: WSMessage) => void;
-}
-
-const WSContext = createContext<WSContextValue>({
-  connected: false,
-  send: () => undefined,
-});
-
-export function useWS(): WSContextValue {
-  return useContext(WSContext);
-}
+// NOTE: WSContext / useWS hook removed (audit-2026-04-29) — no consumer
+// ever imported it. The WebSocketProvider manages connection lifecycle
+// internally; downstream components read wsClient directly.
 
 /**
  * Module-level mount counter lets us survive React.StrictMode's
@@ -91,7 +81,6 @@ function HealthPoller() {
 }
 
 function WebSocketProvider({ children }: { children: React.ReactNode }) {
-  const [connected, setConnected] = useState(() => wsClient.isConnected);
   const tokenRef = useRef<string | null>(null);
 
   useEffect(() => {
@@ -101,14 +90,12 @@ function WebSocketProvider({ children }: { children: React.ReactNode }) {
 
     unsubs.push(
       wsClient.onConnect(() => {
-        setConnected(true);
         useSystemStore.getState().setWsConnected(true);
       })
     );
 
     unsubs.push(
       wsClient.onDisconnect(() => {
-        setConnected(false);
         useSystemStore.getState().setWsConnected(false);
       })
     );
@@ -150,8 +137,6 @@ function WebSocketProvider({ children }: { children: React.ReactNode }) {
       wsMountState.pendingDisconnect = null;
     }
     wsClient.connect(tokenRef.current ?? undefined);
-    // If the socket is already open, reflect that in local state.
-    if (wsClient.isConnected) setConnected(true);
 
     return () => {
       unsubs.forEach((u) => u());
@@ -172,11 +157,7 @@ function WebSocketProvider({ children }: { children: React.ReactNode }) {
     };
   }, []);
 
-  return (
-    <WSContext.Provider value={{ connected, send: (msg) => wsClient.send(msg) }}>
-      {children}
-    </WSContext.Provider>
-  );
+  return <>{children}</>;
 }
 
 /* ─── Root Providers ──────────────────────────────────────────────────────── */

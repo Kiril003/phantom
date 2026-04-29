@@ -514,7 +514,16 @@ class TestResponseFormatter:
         )
         assert form == "text"
         assert content == "Привіт!"
-        assert attachments == []
+        # Day-4 W-2c (ADR-CS-002 §60): `text` form now gains a typed
+        # scene attachment that the W-1 promotion path lifts to
+        # ChatMessage.scene. Legacy attachments (the "real" payload
+        # buckets — chart_data / map_markers / code_block / etc.) MUST
+        # remain empty for a text-form response.
+        legacy = [a for a in attachments if a.get("type") != "scene"]
+        assert legacy == [], (
+            "Phase-03 invariant: text-form responses carry no LEGACY "
+            f"attachments. Got: {legacy!r}"
+        )
 
     def test_parse_chart_function_call(self):
         from ai.response_formatter import parse_function_call

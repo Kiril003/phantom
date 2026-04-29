@@ -239,6 +239,217 @@ _FORM_MAP: dict[str, str] = {
 }
 
 
+# ── Day-4 W-2c — scene-kind picker (ADR-CS-002 §60-§90) ───────────────────────
+
+
+# Map of `response_form` (frontend's existing closed enum) → SceneKind
+# (`@shared/types/chat.ts` Day-4 W-1 closed enum). A form not in this
+# map yields no scene envelope — message.scene stays absent and the
+# frontend renders via the legacy ResponseRenderer (back-compat
+# invariant ADR-CS-002 §60).
+#
+# Day-4 coverage:
+#   text / markdown   → 'text'           single text panel
+#   map               → 'map-pin'        leading text panel + map-pin panel
+#   code / terminal   → 'code-preview'   leading text panel + code-preview panel
+#   metric_cards      → 'list'           leading text panel + list panel
+#
+# `chart`, `diagram`, `mixed` deliberately NOT mapped on Day-4 — those
+# require richer panel kinds the W-1 closed enum does not yet expose
+# (e.g., `chart`-shaped data points). When the operator wants those
+# rendered as scenes we extend `ScenePanelKind` first, ADR-amend the
+# closed enum, then add their entries here.
+_FORM_TO_SCENE_KIND: dict[str, str] = {
+    "text": "text",
+    "markdown": "text",
+    "map": "map-pin",
+    "code": "code-preview",
+    "terminal": "code-preview",
+    "metric_cards": "list",
+}
+
+
+def scene_kind_for_form(response_form: str) -> str | None:
+    """Return the SceneKind matching the given ResponseForm, or None
+    when no preset coverage applies on Day-4 (chart/diagram/mixed)."""
+    return _FORM_TO_SCENE_KIND.get(response_form)
+
+
+def _scene_text_panel(idx: int, markdown: str) -> dict[str, Any]:
+    """Build a `text` ScenePanel matching the W-1 type contract."""
+    return {
+        "id": f"p{idx}",
+        "kind": "text",
+        "data": {"markdown": markdown or ""},
+    }
+
+
+def _scene_map_pin_panel(idx: int, raw: dict[str, Any]) -> dict[str, Any]:
+    """Build a `map-pin` ScenePanel from a `map_markers` attachment."""
+    markers_in = raw.get("markers") or []
+    markers_out: list[dict[str, Any]] = []
+    for m in markers_in:
+        if not isinstance(m, dict):
+            continue
+        try:
+            lat = float(m.get("lat"))
+            lon = float(m.get("lon"))
+        except (TypeError, ValueError):
+            continue
+        marker: dict[str, Any] = {
+            "lat": lat,
+            "lon": lon,
+            "label": str(m.get("label", "")),
+        }
+        if "color" in m:
+            marker["color"] = str(m["color"])
+        markers_out.append(marker)
+    center_raw = raw.get("center") or [0.0, 0.0]
+    try:
+        center = [float(center_raw[0]), float(center_raw[1])]
+    except (TypeError, ValueError, IndexError):
+        center = [0.0, 0.0]
+    panel: dict[str, Any] = {
+        "id": f"p{idx}",
+        "kind": "map-pin",
+        "data": {"markers": markers_out, "center": center},
+    }
+    if "zoom" in raw:
+        try:
+            panel["data"]["zoom"] = int(raw["zoom"])
+        except (TypeError, ValueError):
+            pass
+    return panel
+
+
+def _scene_code_preview_panel(
+    idx: int, raw: dict[str, Any], *, runnable: bool = False
+) -> dict[str, Any]:
+    """Build a `code-preview` ScenePanel from a code_block / terminal
+    attachment payload."""
+    code = raw.get("code")
+    if code is None:
+        # Terminal form stores its body under `command` + `explanation`.
+        cmd = raw.get("command") or ""
+        explanation = raw.get("explanation") or ""
+        code = f"$ {cmd}" if cmd else explanation
+    return {
+        "id": f"p{idx}",
+        "kind": "code-preview",
+        "data": {
+            "language": str(raw.get("language") or "text"),
+            "code": str(code or ""),
+            "runnable": bool(runnable),
+        },
+    }
+
+
+def _scene_list_panel(idx: int, raw: dict[str, Any]) -> dict[str, Any]:
+    """Build a `list` ScenePanel from a metric_card attachment payload."""
+    items_raw = raw.get("metrics") or raw.get("items") or []
+    items: list[dict[str, Any]] = []
+    for m in items_raw:
+        if not isinstance(m, dict):
+            continue
+        item: dict[str, Any] = {"label": str(m.get("label", ""))}
+        if "value" in m and m["value"] is not None:
+            v = m["value"]
+            item["value"] = v if isinstance(v, (int, float)) else str(v)
+        trend = m.get("trend")
+        if trend in ("up", "down", "stable"):
+            item["trend"] = trend
+        items.append(item)
+    return {
+        "id": f"p{idx}",
+        "kind": "list",
+        "data": {"items": items},
+    }
+
+
+def build_scene_envelope(
+    response_form: str,
+    content: str,
+    attachments: list[dict[str, Any]],
+) -> dict[str, Any] | None:
+    """Day-4 W-2c (ADR-CS-002): given a parsed AI reply, build a
+    ChatScene envelope wrapped as a `{type: 'scene', data: {...}}`
+    attachment ready for the W-1 promotion path
+    (`routes_chat._serialize_message`) to lift onto
+    `ChatMessage.scene`.
+
+    Returns None when `response_form` has no preset coverage on Day-4.
+    The caller appends the returned dict (if not None) to the
+    `attachments` list. The W-1 serialiser strips it from the published
+    attachments and promotes its `data` field to the top-level
+    `scene` field, so legacy clients that don't yet handle scenes
+    silently see one fewer attachment without breaking.
+    """
+    kind = scene_kind_for_form(response_form)
+    if kind is None:
+        return None
+
+    panels: list[dict[str, Any]] = []
+    idx = 1
+
+    # Most kinds open with a leading text panel summarising the body.
+    # `text` form just IS the text panel — no leading panel.
+    if kind == "text":
+        panels.append(_scene_text_panel(idx, content))
+        idx += 1
+    else:
+        if content:
+            panels.append(_scene_text_panel(idx, content))
+            idx += 1
+
+    if kind == "map-pin":
+        for att in attachments:
+            if isinstance(att, dict) and att.get("type") == "map_markers":
+                data = att.get("data") if isinstance(att.get("data"), dict) else {}
+                panels.append(_scene_map_pin_panel(idx, data))
+                idx += 1
+                break  # first map_markers wins; multiples are rare and ambiguous
+    elif kind == "code-preview":
+        for att in attachments:
+            if not isinstance(att, dict):
+                continue
+            t = att.get("type")
+            data = att.get("data") if isinstance(att.get("data"), dict) else {}
+            if t == "code_block":
+                panels.append(_scene_code_preview_panel(idx, data))
+                idx += 1
+                break
+            if t == "terminal_output":
+                panels.append(
+                    _scene_code_preview_panel(idx, data, runnable=False)
+                )
+                idx += 1
+                break
+    elif kind == "list":
+        for att in attachments:
+            if isinstance(att, dict) and att.get("type") == "metric_card":
+                data = att.get("data") if isinstance(att.get("data"), dict) else {}
+                panels.append(_scene_list_panel(idx, data))
+                idx += 1
+                break
+
+    # No content + no payload-derived panels → nothing useful to render
+    # as a scene. Skip promotion; legacy renderer keeps working.
+    if not panels:
+        return None
+
+    return {
+        "type": "scene",
+        "data": {
+            "kind": kind,
+            "panels": panels,
+            # Reveal default — sequential with 80 ms stagger matches the
+            # frontend default in ChatScene.tsx so envelopes that omit
+            # `reveal` still render with the canonical cadence.
+            "reveal": {"policy": "sequential", "staggerMs": 80},
+        },
+    }
+
+
 # ── Parsing ───────────────────────────────────────────────────────────────────
 
 def parse_function_call(
@@ -358,6 +569,14 @@ def parse_function_call(
                 },
             })
 
+    # Day-4 W-2c — promote to a typed scene envelope when the form has
+    # preset coverage. The W-1 _serialize_message in routes_chat lifts
+    # this attachment to top-level message.scene; legacy clients see
+    # one fewer attachment without breaking.
+    scene_att = build_scene_envelope(response_form, content, attachments)
+    if scene_att is not None:
+        attachments.append(scene_att)
+
     return response_form, content, attachments
 
 
@@ -365,18 +584,33 @@ def parse_plain_text(text: str) -> tuple[str, str, list[dict[str, Any]]]:
     """
     Fallback when AI returns plain text (no function call).
     Detects markdown, code blocks, etc. heuristically.
+
+    Day-4 W-2c: every return path passes through the scene-promotion
+    helper so plain text replies also gain a typed `text` panel and
+    code-fenced replies render through `code-preview`.
     """
     stripped = text.strip()
+    form: str
+    content: str
+    attachments: list[dict[str, Any]]
 
-    # Detect fenced code block
     if stripped.startswith("```"):
+        # Fenced code block — extract language + body.
         lines = stripped.split("\n")
         lang = lines[0].lstrip("`").strip() or "text"
         code = "\n".join(lines[1:-1]) if lines[-1].strip() == "```" else "\n".join(lines[1:])
-        return "code", "", [{"type": "code_block", "data": {"language": lang, "code": code}}]
+        form, content, attachments = (
+            "code",
+            "",
+            [{"type": "code_block", "data": {"language": lang, "code": code}}],
+        )
+    elif any(marker in stripped for marker in ("#", "**", "- ", "1. ", "| ")):
+        form, content, attachments = "markdown", stripped, []
+    else:
+        form, content, attachments = "text", stripped, []
 
-    # Detect markdown (headers, lists, bold)
-    if any(marker in stripped for marker in ("#", "**", "- ", "1. ", "| ")):
-        return "markdown", stripped, []
+    scene_att = build_scene_envelope(form, content, attachments)
+    if scene_att is not None:
+        attachments.append(scene_att)
 
-    return "text", stripped, []
+    return form, content, attachments

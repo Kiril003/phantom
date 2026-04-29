@@ -662,3 +662,51 @@ envelope based on response_form / content shape).
 
 ---
 
+## 2026-05-02 03:30 CEST — Wave-2 W-2c DONE (backend scene_kind picker)
+
+Closes the chat-liveness loop. ADR-CS-002 §60-§90.
+
+  AI provider → parse_function_call/parse_plain_text → scene attachment
+   → routes_chat._serialize_message lifts to message.scene → ChatScene
+   composer (W-2) renders.
+
+`src/backend/ai/response_formatter.py` gains:
+
+- `_FORM_TO_SCENE_KIND` static map: text/markdown→text, map→map-pin,
+  code/terminal→code-preview, metric_cards→list. chart/diagram/mixed
+  deliberately unmapped — they need richer ScenePanelKind members
+  before scene promotion is safe (D-1 in DAY4_BACKLOG_EXTENSIONS.md).
+- `scene_kind_for_form(response_form: str) -> str | None` — public
+  picker; returns None for uncovered forms so the caller knows to
+  fall through to the legacy ResponseRenderer.
+- `build_scene_envelope(form, content, attachments)` — builds a
+  `{type: "scene", data: {kind, panels[], reveal}}` attachment ready
+  for W-1 promotion. Per-kind helpers:
+    `_scene_text_panel` (markdown body)
+    `_scene_map_pin_panel` (markers + center + zoom; defensive
+                            float-coerce on lat/lon, drops malformed
+                            entries silently)
+    `_scene_code_preview_panel` (language + code; falls back to
+                                  `command + explanation` for terminal)
+    `_scene_list_panel` (label/value items + trend whitelist
+                          {up,down,stable})
+- Wired into BOTH `parse_function_call` (tail) and
+  `parse_plain_text` (every return path, incl. fenced-code +
+  markdown branches).
+
+19 W-2c contract tests + 8 W-1 regression tests pass. Phase-03
+baseline test `test_parse_text_function_call` updated to
+distinguish LEGACY attachments (must stay empty for text form)
+from the W-2c scene attachment (now expected). The original
+"empty attachments" invariant is preserved in spirit by filtering
+by `type != "scene"` before assertion.
+
+124/124 green across the response_formatter + Gemini + Ollama +
+chat_pipeline + Phase-03 sweep. Behavioural drift = none for
+clients that ignore `message.scene` (legacy attachments byte-
+identical for the chart/diagram/mixed paths).
+
+Next: W-3 (`+` button + AttachDrawer + ModelCard).
+
+---
+

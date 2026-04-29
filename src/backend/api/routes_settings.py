@@ -283,10 +283,14 @@ CATEGORY_SPEC: list[dict[str, Any]] = [
         "id": "map",
         "label": "Карта",
         "icon": "◎",
+        # Audit settings-persistence note — `agent_localization_enabled` was
+        # listed here AND in the `agent` category. The settings UI rendered
+        # the same toggle in two places, and `reset` iterated it twice. It
+        # logically belongs to the agent surface (controls the resolver
+        # pipeline, not the map view); kept there only.
         "keys": [
             "ui_map_default_zoom",
             "ui_map_style",
-            "agent_localization_enabled",
             "agent_browser_geolocation_enabled",
             "wardriving_cell_precision",
             "wardriving_heatmap_precision",

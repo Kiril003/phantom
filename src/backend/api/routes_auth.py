@@ -392,6 +392,34 @@ async def logout(response: Response) -> dict:
     return {"ok": True}
 
 
+# ── Day-4 Wave-2 IDB-2 (ADR-IDB-003): user picker for the LoginScreen ─────────
+
+
+@router.get("/users/picker", response_model=None)
+async def list_users_picker(db: AsyncSession = Depends(get_db)) -> list[dict]:
+    """Public-ish: minimal user tiles for the pre-login `<UserPicker>`.
+
+    Returned dicts MUST contain ONLY {id, username, avatar_url}. This
+    is consumed BEFORE auth (the picker shows ahead of the PinPad), so
+    pin_hash / rfid_uid_hash / preferences / behavioral_model / role
+    / last_seen_at / created_at / sensitive auth-related fields MUST
+    be whitelisted out — every field that `_user_to_dict` (the
+    FACTS-1 leak source flagged at U6-ID-C2) returns is excluded here.
+
+    Order = last-seen DESC so the operator-most-recent user is the
+    leftmost tile (a Day-5 Settings toggle can flip this).
+
+    The route MUST NOT call `_user_to_dict`; that would re-introduce
+    the leak. The route MUST NOT require auth; that breaks the
+    pre-login picker flow.
+    """
+    result = await db.execute(select(User).order_by(User.last_seen_at.desc()))
+    return [
+        {"id": u.id, "username": u.username, "avatar_url": u.avatar_url}
+        for u in result.scalars().all()
+    ]
+
+
 # ── User management (ROOT only) ────────────────────────────────────────────────
 
 users_router = APIRouter(prefix="/users", tags=["users"])
@@ -420,6 +448,29 @@ async def create_user(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Username '{req.username}' already exists",
         )
+    # Day-4 Wave-2 IDB-2 (ADR-IDB-002) — shared-PIN guard. bcrypt salts
+    # so two identical PINs hash to different ciphertexts; the only
+    # correct algorithm is an O(N) verify_secret scan over every user
+    # whose `pin_hash` is set. The guard MUST run BEFORE `db.add` so a
+    # colliding row never lands in the DB. Username is masked to first-
+    # letter + *** so an attacker who got ROOT can't enumerate
+    # PIN→username pairs by iterating PINs (the 5-attempt lockout +
+    # bcrypt cost rate-limits anyway, but the masking is one line).
+    if req.pin is not None:
+        from security.auth import verify_secret
+        existing_pin_users = (
+            await db.execute(select(User).where(User.pin_hash.is_not(None)))
+        ).scalars().all()
+        for u in existing_pin_users:
+            if u.pin_hash and verify_secret(req.pin, u.pin_hash):
+                masked = (u.username[:1] + "***") if u.username else "***"
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail={
+                        "error": "shared_pin_forbidden",
+                        "existing_username": masked,
+                    },
+                )
     user = User(
         id=str(uuid.uuid4()),
         username=req.username,

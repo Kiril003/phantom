@@ -1486,3 +1486,48 @@ Next: IDB-2 (shared-PIN guard + /api/auth/users/picker route).
 
 ---
 
+## 2026-05-02 10:25 CEST — Wave-2 IDB-2 DONE (shared-PIN + picker route)
+
+ADR-IDB-002 (shared-PIN guard) + ADR-IDB-003 (public picker route).
+Closes audit U6-ID-C2 (`_user_to_dict` leak class — picker
+whitelists out every leaked field).
+
+  routes_auth.py create_user — IDB-2 shared-PIN guard inserted
+                                between username uniqueness check
+                                and `db.add`. O(N) bcrypt verify_secret
+                                scan over every user with a pin_hash;
+                                first letter + *** mask on the
+                                colliding username so a ROOT enum
+                                attack cannot exfiltrate PIN→username
+                                pairs. Skipped when req.pin is None
+                                (RFID-only users still create
+                                cleanly).
+
+  routes_auth.py /users/picker — NEW GET handler on the public
+                                /auth router (NOT users_router which
+                                is ROOT-gated). Returns
+                                [{id, username, avatar_url}] only.
+                                MUST NOT call _user_to_dict (the
+                                leak source). MUST NOT require auth
+                                (consumed BEFORE PinPad). Order =
+                                last_seen_at DESC.
+
+6 IDB-2 contract tests:
+  - shared-PIN: collision → 409 with {error: "shared_pin_forbidden",
+    existing_username: "X***"} masked.
+  - shared-PIN: unique PIN → 201.
+  - shared-PIN: skipped on RFID-only user (req.pin is None) → 201.
+  - picker: no auth required → 200 list.
+  - picker: response keys EXACTLY {id, username, avatar_url}; no
+    pin_hash / preferences / behavioral_model / role / last_seen_at /
+    created_at leakage.
+  - picker: AST contract — list_users_picker function body has
+    NO Call to _user_to_dict (catches refactor regressions without
+    docstring false-positives).
+
+Behavioural drift = ZERO outside the new guard + route.
+
+Next: IDB-3 (UserPicker React + LoginScreen integration).
+
+---
+

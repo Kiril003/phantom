@@ -54,6 +54,13 @@ export function StatusBar() {
     second: '2-digit',
   });
 
+  // Audit H-MM-1 fix — all hooks must run BEFORE any early return so the
+  // hook order stays stable across re-renders. Pre-fix the GHOST/DREAM
+  // early-return ran before `useRouterStatePolled()`, so the very first
+  // GHOST mount tripped React's "Rendered fewer hooks than expected"
+  // invariant and crashed the layout.
+  const routerState = useRouterStatePolled();
+
   if (state === SystemState.GHOST || state === SystemState.DREAM) return null;
 
   const bpm = context?.body.breathing_bpm;
@@ -62,7 +69,6 @@ export function StatusBar() {
   const ram = context?.system.ram_percent;
   const disk = context?.system.disk_percent;
   const provider = context?.system.ai_provider ?? '—';
-  const routerState = useRouterStatePolled();
   /* ESP32 tri-state comes from /health polling; fallback derived from sensor data. */
   const esp32DerivedOnline = bpm != null || tempC != null;
   const esp32Effective: 'disabled' | 'offline' | 'online' | 'unknown' =

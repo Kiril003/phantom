@@ -7,6 +7,7 @@
  * Settings screen can re-apply after a save without a reload.
  */
 import { settingsApi } from './api';
+import { wsClient } from './websocket';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useFaceStore } from '../stores/faceStore';
 
@@ -14,6 +15,7 @@ const DEFAULT_FONT_SIZE = 14; // matches config.ui_font_size default
 
 let inFlight: Promise<void> | null = null;
 let lastBootstrapAt = 0;
+let reloadSubscribed = false;
 // Dedupe window for rapid-fire calls (React StrictMode double-effect,
 // providers + post-login retrigger landing in the same tick, etc).
 const DEDUPE_WINDOW_MS = 1000;
@@ -42,6 +44,23 @@ export async function bootstrapSettings(): Promise<void> {
 }
 
 async function _runBootstrap(): Promise<void> {
+  // Audit B-3 + B-25 — install one-shot subscriber on the `settings`
+  // WS channel so a PUT from another tab (or a backend-side config
+  // reload) refreshes this tab without forcing a full page reload.
+  // Idempotent across multiple bootstrap calls thanks to the flag.
+  // Lives inside _runBootstrap so it never installs pre-auth — by the
+  // time we arrive here we know the token is valid.
+  if (!reloadSubscribed) {
+    reloadSubscribed = true;
+    wsClient.on('settings', (msg) => {
+      if (msg.type !== 'config.reloaded') return;
+      // Force-bypass the dedupe window — the BE just told us the
+      // canonical settings changed, so we want fresh values now.
+      lastBootstrapAt = 0;
+      void bootstrapSettings().catch(() => undefined);
+    });
+  }
+
   const data = await settingsApi.getAll();
   const values: Record<string, unknown> = {};
   for (const cat of data.categories) {

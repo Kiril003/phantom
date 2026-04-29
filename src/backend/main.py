@@ -29,6 +29,7 @@ from api.routes_ai import router as ai_router
 from api.routes_face import router as face_router
 from api.routes_agent import router as agent_router
 from api.routes_dynamic_source import router as dynamic_source_router
+from api.routes_hub import router as hub_router
 
 logging.basicConfig(
     level=getattr(logging, config.log_level),
@@ -647,6 +648,9 @@ def create_app() -> FastAPI:
     # frontend <DynamicPicker> consumer (chat-input ModelCard, future
     # Settings dynamic dropdowns).
     app.include_router(dynamic_source_router, prefix=prefix)
+    # Day-4 Z-2 (ADR-HUB-005): /api/v1/hub/{providers,route_state}
+    # operator diagnostics for the AIHub registry + decision ring.
+    app.include_router(hub_router, prefix=prefix)
 
     _register_ws(app)
     register_voice_ws(app)

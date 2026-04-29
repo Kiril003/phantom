@@ -1378,3 +1378,49 @@ Next: Z-2 (/api/v1/hub/providers + /hub/route_state routes).
 
 ---
 
+## 2026-05-02 09:35 CEST — Wave-2 Z-2 DONE (hub HTTP routes)
+
+ADR-HUB-005. Two GET endpoints expose the AIHub registry + decision
+ring to operators.
+
+  src/backend/api/routes_hub.py (NEW):
+    GET /api/v1/hub/providers      — snapshot of every registered
+                                      ProviderCapability (default-seeded
+                                      4 rows: Gemini × {chat,
+                                      chat_subtask}, Ollama × same).
+                                      Wire shape mirrors the Python
+                                      dataclass exactly so the
+                                      frontend type contract can land
+                                      1:1.
+    GET /api/v1/hub/route_state    — last N decisions from the
+                                      in-memory ring (Pydantic
+                                      Query validates limit ∈ [1, 200]
+                                      → 422 outside range).
+
+  Both routes require auth (mirrors the rest of /api/v1).
+
+  First-call seed: when the registry is empty (fresh process, no
+  lifespan hook seeded yet), `_ensure_default_registrations` calls
+  `register_default_capabilities` so the UI never sees an empty
+  list. Idempotent — re-registration overwrites by (provider,
+  task_class) key.
+
+  src/backend/main.py — wires routes_hub under /api/v1.
+
+7 Z-2 contract tests:
+  - both routes 401 without auth.
+  - /providers returns seeded 4 rows (gemini+ollama × chat+chat_subtask).
+  - row shape matches ProviderCapability exactly (drift detector for
+    the frontend type contract).
+  - /route_state empty after a hub reset.
+  - /route_state shows the last pick after `hub.pick("chat")`.
+  - /route_state?limit=0 → 422; ?limit=999 → 422; ?limit=10 → 200.
+
+Behavioural drift = ZERO outside the new routes. The hub is exposed
+diagnostically but no production code path imports it from the
+chat / voice flows yet (that's Z-3, Day-5).
+
+Next: FACTS-1 (UserFact ORM + CRUD route + require_self_or_root).
+
+---
+

@@ -348,6 +348,14 @@ class PhantomConfig(BaseSettings):
     # linux/dangerous_patterns.py blocklist + UI confirm pipeline lands.
     agent_risk_tolerance: int = 3            # caps executable actions: 1/3/5/7
     agent_workspace_dir: str = "~/phantom/workspace"
+    # Day-4 Wave-2 Y-5 (ADR-SBX-002): default SandboxProfile applied to
+    # bash.run + MCP adapter spawns. Closed enum mirrors the
+    # `agent.safety.sandbox.SandboxProfile` Python enum (compute |
+    # net_observe). `radio_privileged` is intentionally NOT exposed in
+    # Settings on Day-4 — it's reserved for the Day-6 BT/Wi-Fi work
+    # and toggling it on early would silently re-enable CAP_NET_RAW
+    # for every bash.run.
+    agent_sandbox_profile_default: Literal["compute", "net_observe"] = "compute"
     agent_max_actions_per_task: int = 20
     agent_max_elapsed_s_per_task: int = 600
     agent_max_elapsed_s_per_action: int = 120

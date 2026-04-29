@@ -1089,3 +1089,36 @@ Next: Y-5 (Sandbox settings surface).
 
 ---
 
+## 2026-05-02 07:50 CEST — Wave-2 Y-5 DONE (Sandbox settings surface)
+
+Closes audit U4-SEC-M1 (workspace bind not visible to operator).
+
+Single config addition next to the existing `agent_workspace_dir`:
+
+  config.agent_sandbox_profile_default: Literal["compute",
+                                                "net_observe"] = "compute"
+
+Mirrors the Python `SandboxProfile` enum but deliberately EXCLUDES
+`radio_privileged` — that value is reserved for the Day-6 BT/Wi-Fi
+work and the Settings UI must not let the operator toggle it on
+early (would silently re-enable CAP_NET_RAW for every bash.run).
+
+5 contract tests:
+- default = "compute"
+- Literal closed to {compute, net_observe}; "radio_privileged"
+  rejected via Pydantic validation
+- Settings Literal is a strict subset of the SandboxProfile Python
+  enum (so operators can never set a value the runtime doesn't
+  recognise)
+- agent_workspace_dir default = "~/phantom/workspace"
+- agent_workspace_dir is a string field (the Day-3 R-1 settings
+  auto-render only knows string for now; path-picker is Day-5+)
+
+The auto-render Settings registry picks the new key up without
+manual SettingDefinition wiring.
+
+Next: X-1 (ai/agents/ skeleton + single-turn default + Gemini-only
+gate).
+
+---
+

@@ -124,12 +124,7 @@ export const DEFAULT_DURATION_FOR_POSE: Record<FamiliarPose, number> = {
 };
 
 /**
- * `ChatScene` arm for AI-summoned Familiars (the `phantom_manifest` kind).
- * Re-exported through `chat.ts` so callers see one super-union of scenes.
+ * `ChatScene` arm for AI-summoned Familiars (the `phantom_manifest` kind)
+ * lives in `./chat.ts` to avoid a circular re-export — `chat.ts` already
+ * imports `FamiliarPose`/`FamiliarTarget` from this module.
  */
-export interface PhantomManifestSceneData {
-  pose: FamiliarPose;
-  message?: string;
-  durationMs?: number;
-  target?: FamiliarTarget;
-}

@@ -66,6 +66,17 @@ SENSITIVE_ENV_PREFIXES: tuple[str, ...] = (
     "AI_",
     "PHANTOM_",
     "PYTHON",
+    # Day-4 Wave-2 audit (security #M-3): close the
+    # Day-5-extension-class — direct provider env keys (OPENAI_API_KEY,
+    # ANTHROPIC_API_KEY, GOOGLE_API_KEY, etc.) MUST never leak into a
+    # bwrap'd subprocess. Adding now means a future config that
+    # adopts these names doesn't silently regress the audit.
+    "OPENAI_",
+    "ANTHROPIC_",
+    "GOOGLE_",
+    "GEMINI_",
+    "HF_",
+    "HUGGINGFACE_",
 )
 SENSITIVE_ENV_EXACT: frozenset[str] = frozenset(
     {"LD_PRELOAD", "LD_LIBRARY_PATH"}

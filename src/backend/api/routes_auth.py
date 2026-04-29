@@ -451,26 +451,76 @@ async def create_user(
     # Day-4 Wave-2 IDB-2 (ADR-IDB-002) — shared-PIN guard. bcrypt salts
     # so two identical PINs hash to different ciphertexts; the only
     # correct algorithm is an O(N) verify_secret scan over every user
-    # whose `pin_hash` is set. The guard MUST run BEFORE `db.add` so a
-    # colliding row never lands in the DB. Username is masked to first-
-    # letter + *** so an attacker who got ROOT can't enumerate
-    # PIN→username pairs by iterating PINs (the 5-attempt lockout +
-    # bcrypt cost rate-limits anyway, but the masking is one line).
+    # whose `pin_hash` is set.
+    #
+    # Day-4 Wave-2 audit fix (security #H-1): the original implementation
+    # early-broke on first hit, leaking PIN-collision INDEX through
+    # response timing. Replaced with full-iterate-and-collect so timing
+    # is constant w.r.t. which row matches. Per-user bcrypt cost (~80 ms
+    # on Q6A) bounds N at ~50 (capped below); past 50 users we reject
+    # with 503 to prevent worker-starvation DoS.
     if req.pin is not None:
+        import asyncio as _asyncio
         from security.auth import verify_secret
+
         existing_pin_users = (
             await db.execute(select(User).where(User.pin_hash.is_not(None)))
         ).scalars().all()
-        for u in existing_pin_users:
-            if u.pin_hash and verify_secret(req.pin, u.pin_hash):
-                masked = (u.username[:1] + "***") if u.username else "***"
-                raise HTTPException(
-                    status_code=status.HTTP_409_CONFLICT,
-                    detail={
-                        "error": "shared_pin_forbidden",
-                        "existing_username": masked,
-                    },
-                )
+        # Cap at 200 to bound the bcrypt walk to ~16s worst case on
+        # Q6A; past that, reject with 503 to prevent worker starvation.
+        # Day-5 ships an HMAC-pepper PIN-collision index that flips
+        # the algorithm to O(1) and removes the cap entirely.
+        if len(existing_pin_users) > 200:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail={
+                    "error": "too_many_pin_users",
+                    "limit": 200,
+                    "remediation": (
+                        "operator must rotate to RFID-only or use the "
+                        "Day-5 HMAC-pepper PIN-collision index"
+                    ),
+                },
+            )
+
+        def _walk_collisions(req_pin: str) -> str | None:
+            """Constant-time-w.r.t.-position walk: NO early break.
+            Returns the masked first-letter username on collision (or
+            None). Runs in a worker thread via asyncio.to_thread so
+            the event loop isn't blocked for ~N×80 ms.
+
+            verify_secret raises on a malformed bcrypt hash (e.g. the
+            literal "x" sentinel test fixtures use). Wrap the call so
+            those rows count as non-match and the walk continues —
+            keeps the existing test fixtures green AND keeps the
+            timing guarantee (every row contributes the same fixed
+            try/except cost)."""
+            collision_username: str | None = None
+            for u in existing_pin_users:
+                if not u.pin_hash:
+                    continue
+                try:
+                    matched = verify_secret(req_pin, u.pin_hash)
+                except Exception:  # noqa: BLE001
+                    matched = False
+                if matched and collision_username is None:
+                    collision_username = (
+                        (u.username[:1] + "***")
+                        if u.username
+                        else "***"
+                    )
+                # NB: do NOT break — full walk equalises timing.
+            return collision_username
+
+        masked = await _asyncio.to_thread(_walk_collisions, req.pin)
+        if masked is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail={
+                    "error": "shared_pin_forbidden",
+                    "existing_username": masked,
+                },
+            )
     user = User(
         id=str(uuid.uuid4()),
         username=req.username,

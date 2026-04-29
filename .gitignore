@@ -52,6 +52,11 @@ src/backend/chroma_data/chroma.sqlite3-journal
 src/backend/chroma_data/chroma.sqlite3-shm
 src/backend/chroma_data/chroma.sqlite3-wal
 src/backend/chroma_data/*/
+# Day-4 Wave-2 audit fix: pytest sometimes creates ./chroma_data at the
+# repo root (CWD-dependent). Never commit operator data anywhere in the
+# tree.
+chroma_data/
+**/chroma_data/
 
 # Voice models: large pretrained blobs (Piper UA ~73 MB, Vosk UK ~400 MB)
 # stay out of git; fetched via setup / manual download. Silero VAD

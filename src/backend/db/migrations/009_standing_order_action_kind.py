@@ -33,6 +33,16 @@ async def apply(conn) -> None:
 
     res = await conn.execute(text("PRAGMA table_info(standing_orders)"))
     cols = {row[1] for row in res.fetchall()}
+    # Day-4 Wave-2 audit fix (architect R1): if migration 008 failed
+    # (apply_pending swallows exceptions and continues to the next
+    # migration), 009 MUST NOT proceed — backfilling on a schema
+    # without the lease columns leaves a poisoned state where
+    # `recover_stale_leases` will OperationalError on the absent
+    # `in_flight_task_id` column. Gate the entire 009 body on 008's
+    # columns being present; otherwise return cleanly so the next
+    # boot retries the full chain.
+    if "in_flight_task_id" not in cols or "claimed_at" not in cols:
+        return
     if "action_kind" not in cols:
         await conn.execute(
             text(

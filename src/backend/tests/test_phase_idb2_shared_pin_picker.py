@@ -22,7 +22,17 @@ Coverage:
 """
 from __future__ import annotations
 
+import uuid
 import pytest
+
+
+def _u(prefix: str) -> str:
+    """Day-4 audit fix: usernames + PINs across IDB-2 tests collide
+    across runs because the SQLite test DB persists session-wide.
+    Tag every username with a uuid suffix and choose PINs from a
+    deterministic-but-unique pool so the shared-PIN guard sees a
+    clean slate on every test run."""
+    return f"{prefix}-{uuid.uuid4().hex[:8]}"
 
 
 # ───────────────────────────────────────────── shared-PIN guard ──
@@ -30,12 +40,17 @@ import pytest
 
 class TestSharedPinGuard:
     def test_create_user_with_colliding_pin_409(self, auth_root_client):
-        # Create user A with a fresh PIN.
+        # Use a uuid-suffixed PIN so we don't collide with prior runs.
+        # PIN must be 6+ digits per the auth schema; build from the
+        # uuid hex digits.
+        shared_pin = uuid.uuid4().hex[:6].translate(
+            str.maketrans("abcdef", "012345")
+        )
         r1 = auth_root_client.post(
             "/api/v1/users",
             json={
-                "username": "alice-shared-pin",
-                "pin": "424242",
+                "username": _u("alice-shared-pin"),
+                "pin": shared_pin,
                 "role": "OPERATOR",
             },
         )
@@ -45,8 +60,8 @@ class TestSharedPinGuard:
         r2 = auth_root_client.post(
             "/api/v1/users",
             json={
-                "username": "bob-shared-pin",
-                "pin": "424242",
+                "username": _u("bob-shared-pin"),
+                "pin": shared_pin,
                 "role": "OPERATOR",
             },
         )
@@ -65,23 +80,27 @@ class TestSharedPinGuard:
         )
 
     def test_create_user_with_unique_pin_201(self, auth_root_client):
+        unique_pin = uuid.uuid4().hex[:6].translate(
+            str.maketrans("abcdef", "012345")
+        )
         r = auth_root_client.post(
             "/api/v1/users",
             json={
-                "username": "charlie-unique-pin",
-                "pin": "555000",
+                "username": _u("charlie-unique-pin"),
+                "pin": unique_pin,
                 "role": "OPERATOR",
             },
         )
-        assert r.status_code == 201
+        assert r.status_code == 201, r.text
 
     def test_create_user_with_no_pin_skips_guard(self, auth_root_client):
         """RFID-only user has pin=None — the guard MUST NOT trip."""
+        suffix = uuid.uuid4().hex[:8]
         r = auth_root_client.post(
             "/api/v1/users",
             json={
-                "username": "rfid-only",
-                "rfid_uid": "deadbeef-rfid-only",
+                "username": _u("rfid-only"),
+                "rfid_uid": f"deadbeef-rfid-only-{suffix}",
                 "role": "OPERATOR",
             },
         )

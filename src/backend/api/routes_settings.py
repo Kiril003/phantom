@@ -268,15 +268,31 @@ CATEGORY_SPEC: list[dict[str, Any]] = [
         "id": "agent",
         "label": "Агент",
         "icon": "🤖",
+        # Phase-6 T5 — full agent surface in Settings (audit-2026-04-30:
+        # operator flagged 'налаштувань він немає'). Backend exposes 30+
+        # agent_* fields; this group surfaces the operator-facing dial set
+        # ordered by impact (top→bottom: kill switch / risk / budget /
+        # proactive / standing orders / memory / locale / sandbox /
+        # reflection / proactive cooldowns).
         "keys": [
             "agent_enabled",
             "agent_risk_tolerance",
             "agent_max_actions_per_task",
+            "agent_max_elapsed_s_per_task",
+            "agent_max_elapsed_s_per_action",
             "agent_max_llm_calls_per_task",
+            "agent_max_llm_calls_per_background_task",
+            "agent_background_task_timeout_s",
             "agent_proactive_enabled",
+            "agent_proactive_interval_s",
+            "agent_proactive_cooldown_s",
             "agent_standing_orders_enabled",
             "agent_episodic_memory_enabled",
+            "agent_episodic_top_k",
             "agent_localization_enabled",
+            "agent_emotion_enabled",
+            "agent_sandbox_profile_default",
+            "agent_reflection_every_n_actions",
         ],
     },
     {
@@ -401,6 +417,17 @@ LABEL_OVERRIDES: dict[str, str] = {
     "agent_episodic_memory_enabled": "Епізодична пам'ять",
     "agent_localization_enabled": "Геолокація агента",
     "agent_browser_geolocation_enabled": "Використовувати GPS браузера",
+    # Phase-6 T5 — additional agent dials surfaced in the UI.
+    "agent_max_elapsed_s_per_task": "Бюджет часу на задачу (с)",
+    "agent_max_elapsed_s_per_action": "Бюджет часу на дію (с)",
+    "agent_max_llm_calls_per_background_task": "LLM-ліміт фонових задач",
+    "agent_background_task_timeout_s": "Тайм-аут фонових задач (с)",
+    "agent_proactive_interval_s": "Інтервал ініціативи (с)",
+    "agent_proactive_cooldown_s": "Кулдаун ініціативи (с)",
+    "agent_episodic_top_k": "Епізоди top-K у промпті",
+    "agent_emotion_enabled": "Емоційний стан агента",
+    "agent_sandbox_profile_default": "Профіль пісочниці за замовч.",
+    "agent_reflection_every_n_actions": "Рефлексія кожні N дій",
 }
 
 PASSWORD_KEYS = {"ai_gemini_api_key", "jwt_secret_key"}

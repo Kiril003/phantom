@@ -322,6 +322,50 @@ CHAT_DATA_TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "list_files",
+        "description": (
+            "Перелік файлів у директорії всередині дозволеного дерева "
+            "(домашня тека / /tmp / /opt/phantom). path = None → домівка."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string", "description": "Абсолютний або ~/ префікс."},
+                "limit": {"type": "integer", "description": "1..200, default 50."},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "read_file",
+        "description": (
+            "Прочитати файл усередині дозволеного дерева. Ліміт 1 МіБ — "
+            "більше повертається з truncated=True. Повертає kind='text' "
+            "з content або kind='binary' з content_base64."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {"path": {"type": "string"}},
+            "required": ["path"],
+        },
+    },
+    {
+        "name": "search_files",
+        "description": (
+            "Пошук файлів за підрядком у назві всередині дозволеного "
+            "дерева. Повертає top-N збігів за mtime."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "query": {"type": "string"},
+                "root": {"type": "string"},
+                "limit": {"type": "integer"},
+            },
+            "required": ["query"],
+        },
+    },
+    {
         "name": "create_checkpoint",
         "description": (
             "Створити чекпойнт стану системи. reason ∈ "

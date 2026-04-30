@@ -17,7 +17,7 @@ import os
 from datetime import datetime, timezone
 from hashlib import blake2s
 from pathlib import Path
-from typing import Iterable, Optional
+from typing import Any, Iterable, Optional
 
 from ai.scenes import FilesMatch, FilesSceneData
 
@@ -240,4 +240,143 @@ def list_dir(
     )
 
 
-__all__ = ["search_files", "list_dir"]
+# Phase-6 T4 — REST surface helpers (audit-2026-04-30 — operator: 'з
+# візуалу логіка не взята' for file_manager). The bytes-only `read_file`
+# enforces a 1 MiB cap so the agent / FE can't stream a multi-GB binary
+# into chat. Path traversal is blocked by `_normalise_root` then a
+# `relative_to(allowed)` check on the candidate.
+
+READ_FILE_CAP_BYTES = 1 * 1024 * 1024  # 1 MiB
+READ_FILE_TEXT_PROBE_BYTES = 8192       # bytes used to detect text vs binary
+
+
+def _resolve_inside_allowed(path: str) -> Path:
+    candidate = Path(os.path.expanduser(path)).resolve(strict=False)
+    for allowed in _allowed_roots():
+        try:
+            candidate.relative_to(allowed)
+            return candidate
+        except ValueError:
+            continue
+    raise ValueError(
+        f"path {path!r} resolves outside the allowed roots "
+        f"({[str(p) for p in _allowed_roots()]})"
+    )
+
+
+def read_file(*, path: str) -> dict[str, Any]:
+    """Read a regular file inside the allowed roots, capped at 1 MiB.
+
+    Returns a dict ready to JSON-serialise:
+      - kind: 'text' | 'binary'
+      - text content for 'text', or base64 for 'binary'
+      - size + truncated flag.
+    """
+    target = _resolve_inside_allowed(path)
+    if not target.exists():
+        raise FileNotFoundError(str(target))
+    if not target.is_file():
+        raise IsADirectoryError(str(target))
+    stat = target.stat()
+    size = int(stat.st_size)
+    truncated = size > READ_FILE_CAP_BYTES
+    read_size = min(size, READ_FILE_CAP_BYTES)
+    with target.open("rb") as fh:
+        raw = fh.read(read_size)
+    # Heuristic: a chunk is text if it decodes cleanly as UTF-8 AND has
+    # zero null bytes in the first probe slice. Anything else is binary.
+    probe = raw[:READ_FILE_TEXT_PROBE_BYTES]
+    is_text = b"\x00" not in probe
+    text_content: str | None = None
+    if is_text:
+        try:
+            text_content = raw.decode("utf-8")
+        except UnicodeDecodeError:
+            is_text = False
+    if is_text:
+        return {
+            "kind": "text",
+            "path": str(target),
+            "name": target.name,
+            "size": size,
+            "size_display": _human_size(size),
+            "truncated": truncated,
+            "mtime_ms": _ms(stat.st_mtime),
+            "content": text_content or "",
+        }
+    import base64
+    return {
+        "kind": "binary",
+        "path": str(target),
+        "name": target.name,
+        "size": size,
+        "size_display": _human_size(size),
+        "truncated": truncated,
+        "mtime_ms": _ms(stat.st_mtime),
+        "content_base64": base64.b64encode(raw).decode("ascii"),
+    }
+
+
+def list_dir_raw(*, path: Optional[str], limit: int = 200) -> dict[str, Any]:
+    """Listing helper for the FileBrowser FE — same allow-list discipline
+    as `list_dir` but returns the raw entries instead of a scene card."""
+    base = _normalise_root(path)
+    if not base.exists() or not base.is_dir():
+        raise FileNotFoundError(str(base))
+    parent_path: str | None = None
+    try:
+        parent = base.parent
+        # Only expose parent if it is itself inside the allow-list.
+        for allowed in _allowed_roots():
+            if parent == allowed or str(parent).startswith(str(allowed)):
+                parent_path = str(parent)
+                break
+    except Exception:
+        parent_path = None
+    entries = []
+    for p in sorted(base.iterdir(), key=lambda q: (not q.is_dir(), q.name.lower())):
+        if p.name.startswith("."):
+            continue
+        try:
+            stat = p.stat()
+        except OSError:
+            continue
+        entries.append({
+            "name": p.name,
+            "path": str(p),
+            "is_dir": p.is_dir(),
+            "size": int(stat.st_size) if p.is_file() else 0,
+            "size_display": _human_size(stat.st_size) if p.is_file() else "",
+            "mtime_ms": _ms(stat.st_mtime),
+        })
+        if len(entries) >= limit:
+            break
+    return {
+        "path": str(base),
+        "display": _root_display(base),
+        "parent": parent_path,
+        "entries": entries,
+        "count": len(entries),
+    }
+
+
+def delete_path(*, path: str) -> dict[str, Any]:
+    """Delete a regular file inside the allow-list. Refuses directories
+    and refuses anything outside the allow-list. Returns {ok, path}."""
+    target = _resolve_inside_allowed(path)
+    if not target.exists():
+        raise FileNotFoundError(str(target))
+    if target.is_dir():
+        raise IsADirectoryError(str(target))
+    target.unlink()
+    return {"ok": True, "path": str(target)}
+
+
+__all__ = [
+    "search_files",
+    "list_dir",
+    "read_file",
+    "list_dir_raw",
+    "delete_path",
+    "READ_FILE_CAP_BYTES",
+]

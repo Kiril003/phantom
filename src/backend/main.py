@@ -23,6 +23,7 @@ from api.routes_settings import router as settings_router
 from api.routes_map import router as map_router
 from api.routes_linux import router as linux_router
 from api.routes_tools import router as tools_router
+from api.routes_files import router as files_router
 from api.routes_voice import router as voice_router
 from api.routes_voice_stream import register_voice_ws
 from api.routes_ai import router as ai_router
@@ -727,6 +728,7 @@ def create_app() -> FastAPI:
     app.include_router(map_router, prefix=prefix)
     app.include_router(linux_router, prefix=prefix)
     app.include_router(tools_router, prefix=prefix)
+    app.include_router(files_router, prefix=prefix)
     app.include_router(voice_router, prefix=prefix)
     app.include_router(ai_router, prefix=prefix)
     app.include_router(face_router, prefix=prefix)

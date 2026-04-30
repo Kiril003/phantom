@@ -976,6 +976,63 @@ async def _tool_query_wardriving(args: dict[str, Any], user_id: str) -> dict[str
     )
 
 
+async def _tool_list_files(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    """Operator-scoped directory listing inside the file_manager allow-list."""
+    _ = user_id
+    path = args.get("path")
+    if path is not None and not isinstance(path, str):
+        return _err("invalid_args", "path must be string or null")
+    limit = args.get("limit") or 50
+    if not isinstance(limit, int) or limit < 1 or limit > 200:
+        return _err("invalid_args", "limit must be 1..200")
+    try:
+        from tools.file_manager import list_dir_raw
+        return _ok(**list_dir_raw(path=path, limit=limit))
+    except FileNotFoundError as exc:
+        return _err("not_found", str(exc))
+    except ValueError as exc:
+        return _err("forbidden", str(exc))
+
+
+async def _tool_read_file(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    """Read a single file inside the allow-list, capped at 1 MiB."""
+    _ = user_id
+    path = args.get("path")
+    if not isinstance(path, str) or not path.strip():
+        return _err("invalid_args", "path is required")
+    try:
+        from tools.file_manager import read_file as _rf
+        return _ok(**_rf(path=path.strip()))
+    except FileNotFoundError as exc:
+        return _err("not_found", str(exc))
+    except IsADirectoryError as exc:
+        return _err("invalid_args", f"path is a directory: {exc}")
+    except ValueError as exc:
+        return _err("forbidden", str(exc))
+
+
+async def _tool_search_files(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    """Substring filename search inside the allow-list."""
+    _ = user_id
+    query = args.get("query")
+    if not isinstance(query, str) or not query.strip():
+        return _err("invalid_args", "query is required")
+    root = args.get("root") if isinstance(args.get("root"), str) else None
+    limit = args.get("limit") or 9
+    if not isinstance(limit, int) or limit < 1 or limit > 50:
+        return _err("invalid_args", "limit must be 1..50")
+    try:
+        from tools.file_manager import search_files
+        scene = search_files(root=root, query=query.strip(), limit=limit)
+    except ValueError as exc:
+        return _err("invalid_args", str(exc))
+    return _ok(
+        root_display=scene.root_display,
+        total_matches=scene.total_matches,
+        matches=[m.model_dump() for m in scene.matches],
+    )
+
+
 async def _tool_create_checkpoint(args: dict[str, Any], user_id: str) -> dict[str, Any]:
     """Create a planner checkpoint row. ROOT-style operation but agent-callable
     so the operator can voice-trigger 'збережи стан'."""
@@ -1034,6 +1091,9 @@ _HANDLERS: dict[str, Any] = {
     "query_audit_log": _tool_query_audit_log,
     "query_wardriving": _tool_query_wardriving,
     "create_checkpoint": _tool_create_checkpoint,
+    "list_files": _tool_list_files,
+    "read_file": _tool_read_file,
+    "search_files": _tool_search_files,
 }
 
 

@@ -29,14 +29,18 @@ import { useFamiliarStore } from '../../stores/familiarStore';
 import type { FamiliarManifestation } from '@shared/types';
 import { FamiliarSVG } from './FamiliarSVG';
 
-const FAMILIAR_W = 50;
-const FAMILIAR_H = 66;
+// Phase-5 R1 audit-2026-04-30 — bumped from 50×66 to 110×138 px so the
+// creature reads as a CHARACTER from across the 7-inch display, not as
+// a glow-bullet flying past the corner.
+const FAMILIAR_W = 110;
+const FAMILIAR_H = 138;
 const FRAME_W = 1024;
 const FRAME_H = 600;
 
-// 24-px inset from the bottom-right corner — the "home" pose anchor.
-const HOME_X = FRAME_W - FAMILIAR_W - 24;
-const HOME_Y = FRAME_H - FAMILIAR_H - 24;
+// 32-px inset from the bottom-right corner — the "home" pose anchor.
+// Slightly more inset than before to clear the wider silhouette.
+const HOME_X = FRAME_W - FAMILIAR_W - 32;
+const HOME_Y = FRAME_H - FAMILIAR_H - 32;
 
 function usePrefersReducedMotion(): boolean {
   const [reduce, setReduce] = useState<boolean>(() => {

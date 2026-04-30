@@ -114,13 +114,16 @@ export const DEFAULT_POSE_FOR_TRIGGER: Record<ManifestTrigger, FamiliarPose> = {
  * idle) and the short ones are pointing + waving (gestural).
  */
 export const DEFAULT_DURATION_FOR_POSE: Record<FamiliarPose, number> = {
-  idle: 4500,
-  floating: 6500,
-  pointing: 4000,
-  peeking: 3500,
-  sleeping: 8000,
-  waving: 3000,
-  vanishing: 1200,
+  // Phase-5 R1 audit-2026-04-30 — durations lengthened so the wisp
+  // feels like a small companion lingering, not a bullet zipping past.
+  // The bigger silhouette (110×138) reads better at slower speeds.
+  idle: 6000,
+  floating: 9000,
+  pointing: 5500,
+  peeking: 5000,
+  sleeping: 12000,
+  waving: 4500,
+  vanishing: 1600,
 };
 
 /**

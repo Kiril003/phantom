@@ -27,10 +27,11 @@
  *   - data-testid="profile-selector", data-tile-count, data-error
  *     preserved for the existing test suite.
  */
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { authApi } from '../../services/api';
 import { EASE_PHANTOM } from '../../styles/motion';
+import { AddProfileWizard } from './AddProfileWizard';
 
 interface PickerTile {
   id: string;
@@ -89,6 +90,22 @@ export function ProfileSelector({ onSelect, disabled = false }: ProfileSelectorP
   const [error, setError] = useState<string | null>(null);
   const [activeId, setActiveId] = useState<string | null>(null);
   const [now, setNow] = useState<Date>(() => new Date());
+  const [wizardOpen, setWizardOpen] = useState(false);
+
+  const reloadPicker = useCallback(async () => {
+    try {
+      const rows = await authApi.picker();
+      setTiles(rows);
+      if (rows.length && !activeId) {
+        const phantom = rows.find((r) => r.username === 'phantom');
+        setActiveId(phantom ? phantom.id : rows[0].id);
+      }
+      setError(null);
+    } catch {
+      setError('picker unavailable');
+      setTiles([]);
+    }
+  }, [activeId]);
 
   useEffect(() => {
     let cancelled = false;
@@ -240,8 +257,27 @@ export function ProfileSelector({ onSelect, disabled = false }: ProfileSelectorP
               onPick={() => !disabled && onSelect(tile.username)}
             />
           ))}
+          {/* Add-profile tile — only when room remains in the design's
+              6-card budget. Tap opens AddProfileWizard which gates on
+              ROOT auth before POST /api/v1/users. */}
+          {visible.length < 6 && (
+            <AddProfileTile
+              key="__add__"
+              index={visible.length}
+              disabled={disabled}
+              onActivate={() => setWizardOpen(true)}
+            />
+          )}
         </AnimatePresence>
       </div>
+
+      <AddProfileWizard
+        open={wizardOpen}
+        onClose={() => setWizardOpen(false)}
+        onCreated={() => {
+          void reloadPicker();
+        }}
+      />
 
       {/* ── Glow under the active card ──────────────────────────── */}
       <SelectedGlow activeIndex={visible.findIndex((t) => t.id === activeId)} count={visible.length} />
@@ -682,5 +718,94 @@ function VoiceCommandPill() {
         </span>
       </button>
     </div>
+  );
+}
+
+/* ─────────────────────────────────────────── AddProfileTile (closes audit
+ *  2026-04-30 OPERATOR-ASK — "+ додати профіль"). Stays visually quieter
+ *  than OperatorCard so it never competes for the operator's eye, but
+ *  stays touch-44+ and keyboard-accessible. */
+
+interface AddProfileTileProps {
+  index: number;
+  disabled: boolean;
+  onActivate: () => void;
+}
+
+function AddProfileTile({ index, disabled, onActivate }: AddProfileTileProps) {
+  return (
+    <motion.button
+      type="button"
+      onClick={() => !disabled && onActivate()}
+      disabled={disabled}
+      initial={{ opacity: 0, y: 12, scale: 0.96 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -8, scale: 0.96 }}
+      transition={{ duration: 0.45, delay: 0.06 * index, ease: EASE_PHANTOM as unknown as number[] }}
+      whileHover={disabled ? undefined : { y: -3 }}
+      whileTap={disabled ? undefined : { scale: 0.98 }}
+      role="option"
+      aria-label="Додати новий профіль"
+      style={{
+        width: 180,
+        height: 260,
+        borderRadius: 18,
+        background:
+          'linear-gradient(160deg, rgba(255,255,255,0.45), rgba(244,175,37,0.05))',
+        border: '1.5px dashed rgba(244,175,37,0.45)',
+        cursor: disabled ? 'not-allowed' : 'pointer',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 14,
+        padding: 12,
+        opacity: disabled ? 0.4 : 1,
+        fontFamily: 'var(--font-display)',
+        boxShadow: '0 6px 18px rgba(120,70,10,0.06)',
+      }}
+    >
+      <div
+        style={{
+          width: 88,
+          height: 88,
+          borderRadius: '50%',
+          background:
+            'radial-gradient(circle at 30% 30%, rgba(244,175,37,0.32), rgba(251,146,60,0.16) 60%, transparent 75%)',
+          border: '1px dashed rgba(244,175,37,0.55)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          color: '#8a5e0a',
+        }}
+      >
+        <span className="msym" aria-hidden style={{ fontSize: 44, fontVariationSettings: "'wght' 300" }}>
+          add
+        </span>
+      </div>
+      <div style={{ textAlign: 'center' }}>
+        <div
+          style={{
+            fontSize: 14,
+            fontWeight: 600,
+            color: 'var(--ink-primary)',
+            letterSpacing: '0.02em',
+          }}
+        >
+          Додати профіль
+        </div>
+        <div
+          className="playfair"
+          style={{
+            fontSize: 11,
+            color: 'var(--ink-muted)',
+            marginTop: 4,
+            fontStyle: 'italic',
+          }}
+        >
+          ROOT-only · username + PIN
+        </div>
+      </div>
+    </motion.button>
   );
 }

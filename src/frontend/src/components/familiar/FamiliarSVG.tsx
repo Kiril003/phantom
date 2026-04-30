@@ -29,10 +29,15 @@ interface FamiliarSVGProps {
   pointLength?: number;
 }
 
-const VB_W = 60;
-const VB_H = 80;
-const BODY_CX = 30;
-const BODY_CY = 38;
+// Phase-5 R1 audit-2026-04-30 — bumped from 60×80 viewBox @50×66 px to a
+// 80×100 viewBox @ 110×138 px so the operator reads a CHARACTER, not a
+// glow-blob flying past. Body geometry redrawn as a classic phantom
+// silhouette (rounded crown + 3-crested scalloped hem) instead of the
+// previous featureless teardrop.
+const VB_W = 80;
+const VB_H = 100;
+const BODY_CX = 40;
+const BODY_CY = 46;
 
 const SPRING: Transition = { type: 'spring', stiffness: 120, damping: 14 };
 const BREATH: Transition = {
@@ -51,12 +56,12 @@ export function FamiliarSVG({
   return (
     <svg
       viewBox={`0 0 ${VB_W} ${VB_H}`}
-      width={50}
-      height={66}
+      width={110}
+      height={138}
       style={{
         overflow: 'visible',
         filter:
-          'drop-shadow(0 4px 10px rgba(244, 175, 37, 0.45)) drop-shadow(0 0 14px rgba(244, 175, 37, 0.30))',
+          'drop-shadow(0 6px 18px rgba(244, 175, 37, 0.50)) drop-shadow(0 0 22px rgba(244, 175, 37, 0.32))',
       }}
       aria-hidden
     >
@@ -206,11 +211,24 @@ function PoseGroup({
   }
 }
 
-/** Drop-shape teardrop body path, anchor at (BODY_CX,BODY_CY). */
+/** Classic phantom silhouette: rounded crown over the eyes, body widens
+ *  to shoulder line, then a 3-crested scalloped hem along the bottom.
+ *  Anchored at (BODY_CX, BODY_CY); CY is roughly the eye line so the
+ *  hem sits visibly below the face. Curve constants tuned to read as a
+ *  friendly phantom at 110×138 px without losing the silhouette at the
+ *  tiny corner anchor. */
 const BODY_D = `
-  M ${BODY_CX} ${BODY_CY - 18}
-  C ${BODY_CX + 14} ${BODY_CY - 18}, ${BODY_CX + 16} ${BODY_CY + 8}, ${BODY_CX} ${BODY_CY + 16}
-  C ${BODY_CX - 16} ${BODY_CY + 8}, ${BODY_CX - 14} ${BODY_CY - 18}, ${BODY_CX} ${BODY_CY - 18}
+  M ${BODY_CX - 24} ${BODY_CY - 4}
+  C ${BODY_CX - 24} ${BODY_CY - 30}, ${BODY_CX - 14} ${BODY_CY - 38}, ${BODY_CX} ${BODY_CY - 38}
+  C ${BODY_CX + 14} ${BODY_CY - 38}, ${BODY_CX + 24} ${BODY_CY - 30}, ${BODY_CX + 24} ${BODY_CY - 4}
+  L ${BODY_CX + 24} ${BODY_CY + 22}
+  C ${BODY_CX + 24} ${BODY_CY + 30}, ${BODY_CX + 16} ${BODY_CY + 30}, ${BODY_CX + 16} ${BODY_CY + 22}
+  C ${BODY_CX + 16} ${BODY_CY + 14}, ${BODY_CX + 8} ${BODY_CY + 14}, ${BODY_CX + 8} ${BODY_CY + 22}
+  C ${BODY_CX + 8} ${BODY_CY + 30}, ${BODY_CX} ${BODY_CY + 30}, ${BODY_CX} ${BODY_CY + 22}
+  C ${BODY_CX} ${BODY_CY + 14}, ${BODY_CX - 8} ${BODY_CY + 14}, ${BODY_CX - 8} ${BODY_CY + 22}
+  C ${BODY_CX - 8} ${BODY_CY + 30}, ${BODY_CX - 16} ${BODY_CY + 30}, ${BODY_CX - 16} ${BODY_CY + 22}
+  C ${BODY_CX - 16} ${BODY_CY + 14}, ${BODY_CX - 24} ${BODY_CY + 14}, ${BODY_CX - 24} ${BODY_CY + 22}
+  L ${BODY_CX - 24} ${BODY_CY - 4}
   Z
 `;
 
@@ -251,29 +269,119 @@ function Eyes({
           times: [0, 0.93, 0.97, 1],
           ease: 'linear',
         };
+  // White-of-eye + warm-amber pupil. Bigger than the original 1.6 r dots
+  // so the phantom reads as a face from across the room, not as two
+  // freckles. Pupil offset slightly toward the inner-side gives him a
+  // gentler, less stare-y expression.
+  const EYE_W_R = 3.4;   // sclera radius
+  const PUPIL_R = 1.7;   // pupil radius
+  const EYE_DX = 7;      // half-distance between eye centres
+  const EYE_CY = BODY_CY - 6;
   return (
     <g>
       {!rightOnly && (
+        <g style={{ transformOrigin: `${BODY_CX - EYE_DX}px ${EYE_CY}px` }}>
+          <motion.circle
+            cx={BODY_CX - EYE_DX}
+            cy={EYE_CY}
+            r={EYE_W_R}
+            fill="#ffffff"
+            stroke="rgba(26,22,18,0.18)"
+            strokeWidth={0.4}
+            animate={blink}
+            transition={tx}
+            style={{ transformOrigin: `${BODY_CX - EYE_DX}px ${EYE_CY}px` }}
+          />
+          <motion.circle
+            cx={BODY_CX - EYE_DX + 0.6}
+            cy={EYE_CY + 0.4}
+            r={PUPIL_R}
+            fill="#3a2611"
+            animate={blink}
+            transition={tx}
+            style={{ transformOrigin: `${BODY_CX - EYE_DX}px ${EYE_CY}px` }}
+          />
+          <circle
+            cx={BODY_CX - EYE_DX + 1.0}
+            cy={EYE_CY - 0.4}
+            r={0.6}
+            fill="#ffffff"
+            opacity={0.9}
+          />
+        </g>
+      )}
+      <g style={{ transformOrigin: `${BODY_CX + EYE_DX}px ${EYE_CY}px` }}>
         <motion.circle
-          cx={BODY_CX - 4}
-          cy={BODY_CY - 2}
-          r={1.6}
-          fill="#1a1612"
+          cx={BODY_CX + EYE_DX}
+          cy={EYE_CY}
+          r={EYE_W_R}
+          fill="#ffffff"
+          stroke="rgba(26,22,18,0.18)"
+          strokeWidth={0.4}
           animate={blink}
           transition={tx}
-          style={{ transformOrigin: `${BODY_CX - 4}px ${BODY_CY - 2}px` }}
+          style={{ transformOrigin: `${BODY_CX + EYE_DX}px ${EYE_CY}px` }}
         />
-      )}
-      <motion.circle
-        cx={BODY_CX + 4}
-        cy={BODY_CY - 2}
-        r={1.6}
-        fill="#1a1612"
-        animate={blink}
-        transition={tx}
-        style={{ transformOrigin: `${BODY_CX + 4}px ${BODY_CY - 2}px` }}
-      />
+        <motion.circle
+          cx={BODY_CX + EYE_DX - 0.6}
+          cy={EYE_CY + 0.4}
+          r={PUPIL_R}
+          fill="#3a2611"
+          animate={blink}
+          transition={tx}
+          style={{ transformOrigin: `${BODY_CX + EYE_DX}px ${EYE_CY}px` }}
+        />
+        <circle
+          cx={BODY_CX + EYE_DX - 0.2}
+          cy={EYE_CY - 0.4}
+          r={0.6}
+          fill="#ffffff"
+          opacity={0.9}
+        />
+      </g>
     </g>
+  );
+}
+
+/* Mouth — small expressive shape that morphs per pose. Default a soft
+ * smile; PoseSleeping passes shape="o", PoseWaving passes "smile-wide". */
+function Mouth({
+  shape = 'smile',
+  reduceMotion,
+}: {
+  shape?: 'smile' | 'smile-wide' | 'o' | 'flat';
+  reduceMotion: boolean;
+}) {
+  const cy = BODY_CY + 4;
+  const path =
+    shape === 'smile'
+      ? `M ${BODY_CX - 3} ${cy} Q ${BODY_CX} ${cy + 2.4} ${BODY_CX + 3} ${cy}`
+      : shape === 'smile-wide'
+        ? `M ${BODY_CX - 4} ${cy - 0.4} Q ${BODY_CX} ${cy + 3} ${BODY_CX + 4} ${cy - 0.4}`
+        : shape === 'flat'
+          ? `M ${BODY_CX - 3} ${cy} L ${BODY_CX + 3} ${cy}`
+          : ''; // 'o' rendered as circle below
+  if (shape === 'o') {
+    return (
+      <motion.ellipse
+        cx={BODY_CX}
+        cy={cy + 0.6}
+        rx={1.4}
+        ry={1.8}
+        fill="#3a2611"
+        animate={reduceMotion ? undefined : { ry: [1.5, 2.0, 1.5] }}
+        transition={reduceMotion ? undefined : { duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+      />
+    );
+  }
+  return (
+    <path
+      d={path}
+      stroke="#3a2611"
+      strokeWidth={1.2}
+      strokeLinecap="round"
+      fill="none"
+    />
   );
 }
 
@@ -282,6 +390,7 @@ function PoseIdle({ reduceMotion }: { reduceMotion: boolean }) {
     <g>
       <Body reduceMotion={reduceMotion} />
       <Eyes reduceMotion={reduceMotion} />
+      <Mouth shape="smile" reduceMotion={reduceMotion} />
     </g>
   );
 }
@@ -301,6 +410,7 @@ function PosePointing({
     <g>
       <Body reduceMotion={reduceMotion} />
       <Eyes reduceMotion={reduceMotion} />
+      <Mouth shape="o" reduceMotion={reduceMotion} />
       {/* Tendril: a curve from body edge in `pointAngle` direction. */}
       <motion.path
         d={`M ${BODY_CX} ${BODY_CY + 4} Q ${BODY_CX + tx * 0.55} ${

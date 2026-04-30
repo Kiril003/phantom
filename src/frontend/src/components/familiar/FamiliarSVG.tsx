@@ -1,21 +1,23 @@
 /**
- * FamiliarSVG — the SVG drawing of the wisp/spirit.
+ * FamiliarSVG — shadow-samurai silhouette of the PHANTOM Familiar.
  *
- * One ~50px viewport (60×80 viewBox to leave room for the tendril +
- * tail). Renders a drop-shape body in translucent gradient (white core →
- * amber halo), two dot eyes, and a 3-particle tail. Each pose is one
- * `<g>` group; `AnimatePresence` cross-fades between them so changing
- * pose feels smooth instead of janky.
+ * Phase-5 R1 audit-2026-04-30 redesign (operator: "як тіньовий
+ * воїн/самурай його можна зробити? щоб дивим був і міг і руками і
+ * ногами якісно керувати"). Replaces the previous teardrop-with-eyes
+ * wisp with an articulated samurai silhouette: kabuto-helmet head
+ * with amber oni eye-slits, torso plate, two segmented arms, two
+ * segmented legs (hakama-style hem), katana. Every limb is its own
+ * group rotating around its joint pivot so each pose can pose the
+ * body honestly — pointing extends an arm + draws the katana,
+ * waving lifts the offhand, sleeping crosses the legs, vanishing
+ * dissolves into smoke ribbons.
  *
- * Pure presentation. Animations:
- *   - blink: independent loop (eyes scale Y down briefly every ~3.6s)
- *   - tail trail: 3 motion.circles with stagger
- *   - per-pose: bob (idle), drift (floating handled in PhantomFamiliar),
- *     reach (pointing tendril), peek (clipped slide), sleep (zZz),
- *     wave (rotational sway), vanish (scale → 0 + opacity)
+ * Geometry: 100×140 viewBox, displayed at 130×182 css px. Anchor at
+ * (BODY_CX, BODY_CY) = (50, 70) — torso centre.
  *
- * `reduceMotion=true` flattens all of it to a static silhouette so the
- * Familiar doesn't fight a vestibular operator.
+ * Reduce-motion: collapses every animated transform to its rest pose.
+ * Drop-shadow filter and the ambient halo stay; the silhouette is
+ * legible even fully static.
  */
 import { motion, AnimatePresence, type Transition } from 'framer-motion';
 import type { FamiliarPose } from '@shared/types';
@@ -23,25 +25,29 @@ import type { FamiliarPose } from '@shared/types';
 interface FamiliarSVGProps {
   pose: FamiliarPose;
   reduceMotion?: boolean;
-  /** Tendril direction in radians, used by `pointing`. 0 = right. */
-  pointAngle?: number;
-  /** Tendril length in svg-px, used by `pointing`. */
-  pointLength?: number;
+  pointAngle?: number;   // radians; 0 = right
+  pointLength?: number;  // svg-px the katana tip travels from base
 }
 
-// Phase-5 R1 audit-2026-04-30 — bumped from 60×80 viewBox @50×66 px to a
-// 80×100 viewBox @ 110×138 px so the operator reads a CHARACTER, not a
-// glow-blob flying past. Body geometry redrawn as a classic phantom
-// silhouette (rounded crown + 3-crested scalloped hem) instead of the
-// previous featureless teardrop.
-const VB_W = 80;
-const VB_H = 100;
-const BODY_CX = 40;
-const BODY_CY = 46;
+const VB_W = 100;
+const VB_H = 140;
+const BODY_CX = 50;
+const BODY_CY = 70;
 
-const SPRING: Transition = { type: 'spring', stiffness: 120, damping: 14 };
+// Palette — PHANTOM is a *shadow* warrior so the silhouette is dark
+// against the cream-warm sunrise UI. Amber accents for armour edge,
+// eye-slit glow, and katana edge so he reads as PHANTOM-tinted, not
+// generic ninja.
+const SHADOW_DEEP = '#1a1612';   // darkest body fill (matches --ink-primary)
+const SHADOW_MID = '#2a2520';    // mid silhouette layer
+const ARMOUR_EDGE = '#f4af25';   // amber armour pin-light
+const EYE_GLOW = '#ffd070';      // brighter amber for eye slits
+const KATANA_EDGE = '#fde9b8';   // pale-amber blade edge highlight
+const FABRIC = '#3a2611';        // hakama / sash fabric — warm-dark
+
+const SPRING: Transition = { type: 'spring', stiffness: 130, damping: 16 };
 const BREATH: Transition = {
-  duration: 2.6,
+  duration: 3.4,
   repeat: Infinity,
   repeatType: 'reverse',
   ease: 'easeInOut',
@@ -51,64 +57,59 @@ export function FamiliarSVG({
   pose,
   reduceMotion = false,
   pointAngle = 0,
-  pointLength = 18,
+  pointLength = 28,
 }: FamiliarSVGProps) {
   return (
     <svg
       viewBox={`0 0 ${VB_W} ${VB_H}`}
-      width={110}
-      height={138}
+      width={130}
+      height={182}
       style={{
         overflow: 'visible',
         filter:
-          'drop-shadow(0 6px 18px rgba(244, 175, 37, 0.50)) drop-shadow(0 0 22px rgba(244, 175, 37, 0.32))',
+          'drop-shadow(0 8px 22px rgba(26,22,18,0.55)) drop-shadow(0 0 18px rgba(244,175,37,0.32))',
       }}
       aria-hidden
     >
       <defs>
-        <radialGradient
-          id="phantom-familiar-body"
-          cx="50%"
-          cy="40%"
-          r="60%"
-          fx="45%"
-          fy="35%"
-        >
-          <stop offset="0%" stopColor="#ffffff" stopOpacity="0.95" />
-          <stop offset="55%" stopColor="#fde9b8" stopOpacity="0.78" />
-          <stop offset="100%" stopColor="#f4af25" stopOpacity="0.30" />
+        <radialGradient id="phantom-familiar-halo" cx="50%" cy="50%" r="55%">
+          <stop offset="0%" stopColor={ARMOUR_EDGE} stopOpacity="0.42" />
+          <stop offset="100%" stopColor={ARMOUR_EDGE} stopOpacity="0" />
         </radialGradient>
-        <radialGradient id="phantom-familiar-halo" cx="50%" cy="50%" r="50%">
-          <stop offset="0%" stopColor="#f4af25" stopOpacity="0.50" />
-          <stop offset="100%" stopColor="#f4af25" stopOpacity="0" />
-        </radialGradient>
+        <linearGradient id="phantom-familiar-armour" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={SHADOW_MID} />
+          <stop offset="100%" stopColor={SHADOW_DEEP} />
+        </linearGradient>
+        <linearGradient id="phantom-familiar-katana" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0%" stopColor={KATANA_EDGE} />
+          <stop offset="60%" stopColor="#f4d35e" />
+          <stop offset="100%" stopColor={ARMOUR_EDGE} />
+        </linearGradient>
       </defs>
 
-      {/* Outer halo — always present so the creature reads on cream too. */}
+      {/* Ambient halo so the silhouette doesn't drop into the cream BG. */}
       <motion.circle
         cx={BODY_CX}
         cy={BODY_CY}
-        r={28}
+        r={56}
         fill="url(#phantom-familiar-halo)"
         animate={
           reduceMotion
-            ? { opacity: 0.6 }
-            : { opacity: [0.40, 0.70, 0.40], scale: [0.95, 1.04, 0.95] }
+            ? { opacity: 0.5 }
+            : { opacity: [0.32, 0.58, 0.32], scale: [0.95, 1.04, 0.95] }
         }
         transition={reduceMotion ? undefined : BREATH}
         style={{ transformOrigin: `${BODY_CX}px ${BODY_CY}px` }}
       />
 
-      {/* Tail trail — 3 little circles trailing below the body. */}
-      <Tail reduceMotion={reduceMotion} />
+      <CapeTrail reduceMotion={reduceMotion} />
 
-      {/* Body + per-pose decoration cross-fade. */}
       <AnimatePresence mode="wait" initial={false}>
         <motion.g
           key={pose}
-          initial={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.85 }}
-          animate={reduceMotion ? { opacity: 1 } : { opacity: 1, scale: 1 }}
-          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.85 }}
+          initial={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 6 }}
+          animate={reduceMotion ? { opacity: 1 } : { opacity: 1, y: 0 }}
+          exit={reduceMotion ? { opacity: 0 } : { opacity: 0, y: 4 }}
           transition={SPRING}
           style={{ transformOrigin: `${BODY_CX}px ${BODY_CY}px` }}
         >
@@ -124,38 +125,40 @@ export function FamiliarSVG({
   );
 }
 
-/* ── Tail ────────────────────────────────────────────────────────────────── */
+/* ── Cape trail (replaces the old 3-dot blob tail) ────────────────────────── */
 
-function Tail({ reduceMotion }: { reduceMotion: boolean }) {
-  const dots = [
-    { cx: BODY_CX, cy: BODY_CY + 20, r: 2.6, delay: 0 },
-    { cx: BODY_CX - 1.5, cy: BODY_CY + 26, r: 1.8, delay: 0.18 },
-    { cx: BODY_CX + 1.5, cy: BODY_CY + 31, r: 1.2, delay: 0.36 },
+function CapeTrail({ reduceMotion }: { reduceMotion: boolean }) {
+  // Two thin amber-edged ribbons trailing from the kabuto crest, drifting
+  // back as if the warrior just stopped moving. Pure ambient — never
+  // touched by pose logic, so a still samurai still feels alive.
+  const ribbons = [
+    { x: BODY_CX - 6, y0: BODY_CY - 26, hue: 0.30 },
+    { x: BODY_CX + 6, y0: BODY_CY - 26, hue: 0.20 },
   ];
   return (
     <g>
-      {dots.map((d, i) => (
-        <motion.circle
+      {ribbons.map((r, i) => (
+        <motion.path
           key={i}
-          cx={d.cx}
-          cy={d.cy}
-          r={d.r}
-          fill="#f4af25"
-          opacity={0.6}
+          d={`M ${r.x} ${r.y0} Q ${r.x + (i === 0 ? -3 : 3)} ${r.y0 - 12} ${r.x + (i === 0 ? -8 : 8)} ${r.y0 - 28}`}
+          stroke={ARMOUR_EDGE}
+          strokeWidth={1.4}
+          strokeLinecap="round"
+          fill="none"
+          opacity={r.hue}
           animate={
             reduceMotion
-              ? { opacity: 0.5 }
+              ? { opacity: r.hue }
               : {
-                  opacity: [0.30, 0.75, 0.30],
-                  cy: [d.cy, d.cy + 2, d.cy],
+                  opacity: [r.hue * 0.6, r.hue, r.hue * 0.6],
                 }
           }
           transition={
             reduceMotion
               ? undefined
               : {
-                  duration: 1.8,
-                  delay: d.delay,
+                  duration: 2.6,
+                  delay: i * 0.4,
                   repeat: Infinity,
                   ease: 'easeInOut',
                 }
@@ -166,7 +169,7 @@ function Tail({ reduceMotion }: { reduceMotion: boolean }) {
   );
 }
 
-/* ── Pose groups ─────────────────────────────────────────────────────────── */
+/* ── Pose dispatch ────────────────────────────────────────────────────────── */
 
 interface PoseGroupProps {
   pose: FamiliarPose;
@@ -175,17 +178,12 @@ interface PoseGroupProps {
   pointLength: number;
 }
 
-function PoseGroup({
-  pose,
-  reduceMotion,
-  pointAngle,
-  pointLength,
-}: PoseGroupProps) {
+function PoseGroup({ pose, reduceMotion, pointAngle, pointLength }: PoseGroupProps) {
   switch (pose) {
     case 'idle':
       return <PoseIdle reduceMotion={reduceMotion} />;
     case 'floating':
-      return <PoseIdle reduceMotion={reduceMotion} />;
+      return <PoseFloating reduceMotion={reduceMotion} />;
     case 'pointing':
       return (
         <PosePointing
@@ -203,7 +201,6 @@ function PoseGroup({
     case 'vanishing':
       return <PoseVanishing reduceMotion={reduceMotion} />;
     default: {
-      // Exhaustive — adding a new pose must add a case here.
       const _exhaustive: never = pose;
       void _exhaustive;
       return null;
@@ -211,187 +208,386 @@ function PoseGroup({
   }
 }
 
-/** Classic phantom silhouette: rounded crown over the eyes, body widens
- *  to shoulder line, then a 3-crested scalloped hem along the bottom.
- *  Anchored at (BODY_CX, BODY_CY); CY is roughly the eye line so the
- *  hem sits visibly below the face. Curve constants tuned to read as a
- *  friendly phantom at 110×138 px without losing the silhouette at the
- *  tiny corner anchor. */
-const BODY_D = `
-  M ${BODY_CX - 24} ${BODY_CY - 4}
-  C ${BODY_CX - 24} ${BODY_CY - 30}, ${BODY_CX - 14} ${BODY_CY - 38}, ${BODY_CX} ${BODY_CY - 38}
-  C ${BODY_CX + 14} ${BODY_CY - 38}, ${BODY_CX + 24} ${BODY_CY - 30}, ${BODY_CX + 24} ${BODY_CY - 4}
-  L ${BODY_CX + 24} ${BODY_CY + 22}
-  C ${BODY_CX + 24} ${BODY_CY + 30}, ${BODY_CX + 16} ${BODY_CY + 30}, ${BODY_CX + 16} ${BODY_CY + 22}
-  C ${BODY_CX + 16} ${BODY_CY + 14}, ${BODY_CX + 8} ${BODY_CY + 14}, ${BODY_CX + 8} ${BODY_CY + 22}
-  C ${BODY_CX + 8} ${BODY_CY + 30}, ${BODY_CX} ${BODY_CY + 30}, ${BODY_CX} ${BODY_CY + 22}
-  C ${BODY_CX} ${BODY_CY + 14}, ${BODY_CX - 8} ${BODY_CY + 14}, ${BODY_CX - 8} ${BODY_CY + 22}
-  C ${BODY_CX - 8} ${BODY_CY + 30}, ${BODY_CX - 16} ${BODY_CY + 30}, ${BODY_CX - 16} ${BODY_CY + 22}
-  C ${BODY_CX - 16} ${BODY_CY + 14}, ${BODY_CX - 24} ${BODY_CY + 14}, ${BODY_CX - 24} ${BODY_CY + 22}
-  L ${BODY_CX - 24} ${BODY_CY - 4}
-  Z
-`;
+/* ── Anatomy primitives ──────────────────────────────────────────────────── */
 
-function Body({ reduceMotion }: { reduceMotion: boolean }) {
+const HEAD_R = 11;
+const HEAD_CY = BODY_CY - 22;
+const SHOULDER_Y = BODY_CY - 4;
+const HIP_Y = BODY_CY + 18;
+const SHOULDER_DX = 11;
+const HIP_DX = 8;
+
+/** Kabuto-helmeted head with two horn-crest peaks on top + amber eye-slits.
+ *  Eye-slits glow steady (no blink — they're light slots, not eyelids). */
+function Head({ reduceMotion }: { reduceMotion: boolean }) {
   return (
-    <motion.path
-      d={BODY_D}
-      fill="url(#phantom-familiar-body)"
-      stroke="rgba(255,255,255,0.85)"
-      strokeWidth={0.6}
+    <g>
+      {/* Helmet crown — slightly flattened oval. */}
+      <ellipse
+        cx={BODY_CX}
+        cy={HEAD_CY}
+        rx={HEAD_R}
+        ry={HEAD_R + 1.2}
+        fill="url(#phantom-familiar-armour)"
+        stroke={ARMOUR_EDGE}
+        strokeWidth={0.8}
+      />
+      {/* Front-shield rim — a darker arc above the eyes. */}
+      <path
+        d={`M ${BODY_CX - HEAD_R + 1} ${HEAD_CY - 1}
+            Q ${BODY_CX} ${HEAD_CY - HEAD_R - 0.5}
+              ${BODY_CX + HEAD_R - 1} ${HEAD_CY - 1}`}
+        fill="none"
+        stroke={ARMOUR_EDGE}
+        strokeWidth={0.8}
+        opacity={0.65}
+      />
+      {/* Two horn-crest tips. */}
+      <path
+        d={`M ${BODY_CX - 5} ${HEAD_CY - HEAD_R - 0.5}
+            L ${BODY_CX - 8} ${HEAD_CY - HEAD_R - 6}
+            L ${BODY_CX - 3} ${HEAD_CY - HEAD_R - 1.5}`}
+        fill={SHADOW_DEEP}
+        stroke={ARMOUR_EDGE}
+        strokeWidth={0.5}
+        strokeLinejoin="round"
+      />
+      <path
+        d={`M ${BODY_CX + 5} ${HEAD_CY - HEAD_R - 0.5}
+            L ${BODY_CX + 8} ${HEAD_CY - HEAD_R - 6}
+            L ${BODY_CX + 3} ${HEAD_CY - HEAD_R - 1.5}`}
+        fill={SHADOW_DEEP}
+        stroke={ARMOUR_EDGE}
+        strokeWidth={0.5}
+        strokeLinejoin="round"
+      />
+      {/* Mempo (face mask) — lower-half darker plate w/ subtle grin notch. */}
+      <path
+        d={`M ${BODY_CX - HEAD_R + 1} ${HEAD_CY + 2}
+            Q ${BODY_CX - HEAD_R - 1} ${HEAD_CY + HEAD_R - 1}
+              ${BODY_CX} ${HEAD_CY + HEAD_R + 1}
+            Q ${BODY_CX + HEAD_R + 1} ${HEAD_CY + HEAD_R - 1}
+              ${BODY_CX + HEAD_R - 1} ${HEAD_CY + 2} Z`}
+        fill={SHADOW_DEEP}
+        stroke={ARMOUR_EDGE}
+        strokeWidth={0.5}
+      />
+      {/* Mempo lip-line. */}
+      <path
+        d={`M ${BODY_CX - 3.5} ${HEAD_CY + 6}
+            L ${BODY_CX + 3.5} ${HEAD_CY + 6}`}
+        stroke={ARMOUR_EDGE}
+        strokeWidth={0.6}
+        strokeLinecap="round"
+        opacity={0.7}
+      />
+      {/* Amber eye-slits — primary character feature. */}
+      <EyeSlit cx={BODY_CX - 4.5} cy={HEAD_CY - 1} reduceMotion={reduceMotion} />
+      <EyeSlit cx={BODY_CX + 4.5} cy={HEAD_CY - 1} reduceMotion={reduceMotion} />
+    </g>
+  );
+}
+
+function EyeSlit({
+  cx,
+  cy,
+  reduceMotion,
+}: {
+  cx: number;
+  cy: number;
+  reduceMotion: boolean;
+}) {
+  return (
+    <g>
+      {/* Soft glow halo. */}
+      <motion.circle
+        cx={cx}
+        cy={cy}
+        r={2.6}
+        fill={EYE_GLOW}
+        opacity={0.35}
+        animate={
+          reduceMotion
+            ? { opacity: 0.35 }
+            : { opacity: [0.25, 0.55, 0.25] }
+        }
+        transition={
+          reduceMotion
+            ? undefined
+            : { duration: 2.4, repeat: Infinity, ease: 'easeInOut' }
+        }
+      />
+      {/* The slit itself — a tight horizontal lozenge. */}
+      <ellipse cx={cx} cy={cy} rx={2.4} ry={1.0} fill={EYE_GLOW} />
+      <ellipse cx={cx} cy={cy} rx={1.4} ry={0.5} fill="#ffffff" opacity={0.85} />
+    </g>
+  );
+}
+
+/** Torso plate — keyhole-shaped chestpiece with a centre amber clasp. */
+function Torso({ reduceMotion }: { reduceMotion: boolean }) {
+  return (
+    <motion.g
       animate={reduceMotion ? undefined : { y: [0, -1.5, 0] }}
       transition={reduceMotion ? undefined : BREATH}
-    />
-  );
-}
-
-function Eyes({
-  reduceMotion,
-  closed = false,
-  rightOnly = false,
-}: {
-  reduceMotion: boolean;
-  closed?: boolean;
-  rightOnly?: boolean;
-}) {
-  const blink = reduceMotion
-    ? { scaleY: 1 }
-    : closed
-      ? { scaleY: 0.05 }
-      : { scaleY: [1, 1, 0.1, 1] };
-  const tx: Transition = reduceMotion
-    ? { duration: 0 }
-    : closed
-      ? { duration: 0.4, ease: 'easeInOut' }
-      : {
-          duration: 3.6,
-          repeat: Infinity,
-          times: [0, 0.93, 0.97, 1],
-          ease: 'linear',
-        };
-  // White-of-eye + warm-amber pupil. Bigger than the original 1.6 r dots
-  // so the phantom reads as a face from across the room, not as two
-  // freckles. Pupil offset slightly toward the inner-side gives him a
-  // gentler, less stare-y expression.
-  const EYE_W_R = 3.4;   // sclera radius
-  const PUPIL_R = 1.7;   // pupil radius
-  const EYE_DX = 7;      // half-distance between eye centres
-  const EYE_CY = BODY_CY - 6;
-  return (
-    <g>
-      {!rightOnly && (
-        <g style={{ transformOrigin: `${BODY_CX - EYE_DX}px ${EYE_CY}px` }}>
-          <motion.circle
-            cx={BODY_CX - EYE_DX}
-            cy={EYE_CY}
-            r={EYE_W_R}
-            fill="#ffffff"
-            stroke="rgba(26,22,18,0.18)"
-            strokeWidth={0.4}
-            animate={blink}
-            transition={tx}
-            style={{ transformOrigin: `${BODY_CX - EYE_DX}px ${EYE_CY}px` }}
-          />
-          <motion.circle
-            cx={BODY_CX - EYE_DX + 0.6}
-            cy={EYE_CY + 0.4}
-            r={PUPIL_R}
-            fill="#3a2611"
-            animate={blink}
-            transition={tx}
-            style={{ transformOrigin: `${BODY_CX - EYE_DX}px ${EYE_CY}px` }}
-          />
-          <circle
-            cx={BODY_CX - EYE_DX + 1.0}
-            cy={EYE_CY - 0.4}
-            r={0.6}
-            fill="#ffffff"
-            opacity={0.9}
-          />
-        </g>
-      )}
-      <g style={{ transformOrigin: `${BODY_CX + EYE_DX}px ${EYE_CY}px` }}>
-        <motion.circle
-          cx={BODY_CX + EYE_DX}
-          cy={EYE_CY}
-          r={EYE_W_R}
-          fill="#ffffff"
-          stroke="rgba(26,22,18,0.18)"
-          strokeWidth={0.4}
-          animate={blink}
-          transition={tx}
-          style={{ transformOrigin: `${BODY_CX + EYE_DX}px ${EYE_CY}px` }}
-        />
-        <motion.circle
-          cx={BODY_CX + EYE_DX - 0.6}
-          cy={EYE_CY + 0.4}
-          r={PUPIL_R}
-          fill="#3a2611"
-          animate={blink}
-          transition={tx}
-          style={{ transformOrigin: `${BODY_CX + EYE_DX}px ${EYE_CY}px` }}
-        />
-        <circle
-          cx={BODY_CX + EYE_DX - 0.2}
-          cy={EYE_CY - 0.4}
-          r={0.6}
-          fill="#ffffff"
-          opacity={0.9}
-        />
-      </g>
-    </g>
-  );
-}
-
-/* Mouth — small expressive shape that morphs per pose. Default a soft
- * smile; PoseSleeping passes shape="o", PoseWaving passes "smile-wide". */
-function Mouth({
-  shape = 'smile',
-  reduceMotion,
-}: {
-  shape?: 'smile' | 'smile-wide' | 'o' | 'flat';
-  reduceMotion: boolean;
-}) {
-  const cy = BODY_CY + 4;
-  const path =
-    shape === 'smile'
-      ? `M ${BODY_CX - 3} ${cy} Q ${BODY_CX} ${cy + 2.4} ${BODY_CX + 3} ${cy}`
-      : shape === 'smile-wide'
-        ? `M ${BODY_CX - 4} ${cy - 0.4} Q ${BODY_CX} ${cy + 3} ${BODY_CX + 4} ${cy - 0.4}`
-        : shape === 'flat'
-          ? `M ${BODY_CX - 3} ${cy} L ${BODY_CX + 3} ${cy}`
-          : ''; // 'o' rendered as circle below
-  if (shape === 'o') {
-    return (
-      <motion.ellipse
-        cx={BODY_CX}
-        cy={cy + 0.6}
-        rx={1.4}
-        ry={1.8}
-        fill="#3a2611"
-        animate={reduceMotion ? undefined : { ry: [1.5, 2.0, 1.5] }}
-        transition={reduceMotion ? undefined : { duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
+    >
+      {/* Shoulders → waist trapezoid. */}
+      <path
+        d={`M ${BODY_CX - SHOULDER_DX - 2} ${SHOULDER_Y}
+            Q ${BODY_CX - SHOULDER_DX} ${SHOULDER_Y - 3}
+              ${BODY_CX - SHOULDER_DX + 2} ${SHOULDER_Y - 3}
+            L ${BODY_CX + SHOULDER_DX - 2} ${SHOULDER_Y - 3}
+            Q ${BODY_CX + SHOULDER_DX} ${SHOULDER_Y - 3}
+              ${BODY_CX + SHOULDER_DX + 2} ${SHOULDER_Y}
+            L ${BODY_CX + HIP_DX + 1} ${HIP_Y}
+            L ${BODY_CX - HIP_DX - 1} ${HIP_Y} Z`}
+        fill="url(#phantom-familiar-armour)"
+        stroke={ARMOUR_EDGE}
+        strokeWidth={0.8}
+        strokeLinejoin="round"
       />
-    );
-  }
-  return (
-    <path
-      d={path}
-      stroke="#3a2611"
-      strokeWidth={1.2}
-      strokeLinecap="round"
-      fill="none"
-    />
+      {/* Centre clasp — small amber square. */}
+      <rect
+        x={BODY_CX - 1.6}
+        y={SHOULDER_Y + 6}
+        width={3.2}
+        height={3.2}
+        fill={ARMOUR_EDGE}
+        rx={0.6}
+      />
+      {/* Sash (obi) — across the waist. */}
+      <rect
+        x={BODY_CX - HIP_DX - 1}
+        y={HIP_Y - 4}
+        width={(HIP_DX + 1) * 2}
+        height={4}
+        fill={FABRIC}
+        stroke={ARMOUR_EDGE}
+        strokeWidth={0.4}
+      />
+    </motion.g>
   );
 }
+
+/** Two-segment limb. `pivot` is the shoulder/hip; angles in degrees,
+ *  measured CW from straight-down. Length controls reach. */
+function Limb({
+  pivotX,
+  pivotY,
+  shoulderAngle,
+  elbowAngle,
+  upperLen,
+  lowerLen,
+  hand = true,
+  reduceMotion,
+  animate,
+}: {
+  pivotX: number;
+  pivotY: number;
+  shoulderAngle: number;     // degrees, 0 = straight down
+  elbowAngle: number;        // degrees, 0 = continuing straight
+  upperLen: number;
+  lowerLen: number;
+  hand?: boolean;
+  reduceMotion: boolean;
+  animate?: { rotate?: number[]; transition?: Transition };
+}) {
+  // Compute elbow + wrist positions in svg space.
+  const sa = (shoulderAngle * Math.PI) / 180;
+  const ex = pivotX + Math.sin(sa) * upperLen;
+  const ey = pivotY + Math.cos(sa) * upperLen;
+  const ea = sa + (elbowAngle * Math.PI) / 180;
+  const wx = ex + Math.sin(ea) * lowerLen;
+  const wy = ey + Math.cos(ea) * lowerLen;
+  const animProps = animate && !reduceMotion
+    ? { animate: animate.rotate ? { rotate: animate.rotate } : undefined, transition: animate.transition }
+    : {};
+  return (
+    <motion.g
+      style={{ transformOrigin: `${pivotX}px ${pivotY}px` }}
+      animate={animProps.animate}
+      transition={animProps.transition}
+    >
+      <line
+        x1={pivotX}
+        y1={pivotY}
+        x2={ex}
+        y2={ey}
+        stroke={SHADOW_DEEP}
+        strokeWidth={4}
+        strokeLinecap="round"
+      />
+      <line
+        x1={ex}
+        y1={ey}
+        x2={wx}
+        y2={wy}
+        stroke={SHADOW_DEEP}
+        strokeWidth={4}
+        strokeLinecap="round"
+      />
+      {/* Joint pin — small amber dot at elbow. */}
+      <circle cx={ex} cy={ey} r={1.2} fill={ARMOUR_EDGE} />
+      {hand && (
+        <circle
+          cx={wx}
+          cy={wy}
+          r={2.1}
+          fill={SHADOW_MID}
+          stroke={ARMOUR_EDGE}
+          strokeWidth={0.5}
+        />
+      )}
+    </motion.g>
+  );
+}
+
+/** Katana drawn FROM `gripX,gripY` along `angleDeg`, length `len`. */
+function Katana({
+  gripX,
+  gripY,
+  angleDeg,
+  len,
+  reduceMotion,
+  animate,
+}: {
+  gripX: number;
+  gripY: number;
+  angleDeg: number;
+  len: number;
+  reduceMotion: boolean;
+  animate?: { rotate?: number[]; pathLength?: number; transition?: Transition };
+}) {
+  const animProps = animate && !reduceMotion
+    ? {
+        animate: {
+          ...(animate.rotate ? { rotate: animate.rotate } : {}),
+          ...(animate.pathLength !== undefined ? { pathLength: animate.pathLength } : {}),
+        },
+        transition: animate.transition,
+      }
+    : {};
+  return (
+    <motion.g
+      style={{ transformOrigin: `${gripX}px ${gripY}px`, rotate: `${angleDeg}deg` }}
+      animate={animProps.animate}
+      transition={animProps.transition}
+    >
+      {/* Handle wrap (tsuka). */}
+      <rect
+        x={gripX - 1.2}
+        y={gripY - 1}
+        width={2.4}
+        height={6}
+        fill={FABRIC}
+        rx={0.4}
+      />
+      {/* Tsuba (guard) — small disk. */}
+      <circle cx={gripX} cy={gripY + 6} r={1.6} fill={ARMOUR_EDGE} />
+      {/* Blade itself — thin gradient bar pointing along positive Y of the rotated group. */}
+      <rect
+        x={gripX - 0.7}
+        y={gripY + 6}
+        width={1.4}
+        height={len}
+        fill="url(#phantom-familiar-katana)"
+        stroke={ARMOUR_EDGE}
+        strokeWidth={0.3}
+      />
+      {/* Blade tip — small triangle. */}
+      <path
+        d={`M ${gripX - 0.7} ${gripY + 6 + len}
+            L ${gripX} ${gripY + 6 + len + 3}
+            L ${gripX + 0.7} ${gripY + 6 + len} Z`}
+        fill={KATANA_EDGE}
+      />
+    </motion.g>
+  );
+}
+
+/* ── Pose implementations ────────────────────────────────────────────────── */
 
 function PoseIdle({ reduceMotion }: { reduceMotion: boolean }) {
+  // Standing easy, both hands relaxed at sides. Right hand resting on
+  // katana hilt at the hip. Slight breath bob via Torso wrapper.
   return (
     <g>
-      <Body reduceMotion={reduceMotion} />
-      <Eyes reduceMotion={reduceMotion} />
-      <Mouth shape="smile" reduceMotion={reduceMotion} />
+      <Head reduceMotion={reduceMotion} />
+      <Torso reduceMotion={reduceMotion} />
+      {/* Left arm — relaxed. */}
+      <Limb
+        pivotX={BODY_CX - SHOULDER_DX}
+        pivotY={SHOULDER_Y}
+        shoulderAngle={5}
+        elbowAngle={10}
+        upperLen={11}
+        lowerLen={10}
+        reduceMotion={reduceMotion}
+      />
+      {/* Right arm — bent across to rest on katana hilt. */}
+      <Limb
+        pivotX={BODY_CX + SHOULDER_DX}
+        pivotY={SHOULDER_Y}
+        shoulderAngle={-30}
+        elbowAngle={70}
+        upperLen={11}
+        lowerLen={9}
+        reduceMotion={reduceMotion}
+      />
+      {/* Two legs — slight stance. */}
+      <Limb
+        pivotX={BODY_CX - HIP_DX}
+        pivotY={HIP_Y}
+        shoulderAngle={-6}
+        elbowAngle={6}
+        upperLen={14}
+        lowerLen={14}
+        hand={false}
+        reduceMotion={reduceMotion}
+      />
+      <Limb
+        pivotX={BODY_CX + HIP_DX}
+        pivotY={HIP_Y}
+        shoulderAngle={6}
+        elbowAngle={-6}
+        upperLen={14}
+        lowerLen={14}
+        hand={false}
+        reduceMotion={reduceMotion}
+      />
+      {/* Sheathed katana — angled at the left hip. */}
+      <Katana
+        gripX={BODY_CX - 4}
+        gripY={HIP_Y - 1}
+        angleDeg={12}
+        len={26}
+        reduceMotion={reduceMotion}
+      />
     </g>
+  );
+}
+
+function PoseFloating({ reduceMotion }: { reduceMotion: boolean }) {
+  // Same as idle, with a slow drift bob handled at the PhantomFamiliar
+  // wrapper level. Adds a faint trailing motion-line in front of the
+  // legs (spirit-walking, not running).
+  return (
+    <motion.g
+      animate={reduceMotion ? undefined : { y: [0, -3, 0] }}
+      transition={reduceMotion ? undefined : { duration: 3.2, repeat: Infinity, ease: 'easeInOut' }}
+    >
+      <PoseIdle reduceMotion={reduceMotion} />
+      {/* Motion line at the heel — short trailing wisp. */}
+      <motion.path
+        d={`M ${BODY_CX - 8} ${HIP_Y + 32} Q ${BODY_CX - 14} ${HIP_Y + 30} ${BODY_CX - 18} ${HIP_Y + 26}`}
+        stroke={ARMOUR_EDGE}
+        strokeWidth={0.6}
+        fill="none"
+        opacity={0.4}
+        animate={reduceMotion ? undefined : { opacity: [0.2, 0.55, 0.2] }}
+        transition={reduceMotion ? undefined : { duration: 1.6, repeat: Infinity, ease: 'easeInOut' }}
+      />
+    </motion.g>
   );
 }
 
@@ -404,119 +600,185 @@ function PosePointing({
   pointAngle: number;
   pointLength: number;
 }) {
-  const tx = Math.cos(pointAngle) * pointLength;
-  const ty = Math.sin(pointAngle) * pointLength;
+  // Katana drawn and extended toward the target. Arm follows the
+  // katana line; offhand braced at the hip for balance.
+  // pointAngle radians → svg degrees; svg-y points down so we negate
+  // and rotate so 0° in svg space points down (matches Katana baseline).
+  const swordDeg = (pointAngle * 180) / Math.PI - 90;
+  const swordLen = Math.max(20, Math.min(34, pointLength));
   return (
     <g>
-      <Body reduceMotion={reduceMotion} />
-      <Eyes reduceMotion={reduceMotion} />
-      <Mouth shape="o" reduceMotion={reduceMotion} />
-      {/* Tendril: a curve from body edge in `pointAngle` direction. */}
-      <motion.path
-        d={`M ${BODY_CX} ${BODY_CY + 4} Q ${BODY_CX + tx * 0.55} ${
-          BODY_CY + ty * 0.55 + 2
-        } ${BODY_CX + tx} ${BODY_CY + ty}`}
-        stroke="#f4af25"
-        strokeWidth={2.4}
-        strokeLinecap="round"
-        fill="none"
-        opacity={0.85}
-        initial={reduceMotion ? { pathLength: 1 } : { pathLength: 0 }}
-        animate={{ pathLength: 1 }}
-        transition={
-          reduceMotion ? { duration: 0 } : { duration: 0.45, ease: 'easeOut' }
-        }
+      <Head reduceMotion={reduceMotion} />
+      <Torso reduceMotion={reduceMotion} />
+      {/* Left arm — grip-supporting the blade. Reaches across the chest. */}
+      <Limb
+        pivotX={BODY_CX - SHOULDER_DX}
+        pivotY={SHOULDER_Y}
+        shoulderAngle={50 + swordDeg * 0.3}
+        elbowAngle={20}
+        upperLen={11}
+        lowerLen={10}
+        reduceMotion={reduceMotion}
       />
-      <motion.circle
-        cx={BODY_CX + tx}
-        cy={BODY_CY + ty}
-        r={2.2}
-        fill="#fb923c"
-        animate={
-          reduceMotion
-            ? { opacity: 1 }
-            : { opacity: [0.6, 1, 0.6], scale: [0.9, 1.2, 0.9] }
-        }
-        transition={
-          reduceMotion
-            ? undefined
-            : { duration: 1.4, repeat: Infinity, ease: 'easeInOut' }
-        }
-        style={{ transformOrigin: `${BODY_CX + tx}px ${BODY_CY + ty}px` }}
+      {/* Right arm — main hand on the katana, pointing along swordDeg. */}
+      <Limb
+        pivotX={BODY_CX + SHOULDER_DX}
+        pivotY={SHOULDER_Y}
+        shoulderAngle={Math.min(85, Math.max(20, 65 + swordDeg * 0.4))}
+        elbowAngle={5}
+        upperLen={11}
+        lowerLen={11}
+        reduceMotion={reduceMotion}
+      />
+      {/* Legs — split stance, weight slightly forward on the right. */}
+      <Limb
+        pivotX={BODY_CX - HIP_DX}
+        pivotY={HIP_Y}
+        shoulderAngle={-12}
+        elbowAngle={4}
+        upperLen={14}
+        lowerLen={14}
+        hand={false}
+        reduceMotion={reduceMotion}
+      />
+      <Limb
+        pivotX={BODY_CX + HIP_DX}
+        pivotY={HIP_Y}
+        shoulderAngle={14}
+        elbowAngle={-2}
+        upperLen={14}
+        lowerLen={14}
+        hand={false}
+        reduceMotion={reduceMotion}
+      />
+      {/* Drawn katana — anchor at the right hand, rotated to swordDeg. */}
+      <Katana
+        gripX={BODY_CX + 18}
+        gripY={SHOULDER_Y + 14}
+        angleDeg={swordDeg}
+        len={swordLen}
+        reduceMotion={reduceMotion}
+        animate={{
+          pathLength: 1,
+          rotate: [swordDeg - 6, swordDeg, swordDeg - 1],
+          transition: { duration: 1.4, repeat: Infinity, ease: 'easeInOut' },
+        }}
       />
     </g>
   );
 }
 
 function PosePeeking({ reduceMotion }: { reduceMotion: boolean }) {
-  // Half-emerged: clip the bottom half of the body so it looks like the
-  // creature is climbing out from somewhere.
+  // Shadow leaning out from the right edge — only head + right shoulder
+  // visible, body tilted. We achieve this by clipping everything below
+  // BODY_CY + 2 and shifting the whole group right slightly.
   return (
-    <g>
+    <g transform="translate(-12, 4) rotate(-8 50 70)">
       <defs>
         <clipPath id="phantom-familiar-peek-clip">
-          <rect x={0} y={BODY_CY - 22} width={VB_W} height={20} />
+          <rect x={0} y={0} width={VB_W} height={BODY_CY + 4} />
         </clipPath>
       </defs>
       <g clipPath="url(#phantom-familiar-peek-clip)">
-        <Body reduceMotion={reduceMotion} />
+        <Head reduceMotion={reduceMotion} />
+        <Torso reduceMotion={reduceMotion} />
+        {/* Just the right arm peeking, gripping a katana edge. */}
+        <Limb
+          pivotX={BODY_CX + SHOULDER_DX}
+          pivotY={SHOULDER_Y}
+          shoulderAngle={-25}
+          elbowAngle={50}
+          upperLen={11}
+          lowerLen={9}
+          reduceMotion={reduceMotion}
+        />
       </g>
-      {/* Only the right eye visible — nudges "shy peek" reading. */}
-      <motion.g
-        animate={reduceMotion ? undefined : { y: [0, -2, 0] }}
-        transition={
-          reduceMotion
-            ? undefined
-            : { duration: 2.2, repeat: Infinity, ease: 'easeInOut' }
-        }
-      >
-        <Eyes reduceMotion={reduceMotion} rightOnly />
-      </motion.g>
     </g>
   );
 }
 
 function PoseSleeping({ reduceMotion }: { reduceMotion: boolean }) {
+  // Cross-legged seiza on the floor. Head bowed (rotated forward),
+  // hands resting on knees. Three drifting "z" particles.
   return (
     <g>
-      <Body reduceMotion={reduceMotion} />
-      {/* Closed-eye lids: short horizontal strokes. */}
-      <line
-        x1={BODY_CX - 6}
-        x2={BODY_CX - 2}
-        y1={BODY_CY - 2}
-        y2={BODY_CY - 2}
-        stroke="#1a1612"
-        strokeWidth={1.2}
-        strokeLinecap="round"
-      />
-      <line
-        x1={BODY_CX + 2}
-        x2={BODY_CX + 6}
-        y1={BODY_CY - 2}
-        y2={BODY_CY - 2}
-        stroke="#1a1612"
-        strokeWidth={1.2}
-        strokeLinecap="round"
-      />
-      {/* Tiny zZz drifting up. */}
+      <motion.g
+        animate={reduceMotion ? undefined : { y: [0, -1, 0] }}
+        transition={reduceMotion ? undefined : BREATH}
+        style={{ transformOrigin: `${BODY_CX}px ${BODY_CY}px` }}
+      >
+        {/* Head bowed forward. */}
+        <g transform={`rotate(8 ${BODY_CX} ${HEAD_CY})`}>
+          <Head reduceMotion={reduceMotion} />
+        </g>
+        <Torso reduceMotion={reduceMotion} />
+        {/* Crossed legs — left bent right, right bent left. */}
+        <Limb
+          pivotX={BODY_CX - HIP_DX}
+          pivotY={HIP_Y}
+          shoulderAngle={70}
+          elbowAngle={-100}
+          upperLen={12}
+          lowerLen={12}
+          hand={false}
+          reduceMotion={reduceMotion}
+        />
+        <Limb
+          pivotX={BODY_CX + HIP_DX}
+          pivotY={HIP_Y}
+          shoulderAngle={-70}
+          elbowAngle={100}
+          upperLen={12}
+          lowerLen={12}
+          hand={false}
+          reduceMotion={reduceMotion}
+        />
+        {/* Hands resting on knees. */}
+        <Limb
+          pivotX={BODY_CX - SHOULDER_DX}
+          pivotY={SHOULDER_Y}
+          shoulderAngle={35}
+          elbowAngle={45}
+          upperLen={10}
+          lowerLen={8}
+          reduceMotion={reduceMotion}
+        />
+        <Limb
+          pivotX={BODY_CX + SHOULDER_DX}
+          pivotY={SHOULDER_Y}
+          shoulderAngle={-35}
+          elbowAngle={-45}
+          upperLen={10}
+          lowerLen={8}
+          reduceMotion={reduceMotion}
+        />
+        {/* Sheathed katana on the right side. */}
+        <Katana
+          gripX={BODY_CX + 18}
+          gripY={HIP_Y - 4}
+          angleDeg={70}
+          len={22}
+          reduceMotion={reduceMotion}
+        />
+      </motion.g>
+      {/* Drifting "z"s. */}
       {!reduceMotion &&
         ['z', 'z', 'z'].map((c, i) => (
           <motion.text
             key={i}
-            x={BODY_CX + 12 + i * 2}
-            y={BODY_CY - 18}
+            x={BODY_CX + 16 + i * 2}
+            y={HEAD_CY - 4}
             fontSize={5 + i * 1.5}
-            fontFamily="Manrope, system-ui"
-            fontWeight={700}
-            fill="#b07a10"
-            initial={{ opacity: 0, y: BODY_CY - 12 }}
-            animate={{ opacity: [0, 0.9, 0], y: BODY_CY - 22 - i * 6 }}
+            fill={ARMOUR_EDGE}
+            fontFamily="serif"
+            style={{ fontStyle: 'italic' }}
+            initial={{ opacity: 0, y: HEAD_CY - 4 }}
+            animate={{ opacity: [0, 0.85, 0], y: HEAD_CY - 22 - i * 6 }}
             transition={{
-              duration: 2.4,
-              delay: i * 0.5,
+              duration: 3.6,
+              delay: i * 0.6,
               repeat: Infinity,
-              ease: 'easeOut',
+              ease: 'easeInOut',
             }}
           >
             {c}
@@ -527,70 +789,114 @@ function PoseSleeping({ reduceMotion }: { reduceMotion: boolean }) {
 }
 
 function PoseWaving({ reduceMotion }: { reduceMotion: boolean }) {
-  // Body sways side-to-side, tendril extends to the right and waves.
+  // Calm samurai bow — torso forward, right hand to chest, left arm
+  // gestures up-and-back like a wave. Not anime-cheerful, dignified.
   return (
-    <motion.g
-      animate={reduceMotion ? undefined : { rotate: [-6, 6, -6] }}
-      transition={
-        reduceMotion
-          ? undefined
-          : { duration: 1.4, repeat: Infinity, ease: 'easeInOut' }
-      }
-      style={{ transformOrigin: `${BODY_CX}px ${BODY_CY + 16}px` }}
-    >
-      <Body reduceMotion={reduceMotion} />
-      <Eyes reduceMotion={reduceMotion} />
-      <motion.path
-        d={`M ${BODY_CX + 10} ${BODY_CY + 2} Q ${BODY_CX + 18} ${
-          BODY_CY - 6
-        } ${BODY_CX + 22} ${BODY_CY - 14}`}
-        stroke="#f4af25"
-        strokeWidth={2.2}
-        strokeLinecap="round"
-        fill="none"
-      />
-      <circle
-        cx={BODY_CX + 22}
-        cy={BODY_CY - 14}
-        r={1.8}
-        fill="#fb923c"
-        opacity={0.9}
-      />
-    </motion.g>
+    <g>
+      <motion.g
+        animate={reduceMotion ? undefined : { rotate: [0, 4, 0] }}
+        transition={reduceMotion ? undefined : { duration: 2.6, repeat: Infinity, ease: 'easeInOut' }}
+        style={{ transformOrigin: `${BODY_CX}px ${BODY_CY + 18}px` }}
+      >
+        <Head reduceMotion={reduceMotion} />
+        <Torso reduceMotion={reduceMotion} />
+        {/* Right hand to chest. */}
+        <Limb
+          pivotX={BODY_CX + SHOULDER_DX}
+          pivotY={SHOULDER_Y}
+          shoulderAngle={-50}
+          elbowAngle={80}
+          upperLen={11}
+          lowerLen={9}
+          reduceMotion={reduceMotion}
+        />
+        {/* Left arm waving — animated rotation around the shoulder. */}
+        <Limb
+          pivotX={BODY_CX - SHOULDER_DX}
+          pivotY={SHOULDER_Y}
+          shoulderAngle={-90}
+          elbowAngle={-30}
+          upperLen={11}
+          lowerLen={11}
+          reduceMotion={reduceMotion}
+          animate={{
+            rotate: [-15, 15, -15],
+            transition: { duration: 1.4, repeat: Infinity, ease: 'easeInOut' },
+          }}
+        />
+        {/* Legs — close together, slight forward bow. */}
+        <Limb
+          pivotX={BODY_CX - HIP_DX}
+          pivotY={HIP_Y}
+          shoulderAngle={-2}
+          elbowAngle={4}
+          upperLen={14}
+          lowerLen={14}
+          hand={false}
+          reduceMotion={reduceMotion}
+        />
+        <Limb
+          pivotX={BODY_CX + HIP_DX}
+          pivotY={HIP_Y}
+          shoulderAngle={2}
+          elbowAngle={-4}
+          upperLen={14}
+          lowerLen={14}
+          hand={false}
+          reduceMotion={reduceMotion}
+        />
+        {/* Sheathed katana, low. */}
+        <Katana
+          gripX={BODY_CX - 4}
+          gripY={HIP_Y - 1}
+          angleDeg={12}
+          len={26}
+          reduceMotion={reduceMotion}
+        />
+      </motion.g>
+    </g>
   );
 }
 
 function PoseVanishing({ reduceMotion }: { reduceMotion: boolean }) {
+  // Standard idle silhouette dissolving into upward-drifting smoke
+  // ribbons. Body opacity drops to 0; ribbons replace it.
   return (
-    <motion.g
-      initial={{ opacity: 1, scale: 1 }}
-      animate={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.4 }}
-      transition={
-        reduceMotion ? { duration: 0.4 } : { duration: 1.0, ease: 'easeIn' }
-      }
-      style={{ transformOrigin: `${BODY_CX}px ${BODY_CY}px` }}
-    >
-      <Body reduceMotion={reduceMotion} />
-      <Eyes reduceMotion={reduceMotion} />
-      {/* Mist particles spreading outward. */}
-      {!reduceMotion &&
-        Array.from({ length: 6 }, (_, i) => {
-          const a = (i / 6) * Math.PI * 2;
-          const dx = Math.cos(a) * 18;
-          const dy = Math.sin(a) * 18;
-          return (
-            <motion.circle
+    <g>
+      <motion.g
+        initial={{ opacity: 1, scale: 1 }}
+        animate={reduceMotion ? { opacity: 0 } : { opacity: 0, scale: 0.85, y: -6 }}
+        transition={
+          reduceMotion ? { duration: 0.6 } : { duration: 1.4, ease: 'easeInOut' }
+        }
+        style={{ transformOrigin: `${BODY_CX}px ${BODY_CY}px` }}
+      >
+        <PoseIdle reduceMotion={reduceMotion} />
+      </motion.g>
+      {!reduceMotion && (
+        <g>
+          {[-12, -4, 4, 12].map((dx, i) => (
+            <motion.path
               key={i}
-              cx={BODY_CX}
-              cy={BODY_CY}
-              r={1.6}
-              fill="#f4af25"
-              initial={{ opacity: 0.8, x: 0, y: 0 }}
-              animate={{ opacity: 0, x: dx, y: dy }}
-              transition={{ duration: 0.9, ease: 'easeOut' }}
+              d={`M ${BODY_CX + dx} ${BODY_CY + 10} Q ${BODY_CX + dx + (i % 2 === 0 ? -3 : 3)} ${BODY_CY - 6} ${BODY_CX + dx} ${BODY_CY - 24}`}
+              stroke={ARMOUR_EDGE}
+              strokeWidth={1.2}
+              strokeLinecap="round"
+              fill="none"
+              initial={{ opacity: 0, pathLength: 0 }}
+              animate={{
+                opacity: [0, 0.6, 0],
+                pathLength: [0, 1, 1],
+              }}
+              transition={{
+                duration: 1.6,
+                delay: 0.05 * i,
+                ease: 'easeOut',
+              }}
             />
-          );
-        })}
-    </motion.g>
+          ))}
+        </g>
+      )}
+    </g>
   );
 }

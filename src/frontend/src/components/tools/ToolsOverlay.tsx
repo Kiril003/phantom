@@ -13,13 +13,14 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { TimerManager } from './TimerManager';
+import { CalendarManager } from '../calendar/CalendarManager';
 
 type ToolsTab = 'timer' | 'alarm' | 'calendar' | 'files';
 
 const TABS: Array<{ id: ToolsTab; label: string; icon: string; ready: boolean }> = [
   { id: 'timer', label: 'Таймери', icon: 'timer', ready: true },
   { id: 'alarm', label: 'Будильники', icon: 'alarm', ready: false },
-  { id: 'calendar', label: 'Календар', icon: 'event', ready: false },
+  { id: 'calendar', label: 'Календар', icon: 'event', ready: true },
   { id: 'files', label: 'Файли', icon: 'folder', ready: false },
 ];
 
@@ -147,7 +148,8 @@ export function ToolsOverlay({ open, initialTab = 'timer', onClose }: ToolsOverl
 
             <div style={{ flex: 1, overflowY: 'auto' }}>
               {tab === 'timer' && <TimerManager />}
-              {tab !== 'timer' && (
+              {tab === 'calendar' && <CalendarManager />}
+              {tab !== 'timer' && tab !== 'calendar' && (
                 <div
                   className="playfair"
                   style={{

@@ -183,6 +183,163 @@ CHAT_DATA_TOOLS: list[dict[str, Any]] = [
             "required": ["title", "start_at"],
         },
     },
+    # ── Phase-6 T2 — extended tool schemas (audit-2026-04-30) ──────────────
+    # Each maps 1:1 to a handler in tool_executor._HANDLERS. Descriptions
+    # in Ukrainian + English so Gemini picks them on either-language input.
+    {
+        "name": "create_timer",
+        "description": (
+            "Створити одноразовий таймер. Викликай коли юзер каже «постав таймер X хвилин/годин» "
+            "або «нагадай через X». duration_s у секундах (1..86400). label — коротка причина."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "label": {"type": "string", "description": "Коротка назва таймера."},
+                "duration_s": {"type": "integer", "description": "Тривалість у секундах (1..86400)."},
+            },
+            "required": ["duration_s"],
+        },
+    },
+    {
+        "name": "cancel_timer",
+        "description": "Скасувати активний таймер за id.",
+        "parameters": {
+            "type": "object",
+            "properties": {"timer_id": {"type": "string"}},
+            "required": ["timer_id"],
+        },
+    },
+    {
+        "name": "list_timers",
+        "description": "Отримати список активних таймерів користувача.",
+        "parameters": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "create_alarm",
+        "description": (
+            "Створити будильник на конкретний час доби. time у форматі HH:MM (24h). "
+            "repeat = 'once' | 'daily' | 'weekdays'. label — необов'язково."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "time": {"type": "string", "description": "HH:MM 24h."},
+                "repeat": {
+                    "type": "string",
+                    "enum": ["once", "daily", "weekdays"],
+                    "description": "Періодичність.",
+                },
+                "label": {"type": "string"},
+            },
+            "required": ["time"],
+        },
+    },
+    {
+        "name": "delete_alarm",
+        "description": "Видалити будильник за id (повністю).",
+        "parameters": {
+            "type": "object",
+            "properties": {"alarm_id": {"type": "string"}},
+            "required": ["alarm_id"],
+        },
+    },
+    {
+        "name": "set_alarm_active",
+        "description": "Увімкнути/вимкнути будильник без видалення.",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "alarm_id": {"type": "string"},
+                "active": {"type": "boolean"},
+            },
+            "required": ["alarm_id", "active"],
+        },
+    },
+    {
+        "name": "list_alarms",
+        "description": "Отримати список усіх будильників користувача (активних і неактивних).",
+        "parameters": {"type": "object", "properties": {}, "required": []},
+    },
+    {
+        "name": "update_calendar_event",
+        "description": (
+            "Оновити існуючу подію календаря. Усі поля окрім event_id опційні — "
+            "передавай лише ті що змінюються."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "event_id": {"type": "string"},
+                "title": {"type": "string"},
+                "description": {"type": "string"},
+                "start_at": {"type": "string", "description": "ISO 8601 або природна мова."},
+                "end_at": {"type": "string"},
+                "all_day": {"type": "boolean"},
+                "location": {"type": "string"},
+            },
+            "required": ["event_id"],
+        },
+    },
+    {
+        "name": "delete_calendar_event",
+        "description": "Видалити подію календаря за id.",
+        "parameters": {
+            "type": "object",
+            "properties": {"event_id": {"type": "string"}},
+            "required": ["event_id"],
+        },
+    },
+    {
+        "name": "query_audit_log",
+        "description": (
+            "Прочитати останні N записів agent_audit. Фільтр action_name опційний "
+            "(наприклад 'sandbox.session.started' або 'chat.respond'). "
+            "Викликай коли юзер питає «що ти робив», «остання дія», «чому ти це зробив»."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "limit": {"type": "integer", "description": "1..200, default 20."},
+                "action_name": {"type": "string"},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "query_wardriving",
+        "description": (
+            "Останні WiFi/BLE wardriving-записи. ssid_substr — пошук підрядком у SSID. "
+            "Викликай коли юзер питає «які мережі поряд», «чи бачив SSID X»."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "limit": {"type": "integer", "description": "1..500, default 50."},
+                "ssid_substr": {"type": "string"},
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "create_checkpoint",
+        "description": (
+            "Створити чекпойнт стану системи. reason ∈ "
+            "{manual, auto_reflect, pause, shutdown}. goal — короткий опис чому. "
+            "Викликай коли юзер каже «збережи стан», «зроби бекап», «запам'ятай це»."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "reason": {
+                    "type": "string",
+                    "enum": ["manual", "auto_reflect", "pause", "shutdown"],
+                },
+                "goal": {"type": "string"},
+            },
+            "required": ["goal"],
+        },
+    },
 ]
 
 

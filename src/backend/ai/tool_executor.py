@@ -734,6 +734,281 @@ async def _tool_create_calendar_event(args: dict[str, Any], user_id: str) -> dic
     )
 
 
+# ── Phase-6 T1 — extended tool surface ───────────────────────────────────────
+#
+# Closes the audit-2026-04-30 finding that the agent only had 8 tools
+# while phase-5 shipped UI/REST for ~20 actions (timer/alarm CRUD,
+# sandbox kicks, audit query, wardriving query, etc.). Each handler
+# below preserves the {"ok": True, ...} / {"error": "...",
+# "error_kind": "..."} contract and uses a fresh AsyncSession so a
+# tool call inside a chat turn doesn't reuse the chat's session.
+
+
+async def _tool_create_timer(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    label = args.get("label") or "Timer"
+    duration_s = args.get("duration_s")
+    if not isinstance(duration_s, (int, float)) or duration_s <= 0:
+        return _err("invalid_args", "duration_s must be a positive number")
+    duration_s = int(duration_s)
+    if duration_s > 86400:
+        return _err("invalid_args", "duration_s must be <= 86400 (24h)")
+    if not isinstance(label, str):
+        return _err("invalid_args", "label must be string")
+    label = label.strip()[:256] or "Timer"
+
+    from db.tools_repo import create_timer as _create_timer
+    async with _session_factory()() as db:
+        timer = await _create_timer(db, user_id, label, duration_s)
+    return _ok(
+        id=timer.id,
+        label=timer.label,
+        ends_at=timer.ends_at.isoformat() if timer.ends_at else None,
+        duration_s=duration_s,
+        status="active",
+    )
+
+
+async def _tool_cancel_timer(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    timer_id = args.get("timer_id")
+    if not isinstance(timer_id, str) or not timer_id.strip():
+        return _err("invalid_args", "timer_id is required")
+    from db.tools_repo import cancel_timer as _cancel_timer
+    async with _session_factory()() as db:
+        ok = await _cancel_timer(db, user_id, timer_id.strip())
+    if not ok:
+        return _err("not_found", f"no timer with id={timer_id!r}")
+    return _ok(id=timer_id.strip(), status="cancelled")
+
+
+async def _tool_list_timers(_args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    from db.tools_repo import get_timers as _get_timers
+    async with _session_factory()() as db:
+        rows = await _get_timers(db, user_id)
+    return _ok(
+        timers=[
+            {
+                "id": t.id,
+                "label": t.label,
+                "ends_at": t.ends_at.isoformat() if t.ends_at else None,
+                "duration_s": t.duration_s,
+            }
+            for t in rows
+        ],
+        count=len(rows),
+    )
+
+
+async def _tool_create_alarm(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    time_str = args.get("time")
+    repeat = args.get("repeat") or "once"
+    label = args.get("label") or ""
+    if not isinstance(time_str, str) or not re.match(r"^\d{2}:\d{2}$", time_str):
+        return _err("invalid_args", "time must be HH:MM 24h string")
+    if repeat not in ("once", "daily", "weekdays"):
+        return _err("invalid_args", "repeat must be once|daily|weekdays")
+    if not isinstance(label, str):
+        return _err("invalid_args", "label must be string")
+    from db.tools_repo import create_alarm as _create_alarm
+    async with _session_factory()() as db:
+        alarm = await _create_alarm(db, user_id, label.strip()[:256], time_str, repeat)
+    return _ok(
+        id=alarm.id,
+        time=alarm.time_str,
+        repeat=alarm.repeat,
+        label=alarm.label,
+        next_trigger=alarm.next_trigger.isoformat() if alarm.next_trigger else None,
+    )
+
+
+async def _tool_delete_alarm(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    alarm_id = args.get("alarm_id")
+    if not isinstance(alarm_id, str) or not alarm_id.strip():
+        return _err("invalid_args", "alarm_id is required")
+    from db.tools_repo import delete_alarm as _delete_alarm
+    async with _session_factory()() as db:
+        ok = await _delete_alarm(db, user_id, alarm_id.strip())
+    if not ok:
+        return _err("not_found", f"no alarm with id={alarm_id!r}")
+    return _ok(id=alarm_id.strip(), status="deleted")
+
+
+async def _tool_set_alarm_active(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    alarm_id = args.get("alarm_id")
+    active = args.get("active")
+    if not isinstance(alarm_id, str) or not alarm_id.strip():
+        return _err("invalid_args", "alarm_id is required")
+    if not isinstance(active, bool):
+        return _err("invalid_args", "active must be boolean")
+    from db.tools_repo import set_alarm_active as _set_active
+    async with _session_factory()() as db:
+        ok = await _set_active(db, user_id, alarm_id.strip(), active)
+    if not ok:
+        return _err("not_found", f"no alarm with id={alarm_id!r}")
+    return _ok(id=alarm_id.strip(), active=active)
+
+
+async def _tool_list_alarms(_args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    from db.tools_repo import get_alarms as _get_alarms
+    async with _session_factory()() as db:
+        rows = await _get_alarms(db, user_id)
+    return _ok(
+        alarms=[
+            {
+                "id": a.id,
+                "time": a.time_str,
+                "repeat": a.repeat,
+                "label": a.label,
+                "active": a.active,
+                "next_trigger": a.next_trigger.isoformat() if a.next_trigger else None,
+            }
+            for a in rows
+        ],
+        count=len(rows),
+    )
+
+
+async def _tool_update_calendar_event(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    event_id = args.get("event_id")
+    if not isinstance(event_id, str) or not event_id.strip():
+        return _err("invalid_args", "event_id is required")
+    title = args.get("title") if isinstance(args.get("title"), str) else None
+    description = args.get("description") if isinstance(args.get("description"), str) else None
+    start_expr = args.get("start_at")
+    end_expr = args.get("end_at")
+    location = args.get("location") if isinstance(args.get("location"), str) else None
+    all_day = args.get("all_day") if isinstance(args.get("all_day"), bool) else None
+    start_dt = _parse_datetime_freeform(start_expr) if isinstance(start_expr, str) else None
+    end_dt = _parse_datetime_freeform(end_expr) if isinstance(end_expr, str) else None
+    if isinstance(start_expr, str) and start_dt is None:
+        return _err("invalid_args", f"could not parse start_at={start_expr!r}")
+    if isinstance(end_expr, str) and end_dt is None:
+        return _err("invalid_args", f"could not parse end_at={end_expr!r}")
+    from db.tools_repo import update_calendar_event as _update
+    async with _session_factory()() as db:
+        event = await _update(
+            db, user_id, event_id.strip(),
+            title=title, description=description,
+            start_at=start_dt, end_at=end_dt,
+            all_day=all_day, location=location,
+        )
+    if event is None:
+        return _err("not_found", f"no event with id={event_id!r}")
+    return _ok(
+        id=event.id,
+        title=event.title,
+        start_at=event.start_at.isoformat(),
+        end_at=event.end_at.isoformat(),
+        status="updated",
+    )
+
+
+async def _tool_delete_calendar_event(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    event_id = args.get("event_id")
+    if not isinstance(event_id, str) or not event_id.strip():
+        return _err("invalid_args", "event_id is required")
+    from db.tools_repo import delete_calendar_event as _delete
+    async with _session_factory()() as db:
+        ok = await _delete(db, user_id, event_id.strip())
+    if not ok:
+        return _err("not_found", f"no event with id={event_id!r}")
+    return _ok(id=event_id.strip(), status="deleted")
+
+
+async def _tool_query_audit_log(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    """Last N agent_audit rows for the caller. Filterable by action_name."""
+    limit = args.get("limit") or 20
+    action_name = args.get("action_name")
+    if not isinstance(limit, int) or limit < 1 or limit > 200:
+        return _err("invalid_args", "limit must be 1..200")
+    from db.models import AgentAuditEntry
+    from sqlalchemy import desc, select as _select
+    async with _session_factory()() as db:
+        stmt = _select(AgentAuditEntry).order_by(desc(AgentAuditEntry.timestamp)).limit(limit)
+        if isinstance(action_name, str) and action_name.strip():
+            stmt = stmt.where(AgentAuditEntry.action_name == action_name.strip())
+        rows = (await db.execute(stmt)).scalars().all()
+    return _ok(
+        entries=[
+            {
+                "task_id": r.task_id,
+                "action_name": r.action_name,
+                "timestamp": r.timestamp.isoformat() if r.timestamp else None,
+                "elapsed_ms": r.elapsed_ms,
+                "risk_level": r.risk_level,
+                "intent": r.intent,
+            }
+            for r in rows
+        ],
+        count=len(rows),
+    )
+
+
+async def _tool_query_wardriving(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    """Recent wifi/BLE wardriving records. Optional ssid_substr filter."""
+    _ = user_id  # wardriving rows are device-global, not user-scoped
+    limit = args.get("limit") or 50
+    ssid_substr = args.get("ssid_substr")
+    if not isinstance(limit, int) or limit < 1 or limit > 500:
+        return _err("invalid_args", "limit must be 1..500")
+    try:
+        from db.models import WardrivingRecord
+    except ImportError:
+        return _err("not_implemented", "wardriving model not present in this build")
+    from sqlalchemy import desc, select as _select
+    async with _session_factory()() as db:
+        stmt = _select(WardrivingRecord).order_by(desc(WardrivingRecord.timestamp)).limit(limit)
+        if isinstance(ssid_substr, str) and ssid_substr.strip():
+            stmt = stmt.where(WardrivingRecord.ssid.ilike(f"%{ssid_substr.strip()}%"))
+        rows = (await db.execute(stmt)).scalars().all()
+    return _ok(
+        records=[
+            {
+                "ssid": r.ssid,
+                "bssid": r.bssid,
+                "rssi": r.rssi,
+                "lat": r.lat,
+                "lon": r.lon,
+                "timestamp": r.timestamp.isoformat() if r.timestamp else None,
+            }
+            for r in rows
+        ],
+        count=len(rows),
+    )
+
+
+async def _tool_create_checkpoint(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    """Create a planner checkpoint row. ROOT-style operation but agent-callable
+    so the operator can voice-trigger 'збережи стан'."""
+    reason = args.get("reason") or "manual"
+    goal = args.get("goal") or "manual checkpoint"
+    if reason not in ("manual", "auto_reflect", "pause", "shutdown"):
+        return _err("invalid_args", "reason must be manual|auto_reflect|pause|shutdown")
+    if not isinstance(goal, str) or not goal.strip():
+        return _err("invalid_args", "goal must be non-empty string")
+    try:
+        from agent.audit import save_checkpoint
+        from agent.schemas import Checkpoint, SelfModel
+    except Exception as exc:
+        return _err("not_implemented", f"checkpoint stack unavailable: {exc}")
+    payload = Checkpoint(
+        task_id=f"manual:{user_id}",
+        reason=reason,  # type: ignore[arg-type]
+        goal=goal.strip(),
+        sub_goals=[],
+        observations=[],
+        self_model=SelfModel(
+            identity="PHANTOM manual checkpoint",
+            hardware={"trigger": "agent_tool"},
+        ),
+        step_idx=0,
+    )
+    try:
+        cp_id = await save_checkpoint(payload)
+    except Exception as exc:
+        return _err("exception", f"save_checkpoint failed: {exc}")
+    return _ok(checkpoint_id=cp_id, reason=reason, goal=goal.strip())
+
+
 # ── Dispatcher ────────────────────────────────────────────────────────────────
 
 
@@ -746,6 +1021,19 @@ _HANDLERS: dict[str, Any] = {
     "search_web": _tool_search_web,
     "get_calendar_events": _tool_get_calendar_events,
     "create_calendar_event": _tool_create_calendar_event,
+    # Phase-6 T1 expansion (audit-2026-04-30):
+    "create_timer": _tool_create_timer,
+    "cancel_timer": _tool_cancel_timer,
+    "list_timers": _tool_list_timers,
+    "create_alarm": _tool_create_alarm,
+    "delete_alarm": _tool_delete_alarm,
+    "set_alarm_active": _tool_set_alarm_active,
+    "list_alarms": _tool_list_alarms,
+    "update_calendar_event": _tool_update_calendar_event,
+    "delete_calendar_event": _tool_delete_calendar_event,
+    "query_audit_log": _tool_query_audit_log,
+    "query_wardriving": _tool_query_wardriving,
+    "create_checkpoint": _tool_create_checkpoint,
 }
 
 

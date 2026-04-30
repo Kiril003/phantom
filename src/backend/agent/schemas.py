@@ -92,7 +92,16 @@ ReflectionVerdict = Literal[
 
 Track = Literal["foreground", "background"]
 
-CheckpointReason = Literal["auto_reflect", "manual", "pause", "shutdown"]
+CheckpointReason = Literal[
+    "auto_reflect",
+    "manual",
+    "pause",
+    "shutdown",
+    # Phase 5 R1 — sandbox subprocess completion (linux/executor.py).
+    # Lets `executor.checkpoint(session_id)` persist a Checkpoint row
+    # without abusing one of the planner-loop reasons.
+    "sandbox_complete",
+]
 
 
 # ── Sub-goal / plan ───────────────────────────────────────────────────────────

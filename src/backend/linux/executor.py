@@ -167,13 +167,20 @@ def _preexec_factory(uid_to_set: int | None) -> Callable[[], None]:
         # rlimits — fail-closed: every cap is best-effort but logged
         # only at the parent. The child has stderr captured so a
         # `resource.error` is visible.
-        for rlim, soft, hard in (
+        rlimits: list[tuple[int, int, int]] = [
             (resource.RLIMIT_AS, MEM_LIMIT_BYTES, MEM_LIMIT_BYTES),
             (resource.RLIMIT_FSIZE, FILE_LIMIT_BYTES, FILE_LIMIT_BYTES),
             (resource.RLIMIT_CPU, CPU_LIMIT_S, CPU_LIMIT_S),
             (resource.RLIMIT_NOFILE, NOFILE_LIMIT, NOFILE_LIMIT),
-            (resource.RLIMIT_NPROC, NPROC_LIMIT, NPROC_LIMIT),
-        ):
+        ]
+        # RLIMIT_NPROC is per-real-uid and counts every process owned by
+        # that uid system-wide — so applying it on the parent's uid (when
+        # uid_to_set is None because phantom-sb doesn't exist) immediately
+        # kills /bin/sh's first fork on a busy dev box. Only enforce the
+        # process cap when we successfully demoted to the sandbox user.
+        if uid_to_set is not None:
+            rlimits.append((resource.RLIMIT_NPROC, NPROC_LIMIT, NPROC_LIMIT))
+        for rlim, soft, hard in rlimits:
             with contextlib.suppress(ValueError, OSError, resource.error):
                 resource.setrlimit(rlim, (soft, hard))
 
@@ -484,23 +491,31 @@ class SandboxExecutor:
             return None
         try:
             from agent.audit import save_checkpoint
-            from agent.schemas import Checkpoint
+            from agent.schemas import Checkpoint, SelfModel
         except Exception as exc:  # noqa: BLE001
             logger.warning("linux.executor: checkpoint save unavailable: %s", exc)
             return None
 
+        # Sandbox sessions don't have a planner SelfModel — synthesise a
+        # minimal one with the run metadata in `hardware` so the row is
+        # introspectable later. `goal` is the original command, which is
+        # the operator-facing intent for a sandbox checkpoint.
         payload = Checkpoint(
             task_id=f"sandbox:{session.session_id}",
             reason="sandbox_complete",
+            goal=session.cmd,
             sub_goals=[],
             observations=[],
-            self_model={
-                "kind": "sandbox",
-                "cmd": session.cmd,
-                "exit_code": session.exit_code,
-                "cwd": str(session.cwd),
-                "stdout_tail": session.stdout_buf[-50:],
-            },
+            self_model=SelfModel(
+                identity="PHANTOM sandbox executor",
+                hardware={
+                    "kind": "sandbox",
+                    "cmd": session.cmd,
+                    "exit_code": session.exit_code,
+                    "cwd": str(session.cwd),
+                    "stdout_tail": session.stdout_buf[-50:],
+                },
+            ),
             step_idx=0,
         )
         try:

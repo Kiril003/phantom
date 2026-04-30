@@ -281,15 +281,21 @@ describe('SentinelLayout', () => {
   });
 
   it('renders THREAT DETECTED header', async () => {
+    // phase-5 R1 — SentinelLayout was localised to Ukrainian primary
+    // (per CLAUDE.md voice-first language rule). The header reads
+    // 'ЗАГРОЗА ВИЯВЛЕНА' on the threat banner.
     const SentinelLayout = (await import('../layouts/SentinelLayout')).default;
     render(withRouter(<SentinelLayout />));
-    expect(screen.getByText('THREAT DETECTED')).toBeDefined();
+    expect(screen.getByText('ЗАГРОЗА ВИЯВЛЕНА')).toBeDefined();
   });
 
   it('shows other presence distance', async () => {
+    // After redesign the distance is part of a multi-token line
+    // ("UNKNOWN · 200 cm · 45°"); switch to a regex match so the
+    // distance assertion survives surrounding chrome.
     const SentinelLayout = (await import('../layouts/SentinelLayout')).default;
     render(withRouter(<SentinelLayout />));
-    expect(screen.getByText('200 cm')).toBeDefined();
+    expect(screen.getByText(/200 cm/)).toBeDefined();
   });
 
   it('shows first visit warning', async () => {
@@ -299,9 +305,12 @@ describe('SentinelLayout', () => {
   });
 
   it('shows night time warning', async () => {
+    // After redesign the night-time line is decorated with the local
+    // scan timestamp ("Night time · 02:30 local"); use a regex so the
+    // assertion does not break when the timestamp formatting evolves.
     const SentinelLayout = (await import('../layouts/SentinelLayout')).default;
     render(withRouter(<SentinelLayout />));
-    expect(screen.getByText('Night time')).toBeDefined();
+    expect(screen.getByText(/Night time/)).toBeDefined();
   });
 });
 

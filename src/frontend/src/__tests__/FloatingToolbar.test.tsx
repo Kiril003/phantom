@@ -59,8 +59,12 @@ describe('FloatingToolbar — Voice mode cycle (Phase 12.0)', () => {
       user: { id: 'u1', username: 'op', role: 'OPERATOR' },
       token: 't',
     } as never);
+    // phase-5 R1 — Voice mode lives in the secondary "more" overlay
+    // after the StatusBar repaint redesign moved it out of the primary
+    // pill row. Open the menu in test fixtures so getByLabelText finds
+    // the secondary action.
     useUIStore.setState({
-      moreMenuOpen: false,
+      moreMenuOpen: true,
       pendingVoiceActivation: false,
     } as never);
     useSystemStore.setState({ state: SystemState.SHADOW } as never);

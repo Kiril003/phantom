@@ -495,6 +495,7 @@ function MoreMenuItem({ action }: { action: ToolbarAction }) {
         (e.currentTarget as HTMLElement).style.background = 'transparent';
       }}
       aria-label={action.label}
+      aria-pressed={action.active}
       title={action.tooltip ?? action.label}
     >
       <span

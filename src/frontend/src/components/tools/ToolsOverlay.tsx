@@ -15,6 +15,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { TimerManager } from './TimerManager';
 import { AlarmManager } from './AlarmManager';
 import { CalendarManager } from '../calendar/CalendarManager';
+import { FileBrowser } from '../files/FileBrowser';
 
 type ToolsTab = 'timer' | 'alarm' | 'calendar' | 'files';
 
@@ -22,7 +23,7 @@ const TABS: Array<{ id: ToolsTab; label: string; icon: string; ready: boolean }>
   { id: 'timer', label: 'Таймери', icon: 'timer', ready: true },
   { id: 'alarm', label: 'Будильники', icon: 'alarm', ready: true },
   { id: 'calendar', label: 'Календар', icon: 'event', ready: true },
-  { id: 'files', label: 'Файли', icon: 'folder', ready: false },
+  { id: 'files', label: 'Файли', icon: 'folder', ready: true },
 ];
 
 export interface ToolsOverlayProps {
@@ -151,7 +152,8 @@ export function ToolsOverlay({ open, initialTab = 'timer', onClose }: ToolsOverl
               {tab === 'timer' && <TimerManager />}
               {tab === 'alarm' && <AlarmManager />}
               {tab === 'calendar' && <CalendarManager />}
-              {tab === 'files' && (
+              {tab === 'files' && <FileBrowser />}
+              {false && (
                 <div
                   className="playfair"
                   style={{

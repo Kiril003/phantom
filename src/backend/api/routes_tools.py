@@ -5,9 +5,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.database import get_db
 from db.tools_repo import (
-    create_timer, get_timers,
-    create_alarm, get_alarms,
-    create_calendar_event, get_calendar_events
+    create_timer, get_timers, cancel_timer, delete_timer,
+    create_alarm, get_alarms, set_alarm_active, delete_alarm,
+    create_calendar_event, get_calendar_events,
+    update_calendar_event, delete_calendar_event,
 )
 from security.auth import get_current_user
 from db.models import User
@@ -106,3 +107,108 @@ async def api_create_event(
         req.description, req.all_day, req.location
     )
     return {"ok": True, "id": event.id}
+
+
+# ── Timer / alarm / calendar mutation endpoints ───────────────────────────
+# Phase-5 R1 Task C — added so the new TimerManager FE has a real
+# REST surface to act against (was: create + list only).
+
+
+class TimerCancel(BaseModel):
+    """Empty body — `POST /tools/timer/{id}/cancel` toggles `fired=True`
+    so the scheduler stops emitting the timer.fired event for it."""
+
+
+@router.post("/timer/{timer_id}/cancel", response_model=None)
+async def api_cancel_timer(
+    timer_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    ok = await cancel_timer(db, user.id, timer_id)
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="timer not found")
+    return {"ok": True}
+
+
+@router.delete("/timer/{timer_id}", response_model=None, status_code=status.HTTP_204_NO_CONTENT)
+async def api_delete_timer(
+    timer_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    ok = await delete_timer(db, user.id, timer_id)
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="timer not found")
+
+
+class AlarmActiveToggle(BaseModel):
+    active: bool
+
+
+@router.put("/alarm/{alarm_id}/active", response_model=None)
+async def api_set_alarm_active(
+    alarm_id: str,
+    req: AlarmActiveToggle,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    ok = await set_alarm_active(db, user.id, alarm_id, req.active)
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="alarm not found")
+    return {"ok": True, "active": req.active}
+
+
+@router.delete("/alarm/{alarm_id}", response_model=None, status_code=status.HTTP_204_NO_CONTENT)
+async def api_delete_alarm(
+    alarm_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    ok = await delete_alarm(db, user.id, alarm_id)
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="alarm not found")
+
+
+class CalendarEventUpdate(BaseModel):
+    title: str | None = None
+    description: str | None = None
+    start_at: datetime | None = None
+    end_at: datetime | None = None
+    all_day: bool | None = None
+    location: str | None = None
+
+
+@router.put("/calendar/events/{event_id}", response_model=None)
+async def api_update_event(
+    event_id: str,
+    req: CalendarEventUpdate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    event = await update_calendar_event(
+        db, user.id, event_id,
+        title=req.title, description=req.description,
+        start_at=req.start_at, end_at=req.end_at,
+        all_day=req.all_day, location=req.location,
+    )
+    if event is None:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="event not found")
+    return {
+        "ok": True,
+        "id": event.id,
+        "title": event.title,
+        "start_at": event.start_at.isoformat(),
+        "end_at": event.end_at.isoformat(),
+    }
+
+
+@router.delete("/calendar/events/{event_id}", response_model=None, status_code=status.HTTP_204_NO_CONTENT)
+async def api_delete_event(
+    event_id: str,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> None:
+    ok = await delete_calendar_event(db, user.id, event_id)
+    if not ok:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="event not found")

@@ -76,6 +76,8 @@ interface UIStoreState {
   setPrimaryToolbarOnly: (v: boolean) => void;
   moreMenuOpen: boolean;
   setMoreMenuOpen: (v: boolean) => void;
+  toolsOverlayOpen: boolean;
+  setToolsOverlayOpen: (v: boolean) => void;
 
   /**
    * Phase 9.5 — transient flag: the Voice button in FloatingToolbar sets this
@@ -295,6 +297,8 @@ export const useUIStore = create<UIStoreState>((set, get) => ({
   setPrimaryToolbarOnly: (v) => set({ primaryToolbarOnly: v }),
   moreMenuOpen: false,
   setMoreMenuOpen: (v) => set({ moreMenuOpen: v }),
+  toolsOverlayOpen: false,
+  setToolsOverlayOpen: (v) => set({ toolsOverlayOpen: v }),
 
   pendingVoiceActivation: false,
   setPendingVoiceActivation: (v) => set({ pendingVoiceActivation: v }),

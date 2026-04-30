@@ -10,6 +10,8 @@ import { useSystemStore } from '../stores/systemStore';
 import { SystemState } from '@shared/types';
 import { geolocationService, BrowserGeolocationService } from '../services/geolocation';
 import { PhantomFamiliar } from '../components/familiar/PhantomFamiliar';
+import { ToolsOverlay } from '../components/tools/ToolsOverlay';
+import { useUIStore } from '../stores/uiStore';
 import { useFamiliarTriggers } from '../hooks/useFamiliarTriggers';
 
 function GlobalGeolocationManager() {
@@ -165,9 +167,20 @@ export function App() {
                 shell tears both down together. */}
             <FamiliarTriggers />
             <PhantomFamiliar />
+            <ToolsOverlayMount />
           </div>
         </ViewportFrame>
       </BrowserRouter>
     </Providers>
   );
+}
+
+/* Phase-5 R1 Task C — small wrapper that subscribes the overlay to
+ * uiStore so a single source of truth (the FloatingToolbar's Tools
+ * button) drives open/close. Kept as a sibling so the BrowserRouter
+ * + Providers stay untouched. */
+function ToolsOverlayMount() {
+  const open = useUIStore((s) => s.toolsOverlayOpen);
+  const setOpen = useUIStore((s) => s.setToolsOverlayOpen);
+  return <ToolsOverlay open={open} onClose={() => setOpen(false)} />;
 }

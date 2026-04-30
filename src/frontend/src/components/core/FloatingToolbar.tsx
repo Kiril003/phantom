@@ -61,6 +61,8 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
   const toggleOverlay = useUIStore((s) => s.toggleOverlay);
   const moreMenuOpen = useUIStore((s) => s.moreMenuOpen);
   const setMoreMenuOpen = useUIStore((s) => s.setMoreMenuOpen);
+  const toolsOverlayOpen = useUIStore((s) => s.toolsOverlayOpen);
+  const setToolsOverlayOpen = useUIStore((s) => s.setToolsOverlayOpen);
 
   const voiceMode = useSettingsStore(
     (s) => (s.values.voice_mode as 'off' | 'continuous' | 'wake_word' | undefined) ?? 'off',
@@ -201,6 +203,17 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
       active: voiceModeActive,
       onClick: () => {
         cycleVoiceMode();
+        setMoreMenuOpen(false);
+      },
+    },
+    {
+      id: 'tools',
+      icon: 'widgets',
+      label: 'Tools',
+      tooltip: 'Таймери · будильники · календар · файли',
+      active: toolsOverlayOpen,
+      onClick: () => {
+        setToolsOverlayOpen(!toolsOverlayOpen);
         setMoreMenuOpen(false);
       },
     },

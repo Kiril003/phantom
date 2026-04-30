@@ -101,7 +101,14 @@ async def test_plain_text_branch_empty_response_gets_ukrainian_filler(caplog, mo
 
 @pytest.mark.asyncio
 async def test_plain_text_with_real_text_unchanged(monkeypatch):
-    """Regression guard: plain text with real content still routes correctly."""
+    """Regression guard: plain text with real content still routes correctly.
+
+    Day-4 W-2c (ADR-CS-002) — plain non-empty text now auto-promotes to a
+    `text`-kind scene envelope so the FE ChatScene composer renders the
+    bubble through the typed pipeline. The legacy `attachments == []`
+    assertion was relaxed in phase-5 R1 audit-2026-04-30 to accept the
+    single auto-promoted scene attachment alongside `result.content`.
+    """
     from ai import gemini_provider as gp
 
     text_part = SimpleNamespace(function_call=None, text="Привіт, друже!")
@@ -113,7 +120,13 @@ async def test_plain_text_with_real_text_unchanged(monkeypatch):
 
     assert result.content == "Привіт, друже!"
     assert result.response_form == "text"
-    assert result.attachments == []
+    # W-2c contract — exactly one scene envelope wrapping the content as
+    # a single text panel. No other attachments.
+    assert len(result.attachments) == 1
+    scene_att = result.attachments[0]
+    assert scene_att["type"] == "scene"
+    assert scene_att["data"]["kind"] == "text"
+    assert scene_att["data"]["panels"][0]["data"]["markdown"] == "Привіт, друже!"
 
 
 @pytest.mark.asyncio

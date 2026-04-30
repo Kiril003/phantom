@@ -269,6 +269,49 @@ _FORM_TO_SCENE_KIND: dict[str, str] = {
 }
 
 
+def _should_auto_attach_scene(
+    response_form: str,
+    content: str,
+    attachments: list[dict[str, Any]],
+) -> bool:
+    """Phase-5 R1 — gate the W-2c scene envelope auto-promotion.
+
+    The legacy passthrough forms (`text`, `markdown`, `terminal`) already
+    carry their payload through `result.content` or a primary attachment;
+    a scene envelope on top of them is dead weight that breaks the
+    classic empty-bubble guards (audit-2026-04-30 P1 CHATFIX-DEFAULT-
+    SCENE-ATTACHMENT). For all other covered forms (`map`, `code`,
+    `metric_cards`) the scene IS the only structured render path, so
+    promotion stays automatic.
+    """
+    # Empty content + no payload-bearing attachments = nothing useful to
+    # promote. The W-2c scene envelope would just carry an empty markdown
+    # panel that the FE renders as a vacuous bubble — the legacy
+    # `result.content` fillers (Ukrainian "Не встиг сформулювати —
+    # перепитай?" guard, etc.) need to land on bubble.content first.
+    if not (content or "").strip():
+        payload_types = {
+            att.get("type") for att in attachments
+            if isinstance(att, dict)
+        }
+        # Forms that ship their own primary attachment as the rendering
+        # surface should not be re-wrapped as a scene when content is
+        # empty — the FE renderer reads the attachment directly.
+        # Only `terminal_output` ships its own renderer surface that
+        # makes the scene wrapper redundant. Other carriers (code_block,
+        # chart_data, metric_card, map_markers) are explicitly promoted
+        # by build_scene_envelope into typed scenes — keep auto-attach.
+        legacy_payload_carriers = {"terminal_output"}
+        if payload_types & legacy_payload_carriers:
+            return False
+        # No content + no payload — every promoted scene would carry an
+        # empty markdown panel. Skip so the empty-bubble guard upstream
+        # can substitute the operator-friendly Ukrainian filler text.
+        if not attachments:
+            return False
+    return True
+
+
 def scene_kind_for_form(response_form: str) -> str | None:
     """Return the SceneKind matching the given ResponseForm, or None
     when no preset coverage applies on Day-4 (chart/diagram/mixed)."""
@@ -573,6 +616,15 @@ def parse_function_call(
     # preset coverage. The W-1 _serialize_message in routes_chat lifts
     # this attachment to top-level message.scene; legacy clients see
     # one fewer attachment without breaking.
+    #
+    # Phase-5 R1 fix (audit-2026-04-30 P1 CHATFIX-DEFAULT-SCENE-ATTACHMENT)
+    # — skip auto-promotion for the legacy passthrough forms. `text` and
+    # `markdown` are already carried by `result.content`; `terminal` ships
+    # its own `terminal_output` attachment that the FE renders directly.
+    # Wrapping any of these in a scene envelope just doubles the payload.
+    if not _should_auto_attach_scene(response_form, content, attachments):
+        return response_form, content, attachments
+
     scene_att = build_scene_envelope(response_form, content, attachments)
     if scene_att is not None:
         attachments.append(scene_att)
@@ -609,8 +661,9 @@ def parse_plain_text(text: str) -> tuple[str, str, list[dict[str, Any]]]:
     else:
         form, content, attachments = "text", stripped, []
 
-    scene_att = build_scene_envelope(form, content, attachments)
-    if scene_att is not None:
-        attachments.append(scene_att)
+    if _should_auto_attach_scene(form, content, attachments):
+        scene_att = build_scene_envelope(form, content, attachments)
+        if scene_att is not None:
+            attachments.append(scene_att)
 
     return form, content, attachments

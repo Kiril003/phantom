@@ -178,13 +178,16 @@ class _FakeChromaClient:
 
 class TestStrategicMemoryDefensiveFilter:
     def test_filters_test_fixture_pattern(self, monkeypatch):
+        # phase-5 R1 fix — C-4 belt-and-braces in _sync_retrieve refuses
+        # rows whose meta.user_id doesn't match the caller, so each fake
+        # fixture row now carries the user_id the prod path would set.
         from memory import strategic_memory as sm
         coll = _FakeChromaCollection(
             docs=["Fact 0", "Fact 1", "User loves espresso"],
             metas=[
-                {"place_name": "Place 0"},
-                {"place_name": "Place 1"},
-                {"place_name": "Cafe Aroma"},
+                {"place_name": "Place 0", "user_id": "u1"},
+                {"place_name": "Place 1", "user_id": "u1"},
+                {"place_name": "Cafe Aroma", "user_id": "u1"},
             ],
         )
         monkeypatch.setattr(sm, "_get_client", lambda: _FakeChromaClient(coll))
@@ -196,7 +199,10 @@ class TestStrategicMemoryDefensiveFilter:
         from memory import strategic_memory as sm
         coll = _FakeChromaCollection(
             docs=["User dislikes mornings", "Plans Lviv trip"],
-            metas=[{"category": "preference"}, {"category": "decision"}],
+            metas=[
+                {"category": "preference", "user_id": "u2"},
+                {"category": "decision", "user_id": "u2"},
+            ],
         )
         monkeypatch.setattr(sm, "_get_client", lambda: _FakeChromaClient(coll))
         monkeypatch.setattr(sm, "_get_ef", lambda: object())
@@ -209,7 +215,7 @@ class TestStrategicMemoryDefensiveFilter:
         from memory import strategic_memory as sm
         coll = _FakeChromaCollection(
             docs=["Fact about Lviv weather"],
-            metas=[{"place_name": "Lviv"}],
+            metas=[{"place_name": "Lviv", "user_id": "u3"}],
         )
         monkeypatch.setattr(sm, "_get_client", lambda: _FakeChromaClient(coll))
         monkeypatch.setattr(sm, "_get_ef", lambda: object())

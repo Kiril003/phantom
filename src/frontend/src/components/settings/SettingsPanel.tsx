@@ -17,6 +17,7 @@ import {
   Cog,
   SlidersHorizontal as Tune,
 } from 'lucide-react';
+import { ProfileManagementSection } from './ProfileManagement';
 import { StatusBar } from '../core/StatusBar';
 import { FloatingToolbar } from '../core/FloatingToolbar';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -696,7 +697,10 @@ export default function SettingsPanel() {
                 {activeCategory.id === 'voice' && <NPUDiagnostics />}
                 {(activeCategory.id === 'profile' ||
                   activeCategory.id === 'personality') && (
-                  <FamiliarControlSection />
+                  <>
+                    <FamiliarControlSection />
+                    <ProfileManagementSection />
+                  </>
                 )}
                 {activeCategory.settings.length === 0 && (
                   <div

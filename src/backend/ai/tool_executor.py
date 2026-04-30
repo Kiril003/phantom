@@ -1033,6 +1033,45 @@ async def _tool_search_files(args: dict[str, Any], user_id: str) -> dict[str, An
     )
 
 
+async def _tool_write_file(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    """Write a UTF-8 text file inside the allow-list. 5 MiB cap."""
+    _ = user_id
+    path = args.get("path")
+    content = args.get("content")
+    overwrite = args.get("overwrite", True)
+    if not isinstance(path, str) or not path.strip():
+        return _err("invalid_args", "path is required")
+    if not isinstance(content, str):
+        return _err("invalid_args", "content must be string")
+    if not isinstance(overwrite, bool):
+        return _err("invalid_args", "overwrite must be boolean")
+    try:
+        from tools.file_manager import write_file as _wf
+        return _ok(**_wf(path=path.strip(), content=content, overwrite=overwrite))
+    except FileExistsError as exc:
+        return _err("conflict", str(exc))
+    except IsADirectoryError as exc:
+        return _err("invalid_args", f"path is a directory: {exc}")
+    except ValueError as exc:
+        msg = str(exc)
+        kind = "too_large" if "exceeds write cap" in msg else "forbidden"
+        return _err(kind, msg)
+
+
+async def _tool_make_directory(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    _ = user_id
+    path = args.get("path")
+    if not isinstance(path, str) or not path.strip():
+        return _err("invalid_args", "path is required")
+    try:
+        from tools.file_manager import make_directory as _md
+        return _ok(**_md(path=path.strip()))
+    except FileExistsError as exc:
+        return _err("conflict", str(exc))
+    except ValueError as exc:
+        return _err("forbidden", str(exc))
+
+
 async def _tool_create_checkpoint(args: dict[str, Any], user_id: str) -> dict[str, Any]:
     """Create a planner checkpoint row. ROOT-style operation but agent-callable
     so the operator can voice-trigger 'збережи стан'."""
@@ -1094,6 +1133,8 @@ _HANDLERS: dict[str, Any] = {
     "list_files": _tool_list_files,
     "read_file": _tool_read_file,
     "search_files": _tool_search_files,
+    "write_file": _tool_write_file,
+    "make_directory": _tool_make_directory,
 }
 
 

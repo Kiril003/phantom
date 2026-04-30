@@ -360,6 +360,69 @@ def list_dir_raw(*, path: Optional[str], limit: int = 200) -> dict[str, Any]:
     }
 
 
+WRITE_FILE_CAP_BYTES = 5 * 1024 * 1024  # 5 MiB write ceiling
+
+
+def write_file(*, path: str, content: str | bytes, encoding: str = "utf-8", overwrite: bool = True) -> dict[str, Any]:
+    """Write a regular file inside the allow-list. 5 MiB cap.
+
+    `content` may be str (encoded with `encoding`, default utf-8) or
+    bytes (written verbatim). Refuses to overwrite if `overwrite=False`
+    and target exists.
+    """
+    target = _resolve_inside_allowed(path)
+    if target.is_dir():
+        raise IsADirectoryError(str(target))
+    if target.exists() and not overwrite:
+        raise FileExistsError(str(target))
+    payload: bytes
+    if isinstance(content, str):
+        payload = content.encode(encoding)
+    elif isinstance(content, (bytes, bytearray)):
+        payload = bytes(content)
+    else:
+        raise TypeError(f"content must be str or bytes, got {type(content).__name__}")
+    if len(payload) > WRITE_FILE_CAP_BYTES:
+        raise ValueError(f"content exceeds write cap {WRITE_FILE_CAP_BYTES} bytes")
+    target.parent.mkdir(parents=True, exist_ok=True)
+    with target.open("wb") as fh:
+        fh.write(payload)
+    stat = target.stat()
+    return {
+        "ok": True,
+        "path": str(target),
+        "name": target.name,
+        "size": int(stat.st_size),
+        "size_display": _human_size(stat.st_size),
+        "mtime_ms": _ms(stat.st_mtime),
+    }
+
+
+def make_directory(*, path: str) -> dict[str, Any]:
+    """Create a new directory inside the allow-list. Idempotent — returns
+    `created=False` when it already existed."""
+    target = _resolve_inside_allowed(path)
+    if target.exists() and not target.is_dir():
+        raise FileExistsError(f"{target} exists and is not a directory")
+    created = not target.exists()
+    target.mkdir(parents=True, exist_ok=True)
+    return {"ok": True, "path": str(target), "created": created}
+
+
+def rename_path(*, src: str, dst: str) -> dict[str, Any]:
+    """Rename / move a path inside the allow-list. Both endpoints must
+    resolve inside the allow-list."""
+    src_path = _resolve_inside_allowed(src)
+    dst_path = _resolve_inside_allowed(dst)
+    if not src_path.exists():
+        raise FileNotFoundError(str(src_path))
+    if dst_path.exists():
+        raise FileExistsError(str(dst_path))
+    dst_path.parent.mkdir(parents=True, exist_ok=True)
+    src_path.rename(dst_path)
+    return {"ok": True, "from": str(src_path), "to": str(dst_path)}
+
+
 def delete_path(*, path: str) -> dict[str, Any]:
     """Delete a regular file inside the allow-list. Refuses directories
     and refuses anything outside the allow-list. Returns {ok, path}."""
@@ -377,6 +440,10 @@ __all__ = [
     "list_dir",
     "read_file",
     "list_dir_raw",
+    "write_file",
+    "make_directory",
+    "rename_path",
     "delete_path",
     "READ_FILE_CAP_BYTES",
+    "WRITE_FILE_CAP_BYTES",
 ]

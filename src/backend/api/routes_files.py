@@ -17,6 +17,7 @@ import logging
 from typing import Any, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.database import get_db
@@ -25,10 +26,14 @@ from security.auth import get_current_user
 from security.permissions import require_root
 from tools.file_manager import (
     READ_FILE_CAP_BYTES,
+    WRITE_FILE_CAP_BYTES,
     delete_path,
     list_dir_raw,
+    make_directory,
     read_file as _read_file,
+    rename_path,
     search_files,
+    write_file,
 )
 
 logger = logging.getLogger(__name__)
@@ -117,5 +122,82 @@ async def api_delete_file(
 
 @router.get("/cap")
 async def api_files_cap(_: User = Depends(get_current_user)) -> dict[str, Any]:
-    """Expose the read cap so the FE can warn before issuing big reads."""
-    return {"read_cap_bytes": READ_FILE_CAP_BYTES}
+    """Expose the read/write caps so the FE can warn before issuing big reads."""
+    return {
+        "read_cap_bytes": READ_FILE_CAP_BYTES,
+        "write_cap_bytes": WRITE_FILE_CAP_BYTES,
+    }
+
+
+# ── Phase-6 follow-up — write / mkdir / rename (audit-2026-04-30) ─────
+
+
+class WriteFileRequest(BaseModel):
+    path: str = Field(..., description="Absolute or ~-prefixed target path")
+    content: str = Field(default="", description="UTF-8 text body; capped at 5 MiB")
+    overwrite: bool = Field(default=True)
+
+
+@router.post("/write", status_code=status.HTTP_200_OK)
+async def api_write_file(
+    req: WriteFileRequest,
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    _ = user
+    try:
+        return write_file(path=req.path, content=req.content, overwrite=req.overwrite)
+    except FileExistsError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    except IsADirectoryError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"path is a directory: {exc}",
+        )
+    except ValueError as exc:
+        # Either allow-list rejection or content-too-large.
+        msg = str(exc)
+        code = (
+            status.HTTP_413_REQUEST_ENTITY_TOO_LARGE
+            if "exceeds write cap" in msg
+            else status.HTTP_403_FORBIDDEN
+        )
+        raise HTTPException(status_code=code, detail=msg)
+
+
+class MakeDirRequest(BaseModel):
+    path: str
+
+
+@router.post("/mkdir", status_code=status.HTTP_200_OK)
+async def api_mkdir(
+    req: MakeDirRequest,
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    _ = user
+    try:
+        return make_directory(path=req.path)
+    except FileExistsError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+
+
+class RenameRequest(BaseModel):
+    src: str
+    dst: str
+
+
+@router.post("/rename", status_code=status.HTTP_200_OK)
+async def api_rename(
+    req: RenameRequest,
+    user: User = Depends(get_current_user),
+) -> dict[str, Any]:
+    _ = user
+    try:
+        return rename_path(src=req.src, dst=req.dst)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(exc))
+    except FileExistsError as exc:
+        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail=str(exc))
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))

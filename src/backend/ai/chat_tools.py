@@ -366,6 +366,31 @@ CHAT_DATA_TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "write_file",
+        "description": (
+            "Записати UTF-8 текстовий файл у дозволеному дереві. Ліміт 5 МіБ. "
+            "За замовч. перезаписує існуючий — встанови overwrite=false щоб уникнути."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {"type": "string"},
+                "content": {"type": "string"},
+                "overwrite": {"type": "boolean"},
+            },
+            "required": ["path", "content"],
+        },
+    },
+    {
+        "name": "make_directory",
+        "description": "Створити нову директорію в дозволеному дереві. Ідемпотентна.",
+        "parameters": {
+            "type": "object",
+            "properties": {"path": {"type": "string"}},
+            "required": ["path"],
+        },
+    },
+    {
         "name": "create_checkpoint",
         "description": (
             "Створити чекпойнт стану системи. reason ∈ "

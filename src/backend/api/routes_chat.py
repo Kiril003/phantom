@@ -481,6 +481,56 @@ async def _build_ai_response(
     except Exception as exc:  # noqa: BLE001
         logger.debug("Failed to schedule background fact extraction: %s", exc)
 
+    # Phase-6 follow-up — terminal execution wire-up.
+    # Operator audit 2026-04-30: 'термінал не зробив'. The previous
+    # respond_terminal path produced a `terminal_output` attachment
+    # carrying the command but NEVER ran it. Now: when the AI picks
+    # respond_terminal AND the caller is ROOT, we spawn a sandbox
+    # session for the command, append a `sandbox` scene attachment with
+    # the live session id so the FE renders streaming output, and let
+    # the existing scene-promotion path lift it onto message.scene.
+    # Non-ROOT operators get the legacy preview-only attachment.
+    if ai_response.response_form == "terminal" and user.role == "ROOT":
+        cmd: str | None = None
+        for att in ai_response.attachments or []:
+            if isinstance(att, dict) and att.get("type") == "terminal_output":
+                data = att.get("data") or {}
+                if isinstance(data, dict):
+                    cmd = (data.get("command") or "").strip() or None
+                break
+        if cmd:
+            try:
+                from linux.executor import session_registry as _sandbox_reg
+                session = await _sandbox_reg.create_session(
+                    cmd, user_id=user.id, is_root=True,
+                )
+                # Append a sandbox scene attachment so the FE renders the
+                # live stream inline. The FE SandboxScene reads
+                # session_id and subscribes to sandbox.<id> WS.
+                ai_response.attachments = list(ai_response.attachments or []) + [{
+                    "type": "scene",
+                    "data": {
+                        "kind": "sandbox",
+                        "data": {
+                            "session_id": session.session_id,
+                            "root": True,
+                            "live": True,
+                            "steps": [],
+                            "recent_stdout": [],
+                            "recent_stderr": [],
+                        },
+                    },
+                }]
+                logger.info(
+                    "chat.respond_terminal: sandbox session=%s spawned for cmd=%r",
+                    session.session_id, cmd[:80],
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "chat.respond_terminal: sandbox spawn failed (cmd=%r): %s",
+                    cmd[:80], exc,
+                )
+
     return (
         ai_response.content,
         ai_response.response_form,

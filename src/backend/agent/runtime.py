@@ -291,6 +291,7 @@ class AgentRuntime:
             "task_id": state.id,
             "reason": reason,
             "promoted_at": state.promoted_to_background_at,
+            "goal": (state.goal or "")[:500],
         })
         # Switch the ContextVar so subsequent broadcasts from the running
         # coroutine route on the background_events channel.

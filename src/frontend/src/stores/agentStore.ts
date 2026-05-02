@@ -110,6 +110,7 @@ interface AgentState {
   progressByTaskId: Record<string, AgentProgressUpdate[]>;
   progressEtaByTaskId: Record<string, number | null>;
   promotedToBackgroundAt: Record<string, number>;
+  bgTaskGoals: Record<string, string>;
   progressLoading: Record<string, boolean>;
 
   // Setters
@@ -213,6 +214,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   progressByTaskId: {},
   progressEtaByTaskId: {},
   promotedToBackgroundAt: {},
+  bgTaskGoals: {},
   progressLoading: {},
 
   setWSConnected: (connected) => set({ wsConnected: connected }),
@@ -395,7 +397,13 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     }
   },
   clearProgress: (taskId) => {
-    const { progressByTaskId, progressEtaByTaskId, promotedToBackgroundAt, progressLoading } = get();
+    const {
+      progressByTaskId,
+      progressEtaByTaskId,
+      promotedToBackgroundAt,
+      bgTaskGoals,
+      progressLoading,
+    } = get();
     const drop = <T extends Record<string, unknown>>(o: T): T => {
       if (!(taskId in o)) return o;
       const { [taskId]: _omit, ...rest } = o;
@@ -405,6 +413,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       progressByTaskId: drop(progressByTaskId),
       progressEtaByTaskId: drop(progressEtaByTaskId),
       promotedToBackgroundAt: drop(promotedToBackgroundAt),
+      bgTaskGoals: drop(bgTaskGoals),
       progressLoading: drop(progressLoading),
     });
   },
@@ -603,18 +612,26 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         patch.status = 'done';
         patch.substate = 'idle';
         patch.connectionStatus = 'idle';
+        // Phase 18-COMPLETE — drop the long-running mirror for this task
+        // so the LongRunningTaskCard auto-dismisses.
+        const tid = String(e.payload.task_id ?? '');
+        if (tid) setTimeout(() => get().clearProgress(tid), 0);
         break;
       }
       case 'task.stopped': {
         patch.status = 'stopped';
         patch.substate = 'idle';
         patch.connectionStatus = 'idle';
+        const tid = String(e.payload.task_id ?? '');
+        if (tid) setTimeout(() => get().clearProgress(tid), 0);
         break;
       }
       case 'task.failed': {
         patch.status = 'failed';
         patch.substate = 'idle';
         patch.connectionStatus = 'idle';
+        const tid = String(e.payload.task_id ?? '');
+        if (tid) setTimeout(() => get().clearProgress(tid), 0);
         break;
       }
       case 'task.progress': {
@@ -655,6 +672,17 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           patch.promotedToBackgroundAt = {
             ...get().promotedToBackgroundAt,
             [taskId]: at,
+          };
+          // Goal preferentially comes from the BE event payload; fall back
+          // to the in-memory currentTask if the FE was already tracking
+          // this id as foreground.
+          const goalFromEvent = e.payload.goal ? String(e.payload.goal) : '';
+          const goalFromState = get().currentTask?.task?.id === taskId
+            ? get().currentTask?.task?.goal ?? ''
+            : '';
+          patch.bgTaskGoals = {
+            ...get().bgTaskGoals,
+            [taskId]: goalFromEvent || goalFromState || taskId,
           };
         }
         break;
@@ -849,6 +877,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     progressByTaskId: {},
     progressEtaByTaskId: {},
     promotedToBackgroundAt: {},
+    bgTaskGoals: {},
     progressLoading: {},
   }),
 }));

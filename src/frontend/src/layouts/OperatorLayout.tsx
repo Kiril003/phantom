@@ -32,6 +32,7 @@ import { DecisionCard, type DecisionCardData } from '../components/agent/Decisio
 import { AgentReportScreen } from '../components/agent/AgentReportScreen';
 import { CouncilStage } from '../components/agent/CouncilStage';
 import { InfoNeedDialog } from '../components/agent/InfoNeedDialog';
+import { LongRunningTaskCard } from '../components/agent/LongRunningTaskCard';
 import { PlanEditor } from '../components/agent/PlanEditor';
 import { useAgentStream } from '../hooks/useAgentStream';
 import { useAgentStore } from '../stores/agentStore';
@@ -473,6 +474,8 @@ export default function OperatorLayout() {
           onOpenHistory={() => setAgentHistoryOpen(true)}
         />
       )}
+      <BackgroundTaskCardMount />
+
       {currentInfoNeed && (
         <InfoNeedDialog
           infoNeed={currentInfoNeed}
@@ -650,5 +653,31 @@ function BudgetChip({
         {sub}
       </span>
     </div>
+  );
+}
+
+/**
+ * Phase 18-COMPLETE — host for the LongRunningTaskCard. Renders one
+ * card per active background task. Today the runtime caps to one bg
+ * slot, so this is effectively a single instance, but the iteration
+ * makes future N-slot expansion trivial.
+ */
+function BackgroundTaskCardMount() {
+  const promotedAt = useAgentStore((s) => s.promotedToBackgroundAt);
+  const goals = useAgentStore((s) => s.bgTaskGoals);
+  const clearProgress = useAgentStore((s) => s.clearProgress);
+  const ids = Object.keys(promotedAt);
+  if (ids.length === 0) return null;
+  return (
+    <>
+      {ids.map((tid) => (
+        <LongRunningTaskCard
+          key={tid}
+          taskId={tid}
+          goal={goals[tid] ?? tid}
+          onDismiss={() => clearProgress(tid)}
+        />
+      ))}
+    </>
   );
 }

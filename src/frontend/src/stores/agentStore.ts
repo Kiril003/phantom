@@ -1,17 +1,22 @@
 import { create } from 'zustand';
 import type {
+  AgentCouncilDecision,
   AgentEmotionVector,
   AgentEvent,
+  AgentInfoNeed,
   AgentObservation,
   AgentPlanStep,
   AgentReflectionResult,
+  AgentRoleStatement,
   AgentSubGoal,
   AgentSubstate,
   AgentTaskDetail,
+  AgentTaskReport,
   AgentTaskStatus,
+  AgentTaskSummary,
   AgentThoughtBudget,
 } from '@shared/types';
-import { agentApi } from '../services/agentApi';
+import { agentApi, type AgentResumeAsConversationResponse } from '../services/agentApi';
 
 const EVENT_CAP = 500;
 
@@ -78,10 +83,32 @@ interface AgentState {
     reason: string;
     at: string;
   } | null;
+  // Phase 16 — final report screen (deferred OPERATOR exit).
+  reportPending: AgentTaskReport | null;
+  reportLoading: boolean;
+  reportError: string | null;
+  // Phase 17a.5 — typed prompt awaiting an operator answer.
+  currentInfoNeed: AgentInfoNeed | null;
+  infoNeedBusy: boolean;
+  infoNeedError: string | null;
+  // Phase 17a — Council deliberation.
+  councilActive: boolean;
+  councilSituationKind: string | null;
+  councilSituationSummary: string | null;
+  councilStatements: AgentRoleStatement[];
+  councilDecision: AgentCouncilDecision | null;
+  // Phase 16 — chat seed payload returned by /resume-as-conversation. Cleared
+  // by the chat layer after consuming it (see chatStore.consumeAgentSeed).
+  conversationSeed: AgentResumeAsConversationResponse | null;
+  // Phase 16 — past-task index for AgentSessionHistory.
+  historyTasks: AgentTaskSummary[];
+  historyLoading: boolean;
+  historyError: string | null;
 
   // Setters
   setWSConnected: (connected: boolean) => void;
   setPromptToUser: (prompt: string | null) => void;
+  setConversationSeed: (seed: AgentResumeAsConversationResponse | null) => void;
 
   // Async actions
   startTask: (goal: string) => Promise<void>;
@@ -96,6 +123,33 @@ interface AgentState {
     rating: 'up' | 'down' | 'comment',
     comment?: string,
   ) => Promise<void>;
+  // Phase 16 — report lifecycle.
+  fetchReport: (taskId: string, preferLLM?: boolean) => Promise<AgentTaskReport | null>;
+  acknowledgeReport: () => Promise<void>;
+  resumeAsConversation: () => Promise<AgentResumeAsConversationResponse | null>;
+  // Phase 17a.5 — InfoNeed lifecycle.
+  respondToInfoNeed: (answer: unknown) => Promise<void>;
+  dismissInfoNeed: () => void;
+  // Phase 17a — Council manual trigger.
+  runCouncilRound: (
+    summary: string,
+    options?: {
+      kind?:
+        | 'strategic_revise'
+        | 'before_destructive'
+        | 'low_confidence'
+        | 'info_need'
+        | 'quality_gate'
+        | 'user_invoked';
+      proposed_action?: Record<string, unknown>;
+      monologue_confidence?: number;
+      include_aesthete?: boolean;
+    },
+  ) => Promise<AgentCouncilDecision | null>;
+  dismissCouncil: () => void;
+  // Phase 16 — past-run browsing.
+  loadHistory: (status?: string, limit?: number) => Promise<void>;
+  clearHistory: () => void;
 
   // Event surface
   handleEvent: (e: AgentEvent) => void;
@@ -131,9 +185,25 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   quotaBackoff: null,
   pendingProactiveAction: null,
   lastCheckpoint: null,
+  reportPending: null,
+  reportLoading: false,
+  reportError: null,
+  currentInfoNeed: null,
+  infoNeedBusy: false,
+  infoNeedError: null,
+  councilActive: false,
+  councilSituationKind: null,
+  councilSituationSummary: null,
+  councilStatements: [],
+  councilDecision: null,
+  conversationSeed: null,
+  historyTasks: [],
+  historyLoading: false,
+  historyError: null,
 
   setWSConnected: (connected) => set({ wsConnected: connected }),
   setPromptToUser: (prompt) => set({ promptToUser: prompt }),
+  setConversationSeed: (seed) => set({ conversationSeed: seed }),
 
   startTask: async (goal) => {
     set({ connectionStatus: 'starting', promptToUser: null });
@@ -203,6 +273,124 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     await agentApi.feedback(auditId, rating, comment);
   },
 
+  // ── Phase 16 — report + history ──────────────────────────────────────────
+
+  fetchReport: async (taskId, preferLLM = true) => {
+    set({ reportLoading: true, reportError: null });
+    try {
+      const resp = await agentApi.getReport(taskId, preferLLM);
+      set({ reportPending: resp.report, reportLoading: false });
+      return resp.report;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'failed to fetch report';
+      set({ reportLoading: false, reportError: msg });
+      return null;
+    }
+  },
+
+  acknowledgeReport: async () => {
+    const pending = get().reportPending;
+    const taskId = pending?.task_id ?? get().currentTask?.task.id;
+    if (!taskId) {
+      set({ reportPending: null });
+      return;
+    }
+    try {
+      await agentApi.dismissReport(taskId);
+    } catch (err) {
+      // Best-effort — clear locally even if the BE call failed (the slot is
+      // already free, the worst case is the server-side state machine
+      // auto-times-out the OPERATOR transition).
+      console.warn('agent acknowledgeReport network failed', err);
+    }
+    set({ reportPending: null });
+  },
+
+  resumeAsConversation: async () => {
+    const pending = get().reportPending;
+    const taskId = pending?.task_id ?? get().currentTask?.task.id;
+    if (!taskId) return null;
+    try {
+      const seed = await agentApi.resumeAsConversation(taskId);
+      // Server already acknowledged; clear local mirror so OperatorLayout
+      // can swap to DialogueLayout without prompting again.
+      set({ reportPending: null, conversationSeed: seed });
+      return seed;
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'failed to resume as conversation';
+      set({ reportError: msg });
+      return null;
+    }
+  },
+
+  loadHistory: async (status, limit = 50) => {
+    set({ historyLoading: true, historyError: null });
+    try {
+      const resp = await agentApi.listTasks(status, limit);
+      set({ historyTasks: resp.tasks, historyLoading: false });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'failed to load history';
+      set({ historyLoading: false, historyError: msg });
+    }
+  },
+
+  clearHistory: () => set({ historyTasks: [], historyError: null }),
+
+  // ── Phase 17a.5 — InfoNeed ───────────────────────────────────────────────
+
+  respondToInfoNeed: async (answer) => {
+    const need = get().currentInfoNeed;
+    if (!need) return;
+    set({ infoNeedBusy: true, infoNeedError: null });
+    try {
+      await agentApi.submitInfoResponse(need.task_id, need.id, answer);
+      set({ currentInfoNeed: null, infoNeedBusy: false });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'failed to submit info response';
+      set({ infoNeedBusy: false, infoNeedError: msg });
+    }
+  },
+
+  dismissInfoNeed: () => set({ currentInfoNeed: null, infoNeedError: null }),
+
+  // ── Phase 17a — Council ─────────────────────────────────────────────────
+
+  runCouncilRound: async (summary, options) => {
+    const taskId = get().currentTask?.task.id;
+    if (!taskId) return null;
+    set({
+      councilActive: true,
+      councilSituationKind: options?.kind ?? 'user_invoked',
+      councilSituationSummary: summary,
+      councilStatements: [],
+      councilDecision: null,
+    });
+    try {
+      const resp = await agentApi.runCouncilRound(taskId, {
+        summary,
+        kind: options?.kind ?? 'user_invoked',
+        proposed_action: options?.proposed_action,
+        monologue_confidence: options?.monologue_confidence,
+        include_aesthete: options?.include_aesthete,
+      });
+      set({ councilDecision: resp.decision });
+      return resp.decision;
+    } catch (err) {
+      console.warn('council round failed', err);
+      set({ councilActive: false });
+      return null;
+    }
+  },
+
+  dismissCouncil: () =>
+    set({
+      councilActive: false,
+      councilSituationKind: null,
+      councilSituationSummary: null,
+      councilStatements: [],
+      councilDecision: null,
+    }),
+
   handleEvent: (e) => {
     const events = [...get().events, e];
     if (events.length > EVENT_CAP) events.splice(0, events.length - EVENT_CAP);
@@ -212,6 +400,12 @@ export const useAgentStore = create<AgentState>((set, get) => ({
 
     switch (e.type) {
       case 'task.started': {
+        // Phase 16 — operator started a new task; any prior pending report
+        // is implicitly dismissed (the new run "owns" the OPERATOR layout
+        // now). Conversation seed is also cleared so it doesn't bleed into
+        // the new run's narrative.
+        patch.reportPending = null;
+        patch.conversationSeed = null;
         const sm = e.payload.self_model as AgentTaskDetail['self_model'];
         patch.currentTask = {
           task: {
@@ -350,6 +544,58 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         patch.connectionStatus = 'idle';
         break;
       }
+      case 'task.report_ready': {
+        // Phase 16 — backend just composed a TaskReport for the finished
+        // task. Surface it through reportPending so OperatorLayout shows
+        // <AgentReportScreen>; do NOT exit OPERATOR — that waits for the
+        // operator's explicit acknowledge / continue-as-conversation.
+        const report = e.payload.report as AgentTaskReport | undefined;
+        if (report) patch.reportPending = report;
+        break;
+      }
+      case 'agent.info_need': {
+        // Phase 17a.5 — agent typed-prompt; show InfoNeedDialog.
+        const need = e.payload.info_need as AgentInfoNeed | undefined;
+        if (need) {
+          patch.currentInfoNeed = need;
+          patch.infoNeedError = null;
+        }
+        break;
+      }
+      case 'agent.info_need_resolved': {
+        // BE confirms a matching info_need was answered (locally or via
+        // mobile companion etc.). Clear local mirror if the IDs match.
+        const id = String(e.payload.info_need_id ?? '');
+        if (id && get().currentInfoNeed?.id === id) {
+          patch.currentInfoNeed = null;
+        }
+        break;
+      }
+      case 'council.round_started': {
+        patch.councilActive = true;
+        patch.councilSituationKind = String(e.payload.kind ?? 'user_invoked');
+        patch.councilSituationSummary = String(e.payload.summary ?? '');
+        patch.councilStatements = [];
+        patch.councilDecision = null;
+        break;
+      }
+      case 'council.role_spoke': {
+        const stmt = e.payload.statement as AgentRoleStatement | undefined;
+        if (stmt) {
+          patch.councilStatements = [...get().councilStatements, stmt].slice(-30);
+        }
+        break;
+      }
+      case 'council.consensus_reached': {
+        const decision = e.payload.decision as AgentCouncilDecision | undefined;
+        if (decision) {
+          patch.councilDecision = decision;
+          patch.councilStatements = decision.statements;
+        }
+        // Stays "active" until explicit dismissCouncil so the UI can show
+        // the verdict + statements; user closes it when ready.
+        break;
+      }
       case 'task.blocked_quota': {
         patch.status = 'blocked_quota';
         patch.promptToUser = String(
@@ -466,5 +712,23 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     subGoals: [],
     promptToUser: null,
     notification: null,
+    // Phase 16 — clear deferred-OPERATOR + history surfaces too.
+    reportPending: null,
+    reportLoading: false,
+    reportError: null,
+    conversationSeed: null,
+    historyTasks: [],
+    historyLoading: false,
+    historyError: null,
+    // Phase 17a.5 — drop any stale info-need state on reset.
+    currentInfoNeed: null,
+    infoNeedBusy: false,
+    infoNeedError: null,
+    // Phase 17a — clear council state on reset.
+    councilActive: false,
+    councilSituationKind: null,
+    councilSituationSummary: null,
+    councilStatements: [],
+    councilDecision: null,
   }),
 }));

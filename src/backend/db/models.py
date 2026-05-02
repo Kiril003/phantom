@@ -512,3 +512,52 @@ class UserFact(Base):
     value_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
+
+
+# ── Phase 17b — Agent Studio (CustomAgent / cards / runs) ────────────────────
+
+
+class CustomAgentRow(Base):
+    """A user-saved autonomous agent built from cards."""
+    __tablename__ = "custom_agents"
+    __table_args__ = (Index("ix_custom_agents_owner", "owner_user_id"),)
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    owner_user_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    name: Mapped[str] = mapped_column(String(160), nullable=False)
+    description: Mapped[str] = mapped_column(Text, default="")
+    avatar: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    tags_json: Mapped[str] = mapped_column(Text, default="[]")
+    goal_template: Mapped[str] = mapped_column(Text, default="")
+    inputs_schema_json: Mapped[str] = mapped_column(Text, default="[]")
+    cards_json: Mapped[str] = mapped_column(Text, default="[]")
+    links_json: Mapped[str] = mapped_column(Text, default="[]")
+    recipients_json: Mapped[str] = mapped_column(Text, default="[]")
+    schedule_json: Mapped[str] = mapped_column(Text, default="{}")
+    enabled: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    last_run_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    run_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    success_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
+
+
+class CustomAgentRunRow(Base):
+    """One execution of a CustomAgent — links to the agent_runtime task."""
+    __tablename__ = "custom_agent_runs"
+    __table_args__ = (
+        Index("ix_custom_agent_runs_agent", "agent_id"),
+        Index("ix_custom_agent_runs_task", "task_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    agent_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    task_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    inputs_json: Mapped[str] = mapped_column(Text, default="{}")
+    status: Mapped[str] = mapped_column(String(16), default="queued", nullable=False)
+    triggered_by: Mapped[str] = mapped_column(String(16), default="manual", nullable=False)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    summary: Mapped[str] = mapped_column(Text, default="")
+    error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, index=True)

@@ -12,6 +12,7 @@ from pydantic import ValidationError
 from pydantic_core import PydanticUndefined
 
 from ..schemas import RiskLevel
+from .ask_user import AskUser
 from .base import Action
 from .bash import BashRun
 from .browser import BrowserClickByDescription, BrowserExtract, BrowserNavigate
@@ -19,6 +20,7 @@ from .fs import FsRead, FsWrite
 from .net import NetScan
 from .notify import NotifyDesktop
 from .process import ProcessList
+from .research import WebResearch
 from .self_introspect import SelfCapability, SelfRecall
 from .time_ import TimeWait
 from .web import WebSearch
@@ -33,6 +35,10 @@ _REGISTERED: list[Type[Action]] = [
     TimeWait,
     SelfCapability, SelfRecall,
     WebSearch,
+    # Phase 17a.5 — typed prompt to the operator.
+    AskUser,
+    # Phase 17a.5 — iterative corroboration search.
+    WebResearch,
 ]
 
 

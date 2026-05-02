@@ -183,6 +183,14 @@ class AgentRuntime:
         self.browser_page = None
         self._playwright = None
 
+        # Phase 16 — report-ready handoff. After a foreground task finalizes we
+        # compose a TaskReport, emit task.report_ready, and HOLD the OPERATOR
+        # state-machine transition until the operator acknowledges (close /
+        # continue-as-conversation). The slot itself is released immediately so
+        # the next task can run; only the layout-exit is deferred.
+        # Keys are task_ids; values: {report, outcome, to_safe}.
+        self.pending_reports: dict[str, dict[str, Any]] = {}
+
     # ── Helpers ──────────────────────────────────────────────────────────────
 
     @property
@@ -932,22 +940,312 @@ class AgentRuntime:
 
         await self.set_substate("idle")
 
-        if state.track == "foreground":
+        # Phase 16 — for foreground tasks we compose a TaskReport and emit a
+        # `task.report_ready` event, but defer the OPERATOR-state exit until
+        # the operator explicitly acknowledges (close / continue-as-conversation
+        # / start a new task). The slot itself is already released by
+        # `_finalize_release_slot`, so the next task can still run; only the
+        # layout swap is held back so the user actually gets to see the report.
+        # The legacy auto-exit fires only for background tasks (which have no
+        # report screen).
+        if state.track != "foreground":
+            return
+
+        report_payload: dict[str, Any] | None = None
+        with contextlib.suppress(Exception):
+            from .reports import compose_task_report
+            # Compose with a tight LLM timeout so quota issues / network hangs
+            # never delay the report screen — deterministic fallback always
+            # produces a usable report.
+            report = await compose_task_report(
+                state.id, prefer_llm=True, llm_timeout_s=8.0,
+            )
+            if report is not None:
+                report_payload = report.model_dump(mode="json")
+                self.pending_reports[state.id] = {
+                    "report": report_payload,
+                    "outcome": outcome,
+                    "to_safe": (outcome == "stopped"),
+                }
+
+        if report_payload is not None:
+            await self._broadcast("task.report_ready", {
+                "task_id": state.id,
+                "track": state.track,
+                "report": report_payload,
+            })
+        else:
+            # Composer failed for some unforeseen reason; fall back to legacy
+            # auto-exit so we never leave the operator stranded in OPERATOR.
+            await self._exit_operator_now(state.id, outcome)
+
+    async def _exit_operator_now(self, task_id: str, outcome: TaskStatus) -> bool:
+        """Run the deferred OPERATOR → previous-state transition.
+
+        Phase 16 split out from `_finalize_broadcast` so the same code path
+        runs both:
+          • automatically when no report could be composed (failsafe), and
+          • on demand from `acknowledge_report` when the operator dismisses
+            the report screen.
+
+        Returns True iff a transition was actually emitted.
+        """
+        try:
+            from core.state_machine import state_machine
+        except Exception:
+            return False
+        try:
+            transition = state_machine.exit_operator(
+                f"agent_task_{outcome}",
+                to_safe=(outcome == "stopped"),
+            )
+        except Exception as exc:
+            logger.debug("exit_operator raised: %s", exc)
+            return False
+        if transition is None:
+            return False
+        with contextlib.suppress(Exception):
+            from api.websocket_hub import hub
+            await hub.broadcast("state", "transition", {
+                "from": transition.from_state,
+                "to": transition.to_state,
+                "trigger": transition.trigger,
+                "timestamp": transition.timestamp,
+                "auto": transition.auto,
+            })
+        # Telemetry-friendly trace.
+        logger.info(
+            "operator-state exit emitted task=%s trigger=%s",
+            task_id[:8], transition.trigger,
+        )
+        return True
+
+    async def acknowledge_report(
+        self,
+        task_id: str,
+        *,
+        also_broadcast: bool = True,
+    ) -> bool:
+        """Operator-driven dismissal of a pending TaskReport.
+
+        Pops the cached report, runs the deferred OPERATOR exit, and
+        optionally broadcasts a `task.report_acknowledged` event so any
+        secondary surface (mobile companion, tactical map) can drop the
+        screen too.
+
+        Idempotent: extra calls after the first return False without
+        side-effects (the second tap of "Close" should be a no-op).
+        """
+        pending = self.pending_reports.pop(task_id, None)
+        if pending is None:
+            return False
+        outcome = pending.get("outcome", "done")
+        ok = await self._exit_operator_now(task_id, outcome)  # type: ignore[arg-type]
+        if also_broadcast:
             with contextlib.suppress(Exception):
-                from core.state_machine import state_machine
-                transition = state_machine.exit_operator(
-                    f"agent_task_{outcome}",
-                    to_safe=(outcome == "stopped"),
+                from api.websocket_hub import hub
+                await hub.broadcast("agent.stream", "task.report_acknowledged", {
+                    "task_id": task_id,
+                    "outcome": outcome,
+                })
+        return ok
+
+    def get_pending_report(self, task_id: str) -> dict[str, Any] | None:
+        """Read a still-pending TaskReport without dismissing it."""
+        entry = self.pending_reports.get(task_id)
+        if entry is None:
+            return None
+        return entry.get("report")
+
+    # ── Phase 17a — Live plan editing ───────────────────────────────────────
+
+    def _state_for_task(self, task_id: str) -> "TaskState | None":
+        if self.foreground_slot is not None and self.foreground_slot.id == task_id:
+            return self.foreground_slot
+        if self.background_slot is not None and self.background_slot.id == task_id:
+            return self.background_slot
+        return None
+
+    async def inject_subgoal(
+        self,
+        task_id: str,
+        *,
+        description: str,
+        rationale: str = "",
+        position: int | None = None,
+        expected_actions: int = 3,
+        acceptance_criteria: str = "",
+    ) -> dict[str, Any] | None:
+        """Insert a new pending sub-goal at `position` (or at the end).
+
+        Requires the task to be paused — the caller (route) is responsible for
+        pausing it first if necessary. Audits the change and broadcasts
+        `plan.user_edited` so the FE can refresh.
+        """
+        state = self._state_for_task(task_id)
+        if state is None:
+            return None
+        if state.status not in {"paused", "awaiting_user", "blocked_quota"}:
+            # Liveness guard: don't mutate the plan tree while the loop is
+            # mid-step, otherwise next_pending_subgoal() can race with the
+            # action executor. The route surfaces a 409.
+            return {"error": "task must be paused to edit the plan"}
+
+        new_sg = SubGoal(
+            description=description.strip()[:500] or "Без назви",
+            rationale=rationale.strip()[:500],
+            expected_actions=max(1, int(expected_actions or 3)),
+            acceptance_criteria=acceptance_criteria.strip()[:500],
+        )
+        if position is None or position < 0 or position > len(state.sub_goals):
+            state.sub_goals.append(new_sg)
+            position = len(state.sub_goals) - 1
+        else:
+            state.sub_goals.insert(position, new_sg)
+
+        with contextlib.suppress(Exception):
+            await persist_task_state(state.id, sub_goals=state.sub_goals)
+
+        await self._broadcast("plan.user_edited", {
+            "task_id": state.id,
+            "kind": "inject",
+            "sub_goal_id": new_sg.id,
+            "position": position,
+            "description": new_sg.description,
+        })
+        return {"sub_goal": new_sg.model_dump(mode="json"), "position": position}
+
+    async def delete_subgoal(
+        self,
+        task_id: str,
+        *,
+        sub_goal_id: str,
+        skip_only: bool = False,
+    ) -> dict[str, Any] | None:
+        state = self._state_for_task(task_id)
+        if state is None:
+            return None
+        if state.status not in {"paused", "awaiting_user", "blocked_quota"}:
+            return {"error": "task must be paused to edit the plan"}
+        for idx, sg in enumerate(state.sub_goals):
+            if sg.id == sub_goal_id:
+                if skip_only:
+                    sg.status = "skipped"
+                else:
+                    state.sub_goals.pop(idx)
+                with contextlib.suppress(Exception):
+                    await persist_task_state(state.id, sub_goals=state.sub_goals)
+                await self._broadcast("plan.user_edited", {
+                    "task_id": state.id,
+                    "kind": "skip" if skip_only else "delete",
+                    "sub_goal_id": sub_goal_id,
+                })
+                return {"removed": True, "skip_only": skip_only}
+        return {"removed": False, "reason": "not found"}
+
+    async def patch_plan(
+        self,
+        task_id: str,
+        *,
+        diffs: list[dict[str, Any]],
+    ) -> dict[str, Any] | None:
+        """Apply a batch of plan-diff entries.
+
+        Each diff item looks like one of:
+          {"op": "edit", "id": <sg_id>, "description"?: "...", "rationale"?: "...",
+           "expected_actions"?: 3, "acceptance_criteria"?: "..."}
+          {"op": "reorder", "ids": [<sg_id_in_new_order>...]}
+          {"op": "skip", "id": <sg_id>}
+          {"op": "delete", "id": <sg_id>}
+          {"op": "inject", "description": "...", "position"?: int, ...}
+        """
+        state = self._state_for_task(task_id)
+        if state is None:
+            return None
+        if state.status not in {"paused", "awaiting_user", "blocked_quota"}:
+            return {"error": "task must be paused to edit the plan"}
+
+        applied: list[dict[str, Any]] = []
+        by_id = {sg.id: sg for sg in state.sub_goals}
+        for d in diffs:
+            op = (d.get("op") or "").lower()
+            if op == "edit":
+                sg = by_id.get(d.get("id"))
+                if sg is None:
+                    continue
+                desc = d.get("description")
+                if isinstance(desc, str) and desc.strip():
+                    sg.description = desc.strip()[:500]
+                rat = d.get("rationale")
+                if isinstance(rat, str):
+                    sg.rationale = rat.strip()[:500]
+                ea = d.get("expected_actions")
+                if isinstance(ea, int) and ea >= 1:
+                    sg.expected_actions = ea
+                ac = d.get("acceptance_criteria")
+                if isinstance(ac, str):
+                    sg.acceptance_criteria = ac.strip()[:500]
+                applied.append({"op": "edit", "id": sg.id})
+            elif op == "skip":
+                sg = by_id.get(d.get("id"))
+                if sg is not None:
+                    sg.status = "skipped"
+                    applied.append({"op": "skip", "id": sg.id})
+            elif op == "delete":
+                sgid = d.get("id")
+                state.sub_goals = [sg for sg in state.sub_goals if sg.id != sgid]
+                by_id = {sg.id: sg for sg in state.sub_goals}
+                applied.append({"op": "delete", "id": sgid})
+            elif op == "reorder":
+                ids = d.get("ids") or []
+                if isinstance(ids, list):
+                    ordered: list[SubGoal] = []
+                    for sgid in ids:
+                        sg = by_id.get(sgid)
+                        if sg is not None:
+                            ordered.append(sg)
+                    # Append any that weren't named at the end.
+                    named = {sg.id for sg in ordered}
+                    for sg in state.sub_goals:
+                        if sg.id not in named:
+                            ordered.append(sg)
+                    state.sub_goals = ordered
+                    by_id = {sg.id: sg for sg in state.sub_goals}
+                    applied.append({"op": "reorder", "count": len(ordered)})
+            elif op == "inject":
+                desc = str(d.get("description") or "").strip()
+                if not desc:
+                    continue
+                pos = d.get("position")
+                pos = int(pos) if isinstance(pos, int) else None
+                rat = str(d.get("rationale") or "")
+                ea = int(d.get("expected_actions") or 3)
+                ac = str(d.get("acceptance_criteria") or "")
+                new_sg = SubGoal(
+                    description=desc[:500],
+                    rationale=rat.strip()[:500],
+                    expected_actions=max(1, ea),
+                    acceptance_criteria=ac.strip()[:500],
                 )
-                if transition is not None:
-                    from api.websocket_hub import hub
-                    await hub.broadcast("state", "transition", {
-                        "from": transition.from_state,
-                        "to": transition.to_state,
-                        "trigger": transition.trigger,
-                        "timestamp": transition.timestamp,
-                        "auto": transition.auto,
-                    })
+                if pos is None or pos < 0 or pos > len(state.sub_goals):
+                    state.sub_goals.append(new_sg)
+                else:
+                    state.sub_goals.insert(pos, new_sg)
+                by_id[new_sg.id] = new_sg
+                applied.append({"op": "inject", "id": new_sg.id})
+
+        with contextlib.suppress(Exception):
+            await persist_task_state(state.id, sub_goals=state.sub_goals)
+
+        await self._broadcast("plan.user_edited", {
+            "task_id": state.id,
+            "kind": "batch",
+            "applied": applied,
+        })
+        return {
+            "applied": applied,
+            "sub_goals": [sg.model_dump(mode="json") for sg in state.sub_goals],
+        }
 
     def _finalize_release_slot(self, state: TaskState) -> None:
         """Clear the track's slot + runner handle and kick off a queue

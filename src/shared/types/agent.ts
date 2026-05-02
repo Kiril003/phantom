@@ -183,6 +183,165 @@ export interface AgentTaskDetail {
   last_audit: AgentAuditEntry[];
 }
 
+/* ─── Task Report (Phase 16) ──────────────────────────────────────────────── */
+
+export type AgentReportGenerationStrategy = 'llm' | 'deterministic' | 'hybrid';
+
+export type AgentEvidenceKind =
+  | 'audit'
+  | 'observation'
+  | 'checkpoint'
+  | 'url'
+  | 'file'
+  | 'other';
+
+export interface AgentKeyDecision {
+  step_idx: number;
+  sub_goal_id: string | null;
+  verdict: AgentReflectionVerdict;
+  summary: string;
+  confidence: number;
+  objection: string | null;
+  ts: string | null;
+}
+
+export interface AgentEvidenceLink {
+  kind: AgentEvidenceKind;
+  ref: string;
+  label: string;
+}
+
+export interface AgentAuditCompact {
+  audit_id: number;
+  step_idx: number;
+  action: string;
+  ok: boolean;
+  elapsed_ms: number;
+  intent: string;
+}
+
+export interface AgentTaskReport {
+  task_id: string;
+  goal: string;
+  status: AgentTaskStatus;
+  track: AgentTrack;
+  duration_ms: number;
+  achievements: string[];
+  obstacles: string[];
+  key_decisions: AgentKeyDecision[];
+  next_steps: string[];
+  evidence_links: AgentEvidenceLink[];
+  audit_trail_compact: AgentAuditCompact[];
+  llm_narrative: string | null;
+  generated_at: string;
+  generation_strategy: AgentReportGenerationStrategy;
+  sub_goals_done: number;
+  sub_goals_total: number;
+  actions_total: number;
+  actions_failed: number;
+}
+
+/* ─── Council / Multi-Agent Team (Phase 17) ───────────────────────────────── */
+
+export type AgentRoleName =
+  | 'planner'
+  | 'critic'
+  | 'executor'
+  | 'researcher'
+  | 'risk_assessor'
+  | 'aesthete'
+  | 'skeptic'
+  | 'moderator'
+  | 'verifier';
+
+export type AgentOrchestratorMode = 'single' | 'council' | 'swarm';
+
+export type AgentCouncilSituationKind =
+  | 'strategic_revise'
+  | 'before_destructive'
+  | 'low_confidence'
+  | 'info_need'
+  | 'quality_gate'
+  | 'user_invoked';
+
+export interface AgentRoleStatement {
+  role: AgentRoleName;
+  text: string;
+  confidence: number;
+  objection_to: AgentRoleName[];
+  suggests_action: Record<string, unknown> | null;
+  ts: string;
+}
+
+export interface AgentCouncilSituation {
+  kind: AgentCouncilSituationKind;
+  task_id: string;
+  summary: string;
+  context: Record<string, unknown>;
+  proposed_action: Record<string, unknown> | null;
+  monologue: AgentInnerMonologue | null;
+  sub_goal_id: string | null;
+  step_idx: number;
+}
+
+export interface AgentCouncilDecision {
+  situation: AgentCouncilSituation;
+  verdict: 'proceed' | 'revise' | 'abort' | 'ask_user';
+  statements: AgentRoleStatement[];
+  consensus_summary: string;
+  consensus_confidence: number;
+  chosen_action: Record<string, unknown> | null;
+  rounds_used: number;
+  generation_strategy: 'llm' | 'deterministic' | 'hybrid';
+  ts: string;
+}
+
+/* ─── Information Need Resolution (Phase 17a.5) ──────────────────────────── */
+
+export type AgentInfoNeedKind =
+  | 'text'
+  | 'single_choice'
+  | 'multi_choice'
+  | 'file_pick'
+  | 'range'
+  | 'confirm'
+  | 'visual_pick';
+
+export interface AgentInfoNeedOption {
+  id: string;
+  label: string;
+  description: string;
+  preview_url: string | null;
+  example: string | null;
+  badge: string | null;
+}
+
+export interface AgentInfoNeed {
+  id: string;
+  task_id: string;
+  kind: AgentInfoNeedKind;
+  question: string;
+  hint: string | null;
+  options: AgentInfoNeedOption[];
+  default: unknown | null;
+  required: boolean;
+  range_min: number | null;
+  range_max: number | null;
+  range_step: number | null;
+  placeholder: string | null;
+  ts: string;
+  expires_at: string | null;
+  resolution_strategy: 'ask' | 'search_first_then_ask';
+}
+
+export interface AgentInfoNeedResponse {
+  info_need_id: string;
+  task_id: string;
+  kind: AgentInfoNeedKind;
+  answer: unknown;
+  submitted_at: string;
+}
+
 /* ─── WS event surface ────────────────────────────────────────────────────── */
 
 export type AgentEventType =
@@ -211,6 +370,24 @@ export type AgentEventType =
   | 'task.completed'
   | 'task.stopped'
   | 'task.failed'
+  // Phase 16 — emitted after a terminal task event when its TaskReport is
+  // composed and persisted. Frontend should surface AgentReportScreen and
+  // NOT auto-dismiss the OPERATOR layout. Operator must acknowledge via
+  // POST /agent/task/{id}/dismiss-report or POST .../resume-as-conversation.
+  | 'task.report_ready'
+  // Phase 17 — Council deliberation lifecycle.
+  | 'council.round_started'
+  | 'council.role_spoke'
+  | 'council.consensus_reached'
+  | 'council.round_aborted'
+  // Phase 17a.5 — operator-facing typed prompts.
+  | 'agent.info_need'
+  | 'agent.info_need_resolved'
+  // Phase 17a — live plan editing audit.
+  | 'plan.user_edited'
+  // Phase 17a.6 — Quality Gate revision cycles.
+  | 'quality_gate.revision_started'
+  | 'quality_gate.revision_completed'
   // Phase 9.2.1
   | 'task.blocked_quota'
   // Audit B-18 — backoff retry envelope. runtime.py:584 emits when the

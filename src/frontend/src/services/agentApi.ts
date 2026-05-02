@@ -1,7 +1,9 @@
 import type {
+  AgentCouncilDecision,
   AgentSelfModel,
   AgentSubstate,
   AgentTaskDetail,
+  AgentTaskReport,
   AgentTaskSummary,
   AgentAuditEntry,
 } from '@shared/types';
@@ -39,6 +41,14 @@ export interface AgentStatusSnapshot {
   background: AgentTrackSlotView;
 }
 
+/** Phase 16 — POST /task/{id}/resume-as-conversation response shape. */
+export interface AgentResumeAsConversationResponse {
+  task_id: string;
+  seed_summary: string;
+  suggested_starter: string;
+  follow_ups: string[];
+}
+
 export const agentApi = {
   startTask: (goal: string) => req<StartTaskResponse>('POST', '/agent/task', { goal }),
   pause: (id: string) => req<{ paused: boolean }>('POST', `/agent/task/${id}/pause`),
@@ -68,4 +78,83 @@ export const agentApi = {
   status: () => req<AgentStatusSnapshot>('GET', '/agent/status'),
   feedback: (audit_entry_id: number, rating: 'up' | 'down' | 'comment', comment?: string) =>
     req<{ id: number }>('POST', '/agent/feedback', { audit_entry_id, rating, comment: comment ?? null }),
+  // Phase 16 — task report endpoints.
+  getReport: (id: string, preferLLM = true) => {
+    const qs = new URLSearchParams();
+    qs.set('prefer_llm', String(preferLLM));
+    return req<{ report: AgentTaskReport; from_cache: boolean }>(
+      'GET', `/agent/task/${id}/report?${qs.toString()}`,
+    );
+  },
+  dismissReport: (id: string) =>
+    req<{ dismissed: boolean }>('POST', `/agent/task/${id}/dismiss-report`),
+  resumeAsConversation: (id: string) =>
+    req<AgentResumeAsConversationResponse>(
+      'POST', `/agent/task/${id}/resume-as-conversation`,
+    ),
+  // Phase 17a.5 — InfoNeed prompt resolution.
+  submitInfoResponse: (taskId: string, infoNeedId: string, answer: unknown) =>
+    req<{ resolved: boolean; info_need_id: string }>(
+      'POST', `/agent/task/${taskId}/info-response`,
+      { info_need_id: infoNeedId, answer },
+    ),
+  // Phase 17a — Live Plan Editor.
+  injectSubgoal: (
+    taskId: string,
+    body: {
+      description: string;
+      rationale?: string;
+      position?: number;
+      expected_actions?: number;
+      acceptance_criteria?: string;
+    },
+  ) =>
+    req<{ sub_goal: import('@shared/types').AgentSubGoal; position: number }>(
+      'POST', `/agent/task/${taskId}/inject-subgoal`, body,
+    ),
+  deleteSubgoal: (taskId: string, subGoalId: string, skipOnly = false) => {
+    const qs = new URLSearchParams();
+    qs.set('skip_only', String(skipOnly));
+    return req<{ removed: boolean; skip_only?: boolean; reason?: string }>(
+      'DELETE', `/agent/task/${taskId}/subgoals/${subGoalId}?${qs.toString()}`,
+    );
+  },
+  patchPlan: (
+    taskId: string,
+    diffs: Array<{
+      op: 'edit' | 'skip' | 'delete' | 'reorder' | 'inject';
+      id?: string;
+      ids?: string[];
+      description?: string;
+      rationale?: string;
+      expected_actions?: number;
+      acceptance_criteria?: string;
+      position?: number;
+    }>,
+  ) =>
+    req<{
+      applied: Array<{ op: string; id?: string; count?: number }>;
+      sub_goals: import('@shared/types').AgentSubGoal[];
+    }>('PATCH', `/agent/task/${taskId}/plan`, { diffs }),
+  // Phase 17a — Council manual trigger.
+  runCouncilRound: (
+    taskId: string,
+    body: {
+      summary: string;
+      kind?:
+        | 'strategic_revise'
+        | 'before_destructive'
+        | 'low_confidence'
+        | 'info_need'
+        | 'quality_gate'
+        | 'user_invoked';
+      proposed_action?: Record<string, unknown>;
+      context?: Record<string, unknown>;
+      monologue_confidence?: number;
+      include_aesthete?: boolean;
+    },
+  ) =>
+    req<{ decision: AgentCouncilDecision }>(
+      'POST', `/agent/task/${taskId}/council/round`, body,
+    ),
 };

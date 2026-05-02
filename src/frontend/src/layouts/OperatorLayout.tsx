@@ -29,8 +29,15 @@ import { InterventionDialog } from '../components/agent/InterventionDialog';
 import { PlanTree } from '../components/agent/PlanTree';
 import { AgentTimeline } from '../components/agent/AgentTimeline';
 import { DecisionCard, type DecisionCardData } from '../components/agent/DecisionCard';
+import { AgentReportScreen } from '../components/agent/AgentReportScreen';
+import { CouncilStage } from '../components/agent/CouncilStage';
+import { InfoNeedDialog } from '../components/agent/InfoNeedDialog';
+import { PlanEditor } from '../components/agent/PlanEditor';
 import { useAgentStream } from '../hooks/useAgentStream';
 import { useAgentStore } from '../stores/agentStore';
+import { useUIStore } from '../stores/uiStore';
+import { useSystemStore } from '../stores/systemStore';
+import { SystemState } from '@shared/types';
 import { EASE_PHANTOM } from '../styles/motion';
 import { useState } from 'react';
 import type { AgentTaskStatus } from '@shared/types';
@@ -63,8 +70,61 @@ export default function OperatorLayout() {
   const startTask = useAgentStore((s) => s.startTask);
   const intervene = useAgentStore((s) => s.intervene);
   const setPromptToUser = useAgentStore((s) => s.setPromptToUser);
+  // Phase 16 — final report screen + history overlay wiring.
+  const reportPending = useAgentStore((s) => s.reportPending);
+  const acknowledgeReport = useAgentStore((s) => s.acknowledgeReport);
+  const resumeAsConversation = useAgentStore((s) => s.resumeAsConversation);
+  const setAgentHistoryOpen = useUIStore((s) => s.setAgentHistoryOpen);
+  const setSystemState = useSystemStore((s) => s.setState);
+  // Phase 17a.5 — typed prompt awaiting an answer.
+  const currentInfoNeed = useAgentStore((s) => s.currentInfoNeed);
+  const infoNeedBusy = useAgentStore((s) => s.infoNeedBusy);
+  const respondToInfoNeed = useAgentStore((s) => s.respondToInfoNeed);
+  const dismissInfoNeed = useAgentStore((s) => s.dismissInfoNeed);
+  // Phase 17a — Council deliberation surface.
+  const councilActive = useAgentStore((s) => s.councilActive);
+  const councilSituationKind = useAgentStore((s) => s.councilSituationKind);
+  const councilSituationSummary = useAgentStore((s) => s.councilSituationSummary);
+  const councilStatements = useAgentStore((s) => s.councilStatements);
+  const councilDecision = useAgentStore((s) => s.councilDecision);
+  const runCouncilRound = useAgentStore((s) => s.runCouncilRound);
+  const dismissCouncil = useAgentStore((s) => s.dismissCouncil);
 
   const [interveneOpen, setInterveneOpen] = useState(false);
+  const [reportBusy, setReportBusy] = useState(false);
+  // Phase 17a — Live Plan Editor (visible only when task is paused).
+  const [planEditorOpen, setPlanEditorOpen] = useState(false);
+  const planEditable =
+    status === 'paused' || status === 'awaiting_user' || status === 'blocked_quota';
+
+  const handleCloseReport = async () => {
+    if (reportBusy) return;
+    setReportBusy(true);
+    try {
+      await acknowledgeReport();
+    } finally {
+      setReportBusy(false);
+    }
+  };
+  const handleContinueAsConversation = async () => {
+    if (reportBusy) return;
+    setReportBusy(true);
+    try {
+      const seed = await resumeAsConversation();
+      // Backend acknowledged the report and emitted a state.transition; force
+      // DIALOGUE explicitly so the operator never lands somewhere unexpected
+      // (FSM "previous state" might be SHADOW or FOCUS depending on context).
+      if (seed) {
+        setSystemState(SystemState.DIALOGUE, {
+          trigger: 'agent_resume_as_conversation',
+          timestamp: Date.now(),
+          auto: false,
+        });
+      }
+    } finally {
+      setReportBusy(false);
+    }
+  };
 
   useEffect(() => {
     document.body.setAttribute('data-substate', substate);
@@ -404,6 +464,107 @@ export default function OperatorLayout() {
         }}
         onClose={() => setInterveneOpen(false)}
       />
+      {reportPending && (
+        <AgentReportScreen
+          report={reportPending}
+          busy={reportBusy}
+          onClose={handleCloseReport}
+          onContinueAsConversation={handleContinueAsConversation}
+          onOpenHistory={() => setAgentHistoryOpen(true)}
+        />
+      )}
+      {currentInfoNeed && (
+        <InfoNeedDialog
+          infoNeed={currentInfoNeed}
+          busy={infoNeedBusy}
+          onSubmit={(answer) => respondToInfoNeed(answer)}
+          onCancel={
+            currentInfoNeed.required ? undefined : () => dismissInfoNeed()
+          }
+        />
+      )}
+      {planEditorOpen && currentTask && (
+        <PlanEditor
+          open={planEditorOpen}
+          taskId={currentTask.task.id}
+          initialSubGoals={subGoals}
+          onClose={() => setPlanEditorOpen(false)}
+        />
+      )}
+      {planEditable && currentTask && !planEditorOpen && (
+        <button
+          type="button"
+          onClick={() => setPlanEditorOpen(true)}
+          style={{
+            position: 'absolute',
+            right: 24,
+            bottom: 92,
+            zIndex: 50,
+            minHeight: 44,
+            padding: '0 16px',
+            borderRadius: 14,
+            border: '1px solid rgba(168,118,18,0.45)',
+            background: 'linear-gradient(180deg, rgba(244,175,37,0.95) 0%, rgba(232,154,28,0.95) 100%)',
+            color: '#1F1308',
+            fontSize: 12,
+            fontWeight: 700,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            cursor: 'pointer',
+            boxShadow: '0 10px 28px rgba(244,175,37,0.32)',
+          }}
+          aria-label="Редагувати план"
+        >
+          ✎ Редагувати план
+        </button>
+      )}
+      {currentTask && !councilActive && (
+        <button
+          type="button"
+          onClick={() => {
+            const lastReflection = reflections[reflections.length - 1];
+            const summary =
+              activeSubGoal?.description ||
+              lastReflection?.summary ||
+              currentTask.task.goal ||
+              'Перегляньте поточну ситуацію разом';
+            void runCouncilRound(summary, { kind: 'user_invoked' });
+          }}
+          style={{
+            position: 'absolute',
+            right: 24,
+            bottom: 144,
+            zIndex: 50,
+            minHeight: 44,
+            padding: '0 16px',
+            borderRadius: 14,
+            border: '1px solid rgba(180,150,90,0.30)',
+            background: 'rgba(255,255,255,0.85)',
+            color: 'var(--ink-strong)',
+            fontSize: 12,
+            fontWeight: 700,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            cursor: 'pointer',
+            boxShadow: '0 8px 22px rgba(120,90,40,0.16)',
+          }}
+          aria-label="Скликати раду"
+        >
+          ⚖ Скликати раду
+        </button>
+      )}
+      {councilActive && (
+        <CouncilStage
+          open={councilActive}
+          situationKind={councilSituationKind}
+          summary={councilSituationSummary}
+          statements={councilStatements}
+          decision={councilDecision}
+          onClose={dismissCouncil}
+        />
+      )}
     </motion.div>
   );
 }

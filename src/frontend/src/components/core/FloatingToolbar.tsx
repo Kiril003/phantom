@@ -63,6 +63,12 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
   const setMoreMenuOpen = useUIStore((s) => s.setMoreMenuOpen);
   const toolsOverlayOpen = useUIStore((s) => s.toolsOverlayOpen);
   const setToolsOverlayOpen = useUIStore((s) => s.setToolsOverlayOpen);
+  // Phase 16 — agent run history overlay (mounted at App level).
+  const agentHistoryOpen = useUIStore((s) => s.agentHistoryOpen);
+  const setAgentHistoryOpen = useUIStore((s) => s.setAgentHistoryOpen);
+  // Phase 17b — Agent Studio overlay (mounted at App level).
+  const studioOpen = useUIStore((s) => s.studioOpen);
+  const setStudioOpen = useUIStore((s) => s.setStudioOpen);
 
   const voiceMode = useSettingsStore(
     (s) => (s.values.voice_mode as 'off' | 'continuous' | 'wake_word' | undefined) ?? 'off',
@@ -192,6 +198,28 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
       active: state === SystemState.OPERATOR,
       onClick: () => {
         goOperator();
+        setMoreMenuOpen(false);
+      },
+    },
+    {
+      id: 'agent-history',
+      icon: 'history',
+      label: 'Історія',
+      tooltip: 'Перегляд минулих прогонів агента',
+      active: agentHistoryOpen,
+      onClick: () => {
+        setAgentHistoryOpen(!agentHistoryOpen);
+        setMoreMenuOpen(false);
+      },
+    },
+    {
+      id: 'studio',
+      icon: 'auto_awesome',
+      label: 'Studio',
+      tooltip: 'Створювати власних агентів — Васі-агенти',
+      active: studioOpen,
+      onClick: () => {
+        setStudioOpen(!studioOpen);
         setMoreMenuOpen(false);
       },
     },

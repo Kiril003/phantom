@@ -355,6 +355,190 @@ class TaskDetail(BaseModel):
     last_audit: list[AuditEntry] = Field(default_factory=list)
 
 
+# ── Task Report (Phase 16) ───────────────────────────────────────────────────
+#
+# Composed at task finalization (or on-demand via GET /agent/task/{id}/report).
+# Surfaced to the user as a "result screen" that does NOT auto-dismiss — the
+# operator must explicitly acknowledge it (close / continue-as-conversation).
+# Two generation strategies: LLM-narrative (rich prose) and deterministic
+# fallback (audit-derived bullets) so the report ALWAYS shows even when both
+# AI providers are quota-exhausted (П-1 offline-resilience principle).
+
+ReportGenerationStrategy = Literal["llm", "deterministic", "hybrid"]
+
+
+class KeyDecision(BaseModel):
+    """A reflection or pivotal decision worth surfacing in the report."""
+    step_idx: int = 0
+    sub_goal_id: str | None = None
+    verdict: ReflectionVerdict = "continue"
+    summary: str = ""
+    confidence: float = 0.5
+    objection: str | None = None
+    ts: datetime | None = None
+
+
+class EvidenceLink(BaseModel):
+    """A pointer to artefact produced/referenced during the run."""
+    kind: Literal["audit", "observation", "checkpoint", "url", "file", "other"] = "audit"
+    ref: str = ""  # audit_id, observation step_idx, checkpoint id, URL, path
+    label: str = ""
+
+
+class AuditCompact(BaseModel):
+    """Slim audit row for report timeline (full row available via /audit)."""
+    audit_id: int = 0
+    step_idx: int = 0
+    action: str = ""
+    ok: bool = True
+    elapsed_ms: int = 0
+    intent: str = ""
+
+
+class TaskReport(BaseModel):
+    """Structured report rendered after task completion. Phase 16."""
+    task_id: str
+    goal: str
+    status: TaskStatus
+    track: Track = "foreground"
+    duration_ms: int = 0
+    achievements: list[str] = Field(default_factory=list)
+    obstacles: list[str] = Field(default_factory=list)
+    key_decisions: list[KeyDecision] = Field(default_factory=list)
+    next_steps: list[str] = Field(default_factory=list)
+    evidence_links: list[EvidenceLink] = Field(default_factory=list)
+    audit_trail_compact: list[AuditCompact] = Field(default_factory=list)
+    llm_narrative: str | None = None
+    generated_at: datetime = Field(default_factory=_utcnow)
+    generation_strategy: ReportGenerationStrategy = "deterministic"
+    # Aggregate counts useful for the hero strip (avoid recompute on FE).
+    sub_goals_done: int = 0
+    sub_goals_total: int = 0
+    actions_total: int = 0
+    actions_failed: int = 0
+
+
+# ── Council / Multi-Agent Team (Phase 17) ────────────────────────────────────
+#
+# A "Council" is a small group (3-7) of AgentRoles that deliberate ONE round
+# before the agent commits to a decision. Distinct from "Swarm" — which spawns
+# parallel independent task branches and merges them later. Council is a
+# debate; Swarm is parallel work.
+
+RoleName = Literal[
+    "planner",
+    "critic",
+    "executor",
+    "researcher",
+    "risk_assessor",
+    "aesthete",      # UI / visual / creative voice
+    "skeptic",
+    "moderator",     # picks consensus
+    "verifier",      # post-action sanity check (Quality Gate)
+]
+
+OrchestratorMode = Literal["single", "council", "swarm"]
+
+CouncilSituationKind = Literal[
+    "strategic_revise",     # reflection asked for a strategy revision
+    "before_destructive",   # next action is risky / irreversible
+    "low_confidence",       # monologue confidence < threshold
+    "info_need",            # agent needs to ask user something
+    "quality_gate",         # output review (Quality Gate Loop)
+    "user_invoked",         # operator explicitly demanded a Council round
+]
+
+
+class RoleStatement(BaseModel):
+    """Single role's contribution within one Council round."""
+    role: RoleName
+    text: str
+    confidence: float = 0.5
+    objection_to: list[RoleName] = Field(default_factory=list)
+    suggests_action: dict[str, Any] | None = None
+    ts: datetime = Field(default_factory=_utcnow)
+
+
+class CouncilSituation(BaseModel):
+    """Snapshot of state pushed into a Council round."""
+    kind: CouncilSituationKind
+    task_id: str
+    summary: str
+    context: dict[str, Any] = Field(default_factory=dict)
+    proposed_action: dict[str, Any] | None = None
+    monologue: InnerMonologue | None = None
+    sub_goal_id: str | None = None
+    step_idx: int = 0
+
+
+class CouncilDecision(BaseModel):
+    """Outcome of a Council round."""
+    situation: CouncilSituation
+    verdict: Literal["proceed", "revise", "abort", "ask_user"] = "proceed"
+    statements: list[RoleStatement] = Field(default_factory=list)
+    consensus_summary: str = ""
+    consensus_confidence: float = 0.5
+    chosen_action: dict[str, Any] | None = None
+    rounds_used: int = 1
+    generation_strategy: Literal["llm", "deterministic", "hybrid"] = "deterministic"
+    ts: datetime = Field(default_factory=_utcnow)
+
+
+# ── Information Need Resolution (Phase 17a.5) ───────────────────────────────
+#
+# When an agent doesn't know something, it tries (in order): cache → web search
+# → ask user. The "ask user" path uses a typed prompt with rich UI variants so
+# operators are nudged toward the easiest possible reply.
+
+InfoNeedKind = Literal[
+    "text",
+    "single_choice",
+    "multi_choice",
+    "file_pick",
+    "range",
+    "confirm",
+    "visual_pick",
+]
+
+
+class InfoNeedOption(BaseModel):
+    """One option for single_choice / multi_choice / visual_pick."""
+    id: str
+    label: str
+    description: str = ""
+    preview_url: str | None = None  # image / video / asset hint for visual_pick
+    example: str | None = None      # short illustrative quote
+    badge: str | None = None        # eyebrow tag like "найдешевше" / "swiftest"
+
+
+class InfoNeed(BaseModel):
+    """Typed prompt the agent shows the operator."""
+    id: str = Field(default_factory=_uuid)
+    task_id: str
+    kind: InfoNeedKind
+    question: str
+    hint: str | None = None
+    options: list[InfoNeedOption] = Field(default_factory=list)
+    default: Any | None = None
+    required: bool = True
+    range_min: float | None = None
+    range_max: float | None = None
+    range_step: float | None = None
+    placeholder: str | None = None
+    ts: datetime = Field(default_factory=_utcnow)
+    expires_at: datetime | None = None
+    resolution_strategy: Literal["ask", "search_first_then_ask"] = "ask"
+
+
+class InfoNeedResponse(BaseModel):
+    """Operator's reply to an InfoNeed."""
+    info_need_id: str
+    task_id: str
+    kind: InfoNeedKind
+    answer: Any  # string | list[str] | dict | float | bool, validated per kind
+    submitted_at: datetime = Field(default_factory=_utcnow)
+
+
 __all__ = [
     "RiskLevel",
     "Substate",
@@ -381,4 +565,21 @@ __all__ = [
     "TaskSummary",
     "AuditEntry",
     "TaskDetail",
+    "ReportGenerationStrategy",
+    "KeyDecision",
+    "EvidenceLink",
+    "AuditCompact",
+    "TaskReport",
+    # Phase 17 — Council
+    "RoleName",
+    "OrchestratorMode",
+    "CouncilSituationKind",
+    "RoleStatement",
+    "CouncilSituation",
+    "CouncilDecision",
+    # Phase 17a.5 — InfoNeed
+    "InfoNeedKind",
+    "InfoNeedOption",
+    "InfoNeed",
+    "InfoNeedResponse",
 ]

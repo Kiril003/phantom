@@ -87,6 +87,23 @@ interface UIStoreState {
    */
   pendingVoiceActivation: boolean;
   setPendingVoiceActivation: (v: boolean) => void;
+
+  /**
+   * Phase 16 — AgentSessionHistory overlay visibility. Toggled from
+   * FloatingToolbar's "Історія агента" entry and from AgentReportScreen's
+   * "Історія" CTA. Mounted at App level so it overlays any layout.
+   */
+  agentHistoryOpen: boolean;
+  setAgentHistoryOpen: (v: boolean) => void;
+
+  /**
+   * Phase 17b — Agent Studio overlay (saved CustomAgents library +
+   * visual builder). Toggled from FloatingToolbar's "Studio" entry. The
+   * conversational builder is invoked via chat tools; this overlay is
+   * only the visual surface.
+   */
+  studioOpen: boolean;
+  setStudioOpen: (v: boolean) => void;
 }
 
 /**
@@ -302,4 +319,10 @@ export const useUIStore = create<UIStoreState>((set, get) => ({
 
   pendingVoiceActivation: false,
   setPendingVoiceActivation: (v) => set({ pendingVoiceActivation: v }),
+
+  agentHistoryOpen: false,
+  setAgentHistoryOpen: (v) => set({ agentHistoryOpen: v }),
+
+  studioOpen: false,
+  setStudioOpen: (v) => set({ studioOpen: v }),
 }));

@@ -9,8 +9,9 @@ import { VoiceAlwaysOnGate } from '../components/chat/VoiceAlwaysOnGate';
 import { useSystemStore } from '../stores/systemStore';
 import { SystemState } from '@shared/types';
 import { geolocationService, BrowserGeolocationService } from '../services/geolocation';
-import { PhantomFamiliar } from '../components/familiar/PhantomFamiliar';
 import { ToolsOverlay } from '../components/tools/ToolsOverlay';
+import { AgentSessionHistory } from '../components/agent/AgentSessionHistory';
+import { AgentStudioOverlay } from '../components/studio/AgentStudioOverlay';
 import { useUIStore } from '../stores/uiStore';
 import { useFamiliarTriggers } from '../hooks/useFamiliarTriggers';
 import { useAuthStore } from '../stores/authStore';
@@ -103,27 +104,12 @@ function PhantomLoader() {
   );
 }
 
-/* ─── App-level Always-On gate ───────────────────────────────────────────────
- *
- * Phase 11c.3 — `VoiceAlwaysOnGate` used to live inside `DialogueLayout`, so
- * the always-on listener only ran while the user happened to be in the chat.
- * The whole point of always-on is to listen *always*, regardless of state, so
- * we mount the gate here at App-level the moment the operator authenticates.
- * Any layout that wants to show the gate's status reads it from
- * `voiceAlwaysOnStatusStore`.
- */
 function GlobalAlwaysOnGate() {
   const authenticated = useSystemStore((s) => s.authenticated);
   if (!authenticated) return null;
   return <VoiceAlwaysOnGate />;
 }
 
-/* ─── Familiar trigger wiring ────────────────────────────────────────────────
- *
- * Phase-5 R1-FAMILIAR-1 — `<PhantomFamiliar />` is the visual; this side
- * mounts the trigger hook (state-transition / idle-timeout / greeting). The
- * trigger hook is a no-render component so we can colocate it next to other
- * App-level wiring without a wrapper div. */
 function FamiliarTriggers() {
   useFamiliarTriggers();
   return null;
@@ -140,6 +126,7 @@ function AutoLoginManager() {
 /* ─── App Root ────────────────────────────────────────────────────────────── */
 
 export function App() {
+  console.log('PHANTOM OS: App rendering');
   return (
     <Providers>
       <AutoLoginManager />
@@ -172,12 +159,11 @@ export function App() {
               <Route path="/*" element={<StateRouter />} />
             </Routes>
             <Overlays />
-            {/* Familiar overlay — sits above content, below modals (z=35).
-                The trigger hook lives next to it so unmounting the App
-                shell tears both down together. */}
             <FamiliarTriggers />
-            <PhantomFamiliar />
+            {/* <PhantomFamiliar /> */}
             <ToolsOverlayMount />
+            <AgentSessionHistoryMount />
+            <StudioOverlayMount />
           </div>
         </ViewportFrame>
       </BrowserRouter>
@@ -185,12 +171,33 @@ export function App() {
   );
 }
 
-/* Phase-5 R1 Task C — small wrapper that subscribes the overlay to
- * uiStore so a single source of truth (the FloatingToolbar's Tools
- * button) drives open/close. Kept as a sibling so the BrowserRouter
- * + Providers stay untouched. */
+function StudioOverlayMount() {
+  const open = useUIStore((s) => s.studioOpen);
+  const setOpen = useUIStore((s) => s.setStudioOpen);
+  return <AgentStudioOverlay open={open} onClose={() => setOpen(false)} />;
+}
+
 function ToolsOverlayMount() {
   const open = useUIStore((s) => s.toolsOverlayOpen);
   const setOpen = useUIStore((s) => s.setToolsOverlayOpen);
   return <ToolsOverlay open={open} onClose={() => setOpen(false)} />;
+}
+
+function AgentSessionHistoryMount() {
+  const open = useUIStore((s) => s.agentHistoryOpen);
+  const setOpen = useUIStore((s) => s.setAgentHistoryOpen);
+  const setSystemState = useSystemStore((s) => s.setState);
+  return (
+    <AgentSessionHistory
+      open={open}
+      onClose={() => setOpen(false)}
+      onContinueAsConversation={() => {
+        setSystemState(SystemState.DIALOGUE, {
+          trigger: 'agent_resume_as_conversation',
+          timestamp: Date.now(),
+          auto: false,
+        });
+      }}
+    />
+  );
 }

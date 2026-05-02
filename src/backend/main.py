@@ -29,6 +29,7 @@ from api.routes_voice_stream import register_voice_ws
 from api.routes_ai import router as ai_router
 from api.routes_face import router as face_router
 from api.routes_agent import router as agent_router
+from api.routes_studio import router as studio_router
 from api.routes_dynamic_source import router as dynamic_source_router
 from api.routes_hub import router as hub_router
 from api.routes_user_facts import router as user_facts_router
@@ -733,6 +734,8 @@ def create_app() -> FastAPI:
     app.include_router(ai_router, prefix=prefix)
     app.include_router(face_router, prefix=prefix)
     app.include_router(agent_router, prefix=prefix)
+    # Phase 17b — Agent Studio (CustomAgent CRUD + run + clone + cards catalog).
+    app.include_router(studio_router, prefix=prefix)
     # Day-4 W-4 (ADR-XC-007): /api/v1/dynamic_source/{source} for the
     # frontend <DynamicPicker> consumer (chat-input ModelCard, future
     # Settings dynamic dropdowns).

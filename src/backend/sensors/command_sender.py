@@ -141,3 +141,76 @@ class CommandSender:
 
 # Singleton
 command_sender = CommandSender()
+
+
+# ── Module-level wrappers used by agent.actions.device (Phase 18) ──────────
+#
+# The Action layer wants a stable, kwarg-friendly API that hides the
+# CommandSender singleton + the legacy field name pivots ("pat" / "id" /
+# "color" hex). These thin wrappers delegate to the singleton and adapt
+# argument shapes; they intentionally accept fields the protocol doesn't
+# yet honour (intensity, duration_ms on OLED) so the action signatures stay
+# forward-compatible when firmware grows.
+
+
+_HAPTIC_PATTERNS = {"single", "short", "long", "double", "triple", "pulse"}
+
+
+async def send_haptic(pattern: str = "short", intensity: int = 120, duration_ms: int | None = None) -> bool:
+    """ESP32 haptic. `pattern` is the protocol kind; `intensity` (0-255) is
+    accepted for API forward-compat but currently shapes only the pulse
+    duration (firmware will gain a real intensity channel later)."""
+    pat = pattern if pattern in _HAPTIC_PATTERNS else "short"
+    if duration_ms is None:
+        # 0..255 intensity → ~80..400 ms pulse
+        i = max(0, min(int(intensity), 255))
+        duration_ms = 80 + int((i / 255) * 320)
+    return await command_sender.haptic(pattern=pat, duration_ms=int(duration_ms))
+
+
+async def send_rgb(r: int, g: int, b: int, duration_ms: int = 400, led_id: int = 0, mode: str = "solid") -> bool:
+    """ESP32 RGB. Maps r/g/b ints → hex string the firmware expects.
+    `duration_ms` rides through as `speed_ms` for the existing protocol."""
+    rr = max(0, min(int(r), 255))
+    gg = max(0, min(int(g), 255))
+    bb = max(0, min(int(b), 255))
+    color = f"{rr:02x}{gg:02x}{bb:02x}"
+    return await command_sender.rgb(led_id=int(led_id), color=color, mode=mode, speed_ms=int(duration_ms))
+
+
+def _wrap_oled_lines(text: str, max_per_line: int = 16) -> list[str]:
+    """Soft-wrap a flat string onto OLED-sized lines without breaking
+    words mid-character. The firmware expects a small list of strings."""
+    text = (text or "").replace("\r", "").rstrip()
+    if not text:
+        return [""]
+    raw_lines = text.split("\n")
+    out: list[str] = []
+    for raw in raw_lines:
+        if len(raw) <= max_per_line:
+            out.append(raw)
+            continue
+        # word-wrap
+        words = raw.split(" ")
+        cur = ""
+        for w in words:
+            if not cur:
+                cur = w
+            elif len(cur) + 1 + len(w) <= max_per_line:
+                cur = cur + " " + w
+            else:
+                out.append(cur)
+                cur = w
+        if cur:
+            out.append(cur)
+    return out[:8]  # OLED screen cap
+
+
+async def send_oled_text(text: str, duration_ms: int = 2000) -> bool:
+    """ESP32 OLED. Wraps `text` to OLED-sized lines and dispatches via the
+    existing oled_text protocol. `duration_ms` is accepted for API
+    completeness; the firmware does not auto-clear yet (a future cfg key
+    will plumb that through)."""
+    _ = duration_ms  # forward-compat
+    lines = _wrap_oled_lines(text)
+    return await command_sender.oled_text(lines)

@@ -236,10 +236,15 @@ class ESP32Haptic(Action):
                 elapsed_ms=0,
             )
         try:
-            await cs.send_haptic(self.pattern, intensity=self.intensity)
+            sent = await cs.send_haptic(self.pattern, intensity=self.intensity)
         except Exception as exc:
             return ActionResult(
                 ok=False, error=str(exc), error_class=type(exc).__name__, elapsed_ms=0,
+            )
+        if not sent:
+            return ActionResult(
+                ok=False, error="ESP32 serial writer not attached (device offline)",
+                error_class="SerialDisconnected", elapsed_ms=0,
             )
         return ActionResult(ok=True, output={"pattern": self.pattern}, side_effects=["haptic"], elapsed_ms=0)
 
@@ -261,10 +266,15 @@ class ESP32RGB(Action):
                 elapsed_ms=0,
             )
         try:
-            await cs.send_rgb(self.r, self.g, self.b, duration_ms=self.duration_ms)
+            sent = await cs.send_rgb(self.r, self.g, self.b, duration_ms=self.duration_ms)
         except Exception as exc:
             return ActionResult(
                 ok=False, error=str(exc), error_class=type(exc).__name__, elapsed_ms=0,
+            )
+        if not sent:
+            return ActionResult(
+                ok=False, error="ESP32 serial writer not attached (device offline)",
+                error_class="SerialDisconnected", elapsed_ms=0,
             )
         return ActionResult(
             ok=True, output={"rgb": [self.r, self.g, self.b]},
@@ -287,10 +297,15 @@ class ESP32OLEDText(Action):
                 elapsed_ms=0,
             )
         try:
-            await cs.send_oled_text(self.text, duration_ms=self.duration_ms)
+            sent = await cs.send_oled_text(self.text, duration_ms=self.duration_ms)
         except Exception as exc:
             return ActionResult(
                 ok=False, error=str(exc), error_class=type(exc).__name__, elapsed_ms=0,
+            )
+        if not sent:
+            return ActionResult(
+                ok=False, error="ESP32 serial writer not attached (device offline)",
+                error_class="SerialDisconnected", elapsed_ms=0,
             )
         return ActionResult(ok=True, output={"chars": len(self.text)}, side_effects=["oled"], elapsed_ms=0)
 

@@ -27,13 +27,12 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useFamiliarStore } from '../../stores/familiarStore';
 import type { FamiliarManifestation } from '@shared/types';
-import { FamiliarSVG } from './FamiliarSVG';
+import { Familiar3D } from './Familiar3D';
 
-// Phase-5 R1 audit-2026-04-30 — bumped from 50×66 to 110×138 px so the
-// creature reads as a CHARACTER from across the 7-inch display, not as
-// a glow-bullet flying past the corner.
-const FAMILIAR_W = 110;
-const FAMILIAR_H = 138;
+// Phase-5 R2 3D Character integration.
+// 130×182 px to fit the 3D Canvas aspect ratio and character rig.
+const FAMILIAR_W = 130;
+const FAMILIAR_H = 182;
 const FRAME_W = 1024;
 const FRAME_H = 600;
 
@@ -383,9 +382,8 @@ export function PhantomFamiliar() {
               willChange: 'transform, opacity',
             }}
           >
-            <FamiliarSVG
+            <Familiar3D
               pose={manifestation.pose}
-              reduceMotion={reduceMotion}
               pointAngle={anchor.pointAngle}
               pointLength={anchor.pointLength}
             />

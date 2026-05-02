@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import type { User } from '@shared/types';
 import { authApi } from '../services/api';
 import { bootstrapSettings } from '../services/settingsBootstrap';
+import { useSystemStore } from './systemStore';
 
 interface AuthStoreState {
   user: User | null;
@@ -89,6 +90,7 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
     try {
       const user = await authApi.me();
       set({ user });
+      useSystemStore.getState().setAuthenticated(true);
       // Audit D-H6 — first chance to load /settings now that the token
       // has been validated. The pre-auth mount call no-ops, so if we
       // skip this nothing else will fire it on the auto-login path.
@@ -128,4 +130,12 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
 if (import.meta.env?.DEV && typeof window !== 'undefined') {
   (window as any).__phantom = (window as any).__phantom ?? {};
   (window as any).__phantom.auth = useAuthStore;
+}
+
+// Global 401 listener — syncs stores and drops layouts when the session dies
+if (typeof window !== 'undefined') {
+  window.addEventListener('phantom:unauthorized', () => {
+    useAuthStore.getState().clearAuth();
+    useSystemStore.getState().setAuthenticated(false);
+  });
 }

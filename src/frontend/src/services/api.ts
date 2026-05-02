@@ -12,7 +12,7 @@ import type {
   TrackPoint,
 } from '@shared/types';
 
-const BASE = '/api/v1';
+export const BASE = '/api/v1';
 
 class ApiError extends Error {
   constructor(
@@ -25,7 +25,7 @@ class ApiError extends Error {
   }
 }
 
-async function request<T>(
+export async function request<T>(
   method: string,
   path: string,
   body?: unknown
@@ -52,6 +52,7 @@ async function request<T>(
       try {
         localStorage.removeItem('phantom_token');
         localStorage.removeItem('phantom_token_expires');
+        window.dispatchEvent(new CustomEvent('phantom:unauthorized'));
       } catch {
         /* SSR / restricted storage: ignore */
       }
@@ -115,6 +116,8 @@ export const chatApi = {
     request<{ messages: ChatMessage[] }>('GET', `/chat/sessions/${sessionId}/messages`),
   deleteSession: (sessionId: string) =>
     request<{ ok: boolean }>('DELETE', `/chat/sessions/${sessionId}`),
+  updateSession: (sessionId: string, updates: { summary: string }) =>
+    request<{ session: ChatSession }>('PUT', `/chat/sessions/${sessionId}`, updates),
 };
 
 /* ─── Context ─────────────────────────────────────────────────────────────── */

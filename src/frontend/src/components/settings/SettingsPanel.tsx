@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router-dom';
 import {
   ArrowLeft,
   Save,
@@ -58,6 +58,7 @@ export default function SettingsPanel() {
   const setValue = useSettingsStore((s) => s.setValue);
   const markClean = useSettingsStore((s) => s.markClean);
 
+  const { categoryId: urlCategoryId } = useParams<{ categoryId: string }>();
   const [activeCategoryId, setActiveCategoryId] = useState<string>('');
   const [status, setStatus] = useState<
     | { kind: 'idle' }
@@ -78,7 +79,7 @@ export default function SettingsPanel() {
       .then((data) => {
         if (cancelled) return;
         setCategories(data.categories);
-        setActiveCategoryId((prev) => prev || data.categories[0]?.id || '');
+        setActiveCategoryId((prev) => urlCategoryId || prev || data.categories[0]?.id || '');
         setStatus({ kind: 'idle' });
       })
       .catch((err: unknown) => {

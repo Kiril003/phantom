@@ -725,12 +725,49 @@ async def _tool_create_calendar_event(args: dict[str, Any], user_id: str) -> dic
         await db.commit()
         await db.refresh(event)
 
+    # Day-5 W-2c — build a CalendarScene envelope for the new event.
+    # The FE expects a full week view; we provide the labels for the current week.
+    today_l = _today_local()
+    monday_l = today_l - timedelta(days=today_l.weekday())
+    weekday_labels = ("ПН", "ВТ", "СР", "ЧТ", "ПТ", "СБ", "НД")
+    date_labels = tuple((monday_l + timedelta(days=i)).strftime("%d.%m") for i in range(7))
+
+    # Position percentage within the 24h column
+    y_pct = (event.start_at.hour * 60 + event.start_at.minute) / (24 * 60) * 100
+    duration_min = (event.end_at - event.start_at).total_seconds() / 60 if event.end_at else 60
+    h_pct = max(5, duration_min / (24 * 60) * 100)  # min 5% height for visibility
+
+    scene_event = {
+        "event_id": str(event.id),
+        "day_index": event.start_at.weekday(),
+        "y_pct": round(y_pct, 1),
+        "h_pct": round(h_pct, 1),
+        "category": "personal",
+        "label": event.title,
+        "starts_at_ms": int(event.start_at.timestamp() * 1000),
+        "ends_at_ms": int(event.end_at.timestamp() * 1000) if event.end_at else 0,
+    }
+
+    scene = {
+        "kind": "calendar",
+        "data": {
+            "week_start_iso": monday_l.isoformat(),
+            "today_iso": today_l.isoformat(),
+            "weekday_labels": weekday_labels,
+            "date_labels": date_labels,
+            "events": [scene_event],
+            "total_count": 1,
+            "ai_suggestion": "Подію додано до вашого розкладу.",
+        }
+    }
+
     return _ok(
         id=event.id,
         title=event.title,
         start_at=event.start_at.isoformat(),
         end_at=event.end_at.isoformat(),
         status="created",
+        scene=scene,
     )
 
 
@@ -759,12 +796,27 @@ async def _tool_create_timer(args: dict[str, Any], user_id: str) -> dict[str, An
     from db.tools_repo import create_timer as _create_timer
     async with _session_factory()() as db:
         timer = await _create_timer(db, user_id, label, duration_s)
+
+    scene = {
+        "kind": "timer",
+        "data": {
+            "timer_id": str(timer.id),
+            "label": timer.label,
+            "duration_sec": duration_s,
+            "remaining_sec": duration_s,
+            "started_at_ms": int(time.time() * 1000),
+            "ends_at_ms": int(timer.ends_at.timestamp() * 1000) if timer.ends_at else 0,
+            "status": "active",
+        }
+    }
+
     return _ok(
         id=timer.id,
         label=timer.label,
         ends_at=timer.ends_at.isoformat() if timer.ends_at else None,
         duration_s=duration_s,
         status="active",
+        scene=scene,
     )
 
 
@@ -808,15 +860,43 @@ async def _tool_create_alarm(args: dict[str, Any], user_id: str) -> dict[str, An
         return _err("invalid_args", "repeat must be once|daily|weekdays")
     if not isinstance(label, str):
         return _err("invalid_args", "label must be string")
+    
     from db.tools_repo import create_alarm as _create_alarm
     async with _session_factory()() as db:
         alarm = await _create_alarm(db, user_id, label.strip()[:256], time_str, repeat)
+
+    # Day-5 W-2c — build an AlarmScene envelope.
+    WEEKDAYS = ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"]
+    now = datetime.now(timezone.utc)
+    
+    # Coerce to UTC aware if naive (SQLite fallback)
+    fire_at = alarm.next_trigger
+    if fire_at and fire_at.tzinfo is None:
+        fire_at = fire_at.replace(tzinfo=timezone.utc)
+
+    scene = {
+        "kind": "alarm",
+        "data": {
+            "alarm_id": str(alarm.id),
+            "fire_at_ms": int(fire_at.timestamp() * 1000) if fire_at else 0,
+            "weekday": WEEKDAYS[fire_at.weekday()] if fire_at else "MON",
+            "display_time": alarm.time_str,
+            "display_date": fire_at.strftime("%d.%m") if fire_at else "",
+            "display_weekday_short": fire_at.strftime("%a").upper() if fire_at else "",
+            "sound": "default",
+            "repeat_daily": alarm.repeat == "daily",
+            "fires_in_ms": int((fire_at - now).total_seconds() * 1000) if fire_at else 0,
+            "ai_note": "Будильник встановлено.",
+        }
+    }
+
     return _ok(
         id=alarm.id,
         time=alarm.time_str,
         repeat=alarm.repeat,
         label=alarm.label,
         next_trigger=alarm.next_trigger.isoformat() if alarm.next_trigger else None,
+        scene=scene,
     )
 
 

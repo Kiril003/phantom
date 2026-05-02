@@ -13,7 +13,7 @@
  * intercept; clicks without a parent listener are no-ops (no console
  * noise, no state mutation).
  */
-import { useMemo } from 'react';
+import { useMemo, useEffect, useState } from 'react';
 import type { TimerSceneData } from '@shared/types';
 
 const RING_RADIUS = 56;
@@ -46,8 +46,22 @@ const STATUS_DISPLAY: Record<TimerSceneData['status'], { label: string; live: bo
 };
 
 export function TimerScene({ data }: TimerSceneProps) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (data.status !== 'active') return;
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [data.status]);
+
   const total = Math.max(1, data.duration_sec);
-  const remaining = Math.max(0, Math.min(data.remaining_sec, total));
+  
+  let currentRemaining = data.remaining_sec;
+  if (data.status === 'active') {
+    currentRemaining = Math.max(0, Math.floor((data.ends_at_ms - now) / 1000));
+  }
+  
+  const remaining = Math.max(0, Math.min(currentRemaining, total));
   const progress = 1 - remaining / total;
   const statusInfo = STATUS_DISPLAY[data.status];
 

@@ -11,6 +11,7 @@
  * Pure render. The toggle is visual-only; emit `data-alarm-action` for
  * a parent listener to wire.
  */
+import { useEffect, useState } from 'react';
 import type { AlarmSceneData } from '@shared/types';
 
 interface AlarmSceneProps {
@@ -29,6 +30,16 @@ function formatCountdown(ms: number): string {
 }
 
 export function AlarmScene({ data }: AlarmSceneProps) {
+  const [now, setNow] = useState(() => Date.now());
+
+  useEffect(() => {
+    if (data.fire_at_ms <= now) return;
+    const interval = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(interval);
+  }, [data.fire_at_ms, now]);
+
+  const currentFiresInMs = Math.max(0, data.fire_at_ms - now);
+
   const waveform = (data.sound_waveform && data.sound_waveform.length > 0
     ? data.sound_waveform
     : DEFAULT_WAVEFORM
@@ -250,7 +261,7 @@ export function AlarmScene({ data }: AlarmSceneProps) {
           “{data.ai_note}”
         </div>
       )}
-      {!data.ai_note && data.fires_in_ms > 0 && (
+      {!data.ai_note && currentFiresInMs > 0 && (
         <div
           className="playfair"
           style={{
@@ -262,7 +273,7 @@ export function AlarmScene({ data }: AlarmSceneProps) {
             lineHeight: 1.4,
           }}
         >
-          Через {formatCountdown(data.fires_in_ms)}.
+          Через {formatCountdown(currentFiresInMs)}.
         </div>
       )}
     </div>

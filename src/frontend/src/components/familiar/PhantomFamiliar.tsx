@@ -131,7 +131,7 @@ function anchorFor(m: FamiliarManifestation | null): AnchorPoint {
       // FamiliarSVG point length is in svg-px (60×80 viewBox); we keep it
       // proportional to the screen distance, capped so it doesn't blow
       // off-canvas.
-      const pointLength = Math.min(28, Math.max(14, dist / 4));
+      const pointLength = Math.min(34, Math.max(8, dist / 4));
       return {
         x: px,
         y: py,

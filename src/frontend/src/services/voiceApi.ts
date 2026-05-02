@@ -7,7 +7,7 @@
  * object URL for <audio>.
  */
 
-const BASE = '/api/v1';
+import { request, BASE } from './api';
 
 function _authHeaders(extra: Record<string, string> = {}): Record<string, string> {
   const token = localStorage.getItem('phantom_token');
@@ -92,12 +92,5 @@ export const voiceApi = {
     };
   },
 
-  status: async (): Promise<VoiceStatusResponse> => {
-    const res = await fetch(`${BASE}/voice/status`, {
-      credentials: 'include',
-      headers: _authHeaders(),
-    });
-    if (!res.ok) throw new Error(`Voice status HTTP ${res.status}`);
-    return (await res.json()) as VoiceStatusResponse;
-  },
+  status: () => request<VoiceStatusResponse>('GET', '/voice/status'),
 };

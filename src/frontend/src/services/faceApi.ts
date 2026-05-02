@@ -6,14 +6,7 @@
  * frames never leave the device.
  */
 
-const BASE = '/api/v1';
-
-function _authHeaders(extra: Record<string, string> = {}): Record<string, string> {
-  const token = localStorage.getItem('phantom_token');
-  const headers: Record<string, string> = { ...extra };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  return headers;
-}
+import { request } from './api';
 
 export interface FaceEnrollResponse {
   ok: boolean;
@@ -49,63 +42,21 @@ export interface FaceMeResponse {
   has_embedding: boolean;
 }
 
-async function _parseErr(res: Response, fallback: string): Promise<Error> {
-  try {
-    const j = await res.json();
-    return new Error(j?.detail || fallback);
-  } catch {
-    return new Error(`${fallback} (HTTP ${res.status})`);
-  }
-}
+
 
 export const faceApi = {
-  enroll: async (samples: number[][]): Promise<FaceEnrollResponse> => {
-    const res = await fetch(`${BASE}/face/enroll`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: _authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ samples }),
-    });
-    if (!res.ok) throw await _parseErr(res, 'Face enroll failed');
-    return (await res.json()) as FaceEnrollResponse;
-  },
+  enroll: (samples: number[][]) =>
+    request<FaceEnrollResponse>('POST', '/face/enroll', { samples }),
 
-  recognize: async (embedding: number[]): Promise<FaceRecognizeResponse> => {
-    const res = await fetch(`${BASE}/face/recognize`, {
-      method: 'POST',
-      credentials: 'include',
-      headers: _authHeaders({ 'Content-Type': 'application/json' }),
-      body: JSON.stringify({ embedding }),
-    });
-    if (!res.ok) throw await _parseErr(res, 'Face recognize failed');
-    return (await res.json()) as FaceRecognizeResponse;
-  },
+  recognize: (embedding: number[]) =>
+    request<FaceRecognizeResponse>('POST', '/face/recognize', { embedding }),
 
-  deleteEmbedding: async (): Promise<{ ok: boolean; removed: boolean }> => {
-    const res = await fetch(`${BASE}/face/embedding`, {
-      method: 'DELETE',
-      credentials: 'include',
-      headers: _authHeaders(),
-    });
-    if (!res.ok) throw await _parseErr(res, 'Face delete failed');
-    return (await res.json()) as { ok: boolean; removed: boolean };
-  },
+  deleteEmbedding: () =>
+    request<{ ok: boolean; removed: boolean }>('DELETE', '/face/embedding'),
 
-  status: async (): Promise<FaceStatusResponse> => {
-    const res = await fetch(`${BASE}/face/status`, {
-      credentials: 'include',
-      headers: _authHeaders(),
-    });
-    if (!res.ok) throw await _parseErr(res, 'Face status failed');
-    return (await res.json()) as FaceStatusResponse;
-  },
+  status: () =>
+    request<FaceStatusResponse>('GET', '/face/status'),
 
-  me: async (): Promise<FaceMeResponse> => {
-    const res = await fetch(`${BASE}/face/me`, {
-      credentials: 'include',
-      headers: _authHeaders(),
-    });
-    if (!res.ok) throw await _parseErr(res, 'Face me failed');
-    return (await res.json()) as FaceMeResponse;
-  },
+  me: () =>
+    request<FaceMeResponse>('GET', '/face/me'),
 };

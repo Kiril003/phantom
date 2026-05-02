@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { useSystemStore } from '../../stores/systemStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useFaceStore } from '../../stores/faceStore';
@@ -75,6 +76,7 @@ function MSym({
 export function StatusBar() {
   const { state, wsConnected, context, esp32 } = useSystemStore();
   const { user } = useAuthStore();
+  const navigate = useNavigate();
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
@@ -141,8 +143,12 @@ export function StatusBar() {
 
       <Divider />
 
-      {/* ── Operator avatar + name ──────────────────────────────────── */}
-      <span className="inline-flex items-center" style={{ gap: 8 }}>
+      <span 
+        className="inline-flex items-center cursor-pointer hover:opacity-80 transition-opacity active:scale-[0.98]" 
+        style={{ gap: 8 }}
+        onClick={() => navigate('/settings/profile')}
+        title="Open Profile Settings"
+      >
         <span
           aria-hidden
           style={{

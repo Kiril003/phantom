@@ -9,6 +9,9 @@ import {
   MessageCircle,
   Sparkles,
   X,
+  Menu,
+  Edit3,
+  Check,
 } from 'lucide-react';
 import { MessageBubble } from './MessageBubble';
 import { AttachDrawer, type AttachSelection } from './AttachDrawer';
@@ -77,16 +80,21 @@ export function ChatWindow({
   const sessions = useChatStore((s) => s.sessions);
   const error = useChatStore((s) => s.error);
 
-  const { sendMessage, startNewSession, loadSessions, openSession, deleteSession } = useChatStore(
+  const { sendMessage, startNewSession, loadSessions, openSession, deleteSession, updateSession } = useChatStore(
     (s) => ({
       sendMessage: s.sendMessage,
       startNewSession: s.startNewSession,
       loadSessions: s.loadSessions,
       openSession: s.openSession,
       deleteSession: s.deleteSession,
+      updateSession: s.updateSession,
     })
   );
   const systemState = useSystemStore((s) => s.state);
+
+  const [sessionsOpen, setSessionsOpen] = useState(!minimalChrome);
+  const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
+  const [editSessionText, setEditSessionText] = useState('');
 
   const [input, setInput] = useState('');
   const [voiceError, setVoiceError] = useState<string | null>(null);
@@ -340,55 +348,78 @@ export function ChatWindow({
       className={`flex h-full w-full min-h-0 ${className}`}
       style={{ background: 'transparent' }}
     >
-      {!minimalChrome && (
-        <aside
-          className="w-[220px] h-full flex flex-col shrink-0 glass-panel"
-          style={{
-            borderTop: 'none',
-            borderBottom: 'none',
-            borderLeft: 'none',
-          }}
-        >
-          <header
-            className="px-4 flex items-center gap-2 shrink-0"
+      <AnimatePresence>
+        {sessionsOpen && (
+          <motion.aside
+            initial={{ x: '-100%', opacity: 0 }}
+            animate={{ x: 0, opacity: 1 }}
+            exit={{ x: '-100%', opacity: 0 }}
+            transition={{ type: 'spring', damping: 25, stiffness: 200 }}
+            className="absolute left-0 top-0 bottom-0 z-20 w-[260px] flex flex-col shrink-0 glass"
             style={{
-              height: 44,
-              borderBottom: '1px solid var(--glass-border)',
+              borderTop: 'none',
+              borderBottom: 'none',
+              borderLeft: 'none',
+              borderRight: '1px solid var(--glass-border)',
+              boxShadow: '4px 0 24px rgba(0,0,0,0.1)',
+              background: 'var(--surface-base)',
             }}
           >
-            <span
-              className="flex-1 uppercase"
+            <header
+              className="px-4 flex items-center gap-2 shrink-0"
               style={{
-                fontFamily: 'var(--font-display)',
-                fontSize: 'var(--fs-micro)',
-                color: 'var(--ink-secondary)',
-                letterSpacing: 'var(--tracking-widest)',
-                fontWeight: 500,
+                height: 52,
+                borderBottom: '1px solid var(--glass-border)',
               }}
             >
-              Sessions
-            </span>
-            <button
-              type="button"
-              onClick={startNewSession}
-              className="flex items-center justify-center transition-all active:scale-95"
-              style={{
-                minWidth: 44,
-                minHeight: 44,
-                width: 32,
-                height: 32,
-                borderRadius: 10,
-                background: 'color-mix(in srgb, var(--accent) 14%, transparent)',
-                border: '1px solid color-mix(in srgb, var(--accent) 40%, transparent)',
-                color: 'var(--accent)',
-                boxShadow: '0 0 12px var(--accent-glow)',
-              }}
-              aria-label="New session"
-              title="New session"
-            >
-              <Plus size={16} strokeWidth={2} />
-            </button>
-          </header>
+              <button
+                type="button"
+                onClick={() => setSessionsOpen(false)}
+                className="flex items-center justify-center transition-all active:scale-95"
+                style={{
+                  width: 32,
+                  height: 32,
+                  borderRadius: 10,
+                  background: 'transparent',
+                  border: 'none',
+                  color: 'var(--ink-secondary)',
+                }}
+              >
+                <Menu size={18} strokeWidth={2} />
+              </button>
+              <span
+                className="flex-1 uppercase"
+                style={{
+                  fontFamily: 'var(--font-display)',
+                  fontSize: 'var(--fs-micro)',
+                  color: 'var(--ink-secondary)',
+                  letterSpacing: 'var(--tracking-widest)',
+                  fontWeight: 500,
+                }}
+              >
+                Sessions
+              </span>
+              <button
+                type="button"
+                onClick={startNewSession}
+                className="flex items-center justify-center transition-all active:scale-95"
+                style={{
+                  minWidth: 44,
+                  minHeight: 44,
+                  width: 32,
+                  height: 32,
+                  borderRadius: 10,
+                  background: 'color-mix(in srgb, var(--accent) 14%, transparent)',
+                  border: '1px solid color-mix(in srgb, var(--accent) 40%, transparent)',
+                  color: 'var(--accent)',
+                  boxShadow: '0 0 12px var(--accent-glow)',
+                }}
+                aria-label="New session"
+                title="New session"
+              >
+                <Plus size={16} strokeWidth={2} />
+              </button>
+            </header>
 
           <div className="flex-1 overflow-y-auto py-2 px-2">
             {sessions.length === 0 && (
@@ -446,17 +477,55 @@ export function ChatWindow({
                   }}
                 >
                   <div className="flex-1 min-w-0">
-                    <div
-                      className="truncate"
-                      style={{
-                        fontFamily: 'var(--font-display)',
-                        fontSize: 'var(--fs-xs)',
-                        color: active ? 'var(--ink-primary)' : 'var(--ink-secondary)',
-                        fontWeight: active ? 500 : 400,
-                      }}
-                    >
-                      {preview}
-                    </div>
+                    {editingSessionId === sess.id ? (
+                      <input
+                        type="text"
+                        // eslint-disable-next-line jsx-a11y/no-autofocus
+                        autoFocus
+                        value={editSessionText}
+                        onChange={(e) => setEditSessionText(e.target.value)}
+                        onBlur={() => {
+                          if (editSessionText.trim() && editSessionText.trim() !== sess.summary) {
+                            void updateSession(sess.id, editSessionText.trim());
+                          }
+                          setEditingSessionId(null);
+                        }}
+                        onKeyDown={(e) => {
+                          if (e.key === 'Enter') {
+                            e.preventDefault();
+                            e.currentTarget.blur();
+                          }
+                          if (e.key === 'Escape') {
+                            setEditingSessionId(null);
+                          }
+                        }}
+                        className="w-full bg-transparent outline-none"
+                        style={{
+                          fontFamily: 'var(--font-display)',
+                          fontSize: 'var(--fs-xs)',
+                          color: 'var(--ink-primary)',
+                          borderBottom: '1px solid var(--accent)',
+                        }}
+                      />
+                    ) : (
+                      <div
+                        className="truncate"
+                        style={{
+                          fontFamily: 'var(--font-display)',
+                          fontSize: 'var(--fs-xs)',
+                          color: active ? 'var(--ink-primary)' : 'var(--ink-secondary)',
+                          fontWeight: active ? 500 : 400,
+                        }}
+                        onDoubleClick={(e) => {
+                          e.stopPropagation();
+                          setEditSessionText(sess.summary ?? '');
+                          setEditingSessionId(sess.id);
+                        }}
+                        title="Double-click to rename"
+                      >
+                        {preview}
+                      </div>
+                    )}
                     <div
                       className="flex items-center gap-1.5"
                       style={{
@@ -470,35 +539,133 @@ export function ChatWindow({
                       <span>{sess.message_count} msg</span>
                     </div>
                   </div>
-                  <button
-                    type="button"
-                    className="flex items-center justify-center transition-colors active:scale-95"
-                    style={{
-                      minWidth: 44,
-                      minHeight: 44,
-                      width: 26,
-                      height: 26,
-                      color: 'var(--ink-muted)',
-                      opacity: active ? 1 : 0.6,
-                      background: 'transparent',
-                    }}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      deleteSession(sess.id);
-                    }}
-                    aria-label="Delete session"
-                  >
-                    <Trash2 size={12} strokeWidth={1.5} />
-                  </button>
+                  <div className="flex items-center gap-0">
+                    <button
+                      type="button"
+                      className="flex items-center justify-center transition-colors active:scale-95"
+                      style={{
+                        width: 26,
+                        height: 26,
+                        color: 'var(--ink-muted)',
+                        opacity: active ? 1 : 0.6,
+                        background: 'transparent',
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        if (editingSessionId === sess.id) {
+                          setEditingSessionId(null);
+                        } else {
+                          setEditSessionText(sess.summary ?? '');
+                          setEditingSessionId(sess.id);
+                        }
+                      }}
+                      aria-label="Rename session"
+                    >
+                      {editingSessionId === sess.id ? (
+                        <Check size={12} strokeWidth={2} style={{ color: 'var(--accent)' }} />
+                      ) : (
+                        <Edit3 size={12} strokeWidth={1.5} />
+                      )}
+                    </button>
+                    <button
+                      type="button"
+                      className="flex items-center justify-center transition-colors active:scale-95"
+                      style={{
+                        width: 26,
+                        height: 26,
+                        color: 'var(--ink-muted)',
+                        opacity: active ? 1 : 0.6,
+                        background: 'transparent',
+                      }}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        void deleteSession(sess.id);
+                      }}
+                      aria-label="Delete session"
+                    >
+                      <Trash2 size={12} strokeWidth={1.5} />
+                    </button>
+                  </div>
                 </div>
               );
             })}
           </div>
-        </aside>
+        </motion.aside>
       )}
+      </AnimatePresence>
 
       {/* Main chat */}
       <div className="flex-1 flex flex-col min-w-0 min-h-0 relative">
+        {/* Phase 10 — Chat Header with Menu toggle and New Session action.
+            Addresses operator request for '3-х ліній' button and quick
+            session management. Header sits inside the glass shell. */}
+        <header
+          className="px-4 flex items-center justify-between shrink-0"
+          style={{
+            height: 52,
+            background: 'rgba(255,255,255,0.02)',
+            borderBottom: '1px solid var(--glass-border)',
+          }}
+        >
+          <div className="flex items-center gap-3">
+            {!sessionsOpen && (
+              <button
+                type="button"
+                onClick={() => setSessionsOpen(true)}
+                className="flex items-center justify-center transition-all active:scale-95"
+                style={{
+                  width: 36,
+                  height: 36,
+                  borderRadius: 10,
+                  background: 'rgba(255,255,255,0.05)',
+                  border: '1px solid var(--glass-border)',
+                  color: 'var(--ink-secondary)',
+                }}
+                title="Open Sessions"
+              >
+                <Menu size={20} />
+              </button>
+            )}
+            <div className="flex flex-col">
+              <span 
+                className="micro-label" 
+                style={{ 
+                  fontSize: 8, 
+                  letterSpacing: '0.1em', 
+                  color: 'var(--ink-muted)',
+                  opacity: 0.7
+                }}
+              >
+                CURRENT SESSION
+              </span>
+              <span 
+                className="truncate max-w-[200px]" 
+                style={{ 
+                  fontFamily: 'var(--font-display)',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: 'var(--ink-primary)'
+                }}
+              >
+                {sessions.find(s => s.id === currentSessionId)?.summary || 'New Conversation'}
+              </span>
+            </div>
+          </div>
+
+          <button
+            type="button"
+            onClick={() => startNewSession()}
+            className="flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all active:scale-95 hover:bg-accent/10"
+            style={{
+              border: '1px solid color-mix(in srgb, var(--accent) 30%, transparent)',
+              color: 'var(--accent)',
+            }}
+          >
+            <Plus size={16} />
+            <span className="micro-label" style={{ fontWeight: 700 }}>NEW</span>
+          </button>
+        </header>
+
         <div
           ref={listRef}
           onScroll={handleScroll}
@@ -755,6 +922,25 @@ export function ChatWindow({
               }}
               data-focus={inputFocused ? '1' : '0'}
             >
+              <button
+                type="button"
+                onClick={() => setSessionsOpen((v) => !v)}
+                className="flex items-center justify-center shrink-0 transition-all active:scale-95 self-end"
+                style={{
+                  width: 40,
+                  height: 40,
+                  minWidth: 44,
+                  minHeight: 44,
+                  borderRadius: 9999,
+                  background: 'var(--glass-subtle)',
+                  color: 'var(--ink-secondary)',
+                  border: '1px solid var(--glass-border)',
+                }}
+                aria-label="Toggle sessions menu"
+              >
+                <Menu size={16} strokeWidth={1.75} />
+              </button>
+
               {showVoice && (
                 <button
                   type="button"

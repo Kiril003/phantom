@@ -114,6 +114,24 @@ def _resolve_piper_model(voice_name: str) -> Optional[Path]:
     return None
 
 
+def _find_any_piper_model() -> Optional[Path]:
+    """Last-resort fallback: find any .onnx file in the standard search paths."""
+    search_dirs = [
+        Path("/usr/share/piper-voices"),
+        Path("/opt/piper-voices"),
+        Path.home() / "piper-voices",
+        Path.cwd() / "piper_voices",
+        Path.cwd() / "voice_models",
+    ]
+    for d in search_dirs:
+        if not d.is_dir():
+            continue
+        for p in d.glob("*.onnx"):
+            if p.is_file():
+                return p
+    return None
+
+
 class PiperTTSProvider(TTSProvider):
     """
     Piper-TTS via its Python bindings. Per-voice models are cached so a
@@ -133,12 +151,20 @@ class PiperTTSProvider(TTSProvider):
     def _ensure_voice(self, requested: str):
         from piper import PiperVoice
         path = _resolve_piper_model(requested)
+        if path is None and requested != config.voice_tts_voice:
+            logger.warning("Voice %s not found, falling back to default %s", requested, config.voice_tts_voice)
+            path = _resolve_piper_model(config.voice_tts_voice)
+        
+        if path is None:
+            logger.warning("Default voice not found, searching for any available Piper model...")
+            path = _find_any_piper_model()
+
         if path is None:
             raise RuntimeError(
-                f"Piper voice model '{requested}' not found. Drop a .onnx "
-                "+ .onnx.json pair under ~/piper-voices/ or set "
-                "voice_tts_voice to an absolute path."
+                f"No Piper voice models found. Drop a .onnx + .onnx.json pair "
+                f"under ~/piper-voices/ (e.g. {requested}.onnx)."
             )
+        
         if self._voice_path == path and self._voice is not None:
             return self._voice
         logger.info("Loading Piper voice %s", path)

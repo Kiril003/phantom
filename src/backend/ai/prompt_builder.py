@@ -221,11 +221,11 @@ def build_system_prompt(
     # — the relative order ФОРМИ → ДАНІ → РЕГІСТР is unchanged.
     parts: list[str] = []
 
-    # ── STATIC PREFIX (cacheable across turns) ────────────────────────
     parts.append(PHANTOM_IDENTITY)
     parts.append("\n" + BREVITY_DISCIPLINE)
     parts.append("\n" + RESPONSE_FORMS_GUIDANCE)
-    parts.append("\n" + DATA_TOOLS_GUIDANCE)
+    if config.chat_tools_enabled:
+        parts.append("\n" + DATA_TOOLS_GUIDANCE)
     parts.append("\n" + REGISTER_GUIDANCE)
 
     # ── DYNAMIC TAIL (per-turn) ───────────────────────────────────────

@@ -58,7 +58,6 @@ async def start_task(
 ) -> dict:
     task_id, started = await agent_runtime.start_task(req.goal)
     if not started:
-        response.status_code = 409
         return {
             "task_id": task_id,
             "started": False,

@@ -309,7 +309,6 @@ export default function DialogueLayout() {
           <div className="relative h-full">
             <ChatWindow
               onVoiceToggle={handleVoiceToggle}
-              minimalChrome
               placeholder="Message PHANTOM…"
               className="pb-2"
             />

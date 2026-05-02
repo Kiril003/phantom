@@ -67,6 +67,9 @@ class SendMessageRequest(BaseModel):
             )
         return v
 
+class UpdateSessionRequest(BaseModel):
+    summary: str
+
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
 
@@ -752,6 +755,36 @@ async def send_message(
         attachments=attachments,
     )
 
+    # Phase 19: Auto-summarize session if it's new
+    if session.message_count == 2 and not session.summary:
+        async def _bg_summarize_session() -> None:
+            try:
+                from db.database import get_session as _get_bg_session
+                from ai.provider import ai_router
+                from sqlalchemy import select as _bg_select
+                async with _get_bg_session() as bg_db:
+                    res = await bg_db.execute(
+                        _bg_select(ChatSession).where(ChatSession.id == session.id)
+                    )
+                    bg_session = res.scalar_one_or_none()
+                    if bg_session:
+                        summary_resp = await ai_router.generate(
+                            user_message="Summarize this chat in 2-4 words maximum, capitalize it like a title. Return ONLY the title and nothing else.",
+                            system_prompt="You are an AI generating very brief, 2-4 word chat titles.",
+                            history=[{"role": "user", "content": req.content}, {"role": "assistant", "content": content}],
+                            user_id=user.id,
+                        )
+                        if summary_resp.content:
+                            title = summary_resp.content.replace("\"", "").strip()
+                            if len(title) > 0:
+                                bg_session.summary = title
+                                await bg_db.commit()
+            except Exception as exc:
+                logger.debug("Background session summarize failed: %s", exc)
+
+        asyncio.create_task(_bg_summarize_session())
+
+
     # Create TemporalAnchor — "what was happening at this moment"
     try:
         from db.models import TemporalAnchor
@@ -849,6 +882,8 @@ async def _broadcast_message_stream(
         {"message_id": message_id, "delta": "", "done": True, "message": message},
         user_id=user_id,
     )
+    import logging
+    logging.getLogger(__name__).warning("BROADCASTING FINAL MESSAGE: %r", message)
     await hub.broadcast(
         "chat", "message",
         {"message": message, "session_id": session_id},
@@ -1126,3 +1161,26 @@ async def delete_session(
     session_memory.clear_session(session_id)
 
     return {"ok": True}
+
+
+@router.put("/sessions/{session_id}")
+async def update_session(
+    session_id: str,
+    req: UpdateSessionRequest,
+    token_data: TokenPayload = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    result = await db.execute(
+        select(ChatSession).where(
+            ChatSession.id == session_id,
+            ChatSession.user_id == token_data.user_id,
+        )
+    )
+    session = result.scalar_one_or_none()
+    if not session:
+        raise HTTPException(status_code=404, detail="Session not found")
+
+    session.summary = req.summary.strip()
+    await db.flush()
+
+    return {"session": _serialize_session(session)}

@@ -6,40 +6,7 @@ import type {
   AgentAuditEntry,
 } from '@shared/types';
 
-const BASE = '/api/v1';
-
-async function req<T>(method: string, path: string, body?: unknown): Promise<T> {
-  const token = localStorage.getItem('phantom_token');
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
-  const res = await fetch(`${BASE}${path}`, {
-    method,
-    headers,
-    credentials: 'include',
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
-  if (res.status === 204) return undefined as T;
-  const text = await res.text();
-  let parsed: unknown = null;
-  if (text) {
-    try {
-      parsed = JSON.parse(text);
-    } catch {
-      parsed = text;
-    }
-  }
-  if (!res.ok) {
-    const message =
-      parsed && typeof parsed === 'object' && 'detail' in parsed
-        ? String((parsed as { detail: unknown }).detail)
-        : `agent api error ${res.status}`;
-    const err = new Error(message) as Error & { status?: number; payload?: unknown };
-    err.status = res.status;
-    err.payload = parsed;
-    throw err;
-  }
-  return parsed as T;
-}
+import { request as req } from './api';
 
 export interface StartTaskResponse {
   task_id: string;

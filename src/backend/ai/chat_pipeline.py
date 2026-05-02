@@ -143,6 +143,12 @@ async def run(
         ok=str(bool(dispatch_result.get("ok"))).lower(),
     )
 
+    # Day-5 W-2c — capture the scene from the tool result if present. Some
+    # tools (Alarm/Timer) return a rich UI card in the 'scene' field; we
+    # want to ensure this reaches the FE even if the LLM's final response
+    # turn doesn't explicitly mention it.
+    tool_scene = (dispatch_result.get("result") or {}).get("scene") if dispatch_result.get("ok") else None
+
     # Hard cap on total dispatches in case future call_with_tools
     # returns plural tool_calls.
     if max_calls < 1:
@@ -189,11 +195,43 @@ async def run(
 
     # ── Step 6: sanitize before return (TM-17B-I1) ──────────────────────────
     sanitized = _safe_sanitize(final.content, user_id)
+
+    # Day-5 W-2c — auto-attach tool scene. If the tool result carried a
+    # rich UI card AND the LLM's final answer didn't already pick its
+    # own scene (e.g. respond_terminal), promote the tool's scene into
+    # the attachments list so the FE renders it inline.
+    final_attachments = list(final.attachments or [])
+    
+    if tool_scene:
+        # Inject the final LLM text into the tool scene's ai_note
+        if "data" in tool_scene and isinstance(tool_scene["data"], dict):
+            if sanitized and sanitized.strip():
+                tool_scene["data"]["ai_note"] = sanitized.strip()
+        
+        # Remove any auto-generated composer scene (which has 'panels')
+        # so the tool_scene takes precedence.
+        filtered_attachments = []
+        for a in final_attachments:
+            if isinstance(a, dict) and a.get("type") == "scene":
+                # If the generated scene is a composer scene (has 'panels' instead of 'data'), drop it
+                scene_data = a.get("data", {})
+                if "panels" in scene_data:
+                    continue
+            filtered_attachments.append(a)
+        
+        has_scene = any(
+            isinstance(a, dict) and a.get("type") == "scene"
+            for a in filtered_attachments
+        )
+        if not has_scene:
+            filtered_attachments.append({"type": "scene", "data": tool_scene})
+        final_attachments = filtered_attachments
+
     return AIResponse(
         content=sanitized,
         provider=final.provider,
         response_form=final.response_form,
-        attachments=final.attachments,
+        attachments=final_attachments,
         tokens_used=final.tokens_used,
         latency_ms=final.latency_ms,
     )

@@ -45,6 +45,7 @@ interface ChatStoreState {
   openSession: (sessionId: string) => Promise<void>;
   startNewSession: () => void;
   deleteSession: (sessionId: string) => Promise<void>;
+  updateSession: (sessionId: string, summary: string) => Promise<void>;
   sendMessage: (
     content: string,
     inputMethod?: InputMethod,
@@ -203,6 +204,19 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
             ? `Не вдалось видалити сесію: ${err.message}`
             : 'Не вдалось видалити сесію.';
       set({ error: friendly });
+    }
+  },
+
+  updateSession: async (sessionId: string, summary: string) => {
+    // Optimistic update
+    set((s) => ({
+      sessions: s.sessions.map((x) => (x.id === sessionId ? { ...x, summary } : x)),
+    }));
+    try {
+      await chatApi.updateSession(sessionId, { summary });
+    } catch (err) {
+      set({ error: 'Failed to update session summary.' });
+      void get().loadSessions(); // rollback
     }
   },
 

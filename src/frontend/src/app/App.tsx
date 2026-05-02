@@ -13,6 +13,7 @@ import { PhantomFamiliar } from '../components/familiar/PhantomFamiliar';
 import { ToolsOverlay } from '../components/tools/ToolsOverlay';
 import { useUIStore } from '../stores/uiStore';
 import { useFamiliarTriggers } from '../hooks/useFamiliarTriggers';
+import { useAuthStore } from '../stores/authStore';
 
 function GlobalGeolocationManager() {
   const authenticated = useSystemStore((s) => s.authenticated);
@@ -128,11 +129,20 @@ function FamiliarTriggers() {
   return null;
 }
 
+function AutoLoginManager() {
+  const autoLogin = useAuthStore((s) => s.autoLogin);
+  useEffect(() => {
+    void autoLogin();
+  }, [autoLogin]);
+  return null;
+}
+
 /* ─── App Root ────────────────────────────────────────────────────────────── */
 
 export function App() {
   return (
     <Providers>
+      <AutoLoginManager />
       <BrowserRouter>
         <StateTransitionController />
         <GlobalAlwaysOnGate />
@@ -144,7 +154,7 @@ export function App() {
           >
             <Routes>
               <Route
-                path="/settings"
+                path="/settings/:categoryId?"
                 element={
                   <React.Suspense fallback={<PhantomLoader />}>
                     <SettingsPanel />

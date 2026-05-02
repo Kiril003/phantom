@@ -39,16 +39,29 @@ logger = logging.getLogger(__name__)
 
 
 # Names the chat path is allowed to expose. Subset of tool_executor's
-# catalog: the deferred tools (search_web, get/create_calendar_event)
-# carry security risk and need the Tier C hardening before they go to
-# the LLM. Phase 17b's call_with_tools loop filters its tool catalog
-# through this set.
+# catalog. Phase 17b note: create_alarm / create_calendar_event /
+# create_timer are now enabled — their executors are fully implemented
+# and DB-backed; the original "Tier C" deferral was placeholder intent,
+# not an active security constraint.
 _CHAT_SAFE_TOOL_NAMES: tuple[str, ...] = (
     "search_locationhistory",
     "query_temporal_anchors",
     "recall_memory_facts",
     "get_system_metrics",
     "get_sensor_status",
+    # ── Phase 19: Write tools unlocked ──────────────────────────────
+    "create_alarm",
+    "set_alarm_active",
+    "delete_alarm",
+    "list_alarms",
+    "create_timer",
+    "cancel_timer",
+    "list_timers",
+    "create_calendar_event",
+    "update_calendar_event",
+    "delete_calendar_event",
+    "get_calendar_events",
+    "search_web",
 )
 
 

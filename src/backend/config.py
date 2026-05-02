@@ -149,7 +149,7 @@ class PhantomConfig(BaseSettings):
 
     # ── Voice / TTS ───────────────────────────────────────────────────────────
     voice_tts_enabled: bool = True
-    voice_tts_voice: str = "Марина"
+    voice_tts_voice: str = "uk_UA-ukrainian_tts-medium"
     voice_tts_speed: float = 1.0
     voice_tts_alpha: float = 0.3
     voice_tts_beta: float = 0.7
@@ -463,7 +463,7 @@ class PhantomConfig(BaseSettings):
     agent_language_fallback: Literal["uk", "en"] = "en"
 
     # ── Voice / TTS — language-aware (Phase 9.2) ─────────────────────────────
-    voice_tts_voice_uk: str = "uk_UA-lada-x_low"
+    voice_tts_voice_uk: str = "uk_UA-ukrainian_tts-medium"
     voice_tts_voice_en: str = "en_US-amy-low"
     voice_tts_auto_language: bool = True
 
@@ -528,7 +528,7 @@ class PhantomConfig(BaseSettings):
     # the call_with_tools wiring lands in Phase 17b. Per-tool result-row
     # caps below shape the response size that goes back to the LLM —
     # higher = more recall but more tokens.
-    chat_tools_enabled: bool = False
+    chat_tools_enabled: bool = True
     # Day-4 Wave-2 X-1 (ADR-ORC-001): orchestrator scaffold flag. When
     # OFF (default), routes_chat calls chat_pipeline.run unchanged —
     # back-compat invariant preserved. When ON AND the active provider

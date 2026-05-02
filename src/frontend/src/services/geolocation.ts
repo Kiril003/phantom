@@ -22,19 +22,11 @@ export interface GeolocationServiceEvents {
   onPermissionChange?: (state: PermissionState) => void;
 }
 
-const BASE = '/api/v1';
+import { request } from './api';
 
 async function submit(sub: GeolocationSubmission): Promise<void> {
-  const token = localStorage.getItem('phantom_token');
-  const headers: Record<string, string> = { 'Content-Type': 'application/json' };
-  if (token) headers['Authorization'] = `Bearer ${token}`;
   try {
-    await fetch(`${BASE}/map/geolocation/submit`, {
-      method: 'POST',
-      headers,
-      credentials: 'include',
-      body: JSON.stringify(sub),
-    });
+    await request('POST', '/map/geolocation/submit', sub);
   } catch {
     // Silent — the source will go stale after its freshness window and
     // the resolver will fall through to IP estimate or user-stated.

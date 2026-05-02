@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { wsClient, type WSMessage } from '../services/websocket';
 import { useAgentStore } from '../stores/agentStore';
+import { agentApi } from '../services/agentApi';
 import type { AgentEvent, AgentEventType } from '@shared/types';
 
 /**
@@ -13,6 +14,15 @@ export function useAgentStream(): void {
   const setWSConnected = useAgentStore((s) => s.setWSConnected);
 
   useEffect(() => {
+    // Initial sync in case a task is already running when we mount.
+    agentApi.status().then((st) => {
+      if (st.foreground.active && st.foreground.task_id) {
+        useAgentStore.getState().refreshTask(st.foreground.task_id);
+      }
+    }).catch((err) => {
+      console.debug('[AgentStream] Failed to fetch initial status:', err);
+    });
+
     const offChannel = wsClient.on('agent.stream', (msg: WSMessage) => {
       const event: AgentEvent = {
         type: msg.type as AgentEventType,

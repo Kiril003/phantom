@@ -236,6 +236,12 @@ _FORM_MAP: dict[str, str] = {
     "respond_metrics":  "metric_cards",
     "respond_diagram":  "diagram",
     "respond_mixed":    "mixed",
+    # Day-5 W-2c — hallucination safety aliases. Some versions of Gemini
+    # tend to invent respond_alarm/calendar based on tool names; coerce
+    # those back to text so the pipeline proceeds to the tool-scene promotion.
+    "respond_alarm":    "text",
+    "respond_timer":    "text",
+    "respond_calendar": "text",
 }
 
 

@@ -1,11 +1,9 @@
 # PHANTOM Familiar
 
-The Familiar is PHANTOM OS's signature character: a small (~50px) wisp/spirit
-creature in the spirit of a candle-flame ghost. Drop-shape body in translucent
-gradient (white core → amber halo), two dot eyes, a 3-particle tail, and a soft
-amber drop-shadow. Friendly, never spooky. Lives as an App-level overlay above
-content (z=35) and below modals (z=40). Pointer-events: none — ambient, never
-steals touch.
+The Familiar is PHANTOM OS's signature character: an articulated glassmorphism humanoid entity (~110x138px). 
+It embodies the Sunrise aesthetic using a layered translucent body, amber glowing joints (`#f4af25`), and a core crystal. 
+It uses procedural animation and Inverse Kinematics (IK) to interact naturally with the UI. Friendly, organic, never spooky. 
+Lives as an App-level overlay above content (z=35) and below modals (z=40). Pointer-events: none — ambient, never steals touch.
 
 ## Pose taxonomy
 
@@ -65,29 +63,21 @@ in the transcript and triggers the overlay creature on mount.
 
 ## Design batch-3 prompt (paste into claude.ai/design)
 
-> Refine the PHANTOM Familiar wisp character on a 1024×600 canvas. Sunrise
+> Refine the PHANTOM Familiar character on a 1024×600 canvas. Sunrise
 > palette: cream surfaces (#fdf6e9), amber primary #f4af25, orange #fb923c,
-> warm-dark text #1a1612. The creature is a single small entity (~50px)
-> with seven named pose states drawn side-by-side, each labelled. Body is
-> a teardrop shape in translucent radial gradient (white core fading to
-> amber halo); two black dot eyes; three trailing tail-particles in
-> amber. Soft drop-shadow tinted #f4af25 at 40% opacity.
+> warm-dark text #1a1612. The creature is a humanoid entity (~110x138px)
+> with seven named pose states drawn side-by-side, each labelled. The body
+> consists of glassmorphism segments (blur, translucent fills) joined by 
+> glowing amber nodes. Core torso features an amber crystal. Inverse 
+> Kinematics handles limb positioning. Drop-shadow tinted #f4af25 at 22% opacity.
 >
 > Poses to refine:
->   1. **idle** — hovering, gentle bob, both eyes open.
->   2. **floating** — same body, motion-blur trail behind, suggesting drift.
->   3. **pointing** — body unchanged, tendril extending right with a glowing
->      tip; design hint: tendril should look molten, not mechanical.
->   4. **peeking** — clip body to upper half, one eye visible, suggest
->      climbing-out-of-frame.
->   5. **sleeping** — closed-eye lids (short horizontal strokes), three
->      `z` letters rising in Manrope bold, fading.
->   6. **waving** — body tilted -8°, raised tendril at upper-right with
->      glow tip.
->   7. **vanishing** — body at 40% opacity dissolving outward into 6
->      mist-particles in a radial spread.
->
-> For each pose include a 1-line animation hint underneath (e.g. "idle:
-> bob ±1.5px every 2.6s"). Output as a single SVG that can be split into
-> seven `<g>` groups by pose, with stable `id="pose-idle"` etc.
-> Keep the creature playful and friendly — candle-flame ghost, not horror.
+>   1. **idle** — hovering, gentle breath bob, relaxed limbs.
+>   2. **floating** — similar to idle, but drifting via Bezier path, legs swept back slightly.
+>   3. **pointing** — head turned toward target, torso engaged, one arm 
+>      extended using 2-segment IK to trace a glowing amber beam to the target.
+>   4. **peeking** — clip body to upper half, hands gripping the edge of the viewport.
+>   5. **sleeping** — seated cross-legged on the floor, head bowed forward, hands in lap, three
+>      `z` letters rising in serif italic, fading.
+>   6. **waving** — calm gesture, one hand waving on a procedural loop, dignified posture.
+>   7. **vanishing** — glass body dissolves (opacity 0) and is replaced by upward-drifting amber energy ribbons.

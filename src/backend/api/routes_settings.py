@@ -290,10 +290,23 @@ CATEGORY_SPEC: list[dict[str, Any]] = [
             "agent_episodic_memory_enabled",
             "agent_episodic_top_k",
             "agent_localization_enabled",
-            "agent_emotion_enabled",
             "agent_sandbox_profile_default",
+        ],
+    },
+    {
+        "id": "personality",
+        "label": "Характер",
+        "icon": "🧠",
+        "keys": [
+            "agent_emotion_enabled",
             "agent_reflection_every_n_actions",
         ],
+    },
+    {
+        "id": "profile",
+        "label": "Профіль",
+        "icon": "👤",
+        "keys": [],
     },
     {
         "id": "map",

@@ -1,16 +1,21 @@
 /**
  * DecisionCard — single "what is PHANTOM thinking now?" card.
  *
- * Sunrise redesign (phase-5-R1-FE-OPERATOR-1).
+ * Phase 21 redesign — drama upgrade.
  *
- * Each card is a snapshot of an in-flight decision: the action the agent is
- * about to take or the reflection it has just produced. The OperatorLayout
- * stacks 3–4 of these on the right rail, newest on top. Source data is the
- * inner monologue of the most recent plan step (already shipped in
- * AgentPlanStep.monologue).
+ *   • Confidence is rendered as a thin SVG ring framing the eyebrow chip.
+ *     Width of the arc = confidence percentage. Tone shifts ok→primary→alert.
+ *   • Inner monologue (`what_i_plan`) types out at 18 ms / char with a
+ *     blinking caret while typing. Once done the caret hides. Subsequent
+ *     re-renders skip the animation (text stays).
+ *   • Objection (`monologue.objection`) gets a coral "ATTENTION" tab pulled
+ *     out from the right edge with `animate-objection-pull-out` and the
+ *     usual DetailRow remains for full text — drama, not concealment.
+ *   • Active card retains the gentle phantom-pulse glow.
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import {
+  AlertTriangle,
   Lightbulb,
   ShieldAlert,
   Target,
@@ -46,6 +51,54 @@ function clockChip(iso: string | null): string {
   return `${hh}:${mm}`;
 }
 
+/** Reveals the source string one character at a time at the requested speed.
+ *  Honours prefers-reduced-motion (skips animation, returns full string). */
+function useTypewriter(source: string, speedMs = 18): { text: string; typing: boolean } {
+  const [reduced, setReduced] = useState(false);
+  const [out, setOut] = useState(() => source);
+  const [typing, setTyping] = useState(false);
+  const sourceRef = useRef(source);
+
+  useEffect(() => {
+    if (typeof window === 'undefined' || !window.matchMedia) return;
+    const mq = window.matchMedia('(prefers-reduced-motion: reduce)');
+    const update = () => setReduced(mq.matches);
+    update();
+    mq.addEventListener('change', update);
+    return () => mq.removeEventListener('change', update);
+  }, []);
+
+  useEffect(() => {
+    sourceRef.current = source;
+    if (reduced || !source) {
+      setOut(source);
+      setTyping(false);
+      return;
+    }
+    setOut('');
+    setTyping(true);
+    let i = 0;
+    const id = window.setInterval(() => {
+      i += 1;
+      if (sourceRef.current !== source) {
+        // Source changed underneath; let the next effect run handle it.
+        window.clearInterval(id);
+        return;
+      }
+      if (i >= source.length) {
+        setOut(source);
+        setTyping(false);
+        window.clearInterval(id);
+        return;
+      }
+      setOut(source.slice(0, i));
+    }, speedMs);
+    return () => window.clearInterval(id);
+  }, [source, speedMs, reduced]);
+
+  return { text: out, typing };
+}
+
 export function DecisionCard({ data }: Props) {
   const [reducedMotion, setReducedMotion] = useState(false);
 
@@ -70,12 +123,27 @@ export function DecisionCard({ data }: Props) {
         ? 'var(--primary, #f4af25)'
         : 'var(--signal-alert, #ef4444)';
 
+  // Ring geometry — small, roughly framing the eyebrow chip on the left.
+  const ringSize = 30;
+  const ringStroke = 2.4;
+  const ringR = (ringSize - ringStroke) / 2;
+  const ringC = 2 * Math.PI * ringR;
+  const ringDash = (confidencePct / 100) * ringC;
+
+  const headline =
+    monologue?.what_i_plan
+    ?? (reflection
+      ? (reflection.summary || reflection.recommendations || 'Reflection completed.')
+      : '');
+  const { text: typedHeadline, typing } = useTypewriter(headline);
+
   return (
     <article
       data-testid="decision-card"
       data-active={active ? 'true' : 'false'}
       className="flex flex-col gap-2 p-3"
       style={{
+        position: 'relative',
         background: active
           ? 'color-mix(in srgb, var(--primary, #f4af25) 10%, var(--glass-card, rgba(255,255,255,0.7)))'
           : 'var(--glass-card, rgba(255,255,255,0.7))',
@@ -88,10 +156,102 @@ export function DecisionCard({ data }: Props) {
           : 'var(--shadow-sm, 0 2px 8px rgba(120,70,10,0.04))',
         animation:
           active && !reducedMotion ? 'phantom-pulse 2.2s ease-in-out infinite' : 'none',
+        overflow: 'hidden', // contains the objection tab
       }}
     >
-      {/* Eyebrow row */}
+      {/* Objection drama tab — pulled out from the right edge. */}
+      {monologue?.objection && (
+        <div
+          className="animate-objection-pull-out"
+          data-testid="decision-objection-tab"
+          style={{
+            position: 'absolute',
+            top: 10,
+            right: 0,
+            transformOrigin: 'right center',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+            padding: '3px 10px 3px 8px',
+            borderRadius: '12px 0 0 12px',
+            background:
+              'linear-gradient(90deg, color-mix(in srgb, var(--coral, #ef4444) 40%, transparent), color-mix(in srgb, var(--coral, #ef4444) 70%, transparent))',
+            color: '#fff',
+            fontSize: 'var(--fs-xxs, 10px)',
+            fontWeight: 800,
+            letterSpacing: '0.16em',
+            textTransform: 'uppercase',
+            fontFamily: 'var(--font-mono)',
+            boxShadow: '0 4px 12px color-mix(in srgb, var(--coral, #ef4444) 35%, transparent)',
+          }}
+        >
+          <AlertTriangle size={11} strokeWidth={2.4} />
+          OBJECTION
+        </div>
+      )}
+
+      {/* Eyebrow row — confidence ring frames the eyebrow chip on the left. */}
       <header className="flex items-center gap-2">
+        <span
+          aria-hidden
+          style={{
+            position: 'relative',
+            width: ringSize,
+            height: ringSize,
+            flexShrink: 0,
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+          }}
+          data-testid="decision-confidence-ring"
+          data-confidence={confidencePct}
+        >
+          <svg
+            width={ringSize}
+            height={ringSize}
+            viewBox={`0 0 ${ringSize} ${ringSize}`}
+            style={{
+              position: 'absolute',
+              inset: 0,
+              transform: 'rotate(-90deg)',
+            }}
+          >
+            <circle
+              cx={ringSize / 2}
+              cy={ringSize / 2}
+              r={ringR}
+              stroke="rgba(0,0,0,0.08)"
+              strokeWidth={ringStroke}
+              fill="none"
+            />
+            <circle
+              cx={ringSize / 2}
+              cy={ringSize / 2}
+              r={ringR}
+              stroke={confidenceTone}
+              strokeWidth={ringStroke}
+              strokeLinecap="round"
+              fill="none"
+              strokeDasharray={`${ringDash} ${ringC - ringDash}`}
+              style={{
+                transition: reducedMotion ? 'none' : 'stroke-dasharray 320ms ease',
+              }}
+            />
+          </svg>
+          <span
+            className="font-mono"
+            style={{
+              position: 'relative',
+              fontSize: 'var(--fs-xxs, 10px)',
+              fontWeight: 800,
+              color: confidenceTone,
+              lineHeight: 1,
+            }}
+          >
+            {confidencePct}
+          </span>
+        </span>
+
         <span
           className="font-mono"
           style={{
@@ -140,29 +300,33 @@ export function DecisionCard({ data }: Props) {
         </span>
       </header>
 
-      {/* Headline */}
-      {monologue?.what_i_plan && (
+      {/* Headline (typewriter) */}
+      {headline && (
         <p
           className="leading-snug"
           style={{
             color: 'var(--ink-primary)',
             fontSize: 'var(--fs-sm)',
             margin: 0,
+            minHeight: 18,
           }}
+          data-testid="decision-headline"
         >
-          {monologue.what_i_plan}
-        </p>
-      )}
-      {!monologue && reflection && (
-        <p
-          className="leading-snug"
-          style={{
-            color: 'var(--ink-primary)',
-            fontSize: 'var(--fs-sm)',
-            margin: 0,
-          }}
-        >
-          {reflection.summary || reflection.recommendations || 'Reflection completed.'}
+          {typedHeadline}
+          {typing && (
+            <span
+              aria-hidden
+              style={{
+                display: 'inline-block',
+                width: 1.5,
+                height: '0.95em',
+                marginLeft: 2,
+                verticalAlign: 'text-bottom',
+                background: 'var(--primary-shadow, #8a5e0a)',
+                animation: 'caret-blink 0.8s steps(1) infinite',
+              }}
+            />
+          )}
         </p>
       )}
 
@@ -207,7 +371,7 @@ export function DecisionCard({ data }: Props) {
         )}
       </dl>
 
-      {/* Confidence bar */}
+      {/* Confidence bar — kept as fine-grain readout under the ring. */}
       <footer className="flex items-center gap-2 mt-1">
         <TrendingUp size={11} strokeWidth={2.2} color={confidenceTone} />
         <span

@@ -283,6 +283,7 @@ function SubGoalCapsule({
   return (
     <li
       data-testid={`plan-tree-node-${subGoal.status}`}
+      data-subgoal-id={subGoal.id}
       style={{ position: 'relative', listStyle: 'none' }}
     >
       <div className="flex items-start gap-2.5">

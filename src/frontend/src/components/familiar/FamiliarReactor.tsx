@@ -1,17 +1,25 @@
 /**
- * Phase 18-COMPLETE — FamiliarReactor.
+ * FamiliarReactor — Phase 18-COMPLETE + Phase 21 expansion.
  *
  * Bridges agent state ↔ familiar manifestations. The screen-vision +
  * Council + InfoNeed + report-ready paths all gain a tiny visual punch
  * without touching the agent loop or the existing `useFamiliarTriggers`
  * hook (which handles state-machine + idle + greeting cases).
  *
- * Mapping:
+ * Phase 18-COMPLETE mapping (kept as-is):
  *   currentInfoNeed appears                → pose='pointing' (notice me)
  *   council.consensus_reached              → pose='waving'   (we agreed)
  *   task.report_ready (reportPending set)  → pose='waving'   (presenting)
- *   task.promoted_to_background           → pose='peeking'  (still watching)
+ *   task.promoted_to_background            → pose='peeking'  (still watching)
  *   high-risk action just executed         → pose='pointing' (caution)
+ *
+ * Phase 21 additions — agent task health drives Familiar posture:
+ *   status: running → done                 → pose='waving'   (triumphant)
+ *   status: running → failed/stopped       → pose='peeking'  (concerned)
+ *   status: running → awaiting_user        → pose='pointing' (look at this)
+ *   status: any → blocked_quota            → pose='pointing' (skeleton mode)
+ *   activeSubGoal.id changes               → pose='pointing'
+ *                                            target=[data-subgoal-id=...]
  *
  * All summons go through `familiarStore.manifest('ai-summon', …)` which
  * bypasses the rarity gate + cooldown — the operator MUST see the
@@ -33,6 +41,9 @@ export function FamiliarReactor(): null {
   const councilDecision = useAgentStore((s) => s.councilDecision);
   const promotedToBackgroundAt = useAgentStore((s) => s.promotedToBackgroundAt);
   const recentActions = useAgentStore((s) => s.recentActions);
+  // Phase 21 — task health + active sub-goal awareness.
+  const status = useAgentStore((s) => s.status);
+  const subGoals = useAgentStore((s) => s.subGoals);
   const manifest = useFamiliarStore((s) => s.manifest);
 
   // Track which singletons we've already reacted to so a long-lived
@@ -42,6 +53,9 @@ export function FamiliarReactor(): null {
   const seenCouncilTimestamp = useRef<string | null>(null);
   const seenPromotedKeys = useRef<Set<string>>(new Set());
   const lastActionAuditId = useRef<number | null>(null);
+  // Phase 21 — status edge detection.
+  const lastStatusRef = useRef<string | null>(null);
+  const lastActiveSubGoalIdRef = useRef<string | null>(null);
 
   useEffect(() => {
     if (reportPending && reportPending.task_id !== seenReportId.current) {
@@ -100,6 +114,47 @@ export function FamiliarReactor(): null {
       });
     }
   }, [promotedToBackgroundAt, manifest]);
+
+  // Phase 21 — task status transitions drive Familiar posture.
+  useEffect(() => {
+    const prev = lastStatusRef.current;
+    lastStatusRef.current = status;
+    if (prev === null || prev === status) return;
+    // Edge cases worth a manifestation. We deliberately skip transitions
+    // INTO 'idle' and OUT of 'idle' to avoid noise on every task start.
+    if (status === 'done') {
+      manifest('ai-summon', { pose: 'waving', message: 'Готово, як просили.', durationMs: 4500 });
+    } else if (status === 'failed' || status === 'stopped') {
+      manifest('ai-summon', { pose: 'peeking', message: 'Не дотиснув.', durationMs: 3500 });
+    } else if (status === 'awaiting_user') {
+      manifest('ai-summon', { pose: 'pointing', message: 'Потрібен ти.', durationMs: 3500 });
+    } else if (status === 'blocked_quota' && prev !== 'blocked_quota') {
+      manifest('ai-summon', {
+        pose: 'pointing',
+        message: 'Працюю на скелеті — без хмари.',
+        durationMs: 4000,
+      });
+    }
+  }, [status, manifest]);
+
+  // Phase 21 — when the active sub-goal changes, briefly point at it.
+  useEffect(() => {
+    const active = subGoals.find((sg) => sg.status === 'active');
+    const id = active?.id ?? null;
+    if (!id || id === lastActiveSubGoalIdRef.current) {
+      if (!id) lastActiveSubGoalIdRef.current = null;
+      return;
+    }
+    lastActiveSubGoalIdRef.current = id;
+    // Use the data-subgoal-id selector that PlanTree exposes so the
+    // Familiar's tendril resolves to the right capsule on screen.
+    manifest('ai-summon', {
+      pose: 'pointing',
+      message: active?.description ?? undefined,
+      durationMs: 2800,
+      target: { selector: `[data-subgoal-id="${id}"]` },
+    });
+  }, [subGoals, manifest]);
 
   useEffect(() => {
     if (recentActions.length === 0) {

@@ -542,6 +542,69 @@ async def submit_feedback(
     return {"id": fb_id}
 
 
+# ── Phase 18 — Screen / desktop control endpoints ──────────────────────────
+
+
+@router.get("/screen/capture")
+async def get_screen_capture(
+    x: int | None = Query(default=None),
+    y: int | None = Query(default=None),
+    w: int | None = Query(default=None),
+    h: int | None = Query(default=None),
+    return_base64: bool = Query(default=True),
+    _: TokenPayload = Depends(require_auth),
+) -> dict:
+    """Capture the operator's desktop. Returns base64 PNG by default.
+
+    Backend cascade picks mss → grim → scrot → import. If none are
+    installed, the response carries `ok=False` + `tried` list so the
+    operator UI can prompt them to install grim/scrot.
+    """
+    from agent.actions.device import ScreenCapture
+    from agent.actions.base import ActionContext
+    region = None
+    if all(v is not None for v in (x, y, w, h)):
+        region = [int(x), int(y), int(w), int(h)]
+    cap = ScreenCapture(region=region, return_base64=return_base64)
+    ctx = ActionContext(task_id="screen-route", step_idx=0, workspace_dir="/tmp")
+    result = await cap.execute(ctx)
+    if not result.ok:
+        raise HTTPException(
+            status_code=503,
+            detail={
+                "error": result.error,
+                "tried": (result.output or {}).get("tried"),
+            },
+        )
+    return {"ok": True, **(result.output or {})}
+
+
+@router.get("/screen/ocr")
+async def get_screen_ocr(
+    x: int | None = Query(default=None),
+    y: int | None = Query(default=None),
+    w: int | None = Query(default=None),
+    h: int | None = Query(default=None),
+    languages: str = Query(default="ukr+eng"),
+    min_confidence: float = Query(default=30.0, ge=0.0, le=100.0),
+    _: TokenPayload = Depends(require_auth),
+) -> dict:
+    from agent.actions.device import ScreenOCR
+    from agent.actions.base import ActionContext
+    region = None
+    if all(v is not None for v in (x, y, w, h)):
+        region = [int(x), int(y), int(w), int(h)]
+    ocr = ScreenOCR(region=region, languages=languages, min_confidence=min_confidence)
+    ctx = ActionContext(task_id="screen-route", step_idx=0, workspace_dir="/tmp")
+    result = await ocr.execute(ctx)
+    if not result.ok:
+        raise HTTPException(
+            status_code=503,
+            detail={"error": result.error, "tried": (result.output or {}).get("tried")},
+        )
+    return {"ok": True, **(result.output or {})}
+
+
 # ── Standing orders (Phase 9.3b) ─────────────────────────────────────────────
 
 

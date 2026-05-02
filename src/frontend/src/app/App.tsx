@@ -11,6 +11,7 @@ import { SystemState } from '@shared/types';
 import { geolocationService, BrowserGeolocationService } from '../services/geolocation';
 import { ToolsOverlay } from '../components/tools/ToolsOverlay';
 import { AgentSessionHistory } from '../components/agent/AgentSessionHistory';
+import { AgentVisionPanel } from '../components/agent/AgentVisionPanel';
 import { AgentStudioOverlay } from '../components/studio/AgentStudioOverlay';
 import { useUIStore } from '../stores/uiStore';
 import { useFamiliarTriggers } from '../hooks/useFamiliarTriggers';
@@ -164,6 +165,7 @@ export function App() {
             <ToolsOverlayMount />
             <AgentSessionHistoryMount />
             <StudioOverlayMount />
+            <AgentVisionMount />
           </div>
         </ViewportFrame>
       </BrowserRouter>
@@ -175,6 +177,12 @@ function StudioOverlayMount() {
   const open = useUIStore((s) => s.studioOpen);
   const setOpen = useUIStore((s) => s.setStudioOpen);
   return <AgentStudioOverlay open={open} onClose={() => setOpen(false)} />;
+}
+
+function AgentVisionMount() {
+  const open = useUIStore((s) => s.visionOpen);
+  const setOpen = useUIStore((s) => s.setVisionOpen);
+  return <AgentVisionPanel open={open} onClose={() => setOpen(false)} />;
 }
 
 function ToolsOverlayMount() {

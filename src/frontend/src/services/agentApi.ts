@@ -136,6 +136,46 @@ export const agentApi = {
       applied: Array<{ op: string; id?: string; count?: number }>;
       sub_goals: import('@shared/types').AgentSubGoal[];
     }>('PATCH', `/agent/task/${taskId}/plan`, { diffs }),
+  // Phase 18 — Screen capture + OCR HTTP wrappers (no task spawn needed).
+  screenCapture: (region?: { x: number; y: number; w: number; h: number }) => {
+    const qs = new URLSearchParams();
+    qs.set('return_base64', 'true');
+    if (region) {
+      qs.set('x', String(region.x));
+      qs.set('y', String(region.y));
+      qs.set('w', String(region.w));
+      qs.set('h', String(region.h));
+    }
+    return req<{
+      ok: boolean;
+      width: number;
+      height: number;
+      strategy: string;
+      png_base64: string;
+      size_bytes: number;
+      captured_at: number;
+    }>('GET', `/agent/screen/capture?${qs.toString()}`);
+  },
+  screenOcr: (
+    region?: { x: number; y: number; w: number; h: number },
+    languages = 'ukr+eng',
+  ) => {
+    const qs = new URLSearchParams();
+    qs.set('languages', languages);
+    if (region) {
+      qs.set('x', String(region.x));
+      qs.set('y', String(region.y));
+      qs.set('w', String(region.w));
+      qs.set('h', String(region.h));
+    }
+    return req<{
+      ok: boolean;
+      lines: Array<{ text: string; x: number; y: number; w: number; h: number; confidence: number }>;
+      image_width: number;
+      image_height: number;
+      languages: string;
+    }>('GET', `/agent/screen/ocr?${qs.toString()}`);
+  },
   // Phase 17a — Council manual trigger.
   runCouncilRound: (
     taskId: string,

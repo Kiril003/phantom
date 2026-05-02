@@ -69,6 +69,9 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
   // Phase 17b — Agent Studio overlay (mounted at App level).
   const studioOpen = useUIStore((s) => s.studioOpen);
   const setStudioOpen = useUIStore((s) => s.setStudioOpen);
+  // Phase 18 — AgentVisionPanel (мощуть бачити що бачить агент).
+  const visionOpen = useUIStore((s) => s.visionOpen);
+  const setVisionOpen = useUIStore((s) => s.setVisionOpen);
 
   const voiceMode = useSettingsStore(
     (s) => (s.values.voice_mode as 'off' | 'continuous' | 'wake_word' | undefined) ?? 'off',
@@ -220,6 +223,17 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
       active: studioOpen,
       onClick: () => {
         setStudioOpen(!studioOpen);
+        setMoreMenuOpen(false);
+      },
+    },
+    {
+      id: 'vision',
+      icon: 'visibility',
+      label: 'Очі',
+      tooltip: 'Бачити що бачить агент (екран + OCR)',
+      active: visionOpen,
+      onClick: () => {
+        setVisionOpen(!visionOpen);
         setMoreMenuOpen(false);
       },
     },

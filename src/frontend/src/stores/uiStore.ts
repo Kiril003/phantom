@@ -104,6 +104,13 @@ interface UIStoreState {
    */
   studioOpen: boolean;
   setStudioOpen: (v: boolean) => void;
+
+  /**
+   * Phase 18 — AgentVisionPanel ("очі агента"). Operator toggles to
+   * see what the agent sees on the desktop, with optional OCR overlay.
+   */
+  visionOpen: boolean;
+  setVisionOpen: (v: boolean) => void;
 }
 
 /**
@@ -325,4 +332,7 @@ export const useUIStore = create<UIStoreState>((set, get) => ({
 
   studioOpen: false,
   setStudioOpen: (v) => set({ studioOpen: v }),
+
+  visionOpen: false,
+  setVisionOpen: (v) => set({ visionOpen: v }),
 }));

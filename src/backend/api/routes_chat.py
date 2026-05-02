@@ -163,8 +163,11 @@ def _serialize_session(session: ChatSession) -> dict[str, Any]:
     state_history = []
     try:
         state_history = json.loads(session.state_history_json or "[]")
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.warning(
+            "chat.serialize: state_history_json corrupt for session=%s — %s",
+            session.id, exc,
+        )
     return {
         "id": session.id,
         "user_id": session.user_id,
@@ -313,7 +316,11 @@ async def _build_ai_response(
     # to `True` explicitly via Settings UI.
     if config.chat_tools_enabled is True:
         from ai.chat_pipeline import run as chat_pipeline_run
-        ai_response = await chat_pipeline_run(
+        from ai.agents.orchestrator import run_orchestrator
+        ai_response = await run_orchestrator(
+            user_text=user_message,
+            provider=ai_router.active_provider_name,
+            chat_pipeline_run=chat_pipeline_run,
             user_message=user_message,
             system_prompt=system_prompt,
             history=history,

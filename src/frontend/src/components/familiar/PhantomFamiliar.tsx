@@ -96,8 +96,49 @@ function resolveTargetRect(
 }
 
 /** Compute the anchor point for a manifestation. */
+function getSafeAnchor(preferredX: number, desiredY: number): { x: number, y: number } {
+  // Check if we overlap with any major UI panels. We keep it light:
+  // query for [role="dialog"], .glass-panel.
+  // The familiar bounds are FAMILIAR_W x FAMILIAR_H.
+  const myW = 130;
+  const myH = 182;
+  let cx = preferredX;
+  let cy = desiredY;
+  
+  if (typeof document === 'undefined') return { x: cx, y: cy };
+
+  const obstacles = Array.from(document.querySelectorAll('[role="dialog"], .glass-panel, .shadow-panel'));
+  
+  for (const el of obstacles) {
+    const rect = el.getBoundingClientRect();
+    // basic AABB intersection check
+    if (
+      cx < rect.right &&
+      cx + myW > rect.left &&
+      cy < rect.bottom &&
+      cy + myH > rect.top
+    ) {
+      // Collision detected. Push the familiar up or left
+      if (rect.top > myH + 20) {
+        cy = rect.top - myH - 20; // push up
+      } else {
+        cx = rect.left - myW - 20; // push left
+      }
+    }
+  }
+
+  // Ensure still within screen
+  cx = Math.max(0, Math.min(1024 - myW, cx));
+  cy = Math.max(0, Math.min(600 - myH, cy));
+  
+  return { x: cx, y: cy };
+}
+
 function anchorFor(m: FamiliarManifestation | null): AnchorPoint {
-  if (!m) return HOME_ANCHOR;
+  if (!m) {
+    const safeHome = getSafeAnchor(HOME_X, HOME_Y); 
+    return { ...HOME_ANCHOR, x: safeHome.x, y: safeHome.y };
+  }
 
   switch (m.pose) {
     case 'pointing': {
@@ -153,9 +194,14 @@ function anchorFor(m: FamiliarManifestation | null): AnchorPoint {
       const target = resolveTargetRect(m);
       const tx = target?.x ?? FRAME_W * 0.5;
       const ty = target?.y ?? FRAME_H * 0.45;
-      return {
+      const base = {
         x: Math.max(4, Math.min(FRAME_W - FAMILIAR_W - 4, tx - FAMILIAR_W / 2)),
-        y: Math.max(4, Math.min(FRAME_H - FAMILIAR_H - 4, ty - FAMILIAR_H / 2)),
+        y: Math.max(4, Math.min(FRAME_H - FAMILIAR_H - 4, ty - FAMILIAR_H / 2))
+      };
+      const safe = getSafeAnchor(base.x, base.y);
+      return {
+        x: safe.x,
+        y: safe.y,
         pointAngle: 0,
         pointLength: 0,
       };

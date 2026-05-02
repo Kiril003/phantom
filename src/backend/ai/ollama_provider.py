@@ -101,18 +101,23 @@ class OllamaProvider(AIProvider):
     ) -> AIResponse:
         # Phase 10 — Ollama fallback does NOT participate in the chat
         # data-tool roundtrip; it produces a best-effort plain response.
-        # `user_id` is accepted for interface parity and ignored.
-        del user_id
         client = self._client()
         messages = _build_messages(user_message, system_prompt, history)
-        tools = _build_ollama_tools()
+        
+        # Only use RESPONSE_FORM_TOOLS if this is a chat turn (user_id is present).
+        # Planners (like strategic planner) do not pass user_id and expect strict JSON,
+        # so passing chat tools confuses the model.
+        tools = _build_ollama_tools() if user_id is not None else None
+        
+        kwargs = {
+            "model": config.ai_ollama_model,
+            "messages": messages,
+            "options": self._options(),
+        }
+        if tools:
+            kwargs["tools"] = tools
 
-        response = await client.chat(
-            model=config.ai_ollama_model,
-            messages=messages,
-            tools=tools,
-            options=self._options(),
-        )
+        response = await client.chat(**kwargs)
 
         msg = response.message
         fn_name: str | None = None

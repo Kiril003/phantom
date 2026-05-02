@@ -206,12 +206,17 @@ class GeminiProvider(AIProvider):
         contents = _build_contents(user_message, history)
 
         with_data_tools = user_id is not None
-        catalog = (
-            [*RESPONSE_FORM_TOOLS, *CHAT_DATA_TOOLS] if with_data_tools
-            else list(RESPONSE_FORM_TOOLS)
-        )
-        tools = _build_gemini_tools(catalog)
-        tools_no_data = _build_gemini_tools(list(RESPONSE_FORM_TOOLS))
+        
+        # Only use chat tools if user_id is provided. Planners (like strategic planner)
+        # do not pass user_id and expect strict text/JSON output, so passing tools
+        # would confuse the model into calling a response formatter tool.
+        if user_id is not None:
+            catalog = [*RESPONSE_FORM_TOOLS, *CHAT_DATA_TOOLS]
+            tools = _build_gemini_tools(catalog)
+            tools_no_data = _build_gemini_tools(list(RESPONSE_FORM_TOOLS))
+        else:
+            tools = None
+            tools_no_data = None
 
         base_gen_kwargs = dict(
             system_instruction=system_prompt,
@@ -219,11 +224,13 @@ class GeminiProvider(AIProvider):
             top_p=config.ai_top_p,
             top_k=40,
             max_output_tokens=config.ai_max_tokens,
-            tool_config=types.ToolConfig(
-                function_calling_config=types.FunctionCallingConfig(mode="AUTO"),
-            ),
             safety_settings=[types.SafetySetting(**s) for s in _SAFETY_OFF],
         )
+        
+        if tools is not None:
+            base_gen_kwargs["tool_config"] = types.ToolConfig(
+                function_calling_config=types.FunctionCallingConfig(mode="AUTO"),
+            )
 
         data_calls_made = 0
         tool_trace: list[dict[str, Any]] = []
@@ -234,9 +241,11 @@ class GeminiProvider(AIProvider):
                 tools if (with_data_tools and data_calls_made < MAX_TOOL_CALLS_PER_TURN)
                 else tools_no_data
             )
-            gen_config = types.GenerateContentConfig(
-                tools=current_tools, **base_gen_kwargs,
-            )
+            gen_kwargs = {**base_gen_kwargs}
+            if current_tools is not None:
+                gen_kwargs["tools"] = current_tools
+                
+            gen_config = types.GenerateContentConfig(**gen_kwargs)
             response = await client.aio.models.generate_content(
                 model=config.ai_gemini_model,
                 contents=contents,

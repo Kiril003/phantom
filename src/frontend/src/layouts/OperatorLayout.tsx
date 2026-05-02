@@ -211,20 +211,12 @@ export default function OperatorLayout() {
             minHeight: 80,
           }}
         >
-          {/* Status orb */}
-          <div
-            aria-hidden
-            style={{
-              width: 56,
-              height: 56,
-              flexShrink: 0,
-              borderRadius: 999,
-              background: 'var(--accent-radial, radial-gradient(circle at 30% 30%, #fff8e0, #f4af25, #fb923c))',
-              boxShadow:
-                '0 0 18px color-mix(in srgb, var(--primary, #f4af25) 50%, transparent)',
-              animation: taskActive ? 'orb-breathe 3s ease-in-out infinite' : 'none',
-              position: 'relative',
-            }}
+          {/* Status orb — wears the overall plan-progress ring on its sleeve. */}
+          <HeroOrb
+            taskActive={taskActive}
+            doneSteps={subGoals.filter((sg) => sg.status === 'done').length}
+            totalSteps={subGoals.length}
+            tone={pill.color}
           />
           <div className="flex-1 min-w-0 flex flex-col gap-1">
             <div className="flex items-center gap-2">
@@ -573,6 +565,84 @@ export default function OperatorLayout() {
   );
 }
 
+/**
+ * HeroOrb — the breathing dot at the top-left of the operator hero, now
+ * wearing an SVG progress ring that mirrors the overall plan completion.
+ * Gives the operator one place to glance for "how far is this run?"
+ * without reading the PlanTree counter.
+ */
+function HeroOrb({
+  taskActive,
+  doneSteps,
+  totalSteps,
+  tone,
+}: {
+  taskActive: boolean;
+  doneSteps: number;
+  totalSteps: number;
+  tone: string;
+}) {
+  const size = 56;
+  const stroke = 3;
+  const r = (size - stroke) / 2;
+  const c = 2 * Math.PI * r;
+  const pct = totalSteps > 0 ? Math.max(0, Math.min(1, doneSteps / totalSteps)) : 0;
+  const dash = pct * c;
+  return (
+    <div
+      aria-hidden
+      style={{
+        position: 'relative',
+        width: size,
+        height: size,
+        flexShrink: 0,
+      }}
+      data-testid="hero-orb"
+      data-progress-pct={Math.round(pct * 100)}
+    >
+      <div
+        style={{
+          position: 'absolute',
+          inset: 6,
+          borderRadius: 999,
+          background:
+            'var(--accent-radial, radial-gradient(circle at 30% 30%, #fff8e0, #f4af25, #fb923c))',
+          boxShadow: '0 0 18px color-mix(in srgb, var(--primary, #f4af25) 50%, transparent)',
+          animation: taskActive ? 'orb-breathe 3s ease-in-out infinite' : 'none',
+        }}
+      />
+      {totalSteps > 0 && (
+        <svg
+          width={size}
+          height={size}
+          viewBox={`0 0 ${size} ${size}`}
+          style={{ position: 'absolute', inset: 0, transform: 'rotate(-90deg)' }}
+        >
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            stroke="rgba(0,0,0,0.06)"
+            strokeWidth={stroke}
+            fill="none"
+          />
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={r}
+            stroke={tone}
+            strokeWidth={stroke}
+            strokeLinecap="round"
+            fill="none"
+            strokeDasharray={`${dash} ${c - dash}`}
+            style={{ transition: 'stroke-dasharray 380ms ease' }}
+          />
+        </svg>
+      )}
+    </div>
+  );
+}
+
 function BudgetChip({
   label,
   value,
@@ -586,17 +656,26 @@ function BudgetChip({
   pct: number;
   sub: string;
 }) {
+  // Phase 21 — coral warning band when the budget is nearly exhausted so
+  // the operator notices the limit before it blows up the run.
+  const tight = pct >= 90;
   return (
     <div
       className="flex flex-col gap-1 px-3 py-2"
       style={{
         minWidth: 112,
         borderRadius: 10,
-        background: 'rgba(255,255,255,0.55)',
-        border: '1px solid rgba(255,255,255,0.6)',
+        background: tight
+          ? 'color-mix(in srgb, var(--coral, #ef4444) 10%, rgba(255,255,255,0.55))'
+          : 'rgba(255,255,255,0.55)',
+        border: tight
+          ? '1px solid color-mix(in srgb, var(--coral, #ef4444) 36%, transparent)'
+          : '1px solid rgba(255,255,255,0.6)',
         flexShrink: 0,
+        transition: 'background 320ms ease, border 320ms ease',
       }}
       data-testid={`budget-chip-${label.toLowerCase()}`}
+      data-tight={tight ? 'true' : 'false'}
     >
       <span
         className="font-mono"
@@ -640,9 +719,10 @@ function BudgetChip({
           style={{
             width: `${Math.max(0, Math.min(100, pct))}%`,
             height: '100%',
-            background:
-              'linear-gradient(90deg, var(--primary, #f4af25), var(--orange, #fb923c))',
-            transition: 'width 320ms ease',
+            background: tight
+              ? 'linear-gradient(90deg, var(--coral, #ef4444), var(--coral-deep, #b9201f))'
+              : 'linear-gradient(90deg, var(--primary, #f4af25), var(--orange, #fb923c))',
+            transition: 'width 320ms ease, background 320ms ease',
           }}
         />
       </div>

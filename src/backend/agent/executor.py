@@ -15,6 +15,7 @@ from config import config
 from .actions.base import ActionContext
 from .actions.registry import ActionRegistry, registry as default_registry
 from .audit import write_audit_entry
+from .long_running import ProgressTracker, should_promote
 from .safety.preconditions import check_preconditions
 from .schemas import ActionResult, PlanStep, RiskLevel
 
@@ -126,9 +127,39 @@ async def execute(
         runtime=runtime,
     )
 
+    # Phase 18-COMPLETE — promote long-running actions onto the background
+    # track BEFORE we await execute(), so the operator UI is freed the
+    # moment we know the action will take a while. We also spawn a
+    # ProgressTracker that broadcasts heartbeats while the action runs;
+    # cancelled in the finally block below.
+    long_spec = None
+    progress_tracker: ProgressTracker | None = None
+    try:
+        long_spec = action.long_running_spec()
+    except Exception:
+        logger.exception("executor: long_running_spec() failed for %s", step.action)
+
+    if long_spec is not None and runtime is not None:
+        state = runtime._state_for_task(task_id) if hasattr(runtime, "_state_for_task") else None
+        if state is not None:
+            if should_promote(long_spec, state.track):
+                try:
+                    await runtime.promote_to_background(state, reason="long_running_action")
+                except Exception:
+                    logger.exception("executor: promote_to_background failed")
+            progress_tracker = ProgressTracker(
+                runtime=runtime, task_id=task_id, spec=long_spec, action_name=step.action,
+            )
+            progress_tracker.start()
+
     # Per-action ceiling. Ceiling kept slightly above the action's own internal
     # timeout so well-behaved actions don't get aborted on a normal long path.
     ceiling = int(config.agent_max_elapsed_s_per_action)
+    # If the action declares a long-running spec, raise the per-action ceiling
+    # to its estimated duration (with a small safety margin) — otherwise the
+    # generic ceiling would kill BlenderRun(timeout_s=1800) at 5 min.
+    if long_spec is not None:
+        ceiling = max(ceiling, int(long_spec.estimated_duration_s) + 30)
 
     t0 = time.monotonic()
     cancelled_by_user = False
@@ -182,6 +213,8 @@ async def execute(
     finally:
         if runtime is not None and runtime._current_action_task is exec_task:
             runtime._current_action_task = None
+        if progress_tracker is not None:
+            await progress_tracker.stop()
 
     audit_id = await write_audit_entry(
         task_id=task_id, step=step, result=result, risk_level=risk_level,

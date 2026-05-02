@@ -22,6 +22,7 @@ from typing import Any, ClassVar
 
 from pydantic import Field
 
+from ..long_running import LongRunningSpec
 from ..schemas import ActionResult, Precondition, RiskLevel
 from .base import Action, ActionContext
 
@@ -329,6 +330,17 @@ class BlenderRun(Action):
     output_path: str | None = Field(default=None, description="optional render output")
     timeout_s: int = Field(default=1800, ge=10, le=86400)
     args: list[str] = Field(default_factory=list)
+
+    def long_running_spec(self) -> LongRunningSpec | None:
+        # Anything bigger than ~5 min — promote so the operator UI is freed.
+        # Smaller cube-test scripts stay foreground (cheap to wait through).
+        if int(self.timeout_s) <= 300:
+            return None
+        return LongRunningSpec(
+            estimated_duration_s=int(self.timeout_s),
+            progress_checkpoint_interval_s=60,
+            label="Blender headless render",
+        )
 
     async def execute(self, ctx: ActionContext) -> ActionResult:
         import asyncio

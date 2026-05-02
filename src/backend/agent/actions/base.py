@@ -42,5 +42,19 @@ class Action(BaseModel, ABC):
         """Override to declare runtime preconditions."""
         return []
 
+    def long_running_spec(self) -> "LongRunningSpec | None":
+        """Phase 18-COMPLETE: opt-in declaration that this action is
+        expected to run for minutes-to-hours. Returning a spec triggers
+        foreground→background track promotion + periodic progress
+        heartbeats. Default None = treat as a normal foreground step.
+        Implemented as an instance method so subclasses can derive the
+        decision from their args (e.g. a small timeout_s stays foreground)."""
+        return None
+
     @abstractmethod
     async def execute(self, ctx: ActionContext) -> ActionResult: ...
+
+
+# Re-imported here to keep the type reference resolvable in subclasses
+# without forcing every Action import to also pull long_running.
+from ..long_running import LongRunningSpec  # noqa: E402  (deliberate late import)

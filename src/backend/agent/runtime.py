@@ -113,6 +113,12 @@ class TaskState:
     origin: str = "user"
     order_id: str | None = None
     timeout_s: int | None = None
+    # Phase 18-COMPLETE — periodic progress heartbeats from long-running
+    # actions. Populated by ProgressTracker; replayed by
+    # `GET /tasks/{id}/progress` for UI hydration after reconnect. Bounded
+    # to ~240 entries by the tracker's _record method.
+    progress_checkpoints: list[Any] = field(default_factory=list)
+    promoted_to_background_at: float | None = None
 
 
 @dataclass
@@ -232,6 +238,72 @@ class AgentRuntime:
             self.background_slot = state
         else:
             self.foreground_slot = state
+
+    async def promote_to_background(
+        self,
+        state: TaskState,
+        *,
+        reason: str = "long_running",
+    ) -> bool:
+        """Phase 18-COMPLETE — flip a running foreground task onto the
+        background track so the operator regains the foreground while
+        the long-running action keeps making progress.
+
+        Returns True on success. Refuses (returns False) when:
+          * `state` is not currently the foreground slot
+          * the background slot is already occupied by an active task
+
+        The asyncio.Task handle is migrated alongside the slot pointer
+        so cancel / status paths still find the right runner.
+        """
+        if self.foreground_slot is not state or state.track != "foreground":
+            logger.debug("promote_to_background: state mismatch, no-op")
+            return False
+        if self.background_slot is not None and self.background_slot.status in {
+            "running", "waiting_for_user", "blocked_quota", "queued",
+        }:
+            logger.info(
+                "promote_to_background: bg slot busy (%s), staying foreground",
+                self.background_slot.status,
+            )
+            return False
+
+        state.track = "background"
+        state.promoted_to_background_at = time.time()
+        self.foreground_slot = None
+        self.background_slot = state
+        # Inherit substate so the FE doesn't see a "thinking…" pulse stop
+        # the moment we promote.
+        self.background_substate = self.foreground_substate
+        self.foreground_substate = "idle"
+        self.background_runner = self.task_runner
+        self.task_runner = None
+
+        try:
+            from core.state_machine import state_machine
+            # Foreground is now free — drop OPERATOR substate cleanly so the
+            # state-machine doesn't keep advertising "agent is here".
+            state_machine.set_operator_substate("idle")
+        except Exception:  # noqa: BLE001
+            pass
+
+        await self._broadcast("task.promoted_to_background", {
+            "task_id": state.id,
+            "reason": reason,
+            "promoted_at": state.promoted_to_background_at,
+        })
+        # Switch the ContextVar so subsequent broadcasts from the running
+        # coroutine route on the background_events channel.
+        try:
+            current_track.set("background")
+        except Exception:  # noqa: BLE001
+            pass
+        # A queued foreground task can now start, if any. Foreground queue is
+        # never populated today (Phase 9.1 contract) but we wire the drain
+        # for symmetry.
+        if self._track_queues["foreground"]:
+            asyncio.create_task(self._drain_queue("foreground"))
+        return True
 
     def queue_size(self, track: Track) -> int:
         return len(self._track_queues.get(track, ()))

@@ -16,6 +16,11 @@ from .ask_user import AskUser
 from .base import Action
 from .bash import BashRun
 from .browser import BrowserClickByDescription, BrowserExtract, BrowserNavigate
+from .device import (
+    ESP32Haptic, ESP32OLEDText, ESP32RGB,
+    ScreenCapture, ScreenClick, ScreenKeyCombo,
+    ScreenOCR, ScreenScroll, ScreenType,
+)
 from .fs import FsRead, FsWrite
 from .net import NetScan
 from .notify import NotifyDesktop
@@ -39,6 +44,10 @@ _REGISTERED: list[Type[Action]] = [
     AskUser,
     # Phase 17a.5 — iterative corroboration search.
     WebResearch,
+    # Phase 18 — desktop / screen / ESP32 actor control.
+    ScreenCapture, ScreenOCR,
+    ScreenClick, ScreenType, ScreenKeyCombo, ScreenScroll,
+    ESP32Haptic, ESP32RGB, ESP32OLEDText,
 ]
 
 

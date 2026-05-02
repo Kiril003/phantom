@@ -477,6 +477,114 @@ class GameInputBurst(Action):
         )
 
 
+
+# ── AT-SPI semantic targeting (Phase 18-COMPLETE) ───────────────────────────
+
+
+class ATSPIFindByLabel(Action):
+    """Locate an on-screen control by its accessibility label, without OCR.
+
+    Returns ok=False / error_class='ATSPIUnavailable' on systems where
+    pyatspi or the a11y daemon are missing — the planner is expected to
+    fall back to screen.ocr + screen.click in that case.
+    """
+
+    name: ClassVar[str] = "atspi.find_by_label"
+    risk_level: ClassVar[RiskLevel] = RiskLevel.SAFE
+    reversible: ClassVar[bool] = True
+
+    label: str = Field(min_length=1, max_length=200)
+    role: str | None = Field(default=None, max_length=64,
+                             description="optional semantic filter (e.g. 'push button')")
+    app: str | None = Field(default=None, max_length=128,
+                            description="optional app-name substring filter")
+
+    async def execute(self, ctx: ActionContext) -> ActionResult:
+        from input import atspi_bridge as ab
+        try:
+            node = await ab.find_by_label(self.label, role=self.role, app=self.app)
+        except ab.ATSPIUnavailable as exc:
+            return ActionResult(
+                ok=False, error=str(exc), error_class="ATSPIUnavailable", elapsed_ms=0,
+            )
+        if node is None:
+            return ActionResult(
+                ok=False, error=f"no atspi match for label={self.label!r}",
+                error_class="NotFound", elapsed_ms=0,
+            )
+        x, y, w, h = node.bbox
+        return ActionResult(
+            ok=True,
+            output={
+                "label": node.name,
+                "role": node.role,
+                "description": node.description,
+                "bbox": [x, y, w, h],
+                "click_point": [int(x + w // 2), int(y + h // 2)],
+                "app": node.app,
+                "pid": node.pid,
+            },
+            elapsed_ms=0,
+        )
+
+
+class ATSPIClickByLabel(Action):
+    """Find an accessibility-labelled control and click its centre.
+
+    Combines `atspi.find_by_label` with `desktop_control.click` for the
+    common one-shot case so the planner doesn't need to chain two
+    actions just to press OK.
+    """
+
+    name: ClassVar[str] = "atspi.click_by_label"
+    risk_level: ClassVar[RiskLevel] = RiskLevel.LOW
+    reversible: ClassVar[bool] = False
+
+    label: str = Field(min_length=1, max_length=200)
+    role: str | None = Field(default=None, max_length=64)
+    app: str | None = Field(default=None, max_length=128)
+    button: str = Field(default="left", pattern=r"^(left|middle|right)$")
+    double: bool = False
+
+    async def execute(self, ctx: ActionContext) -> ActionResult:
+        from input import atspi_bridge as ab
+        from input import desktop_control as dc
+        try:
+            node = await ab.find_by_label(self.label, role=self.role, app=self.app)
+        except ab.ATSPIUnavailable as exc:
+            return ActionResult(
+                ok=False, error=str(exc), error_class="ATSPIUnavailable", elapsed_ms=0,
+            )
+        if node is None:
+            return ActionResult(
+                ok=False, error=f"no atspi match for label={self.label!r}",
+                error_class="NotFound", elapsed_ms=0,
+            )
+        x, y, w, h = node.bbox
+        cx, cy = int(x + max(1, w // 2)), int(y + max(1, h // 2))
+        try:
+            if self.double:
+                ok = await dc.double_click(cx, cy, button=self.button)
+            else:
+                ok = await dc.click(cx, cy, button=self.button)
+        except dc.ControlBackendError as exc:
+            return ActionResult(
+                ok=False, error=str(exc), error_class="ControlBackendError", elapsed_ms=0,
+            )
+        return ActionResult(
+            ok=bool(ok),
+            output={
+                "label": node.name,
+                "role": node.role,
+                "click_point": [cx, cy],
+                "button": self.button,
+                "double": self.double,
+            },
+            side_effects=["mouse_click"],
+            elapsed_ms=0,
+        )
+
+
 __all__ = [
     "ScreenCapture",
     "ScreenOCR",
@@ -489,4 +597,6 @@ __all__ = [
     "ESP32OLEDText",
     "BlenderRun",
     "GameInputBurst",
+    "ATSPIFindByLabel",
+    "ATSPIClickByLabel",
 ]

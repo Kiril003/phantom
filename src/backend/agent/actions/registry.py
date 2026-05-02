@@ -17,6 +17,7 @@ from .base import Action
 from .bash import BashRun
 from .browser import BrowserClickByDescription, BrowserExtract, BrowserNavigate
 from .device import (
+    ATSPIClickByLabel, ATSPIFindByLabel,
     BlenderRun, ESP32Haptic, ESP32OLEDText, ESP32RGB,
     GameInputBurst, ScreenCapture, ScreenClick,
     ScreenKeyCombo, ScreenOCR, ScreenScroll, ScreenType,
@@ -50,6 +51,8 @@ _REGISTERED: list[Type[Action]] = [
     ESP32Haptic, ESP32RGB, ESP32OLEDText,
     # Phase 18 — long-running headless apps + high-frequency game input.
     BlenderRun, GameInputBurst,
+    # Phase 18-COMPLETE — semantic UI targeting via AT-SPI.
+    ATSPIFindByLabel, ATSPIClickByLabel,
 ]
 
 

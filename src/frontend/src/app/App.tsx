@@ -15,6 +15,7 @@ import { AgentVisionPanel } from '../components/agent/AgentVisionPanel';
 import { AgentStudioOverlay } from '../components/studio/AgentStudioOverlay';
 import { useUIStore } from '../stores/uiStore';
 import { useFamiliarTriggers } from '../hooks/useFamiliarTriggers';
+import { FamiliarReactor } from '../components/familiar/FamiliarReactor';
 import { useAuthStore } from '../stores/authStore';
 
 function GlobalGeolocationManager() {
@@ -161,6 +162,7 @@ export function App() {
             </Routes>
             <Overlays />
             <FamiliarTriggers />
+            <FamiliarReactor />
             {/* <PhantomFamiliar /> */}
             <ToolsOverlayMount />
             <AgentSessionHistoryMount />

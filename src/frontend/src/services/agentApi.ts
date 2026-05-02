@@ -197,4 +197,9 @@ export const agentApi = {
     req<{ decision: AgentCouncilDecision }>(
       'POST', `/agent/task/${taskId}/council/round`, body,
     ),
+  // Phase 18-COMPLETE — long-running task progress hydration.
+  getProgress: (taskId: string) =>
+    req<import('@shared/types').AgentProgressSnapshot>(
+      'GET', `/agent/task/${taskId}/progress`,
+    ),
 };

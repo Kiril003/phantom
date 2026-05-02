@@ -6,6 +6,8 @@ import type {
   AgentInfoNeed,
   AgentObservation,
   AgentPlanStep,
+  AgentProgressSnapshot,
+  AgentProgressUpdate,
   AgentReflectionResult,
   AgentRoleStatement,
   AgentSubGoal,
@@ -104,6 +106,11 @@ interface AgentState {
   historyTasks: AgentTaskSummary[];
   historyLoading: boolean;
   historyError: string | null;
+  // Phase 18-COMPLETE — long-running task progress heartbeats.
+  progressByTaskId: Record<string, AgentProgressUpdate[]>;
+  progressEtaByTaskId: Record<string, number | null>;
+  promotedToBackgroundAt: Record<string, number>;
+  progressLoading: Record<string, boolean>;
 
   // Setters
   setWSConnected: (connected: boolean) => void;
@@ -150,6 +157,9 @@ interface AgentState {
   // Phase 16 — past-run browsing.
   loadHistory: (status?: string, limit?: number) => Promise<void>;
   clearHistory: () => void;
+  // Phase 18-COMPLETE — progress hydration (REST replay after WS reconnect).
+  loadProgress: (taskId: string) => Promise<AgentProgressSnapshot | null>;
+  clearProgress: (taskId: string) => void;
 
   // Event surface
   handleEvent: (e: AgentEvent) => void;
@@ -200,6 +210,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   historyTasks: [],
   historyLoading: false,
   historyError: null,
+  progressByTaskId: {},
+  progressEtaByTaskId: {},
+  promotedToBackgroundAt: {},
+  progressLoading: {},
 
   setWSConnected: (connected) => set({ wsConnected: connected }),
   setPromptToUser: (prompt) => set({ promptToUser: prompt }),
@@ -335,6 +349,65 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   },
 
   clearHistory: () => set({ historyTasks: [], historyError: null }),
+
+  // Phase 18-COMPLETE — pull the in-memory progress snapshot for a long-
+  // running task. Used by LongRunningTaskCard to hydrate after WS reconnect.
+  loadProgress: async (taskId) => {
+    set({
+      progressLoading: { ...get().progressLoading, [taskId]: true },
+    });
+    try {
+      const snap = await agentApi.getProgress(taskId);
+      const baseUpdates: AgentProgressUpdate[] = (snap.checkpoints || []).map(
+        (c) => ({
+          task_id: snap.task_id,
+          kind: 'checkpoint',
+          label: c.label,
+          percent: c.percent ?? null,
+          at: c.at,
+          extra: (c.extra as AgentProgressUpdate['extra']) ?? {},
+        }),
+      );
+      set({
+        progressByTaskId: {
+          ...get().progressByTaskId,
+          [taskId]: baseUpdates,
+        },
+        progressEtaByTaskId: {
+          ...get().progressEtaByTaskId,
+          [taskId]: snap.eta_remaining_s ?? null,
+        },
+        promotedToBackgroundAt: snap.promoted_to_background_at
+          ? {
+              ...get().promotedToBackgroundAt,
+              [taskId]: snap.promoted_to_background_at,
+            }
+          : get().promotedToBackgroundAt,
+        progressLoading: { ...get().progressLoading, [taskId]: false },
+      });
+      return snap;
+    } catch (err) {
+      console.warn('agent loadProgress failed', err);
+      set({
+        progressLoading: { ...get().progressLoading, [taskId]: false },
+      });
+      return null;
+    }
+  },
+  clearProgress: (taskId) => {
+    const { progressByTaskId, progressEtaByTaskId, promotedToBackgroundAt, progressLoading } = get();
+    const drop = <T extends Record<string, unknown>>(o: T): T => {
+      if (!(taskId in o)) return o;
+      const { [taskId]: _omit, ...rest } = o;
+      return rest as T;
+    };
+    set({
+      progressByTaskId: drop(progressByTaskId),
+      progressEtaByTaskId: drop(progressEtaByTaskId),
+      promotedToBackgroundAt: drop(promotedToBackgroundAt),
+      progressLoading: drop(progressLoading),
+    });
+  },
 
   // ── Phase 17a.5 — InfoNeed ───────────────────────────────────────────────
 
@@ -544,6 +617,48 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         patch.connectionStatus = 'idle';
         break;
       }
+      case 'task.progress': {
+        // Phase 18-COMPLETE — heartbeat from a long-running action's
+        // ProgressTracker. Append to the per-task ring (cap 240 to match
+        // backend) and refresh the ETA mirror.
+        const taskId = String(e.payload.task_id ?? '');
+        if (!taskId) break;
+        const update: AgentProgressUpdate = {
+          task_id: taskId,
+          kind: (e.payload.kind as 'checkpoint' | 'eta_update') ?? 'checkpoint',
+          label: String(e.payload.label ?? ''),
+          percent: (e.payload.percent as number | null | undefined) ?? null,
+          at: Number(e.payload.at ?? Date.now() / 1000),
+          extra: (e.payload.extra as AgentProgressUpdate['extra']) ?? {},
+        };
+        const existing = get().progressByTaskId[taskId] ?? [];
+        const next = [...existing, update].slice(-240);
+        const eta = update.extra?.eta_remaining_s;
+        patch.progressByTaskId = {
+          ...get().progressByTaskId,
+          [taskId]: next,
+        };
+        patch.progressEtaByTaskId = {
+          ...get().progressEtaByTaskId,
+          [taskId]: typeof eta === 'number' ? eta : (get().progressEtaByTaskId[taskId] ?? null),
+        };
+        break;
+      }
+      case 'task.promoted_to_background': {
+        // Phase 18-COMPLETE — runtime flipped this task fg→bg because its
+        // current action declared a long_running_spec. Mirror the timestamp
+        // so the LongRunningTaskCard can show "moved at HH:MM, freed
+        // foreground" without polling /status.
+        const taskId = String(e.payload.task_id ?? '');
+        const at = Number(e.payload.promoted_at ?? Date.now() / 1000);
+        if (taskId) {
+          patch.promotedToBackgroundAt = {
+            ...get().promotedToBackgroundAt,
+            [taskId]: at,
+          };
+        }
+        break;
+      }
       case 'task.report_ready': {
         // Phase 16 — backend just composed a TaskReport for the finished
         // task. Surface it through reportPending so OperatorLayout shows
@@ -730,5 +845,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     councilSituationSummary: null,
     councilStatements: [],
     councilDecision: null,
+    // Phase 18-COMPLETE — drop progress maps on reset.
+    progressByTaskId: {},
+    progressEtaByTaskId: {},
+    promotedToBackgroundAt: {},
+    progressLoading: {},
   }),
 }));

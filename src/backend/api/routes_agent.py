@@ -511,6 +511,69 @@ async def get_agent_status(_: TokenPayload = Depends(require_auth)) -> dict:
     }
 
 
+@router.get("/task/{task_id}/progress")
+async def get_task_progress(
+    task_id: str,
+    _: TokenPayload = Depends(require_auth),
+) -> dict:
+    """
+    Phase 18-COMPLETE — replay heartbeats from a long-running action.
+
+    The agent runtime keeps progress checkpoints in-memory on the
+    TaskState while a long-running action is in flight (Blender renders,
+    multi-stage research crawls, etc.). The FE LongRunningTaskCard hits
+    this endpoint on mount + after WS reconnects to hydrate the chart.
+
+    Response shape:
+      {
+        "task_id": str,
+        "track": "foreground" | "background",
+        "started_at": float | null,        # epoch seconds
+        "promoted_to_background_at": float | null,
+        "estimated_duration_s": int | null,
+        "eta_remaining_s": int | null,
+        "checkpoints": [{"at", "label", "percent?", "extra"}, ...],
+      }
+
+    Returns 404 only when the task is neither active nor in either slot.
+    """
+    state = agent_runtime._state_for_task(task_id)
+    if state is None:
+        raise HTTPException(404, f"task '{task_id}' not active")
+
+    checkpoints_payload: list[dict] = []
+    for ck in getattr(state, "progress_checkpoints", []) or []:
+        try:
+            checkpoints_payload.append({
+                "at": ck.at,
+                "label": ck.label,
+                "percent": ck.percent,
+                "extra": dict(ck.extra) if ck.extra else {},
+            })
+        except AttributeError:
+            # Robust against the bucket holding plain dicts during tests.
+            checkpoints_payload.append(dict(ck) if isinstance(ck, dict) else {})
+
+    estimated = None
+    eta_remaining = None
+    if checkpoints_payload:
+        last_extra = checkpoints_payload[-1].get("extra") or {}
+        estimated = last_extra.get("elapsed_s")
+        eta_remaining = last_extra.get("eta_remaining_s")
+
+    return {
+        "task_id": state.id,
+        "track": state.track,
+        "started_at": state.started_at,
+        "promoted_to_background_at": getattr(
+            state, "promoted_to_background_at", None,
+        ),
+        "estimated_duration_s": estimated,
+        "eta_remaining_s": eta_remaining,
+        "checkpoints": checkpoints_payload,
+    }
+
+
 @router.get("/router_state")
 async def get_router_state(_: TokenPayload = Depends(require_auth)) -> dict:
     """

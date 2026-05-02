@@ -51,6 +51,44 @@ export type AgentReflectionVerdict =
 
 export type AgentTrack = 'foreground' | 'background';
 
+// Phase 18-COMPLETE — long-running action progress heartbeats.
+export type AgentProgressKind = 'checkpoint' | 'eta_update';
+
+export interface AgentProgressUpdate {
+  task_id: string;
+  kind: AgentProgressKind;
+  label: string;
+  percent: number | null;
+  at: number;
+  extra: {
+    action?: string;
+    elapsed_s?: number;
+    eta_remaining_s?: number;
+    [key: string]: unknown;
+  };
+}
+
+export interface AgentProgressSnapshot {
+  task_id: string;
+  track: AgentTrack;
+  started_at: number | null;
+  promoted_to_background_at: number | null;
+  estimated_duration_s: number | null;
+  eta_remaining_s: number | null;
+  checkpoints: Array<{
+    at: number;
+    label: string;
+    percent: number | null;
+    extra: Record<string, unknown>;
+  }>;
+}
+
+export interface AgentTaskPromotedEvent {
+  task_id: string;
+  reason: string;
+  promoted_at: number;
+}
+
 export type AgentRiskLevel = 1 | 3 | 5 | 7; // SAFE / LOW / MEDIUM / HIGH
 
 export interface AgentInnerMonologue {
@@ -375,6 +413,9 @@ export type AgentEventType =
   // NOT auto-dismiss the OPERATOR layout. Operator must acknowledge via
   // POST /agent/task/{id}/dismiss-report or POST .../resume-as-conversation.
   | 'task.report_ready'
+  // Phase 18-COMPLETE — long-running progress heartbeats + fg→bg promotion.
+  | 'task.progress'
+  | 'task.promoted_to_background'
   // Phase 17 — Council deliberation lifecycle.
   | 'council.round_started'
   | 'council.role_spoke'

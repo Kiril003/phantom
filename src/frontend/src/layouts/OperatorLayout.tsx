@@ -334,6 +334,7 @@ export default function OperatorLayout() {
               subGoals={subGoals}
               recentActions={recentActions}
               activeSubGoalId={activeSubGoal?.id ?? null}
+              taskActive={taskActive}
             />
           </div>
 

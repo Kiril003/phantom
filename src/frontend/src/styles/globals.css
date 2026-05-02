@@ -617,3 +617,88 @@ body.state-transitioning::after {
 .animate-rfid-scan {
   animation: rfid-scan 3s linear infinite;
 }
+
+/* ─── Phase 21 — Agent layer living-capsule keyframes ─────────────────── */
+
+/* Active sub-goal capsule: gentle breathing scale + shadow lift.
+ * 5s loop — slower than orb-breathe so multiple capsules don't sync-strobe. */
+@keyframes capsule-breathe {
+  0%, 100% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--primary, #f4af25) 40%, transparent),
+      0 4px 14px color-mix(in srgb, var(--primary, #f4af25) 18%, transparent);
+  }
+  50% {
+    box-shadow:
+      0 0 0 1px color-mix(in srgb, var(--primary, #f4af25) 60%, transparent),
+      0 6px 22px color-mix(in srgb, var(--primary, #f4af25) 32%, transparent);
+  }
+}
+
+/* Inner shimmer sweep — a slow translucent gradient slides L→R inside the
+ * progress-fill of an active capsule. Runs in tandem with capsule-breathe
+ * so the active node literally has "життя всередині". */
+@keyframes capsule-shimmer {
+  0%   { background-position:   0% 0; }
+  100% { background-position: 200% 0; }
+}
+
+/* Spine flow — vertical gradient drift down the PlanTree spine while a
+ * task is running. Communicates "energy is flowing through the plan". */
+@keyframes spine-flow {
+  0%   { background-position: 0 0; }
+  100% { background-position: 0 100%; }
+}
+
+/* Decision-card confidence ring rotation — used as a soft conic sweep. */
+@keyframes confidence-ring-rotate {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* Objection tab pulled out — shake-in from the right edge with a coral
+ * flash. Single-shot, runs on mount when objection appears. */
+@keyframes objection-pull-out {
+  0%   { transform: translateX(100%); opacity: 0; }
+  60%  { transform: translateX(-6%);  opacity: 1; }
+  80%  { transform: translateX(2%);   opacity: 1; }
+  100% { transform: translateX(0);    opacity: 1; }
+}
+
+/* Typewriter caret — used in DecisionCard monologue. */
+@keyframes caret-blink {
+  0%, 49%   { opacity: 1; }
+  50%, 100% { opacity: 0; }
+}
+
+.animate-capsule-breathe {
+  animation: capsule-breathe 5s ease-in-out infinite;
+}
+.animate-capsule-shimmer {
+  background-size: 200% 100%;
+  animation: capsule-shimmer 6s linear infinite;
+}
+.animate-spine-flow {
+  background-size: 100% 200%;
+  animation: spine-flow 4s linear infinite;
+}
+.animate-confidence-ring {
+  animation: confidence-ring-rotate 8s linear infinite;
+}
+.animate-objection-pull-out {
+  animation: objection-pull-out 480ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-capsule-breathe,
+  .animate-capsule-shimmer,
+  .animate-spine-flow,
+  .animate-confidence-ring {
+    animation: none !important;
+  }
+  .animate-objection-pull-out {
+    animation: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+  }
+}

@@ -31,6 +31,7 @@ from .planner._llm import BlockedQuotaError, PlannerLLMError
 from .safety.circuit_breakers import TaskBudget, evaluate as evaluate_breaker
 from .schemas import (
     ActionResult,
+    CouncilSituation,
     Observation,
     PlanStep,
     ReflectionResult,
@@ -39,6 +40,7 @@ from .schemas import (
     SubGoalStatus,
     ThoughtBudget,
 )
+from .orchestrator import maybe_consult_council
 
 if TYPE_CHECKING:
     from .runtime import AgentRuntime, TaskState
@@ -407,7 +409,25 @@ async def _run_task_loop_impl(runtime: "AgentRuntime", state: "TaskState", *, re
                     await asyncio.sleep(0.5)
                     continue
                 if ref.verdict == "revise_strategy":
-                    if not await _ensure_strategic_plan(runtime, state, revise_note=ref.recommendations or ""):
+                    # Phase 17 — consult the Council before re-planning so the
+                    # revise_note carries cross-perspective input. The hook is
+                    # no-op when mode picker says 'single' or LLM is offline
+                    # (deterministic personas still produce a usable consensus).
+                    council_decision = await maybe_consult_council(
+                        CouncilSituation(
+                            kind="strategic_revise",
+                            task_id=state.id,
+                            summary=(ref.summary or ref.recommendations or "Перегляд стратегії")[:600],
+                            context={"recommendations": ref.recommendations or ""},
+                        ),
+                        runtime=runtime,
+                    )
+                    revise_note = ref.recommendations or ""
+                    if council_decision is not None and council_decision.consensus_summary:
+                        revise_note = (
+                            (revise_note + "\n\nConsensus: " + council_decision.consensus_summary[:300]).strip()
+                        )
+                    if not await _ensure_strategic_plan(runtime, state, revise_note=revise_note):
                         return
                     actions_in_subgoal = 0
                     continue

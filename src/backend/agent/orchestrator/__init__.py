@@ -17,6 +17,7 @@ from .council import Council
 from .modes import pick_orchestrator_mode
 from .role import AgentRole, build_default_council_roles
 from .quality_gate import QualityGate, run_quality_gate
+from .runtime_hooks import maybe_consult_council, run_quality_gate_for
 
 __all__ = [
     "Council",
@@ -25,4 +26,6 @@ __all__ = [
     "pick_orchestrator_mode",
     "QualityGate",
     "run_quality_gate",
+    "maybe_consult_council",
+    "run_quality_gate_for",
 ]

@@ -326,6 +326,55 @@ class StandingOrderRunner:
         except json.JSONDecodeError as exc:
             logger.warning("standing order %s action_json invalid: %s", order.id, exc)
             return False
+
+        # Phase 17b — `kind=custom_agent` fires a saved CustomAgent instead
+        # of a plain start_task. Falls back to the legacy goal-based path
+        # for everything else (kind in {"task", None, ...}).
+        if action.get("kind") == "custom_agent":
+            agent_id = str(action.get("agent_id") or "").strip()
+            if not agent_id:
+                logger.warning("standing order %s custom_agent without agent_id", order.id)
+                return False
+            try:
+                from agent.studio.repository import get_agent
+                from agent.studio.runner import run_custom_agent
+                from agent.studio.models import RunSpec
+                custom_agent = await get_agent(agent_id)
+                if custom_agent is None:
+                    logger.warning(
+                        "standing order %s references missing custom_agent %s",
+                        order.id, agent_id,
+                    )
+                    return False
+                inputs = action.get("inputs") if isinstance(action.get("inputs"), dict) else {}
+                spec = RunSpec(
+                    agent_id=agent_id,
+                    inputs=inputs,
+                    track=action.get("track") or "background",  # type: ignore[arg-type]
+                    note=action.get("note"),
+                )
+                task_id, run_id = await run_custom_agent(
+                    custom_agent, spec,
+                    triggered_by="schedule",
+                )
+            except TrackBusyError as exc:
+                logger.info(
+                    "standing order %s (custom_agent) deferred — background full (queue=%d)",
+                    order.id, exc.queue_size,
+                )
+                return False
+            except Exception as exc:
+                logger.error(
+                    "standing order %s custom_agent dispatch raised: %s",
+                    order.id, exc,
+                )
+                return False
+            now = _utcnow()
+            await self._update_fire_stats(
+                order.id, now, f"custom_agent={agent_id} task={task_id} run={run_id}",
+            )
+            return True
+
         goal = (action.get("goal") or order.description or "").strip()
         if not goal:
             logger.warning("standing order %s has empty goal — skipping", order.id)

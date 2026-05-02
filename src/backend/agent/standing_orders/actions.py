@@ -81,8 +81,24 @@ class WebhookAction(BaseModel):
     body: Optional[dict] = None
 
 
+class CustomAgentAction(BaseModel):
+    """Phase 17b — fires a saved Studio CustomAgent on schedule.
+
+    The runner (see `runner._fire_order`) resolves `agent_id` against
+    the studio repository and routes through `studio.runner.run_custom_agent`,
+    which compiles the cards DAG + run-time inputs into a regular agent
+    runtime task tagged with `[custom:{name}]`.
+    """
+
+    kind: Literal["custom_agent"] = "custom_agent"
+    agent_id: str = Field(..., min_length=1, max_length=64)
+    inputs: dict = Field(default_factory=dict)
+    track: Literal["foreground", "background"] = "background"
+    note: Optional[str] = None
+
+
 ActionSpec = Annotated[
-    Union[SpeakAction, NotifyAction, TaskAction, WebhookAction],
+    Union[SpeakAction, NotifyAction, TaskAction, WebhookAction, CustomAgentAction],
     Field(discriminator="kind"),
 ]
 

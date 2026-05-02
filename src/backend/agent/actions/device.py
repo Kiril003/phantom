@@ -295,6 +295,161 @@ class ESP32OLEDText(Action):
         return ActionResult(ok=True, output={"chars": len(self.text)}, side_effects=["oled"], elapsed_ms=0)
 
 
+# ── Long-running headless apps ──────────────────────────────────────────────
+
+
+class BlenderRun(Action):
+    """Run Blender headless with a Python script — for "build a city" /
+    procedural-modelling flows. Long-running by design; the loop will
+    auto-shift the parent task to the background track when expected_duration
+    is large.
+    """
+
+    name: ClassVar[str] = "blender.run"
+    risk_level: ClassVar[RiskLevel] = RiskLevel.LOW
+    reversible: ClassVar[bool] = False
+
+    script_path: str = Field(min_length=1)
+    blend_path: str | None = Field(default=None, description="optional .blend to open")
+    output_path: str | None = Field(default=None, description="optional render output")
+    timeout_s: int = Field(default=1800, ge=10, le=86400)
+    args: list[str] = Field(default_factory=list)
+
+    async def execute(self, ctx: ActionContext) -> ActionResult:
+        import asyncio
+        import shutil
+        import time
+        if shutil.which("blender") is None:
+            return ActionResult(
+                ok=False, error="blender binary not in PATH (install blender)",
+                error_class="BinaryMissing", elapsed_ms=0,
+            )
+        cmd = ["blender", "--background"]
+        if self.blend_path:
+            cmd.append(self.blend_path)
+        cmd += ["--python", self.script_path]
+        if self.output_path:
+            cmd += ["--render-output", self.output_path]
+        cmd += list(self.args)
+        t0 = time.monotonic()
+        try:
+            proc = await asyncio.create_subprocess_exec(
+                *cmd,
+                stdout=asyncio.subprocess.PIPE,
+                stderr=asyncio.subprocess.PIPE,
+            )
+            try:
+                stdout, stderr = await asyncio.wait_for(
+                    proc.communicate(), timeout=self.timeout_s,
+                )
+            except asyncio.TimeoutError:
+                with __import__("contextlib").suppress(Exception):
+                    proc.kill()
+                return ActionResult(
+                    ok=False, error="blender timed out",
+                    error_class="TimeoutError",
+                    elapsed_ms=int((time.monotonic() - t0) * 1000),
+                )
+            elapsed = int((time.monotonic() - t0) * 1000)
+            if proc.returncode != 0:
+                return ActionResult(
+                    ok=False,
+                    error=(stderr or b"").decode(errors="replace")[:600],
+                    error_class="BlenderNonZeroExit",
+                    output={"returncode": proc.returncode, "stdout_tail": (stdout or b"")[-400:].decode(errors="replace")},
+                    elapsed_ms=elapsed,
+                )
+            return ActionResult(
+                ok=True,
+                output={
+                    "returncode": 0,
+                    "stdout_tail": (stdout or b"")[-400:].decode(errors="replace"),
+                    "output_path": self.output_path,
+                },
+                elapsed_ms=elapsed,
+                side_effects=["blender_render"],
+            )
+        except FileNotFoundError as exc:
+            return ActionResult(
+                ok=False, error=str(exc), error_class="BinaryMissing", elapsed_ms=0,
+            )
+
+
+class GameInputBurst(Action):
+    """High-frequency input sequence — for playing games on the operator's
+    behalf. Each step is one of:
+      {"kind": "click", "x": int, "y": int, "button"?: "left"|"right"}
+      {"kind": "key", "key": str}        # single key (xdotool/ydotool keysym)
+      {"kind": "combo", "keys": [str]}    # like ['ctrl', 'shift', 'k']
+      {"kind": "type", "text": str}
+      {"kind": "wait", "ms": int}
+      {"kind": "move", "x": int, "y": int}
+
+    `ms_between` is the default delay between steps that don't carry
+    their own timing.
+    """
+
+    name: ClassVar[str] = "screen.game_burst"
+    risk_level: ClassVar[RiskLevel] = RiskLevel.LOW
+    reversible: ClassVar[bool] = False
+
+    steps: list[dict] = Field(min_length=1)
+    ms_between: int = Field(default=40, ge=0, le=5000)
+
+    async def execute(self, ctx: ActionContext) -> ActionResult:
+        import asyncio
+        import time
+        from input import desktop_control as dc
+        applied: list[dict] = []
+        t0 = time.monotonic()
+        for step in self.steps:
+            try:
+                kind = (step.get("kind") or "").lower()
+                if kind == "click":
+                    await dc.click(int(step["x"]), int(step["y"]),
+                                   button=str(step.get("button") or "left"))
+                elif kind == "double_click":
+                    await dc.double_click(int(step["x"]), int(step["y"]),
+                                          button=str(step.get("button") or "left"))
+                elif kind == "key":
+                    await dc.key_combo([str(step["key"])])
+                elif kind == "combo":
+                    await dc.key_combo([str(k) for k in (step.get("keys") or [])])
+                elif kind == "type":
+                    await dc.type_text(str(step.get("text") or ""))
+                elif kind == "move":
+                    await dc.move(int(step["x"]), int(step["y"]))
+                elif kind == "wait":
+                    await asyncio.sleep(int(step.get("ms") or 0) / 1000.0)
+                else:
+                    return ActionResult(
+                        ok=False, error=f"unknown game-burst kind: {kind!r}",
+                        error_class="ValueError",
+                        elapsed_ms=int((time.monotonic() - t0) * 1000),
+                    )
+                applied.append({"kind": kind})
+                if self.ms_between and kind != "wait":
+                    await asyncio.sleep(self.ms_between / 1000.0)
+            except dc.ControlBackendError as exc:
+                return ActionResult(
+                    ok=False, error=str(exc), error_class="ControlBackendError",
+                    output={"applied": applied},
+                    elapsed_ms=int((time.monotonic() - t0) * 1000),
+                )
+            except Exception as exc:
+                return ActionResult(
+                    ok=False, error=str(exc), error_class=type(exc).__name__,
+                    output={"applied": applied},
+                    elapsed_ms=int((time.monotonic() - t0) * 1000),
+                )
+        return ActionResult(
+            ok=True,
+            output={"applied": applied, "step_count": len(applied)},
+            elapsed_ms=int((time.monotonic() - t0) * 1000),
+            side_effects=["game_input"],
+        )
+
+
 __all__ = [
     "ScreenCapture",
     "ScreenOCR",
@@ -305,4 +460,6 @@ __all__ = [
     "ESP32Haptic",
     "ESP32RGB",
     "ESP32OLEDText",
+    "BlenderRun",
+    "GameInputBurst",
 ]

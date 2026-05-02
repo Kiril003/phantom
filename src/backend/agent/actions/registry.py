@@ -17,9 +17,9 @@ from .base import Action
 from .bash import BashRun
 from .browser import BrowserClickByDescription, BrowserExtract, BrowserNavigate
 from .device import (
-    ESP32Haptic, ESP32OLEDText, ESP32RGB,
-    ScreenCapture, ScreenClick, ScreenKeyCombo,
-    ScreenOCR, ScreenScroll, ScreenType,
+    BlenderRun, ESP32Haptic, ESP32OLEDText, ESP32RGB,
+    GameInputBurst, ScreenCapture, ScreenClick,
+    ScreenKeyCombo, ScreenOCR, ScreenScroll, ScreenType,
 )
 from .fs import FsRead, FsWrite
 from .net import NetScan
@@ -48,6 +48,8 @@ _REGISTERED: list[Type[Action]] = [
     ScreenCapture, ScreenOCR,
     ScreenClick, ScreenType, ScreenKeyCombo, ScreenScroll,
     ESP32Haptic, ESP32RGB, ESP32OLEDText,
+    # Phase 18 — long-running headless apps + high-frequency game input.
+    BlenderRun, GameInputBurst,
 ]
 
 

@@ -150,9 +150,12 @@ describe('MobilePairing — generate QR', () => {
     await screen.findByAltText(/Pairing QR code/i);
     expect(screen.getByText('phantom.local')).toBeTruthy();
     expect(screen.getByText(/192\.168\.1\.42:8443/)).toBeTruthy();
-    // pair_id is truncated to first 8 chars + ellipsis.
+    // Chip uses `pair_id · abcdef12…` (middle dot + ellipsis). The new
+    // raw-JSON drawer also contains the substring "pair_id": "abcdef12…",
+    // so we scope the match to text containing the middle-dot separator
+    // unique to the chip rendering.
     expect(
-      screen.getByText((t) => t.includes('pair_id') && t.includes('abcdef12')),
+      screen.getByText((t) => t.includes('pair_id ·') && t.includes('abcdef12')),
     ).toBeTruthy();
     expect(screen.getByText(/dev · no cert pin/i)).toBeTruthy();
   });

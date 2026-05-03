@@ -29,9 +29,6 @@ import {
   Loader2,
   AlertTriangle,
   Copy,
-  Check,
-  ChevronDown,
-  ChevronRight,
 } from 'lucide-react';
 import {
   pairApi,
@@ -147,21 +144,27 @@ function CountdownRing({
   );
 }
 
+// @refresh reset
 /**
- * Click-to-copy JSON code block. Two earlier revisions failed the
+ * Click-to-copy raw QR JSON block. Three earlier revisions failed the
  * operator: the first relied on Ctrl-C after click-to-select (no
- * visible hover state, "0 reactions" perception); the second still
- * needed the secondary "Скопіювати" button. This component:
- *   - shows a visible hover highlight + amber border (the operator
- *     can SEE the block is interactive without reading any label);
- *   - on click selects all text AND copies to clipboard in one go;
- *   - flashes "✓ Скопійовано" overlay for 1.5 s as confirmation;
- *   - keeps Ctrl-A / Ctrl-C working for the rare case the user
- *     wants partial selection.
+ * visible affordance, "0 reactions" perception); the second hid it
+ * behind a "Показати JSON" toggle whose pill-button was easy to miss;
+ * the third made the toggle visible but left the block stuffed in the
+ * narrow right column of the QR card. This revision:
+ *   - is rendered always (no toggle), full-width under the QR card;
+ *   - always shows the "Клік — скопіювати" pill in the corner so the
+ *     operator never has to discover hover behaviour;
+ *   - on click selects all text AND copies to clipboard in one go,
+ *     the pill briefly turns green "✓ Скопійовано" as confirmation;
+ *   - keeps Ctrl-A / Ctrl-C working for partial selection.
  * Renders independently of the parent so the countdown tick never
- * touches its DOM tree.
+ * touches its DOM tree. The `// @refresh reset` directive at the top
+ * of the file forces React Fast Refresh to remount the subtree on
+ * the next HMR — a defence against the operator seeing a stale bundle
+ * after a soft-reload race in vite.
  */
-function JsonCodeBlock({
+function RawQrJsonBlock({
   text,
   onCopied,
 }: {
@@ -206,7 +209,7 @@ function JsonCodeBlock({
   );
 
   return (
-    <div style={{ position: 'relative', marginTop: 6 }}>
+    <div style={{ position: 'relative' }}>
       <pre
         onClick={onClick}
         onMouseEnter={() => setHover(true)}
@@ -214,45 +217,46 @@ function JsonCodeBlock({
         title="Натисни, щоб скопіювати JSON"
         style={{
           margin: 0,
-          padding: 10,
-          borderRadius: 8,
-          background: hover ? 'rgba(244,175,37,0.08)' : 'rgba(0,0,0,0.04)',
+          padding: 12,
+          borderRadius: 10,
+          background: hover ? 'rgba(244,175,37,0.10)' : 'rgba(0,0,0,0.04)',
           border: hover
-            ? '1px solid rgba(244,175,37,0.55)'
+            ? '1px solid rgba(244,175,37,0.65)'
             : '1px solid rgba(0,0,0,0.08)',
-          fontSize: 10.5,
-          lineHeight: 1.45,
+          fontSize: 11.5,
+          lineHeight: 1.5,
           fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
           color: 'var(--ink-primary)',
-          maxHeight: 180,
-          overflowY: 'auto',
+          // No maxHeight: the QR JSON payload is < 12 lines, hiding it
+          // behind a scroll made the block feel like a "surprise inside"
+          // and the operator wasn't sure it was complete.
           whiteSpace: 'pre',
           cursor: 'pointer',
           userSelect: 'text',
-          transition: 'background 120ms ease, border-color 120ms ease',
+          transition: 'background 120ms ease, border-color 120ms ease, box-shadow 120ms ease',
           boxShadow: hover
-            ? '0 0 0 3px rgba(244,175,37,0.10)'
+            ? '0 0 0 3px rgba(244,175,37,0.14)'
             : 'none',
         }}
       >
         {text}
       </pre>
-      {/* Hover hint pill — appears on hover, becomes "✓ Скопійовано"
-          flash on click. Sits in the top-right corner of the pre. */}
+      {/* Always-visible CTA pill — operator never has to discover the
+          hover behaviour. Becomes a green "✓ Скопійовано" confirm
+          on click. */}
       <div
         style={{
           position: 'absolute',
-          top: 6,
-          right: 8,
-          padding: '2px 8px',
+          top: 8,
+          right: 10,
+          padding: '3px 9px',
           borderRadius: 999,
           fontSize: 9,
           fontWeight: 700,
           letterSpacing: '0.05em',
           textTransform: 'uppercase',
           pointerEvents: 'none',
-          opacity: flash || hover ? 1 : 0,
-          transition: 'opacity 140ms ease, background 140ms ease, color 140ms ease',
+          transition: 'background 140ms ease, color 140ms ease',
           background: flash
             ? 'rgba(22,163,74,0.95)'
             : 'rgba(244,175,37,0.95)',
@@ -274,8 +278,6 @@ export function MobilePairing(): JSX.Element {
   const [devicesLoading, setDevicesLoading] = useState(false);
   const [revokingId, setRevokingId] = useState<string | null>(null);
   const [toast, setToast] = useState<ClaimToast | null>(null);
-  const [showJson, setShowJson] = useState(false);
-  const [copied, setCopied] = useState(false);
 
   /* ── Initial device list + WS subscription ───────────────────────── */
   const refreshDevices = useCallback(async () => {
@@ -308,7 +310,6 @@ export function MobilePairing(): JSX.Element {
           ts: Date.now(),
         });
         setQr(null);
-        setShowJson(false);
         void refreshDevices();
       } else if (msg.type === 'revoked') {
         setToast({
@@ -338,15 +339,12 @@ export function MobilePairing(): JSX.Element {
   );
   const handleQrExpire = useCallback(() => {
     setQr(null);
-    setShowJson(false);
   }, []);
 
   /* ── Actions ─────────────────────────────────────────────────────── */
   const handleGenerate = useCallback(async () => {
     setError(null);
     setGenerating(true);
-    setShowJson(false);
-    setCopied(false);
     try {
       const resp = await pairApi.init();
       setQr(resp);
@@ -386,31 +384,6 @@ export function MobilePairing(): JSX.Element {
     // and pretty-printed JSON.
     return JSON.stringify(qr.qr, null, 2);
   }, [qr]);
-
-  const handleCopyJson = useCallback(async () => {
-    if (!qrJsonText) return;
-    try {
-      // Modern path. Falls back to a hidden textarea selection in
-      // browsers without the async clipboard API (very rare on Chromium
-      // running our kiosk shell, but cheap insurance).
-      if (navigator.clipboard?.writeText) {
-        await navigator.clipboard.writeText(qrJsonText);
-      } else {
-        const ta = document.createElement('textarea');
-        ta.value = qrJsonText;
-        ta.style.position = 'fixed';
-        ta.style.opacity = '0';
-        document.body.appendChild(ta);
-        ta.select();
-        document.execCommand('copy');
-        document.body.removeChild(ta);
-      }
-      setCopied(true);
-      setTimeout(() => setCopied(false), 1800);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : 'Clipboard write failed');
-    }
-  }, [qrJsonText]);
 
   /* ── Render ──────────────────────────────────────────────────────── */
   return (
@@ -676,78 +649,42 @@ export function MobilePairing(): JSX.Element {
                 </span>
               </div>
 
-              {/* JSON drawer — toggle + copy. The Companion app's manual
-                  paste field on PairScreen accepts exactly this object. */}
-              <div style={{ marginTop: 8 }}>
-                <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-                  <button
-                    type="button"
-                    onClick={() => setShowJson((v) => !v)}
-                    style={{
-                      minHeight: 26,
-                      padding: '3px 9px',
-                      borderRadius: 999,
-                      border: '1px solid rgba(0,0,0,0.10)',
-                      background: showJson
-                        ? 'rgba(244,175,37,0.10)'
-                        : 'transparent',
-                      color: showJson ? '#b07a10' : 'var(--ink-secondary)',
-                      fontSize: 10,
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 4,
-                    }}
-                  >
-                    {showJson ? (
-                      <ChevronDown size={11} strokeWidth={1.75} />
-                    ) : (
-                      <ChevronRight size={11} strokeWidth={1.75} />
-                    )}
-                    {showJson ? 'Сховати JSON' : 'Показати JSON'}
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => void handleCopyJson()}
-                    style={{
-                      minHeight: 26,
-                      padding: '3px 9px',
-                      borderRadius: 999,
-                      border: '1px solid rgba(0,0,0,0.10)',
-                      background: copied
-                        ? 'rgba(22,163,74,0.10)'
-                        : 'transparent',
-                      color: copied ? '#16a34a' : 'var(--ink-secondary)',
-                      fontSize: 10,
-                      fontWeight: 600,
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 4,
-                    }}
-                    title="Скопіювати raw JSON для manual-paste у Companion"
-                  >
-                    {copied ? (
-                      <Check size={11} strokeWidth={1.75} />
-                    ) : (
-                      <Copy size={11} strokeWidth={1.75} />
-                    )}
-                    {copied ? 'Скопійовано' : 'Скопіювати'}
-                  </button>
-                </div>
-                {showJson && (
-                  <JsonCodeBlock
-                    text={qrJsonText}
-                    onCopied={() => {
-                      setCopied(true);
-                      setTimeout(() => setCopied(false), 1800);
-                    }}
-                  />
-                )}
-              </div>
             </div>
           </div>
+        </div>
+      )}
+
+      {/* Raw JSON block — full-width, always visible while a QR is live.
+          The Companion app's PairScreen manual-paste field accepts this
+          object verbatim, so the operator just clicks the block and the
+          payload is in their clipboard ready to paste on the phone. */}
+      {qr && (
+        <div className="glass" style={{ padding: 12 }}>
+          <div
+            style={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 6,
+              marginBottom: 8,
+            }}
+          >
+            <Copy size={12} strokeWidth={1.75} style={{ color: '#b07a10' }} />
+            <span className="eyebrow-amber" style={{ fontSize: 9 }}>
+              RAW QR JSON · КЛІК СКОПІЮЄ
+            </span>
+            <span style={{ flex: 1 }} />
+            <span
+              className="tabular"
+              style={{
+                fontSize: 9,
+                color: 'var(--ink-muted)',
+                fontWeight: 500,
+              }}
+            >
+              для Companion → "Вставити JSON QR"
+            </span>
+          </div>
+          <RawQrJsonBlock text={qrJsonText} onCopied={() => undefined} />
         </div>
       )}
 

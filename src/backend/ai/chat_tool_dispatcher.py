@@ -62,6 +62,13 @@ _CHAT_SAFE_TOOL_NAMES: tuple[str, ...] = (
     "delete_calendar_event",
     "get_calendar_events",
     "search_web",
+    # Phase 17b — chat-driven Custom Agent management.
+    "studio_list_agents",
+    "studio_get_agent",
+    "studio_create_agent",
+    "studio_run_agent",
+    "studio_delete_agent",
+    "studio_card_catalog",
 )
 
 

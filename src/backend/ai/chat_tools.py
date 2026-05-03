@@ -409,6 +409,155 @@ CHAT_DATA_TOOLS: list[dict[str, Any]] = [
             "required": ["goal"],
         },
     },
+    # ── Phase 17b — Custom Agent management ("Васі-агенти") ───────────────────
+    {
+        "name": "studio_list_agents",
+        "description": (
+            "Перерахувати збережених кастомних агентів юзера. Викликай коли "
+            "юзер питає «які у мене агенти», «покажи моїх Васів», «що в студії». "
+            "Повертає id, name, description, tags, schedule_kind, run_count, "
+            "success_rate і last_run_at для кожного."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
+    {
+        "name": "studio_get_agent",
+        "description": (
+            "Отримати повну конфігурацію конкретного кастомного агента "
+            "(описи карток, лінки DAG, отримувачі, розклад). Викликай коли "
+            "юзер каже «розкажи що робить агент <name>», «покажи деталі», або "
+            "коли треба обрати чи редагувати — отриманий agent_id потім "
+            "передається у studio_run_agent / studio_delete_agent."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "agent_id": {
+                    "type": "string",
+                    "description": "UUID агента з studio_list_agents.",
+                },
+            },
+            "required": ["agent_id"],
+        },
+    },
+    {
+        "name": "studio_create_agent",
+        "description": (
+            "Створити нового кастомного агента (Phase 17b). Викликай коли "
+            "юзер каже «створи мені агента що…», «зроби Васю для…», «зберігай "
+            "цей workflow». Лише перший крок — повертає agent_id; додавання "
+            "карток-джерел / трансформів / отримувачів / розкладу робиться "
+            "далі через AgentStudio overlay або наступні tool-виклики."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string",
+                    "description": "Коротка назва (2-160 символів). Повинна виразно відрізняти агента в списку — 'Ранкові новини про дрони', 'Перевірка email батьків'.",
+                },
+                "description": {
+                    "type": "string",
+                    "description": "Що цей агент робить, людською мовою. Те, що юзер прочитає в списку щоб не плутатись.",
+                },
+                "goal_template": {
+                    "type": "string",
+                    "description": "Шаблон цілі для агент-runtime з {{var}} плейсхолдерами. Якщо не знаєш — постав короткий опис того що мусить статись.",
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Теги для групування в студії (опційно, max 8).",
+                },
+                "schedule": {
+                    "type": "object",
+                    "description": "Розклад. kind ∈ {manual, interval, cron, conditional, one_shot_future}. Default 'manual'. interval_s — для interval; cron_expr — для cron; condition — для conditional; fire_at (ISO datetime) — для one_shot_future.",
+                    "properties": {
+                        "kind": {
+                            "type": "string",
+                            "enum": ["manual", "interval", "cron", "conditional", "one_shot_future"],
+                        },
+                        "interval_s": {"type": "integer"},
+                        "cron_expr": {"type": "string"},
+                        "condition": {"type": "string"},
+                        "fire_at": {"type": "string"},
+                        "enabled": {"type": "boolean"},
+                    },
+                },
+                "enabled": {
+                    "type": "boolean",
+                    "description": "True за замовчуванням. False — лежить як чернетка.",
+                },
+            },
+            "required": ["name", "description"],
+        },
+    },
+    {
+        "name": "studio_run_agent",
+        "description": (
+            "Запустити збереженого кастомного агента зараз. Викликай коли "
+            "юзер каже «запусти Васю», «прокачай агента <name>», «зроби це "
+            "ще раз». Повертає task_id (для перегляду в AgentTimeline) і "
+            "run_id (для studio history)."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "agent_id": {
+                    "type": "string",
+                    "description": "UUID агента.",
+                },
+                "inputs": {
+                    "type": "object",
+                    "description": "Парам-словник, що задовольняє inputs_schema агента. Якщо агент не має inputs_schema — пусте {}.",
+                },
+                "track": {
+                    "type": "string",
+                    "enum": ["foreground", "background"],
+                    "description": "За замовчуванням 'background' — щоб поточна розмова не блокувалася.",
+                },
+                "note": {
+                    "type": "string",
+                    "description": "Опційний коментар-причина запуску (потрапить у CustomAgentRun.summary).",
+                },
+            },
+            "required": ["agent_id"],
+        },
+    },
+    {
+        "name": "studio_delete_agent",
+        "description": (
+            "Видалити збереженого кастомного агента. Викликай коли юзер "
+            "каже «видали Васю», «забудь цього агента». Не зачіпає історію "
+            "минулих run-ів — лише сам агент-картку."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "agent_id": {"type": "string"},
+            },
+            "required": ["agent_id"],
+        },
+    },
+    {
+        "name": "studio_card_catalog",
+        "description": (
+            "Перерахувати доступні типи карток для конструювання агента "
+            "(sources / transforms / decisions / outputs / council). "
+            "Викликай ВПЕРШЕ коли юзер каже «склади мені агента що…» — "
+            "перш ніж пропонувати конкретний DAG, перевір що ти знаєш всі "
+            "доступні card kinds. Повертає згруповано по category."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {},
+            "required": [],
+        },
+    },
 ]
 
 

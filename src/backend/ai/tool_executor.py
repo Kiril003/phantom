@@ -1185,6 +1185,213 @@ async def _tool_create_checkpoint(args: dict[str, Any], user_id: str) -> dict[st
     return _ok(checkpoint_id=cp_id, reason=reason, goal=goal.strip())
 
 
+# ── Phase 17b — chat-driven Custom Agent management ──────────────────────────
+#
+# These tools let PHANTOM author, list, run, and delete saved "Васі-агенти"
+# from inside a normal chat turn. The studio API at /api/v1/studio is the
+# same surface the OperatorLayout AgentStudioOverlay uses; here we wrap it
+# so the chat LLM can pick the right tool when the user says
+# "PHANTOM, створи агента що щоранку збиратиме новини про дрони".
+
+
+async def _tool_studio_list_agents(args: dict[str, Any], user_id: str) -> dict[str, Any]:  # noqa: ARG001
+    try:
+        from agent.studio.repository import list_agents
+    except Exception as exc:
+        return _err("import_error", f"studio unavailable: {exc}")
+    try:
+        rows = await list_agents(user_id, limit=50)
+    except Exception as exc:
+        return _err("studio_list_failed", f"{type(exc).__name__}: {exc}")
+    agents = [
+        {
+            "id": a.id,
+            "name": a.name,
+            "description": a.description,
+            "tags": list(a.tags or []),
+            "schedule_kind": a.schedule.kind if a.schedule else "manual",
+            "enabled": bool(a.enabled),
+            "last_run_at": a.last_run_at.isoformat() if a.last_run_at else None,
+            "run_count": int(a.run_count or 0),
+            "success_rate": round(float(a.success_rate), 3),
+            "card_count": len(a.cards or []),
+        }
+        for a in rows
+    ]
+    return _ok(agents=agents, count=len(agents))
+
+
+async def _tool_studio_get_agent(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    agent_id = str(args.get("agent_id") or "").strip()
+    if not agent_id:
+        return _err("invalid_args", "agent_id is required")
+    try:
+        from agent.studio.repository import get_agent
+    except Exception as exc:
+        return _err("import_error", f"studio unavailable: {exc}")
+    try:
+        agent = await get_agent(agent_id)
+    except Exception as exc:
+        return _err("studio_get_failed", f"{type(exc).__name__}: {exc}")
+    if agent is None:
+        return _err("not_found", f"agent {agent_id} not found")
+    if agent.owner_user_id != user_id:
+        return _err("forbidden", "agent belongs to a different user")
+    return _ok(agent=agent.model_dump(mode="json"))
+
+
+async def _tool_studio_create_agent(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    name = str(args.get("name") or "").strip()
+    if len(name) < 2:
+        return _err("invalid_args", "name must be at least 2 characters")
+    if len(name) > 160:
+        return _err("invalid_args", "name longer than 160 characters")
+    description = str(args.get("description") or "").strip()[:2000]
+    goal_template = str(args.get("goal_template") or "").strip()[:4000]
+
+    raw_tags = args.get("tags") or []
+    tags: list[str] = []
+    if isinstance(raw_tags, list):
+        for t in raw_tags:
+            if isinstance(t, str) and t.strip():
+                tags.append(t.strip()[:32])
+        tags = tags[:8]
+
+    raw_schedule = args.get("schedule") or {}
+    if not isinstance(raw_schedule, dict):
+        raw_schedule = {}
+
+    try:
+        from agent.studio import CustomAgent, Schedule
+        from agent.studio.repository import save_agent
+        from agent.studio.validate import has_blockers, validate_agent
+    except Exception as exc:
+        return _err("import_error", f"studio unavailable: {exc}")
+
+    try:
+        schedule = Schedule(**raw_schedule)
+    except Exception as exc:
+        return _err("invalid_schedule", f"{type(exc).__name__}: {exc}")
+
+    agent = CustomAgent(
+        owner_user_id=user_id,
+        name=name,
+        description=description,
+        goal_template=goal_template,
+        tags=tags,
+        schedule=schedule,
+        enabled=bool(args.get("enabled", True)),
+    )
+    issues = validate_agent(agent)
+    if has_blockers(issues):
+        return _err(
+            "validation_failed",
+            "; ".join(i.message for i in issues if i.severity == "blocker")[:300],
+        )
+    try:
+        saved = await save_agent(agent)
+    except Exception as exc:
+        return _err("studio_save_failed", f"{type(exc).__name__}: {exc}")
+    return _ok(
+        agent_id=saved.id,
+        name=saved.name,
+        next_step=(
+            "Агент створено. Додавай картки джерел і виходів через "
+            "AgentStudio overlay або викликай мене знову з кратким описом "
+            "потрібних кроків — я допоможу скласти DAG."
+        ),
+    )
+
+
+async def _tool_studio_run_agent(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    agent_id = str(args.get("agent_id") or "").strip()
+    if not agent_id:
+        return _err("invalid_args", "agent_id is required")
+    raw_inputs = args.get("inputs") or {}
+    if not isinstance(raw_inputs, dict):
+        return _err("invalid_args", "inputs must be an object")
+    track = str(args.get("track") or "background").strip()
+    if track not in {"foreground", "background"}:
+        track = "background"
+    note = str(args.get("note") or "").strip()[:240] or None
+
+    try:
+        from agent.studio import RunSpec
+        from agent.studio.repository import get_agent
+        from agent.studio.runner import run_custom_agent
+    except Exception as exc:
+        return _err("import_error", f"studio unavailable: {exc}")
+
+    try:
+        agent = await get_agent(agent_id)
+    except Exception as exc:
+        return _err("studio_get_failed", f"{type(exc).__name__}: {exc}")
+    if agent is None:
+        return _err("not_found", f"agent {agent_id} not found")
+    if agent.owner_user_id != user_id:
+        return _err("forbidden", "agent belongs to a different user")
+    if not agent.enabled:
+        return _err("agent_disabled", f"agent {agent.name} is disabled")
+
+    spec = RunSpec(agent_id=agent.id, inputs=raw_inputs, track=track, note=note)  # type: ignore[arg-type]
+    try:
+        task_id, run_id = await run_custom_agent(
+            agent, spec, triggered_by="chat",
+        )
+    except Exception as exc:
+        return _err("studio_run_failed", f"{type(exc).__name__}: {exc}")
+    return _ok(task_id=task_id, run_id=run_id, agent_name=agent.name, track=track)
+
+
+async def _tool_studio_delete_agent(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    agent_id = str(args.get("agent_id") or "").strip()
+    if not agent_id:
+        return _err("invalid_args", "agent_id is required")
+    try:
+        from agent.studio.repository import delete_agent, get_agent
+    except Exception as exc:
+        return _err("import_error", f"studio unavailable: {exc}")
+    try:
+        agent = await get_agent(agent_id)
+    except Exception as exc:
+        return _err("studio_get_failed", f"{type(exc).__name__}: {exc}")
+    if agent is None:
+        return _err("not_found", f"agent {agent_id} not found")
+    if agent.owner_user_id != user_id:
+        return _err("forbidden", "agent belongs to a different user")
+    try:
+        deleted = await delete_agent(agent_id)
+    except Exception as exc:
+        return _err("studio_delete_failed", f"{type(exc).__name__}: {exc}")
+    return _ok(deleted=bool(deleted), agent_name=agent.name)
+
+
+async def _tool_studio_card_catalog(args: dict[str, Any], user_id: str) -> dict[str, Any]:  # noqa: ARG001
+    try:
+        from agent.studio.catalog import list_catalog
+    except Exception as exc:
+        return _err("import_error", f"studio unavailable: {exc}")
+    try:
+        entries = list_catalog()
+    except Exception as exc:
+        return _err("studio_catalog_failed", f"{type(exc).__name__}: {exc}")
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for entry in entries:
+        try:
+            payload = entry.model_dump(mode="json") if hasattr(entry, "model_dump") else dict(entry)  # type: ignore[arg-type]
+        except Exception:
+            continue
+        cat = str(payload.get("category") or "other")
+        grouped.setdefault(cat, []).append(
+            {
+                "kind": payload.get("kind"),
+                "title": payload.get("title") or payload.get("kind"),
+                "description": payload.get("description") or "",
+            }
+        )
+    return _ok(categories=grouped, total=sum(len(v) for v in grouped.values()))
+
+
 # ── Dispatcher ────────────────────────────────────────────────────────────────
 
 
@@ -1215,6 +1422,13 @@ _HANDLERS: dict[str, Any] = {
     "search_files": _tool_search_files,
     "write_file": _tool_write_file,
     "make_directory": _tool_make_directory,
+    # Phase 17b — chat-driven Custom Agent management ("Васі-агенти").
+    "studio_list_agents": _tool_studio_list_agents,
+    "studio_get_agent": _tool_studio_get_agent,
+    "studio_create_agent": _tool_studio_create_agent,
+    "studio_run_agent": _tool_studio_run_agent,
+    "studio_delete_agent": _tool_studio_delete_agent,
+    "studio_card_catalog": _tool_studio_card_catalog,
 }
 
 

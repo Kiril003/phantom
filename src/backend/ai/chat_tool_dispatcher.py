@@ -84,6 +84,10 @@ _CHAT_SAFE_TOOL_NAMES: tuple[str, ...] = (
     "vault_update",
     "vault_delete",
     "vault_restore",
+    # Phase 25-D — HIGH RISK reveal of secret plaintext. Caller is
+    # expected to justify each reveal in the call args; every reveal
+    # is audited with actor="ai" so the operator can review.
+    "vault_reveal",
 )
 
 

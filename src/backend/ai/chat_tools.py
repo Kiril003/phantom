@@ -953,6 +953,49 @@ CHAT_DATA_TOOLS: list[dict[str, Any]] = [
             "required": ["card_id"],
         },
     },
+    # ── Phase 25-D — HIGH RISK reveal ──────────────────────────────────────
+    # Returns plaintext for ONE secret field. The plaintext lands in the
+    # LLM's working context — call sparingly and only when the user has
+    # explicitly asked for the secret OR when a downstream form-fill needs
+    # it. Every reveal is audited with actor="ai".
+    {
+        "name": "vault_reveal",
+        "description": (
+            "ВИСОКОРИЗИКОВО — повертає plaintext для одного secret-поля "
+            "однієї картки. Викликай ТІЛЬКИ коли:\n"
+            "  • юзер прямо попросив назвати/показати secret («скажи мені пароль для X»)\n"
+            "  • треба вставити secret у form/команду на наступному кроці\n"
+            "Кожен виклик ЗАПИСУЄТЬСЯ у audit (actor=ai). Аргумент "
+            "`justification` пояснює оператору причину — пиши конкретно ('юзер "
+            "попросив зчитати пароль для входу в Gmail'). Не повторюй secret "
+            "у наступних повідомленнях; не зберігай у пам'яті без потреби."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "card_id": {
+                    "type": "string",
+                    "description": "UUID картки з vault_list/vault_get.",
+                },
+                "field_name": {
+                    "type": "string",
+                    "description": (
+                        "Точна назва secret-поля (з field_kinds де "
+                        "значення == 'secret')."
+                    ),
+                },
+                "justification": {
+                    "type": "string",
+                    "description": (
+                        "Чому ти зараз потребуєш plaintext — 4..240 "
+                        "символів. Цей рядок постійно зберігається у "
+                        "audit як виправдання тобою-AI цієї дії."
+                    ),
+                },
+            },
+            "required": ["card_id", "field_name", "justification"],
+        },
+    },
 ]
 
 

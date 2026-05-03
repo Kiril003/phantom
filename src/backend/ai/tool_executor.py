@@ -1996,6 +1996,99 @@ async def _tool_vault_delete(args: dict[str, Any], user_id: str) -> dict[str, An
     return _ok(deleted=True, card_id=card_id)
 
 
+async def _tool_vault_reveal(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    """Phase 25-D — return plaintext for ONE secret field on ONE card.
+
+    HIGH RISK: the plaintext flows back through the LLM tool-call return
+    path so the model has it in its working context. The operator gates
+    THIS tool via the agent loop's risk gate (Phase 23-D Council +
+    Phase 19-4 phone approval) BEFORE the dispatcher invokes the
+    handler — by the time we reach this code the human approval has
+    already happened.
+
+    Audit: actor="ai", details include field_name + justification + an
+    `accessed_via` marker so the operator can distinguish chat-tool
+    reveals from REST-driven (Settings UI) reveals.
+    """
+    import json as _json
+    from datetime import datetime, timezone
+    from sqlalchemy import select
+    from db.models import VaultAuditEntry, VaultCard
+    from security.vault_crypto import InvalidVaultToken, decrypt_field
+
+    card_id = str(args.get("card_id") or "").strip()
+    field_name = str(args.get("field_name") or "").strip()
+    justification = str(args.get("justification") or "").strip()
+    if not card_id:
+        return _err("invalid_args", "card_id is required")
+    if not field_name:
+        return _err("invalid_args", "field_name is required")
+    if len(justification) < 4 or len(justification) > 240:
+        return _err(
+            "invalid_args",
+            "justification is required (4..240 chars) and is logged "
+            "in the audit trail; tell the user why you need plaintext",
+        )
+
+    async with _session_factory()() as db:
+        stmt = select(VaultCard).where(
+            VaultCard.id == card_id,
+            VaultCard.owner_user_id == user_id,
+            VaultCard.deleted_at.is_(None),
+        )
+        card = (await db.execute(stmt)).scalar_one_or_none()
+        if card is None:
+            return _err("not_found", f"card {card_id} not found")
+
+        raw = _json.loads(card.fields_json or "{}")
+        payload = raw.get(field_name)
+        if not isinstance(payload, dict):
+            return _err("not_found", f"field '{field_name}' not on card")
+        if not payload.get("secret"):
+            return _err(
+                "not_secret",
+                f"field '{field_name}' is plain — read via vault_get",
+            )
+        try:
+            plaintext = decrypt_field(
+                user_id=user_id,
+                card_id=card.id,
+                field_name=field_name,
+                token=str(payload.get("v") or ""),
+            )
+        except InvalidVaultToken as exc:
+            return _err(
+                "vault_key_rotation_required",
+                f"decrypt failed: {exc}; operator must run the "
+                f"vault re-encrypt migration",
+            )
+
+        revealed_at = datetime.now(tz=timezone.utc)
+        card.last_accessed_at = revealed_at
+        db.add(VaultAuditEntry(
+            user_id=user_id,
+            card_id=card.id,
+            action="reveal",
+            actor="ai",
+            details_json=_json.dumps(
+                {
+                    "field_name": field_name,
+                    "justification": justification,
+                    "accessed_via": "chat_tool",
+                },
+                ensure_ascii=False,
+            ),
+        ))
+        await db.commit()
+
+    return _ok(
+        card_id=card_id,
+        field_name=field_name,
+        value=plaintext,
+        revealed_at=revealed_at.isoformat(),
+    )
+
+
 async def _tool_vault_restore(args: dict[str, Any], user_id: str) -> dict[str, Any]:
     import json as _json
     from datetime import datetime, timezone
@@ -2078,6 +2171,10 @@ _HANDLERS: dict[str, Any] = {
     "vault_update": _tool_vault_update,
     "vault_delete": _tool_vault_delete,
     "vault_restore": _tool_vault_restore,
+    # Phase 25-D — HIGH RISK: returns plaintext to the LLM context.
+    # Gated upstream by the agent loop's risk gate (Phase 23-D Council
+    # + Phase 19-4 phone approval) BEFORE this handler runs.
+    "vault_reveal": _tool_vault_reveal,
 }
 
 

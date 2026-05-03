@@ -45,7 +45,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from db.database import get_db
 from db.models import User, VaultAuditEntry, VaultCard
 from security.auth import get_current_user
-from security.vault_crypto import encrypt_field
+from security.vault_crypto import (
+    InvalidVaultToken, decrypt_field, encrypt_field,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -375,6 +377,118 @@ async def restore_card(
     await db.commit()
     await db.refresh(card)
     return _serialise_card(card)
+
+
+# ─── Reveal (Phase 25-D) ────────────────────────────────────────────────────
+
+
+class RevealRequest(BaseModel):
+    """Body for POST /vault/cards/{id}/reveal.
+
+    `justification` is a short operator-supplied note ("login form on
+    https://example.com asked for it") that lands in the audit row so
+    a future review can answer "why did the AI ever look at this?".
+    Free text up to 240 chars; required.
+    """
+    field_name: str = Field(..., min_length=1, max_length=64)
+    justification: str = Field(..., min_length=4, max_length=240)
+
+
+class RevealResponse(BaseModel):
+    """Returned only on success. `value` is the plaintext — caller MUST
+    treat it as sensitive (do not log; do not echo into chat history;
+    do not display longer than the window the user requested it for)."""
+    card_id: str
+    field_name: str
+    value: str
+    revealed_at: datetime
+
+
+@router.post("/cards/{card_id}/reveal", response_model=RevealResponse)
+async def reveal_field(
+    card_id: str,
+    payload: RevealRequest,
+    me: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> RevealResponse:
+    """Decrypt and return the plaintext for ONE secret field on ONE card.
+
+    Audit semantics: every successful reveal writes a VaultAuditEntry
+    with action="reveal" + details={field_name, justification, actor}.
+    `actor` is "user" by default (operator-initiated via Settings UI);
+    AI-driven reveals (Phase 25-E `vault.use` action) call this same
+    endpoint but tag actor="ai" via an X-Reveal-Actor header.
+
+    Failure modes:
+      404 — card missing or owned by another user
+      404 — field name not on the card
+      400 — field is not marked secret (no plaintext to reveal; the
+            caller can already read non-secret values via vault_get)
+      503 — JWT_SECRET_KEY rotated since the field was encrypted; the
+            operator must run the re-encrypt migration first
+    """
+    card = await _load_owned_card(db, card_id=card_id, user_id=me.id)
+    raw = json.loads(card.fields_json or "{}")
+    payload_field = raw.get(payload.field_name)
+    if not isinstance(payload_field, dict):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail=f"Field '{payload.field_name}' not found on card",
+        )
+    if not payload_field.get("secret"):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"Field '{payload.field_name}' is not secret — read it "
+                f"directly via GET /vault/cards/{{id}}"
+            ),
+        )
+    token = str(payload_field.get("v") or "")
+    try:
+        plaintext = decrypt_field(
+            user_id=me.id,
+            card_id=card.id,
+            field_name=payload.field_name,
+            token=token,
+        )
+    except InvalidVaultToken as exc:
+        # AAD mismatch / JWT rotated / ciphertext tampered. The operator
+        # gets a 503 + machine-readable header so the FE can render a
+        # "rotation required" hint instead of a generic 500.
+        logger.warning(
+            "vault reveal: decrypt failed for card=%s field=%s — %s",
+            card.id, payload.field_name, exc,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=(
+                "Field cannot be decrypted (key rotated or token "
+                "tampered). Run the vault re-encrypt migration."
+            ),
+            headers={"X-Error-Code": "VAULT_KEY_ROTATION_REQUIRED"},
+        ) from exc
+
+    revealed_at = datetime.now(tz=timezone.utc)
+    card.last_accessed_at = revealed_at
+    await _record_audit(
+        db,
+        user_id=me.id,
+        card_id=card.id,
+        action="reveal",
+        actor="user",
+        details={
+            "field_name": payload.field_name,
+            "justification": payload.justification,
+        },
+    )
+    await db.commit()
+
+    return RevealResponse(
+        card_id=card.id,
+        field_name=payload.field_name,
+        value=plaintext,
+        revealed_at=revealed_at,
+    )
 
 
 @router.get("/audit", response_model=AuditResponse)

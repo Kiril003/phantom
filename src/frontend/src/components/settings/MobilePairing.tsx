@@ -19,7 +19,7 @@
  * Crypto, JWT minting, and ECDH live on the backend (`security/pair_crypto`
  * + `api/routes_pair.py`); this component is a thin presentational shell.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
   Smartphone,
   QrCode,
@@ -59,9 +59,96 @@ function formatRelative(iso: string): string {
   return `${Math.floor(dt / 86_400)}d ago`;
 }
 
+/**
+ * Countdown ring isolated from the parent so the per-second tick does
+ * NOT force the QR card / JSON drawer / buttons to re-render. Earlier
+ * revision drove the entire panel from `secondsLeft` state and that
+ * caused two visible bugs on the device:
+ *   - Click-to-select on the JSON `<pre>` looked like "0 reactions" —
+ *     the browser-native text selection was nuked by every render.
+ *   - The Show JSON / Copy buttons "felt frozen" because their hover
+ *     and pressed states reset 1× per second.
+ * The ring owns its own interval; parent only learns when the QR
+ * actually expires (via `onExpire`).
+ */
+function CountdownRing({
+  expiresAt,
+  onExpire,
+}: {
+  expiresAt: number;
+  onExpire: () => void;
+}): JSX.Element {
+  const [secondsLeft, setSecondsLeft] = useState<number>(() =>
+    Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000))
+  );
+  useEffect(() => {
+    const tick = () => {
+      const left = Math.max(0, Math.ceil((expiresAt - Date.now()) / 1000));
+      setSecondsLeft(left);
+      if (left <= 0) onExpire();
+    };
+    tick();
+    const id = setInterval(tick, 1000);
+    return () => clearInterval(id);
+  }, [expiresAt, onExpire]);
+
+  const ringPct = Math.max(0, Math.min(1, secondsLeft / PAIR_TTL_S));
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        top: -8,
+        right: -8,
+        width: 32,
+        height: 32,
+        borderRadius: 999,
+        background: 'white',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
+      }}
+      aria-label={`expires in ${secondsLeft}s`}
+    >
+      <svg width="32" height="32" viewBox="0 0 32 32">
+        <circle
+          cx="16"
+          cy="16"
+          r="13"
+          fill="none"
+          stroke="rgba(0,0,0,0.08)"
+          strokeWidth="3"
+        />
+        <circle
+          cx="16"
+          cy="16"
+          r="13"
+          fill="none"
+          stroke={secondsLeft > 10 ? '#f4af25' : '#dc2626'}
+          strokeWidth="3"
+          strokeDasharray={`${ringPct * 81.68} 81.68`}
+          strokeLinecap="round"
+          transform="rotate(-90 16 16)"
+          style={{ transition: 'stroke-dasharray 1s linear' }}
+        />
+      </svg>
+      <span
+        className="tabular"
+        style={{
+          position: 'absolute',
+          fontSize: 9,
+          fontWeight: 700,
+          color: secondsLeft > 10 ? '#8a5e0a' : '#b91c1c',
+        }}
+      >
+        {secondsLeft}
+      </span>
+    </div>
+  );
+}
+
 export function MobilePairing(): JSX.Element {
   const [qr, setQr] = useState<PairInitResponse | null>(null);
-  const [secondsLeft, setSecondsLeft] = useState<number>(0);
   const [generating, setGenerating] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [devices, setDevices] = useState<PairedDeviceRow[]>([]);
@@ -70,7 +157,6 @@ export function MobilePairing(): JSX.Element {
   const [toast, setToast] = useState<ClaimToast | null>(null);
   const [showJson, setShowJson] = useState(false);
   const [copied, setCopied] = useState(false);
-  const tickRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
   /* ── Initial device list + WS subscription ───────────────────────── */
   const refreshDevices = useCallback(async () => {
@@ -104,7 +190,6 @@ export function MobilePairing(): JSX.Element {
         });
         setQr(null);
         setShowJson(false);
-        setSecondsLeft(0);
         void refreshDevices();
       } else if (msg.type === 'revoked') {
         setToast({
@@ -125,37 +210,17 @@ export function MobilePairing(): JSX.Element {
     return () => clearTimeout(id);
   }, [toast]);
 
-  /* ── 60s countdown ───────────────────────────────────────────────── */
-  useEffect(() => {
-    if (!qr) {
-      if (tickRef.current) {
-        clearInterval(tickRef.current);
-        tickRef.current = null;
-      }
-      return;
-    }
-    setSecondsLeft(qr.expires_in_seconds);
-    tickRef.current = setInterval(() => {
-      setSecondsLeft((prev) => {
-        if (prev <= 1) {
-          if (tickRef.current) {
-            clearInterval(tickRef.current);
-            tickRef.current = null;
-          }
-          setQr(null);
-          setShowJson(false);
-          return 0;
-        }
-        return prev - 1;
-      });
-    }, 1000);
-    return () => {
-      if (tickRef.current) {
-        clearInterval(tickRef.current);
-        tickRef.current = null;
-      }
-    };
-  }, [qr]);
+  /* Countdown lives inside <CountdownRing>. Parent only needs the
+     absolute expiry timestamp so the child can compute seconds-left
+     locally without re-rendering this whole tree on every tick. */
+  const expiresAt = useMemo(
+    () => (qr ? Date.now() + qr.expires_in_seconds * 1000 : 0),
+    [qr]
+  );
+  const handleQrExpire = useCallback(() => {
+    setQr(null);
+    setShowJson(false);
+  }, []);
 
   /* ── Actions ─────────────────────────────────────────────────────── */
   const handleGenerate = useCallback(async () => {
@@ -229,8 +294,6 @@ export function MobilePairing(): JSX.Element {
   }, [qrJsonText]);
 
   /* ── Render ──────────────────────────────────────────────────────── */
-  const ringPct = qr ? secondsLeft / PAIR_TTL_S : 0;
-
   return (
     <div
       style={{
@@ -402,56 +465,10 @@ export function MobilePairing(): JSX.Element {
                   display: 'block',
                 }}
               />
-              <div
-                style={{
-                  position: 'absolute',
-                  top: -8,
-                  right: -8,
-                  width: 32,
-                  height: 32,
-                  borderRadius: 999,
-                  background: 'white',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.15)',
-                }}
-                aria-label={`expires in ${secondsLeft}s`}
-              >
-                <svg width="32" height="32" viewBox="0 0 32 32">
-                  <circle
-                    cx="16"
-                    cy="16"
-                    r="13"
-                    fill="none"
-                    stroke="rgba(0,0,0,0.08)"
-                    strokeWidth="3"
-                  />
-                  <circle
-                    cx="16"
-                    cy="16"
-                    r="13"
-                    fill="none"
-                    stroke={secondsLeft > 10 ? '#f4af25' : '#dc2626'}
-                    strokeWidth="3"
-                    strokeDasharray={`${ringPct * 81.68} 81.68`}
-                    strokeLinecap="round"
-                    transform="rotate(-90 16 16)"
-                    style={{ transition: 'stroke-dasharray 1s linear' }}
-                  />
-                </svg>
-                <span
-                  className="tabular"
-                  style={{
-                    position: 'absolute',
-                    fontSize: 9,
-                    fontWeight: 700,
-                    color: secondsLeft > 10 ? '#8a5e0a' : '#b91c1c',
-                  }}
-                >
-                  {secondsLeft}
-                </span>
-              </div>
+              <CountdownRing
+                expiresAt={expiresAt}
+                onExpire={handleQrExpire}
+              />
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div className="eyebrow-amber" style={{ fontSize: 9 }}>

@@ -253,3 +253,22 @@ class WebSocketHub:
 
 # Singleton hub
 hub = WebSocketHub()
+
+
+# ── Phase 24-B — `map.*` channel convenience helpers ──────────────────────
+
+
+async def broadcast_map_mutation(
+    op: str,
+    payload: dict[str, Any],
+    *,
+    user_id: str | None = None,
+) -> None:
+    """Push a map-state delta on the canonical ``"map"`` channel.
+
+    Thin wrapper so action code doesn't have to remember the channel
+    name. Used by every mutating verb in
+    `agent.actions.map.*` so the desktop HUD stays in lock-step with
+    the agent's intent without polling the registry.
+    """
+    await hub.broadcast("map", op, payload, user_id=user_id)

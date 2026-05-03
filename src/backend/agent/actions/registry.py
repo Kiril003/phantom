@@ -36,6 +36,7 @@ from .visual import (
     VisualClickTarget, VisualFindTarget, VisualSceneDescribe, VisualWaitFor,
 )
 from .esp32_aim import ESP32BuzzerAlert, ESP32ServoAim
+from .map import MAP_ACTIONS
 from .web import WebSearch
 
 _REGISTERED: list[Type[Action]] = [
@@ -74,6 +75,10 @@ _REGISTERED: list[Type[Action]] = [
     # find / click / wait / scene-describe so the planner can name UI
     # in natural language without ever reasoning about pixel coords.
     VisualFindTarget, VisualClickTarget, VisualWaitFor, VisualSceneDescribe,
+    # Phase 24-B — `map.*` agent action surface. 12 verbs, every
+    # mutation broadcast on the `"map"` WS channel via
+    # `agent.actions.map._common.broadcast_map_mutation`.
+    *MAP_ACTIONS,
 ]
 
 

@@ -108,6 +108,10 @@ class TaskState:
     # the runtime callback in agent_runtime.note_llm_call).
     llm_calls_this_task: int = 0
     llm_call_warned: bool = False
+    # Phase 17a.6 — count of failed Quality-Gate rounds on this task. The
+    # loop bounds re-attempts so a stubborn critic never wedges the agent;
+    # after N strikes it accepts the artefact with a logged caveat.
+    quality_gate_failures: int = 0
     # Phase 9.4a — metadata for background tasks (origin of dispatch, tie-back
     # to a standing order, per-task timeout override). None for foreground.
     origin: str = "user"

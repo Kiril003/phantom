@@ -41,6 +41,8 @@ from .schemas import (
     ThoughtBudget,
 )
 from .orchestrator import maybe_consult_council
+from .orchestrator.quality_gate import GateDraft
+from .orchestrator.runtime_hooks import run_quality_gate_for
 
 if TYPE_CHECKING:
     from .runtime import AgentRuntime, TaskState
@@ -62,6 +64,12 @@ _REPEAT_LOOKBACK = 5
 _REPEAT_FORCE_REFLECT_AT = 2
 _REPEAT_ABANDON_AT = 3
 _TIMESTAMP_KEYS = frozenset({"ts", "timestamp", "now", "_ts", "created_at"})
+
+# Phase 17a.6 — Quality Gate strikes before we accept the artefact as-is.
+# First failure → forced reflection (reflector either revises strategy or
+# the next DONE_TASK ships a clean draft). Second failure → finalize with
+# a caveat warning so the agent never wedges itself on a stubborn critic.
+_QUALITY_GATE_MAX_FAILURES = 2
 
 
 def _canonical_args_key(action: str, args: dict | None) -> str:
@@ -522,6 +530,154 @@ async def _run_task_loop_impl(runtime: "AgentRuntime", state: "TaskState", *, re
             # Terminal markers ───────────────────────────────────────────────────
             if step.action == _TERMINAL_DONE_TASK:
                 summary = str(step.args.get("summary") or "task complete")
+                # Phase 17a.6 — Quality Gate before declaring done. Producer
+                # is single-pass (returns the artefact as-is) — we use the
+                # gate purely as a *checkpoint*: if blockers exist we record
+                # the critique as an observation and force a reflection,
+                # giving the reflector enough context to either revise the
+                # strategy or ship a cleaner DONE_TASK on the next round.
+                # This is what "довести до кінцевого результату" looks like
+                # in practice: the agent never finalises on a draft that
+                # fails its own checklist.
+                #
+                # Bounded by `_QUALITY_GATE_MAX_FAILURES` so a stubborn
+                # critic never wedges the loop. After N strikes we accept
+                # the artefact with a caveat WS warning.
+                artefact = str(step.args.get("artefact") or summary)
+                artefact_kind = str(step.args.get("artefact_kind") or "text")
+                if artefact_kind not in {"text", "code", "document", "plan", "message"}:
+                    artefact_kind = "text"
+                acceptance = "\n".join(
+                    sg.acceptance_criteria
+                    for sg in state.sub_goals
+                    if sg.acceptance_criteria
+                ).strip() or state.goal
+
+                async def _gate_producer(
+                    _prev: GateDraft | None, _crit
+                ) -> GateDraft:
+                    return GateDraft(
+                        text=artefact,
+                        metadata={"step_idx": step.step_idx, "summary": summary},
+                    )
+
+                try:
+                    gate_result = await run_quality_gate_for(
+                        intent=state.goal,
+                        acceptance_criteria=acceptance,
+                        producer=_gate_producer,
+                        runtime=runtime,
+                        artefact_kind=artefact_kind,
+                        task_id=state.id,
+                        max_revisions=1,
+                    )
+                except Exception as exc:
+                    # Gate is best-effort — never block finalisation on its
+                    # own bug. Log + proceed as if it passed.
+                    logger.debug("quality_gate errored, accepting draft: %s", exc)
+                    gate_result = None
+
+                if (
+                    gate_result is not None
+                    and not gate_result.passed
+                    and gate_result.final_critique.has_blockers
+                ):
+                    state.quality_gate_failures += 1
+                    blocker_msgs = [
+                        i.message
+                        for i in gate_result.final_critique.issues
+                        if i.severity == "blocker"
+                    ]
+                    crit_msg = (
+                        "Quality gate blocked task completion ("
+                        f"strike {state.quality_gate_failures}/"
+                        f"{_QUALITY_GATE_MAX_FAILURES}):\n- "
+                        + "\n- ".join(blocker_msgs)
+                    )
+                    state.observations.append(
+                        build_system(state.step_idx, "quality_gate", crit_msg)
+                    )
+                    await runtime._broadcast(
+                        "quality_gate.blocked",
+                        {
+                            "task_id": state.id,
+                            "blockers": blocker_msgs,
+                            "strike": state.quality_gate_failures,
+                            "max_strikes": _QUALITY_GATE_MAX_FAILURES,
+                        },
+                    )
+
+                    if state.quality_gate_failures < _QUALITY_GATE_MAX_FAILURES:
+                        # Phase 17 — consult Council on the critique so a
+                        # second perspective shapes the revise_note. The
+                        # mode picker stays the gate; offline → deterministic
+                        # personas already produce a usable consensus.
+                        revise_note = crit_msg
+                        try:
+                            council_decision = await maybe_consult_council(
+                                CouncilSituation(
+                                    kind="quality_gate",
+                                    task_id=state.id,
+                                    summary=crit_msg[:600],
+                                    context={
+                                        "blockers": blocker_msgs,
+                                        "summary": summary,
+                                        "artefact_excerpt": artefact[:1000],
+                                    },
+                                ),
+                                runtime=runtime,
+                            )
+                            if (
+                                council_decision is not None
+                                and council_decision.consensus_summary
+                            ):
+                                revise_note = (
+                                    revise_note
+                                    + "\n\nConsensus: "
+                                    + council_decision.consensus_summary[:300]
+                                ).strip()
+                        except Exception as exc:
+                            logger.debug("council on quality_gate failed: %s", exc)
+
+                        ref = await _run_reflection(
+                            runtime, state, "quality_gate_failed"
+                        )
+                        if ref.verdict == "abandon_task":
+                            await runtime.finalize_task(
+                                state, "failed",
+                                summary=ref.summary,
+                                error="quality_gate_abandon",
+                            )
+                            return
+                        if ref.verdict == "revise_strategy":
+                            if not await _ensure_strategic_plan(
+                                runtime, state, revise_note=revise_note,
+                            ):
+                                return
+                            actions_in_subgoal = 0
+                        # Re-open completion: drop the failed DONE_TASK,
+                        # let the loop pick up where reflection left it.
+                        state.step_idx += 1
+                        continue
+
+                    # Strike cap reached — finalise with a caveat warning so
+                    # downstream reports surface that the gate didn't pass.
+                    await runtime._broadcast(
+                        "warning.issued",
+                        {
+                            "task_id": state.id,
+                            "category": "quality_gate_exhausted",
+                            "message": (
+                                "Quality gate failed "
+                                f"{state.quality_gate_failures} times — "
+                                "finalising with caveat."
+                            ),
+                        },
+                    )
+                    summary = f"{summary}\n\n⚠ quality gate caveat: " + "; ".join(
+                        blocker_msgs
+                    )
+
                 # Mark all sub-goals done
                 for sg in state.sub_goals:
                     if sg.status in {"pending", "active"}:

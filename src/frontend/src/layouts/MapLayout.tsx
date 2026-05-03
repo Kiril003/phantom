@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { TacticalMap } from '../components/map/TacticalMap';
+import { OmniMap } from '../components/map/OmniMap';
 import { StatusBar } from '../components/core/StatusBar';
 import { FloatingToolbar } from '../components/core/FloatingToolbar';
 import { EASE_PHANTOM } from '../styles/motion';
@@ -102,7 +102,7 @@ export default function MapLayout() {
       <div className="relative z-10 flex flex-col w-full h-full">
         <StatusBar />
         <main className="flex-1 min-h-0 relative">
-          <TacticalMap initialZoom={initialZoom} />
+          <OmniMap initialZoom={initialZoom} />
         </main>
         <FloatingToolbar />
       </div>

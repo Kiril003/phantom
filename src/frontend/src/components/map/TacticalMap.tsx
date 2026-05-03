@@ -180,6 +180,16 @@ export function TacticalMap({
     mapRef.current = map;
     setStyleLoadFailed(false);
 
+    // Phase 24-D — expose the live MapLibre instance so the OmniMap
+    // HUD overlay (`OmniMap.tsx`) can subscribe to rotate events and
+    // mirror bearing into the new `MapStateBadge` / `BearingTool`
+    // chips. Read-only handle; we never mutate via the glob.
+    if (typeof window !== 'undefined') {
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const phantom = ((window as any).__phantom = (window as any).__phantom ?? {});
+      phantom.map = map;
+    }
+
     const onLoad = () => {
       setReady(true);
       setStyleLoadFailed(false);

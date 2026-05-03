@@ -561,3 +561,115 @@ class CustomAgentRunRow(Base):
     summary: Mapped[str] = mapped_column(Text, default="")
     error: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, index=True)
+
+
+# ── Phase 19 — Mobile Companion ──────────────────────────────────────────────
+#
+# Pairing protocol (X25519 ECDH + Ed25519 long-term + HMAC-SHA256 proofs)
+# lives in `security/pair_crypto.py`. Tables here are the *persistent* outputs:
+#
+#   PairedDevice            — one row per claimed device (long-term Ed25519
+#                             pubkey, owning user, audit timestamps, revocation).
+#   MobileSensorBatch       — append-only log of mobile sensor packets received
+#                             via POST /sensors/mobile_batch. Used by the same
+#                             ContextEngine pipeline that ingests ESP32 data;
+#                             stored here for audit + replay + offline catch-up.
+#   MobileApprovalRequest   — push-driven ROOT-tier approval gate (Phase 19
+#                             approve-on-phone). Agent runtime creates a row,
+#                             phone signs response, runtime resumes with the
+#                             verdict.
+#
+# Ephemeral pairing sessions live in-memory in `pair_crypto._sessions` (60 s
+# TTL per design §4) — not persisted because a restart cancels them anyway
+# and PII (server private ECDH key) MUST NOT touch disk.
+
+
+class PairedDevice(Base):
+    __tablename__ = "paired_devices"
+    __table_args__ = (
+        Index("ix_paired_devices_user", "user_id"),
+        Index("ix_paired_devices_active", "user_id", "revoked_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    # Display
+    device_name: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    device_model: Mapped[str] = mapped_column(String(128), nullable=False, default="")
+    platform: Mapped[str] = mapped_column(String(16), nullable=False, default="android")
+    platform_version: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
+    # Crypto
+    device_pub_ed25519: Mapped[str] = mapped_column(String(128), nullable=False)
+    # Lifecycle
+    paired_at: Mapped[datetime] = mapped_column(DateTime, default=_now, nullable=False)
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime, default=_now, onupdate=_now, nullable=False
+    )
+    revoked_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    revoked_by: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    revoked_reason: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    # Capability flags (JSON-encoded set: ["sensors","approvals","comms",...])
+    capabilities_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+
+
+class MobileSensorBatch(Base):
+    __tablename__ = "mobile_sensor_batches"
+    __table_args__ = (
+        Index("ix_mobile_sensor_batches_device_ts", "device_id", "received_at"),
+    )
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    device_id: Mapped[str] = mapped_column(
+        ForeignKey("paired_devices.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[str] = mapped_column(String(36), nullable=False, index=True)
+    received_at: Mapped[datetime] = mapped_column(DateTime, default=_now, nullable=False)
+    # Original device timestamp (ms since epoch) — keep so we can detect
+    # offline-buffered batches that arrive late.
+    device_ts_ms: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    # Geo + motion + RF (all optional — phone may carry only some sensors)
+    gps_lat: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    gps_lon: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    gps_accuracy_m: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    motion_class: Mapped[Optional[str]] = mapped_column(String(24), nullable=True)
+    mic_rms: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    body_bpm: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    body_hrv: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    # BLE/WiFi observations are arrays — keep raw JSON. ContextEngine bridge
+    # opportunistically forwards each WiFi entry to wardriving.collector.
+    ble_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+    wifi_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+
+
+class MobileApprovalRequest(Base):
+    """Phase 19 approve-on-phone gate.
+
+    Lifecycle:
+      pending → (phone signs)  → approved | denied
+      pending → (timeout)      → expired
+      pending → (operator UI)  → cancelled
+    Nonce is a 16-byte b64 random string the phone signs together with
+    `request_id || verdict` using its long-term Ed25519 device key.
+    """
+    __tablename__ = "mobile_approval_requests"
+    __table_args__ = (
+        Index("ix_mobile_approval_pending", "user_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    device_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    task_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
+    action_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    risk_level: Mapped[int] = mapped_column(Integer, default=5, nullable=False)
+    payload_json: Mapped[str] = mapped_column(Text, default="{}", nullable=False)
+    summary: Mapped[str] = mapped_column(String(512), nullable=False, default="")
+    nonce_b64: Mapped[str] = mapped_column(String(64), nullable=False)
+    status: Mapped[str] = mapped_column(String(16), nullable=False, default="pending")
+    verdict: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    signature_b64: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, nullable=False)
+    expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
+    resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)

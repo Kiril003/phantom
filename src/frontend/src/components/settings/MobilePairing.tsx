@@ -147,6 +147,125 @@ function CountdownRing({
   );
 }
 
+/**
+ * Click-to-copy JSON code block. Two earlier revisions failed the
+ * operator: the first relied on Ctrl-C after click-to-select (no
+ * visible hover state, "0 reactions" perception); the second still
+ * needed the secondary "Скопіювати" button. This component:
+ *   - shows a visible hover highlight + amber border (the operator
+ *     can SEE the block is interactive without reading any label);
+ *   - on click selects all text AND copies to clipboard in one go;
+ *   - flashes "✓ Скопійовано" overlay for 1.5 s as confirmation;
+ *   - keeps Ctrl-A / Ctrl-C working for the rare case the user
+ *     wants partial selection.
+ * Renders independently of the parent so the countdown tick never
+ * touches its DOM tree.
+ */
+function JsonCodeBlock({
+  text,
+  onCopied,
+}: {
+  text: string;
+  onCopied: () => void;
+}): JSX.Element {
+  const [hover, setHover] = useState(false);
+  const [flash, setFlash] = useState(false);
+
+  const doCopy = useCallback(async () => {
+    try {
+      if (navigator.clipboard?.writeText) {
+        await navigator.clipboard.writeText(text);
+      } else {
+        const ta = document.createElement('textarea');
+        ta.value = text;
+        ta.style.position = 'fixed';
+        ta.style.opacity = '0';
+        document.body.appendChild(ta);
+        ta.select();
+        document.execCommand('copy');
+        document.body.removeChild(ta);
+      }
+      setFlash(true);
+      setTimeout(() => setFlash(false), 1500);
+      onCopied();
+    } catch {
+      /* operator can still Ctrl-A / Ctrl-C the selected text below. */
+    }
+  }, [text, onCopied]);
+
+  const onClick = useCallback(
+    (e: React.MouseEvent<HTMLPreElement>) => {
+      const range = document.createRange();
+      range.selectNodeContents(e.currentTarget);
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+      void doCopy();
+    },
+    [doCopy]
+  );
+
+  return (
+    <div style={{ position: 'relative', marginTop: 6 }}>
+      <pre
+        onClick={onClick}
+        onMouseEnter={() => setHover(true)}
+        onMouseLeave={() => setHover(false)}
+        title="Натисни, щоб скопіювати JSON"
+        style={{
+          margin: 0,
+          padding: 10,
+          borderRadius: 8,
+          background: hover ? 'rgba(244,175,37,0.08)' : 'rgba(0,0,0,0.04)',
+          border: hover
+            ? '1px solid rgba(244,175,37,0.55)'
+            : '1px solid rgba(0,0,0,0.08)',
+          fontSize: 10.5,
+          lineHeight: 1.45,
+          fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+          color: 'var(--ink-primary)',
+          maxHeight: 180,
+          overflowY: 'auto',
+          whiteSpace: 'pre',
+          cursor: 'pointer',
+          userSelect: 'text',
+          transition: 'background 120ms ease, border-color 120ms ease',
+          boxShadow: hover
+            ? '0 0 0 3px rgba(244,175,37,0.10)'
+            : 'none',
+        }}
+      >
+        {text}
+      </pre>
+      {/* Hover hint pill — appears on hover, becomes "✓ Скопійовано"
+          flash on click. Sits in the top-right corner of the pre. */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 6,
+          right: 8,
+          padding: '2px 8px',
+          borderRadius: 999,
+          fontSize: 9,
+          fontWeight: 700,
+          letterSpacing: '0.05em',
+          textTransform: 'uppercase',
+          pointerEvents: 'none',
+          opacity: flash || hover ? 1 : 0,
+          transition: 'opacity 140ms ease, background 140ms ease, color 140ms ease',
+          background: flash
+            ? 'rgba(22,163,74,0.95)'
+            : 'rgba(244,175,37,0.95)',
+          color: 'white',
+          boxShadow: '0 2px 6px rgba(0,0,0,0.18)',
+        }}
+      >
+        {flash ? '✓ Скопійовано' : 'Клік — скопіювати'}
+      </div>
+    </div>
+  );
+}
+
 export function MobilePairing(): JSX.Element {
   const [qr, setQr] = useState<PairInitResponse | null>(null);
   const [generating, setGenerating] = useState(false);
@@ -618,36 +737,13 @@ export function MobilePairing(): JSX.Element {
                   </button>
                 </div>
                 {showJson && (
-                  <pre
-                    onClick={(e) => {
-                      // Click-to-select makes manual copy with Ctrl-C work
-                      // for the rare Chromium build without async-clipboard.
-                      const range = document.createRange();
-                      range.selectNodeContents(e.currentTarget);
-                      const sel = window.getSelection();
-                      sel?.removeAllRanges();
-                      sel?.addRange(range);
+                  <JsonCodeBlock
+                    text={qrJsonText}
+                    onCopied={() => {
+                      setCopied(true);
+                      setTimeout(() => setCopied(false), 1800);
                     }}
-                    style={{
-                      marginTop: 6,
-                      padding: 10,
-                      borderRadius: 8,
-                      background: 'rgba(0,0,0,0.04)',
-                      border: '1px solid rgba(0,0,0,0.08)',
-                      fontSize: 10.5,
-                      lineHeight: 1.45,
-                      fontFamily:
-                        'ui-monospace, SFMono-Regular, Menlo, monospace',
-                      color: 'var(--ink-primary)',
-                      maxHeight: 180,
-                      overflowY: 'auto',
-                      whiteSpace: 'pre',
-                      cursor: 'text',
-                      userSelect: 'text',
-                    }}
-                  >
-                    {qrJsonText}
-                  </pre>
+                  />
                 )}
               </div>
             </div>

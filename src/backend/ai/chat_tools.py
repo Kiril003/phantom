@@ -558,6 +558,150 @@ CHAT_DATA_TOOLS: list[dict[str, Any]] = [
             "required": [],
         },
     },
+    # ── Phase 17b-chat-2 — editing an existing custom agent ───────────────────
+    {
+        "name": "studio_update_agent",
+        "description": (
+            "Змінити поля існуючого кастомного агента: name / description / "
+            "goal_template / tags / enabled / schedule. Передавай ЛИШЕ ті "
+            "поля які треба змінити — інші лишаються як були. Викликай коли "
+            "юзер каже «перейменуй Васю в …», «зміни розклад на щогодини», "
+            "«вимкни цього агента»."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "agent_id": {"type": "string"},
+                "name": {"type": "string"},
+                "description": {"type": "string"},
+                "goal_template": {"type": "string"},
+                "tags": {"type": "array", "items": {"type": "string"}},
+                "enabled": {"type": "boolean"},
+                "schedule": {
+                    "type": "object",
+                    "properties": {
+                        "kind": {
+                            "type": "string",
+                            "enum": ["manual", "interval", "cron", "conditional", "one_shot_future"],
+                        },
+                        "interval_s": {"type": "integer"},
+                        "cron_expr": {"type": "string"},
+                        "condition": {"type": "string"},
+                        "fire_at": {"type": "string"},
+                        "enabled": {"type": "boolean"},
+                    },
+                },
+            },
+            "required": ["agent_id"],
+        },
+    },
+    {
+        "name": "studio_add_card",
+        "description": (
+            "Додати картку (один блок поведінки) до існуючого агента. "
+            "category ∈ {source, transform, decision, output, council}; "
+            "kind — конкретний тип з studio_card_catalog (наприклад "
+            "'web_search', 'summarize', 'send_telegram', 'review_by_council'). "
+            "Картка додається в кінець списку; зв'язки між картками "
+            "(DAG-edges) додаються окремо через studio_link_cards. Cap 32."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "agent_id": {"type": "string"},
+                "kind": {
+                    "type": "string",
+                    "description": "Точна назва kind зі studio_card_catalog.",
+                },
+                "category": {
+                    "type": "string",
+                    "enum": ["source", "transform", "decision", "output", "council"],
+                },
+                "title": {"type": "string"},
+                "description": {"type": "string"},
+                "config": {
+                    "type": "object",
+                    "description": "Параметри картки (наприклад {'query': 'дрони сьогодні', 'top_k': 5} для web_search). Структура залежить від kind.",
+                },
+            },
+            "required": ["agent_id", "kind", "category"],
+        },
+    },
+    {
+        "name": "studio_remove_card",
+        "description": (
+            "Видалити картку з агента. Лінки які торкають цю картку (як "
+            "from_card_id, так і to_card_id) автоматично прибираються щоб "
+            "validate_agent не блокувало save."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "agent_id": {"type": "string"},
+                "card_id": {"type": "string"},
+            },
+            "required": ["agent_id", "card_id"],
+        },
+    },
+    {
+        "name": "studio_link_cards",
+        "description": (
+            "З'єднати дві картки в DAG (вихід першої → вхід другої). "
+            "label використовується для branch-карток ('true'/'false', "
+            "'matched'/'fallback'). Дублювати точно ту саму грань (тi самi "
+            "from/to/label) не можна."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "agent_id": {"type": "string"},
+                "from_card_id": {"type": "string"},
+                "to_card_id": {"type": "string"},
+                "label": {"type": "string"},
+            },
+            "required": ["agent_id", "from_card_id", "to_card_id"],
+        },
+    },
+    {
+        "name": "studio_add_recipient",
+        "description": (
+            "Додати отримувача (куди агент шле результат). channel ∈ "
+            "{email, telegram, sms, file, chat_self, phantom_notify, "
+            "webhook}. target — адреса/ID/шлях/URL. label — людська назва "
+            "(опційно). Cap 16."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "agent_id": {"type": "string"},
+                "channel": {
+                    "type": "string",
+                    "enum": [
+                        "email", "telegram", "sms", "file",
+                        "chat_self", "phantom_notify", "webhook",
+                    ],
+                },
+                "target": {"type": "string"},
+                "label": {"type": "string"},
+                "enabled": {"type": "boolean"},
+            },
+            "required": ["agent_id", "channel", "target"],
+        },
+    },
+    {
+        "name": "studio_remove_recipient",
+        "description": (
+            "Видалити отримувача з агента."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "agent_id": {"type": "string"},
+                "recipient_id": {"type": "string"},
+            },
+            "required": ["agent_id", "recipient_id"],
+        },
+    },
 ]
 
 

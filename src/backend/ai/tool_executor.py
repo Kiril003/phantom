@@ -1366,6 +1366,296 @@ async def _tool_studio_delete_agent(args: dict[str, Any], user_id: str) -> dict[
     return _ok(deleted=bool(deleted), agent_name=agent.name)
 
 
+async def _studio_load_owned(agent_id: str, user_id: str) -> tuple[Any, dict[str, Any] | None]:
+    """Shared helper: load agent + verify ownership. Returns (agent, error)."""
+    try:
+        from agent.studio.repository import get_agent
+    except Exception as exc:
+        return None, _err("import_error", f"studio unavailable: {exc}")
+    try:
+        agent = await get_agent(agent_id)
+    except Exception as exc:
+        return None, _err("studio_get_failed", f"{type(exc).__name__}: {exc}")
+    if agent is None:
+        return None, _err("not_found", f"agent {agent_id} not found")
+    if agent.owner_user_id != user_id:
+        return None, _err("forbidden", "agent belongs to a different user")
+    return agent, None
+
+
+async def _studio_save_with_validation(agent: Any) -> dict[str, Any] | None:
+    """Validate + persist. Returns error dict on failure, None on success."""
+    try:
+        from agent.studio.repository import save_agent
+        from agent.studio.validate import has_blockers, validate_agent
+    except Exception as exc:
+        return _err("import_error", f"studio unavailable: {exc}")
+    issues = validate_agent(agent)
+    if has_blockers(issues):
+        return _err(
+            "validation_failed",
+            "; ".join(i.message for i in issues if i.severity == "blocker")[:300],
+        )
+    try:
+        await save_agent(agent)
+    except Exception as exc:
+        return _err("studio_save_failed", f"{type(exc).__name__}: {exc}")
+    return None
+
+
+async def _tool_studio_update_agent(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    agent_id = str(args.get("agent_id") or "").strip()
+    if not agent_id:
+        return _err("invalid_args", "agent_id is required")
+    agent, err = await _studio_load_owned(agent_id, user_id)
+    if err is not None:
+        return err
+
+    # Apply only fields the LLM included; leave the rest untouched. This
+    # lets PHANTOM say "rename it to X" without resending the full agent.
+    if "name" in args:
+        new_name = str(args.get("name") or "").strip()
+        if len(new_name) < 2 or len(new_name) > 160:
+            return _err("invalid_args", "name must be 2-160 characters")
+        agent.name = new_name
+    if "description" in args:
+        agent.description = str(args.get("description") or "").strip()[:2000]
+    if "goal_template" in args:
+        agent.goal_template = str(args.get("goal_template") or "").strip()[:4000]
+    if "tags" in args:
+        raw = args.get("tags") or []
+        if not isinstance(raw, list):
+            return _err("invalid_args", "tags must be an array")
+        clean: list[str] = []
+        for t in raw:
+            if isinstance(t, str) and t.strip():
+                clean.append(t.strip()[:32])
+        agent.tags = clean[:8]
+    if "enabled" in args:
+        agent.enabled = bool(args.get("enabled"))
+    if "schedule" in args:
+        try:
+            from agent.studio import Schedule
+        except Exception as exc:
+            return _err("import_error", f"studio unavailable: {exc}")
+        raw_sched = args.get("schedule") or {}
+        if not isinstance(raw_sched, dict):
+            return _err("invalid_args", "schedule must be an object")
+        try:
+            agent.schedule = Schedule(**raw_sched)
+        except Exception as exc:
+            return _err("invalid_schedule", f"{type(exc).__name__}: {exc}")
+
+    err = await _studio_save_with_validation(agent)
+    if err is not None:
+        return err
+    return _ok(agent_id=agent.id, name=agent.name, updated=True)
+
+
+async def _tool_studio_add_card(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    agent_id = str(args.get("agent_id") or "").strip()
+    if not agent_id:
+        return _err("invalid_args", "agent_id is required")
+    agent, err = await _studio_load_owned(agent_id, user_id)
+    if err is not None:
+        return err
+
+    kind = str(args.get("kind") or "").strip()
+    category = str(args.get("category") or "").strip()
+    if not kind or not category:
+        return _err("invalid_args", "kind and category are required")
+    title = str(args.get("title") or "").strip()[:160]
+    description = str(args.get("description") or "").strip()[:600]
+    config = args.get("config") or {}
+    if not isinstance(config, dict):
+        return _err("invalid_args", "config must be an object")
+
+    try:
+        from agent.studio import AgentCard
+    except Exception as exc:
+        return _err("import_error", f"studio unavailable: {exc}")
+    try:
+        card = AgentCard(
+            kind=kind,  # type: ignore[arg-type]
+            category=category,  # type: ignore[arg-type]
+            title=title,
+            description=description,
+            config=config,
+        )
+    except Exception as exc:
+        return _err("invalid_card", f"{type(exc).__name__}: {exc}")
+
+    if len(agent.cards) >= 32:
+        return _err(
+            "card_limit",
+            "agent has 32 cards already — drop one before adding more",
+        )
+    agent.cards = list(agent.cards) + [card]
+
+    err = await _studio_save_with_validation(agent)
+    if err is not None:
+        return err
+    return _ok(
+        agent_id=agent.id,
+        card_id=card.id,
+        card_count=len(agent.cards),
+        next_step=(
+            f"Картку '{card.title or card.kind}' додано. Якщо ця картка "
+            "має споживати вихід попередньої — викликай studio_link_cards "
+            f"з from_card_id={agent.cards[-2].id if len(agent.cards) >= 2 else '<prev>'} "
+            f"to_card_id={card.id}."
+        ),
+    )
+
+
+async def _tool_studio_remove_card(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    agent_id = str(args.get("agent_id") or "").strip()
+    card_id = str(args.get("card_id") or "").strip()
+    if not agent_id or not card_id:
+        return _err("invalid_args", "agent_id and card_id are required")
+    agent, err = await _studio_load_owned(agent_id, user_id)
+    if err is not None:
+        return err
+
+    before = len(agent.cards)
+    agent.cards = [c for c in agent.cards if c.id != card_id]
+    if len(agent.cards) == before:
+        return _err("not_found", f"card {card_id} not on this agent")
+    # Drop dangling links so validate_agent doesn't blocker on them.
+    agent.links = [
+        l for l in agent.links
+        if l.from_card_id != card_id and l.to_card_id != card_id
+    ]
+
+    err = await _studio_save_with_validation(agent)
+    if err is not None:
+        return err
+    return _ok(
+        agent_id=agent.id,
+        card_id=card_id,
+        card_count=len(agent.cards),
+        link_count=len(agent.links),
+    )
+
+
+async def _tool_studio_link_cards(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    agent_id = str(args.get("agent_id") or "").strip()
+    from_card_id = str(args.get("from_card_id") or "").strip()
+    to_card_id = str(args.get("to_card_id") or "").strip()
+    if not agent_id or not from_card_id or not to_card_id:
+        return _err(
+            "invalid_args", "agent_id, from_card_id, to_card_id are required"
+        )
+    if from_card_id == to_card_id:
+        return _err("invalid_args", "from_card_id and to_card_id must differ")
+    label = str(args.get("label") or "").strip()[:32] or None
+
+    agent, err = await _studio_load_owned(agent_id, user_id)
+    if err is not None:
+        return err
+
+    card_ids = {c.id for c in agent.cards}
+    if from_card_id not in card_ids:
+        return _err("not_found", f"from_card_id {from_card_id} not on this agent")
+    if to_card_id not in card_ids:
+        return _err("not_found", f"to_card_id {to_card_id} not on this agent")
+
+    # Prevent duplicate edges with the same label.
+    for link in agent.links:
+        if (
+            link.from_card_id == from_card_id
+            and link.to_card_id == to_card_id
+            and (link.label or None) == label
+        ):
+            return _err(
+                "duplicate_link",
+                "this exact edge already exists — pass a different label or skip",
+            )
+
+    try:
+        from agent.studio import AgentCardLink
+    except Exception as exc:
+        return _err("import_error", f"studio unavailable: {exc}")
+    new_link = AgentCardLink(
+        from_card_id=from_card_id, to_card_id=to_card_id, label=label,
+    )
+    agent.links = list(agent.links) + [new_link]
+
+    err = await _studio_save_with_validation(agent)
+    if err is not None:
+        return err
+    return _ok(agent_id=agent.id, link_count=len(agent.links))
+
+
+async def _tool_studio_add_recipient(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    agent_id = str(args.get("agent_id") or "").strip()
+    if not agent_id:
+        return _err("invalid_args", "agent_id is required")
+    channel = str(args.get("channel") or "").strip()
+    target = str(args.get("target") or "").strip()
+    if not channel or not target:
+        return _err("invalid_args", "channel and target are required")
+    label = str(args.get("label") or "").strip()[:120] or None
+
+    agent, err = await _studio_load_owned(agent_id, user_id)
+    if err is not None:
+        return err
+
+    try:
+        from agent.studio import Recipient
+    except Exception as exc:
+        return _err("import_error", f"studio unavailable: {exc}")
+    try:
+        recipient = Recipient(
+            channel=channel,  # type: ignore[arg-type]
+            target=target,
+            label=label,
+            enabled=bool(args.get("enabled", True)),
+        )
+    except Exception as exc:
+        return _err("invalid_recipient", f"{type(exc).__name__}: {exc}")
+
+    if len(agent.recipients) >= 16:
+        return _err(
+            "recipient_limit",
+            "agent has 16 recipients already — drop one before adding",
+        )
+    agent.recipients = list(agent.recipients) + [recipient]
+
+    err = await _studio_save_with_validation(agent)
+    if err is not None:
+        return err
+    return _ok(
+        agent_id=agent.id,
+        recipient_id=recipient.id,
+        recipient_count=len(agent.recipients),
+    )
+
+
+async def _tool_studio_remove_recipient(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    agent_id = str(args.get("agent_id") or "").strip()
+    recipient_id = str(args.get("recipient_id") or "").strip()
+    if not agent_id or not recipient_id:
+        return _err("invalid_args", "agent_id and recipient_id are required")
+    agent, err = await _studio_load_owned(agent_id, user_id)
+    if err is not None:
+        return err
+
+    before = len(agent.recipients)
+    agent.recipients = [r for r in agent.recipients if r.id != recipient_id]
+    if len(agent.recipients) == before:
+        return _err("not_found", f"recipient {recipient_id} not on this agent")
+
+    err = await _studio_save_with_validation(agent)
+    if err is not None:
+        return err
+    return _ok(
+        agent_id=agent.id,
+        recipient_id=recipient_id,
+        recipient_count=len(agent.recipients),
+    )
+
+
 async def _tool_studio_card_catalog(args: dict[str, Any], user_id: str) -> dict[str, Any]:  # noqa: ARG001
     try:
         from agent.studio.catalog import list_catalog
@@ -1429,6 +1719,13 @@ _HANDLERS: dict[str, Any] = {
     "studio_run_agent": _tool_studio_run_agent,
     "studio_delete_agent": _tool_studio_delete_agent,
     "studio_card_catalog": _tool_studio_card_catalog,
+    # Phase 17b-chat-2 — chat-driven editing of an existing custom agent.
+    "studio_update_agent": _tool_studio_update_agent,
+    "studio_add_card": _tool_studio_add_card,
+    "studio_remove_card": _tool_studio_remove_card,
+    "studio_link_cards": _tool_studio_link_cards,
+    "studio_add_recipient": _tool_studio_add_recipient,
+    "studio_remove_recipient": _tool_studio_remove_recipient,
 }
 
 

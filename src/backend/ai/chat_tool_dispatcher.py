@@ -69,6 +69,13 @@ _CHAT_SAFE_TOOL_NAMES: tuple[str, ...] = (
     "studio_run_agent",
     "studio_delete_agent",
     "studio_card_catalog",
+    # Phase 17b-chat-2 — chat-driven editing of an existing agent.
+    "studio_update_agent",
+    "studio_add_card",
+    "studio_remove_card",
+    "studio_link_cards",
+    "studio_add_recipient",
+    "studio_remove_recipient",
 )
 
 

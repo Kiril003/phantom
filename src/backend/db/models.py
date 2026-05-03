@@ -673,3 +673,99 @@ class MobileApprovalRequest(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, nullable=False)
     expires_at: Mapped[datetime] = mapped_column(DateTime, nullable=False)
     resolved_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
+# ── Phase 25-A — Personal Vault (encrypted info cards) ───────────────────────
+
+
+class VaultCard(Base):
+    """Phase 25-A — encrypted personal info card.
+
+    Each card belongs to one user and groups related fields (e.g. one
+    `email_account` card holds provider, address, password, app_password).
+    `fields_json` stores a dict where each value is either:
+
+        {"v": "<plaintext>", "secret": false}       ← visible to AI
+        {"v": "<base64-aead-token>", "secret": true} ← AES-256-GCM
+                                                        token via
+                                                        security/vault_crypto
+
+    AI sees label + tags + non-secret fields by default. Secret fields
+    require an explicit `vault.reveal` call (Council pre-approval +
+    phone biometric) OR `vault.use` which injects the secret directly
+    into a downstream action's args without ever returning plaintext to
+    the LLM context window.
+    """
+    __tablename__ = "vault_cards"
+    __table_args__ = (
+        Index("ix_vault_cards_owner_kind", "owner_user_id", "kind"),
+        Index("ix_vault_cards_active", "owner_user_id", "deleted_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    owner_user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # Closed enum mirrors the FE card editors. Storage is a string so
+    # adding a new kind doesn't require a schema migration; the FE +
+    # routes layer enforces the closed set.
+    # Known kinds: email_account, service_login, messenger, phone,
+    # company, payment_method, api_key, document, contact, wifi_network,
+    # crypto_wallet, custom.
+    kind: Mapped[str] = mapped_column(String(32), nullable=False)
+    label: Mapped[str] = mapped_column(String(160), nullable=False)
+    fields_json: Mapped[str] = mapped_column(Text, default="{}", nullable=False)
+    tags_json: Mapped[str] = mapped_column(Text, default="[]", nullable=False)
+    # When False, AI tools may read but never write the card. Operator-
+    # owned cards (e.g. master credentials) flip this off.
+    ai_writable: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    # Soft-delete with 30d undo window — see VaultAuditEntry for the
+    # audit trail. Hard delete happens via a nightly job in 25-B.
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True, index=True
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=_now, nullable=False
+    )
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, default=_now, onupdate=_now, nullable=False
+    )
+    # Last time ANY field on this card was read (revealed or used). Lets
+    # the FE highlight stale cards and powers an "AI accessed this
+    # 2 hours ago" hint in the audit timeline.
+    last_accessed_at: Mapped[Optional[datetime]] = mapped_column(
+        DateTime, nullable=True
+    )
+
+
+class VaultAuditEntry(Base):
+    """Phase 25-A — append-only log of every vault operation.
+
+    Tracks who/when/what so the operator can review AI access patterns,
+    detect unexpected reveals, and roll back accidental deletes within
+    the 30-day soft-delete window.
+
+    `actor` distinguishes operator-initiated actions from AI-initiated
+    ones — the FE renders the timeline with different glyphs so a sweep
+    of "what did the AI touch today?" is one filter away.
+    """
+    __tablename__ = "vault_audit_entries"
+    __table_args__ = (
+        Index("ix_vault_audit_card", "card_id", "created_at"),
+        Index("ix_vault_audit_user_action", "user_id", "action"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    card_id: Mapped[Optional[str]] = mapped_column(
+        String(36), nullable=True, index=True
+    )
+    # Closed enum — list / get / create / update / delete / restore /
+    # reveal / use. Stored as a string for forward compatibility with
+    # future verbs without a migration.
+    action: Mapped[str] = mapped_column(String(32), nullable=False)
+    actor: Mapped[str] = mapped_column(String(16), nullable=False)  # user|ai
+    details_json: Mapped[str] = mapped_column(Text, default="{}", nullable=False)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=_now, nullable=False, index=True
+    )

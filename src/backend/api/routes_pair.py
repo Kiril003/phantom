@@ -36,7 +36,10 @@ from api.websocket_hub import hub
 from config import config
 from db.database import get_db
 from db.models import PairedDevice, User
-from security.device_token import create_device_token
+from security.device_token import (
+    create_device_token,
+    decode_expired_device_token,
+)
 from security.pair_crypto import (
     PAIR_TTL_SECONDS,
     PairingError,
@@ -45,6 +48,7 @@ from security.pair_crypto import (
     derive_shared_key,
     session_store,
     verify_client_proof,
+    verify_device_signature,
 )
 from security.permissions import require_root
 
@@ -88,6 +92,26 @@ class PairStatusResponse(BaseModel):
     pair_id: str
     status: str
     device_id: Optional[str] = None
+
+
+class PairRefreshRequest(BaseModel):
+    """Phase 19-9 — phone-initiated device JWT refresh.
+
+    The phone proves possession of its biometric-gated Android Keystore
+    Ed25519 key by signing `device_id || ":" || nonce_b64`. The old
+    JWT carries the orig_iat anchor that the server preserves into the
+    new token. Even if the old JWT is past its `exp`, refresh succeeds
+    as long as the orig_iat is within the absolute-lifetime cap.
+    """
+
+    old_token: str = Field(..., description="Most-recent device JWT (may be expired)")
+    nonce_b64: str = Field(..., min_length=16, max_length=64)
+    signature_b64: str = Field(..., min_length=40, max_length=128)
+
+
+class PairRefreshResponse(BaseModel):
+    device_jwt: str
+    expires_at: str
 
 
 class PairedDeviceRow(BaseModel):
@@ -331,6 +355,95 @@ async def pair_claim(
         server_proof=server_proof,
         user=_user_to_dict(owner),
     )
+
+
+@router.post("/pair/refresh", response_model=PairRefreshResponse)
+async def pair_refresh(
+    body: PairRefreshRequest,
+    db: AsyncSession = Depends(get_db),
+) -> PairRefreshResponse:
+    """Phase 19-9 — sliding-window device-JWT refresh.
+
+    NO Bearer auth: the old JWT may be expired, in which case the
+    standard auth dependency would refuse. Instead, the phone proves
+    identity through an Ed25519 signature over the (device_id, nonce)
+    tuple — the corresponding pubkey lives on `PairedDevice` and was
+    pinned at /pair/claim time.
+
+    The new token preserves `orig_iat`, so the absolute-lifetime cap
+    in `verify_device_token` (anchored to that field) eventually
+    forces the phone to re-pair via QR — no infinite refresh chains.
+    """
+    # 1) Decode the old token w/o exp validation. Anything else
+    #    structural (signature, audience, role, missing orig_iat,
+    #    absolute-lifetime cap) DOES still raise — those represent
+    #    forgery attempts and should fail the refresh.
+    try:
+        old_payload = decode_expired_device_token(body.old_token)
+    except Exception as exc:
+        logger.info("pair/refresh: old token rejected: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "old_token_rejected"},
+        ) from exc
+
+    # 2) Look up the paired-device row.
+    row = await db.get(PairedDevice, old_payload.device_id)
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "device_unknown"},
+        )
+    if row.revoked_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "device_revoked"},
+        )
+    if row.user_id != old_payload.user_id:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "device_owner_mismatch"},
+        )
+
+    # 3) Verify the Ed25519 signature over `device_id:nonce_b64`. The
+    #    nonce is the per-refresh entropy that prevents replay; we
+    #    don't store it server-side because the timestamp embedded in
+    #    the new JWT (`iat`) plus the orig_iat ceiling collectively
+    #    bound replay value to ≤ ABSOLUTE_LIFETIME_DAYS anyway.
+    challenge = f"{old_payload.device_id}:{body.nonce_b64}".encode("utf-8")
+    try:
+        verify_device_signature(
+            device_pub_ed25519_b64=row.device_pub_ed25519,
+            message=challenge,
+            signature_b64=body.signature_b64,
+        )
+    except PairingError as exc:
+        logger.info(
+            "pair/refresh: signature rejected device_id=%s code=%s",
+            old_payload.device_id,
+            exc.code,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": exc.code},
+        ) from exc
+
+    # 4) Mint a fresh token preserving orig_iat. last_seen_at bumps
+    #    on every refresh, which keeps the dormancy clock honest.
+    new_jwt, new_exp_iso = create_device_token(
+        device_id=old_payload.device_id,
+        user_id=old_payload.user_id,
+        orig_iat=old_payload.orig_iat,
+    )
+    row.last_seen_at = datetime.now(tz=timezone.utc)
+    await db.commit()
+
+    logger.info(
+        "pair/refresh: device_id=%s user_id=%s",
+        old_payload.device_id,
+        old_payload.user_id,
+    )
+    return PairRefreshResponse(device_jwt=new_jwt, expires_at=new_exp_iso)
 
 
 @router.get("/pair/status", response_model=PairStatusResponse)

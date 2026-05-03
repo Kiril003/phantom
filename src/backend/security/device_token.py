@@ -47,6 +47,7 @@ __all__ = [
     "DeviceTokenPayload",
     "create_device_token",
     "verify_device_token",
+    "decode_expired_device_token",
 ]
 
 _ALGORITHM = "HS256"
@@ -115,6 +116,49 @@ def verify_device_token(token: str) -> DeviceTokenPayload:
         _secret(),
         algorithms=[_ALGORITHM],
         audience=_AUDIENCE,
+    )
+    if payload.get("role") != "DEVICE":
+        raise JWTError("device token role drift")
+    if "orig_iat" not in payload:
+        raise JWTError("device token missing orig_iat")
+    orig_iat_ts = int(payload["orig_iat"])
+    now_ts = int(datetime.now(tz=timezone.utc).timestamp())
+    if now_ts - orig_iat_ts > ABSOLUTE_LIFETIME_DAYS * 86400:
+        raise JWTError(
+            f"device refresh chain exceeded {ABSOLUTE_LIFETIME_DAYS}-day cap"
+        )
+    return DeviceTokenPayload(
+        device_id=str(payload["sub"]),
+        user_id=str(payload["user_id"]),
+        iat=int(payload["iat"]),
+        exp=int(payload["exp"]),
+        orig_iat=orig_iat_ts,
+    )
+
+
+def decode_expired_device_token(token: str) -> DeviceTokenPayload:
+    """Phase 19-9 refresh path — decode a device JWT WITHOUT validating
+    `exp` so /pair/refresh can read `orig_iat` from a freshly-expired
+    credential.
+
+    This is only safe to call from a code path that ALREADY verified
+    phone identity through some other proof (Ed25519 signature over a
+    fresh nonce, `PairedDevice` row lookup, etc.). Using it as a
+    standalone auth dependency would defeat token expiry entirely —
+    so the helper is intentionally not exposed via FastAPI Depends().
+
+    Signature, audience, role, and the absolute-lifetime cap are
+    still enforced; only the per-token `exp` is allowed to be in the
+    past. A token forged with a future orig_iat (e.g. an attacker
+    trying to extend the chain) will still be caught by the
+    `ABSOLUTE_LIFETIME_DAYS` ceiling.
+    """
+    payload = jwt.decode(
+        token,
+        _secret(),
+        algorithms=[_ALGORITHM],
+        audience=_AUDIENCE,
+        options={"verify_exp": False},
     )
     if payload.get("role") != "DEVICE":
         raise JWTError("device token role drift")

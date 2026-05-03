@@ -99,6 +99,26 @@ interface AgentState {
   councilSituationSummary: string | null;
   councilStatements: AgentRoleStatement[];
   councilDecision: AgentCouncilDecision | null;
+  // Phase 17a.6 — Quality Gate live state. Surfaced in AgentPulseLane so
+  // the operator can watch the agent revising a draft instead of
+  // staring at a frozen "thinking…" pill. Lifecycle:
+  //   revision_started → revision_completed (× n) →
+  //     either: regenerated (passed with rewrite) OR blocked (strike).
+  // Cleared on the next task termination event.
+  qualityGate: {
+    active: boolean;
+    round: number;
+    maxRounds: number;
+    blockers: string[];
+    warningsCount: number;
+    draftExcerpt: string | null;
+    regenerated: boolean;
+    strike: number;
+    maxStrikes: number;
+    artefactKind: string | null;
+    intent: string | null;
+    at: string;
+  } | null;
   // Phase 16 — chat seed payload returned by /resume-as-conversation. Cleared
   // by the chat layer after consuming it (see chatStore.consumeAgentSeed).
   conversationSeed: AgentResumeAsConversationResponse | null;
@@ -207,6 +227,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   councilSituationSummary: null,
   councilStatements: [],
   councilDecision: null,
+  qualityGate: null,
   conversationSeed: null,
   historyTasks: [],
   historyLoading: false,
@@ -517,6 +538,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         patch.status = 'running';
         patch.connectionStatus = 'running';
         patch.promptToUser = null;
+        // Phase 17a.6 — fresh task → wipe quality gate state from any
+        // previous run so the pulse-lane doesn't show stale "polishing"
+        // chips on the new task's hero.
+        patch.qualityGate = null;
         break;
       }
       case 'strategic_plan.created': {
@@ -739,6 +764,88 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         // the verdict + statements; user closes it when ready.
         break;
       }
+      // ── Phase 17a.6 — Quality Gate revision lifecycle ──────────────────
+      case 'quality_gate.revision_started': {
+        patch.qualityGate = {
+          active: true,
+          round: 0,
+          maxRounds: 3,
+          blockers: [],
+          warningsCount: 0,
+          draftExcerpt: null,
+          regenerated: false,
+          strike: get().qualityGate?.strike ?? 0,
+          maxStrikes: get().qualityGate?.maxStrikes ?? 2,
+          artefactKind: get().qualityGate?.artefactKind ?? null,
+          intent: String(e.payload.intent ?? '') || null,
+          at: new Date(e.ts).toISOString(),
+        };
+        break;
+      }
+      case 'quality_gate.revision_completed': {
+        const round = Number(e.payload.round ?? 0);
+        const blockers = (e.payload.blockers as string[] | undefined) ?? [];
+        const warningsCount = Number(e.payload.warnings_count ?? 0);
+        const excerpt = String(e.payload.draft_excerpt ?? '') || null;
+        const prev = get().qualityGate;
+        patch.qualityGate = {
+          active: true,
+          round,
+          maxRounds: prev?.maxRounds ?? 3,
+          blockers,
+          warningsCount,
+          draftExcerpt: excerpt,
+          regenerated: prev?.regenerated ?? false,
+          strike: prev?.strike ?? 0,
+          maxStrikes: prev?.maxStrikes ?? 2,
+          artefactKind: prev?.artefactKind ?? null,
+          intent: prev?.intent ?? null,
+          at: new Date(e.ts).toISOString(),
+        };
+        break;
+      }
+      case 'quality_gate.blocked': {
+        const blockers = (e.payload.blockers as string[] | undefined) ?? [];
+        const strike = Number(e.payload.strike ?? 1);
+        const maxStrikes = Number(e.payload.max_strikes ?? 2);
+        const prev = get().qualityGate;
+        patch.qualityGate = {
+          active: true,
+          round: prev?.round ?? 0,
+          maxRounds: prev?.maxRounds ?? 3,
+          blockers,
+          warningsCount: prev?.warningsCount ?? 0,
+          draftExcerpt: prev?.draftExcerpt ?? null,
+          regenerated: false,
+          strike,
+          maxStrikes,
+          artefactKind: prev?.artefactKind ?? null,
+          intent: prev?.intent ?? null,
+          at: new Date(e.ts).toISOString(),
+        };
+        break;
+      }
+      case 'quality_gate.regenerated': {
+        const rounds = Number(e.payload.rounds ?? 0);
+        const excerpt = String(e.payload.excerpt ?? '') || null;
+        const artefactKind = String(e.payload.artefact_kind ?? '') || null;
+        const prev = get().qualityGate;
+        patch.qualityGate = {
+          active: true,
+          round: rounds,
+          maxRounds: prev?.maxRounds ?? 3,
+          blockers: [],
+          warningsCount: prev?.warningsCount ?? 0,
+          draftExcerpt: excerpt,
+          regenerated: true,
+          strike: prev?.strike ?? 0,
+          maxStrikes: prev?.maxStrikes ?? 2,
+          artefactKind,
+          intent: prev?.intent ?? null,
+          at: new Date(e.ts).toISOString(),
+        };
+        break;
+      }
       case 'task.blocked_quota': {
         patch.status = 'blocked_quota';
         patch.promptToUser = String(
@@ -860,6 +967,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     reportLoading: false,
     reportError: null,
     conversationSeed: null,
+    qualityGate: null,
     historyTasks: [],
     historyLoading: false,
     historyError: null,

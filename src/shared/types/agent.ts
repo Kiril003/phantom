@@ -429,6 +429,9 @@ export type AgentEventType =
   // Phase 17a.6 — Quality Gate revision cycles.
   | 'quality_gate.revision_started'
   | 'quality_gate.revision_completed'
+  // Phase 17a.6-revise — strike + regenerated draft surfacing.
+  | 'quality_gate.blocked'
+  | 'quality_gate.regenerated'
   // Phase 9.2.1
   | 'task.blocked_quota'
   // Audit B-18 — backoff retry envelope. runtime.py:584 emits when the

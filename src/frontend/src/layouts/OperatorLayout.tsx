@@ -31,6 +31,7 @@ import { AgentTimeline } from '../components/agent/AgentTimeline';
 import { DecisionCard, type DecisionCardData } from '../components/agent/DecisionCard';
 import { AgentReportScreen } from '../components/agent/AgentReportScreen';
 import { CouncilStage } from '../components/agent/CouncilStage';
+import { AgentPulseLane } from '../components/agent/AgentPulseLane';
 import { InfoNeedDialog } from '../components/agent/InfoNeedDialog';
 import { LongRunningTaskCard } from '../components/agent/LongRunningTaskCard';
 import { PlanEditor } from '../components/agent/PlanEditor';
@@ -194,7 +195,9 @@ export default function OperatorLayout() {
       <main
         className="flex-1 grid gap-3 px-3 py-3 min-h-0 z-10"
         style={{
-          gridTemplateRows: 'auto 1fr auto',
+          // phase-21-extend — extra `auto` row hosts the AgentPulseLane
+          // between hero and body. Self-collapses on idle.
+          gridTemplateRows: 'auto auto 1fr auto',
           gridTemplateColumns: '1fr',
         }}
       >
@@ -304,6 +307,9 @@ export default function OperatorLayout() {
             sub={substate.toUpperCase()}
           />
         </section>
+
+        {/* ─── PULSE LANE — substate + council + quality gate + monologue */}
+        <AgentPulseLane />
 
         {/* ─── BODY — plan tree + decision stack ─── */}
         <section

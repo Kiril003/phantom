@@ -16,6 +16,8 @@ import {
   Moon,
   Cog,
   SlidersHorizontal as Tune,
+  Search,
+  X as XIcon,
 } from 'lucide-react';
 import { ProfileManagementSection } from './ProfileManagement';
 import { StatusBar } from '../core/StatusBar';
@@ -57,6 +59,11 @@ export default function SettingsPanel() {
   const setCategories = useSettingsStore((s) => s.setCategories);
   const setValue = useSettingsStore((s) => s.setValue);
   const markClean = useSettingsStore((s) => s.markClean);
+  // Phase 22 — IA: Basic / Advanced gate + live search.
+  const showAdvanced = useSettingsStore((s) => s.showAdvanced);
+  const setShowAdvanced = useSettingsStore((s) => s.setShowAdvanced);
+  const query = useSettingsStore((s) => s.query);
+  const setQuery = useSettingsStore((s) => s.setQuery);
 
   const { categoryId: urlCategoryId } = useParams<{ categoryId: string }>();
   const [activeCategoryId, setActiveCategoryId] = useState<string>('');
@@ -633,6 +640,16 @@ export default function SettingsPanel() {
             )}
           </div>
 
+          {/* Phase 22 — sticky search + Advanced gate. Search filters by
+              label / description / key substring across the active
+              category; the toggle persists in localStorage. */}
+          <SettingsFilterBar
+            query={query}
+            onQuery={setQuery}
+            showAdvanced={showAdvanced}
+            onShowAdvanced={setShowAdvanced}
+          />
+
           <div
             style={{
               flex: 1,
@@ -716,9 +733,21 @@ export default function SettingsPanel() {
                   </div>
                 )}
                 {(() => {
-                  const visible = activeCategory.settings.filter(
-                    (def) => def.key !== 'voice_always_on_enabled'
-                  );
+                  const q = query.trim().toLowerCase();
+                  const visible = activeCategory.settings.filter((def) => {
+                    if (def.key === 'voice_always_on_enabled') return false;
+                    // Phase 22 — gate advanced rows behind the toggle. Search
+                    // overrides the gate: if the operator types into the
+                    // search box, surface every match regardless of tier.
+                    if (def.tier === 'advanced' && !showAdvanced && !q) {
+                      return false;
+                    }
+                    if (q) {
+                      const haystack = `${def.label} ${def.description} ${def.key}`.toLowerCase();
+                      if (!haystack.includes(q)) return false;
+                    }
+                    return true;
+                  });
                   const groups = groupByInferredSubgroup(
                     activeCategory.id,
                     visible
@@ -837,6 +866,165 @@ export default function SettingsPanel() {
   );
 }
 
+/* ─── Phase 22 — sticky filter bar ────────────────────────────────────
+ *
+ * Surfaces two IA controls above the active category's settings list:
+ *
+ *   • Search — substring match against label, description and key
+ *     (operator-friendly: types "ollama" and lands on the model + host
+ *     fields no matter which category they live in).
+ *   • Показати розширені — gates `tier: 'advanced'` rows behind a
+ *     toggle that persists in localStorage. Search overrides the gate
+ *     so an operator searching for an advanced-tier knob always finds
+ *     it.
+ */
+function SettingsFilterBar({
+  query,
+  onQuery,
+  showAdvanced,
+  onShowAdvanced,
+}: {
+  query: string;
+  onQuery: (v: string) => void;
+  showAdvanced: boolean;
+  onShowAdvanced: (v: boolean) => void;
+}) {
+  return (
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 10,
+        padding: '8px 10px',
+        background: 'rgba(255,250,244,0.62)',
+        border: '1px solid rgba(40,30,15,0.10)',
+        borderRadius: 12,
+        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.45)',
+      }}
+    >
+      <Search
+        size={14}
+        strokeWidth={1.75}
+        style={{ color: 'var(--ink-muted)', flexShrink: 0 }}
+      />
+      <input
+        type="search"
+        value={query}
+        onChange={(e) => onQuery(e.currentTarget.value)}
+        placeholder="Пошук по налаштуваннях…"
+        aria-label="Пошук по налаштуваннях"
+        style={{
+          flex: 1,
+          minWidth: 0,
+          background: 'transparent',
+          border: 'none',
+          outline: 'none',
+          color: 'var(--ink-primary)',
+          fontFamily: 'var(--font-display)',
+          fontSize: 12,
+          letterSpacing: '0.01em',
+        }}
+      />
+      {query && (
+        <button
+          type="button"
+          onClick={() => onQuery('')}
+          aria-label="Очистити пошук"
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: 24,
+            height: 24,
+            borderRadius: 999,
+            border: 'none',
+            background: 'rgba(40,30,15,0.06)',
+            color: 'var(--ink-muted)',
+            cursor: 'pointer',
+            flexShrink: 0,
+          }}
+        >
+          <XIcon size={12} strokeWidth={1.75} />
+        </button>
+      )}
+      <span
+        aria-hidden
+        style={{
+          width: 1,
+          alignSelf: 'stretch',
+          background: 'rgba(40,30,15,0.10)',
+          margin: '0 4px',
+        }}
+      />
+      <label
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 8,
+          cursor: 'pointer',
+          userSelect: 'none',
+          minHeight: 28,
+          padding: '0 4px',
+        }}
+        title="Показати розширені (експертне налаштування)"
+      >
+        <span
+          style={{
+            fontSize: 11,
+            fontWeight: 600,
+            letterSpacing: '0.04em',
+            textTransform: 'uppercase',
+            color: showAdvanced ? '#8a5e0a' : 'var(--ink-secondary)',
+            fontFamily: 'var(--font-display)',
+          }}
+        >
+          Розширені
+        </span>
+        <span
+          role="switch"
+          aria-checked={showAdvanced}
+          tabIndex={0}
+          onClick={() => onShowAdvanced(!showAdvanced)}
+          onKeyDown={(e) => {
+            if (e.key === ' ' || e.key === 'Enter') {
+              e.preventDefault();
+              onShowAdvanced(!showAdvanced);
+            }
+          }}
+          style={{
+            position: 'relative',
+            display: 'inline-block',
+            width: 36,
+            height: 20,
+            borderRadius: 999,
+            background: showAdvanced
+              ? 'linear-gradient(135deg, rgba(244,175,37,0.85), rgba(251,146,60,0.85))'
+              : 'rgba(40,30,15,0.18)',
+            transition: 'background 200ms ease',
+            cursor: 'pointer',
+            flexShrink: 0,
+          }}
+        >
+          <span
+            aria-hidden
+            style={{
+              position: 'absolute',
+              top: 2,
+              left: showAdvanced ? 18 : 2,
+              width: 16,
+              height: 16,
+              borderRadius: 999,
+              background: 'white',
+              boxShadow: '0 2px 6px rgba(40,30,15,0.20)',
+              transition: 'left 200ms ease',
+            }}
+          />
+        </span>
+      </label>
+    </div>
+  );
+}
+
 /* ─── Setting row ────────────────────────────────────────────────────── */
 
 function SettingRow({
@@ -907,6 +1095,29 @@ function SettingRow({
           >
             {def.label}
           </span>
+          {/* Phase 22 — replaces the legacy " [soon]" label suffix the
+              backend used to bake in. The metadata flag now drives a
+              proper visual badge so the row is glanceable at a row
+              level. Today the backend filters unimplemented keys out
+              entirely, so this only fires once an "experimental view"
+              toggle surfaces them — kept here so that landing a row
+              with `unimplemented=true` is a one-line backend change. */}
+          {def.unimplemented && (
+            <span
+              title="Підсистема ще не запущена — значення зберігається, але ефекту нема"
+              style={{
+                fontSize: 8,
+                padding: '1px 5px',
+                borderRadius: 4,
+                background: 'rgba(122,140,170,0.20)',
+                color: '#3e4a63',
+                fontWeight: 700,
+                letterSpacing: '0.10em',
+              }}
+            >
+              СКОРО
+            </span>
+          )}
           {dirty && (
             <span
               style={{
@@ -961,6 +1172,34 @@ function SettingRow({
 
 /* ─── Value editor ───────────────────────────────────────────────────── */
 
+/**
+ * Phase 22 — custom editor registry. The backend stamps `editor: "Name"`
+ * on `SettingDefinitionOut` for keys that warrant a bespoke widget
+ * (auto-detect dropdown, chip input, host:port validator, …). The FE
+ * looks the name up here and falls through to the generic
+ * type-based editor when nothing matches. Keeping the registry FE-side
+ * means the backend stays a thin metadata source — adding a new editor
+ * is one map entry + one component, no schema migration needed.
+ */
+const KEY_EDITORS: Record<
+  string,
+  React.ComponentType<{
+    value: unknown;
+    onChange: (v: unknown) => void;
+    def: SettingDefinition;
+  }>
+> = {
+  OllamaModelEditor: ({ value, onChange }) => (
+    <OllamaModelEditor value={value} onChange={onChange} />
+  ),
+  HostPortEditor: ({ value, onChange }) => (
+    <HostPortEditor value={value} onChange={onChange} />
+  ),
+  ChipInputEditor: ({ value, onChange }) => (
+    <ChipInputEditor value={value} onChange={onChange} />
+  ),
+};
+
 function ValueEditor({
   def,
   value,
@@ -970,8 +1209,13 @@ function ValueEditor({
   value: unknown;
   onChange: (v: unknown) => void;
 }) {
-  if (def.key === 'ai_ollama_model') {
-    return <OllamaModelEditor value={value} onChange={onChange} />;
+  // Prefer the backend-declared editor when present + we have a
+  // matching component. Anything unknown falls through to the generic
+  // editors below — keeps FE forward-compatible if the backend ever
+  // ships an editor name we don't implement yet.
+  if (def.editor && KEY_EDITORS[def.editor]) {
+    const Editor = KEY_EDITORS[def.editor];
+    return <Editor def={def} value={value} onChange={onChange} />;
   }
 
   if (def.type === 'boolean') {
@@ -1652,6 +1896,219 @@ function OllamaModelEditor({
         </option>
       ))}
     </select>
+  );
+}
+
+/* ─── Phase 22 — host:port editor ───────────────────────────────────────
+ *
+ * Used for `ai_ollama_host` (and any future `host:port` knob). Validates
+ * the URL/host format inline so the operator gets feedback before save
+ * — bad value paints the border coral and surfaces a hint underneath.
+ * Persists the raw string value (no normalization) so the operator
+ * remains in control of trailing slashes, scheme, and port literals.
+ */
+function HostPortEditor({
+  value,
+  onChange,
+}: {
+  value: unknown;
+  onChange: (v: unknown) => void;
+}) {
+  const current = String(value ?? '');
+  // Accept either a bare host[:port] or a full http(s) URL. We don't
+  // ping the host — that's the AI provider's job at startup. This is
+  // pure shape validation so typos surface before save.
+  const ok = useMemo(() => {
+    const trimmed = current.trim();
+    if (trimmed.length === 0) return true; // empty is "use default"
+    if (/^https?:\/\/[^\s/]+(?:\/.*)?$/i.test(trimmed)) return true;
+    if (/^[A-Za-z0-9_.-]+(?::\d{1,5})?$/.test(trimmed)) return true;
+    return false;
+  }, [current]);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+      <input
+        type="text"
+        value={current}
+        onChange={(e) => onChange(e.target.value)}
+        placeholder="http://localhost:11434"
+        spellCheck={false}
+        style={{
+          minHeight: 44,
+          width: '100%',
+          padding: '0 12px',
+          borderRadius: 10,
+          color: 'var(--ink-primary)',
+          background: 'rgba(255,255,255,0.60)',
+          border: ok
+            ? '1px solid rgba(0,0,0,0.06)'
+            : '1px solid rgba(244,99,99,0.55)',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 13,
+          outline: 'none',
+        }}
+      />
+      {!ok && (
+        <span
+          style={{
+            fontFamily: 'var(--font-display)',
+            fontSize: 10,
+            color: 'var(--signal-warn, #b85c00)',
+            letterSpacing: '0.05em',
+          }}
+        >
+          Очікується host[:port] або http(s)://host[:port]
+        </span>
+      )}
+    </div>
+  );
+}
+
+/* ─── Phase 22 — chip-input editor ──────────────────────────────────────
+ *
+ * Used for `list[str]` settings (e.g. `security_trusted_proxies`). The
+ * backend returns the value as a JSON array; the FE renders each item
+ * as a removable chip and surfaces a single text input that turns
+ * comma- or Enter-terminated tokens into new chips. Persists the value
+ * as `string[]` so the backend Pydantic coercion just works.
+ */
+function ChipInputEditor({
+  value,
+  onChange,
+}: {
+  value: unknown;
+  onChange: (v: unknown) => void;
+}) {
+  // Tolerate legacy string blobs ("a,b,c") + the canonical list form.
+  // Settings imported from older builds may still arrive as strings —
+  // normalize on render so the operator never sees a stringified array.
+  const items = useMemo<string[]>(() => {
+    if (Array.isArray(value)) {
+      return value.map((v) => String(v).trim()).filter(Boolean);
+    }
+    if (typeof value === 'string') {
+      return value
+        .split(/[,\n]/)
+        .map((s) => s.trim())
+        .filter(Boolean);
+    }
+    return [];
+  }, [value]);
+
+  const [draft, setDraft] = useState('');
+
+  const commit = (next: string[]) => onChange(next);
+
+  const addToken = (raw: string) => {
+    const token = raw.trim();
+    if (!token) return;
+    if (items.includes(token)) {
+      setDraft('');
+      return;
+    }
+    commit([...items, token]);
+    setDraft('');
+  };
+
+  const removeAt = (idx: number) => {
+    const next = items.slice();
+    next.splice(idx, 1);
+    commit(next);
+  };
+
+  return (
+    <div
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        gap: 6,
+        alignItems: 'center',
+        minHeight: 44,
+        width: '100%',
+        padding: '6px 8px',
+        borderRadius: 10,
+        background: 'rgba(255,255,255,0.60)',
+        border: '1px solid rgba(0,0,0,0.06)',
+      }}
+    >
+      {items.map((token, idx) => (
+        <span
+          key={`${token}-${idx}`}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+            padding: '2px 4px 2px 8px',
+            borderRadius: 999,
+            background: 'rgba(244,175,37,0.18)',
+            color: '#8a5e0a',
+            fontFamily: 'var(--font-mono)',
+            fontSize: 11,
+            letterSpacing: '0.02em',
+          }}
+        >
+          {token}
+          <button
+            type="button"
+            onClick={() => removeAt(idx)}
+            aria-label={`Видалити ${token}`}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: 18,
+              height: 18,
+              borderRadius: 999,
+              border: 'none',
+              background: 'rgba(40,30,15,0.10)',
+              color: '#8a5e0a',
+              cursor: 'pointer',
+              padding: 0,
+            }}
+          >
+            <XIcon size={10} strokeWidth={2} />
+          </button>
+        </span>
+      ))}
+      <input
+        type="text"
+        value={draft}
+        onChange={(e) => {
+          const v = e.currentTarget.value;
+          // Comma or whitespace acts as a commit terminator — the chip
+          // appears immediately so the operator sees the boundary.
+          if (/[,\s]/.test(v)) {
+            const parts = v.split(/[,\s]+/).filter(Boolean);
+            for (const p of parts) addToken(p);
+            return;
+          }
+          setDraft(v);
+        }}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            addToken(draft);
+          } else if (e.key === 'Backspace' && draft === '' && items.length > 0) {
+            removeAt(items.length - 1);
+          }
+        }}
+        onBlur={() => addToken(draft)}
+        placeholder={items.length === 0 ? 'додати запис…' : ''}
+        spellCheck={false}
+        style={{
+          flex: '1 1 80px',
+          minWidth: 80,
+          background: 'transparent',
+          border: 'none',
+          outline: 'none',
+          color: 'var(--ink-primary)',
+          fontFamily: 'var(--font-mono)',
+          fontSize: 12,
+          padding: '4px 2px',
+        }}
+      />
+    </div>
   );
 }
 

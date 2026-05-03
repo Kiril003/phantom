@@ -22,6 +22,19 @@ export interface SettingDefinition {
   requires_restart: boolean;
   category: string;
   visible_to: UserRole[];
+  /**
+   * Phase 22 — Basic / Advanced split. The settings panel hides
+   * `advanced` entries by default; the operator flips the
+   * "Показати розширені" toggle in the sticky category header to
+   * reveal expert tuning. Defaults to 'basic' on legacy responses.
+   */
+  tier?: 'basic' | 'advanced';
+  /** Owning subsystem hasn't shipped — render a "скоро" badge. */
+  unimplemented?: boolean;
+  /** Backend hint that the FE has a custom auto-detect editor. */
+  auto_detect?: boolean;
+  /** Explicit editor component name to dispatch (e.g. `OllamaModelEditor`). */
+  editor?: string | null;
 }
 
 /* phase-5-R0-3-THEME-NIGHT — Theme picker contract.

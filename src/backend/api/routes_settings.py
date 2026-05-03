@@ -53,6 +53,20 @@ class SettingDefinitionOut(BaseModel):
     requires_restart: bool = False
     category: str
     visible_to: list[str] = ["ROOT", "OPERATOR", "GUEST"]
+    # Phase 22 — Basic / Advanced tier so the operator only sees the
+    # daily knobs by default. Advanced fields collapse behind a toggle.
+    tier: Literal["basic", "advanced"] = "basic"
+    # True for keys whose owning subsystem hasn't shipped yet — the FE
+    # renders a `<Badge variant="soon">скоро</Badge>` next to the label
+    # instead of the legacy inline " [soon]" suffix.
+    unimplemented: bool = False
+    # True for keys that have a custom auto-detecting editor on the FE
+    # (Ollama-host pinger, serial-port scanner, piper-voice picker, …).
+    # The FE checks this flag + the explicit `editor` name to decide
+    # whether to dispatch a custom editor or fall back to the generic
+    # type-based ValueEditor.
+    auto_detect: bool = False
+    editor: str | None = None
 
 
 class SettingsCategoryOut(BaseModel):
@@ -450,6 +464,82 @@ PASSWORD_KEYS = {"ai_gemini_api_key", "jwt_secret_key"}
 # "[soon]" badge so operators aren't misled into expecting behaviour that
 # will only come online once the owning phase ships. Keep this list tight:
 # a key that is actually wired must NOT appear here.
+# Phase 22 — IA pass: keys here are real, working knobs the daily operator
+# never needs to touch. They collapse behind the "Показати розширені" toggle
+# in the SettingsPanel header. Aim is "even the owner should understand each
+# setting in the basic view"; expert tuning lives in advanced.
+ADVANCED_KEYS: set[str] = {
+    # Voice — streaming refinement + NPU/MMS expert tuning
+    "voice_partial_debounce_ms",
+    "voice_refine_with_whisper",
+    "voice_refine_diff_threshold",
+    "voice_stt_whisper_compute",
+    "voice_stt_npu_enabled",
+    "voice_stt_npu_model_path",
+    "voice_stt_npu_compute",
+    "voice_stt_mms_enabled",
+    "voice_stt_mms_bundle_dir",
+    "voice_stt_mms_lang",
+    "voice_stt_mms_min_speech_ms",
+    "voice_stt_mms_max_partial_ms",
+    # Agent cognitive subsystem internals
+    "agent_emotion_enabled",
+    "agent_emotion_decay_minutes",
+    "agent_reflection_every_n_actions",
+    "agent_proactive_cooldown_s",
+    "agent_proactive_interval_s",
+    "agent_standing_orders_check_interval_s",
+    "agent_standing_orders_max_concurrent",
+    "agent_max_llm_calls_per_background_task",
+    "agent_background_task_timeout_s",
+    "agent_monologue_rate_limit_eps",
+    # Chat orchestrator + tool-call internals
+    "chat_orchestrator_enabled",
+    "chat_orchestrator_max_steps",
+    "chat_orchestrator_step_timeout_s",
+    "chat_tool_call_timeout_s",
+    "chat_tool_max_total_ms",
+    "chat_tool_max_calls_per_turn",
+    "chat_prompt_excerpt_max_chars",
+    # Reverse-proxy / ops-only security
+    "security_trust_xff",
+    "security_trusted_proxies",
+    # Wardriving precision
+    "wardriving_min_rssi",
+    "wardriving_dedupe_window_s",
+    "wardriving_persist_interval_s",
+}
+
+
+# Phase 22 — keys removed entirely from the response. Either deprecated
+# aliases the system honours but no longer surfaces, or replaced by a
+# better mechanism. Operators can still PUT them via raw API for legacy
+# scripts; the SettingsPanel never offers them.
+HIDDEN_KEYS: set[str] = {
+    # Phase 11b deprecated voice_always_on_enabled in favour of voice_mode
+    # (off / continuous / wake_word). Kept on the model so old persisted
+    # rows don't crash, but the UI must not expose the dead toggle.
+    "voice_always_on_enabled",
+}
+
+
+# Phase 22 — keys that have a custom FE editor with auto-detection.
+# The map's value is the editor component name the FE looks up in its
+# KEY_EDITORS dispatch (see SettingsPanel.tsx). Backend doesn't render
+# any editor itself; this is purely metadata so the FE knows when to
+# bypass the generic ValueEditor.
+#
+# Kept tight: only ship a name when the FE has a real component for it.
+# Discovery-style editors (Gemini models, Piper voices, serial-port
+# scanner, NPU/MMS bundle pickers) need backend `/discover/*` routes
+# before they can surface — added back here once those land.
+AUTO_DETECT_EDITORS: dict[str, str] = {
+    "ai_ollama_model": "OllamaModelEditor",
+    "ai_ollama_host": "HostPortEditor",
+    "security_trusted_proxies": "ChipInputEditor",
+}
+
+
 UNIMPLEMENTED_KEYS = {
     # Voice pipeline — Phase 07 shipped push-to-talk STT/TTS wiring;
     # Phase 11b shipped always-on wake word + continuous streaming, so
@@ -492,8 +582,15 @@ def _build_definition(key: str, category_id: str) -> SettingDefinitionOut | None
         display_value = value
 
     options = _select_options_from_literal(annotation)
-    base_label = LABEL_OVERRIDES.get(key, key.replace("_", " ").title())
-    label = f"{base_label} [soon]" if key in UNIMPLEMENTED_KEYS else base_label
+    label = LABEL_OVERRIDES.get(key, key.replace("_", " ").title())
+    is_unimplemented = key in UNIMPLEMENTED_KEYS
+    # Unimplemented knobs auto-promote to advanced — even if a future
+    # phase forgets to touch ADVANCED_KEYS, dead toggles never clutter
+    # the basic view.
+    tier: Literal["basic", "advanced"] = (
+        "advanced" if (key in ADVANCED_KEYS or is_unimplemented) else "basic"
+    )
+    editor_name = AUTO_DETECT_EDITORS.get(key)
     return SettingDefinitionOut(
         key=key,
         label=label,
@@ -504,14 +601,25 @@ def _build_definition(key: str, category_id: str) -> SettingDefinitionOut | None
         options=options,
         requires_restart=False,
         category=category_id,
+        tier=tier,
+        unimplemented=is_unimplemented,
+        auto_detect=editor_name is not None,
+        editor=editor_name,
     )
 
 
 def _collect_categories() -> list[SettingsCategoryOut]:
-    """Return settings grouped by category. Phase 9.4c audit D4 — keys in
-    ``UNIMPLEMENTED_KEYS`` are filtered out so the UI never renders rows
-    whose toggle does nothing. They remain persistable via the REST API
-    for operators who want to stage values ahead of a subsystem landing.
+    """Return settings grouped by category.
+
+    Two filters apply:
+      • ``HIDDEN_KEYS`` (Phase 22) — deprecated aliases / dead knobs we
+        never want to surface, even in the advanced view.
+      • ``UNIMPLEMENTED_KEYS`` (Phase 9.4c audit D4) — toggles whose
+        owning subsystem hasn't shipped, so the UI never offers a knob
+        that does nothing. They remain persistable via raw PUT for
+        operators staging values ahead of a subsystem landing, and the
+        new ``unimplemented`` flag is wired in case a future build wants
+        to surface them behind an "experimental" toggle.
     """
     out: list[SettingsCategoryOut] = []
     for spec in CATEGORY_SPEC:
@@ -519,6 +627,7 @@ def _collect_categories() -> list[SettingsCategoryOut]:
             d
             for key in spec["keys"]
             if key not in UNIMPLEMENTED_KEYS
+            and key not in HIDDEN_KEYS
             and (d := _build_definition(key, spec["id"])) is not None
         ]
         out.append(

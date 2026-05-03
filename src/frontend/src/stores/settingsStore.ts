@@ -24,6 +24,10 @@ import { settingsApi } from '../services/api';
 export const THEME_STORAGE_KEY = 'phantom_theme';
 export const THEME_SETTING_KEY = 'ui_theme';
 
+// Phase 22 — sticky operator preference for the SettingsPanel header.
+// Persisted in localStorage so reload remembers the operator's choice.
+export const ADVANCED_TOGGLE_KEY = 'phantom_settings_advanced';
+
 export function applyThemeToDom(id: ThemeId): void {
   if (typeof document === 'undefined') return;
   document.documentElement.setAttribute('data-theme', id);
@@ -46,6 +50,31 @@ interface SettingsStoreState {
   getActiveTheme: () => ThemeId;
   /** Flip theme: DOM + localStorage immediately, backend best-effort. */
   setTheme: (id: ThemeId) => Promise<void>;
+
+  /**
+   * Phase 22 — IA controls for the settings header.
+   *
+   * `showAdvanced` toggles the "Показати розширені" switch — when
+   * false, settings whose tier is 'advanced' are filtered out of the
+   * rendered category list. Persisted in localStorage so the operator
+   * keeps the same view across reloads.
+   *
+   * `query` is the live search-filter string for the sticky header
+   * search box. Not persisted (transient per session).
+   */
+  showAdvanced: boolean;
+  setShowAdvanced: (v: boolean) => void;
+  query: string;
+  setQuery: (v: string) => void;
+}
+
+function loadShowAdvanced(): boolean {
+  if (typeof localStorage === 'undefined') return false;
+  try {
+    return localStorage.getItem(ADVANCED_TOGGLE_KEY) === '1';
+  } catch {
+    return false;
+  }
 }
 
 export const useSettingsStore = create<SettingsStoreState>((set, get) => ({
@@ -53,6 +82,8 @@ export const useSettingsStore = create<SettingsStoreState>((set, get) => ({
   values: {},
   dirty: new Set(),
   loaded: false,
+  showAdvanced: loadShowAdvanced(),
+  query: '',
 
   setCategories: (categories) => {
     const values: Record<string, unknown> = {};
@@ -131,4 +162,17 @@ export const useSettingsStore = create<SettingsStoreState>((set, get) => ({
       /* network blip — cache is durable; sync happens next save. */
     }
   },
+
+  setShowAdvanced: (v) => {
+    if (typeof localStorage !== 'undefined') {
+      try {
+        localStorage.setItem(ADVANCED_TOGGLE_KEY, v ? '1' : '0');
+      } catch {
+        /* private mode / quota — best-effort */
+      }
+    }
+    set({ showAdvanced: v });
+  },
+
+  setQuery: (v) => set({ query: v }),
 }));

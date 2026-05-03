@@ -175,6 +175,17 @@ class _VoiceSession:
                 oled_animator.set_voice(listening=False)
         except Exception:
             pass  # OLED dep missing on cloud / dev deploys is acceptable
+        # Phase 23-A — re-publish voice events on the internal event_bus so
+        # in-process consumers (e.g. agent.actions.voice_listen) can await
+        # the next `final` transcript without owning a WS subscription.
+        # This is purely an additional fan-out path; the original WS push
+        # below is unaffected. We never raise — bus failures must not
+        # break voice transport.
+        try:
+            from core.event_bus import event_bus
+            event_bus.emit("voice.event", payload)
+        except Exception:
+            pass
         try:
             await self.ws.send_text(json.dumps(payload, ensure_ascii=False))
         except Exception as exc:

@@ -29,6 +29,10 @@ from .process import ProcessList
 from .research import WebResearch
 from .self_introspect import SelfCapability, SelfRecall
 from .time_ import TimeWait
+from .voice_listen import VoiceListen
+from .voice_say import VoiceSay
+from .vision import SeeScreen
+from .esp32_aim import ESP32BuzzerAlert, ESP32ServoAim
 from .web import WebSearch
 
 _REGISTERED: list[Type[Action]] = [
@@ -53,6 +57,15 @@ _REGISTERED: list[Type[Action]] = [
     BlenderRun, GameInputBurst,
     # Phase 18-COMPLETE — semantic UI targeting via AT-SPI.
     ATSPIFindByLabel, ATSPIClickByLabel,
+    # Phase 23-A — agent-initiated voice. `voice.say` lets a step emit
+    # synthesized speech (gated on GHOST/SHADOW unless force=True);
+    # `voice.listen` blocks until the next user transcript arrives via
+    # the always-on pipeline event_bus republisher.
+    VoiceSay, VoiceListen,
+    # Phase 23-B — agent-initiated vision via Gemini multimodal.
+    SeeScreen,
+    # Phase 23-C — agent-driven ESP32 servo aim + buzzer alert.
+    ESP32ServoAim, ESP32BuzzerAlert,
 ]
 
 

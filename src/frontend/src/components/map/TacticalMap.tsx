@@ -22,6 +22,7 @@ import { TimelineDrawer } from './TimelineDrawer';
 import { NearbyPanel } from './NearbyPanel';
 import { MapContext } from './MapContext';
 import { ServicesHealthBanner } from './ServicesHealthBanner';
+import { AttributionDrawer } from './hud/AttributionDrawer';
 import { BaseLayer } from './layers/BaseLayer';
 import { PresenceLayer } from './layers/PresenceLayer';
 import { WardrivingLayer } from './layers/WardrivingLayer';
@@ -934,11 +935,14 @@ export function TacticalMap({
         <CoordinateReadout context={context} />
       </div>
 
-      {/* Right-column HUD — compass + GPS quality */}
+      {/* Right-column HUD — compass + GPS quality + attribution drawer (24-A) */}
       <div className="absolute top-3 right-3 z-20 pointer-events-none flex flex-col items-end gap-2">
         <CompassChip bearing={bearing} />
         <GpsQualityChip context={context} />
         <StatusChip loading={loading} zoom={mapRef.current?.getZoom() ?? initialZoom} />
+        <div className="pointer-events-auto">
+          <AttributionDrawer />
+        </div>
       </div>
 
       {/* Bottom glass toolbar — zoom + centre + add POI */}

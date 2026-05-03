@@ -1,0 +1,34 @@
+id: substations
+name_ua: Електропідстанції (OSM)
+name_en: Substations (OpenInfraMap / OSM)
+category: infra
+license: ODbL (OpenStreetMap)
+attribution: "© OpenStreetMap contributors · OpenInfraMap"
+source:
+  type: rest_polling
+  url: https://overpass-api.de/api/interpreter
+  poll_interval_s: 86400
+  ttl_s: 86400
+  bbox_required: true
+  rate_limit_per_minute: 6
+geometry: mixed
+style:
+  fill: accent/violet
+  fill_opacity: 0.5
+  stroke: accent/violet
+  stroke_width: 1
+  point_radius: 3
+  icon: zap
+agent_verbs:
+  - map.nearby_substations
+  - map.infra_brief
+require_internet: true
+require_setting: layers.infra.enabled
+require_root: true
+private: false
+priority: normal
+default_active: false
+available_offline: true
+tags:
+  - osint
+  - infra

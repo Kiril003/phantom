@@ -1,0 +1,29 @@
+id: wardriving
+name_ua: Wardriving (Wi-Fi)
+name_en: Wardriving (Wi-Fi)
+category: hacker
+license: PHANTOM-internal
+attribution: "PHANTOM wardriving collector"
+source:
+  type: local_db
+  ttl_s: 30
+  bbox_required: true
+geometry: point
+style:
+  fill: signal/electric
+  fill_opacity: 0.7
+  stroke: signal/electric
+  stroke_width: 1
+  point_radius: 3
+  icon: wifi
+agent_verbs:
+  - map.nearby_wifi
+  - map.lookup_bssid
+require_internet: false
+private: false
+priority: normal
+default_active: true
+available_offline: true
+tags:
+  - osint
+  - rf

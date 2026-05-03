@@ -1,0 +1,26 @@
+id: facts
+name_ua: Гео-факти памʼяті
+name_en: Geo-tagged memory facts
+category: personal
+license: PHANTOM-internal
+attribution: "PHANTOM memory (ChromaDB)"
+source:
+  type: local_db
+  ttl_s: 60
+geometry: point
+style:
+  fill: accent/warm
+  fill_opacity: 0.55
+  point_radius: 4
+  icon: sparkles
+agent_verbs:
+  - map.list_markers
+  - map.inspect_feature
+require_internet: false
+private: false
+priority: normal
+default_active: true
+available_offline: true
+tags:
+  - personal
+  - memory

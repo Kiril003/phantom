@@ -1,0 +1,31 @@
+id: frontline
+name_ua: Лінія фронту
+name_en: Frontline (DeepStateMap)
+category: ukraine
+license: CC-BY-NC-SA (DeepStateMap)
+attribution: "Дані: DeepStateMap.live"
+source:
+  type: rest_polling
+  url: https://deepstatemap.live/api/history/last
+  poll_interval_s: 600
+  ttl_s: 600
+  rate_limit_per_minute: 30
+geometry: polygon
+style:
+  fill: signal/warning
+  fill_opacity: 0.18
+  stroke: signal/alert
+  stroke_width: 2
+  icon: split
+agent_verbs:
+  - map.frontline_status
+  - map.compare_dates
+require_internet: true
+require_setting: alerts.frontline.enabled
+private: false
+priority: critical
+default_active: false
+available_offline: false
+tags:
+  - ukraine
+  - war

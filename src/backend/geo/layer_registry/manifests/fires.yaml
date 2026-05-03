@@ -1,0 +1,36 @@
+id: fires
+name_ua: Активні пожежі (FIRMS)
+name_en: Active fires (NASA FIRMS)
+category: live
+license: NASA (Public Domain)
+attribution: "NASA FIRMS · MODIS/VIIRS"
+source:
+  type: rest_polling
+  url: https://firms.modaps.eosdis.nasa.gov/api/area/csv
+  auth:
+    kind: api_key
+    env_key: NASA_FIRMS_KEY
+    query_param: MAP_KEY
+  poll_interval_s: 900
+  ttl_s: 900
+  bbox_required: true
+geometry: point
+style:
+  fill: signal/heat
+  fill_opacity: 0.85
+  point_radius: 4
+  icon: flame
+  legend:
+    - { label: "low confidence", color: "#ffb020" }
+    - { label: "high confidence", color: "#ff3b3b" }
+agent_verbs:
+  - map.nearby_fires
+require_internet: true
+require_setting: layers.fires.enabled
+private: false
+priority: elevated
+default_active: false
+available_offline: false
+tags:
+  - live
+  - hazard

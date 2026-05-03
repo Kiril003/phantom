@@ -25,6 +25,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from config import config
 from db.database import get_db
 from db.models import MapPOI, WardrivingRecord
+from geo import (
+    LayerCategory,
+    get_attribution_store,
+    get_layer_registry,
+)
+from geo.layer_registry import LayerNotFoundError
 from security.auth import require_auth
 from security.jwt_manager import TokenPayload
 from wardriving.collector import query_records_in_bounds
@@ -497,3 +503,118 @@ async def get_services_health() -> dict[str, Any]:
     """
     from agent.localization import service_health
     return {"services": service_health.snapshot()}
+
+
+# ── Phase 24-A — OmniMap Layer Registry / Attribution ────────────────────
+
+
+def _session_id_for(token: TokenPayload) -> str:
+    """Per-user attribution scope.
+
+    The drawer in the OmniMap HUD shows attribution for *this* operator's
+    active layer set — two operators on the same Radxa (rare but
+    possible) keep their selections independent.
+    """
+    return f"user:{token.user_id}"
+
+
+@router.get("/layers")
+async def list_layers(
+    category: str | None = Query(default=None),
+    offline: bool | None = Query(default=None, description="Filter by available_offline"),
+    require_root: bool | None = Query(default=None),
+    token_data: TokenPayload = Depends(require_auth),
+) -> dict[str, Any]:
+    """Return the full layer registry, with this operator's active set."""
+    registry = get_layer_registry()
+    parsed_cat: LayerCategory | None = None
+    if category is not None:
+        try:
+            parsed_cat = LayerCategory(category)
+        except ValueError as exc:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Unknown category {category!r} — must be one of "
+                f"{[c.value for c in LayerCategory]}",
+            ) from exc
+
+    layers = registry.filter(
+        category=parsed_cat,
+        available_offline=offline,
+        require_root=require_root,
+    )
+    store = get_attribution_store()
+    session = _session_id_for(token_data)
+    active_ids = set(store.active_ids(session_id=session))
+
+    payload: list[dict[str, Any]] = []
+    for manifest in layers:
+        item = manifest.public_dict()
+        item["active"] = manifest.id in active_ids
+        payload.append(item)
+
+    return {
+        "layers": payload,
+        "total": len(payload),
+        "categories": [c.value for c in registry.categories()],
+        "load_errors": [
+            {"file": name, "error": err} for name, err in registry.load_errors()
+        ],
+    }
+
+
+@router.post("/layers/{layer_id}/enable")
+async def enable_layer(
+    layer_id: str,
+    token_data: TokenPayload = Depends(require_auth),
+) -> dict[str, Any]:
+    """Activate `layer_id` in the operator's session and emit the new
+    attribution union so the HUD repaints in lock-step."""
+    registry = get_layer_registry()
+    try:
+        manifest = registry.get(layer_id)
+    except LayerNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=f"Layer {layer_id!r} not found") from exc
+
+    if manifest.require_root and token_data.role != "ROOT":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail=f"Layer {layer_id!r} requires ROOT trust level",
+        )
+
+    store = get_attribution_store()
+    session = _session_id_for(token_data)
+    activation = store.enable(layer_id, session_id=session, via="operator")
+    payload = store.public_payload(session_id=session)
+    payload["activated"] = {
+        "layer_id": activation.layer_id,
+        "via": activation.via,
+        "activated_at": activation.activated_at,
+    }
+    return payload
+
+
+@router.delete("/layers/{layer_id}")
+async def disable_layer(
+    layer_id: str,
+    token_data: TokenPayload = Depends(require_auth),
+) -> dict[str, Any]:
+    """Remove `layer_id` from the operator's active set."""
+    registry = get_layer_registry()
+    if not registry.has(layer_id):
+        raise HTTPException(status_code=404, detail=f"Layer {layer_id!r} not found")
+    store = get_attribution_store()
+    session = _session_id_for(token_data)
+    was_active = store.disable(layer_id, session_id=session)
+    payload = store.public_payload(session_id=session)
+    payload["was_active"] = was_active
+    return payload
+
+
+@router.get("/attribution")
+async def get_attribution(
+    token_data: TokenPayload = Depends(require_auth),
+) -> dict[str, Any]:
+    """Current per-operator attribution union — used by AttributionDrawer."""
+    store = get_attribution_store()
+    return store.public_payload(session_id=_session_id_for(token_data))

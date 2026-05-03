@@ -1,0 +1,27 @@
+id: recon
+name_ua: Recon-маркери
+name_en: Recon markers
+category: personal
+license: PHANTOM-internal
+attribution: "PHANTOM recon layer"
+source:
+  type: local_db
+  ttl_s: 30
+geometry: mixed
+style:
+  fill: signal/warning
+  fill_opacity: 0.7
+  stroke: signal/warning
+  stroke_width: 1.5
+  icon: route
+agent_verbs:
+  - map.recon_brief
+  - map.add_marker
+require_internet: false
+private: false
+priority: elevated
+default_active: false
+available_offline: true
+tags:
+  - personal
+  - recon

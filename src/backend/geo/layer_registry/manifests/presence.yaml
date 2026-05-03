@@ -1,0 +1,28 @@
+id: presence
+name_ua: Присутність оператора
+name_en: Operator presence
+category: personal
+license: PHANTOM-internal
+attribution: "PHANTOM Presence (локально)"
+source:
+  type: local_db
+  ttl_s: 5
+geometry: point
+style:
+  fill: accent/strong
+  fill_opacity: 0.85
+  point_radius: 6
+  pulse: true
+  icon: radar
+agent_verbs:
+  - map.set_view
+  - map.flyto
+  - map.snapshot_state
+require_internet: false
+private: false
+priority: elevated
+default_active: true
+available_offline: true
+tags:
+  - personal
+  - gps

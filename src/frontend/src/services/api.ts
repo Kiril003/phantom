@@ -227,7 +227,116 @@ export const mapApi = {
       'GET',
       `/map/geo_tagged_facts?limit=${limit}`,
     ),
+  // Phase 24-A — OmniMap Layer Registry.
+  getLayers: (opts?: {
+    category?: string;
+    offline?: boolean;
+    requireRoot?: boolean;
+  }) => {
+    const params = new URLSearchParams();
+    if (opts?.category) params.set('category', opts.category);
+    if (opts?.offline !== undefined) params.set('offline', String(opts.offline));
+    if (opts?.requireRoot !== undefined) params.set('require_root', String(opts.requireRoot));
+    const qs = params.toString();
+    return request<LayerRegistryResponse>(
+      'GET',
+      `/map/layers${qs ? `?${qs}` : ''}`,
+    );
+  },
+  enableLayer: (layerId: string) =>
+    request<AttributionPayload & { activated?: { layer_id: string; via: string; activated_at: number } }>(
+      'POST',
+      `/map/layers/${encodeURIComponent(layerId)}/enable`,
+    ),
+  disableLayer: (layerId: string) =>
+    request<AttributionPayload & { was_active?: boolean }>(
+      'DELETE',
+      `/map/layers/${encodeURIComponent(layerId)}`,
+    ),
+  getAttribution: () =>
+    request<AttributionPayload>('GET', '/map/attribution'),
 };
+
+// ── Phase 24-A — OmniMap Layer Registry types ────────────────────────────
+
+export type LayerCategory =
+  | 'base'
+  | 'terrain'
+  | 'personal'
+  | 'reference'
+  | 'tourism'
+  | 'ukraine'
+  | 'live'
+  | 'environment'
+  | 'astronomy'
+  | 'infra'
+  | 'osint'
+  | 'hacker'
+  | 'research'
+  | 'marine'
+  | 'aviation'
+  | 'health'
+  | 'generic'
+  | 'fun';
+
+export interface LayerManifest {
+  id: string;
+  name_ua: string;
+  name_en: string;
+  category: LayerCategory;
+  license: string;
+  attribution: string;
+  source: {
+    type: string;
+    url?: string | null;
+    auth?: { kind: string } | null;
+    poll_interval_s?: number | null;
+    ttl_s: number;
+    bbox_required: boolean;
+    rate_limit_per_minute?: number | null;
+    extras: Record<string, string | number | boolean>;
+  };
+  geometry: string;
+  style: {
+    fill?: string | null;
+    fill_opacity: number;
+    stroke?: string | null;
+    stroke_width: number;
+    point_radius: number;
+    pulse: boolean;
+    icon?: string | null;
+    legend: Array<{ label: string; color: string }>;
+  };
+  agent_verbs: string[];
+  require_internet: boolean;
+  require_setting?: string | null;
+  require_root: boolean;
+  private: boolean;
+  priority: 'background' | 'normal' | 'elevated' | 'critical';
+  default_active: boolean;
+  available_offline: boolean;
+  tags: string[];
+  active: boolean;
+}
+
+export interface LayerRegistryResponse {
+  layers: LayerManifest[];
+  total: number;
+  categories: LayerCategory[];
+  load_errors: Array<{ file: string; error: string }>;
+}
+
+export interface AttributionLine {
+  text: string;
+  license: string;
+  layer_ids: string[];
+}
+
+export interface AttributionPayload {
+  session_id: string;
+  active_layer_ids: string[];
+  attribution: AttributionLine[];
+}
 
 export interface GeoTaggedFact {
   id: string;

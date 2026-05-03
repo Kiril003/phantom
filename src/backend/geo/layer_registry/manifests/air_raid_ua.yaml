@@ -1,0 +1,36 @@
+id: air_raid_ua
+name_ua: Повітряна тривога (Україна)
+name_en: Air-raid alerts (Ukraine)
+category: ukraine
+license: NC (alarms.in.ua)
+attribution: "Дані: alarms.in.ua"
+source:
+  type: rest_polling
+  url: https://api.alarms.in.ua/v3/alerts/active.json
+  auth:
+    kind: api_key
+    env_key: ALARMS_UA_KEY
+    header_name: Authorization
+  poll_interval_s: 30
+  ttl_s: 30
+  rate_limit_per_minute: 120
+geometry: oblast_polygons
+style:
+  fill: signal/alert
+  fill_opacity: 0.35
+  stroke: signal/alert
+  stroke_width: 1.5
+  pulse: true
+  icon: triangle-alert
+agent_verbs:
+  - map.air_raid_status
+  - map.nearby_alerts
+require_internet: true
+require_setting: alerts.air_raid.enabled
+private: false
+priority: critical
+default_active: true
+available_offline: false
+tags:
+  - ukraine
+  - alarm

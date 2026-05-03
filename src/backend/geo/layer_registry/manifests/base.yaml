@@ -1,0 +1,25 @@
+id: base
+name_ua: Базова карта
+name_en: Base map
+category: base
+license: ODbL (OpenStreetMap), CC0 (Protomaps)
+attribution: "© OpenStreetMap contributors · Protomaps"
+source:
+  type: vector_pmtiles
+  ttl_s: 86400
+  rate_limit_per_minute: 600
+geometry: tile
+style:
+  fill_opacity: 1.0
+  icon: layers
+agent_verbs:
+  - map.set_style
+  - map.list_layers
+require_internet: false
+private: false
+priority: background
+default_active: true
+available_offline: true
+tags:
+  - base
+  - default

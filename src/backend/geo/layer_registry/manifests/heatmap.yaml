@@ -1,0 +1,29 @@
+id: heatmap
+name_ua: Wi-Fi heatmap
+name_en: Wi-Fi RSSI heatmap
+category: hacker
+license: PHANTOM-internal
+attribution: "PHANTOM RSSI heatmap"
+source:
+  type: computed
+  ttl_s: 60
+  bbox_required: true
+geometry: polygon
+style:
+  fill: signal/heat
+  fill_opacity: 0.45
+  icon: flame
+  legend:
+    - { label: "weak", color: "#1f3b8a" }
+    - { label: "fair", color: "#ffb020" }
+    - { label: "strong", color: "#ff3b3b" }
+agent_verbs:
+  - map.overlay_heatmap
+require_internet: false
+private: false
+priority: normal
+default_active: false
+available_offline: true
+tags:
+  - rf
+  - heatmap

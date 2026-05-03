@@ -1,0 +1,27 @@
+id: intel
+name_ua: Інтел POI
+name_en: Intel POIs
+category: personal
+license: PHANTOM-internal
+attribution: "PHANTOM intel layer"
+source:
+  type: local_db
+  ttl_s: 30
+geometry: point
+style:
+  fill: accent/violet
+  fill_opacity: 0.9
+  point_radius: 5
+  icon: map-pin
+agent_verbs:
+  - map.add_marker
+  - map.edit_marker
+  - map.list_markers
+require_internet: false
+private: false
+priority: normal
+default_active: true
+available_offline: true
+tags:
+  - personal
+  - poi

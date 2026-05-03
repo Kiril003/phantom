@@ -1,0 +1,33 @@
+id: ads_b
+name_ua: Літаки в небі (ADS-B)
+name_en: Live aircraft (ADS-B / OpenSky)
+category: aviation
+license: CC-BY-NC-SA (OpenSky Network)
+attribution: "Дані: OpenSky Network"
+source:
+  type: rest_polling
+  url: https://opensky-network.org/api/states/all
+  auth:
+    kind: basic
+    env_key: OPENSKY_BASIC_AUTH
+  poll_interval_s: 5
+  ttl_s: 5
+  bbox_required: true
+  rate_limit_per_minute: 60
+geometry: point
+style:
+  fill: accent/electric
+  fill_opacity: 0.9
+  point_radius: 4
+  icon: plane
+agent_verbs:
+  - map.nearby_aircraft
+require_internet: true
+require_setting: layers.adsb.enabled
+private: false
+priority: normal
+default_active: false
+available_offline: false
+tags:
+  - live
+  - aviation

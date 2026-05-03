@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useSystemStore } from '../../stores/systemStore';
@@ -92,10 +92,6 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
     if (location.pathname !== '/') navigate('/');
     toolbarTransition(SystemState.DIALOGUE);
   };
-  const goMap = () => {
-    if (!location.pathname.startsWith('/map')) navigate('/map');
-    if (state !== SystemState.FOCUS) toolbarTransition(SystemState.FOCUS);
-  };
   const goFocus = () => {
     if (location.pathname !== '/') navigate('/');
     toolbarTransition(SystemState.FOCUS);
@@ -147,6 +143,19 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
         ? 'Голос: wake-фраза (тап → вимкнути)'
         : 'Голос: вимкнено (тап → постійний)';
 
+  // Sentinel/Ghost states are dramatic — let the dock recede so it doesn't
+  // compete with the threat-mode UI (audit fix Phase-21 follow-up).
+  const dockRecede = state === SystemState.SENTINEL || state === SystemState.GHOST;
+
+  // First-run discovery hint for the long-press-on-Home → More gesture.
+  // Cleared the first time long-press fires; persisted in localStorage so
+  // returning sessions don't re-pulse.
+  const [showMoreHint, setShowMoreHint] = useState(
+    () =>
+      typeof window !== 'undefined' &&
+      window.localStorage.getItem('phantom_more_hint_seen') !== '1',
+  );
+
   const primary: ToolbarAction[] = [
     {
       id: 'home',
@@ -168,21 +177,6 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
       label: 'Apps',
       active: isOverlayOpen('apps'),
       onClick: () => toggleOverlay('apps'),
-    },
-    {
-      id: 'terminal',
-      icon: 'terminal',
-      label: 'Terminal',
-      active: isOverlayOpen('terminal'),
-      onClick: () => toggleOverlay('terminal'),
-    },
-    {
-      id: 'map',
-      icon: 'map',
-      label: 'Map',
-      tooltip: 'Tactical map',
-      active: location.pathname.startsWith('/map'),
-      onClick: goMap,
     },
     {
       id: 'settings',
@@ -336,6 +330,14 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
     homePressTimer.current = setTimeout(() => {
       didLongPress.current = true;
       setMoreMenuOpen(true);
+      if (showMoreHint) {
+        try {
+          window.localStorage.setItem('phantom_more_hint_seen', '1');
+        } catch {
+          /* private mode / storage disabled — best-effort */
+        }
+        setShowMoreHint(false);
+      }
     }, LONG_PRESS_MS);
   };
   const onHomePointerUp = () => {
@@ -383,11 +385,16 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
             style={{ bottom: 64, zIndex: 40 }}
           >
             <div
-              className="glass-strong flex flex-col"
+              className="glass-strong"
               style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(2, minmax(150px, 1fr))',
                 gap: 4,
                 padding: 8,
-                minWidth: 220,
+                minWidth: 320,
+                maxHeight: 480,
+                overflowY: 'auto',
+                overscrollBehavior: 'contain',
                 borderRadius: 18,
               }}
             >
@@ -399,27 +406,59 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
         )}
       </AnimatePresence>
 
-      <div
+      <motion.div
         className="glass-strong flex items-center"
+        animate={{
+          opacity: dockRecede ? 0.62 : 1,
+          scale: dockRecede ? 0.96 : 1,
+        }}
+        transition={{ duration: 0.24, ease: EASE_PHANTOM as unknown as number[] }}
         style={{
-          gap: 4,
-          padding: '6px 8px',
+          gap: 2,
+          padding: '4px 6px',
           borderRadius: 999,
           boxShadow:
-            '0 14px 38px rgba(120,70,10,0.18), 0 0 0 1px var(--glass-border), inset 0 1px 0 var(--glass-highlight)',
+            '0 6px 18px rgba(40,30,15,0.10), 0 0 0 1px var(--glass-border), inset 0 1px 0 var(--glass-highlight)',
         }}
       >
         {list.map((item) => {
           if (item.id === 'home') {
             return (
-              <ToolbarIcon
-                key={item.id}
-                item={item}
-                onPointerDown={onHomePointerDown}
-                onPointerUp={onHomePointerUp}
-                onPointerLeave={onHomePointerUp}
-                onClick={onHomeClick}
-              />
+              <div key={item.id} className="relative inline-flex">
+                <ToolbarIcon
+                  item={item}
+                  onPointerDown={onHomePointerDown}
+                  onPointerUp={onHomePointerUp}
+                  onPointerLeave={onHomePointerUp}
+                  onClick={onHomeClick}
+                />
+                <AnimatePresence>
+                  {showMoreHint && !moreMenuOpen && (
+                    <motion.span
+                      key="more-hint"
+                      initial={{ opacity: 0, scale: 0.6 }}
+                      animate={{ opacity: [0.3, 0.9, 0.3], scale: 1 }}
+                      exit={{ opacity: 0, scale: 0.6 }}
+                      transition={{
+                        opacity: { duration: 1.6, repeat: Infinity, ease: 'easeInOut' },
+                        scale: { duration: 0.18 },
+                      }}
+                      aria-hidden
+                      style={{
+                        position: 'absolute',
+                        right: 4,
+                        bottom: 4,
+                        width: 6,
+                        height: 6,
+                        borderRadius: 999,
+                        background: 'rgba(244,175,37,0.95)',
+                        boxShadow: '0 0 6px rgba(244,175,37,0.85)',
+                        pointerEvents: 'none',
+                      }}
+                    />
+                  )}
+                </AnimatePresence>
+              </div>
             );
           }
           return <ToolbarIcon key={item.id} item={item} />;
@@ -433,7 +472,7 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
             onClick: () => setMoreMenuOpen(!moreMenuOpen),
           }}
         />
-      </div>
+      </motion.div>
     </div>
   );
 }
@@ -466,11 +505,11 @@ function ToolbarIcon({
       onClick={item.disabled ? undefined : handle}
       className="relative inline-flex items-center justify-center active:scale-95"
       style={{
-        width: 44,
-        height: 44,
-        minWidth: 44,
-        minHeight: 44,
-        borderRadius: 14,
+        width: 40,
+        height: 40,
+        minWidth: 40,
+        minHeight: 40,
+        borderRadius: 12,
         border: 'none',
         opacity: item.disabled ? 0.35 : 1,
         cursor: item.disabled ? 'not-allowed' : 'pointer',
@@ -481,10 +520,10 @@ function ToolbarIcon({
               ? '#8a5e0a'
               : 'var(--ink-secondary)',
         background: item.active
-          ? 'linear-gradient(135deg, rgba(244,175,37,0.32), rgba(251,146,60,0.28))'
+          ? 'linear-gradient(135deg, rgba(244,175,37,0.30), rgba(251,146,60,0.26))'
           : 'transparent',
         boxShadow: item.active
-          ? 'inset 0 0 0 1px rgba(244,175,37,0.55), 0 0 14px rgba(244,175,37,0.30)'
+          ? 'inset 0 0 0 1.5px rgba(244,175,37,0.55)'
           : 'none',
         transition: 'background 200ms ease, color 200ms ease, box-shadow 200ms ease, transform 120ms ease',
       }}
@@ -495,7 +534,7 @@ function ToolbarIcon({
       <span
         className="msym"
         style={{
-          fontSize: 22,
+          fontSize: 20,
           lineHeight: 1,
           fontVariationSettings: `'FILL' ${fillIcon}, 'wght' ${wghtIcon}, 'GRAD' 0, 'opsz' 24`,
         }}

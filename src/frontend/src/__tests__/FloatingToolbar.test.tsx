@@ -169,3 +169,99 @@ describe('FloatingToolbar — Voice mode cycle (Phase 12.0)', () => {
     expect(useSettingsStore.getState().values.voice_mode).toBe('off');
   });
 });
+
+/**
+ * Section A — Dock redesign (1024×600 productisation pass).
+ *
+ * Primary set trimmed from 7 → 5: Home · Chat · Apps · Settings · More.
+ * Map and Terminal moved to Apps grid.
+ * More-menu becomes a 2-column scroll-safe grid.
+ * Long-press on Home shows a one-shot pulsing hint dot until first long-press.
+ */
+describe('FloatingToolbar — Section A dock redesign', () => {
+  beforeEach(() => {
+    setMock.mockReset();
+    useSettingsStore.setState({
+      categories: [],
+      values: { voice_mode: 'off' },
+      dirty: new Set(),
+      loaded: true,
+    });
+    useAuthStore.setState({
+      user: { id: 'u1', username: 'op', role: 'OPERATOR' },
+      token: 't',
+    } as never);
+    useUIStore.setState({
+      moreMenuOpen: false,
+      pendingVoiceActivation: false,
+    } as never);
+    useSystemStore.setState({ state: SystemState.SHADOW } as never);
+    try {
+      window.localStorage.removeItem('phantom_more_hint_seen');
+    } catch {
+      /* ignore */
+    }
+  });
+
+  afterEach(() => {
+    useSettingsStore.setState({
+      categories: [],
+      values: {},
+      dirty: new Set(),
+      loaded: false,
+    });
+    useUIStore.setState({ moreMenuOpen: false } as never);
+  });
+
+  it('renders only Home, Chat (Dialogue), Apps, Settings + More in primary row', () => {
+    renderToolbar();
+    expect(screen.getByLabelText('Home')).toBeTruthy();
+    expect(screen.getByLabelText('Dialogue')).toBeTruthy();
+    expect(screen.getByLabelText('Apps')).toBeTruthy();
+    expect(screen.getByLabelText('Settings')).toBeTruthy();
+    expect(screen.getByLabelText('More')).toBeTruthy();
+    // Terminal and Map have moved to the Apps grid; closed More menu
+    // means they must NOT be reachable in the primary row.
+    expect(screen.queryByLabelText('Terminal')).toBeNull();
+    expect(screen.queryByLabelText('Map')).toBeNull();
+  });
+
+  it('More menu renders as a 2-column scroll-safe grid', () => {
+    useUIStore.setState({ moreMenuOpen: true } as never);
+    renderToolbar();
+    // Grab the More menu button to find its sibling popover.
+    const moreBtn = screen.getByLabelText('More');
+    // Climb to the toolbar container then find the grid via the secondary
+    // action's parent (e.g. the Sentinel button's grandparent).
+    const sentinel = screen.getByLabelText('Sentinel');
+    const grid = sentinel.parentElement!;
+    expect(grid.style.display).toBe('grid');
+    expect(grid.style.gridTemplateColumns).toContain('repeat(2,');
+    expect(grid.style.overflowY).toBe('auto');
+    expect(parseInt(grid.style.maxHeight, 10)).toBeGreaterThan(0);
+    expect(moreBtn.getAttribute('aria-pressed')).toBe('true');
+  });
+
+  it('shows the long-press hint dot on first run and dismisses after long-press', async () => {
+    vi.useFakeTimers();
+    try {
+      renderToolbar();
+      // Hint dot is rendered as a sibling motion.span inside the Home wrapper.
+      const homeBtn = screen.getByLabelText('Home');
+      const homeWrapper = homeBtn.parentElement!;
+      // span with aria-hidden marks the hint dot.
+      expect(homeWrapper.querySelector('span[aria-hidden="true"]')).toBeTruthy();
+
+      // Trigger long-press: pointerDown then advance 500ms.
+      await act(async () => {
+        fireEvent.pointerDown(homeBtn);
+        vi.advanceTimersByTime(600);
+      });
+      expect(window.localStorage.getItem('phantom_more_hint_seen')).toBe('1');
+      // After long-press fires, the hint dot is gone.
+      expect(homeWrapper.querySelector('span[aria-hidden="true"]')).toBeNull();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});

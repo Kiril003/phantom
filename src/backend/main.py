@@ -35,6 +35,7 @@ from api.routes_hub import router as hub_router
 from api.routes_user_facts import router as user_facts_router
 from api.routes_familiar import router as familiar_router
 from api.routes_pair import router as pair_router
+from api.routes_mobile_sensors import router as mobile_sensors_router
 
 logging.basicConfig(
     level=getattr(logging, config.log_level),
@@ -759,6 +760,11 @@ def create_app() -> FastAPI:
     # paired devices via /pair/devices*. WS broadcasts on the `pair`
     # channel (`claimed` / `revoked`) so the desktop UI updates live.
     app.include_router(pair_router, prefix=prefix)
+    # Phase 19 — POST /api/v1/sensors/mobile_batch ingests phone sensor
+    # packets from a paired device. Persists `MobileSensorBatch`, fans
+    # out `sensor/mobile_batch` WS, opportunistically forwards WiFi
+    # entries through the existing wardriving.collector pipeline.
+    app.include_router(mobile_sensors_router, prefix=prefix)
 
     _register_ws(app)
     register_voice_ws(app)

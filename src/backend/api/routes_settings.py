@@ -291,6 +291,7 @@ CATEGORY_SPEC: list[dict[str, Any]] = [
         "keys": [
             "agent_enabled",
             "agent_risk_tolerance",
+            "agent_council_for_high_risk",
             "agent_max_actions_per_task",
             "agent_max_elapsed_s_per_task",
             "agent_max_elapsed_s_per_action",
@@ -449,6 +450,7 @@ LABEL_OVERRIDES: dict[str, str] = {
     "wardriving_max_records_query": "Max query records",
     "agent_enabled": "Агент увімкнено",
     "agent_risk_tolerance": "Толерантність до ризику (1-7)",
+    "agent_council_for_high_risk": "Council vote перед high-risk approval",
     "agent_max_actions_per_task": "Макс. дій на задачу",
     "agent_max_llm_calls_per_task": "Ліміт викликів LLM",
     "agent_proactive_enabled": "Проактивна ініціатива",

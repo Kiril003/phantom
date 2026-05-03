@@ -851,6 +851,61 @@ async def _run_task_loop_impl(runtime: "AgentRuntime", state: "TaskState", *, re
             from .actions.registry import registry as _reg
             cls = _reg.get(step.action)
             if cls and int(cls.risk_level) > int(config.agent_risk_tolerance):
+                # Phase 23-D — consult Council BEFORE the operator is asked.
+                # The deliberation can refuse a destructive ask outright
+                # ("abort"/"revise") so the operator never sees a prompt for
+                # something cross-perspective review already rejected.
+                # "ask_user"/"proceed" verdicts (or council disabled) fall
+                # through to the existing phone/desktop approval path.
+                if bool(getattr(config, "agent_council_for_high_risk", True)):
+                    try:
+                        action_args = getattr(step, "args", {}) or {}
+                        council_decision = await maybe_consult_council(
+                            CouncilSituation(
+                                kind="high_risk_action",
+                                task_id=state.id,
+                                summary=(
+                                    f"Risky action '{step.action}' (risk "
+                                    f"{int(cls.risk_level)} > tolerance "
+                                    f"{int(config.agent_risk_tolerance)}). "
+                                    f"Intent: {(step.intent or '')[:200]}"
+                                ),
+                                proposed_action={
+                                    "action": step.action,
+                                    "args": action_args,
+                                    "risk_level": int(cls.risk_level),
+                                },
+                                step_idx=state.step_idx,
+                            ),
+                            runtime=runtime,
+                        )
+                    except Exception as exc:
+                        logger.debug("council on high_risk_action failed: %s", exc)
+                        council_decision = None
+                    if council_decision is not None and council_decision.verdict in {"abort", "revise"}:
+                        consensus = (council_decision.consensus_summary or "").strip()
+                        state.observations.append(build_system(
+                            state.step_idx, "council_block",
+                            f"Council {council_decision.verdict}ed risky action "
+                            f"{step.action}"
+                            + (f": {consensus[:240]}" if consensus else ""),
+                        ))
+                        await runtime._broadcast("warning.issued", {
+                            "task_id": state.id,
+                            "category": "council_blocked_risky",
+                            "message": (
+                                f"Council {council_decision.verdict}ed "
+                                f"{step.action}"
+                            ),
+                        })
+                        # Drop the offending step. "revise" lets the
+                        # tactical planner pick a different action next
+                        # iteration; "abort" is treated identically here
+                        # (planner-level abort is handled by reflector).
+                        state.status = "running"
+                        await update_task_status(state.id, "running")
+                        state.step_idx += 1
+                        continue
                 state.status = "awaiting_user"
                 await update_task_status(state.id, "awaiting_user")
                 await runtime.set_substate("waiting_user")

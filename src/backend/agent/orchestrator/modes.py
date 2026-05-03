@@ -32,6 +32,10 @@ _AUTO_COUNCIL_KINDS = frozenset({
     "quality_gate",
     "user_invoked",
     "info_need",
+    # Phase 23-D — risk gate auto-engages Council before phone approval so
+    # the deliberation can refuse a destructive ask outright (verdict
+    # "abort"/"revise") instead of relying on the operator to catch it.
+    "high_risk_action",
 })
 
 

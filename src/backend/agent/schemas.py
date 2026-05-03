@@ -446,6 +446,10 @@ CouncilSituationKind = Literal[
     "info_need",            # agent needs to ask user something
     "quality_gate",         # output review (Quality Gate Loop)
     "user_invoked",         # operator explicitly demanded a Council round
+    # Phase 23-D — risk-tolerance gate fires Council BEFORE phone/desktop
+    # approval so a verdict of "abort"/"revise" can short-circuit a
+    # destructive ask before the operator even sees it.
+    "high_risk_action",
 ]
 
 

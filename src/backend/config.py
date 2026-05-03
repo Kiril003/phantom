@@ -361,6 +361,13 @@ class PhantomConfig(BaseSettings):
     # to authorise MEDIUM actions. Mitigates blast radius until the full
     # linux/dangerous_patterns.py blocklist + UI confirm pipeline lands.
     agent_risk_tolerance: int = 3            # caps executable actions: 1/3/5/7
+    # Phase 23-D — when True (default), the risk gate consults the Council
+    # BEFORE asking the operator (phone or desktop). A "abort"/"revise"
+    # verdict short-circuits the prompt, so the operator never even sees a
+    # destructive action that the cross-perspective deliberation already
+    # rejected. Setting to False restores the pre-23-D path (gate jumps
+    # straight to phone/desktop approval). Hot-reloadable.
+    agent_council_for_high_risk: bool = True
     agent_workspace_dir: str = "~/phantom/workspace"
     # Day-4 Wave-2 Y-5 (ADR-SBX-002): default SandboxProfile applied to
     # bash.run + MCP adapter spawns. Closed enum mirrors the

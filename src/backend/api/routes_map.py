@@ -618,3 +618,156 @@ async def get_attribution(
     """Current per-operator attribution union — used by AttributionDrawer."""
     store = get_attribution_store()
     return store.public_payload(session_id=_session_id_for(token_data))
+
+
+# ── Phase 24-C — Routing endpoints ────────────────────────────────────────
+
+
+class _RouteRequestBody(BaseModel):
+    waypoints: list[list[float]] = Field(..., min_length=2, max_length=64)
+    profile: str = Field(default="car", max_length=24)
+    alternatives: int = Field(default=0, ge=0, le=3)
+    language: str = Field(default="uk", max_length=5)
+
+
+class _IsochroneRequestBody(BaseModel):
+    lat: float = Field(..., ge=-90.0, le=90.0)
+    lon: float = Field(..., ge=-180.0, le=180.0)
+    time_minutes: int = Field(..., ge=1, le=120)
+    profile: str = Field(default="foot", max_length=24)
+
+
+class _OptimizeVisitBody(BaseModel):
+    stops: list[list[float]] = Field(..., min_length=2, max_length=24)
+    profile: str = Field(default="car", max_length=24)
+    return_to_start: bool = Field(default=False)
+
+
+class _SnapTrackBody(BaseModel):
+    points: list[list[float]] = Field(..., min_length=2, max_length=500)
+    timestamps_ms: Optional[list[int]] = None
+    profile: str = Field(default="car", max_length=24)
+
+
+def _resolve_profile(raw: str):
+    from geo.routing import RoutingProfile
+    try:
+        return RoutingProfile(raw)
+    except ValueError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Unknown profile {raw!r} — valid: {[p.value for p in RoutingProfile]}",
+        ) from exc
+
+
+@router.post("/route")
+async def post_route(
+    body: _RouteRequestBody,
+    token_data: TokenPayload = Depends(require_auth),
+) -> dict[str, Any]:
+    """Plan a route via the routing facade (BRouter → ORS → OSRM fallback)."""
+    from geo.routing import RouteRequest, get_router
+    from geo.routing.adapters import RoutingError
+
+    profile = _resolve_profile(body.profile)
+    try:
+        req = RouteRequest(
+            waypoints=[{"lat": p[0], "lon": p[1]} for p in body.waypoints],
+            profile=profile,
+            alternatives=body.alternatives,
+            language=body.language,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"bad waypoints: {exc}") from exc
+    try:
+        result = await get_router().route(req)
+    except RoutingError as exc:
+        raise HTTPException(status_code=502, detail=f"no router answered: {exc}") from exc
+    return result.model_dump(mode="json")
+
+
+@router.post("/isochrone")
+async def post_isochrone(
+    body: _IsochroneRequestBody,
+    token_data: TokenPayload = Depends(require_auth),
+) -> dict[str, Any]:
+    from geo.routing import IsochroneRequest, get_router
+    from geo.routing.adapters import RoutingError
+
+    profile = _resolve_profile(body.profile)
+    req = IsochroneRequest(
+        center={"lat": body.lat, "lon": body.lon},
+        time_minutes=body.time_minutes,
+        profile=profile,
+    )
+    try:
+        result = await get_router().isochrone(req)
+    except RoutingError as exc:
+        raise HTTPException(status_code=502, detail=f"no isochrone provider: {exc}") from exc
+    return result.model_dump(mode="json")
+
+
+@router.post("/route/optimize")
+async def post_optimize_visit(
+    body: _OptimizeVisitBody,
+    token_data: TokenPayload = Depends(require_auth),
+) -> dict[str, Any]:
+    from geo.routing import MatrixRequest, get_router
+    from geo.routing.adapters import RoutingError
+
+    profile = _resolve_profile(body.profile)
+    try:
+        req = MatrixRequest(
+            points=[{"lat": p[0], "lon": p[1]} for p in body.stops],
+            profile=profile,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"bad stops: {exc}") from exc
+    try:
+        mat = await get_router().matrix(req)
+    except RoutingError as exc:
+        raise HTTPException(status_code=502, detail=f"no matrix provider: {exc}") from exc
+
+    n = len(body.stops)
+    order: list[int] = [0]
+    unvisited = set(range(1, n))
+    total_s = 0.0
+    cur = 0
+    while unvisited:
+        nxt = min(unvisited, key=lambda j: mat.durations_s[cur][j])
+        total_s += mat.durations_s[cur][nxt]
+        order.append(nxt)
+        unvisited.remove(nxt)
+        cur = nxt
+    if body.return_to_start:
+        total_s += mat.durations_s[cur][0]
+        order.append(0)
+    return {
+        "order": order,
+        "total_duration_s": total_s,
+        "engine": mat.engine,
+        "profile": profile.value,
+    }
+
+
+@router.post("/snap")
+async def post_snap_track(
+    body: _SnapTrackBody,
+    token_data: TokenPayload = Depends(require_auth),
+) -> dict[str, Any]:
+    from geo.routing import SnapMatchRequest, get_router
+    from geo.routing.adapters import RoutingError
+
+    profile = _resolve_profile(body.profile)
+    if body.timestamps_ms is not None and len(body.timestamps_ms) != len(body.points):
+        raise HTTPException(status_code=400, detail="timestamps_ms length mismatch")
+    req = SnapMatchRequest(
+        points=[{"lat": p[0], "lon": p[1]} for p in body.points],
+        timestamps_ms=body.timestamps_ms,
+        profile=profile,
+    )
+    try:
+        result = await get_router().snap_match(req)
+    except RoutingError as exc:
+        raise HTTPException(status_code=502, detail=f"no snap provider: {exc}") from exc
+    return result.model_dump(mode="json")

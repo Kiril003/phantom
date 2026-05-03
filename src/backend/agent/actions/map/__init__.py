@@ -21,15 +21,20 @@ from .enable_layer import MapEnableLayer
 from .explain_view import MapExplainView
 from .flyto import MapFlyTo
 from .geocode import MapGeocode
+from .isochrone import MapIsochrone
 from .list_layers import MapListLayers
 from .open_map import MapOpenMap
+from .optimize_visit import MapOptimizeVisit
+from .plan_route import MapPlanRoute
 from .query_nearby import MapQueryNearby
 from .reverse_geocode import MapReverseGeocode
 from .set_view import MapSetView
+from .snap_track import MapSnapTrack
 from .snapshot import MapSnapshot
 
 # Importable as a tuple so registry.py can splat it into _REGISTERED.
 MAP_ACTIONS = (
+    # 24-B base surface
     MapOpenMap,
     MapSetView,
     MapFlyTo,
@@ -42,6 +47,11 @@ MAP_ACTIONS = (
     MapDisableLayer,
     MapSnapshot,
     MapExplainView,
+    # 24-C routing surface
+    MapPlanRoute,
+    MapOptimizeVisit,
+    MapIsochrone,
+    MapSnapTrack,
 )
 
 __all__ = [
@@ -54,12 +64,16 @@ __all__ = [
     "MapExplainView",
     "MapFlyTo",
     "MapGeocode",
+    "MapIsochrone",
     "MapListLayers",
     "MapMutation",
     "MapOpenMap",
+    "MapOptimizeVisit",
+    "MapPlanRoute",
     "MapQueryNearby",
     "MapReverseGeocode",
     "MapSetView",
+    "MapSnapTrack",
     "MapSnapshot",
     "broadcast_map_mutation",
     "build_map_output",

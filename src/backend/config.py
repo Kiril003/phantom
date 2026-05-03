@@ -533,6 +533,21 @@ class PhantomConfig(BaseSettings):
     agent_near_remembered_dedup_s: int = 3600
     agent_near_remembered_radius_m: float = 200.0
 
+    # ── Routing (Phase 24-C) ─────────────────────────────────────────────────
+    # BRouter — offline routing in a local Docker sidecar, first in the
+    # adapter chain. The Radxa is the canonical home of this; tests +
+    # CI machines just leave it disabled or unreachable, which is fine
+    # because the facade falls through to ORS / OSRM.
+    routing_brouter_enabled: bool = True
+    routing_brouter_url: str = "http://localhost:17777"
+    # OpenRouteService — online API, key required. Set via Settings UI.
+    routing_ors_enabled: bool = True
+    routing_ors_api_key: str = ""
+    # OSRM — public demo (rate-limited) or self-host. Last fallback.
+    routing_osrm_enabled: bool = True
+    routing_osrm_url: str = "https://router.project-osrm.org"
+    routing_default_profile: str = "car"
+
     # ── Chat observability (Phase 16, audit-2026-04-28 step 4) ────────────────
     # Off by default — chat content is sensitive, operator opts in via UI.
     # When enabled, every chat turn writes a row to ai_tool_use_log with

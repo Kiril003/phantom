@@ -60,16 +60,21 @@ def test_all_12_map_verbs_resolve_through_registry():
         "map.explain_view",
     }
     actual = {n for n in registry.names() if n.startswith("map.")}
-    assert expected == actual
+    # 24-B promised at least the 12 base verbs. Later phases add more
+    # (24-C plan_route/optimize_visit/isochrone/snap_track) — this
+    # assertion checks the contract: every base verb is present.
+    assert expected <= actual
     for verb in expected:
         assert registry.get(verb) is not None
-    assert {cls.name for cls in MAP_ACTIONS} == expected
+    base_action_names = {cls.name for cls in MAP_ACTIONS if cls.name in expected}
+    assert base_action_names == expected
 
 
 def test_catalog_exposes_map_verbs_with_signatures():
     catalog = registry.catalog()
     map_entries = [e for e in catalog if e["name"].startswith("map.")]
-    assert len(map_entries) == 12
+    # ≥ 12 because later phases (24-C+) add more map verbs.
+    assert len(map_entries) >= 12
     for entry in map_entries:
         assert "args" in entry
         assert "risk_level" in entry

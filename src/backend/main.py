@@ -37,6 +37,7 @@ from api.routes_familiar import router as familiar_router
 from api.routes_pair import router as pair_router
 from api.routes_mobile_sensors import router as mobile_sensors_router
 from api.routes_approve import router as approve_router
+from api.routes_vault import router as vault_router
 
 logging.basicConfig(
     level=getattr(logging, config.log_level),
@@ -773,6 +774,12 @@ def create_app() -> FastAPI:
     # the signature, mutates the row, fires the agent-loop waiter so
     # the running task unblocks straight to execute / reject.
     app.include_router(approve_router, prefix=prefix)
+    # Phase 25-B — Personal Vault. Per-user encrypted info cards
+    # (emails, passwords, services, phones, company data, API keys,
+    # wallets) that the AI may list/get/create/update/delete via chat
+    # tools. Reveal + use of secrets land in 25-D behind Council +
+    # phone biometric.
+    app.include_router(vault_router, prefix=prefix)
 
     _register_ws(app)
     register_voice_ws(app)

@@ -32,6 +32,9 @@ from .time_ import TimeWait
 from .voice_listen import VoiceListen
 from .voice_say import VoiceSay
 from .vision import SeeScreen
+from .visual import (
+    VisualClickTarget, VisualFindTarget, VisualSceneDescribe, VisualWaitFor,
+)
 from .esp32_aim import ESP32BuzzerAlert, ESP32ServoAim
 from .web import WebSearch
 
@@ -66,6 +69,11 @@ _REGISTERED: list[Type[Action]] = [
     SeeScreen,
     # Phase 23-C — agent-driven ESP32 servo aim + buzzer alert.
     ESP32ServoAim, ESP32BuzzerAlert,
+    # Phase 24-V — visual acting layer. Composes screen capture +
+    # OmniParser grounding + desktop_control into description-based
+    # find / click / wait / scene-describe so the planner can name UI
+    # in natural language without ever reasoning about pixel coords.
+    VisualFindTarget, VisualClickTarget, VisualWaitFor, VisualSceneDescribe,
 ]
 
 

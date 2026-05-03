@@ -34,6 +34,7 @@ from api.routes_dynamic_source import router as dynamic_source_router
 from api.routes_hub import router as hub_router
 from api.routes_user_facts import router as user_facts_router
 from api.routes_familiar import router as familiar_router
+from api.routes_pair import router as pair_router
 
 logging.basicConfig(
     level=getattr(logging, config.log_level),
@@ -752,6 +753,12 @@ def create_app() -> FastAPI:
     # the `familiar` channel which the frontend store turns into an
     # `ai-summon` manifestation.
     app.include_router(familiar_router, prefix=prefix)
+    # Phase 19 — Mobile Companion pairing endpoints. ROOT initiates the
+    # QR exchange (/pair/init); the phone claims it (/pair/claim, no auth,
+    # gated by HMAC proof over an ECDH-derived key); ROOT lists/revokes
+    # paired devices via /pair/devices*. WS broadcasts on the `pair`
+    # channel (`claimed` / `revoked`) so the desktop UI updates live.
+    app.include_router(pair_router, prefix=prefix)
 
     _register_ws(app)
     register_voice_ws(app)

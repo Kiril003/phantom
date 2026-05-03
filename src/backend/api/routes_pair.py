@@ -1,0 +1,363 @@
+"""Phase 19 Mobile Companion — pairing endpoints.
+
+Implements the protocol from `docs/MOBILE_COMPANION.md` §4:
+
+  POST /api/v1/pair/init             ROOT — start a pairing attempt, get QR.
+  POST /api/v1/pair/claim            no auth — phone presents proof + pubkey.
+  GET  /api/v1/pair/status?pair_id=  ROOT — poll claim state (long-poll
+                                              friendly; WS `pair` channel
+                                              also broadcasts on success).
+  GET  /api/v1/pair/devices          ROOT — list paired devices for the
+                                              authenticated user.
+  DELETE /api/v1/pair/devices/{id}   ROOT — revoke a device.
+
+`security.pair_crypto` carries the actual ECDH / HKDF / HMAC / Ed25519
+math; this file is glue: HTTP shape, DB persistence, WS broadcast, audit.
+ROOT is enforced via the existing `security.permissions.require_root`
+dependency — physical presence at the desktop establishes ownership of
+the resulting device row (per design §4 "TOFU through QR").
+"""
+from __future__ import annotations
+
+import json
+import logging
+import socket
+from datetime import datetime, timezone
+from typing import Optional
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from pydantic import BaseModel, Field
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+
+from api.websocket_hub import hub
+from config import config
+from db.database import get_db
+from db.models import PairedDevice, User
+from security.device_token import create_device_token
+from security.pair_crypto import (
+    PAIR_TTL_SECONDS,
+    PairingError,
+    build_qr_payload,
+    build_server_proof,
+    derive_shared_key,
+    session_store,
+    verify_client_proof,
+)
+from security.permissions import require_root
+
+logger = logging.getLogger(__name__)
+
+router = APIRouter(tags=["pair"])
+
+
+# ── Request / response shapes ────────────────────────────────────────────────
+
+
+class PairInitResponse(BaseModel):
+    pair_id: str
+    expires_in_seconds: int = PAIR_TTL_SECONDS
+    qr: dict
+
+
+class PairClaimRequest(BaseModel):
+    pair_id: str = Field(..., min_length=8, max_length=64)
+    client_pub: str = Field(..., min_length=40, max_length=64)
+    device_pub_ed25519: str = Field(..., min_length=40, max_length=64)
+    nonce_echo: str = Field(..., min_length=20, max_length=64)
+    client_proof: str = Field(..., min_length=40, max_length=64)
+    device: dict = Field(default_factory=dict)
+
+
+class PairClaimResponse(BaseModel):
+    device_jwt: str
+    device_id: str
+    expires_at: str
+    server_proof: str
+    user: dict
+
+
+class PairStatusResponse(BaseModel):
+    pair_id: str
+    status: str
+    device_id: Optional[str] = None
+
+
+class PairedDeviceRow(BaseModel):
+    id: str
+    device_name: str
+    device_model: str
+    platform: str
+    platform_version: Optional[str]
+    paired_at: str
+    last_seen_at: str
+    revoked_at: Optional[str]
+    capabilities: list[str]
+
+
+# ── Helpers ──────────────────────────────────────────────────────────────────
+
+
+def _user_to_dict(u: User) -> dict:
+    return {
+        "id": u.id,
+        "username": u.username,
+        "role": u.role,
+        "avatar_url": u.avatar_url,
+    }
+
+
+def _row_to_pydantic(row: PairedDevice) -> PairedDeviceRow:
+    try:
+        caps = json.loads(row.capabilities_json or "[]")
+        if not isinstance(caps, list):
+            caps = []
+    except json.JSONDecodeError:
+        caps = []
+    return PairedDeviceRow(
+        id=row.id,
+        device_name=row.device_name,
+        device_model=row.device_model,
+        platform=row.platform,
+        platform_version=row.platform_version,
+        paired_at=row.paired_at.replace(tzinfo=timezone.utc).isoformat()
+        if row.paired_at.tzinfo is None
+        else row.paired_at.isoformat(),
+        last_seen_at=row.last_seen_at.replace(tzinfo=timezone.utc).isoformat()
+        if row.last_seen_at.tzinfo is None
+        else row.last_seen_at.isoformat(),
+        revoked_at=(
+            row.revoked_at.replace(tzinfo=timezone.utc).isoformat()
+            if row.revoked_at and row.revoked_at.tzinfo is None
+            else (row.revoked_at.isoformat() if row.revoked_at else None)
+        ),
+        capabilities=caps,
+    )
+
+
+def _local_ip_guess() -> str:
+    """Best-effort LAN IP for the QR payload. Phones scan from the LAN, so we
+    want the address that resolves on the *user's* network — not 127.0.0.1.
+    Falls back to 0.0.0.0 if nothing better is reachable; the desktop UI may
+    let the operator override it manually before showing the QR.
+    """
+    s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+    try:
+        # 8.8.8.8 chosen as a non-routable probe target — we don't actually
+        # send anything, we just ask the kernel which interface it would use.
+        s.connect(("8.8.8.8", 53))
+        ip = s.getsockname()[0]
+    except OSError:
+        ip = "0.0.0.0"
+    finally:
+        s.close()
+    return ip
+
+
+# ── Routes ───────────────────────────────────────────────────────────────────
+
+
+@router.post("/pair/init", response_model=PairInitResponse)
+async def pair_init(
+    current_user: User = Depends(require_root),
+) -> PairInitResponse:
+    """ROOT operator initiates a pairing attempt. Server allocates an
+    ephemeral X25519 keypair (in-memory only, 60 s TTL) and returns the
+    QR payload. The phone scans, runs ECDH, posts to /pair/claim.
+    """
+    session = session_store.create(created_by_user_id=current_user.id)
+    qr = build_qr_payload(
+        session,
+        host=getattr(config, "pair_host", "phantom.local"),
+        ip=_local_ip_guess(),
+        port=getattr(config, "pair_port", 8000),
+        # Cert pin is filled in by Caddy/mkcert in deploy. For dev we use a
+        # well-known sentinel ("dev-no-pin") so the phone can opt out of
+        # cert pinning when the server runs cleartext on the LAN. Production
+        # MUST set `PAIR_CERT_SHA256` in config so this turns into a real
+        # SHA-256 fingerprint.
+        cert_sha256_hex=getattr(config, "pair_cert_sha256", "dev-no-pin"),
+    )
+    logger.info(
+        "pair/init: user=%s pair_id=%s ttl=%ds",
+        current_user.id,
+        session.pair_id,
+        PAIR_TTL_SECONDS,
+    )
+    return PairInitResponse(pair_id=session.pair_id, qr=qr)
+
+
+@router.post("/pair/claim", response_model=PairClaimResponse)
+async def pair_claim(
+    body: PairClaimRequest,
+    db: AsyncSession = Depends(get_db),
+) -> PairClaimResponse:
+    """Phone-side endpoint. NO auth — the QR carried the only secret needed
+    to participate, and the HMAC proof gates write access. On success we
+    persist a `PairedDevice`, mint a device JWT, broadcast `pair/claimed`.
+    """
+    session = session_store.consume(body.pair_id)
+    if session is None:
+        # Single-shot consume: either expired or already claimed. Either
+        # way the client must restart from a fresh QR.
+        raise HTTPException(
+            status_code=status.HTTP_410_GONE,
+            detail={"code": "session_expired"},
+        )
+
+    if body.nonce_echo != session.nonce_b64:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "bad_nonce"},
+        )
+
+    try:
+        shared_key = derive_shared_key(
+            session.server_priv,
+            body.client_pub,
+            session.nonce_bytes,
+        )
+        verify_client_proof(
+            shared_key=shared_key,
+            pair_id=session.pair_id,
+            device_pub_ed25519_b64=body.device_pub_ed25519,
+            proof_b64=body.client_proof,
+        )
+    except PairingError as exc:
+        logger.warning(
+            "pair/claim: protocol error pair_id=%s code=%s",
+            session.pair_id,
+            exc.code,
+        )
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": exc.code, "message": str(exc)},
+        ) from exc
+
+    # Owner is the ROOT operator who initiated /pair/init.
+    owner = await db.get(User, session.created_by_user_id)
+    if owner is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"code": "owner_missing"},
+        )
+
+    device_meta = body.device or {}
+    row = PairedDevice(
+        user_id=owner.id,
+        device_name=str(device_meta.get("name", ""))[:128],
+        device_model=str(device_meta.get("model", ""))[:128],
+        platform=str(device_meta.get("platform", "android"))[:16],
+        platform_version=str(device_meta.get("os_version", "") or "")[:32] or None,
+        device_pub_ed25519=body.device_pub_ed25519,
+        # Default capabilities — MVP devices act as sensor + approval surface.
+        # Comms / vault flags can be flipped on by a later PATCH endpoint.
+        capabilities_json=json.dumps(["sensors", "approvals"]),
+    )
+    db.add(row)
+    await db.commit()
+    await db.refresh(row)
+
+    device_jwt, expires_at_iso = create_device_token(
+        device_id=row.id, user_id=owner.id
+    )
+    server_proof = build_server_proof(shared_key=shared_key, device_jwt=device_jwt)
+
+    logger.info(
+        "pair/claim: device_id=%s user_id=%s name=%s",
+        row.id,
+        owner.id,
+        row.device_name or "<unnamed>",
+    )
+
+    # Notify desktop UI (and any other ROOT clients) — they may show a toast
+    # "<phone> paired with <user>, revoke?". Filtered to the owning user's
+    # client_count via user_id arg.
+    await hub.broadcast(
+        "pair",
+        "claimed",
+        {
+            "device_id": row.id,
+            "device_name": row.device_name,
+            "device_model": row.device_model,
+            "platform": row.platform,
+            "user_id": owner.id,
+            "paired_at": row.paired_at.isoformat(),
+        },
+        user_id=owner.id,
+    )
+
+    return PairClaimResponse(
+        device_jwt=device_jwt,
+        device_id=row.id,
+        expires_at=expires_at_iso,
+        server_proof=server_proof,
+        user=_user_to_dict(owner),
+    )
+
+
+@router.get("/pair/status", response_model=PairStatusResponse)
+async def pair_status(
+    pair_id: str,
+    db: AsyncSession = Depends(get_db),
+    _: User = Depends(require_root),
+) -> PairStatusResponse:
+    """ROOT-only — long-poll friendly state lookup. WS `pair/claimed` is the
+    push path; this exists for UI clients that prefer a REST poll loop or
+    that lost their WS connection between init and claim.
+    """
+    session = session_store.get(pair_id)
+    if session is None:
+        # Either expired or already claimed. We can't tell which without
+        # extra bookkeeping, so we treat both as "session no longer pending"
+        # and let the WS broadcast (or absence of one) inform the UI.
+        return PairStatusResponse(pair_id=pair_id, status="closed")
+    return PairStatusResponse(pair_id=pair_id, status="pending")
+
+
+@router.get("/pair/devices", response_model=list[PairedDeviceRow])
+async def list_devices(
+    include_revoked: bool = False,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_root),
+) -> list[PairedDeviceRow]:
+    stmt = select(PairedDevice).where(PairedDevice.user_id == current_user.id)
+    if not include_revoked:
+        stmt = stmt.where(PairedDevice.revoked_at.is_(None))
+    stmt = stmt.order_by(PairedDevice.paired_at.desc())
+    result = await db.execute(stmt)
+    return [_row_to_pydantic(row) for row in result.scalars().all()]
+
+
+@router.delete("/pair/devices/{device_id}")
+async def revoke_device(
+    device_id: str,
+    reason: Optional[str] = None,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_root),
+) -> dict:
+    row = await db.get(PairedDevice, device_id)
+    if row is None or row.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "device_not_found"},
+        )
+    if row.revoked_at is not None:
+        return {"ok": True, "already_revoked": True}
+    row.revoked_at = datetime.now(tz=timezone.utc)
+    row.revoked_by = current_user.id
+    row.revoked_reason = (reason or "")[:256] or None
+    await db.commit()
+    logger.info(
+        "pair/revoke: device_id=%s user_id=%s reason=%s",
+        device_id,
+        current_user.id,
+        reason or "<none>",
+    )
+    await hub.broadcast(
+        "pair",
+        "revoked",
+        {"device_id": device_id, "reason": reason},
+        user_id=current_user.id,
+    )
+    return {"ok": True}

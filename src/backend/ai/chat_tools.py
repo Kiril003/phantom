@@ -763,6 +763,196 @@ CHAT_DATA_TOOLS: list[dict[str, Any]] = [
             "required": ["agent_id", "inputs"],
         },
     },
+    # ── Phase 25-C — Personal Vault chat tools ───────────────────────────────
+    # AI listed/get/create/update/delete/restore vault cards from chat. Secret
+    # field VALUES never leave the server — list/get return "***" placeholders
+    # and a parallel field_kinds map. Reveal + use of plaintext live in 25-D
+    # behind Council + phone biometric.
+    {
+        "name": "vault_list",
+        "description": (
+            "Перерахувати картки персонального сховища юзера (логіни, паролі, "
+            "сервіси, телефони, компанії, API-ключі, гаманці тощо). "
+            "Викликай коли юзер питає «які у мене записи», «покажи мої "
+            "паролі», «де мій акаунт Gmail», або коли тобі потрібен "
+            "card_id для наступних дій. Секретні значення повертаються "
+            "масковані (***); plain поля повертаються як є. Опціональні "
+            "фільтри по kind та тегу."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "type": "string",
+                    "description": (
+                        "Фільтр за типом картки. Один з: email_account, "
+                        "service_login, messenger, phone, company, "
+                        "payment_method, api_key, document, contact, "
+                        "wifi_network, crypto_wallet, custom."
+                    ),
+                },
+                "tag": {
+                    "type": "string",
+                    "description": "Фільтр за тегом (точна збіжність).",
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "vault_get",
+        "description": (
+            "Отримати одну картку за id. Повертає label, kind, tags, "
+            "ai_writable, fields (з маскованими секретами), field_kinds. "
+            "Викликай коли треба деталі однієї картки — наприклад перш "
+            "ніж її редагувати чи видаляти."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "card_id": {
+                    "type": "string",
+                    "description": "UUID картки (з vault_list).",
+                },
+            },
+            "required": ["card_id"],
+        },
+    },
+    {
+        "name": "vault_create",
+        "description": (
+            "Створити нову картку у сховищі. Викликай коли юзер каже "
+            "«запиши мені пароль…», «додай новий email», «зберігай цей "
+            "API-ключ». Секретні поля (passwords, api keys, seed phrases) "
+            "ОБОВ'ЯЗКОВО позначай secret=true — вони шифруються AES-256. "
+            "Plain-поля (URL, username, label) лиши secret=false — їх "
+            "можна потім читати без розкриття."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "kind": {
+                    "type": "string",
+                    "description": (
+                        "Тип картки. Має бути одним з: email_account, "
+                        "service_login, messenger, phone, company, "
+                        "payment_method, api_key, document, contact, "
+                        "wifi_network, crypto_wallet, custom."
+                    ),
+                },
+                "label": {
+                    "type": "string",
+                    "description": (
+                        "Коротка назва що відрізнятиме картку у списку — "
+                        "'Gmail основна', 'OpenAI ключ для проекту X'."
+                    ),
+                },
+                "fields": {
+                    "type": "object",
+                    "description": (
+                        "Поля картки. Кожен ключ → {value, secret}. "
+                        "Приклад: {\"username\": {\"value\": \"x\", "
+                        "\"secret\": false}, \"password\": {\"value\": "
+                        "\"y\", \"secret\": true}}."
+                    ),
+                    "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                            "value": {"type": "string"},
+                            "secret": {"type": "boolean"},
+                        },
+                        "required": ["value", "secret"],
+                    },
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                    "description": "Опційні теги для фільтрації пізніше.",
+                },
+            },
+            "required": ["kind", "label", "fields"],
+        },
+    },
+    {
+        "name": "vault_update",
+        "description": (
+            "Оновити існуючу картку. Лише ключі що передаєш у body "
+            "змінюються — решта лишається як було. Поля у `fields` "
+            "мерджаться: вже існуючі поля що НЕ передані у виклику "
+            "залишаються. Викликай коли юзер каже «оновити пароль для "
+            "X», «зміни label», «додай поле note до картки»."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "card_id": {
+                    "type": "string",
+                    "description": "UUID картки (з vault_list / vault_get).",
+                },
+                "label": {"type": "string"},
+                "fields": {
+                    "type": "object",
+                    "additionalProperties": {
+                        "type": "object",
+                        "properties": {
+                            "value": {"type": "string"},
+                            "secret": {"type": "boolean"},
+                        },
+                        "required": ["value", "secret"],
+                    },
+                },
+                "tags": {
+                    "type": "array",
+                    "items": {"type": "string"},
+                },
+                "ai_writable": {
+                    "type": "boolean",
+                    "description": (
+                        "Якщо false — наступні AI-виклики не зможуть "
+                        "редагувати цю картку (read-only для AI)."
+                    ),
+                },
+            },
+            "required": ["card_id"],
+        },
+    },
+    {
+        "name": "vault_delete",
+        "description": (
+            "Soft-delete картки з 30-денним вікном відновлення. Картка "
+            "стає невидимою для дефолтного vault_list, але доступна "
+            "через include_deleted=true. Викликай коли юзер каже "
+            "«видали запис про…», «прибери цю картку». Якщо помилково — "
+            "vault_restore відновить."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "card_id": {
+                    "type": "string",
+                    "description": "UUID картки.",
+                },
+            },
+            "required": ["card_id"],
+        },
+    },
+    {
+        "name": "vault_restore",
+        "description": (
+            "Відновити soft-deleted картку у межах 30-денного вікна. "
+            "Викликай коли юзер каже «верни видалене», «то було помилково»."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "card_id": {
+                    "type": "string",
+                    "description": "UUID видаленої картки.",
+                },
+            },
+            "required": ["card_id"],
+        },
+    },
 ]
 
 

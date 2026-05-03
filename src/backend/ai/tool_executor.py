@@ -1744,6 +1744,288 @@ async def _tool_studio_card_catalog(args: dict[str, Any], user_id: str) -> dict[
     return _ok(categories=grouped, total=sum(len(v) for v in grouped.values()))
 
 
+# ── Phase 25-C — Vault chat tools ─────────────────────────────────────────────
+
+
+_VAULT_KNOWN_KINDS = frozenset({
+    "email_account", "service_login", "messenger", "phone",
+    "company", "payment_method", "api_key", "document", "contact",
+    "wifi_network", "crypto_wallet", "custom",
+})
+
+
+def _vault_serialise(card: Any) -> dict[str, Any]:
+    """Render a VaultCard ORM row for the chat layer. Mirrors the REST
+    masking in routes_vault — secret values are returned as "***" and the
+    parallel `field_kinds` map tells AI which fields are secret-but-revealable."""
+    import json as _json
+    raw = _json.loads(card.fields_json or "{}")
+    plain: dict[str, str] = {}
+    kinds: dict[str, str] = {}
+    for name, payload in raw.items():
+        if not isinstance(payload, dict):
+            continue
+        is_secret = bool(payload.get("secret"))
+        kinds[name] = "secret" if is_secret else "plain"
+        plain[name] = "***" if is_secret else str(payload.get("v", ""))
+    tags = _json.loads(card.tags_json or "[]")
+    return {
+        "id": card.id,
+        "kind": card.kind,
+        "label": card.label,
+        "tags": list(tags) if isinstance(tags, list) else [],
+        "ai_writable": bool(card.ai_writable),
+        "fields": plain,
+        "field_kinds": kinds,
+        "deleted_at": card.deleted_at.isoformat() if card.deleted_at else None,
+        "created_at": card.created_at.isoformat() if card.created_at else None,
+        "updated_at": card.updated_at.isoformat() if card.updated_at else None,
+    }
+
+
+def _vault_encode_fields(
+    *, fields: dict[str, Any], user_id: str, card_id: str,
+) -> str:
+    """Build the storage blob. Encrypts each `secret=True` value with the
+    same vault_crypto path used by the REST layer so a card created via
+    chat is indistinguishable from one created via /vault/cards."""
+    import json as _json
+    from security.vault_crypto import encrypt_field
+    out: dict[str, dict[str, Any]] = {}
+    for name, payload in fields.items():
+        if not isinstance(payload, dict):
+            continue
+        secret = bool(payload.get("secret"))
+        value = str(payload.get("value") or "")
+        if secret:
+            out[name] = {
+                "v": encrypt_field(
+                    user_id=user_id, card_id=card_id,
+                    field_name=name, plaintext=value,
+                ),
+                "secret": True,
+            }
+        else:
+            out[name] = {"v": value, "secret": False}
+    return _json.dumps(out, ensure_ascii=False)
+
+
+async def _tool_vault_list(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    import json as _json
+    from sqlalchemy import desc, select
+    from db.models import VaultCard
+    kind = args.get("kind")
+    tag = args.get("tag")
+    if kind and kind not in _VAULT_KNOWN_KINDS:
+        return _err("invalid_args", f"unknown kind '{kind}'")
+    async with _session_factory()() as db:
+        stmt = select(VaultCard).where(
+            VaultCard.owner_user_id == user_id,
+            VaultCard.deleted_at.is_(None),
+        )
+        if kind:
+            stmt = stmt.where(VaultCard.kind == kind)
+        stmt = stmt.order_by(desc(VaultCard.updated_at))
+        rows = (await db.execute(stmt)).scalars().all()
+    if tag:
+        rows = [
+            r for r in rows
+            if tag in (_json.loads(r.tags_json or "[]") or [])
+        ]
+    cards = [_vault_serialise(r) for r in rows]
+    return _ok(cards=cards, count=len(cards))
+
+
+async def _tool_vault_get(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    from sqlalchemy import select
+    from db.models import VaultCard
+    card_id = str(args.get("card_id") or "").strip()
+    if not card_id:
+        return _err("invalid_args", "card_id is required")
+    async with _session_factory()() as db:
+        stmt = select(VaultCard).where(
+            VaultCard.id == card_id,
+            VaultCard.owner_user_id == user_id,
+            VaultCard.deleted_at.is_(None),
+        )
+        card = (await db.execute(stmt)).scalar_one_or_none()
+    if card is None:
+        return _err("not_found", f"card {card_id} not found")
+    return _ok(card=_vault_serialise(card))
+
+
+async def _tool_vault_create(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    import json as _json
+    from db.models import VaultAuditEntry, VaultCard
+    kind = str(args.get("kind") or "").strip()
+    if kind not in _VAULT_KNOWN_KINDS:
+        return _err(
+            "invalid_args",
+            f"unknown kind '{kind}'; allowed: {sorted(_VAULT_KNOWN_KINDS)}",
+        )
+    label = str(args.get("label") or "").strip()
+    if len(label) < 1 or len(label) > 160:
+        return _err("invalid_args", "label must be 1..160 chars")
+    fields = args.get("fields") or {}
+    if not isinstance(fields, dict):
+        return _err("invalid_args", "fields must be a dict of {name:{value,secret}}")
+    raw_tags = args.get("tags") or []
+    tags = [str(t)[:64] for t in raw_tags if isinstance(t, (str, int))][:40]
+
+    async with _session_factory()() as db:
+        card = VaultCard(
+            owner_user_id=user_id,
+            kind=kind,
+            label=label,
+            tags_json=_json.dumps(tags, ensure_ascii=False),
+            ai_writable=True,
+        )
+        db.add(card)
+        await db.flush()
+        card.fields_json = _vault_encode_fields(
+            fields=fields, user_id=user_id, card_id=card.id,
+        )
+        db.add(VaultAuditEntry(
+            user_id=user_id,
+            card_id=card.id,
+            action="create",
+            actor="ai",
+            details_json=_json.dumps(
+                {"kind": kind, "label": label,
+                 "field_names": list(fields.keys())},
+                ensure_ascii=False,
+            ),
+        ))
+        await db.commit()
+        await db.refresh(card)
+    return _ok(card=_vault_serialise(card))
+
+
+async def _tool_vault_update(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    import json as _json
+    from datetime import datetime, timezone
+    from sqlalchemy import select
+    from db.models import VaultAuditEntry, VaultCard
+    card_id = str(args.get("card_id") or "").strip()
+    if not card_id:
+        return _err("invalid_args", "card_id is required")
+
+    async with _session_factory()() as db:
+        stmt = select(VaultCard).where(
+            VaultCard.id == card_id,
+            VaultCard.owner_user_id == user_id,
+            VaultCard.deleted_at.is_(None),
+        )
+        card = (await db.execute(stmt)).scalar_one_or_none()
+        if card is None:
+            return _err("not_found", f"card {card_id} not found")
+        if not bool(card.ai_writable):
+            return _err(
+                "forbidden",
+                "this card is marked ai_writable=false — operator must "
+                "edit it via the Vault UI",
+            )
+        changed: list[str] = []
+        if "label" in args and args["label"] is not None:
+            new_label = str(args["label"]).strip()
+            if 1 <= len(new_label) <= 160:
+                card.label = new_label
+                changed.append("label")
+            else:
+                return _err("invalid_args", "label must be 1..160 chars")
+        if "tags" in args and args["tags"] is not None:
+            raw_tags = args["tags"] or []
+            if isinstance(raw_tags, list):
+                tags = [str(t)[:64] for t in raw_tags if isinstance(t, (str, int))][:40]
+                card.tags_json = _json.dumps(tags, ensure_ascii=False)
+                changed.append("tags")
+        if "ai_writable" in args and args["ai_writable"] is not None:
+            card.ai_writable = bool(args["ai_writable"])
+            changed.append("ai_writable")
+        if "fields" in args and args["fields"] is not None:
+            fields = args["fields"] or {}
+            if not isinstance(fields, dict):
+                return _err("invalid_args", "fields must be a dict")
+            existing = _json.loads(card.fields_json or "{}")
+            new_blob = _vault_encode_fields(
+                fields=fields, user_id=user_id, card_id=card.id,
+            )
+            new_raw = _json.loads(new_blob)
+            existing.update(new_raw)
+            card.fields_json = _json.dumps(existing, ensure_ascii=False)
+            changed.append("fields")
+        card.updated_at = datetime.now(tz=timezone.utc)
+        db.add(VaultAuditEntry(
+            user_id=user_id,
+            card_id=card.id,
+            action="update",
+            actor="ai",
+            details_json=_json.dumps({"changed": changed}, ensure_ascii=False),
+        ))
+        await db.commit()
+        await db.refresh(card)
+    return _ok(card=_vault_serialise(card))
+
+
+async def _tool_vault_delete(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    import json as _json
+    from datetime import datetime, timezone
+    from sqlalchemy import select
+    from db.models import VaultAuditEntry, VaultCard
+    card_id = str(args.get("card_id") or "").strip()
+    if not card_id:
+        return _err("invalid_args", "card_id is required")
+    async with _session_factory()() as db:
+        stmt = select(VaultCard).where(
+            VaultCard.id == card_id,
+            VaultCard.owner_user_id == user_id,
+            VaultCard.deleted_at.is_(None),
+        )
+        card = (await db.execute(stmt)).scalar_one_or_none()
+        if card is None:
+            return _err("not_found", f"card {card_id} not found")
+        if not bool(card.ai_writable):
+            return _err("forbidden", "card is ai_writable=false")
+        card.deleted_at = datetime.now(tz=timezone.utc)
+        db.add(VaultAuditEntry(
+            user_id=user_id, card_id=card.id,
+            action="delete", actor="ai",
+            details_json=_json.dumps({}, ensure_ascii=False),
+        ))
+        await db.commit()
+    return _ok(deleted=True, card_id=card_id)
+
+
+async def _tool_vault_restore(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    import json as _json
+    from datetime import datetime, timezone
+    from sqlalchemy import select
+    from db.models import VaultAuditEntry, VaultCard
+    card_id = str(args.get("card_id") or "").strip()
+    if not card_id:
+        return _err("invalid_args", "card_id is required")
+    async with _session_factory()() as db:
+        stmt = select(VaultCard).where(
+            VaultCard.id == card_id,
+            VaultCard.owner_user_id == user_id,
+        )
+        card = (await db.execute(stmt)).scalar_one_or_none()
+        if card is None:
+            return _err("not_found", f"card {card_id} not found")
+        if card.deleted_at is None:
+            return _ok(card=_vault_serialise(card), already_active=True)
+        card.deleted_at = None
+        card.updated_at = datetime.now(tz=timezone.utc)
+        db.add(VaultAuditEntry(
+            user_id=user_id, card_id=card.id,
+            action="restore", actor="ai",
+            details_json=_json.dumps({}, ensure_ascii=False),
+        ))
+        await db.commit()
+        await db.refresh(card)
+    return _ok(card=_vault_serialise(card))
+
+
 # ── Dispatcher ────────────────────────────────────────────────────────────────
 
 
@@ -1789,6 +2071,13 @@ _HANDLERS: dict[str, Any] = {
     "studio_add_recipient": _tool_studio_add_recipient,
     "studio_remove_recipient": _tool_studio_remove_recipient,
     "studio_set_inputs_schema": _tool_studio_set_inputs_schema,
+    # Phase 25-C — Personal Vault chat-driven CRUD.
+    "vault_list": _tool_vault_list,
+    "vault_get": _tool_vault_get,
+    "vault_create": _tool_vault_create,
+    "vault_update": _tool_vault_update,
+    "vault_delete": _tool_vault_delete,
+    "vault_restore": _tool_vault_restore,
 }
 
 

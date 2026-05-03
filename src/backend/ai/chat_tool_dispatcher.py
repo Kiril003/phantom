@@ -77,6 +77,13 @@ _CHAT_SAFE_TOOL_NAMES: tuple[str, ...] = (
     "studio_add_recipient",
     "studio_remove_recipient",
     "studio_set_inputs_schema",
+    # Phase 25-C — Personal Vault chat-driven CRUD.
+    "vault_list",
+    "vault_get",
+    "vault_create",
+    "vault_update",
+    "vault_delete",
+    "vault_restore",
 )
 
 

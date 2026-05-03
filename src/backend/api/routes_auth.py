@@ -26,6 +26,7 @@ from security.auth import (
     is_loopback_host,
     require_auth,
 )
+from security.device_auth import get_user_or_device_user
 from security.jwt_manager import TokenPayload, create_token, refresh_token as jwt_refresh
 from security.permissions import require_operator, require_root
 
@@ -382,6 +383,124 @@ async def get_auth_config() -> dict:
 @router.get("/me")
 async def get_me(current_user: User = Depends(get_current_user)) -> dict:
     """Return full current user object."""
+    return _user_to_dict(current_user)
+
+
+# Phase 19-8 (Mobile Companion design §5) — preference sync whitelist.
+# These are the ONLY keys a `PATCH /auth/me` request may write. The
+# whitelist is a hard wall: anything else (pin_hash, rfid_uid_hash,
+# behavioral_model_json, role, etc.) is silently dropped, NOT 400'd —
+# clients across multiple versions get a forward-compatible API
+# without leaking which fields are sensitive.
+#
+# Nested keys (e.g. `voice.profile_id`) are expressed as dotted paths;
+# the merger walks the JSON tree and applies the new leaf without
+# nuking sibling subtrees.
+_PREFS_WHITELIST: frozenset[str] = frozenset(
+    {
+        "language",
+        "theme",
+        "voice.profile_id",
+        "voice.wake_word",
+        "voice.bilingual_mode",
+        "familiar.rarity",
+        "familiar.manifest_frequency",
+        "notifications",
+        "map.default_layer",
+        "co_pilot.auto_enable",
+    }
+)
+
+
+def _set_dotted(obj: dict[str, Any], dotted: str, value: Any) -> None:
+    """Mutate `obj` so `dotted` (e.g. 'voice.profile_id') points at `value`,
+    creating intermediate dicts as needed. Bare keys (no dot) write the
+    value at the top level."""
+    parts = dotted.split(".")
+    cursor = obj
+    for p in parts[:-1]:
+        nxt = cursor.get(p)
+        if not isinstance(nxt, dict):
+            nxt = {}
+            cursor[p] = nxt
+        cursor = nxt
+    cursor[parts[-1]] = value
+
+
+def _filter_whitelist(patch: dict[str, Any]) -> dict[str, Any]:
+    """Return a copy of `patch` containing ONLY whitelisted top-level
+    keys + dotted paths. Unknown keys are dropped silently."""
+    out: dict[str, Any] = {}
+    for k, v in patch.items():
+        if k in _PREFS_WHITELIST:
+            out[k] = v
+        # Allow nested-dict shorthand: client may send
+        # `{"voice": {"profile_id": "x"}}` — accept the leaf if its
+        # dotted form is whitelisted.
+        elif isinstance(v, dict):
+            for sub_k, sub_v in v.items():
+                dotted = f"{k}.{sub_k}"
+                if dotted in _PREFS_WHITELIST:
+                    out[dotted] = sub_v
+    return out
+
+
+class PatchMeRequest(BaseModel):
+    """Loose: any preference patch. Whitelist is enforced server-side."""
+
+    preferences: dict[str, Any] = Field(default_factory=dict)
+
+
+@router.patch("/me")
+async def patch_me(
+    req: PatchMeRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_user_or_device_user),
+) -> dict:
+    """Phase 19-8 — self-service preference update.
+
+    Mobile and desktop both call this. The whitelist gate guarantees
+    the phone cannot escalate role or modify auth secrets even if a
+    rogue build sends those fields. After commit, broadcasts a
+    `context/preferences_changed` event on the `context` channel scoped
+    to the owning user — so every other paired surface (other tab,
+    paired phone, future watch) sees the change without polling.
+    """
+    safe_patch = _filter_whitelist(req.preferences or {})
+    if not safe_patch:
+        # Nothing to do — return current state. Don't 400; keeps
+        # forward-compat for clients that send only unknown fields.
+        return _user_to_dict(current_user)
+
+    try:
+        prefs = json.loads(current_user.preferences_json or "{}")
+        if not isinstance(prefs, dict):
+            prefs = {}
+    except json.JSONDecodeError:
+        prefs = {}
+
+    for key, value in safe_patch.items():
+        _set_dotted(prefs, key, value)
+
+    current_user.preferences_json = json.dumps(prefs)
+    await db.commit()
+    await db.refresh(current_user)
+
+    # Broadcast the *applied* delta (not the raw input) so listeners
+    # know exactly which leaves changed. Scoped to user_id so other
+    # users' tabs/phones don't receive private prefs.
+    try:
+        from api.websocket_hub import hub
+
+        await hub.broadcast(
+            "context",
+            "preferences_changed",
+            {"changes": safe_patch, "preferences": prefs},
+            user_id=current_user.id,
+        )
+    except Exception as exc:
+        logger.debug("preferences_changed broadcast failed: %s", exc)
+
     return _user_to_dict(current_user)
 
 

@@ -54,6 +54,8 @@ export interface ManifestOptions {
   target?: FamiliarTarget;
   /** Skip the rarity gate + cooldown (forced summon). */
   force?: boolean;
+  /** Do not start the auto-dismiss timer until startTimer(id) is called. */
+  delayTimer?: boolean;
 }
 
 interface FamiliarStoreState {
@@ -76,6 +78,9 @@ interface FamiliarStoreState {
 
   /** Force-dismiss any in-flight manifestation. */
   dismiss: () => void;
+
+  /** Start the auto-dismiss timer for a manifestation (if delayed). */
+  startTimer: (id: string) => void;
 }
 
 let dismissTimer: ReturnType<typeof setTimeout> | null = null;
@@ -138,23 +143,44 @@ export const useFamiliarStore = create<FamiliarStoreState>((set, get) => ({
       startedAtMs: now,
     };
 
-    if (dismissTimer) {
-      clearTimeout(dismissTimer);
-      dismissTimer = null;
-    }
-
-    dismissTimer = setTimeout(() => {
-      dismissTimer = null;
-      // Only dismiss if THIS manifestation is still the current one;
-      // a later summon may have overwritten it.
-      const current = get().currentManifestation;
-      if (current && current.id === manifestation.id) {
-        set({ currentManifestation: null });
+    if (!opts.delayTimer) {
+      if (dismissTimer) {
+        clearTimeout(dismissTimer);
       }
-    }, durationMs);
+      dismissTimer = setTimeout(() => {
+        dismissTimer = null;
+        const current = get().currentManifestation;
+        if (current && current.id === manifestation.id) {
+          set({ currentManifestation: null });
+        }
+      }, durationMs);
+    } else {
+      if (dismissTimer) {
+        clearTimeout(dismissTimer);
+        dismissTimer = null;
+      }
+    }
 
     set({ currentManifestation: manifestation, lastSummonAtMs: now });
     return manifestation;
+  },
+
+  startTimer: (id: string) => {
+    const state = get();
+    const current = state.currentManifestation;
+    if (!current || current.id !== id) return;
+
+    if (dismissTimer) {
+      clearTimeout(dismissTimer);
+    }
+    
+    dismissTimer = setTimeout(() => {
+      dismissTimer = null;
+      const latest = get().currentManifestation;
+      if (latest && latest.id === id) {
+        set({ currentManifestation: null });
+      }
+    }, current.durationMs);
   },
 
   dismiss: () => {

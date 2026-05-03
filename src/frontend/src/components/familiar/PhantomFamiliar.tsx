@@ -386,6 +386,7 @@ export function PhantomFamiliar() {
               pose={manifestation.pose}
               pointAngle={anchor.pointAngle}
               pointLength={anchor.pointLength}
+              onLoaded={() => useFamiliarStore.getState().startTimer(manifestation.id)}
             />
             {manifestation.message && (
               <div

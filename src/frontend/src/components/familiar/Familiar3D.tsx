@@ -11,9 +11,10 @@ interface Familiar3DProps {
   pointAngle?: number;
   pointLength?: number;
   emotion?: FamiliarEmotion;
+  onLoaded?: () => void;
 }
 
-function Model({ pose, pointAngle = 0, emotion = 'neutral' }: Familiar3DProps) {
+function Model({ pose, pointAngle = 0, emotion = 'neutral', onLoaded }: Familiar3DProps) {
   const group = useRef<THREE.Group>(null);
   const { scene, animations } = useGLTF('/assets/familiar.glb');
   const { actions, names } = useAnimations(animations, group);
@@ -29,6 +30,11 @@ function Model({ pose, pointAngle = 0, emotion = 'neutral' }: Familiar3DProps) {
       if (idleAction) idleAction.fadeOut(0.5);
     };
   }, [actions, names]);
+
+  // Notify parent that the model has loaded
+  useEffect(() => {
+    onLoaded?.();
+  }, [onLoaded]);
 
   // Handle pose transitions
   useEffect(() => {
@@ -113,11 +119,11 @@ function Model({ pose, pointAngle = 0, emotion = 'neutral' }: Familiar3DProps) {
 export function Familiar3D(props: Familiar3DProps) {
   return (
     <div style={{ width: '130px', height: '182px', pointerEvents: 'none' }}>
-      <Canvas shadows alpha gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}>
+      <Canvas shadows gl={{ antialias: true, alpha: true, powerPreference: 'high-performance' }}>
         <PerspectiveCamera makeDefault position={[0, 0, 4.5]} fov={40} />
         <ambientLight intensity={0.7} />
         <spotLight position={[5, 5, 5]} angle={0.2} penumbra={1} intensity={1.5} castShadow />
-        <Environment preset="neutral" />
+        <Environment preset="studio" />
         
         <React.Suspense fallback={null}>
           <Model {...props} />
@@ -127,4 +133,6 @@ export function Familiar3D(props: Familiar3DProps) {
   );
 }
 
-useGLTF.preload('/assets/familiar.glb');
+// preload removed — eager fetching the 47MB GLB on app boot blocked the
+// greeting timer race fix; the model now lazy-loads when PhantomFamiliar
+// mounts and signals readiness via Familiar3D.onLoaded → startTimer(id).

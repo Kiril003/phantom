@@ -122,7 +122,8 @@ export function useFamiliarTriggers(): void {
   useEffect(() => {
     if (!lastAuthRef.current && authenticated) {
       // Force=true so the rarity gate doesn't suppress the welcome wave.
-      useFamiliarStore.getState().manifest('greeting', { force: true });
+      // delayTimer=true so the timer doesn't start until the 47MB 3D model loads.
+      useFamiliarStore.getState().manifest('greeting', { force: true, delayTimer: true });
     }
     lastAuthRef.current = authenticated;
   }, [authenticated]);

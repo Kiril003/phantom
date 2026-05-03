@@ -34,7 +34,7 @@ import { useMapStore, type MapLayerKey } from '../../stores/mapStore';
 import { useSystemStore } from '../../stores/systemStore';
 import { getMapTokens, buildPhantomStyle, type PhantomMapStyle } from './mapTokens';
 import { useSettingsStore } from '../../stores/settingsStore';
-import type { Bounds } from '../../services/api';
+import { settingsApi, type Bounds } from '../../services/api';
 // `geolocationService` is owned by `App.GlobalGeolocationManager` —
 // TacticalMap consumes results via `mapStore` polling, no direct import.
 import { expandQuery } from '../../services/translit';
@@ -82,9 +82,23 @@ export function TacticalMap({
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
   const [ready, setReady] = useState(false);
+  const [bearing, setBearing] = useState(0);
+  const [styleLoadFailed, setStyleLoadFailed] = useState(false);
+  const [retryNonce, setRetryNonce] = useState(0);
 
   const mapStyleSetting = useSettingsStore((s) => s.values.ui_map_style);
   const mapStyle = resolveMapStyle(mapStyleSetting);
+  const setSettingValue = useSettingsStore((s) => s.setValue);
+
+  const cycleMapStyle = useCallback(() => {
+    const idx = MAP_STYLE_VALUES.indexOf(mapStyle);
+    const next = MAP_STYLE_VALUES[(idx + 1) % MAP_STYLE_VALUES.length];
+    setSettingValue('ui_map_style', next);
+    // Best-effort backend persist; local optimistic state already updated.
+    settingsApi.set('ui_map_style', next).catch(() => {
+      /* offline / pre-auth — optimistic state survives via settings store. */
+    });
+  }, [mapStyle, setSettingValue]);
 
   const layers = useMapStore((s) => s.layers);
   const toggleLayer = useMapStore((s) => s.toggleLayer);
@@ -155,12 +169,30 @@ export function TacticalMap({
       center: resolvedInitialCenter,
       zoom: initialZoom,
       attributionControl: false,
-      dragRotate: false,
-      pitchWithRotate: false,
+      // Phase 24-PRE — enable rotation so the Compass HUD chip
+      // reflects real bearing and the reset button has meaning.
+      // Pitch stays linked to rotate (default) for upcoming
+      // hillshade / 3D terrain layers.
+      dragRotate: true,
+      pitchWithRotate: true,
     });
     mapRef.current = map;
+    setStyleLoadFailed(false);
 
-    const onLoad = () => setReady(true);
+    const onLoad = () => {
+      setReady(true);
+      setStyleLoadFailed(false);
+    };
+    const onRotate = () => setBearing(map.getBearing());
+    // Phase 24-PRE — surface tile/style/network errors to operator.
+    // The previous behaviour swallowed every map.on('error') silently,
+    // which is the root cause of "buttons appear to do nothing" reports
+    // (toggling a layer triggered a load failure that was never shown).
+    const onError = (e: { error?: { message?: string } }) => {
+      const msg = e?.error?.message ?? 'Map source error';
+      // Truncate noisy MapLibre stack traces to keep the toast scannable.
+      useMapStore.getState().setToast(`Map: ${msg.slice(0, 80)}`);
+    };
     const onMove = () => {
       const c = map.getCenter();
       setCenter([c.lat, c.lng]);
@@ -218,6 +250,10 @@ export function TacticalMap({
 
     map.on('load', onLoad);
     map.on('moveend', onMove);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    map.on('rotate' as any, onRotate);
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    map.on('error' as any, onError);
     map.on('click', onClick);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     map.on('mousedown' as any, onMouseDown);
@@ -245,12 +281,63 @@ export function TacticalMap({
       clearLongPress();
       map.off('load', onLoad);
       map.off('moveend', onMove);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      map.off('rotate' as any, onRotate);
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      map.off('error' as any, onError);
       map.off('click', onClick);
       map.remove();
       mapRef.current = null;
       setReady(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [retryNonce]);
+
+  // Phase 24-PRE — reactively rebuild MapLibre style when ui_map_style
+  // setting changes. Previously the style was set only on mount, so the
+  // Satellite HUD button (now wired) had to round-trip through a re-mount
+  // to take effect. setStyle({diff: true}) preserves zoom/center/markers.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    const tokens = getMapTokens();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    map.setStyle(buildPhantomStyle(tokens, mapStyle) as any, { diff: true });
+  }, [mapStyle, ready]);
+
+  // Phase 24-PRE — ready-timeout fallback. If the map style (OSM tiles
+  // or ArcGIS satellite) fails to fetch within 5s — typical when offline,
+  // CORS-blocked, or DNS slow — surface a clear inline error with retry
+  // instead of leaving operator staring at a black canvas with toggles
+  // that "do nothing" (Zustand mutates but no markers ever render
+  // because layers gate on `ready`).
+  useEffect(() => {
+    if (ready) {
+      setStyleLoadFailed(false);
+      return;
+    }
+    const timer = window.setTimeout(() => {
+      if (!mapRef.current) return;
+      // Only flip into failed state if load really hasn't fired —
+      // mapRef.current.loaded() is the MapLibre canonical check.
+      if (!mapRef.current.loaded()) setStyleLoadFailed(true);
+    }, 5000);
+    return () => window.clearTimeout(timer);
+  }, [ready, retryNonce]);
+
+  const handleStyleRetry = useCallback(() => {
+    setStyleLoadFailed(false);
+    setReady(false);
+    // Bumping the nonce re-runs the mount effect, which tears down the
+    // current MapLibre instance and creates a fresh one.
+    setRetryNonce((n) => n + 1);
+  }, []);
+
+  const handleResetBearing = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    map.rotateTo(0, { duration: 400 });
+    map.easeTo({ pitch: 0, duration: 400 });
   }, []);
 
   const [pendingPoi, setPendingPoi] = useState<{ lng: number; lat: number } | null>(null);
@@ -268,11 +355,19 @@ export function TacticalMap({
     if (!ready || !mapRef.current) return;
     const map = mapRef.current;
     const bounds = computeBounds(map);
-    if (layers.wardriving) loadWardriving(bounds).catch(() => {});
-    if (layers.heatmap) loadHeatmap(bounds).catch(() => {});
-    if (layers.intel) loadPOIs().catch(() => {});
-    if (layers.recon) loadTrack(2).catch(() => {});
-    if (layers.facts) loadGeoTaggedFacts().catch(() => {});
+    // Phase 24-PRE — surface load failures instead of silent .catch.
+    // The store already records `error` per call; we additionally toast
+    // the first user-visible failure so the operator never sees a
+    // toggle "do nothing" without explanation.
+    const reportLoad = (label: string) => (err: unknown) => {
+      const msg = err instanceof Error ? err.message : String(err);
+      useMapStore.getState().setToast(`${label}: ${msg.slice(0, 80)}`);
+    };
+    if (layers.wardriving) loadWardriving(bounds).catch(reportLoad('Wardriving'));
+    if (layers.heatmap) loadHeatmap(bounds).catch(reportLoad('Heatmap'));
+    if (layers.intel) loadPOIs().catch(reportLoad('POIs'));
+    if (layers.recon) loadTrack(2).catch(reportLoad('Track'));
+    if (layers.facts) loadGeoTaggedFacts().catch(reportLoad('Facts'));
   }, [ready, layers.wardriving, layers.heatmap, layers.intel, layers.recon, layers.facts, loadWardriving, loadHeatmap, loadPOIs, loadTrack, loadGeoTaggedFacts]);
 
   // Refresh facts every 5 minutes while the layer is visible (audit G6 spec).
@@ -412,11 +507,15 @@ export function TacticalMap({
           <Divider />
           <LateralButton
             icon={<Satellite size={18} strokeWidth={1.75} />}
-            label="Satellite"
+            label={`Style · ${mapStyle}`}
+            active={mapStyle !== 'dark'}
+            onClick={cycleMapStyle}
           />
           <LateralButton
             icon={<Compass size={18} strokeWidth={1.75} />}
-            label="Compass"
+            label={`Bearing · ${String(Math.round(bearing)).padStart(3, '0')}°`}
+            active={Math.abs(bearing) > 0.5}
+            onClick={handleResetBearing}
           />
           <LateralButton
             icon={<Clock size={18} strokeWidth={1.75} />}
@@ -714,6 +813,100 @@ export function TacticalMap({
         </div>
       )}
 
+      {/* Phase 24-PRE — style-load timeout overlay.
+          Renders when MapLibre fails to fire `load` within 5s — almost
+          always offline / DNS / blocked tile CDN. The black canvas
+          underneath used to look like "buttons broken" because layers
+          gate on `ready` and silently no-op. */}
+      {styleLoadFailed && (
+        <div
+          data-testid="map-style-failed"
+          className="absolute inset-0 z-30 flex items-center justify-center pointer-events-auto"
+          style={{
+            background:
+              'color-mix(in srgb, var(--surface-void) 70%, transparent)',
+            backdropFilter: 'blur(2px)',
+            WebkitBackdropFilter: 'blur(2px)',
+          }}
+        >
+          <div
+            className="glass-elevated"
+            style={{
+              maxWidth: 360,
+              borderRadius: 18,
+              padding: 20,
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 12,
+              textAlign: 'center',
+            }}
+          >
+            <div
+              className="uppercase"
+              style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: 'var(--fs-micro)',
+                letterSpacing: 'var(--tracking-widest)',
+                color: 'var(--signal-alert)',
+              }}
+            >
+              Map style failed to load
+            </div>
+            <div
+              style={{
+                fontFamily: 'var(--font-serif)',
+                fontStyle: 'italic',
+                fontSize: 'var(--fs-xs)',
+                color: 'var(--ink-secondary)',
+              }}
+            >
+              Тайли не завантажились за 5 секунд. Перевір з'єднання
+              з мережею або переключи стиль.
+            </div>
+            <div className="flex items-center gap-2 justify-center">
+              <button
+                type="button"
+                onClick={handleStyleRetry}
+                className="active:scale-95"
+                style={{
+                  minHeight: 44,
+                  padding: '0 18px',
+                  borderRadius: 9999,
+                  background: 'var(--accent)',
+                  color: 'var(--ink-inverse)',
+                  border: '1px solid var(--accent)',
+                  fontFamily: 'var(--font-display)',
+                  fontSize: 'var(--fs-xs)',
+                  letterSpacing: 'var(--tracking-wider)',
+                  textTransform: 'uppercase',
+                  boxShadow: '0 0 20px var(--accent-glow)',
+                }}
+              >
+                Retry
+              </button>
+              <button
+                type="button"
+                onClick={cycleMapStyle}
+                className="active:scale-95"
+                style={{
+                  minHeight: 44,
+                  padding: '0 14px',
+                  borderRadius: 9999,
+                  background: 'transparent',
+                  color: 'var(--ink-secondary)',
+                  border: '1px solid var(--glass-border)',
+                  fontFamily: 'var(--font-display)',
+                  fontSize: 'var(--fs-xs)',
+                  letterSpacing: 'var(--tracking-wide)',
+                }}
+              >
+                Switch style
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Toast */}
       {toast && (
         <div
@@ -743,7 +936,7 @@ export function TacticalMap({
 
       {/* Right-column HUD — compass + GPS quality */}
       <div className="absolute top-3 right-3 z-20 pointer-events-none flex flex-col items-end gap-2">
-        <CompassChip bearing={0} />
+        <CompassChip bearing={bearing} />
         <GpsQualityChip context={context} />
         <StatusChip loading={loading} zoom={mapRef.current?.getZoom() ?? initialZoom} />
       </div>

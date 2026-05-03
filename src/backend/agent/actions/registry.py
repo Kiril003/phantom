@@ -37,6 +37,7 @@ from .visual import (
 )
 from .esp32_aim import ESP32BuzzerAlert, ESP32ServoAim
 from .delegate import AgentDelegate
+from .team_assemble import AgentAssembleTeam
 from .map import MAP_ACTIONS
 from .web import WebSearch
 
@@ -87,6 +88,12 @@ _REGISTERED: list[Type[Action]] = [
     # into a real team. Recursion + concurrency capped via
     # agent_max_delegation_depth + agent_max_team_concurrency.
     AgentDelegate,
+    # Phase 26-C — agent.assemble_team. High-level "delegate to a
+    # whole team" verb that bundles picker + delegate + parallel
+    # await + result consolidation. Three modes: auto (picker), department
+    # (spawns matching team_lead which re-delegates to its seniors),
+    # explicit (caller names roles).
+    AgentAssembleTeam,
 ]
 
 

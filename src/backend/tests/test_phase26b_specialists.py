@@ -34,14 +34,16 @@ os.environ.setdefault("PHANTOM_SERIAL_ENABLED", "false")
 
 
 class TestRegistry:
-    def test_eighteen_specialists(self) -> None:
+    def test_specialist_count_includes_leads(self) -> None:
+        """Phase 26-B baseline: 18 senior roles. Phase 26-C added 5
+        team leads (one per department). Total = 23."""
         from agent.team.specialists import all_specialists
         roles = all_specialists()
-        assert len(roles) == 18, (
-            "Phase 26-B regression: specialist count drifted from 18. "
-            "If you added/removed roles, update this test alongside the "
-            "departments distribution."
-        )
+        leads = [s for s in roles if s.name.startswith("team_lead_")]
+        seniors = [s for s in roles if not s.name.startswith("team_lead_")]
+        assert len(leads) == 5, "expected 5 team leads (one per dept)"
+        assert len(seniors) == 18, "expected 18 senior roles"
+        assert len(roles) == 23
 
     def test_five_departments(self) -> None:
         from agent.team.specialists import departments
@@ -134,7 +136,8 @@ class TestCatalog:
         rows = specialist_catalog()
         text = json.dumps(rows, ensure_ascii=False)
         loaded = json.loads(text)
-        assert len(loaded) == 18
+        # Phase 26-C added 5 team leads on top of the 18 seniors.
+        assert len(loaded) == 23
         for row in loaded:
             assert {"name", "department", "description",
                     "risk_ceiling", "tool_count", "personality"} <= row.keys()

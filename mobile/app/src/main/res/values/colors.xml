@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Mirrors PhantomTheme.SunriseWarm — XML drawable previews and the
+         splash window background read these instead of the Compose tokens. -->
+    <color name="sunrise_surface_base">#F8F7F5</color>
+    <color name="sunrise_surface_deep">#F5F1EA</color>
+    <color name="sunrise_primary">#F4AF25</color>
+    <color name="sunrise_coral">#EF4444</color>
+    <color name="sunrise_ink">#1A150D</color>
+</resources>

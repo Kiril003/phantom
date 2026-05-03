@@ -1,0 +1,24 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PHANTOM monogram — geometric Φ in primary amber. Kept as a vector so the
+     icon survives theming and arbitrary launcher mask radii without bitmap
+     artefacts. Adaptive-icon foreground spec mandates 108×108 dp viewport;
+     the visible disc is the inner 72×72 dp safe zone. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <path
+        android:pathData="M54,18A36,36 0 1 1 54,90A36,36 0 1 1 54,18Z"
+        android:strokeColor="#F4AF25"
+        android:strokeWidth="3"
+        android:fillColor="#00000000" />
+    <path
+        android:pathData="M54,30L54,78"
+        android:strokeColor="#F4AF25"
+        android:strokeWidth="3"
+        android:strokeLineCap="round" />
+    <path
+        android:pathData="M40,42Q54,30 68,42L68,66Q54,78 40,66Z"
+        android:fillColor="#F4AF25" />
+</vector>

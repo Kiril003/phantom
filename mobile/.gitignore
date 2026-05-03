@@ -1,0 +1,11 @@
+.gradle/
+build/
+local.properties
+*.iml
+.idea/
+.kotlin/
+captures/
+.cxx/
+*.apk.idsig
+app/debug.keystore
+.omc/

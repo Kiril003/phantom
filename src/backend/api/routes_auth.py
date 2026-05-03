@@ -12,7 +12,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import and_, not_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.database import get_db
@@ -33,6 +33,12 @@ from security.permissions import require_operator, require_root
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/auth", tags=["auth"])
+
+
+# 2026-05-03 — UX cap for the pre-login profile grid. The 1024×600
+# panel fits ~12 tiles before the grid wraps off-screen and the PIN
+# pad becomes unreachable. See `list_users_picker` for the rationale.
+_PICKER_MAX_TILES = 12
 
 
 # ── Pydantic schemas ───────────────────────────────────────────────────────────
@@ -531,11 +537,38 @@ async def list_users_picker(db: AsyncSession = Depends(get_db)) -> list[dict]:
     The route MUST NOT call `_user_to_dict`; that would re-introduce
     the leak. The route MUST NOT require auth; that breaks the
     pre-login picker flow.
+
+    2026-05-03 — exclude test/ephemeral usernames AND cap to
+    `_PICKER_MAX_TILES`. Two motivations, both load-bearing:
+
+    * pytest fixtures historically wrote to the dev DB
+      (`tests/conftest.py::_make_user_row` minted `phantom_test_*`,
+      `test_phase17a_chat_tool_dispatcher.py` minted `phase17a_user_*`,
+      etc.). Stale fixture rows polluted the LoginScreen's profile
+      grid with 70+ tiles, which on the 1024×600 panel meant the
+      operator literally could not reach the PIN pad. The conftest
+      isolation patch lands in the same commit, but defence-in-depth
+      keeps the picker honest even if a future test escapes again.
+    * 1024×600 fits ~12 tiles before the grid overflows. The cap is
+      a UX guard, not a security one.
     """
-    result = await db.execute(select(User).order_by(User.last_seen_at.desc()))
+    rows = (
+        await db.execute(
+            select(User)
+            .where(
+                and_(
+                    not_(User.username.like("phantom\\_test\\_%", escape="\\")),
+                    not_(User.username.like("phase17a\\_user\\_%", escape="\\")),
+                    not_(User.username.like("t\\_%", escape="\\")),
+                )
+            )
+            .order_by(User.last_seen_at.desc())
+            .limit(_PICKER_MAX_TILES)
+        )
+    ).scalars().all()
     return [
         {"id": u.id, "username": u.username, "avatar_url": u.avatar_url}
-        for u in result.scalars().all()
+        for u in rows
     ]
 
 

@@ -21,6 +21,7 @@ htmlcov/
 .pio/.cache/
 *.db
 *.db-journal
+*.db.bak.*
 *.enc
 ghost_*.enc
 .DS_Store

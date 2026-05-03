@@ -50,6 +50,30 @@ os.environ.setdefault(
 )
 
 
+# ── Day-N (2026-05-03) — test DB isolation ────────────────────────────────────
+#
+# `db.database` builds the async engine at *module import time* from
+# `config.database_url`, which defaults to `sqlite+aiosqlite:///./phantom.db`
+# — the live development DB. Every test that called `init_db()` and
+# `_ensure_user(_make_user_row(...))` therefore left `phantom_test_*` /
+# `phase17a_user_*` rows in the operator's actual database. Over weeks of
+# pytest runs this leaked ~78 ghost users into the LoginScreen profile
+# grid, which on the 1024×600 panel pushed the PIN pad off-screen and
+# made it impossible to log in.
+#
+# Force `DATABASE_URL` to a per-pytest-process tmp file BEFORE any
+# `db.database` import. `setdefault` so tests that need to point at a
+# specific DB (e.g. migration smoke-tests) can still pin their own URL
+# via `monkeypatch.setenv("DATABASE_URL", ...)` *before* importing.
+import tempfile  # noqa: E402  (stdlib import after env setup is intentional)
+
+_TEST_DB_FD, _TEST_DB_PATH = tempfile.mkstemp(
+    prefix="phantom_pytest_", suffix=".db"
+)
+os.close(_TEST_DB_FD)
+os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///{_TEST_DB_PATH}")
+
+
 # ── Day-2 L-3 (audit-2026-04-29 F-15) — login lockout test isolation ─────────
 #
 # `security.login_lockout` is a process-local in-memory module. Tests
@@ -172,7 +196,11 @@ def _reset_system_metrics_sampler_per_test():
 def _make_user_row(role: str) -> dict:
     return {
         "id": str(uuid.uuid4()),
-        "username": f"phantom_test_{role.lower()}_{uuid.uuid4().hex[:8]}",
+        # 2026-05-03 — name pattern MUST NOT match the picker's
+        # exclusion filter (`phantom_test_*` / `phase17a_user_*` /
+        # `t_*`); use `pytest_<role>_<uuid>` so picker-shape tests
+        # still see fixture rows.
+        "username": f"pytest_{role.lower()}_{uuid.uuid4().hex[:8]}",
         "role": role,
         "pin_hash": "x",  # routes don't re-verify PIN once a JWT is issued
         "rfid_uid_hash": None,

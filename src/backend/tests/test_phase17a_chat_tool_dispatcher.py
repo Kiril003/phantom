@@ -39,7 +39,7 @@ async def authed_user_and_db():
         db.add(
             User(
                 id=user_id,
-                username=f"phase17a_user_{user_id[:8]}",
+                username=f"pytest_phase17a_{user_id[:8]}",
                 role="ROOT",
                 pin_hash="x",
                 rfid_uid_hash=None,

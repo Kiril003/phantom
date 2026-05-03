@@ -185,3 +185,152 @@ class TestUsersPickerRoute:
                     )
                 elif isinstance(func, _ast.Attribute):
                     assert func.attr != "_user_to_dict"
+
+
+# ─────────────────────── 2026-05-03 — picker filter + cap ──
+
+# Background: pytest fixtures historically minted `phantom_test_*` /
+# `phase17a_user_*` rows in the operator's live DB (the conftest leak
+# is closed in the same commit), inflating the LoginScreen profile
+# grid past what the 1024×600 panel can render. Two regressions to
+# pin:
+#
+#   * Filter — the picker route MUST exclude usernames matching the
+#     well-known test-fixture patterns regardless of how they got
+#     into the DB. Defence-in-depth — a future test escape (or a
+#     hand-written sqlite INSERT during dev work) shouldn't lock the
+#     operator out of their own panel again.
+#   * Cap — the picker MUST return at most `_PICKER_MAX_TILES` rows
+#     even when N legitimate users exist. The cap is a UX guarantee
+#     (the grid wraps off-screen past ~12 tiles), not a security one.
+
+
+def _mint_pin(seed: str) -> str:
+    """6-digit PIN derived from a uuid hex slice — collision-free
+    across runs because each call gets a fresh uuid."""
+    return uuid.uuid4().hex[:6].translate(
+        str.maketrans("abcdef", "012345")
+    ) + seed[:0]  # `seed` only used to make intent obvious in callers
+
+
+class TestPickerFilterAndCap:
+    def test_phantom_test_pattern_excluded(self, auth_root_client):
+        """A row whose username matches `phantom_test_*` MUST NOT
+        appear in the public picker even if it lives in the DB."""
+        from fastapi.testclient import TestClient
+
+        suffix = uuid.uuid4().hex[:8]
+        leaked_name = f"phantom_test_root_{suffix}"
+        r = auth_root_client.post(
+            "/api/v1/users",
+            json={
+                "username": leaked_name,
+                "pin": _mint_pin("a"),
+                "role": "OPERATOR",
+            },
+        )
+        assert r.status_code == 201, r.text
+
+        client = TestClient(auth_root_client.app)
+        body = client.get("/api/v1/auth/users/picker").json()
+        names = {u["username"] for u in body}
+        assert leaked_name not in names, (
+            f"picker leaked a `phantom_test_*` row: {leaked_name!r} "
+            f"in {names!r}"
+        )
+
+    def test_phase17a_user_pattern_excluded(self, auth_root_client):
+        from fastapi.testclient import TestClient
+
+        suffix = uuid.uuid4().hex[:8]
+        leaked_name = f"phase17a_user_{suffix}"
+        r = auth_root_client.post(
+            "/api/v1/users",
+            json={
+                "username": leaked_name,
+                "pin": _mint_pin("b"),
+                "role": "OPERATOR",
+            },
+        )
+        assert r.status_code == 201, r.text
+
+        client = TestClient(auth_root_client.app)
+        names = {
+            u["username"]
+            for u in client.get("/api/v1/auth/users/picker").json()
+        }
+        assert leaked_name not in names
+
+    def test_t_underscore_pattern_excluded(self, auth_root_client):
+        from fastapi.testclient import TestClient
+
+        # `t_<8-hex>` to mirror the historical
+        # `t_c303655d` rows the live DB had collected.
+        leaked_name = f"t_{uuid.uuid4().hex[:8]}"
+        r = auth_root_client.post(
+            "/api/v1/users",
+            json={
+                "username": leaked_name,
+                "pin": _mint_pin("c"),
+                "role": "OPERATOR",
+            },
+        )
+        assert r.status_code == 201, r.text
+
+        client = TestClient(auth_root_client.app)
+        names = {
+            u["username"]
+            for u in client.get("/api/v1/auth/users/picker").json()
+        }
+        assert leaked_name not in names
+
+    def test_normal_username_is_visible(self, auth_root_client):
+        """Sanity check: a non-pattern username DOES show up. Without
+        this, the filter could be over-broad and we'd never notice."""
+        from fastapi.testclient import TestClient
+
+        normal_name = f"operator_{uuid.uuid4().hex[:8]}"
+        r = auth_root_client.post(
+            "/api/v1/users",
+            json={
+                "username": normal_name,
+                "pin": _mint_pin("d"),
+                "role": "OPERATOR",
+            },
+        )
+        assert r.status_code == 201, r.text
+
+        client = TestClient(auth_root_client.app)
+        names = {
+            u["username"]
+            for u in client.get("/api/v1/auth/users/picker").json()
+        }
+        assert normal_name in names
+
+    def test_picker_caps_response_size(self, auth_root_client):
+        """The picker MUST return at most `_PICKER_MAX_TILES` rows.
+        The cap protects the 1024×600 LoginScreen grid from overflow
+        when many legitimate operators exist."""
+        from fastapi.testclient import TestClient
+        from api.routes_auth import _PICKER_MAX_TILES
+
+        # Mint cap+3 distinct legitimate users.
+        for i in range(_PICKER_MAX_TILES + 3):
+            r = auth_root_client.post(
+                "/api/v1/users",
+                json={
+                    "username": f"capuser_{i}_{uuid.uuid4().hex[:6]}",
+                    "pin": _mint_pin(f"cap{i}"),
+                    "role": "OPERATOR",
+                },
+            )
+            # Skip on shared-PIN collisions (very unlikely with uuid
+            # PINs but the IDB-2 guard could 409 if two PINs collide).
+            assert r.status_code in (201, 409), r.text
+
+        client = TestClient(auth_root_client.app)
+        body = client.get("/api/v1/auth/users/picker").json()
+        assert len(body) <= _PICKER_MAX_TILES, (
+            f"picker returned {len(body)} rows, exceeds cap "
+            f"{_PICKER_MAX_TILES}"
+        )

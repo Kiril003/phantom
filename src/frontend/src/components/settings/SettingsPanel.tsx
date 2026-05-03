@@ -20,6 +20,7 @@ import {
   X as XIcon,
 } from 'lucide-react';
 import { ProfileManagementSection } from './ProfileManagement';
+import { MobilePairing } from './MobilePairing';
 import { StatusBar } from '../core/StatusBar';
 import { FloatingToolbar } from '../core/FloatingToolbar';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -709,7 +710,18 @@ export default function SettingsPanel() {
               <AboutSection />
             )}
 
-            {loaded && activeCategory && activeCategory.id !== 'about' && (
+            {/* Phase 19 — Mobile Companion virtual category. Fully bespoke
+                pane: QR generator, countdown ring, live paired-devices list.
+                Bypasses the regular settings/accordion flow because there
+                are no settings keys to render here. */}
+            {loaded && activeCategory && activeCategory.id === 'mobile' && (
+              <MobilePairing />
+            )}
+
+            {loaded &&
+              activeCategory &&
+              activeCategory.id !== 'about' &&
+              activeCategory.id !== 'mobile' && (
               <>
                 {activeCategory.id === 'ai' && <AIProviderDiagnostics />}
                 {activeCategory.id === 'voice' && <NPUDiagnostics />}

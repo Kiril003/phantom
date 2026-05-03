@@ -26,7 +26,13 @@ export type WSChannel =
   // Phase 5 R1 FAMILIAR — AI-summoned wisp manifestation events.
   // Backend `routes_familiar.py` POST /familiar/manifest broadcasts here;
   // FE `wsHandlers.ts` translates into a familiarStore.manifest('ai-summon').
-  | 'familiar';
+  | 'familiar'
+  // Phase 19 Mobile Companion — pairing lifecycle. `pair/claimed` fires
+  // when a phone successfully completes the QR handshake; `pair/revoked`
+  // when a paired device is dropped from the desktop UI. The Settings
+  // "Mobile Companion" panel subscribes here to live-refresh its device
+  // list without polling.
+  | 'pair';
 
 export interface WSMessage {
   channel: WSChannel;

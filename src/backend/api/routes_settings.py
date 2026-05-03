@@ -340,6 +340,18 @@ CATEGORY_SPEC: list[dict[str, Any]] = [
         ],
     },
     {
+        "id": "mobile",
+        "label": "Мобільний",
+        "icon": "📱",
+        # Phase 19 Mobile Companion — virtual category. The settings list
+        # is empty because the panel is fully bespoke (QR pairing canvas
+        # + paired-devices list), but it has to be registered here so
+        # the SettingsPanel sidebar surfaces the entry and the rest of
+        # the IA (search, breadcrumbs, progress pill) treats it like
+        # any other category.
+        "keys": [],
+    },
+    {
         "id": "about",
         "label": "Про систему",
         "icon": "ⓘ",

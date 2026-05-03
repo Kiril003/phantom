@@ -382,4 +382,58 @@ export const toolsApi = {
     request<unknown>('POST', '/tools/calendar/events', event),
 };
 
+/* ─── Pair (Phase 19 Mobile Companion) ───────────────────────────────────── */
+
+export interface PairQrPayload {
+  v: number;
+  host: string;
+  ip: string;
+  port: number;
+  pair_id: string;
+  server_pub: string;
+  server_cert_sha256: string;
+  exp: number;
+  nonce: string;
+}
+
+export interface PairInitResponse {
+  pair_id: string;
+  expires_in_seconds: number;
+  qr: PairQrPayload;
+  qr_svg_data_url: string;
+}
+
+export interface PairedDeviceRow {
+  id: string;
+  device_name: string;
+  device_model: string;
+  platform: string;
+  platform_version: string | null;
+  paired_at: string;
+  last_seen_at: string;
+  revoked_at: string | null;
+  capabilities: string[];
+}
+
+export const pairApi = {
+  init: () => request<PairInitResponse>('POST', '/pair/init'),
+  status: (pairId: string) =>
+    request<{ pair_id: string; status: 'pending' | 'closed'; device_id: string | null }>(
+      'GET',
+      `/pair/status?pair_id=${encodeURIComponent(pairId)}`
+    ),
+  listDevices: (includeRevoked = false) =>
+    request<PairedDeviceRow[]>(
+      'GET',
+      `/pair/devices${includeRevoked ? '?include_revoked=true' : ''}`
+    ),
+  revoke: (deviceId: string, reason?: string) =>
+    request<{ ok: boolean; already_revoked?: boolean }>(
+      'DELETE',
+      `/pair/devices/${encodeURIComponent(deviceId)}${
+        reason ? `?reason=${encodeURIComponent(reason)}` : ''
+      }`
+    ),
+};
+
 export { ApiError };

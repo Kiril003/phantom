@@ -19,12 +19,14 @@ the resulting device row (per design §4 "TOFU through QR").
 """
 from __future__ import annotations
 
+import io
 import json
 import logging
 import socket
 from datetime import datetime, timezone
 from typing import Optional
 
+import segno
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -58,6 +60,11 @@ class PairInitResponse(BaseModel):
     pair_id: str
     expires_in_seconds: int = PAIR_TTL_SECONDS
     qr: dict
+    # Phase 19 — desktop UI rendering. The QR JSON above is the raw payload
+    # the phone receives; this is a server-rendered SVG of that same JSON
+    # so the React panel can show <img src=qr_svg_data_url /> without
+    # bundling a JS QR encoder. SVG is inlined as a `data:` URL.
+    qr_svg_data_url: str
 
 
 class PairClaimRequest(BaseModel):
@@ -135,6 +142,32 @@ def _row_to_pydantic(row: PairedDevice) -> PairedDeviceRow:
     )
 
 
+def _qr_to_svg_data_url(payload: dict) -> str:
+    """Render the QR JSON payload to an inline-able SVG data URL.
+
+    Compact JSON keeps the QR matrix small enough for a phone camera to
+    decode in <2 s on a Pixel 6a even at 1024×1024 desktop scale. Error
+    correction `M` (15%) is the sweet spot — `H` blows the matrix up
+    past v15 and the dev box can't focus close enough to scan reliably.
+    `scale=8` + `border=2` produces ~280 px on the desktop, which the
+    UI further upscales via CSS. SVG (vs PNG) means zero base64 weight
+    and crisp rendering at any zoom.
+    """
+    encoded = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
+    qr = segno.make(encoded, error="m")
+    buf = io.BytesIO()
+    qr.save(buf, kind="svg", scale=8, border=2, dark="#1a1a1a", light="#ffffff")
+    svg_bytes = buf.getvalue()
+    # `segno` writes XML with a declaration; strip it for inline data: URL
+    # cleanliness — the browser reads SVG fine without it.
+    svg_text = svg_bytes.decode("utf-8")
+    if svg_text.startswith("<?xml"):
+        svg_text = svg_text.split("?>", 1)[1].lstrip()
+    import urllib.parse
+
+    return "data:image/svg+xml;utf8," + urllib.parse.quote(svg_text)
+
+
 def _local_ip_guess() -> str:
     """Best-effort LAN IP for the QR payload. Phones scan from the LAN, so we
     want the address that resolves on the *user's* network — not 127.0.0.1.
@@ -184,7 +217,11 @@ async def pair_init(
         session.pair_id,
         PAIR_TTL_SECONDS,
     )
-    return PairInitResponse(pair_id=session.pair_id, qr=qr)
+    return PairInitResponse(
+        pair_id=session.pair_id,
+        qr=qr,
+        qr_svg_data_url=_qr_to_svg_data_url(qr),
+    )
 
 
 @router.post("/pair/claim", response_model=PairClaimResponse)

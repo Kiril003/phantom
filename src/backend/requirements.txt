@@ -41,6 +41,11 @@ python-jose[cryptography]==3.3.0
 passlib[bcrypt]==1.7.4
 cryptography==43.0.0
 
+# Phase 19 Mobile Companion — pure-Python QR encoder for /pair/init payload
+# rendering. No native deps. Backend renders SVG so the frontend stays
+# JS-free for QR encoding (~25 KB lib, no add-on packages on the wire).
+segno==1.6.1
+
 # System monitoring
 psutil==6.0.0
 

@@ -190,7 +190,14 @@ function AgentVisionMount() {
 function ToolsOverlayMount() {
   const open = useUIStore((s) => s.toolsOverlayOpen);
   const setOpen = useUIStore((s) => s.setToolsOverlayOpen);
-  return <ToolsOverlay open={open} onClose={() => setOpen(false)} />;
+  const initialTab = useUIStore((s) => s.toolsInitialTab);
+  return (
+    <ToolsOverlay
+      open={open}
+      initialTab={initialTab}
+      onClose={() => setOpen(false)}
+    />
+  );
 }
 
 function AgentSessionHistoryMount() {

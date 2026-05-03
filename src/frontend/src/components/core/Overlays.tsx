@@ -14,13 +14,18 @@ import {
   Cpu,
   Radar,
   Settings,
-  MessageSquare,
+  Search,
+  Clock,
+  Bell,
+  CalendarDays,
+  Folder,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { FloatingWindow } from './FloatingWindow';
 import { useUIStore, type OverlayName } from '../../stores/uiStore';
 import { useMapStore } from '../../stores/mapStore';
 import { useSystemStore } from '../../stores/systemStore';
+import { useAppsStore } from '../../stores/appsStore';
 import { useFaceStore } from '../../stores/faceStore';
 import { useFaceDetection } from '../../hooks/useFaceDetection';
 import { faceApi } from '../../services/faceApi';
@@ -785,119 +790,390 @@ function CameraOverlay() {
 
 /* ─── Apps ────────────────────────────────────────────────────────────── */
 
+interface AppTile {
+  id: string;
+  label: string;
+  description: string;
+  icon: React.ReactNode;
+  onClick: () => void;
+}
+
+interface AppSection {
+  id: string;
+  title: string;
+  tiles: AppTile[];
+}
+
 function AppsOverlay() {
   const navigate = useNavigate();
   const toggleOverlay = useUIStore((s) => s.toggleOverlay);
+  const openToolsTab = useUIStore((s) => s.openToolsTab);
   const goOperator = useSystemStore((s) => s.goOperator);
   const goSentinel = useSystemStore((s) => s.goSentinel);
+  const lastUsed = useAppsStore((s) => s.lastUsed);
+  const markUsed = useAppsStore((s) => s.markUsed);
 
-  const apps = [
+  const [query, setQuery] = useState('');
+  const now = Date.now();
+
+  const closeApps = () => toggleOverlay('apps');
+  const launch = (id: string, action: () => void) => {
+    markUsed(id);
+    action();
+    closeApps();
+  };
+
+  // Phase 22 — single home for every app. Camera/Terminal/Networks/Map only
+  // live here, not in the More menu. Tools (Timer/Alarm/Calendar/Files) are
+  // promoted out of the legacy ToolsOverlay tab strip into top-level tiles.
+  const sections: AppSection[] = [
     {
-      id: 'map',
-      label: 'Карта',
-      icon: <Map size={24} />,
-      onClick: () => {
-        navigate('/map');
-        toggleOverlay('apps');
-      },
+      id: 'system',
+      title: 'Системні',
+      tiles: [
+        {
+          id: 'map',
+          label: 'Карта',
+          description: 'Тактична карта · сенсори · мітки',
+          icon: <Map size={22} strokeWidth={1.6} />,
+          onClick: () => launch('map', () => navigate('/map')),
+        },
+        {
+          id: 'camera',
+          label: 'Камера',
+          description: 'Face track · OpenCV pipeline',
+          icon: <Camera size={22} strokeWidth={1.6} />,
+          onClick: () => launch('camera', () => toggleOverlay('camera')),
+        },
+        {
+          id: 'terminal',
+          label: 'Термінал',
+          description: 'Sandboxed shell · пiсочниця',
+          icon: <TerminalIcon size={22} strokeWidth={1.6} />,
+          onClick: () => launch('terminal', () => toggleOverlay('terminal')),
+        },
+        {
+          id: 'wifi',
+          label: 'Мережі',
+          description: 'Wardriving · BSSID скан',
+          icon: <Wifi size={22} strokeWidth={1.6} />,
+          onClick: () => launch('wifi', () => toggleOverlay('wardriving')),
+        },
+      ],
     },
     {
-      id: 'camera',
-      label: 'Камера',
-      icon: <Camera size={24} />,
-      onClick: () => {
-        toggleOverlay('camera');
-        toggleOverlay('apps');
-      },
-    },
-    {
-      id: 'terminal',
-      label: 'Термінал',
-      icon: <TerminalIcon size={24} />,
-      onClick: () => {
-        toggleOverlay('terminal');
-        toggleOverlay('apps');
-      },
-    },
-    {
-      id: 'wifi',
-      label: 'Мережі',
-      icon: <Wifi size={24} />,
-      onClick: () => {
-        toggleOverlay('wardriving');
-        toggleOverlay('apps');
-      },
+      id: 'tools',
+      title: 'Інструменти',
+      tiles: [
+        {
+          id: 'timer',
+          label: 'Таймери',
+          description: 'Зворотний відлік · alerts',
+          icon: <Clock size={22} strokeWidth={1.6} />,
+          onClick: () => launch('timer', () => openToolsTab('timer')),
+        },
+        {
+          id: 'alarm',
+          label: 'Будильники',
+          description: 'Розклад · повторення',
+          icon: <Bell size={22} strokeWidth={1.6} />,
+          onClick: () => launch('alarm', () => openToolsTab('alarm')),
+        },
+        {
+          id: 'calendar',
+          label: 'Календар',
+          description: 'Події · нагадування',
+          icon: <CalendarDays size={22} strokeWidth={1.6} />,
+          onClick: () => launch('calendar', () => openToolsTab('calendar')),
+        },
+        {
+          id: 'files',
+          label: 'Файли',
+          description: 'Browser · upload · sandbox',
+          icon: <Folder size={22} strokeWidth={1.6} />,
+          onClick: () => launch('files', () => openToolsTab('files')),
+        },
+      ],
     },
     {
       id: 'agent',
-      label: 'Агент',
-      icon: <Cpu size={24} />,
-      onClick: () => {
-        goOperator();
-        toggleOverlay('apps');
-      },
-    },
-    {
-      id: 'sentinel',
-      label: 'Sentinel',
-      icon: <Radar size={24} />,
-      onClick: () => {
-        goSentinel();
-        toggleOverlay('apps');
-      },
-    },
-    {
-      id: 'settings',
-      label: 'Налаштув.',
-      icon: <Settings size={24} />,
-      onClick: () => {
-        navigate('/settings');
-        toggleOverlay('apps');
-      },
-    },
-    {
-      id: 'dialogue',
-      label: 'Діалог',
-      icon: <MessageSquare size={24} />,
-      onClick: () => {
-        navigate('/');
-        toggleOverlay('apps');
-      },
-    },
-    {
-      id: 'protocols',
-      label: 'Протоколи',
-      icon: <Zap size={24} />,
-      onClick: () => {
-        toggleOverlay('standing_orders');
-        toggleOverlay('apps');
-      },
+      title: 'Дані / Агент',
+      tiles: [
+        {
+          id: 'agent',
+          label: 'Агент',
+          description: 'Operator state · автономія',
+          icon: <Cpu size={22} strokeWidth={1.6} />,
+          onClick: () => launch('agent', () => goOperator()),
+        },
+        {
+          id: 'sentinel',
+          label: 'Sentinel',
+          description: 'Threat watch · radar',
+          icon: <Radar size={22} strokeWidth={1.6} />,
+          onClick: () => launch('sentinel', () => goSentinel()),
+        },
+        {
+          id: 'settings',
+          label: 'Налаштування',
+          description: 'Усі параметри системи',
+          icon: <Settings size={22} strokeWidth={1.6} />,
+          onClick: () => launch('settings', () => navigate('/settings')),
+        },
+        {
+          id: 'protocols',
+          label: 'Протоколи',
+          description: 'Standing orders · автозадачі',
+          icon: <Zap size={22} strokeWidth={1.6} />,
+          onClick: () =>
+            launch('protocols', () => toggleOverlay('standing_orders')),
+        },
+      ],
     },
   ];
 
+  const q = query.trim().toLowerCase();
+  const filteredSections = q
+    ? sections
+        .map((section) => ({
+          ...section,
+          tiles: section.tiles.filter(
+            (t) =>
+              t.label.toLowerCase().includes(q) ||
+              t.description.toLowerCase().includes(q),
+          ),
+        }))
+        .filter((section) => section.tiles.length > 0)
+    : sections;
+
   return (
-    <div className="h-full grid grid-cols-4 gap-4 p-6 overflow-y-auto">
-      {apps.map((app) => (
-        <button
-          key={app.id}
-          type="button"
-          onClick={app.onClick}
-          className="flex flex-col items-center gap-2 p-3 rounded-xl hover:bg-white/5 active:scale-95 transition-all"
-        >
+    <div
+      className="h-full flex flex-col"
+      style={{ padding: '14px 16px 16px', gap: 12 }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 10,
+          padding: '6px 10px',
+          background: 'rgba(255,250,244,0.55)',
+          border: '1px solid rgba(40,30,15,0.10)',
+          borderRadius: 12,
+          minHeight: 40,
+        }}
+      >
+        <Search
+          size={16}
+          strokeWidth={1.75}
+          style={{ color: 'var(--ink-muted)', flexShrink: 0 }}
+        />
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.currentTarget.value)}
+          placeholder="Пошук додатків…"
+          aria-label="Пошук додатків"
+          style={{
+            flex: 1,
+            background: 'transparent',
+            border: 'none',
+            outline: 'none',
+            color: 'var(--ink-primary)',
+            fontFamily: 'var(--font-display)',
+            fontSize: 'var(--fs-small)',
+          }}
+        />
+        {query && (
+          <button
+            type="button"
+            onClick={() => setQuery('')}
+            aria-label="Очистити пошук"
+            style={{
+              border: 'none',
+              background: 'transparent',
+              color: 'var(--ink-muted)',
+              cursor: 'pointer',
+              fontSize: 11,
+              fontFamily: 'var(--font-display)',
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+            }}
+          >
+            очистити
+          </button>
+        )}
+      </div>
+
+      <div
+        style={{
+          flex: 1,
+          overflowY: 'auto',
+          overscrollBehavior: 'contain',
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 14,
+          paddingRight: 4,
+        }}
+      >
+        {filteredSections.length === 0 && (
           <div
-            className="w-12 h-12 flex items-center justify-center rounded-2xl bg-white/5 text-accent shadow-lg shadow-accent/10 border border-white/5"
-            style={{ color: 'var(--accent)' }}
+            style={{
+              flex: 1,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: 'var(--ink-muted)',
+              fontFamily: 'var(--font-display)',
+              fontSize: 'var(--fs-small)',
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+            }}
           >
-            {app.icon}
+            нічого не знайдено
           </div>
-          <span
-            className="font-display uppercase tracking-wider text-center"
-            style={{ fontSize: 'var(--fs-micro)', color: 'var(--ink-secondary)' }}
+        )}
+        {filteredSections.map((section) => (
+          <div
+            key={section.id}
+            style={{ display: 'flex', flexDirection: 'column', gap: 8 }}
           >
-            {app.label}
-          </span>
-        </button>
-      ))}
+            <div
+              className="eyebrow-amber"
+              style={{ paddingLeft: 4, fontSize: 10, letterSpacing: '0.16em' }}
+            >
+              {section.title}
+            </div>
+            <div
+              style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
+                gap: 10,
+              }}
+            >
+              {section.tiles.map((tile) => {
+                const ts = lastUsed[tile.id];
+                const ago =
+                  typeof ts === 'number' ? formatAgoLabel(now - ts) : null;
+                return (
+                  <AppTileButton key={tile.id} tile={tile} ago={ago} />
+                );
+              })}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
+  );
+}
+
+const MIN = 60_000;
+const HOUR = 60 * MIN;
+const DAY = 24 * HOUR;
+function formatAgoLabel(deltaMs: number): string | null {
+  if (deltaMs < 0 || !Number.isFinite(deltaMs)) return null;
+  if (deltaMs < MIN) return 'щойно';
+  if (deltaMs < HOUR) return `${Math.floor(deltaMs / MIN)} хв`;
+  if (deltaMs < DAY) return `${Math.floor(deltaMs / HOUR)} год`;
+  const d = Math.floor(deltaMs / DAY);
+  if (d <= 7) return `${d} дн`;
+  return null;
+}
+
+function AppTileButton({
+  tile,
+  ago,
+}: {
+  tile: AppTile;
+  ago: string | null;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={tile.onClick}
+      aria-label={tile.label}
+      title={`${tile.label} — ${tile.description}`}
+      style={{
+        position: 'relative',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'flex-start',
+        gap: 6,
+        padding: '12px 12px 10px',
+        minHeight: 96,
+        borderRadius: 14,
+        background: 'rgba(255,250,244,0.55)',
+        border: '1px solid rgba(40,30,15,0.08)',
+        boxShadow:
+          'inset 0 1px 0 rgba(255,255,255,0.55), 0 4px 10px rgba(40,30,15,0.04)',
+        cursor: 'pointer',
+        textAlign: 'left',
+        transition: 'transform 120ms ease, background 200ms ease, box-shadow 200ms ease',
+      }}
+      onMouseEnter={(e) => {
+        (e.currentTarget as HTMLElement).style.background =
+          'rgba(255,250,244,0.85)';
+      }}
+      onMouseLeave={(e) => {
+        (e.currentTarget as HTMLElement).style.background =
+          'rgba(255,250,244,0.55)';
+      }}
+    >
+      <div
+        style={{
+          display: 'flex',
+          width: 36,
+          height: 36,
+          alignItems: 'center',
+          justifyContent: 'center',
+          borderRadius: 10,
+          background:
+            'linear-gradient(135deg, rgba(244,175,37,0.18), rgba(251,146,60,0.14))',
+          color: 'var(--accent)',
+          border: '1px solid rgba(244,175,37,0.35)',
+        }}
+      >
+        {tile.icon}
+      </div>
+      <span
+        className="font-display"
+        style={{
+          fontSize: 'var(--fs-small)',
+          fontWeight: 600,
+          color: 'var(--ink-primary)',
+          letterSpacing: '0.01em',
+        }}
+      >
+        {tile.label}
+      </span>
+      <span
+        style={{
+          fontSize: 11,
+          lineHeight: 1.3,
+          color: 'var(--ink-muted)',
+          fontFamily: 'var(--font-display)',
+        }}
+      >
+        {tile.description}
+      </span>
+      {ago && (
+        <span
+          aria-hidden
+          style={{
+            position: 'absolute',
+            top: 8,
+            right: 10,
+            fontSize: 9,
+            color: 'var(--ink-muted)',
+            fontFamily: 'var(--font-display)',
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            opacity: 0.7,
+          }}
+        >
+          {ago}
+        </span>
+      )}
+    </button>
   );
 }

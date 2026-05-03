@@ -11,7 +11,19 @@ const MIN_H = 200;
 
 /** Compact overlay default: centered-ish, fits 7" screens comfortably. */
 function defaultRectFor(id: OverlayName): WindowRect {
-  // 360×420 per phase-3 spec; slight offsets so stacked opens don't overlap.
+  // Phase 22 — Apps grid hosts every launcher (12 tiles in 3 sections) so it
+  // gets a roomier default than the other compact overlays. Other windows keep
+  // the original 360×420 phase-3 footprint.
+  if (id === 'apps') {
+    const width = 720;
+    const height = 460;
+    return {
+      x: clampX(Math.round((FRAME_W - width) / 2), width),
+      y: clampY(Math.round((FRAME_H - TOOLBAR_CLEARANCE - height) / 2), height),
+      width,
+      height,
+    };
+  }
   const width = 360;
   const height = 420;
   const baseX = Math.round((FRAME_W - width) / 2);
@@ -78,6 +90,14 @@ interface UIStoreState {
   setMoreMenuOpen: (v: boolean) => void;
   toolsOverlayOpen: boolean;
   setToolsOverlayOpen: (v: boolean) => void;
+  /**
+   * Phase 22 — Apps grid promotes Timer / Alarm / Calendar / Files to
+   * top-level tiles. Each tile sets `toolsInitialTab` and opens the
+   * overlay so the user lands on the right tab in one tap.
+   */
+  toolsInitialTab: 'timer' | 'alarm' | 'calendar' | 'files';
+  setToolsInitialTab: (v: 'timer' | 'alarm' | 'calendar' | 'files') => void;
+  openToolsTab: (v: 'timer' | 'alarm' | 'calendar' | 'files') => void;
 
   /**
    * Phase 9.5 — transient flag: the Voice button in FloatingToolbar sets this
@@ -117,7 +137,9 @@ interface UIStoreState {
  * Storage key is versioned. Bump whenever the default geometry changes so
  * stale persisted rects from older builds don't place windows off-screen.
  */
-const STORAGE_KEY = 'phantom.ui.windows.v2';
+// v3 — Phase 22 enlarged the Apps window default (720×460); bumping the
+// version key flushes any persisted v2 rects so the new size lands clean.
+const STORAGE_KEY = 'phantom.ui.windows.v3';
 
 const ALL_IDS: OverlayName[] = ['terminal', 'wardriving', 'camera', 'apps', 'standing_orders'];
 
@@ -323,6 +345,9 @@ export const useUIStore = create<UIStoreState>((set, get) => ({
   setMoreMenuOpen: (v) => set({ moreMenuOpen: v }),
   toolsOverlayOpen: false,
   setToolsOverlayOpen: (v) => set({ toolsOverlayOpen: v }),
+  toolsInitialTab: 'timer',
+  setToolsInitialTab: (v) => set({ toolsInitialTab: v }),
+  openToolsTab: (v) => set({ toolsInitialTab: v, toolsOverlayOpen: true }),
 
   pendingVoiceActivation: false,
   setPendingVoiceActivation: (v) => set({ pendingVoiceActivation: v }),

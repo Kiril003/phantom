@@ -10,7 +10,7 @@
  *
  * Closing the overlay reverts to whatever layout was active before.
  */
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { TimerManager } from './TimerManager';
 import { AlarmManager } from './AlarmManager';
@@ -34,6 +34,13 @@ export interface ToolsOverlayProps {
 
 export function ToolsOverlay({ open, initialTab = 'timer', onClose }: ToolsOverlayProps) {
   const [tab, setTab] = useState<ToolsTab>(initialTab);
+
+  // Phase 22 — when the overlay re-opens with a new initialTab (e.g. the
+  // operator tapped the Calendar tile in the Apps grid), jump straight to
+  // that tab instead of showing whichever one was last visited.
+  useEffect(() => {
+    if (open) setTab(initialTab);
+  }, [open, initialTab]);
 
   return (
     <AnimatePresence>

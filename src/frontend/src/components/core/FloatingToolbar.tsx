@@ -61,8 +61,6 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
   const toggleOverlay = useUIStore((s) => s.toggleOverlay);
   const moreMenuOpen = useUIStore((s) => s.moreMenuOpen);
   const setMoreMenuOpen = useUIStore((s) => s.setMoreMenuOpen);
-  const toolsOverlayOpen = useUIStore((s) => s.toolsOverlayOpen);
-  const setToolsOverlayOpen = useUIStore((s) => s.setToolsOverlayOpen);
   // Phase 16 — agent run history overlay (mounted at App level).
   const agentHistoryOpen = useUIStore((s) => s.agentHistoryOpen);
   const setAgentHistoryOpen = useUIStore((s) => s.setAgentHistoryOpen);
@@ -243,17 +241,6 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
       },
     },
     {
-      id: 'tools',
-      icon: 'widgets',
-      label: 'Tools',
-      tooltip: 'Таймери · будильники · календар · файли',
-      active: toolsOverlayOpen,
-      onClick: () => {
-        setToolsOverlayOpen(!toolsOverlayOpen);
-        setMoreMenuOpen(false);
-      },
-    },
-    {
       id: 'sentinel',
       icon: 'radar',
       label: 'Sentinel',
@@ -284,26 +271,6 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
       active: state === SystemState.FOCUS && location.pathname === '/',
       onClick: () => {
         goFocus();
-        setMoreMenuOpen(false);
-      },
-    },
-    {
-      id: 'camera',
-      icon: 'videocam',
-      label: 'Camera',
-      active: isOverlayOpen('camera'),
-      onClick: () => {
-        toggleOverlay('camera');
-        setMoreMenuOpen(false);
-      },
-    },
-    {
-      id: 'wifi',
-      icon: 'wifi_tethering',
-      label: 'Networks',
-      active: isOverlayOpen('wardriving'),
-      onClick: () => {
-        toggleOverlay('wardriving');
         setMoreMenuOpen(false);
       },
     },

@@ -821,21 +821,84 @@ def create_app() -> FastAPI:
 
 
 def _register_ws(app: FastAPI) -> None:
+    # Phase 19-7 Mobile Companion — default channel allowlist for paired
+    # phones. The phone defaults to a battery-friendly subset (it can
+    # widen via the `subscribe` control protocol from phase-19-6 if it
+    # wants more). Desktop clients keep `client.channels = None` (the
+    # legacy wildcard) and continue receiving every channel.
+    _MOBILE_DEFAULT_CHANNELS = {
+        "sensor",
+        "state",
+        "pair",
+        "familiar",
+        "alert",
+        "_meta",
+        "context",
+        "chat",
+    }
+
     @app.websocket("/ws")
     async def _ws(ws: WebSocket, token: str | None = None) -> None:
         client_id = str(uuid.uuid4())
         user_id: str | None = None
+        device_id: str | None = None
 
-        # Validate JWT if provided (non-blocking: unauthenticated WS gets sensor data only)
+        # Validate JWT if provided. Try user audience first (the desktop
+        # path that's been running since phase-2). On failure, try the
+        # device audience — `aud` mismatch in `verify_token` means a
+        # phone JWT will always fall through to the device branch
+        # without ever satisfying the user check.
         if token:
             try:
                 from security.jwt_manager import verify_token
                 payload = verify_token(token)
                 user_id = payload.user_id
             except Exception:
-                pass  # Accept connection but mark as unauthenticated
+                # Phase 19-7 — try device JWT before giving up.
+                try:
+                    from security.device_token import verify_device_token
+                    from db.database import AsyncSessionLocal
+                    from db.models import PairedDevice
+
+                    dev_payload = verify_device_token(token)
+                    async with AsyncSessionLocal() as session:
+                        row = await session.get(PairedDevice, dev_payload.device_id)
+                        if (
+                            row is not None
+                            and row.revoked_at is None
+                            and row.user_id == dev_payload.user_id
+                        ):
+                            user_id = dev_payload.user_id
+                            device_id = dev_payload.device_id
+                            # Update last_seen_at — drives the 30-day
+                            # auto-revoke dormancy logic from §9 of the
+                            # design doc. Ignore any commit errors so a
+                            # transient DB hiccup never tears down the
+                            # WS handshake.
+                            from datetime import datetime, timezone
+                            row.last_seen_at = datetime.now(tz=timezone.utc)
+                            try:
+                                await session.commit()
+                            except Exception as exc:
+                                logger.debug(
+                                    "device last_seen update failed: %s", exc
+                                )
+                        elif row is not None and row.revoked_at is not None:
+                            # Stable close code so the phone can clear its
+                            # EncryptedSharedPreferences and prompt a
+                            # re-pair flow.
+                            await ws.accept()
+                            await ws.close(code=4401, reason="device_revoked")
+                            return
+                except Exception as exc:
+                    logger.debug("device token WS verify failed: %s", exc)
 
         client = await hub.connect(ws, client_id, user_id)
+        # Phase 19-7 — phones get a narrower default channel filter so
+        # they don't pay for `agent.stream` / `inner_monologue.stream`
+        # raw step logs they didn't ask for.
+        if device_id is not None:
+            client.channels = set(_MOBILE_DEFAULT_CHANNELS)
         try:
             await hub.handle_client(client)
         except WebSocketDisconnect:

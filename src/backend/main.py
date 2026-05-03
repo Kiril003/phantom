@@ -36,6 +36,7 @@ from api.routes_user_facts import router as user_facts_router
 from api.routes_familiar import router as familiar_router
 from api.routes_pair import router as pair_router
 from api.routes_mobile_sensors import router as mobile_sensors_router
+from api.routes_approve import router as approve_router
 
 logging.basicConfig(
     level=getattr(logging, config.log_level),
@@ -765,6 +766,13 @@ def create_app() -> FastAPI:
     # out `sensor/mobile_batch` WS, opportunistically forwards WiFi
     # entries through the existing wardriving.collector pipeline.
     app.include_router(mobile_sensors_router, prefix=prefix)
+    # Phase 19 — approve-on-phone gate. /approve/pending returns the
+    # phone's outstanding queue (in case it missed the WS push); the
+    # phone signs `{request_id}|{verdict}|{nonce}` with its long-term
+    # Ed25519 device key and POSTs /approve/respond — server verifies
+    # the signature, mutates the row, fires the agent-loop waiter so
+    # the running task unblocks straight to execute / reject.
+    app.include_router(approve_router, prefix=prefix)
 
     _register_ws(app)
     register_voice_ws(app)

@@ -601,40 +601,92 @@ async def _run_task_loop_impl(runtime: "AgentRuntime", state: "TaskState", *, re
                         f"Reply with intervene 'approve' or 'reject'."
                     ),
                 })
-                # Wait for an intervention — Phase 9.2.3 (F-17) bounded so the
-                # task doesn't hang forever if the operator walks away.
-                consent_timeout = float(getattr(config, "agent_user_consent_timeout_s", 300) or 300)
+                # Phase 19 — try the paired phone FIRST. The phone path is
+                # the operator's intended approval surface (biometric +
+                # signed verdict); the desktop intervene flow remains as a
+                # fall-through when no phone is paired or the phone times
+                # out / is offline. 'approved' / 'denied' from the phone
+                # short-circuits the existing intervention_queue wait —
+                # 'timeout' / 'no_device' lets execution continue to the
+                # desktop loop below as if the phone never existed.
+                phone_verdict = "no_device"
                 try:
-                    inter = await asyncio.wait_for(
-                        runtime.controls.intervention_queue.get(),
-                        timeout=consent_timeout,
+                    from .approve_on_phone import request_phone_approval
+
+                    phone_timeout_s = float(
+                        getattr(config, "agent_phone_approval_timeout_s", 90.0)
+                        or 90.0
                     )
-                except asyncio.TimeoutError:
-                    state.observations.append(build_system(
-                        state.step_idx, "consent_timeout",
-                        f"user did not respond within {int(consent_timeout)}s; "
-                        f"rejecting risky action {step.action}",
+                    phone_verdict = await request_phone_approval(
+                        task_id=state.id,
+                        action_name=step.action,
+                        risk_level=int(cls.risk_level),
+                        summary=(
+                            f"{step.action} above tolerance "
+                            f"{config.agent_risk_tolerance}"
+                        ),
+                        payload={"args": getattr(step, "args", {})},
+                        timeout_s=phone_timeout_s,
+                        broadcast=runtime._broadcast,
+                    )
+                except Exception as exc:
+                    # Approve-on-phone is best-effort: any failure here
+                    # MUST NOT prevent the existing desktop intervene flow.
+                    logger.debug("approve_on_phone errored, falling back: %s", exc)
+                    phone_verdict = "no_device"
+                if phone_verdict == "approved":
+                    state.observations.append(build_user(
+                        state.step_idx, "approve (phone)"
                     ))
-                    await runtime._broadcast("warning.issued", {
-                        "task_id": state.id,
-                        "category": "consent_timeout",
-                        "message": f"consent request for {step.action} timed out",
-                    })
+                    state.status = "running"
+                    await update_task_status(state.id, "running")
+                    # Fall through to execution — skip desktop intervene wait.
+                elif phone_verdict == "denied":
+                    state.observations.append(build_system(
+                        state.step_idx, "consent",
+                        f"phone-rejected risky action {step.action}",
+                    ))
                     state.status = "running"
                     await update_task_status(state.id, "running")
                     state.step_idx += 1
                     continue
-                state.observations.append(build_user(state.step_idx, inter))
-                approved = inter.strip().lower() in {"approve", "yes", "ok", "approved"}
-                if not approved:
-                    state.observations.append(build_system(
-                        state.step_idx, "consent", f"user rejected risky action {step.action}",
-                    ))
-                    state.status = "running"
-                    await update_task_status(state.id, "running")
-                    state.step_idx += 1
-                    continue
-                # else fall through and allow execution
+                else:
+                    # No paired device or phone timed out → fall back to the
+                    # desktop intervene queue. Phase 9.2.3 (F-17) bounded so
+                    # the task doesn't hang forever if the operator walks
+                    # away from BOTH the phone and the desktop.
+                    consent_timeout = float(getattr(config, "agent_user_consent_timeout_s", 300) or 300)
+                    try:
+                        inter = await asyncio.wait_for(
+                            runtime.controls.intervention_queue.get(),
+                            timeout=consent_timeout,
+                        )
+                    except asyncio.TimeoutError:
+                        state.observations.append(build_system(
+                            state.step_idx, "consent_timeout",
+                            f"user did not respond within {int(consent_timeout)}s; "
+                            f"rejecting risky action {step.action}",
+                        ))
+                        await runtime._broadcast("warning.issued", {
+                            "task_id": state.id,
+                            "category": "consent_timeout",
+                            "message": f"consent request for {step.action} timed out",
+                        })
+                        state.status = "running"
+                        await update_task_status(state.id, "running")
+                        state.step_idx += 1
+                        continue
+                    state.observations.append(build_user(state.step_idx, inter))
+                    approved = inter.strip().lower() in {"approve", "yes", "ok", "approved"}
+                    if not approved:
+                        state.observations.append(build_system(
+                            state.step_idx, "consent", f"user rejected risky action {step.action}",
+                        ))
+                        state.status = "running"
+                        await update_task_status(state.id, "running")
+                        state.step_idx += 1
+                        continue
+                    # else fall through and allow execution
 
             # ── Execute ─────────────────────────────────────────────────────────
             await runtime.set_substate("acting")

@@ -1,8 +1,9 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect } from 'react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { wsClient } from '../services/websocket';
 import type { SensorMessage, StateMessage } from '../services/websocket';
 import { useSystemStore } from '../stores/systemStore';
+import { useAuthStore } from '../stores/authStore';
 import { useOledStore, type OledFrame } from '../stores/oledStore';
 import { bootstrapSettings } from '../services/settingsBootstrap';
 import { registerWsHandlers } from '../services/wsHandlers';
@@ -82,11 +83,13 @@ function HealthPoller() {
 }
 
 function WebSocketProvider({ children }: { children: React.ReactNode }) {
-  const tokenRef = useRef<string | null>(null);
+  // Audit fix: subscribe to the authStore token so we remount and reconnect
+  // whenever the session starts/ends. The previous [] dependency array
+  // left the WS unauthenticated (user=None) if the app booted to a login
+  // screen, even after a successful PIN entry.
+  const token = useAuthStore((s) => s.token);
 
   useEffect(() => {
-    tokenRef.current = localStorage.getItem('phantom_token');
-
     const unsubs: Array<() => void> = [];
 
     unsubs.push(
@@ -142,7 +145,10 @@ function WebSocketProvider({ children }: { children: React.ReactNode }) {
       clearTimeout(wsMountState.pendingDisconnect);
       wsMountState.pendingDisconnect = null;
     }
-    wsClient.connect(tokenRef.current ?? undefined);
+    // Connect with the current token. If null, we connect unauthenticated
+    // (sensors only); once authStore updates the token, this effect re-runs,
+    // disconnects the old socket, and reconnects with auth.
+    wsClient.connect(token ?? undefined);
 
     return () => {
       unsubs.forEach((u) => u());
@@ -161,7 +167,7 @@ function WebSocketProvider({ children }: { children: React.ReactNode }) {
         }, 100);
       }
     };
-  }, []);
+  }, [token]);
 
   return <>{children}</>;
 }

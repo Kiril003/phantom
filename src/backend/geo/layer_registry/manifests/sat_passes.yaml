@@ -1,0 +1,28 @@
+id: sat_passes
+name_ua: Прольоти супутників
+name_en: Satellite passes (CelesTrak TLE)
+category: astronomy
+license: Public Domain (CelesTrak)
+attribution: "CelesTrak TLE · sgp4 local"
+source:
+  type: rest_polling
+  url: https://celestrak.org/NORAD/elements/gp.php
+  poll_interval_s: 86400
+  ttl_s: 86400
+geometry: line
+style:
+  stroke: accent/violet
+  stroke_width: 1
+  icon: satellite
+agent_verbs:
+  - map.sat_pass_predict
+  - map.iss_now
+require_internet: true
+require_setting: layers.sat_passes.enabled
+private: false
+priority: normal
+default_active: false
+available_offline: true
+tags:
+  - astronomy
+  - tracking

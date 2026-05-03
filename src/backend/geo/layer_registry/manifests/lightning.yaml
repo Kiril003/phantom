@@ -1,0 +1,31 @@
+id: lightning
+name_ua: Блискавки (Blitzortung)
+name_en: Lightning strikes (Blitzortung)
+category: live
+license: CC-BY-NC-SA (Blitzortung.org)
+attribution: "Дані: Blitzortung.org community"
+source:
+  type: ws_stream
+  url: wss://ws1.blitzortung.org
+  poll_interval_s: 5
+  ttl_s: 5
+  bbox_required: true
+  rate_limit_per_minute: 600
+geometry: point
+style:
+  fill: accent/electric
+  fill_opacity: 0.9
+  point_radius: 3
+  pulse: true
+  icon: zap
+agent_verbs:
+  - map.nearby_lightning
+require_internet: true
+require_setting: layers.lightning.enabled
+private: false
+priority: normal
+default_active: false
+available_offline: false
+tags:
+  - live
+  - storm

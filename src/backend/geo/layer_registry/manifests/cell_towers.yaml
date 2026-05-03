@@ -1,0 +1,29 @@
+id: cell_towers
+name_ua: Стільникові вежі
+name_en: Cell towers (OpenCellID local)
+category: hacker
+license: CC-BY-SA (OpenCellID)
+attribution: "OpenCellID community"
+source:
+  type: local_db
+  ttl_s: 604800
+  bbox_required: true
+geometry: point
+style:
+  fill: signal/electric
+  fill_opacity: 0.55
+  point_radius: 3
+  icon: antenna
+agent_verbs:
+  - map.nearby_cells
+  - map.lookup_cell
+require_internet: false
+require_setting: layers.cell_towers.enabled
+require_root: true
+private: false
+priority: normal
+default_active: false
+available_offline: true
+tags:
+  - rf
+  - osint

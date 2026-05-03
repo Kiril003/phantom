@@ -1,0 +1,26 @@
+id: sun_moon
+name_ua: Сонце / Місяць
+name_en: Sun & Moon position
+category: astronomy
+license: PHANTOM-internal (suncalc local)
+attribution: "PHANTOM suncalc (local)"
+source:
+  type: computed
+  ttl_s: 60
+geometry: mixed
+style:
+  fill: accent/warm
+  fill_opacity: 0.6
+  point_radius: 6
+  icon: sun
+agent_verbs:
+  - map.sun_moon_now
+  - map.golden_hour_today
+require_internet: false
+require_setting: layers.sun_moon.enabled
+private: false
+priority: background
+default_active: false
+available_offline: true
+tags:
+  - astronomy

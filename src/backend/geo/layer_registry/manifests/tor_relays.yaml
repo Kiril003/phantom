@@ -1,0 +1,34 @@
+id: tor_relays
+name_ua: Tor-релеї (Onionoo)
+name_en: Tor relays (Onionoo)
+category: osint
+license: CC-Zero (Tor Project)
+attribution: "Tor Project · Onionoo"
+source:
+  type: rest_polling
+  url: https://onionoo.torproject.org/details
+  poll_interval_s: 3600
+  ttl_s: 3600
+  rate_limit_per_minute: 30
+geometry: point
+style:
+  fill: accent/violet
+  fill_opacity: 0.7
+  point_radius: 3
+  icon: shield
+  legend:
+    - { label: "guard", color: "#22c55e" }
+    - { label: "exit", color: "#ef4444" }
+    - { label: "relay", color: "#7dd3fc" }
+agent_verbs:
+  - map.tor_relays_in
+require_internet: true
+require_setting: layers.tor_relays.enabled
+require_root: true
+private: false
+priority: normal
+default_active: false
+available_offline: false
+tags:
+  - osint
+  - privacy

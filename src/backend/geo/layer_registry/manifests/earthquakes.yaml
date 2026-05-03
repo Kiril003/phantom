@@ -1,0 +1,34 @@
+id: earthquakes
+name_ua: Землетруси
+name_en: Earthquakes (USGS)
+category: live
+license: Public Domain (USGS)
+attribution: "USGS Earthquake Hazards Program"
+source:
+  type: rest_polling
+  url: https://earthquake.usgs.gov/earthquakes/feed/v1.0/summary/all_day.geojson
+  poll_interval_s: 300
+  ttl_s: 300
+  rate_limit_per_minute: 12
+geometry: point
+style:
+  fill: signal/warning
+  fill_opacity: 0.85
+  point_radius: 4
+  pulse: true
+  icon: activity
+  legend:
+    - { label: "M < 3", color: "#9aa0a6" }
+    - { label: "M 3-5", color: "#facc15" }
+    - { label: "M 5+", color: "#ef4444" }
+agent_verbs:
+  - map.nearby_earthquakes
+require_internet: true
+require_setting: layers.earthquakes.enabled
+private: false
+priority: elevated
+default_active: false
+available_offline: false
+tags:
+  - live
+  - hazard

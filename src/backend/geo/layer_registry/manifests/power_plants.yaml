@@ -1,0 +1,33 @@
+id: power_plants
+name_ua: Електростанції (WRI)
+name_en: Power plants (WRI Global Database)
+category: infra
+license: CC-BY-4.0 (WRI)
+attribution: "WRI Global Power Plant Database"
+source:
+  type: geojson_static
+  url: https://wri-dataportal-prod.s3.amazonaws.com/manual/global_power_plant_database_v_1_3.csv
+  ttl_s: 31536000
+geometry: point
+style:
+  fill: accent/warm
+  fill_opacity: 0.85
+  point_radius: 4
+  icon: factory
+  legend:
+    - { label: "thermal", color: "#f97316" }
+    - { label: "hydro", color: "#3b82f6" }
+    - { label: "renewable", color: "#22c55e" }
+    - { label: "nuclear", color: "#a855f7" }
+agent_verbs:
+  - map.infra_brief
+require_internet: false
+require_setting: layers.power_plants.enabled
+require_root: true
+private: false
+priority: normal
+default_active: false
+available_offline: true
+tags:
+  - infra
+  - osint

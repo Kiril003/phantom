@@ -1,0 +1,30 @@
+id: aurora
+name_ua: Полярне сяйво (NOAA SWPC)
+name_en: Aurora forecast (NOAA SWPC)
+category: astronomy
+license: Public Domain (NOAA)
+attribution: "NOAA Space Weather Prediction Center"
+source:
+  type: rest_polling
+  url: https://services.swpc.noaa.gov/json/ovation_aurora_latest.json
+  poll_interval_s: 600
+  ttl_s: 600
+  rate_limit_per_minute: 12
+geometry: polygon
+style:
+  fill: accent/violet
+  fill_opacity: 0.45
+  stroke: accent/violet
+  stroke_width: 0.5
+  icon: sparkles
+agent_verbs:
+  - map.aurora_forecast
+require_internet: true
+require_setting: layers.aurora.enabled
+private: false
+priority: normal
+default_active: false
+available_offline: false
+tags:
+  - astronomy
+  - space-weather

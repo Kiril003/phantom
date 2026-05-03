@@ -1,0 +1,35 @@
+id: aqi
+name_ua: Якість повітря (AQI)
+name_en: Air Quality Index (OpenAQ)
+category: environment
+license: CC-BY-4.0 (OpenAQ)
+attribution: "OpenAQ + WAQI"
+source:
+  type: rest_polling
+  url: https://api.openaq.org/v2/locations
+  poll_interval_s: 1800
+  ttl_s: 1800
+  bbox_required: true
+  rate_limit_per_minute: 60
+geometry: point
+style:
+  fill: signal/heat
+  fill_opacity: 0.7
+  point_radius: 4
+  icon: wind
+  legend:
+    - { label: "good", color: "#22c55e" }
+    - { label: "moderate", color: "#facc15" }
+    - { label: "unhealthy", color: "#f87171" }
+    - { label: "hazardous", color: "#7f1d1d" }
+agent_verbs:
+  - map.aqi_now
+require_internet: true
+require_setting: layers.aqi.enabled
+private: false
+priority: normal
+default_active: false
+available_offline: false
+tags:
+  - environment
+  - health

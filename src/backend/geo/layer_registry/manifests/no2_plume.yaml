@@ -1,0 +1,36 @@
+id: no2_plume
+name_ua: NO₂ шлейф (Sentinel-5P)
+name_en: NO₂ plume (Sentinel-5P TROPOMI)
+category: environment
+license: Copernicus open licence
+attribution: "Sentinel-5P · ESA Copernicus"
+source:
+  type: raster_tiles
+  url: https://services.sentinel-hub.com/ogc/wmts/{INSTANCE}
+  auth:
+    kind: api_key
+    env_key: SENTINEL_HUB_KEY
+    header_name: Authorization
+  poll_interval_s: 86400
+  ttl_s: 86400
+  bbox_required: true
+geometry: tile
+style:
+  fill_opacity: 0.55
+  icon: factory
+  legend:
+    - { label: "low", color: "#1f3b8a" }
+    - { label: "medium", color: "#facc15" }
+    - { label: "high", color: "#7f1d1d" }
+agent_verbs:
+  - map.area_change
+require_internet: true
+require_setting: layers.no2.enabled
+require_root: true
+private: false
+priority: normal
+default_active: false
+available_offline: false
+tags:
+  - environment
+  - osint

@@ -1,0 +1,29 @@
+id: light_pollution
+name_ua: Світлове забруднення
+name_en: Light pollution (LP map)
+category: astronomy
+license: CC-BY-SA (LP atlas community)
+attribution: "Light Pollution Map · djlorenz.github.io"
+source:
+  type: raster_tiles
+  url: https://djlorenz.github.io/lp/{z}/{x}/{y}.png
+  poll_interval_s: 604800
+  ttl_s: 604800
+geometry: tile
+style:
+  fill_opacity: 0.5
+  icon: moon
+  legend:
+    - { label: "Bortle 1", color: "#020617" }
+    - { label: "Bortle 4", color: "#475569" }
+    - { label: "Bortle 8", color: "#fde68a" }
+agent_verbs:
+  - map.dark_sky_score
+require_internet: true
+require_setting: layers.light_pollution.enabled
+private: false
+priority: background
+default_active: false
+available_offline: false
+tags:
+  - astronomy

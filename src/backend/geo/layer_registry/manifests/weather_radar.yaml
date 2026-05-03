@@ -1,0 +1,32 @@
+id: weather_radar
+name_ua: Радар опадів
+name_en: Weather radar (RainViewer)
+category: live
+license: Free for non-commercial (RainViewer)
+attribution: "Дані: RainViewer"
+source:
+  type: raster_tiles
+  url: https://tilecache.rainviewer.com/v2/radar/{time}/256/{z}/{x}/{y}/2/1_1.png
+  poll_interval_s: 600
+  ttl_s: 600
+  rate_limit_per_minute: 60
+geometry: tile
+style:
+  fill_opacity: 0.65
+  icon: cloud-rain
+  legend:
+    - { label: "drizzle", color: "#7dd3fc" }
+    - { label: "rain", color: "#3b82f6" }
+    - { label: "heavy", color: "#9333ea" }
+agent_verbs:
+  - map.weather_now
+  - map.weather_forecast
+require_internet: true
+require_setting: layers.weather_radar.enabled
+private: false
+priority: normal
+default_active: false
+available_offline: false
+tags:
+  - live
+  - weather

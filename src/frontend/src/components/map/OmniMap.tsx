@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import { TacticalMap } from './TacticalMap';
 import { HudShell } from './hud/HudShell';
+import { LayerLibraryPanel } from './panels/LayerLibraryPanel';
 
 /**
  * Phase 24-D — root OmniMap shell.
@@ -38,6 +39,8 @@ export function OmniMap({
   // when the dev `__phantom` debug glob is on; otherwise we just live
   // without the bearing chip until the operator rotates the map.
   const [bearing, setBearing] = useState<number | null>(null);
+  // Phase 24-E — LayerLibrary slide-in panel state.
+  const [libraryOpen, setLibraryOpen] = useState(false);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -73,8 +76,12 @@ export function OmniMap({
       <HudShell
         bearing={bearing}
         bridgeAgent={bridgeAgent}
-        onOpenLibrary={onOpenLibrary}
+        onOpenLibrary={() => {
+          setLibraryOpen(true);
+          onOpenLibrary?.();
+        }}
       />
+      <LayerLibraryPanel open={libraryOpen} onClose={() => setLibraryOpen(false)} />
     </div>
   );
 }

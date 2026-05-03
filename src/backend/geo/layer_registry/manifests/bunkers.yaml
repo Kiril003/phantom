@@ -1,0 +1,33 @@
+id: bunkers
+name_ua: Бункери (OSM)
+name_en: Bunkers (OSM Overpass)
+category: hacker
+license: ODbL (OpenStreetMap)
+attribution: "© OpenStreetMap contributors"
+source:
+  type: rest_polling
+  url: https://overpass-api.de/api/interpreter
+  poll_interval_s: 86400
+  ttl_s: 86400
+  bbox_required: true
+  rate_limit_per_minute: 6
+geometry: mixed
+style:
+  fill: signal/ghost
+  fill_opacity: 0.55
+  stroke: signal/ghost
+  stroke_width: 1
+  point_radius: 3
+  icon: shield
+agent_verbs:
+  - map.nearby_bunkers
+require_internet: true
+require_setting: layers.bunkers.enabled
+require_root: true
+private: false
+priority: elevated
+default_active: false
+available_offline: true
+tags:
+  - osint
+  - urbex

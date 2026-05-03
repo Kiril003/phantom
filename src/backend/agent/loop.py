@@ -553,13 +553,84 @@ async def _run_task_loop_impl(runtime: "AgentRuntime", state: "TaskState", *, re
                     if sg.acceptance_criteria
                 ).strip() or state.goal
 
+                # Producer with real revise loop. First call returns the
+                # original draft; subsequent calls regenerate the artefact
+                # via the LLM using the previous critique as feedback. This
+                # is what "доводити до кінцевого результату" looks like at
+                # the artefact level — not just "block on blockers", but
+                # actively rewrite the draft to address them.
+                #
+                # Code artefacts need planner+actions to regenerate (that
+                # path stays through the reflection cycle below); text /
+                # document / message / plan kinds are pure-LLM rewrites.
                 async def _gate_producer(
-                    _prev: GateDraft | None, _crit
+                    prev: GateDraft | None, crit
                 ) -> GateDraft:
-                    return GateDraft(
-                        text=artefact,
-                        metadata={"step_idx": step.step_idx, "summary": summary},
-                    )
+                    if prev is None or crit is None or not getattr(crit, "has_blockers", False):
+                        return GateDraft(
+                            text=artefact,
+                            metadata={"step_idx": step.step_idx, "summary": summary},
+                        )
+                    if artefact_kind == "code":
+                        # Code revisions need planner re-entry — skip LLM
+                        # rewrite, fall through to reflection-driven retry.
+                        return GateDraft(
+                            text=prev.text,
+                            metadata={"skipped_revise": "code_kind"},
+                        )
+                    try:
+                        from ai.provider import ai_router as _ar
+                        blocker_lines = "\n".join(
+                            f"- {i.message}"
+                            for i in crit.issues
+                            if i.severity == "blocker"
+                        )
+                        revise_prompt = (
+                            f"Чернетка артефакту для цілі '{state.goal[:300]}'. "
+                            f"Рецензент знайшов блокери:\n{blocker_lines}\n\n"
+                            f"ПОПЕРЕДНЯ ЧЕРНЕТКА:\n{prev.text[:3000]}\n\n"
+                            "Перепиши повністю — виправ КОЖЕН блокер. "
+                            "Поверни ЛИШЕ новий текст без коментарів і без "
+                            "обгорток на кшталт '```'."
+                        )
+                        response = await asyncio.wait_for(
+                            _ar.generate(
+                                user_message=revise_prompt,
+                                system_prompt=(
+                                    "Ти асистент який виправляє чернетку "
+                                    "згідно зауважень рецензента. Поверни "
+                                    "лише виправлений текст."
+                                ),
+                                history=[],
+                                task_id=state.id,
+                            ),
+                            timeout=20.0,
+                        )
+                        new_text = (response.content or "").strip()
+                        if new_text.startswith("```"):
+                            new_text = new_text.strip("` \n")
+                        if not new_text:
+                            return GateDraft(
+                                text=prev.text,
+                                metadata={"regen_failed": "empty"},
+                            )
+                        return GateDraft(
+                            text=new_text,
+                            metadata={
+                                "regenerated": True,
+                                "critique_addressed": sum(
+                                    1
+                                    for i in crit.issues
+                                    if i.severity == "blocker"
+                                ),
+                            },
+                        )
+                    except Exception as exc:
+                        logger.debug("quality_gate revise failed: %s", exc)
+                        return GateDraft(
+                            text=prev.text,
+                            metadata={"regen_failed": str(exc)[:120]},
+                        )
 
                 try:
                     gate_result = await run_quality_gate_for(
@@ -569,13 +640,47 @@ async def _run_task_loop_impl(runtime: "AgentRuntime", state: "TaskState", *, re
                         runtime=runtime,
                         artefact_kind=artefact_kind,
                         task_id=state.id,
-                        max_revisions=1,
+                        # Up to 3 rounds: original → revised → re-revised.
+                        # Each round of LLM revision is bounded above by
+                        # the producer's own 20s timeout, so worst-case
+                        # gate latency is ~60s for text artefacts.
+                        max_revisions=3,
                     )
                 except Exception as exc:
                     # Gate is best-effort — never block finalisation on its
                     # own bug. Log + proceed as if it passed.
                     logger.debug("quality_gate errored, accepting draft: %s", exc)
                     gate_result = None
+
+                # If the producer revised the artefact and the final critique
+                # is clean, ship the regenerated text — that's the whole
+                # point of the revise loop. Without this, the gate could
+                # spin three rounds, polish the draft, then `finalize_task`
+                # would still ship the original sloppy version.
+                if (
+                    gate_result is not None
+                    and gate_result.passed
+                    and gate_result.final_draft.text
+                    and gate_result.final_draft.text != artefact
+                ):
+                    new_text = gate_result.final_draft.text
+                    await runtime._broadcast(
+                        "quality_gate.regenerated",
+                        {
+                            "task_id": state.id,
+                            "rounds": gate_result.rounds_used,
+                            "artefact_kind": artefact_kind,
+                            "excerpt": new_text[:240],
+                        },
+                    )
+                    # If the planner didn't pass a separate artefact arg,
+                    # the regenerated text IS the new summary the operator
+                    # will see in the report. Otherwise we keep the short
+                    # summary intact and surface the regenerated artefact
+                    # via the broadcast above.
+                    if artefact == summary:
+                        summary = new_text
+                    artefact = new_text
 
                 if (
                     gate_result is not None

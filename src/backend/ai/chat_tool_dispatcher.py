@@ -76,6 +76,7 @@ _CHAT_SAFE_TOOL_NAMES: tuple[str, ...] = (
     "studio_link_cards",
     "studio_add_recipient",
     "studio_remove_recipient",
+    "studio_set_inputs_schema",
 )
 
 

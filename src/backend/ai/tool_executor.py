@@ -1632,6 +1632,68 @@ async def _tool_studio_add_recipient(args: dict[str, Any], user_id: str) -> dict
     )
 
 
+async def _tool_studio_set_inputs_schema(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    """Replace the agent's `inputs_schema` — the typed parameters the
+    operator (or another caller) supplies at run-time. Each entry is an
+    `InfoNeed`-shaped dict; on agent run, missing required fields surface
+    through the existing AskUser flow with the same rich variant UI.
+
+    Pass an empty list to clear the schema (agent runs with empty inputs).
+    """
+    agent_id = str(args.get("agent_id") or "").strip()
+    if not agent_id:
+        return _err("invalid_args", "agent_id is required")
+    raw_inputs = args.get("inputs")
+    if raw_inputs is None:
+        raw_inputs = []
+    if not isinstance(raw_inputs, list):
+        return _err("invalid_args", "inputs must be an array")
+    if len(raw_inputs) > 16:
+        return _err("invalid_args", "inputs cap is 16 entries")
+
+    agent, err = await _studio_load_owned(agent_id, user_id)
+    if err is not None:
+        return err
+
+    try:
+        from agent.schemas import InfoNeed
+    except Exception as exc:
+        return _err("import_error", f"schemas unavailable: {exc}")
+
+    parsed: list[Any] = []
+    for idx, entry in enumerate(raw_inputs):
+        if not isinstance(entry, dict):
+            return _err("invalid_args", f"inputs[{idx}] must be an object")
+        # The schema is a TEMPLATE — task_id is filled at runtime by the
+        # AskUser action when an actual InfoNeed instance is registered.
+        # Stamp a placeholder here so Pydantic accepts the shape.
+        entry = dict(entry)
+        entry.setdefault("task_id", "<template>")
+        try:
+            need = InfoNeed(**entry)
+        except Exception as exc:
+            return _err(
+                "invalid_inputs_entry",
+                f"inputs[{idx}]: {type(exc).__name__}: {exc}",
+            )
+        parsed.append(need)
+
+    agent.inputs_schema = parsed
+
+    err = await _studio_save_with_validation(agent)
+    if err is not None:
+        return err
+    return _ok(
+        agent_id=agent.id,
+        inputs_schema_size=len(parsed),
+        next_step=(
+            "Тепер при `studio_run_agent` потрібно передати inputs словник "
+            "із полями що відповідають schema. Якщо required-полів бракує — "
+            "agent зачекає AskUser-пропозиції на запуску."
+        ),
+    )
+
+
 async def _tool_studio_remove_recipient(args: dict[str, Any], user_id: str) -> dict[str, Any]:
     agent_id = str(args.get("agent_id") or "").strip()
     recipient_id = str(args.get("recipient_id") or "").strip()
@@ -1726,6 +1788,7 @@ _HANDLERS: dict[str, Any] = {
     "studio_link_cards": _tool_studio_link_cards,
     "studio_add_recipient": _tool_studio_add_recipient,
     "studio_remove_recipient": _tool_studio_remove_recipient,
+    "studio_set_inputs_schema": _tool_studio_set_inputs_schema,
 }
 
 

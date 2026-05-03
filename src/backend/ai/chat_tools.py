@@ -702,6 +702,67 @@ CHAT_DATA_TOOLS: list[dict[str, Any]] = [
             "required": ["agent_id", "recipient_id"],
         },
     },
+    {
+        "name": "studio_set_inputs_schema",
+        "description": (
+            "Встановити схему вхідних параметрів агента (`inputs_schema`). "
+            "Кожен елемент — InfoNeed-shape: {kind, question, hint?, "
+            "options?, default?, required?, range_min/max/step?, placeholder?}. "
+            "kind ∈ {text, single_choice, multi_choice, file_pick, range, "
+            "confirm, visual_pick}. Викликай коли потрібно щоб агент кожен "
+            "запуск приймав параметри (наприклад 'тема для пошуку', 'список "
+            "адрес кому шле'). Якщо при запуску required-поле не передано — "
+            "агент сам спитає юзера через існуючий InfoNeedDialog. "
+            "Передавай повну схему — заміняє попередню. Cap 16 entries."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "agent_id": {"type": "string"},
+                "inputs": {
+                    "type": "array",
+                    "description": "Список InfoNeed templates. Пустий масив очищує схему.",
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "kind": {
+                                "type": "string",
+                                "enum": [
+                                    "text", "single_choice", "multi_choice",
+                                    "file_pick", "range", "confirm", "visual_pick",
+                                ],
+                            },
+                            "question": {"type": "string"},
+                            "hint": {"type": "string"},
+                            "required": {"type": "boolean"},
+                            "default": {},
+                            "placeholder": {"type": "string"},
+                            "options": {
+                                "type": "array",
+                                "items": {
+                                    "type": "object",
+                                    "properties": {
+                                        "id": {"type": "string"},
+                                        "label": {"type": "string"},
+                                        "description": {"type": "string"},
+                                        "preview_url": {"type": "string"},
+                                        "example": {"type": "string"},
+                                        "badge": {"type": "string"},
+                                    },
+                                    "required": ["id", "label"],
+                                },
+                            },
+                            "range_min": {"type": "number"},
+                            "range_max": {"type": "number"},
+                            "range_step": {"type": "number"},
+                        },
+                        "required": ["kind", "question"],
+                    },
+                },
+            },
+            "required": ["agent_id", "inputs"],
+        },
+    },
 ]
 
 

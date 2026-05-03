@@ -227,6 +227,10 @@ class GeminiProvider(AIProvider):
             safety_settings=[types.SafetySetting(**s) for s in _SAFETY_OFF],
         )
         
+        # Phase 10 — support strict JSON output for planners.
+        if "json" in system_prompt.lower():
+            base_gen_kwargs["response_mime_type"] = "application/json"
+
         if tools is not None:
             base_gen_kwargs["tool_config"] = types.ToolConfig(
                 function_calling_config=types.FunctionCallingConfig(mode="AUTO"),

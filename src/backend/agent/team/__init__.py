@@ -13,6 +13,12 @@ many sub-agents may run in flight across the whole runtime.
 """
 from __future__ import annotations
 
+from .picker import (
+    TeamMemberRequest,
+    TeamPlan,
+    heuristic_pick,
+    pick_specialists,
+)
 from .spawn import (
     SubagentReport,
     SubagentSpawnError,
@@ -22,6 +28,14 @@ from .spawn import (
     spawn_subagent,
     team_semaphore,
     notify_subagent_completed,
+)
+from .specialists import (
+    Specialist,
+    all_specialists,
+    departments,
+    get_specialist,
+    specialist_catalog,
+    specialists_by_department,
 )
 
 __all__ = [
@@ -33,4 +47,15 @@ __all__ = [
     "DelegationDepthExceeded",
     "TeamConcurrencyExceeded",
     "team_semaphore",
+    # Phase 26-B
+    "Specialist",
+    "all_specialists",
+    "departments",
+    "get_specialist",
+    "specialists_by_department",
+    "specialist_catalog",
+    "TeamMemberRequest",
+    "TeamPlan",
+    "pick_specialists",
+    "heuristic_pick",
 ]

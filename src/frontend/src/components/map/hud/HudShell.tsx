@@ -3,6 +3,7 @@ import { LayerPalette } from './LayerPalette';
 import { MapStateBadge } from './MapStateBadge';
 import { ScaleBar } from './ScaleBar';
 import { SearchOmnibar } from './SearchOmnibar';
+import { AirRaidLayer } from '../layers/AirRaidLayer';
 import { useMapAgentBridge } from '../../../hooks/useMapAgentBridge';
 import { useViewport } from '../../../hooks/useViewport';
 
@@ -45,6 +46,11 @@ export function HudShell({
       {/* Top-left: SystemState badge */}
       <div className="absolute top-3 left-3 pointer-events-auto">
         <MapStateBadge />
+      </div>
+
+      {/* Top-center: AirRaid live strip (24-F) — overrides quiet state. */}
+      <div className="absolute top-3 left-1/2 -translate-x-1/2 pointer-events-auto">
+        <AirRaidLayer />
       </div>
 
       {/* Bottom-center: search omnibar */}

@@ -582,6 +582,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except Exception as exc:
             logger.warning("MCP discovery skipped: %s", exc)
 
+    # Phase 24-F — live OmniMap tasker (alarms_ua + later DeepStateMap /
+    # Ukrenergo). Each adapter polls on its manifest's interval and
+    # broadcasts diffs onto the `"map"` WebSocket channel. Failures are
+    # caught + back-off-ed inside the tasker so a downed upstream never
+    # leaks into the lifespan.
+    try:
+        from geo.live_tasker import setup_default_tasks
+        live_tasker = await setup_default_tasks()
+        await live_tasker.start()
+        logger.info("Live tasker: %d task(s) running", len(live_tasker.names))
+    except Exception as exc:
+        logger.warning("Live tasker setup skipped: %s", exc)
+
     yield
 
     loop_task.cancel()
@@ -594,6 +607,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await janitor_task
     except asyncio.CancelledError:
         pass
+
+    # Phase 24-F — stop live OmniMap tasker.
+    try:
+        from geo.live_tasker import get_live_tasker
+        await get_live_tasker().stop()
+    except Exception as exc:
+        logger.debug("Live tasker stop raised: %s", exc)
 
     # Day-2 D2-D-cpu — graceful CPU sampler shutdown.
     try:

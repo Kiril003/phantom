@@ -123,6 +123,17 @@ class TaskState:
     # to ~240 entries by the tracker's _record method.
     progress_checkpoints: list[Any] = field(default_factory=list)
     promoted_to_background_at: float | None = None
+    # Phase 26-A — Agent delegation (sub-agent fan-out).
+    # Set when this task was spawned by another task via agent.delegate.
+    # `parent_task_id` lets the audit trail walk up to the dispatcher;
+    # `subagent_role` carries the specialist label (e.g. "senior_backend",
+    # "reviewer", "researcher") so the planner can adapt prompts;
+    # `delegation_depth` is incremented per spawn level (0 for top-level
+    # operator-driven tasks; capped by agent_max_delegation_depth so a
+    # planner that loops on agent.delegate cannot fork-bomb the runtime).
+    parent_task_id: str | None = None
+    subagent_role: str | None = None
+    delegation_depth: int = 0
 
 
 @dataclass
@@ -949,6 +960,21 @@ class AgentRuntime:
                 action_counts=action_counts,
                 duration_s=duration_s,
             )
+
+        # Phase 26-A — notify the parent task (if any) that this sub-agent
+        # has finished. Always fires; await_subagent on the parent side
+        # silently ignores when no subscriber exists. The semaphore
+        # release lives in the spawn runner's finally block — we ONLY
+        # publish the report here so the parent unblocks.
+        if state.parent_task_id is not None:
+            with contextlib.suppress(Exception):
+                from .team.spawn import notify_subagent_completed
+                notify_subagent_completed(
+                    child_state=state,
+                    outcome_kind=outcome_kind,
+                    summary=episode_summary,
+                    action_counts=action_counts,
+                )
 
         # Phase 23-G — distil + persist a TRANSFERABLE lesson alongside the
         # episode. Episodes capture "what happened in task X"; lessons

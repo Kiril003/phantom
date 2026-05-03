@@ -36,6 +36,7 @@ from .visual import (
     VisualClickTarget, VisualFindTarget, VisualSceneDescribe, VisualWaitFor,
 )
 from .esp32_aim import ESP32BuzzerAlert, ESP32ServoAim
+from .delegate import AgentDelegate
 from .map import MAP_ACTIONS
 from .web import WebSearch
 
@@ -79,6 +80,13 @@ _REGISTERED: list[Type[Action]] = [
     # mutation broadcast on the `"map"` WS channel via
     # `agent.actions.map._common.broadcast_map_mutation`.
     *MAP_ACTIONS,
+    # Phase 26-A — agent.delegate primitive. Lets the planner spawn
+    # specialist sub-agents (senior_backend, reviewer, researcher,
+    # etc.), await their TaskReports, and merge results back as
+    # Observations. The mechanism that turns the single-loop agent
+    # into a real team. Recursion + concurrency capped via
+    # agent_max_delegation_depth + agent_max_team_concurrency.
+    AgentDelegate,
 ]
 
 

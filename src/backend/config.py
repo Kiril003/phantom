@@ -381,6 +381,19 @@ class PhantomConfig(BaseSettings):
     # lesson is considered too distant to be useful and is dropped
     # from prompt injection so cold-cache prompts stay clean.
     agent_lessons_min_relevance: float = 0.35
+    # Phase 26-A — Agent delegation / team fan-out.
+    # `agent_max_team_concurrency` caps how many sub-agents (across ALL
+    # currently-running parents) can run at once; the team semaphore
+    # blocks further spawns when the cap is hit so a delegating loop
+    # cannot fork-bomb the runtime. `agent_max_delegation_depth` caps
+    # recursion: a sub-agent can itself spawn sub-sub-agents but only
+    # up to this depth (default 3 = root → team_lead → senior →
+    # ad-hoc reviewer). `agent_default_subagent_timeout_s` is the
+    # fallback timeout when the delegate caller doesn't pin one.
+    agent_team_enabled: bool = True
+    agent_max_team_concurrency: int = 8
+    agent_max_delegation_depth: int = 3
+    agent_default_subagent_timeout_s: int = 300
     agent_workspace_dir: str = "~/phantom/workspace"
     # Day-4 Wave-2 Y-5 (ADR-SBX-002): default SandboxProfile applied to
     # bash.run + MCP adapter spawns. Closed enum mirrors the

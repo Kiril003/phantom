@@ -353,6 +353,16 @@ CATEGORY_SPEC: list[dict[str, Any]] = [
         "keys": [],
     },
     {
+        "id": "vault",
+        "label": "Сховище",
+        "icon": "🔐",
+        # Phase 25-E Personal Vault — virtual category. Bespoke pane
+        # (cards grid + per-kind editors + reveal flow + audit timeline)
+        # so the settings list is empty; the entry just registers the
+        # sidebar tile so users can navigate to it.
+        "keys": [],
+    },
+    {
         "id": "about",
         "label": "Про систему",
         "icon": "ⓘ",

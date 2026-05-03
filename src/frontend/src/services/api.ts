@@ -545,4 +545,97 @@ export const pairApi = {
     ),
 };
 
+// ─── Phase 25-E — Personal Vault ─────────────────────────────────────────────
+
+export type VaultCardKind =
+  | 'email_account' | 'service_login' | 'messenger' | 'phone'
+  | 'company' | 'payment_method' | 'api_key' | 'document'
+  | 'contact' | 'wifi_network' | 'crypto_wallet' | 'custom';
+
+export interface VaultCard {
+  id: string;
+  kind: VaultCardKind;
+  label: string;
+  tags: string[];
+  ai_writable: boolean;
+  fields: Record<string, string>;          // plain values OR "***" for secrets
+  field_kinds: Record<string, 'plain' | 'secret'>;
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+  last_accessed_at: string | null;
+}
+
+export interface VaultFieldInput {
+  value: string;
+  secret: boolean;
+}
+
+export interface VaultCardCreate {
+  kind: VaultCardKind;
+  label: string;
+  fields: Record<string, VaultFieldInput>;
+  tags?: string[];
+  ai_writable?: boolean;
+}
+
+export interface VaultCardPatch {
+  label?: string;
+  fields?: Record<string, VaultFieldInput>;
+  tags?: string[];
+  ai_writable?: boolean;
+}
+
+export interface VaultAuditEntry {
+  id: string;
+  user_id: string;
+  card_id: string | null;
+  action: string;
+  actor: 'user' | 'ai';
+  details: Record<string, unknown>;
+  created_at: string;
+}
+
+export const vaultApi = {
+  list: (opts: { kind?: VaultCardKind; tag?: string; includeDeleted?: boolean } = {}) => {
+    const qs = new URLSearchParams();
+    if (opts.kind) qs.set('kind', opts.kind);
+    if (opts.tag) qs.set('tag', opts.tag);
+    if (opts.includeDeleted) qs.set('include_deleted', 'true');
+    const tail = qs.toString();
+    return request<{ cards: VaultCard[] }>(
+      'GET', `/vault/cards${tail ? `?${tail}` : ''}`,
+    );
+  },
+  get: (cardId: string) =>
+    request<VaultCard>('GET', `/vault/cards/${encodeURIComponent(cardId)}`),
+  create: (payload: VaultCardCreate) =>
+    request<VaultCard>('POST', '/vault/cards', payload),
+  patch: (cardId: string, payload: VaultCardPatch) =>
+    request<VaultCard>('PATCH', `/vault/cards/${encodeURIComponent(cardId)}`, payload),
+  remove: (cardId: string) =>
+    request<void>('DELETE', `/vault/cards/${encodeURIComponent(cardId)}`),
+  restore: (cardId: string) =>
+    request<VaultCard>('POST', `/vault/cards/${encodeURIComponent(cardId)}/restore`),
+  reveal: (cardId: string, fieldName: string, justification: string) =>
+    request<{
+      card_id: string;
+      field_name: string;
+      value: string;
+      revealed_at: string;
+    }>('POST', `/vault/cards/${encodeURIComponent(cardId)}/reveal`, {
+      field_name: fieldName,
+      justification,
+    }),
+  audit: (cardId?: string, limit = 100) => {
+    const qs = new URLSearchParams();
+    if (cardId) qs.set('card_id', cardId);
+    qs.set('limit', String(limit));
+    return request<{ entries: VaultAuditEntry[] }>(
+      'GET', `/vault/audit?${qs.toString()}`,
+    );
+  },
+};
+
+
 export { ApiError };

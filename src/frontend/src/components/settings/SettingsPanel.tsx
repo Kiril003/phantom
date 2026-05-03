@@ -21,6 +21,7 @@ import {
 } from 'lucide-react';
 import { ProfileManagementSection } from './ProfileManagement';
 import { MobilePairing } from './MobilePairing';
+import { VaultPanel } from './VaultPanel';
 import { StatusBar } from '../core/StatusBar';
 import { FloatingToolbar } from '../core/FloatingToolbar';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -718,10 +719,19 @@ export default function SettingsPanel() {
               <MobilePairing />
             )}
 
+            {/* Phase 25-E — Personal Vault. Bespoke pane (cards grid +
+                per-kind editor + reveal flow). Bypasses the regular
+                settings/accordion flow because there are no settings
+                keys to render. */}
+            {loaded && activeCategory && activeCategory.id === 'vault' && (
+              <VaultPanel />
+            )}
+
             {loaded &&
               activeCategory &&
               activeCategory.id !== 'about' &&
-              activeCategory.id !== 'mobile' && (
+              activeCategory.id !== 'mobile' &&
+              activeCategory.id !== 'vault' && (
               <>
                 {activeCategory.id === 'ai' && <AIProviderDiagnostics />}
                 {activeCategory.id === 'voice' && <NPUDiagnostics />}

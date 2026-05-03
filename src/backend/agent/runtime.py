@@ -950,6 +950,34 @@ class AgentRuntime:
                 duration_s=duration_s,
             )
 
+        # Phase 23-G — distil + persist a TRANSFERABLE lesson alongside the
+        # episode. Episodes capture "what happened in task X"; lessons
+        # capture "what to do/avoid for goals like Y" and are injected
+        # into future strategic + tactical prompts. Best-effort: any
+        # failure here MUST NOT prevent finalisation. Only `done` tasks
+        # produce a positive lesson — failed/timeout/stopped runs would
+        # otherwise teach the agent the wrong "rule".
+        if outcome == "done":
+            with contextlib.suppress(Exception):
+                from .memory.lessons import distill_lesson, write_lesson
+                last_obs_for_lesson = (
+                    state.observations[-1].content if state.observations else ""
+                )
+                lesson = await distill_lesson(
+                    goal=state.goal,
+                    outcome=outcome_kind,
+                    action_counts=action_counts,
+                    last_observation=last_obs_for_lesson,
+                    task_id=state.id,
+                )
+                if lesson:
+                    await write_lesson(
+                        task_id=state.id,
+                        goal=state.goal,
+                        outcome=outcome_kind,
+                        lesson=lesson,
+                    )
+
         with contextlib.suppress(Exception):
             await write_memory_seed(
                 task_id=state.id,

@@ -92,7 +92,7 @@ _SYSTEM_PROMPT_UA = """\
 _USER_TEMPLATE = """\
 SELF:
 {self_model_json}
-{caveats_block}
+{caveats_block}{lessons_block}
 ПОТОЧНА ПІД-ЦІЛЬ:
 {sub_goal_description}
 Acceptance: {acceptance}
@@ -225,10 +225,16 @@ def _build_user_message(
     observations: list[Observation],
     actions_in_sub_goal: int,
     stricter_note: str = "",
+    lessons_block: str = "",
 ) -> str:
+    # Phase 23-G — pre-format lessons_block with leading newline ONLY when
+    # non-empty so the existing prompt layout is unchanged for the cold-cache
+    # case where no lessons survive the relevance filter.
+    rendered_lessons = ("\n" + lessons_block + "\n") if lessons_block else ""
     return _USER_TEMPLATE.format(
         self_model_json=json.dumps(self_model.model_dump(mode="json"), ensure_ascii=False),
         caveats_block=_format_active_caveats(self_model),
+        lessons_block=rendered_lessons,
         sub_goal_description=sub_goal.description,
         acceptance=sub_goal.acceptance_criteria,
         rationale=sub_goal.rationale,
@@ -386,9 +392,23 @@ async def plan(
 
     # Native tool-use path.
     tools = [_inject_synth_args(t) for t in all_tactical_tools(reg)]
+
+    # Phase 23-G — recall distilled lessons whose embeddings are similar to
+    # the current sub-goal description. The prompt is then unchanged when
+    # nothing is found (relevance filter empty); otherwise the lessons sit
+    # right after `caveats_block`, above the sub-goal recap.
+    lessons_block = ""
+    try:
+        from ..memory.lessons import format_lessons_for_prompt, recall_lessons
+        lessons = await recall_lessons(sub_goal.description)
+        lessons_block = format_lessons_for_prompt(lessons)
+    except Exception as exc:
+        logger.debug("tactical: lessons recall skipped (%s)", exc)
+
     user_msg = _build_user_message(
         self_model=self_model, sub_goal=sub_goal,
         observations=observations, actions_in_sub_goal=actions_in_sub_goal,
+        lessons_block=lessons_block,
     )
 
     outcome = await ai_router.call_with_tools(

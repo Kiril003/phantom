@@ -59,7 +59,10 @@ class TestPlannerPublicSurface:
         assert BlockedQuotaError is upstream_err
 
     def test_dunder_all_lists_exact_public_surface(self) -> None:
-        """Catch accidental drift — anything new must be added intentionally."""
+        """Catch accidental drift — anything new must be added intentionally.
+
+        Phase 23-G added the lesson loop helpers; both planner-execution and
+        lesson-management names are part of the surface."""
         import agent.planner as planner_pkg
         assert sorted(planner_pkg.__all__) == sorted([
             "strategic_plan",
@@ -68,6 +71,10 @@ class TestPlannerPublicSurface:
             "reflect",
             "PlannerLLMError",
             "BlockedQuotaError",
+            "distill_lesson",
+            "write_lesson",
+            "recall_lessons",
+            "format_lessons_for_prompt",
         ])
 
     def test_submodule_imports_still_supported(self) -> None:

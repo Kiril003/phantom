@@ -84,6 +84,22 @@ async def plan(
     except Exception as exc:
         logger.debug("strategic: episodic recall skipped (%s)", exc)
 
+    # Phase 23-G — inject distilled lessons (prescriptive, transferable
+    # rules from prior tasks). They sit ABOVE the episodic narrative so
+    # the planner reads "do/avoid" guidance before re-deriving it from
+    # raw episodes. Best-effort: any failure or empty result silently
+    # leaves the memory_block unchanged.
+    try:
+        from ..memory.lessons import format_lessons_for_prompt, recall_lessons
+        lessons = await recall_lessons(goal)
+        lesson_block = format_lessons_for_prompt(lessons)
+        if lesson_block:
+            memory_block = (
+                lesson_block + ("\n\n" + memory_block if memory_block else "")
+            )
+    except Exception as exc:
+        logger.debug("strategic: lessons recall skipped (%s)", exc)
+
     # Back-compat — if caller already passed a synthesized summary string
     # (legacy 9.1 path), surface it alongside the episodic block.
     if memory_seeds_summary:

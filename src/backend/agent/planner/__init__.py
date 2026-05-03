@@ -28,6 +28,18 @@ from .strategic import plan as strategic_plan
 from .tactical import plan as tactical_plan
 from .tactical import plan_safe as tactical_plan_safe
 
+# Phase 23-G — lessons re-exports. The lesson loop is part of the
+# planner's public surface even though storage lives under
+# `agent.memory.lessons` — callers that want to inspect / write / recall
+# lessons (tests, agent studio, audit tools) should not have to know
+# the storage module path.
+from ..memory.lessons import (
+    distill_lesson,
+    format_lessons_for_prompt,
+    recall_lessons,
+    write_lesson,
+)
+
 __all__ = [
     "strategic_plan",
     "tactical_plan",
@@ -35,4 +47,8 @@ __all__ = [
     "reflect",
     "PlannerLLMError",
     "BlockedQuotaError",
+    "distill_lesson",
+    "write_lesson",
+    "recall_lessons",
+    "format_lessons_for_prompt",
 ]

@@ -368,6 +368,19 @@ class PhantomConfig(BaseSettings):
     # rejected. Setting to False restores the pre-23-D path (gate jumps
     # straight to phone/desktop approval). Hot-reloadable.
     agent_council_for_high_risk: bool = True
+    # Phase 23-G — distilled "lessons" memory. After every task `done`
+    # the runtime extracts a transferable rule (what to do, what to
+    # avoid, applicability) and stores it in a dedicated ChromaDB
+    # collection. `tactical_plan` + `strategic_plan` retrieve top-K
+    # lessons by goal similarity and inject them as system-prompt
+    # context. Compounds intelligence across sessions — capability
+    # Claude Code / Coworker do NOT have. Hot-reloadable.
+    agent_lessons_enabled: bool = True
+    agent_lessons_top_k: int = 3
+    # Minimum lessons-recall similarity (0..1). Below threshold a
+    # lesson is considered too distant to be useful and is dropped
+    # from prompt injection so cold-cache prompts stay clean.
+    agent_lessons_min_relevance: float = 0.35
     agent_workspace_dir: str = "~/phantom/workspace"
     # Day-4 Wave-2 Y-5 (ADR-SBX-002): default SandboxProfile applied to
     # bash.run + MCP adapter spawns. Closed enum mirrors the

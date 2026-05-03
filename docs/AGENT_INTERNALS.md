@@ -220,8 +220,70 @@ from agent.planner import (
     reflect,               # async — observations → ReflectionResult
     PlannerLLMError,       # підіймається коли planner LLM не зміг відповісти
     BlockedQuotaError,     # підіймається коли провайдер вичерпав квоту
+    # Phase 23-G — lesson loop (compounding знання між сесіями)
+    distill_lesson,        # async — observations → Lesson|None
+    write_lesson,          # async — Lesson → ChromaDB row
+    recall_lessons,        # async — query → top-K filtered by relevance
+    format_lessons_for_prompt,  # sync — list[Lesson] → UA bullet block
 )
 ```
+
+## Phase 23-G — Lesson loop (compounding знання)
+
+PHANTOM на відміну від Claude Code / Coworker / Aider / Cursor компаундує
+знання МІЖ сесіями: після кожного task `done` runtime витягує
+ТРАНСФЕРАБЕЛЬНИЙ урок ("коли мета X, роби Y, уникай Z") у відокремлену
+ChromaDB-колекцію `agent_lessons`. На наступний task `strategic_plan` +
+`tactical_plan` витягують top-3 уроки за схожістю мети та інжектять їх у
+prompt над блоком епізодів.
+
+```
+finalize_task(state, "done")
+        │
+        ▼
+┌──────────────────────────────────────┐
+│ _finalize_persist                    │
+│  ① compose_summary + write_episode   │ ← episode (narrative)
+│  ② distill_lesson(LLM)               │ ← Phase 23-G
+│     → {what_worked, what_avoid,      │
+│         applicability}               │
+│  ③ write_lesson → ChromaDB           │
+│     collection 'agent_lessons'       │
+└──────────────────────────────────────┘
+
+наступний task:
+        │
+        ▼
+┌──────────────────────────────────────┐
+│ strategic_plan(goal)                 │
+│  recall_lessons(goal, k=3)           │
+│   ↳ format_lessons_for_prompt(...)   │
+│   ↳ injected ABOVE episodic block    │
+│  recall(goal, k=5)                   │
+│   ↳ episodic block                   │
+│  → LLM with both blocks above tools  │
+└──────────────────────────────────────┘
+        │
+        ▼
+для кожної sub_goal:
+┌──────────────────────────────────────┐
+│ tactical_plan(sub_goal)              │
+│  recall_lessons(sub_goal.description)│
+│   ↳ injected after caveats_block,    │
+│     before sub-goal recap            │
+│  → next PlanStep                     │
+└──────────────────────────────────────┘
+```
+
+**Чому це сильніше за Claude Code/Coworker:**
+- Claude Code/Coworker reset memory per turn або per session — досвід пропадає.
+- PHANTOM-уроки персистять у ChromaDB → embedding search → injection.
+- LLM бачить prescriptive guidance ("роби X / уникай Y") до того як заглядає у raw episodes — це справжній metacognitive layer.
+- Уроки фільтруються `agent_lessons_min_relevance` (0.35 default) щоб
+  cold-cache prompts лишались чистими.
+
+Settings: `agent_lessons_enabled` (default True), `agent_lessons_top_k`
+(3), `agent_lessons_min_relevance` (0.35).
 
 Внутрішні модулі (`agent.planner.strategic`, `.tactical`, `.reflector`,
 `._llm`) лишаються імпортовними для тестів і просунутих call sites,

@@ -4,10 +4,10 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useSystemStore } from '../../stores/systemStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useUIStore, type OverlayName } from '../../stores/uiStore';
-import { useSettingsStore } from '../../stores/settingsStore';
-import { settingsApi } from '../../services/api';
 import { SystemState } from '@shared/types';
 import { EASE_PHANTOM } from '../../styles/motion';
+import { ChromeHandle } from './ChromeHandle';
+import { useChromeCollapse } from '../../hooks/useChromeCollapse';
 
 /**
  * FloatingToolbar (sunrise build).
@@ -17,8 +17,8 @@ import { EASE_PHANTOM } from '../../styles/motion';
  *
  * Each button is 44×44 (.toolbar-btn shape), Material Symbols Outlined glyph,
  * amber tint when active. Long-press on Home opens the More-menu (a glass-strong
- * column with secondary actions: Agent / Voice mode / Sentinel / Ghost (ROOT) /
- * System / Camera / Networks / Sign out).
+ * column with secondary actions: Agent / Agent History / Studio / Eyes / Sentinel / 
+ * Ghost (ROOT) / System / Sign out).
  *
  * Audit fix H-MM-2 — SentinelLayout *does* render this component, so secondary
  * routing (Sentinel ↔ previous state) keeps working from any layout.
@@ -70,11 +70,9 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
   // Phase 18 — AgentVisionPanel (мощуть бачити що бачить агент).
   const visionOpen = useUIStore((s) => s.visionOpen);
   const setVisionOpen = useUIStore((s) => s.setVisionOpen);
-
-  const voiceMode = useSettingsStore(
-    (s) => (s.values.voice_mode as 'off' | 'continuous' | 'wake_word' | undefined) ?? 'off',
-  );
-  const applyRemote = useSettingsStore((s) => s.applyRemote);
+  // Phase 28 — Will Engine.
+  const willOpen = useUIStore((s) => s.willOpen);
+  const setWillOpen = useUIStore((s) => s.setWillOpen);
 
   const isOverlayOpen = (name: OverlayName) => windows[name].open && !windows[name].minimized;
   const isRoot = user?.role === 'ROOT';
@@ -116,30 +114,6 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
     useUIStore.getState().closeAll();
     navigate('/');
   };
-  /** Phase 12.0 — cycle voice_mode: off → continuous → wake_word → off.
-   *  Optimistic local flip + persist via settingsApi.set; on failure
-   *  we revert so the button reflects backend truth. */
-  const cycleVoiceMode = () => {
-    const next: 'off' | 'continuous' | 'wake_word' =
-      voiceMode === 'off'
-        ? 'continuous'
-        : voiceMode === 'continuous'
-          ? 'wake_word'
-          : 'off';
-    const previous = voiceMode;
-    applyRemote('voice_mode', next);
-    void settingsApi
-      .set('voice_mode', next)
-      .catch(() => applyRemote('voice_mode', previous));
-  };
-
-  const voiceModeActive = voiceMode === 'continuous' || voiceMode === 'wake_word';
-  const voiceModeTooltip =
-    voiceMode === 'continuous'
-      ? 'Голос: постійний (тап → wake-фраза)'
-      : voiceMode === 'wake_word'
-        ? 'Голос: wake-фраза (тап → вимкнути)'
-        : 'Голос: вимкнено (тап → постійний)';
 
   // Sentinel/Ghost states are dramatic — let the dock recede so it doesn't
   // compete with the threat-mode UI (audit fix Phase-21 follow-up).
@@ -230,13 +204,13 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
       },
     },
     {
-      id: 'always-on',
-      icon: 'graphic_eq',
-      label: 'Voice mode',
-      tooltip: voiceModeTooltip,
-      active: voiceModeActive,
+      id: 'will',
+      icon: 'psychology',
+      label: 'Will',
+      tooltip: 'Will Engine — драйви та цілі автономії',
+      active: willOpen,
       onClick: () => {
-        cycleVoiceMode();
+        setWillOpen(!willOpen);
         setMoreMenuOpen(false);
       },
     },
@@ -335,6 +309,34 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
 
   const list = items ?? primary;
 
+  // OperatorLayout v3 chrome-collapse: when `collapsed=true` the toolbar
+  // hides into a small handle at the bottom centre, freeing ~60px of
+  // content height. Default is collapsed so first-run lands without the
+  // dock competing for attention. Tap handle to expand.
+  const [toolbarCollapsed, toggleToolbar] = useChromeCollapse('toolbar');
+
+  if (toolbarCollapsed) {
+    return (
+      <div
+        className="absolute bottom-3 left-1/2 -translate-x-1/2 pointer-events-auto"
+        style={{ zIndex: 30 }}
+      >
+        <ChromeHandle
+          position="bottom"
+          collapsed={true}
+          onToggle={toggleToolbar}
+          label="Toolbar"
+          style={{
+            background: 'rgba(255,255,255,0.55)',
+            border: '1px solid var(--glass-border, rgba(255,255,255,0.55))',
+            boxShadow: '0 2px 8px rgba(40,30,15,0.10)',
+            backdropFilter: 'blur(6px)',
+          }}
+        />
+      </div>
+    );
+  }
+
   return (
     <div
       className="absolute bottom-3 left-1/2 -translate-x-1/2 pointer-events-auto"
@@ -382,10 +384,10 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
         transition={{ duration: 0.24, ease: EASE_PHANTOM as unknown as number[] }}
         style={{
           gap: 2,
-          padding: '4px 6px',
+          padding: '2px 4px',
           borderRadius: 999,
           boxShadow:
-            '0 6px 18px rgba(40,30,15,0.10), 0 0 0 1px var(--glass-border), inset 0 1px 0 var(--glass-highlight)',
+            '0 6px 18px rgba(0,0,0,0.25), 0 0 0 1px var(--glass-border), inset 0 1px 0 var(--glass-highlight)',
         }}
       >
         {list.map((item) => {
@@ -439,6 +441,13 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
             onClick: () => setMoreMenuOpen(!moreMenuOpen),
           }}
         />
+        <ChromeHandle
+          position="bottom"
+          collapsed={false}
+          onToggle={toggleToolbar}
+          label="Toolbar"
+          style={{ marginLeft: 4 }}
+        />
       </motion.div>
     </div>
   );
@@ -472,11 +481,11 @@ function ToolbarIcon({
       onClick={item.disabled ? undefined : handle}
       className="relative inline-flex items-center justify-center active:scale-95"
       style={{
-        width: 40,
-        height: 40,
-        minWidth: 40,
-        minHeight: 40,
-        borderRadius: 12,
+        width: 32,
+        height: 32,
+        minWidth: 32,
+        minHeight: 32,
+        borderRadius: 8,
         border: 'none',
         opacity: item.disabled ? 0.35 : 1,
         cursor: item.disabled ? 'not-allowed' : 'pointer',
@@ -490,7 +499,7 @@ function ToolbarIcon({
           ? 'linear-gradient(135deg, rgba(244,175,37,0.30), rgba(251,146,60,0.26))'
           : 'transparent',
         boxShadow: item.active
-          ? 'inset 0 0 0 1.5px rgba(244,175,37,0.55)'
+          ? 'inset 0 0 0 1px rgba(244,175,37,0.55)'
           : 'none',
         transition: 'background 200ms ease, color 200ms ease, box-shadow 200ms ease, transform 120ms ease',
       }}
@@ -501,7 +510,7 @@ function ToolbarIcon({
       <span
         className="msym"
         style={{
-          fontSize: 20,
+          fontSize: 18,
           lineHeight: 1,
           fontVariationSettings: `'FILL' ${fillIcon}, 'wght' ${wghtIcon}, 'GRAD' 0, 'opsz' 24`,
         }}

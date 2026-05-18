@@ -1,5 +1,5 @@
 """
-Checkpoint service — wraps ``agent.audit.save_checkpoint`` /
+Checkpoint service — wraps ``agent.kernel.audit.save_checkpoint`` /
 ``fetch_checkpoint`` so chat-callable "create / list / restore" carry
 the same semantics as the cognitive-loop checkpoints.
 

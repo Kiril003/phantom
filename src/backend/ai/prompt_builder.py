@@ -118,7 +118,7 @@ async def fetch_recent_places(
 def _format_emotion_block(emotion: dict | None) -> str | None:
     """Phase 9.4c-qw fix #5 — render PHANTOM's emotion when notably off baseline.
 
-    Ported from agent.planner.tactical._format_emotion_block but tuned for
+    Ported from agent.cognition.planner.tactical._format_emotion_block but tuned for
     chat: only one short labelled line, no full coaching paragraph. Skipped
     entirely on near-neutral state so a default chat doesn't pay the
     prompt-bloat tax.
@@ -199,6 +199,7 @@ def build_system_prompt(
     memory_hints: list[str] | None = None,
     recent_places: list[tuple[str, datetime]] | None = None,
     emotion: dict | None = None,
+    hormones: dict[str, float] | None = None,
 ) -> str:
     """
     Build the full dynamic system prompt for one AI turn.
@@ -223,7 +224,12 @@ def build_system_prompt(
 
     parts.append(PHANTOM_IDENTITY)
     parts.append("\n" + BREVITY_DISCIPLINE)
-    parts.append("\n" + RESPONSE_FORMS_GUIDANCE)
+    # Structured response widgets and data tools are separate controls.
+    # Do not teach the model to produce cards/maps/artifacts unless the
+    # renderer catalog is actually enabled; otherwise it may imitate tool
+    # syntax in plain text or spam unfinished UI surfaces.
+    if config.chat_response_widgets_enabled:
+        parts.append("\n" + RESPONSE_FORMS_GUIDANCE)
     if config.chat_tools_enabled:
         parts.append("\n" + DATA_TOOLS_GUIDANCE)
     parts.append("\n" + REGISTER_GUIDANCE)
@@ -306,6 +312,17 @@ def build_system_prompt(
     emotion_block = _format_emotion_block(emotion)
     if emotion_block:
         parts.append("\n" + emotion_block)
+
+    # 7c. Endocrine influence — Phase 14
+    if hormones:
+        c = hormones.get("cortisol", 0.2)
+        d = hormones.get("dopamine", 0.5)
+        o = hormones.get("oxytocin", 0.5)
+        h_lines = [f"CHEMISTRY: cortisol={c:.2f}, dopamine={d:.2f}, oxytocin={o:.2f}"]
+        if c > 0.6: h_lines.append("STATE: High stress. Be brief, guarded, and highly efficient.")
+        if d > 0.7: h_lines.append("STATE: High engagement. Be creative, enthusiastic, and proactive.")
+        if o > 0.7: h_lines.append("STATE: Deep bonding. Be informal, warm, and highly trusting.")
+        parts.append("\n" + " ".join(h_lines))
 
     # 8. Extra prompt from user settings — placed at the very tail so a
     # user's custom directive (the most concrete intent) is the freshest

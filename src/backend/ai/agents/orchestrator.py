@@ -96,6 +96,12 @@ async def run_orchestrator(
     timeout MUST NOT cancel surviving leaves; ADR-ORC-005).
     """
     mode = decide_mode(provider=provider, user_text=user_text)
+    # Forward the chosen provider to chat_pipeline.run as provider_hint
+    # so nested ai_hub.dispatch calls bypass the hub's locality-first
+    # auto-pick (which always grabs Ollama when both providers are
+    # registered as available). Caller can still override by passing
+    # provider_hint explicitly in chat_pipeline_kwargs.
+    chat_pipeline_kwargs.setdefault("provider_hint", provider)
     if mode is OrchestratorMode.single:
         return await chat_pipeline_run(**chat_pipeline_kwargs)
     # X-3: parallel-K branch lands here. For now, the dispatcher's

@@ -334,7 +334,10 @@ def _sync_store_fact(
     }
     if metadata_extra:
         meta.update(metadata_extra)
-    collection.add(
+    # MemoryBrain writes durable user facts immediately while the janitor can
+    # later promote the same tactical fact id. Upsert keeps that path
+    # idempotent instead of failing on duplicate Chroma ids.
+    collection.upsert(
         ids=[fact_id],
         documents=[content],
         metadatas=[meta],  # type: ignore[list-item]
@@ -604,34 +607,20 @@ async def extract_and_store_facts(
     conversation_summary: str,
     db: Any,
 ) -> list[str]:
+    """Post-turn memory write pipeline.
+
+    Kept for backward compatibility with older call sites/tests. The real
+    implementation now lives in ``memory.brain`` so a chat turn writes to the
+    same durable path that prompt recall and tools read from.
     """
-    Post-turn memory write pipeline:
-    1. Split conversation summary into candidate sentences.
-    2. Classify each sentence into a MemoryFact category.
-    3. Score importance (0–1).
-    4. Store facts above threshold in the tactical layer.
-    5. Return stored fact IDs.
-    """
-    from memory.tactical_memory import store_fact as tactical_store
+    from memory.brain import memory_brain
 
-    # Sentence splitting: split on ". ", ".\n", "! ", "? "
-    raw_sentences = re.split(r"(?<=[.!?])\s+", conversation_summary.replace("\n", " "))
-    sentences = [s.strip() for s in raw_sentences if len(s.strip()) > 20]
-
-    stored_ids: list[str] = []
-    for sentence in sentences[:15]:  # Cap at 15 sentences per turn
-        category = _classify_sentence(sentence)
-        importance = _score_importance(sentence, category)
-
-        if importance >= config.memory_importance_threshold:
-            fact_id = await tactical_store(
-                db=db,
-                user_id=user_id,
-                session_id=session_id,
-                content=sentence,
-                category=category,
-                importance=importance,
-            )
-            stored_ids.append(fact_id)
-
-    return stored_ids
+    report = await memory_brain.remember_text(
+        db=db,
+        user_id=user_id,
+        session_id=session_id,
+        text=conversation_summary,
+        source="chat",
+        durable=True,
+    )
+    return report.stored_ids

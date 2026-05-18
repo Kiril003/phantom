@@ -50,7 +50,7 @@ class TestAgentSandboxProfileDefault:
         """The Settings Literal MUST be a strict subset of the
         `SandboxProfile` Python enum so the operator can never set a
         value that the runtime doesn't recognise."""
-        from agent.safety.sandbox import SandboxProfile
+        from agent.operations.safety.sandbox import SandboxProfile
 
         runtime_names = {m.name for m in SandboxProfile}
         # Settings exposes 2 of the 3 (radio_privileged Day-6 only).

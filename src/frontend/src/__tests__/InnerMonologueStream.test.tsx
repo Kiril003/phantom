@@ -4,7 +4,7 @@
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen, cleanup, act } from '@testing-library/react';
-import { InnerMonologueStream } from '../components/agent/InnerMonologueStream';
+import { InnerMonologueStream } from '../components/agent/status/InnerMonologueStream';
 
 type Handler = (msg: { channel: string; type: string; data: unknown }) => void;
 

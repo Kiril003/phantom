@@ -1,6 +1,7 @@
 import { motion } from 'framer-motion';
 import { ShieldOff } from 'lucide-react';
 import { useSystemStore } from '../stores/systemStore';
+import { formatUptime } from '../utils/format';
 
 /**
  * GHOST — Encrypted recording mode.
@@ -29,7 +30,7 @@ export default function GhostLayout() {
       <motion.button
         type="button"
         onClick={goShadow}
-        className="absolute top-4 left-4 p-3 rounded-full z-50 border border-white/5 active:opacity-100"
+        className="absolute top-4 left-4 p-2.5 rounded-full z-50 border border-white/5 active:opacity-100"
         style={{
           background: 'rgba(255,255,255,0.03)',
           backdropFilter: 'blur(8px)',
@@ -42,7 +43,7 @@ export default function GhostLayout() {
         transition={{ duration: 0.2 }}
         aria-label="Exit Ghost"
       >
-        <ShieldOff size={18} />
+        <ShieldOff size={16} />
       </motion.button>
 
       {/* Micro indicator — bottom-right, 2x2 pixel equivalent */}
@@ -79,11 +80,4 @@ export default function GhostLayout() {
       )}
     </motion.div>
   );
-}
-
-function formatUptime(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}:${s.toString().padStart(2, '0')}`;
 }

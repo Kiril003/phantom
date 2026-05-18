@@ -32,8 +32,23 @@ import { useEffect, useRef } from 'react';
 
 import { useAgentStore } from '../../stores/agentStore';
 import { useFamiliarStore } from '../../stores/familiarStore';
+import type { AgentEmotionVector, FamiliarEmotion } from '@shared/types';
 
 const HIGH_RISK_THRESHOLD = 5; // RiskLevel.MEDIUM and above
+
+function mapEmotionToFamiliar(vector: AgentEmotionVector | null): FamiliarEmotion {
+  if (!vector) return 'neutral';
+  // Simplified mapping for the wisp character:
+  //   fatigue → sleepy
+  //   concern → alert (worry)
+  //   curiosity → happy (bright)
+  //   focus → alert (active)
+  if (vector.fatigue > 0.65) return 'sleepy';
+  if (vector.concern > 0.5) return 'alert';
+  if (vector.curiosity > 0.6) return 'happy';
+  if (vector.focus > 0.8) return 'alert';
+  return 'neutral';
+}
 
 export function FamiliarReactor(): null {
   const reportPending = useAgentStore((s) => s.reportPending);
@@ -44,7 +59,10 @@ export function FamiliarReactor(): null {
   // Phase 21 — task health + active sub-goal awareness.
   const status = useAgentStore((s) => s.status);
   const subGoals = useAgentStore((s) => s.subGoals);
+  const emotionVector = useAgentStore((s) => s.emotion);
   const manifest = useFamiliarStore((s) => s.manifest);
+
+  const familiarEmotion = mapEmotionToFamiliar(emotionVector);
 
   // Track which singletons we've already reacted to so a long-lived
   // reportPending / infoNeed only manifests once per occurrence.
@@ -62,6 +80,7 @@ export function FamiliarReactor(): null {
       seenReportId.current = reportPending.task_id;
       manifest('ai-summon', {
         pose: 'waving',
+        emotion: familiarEmotion,
         message: 'Готово.',
         durationMs: 4200,
       });
@@ -69,7 +88,7 @@ export function FamiliarReactor(): null {
     if (!reportPending) {
       seenReportId.current = null;
     }
-  }, [reportPending, manifest]);
+  }, [reportPending, manifest, familiarEmotion]);
 
   useEffect(() => {
     const id = currentInfoNeed?.id ?? null;
@@ -77,6 +96,7 @@ export function FamiliarReactor(): null {
       seenInfoNeedId.current = id;
       manifest('ai-summon', {
         pose: 'pointing',
+        emotion: 'alert',
         message: 'Потрібна підказка',
         durationMs: 3200,
       });
@@ -96,6 +116,7 @@ export function FamiliarReactor(): null {
       seenCouncilTimestamp.current = stamp;
       manifest('ai-summon', {
         pose: 'waving',
+        emotion: 'happy',
         message: 'Рада прийшла до згоди',
         durationMs: 3000,
       });
@@ -109,11 +130,12 @@ export function FamiliarReactor(): null {
       seenPromotedKeys.current.add(key);
       manifest('ai-summon', {
         pose: 'peeking',
+        emotion: familiarEmotion,
         message: 'Працюю на фоні',
         durationMs: 3500,
       });
     }
-  }, [promotedToBackgroundAt, manifest]);
+  }, [promotedToBackgroundAt, manifest, familiarEmotion]);
 
   // Phase 21 — task status transitions drive Familiar posture.
   useEffect(() => {
@@ -123,14 +145,30 @@ export function FamiliarReactor(): null {
     // Edge cases worth a manifestation. We deliberately skip transitions
     // INTO 'idle' and OUT of 'idle' to avoid noise on every task start.
     if (status === 'done') {
-      manifest('ai-summon', { pose: 'waving', message: 'Готово, як просили.', durationMs: 4500 });
+      manifest('ai-summon', {
+        pose: 'waving',
+        emotion: 'happy',
+        message: 'Готово, як просили.',
+        durationMs: 4500
+      });
     } else if (status === 'failed' || status === 'stopped') {
-      manifest('ai-summon', { pose: 'peeking', message: 'Не дотиснув.', durationMs: 3500 });
+      manifest('ai-summon', {
+        pose: 'peeking',
+        emotion: 'alert',
+        message: 'Не дотиснув.',
+        durationMs: 3500
+      });
     } else if (status === 'awaiting_user') {
-      manifest('ai-summon', { pose: 'pointing', message: 'Потрібен ти.', durationMs: 3500 });
+      manifest('ai-summon', {
+        pose: 'pointing',
+        emotion: 'alert',
+        message: 'Потрібен ти.',
+        durationMs: 3500
+      });
     } else if (status === 'blocked_quota' && prev !== 'blocked_quota') {
       manifest('ai-summon', {
         pose: 'pointing',
+        emotion: 'sleepy',
         message: 'Працюю на скелеті — без хмари.',
         durationMs: 4000,
       });
@@ -150,11 +188,12 @@ export function FamiliarReactor(): null {
     // Familiar's tendril resolves to the right capsule on screen.
     manifest('ai-summon', {
       pose: 'pointing',
+      emotion: familiarEmotion,
       message: active?.description ?? undefined,
       durationMs: 2800,
       target: { selector: `[data-subgoal-id="${id}"]` },
     });
-  }, [subGoals, manifest]);
+  }, [subGoals, manifest, familiarEmotion]);
 
   useEffect(() => {
     if (recentActions.length === 0) {
@@ -173,6 +212,7 @@ export function FamiliarReactor(): null {
       lastActionAuditId.current = auditId;
       manifest('ai-summon', {
         pose: 'pointing',
+        emotion: 'alert',
         message: 'Ризикована дія',
         durationMs: 2400,
       });

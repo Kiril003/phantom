@@ -16,7 +16,7 @@ Coverage:
    and returns its result identity.
 10. The X-3 import-gate test still passes after adding ai/agents/
     (no orchestrator code imports from agent.actions / agent.runtime
-    / agent.proactive / agent.standing_orders / agent.mcp).
+    / agent.cognition.proactive.loop / agent.operations.standing_orders / agent.mcp).
 """
 from __future__ import annotations
 
@@ -117,8 +117,10 @@ class TestRunOrchestratorSingleMode:
     @pytest.mark.asyncio
     async def test_single_mode_passes_through_to_chat_pipeline(self):
         """Back-compat invariant ADR-ORC-001: when mode is `single`,
-        run_orchestrator MUST call chat_pipeline_run with the same
-        kwargs and return its result identity."""
+        run_orchestrator MUST forward chat_pipeline_run with the caller's
+        kwargs PLUS `provider_hint=<provider>` so nested ai_hub.dispatch
+        calls bypass the locality-first auto-pick. Result identity is
+        preserved (no wrapping)."""
         from ai.agents import run_orchestrator
 
         sentinel = object()
@@ -137,7 +139,26 @@ class TestRunOrchestratorSingleMode:
             "by IDENTITY (not equality) on the single path so the legacy "
             "behaviour is byte-perfect."
         )
-        run_mock.assert_awaited_once_with(session_id="s1", user_id="u1")
+        run_mock.assert_awaited_once_with(
+            session_id="s1", user_id="u1", provider_hint="gemini"
+        )
+
+    @pytest.mark.asyncio
+    async def test_explicit_provider_hint_overrides_provider_arg(self):
+        """If the caller passes provider_hint explicitly in
+        chat_pipeline_kwargs, the orchestrator must NOT clobber it with
+        its own `provider` arg — `setdefault` semantics."""
+        from ai.agents import run_orchestrator
+
+        run_mock = AsyncMock(return_value=None)
+        await run_orchestrator(
+            user_text="hello",
+            provider="gemini",
+            chat_pipeline_run=run_mock,
+            user_id="u1",
+            provider_hint="ollama",
+        )
+        run_mock.assert_awaited_once_with(user_id="u1", provider_hint="ollama")
 
 
 # ────────────────────────────────────────────────────────── import gate ──
@@ -146,7 +167,7 @@ class TestRunOrchestratorSingleMode:
 class TestAiAgentsImportSurface:
     """X-3 (already shipped at tests/test_phase_x3_ai_agents_import_gate.py)
     enforces TM-17B-E4 — ai/agents/** must NOT import from agent.actions
-    / agent.runtime / agent.proactive / agent.standing_orders / agent.mcp.
+    / agent.runtime / agent.cognition.proactive.loop / agent.operations.standing_orders / agent.mcp.
     Belt-and-braces here too: a static grep on the 2 X-1 files."""
 
     def test_orchestrator_does_not_import_agent_runtime(self):
@@ -157,8 +178,8 @@ class TestAiAgentsImportSurface:
         forbidden = {
             "agent.runtime",
             "agent.actions",
-            "agent.proactive",
-            "agent.standing_orders",
+            "agent.cognition.proactive.loop",
+            "agent.operations.standing_orders",
             "agent.mcp",
         }
         for node in _ast.walk(tree):
@@ -184,8 +205,8 @@ class TestAiAgentsImportSurface:
         forbidden = {
             "agent.runtime",
             "agent.actions",
-            "agent.proactive",
-            "agent.standing_orders",
+            "agent.cognition.proactive.loop",
+            "agent.operations.standing_orders",
             "agent.mcp",
         }
         for node in _ast.walk(tree):

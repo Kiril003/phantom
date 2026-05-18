@@ -32,12 +32,20 @@ export type WSChannel =
   // when a paired device is dropped from the desktop UI. The Settings
   // "Mobile Companion" panel subscribes here to live-refresh its device
   // list without polling.
-  | 'pair';
+  | 'pair'
+  | 'vision'
+  | '_meta';
 
 export interface WSMessage {
   channel: WSChannel;
   type: string;
   data: Record<string, unknown>;
+  ts?: number;
+}
+
+export interface WSControlMessage {
+  control: string;
+  channels?: string[];
   ts?: number;
 }
 
@@ -156,7 +164,7 @@ class WebSocketClient {
     }
   }
 
-  send(msg: WSMessage): void {
+  send(msg: WSMessage | WSControlMessage): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ ...msg, ts: msg.ts ?? Date.now() }));
     }
@@ -180,13 +188,17 @@ class WebSocketClient {
     const handlers = this.channelHandlers.get(channel) ?? [];
     handlers.push(handler as ChannelHandler);
     this.channelHandlers.set(channel, handlers);
-    return () => {
-      const current = this.channelHandlers.get(channel) ?? [];
+    return () => this.off(channel, handler);
+  }
+
+  off<T extends WSMessage>(channel: WSChannel, handler: ChannelHandler<T>): void {
+    const current = this.channelHandlers.get(channel);
+    if (current) {
       this.channelHandlers.set(
         channel,
         current.filter((h) => h !== (handler as ChannelHandler))
       );
-    };
+    }
   }
 
   get isConnected(): boolean {

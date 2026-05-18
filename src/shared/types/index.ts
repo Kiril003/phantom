@@ -11,3 +11,4 @@ export * from './agent';
 export * from './voice';
 export * from './familiar';
 export * from './studio';
+export * from './mission';

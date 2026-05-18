@@ -50,12 +50,12 @@ async def isolated_db(monkeypatch):
 @pytest.mark.asyncio
 async def test_update_status_persists_after_context_exit(isolated_db):
     """After `update_task_status` returns, a FRESH session sees the new value."""
-    from agent.audit import create_task_row, update_task_status
+    from agent.kernel.audit import create_task_row, update_task_status
     from db.database import get_session
     from db.models import AgentTask
 
     task_id = str(uuid.uuid4())
-    await create_task_row(task_id, "test goal", "foreground")
+    await create_task_row("u-test", task_id, "test goal", "foreground")
 
     await update_task_status(task_id, "blocked_quota",
                               paused_reason="provider quota exhausted")
@@ -75,12 +75,12 @@ async def test_update_status_visible_to_concurrent_reader(isolated_db):
     while the REST refresh path reads the same row. Reader must see the new
     value once the writer has returned, even if they overlap.
     """
-    from agent.audit import create_task_row, update_task_status
+    from agent.kernel.audit import create_task_row, update_task_status
     from db.database import get_session
     from db.models import AgentTask
 
     task_id = str(uuid.uuid4())
-    await create_task_row(task_id, "concurrent goal", "foreground")
+    await create_task_row("u-test", task_id, "concurrent goal", "foreground")
 
     # Pre-load row in reader's session BEFORE the write — this is the
     # condition the audit speculates about: a shadowed snapshot might
@@ -106,12 +106,12 @@ async def test_update_status_lands_under_cancellation_race(isolated_db):
     cancelled, the commit must still land (the write should precede any
     await that could receive the cancel).
     """
-    from agent.audit import create_task_row, update_task_status
+    from agent.kernel.audit import create_task_row, update_task_status
     from db.database import get_session
     from db.models import AgentTask
 
     task_id = str(uuid.uuid4())
-    await create_task_row(task_id, "cancel race", "foreground")
+    await create_task_row("u-test", task_id, "cancel race", "foreground")
 
     async def transition():
         await update_task_status(task_id, "blocked_quota",
@@ -133,8 +133,8 @@ async def test_enter_blocked_quota_persists_to_db(isolated_db, monkeypatch):
     call so the loop exits quickly.
     """
     from agent import audit
-    from agent.audit import create_task_row
-    from agent.runtime import AgentRuntime, TaskState
+    from agent.kernel.audit import create_task_row
+    from agent.kernel.runtime import AgentRuntime, TaskState
     from agent.schemas import SelfModel
     from db.database import get_session
     from db.models import AgentTask
@@ -170,7 +170,7 @@ async def test_enter_blocked_quota_persists_to_db(isolated_db, monkeypatch):
 
     monkeypatch.setattr(audit, "update_task_status", spying_update)
     # runtime.py imports at module scope — also patch the already-bound name.
-    import agent.runtime as runtime_mod
+    import agent.kernel.runtime as runtime_mod
     monkeypatch.setattr(runtime_mod, "update_task_status", spying_update)
 
     resumed = await runtime.enter_blocked_quota(state, "quota_exhausted")

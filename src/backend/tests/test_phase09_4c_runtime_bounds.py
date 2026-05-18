@@ -7,7 +7,7 @@ cannot unbounded-grow the process.
 """
 from __future__ import annotations
 
-from agent.runtime import AgentRuntime
+from agent.kernel.runtime import AgentRuntime
 
 
 def test_foreground_queue_bounded() -> None:

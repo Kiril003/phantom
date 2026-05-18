@@ -2,6 +2,15 @@
  * Phase 9.2.1 — derive the StatusBar provider badge state from a router
  * snapshot. Pulled out of StatusBar.tsx so the rendering logic is unit
  * testable without dragging in every store the bar consumes.
+ *
+ * Defensive — backend `ai_router.router_state_snapshot()` historically
+ * returned a partial shape (`{active, cooling: list[str]}`) while the
+ * TypeScript contract above declares the richer `cooling: Record<...>` /
+ * `quota_exhausted` form. A missing key surfaced as
+ * `'string' in undefined → TypeError` which crashed the entire app
+ * tree (no error boundary above StatusBar). Treat every cooling /
+ * quota field as optional and fall back to "ok" green when the
+ * snapshot is partial.
  */
 import type { RouterStateSnapshot } from '../services/agentApi';
 
@@ -12,6 +21,12 @@ export interface ProviderSummary {
   fallbackArrow: boolean;
 }
 
+function asRecord<T>(v: unknown): Record<string, T> {
+  return v && typeof v === 'object' && !Array.isArray(v)
+    ? (v as Record<string, T>)
+    : {};
+}
+
 export function deriveProviderSummary(
   provider: string,
   rs: RouterStateSnapshot | null,
@@ -20,20 +35,22 @@ export function deriveProviderSummary(
   if (!rs) {
     return { color: 'var(--signal-ok)', label: provider, tooltip: provider, fallbackArrow: false };
   }
-  const primary = rs.primary;
-  const fallback = rs.fallback;
+  const primary = rs.primary ?? provider;
+  const fallback = rs.fallback ?? 'none';
+  const quotaExhausted = asRecord<{ until_utc?: string }>(rs.quota_exhausted);
+  const cooling = asRecord<{ until_utc?: string; reason?: string }>(rs.cooling);
 
-  if (primary in rs.quota_exhausted) {
+  if (primary in quotaExhausted) {
     return {
       color: 'var(--signal-alert)',
       label: `${primary} · quota`,
-      tooltip: `${primary} quota exhausted until ${rs.quota_exhausted[primary]?.until_utc}`,
+      tooltip: `${primary} quota exhausted until ${quotaExhausted[primary]?.until_utc}`,
       fallbackArrow: true,
     };
   }
-  if (primary in rs.cooling) {
-    const until = rs.cooling[primary]?.until_utc;
-    const reason = rs.cooling[primary]?.reason;
+  if (primary in cooling) {
+    const until = cooling[primary]?.until_utc;
+    const reason = cooling[primary]?.reason;
     const remaining = until ? Math.max(0, Math.round((Date.parse(until) - nowMs) / 1000)) : 0;
     return {
       color: 'var(--signal-warn)',

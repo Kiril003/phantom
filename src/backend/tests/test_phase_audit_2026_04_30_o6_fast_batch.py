@@ -14,7 +14,7 @@ Tier-C/D fast batch — three small fixes the audit swarm flagged:
   first). Operators reading the metric finally get a
   primary-stability signal.
 
-* **D3-D-2** — `agent.proactive`'s cycle-broadcast comment said "only
+* **D3-D-2** — `agent.cognition.proactive.loop`'s cycle-broadcast comment said "only
   emit every 5th cycle so UIs can show breathing without log spam"
   but the code emitted every cycle. Now genuinely every-5th via a
   per-loop tick counter (D3-D-2).
@@ -172,7 +172,7 @@ class TestD3D2EveryFifthCycle:
         and count broadcast emissions. Should be exactly 2 (cycles 1
         and 6). Tickle the modulo edge so a refactor that breaks the
         period back to "every cycle" trips immediately."""
-        from agent.proactive import ProactiveLoop
+        from agent.cognition.proactive.loop import ProactiveLoop
         from unittest.mock import MagicMock
         loop_obj = ProactiveLoop(runtime=MagicMock())
 
@@ -204,6 +204,6 @@ class TestD3D2EveryFifthCycle:
         """A fresh `ProactiveLoop` instance starts with `_cycle_n = 0`.
         First increment lands at 1; the modulo gate fires on 1, 6,
         11, ..."""
-        from agent.proactive import ProactiveLoop
+        from agent.cognition.proactive.loop import ProactiveLoop
         from unittest.mock import MagicMock
         assert ProactiveLoop(runtime=MagicMock())._cycle_n == 0

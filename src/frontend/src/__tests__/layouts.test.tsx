@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { BrowserRouter } from 'react-router-dom';
 import { useSystemStore } from '../stores/systemStore';
+import { useUIStore } from '../stores/uiStore';
 import { SystemState } from '@shared/types';
 
 // Mock framer-motion to avoid animation issues in tests
@@ -142,6 +143,12 @@ describe('ShadowLayout', () => {
       authenticated: true,
       wsConnected: true,
       stateHistory: [],
+    });
+    // OperatorLayout v3 chrome-collapse — temp/bpm chips only render in the
+    // full StatusBar layout. Expand chrome so the existing assertions still
+    // see them.
+    useUIStore.setState({
+      chrome: { statusBar: false, roster: false, hud: false, toolbar: false },
     });
   });
 

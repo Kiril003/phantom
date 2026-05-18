@@ -27,7 +27,7 @@
 │  │  ┌────┴─────┐    ┌─────┴──────┐   ┌──────────────┐  │    │
 │  │  │ Sensors  │    │  AI Core   │   │   Memory     │  │    │
 │  │  │ Bridge   │    │ Gemini/    │   │ Session/     │  │    │
-│  │  │ (Serial) │    │ Gemma 4    │   │ Tactical/    │  │    │
+│  │  │ (Serial) │    │ Ollama     │   │ Tactical/    │  │    │
 │  │  └────┬─────┘    └────────────┘   │ Strategic/   │  │    │
 │  │       │                            │ Archive      │  │    │
 │  │       │          ┌──────────────┐  └──────────────┘  │    │
@@ -82,7 +82,7 @@ User input (voice / touch / encoder)
       - memory retrieval (ChromaDB top-5 relevant)
       - behavioral_model (tone adaptation)
       - user message
-  → ai/provider.py → Gemini API (timeout 5s) || Ollama Gemma 4
+  → ai/provider.py → configured Gemini model || Ollama fallback
   → response_formatter.py → AI вибирає форму (text/chart/map/terminal/mixed)
   → WebSocket push → frontend renders
   → memory записує interaction
@@ -94,11 +94,11 @@ Microphone (always listening in DIALOGUE state)
   → wake_word.py → hotword detected?
     YES → voice_pipeline.py activates
       → Vosk streaming (instant partial results → UI)
-      → faster-whisper (final accurate transcript, ~1-2s)
-      → якщо розбіжність > threshold → whisper wins
+      → faster-whisper / NPU Whisper refinement where configured
+      → якщо розбіжність > threshold → refined transcript wins
       → transcript → routes_chat.py (як текстовий input)
   → AI response text
-    → tts_engine.py → StyleTTS2 Ukrainian
+    → tts_engine.py → Piper voice (StyleTTS2 is future work)
     → audio stream → speaker
     → анімація аватару синхронізується з аудіо
 ```

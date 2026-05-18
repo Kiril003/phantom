@@ -13,7 +13,7 @@ source of truth for tool behavior; this test file verifies:
 * per-tool behavior remains correct end-to-end, asserted through the
   dispatcher (so the integration with the consolidated executor is
   guarded against regressions)
-* config defaults stay safe (flag off, limits sane)
+* config defaults stay concept-aligned (chat grounding on, limits sane)
 
 Tool-shape assertions live in test_phase10_tool_use.py — the canonical
 home for ``tool_executor`` behavior. We don't duplicate them here.
@@ -67,17 +67,15 @@ class TestSupportedToolsContract:
             "get_sensor_status",
         }.issubset(names)
 
-    def test_deferred_tools_not_advertised(self):
+    def test_mutating_tools_are_now_available_but_policy_gated(self):
         from ai.chat_tool_dispatcher import supported_tools
 
         names = set(supported_tools())
-        # Until the Tier C hardening lands these stay deferred — the
-        # dispatcher's catalog is the choke point keeping them away
-        # from the LLM's tool list, regardless of whether tool_executor
-        # itself implements them.
-        assert "search_web" not in names
-        assert "create_calendar_event" not in names
-        assert "get_calendar_events" not in names
+        # The Sentient Familiar concept expects PHANTOM to be capable of
+        # acting, while the tactical/proactive planners decide when to ask.
+        assert "search_web" in names
+        assert "create_calendar_event" in names
+        assert "get_calendar_events" in names
 
 
 # ── Day-2 H-5 — delegation + drift contract ───────────────────────────────────
@@ -428,9 +426,16 @@ class TestGetSensorStatusThroughDispatcher:
 
 
 class TestPhase17aConfigDefaults:
-    def test_chat_tools_enabled_default_off(self):
+    def test_chat_tools_enabled_default_off_for_plain_chat(self):
         from config import PhantomConfig
         assert PhantomConfig.model_fields["chat_tools_enabled"].default is False
+
+    def test_chat_response_widgets_default_off(self):
+        from config import PhantomConfig
+        assert (
+            PhantomConfig.model_fields["chat_response_widgets_enabled"].default
+            is False
+        )
 
     def test_locationhistory_limit_default_reasonable(self):
         from config import PhantomConfig

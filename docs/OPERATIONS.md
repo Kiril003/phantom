@@ -298,11 +298,18 @@ twelve Tier-A items closed in the seven Block-O commits; Phase 17b
 ships with the four TM-17B Critical mitigations in
 `ai/chat_pipeline.py`.
 
-### Phase 17b — chat tool-use, opt-in
+### Phase 17b — chat tool-use
 
-Set `chat_tools_enabled = true` (Settings → Чат → Chat tool-use)
-to enable the bounded loop. Default is OFF — the existing v0.18.x
-chat path is untouched until you flip the knob.
+`chat_tools_enabled` defaults to `false`: ordinary chat is text-first
+and uses the memory/context already hydrated into the prompt. Operators
+can set `chat_tools_enabled = true` (Settings → Chat → Chat tool-use)
+when they want an extra bounded read-only grounding pass through memory,
+location, sensor, and system tools.
+
+Rich response widgets are controlled separately by
+`chat_response_widgets_enabled`, and arbitrary HTML artifacts also
+require `chat_artifacts_enabled`. Both default to `false` so unfinished
+cards/maps/artifacts cannot interrupt normal conversation.
 
 When enabled, `routes_chat._build_ai_response` routes through
 `ai.chat_pipeline.run`:
@@ -337,7 +344,8 @@ via `PHANTOM_ALLOW_MULTI_TENANT_PREVIEW=1`.
 
 | Key | Default | Purpose |
 |---|---|---|
-| `chat_tools_enabled` | `false` | Master flag for Phase 17b chat tool-use loop. |
+| `chat_tools_enabled` | `false` | Master flag for bounded read-only chat grounding. Enable only when a deployment wants tool-backed chat turns. |
+| `chat_response_widgets_enabled` | `false` | Enables model-selected chart/map/metric/code/artifact response surfaces. |
 | `chat_tool_max_calls_per_turn` | `4` | Tool dispatch budget per chat turn (Q-1 single-call scope; future plural-call call_with_tools will respect this). |
 | `security_trust_xff` | `false` | Trust `X-Forwarded-For` for IP-key lockout. Flip on when behind a reverse proxy that strips/replaces XFF. |
 | `security_trusted_proxies` | `["127.0.0.1", "::1", "localhost"]` | Allowlist of immediate-peer hosts whose XFF the daemon parses. |

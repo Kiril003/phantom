@@ -300,7 +300,7 @@ class TestProcessChatMessageForPlaces:
                 self.pushed.append(t)
 
         fake_loop = _FakeLoop()
-        monkeypatch.setattr("agent.proactive.get_loop", lambda: fake_loop)
+        monkeypatch.setattr("agent.cognition.proactive.loop.get_loop", lambda: fake_loop)
 
         reset_region_memory()
         reset_extractor()

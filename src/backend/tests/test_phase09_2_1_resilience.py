@@ -276,7 +276,7 @@ class TestRouterCoolingState:
 
 class TestSelectorBias:
     def test_selector_no_match_adds_hint_to_observation(self):
-        from agent.observations import build_from_action_result
+        from agent.cognition.observations import build_from_action_result
         from agent.schemas import (ActionResult, InnerMonologue, PlanStep)
         step = PlanStep(
             step_idx=3, sub_goal_id=None, action="browser.extract",
@@ -295,7 +295,7 @@ class TestSelectorBias:
         assert "browser.click_by_description" in obs.content
 
     def test_tactical_prompt_contains_recovery_patterns(self):
-        from agent.planner.tactical import _SYSTEM_PROMPT_UA
+        from agent.cognition.planner.tactical import _SYSTEM_PROMPT_UA
         assert "ПАТЕРНИ ВІДНОВЛЕННЯ" in _SYSTEM_PROMPT_UA
         assert "browser.click_by_description" in _SYSTEM_PROMPT_UA
         assert "DONE_SUBGOAL" in _SYSTEM_PROMPT_UA
@@ -308,7 +308,7 @@ class TestSelectorBias:
 
 class TestRepeatActionDetection:
     def test_canonical_args_key_is_case_and_timestamp_insensitive(self):
-        from agent.loop import _canonical_args_key
+        from agent.kernel.loop import _canonical_args_key
         a = _canonical_args_key("browser.extract", {"selector": "div.main-temp"})
         b = _canonical_args_key("browser.extract", {"selector": "DIV.MAIN-TEMP"})
         c = _canonical_args_key(
@@ -329,8 +329,8 @@ class TestRepeatActionDetection:
 class TestCallBudget:
     @pytest.mark.asyncio
     async def test_warn_event_fires_once_at_threshold(self, isolated_db, monkeypatch):
-        from agent import runtime as _rt_mod
-        from agent.runtime import AgentRuntime, TaskState
+        from agent.kernel import runtime as _rt_mod
+        from agent.kernel.runtime import AgentRuntime, TaskState
         from agent.schemas import SelfModel
         rt = AgentRuntime()
         rt.foreground_slot = TaskState(
@@ -356,8 +356,8 @@ class TestCallBudget:
 
     @pytest.mark.asyncio
     async def test_hard_cap_returns_false_after_reaching_limit(self, isolated_db, monkeypatch):
-        from agent import runtime as _rt_mod
-        from agent.runtime import AgentRuntime, TaskState
+        from agent.kernel import runtime as _rt_mod
+        from agent.kernel.runtime import AgentRuntime, TaskState
         from agent.schemas import SelfModel
         rt = AgentRuntime()
         rt.foreground_slot = TaskState(
@@ -408,7 +408,7 @@ class TestMinIntervalEnforcement:
 class TestBlockedQuotaStatus:
     @pytest.mark.asyncio
     async def test_tactical_raises_blocked_quota_on_quota_exhausted(self, isolated_db, monkeypatch):
-        from agent.planner import tactical, _llm
+        from agent.cognition.planner import tactical, _llm
         from agent.schemas import SelfModel, SubGoal
         from ai.tool_use import ToolErrorKind, ToolUseError
 

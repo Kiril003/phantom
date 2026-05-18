@@ -2,11 +2,14 @@ import { useEffect, useMemo, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useSystemStore } from '../../stores/systemStore';
 import { useAuthStore } from '../../stores/authStore';
-import { useFaceStore } from '../../stores/faceStore';
 import { useAgentStore } from '../../stores/agentStore';
 import { agentApi } from '../../services/agentApi';
 import { SystemState } from '@shared/types';
 import { OledEyePreview } from './OledEyePreview';
+import { ChromeHandle } from './ChromeHandle';
+import { useChromeCollapse } from '../../hooks/useChromeCollapse';
+
+import { useSettingsStore } from '../../stores/settingsStore';
 
 /**
  * StatusBar (sunrise build).
@@ -90,13 +93,15 @@ export function StatusBar() {
   // expected" the first time GHOST mounted.
   const routerState = useRouterStatePolled();
 
+  const currentTheme = useSettingsStore((s) => s.getActiveTheme());
+  const isPro = currentTheme === 'pro-console';
+
   if (state === SystemState.GHOST || state === SystemState.DREAM) return null;
 
   const bpm = context?.body.breathing_bpm;
   const tempC = context?.env.temp_c;
   const cpu = context?.system.cpu_percent;
   const ram = context?.system.ram_percent;
-  const disk = context?.system.disk_percent;
   const provider = context?.system.ai_provider ?? '—';
 
   // ESP32 tri-state from /health polling; fall back to "online" once we see
@@ -113,32 +118,103 @@ export function StatusBar() {
 
   const tone = stateTone(state);
   const operatorName = user?.username ?? 'guest';
-  const operatorRole = user?.role ?? 'GUEST';
+
+  const [collapsed, toggleCollapsed] = useChromeCollapse('statusBar');
+
+  if (collapsed) {
+    return (
+      <div
+        data-testid="status-bar"
+        data-compact="true"
+        className={`${isPro ? 'bg-black border-b border-white/5' : 'glass'} w-[1024px] flex items-center shrink-0 relative`}
+        style={{
+          height: 24,
+          padding: '0 10px',
+          gap: 8,
+          borderRadius: 0,
+          borderLeft: 'none',
+          borderRight: 'none',
+          borderTop: 'none',
+          opacity: 'var(--ui-opacity)',
+        }}
+      >
+        <span
+          className={`status-pill ${tone === 'coral' ? 'coral' : tone === 'green' ? 'green' : ''} ${isPro ? 'rounded-none' : ''}`}
+          style={{ height: 18, fontSize: 9, padding: '1px 6px' }}
+          title={`State: ${STATE_LABELS[state]}`}
+        >
+          <span className="dot" aria-hidden />
+          {STATE_LABELS[state].toUpperCase()}
+        </span>
+        <span
+          className="tabular"
+          style={{
+            fontFamily: 'var(--font-mono)',
+            fontSize: 12,
+            fontWeight: 600,
+            color: 'var(--ink-primary)',
+          }}
+        >
+          {timeStr}
+        </span>
+        <span style={{ flex: 1 }} />
+        <ConnectivityIcon
+          ok={!!context?.system.wifi_connected}
+          iconOn="wifi"
+          iconOff="wifi_off"
+          label="WiFi"
+        />
+        <ConnectivityIcon
+          ok={!!context?.system.internet_available}
+          iconOn="cloud_done"
+          iconOff="cloud_off"
+          label="Internet"
+        />
+        <span
+          aria-hidden
+          title={wsConnected ? 'Realtime connected' : 'Realtime offline'}
+          style={{
+            width: 6,
+            height: 6,
+            borderRadius: 999,
+            background: wsConnected ? 'var(--signal-ok)' : 'var(--signal-alert)',
+            boxShadow: (wsConnected && !isPro)
+              ? '0 0 6px var(--signal-ok)'
+              : 'none',
+          }}
+        />
+        <ChromeHandle
+          position="top"
+          collapsed={true}
+          onToggle={toggleCollapsed}
+          label="StatusBar"
+        />
+      </div>
+    );
+  }
 
   return (
     <div
       data-testid="status-bar"
-      className="glass w-[1024px] flex items-center shrink-0 relative"
+      className={`${isPro ? 'bg-black border-b border-white/5' : 'glass'} w-[1024px] flex items-center shrink-0 relative`}
       style={{
         height: 'var(--status-bar-h)',
         padding: '0 14px',
         gap: 10,
         borderRadius: 0,
-        // Override .glass border-radius: the status-bar is a flush strip at top.
         borderLeft: 'none',
         borderRight: 'none',
         borderTop: 'none',
         opacity: 'var(--ui-opacity)',
       }}
     >
-      {/* ── State pill ──────────────────────────────────────────────── */}
       <span
-        className={`status-pill ${tone === 'coral' ? 'coral' : tone === 'green' ? 'green' : ''}`}
+        className={`status-pill ${tone === 'coral' ? 'coral' : tone === 'green' ? 'green' : ''} ${isPro ? 'rounded-none border border-white/10' : ''}`}
         style={{ height: 26 }}
         title={`State: ${STATE_LABELS[state]}`}
       >
         <span className="dot" aria-hidden />
-        {STATE_LABELS[state]}
+        {STATE_LABELS[state].toUpperCase()}
       </span>
 
       <Divider />
@@ -154,76 +230,51 @@ export function StatusBar() {
           style={{
             width: 22,
             height: 22,
-            borderRadius: 999,
-            background: 'linear-gradient(135deg,#f4af25,#fb923c)',
-            boxShadow:
-              'inset 0 0 0 1px rgba(255,255,255,0.55), 0 0 8px rgba(244,175,37,0.35)',
+            borderRadius: isPro ? 2 : 999,
+            background: isPro ? 'var(--ink-faint)' : 'linear-gradient(135deg,#f4af25,#fb923c)',
+            boxShadow: isPro ? 'none' : 'inset 0 0 0 1px rgba(255,255,255,0.55), 0 0 8px rgba(244,175,37,0.35)',
+            border: isPro ? '1px solid var(--white/10)' : 'none'
           }}
         />
         <span
           style={{
-            fontFamily: 'var(--font-display)',
+            fontFamily: 'var(--font-mono)',
             fontSize: 12,
             fontWeight: 600,
             color: 'var(--ink-primary)',
           }}
         >
-          {operatorName}
-        </span>
-        <span
-          style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 10,
-            fontWeight: 700,
-            letterSpacing: '0.16em',
-            textTransform: 'uppercase',
-            color: 'var(--ink-muted)',
-          }}
-        >
-          · {operatorRole}
+          {operatorName.toUpperCase()}
         </span>
       </span>
 
       <Divider />
 
-      {/* ── Sensor chips ────────────────────────────────────────────── */}
       <SensorChip
         icon="favorite"
         value={bpm != null ? `${bpm}` : '—'}
         unit="bpm"
-        accent="#b07a10"
-        title={bpm != null ? `Heart rate: ${bpm} bpm` : 'Heart rate not available'}
+        accent={isPro ? 'var(--primary)' : "#b07a10"}
       />
       <SensorChip
         icon="device_thermostat"
         value={tempC != null ? tempC.toFixed(1) : '—'}
         unit="°C"
-        accent="#b07a10"
-        title={tempC != null ? `Ambient ${tempC.toFixed(1)} °C` : 'Temperature offline'}
+        accent={isPro ? 'var(--primary)' : "#b07a10"}
       />
       <SensorChip
         icon="memory"
         value={ram != null ? `${Math.round(ram)}` : '—'}
         unit="%"
         accent={pctTone(ram)}
-        title={`RAM ${ram != null ? Math.round(ram) + '%' : 'unknown'}`}
       />
       <SensorChip
         icon="developer_board"
         value={cpu != null ? `${Math.round(cpu)}` : '—'}
         unit="%"
         accent={pctTone(cpu)}
-        title={`CPU ${cpu != null ? Math.round(cpu) + '%' : 'unknown'}`}
-      />
-      <SensorChip
-        icon="storage"
-        value={disk != null ? `${Math.round(disk)}` : '—'}
-        unit="%"
-        accent={pctTone(disk)}
-        title={`Disk ${disk != null ? Math.round(disk) + '%' : 'unknown'}`}
       />
 
-      {/* ESP32 tri-state pill: only render if known. */}
       {esp32Effective !== 'unknown' && (
         <>
           <Divider />
@@ -232,68 +283,46 @@ export function StatusBar() {
       )}
 
       <Divider />
-
-      {/* ── Provider status ─────────────────────────────────────────── */}
       <ProviderBadge provider={provider} routerState={routerState} />
-
       <Divider />
-
-      {/* ── Proactive breathing dot ─────────────────────────────────── */}
       <ProactiveIndicator />
-
-      {/* ── Background-track badge (only when activity) ─────────────── */}
       <BackgroundTrackSection />
-
-      {/* ── Face recognition chip ───────────────────────────────────── */}
-      <FaceChip />
-
-      {/* ── OLED eye preview (mirrors hardware face animator) ───────── */}
       <OledEyePreview />
 
       <span style={{ flex: 1 }} />
 
-      {/* ── Connectivity dots ───────────────────────────────────────── */}
-      <ConnectivityIcon
-        ok={!!context?.system.wifi_connected}
-        iconOn="wifi"
-        iconOff="wifi_off"
-        label="WiFi"
-      />
-      <ConnectivityIcon
-        ok={!!context?.system.internet_available}
-        iconOn="cloud_done"
-        iconOff="cloud_off"
-        label="Internet"
-      />
+      <ConnectivityIcon ok={!!context?.system.wifi_connected} iconOn="wifi" iconOff="wifi_off" label="WiFi" />
+      <ConnectivityIcon ok={!!context?.system.internet_available} iconOn="cloud_done" iconOff="cloud_off" label="Internet" />
       <span
         aria-hidden
-        title={wsConnected ? 'Realtime connected' : 'Realtime offline'}
         style={{
           width: 7,
           height: 7,
           borderRadius: 999,
           background: wsConnected ? 'var(--signal-ok)' : 'var(--signal-alert)',
-          boxShadow: wsConnected
-            ? '0 0 8px var(--signal-ok)'
-            : '0 0 6px var(--signal-alert)',
         }}
       />
 
       <Divider />
 
-      {/* ── Clock — large tabular ───────────────────────────────────── */}
       <span
         className="tabular"
         style={{
           fontFamily: 'var(--font-mono)',
-          fontSize: 16,
+          fontSize: 14,
           fontWeight: 600,
-          letterSpacing: '0.02em',
           color: 'var(--ink-primary)',
         }}
       >
         {timeStr}
       </span>
+      <ChromeHandle
+        position="top"
+        collapsed={false}
+        onToggle={toggleCollapsed}
+        label="StatusBar"
+        style={{ marginLeft: 4 }}
+      />
     </div>
   );
 }
@@ -397,62 +426,6 @@ function Esp32Pill({ status }: { status: 'disabled' | 'offline' | 'online' }) {
       <span className="dot" aria-hidden />
       {label}
     </span>
-  );
-}
-
-function FaceChip() {
-  const recognized = useFaceStore((s) => s.recognized);
-  const unknownSince = useFaceStore((s) => s.unknownSince);
-  const detection = useFaceStore((s) => s.lastDetection);
-
-  // Render only when something has been seen recently — otherwise the chip
-  // flickers every time the detector loses track for a frame.
-  const active = !!detection || !!recognized || !!unknownSince;
-  if (!active) return null;
-
-  const matched = !!recognized;
-  const color = matched
-    ? 'var(--signal-ok)'
-    : unknownSince
-      ? 'var(--signal-warn)'
-      : 'var(--ink-muted)';
-  const label = matched
-    ? recognized.username
-    : unknownSince
-      ? 'Unknown'
-      : 'Scanning';
-
-  return (
-    <>
-      <Divider />
-      <span
-        className="inline-flex items-center"
-        style={{
-          gap: 6,
-          padding: '0 8px',
-          height: 22,
-          borderRadius: 999,
-          background: `color-mix(in srgb, ${color} 14%, transparent)`,
-          border: `1px solid color-mix(in srgb, ${color} 40%, transparent)`,
-          color,
-          fontFamily: 'var(--font-display)',
-          fontSize: 10,
-          letterSpacing: '0.12em',
-          textTransform: 'uppercase',
-          fontWeight: 700,
-        }}
-        title={
-          matched
-            ? `Recognized ${recognized.username} at ${(recognized.confidence * 100).toFixed(0)}%`
-            : unknownSince
-              ? 'Face detected but no enrolled user matched'
-              : 'Face detector online'
-        }
-      >
-        <MSym name={matched ? 'face_6' : 'face'} size={12} fill={matched ? 1 : 0} color={color} />
-        {label}
-      </span>
-    </>
   );
 }
 

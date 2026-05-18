@@ -2,7 +2,7 @@
 Phase 17a.5 — AskUser action.
 
 Builds an `InfoNeed`, broadcasts it on the WS, and `await`s the operator's
-reply through `agent.needs.info_need_registry`. The action's `execute()` blocks
+reply through `agent.cognition.will.needs.info_need_registry`. The action's `execute()` blocks
 until the user responds (or the task is cancelled / paused). The runtime
 already supports `pause_event` so this doesn't introduce a new pause mechanism.
 
@@ -31,7 +31,7 @@ from typing import Any, ClassVar
 
 from pydantic import Field
 
-from ..needs import (
+from ..cognition.will.needs import (
     info_need_registry,
     resolve_information_need,
     validate_response,
@@ -214,17 +214,19 @@ class AskUser(Action):
         """
         async def _lookup(info_need: InfoNeed) -> str | None:
             try:
-                from memory.strategic_memory import retrieve_relevant
+                from memory.brain import memory_brain
             except Exception:
                 return None
             try:
-                hits = await retrieve_relevant(
+                hits = await memory_brain.recall_for_prompt(
+                    db=None,
                     user_id=user_id,
                     query=info_need.question[:240],
-                    top_k=5,
+                    limit=5,
+                    include_agent=False,
                 )
             except Exception as exc:
-                logger.debug("strategic_memory lookup failed: %s", exc)
+                logger.debug("memory brain lookup failed: %s", exc)
                 return None
             if not hits:
                 return None

@@ -11,7 +11,8 @@ type Block =
   | { kind: 'blockquote'; text: string }
   | { kind: 'pre'; code: string; lang?: string }
   | { kind: 'p'; text: string }
-  | { kind: 'hr' };
+  | { kind: 'hr' }
+  | { kind: 'table'; headers: string[]; rows: string[][] };
 
 function parseMarkdown(src: string): Block[] {
   const lines = src.replace(/\r\n/g, '\n').split('\n');
@@ -45,6 +46,22 @@ function parseMarkdown(src: string): Block[] {
     if (/^(-{3,}|_{3,}|\*{3,})$/.test(trimmed)) {
       blocks.push({ kind: 'hr' });
       i++;
+      continue;
+    }
+
+    // Table
+    if (trimmed.startsWith('|') && i + 1 < lines.length && lines[i+1].trim().includes('---')) {
+      const parseRow = (row: string) => 
+        row.trim().split('|').filter((_, idx, arr) => idx > 0 && idx < arr.length - 1).map(c => c.trim());
+      
+      const headers = parseRow(line);
+      i += 2; // Skip header and separator
+      const rows: string[][] = [];
+      while (i < lines.length && lines[i].trim().startsWith('|')) {
+        rows.push(parseRow(lines[i]));
+        i++;
+      }
+      blocks.push({ kind: 'table', headers, rows });
       continue;
     }
 
@@ -100,7 +117,8 @@ function parseMarkdown(src: string): Block[] {
       !/^```/.test(lines[i].trim()) &&
       !/^>\s?/.test(lines[i].trim()) &&
       !/^[-*+]\s+/.test(lines[i].trim()) &&
-      !/^\d+\.\s+/.test(lines[i].trim())
+      !/^\d+\.\s+/.test(lines[i].trim()) &&
+      !lines[i].trim().startsWith('|')
     ) {
       paraLines.push(lines[i]);
       i++;
@@ -268,6 +286,33 @@ export function MarkdownResponse({ content }: MarkdownResponseProps) {
               >
                 {block.code}
               </pre>
+            );
+          case 'table':
+            return (
+              <div key={idx} className="overflow-x-auto my-2">
+                <table className="w-full text-left border-collapse" style={{ fontSize: 'var(--fs-sm)' }}>
+                  <thead>
+                    <tr>
+                      {block.headers.map((h, i) => (
+                        <th key={i} className="p-2 border-b" style={{ borderColor: 'var(--line-subtle)', color: 'var(--ink-secondary)', fontWeight: 600 }}>
+                          {renderInline(h, i * 100)}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {block.rows.map((row, i) => (
+                      <tr key={i} className="border-b last:border-b-0" style={{ borderColor: 'var(--line-subtle)' }}>
+                        {row.map((cell, j) => (
+                          <td key={j} className="p-2" style={{ color: 'var(--ink-primary)' }}>
+                            {renderInline(cell, i * 1000 + j * 100)}
+                          </td>
+                        ))}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             );
           case 'p':
           default:

@@ -68,7 +68,7 @@ class _CountingProvider:
 @pytest_asyncio.fixture
 async def fresh_runtime(monkeypatch):
     """Build a fresh AgentRuntime with a known task_id slot."""
-    from agent.runtime import AgentRuntime, TaskState
+    from agent.kernel.runtime import AgentRuntime, TaskState
     from agent.schemas import SelfModel
 
     rt = AgentRuntime()
@@ -86,7 +86,7 @@ async def fresh_runtime(monkeypatch):
 
     monkeypatch.setattr(rt, "_broadcast", fake_broadcast)
     # Re-bind the singleton so ai.provider's _runtime_note_llm_call sees this rt.
-    import agent.runtime as _rt_mod
+    import agent.kernel.runtime as _rt_mod
     monkeypatch.setattr(_rt_mod, "agent_runtime", rt)
     yield rt, broadcasts
 
@@ -102,7 +102,7 @@ class TestBudgetThreadThrough:
         self, isolated_db, fresh_runtime, monkeypatch
     ):
         """Tactical.plan called with task_id increments runtime counter via router."""
-        from agent.planner import tactical
+        from agent.cognition.planner import tactical
         from agent.schemas import SelfModel, SubGoal
         from ai import provider as _provider_mod
 
@@ -135,9 +135,9 @@ class TestBudgetThreadThrough:
         self, isolated_db, fresh_runtime, monkeypatch
     ):
         """With cap=3, the 4th tactical.plan call must surface call_budget_exhausted."""
-        from agent.planner import tactical
-        from agent import runtime as _rt_mod
-        from agent.planner._llm import PlannerLLMError
+        from agent.cognition.planner import tactical
+        from agent.kernel import runtime as _rt_mod
+        from agent.cognition.planner._llm import PlannerLLMError
         from agent.schemas import SelfModel, SubGoal
         from ai import provider as _provider_mod
 
@@ -187,8 +187,8 @@ class TestBudgetThreadThrough:
         self, isolated_db, fresh_runtime, monkeypatch
     ):
         """Crossing warn threshold emits agent.budget.warning exactly once."""
-        from agent.planner import tactical
-        from agent import runtime as _rt_mod
+        from agent.cognition.planner import tactical
+        from agent.kernel import runtime as _rt_mod
         from agent.schemas import SelfModel, SubGoal
         from ai import provider as _provider_mod
 
@@ -246,7 +246,7 @@ class TestBudgetThreadThrough:
         now lives on the impl."""
         import inspect
 
-        from agent import loop
+        from agent.kernel import loop
 
         src = inspect.getsource(loop._run_task_loop_impl)
         assert "task_id=state.id" in src, (

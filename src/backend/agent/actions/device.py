@@ -22,7 +22,7 @@ from typing import Any, ClassVar
 
 from pydantic import Field
 
-from ..long_running import LongRunningSpec
+from ..kernel.long_running import LongRunningSpec
 from ..schemas import ActionResult, Precondition, RiskLevel
 from .base import Action, ActionContext
 
@@ -325,11 +325,24 @@ class BlenderRun(Action):
     risk_level: ClassVar[RiskLevel] = RiskLevel.LOW
     reversible: ClassVar[bool] = False
 
+    # Block B — resource declarations.
+    # Blender with a city scene can peak at 4–12 GB; 4 GB is a safe floor.
+    estimated_peak_ram_mb: ClassVar[int] = 4096
+    estimated_disk_write_mb: ClassVar[int] = 500
+    # wall-seconds is derived from timeout_s via expected_peak_ram_mb() below.
+
     script_path: str = Field(min_length=1)
     blend_path: str | None = Field(default=None, description="optional .blend to open")
     output_path: str | None = Field(default=None, description="optional render output")
     timeout_s: int = Field(default=1800, ge=10, le=86400)
     args: list[str] = Field(default_factory=list)
+
+    def expected_peak_ram_mb(self) -> int:
+        """Block B — instance override: same floor as class default.
+        Heavy scenes can push higher; the class-level 4096 is already
+        conservative. Returns class default.
+        """
+        return type(self).estimated_peak_ram_mb
 
     def long_running_spec(self) -> LongRunningSpec | None:
         # Anything bigger than ~5 min — promote so the operator UI is freed.
@@ -346,6 +359,27 @@ class BlenderRun(Action):
         import asyncio
         import shutil
         import time
+
+        # Block A-1 — idempotency: if output_path already exists and its mtime
+        # is newer than the script_path mtime, the render is already fresh.
+        # Prevents re-rendering hours of frames after a crash restart.
+        if self.output_path and self.script_path:
+            try:
+                from ._idempotency import output_is_fresh
+                if output_is_fresh(self.output_path, self.script_path):
+                    return ActionResult(
+                        ok=True,
+                        output={
+                            "returncode": 0,
+                            "output_path": self.output_path,
+                            "skipped": "output_already_fresh",
+                        },
+                        elapsed_ms=0,
+                        side_effects=[],
+                    )
+            except Exception:
+                pass  # Idempotency check failure is non-fatal.
+
         if shutil.which("blender") is None:
             return ActionResult(
                 ok=False, error="blender binary not in PATH (install blender)",

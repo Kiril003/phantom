@@ -12,25 +12,52 @@ from ._common import MapArtifact, MapMutation, build_map_output
 
 
 class MapQueryNearby(Action):
-    """Combine OSM Overpass features + user-saved POIs in a radius."""
+    """Search for nearby places (cafes, pharmacies, etc.) around a point."""
 
     name: ClassVar[str] = "map.query_nearby"
     risk_level: ClassVar[RiskLevel] = RiskLevel.SAFE
     requires_consent: ClassVar[bool] = False
     reversible: ClassVar[bool] = True
 
-    lat: float = Field(..., ge=-90.0, le=90.0)
-    lon: float = Field(..., ge=-180.0, le=180.0)
+
+    lat: Optional[float] = Field(default=None, ge=-90.0, le=90.0)
+    lon: Optional[float] = Field(default=None, ge=-180.0, le=180.0)
     radius_m: int = Field(default=500, ge=10, le=5000)
+    query: Optional[str] = Field(default=None, description="Optional category to search (e.g., 'cafe', 'pharmacy', 'park', 'supermarket'). If omitted, returns general POIs.")
     user_id: Optional[str] = Field(default=None)
 
     async def execute(self, ctx: ActionContext) -> ActionResult:
         t0 = time.monotonic()
+        lat, lon = lat, lon
+        if lat is None or lon is None:
+            from agent.localization.resolver import get_resolver
+            resolver = get_resolver()
+            est = resolver.last_estimate()
+            if not est:
+                return ActionResult(ok=False, output={"narrative": "Локація невідома.", "reason": "missing_location", "error": "No location"}, side_effects=[], elapsed_ms=1)
+            lat, lon = est.lat, est.lon
+
         osm_features: list[dict[str, Any]] = []
         try:
             from agent.localization.adapters.overpass import get_default_overpass
             overpass = get_default_overpass()
-            features = await overpass.features_near(self.lat, self.lon, radius_m=self.radius_m)
+            feature_types = None
+            if self.query:
+                q = self.query.lower()
+                tags = []
+                if "cafe" in q or "каф" in q or "кав" in q: tags.append("amenity=cafe")
+                elif "restaurant" in q or "ресторан" in q or "їж" in q: tags.append("amenity=restaurant")
+                elif "pharmacy" in q or "аптек" in q: tags.append("amenity=pharmacy")
+                elif "hospital" in q or "лікарн" in q or "шпитал" in q: tags.append("amenity=hospital")
+                elif "bank" in q or "атм" in q or "atm" in q or "банк" in q: tags.append("amenity=bank")
+                elif "supermarket" in q or "магазин" in q or "shop" in q or "маркет" in q:
+                    tags.extend(["shop=supermarket", "shop=convenience"])
+                elif "park" in q or "парк" in q: tags.append("leisure=park")
+                else:
+                    tags.extend([f"amenity={q}", f"shop={q}"])
+                feature_types = tuple(tags)
+
+            features = await overpass.features_near(lat, lon, radius_m=self.radius_m, feature_types=feature_types)
             osm_features = [
                 {
                     "osm_id": f.osm_id,
@@ -57,7 +84,7 @@ class MapQueryNearby(Action):
                 async with async_session() as db:
                     res = await db.execute(select(MapPOI).where(MapPOI.user_id == owner))
                     for p in res.scalars().all():
-                        d_km = haversine_km(self.lat, self.lon, p.lat, p.lon)
+                        d_km = haversine_km(lat, lon, p.lat, p.lon)
                         if d_km * 1000.0 <= self.radius_m:
                             pois.append({
                                 "id": p.id,

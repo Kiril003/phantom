@@ -204,8 +204,8 @@ def _maybe_emit_region_transition(new_country: Optional[str]) -> Optional[tuple[
 
 def _emit_region_changed(from_country: str, to_country: str) -> None:
     try:
-        from agent.proactive import get_loop  # noqa: PLC0415
-        from agent.proactive_triggers import (  # noqa: PLC0415
+        from agent.cognition.proactive.loop import get_loop  # noqa: PLC0415
+        from agent.cognition.proactive.triggers import (  # noqa: PLC0415
             ProactiveTrigger,
             ProactiveTriggerKind,
         )

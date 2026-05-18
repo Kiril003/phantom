@@ -64,6 +64,74 @@ class User(Base):
     map_pois: Mapped[list["MapPOI"]] = relationship(
         "MapPOI", back_populates="user", cascade="all, delete-orphan"
     )
+    profiles: Mapped[list["Profile"]] = relationship(
+        "Profile", back_populates="user", cascade="all, delete-orphan"
+    )
+    agent_tasks: Mapped[list["AgentTask"]] = relationship(
+        "AgentTask", back_populates="user", cascade="all, delete-orphan"
+    )
+    agent_audit: Mapped[list["AgentAuditEntry"]] = relationship(
+        "AgentAuditEntry", back_populates="user", cascade="all, delete-orphan"
+    )
+    agent_checkpoints: Mapped[list["AgentCheckpoint"]] = relationship(
+        "AgentCheckpoint", back_populates="user", cascade="all, delete-orphan"
+    )
+    agent_memory_seeds: Mapped[list["AgentMemorySeed"]] = relationship(
+        "AgentMemorySeed", back_populates="user", cascade="all, delete-orphan"
+    )
+    agent_feedback: Mapped[list["AgentFeedback"]] = relationship(
+        "AgentFeedback", back_populates="user", cascade="all, delete-orphan"
+    )
+
+
+# ── Profiles (companion-v2 multi-identity) ─────────────────────────────────────
+#
+# Each User can carry several Profile rows — sub-identities used by the
+# companion-android v2 client to switch between operator personas without
+# re-authenticating. The desktop continues to talk to a single User (the
+# primary RBAC subject); the phone subscribes to a specific Profile so WS
+# broadcasts can be partitioned per-persona for users who share a single
+# device tree (family / roommates).
+#
+# Phase 1-B (companion-v2) adds:
+#   • this Profile table
+#   • PairedDevice.profile_id (nullable FK, SET NULL on delete) — every
+#     paired phone binds to one profile per pair claim
+#   • migrations/011_user_profiles.py — idempotent CREATE TABLE +
+#     ALTER COLUMN guarded by PRAGMA introspection + Primary backfill
+#
+# Why role lives on Profile instead of just User: the companion native v2
+# expects each profile to assert its own ROOT/OPERATOR/GUEST level so a
+# guest profile under a ROOT user cannot mint ROOT-only verbs. The User-
+# level role stays as the device-trust ceiling for the desktop login.
+
+class Profile(Base):
+    __tablename__ = "profiles"
+    __table_args__ = (
+        Index("ix_profiles_user", "user_id"),
+        UniqueConstraint(
+            "user_id", "display_name", name="uq_profiles_user_display_name"
+        ),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    display_name: Mapped[str] = mapped_column(String(64), nullable=False)
+    role: Mapped[str] = mapped_column(String(16), nullable=False, default="OPERATOR")
+    avatar_uri: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, default=_now, nullable=False
+    )
+    last_seen_at: Mapped[datetime] = mapped_column(
+        DateTime, default=_now, onupdate=_now, nullable=False
+    )
+    archived_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    is_primary: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    behavioral_model_json: Mapped[str] = mapped_column(Text, default="{}", nullable=False)
+
+    user: Mapped["User"] = relationship("User", back_populates="profiles")
 
 
 # ── Chat ───────────────────────────────────────────────────────────────────────
@@ -335,9 +403,13 @@ class GhostRecord(Base):
 
 class AgentTask(Base):
     __tablename__ = "agent_tasks"
+    __table_args__ = (Index("ix_agent_tasks_user", "user_id"),)
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
     goal: Mapped[str] = mapped_column(Text, nullable=False)
+
+    user: Mapped["User"] = relationship("User", back_populates="agent_tasks")
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="planning")
     track: Mapped[str] = mapped_column(String(16), nullable=False, default="foreground")
     sub_goals_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -348,13 +420,24 @@ class AgentTask(Base):
     paused_reason: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, index=True)
     finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # Block A-1 — full TaskState snapshot for crash recovery. When present,
+    # rehydrate_task() uses this in preference to the per-column blobs above.
+    # NULL on rows created before Block A-1 shipped; legacy fallback path in
+    # rehydrate.py reads the column blobs instead.
+    # Also carries the mission_id FK so rehydrate can skip a join.
+    runtime_snapshot_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    mission_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
 
 
 class AgentAuditEntry(Base):
     __tablename__ = "agent_audit"
+    __table_args__ = (Index("ix_agent_audit_user", "user_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
     task_id: Mapped[str] = mapped_column(String(36), index=True, nullable=False)
+
+    user: Mapped["User"] = relationship("User", back_populates="agent_audit")
     step_idx: Mapped[int] = mapped_column(Integer, nullable=False)
     sub_goal_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
     action_name: Mapped[str] = mapped_column(String(64), nullable=False)
@@ -370,9 +453,13 @@ class AgentAuditEntry(Base):
 
 class AgentCheckpoint(Base):
     __tablename__ = "agent_checkpoints"
+    __table_args__ = (Index("ix_agent_checkpoints_user", "user_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
     task_id: Mapped[str] = mapped_column(String(36), index=True, nullable=False)
+
+    user: Mapped["User"] = relationship("User", back_populates="agent_checkpoints")
     reason: Mapped[str] = mapped_column(String(32), nullable=False)
     payload_json: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
@@ -381,9 +468,13 @@ class AgentCheckpoint(Base):
 class AgentMemorySeed(Base):
     """Bridge to future episodic memory — SQL LIKE search this phase, ChromaDB later."""
     __tablename__ = "agent_memory_seeds"
+    __table_args__ = (Index("ix_agent_memory_seeds_user", "user_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
     task_id: Mapped[str] = mapped_column(String(36), nullable=False)
+
+    user: Mapped["User"] = relationship("User", back_populates="agent_memory_seeds")
     goal: Mapped[str] = mapped_column(Text, nullable=False)
     outcome: Mapped[str] = mapped_column(String(16), nullable=False)
     summary: Mapped[str] = mapped_column(Text, nullable=False)
@@ -393,8 +484,12 @@ class AgentMemorySeed(Base):
 
 class AgentFeedback(Base):
     __tablename__ = "agent_feedback"
+    __table_args__ = (Index("ix_agent_feedback_user", "user_id"),)
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False)
+
+    user: Mapped["User"] = relationship("User", back_populates="agent_feedback")
     audit_entry_id: Mapped[int] = mapped_column(Integer, index=True, nullable=False)
     rating: Mapped[str] = mapped_column(String(16), nullable=False)  # up | down | comment
     comment: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
@@ -512,6 +607,12 @@ class UserFact(Base):
     value_encrypted: Mapped[str] = mapped_column(Text, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
+    # V11 — operator trust gate: when True this fact is filtered out of all
+    # LLM/planner prompts but remains visible in IntelligenceHub for un-exclude.
+    # Migration: db/migrations/015_user_facts_exclude_flag.py
+    exclude_from_prompts: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False
+    )
 
 
 # ── Phase 17b — Agent Studio (CustomAgent / cards / runs) ────────────────────
@@ -594,6 +695,15 @@ class PairedDevice(Base):
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
     user_id: Mapped[str] = mapped_column(
         ForeignKey("users.id", ondelete="CASCADE"), nullable=False
+    )
+    # Phase 1-B (companion-v2) — per-Profile binding. NULL on legacy rows
+    # until the backfill pass runs (see migrations/011_user_profiles.py).
+    # FK uses SET NULL on profile delete so we never hard-delete a paired
+    # device row by surprise; revocation stays explicit.
+    profile_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("profiles.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
     )
     # Display
     device_name: Mapped[str] = mapped_column(String(128), nullable=False, default="")
@@ -738,34 +848,267 @@ class VaultCard(Base):
     )
 
 
+# ── Phase 25-B — Vault Audit Log ─────────────────────────────────────────────
+
+
 class VaultAuditEntry(Base):
-    """Phase 25-A — append-only log of every vault operation.
+    """Append-only audit trail for all vault card operations.
 
-    Tracks who/when/what so the operator can review AI access patterns,
-    detect unexpected reveals, and roll back accidental deletes within
-    the 30-day soft-delete window.
-
-    `actor` distinguishes operator-initiated actions from AI-initiated
-    ones — the FE renders the timeline with different glyphs so a sweep
-    of "what did the AI touch today?" is one filter away.
+    Populated by routes_vault._record_audit and tool_executor vault actions.
+    Actions: create, update, delete, restore, reveal, use.
+    actor: "user" | "ai" — who initiated the action.
+    details_json: arbitrary dict with action-specific context.
     """
-    __tablename__ = "vault_audit_entries"
+    __tablename__ = "vault_audit"
     __table_args__ = (
-        Index("ix_vault_audit_card", "card_id", "created_at"),
+        Index("ix_vault_audit_card", "card_id"),
         Index("ix_vault_audit_user_action", "user_id", "action"),
     )
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
-    user_id: Mapped[str] = mapped_column(String(36), nullable=False)
-    card_id: Mapped[Optional[str]] = mapped_column(
-        String(36), nullable=True, index=True
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
     )
-    # Closed enum — list / get / create / update / delete / restore /
-    # reveal / use. Stored as a string for forward compatibility with
-    # future verbs without a migration.
+    # card_id may be NULL for bulk/user-level audit rows
+    card_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
     action: Mapped[str] = mapped_column(String(32), nullable=False)
-    actor: Mapped[str] = mapped_column(String(16), nullable=False)  # user|ai
+    actor: Mapped[str] = mapped_column(String(16), nullable=False, default="user")
     details_json: Mapped[str] = mapped_column(Text, default="{}", nullable=False)
     created_at: Mapped[datetime] = mapped_column(
         DateTime, default=_now, nullable=False, index=True
+    )
+
+
+# ── Will Engine (Phase 28) ───────────────────────────────────────────────────
+
+
+class DriveState(Base):
+    """Persistent state of the 7 fundamental drives (Will Engine v1).
+    Curiosity, Mastery, Autonomy, Relatedness, Achievement, Security, Beauty.
+    """
+    __tablename__ = "drive_state"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    # The drive name (e.g. "curiosity")
+    name: Mapped[str] = mapped_column(String(32), unique=True, nullable=False)
+    current_level: Mapped[float] = mapped_column(Float, default=0.5)
+    baseline: Mapped[float] = mapped_column(Float, default=0.5)
+    decay_rate: Mapped[float] = mapped_column(Float, default=0.01)
+    pressure_rate: Mapped[float] = mapped_column(Float, default=0.01)
+    last_satisfied_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
+
+
+class PersistentGoal(Base):
+    """Multi-horizon goal stack (Vision/Year/Quarter/.../Action).
+    Persistent across sessions, priority-sorted by the Will Engine.
+    """
+    __tablename__ = "goals_persistent"
+    __table_args__ = (
+        Index("ix_goals_horizon", "horizon_level"),
+        Index("ix_goals_status", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), nullable=False, index=True)
+    parent_id: Mapped[Optional[str]] = mapped_column(
+        String(36), ForeignKey("goals_persistent.id"), nullable=True
+    )
+    # 0=Vision, 1=Year, 2=Quarter, 3=Month, 4=Week, 5=Day, 6=Action
+    horizon_level: Mapped[int] = mapped_column(Integer, default=6, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    owner_agent: Mapped[str] = mapped_column(String(64), nullable=False, default="CEO")  # CEO/CTO/etc
+    kpi: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
+    deadline: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    blockers_json: Mapped[str] = mapped_column(Text, default="[]")
+    # pending, running, done, failed, snoozed, cancelled
+    status: Mapped[str] = mapped_column(String(24), default="pending", nullable=False)
+    
+    # Priority components for the Will Engine heap
+    value_alignment: Mapped[float] = mapped_column(Float, default=1.0)
+    drive_pull: Mapped[float] = mapped_column(Float, default=1.0)
+    urgency: Mapped[float] = mapped_column(Float, default=0.5)
+    tractability: Mapped[float] = mapped_column(Float, default=0.5)
+    progress: Mapped[float] = mapped_column(Float, default=0.0) # 0..1 progress towards the goal
+
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, index=True)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    # Self-relation for parent/child goals
+    parent: Mapped[Optional["PersistentGoal"]] = relationship(
+        "PersistentGoal", remote_side=[id], backref="children"
+    )
+
+
+# ── Block C-1 — Mission + Phase (long-horizon planning substrate) ─────────────
+#
+# Three-tier hierarchy: Mission → Phase → SubGoal (existing).
+# Mission: the operator's prompt, durable, immutable after Phase 1 starts.
+# Phase: strategic decomposition into 5-15 ordered segments, each with its
+# own success_criteria and expected_duration_h. Re-planned only on explicit
+# operator revise. Sub-goals (existing SubGoal shape) live inside a Phase.
+#
+# Both tables use the same status enum string as AgentTask for consistency:
+#   "planning" | "running" | "paused" | "done" | "failed" | "abandoned"
+#
+# Every Mission gets a Markdown ledger at ledger_path — append-only, crash-
+# safe source-of-truth for the planner on restart.  See agent/missions/.
+
+
+class Mission(Base):
+    """Durable top-level mission container, one per operator prompt.
+
+    Immutable fields after creation: brief, success_criteria (frozen once
+    Phase 1 starts). All other fields may be updated by the mission store.
+    Per-user isolation is enforced by all CRUD helpers: every query is
+    scoped by user_id and any cross-user read raises PermissionError.
+    """
+    __tablename__ = "agent_missions"
+    __table_args__ = (
+        Index("ix_agent_missions_user_status", "user_id", "status"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    # The operator's original prompt — verbatim, never modified after create.
+    brief: Mapped[str] = mapped_column(Text, nullable=False)
+    # Free-text emitted by the strategic planner; frozen once first Phase runs.
+    success_criteria: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # Operator's "what good looks like" — qualitative bar, may be empty.
+    quality_bar: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # Optional wall-clock deadline for the mission.
+    deadline_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # JSON dict: e.g. {"max_usd": 20, "max_wall_hours": 72}. Nullable.
+    budget_constraints_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    # planning | running | paused | done | failed | abandoned
+    status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="planning"
+    )
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=_now
+    )
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    # Absolute filesystem path to the append-only Markdown ledger.
+    ledger_path: Mapped[str] = mapped_column(String(512), nullable=False, default="")
+
+    # Relations
+    phases: Mapped[list["Phase"]] = relationship(
+        "Phase", back_populates="mission", cascade="all, delete-orphan",
+        order_by="Phase.idx",
+    )
+
+
+class Phase(Base):
+    """One ordered segment of a Mission.
+
+    idx is 0-based and unique within a mission — enforced by the UniqueConstraint.
+    status mirrors Mission.status values. artifacts_json stores declared output
+    files: [{"path": "...", "kind": "file|blend|render|...", "produced": false}].
+    The produced flag is flipped by mark_artifact_produced() once the file lands.
+    """
+    __tablename__ = "agent_phases"
+    __table_args__ = (
+        Index("ix_agent_phases_mission_idx", "mission_id", "idx"),
+        UniqueConstraint("mission_id", "idx", name="uq_agent_phases_mission_idx"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    mission_id: Mapped[str] = mapped_column(
+        ForeignKey("agent_missions.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    # 0-based ordering within the mission; unique per mission (UniqueConstraint above).
+    idx: Mapped[int] = mapped_column(Integer, nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    rationale: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    success_criteria: Mapped[str] = mapped_column(Text, nullable=False, default="")
+    # Planner estimate in hours; 0.0 = unknown.
+    expected_duration_h: Mapped[float] = mapped_column(
+        Float, nullable=False, default=0.0
+    )
+    # planning | running | paused | done | failed | abandoned
+    status: Mapped[str] = mapped_column(
+        String(24), nullable=False, default="planning"
+    )
+    # JSON list of artifact descriptors: [{"path": str, "kind": str, "produced": bool}]
+    artifacts_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    started_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    finished_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+    # Relations
+    mission: Mapped["Mission"] = relationship("Mission", back_populates="phases")
+
+
+# ── V2 — Agent Chat Thread (conversational loop) ──────────────────────────────
+
+
+class AgentChatThread(Base):
+    """Persistent per-task conversation turns for the parallel chat channel.
+
+    One row per message (user or assistant). Loaded on every
+    POST /agent/chat to provide rolling context, persisted after the
+    assistant reply so history survives across drawer close/remount.
+    task_id is NOT a FK — it references agent_tasks.id but tasks may be
+    purged while chat threads should survive for post-task review.
+    """
+    __tablename__ = "agent_chat_threads"
+    __table_args__ = (
+        Index("ix_agent_chat_threads_task", "task_id"),
+        Index("ix_agent_chat_threads_task_created", "task_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    task_id: Mapped[str] = mapped_column(String(36), nullable=False)
+    role: Mapped[str] = mapped_column(String(16), nullable=False)  # user | assistant
+    content: Mapped[str] = mapped_column(Text, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, nullable=False)
+
+
+# ── Agent Roles (Phase 30 — Org-Chart) ────────────────────────────────────────
+
+class AgentRole(Base):
+    """A specialized sub-agent with defined responsibilities and constraints.
+    Persistent across sessions.
+    """
+    __tablename__ = "agent_roles"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    name: Mapped[str] = mapped_column(String(64), unique=True, nullable=False) # e.g. "CEO", "Developer"
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    standing_orders: Mapped[str] = mapped_column(Text, default="")
+    system_prompt_extension: Mapped[str] = mapped_column(Text, default="")
+    avatar_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+    # Relations
+    outbound_relations: Mapped[list["AgentRelation"]] = relationship(
+        "AgentRelation", foreign_keys="AgentRelation.source_role_id", back_populates="source_role"
+    )
+    inbound_relations: Mapped[list["AgentRelation"]] = relationship(
+        "AgentRelation", foreign_keys="AgentRelation.target_role_id", back_populates="target_role"
+    )
+
+
+class AgentRelation(Base):
+    """Defines trust and hierarchy between roles.
+    e.g. "CEO" -> "Developer" (COMMANDS)
+    """
+    __tablename__ = "agent_relations"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    source_role_id: Mapped[str] = mapped_column(ForeignKey("agent_roles.id"), nullable=False)
+    target_role_id: Mapped[str] = mapped_column(ForeignKey("agent_roles.id"), nullable=False)
+    relation_type: Mapped[str] = mapped_column(String(32), default="COMMANDS") # COMMANDS, AUDITS, ADVISES
+    trust_level: Mapped[float] = mapped_column(Float, default=1.0)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+    source_role: Mapped["AgentRole"] = relationship(
+        "AgentRole", foreign_keys=[source_role_id], back_populates="outbound_relations"
+    )
+    target_role: Mapped["AgentRole"] = relationship(
+        "AgentRole", foreign_keys=[target_role_id], back_populates="inbound_relations"
     )

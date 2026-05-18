@@ -48,8 +48,8 @@ class _OkProvider:
 class TestProbeTargetsPrimary:
     @pytest.mark.asyncio
     async def test_probe_calls_primary_not_fallback(self, monkeypatch):
-        from agent import runtime as _rt_mod
-        from agent.runtime import AgentRuntime
+        from agent.kernel import runtime as _rt_mod
+        from agent.kernel.runtime import AgentRuntime
         from ai.provider import ai_router
 
         # The repo .env may set primary=ollama; force gemini for the probe test.
@@ -70,8 +70,8 @@ class TestProbeTargetsPrimary:
 
     @pytest.mark.asyncio
     async def test_probe_returns_false_when_primary_quota_exhausted(self, monkeypatch):
-        from agent import runtime as _rt_mod
-        from agent.runtime import AgentRuntime
+        from agent.kernel import runtime as _rt_mod
+        from agent.kernel.runtime import AgentRuntime
         from ai.provider import ai_router
 
         monkeypatch.setattr(_rt_mod.config, "ai_primary_provider", "gemini")
@@ -90,8 +90,8 @@ class TestProbeTargetsPrimary:
     @pytest.mark.asyncio
     async def test_probe_returns_true_on_transient_network_error(self, monkeypatch):
         """Network hiccup during probe shouldn't leave the task locked forever."""
-        from agent import runtime as _rt_mod
-        from agent.runtime import AgentRuntime
+        from agent.kernel import runtime as _rt_mod
+        from agent.kernel.runtime import AgentRuntime
         from ai.provider import ai_router
 
         monkeypatch.setattr(_rt_mod.config, "ai_primary_provider", "gemini")
@@ -113,8 +113,8 @@ class TestProbeAdaptiveBackoff:
     @pytest.mark.asyncio
     async def test_backoff_kicks_in_after_three_failures(self, monkeypatch):
         """After 3 consecutive Falses, the probe interval grows."""
-        from agent import runtime as _rt_mod
-        from agent.runtime import AgentRuntime, TaskState
+        from agent.kernel import runtime as _rt_mod
+        from agent.kernel.runtime import AgentRuntime, TaskState
         from agent.schemas import SelfModel
 
         rt = AgentRuntime()
@@ -165,8 +165,8 @@ class TestProbeAdaptiveBackoff:
 
     @pytest.mark.asyncio
     async def test_backoff_capped_at_max(self, monkeypatch):
-        from agent import runtime as _rt_mod
-        from agent.runtime import AgentRuntime, TaskState
+        from agent.kernel import runtime as _rt_mod
+        from agent.kernel.runtime import AgentRuntime, TaskState
         from agent.schemas import SelfModel
 
         rt = AgentRuntime()

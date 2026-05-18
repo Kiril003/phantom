@@ -124,8 +124,8 @@ class TestRunnerEmits:
     async def test_zero_orders_still_emits_tick(self, monkeypatch):
         """Even with no orders configured, the tick payload fires once
         per cycle so operators see a heartbeat in /metrics + WS."""
-        from agent.standing_orders.runner import StandingOrderRunner
-        from agent.runtime import AgentRuntime
+        from agent.operations.standing_orders.runner import StandingOrderRunner
+        from agent.kernel.runtime import AgentRuntime
         from core import event_bus as ebmod
 
         captured: list[tuple[str, dict]] = []
@@ -157,24 +157,24 @@ class TestRunnerEmits:
 
         from sqlalchemy import delete
 
-        from agent.runtime import AgentRuntime
-        from agent.standing_orders.runner import StandingOrderRunner
+        from agent.kernel.runtime import AgentRuntime
+        from agent.operations.standing_orders.runner import StandingOrderRunner
         from core import event_bus as ebmod
         from db.database import get_session
         from db.models import StandingOrder
 
         # Force evaluate_condition to False so we hit the skip path
         # without computing real metrics.
-        from agent.standing_orders import conditions as cmod
+        from agent.operations.standing_orders import conditions as cmod
 
         async def _always_false(_: str) -> bool:
             return False
 
         monkeypatch.setattr(cmod, "evaluate_condition", _always_false)
-        # The runner imports evaluate_condition from agent.standing_orders.conditions
+        # The runner imports evaluate_condition from agent.operations.standing_orders.conditions
         # via `from .conditions import ...` — also patch the runner's
         # local reference so our stub is the one called.
-        from agent.standing_orders import runner as rmod
+        from agent.operations.standing_orders import runner as rmod
         monkeypatch.setattr(rmod, "evaluate_condition", _always_false)
 
         # Seed a conditional order. claimed_at NULL; check-and-fire

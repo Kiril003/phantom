@@ -57,18 +57,18 @@ class TestSceneKindForForm:
         assert scene_kind_for_form("code") == "code-preview"
         assert scene_kind_for_form("terminal") == "code-preview"
 
-    def test_metric_cards_maps_to_list(self):
+    def test_metric_cards_and_charts_and_diagrams(self):
         from ai.response_formatter import scene_kind_for_form
 
         assert scene_kind_for_form("metric_cards") == "list"
+        assert scene_kind_for_form("chart") == "chart"
+        assert scene_kind_for_form("diagram") == "diagram"
 
     def test_uncovered_forms_return_none(self):
-        """chart / diagram / mixed do NOT have preset coverage on
+        """mixed does NOT have preset coverage on
         Day-4. The legacy ResponseRenderer must keep rendering them."""
         from ai.response_formatter import scene_kind_for_form
 
-        assert scene_kind_for_form("chart") is None
-        assert scene_kind_for_form("diagram") is None
         assert scene_kind_for_form("mixed") is None
         assert scene_kind_for_form("garbage_unknown_form") is None
 
@@ -92,14 +92,11 @@ class TestEnvelopeShape:
         assert p0["id"] == "p1"
         assert data["reveal"] == {"policy": "sequential", "staggerMs": 80}
 
-    def test_uncovered_form_returns_none(self):
-        from ai.response_formatter import build_scene_envelope
-
-        # chart has no coverage → None even with a chart attachment.
+        # mixed has no coverage → None
         att = build_scene_envelope(
-            "chart",
-            "see graph",
-            [{"type": "chart_data", "data": {}}],
+            "mixed",
+            "hello",
+            [],
         )
         assert att is None
 
@@ -282,14 +279,10 @@ class TestBackCompatLegacyForms:
             },
         )
         assert form == "chart"
-        # Legacy chart_data attachment present, scene attachment ABSENT.
+        # Legacy chart_data attachment present, AND scene attachment present (Phase-28-A).
         types = [a.get("type") for a in attachments]
         assert "chart_data" in types
-        assert "scene" not in types, (
-            "W-2c regression: chart form must NOT promote to a scene. "
-            "Charts have no panel preset on Day-4 (D-1 in "
-            "DAY4_BACKLOG_EXTENSIONS.md)."
-        )
+        assert "scene" in types
 
     def test_diagram_form_does_not_produce_scene(self):
         from ai.response_formatter import parse_function_call
@@ -305,7 +298,7 @@ class TestBackCompatLegacyForms:
             },
         )
         assert form == "diagram"
-        assert all(a.get("type") != "scene" for a in attachments)
+        assert any(a.get("type") == "scene" for a in attachments)
 
     def test_mixed_form_does_not_produce_scene(self):
         from ai.response_formatter import parse_function_call

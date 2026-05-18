@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta, timezone
 
 from agent.schemas import EmotionVector, Relationship, SelfModel
-from agent.self_model import (
+from agent.cognition.self_model import (
     add_concern,
     decay_stale_concerns,
     get_or_create_relationship,
@@ -188,7 +188,7 @@ def test_planner_prompt_includes_concerns_and_successes():
     """tactical._build_user_message serializes the full SelfModel — new
     fields land in the JSON blob the LLM sees."""
     import json
-    from agent.planner.tactical import _build_user_message
+    from agent.cognition.planner.tactical import _build_user_message
     from agent.schemas import SelfModel, SubGoal
 
     sm = SelfModel(
@@ -217,7 +217,7 @@ def test_planner_prompt_includes_concerns_and_successes():
 
 def test_planner_prompt_includes_relationship_when_populated():
     import json
-    from agent.planner.tactical import _build_user_message
+    from agent.cognition.planner.tactical import _build_user_message
     from agent.schemas import SelfModel, SubGoal
 
     sm = SelfModel()

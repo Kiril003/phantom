@@ -37,7 +37,11 @@ interface ChatWindowProps {
   className?: string;
 }
 
-function streamingMessageShape(id: string, content: string): ChatMessage {
+function streamingMessageShape(
+  id: string,
+  content: string,
+  provider: string | null,
+): ChatMessage {
   return {
     id,
     session_id: '',
@@ -48,7 +52,8 @@ function streamingMessageShape(id: string, content: string): ChatMessage {
     metadata: {
       state_at_time: 'DIALOGUE' as ChatMessage['metadata']['state_at_time'],
       context_snapshot_id: '',
-      ai_provider: 'gemini',
+      ai_provider: (provider ??
+        'gemini') as ChatMessage['metadata']['ai_provider'],
       latency_ms: 0,
       tokens_used: 0,
       tone: '',
@@ -92,7 +97,12 @@ export function ChatWindow({
   );
   const systemState = useSystemStore((s) => s.state);
 
-  const [sessionsOpen, setSessionsOpen] = useState(!minimalChrome);
+  // Phase 27-e — sessions sidebar default-closed regardless of chrome.
+  // Was `!minimalChrome` so the panel opened by default and ate 260px
+  // of width on the live 1024×600 device, masking every density cut
+  // inside the chat surface. The menu toggle in the header (and the
+  // sticky one in the input rail) is the operator's way to open it.
+  const [sessionsOpen, setSessionsOpen] = useState(false);
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
   const [editSessionText, setEditSessionText] = useState('');
 
@@ -183,6 +193,56 @@ export function ChatWindow({
       }
     },
     [handleSend]
+  );
+
+  const handleWidgetAction = useCallback(
+    (e: React.MouseEvent) => {
+      const target = e.target as HTMLElement;
+
+      const timerBtn = target.closest('[data-timer-action]');
+      if (timerBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const action = timerBtn.getAttribute('data-timer-action');
+        const timerId = timerBtn.getAttribute('data-timer-id');
+        if (action === 'cancel') sendMessage(`Скасуй таймер ${timerId}`, 'encoder');
+        else if (action === 'pause-toggle') sendMessage(`Призупини або віднови таймер ${timerId}`, 'encoder');
+        else if (action === 'add-1m') sendMessage(`Додай 1 хвилину до таймера ${timerId}`, 'encoder');
+        return;
+      }
+
+      const alarmBtn = target.closest('[data-alarm-action]');
+      if (alarmBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const action = alarmBtn.getAttribute('data-alarm-action');
+        const alarmId = alarmBtn.getAttribute('data-alarm-id');
+        if (action === 'cancel') sendMessage(`Видали будильник ${alarmId}`, 'encoder');
+        else if (action === 'edit') sendMessage(`Зміни будильник ${alarmId}`, 'encoder');
+        else if (action === 'save') sendMessage(`Збережи будильник ${alarmId}`, 'encoder');
+        return;
+      }
+
+      const calendarBtn = target.closest('[data-calendar-action]');
+      if (calendarBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const action = calendarBtn.getAttribute('data-calendar-action');
+        if (action === 'add') sendMessage(`Створи нову подію в календарі`, 'encoder');
+        return;
+      }
+      
+      const filesBtn = target.closest('[data-files-action]');
+      if (filesBtn) {
+        e.preventDefault();
+        e.stopPropagation();
+        const action = filesBtn.getAttribute('data-files-action');
+        const path = filesBtn.getAttribute('data-path');
+        if (action === 'open') sendMessage(`Відкрий файл ${path}`, 'encoder');
+        return;
+      }
+    },
+    [sendMessage]
   );
 
   const toggleVoice = useCallback(async () => {
@@ -321,8 +381,8 @@ export function ChatWindow({
 
   const streamingMessage = useMemo(() => {
     if (!streaming) return null;
-    return streamingMessageShape(streaming.id, streaming.content);
-  }, [streaming]);
+    return streamingMessageShape(streaming.id, streaming.content, activeProvider);
+  }, [streaming, activeProvider]);
 
   // Defensive render-time sort. The chatStore preserves insertion order when
   // the HTTP reply lands *after* the WS broadcast of the same turn, but a
@@ -355,7 +415,7 @@ export function ChatWindow({
             animate={{ x: 0, opacity: 1 }}
             exit={{ x: '-100%', opacity: 0 }}
             transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-            className="absolute left-0 top-0 bottom-0 z-20 w-[260px] flex flex-col shrink-0 glass"
+            className="w-[260px] flex flex-col shrink-0 glass z-20"
             style={{
               borderTop: 'none',
               borderBottom: 'none',
@@ -375,10 +435,13 @@ export function ChatWindow({
               <button
                 type="button"
                 onClick={() => setSessionsOpen(false)}
+                aria-label="Close sessions"
                 className="flex items-center justify-center transition-all active:scale-95"
                 style={{
                   width: 32,
                   height: 32,
+                  minWidth: 44,
+                  minHeight: 44,
                   borderRadius: 10,
                   background: 'transparent',
                   border: 'none',
@@ -546,9 +609,12 @@ export function ChatWindow({
                       style={{
                         width: 26,
                         height: 26,
+                        minWidth: 44,
+                        minHeight: 44,
                         color: 'var(--ink-muted)',
                         opacity: active ? 1 : 0.6,
                         background: 'transparent',
+                        border: 'none',
                       }}
                       onClick={(e) => {
                         e.stopPropagation();
@@ -573,9 +639,12 @@ export function ChatWindow({
                       style={{
                         width: 26,
                         height: 26,
+                        minWidth: 44,
+                        minHeight: 44,
                         color: 'var(--ink-muted)',
                         opacity: active ? 1 : 0.6,
                         background: 'transparent',
+                        border: 'none',
                       }}
                       onClick={(e) => {
                         e.stopPropagation();
@@ -602,66 +671,67 @@ export function ChatWindow({
         <header
           className="px-4 flex items-center justify-between shrink-0"
           style={{
-            height: 52,
+            // Phase 27-e — 52→48; menu/NEW buttons stay at their
+            // touch-target sizes (32×32 visible / 28 minHeight) and
+            // sit in a slightly tighter strip.
+            height: 48,
             background: 'rgba(255,255,255,0.02)',
             borderBottom: '1px solid var(--glass-border)',
           }}
         >
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 min-w-0">
             {!sessionsOpen && (
               <button
                 type="button"
                 onClick={() => setSessionsOpen(true)}
-                className="flex items-center justify-center transition-all active:scale-95"
+                className="flex items-center justify-center transition-all active:scale-95 shrink-0"
                 style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 10,
+                  width: 32,
+                  height: 32,
+                  borderRadius: 9,
                   background: 'rgba(255,255,255,0.05)',
                   border: '1px solid var(--glass-border)',
                   color: 'var(--ink-secondary)',
                 }}
                 title="Open Sessions"
+                aria-label="Open Sessions"
               >
-                <Menu size={20} />
+                <Menu size={18} />
               </button>
             )}
-            <div className="flex flex-col">
-              <span 
-                className="micro-label" 
-                style={{ 
-                  fontSize: 8, 
-                  letterSpacing: '0.1em', 
-                  color: 'var(--ink-muted)',
-                  opacity: 0.7
-                }}
-              >
-                CURRENT SESSION
-              </span>
-              <span 
-                className="truncate max-w-[200px]" 
-                style={{ 
-                  fontFamily: 'var(--font-display)',
-                  fontSize: 12,
-                  fontWeight: 600,
-                  color: 'var(--ink-primary)'
-                }}
-              >
-                {sessions.find(s => s.id === currentSessionId)?.summary || 'New Conversation'}
-              </span>
-            </div>
+            <span
+              className="truncate"
+              style={{
+                fontFamily: 'var(--font-display)',
+                fontSize: 13,
+                fontWeight: 600,
+                color: 'var(--ink-primary)',
+                letterSpacing: '-0.01em',
+                maxWidth: 240,
+              }}
+              title={
+                sessions.find((s) => s.id === currentSessionId)?.summary ||
+                'New Conversation'
+              }
+            >
+              {sessions.find((s) => s.id === currentSessionId)?.summary ||
+                'New Conversation'}
+            </span>
           </div>
 
           <button
             type="button"
             onClick={() => startNewSession()}
-            className="flex items-center gap-2 px-3 py-1.5 rounded-lg transition-all active:scale-95 hover:bg-accent/10"
+            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all active:scale-95 hover:bg-accent/10 shrink-0"
             style={{
-              border: '1px solid color-mix(in srgb, var(--accent) 30%, transparent)',
+              border:
+                '1px solid color-mix(in srgb, var(--accent) 30%, transparent)',
               color: 'var(--accent)',
+              minHeight: 28,
             }}
+            aria-label="New session"
           >
-            <Plus size={16} />
+            <Plus size={14} strokeWidth={2} />
             <span className="micro-label" style={{ fontWeight: 700 }}>NEW</span>
           </button>
         </header>
@@ -669,51 +739,47 @@ export function ChatWindow({
         <div
           ref={listRef}
           onScroll={handleScroll}
-          className="flex-1 overflow-y-auto px-6 py-5 flex flex-col gap-4 min-h-0"
+          onClick={handleWidgetAction}
+          className="flex-1 overflow-y-auto px-6 py-3 flex flex-col gap-3 min-h-0"
         >
+          {/* Phase 27-d — empty state was a 3-stack hero (44px halo
+              icon + display-lg title + serif italic blurb) eating
+              ~120px on a 600px display. The italic blurb is marketing
+              copy; the input placeholder ("Message PHANTOM…") already
+              communicates affordance. Now: 32px halo + title only,
+              ~60px footprint. */}
           {!hasMessages && !isTyping && (
             <motion.div
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-              className="self-center my-auto flex flex-col items-center gap-3 text-center"
+              className="self-center my-auto flex flex-col items-center gap-2 text-center"
               style={{ maxWidth: 400 }}
             >
               <div
                 className="flex items-center justify-center"
                 style={{
-                  width: 44,
-                  height: 44,
-                  borderRadius: 14,
+                  width: 32,
+                  height: 32,
+                  borderRadius: 11,
                   background: 'color-mix(in srgb, var(--accent) 12%, transparent)',
                   border: '1px solid color-mix(in srgb, var(--accent) 34%, transparent)',
                   color: 'var(--accent)',
-                  boxShadow: '0 0 18px var(--accent-glow)',
+                  boxShadow: '0 0 14px var(--accent-glow)',
                 }}
               >
-                <Sparkles size={20} strokeWidth={1.75} />
+                <Sparkles size={16} strokeWidth={1.75} />
               </div>
               <p
                 className="text-gradient"
                 style={{
                   fontFamily: 'var(--font-display)',
-                  fontSize: 'var(--fs-lg)',
+                  fontSize: 'var(--fs-base)',
                   fontWeight: 600,
                   letterSpacing: 'var(--tracking-tight)',
                 }}
               >
                 {currentSessionId ? 'Session loaded' : 'New conversation'}
-              </p>
-              <p
-                className="italic"
-                style={{
-                  fontFamily: 'var(--font-serif)',
-                  fontSize: 'var(--fs-sm)',
-                  color: 'var(--ink-secondary)',
-                  lineHeight: 'var(--lh-relaxed)',
-                }}
-              >
-                Ask anything. PHANTOM reads context, remembers long-term, and speaks in your tone.
               </p>
             </motion.div>
           )}
@@ -835,13 +901,16 @@ export function ChatWindow({
         {/* Input bar — glass card rounded-full. Day-4 W-3 wraps it
             in a relative container so the AttachDrawer can absolute-
             position above the input rail. ModelCard echo + pending-
-            attachment chips render above the rail too. */}
-        <div className="px-5 pb-4 pt-2 shrink-0">
-          {/* Day-4 W-3 — ModelCard echo. Hidden in minimalChrome
-              layouts (e.g. embedded chat tile) since the StatusBar
-              already shows the same data. */}
-          {!minimalChrome && (
-            <div className="px-3 pb-1.5">
+            attachment chips render above the rail too.
+            Phase 27-e — outer pb-3→pb-2; ModelCard now lazy. */}
+        <div className="px-5 pb-2 pt-1 shrink-0">
+          {/* Day-4 W-3 — ModelCard echo. Phase 27-e: only render when
+              the operator is engaged with the rail (focused, has input,
+              or sending) so the idle empty rail doesn't reserve 26px
+              for a "gemini · whisper" line that's already in the
+              StatusBar. Still hidden under minimalChrome. */}
+          {!minimalChrome && (inputFocused || input.trim().length > 0 || sending) && (
+            <div className="px-2 pb-1">
               <ModelCard provider={activeProvider} sttEngine={activeStt} />
             </div>
           )}
@@ -909,10 +978,14 @@ export function ChatWindow({
                 // (single-line) to rounded-3xl (multi-line) and lifts
                 // with an accent glow when focused. Both moves are
                 // pure CSS so no animation jank on re-render.
+                // Phase 27-e — minHeight 52→44 at idle. The textarea
+                // (minHeight 40, maxHeight 120) still grows the pill
+                // for multi-line content; the pill no longer reserves
+                // 12px of dead air on every render.
                 borderRadius: inputFocused ? 22 : 9999,
-                minHeight: 52,
-                paddingTop: 6,
-                paddingBottom: 6,
+                minHeight: 44,
+                paddingTop: 4,
+                paddingBottom: 4,
                 borderColor: inputFocused
                   ? 'color-mix(in srgb, var(--accent) 65%, transparent)'
                   : 'var(--glass-border)',
@@ -1011,9 +1084,13 @@ export function ChatWindow({
                 aria-label="Chat input"
                 className="flex-1 resize-none outline-none bg-transparent"
                 style={{
-                  minHeight: 40,
+                  // Phase 27-e — textarea padding 10/12 → 8/10. Saves
+                  // 4px vertical so the pill at idle (44 minHeight)
+                  // sits closer to the textarea content height (~32px
+                  // for one line) without forcing the pill to grow.
+                  minHeight: 36,
                   maxHeight: 120,
-                  padding: '10px 12px',
+                  padding: '8px 10px',
                   color: 'var(--ink-primary)',
                   fontFamily: 'var(--font-display)',
                   fontSize: 'var(--fs-base)',
@@ -1022,27 +1099,11 @@ export function ChatWindow({
                 }}
               />
 
-              {/* Day-5 D5-DSGN3 — Enter-to-send hint pill. Renders only
-                  when the rail has content + focus, so empty pre-typing
-                  state stays clean. */}
-              {inputFocused && input.trim().length > 0 && (
-                <span
-                  aria-hidden
-                  className="hidden md:inline-flex items-center gap-1 self-end mb-2 px-2 rounded-full uppercase shrink-0"
-                  style={{
-                    height: 22,
-                    background: 'var(--glass-subtle)',
-                    border: '1px solid var(--glass-border)',
-                    color: 'var(--ink-muted)',
-                    fontFamily: 'var(--font-display)',
-                    fontSize: 'var(--fs-micro)',
-                    letterSpacing: 'var(--tracking-widest)',
-                    transition: 'opacity 200ms',
-                  }}
-                >
-                  Enter
-                </span>
-              )}
+              {/* Phase 27-d — Enter pill removed. The Send button's
+                  gradient + glow when input has content is the actual
+                  affordance; a uppercase ENTER chip floating beside it
+                  was redundant and added 22px of chrome on touch when
+                  the rail expanded. Keyboard users know Enter sends. */}
 
               <button
                 type="button"

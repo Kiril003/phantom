@@ -25,6 +25,7 @@ import { create } from 'zustand';
 import {
   DEFAULT_DURATION_FOR_POSE,
   DEFAULT_POSE_FOR_TRIGGER,
+  type FamiliarEmotion,
   type FamiliarManifestation,
   type FamiliarPose,
   type FamiliarRarity,
@@ -49,6 +50,7 @@ const ALWAYS_TRIGGERS: ReadonlyArray<ManifestTrigger> = [
 
 export interface ManifestOptions {
   pose?: FamiliarPose;
+  emotion?: FamiliarEmotion;
   message?: string;
   durationMs?: number;
   target?: FamiliarTarget;
@@ -136,6 +138,7 @@ export const useFamiliarStore = create<FamiliarStoreState>((set, get) => ({
     const manifestation: FamiliarManifestation = {
       id: makeId(),
       pose,
+      emotion: opts.emotion,
       durationMs,
       trigger,
       message: opts.message,

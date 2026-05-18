@@ -5,7 +5,7 @@ import time
 from fastapi import APIRouter, Depends
 
 from core.context_engine import context_engine
-from core.state_machine import state_machine
+from core.state_machine import SystemState, state_machine
 from security.auth import TokenPayload, require_auth
 
 router = APIRouter(prefix="/context", tags=["context"])
@@ -48,4 +48,33 @@ async def get_state(
         "state": state_machine.current_state,
         "since": since_iso,
         "previous": state_machine.previous_state,
+    }
+
+
+from pydantic import BaseModel
+
+class StateTransitionRequest(BaseModel):
+    state: str
+    trigger: str = "manual"
+
+@router.post("/state")
+async def set_state(
+    req: StateTransitionRequest,
+    _: TokenPayload = Depends(require_auth),
+) -> dict:
+    """Force a manual state transition."""
+    if req.state not in SystemState.ALL:
+        from fastapi import HTTPException
+        raise HTTPException(status_code=400, detail=f"Invalid state: {req.state}")
+    
+    if req.state == SystemState.OPERATOR:
+        t = state_machine.enter_operator(req.trigger)
+    else:
+        t = state_machine.force_transition(req.state, req.trigger)
+    
+    return {
+        "from": t.from_state,
+        "to": t.to_state,
+        "trigger": t.trigger,
+        "timestamp": t.timestamp,
     }

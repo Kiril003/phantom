@@ -43,8 +43,13 @@ class BrowserNavigate(Action):
     name: ClassVar[str] = "browser.navigate"
     risk_level: ClassVar[RiskLevel] = RiskLevel.LOW
 
-    url: str = Field(..., description="http or https only")
-    headed_debug: bool = Field(default=False)
+    # Block B — resource declarations.
+    estimated_peak_ram_mb: ClassVar[int] = 800
+    requires_network: ClassVar[bool] = True
+    estimated_wall_seconds: ClassVar[int] = 30
+
+    url: str = Field(..., description="The URL to navigate to (must start with http:// or https://)")
+    headed_debug: bool = Field(default=False, description="If true, opens the browser in headed mode for visual debugging")
 
     def preconditions(self) -> list[Precondition]:
         return [Precondition(key="network.online", required=None, failure_mode="reflect")]
@@ -96,9 +101,14 @@ class BrowserExtract(Action):
     name: ClassVar[str] = "browser.extract"
     risk_level: ClassVar[RiskLevel] = RiskLevel.SAFE
 
-    selector: str = Field(..., description="CSS selector")
-    mode: str = Field(default="text")
-    attr_name: str | None = Field(default=None)
+    # Block B — resource declarations.
+    estimated_peak_ram_mb: ClassVar[int] = 800
+    requires_network: ClassVar[bool] = True
+    estimated_wall_seconds: ClassVar[int] = 30
+
+    selector: str = Field(..., description="CSS selector to locate the element")
+    mode: str = Field(default="text", description="Extraction mode: 'text' for innerText, 'html' for innerHTML, 'attr' for attribute value")
+    attr_name: str = Field(default="", description="The name of the attribute to extract (required only when mode='attr')")
 
     def preconditions(self) -> list[Precondition]:
         return [Precondition(key="browser.page_active", required=None, failure_mode="abandon")]
@@ -160,6 +170,11 @@ class BrowserClickByDescription(Action):
 
     name: ClassVar[str] = "browser.click_by_description"
     risk_level: ClassVar[RiskLevel] = RiskLevel.LOW
+
+    # Block B — resource declarations.
+    estimated_peak_ram_mb: ClassVar[int] = 800
+    requires_network: ClassVar[bool] = True
+    estimated_wall_seconds: ClassVar[int] = 30
 
     description: str = Field(..., description="natural-language description of the element")
     expected_type: Literal["button", "input", "link", "image", "text", "element"] = Field(

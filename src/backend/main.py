@@ -37,7 +37,15 @@ from api.routes_familiar import router as familiar_router
 from api.routes_pair import router as pair_router
 from api.routes_mobile_sensors import router as mobile_sensors_router
 from api.routes_approve import router as approve_router
+from api.routes_will import router as will_router
 from api.routes_vault import router as vault_router
+from api.routes_drive import router as drive_router
+from api.routes_notifications import router as notifications_router
+from api.routes_profile_sync import router as profile_sync_router
+from api.routes_handoff import router as handoff_router
+from api.routes_companion_control import router as companion_control_router
+from api.routes_backup import router as backup_router
+from api.routes_intelligence import router as intelligence_router
 
 logging.basicConfig(
     level=getattr(logging, config.log_level),
@@ -70,8 +78,9 @@ async def _context_loop() -> None:
             # resolver only pays network cost when its caches are stale.
             try:
                 await context_engine.resolve_localization()
+                await context_engine.refresh_slow_context()
             except Exception as exc:
-                logger.debug("Localization tick raised (non-critical): %s", exc)
+                logger.debug("Slow context tick raised (non-critical): %s", exc)
             snapshot = await context_engine.tick()
             transition = state_machine.evaluate(snapshot)
             if transition:
@@ -354,6 +363,25 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     await init_db()
     logger.info("Database initialized")
 
+    # Block B — write daemon PID file for the out-of-process watchdog.
+    try:
+        import os as _os
+        _pid_path = _os.path.expanduser("~/.phantom/daemon.pid")
+        _os.makedirs(_os.path.dirname(_pid_path), exist_ok=True)
+        with open(_pid_path, "w") as _f:
+            _f.write(str(_os.getpid()))
+        logger.debug("daemon PID %d written to %s", _os.getpid(), _pid_path)
+    except Exception as _exc:
+        logger.warning("daemon.pid write failed (watchdog will not attach): %s", _exc)
+
+    # Block B — start the SystemMonitor resource telemetry daemon.
+    try:
+        from core.system_monitor import system_monitor
+        await system_monitor.start()
+        logger.info("SystemMonitor: started")
+    except Exception:
+        logger.exception("system_monitor failed to start — proceeding without telemetry")
+
     # Load persisted settings BEFORE any module reads config (serial bridge,
     # AI providers, WS/hostname, loop interval). Order matters: without this
     # the serial bridge and logger would come up with env/default values even
@@ -401,6 +429,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except Exception as exc:
             logger.warning("JSON log formatter setup failed: %s", exc)
 
+    # Phase 17b — AIHub initialization.
+    try:
+        from ai.hub import ai_hub, register_default_capabilities
+        register_default_capabilities(hub=ai_hub)
+        logger.info("AIHub: registered default capabilities")
+    except Exception as exc:
+        logger.error("AIHub: initialization failed: %s", exc)
+
     # Ensure at least one user exists (creates default ROOT 'phantom'/000000)
     from db.database import get_session
     from security.auth import ensure_default_user
@@ -420,6 +456,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     # Register chat WebSocket handlers
     register_chat_ws_handlers()
+
+    # mDNS / DNS-SD service advertisement — phones on the same Wi-Fi
+    # discover this backend as `_phantom._tcp.local.` without needing
+    # to scan a fresh QR every time the LAN moves. Failure is
+    # non-fatal (no zeroconf installed, multicast firewalled, etc.).
+    try:
+        from discovery.mdns_publisher import start_mdns
+        start_mdns(port=int(config.port), instance_name="PHANTOM")
+    except Exception as exc:
+        logger.warning("mdns advertise skipped: %s", exc)
 
     # Day-3 P-3 (audit-2026-04-30 F-02 + F-03): collapse the two
     # duplicated state-transition broadcasts (background-batch loop
@@ -506,8 +552,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     standing_orders_runner_obj = None
     if config.agent_enabled:
         try:
-            from agent.runtime import ensure_workspace
-            from agent.audit import mark_orphans_paused
+            from agent.kernel.runtime import ensure_workspace
+            from agent.kernel.audit import mark_orphans_paused
             ensure_workspace()
             orphans = await mark_orphans_paused("uvicorn_restart")
             if orphans:
@@ -515,12 +561,27 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except Exception as exc:
             logger.error("Agent startup hook failed: %s", exc)
 
+        # Block A-1 — resume any task/mission that was live when the daemon died.
+        try:
+            from agent.kernel.runtime import agent_runtime
+            resume_counts = await agent_runtime.resume_live_tasks_on_boot()
+            if any(resume_counts.values()):
+                logger.info(
+                    "Agent: resumed tasks on boot — foreground=%d background=%d "
+                    "mission_resumes=%d",
+                    resume_counts.get("foreground", 0),
+                    resume_counts.get("background", 0),
+                    resume_counts.get("mission_resumes", 0),
+                )
+        except Exception:
+            logger.exception("resume_live_tasks_on_boot failed — fresh start")
+
         # Phase 9.3a — emotion decay loop drifts the foreground task's
         # EmotionVector toward baseline every `agent_emotion_decay_interval_s`.
         if config.agent_emotion_enabled:
             try:
-                from agent.runtime import agent_runtime
-                from agent.emotion import decay_loop
+                from agent.kernel.runtime import agent_runtime
+                from agent.cognition.emotion import decay_loop
                 emotion_stop_event = asyncio.Event()
                 emotion_task = asyncio.create_task(
                     decay_loop(agent_runtime, emotion_stop_event),
@@ -533,8 +594,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         # rely on get_loop() returning non-None to push triggers); start the
         # actual background task only when enabled.
         try:
-            from agent.runtime import agent_runtime
-            from agent.proactive import ProactiveLoop, set_loop
+            from agent.kernel.runtime import agent_runtime
+            from agent.cognition.proactive.loop import ProactiveLoop, set_loop
             proactive_loop_obj = ProactiveLoop(agent_runtime)
             set_loop(proactive_loop_obj)
             if config.agent_proactive_enabled:
@@ -552,7 +613,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         # Phase 9.3b — standing orders runner.
         if config.agent_standing_orders_enabled:
             try:
-                from agent.standing_orders.runner import StandingOrderRunner
+                from agent.operations.standing_orders.runner import StandingOrderRunner
                 standing_orders_runner_obj = StandingOrderRunner(agent_runtime)
                 await standing_orders_runner_obj.start()
                 logger.info("Standing orders runner started")
@@ -562,7 +623,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # Phase 09.2 — episodic memory backfill (only when ChromaDB is behind)
     if config.agent_enabled and config.agent_episodic_memory_enabled:
         try:
-            from agent.memory.backfill import backfill_if_behind
+            from agent.cognition.memory.backfill import backfill_if_behind
             stats = await backfill_if_behind()
             if stats:
                 logger.info(
@@ -597,6 +658,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
     yield
 
+    # Stop the mDNS publisher BEFORE we let asyncio cancel the
+    # remaining lifespan tasks — zeroconf has its own thread and
+    # blocks for ~1 s while it sends a goodbye packet.
+    try:
+        from discovery.mdns_publisher import stop_mdns
+        stop_mdns()
+    except Exception:
+        pass
+
     loop_task.cancel()
     janitor_task.cancel()
     try:
@@ -622,13 +692,19 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as exc:
         logger.debug("CPU sampler stop raised: %s", exc)
 
+    # Block B — stop SystemMonitor resource telemetry daemon.
+    import contextlib
+    with contextlib.suppress(Exception):
+        from core.system_monitor import system_monitor
+        await system_monitor.stop()
+
     await oled_animator.stop()
 
     # Phase 09.1 — best-effort agent shutdown: stop running task + close browser
     if config.agent_enabled:
         try:
-            from agent.runtime import agent_runtime
-            from agent.audit import mark_orphans_paused
+            from agent.kernel.runtime import agent_runtime
+            from agent.kernel.audit import mark_orphans_paused
             if agent_runtime.current_task is not None:
                 await agent_runtime.stop()
             await mark_orphans_paused("uvicorn_shutdown")
@@ -652,7 +728,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except Exception as exc:
             logger.debug("Proactive loop shutdown raised: %s", exc)
         try:
-            from agent.proactive import set_loop as _clear_loop
+            from agent.cognition.proactive.loop import set_loop as _clear_loop
             _clear_loop(None)
         except Exception:
             pass
@@ -687,6 +763,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         await serial_bridge.stop()
     await close_db()
     logger.info("PHANTOM OS stopped")
+    
+    # Phase 32-LSP — shutdown language servers
+    try:
+        from agent.operations.lsp_service import lsp_manager
+        await lsp_manager.shutdown_all()
+    except Exception as exc:
+        logger.warning("LSP shutdown failed: %s", exc)
 
 
 def create_app() -> FastAPI:
@@ -800,6 +883,42 @@ def create_app() -> FastAPI:
     # tools. Reveal + use of secrets land in 25-D behind Council +
     # phone biometric.
     app.include_router(vault_router, prefix=prefix)
+    # Phase 28 — Will Engine: drives, values, goal stack.
+    app.include_router(will_router, prefix=prefix)
+    # Phase 5 Driver — phone-controls-desktop verbs.
+    # /drive/text +
+    # /drive/clipboard pipe phone-typed strings into the desktop chat
+    # draft + system clipboard; /drive/upload accepts files into
+    # `~/.phantom/drop/<user_id>/`; /drive/screen returns a one-shot
+    # PNG screenshot. Native AccessibilityService KeyEvent injection
+    # stays in `companion-android/` — this route covers the PWA-
+    # feasible subset.
+    app.include_router(drive_router, prefix=prefix)
+    # Phone-side notifications inbox — projects assistant +
+    # proactive `chat_messages` rows scoped to the current user
+    # (via dual-auth) so the Companion can render an inbox even
+    # after a missed system buzz.
+    app.include_router(notifications_router, prefix=prefix)
+    # Cross-world profile sync — REST snapshot + delta events. The
+    # companion mirrors / pushes profile, preference, and user-fact
+    # mutations through this router; backend re-broadcasts every
+    # accepted event on the `profile_sync` WS channel so other
+    # paired devices catch up in real time.
+    app.include_router(profile_sync_router, prefix=prefix)
+    # Cross-device task handoff registry. A handoff is a small
+    # declarative payload one device hands to another (open this
+    # route on the phone, continue this voice thread on the desk).
+    # Lives on its own table; broadcasts on WS channel `handoff`.
+    app.include_router(handoff_router, prefix=prefix)
+    # Reverse driver — desktop tells phone what to do (open card,
+    # navigate, focus screen, lock vault). Verbs broadcast on WS
+    # channel `companion_control`. ROOT-only.
+    app.include_router(companion_control_router, prefix=prefix)
+    app.include_router(backup_router, prefix=prefix)
+    # Vertical V11 — Intelligence Hub: aggregated operator knowledge surface
+    # (vault metadata, user facts, lessons, strategic memory, agent decisions)
+    # plus cross-corpus semantic search.
+    app.include_router(intelligence_router, prefix=prefix)
 
     _register_ws(app)
     register_voice_ws(app)

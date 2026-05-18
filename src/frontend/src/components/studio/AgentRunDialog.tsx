@@ -14,7 +14,7 @@ import { motion } from 'framer-motion';
 import { Play, X } from 'lucide-react';
 import type { AgentInfoNeed, CustomAgent } from '@shared/types';
 import { useStudioStore } from '../../stores/studioStore';
-import { InfoNeedDialog } from '../agent/InfoNeedDialog';
+import { InfoNeedDialog } from '../agent/overlays/InfoNeedDialog';
 
 interface Props {
   agent: CustomAgent;

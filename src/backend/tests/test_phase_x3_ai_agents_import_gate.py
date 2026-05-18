@@ -230,7 +230,7 @@ class TestFutureAgentsLayer:
     def test_real_agents_files_pass_the_gate(self):
         """Positive-case: walk every real `ai/agents/**.py` through the
         same AST gate. Catches a future X-2 / X-3 / X-4 file that
-        accidentally `from agent.runtime import ...` before code review
+        accidentally `from agent.kernel.runtime import ...` before code review
         notices."""
         import ast as _ast
 

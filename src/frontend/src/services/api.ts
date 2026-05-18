@@ -131,6 +131,8 @@ export const contextApi = {
     ),
   state: () =>
     request<{ state: SystemState; since: string; previous: SystemState }>('GET', '/context/state'),
+  setState: (state: SystemState, trigger = 'manual') =>
+    request<{ to: SystemState }>('POST', '/context/state', { state, trigger }),
 };
 
 /* ─── Voice ───────────────────────────────────────────────────────────────── */
@@ -476,6 +478,8 @@ export const aiApi = {
   listModels: () => request<AIModelsResponse>('GET', '/ai/models'),
   test: (provider: 'ollama' | 'gemini') =>
     request<AITestResponse>('POST', '/ai/test', { provider }),
+  reset: () =>
+    request<{ ok: boolean; message: string }>('POST', '/ai/reset'),
 };
 
 /* ─── Tools ───────────────────────────────────────────────────────────────── */

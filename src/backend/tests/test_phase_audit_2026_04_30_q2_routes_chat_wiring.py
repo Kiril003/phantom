@@ -23,18 +23,11 @@ import pytest
 
 
 class TestChatToolsEnabledFlag:
-    def test_default_off_uses_plain_generate(self):
-        """When `chat_tools_enabled` is False (default), the routes_chat
-        call MUST go through `ai_router.generate` directly — no
-        chat_pipeline involvement, no tool-use surface, no envelope
-        artefacts in the WS broadcast."""
+    def test_default_off_for_professional_chat(self):
+        """Ordinary chat defaults to text-first professional behavior.
+        Operators can explicitly opt in to bounded read-only tools."""
         from config import config
-        # Default check — guards the existing v0.18.x baseline.
-        assert config.chat_tools_enabled is False, (
-            "D3-Q-2 regression: chat_tools_enabled flipped to True by "
-            "default — Phase 17b is gated by the per-tenant ContextEngine "
-            "(D2-I2) and operators must opt in explicitly."
-        )
+        assert config.chat_tools_enabled is False
 
     @pytest.mark.asyncio
     async def test_flag_on_routes_through_chat_pipeline(self, monkeypatch):
@@ -52,7 +45,7 @@ class TestChatToolsEnabledFlag:
 
         async def _explode_generate(**kw):
             raise AssertionError(
-                "D3-Q-2 regression: with flag on, ai_router.generate "
+                "D3-Q-2 regression: with flag on, ai_hub.dispatch "
                 "should not be called — chat_pipeline.run is the entry "
                 "point."
             )
@@ -61,7 +54,7 @@ class TestChatToolsEnabledFlag:
             "ai.chat_pipeline.run", _spy_pipeline_run
         )
         monkeypatch.setattr(
-            routes_chat.ai_router, "generate", _explode_generate
+            routes_chat.ai_hub, "dispatch", _explode_generate
         )
 
         from config import config
@@ -80,7 +73,11 @@ class TestChatToolsEnabledFlag:
             # Patch every other side-effect-heavy dep so the test
             # focuses on the chat_pipeline branch.
             from memory.session_memory import session_memory
-            session_memory.get_history_dicts = lambda *a, **kw: []
+            monkeypatch.setattr(
+                session_memory,
+                "get_history_dicts",
+                lambda *a, **kw: [],
+            )
             from memory.user_model import (
                 get_behavioral_model, save_behavioral_model,
             )

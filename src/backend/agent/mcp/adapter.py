@@ -19,7 +19,7 @@ from typing import Any, ClassVar, Type
 from pydantic import Field, create_model
 
 from ..actions.base import Action, ActionContext
-from ..safety.sandbox import (
+from ..operations.safety.sandbox import (
     SandboxProfile,
     assert_env_safe,
     clean_env,

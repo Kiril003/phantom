@@ -9,9 +9,7 @@ import {
   CheckCircle2,
   AlertTriangle,
   Cpu,
-  ChevronRight,
   GitCompareArrows,
-  KeyRound,
   Sun,
   Moon,
   Cog,
@@ -22,6 +20,7 @@ import {
 import { ProfileManagementSection } from './ProfileManagement';
 import { MobilePairing } from './MobilePairing';
 import { VaultPanel } from './VaultPanel';
+import { BackupRestoreCard } from './BackupRestoreCard';
 import { StatusBar } from '../core/StatusBar';
 import { FloatingToolbar } from '../core/FloatingToolbar';
 import { useSettingsStore } from '../../stores/settingsStore';
@@ -42,6 +41,8 @@ import {
   readAccordionState,
   writeAccordionState,
 } from './SettingsAccordion';
+import { AgentLimitsGroup } from './AgentLimitsGroup';
+import { AgentLayoutGroup } from './AgentLayoutGroup';
 
 type ThemeId = 'sunrise-warm' | 'amber-night' | 'cyberdeck-cold';
 
@@ -209,12 +210,6 @@ export default function SettingsPanel() {
     };
   }, [activeCategory, dirty, values]);
 
-  const sectionIndex = useMemo(() => {
-    if (!activeCategory) return { now: 0, total: categories.length };
-    const idx = categories.findIndex((c) => c.id === activeCategory.id);
-    return { now: idx + 1, total: categories.length };
-  }, [activeCategory, categories]);
-
   return (
     <div
       className="sunrise-frame relative"
@@ -236,74 +231,23 @@ export default function SettingsPanel() {
           top: 68,
           bottom: 76,
           width: 260,
-          padding: 14,
+          padding: 10,
           zIndex: 3,
           display: 'flex',
           flexDirection: 'column',
           borderRadius: 14,
         }}
       >
-        <div className="eyebrow">НАЛАШТУВАННЯ</div>
-        <div
-          className="playfair"
-          style={{
-            fontSize: 17,
-            color: 'var(--ink-secondary)',
-            lineHeight: 1.15,
-            marginTop: 2,
-            marginBottom: 8,
-          }}
-        >
-          Usage shaped
-          <br />
-          to taste.
-        </div>
-
-        {/* Overall progress pill */}
-        <div
-          style={{
-            marginBottom: 10,
-            padding: '8px 10px',
-            borderRadius: 10,
-            background: 'rgba(244,175,37,0.10)',
-            border: '1px solid rgba(244,175,37,0.20)',
-          }}
-        >
-          <div
-            style={{
-              display: 'flex',
-              justifyContent: 'space-between',
-              alignItems: 'center',
-            }}
-          >
-            <span className="micro-label" style={{ color: '#b07a10' }}>
-              CONFIGURED
-            </span>
-            <span
-              className="tabular"
-              style={{ fontSize: 11, fontWeight: 700, color: '#b07a10' }}
-            >
-              {overallProgress.configured} / {overallProgress.total}
-            </span>
-          </div>
-          <div
-            style={{
-              marginTop: 5,
-              height: 3,
-              background: 'rgba(244,175,37,0.18)',
-              borderRadius: 2,
-              overflow: 'hidden',
-            }}
-          >
-            <div
-              style={{
-                width: `${Math.round(overallProgress.ratio * 100)}%`,
-                height: '100%',
-                background: 'linear-gradient(90deg,#f4af25,#fb923c)',
-                transition: 'width 240ms ease',
-              }}
-            />
-          </div>
+        {/* Phase 22-G — sidebar progress pill removed. Was a 50px-tall
+            CONFIGURED block (label + count + 3px progress bar) that
+            fully duplicated the 95/100 score chip already shown in the
+            section header. Reclaiming the 50px lets all 10+ categories
+            fit on a 600px display without sidebar scrolling — direct
+            response to the operator's "деякі не видно" complaint. The
+            eyebrow keeps the row but with tighter margin since the
+            category list now starts immediately below it. */}
+        <div className="eyebrow" style={{ marginBottom: 6 }}>
+          НАЛАШТУВАННЯ · {overallProgress.configured}/{overallProgress.total}
         </div>
 
         {/* Category list */}
@@ -312,7 +256,7 @@ export default function SettingsPanel() {
           style={{
             display: 'flex',
             flexDirection: 'column',
-            gap: 2,
+            gap: 1,
             flex: 1,
             overflowY: 'auto',
             minHeight: 0,
@@ -340,7 +284,7 @@ export default function SettingsPanel() {
                   display: 'flex',
                   alignItems: 'center',
                   gap: 10,
-                  padding: '8px 10px',
+                  padding: '6px 10px',
                   borderRadius: 10,
                   background: active ? 'rgba(244,175,37,0.18)' : 'transparent',
                   borderLeft: active
@@ -422,31 +366,66 @@ export default function SettingsPanel() {
           gap: 10,
         }}
       >
-        {/* Breadcrumb header */}
+        {/* Compact section header — replaces the old breadcrumb +
+            ~80px Hero glass row. Surfaces section identity, score
+            chip, status pill, Reset, Save in a single ~40px strip so
+            the settings list gets the screen real-estate it deserves
+            on a 600px-tall display. */}
         <div
           style={{
             display: 'flex',
             alignItems: 'center',
             gap: 10,
-            padding: '4px 4px 0',
+            padding: '2px 4px 0',
           }}
         >
-          <span style={{ fontSize: 10, color: 'var(--ink-muted)' }}>
-            Налаштування
+          <span
+            aria-hidden
+            style={{
+              width: 22,
+              height: 22,
+              borderRadius: 7,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              background: 'linear-gradient(135deg,#f4af25,#fb923c)',
+              color: 'white',
+              fontSize: 12,
+              fontWeight: 700,
+              boxShadow: '0 2px 6px rgba(244,175,37,0.30)',
+              flexShrink: 0,
+            }}
+          >
+            {activeCategory?.icon ?? '⚙'}
           </span>
-          <ChevronRight
-            size={12}
-            strokeWidth={1.75}
-            style={{ color: 'var(--ink-muted)' }}
-          />
           <span
             style={{
-              fontSize: 10,
-              color: '#b07a10',
+              fontSize: 14,
               fontWeight: 600,
+              letterSpacing: '-0.01em',
+              color: 'var(--ink-primary)',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              maxWidth: 280,
             }}
           >
             {activeCategory?.label ?? '—'}
+          </span>
+          <span
+            className="tabular"
+            title={`${overallProgress.configured} of ${overallProgress.total} keys non-default`}
+            style={{
+              fontSize: 9,
+              fontWeight: 700,
+              padding: '2px 7px',
+              borderRadius: 999,
+              background: 'rgba(34,197,94,0.16)',
+              color: '#16a34a',
+              letterSpacing: '0.04em',
+            }}
+          >
+            {Math.round(overallProgress.ratio * 100)}/100
           </span>
           <span style={{ flex: 1 }} />
           <StatusPill status={status} />
@@ -531,117 +510,23 @@ export default function SettingsPanel() {
           </button>
         </div>
 
-        {/* Hero glass row */}
+        {/* Settings list (scrollable inside main only). Padding tightened
+            from 14 → 10 and the redundant KEY/eyebrow row removed — the
+            section title is now in the compact header above and the dirty
+            count is already on the SAVE button, so duplicating them here
+            was pure visual weight. */}
         <div
           className="glass"
           style={{
-            padding: '14px 16px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 14,
-          }}
-        >
-          <div
-            style={{
-              width: 44,
-              height: 44,
-              borderRadius: 12,
-              background: 'linear-gradient(135deg,#f4af25,#fb923c)',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              color: 'white',
-              boxShadow: '0 4px 14px rgba(244,175,37,0.35)',
-            }}
-            aria-hidden
-          >
-            <CategoryGlyph icon={activeCategory?.icon ?? '⚙'} />
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div className="micro-label">
-              СЕКЦІЯ ·{' '}
-              <span className="tabular">
-                {String(sectionIndex.now).padStart(2, '0')}/
-                {String(sectionIndex.total).padStart(2, '0')}
-              </span>
-            </div>
-            <div
-              style={{
-                fontSize: 22,
-                fontWeight: 600,
-                letterSpacing: '-0.01em',
-                color: 'var(--ink-primary)',
-              }}
-            >
-              {activeCategory?.label ?? '—'}
-            </div>
-          </div>
-          <div
-            style={{ display: 'flex', alignItems: 'center', gap: 12 }}
-          >
-            <div style={{ textAlign: 'right' }}>
-              <div className="micro-label">CONFIG SCORE</div>
-              <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                <span
-                  className="tabular"
-                  style={{
-                    fontSize: 24,
-                    fontWeight: 700,
-                    color: '#16a34a',
-                  }}
-                >
-                  {Math.round(overallProgress.ratio * 100)}
-                </span>
-                <span style={{ fontSize: 11, color: 'var(--ink-muted)' }}>
-                  / 100
-                </span>
-              </div>
-            </div>
-            <CircularScore ratio={overallProgress.ratio} />
-          </div>
-        </div>
-
-        {/* Settings list (scrollable inside main only) */}
-        <div
-          className="glass"
-          style={{
-            padding: 14,
+            padding: 8,
             flex: 1,
             display: 'flex',
             flexDirection: 'column',
-            gap: 8,
+            gap: 6,
             overflow: 'hidden',
             minHeight: 0,
           }}
         >
-          <div
-            style={{ display: 'flex', alignItems: 'center', gap: 8 }}
-          >
-            <KeyRound
-              size={14}
-              strokeWidth={1.75}
-              style={{ color: '#b07a10' }}
-            />
-            <span className="eyebrow-amber">
-              {(activeCategory?.label ?? 'SETTINGS').toUpperCase()}
-            </span>
-            {dirtyInCategory.length > 0 && (
-              <span
-                className="tabular"
-                style={{
-                  fontSize: 9,
-                  padding: '1px 7px',
-                  borderRadius: 999,
-                  background: 'rgba(244,175,37,0.18)',
-                  color: '#8a5e0a',
-                  fontWeight: 700,
-                }}
-              >
-                {dirtyInCategory.length} edited
-              </span>
-            )}
-          </div>
-
           {/* Phase 22 — sticky search + Advanced gate. Search filters by
               label / description / key substring across the active
               category; the toggle persists in localStorage. */}
@@ -708,7 +593,12 @@ export default function SettingsPanel() {
             )}
 
             {loaded && activeCategory && activeCategory.id === 'about' && (
-              <AboutSection />
+              <>
+                <AboutSection />
+                <div style={{ marginTop: 24 }}>
+                  <BackupRestoreCard />
+                </div>
+              </>
             )}
 
             {/* Phase 19 — Mobile Companion virtual category. Fully bespoke
@@ -735,6 +625,12 @@ export default function SettingsPanel() {
               <>
                 {activeCategory.id === 'ai' && <AIProviderDiagnostics />}
                 {activeCategory.id === 'voice' && <NPUDiagnostics />}
+                {activeCategory.id === 'agent' && (
+                  <>
+                    <AgentLimitsGroup values={values} onChange={setValue} />
+                    <AgentLayoutGroup values={values} onChange={setValue} />
+                  </>
+                )}
                 {(activeCategory.id === 'profile' ||
                   activeCategory.id === 'personality') && (
                   <>
@@ -911,21 +807,26 @@ function SettingsFilterBar({
   showAdvanced: boolean;
   onShowAdvanced: (v: boolean) => void;
 }) {
+  // Phase 22-G — was 44px tall (8/10 padding + 28px toggle), with the
+  // "Розширені" label always visible eating ~70px horizontal even when
+  // off. Now ~26px tall (3/8 padding), divider gone, toggle label is
+  // shown only when ON (the switch position is the affordance when off,
+  // and the wrapping <label> still carries the title= for tooltips).
   return (
     <div
       style={{
         display: 'flex',
         alignItems: 'center',
-        gap: 10,
-        padding: '8px 10px',
+        gap: 8,
+        padding: '3px 8px',
         background: 'rgba(255,250,244,0.62)',
         border: '1px solid rgba(40,30,15,0.10)',
-        borderRadius: 12,
+        borderRadius: 10,
         boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.45)',
       }}
     >
       <Search
-        size={14}
+        size={13}
         strokeWidth={1.75}
         style={{ color: 'var(--ink-muted)', flexShrink: 0 }}
       />
@@ -956,8 +857,8 @@ function SettingsFilterBar({
             display: 'inline-flex',
             alignItems: 'center',
             justifyContent: 'center',
-            width: 24,
-            height: 24,
+            width: 20,
+            height: 20,
             borderRadius: 999,
             border: 'none',
             background: 'rgba(40,30,15,0.06)',
@@ -966,42 +867,34 @@ function SettingsFilterBar({
             flexShrink: 0,
           }}
         >
-          <XIcon size={12} strokeWidth={1.75} />
+          <XIcon size={11} strokeWidth={1.75} />
         </button>
       )}
-      <span
-        aria-hidden
-        style={{
-          width: 1,
-          alignSelf: 'stretch',
-          background: 'rgba(40,30,15,0.10)',
-          margin: '0 4px',
-        }}
-      />
       <label
         style={{
           display: 'inline-flex',
           alignItems: 'center',
-          gap: 8,
+          gap: 6,
           cursor: 'pointer',
           userSelect: 'none',
-          minHeight: 28,
-          padding: '0 4px',
         }}
-        title="Показати розширені (експертне налаштування)"
+        title="Розширені (експертне налаштування)"
+        aria-label="Показати розширені налаштування"
       >
-        <span
-          style={{
-            fontSize: 11,
-            fontWeight: 600,
-            letterSpacing: '0.04em',
-            textTransform: 'uppercase',
-            color: showAdvanced ? '#8a5e0a' : 'var(--ink-secondary)',
-            fontFamily: 'var(--font-display)',
-          }}
-        >
-          Розширені
-        </span>
+        {showAdvanced && (
+          <span
+            style={{
+              fontSize: 10,
+              fontWeight: 700,
+              letterSpacing: '0.06em',
+              textTransform: 'uppercase',
+              color: '#8a5e0a',
+              fontFamily: 'var(--font-display)',
+            }}
+          >
+            Розшир.
+          </span>
+        )}
         <span
           role="switch"
           aria-checked={showAdvanced}
@@ -1016,8 +909,8 @@ function SettingsFilterBar({
           style={{
             position: 'relative',
             display: 'inline-block',
-            width: 36,
-            height: 20,
+            width: 30,
+            height: 16,
             borderRadius: 999,
             background: showAdvanced
               ? 'linear-gradient(135deg, rgba(244,175,37,0.85), rgba(251,146,60,0.85))'
@@ -1032,9 +925,9 @@ function SettingsFilterBar({
             style={{
               position: 'absolute',
               top: 2,
-              left: showAdvanced ? 18 : 2,
-              width: 16,
-              height: 16,
+              left: showAdvanced ? 16 : 2,
+              width: 12,
+              height: 12,
               borderRadius: 999,
               background: 'white',
               boxShadow: '0 2px 6px rgba(40,30,15,0.20)',
@@ -1060,11 +953,17 @@ function SettingRow({
   dirty: boolean;
   onChange: (v: unknown) => void;
 }) {
+  // Phase 22-F — density pass. Was: 52px minHeight + 10/12 padding +
+  // 3-row stack (label / mono key / description). With 50+ rows on
+  // a 600px-tall display that ate the whole viewport. Now: 36px
+  // minHeight + 5/10 padding + single-row label + mono key inlined
+  // right before control + description on hover/title only. Saves
+  // ~16px per row × ~50 rows = ~800px of recovered scroll surface.
   return (
     <div
       style={{
         position: 'relative',
-        padding: '10px 12px',
+        padding: '5px 10px',
         borderRadius: 10,
         background: 'rgba(255,255,255,0.50)',
         border: dirty
@@ -1072,118 +971,89 @@ function SettingRow({
           : '1px solid rgba(255,255,255,0.50)',
         display: 'flex',
         alignItems: 'center',
-        gap: 12,
-        minHeight: 52,
+        gap: 10,
+        minHeight: 36,
       }}
+      title={def.description || undefined}
     >
-      {dirty && (
-        <span
-          aria-hidden
-          style={{
-            position: 'absolute',
-            left: -3,
-            top: '50%',
-            transform: 'translateY(-50%)',
-            width: 6,
-            height: 6,
-            borderRadius: 999,
-            background: '#f4af25',
-            boxShadow: '0 0 6px rgba(244,175,37,0.60)',
-          }}
-        />
-      )}
       <Tune
-        size={16}
+        size={14}
         strokeWidth={1.75}
         style={{ color: '#b07a10', flexShrink: 0 }}
       />
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div
+      <div
+        style={{
+          flex: 1,
+          minWidth: 0,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+        }}
+      >
+        <span
           style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
+            fontSize: 13,
+            fontWeight: 600,
+            color: 'var(--ink-primary)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+            flexShrink: 1,
           }}
         >
+          {def.label}
+        </span>
+        {/* Phase 22 — replaces the legacy " [soon]" label suffix the
+            backend used to bake in. */}
+        {def.unimplemented && (
           <span
+            title="Підсистема ще не запущена — значення зберігається, але ефекту нема"
             style={{
-              fontSize: 13,
-              fontWeight: 600,
-              color: 'var(--ink-primary)',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
+              fontSize: 8,
+              padding: '1px 5px',
+              borderRadius: 4,
+              background: 'rgba(122,140,170,0.20)',
+              color: '#3e4a63',
+              fontWeight: 700,
+              letterSpacing: '0.10em',
+              flexShrink: 0,
             }}
           >
-            {def.label}
+            СКОРО
           </span>
-          {/* Phase 22 — replaces the legacy " [soon]" label suffix the
-              backend used to bake in. The metadata flag now drives a
-              proper visual badge so the row is glanceable at a row
-              level. Today the backend filters unimplemented keys out
-              entirely, so this only fires once an "experimental view"
-              toggle surfaces them — kept here so that landing a row
-              with `unimplemented=true` is a one-line backend change. */}
-          {def.unimplemented && (
-            <span
-              title="Підсистема ще не запущена — значення зберігається, але ефекту нема"
-              style={{
-                fontSize: 8,
-                padding: '1px 5px',
-                borderRadius: 4,
-                background: 'rgba(122,140,170,0.20)',
-                color: '#3e4a63',
-                fontWeight: 700,
-                letterSpacing: '0.10em',
-              }}
-            >
-              СКОРО
-            </span>
-          )}
-          {dirty && (
-            <span
-              style={{
-                fontSize: 8,
-                padding: '1px 5px',
-                borderRadius: 4,
-                background: 'rgba(244,175,37,0.22)',
-                color: '#8a5e0a',
-                fontWeight: 700,
-                letterSpacing: '0.10em',
-              }}
-            >
-              EDITED
-            </span>
-          )}
-        </div>
-        <div
+        )}
+        {dirty && (
+          <span
+            style={{
+              fontSize: 8,
+              padding: '1px 5px',
+              borderRadius: 4,
+              background: 'rgba(244,175,37,0.22)',
+              color: '#8a5e0a',
+              fontWeight: 700,
+              letterSpacing: '0.10em',
+              flexShrink: 0,
+            }}
+          >
+            EDITED
+          </span>
+        )}
+        <span
           className="mono"
           style={{
             fontSize: 9,
             color: 'var(--ink-muted)',
-            marginTop: 1,
+            marginLeft: 'auto',
+            paddingLeft: 8,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
+            flexShrink: 1,
+            minWidth: 0,
           }}
         >
           {def.key}
-        </div>
-        {def.description && (
-          <div
-            style={{
-              fontSize: 11,
-              color: 'var(--ink-muted)',
-              marginTop: 2,
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-            }}
-            title={def.description}
-          >
-            {def.description}
-          </div>
-        )}
+        </span>
       </div>
       <div style={{ flexShrink: 0, minWidth: 180 }}>
         <ValueEditor def={def} value={value} onChange={onChange} />
@@ -1400,33 +1270,29 @@ function ThemePicker({ values, onChange }: ThemePickerProps) {
   const tiles: Array<{
     id: ThemeId;
     label: string;
-    blurb: string;
     swatch: string;
     icon: React.ReactNode;
   }> = [
     {
       id: 'sunrise-warm',
-      label: 'Sunrise · Warm',
-      blurb: 'Cream + amber. Bright as life.',
+      label: 'Sunrise',
       swatch:
         'linear-gradient(135deg,#fdf6e9 0%, #f4af25 50%, #fb923c 100%)',
-      icon: <Sun size={16} strokeWidth={2} />,
+      icon: <Sun size={14} strokeWidth={2} />,
     },
     {
       id: 'amber-night',
-      label: 'Amber · Night',
-      blurb: 'Warm-dark. Amber accents.',
+      label: 'Amber',
       swatch:
         'linear-gradient(135deg,#221c10 0%, #b07a10 60%, #f4af25 100%)',
-      icon: <Moon size={16} strokeWidth={2} />,
+      icon: <Moon size={14} strokeWidth={2} />,
     },
     {
       id: 'cyberdeck-cold',
-      label: 'Cyberdeck · Cold',
-      blurb: 'Slate + cyan. Legacy.',
+      label: 'Cyberdeck',
       swatch:
         'linear-gradient(135deg,#020617 0%, #0891b2 60%, #22d3ee 100%)',
-      icon: <Cog size={16} strokeWidth={2} />,
+      icon: <Cog size={14} strokeWidth={2} />,
     },
   ];
 
@@ -1438,12 +1304,14 @@ function ThemePicker({ values, onChange }: ThemePickerProps) {
     onChange(THEME_KEY, id);
   };
 
+  // Phase 22-G — tiles 60→44, swatch 36→26, padding 8/10→4/8.
+  // Was 180px for 3 tiles on a 348px scrollable list (~52%); now ~132px.
   return (
     <div
       style={{
         display: 'grid',
         gridTemplateColumns: 'repeat(3, 1fr)',
-        gap: 10,
+        gap: 8,
       }}
     >
       {tiles.map((t) => {
@@ -1455,19 +1323,19 @@ function ThemePicker({ values, onChange }: ThemePickerProps) {
             onClick={() => handleSelect(t.id)}
             aria-pressed={selected}
             style={{
-              minHeight: 110,
-              padding: 12,
-              borderRadius: 14,
+              minHeight: 44,
+              padding: '4px 8px',
+              borderRadius: 10,
               background: 'rgba(255,255,255,0.55)',
               border: selected
                 ? '2px solid #f4af25'
                 : '1px solid rgba(255,255,255,0.55)',
               boxShadow: selected
-                ? '0 8px 24px rgba(244,175,37,0.30)'
+                ? '0 4px 14px rgba(244,175,37,0.30)'
                 : 'var(--shadow-md)',
               cursor: 'pointer',
               display: 'flex',
-              flexDirection: 'column',
+              alignItems: 'center',
               gap: 8,
               textAlign: 'left',
               position: 'relative',
@@ -1476,11 +1344,12 @@ function ThemePicker({ values, onChange }: ThemePickerProps) {
             <div
               aria-hidden
               style={{
-                width: '100%',
-                height: 36,
-                borderRadius: 10,
+                width: 26,
+                height: 26,
+                borderRadius: 7,
                 background: t.swatch,
                 boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.06)',
+                flexShrink: 0,
               }}
             />
             <div
@@ -1489,6 +1358,8 @@ function ThemePicker({ values, onChange }: ThemePickerProps) {
                 alignItems: 'center',
                 gap: 6,
                 color: '#b07a10',
+                flex: 1,
+                minWidth: 0,
               }}
             >
               {t.icon}
@@ -1498,35 +1369,26 @@ function ThemePicker({ values, onChange }: ThemePickerProps) {
                   fontWeight: 700,
                   color: 'var(--ink-primary)',
                   letterSpacing: '0.02em',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
                 }}
               >
                 {t.label}
               </span>
             </div>
-            <div
-              style={{
-                fontSize: 10,
-                color: 'var(--ink-muted)',
-                lineHeight: 1.4,
-              }}
-            >
-              {t.blurb}
-            </div>
             {selected && (
               <span
-                className="micro-label"
+                aria-hidden
                 style={{
-                  position: 'absolute',
-                  top: 8,
-                  right: 8,
-                  color: '#b07a10',
-                  background: 'rgba(244,175,37,0.18)',
-                  padding: '2px 6px',
+                  width: 6,
+                  height: 6,
                   borderRadius: 999,
+                  background: '#f4af25',
+                  boxShadow: '0 0 6px rgba(244,175,37,0.55)',
+                  flexShrink: 0,
                 }}
-              >
-                ACTIVE
-              </span>
+              />
             )}
           </button>
         );
@@ -1577,82 +1439,11 @@ function StatusPill({
   );
 }
 
-/* ─── Circular score ─────────────────────────────────────────────────── */
-
-function CircularScore({ ratio }: { ratio: number }) {
-  const r = 18;
-  const c = 2 * Math.PI * r;
-  const dash = c * Math.max(0, Math.min(1, ratio));
-  return (
-    <div style={{ position: 'relative', width: 44, height: 44 }}>
-      <svg
-        viewBox="0 0 44 44"
-        style={{ position: 'absolute', inset: 0 }}
-        aria-hidden
-      >
-        <circle
-          cx="22"
-          cy="22"
-          r={r}
-          fill="none"
-          stroke="rgba(0,0,0,0.06)"
-          strokeWidth="3"
-        />
-        <circle
-          cx="22"
-          cy="22"
-          r={r}
-          fill="none"
-          stroke="#16a34a"
-          strokeWidth="3"
-          strokeLinecap="round"
-          strokeDasharray={`${dash} ${c}`}
-          transform="rotate(-90 22 22)"
-        />
-      </svg>
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          fontSize: 10,
-          fontWeight: 700,
-          color: '#16a34a',
-        }}
-      >
-        {Math.round(ratio * 100)}
-      </div>
-    </div>
-  );
-}
-
-/* ─── Category glyph ─────────────────────────────────────────────────── */
-
-function CategoryGlyph({ icon }: { icon: string }) {
-  // Categories carry a single-glyph icon string in the schema (e.g.
-  // "tune", "palette"). Rendering them as text inside the gradient
-  // tile keeps zero new asset loads. A real icon font lookup would
-  // belong in a shared <Icon> component — out of scope here.
-  return (
-    <span
-      style={{
-        fontFamily: 'Material Symbols Outlined, system-ui',
-        fontSize: 22,
-        lineHeight: 1,
-      }}
-    >
-      {icon}
-    </span>
-  );
-}
-
 /* ─── AI diagnostics ─────────────────────────────────────────────────── */
 
 function AIProviderDiagnostics() {
   const [state, setState] = useState<{
-    running: null | 'ollama' | 'gemini';
+    running: null | 'ollama' | 'gemini' | 'reset';
     result: Record<'ollama' | 'gemini', AITestResponse | null>;
   }>({ running: null, result: { ollama: null, gemini: null } });
 
@@ -1680,32 +1471,77 @@ function AIProviderDiagnostics() {
     }
   }, []);
 
+  const runReset = useCallback(async () => {
+    setState((s) => ({ ...s, running: 'reset' }));
+    try {
+      await aiApi.reset();
+      // Clear results to encourage re-testing
+      setState({ running: null, result: { ollama: null, gemini: null } });
+    } catch (err) {
+      setState((s) => ({ ...s, running: null }));
+    }
+  }, []);
+
+  // Phase 22-F — was a column-stacked sub-glass: eyebrow row + test
+  // button row, padding 12/14, gap 10. Now a single-row pill — eyebrow
+  // inlined with the buttons. Saves ~30px.
   return (
     <div
       className="sub-glass"
       style={{
-        padding: '12px 14px',
+        padding: '6px 10px',
         display: 'flex',
-        flexDirection: 'column',
-        gap: 10,
+        alignItems: 'center',
+        flexWrap: 'wrap',
+        gap: 8,
         borderRadius: 12,
       }}
     >
-      <div className="eyebrow-amber">Connectivity</div>
-      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
-        <ProviderTestButton
-          label="Test Ollama"
-          onClick={() => run('ollama')}
-          busy={state.running === 'ollama'}
-          result={state.result.ollama}
-        />
-        <ProviderTestButton
-          label="Test Gemini"
-          onClick={() => run('gemini')}
-          busy={state.running === 'gemini'}
-          result={state.result.gemini}
-        />
+      <div className="eyebrow-amber" style={{ marginRight: 4 }}>
+        Connectivity
       </div>
+      <ProviderTestButton
+        label="Test Ollama"
+        onClick={() => run('ollama')}
+        busy={state.running === 'ollama'}
+        result={state.result.ollama}
+      />
+      <ProviderTestButton
+        label="Test Gemini"
+        onClick={() => run('gemini')}
+        busy={state.running === 'gemini'}
+        result={state.result.gemini}
+      />
+      <button
+        type="button"
+        onClick={runReset}
+        disabled={state.running === 'reset'}
+        style={{
+          minHeight: 44,
+          padding: '0 14px',
+          background: 'rgba(0,0,0,0.05)',
+          color: 'var(--ink-muted)',
+          border: '1px solid rgba(0,0,0,0.1)',
+          borderRadius: 9999,
+          fontFamily: 'var(--font-display)',
+          fontSize: 10,
+          letterSpacing: '0.05em',
+          textTransform: 'uppercase',
+          opacity: state.running === 'reset' ? 0.6 : 1,
+          cursor: state.running === 'reset' ? 'default' : 'pointer',
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: 6,
+          marginLeft: 'auto',
+        }}
+      >
+        {state.running === 'reset' ? (
+          <Loader2 size={12} className="animate-spin" />
+        ) : (
+          <RotateCcw size={12} />
+        )}
+        Force Reset AI
+      </button>
     </div>
   );
 }
@@ -2202,23 +2038,35 @@ function NPUDiagnostics() {
             : 'var(--accent)';
 
   return (
-    <div
+    <details
       className="sub-glass"
       style={{
-        padding: '12px 14px',
-        display: 'flex',
-        flexDirection: 'column',
-        gap: 10,
+        padding: '6px 10px',
         borderRadius: 12,
       }}
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+      <summary
+        style={{
+          listStyle: 'none',
+          cursor: 'pointer',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 8,
+          minHeight: 28,
+          userSelect: 'none',
+        }}
+      >
         <Cpu
-          size={14}
+          size={13}
           strokeWidth={1.75}
-          style={{ color: 'var(--ink-muted)' }}
+          style={{ color: 'var(--ink-muted)', flexShrink: 0 }}
         />
-        <span className="eyebrow-amber">NPU · Hexagon HTP</span>
+        <span
+          className="eyebrow-amber"
+          style={{ flexShrink: 0 }}
+        >
+          NPU · HTP
+        </span>
         <span
           className="micro-label"
           style={{
@@ -2227,6 +2075,7 @@ function NPUDiagnostics() {
             background: `color-mix(in srgb, ${color} 18%, transparent)`,
             color,
             border: `1px solid color-mix(in srgb, ${color} 50%, transparent)`,
+            flexShrink: 0,
           }}
         >
           {tone === 'ok'
@@ -2239,56 +2088,60 @@ function NPUDiagnostics() {
                   ? 'Off'
                   : '…'}
         </span>
+        <span
+          style={{
+            flex: 1,
+            fontFamily: 'var(--font-display)',
+            fontSize: 11,
+            color: 'var(--ink-secondary)',
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+          title={summary}
+        >
+          {summary}
+        </span>
         <button
           type="button"
-          onClick={refresh}
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            void refresh();
+          }}
           disabled={state.loading}
           style={{
-            marginLeft: 'auto',
-            minHeight: 32,
-            minWidth: 0,
-            padding: '0 10px',
+            minHeight: 24,
+            padding: '0 8px',
             borderRadius: 9999,
             background: 'rgba(255,255,255,0.60)',
             color: 'var(--ink-secondary)',
             border: '1px solid rgba(0,0,0,0.06)',
             fontFamily: 'var(--font-display)',
-            fontSize: 10,
+            fontSize: 9,
             letterSpacing: '0.05em',
             cursor: state.loading ? 'default' : 'pointer',
             opacity: state.loading ? 0.5 : 1,
+            flexShrink: 0,
           }}
           title="Re-check /voice/status"
         >
           {state.loading ? (
-            <Loader2
-              size={12}
-              strokeWidth={1.75}
-              className="animate-spin"
-            />
+            <Loader2 size={10} strokeWidth={1.75} className="animate-spin" />
           ) : (
             'Refresh'
           )}
         </button>
-      </div>
-
-      <div
-        style={{
-          fontFamily: 'var(--font-display)',
-          fontSize: 12,
-          color: 'var(--ink-secondary)',
-        }}
-      >
-        {summary}
-      </div>
+      </summary>
 
       {status && (
         <div
           style={{
+            marginTop: 8,
             display: 'grid',
-            gridTemplateColumns: '120px 1fr',
-            rowGap: 4,
-            columnGap: 12,
+            gridTemplateColumns: '110px 1fr',
+            rowGap: 3,
+            columnGap: 10,
             fontFamily: 'var(--font-mono)',
             fontSize: 10,
             color: 'var(--ink-muted)',
@@ -2327,7 +2180,7 @@ function NPUDiagnostics() {
           </span>
         </div>
       )}
-    </div>
+    </details>
   );
 }
 
@@ -2335,87 +2188,83 @@ function NPUDiagnostics() {
 
 function AboutSection() {
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-      <div
-        className="sub-glass"
-        style={{ borderRadius: 14, padding: '16px 18px' }}
-      >
-        <div className="eyebrow-amber">Version</div>
-        <div
-          style={{
-            fontSize: 28,
-            fontWeight: 300,
-            color: 'var(--ink-primary)',
-            letterSpacing: '-0.02em',
-            marginTop: 4,
-          }}
-        >
-          PHANTOM OS{' '}
-          <span style={{ color: '#b07a10' }}>0.6 · Phase 06</span>
-        </div>
-        <div
-          className="playfair"
-          style={{
-            fontSize: 14,
-            color: 'var(--ink-secondary)',
-            lineHeight: 1.5,
-            maxWidth: 520,
-            marginTop: 8,
-            fontStyle: 'italic',
-          }}
-        >
-          A dual-node assistant, part brain (Radxa Dragon Q6A) and part
-          nerves (ESP32-S3). Quiet by default. Louder when it matters.
-        </div>
-      </div>
-
-      <div
-        className="sub-glass"
-        style={{ borderRadius: 14, padding: '14px 18px' }}
-      >
-        <div className="eyebrow-amber" style={{ marginBottom: 6 }}>
-          Runtime
-        </div>
-        <AboutRow label="Frontend" value="React 18 · Vite 5 · Tailwind 3" />
-        <AboutRow label="Backend" value="FastAPI · SQLite · ChromaDB" />
-        <AboutRow label="AI" value="Gemini 2.0 Flash → Ollama Gemma 4" />
-        <AboutRow
-          label="Voice"
-          value="faster-whisper → Vosk · StyleTTS2 UA"
-        />
-      </div>
-    </div>
-  );
-}
-
-function AboutRow({ label, value }: { label: string; value: string }) {
-  return (
     <div
+      className="sub-glass"
       style={{
+        borderRadius: 12,
+        padding: '10px 12px',
         display: 'flex',
-        alignItems: 'center',
-        gap: 12,
-        padding: '6px 0',
-        borderBottom: '1px solid var(--line-subtle)',
+        flexDirection: 'column',
+        gap: 8,
       }}
     >
-      <span
-        className="micro-label"
+      <div
         style={{
-          width: 120,
+          display: 'flex',
+          alignItems: 'baseline',
+          gap: 8,
         }}
       >
-        {label}
-      </span>
-      <span
-        className="mono"
+        <span
+          style={{
+            fontSize: 14,
+            fontWeight: 700,
+            color: 'var(--ink-primary)',
+            letterSpacing: '-0.01em',
+          }}
+        >
+          PHANTOM OS
+        </span>
+        <span
+          className="tabular"
+          style={{
+            fontSize: 11,
+            fontWeight: 700,
+            padding: '1px 7px',
+            borderRadius: 999,
+            background: 'rgba(244,175,37,0.18)',
+            color: '#8a5e0a',
+            letterSpacing: '0.04em',
+          }}
+        >
+          0.6 · PHASE 06
+        </span>
+        <span style={{ flex: 1 }} />
+        <span
+          className="micro-label"
+          style={{ color: 'var(--ink-muted)' }}
+        >
+          DUAL-NODE · RADXA + ESP32-S3
+        </span>
+      </div>
+      <div
         style={{
-          fontSize: 12,
-          color: 'var(--ink-primary)',
+          display: 'grid',
+          gridTemplateColumns: '70px 1fr',
+          rowGap: 3,
+          columnGap: 10,
+          fontFamily: 'var(--font-mono)',
+          fontSize: 11,
+          color: 'var(--ink-muted)',
         }}
       >
-        {value}
-      </span>
+        <span>Frontend</span>
+        <span style={{ color: 'var(--ink-primary)' }}>
+          React 18 · Vite 5 · Tailwind 3
+        </span>
+        <span>Backend</span>
+        <span style={{ color: 'var(--ink-primary)' }}>
+          FastAPI · SQLite · ChromaDB
+        </span>
+        <span>AI</span>
+        <span style={{ color: 'var(--ink-primary)' }}>
+          Gemini router → Ollama fallback
+        </span>
+        <span>Voice</span>
+        <span style={{ color: 'var(--ink-primary)' }}>
+          Whisper / Vosk / NPU STT · Piper TTS
+        </span>
+      </div>
     </div>
   );
 }
@@ -2488,55 +2337,48 @@ function FamiliarControlSection() {
     <div
       className="sub-glass"
       style={{
-        padding: '12px 14px',
+        padding: '8px 10px',
         display: 'flex',
-        flexDirection: 'column',
-        gap: 10,
+        alignItems: 'center',
+        gap: 8,
         borderRadius: 12,
+        flexWrap: 'wrap',
       }}
       data-testid="familiar-control"
     >
-      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-        <span
-          aria-hidden
-          style={{
-            width: 12,
-            height: 12,
-            borderRadius: 999,
-            background:
-              'radial-gradient(circle at 30% 30%, #ffffff, #f4af25 70%)',
-            boxShadow: '0 0 12px rgba(244,175,37,0.55)',
-          }}
-        />
-        <span className="eyebrow-amber">PHANTOM Familiar</span>
-        <span
-          className="micro-label"
-          style={{
-            padding: '1px 7px',
-            borderRadius: 999,
-            background: 'rgba(244,175,37,0.18)',
-            color: '#8a5e0a',
-            fontWeight: 700,
-          }}
-        >
-          {rarity.toUpperCase()}
-        </span>
-      </div>
+      <span
+        aria-hidden
+        style={{
+          width: 10,
+          height: 10,
+          borderRadius: 999,
+          background:
+            'radial-gradient(circle at 30% 30%, #ffffff, #f4af25 70%)',
+          boxShadow: '0 0 10px rgba(244,175,37,0.55)',
+          flexShrink: 0,
+        }}
+      />
+      <span
+        className="eyebrow-amber"
+        title="A small wisp that occasionally appears, points at things, and waves."
+        style={{ flexShrink: 0 }}
+      >
+        Familiar
+      </span>
 
       <div
-        className="playfair"
+        role="group"
+        aria-label="Familiar rarity"
         style={{
-          fontSize: 11,
-          color: 'var(--ink-secondary)',
-          fontStyle: 'italic',
-          lineHeight: 1.4,
+          display: 'inline-flex',
+          alignItems: 'stretch',
+          padding: 2,
+          borderRadius: 999,
+          background: 'rgba(40,30,15,0.06)',
+          border: '1px solid rgba(40,30,15,0.08)',
+          gap: 2,
         }}
       >
-        A small wisp that occasionally appears, points at things, and waves.
-        Set how often it manifests — or summon one now.
-      </div>
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6 }}>
         {options.map((opt) => {
           const selected = opt.id === rarity;
           return (
@@ -2545,84 +2387,55 @@ function FamiliarControlSection() {
               type="button"
               onClick={() => handleSelect(opt.id)}
               aria-pressed={selected}
+              title={opt.blurb}
               style={{
-                minHeight: 44,
-                padding: '6px 8px',
-                borderRadius: 10,
-                border: selected
-                  ? '2px solid #f4af25'
-                  : '1px solid rgba(0,0,0,0.08)',
+                minHeight: 28,
+                padding: '0 10px',
+                borderRadius: 999,
+                border: 'none',
                 background: selected
-                  ? 'rgba(244,175,37,0.18)'
-                  : 'rgba(255,255,255,0.50)',
+                  ? 'linear-gradient(135deg,#f4af25,#fb923c)'
+                  : 'transparent',
+                color: selected ? 'white' : 'var(--ink-secondary)',
                 cursor: 'pointer',
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'flex-start',
-                gap: 2,
-                textAlign: 'left',
+                fontFamily: 'var(--font-display)',
+                fontSize: 11,
+                fontWeight: selected ? 700 : 500,
+                letterSpacing: '0.02em',
+                boxShadow: selected
+                  ? '0 2px 6px rgba(244,175,37,0.35)'
+                  : 'none',
               }}
             >
-              <span
-                style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: selected ? '#8a5e0a' : 'var(--ink-primary)',
-                }}
-              >
-                {opt.label}
-              </span>
-              <span
-                style={{
-                  fontSize: 9,
-                  color: 'var(--ink-muted)',
-                  letterSpacing: '0.02em',
-                }}
-              >
-                {opt.blurb}
-              </span>
+              {opt.label}
             </button>
           );
         })}
       </div>
 
-      <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-        <button
-          type="button"
-          onClick={handleTestSummon}
-          style={{
-            minHeight: 44,
-            padding: '0 14px',
-            borderRadius: 9999,
-            background: 'linear-gradient(135deg,#f4af25,#fb923c)',
-            color: 'white',
-            border: 'none',
-            cursor: 'pointer',
-            fontFamily: 'var(--font-display)',
-            fontSize: 11,
-            fontWeight: 700,
-            letterSpacing: '0.06em',
-            textTransform: 'uppercase',
-            boxShadow: '0 4px 14px rgba(244,175,37,0.40)',
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: 6,
-          }}
-          title="Force-summon the Familiar (bypasses rarity gate)"
-        >
-          Test summon
-        </button>
-        <span
-          className="mono"
-          style={{
-            fontSize: 10,
-            color: 'var(--ink-muted)',
-          }}
-        >
-          Honours `prefers-reduced-motion: reduce` — the wisp fades in/out
-          instead of drifting when motion is reduced.
-        </span>
-      </div>
+      <span style={{ flex: 1, minWidth: 8 }} />
+
+      <button
+        type="button"
+        onClick={handleTestSummon}
+        style={{
+          minHeight: 28,
+          padding: '0 12px',
+          borderRadius: 9999,
+          background: 'transparent',
+          color: '#8a5e0a',
+          border: '1px solid rgba(244,175,37,0.55)',
+          cursor: 'pointer',
+          fontFamily: 'var(--font-display)',
+          fontSize: 10,
+          fontWeight: 700,
+          letterSpacing: '0.06em',
+          textTransform: 'uppercase',
+        }}
+        title="Force-summon the Familiar (bypasses rarity gate)"
+      >
+        Summon
+      </button>
     </div>
   );
 }

@@ -35,7 +35,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from api.websocket_hub import hub
 from config import config
 from db.database import get_db
-from db.models import PairedDevice, User
+from db.models import PairedDevice, Profile, User
 from security.device_token import (
     create_device_token,
     decode_expired_device_token,
@@ -78,6 +78,16 @@ class PairClaimRequest(BaseModel):
     nonce_echo: str = Field(..., min_length=20, max_length=64)
     client_proof: str = Field(..., min_length=40, max_length=64)
     device: dict = Field(default_factory=dict)
+    # Phase 1-B (companion-v2) — phone may nominate which existing
+    # Profile under the owning User this device should bind to. Omit
+    # on first pair under a fresh user and the server lazy-creates
+    # the user's Primary profile and attaches the device to it.
+    profile_id: Optional[str] = Field(default=None, max_length=36)
+    # Phase 1-B (companion-v2) — display name to seed the lazy Primary
+    # profile when `profile_id` is omitted *and* the user has no
+    # profiles yet. Ignored if a profile already exists. Trimmed and
+    # length-capped to match Profile.display_name.
+    profile_display_name: Optional[str] = Field(default=None, max_length=64)
 
 
 class PairClaimResponse(BaseModel):
@@ -86,6 +96,10 @@ class PairClaimResponse(BaseModel):
     expires_at: str
     server_proof: str
     user: dict
+    # Phase 1-B (companion-v2) — the Profile this device is now bound to.
+    # The phone caches this id locally so subsequent re-pairings under
+    # the same operator persona can pass it back via PairClaimRequest.
+    profile: dict
 
 
 class PairStatusResponse(BaseModel):
@@ -136,6 +150,73 @@ def _user_to_dict(u: User) -> dict:
         "role": u.role,
         "avatar_url": u.avatar_url,
     }
+
+
+def _profile_to_dict(p: Profile) -> dict:
+    return {
+        "id": p.id,
+        "user_id": p.user_id,
+        "display_name": p.display_name,
+        "role": p.role,
+        "avatar_uri": p.avatar_uri,
+        "is_primary": p.is_primary,
+    }
+
+
+async def _resolve_or_bootstrap_profile(
+    db: AsyncSession,
+    *,
+    owner: User,
+    requested_profile_id: Optional[str],
+    primary_display_name: Optional[str],
+) -> Profile:
+    """Resolve the [Profile] this paired device should bind to.
+
+    Three paths, in priority order:
+      1. The phone supplied a ``profile_id`` — must exist, belong to the
+         owning user, and not be archived. Anything else is a 400.
+      2. The user already has a Primary profile — re-use it. This is
+         the steady-state "second device joining the same persona" path.
+      3. The user has no profile yet — lazy-create the Primary using
+         ``primary_display_name`` (sanitised) or the user's username as
+         fallback. New profiles inherit the user's role so a ROOT user's
+         first profile can co-sign ROOT verbs without an extra step.
+    """
+    if requested_profile_id:
+        profile = await db.get(Profile, requested_profile_id)
+        if (
+            profile is None
+            or profile.user_id != owner.id
+            or profile.archived_at is not None
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail={"code": "profile_invalid"},
+            )
+        return profile
+
+    stmt = (
+        select(Profile)
+        .where(Profile.user_id == owner.id, Profile.is_primary == True)  # noqa: E712
+        .order_by(Profile.created_at.asc())
+        .limit(1)
+    )
+    primary = (await db.execute(stmt)).scalar_one_or_none()
+    if primary is not None:
+        return primary
+
+    # First profile under this user — seed the Primary.
+    requested_name = (primary_display_name or "").strip()
+    seed_name = requested_name[:64] or (owner.username or "")[:64] or "Primary"
+    primary = Profile(
+        user_id=owner.id,
+        display_name=seed_name,
+        role=owner.role or "OPERATOR",
+        is_primary=True,
+    )
+    db.add(primary)
+    await db.flush()
+    return primary
 
 
 def _row_to_pydantic(row: PairedDevice) -> PairedDeviceRow:
@@ -303,9 +384,21 @@ async def pair_claim(
             detail={"code": "owner_missing"},
         )
 
+    # Phase 1-B (companion-v2) — pick or seed the Profile this device
+    # binds to BEFORE inserting PairedDevice so the FK lands in one
+    # transaction. `_resolve_or_bootstrap_profile` raises 400 on any
+    # phone-supplied profile_id that doesn't belong to `owner`.
+    profile = await _resolve_or_bootstrap_profile(
+        db,
+        owner=owner,
+        requested_profile_id=body.profile_id,
+        primary_display_name=body.profile_display_name,
+    )
+
     device_meta = body.device or {}
     row = PairedDevice(
         user_id=owner.id,
+        profile_id=profile.id,
         device_name=str(device_meta.get("name", ""))[:128],
         device_model=str(device_meta.get("model", ""))[:128],
         platform=str(device_meta.get("platform", "android"))[:16],
@@ -343,6 +436,8 @@ async def pair_claim(
             "device_model": row.device_model,
             "platform": row.platform,
             "user_id": owner.id,
+            "profile_id": profile.id,
+            "profile_display_name": profile.display_name,
             "paired_at": row.paired_at.isoformat(),
         },
         user_id=owner.id,
@@ -354,6 +449,7 @@ async def pair_claim(
         expires_at=expires_at_iso,
         server_proof=server_proof,
         user=_user_to_dict(owner),
+        profile=_profile_to_dict(profile),
     )
 
 

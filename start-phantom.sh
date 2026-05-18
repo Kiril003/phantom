@@ -17,7 +17,7 @@ pgrep -af vite && echo "WARN: vite still running" || echo "OK: vite stopped"
 
 echo "==> Starting backend..."
 cd "$PROJECT/src/backend"
-nohup .venv/bin/uvicorn main:app > /tmp/phantom-backend.log 2>&1 &
+nohup .venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000 > /tmp/phantom-backend.log 2>&1 &
 BACKEND_PID=$!
 echo "Backend PID: $BACKEND_PID"
 

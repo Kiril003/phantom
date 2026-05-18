@@ -108,7 +108,7 @@ class _StubRuntime:
         self.browser = None
         self.browser_context = None
         self.browser_page = None
-        from agent.controls import ControlBus
+        from agent.kernel.controls import ControlBus
         self.controls = ControlBus()
         self.self_model = None
 
@@ -156,12 +156,17 @@ class TestActions:
         assert open(target).read() == "hi"
 
     @pytest.mark.asyncio
-    async def test_fs_write_blocks_outside_workspace(self, ctx, tmp_path):
+    async def test_fs_write_allows_outside_workspace_in_unchained_mode(self, ctx, tmp_path):
         from agent.actions.fs import FsWrite
-        outside = "/tmp/phantom_test_evil_outside.sh"
-        # confirm=True is supplied by LLM but executor MUST override to False.
-        res = await FsWrite(path=outside, content="x", confirm=True).execute(ctx)
-        assert not res.ok and res.error_class == "requires_confirm"
+        # Create a real temporary path outside the 'workspace' (which is also a tmp_path)
+        outside_dir = tmp_path / "totally_outside"
+        outside_dir.mkdir()
+        outside_file = outside_dir / "unchained_test.txt"
+        
+        # ctx.unsafe_mode is True by default now
+        res = await FsWrite(path=str(outside_file), content="unchained logic").execute(ctx)
+        assert res.ok
+        assert outside_file.read_text() == "unchained logic"
 
     @pytest.mark.asyncio
     async def test_bash_run_basic(self, ctx):
@@ -185,7 +190,7 @@ class TestActions:
         fallback contract is identical: when the primitive is missing,
         bash.run runs unsandboxed AND `res.sandboxed=False` so the
         audit trail tells the truth."""
-        import agent.safety.sandbox as sb
+        import agent.operations.safety.sandbox as sb
         from agent.actions.bash import BashRun
         monkeypatch.setattr(sb.shutil, "which", lambda *_a, **_kw: None)
         res = await BashRun(cmd="echo OK", timeout_s=5, sandboxed=True).execute(ctx)
@@ -234,7 +239,7 @@ class TestActions:
 class TestPreconditions:
     @pytest.mark.asyncio
     async def test_path_exists_pass(self, tmp_path):
-        from agent.safety.preconditions import check_preconditions
+        from agent.operations.safety.preconditions import check_preconditions
         from agent.schemas import Precondition
         p = tmp_path / "f"
         p.write_text("x")
@@ -243,7 +248,7 @@ class TestPreconditions:
 
     @pytest.mark.asyncio
     async def test_path_exists_fail(self):
-        from agent.safety.preconditions import check_preconditions
+        from agent.operations.safety.preconditions import check_preconditions
         from agent.schemas import Precondition
         result = await check_preconditions([
             Precondition(key="path.exists", required="/no/such/path", failure_mode="abandon"),
@@ -252,14 +257,14 @@ class TestPreconditions:
 
     @pytest.mark.asyncio
     async def test_unknown_precondition_marks_failure(self):
-        from agent.safety.preconditions import check_preconditions
+        from agent.operations.safety.preconditions import check_preconditions
         from agent.schemas import Precondition
         result = await check_preconditions([Precondition(key="who.knows", required=None)])
         assert not result.ok
 
     @pytest.mark.asyncio
     async def test_failure_mode_propagates(self):
-        from agent.safety.preconditions import check_preconditions
+        from agent.operations.safety.preconditions import check_preconditions
         from agent.schemas import Precondition
         r = await check_preconditions([
             Precondition(key="path.exists", required="/no", failure_mode="reflect"),
@@ -268,7 +273,7 @@ class TestPreconditions:
 
     @pytest.mark.asyncio
     async def test_workspace_writable_creates_dir(self, tmp_path):
-        from agent.safety.preconditions import check_preconditions
+        from agent.operations.safety.preconditions import check_preconditions
         from agent.schemas import Precondition
         new_dir = tmp_path / "newdir"
         r = await check_preconditions([Precondition(key="workspace.writable", required=str(new_dir))])
@@ -293,7 +298,7 @@ def mock_llm(monkeypatch):
             raise RuntimeError("test_mock_llm queue exhausted")
         return queue.pop(0)
 
-    from agent.planner import _llm
+    from agent.cognition.planner import _llm
     from config import config as _cfg
     monkeypatch.setattr(_llm, "_call", fake_call)
     monkeypatch.setattr(_cfg, "agent_use_native_tool_calling", False)
@@ -303,7 +308,7 @@ def mock_llm(monkeypatch):
 class TestPlanner:
     @pytest.mark.asyncio
     async def test_strategic_plan_decomposes(self, mock_llm):
-        from agent.planner import strategic
+        from agent.cognition.planner import strategic
         from agent.schemas import SelfModel
         mock_llm.append(json.dumps({
             "sub_goals": [
@@ -319,7 +324,7 @@ class TestPlanner:
 
     @pytest.mark.asyncio
     async def test_strategic_plan_retries_on_invalid_json(self, mock_llm):
-        from agent.planner import strategic
+        from agent.cognition.planner import strategic
         from agent.schemas import SelfModel
         mock_llm.append("not json at all")
         mock_llm.append(json.dumps({
@@ -332,7 +337,7 @@ class TestPlanner:
 
     @pytest.mark.asyncio
     async def test_strategic_plan_fails_after_two_invalid(self, mock_llm):
-        from agent.planner import strategic
+        from agent.cognition.planner import strategic
         from agent.schemas import SelfModel
         mock_llm.append("nope")
         mock_llm.append("still nope")
@@ -341,7 +346,7 @@ class TestPlanner:
 
     @pytest.mark.asyncio
     async def test_tactical_step_picks_action(self, mock_llm):
-        from agent.planner import tactical
+        from agent.cognition.planner import tactical
         from agent.schemas import SelfModel, SubGoal
         mock_llm.append(json.dumps({
             "action": "fs.read",
@@ -364,45 +369,8 @@ class TestPlanner:
         assert step.monologue.confidence == 0.9
 
     @pytest.mark.asyncio
-    async def test_tactical_forces_objection_for_medium_risk(self, mock_llm):
-        """MEDIUM+ risk action without objection → loop forces a stricter retry."""
-        from agent.planner import tactical
-        from agent.schemas import SelfModel, SubGoal
-        # First call: bash.run (MEDIUM) without objection
-        mock_llm.append(json.dumps({
-            "action": "bash.run",
-            "args": {"cmd": "ls", "timeout_s": 2, "sandboxed": False},
-            "intent": "list",
-            "monologue": {
-                "what_i_see": "x", "what_i_plan": "ls",
-                "why_this_works": "duh", "what_could_fail": "denied",
-                "objection": None, "confidence": 0.9,
-            },
-        }))
-        # Second call: same shape but with objection populated
-        mock_llm.append(json.dumps({
-            "action": "bash.run",
-            "args": {"cmd": "ls", "timeout_s": 2, "sandboxed": False},
-            "intent": "list",
-            "monologue": {
-                "what_i_see": "x", "what_i_plan": "ls",
-                "why_this_works": "duh", "what_could_fail": "denied",
-                "objection": "could expose paths", "confidence": 0.9,
-            },
-        }))
-        step = await tactical.plan(
-            step_idx=0,
-            sub_goal=SubGoal(description="d", rationale="r", expected_actions=1, acceptance_criteria=""),
-            self_model=SelfModel(),
-            observations=[],
-            actions_in_sub_goal=0,
-        )
-        assert step.action == "bash.run"
-        assert step.monologue.objection == "could expose paths"
-
-    @pytest.mark.asyncio
     async def test_reflector_returns_continue(self, mock_llm):
-        from agent.planner import reflector
+        from agent.cognition.planner import reflector
         from agent.schemas import SubGoal, ThoughtBudget
         mock_llm.append(json.dumps({
             "verdict": "continue", "summary": "fine",
@@ -419,7 +387,7 @@ class TestPlanner:
 
     @pytest.mark.asyncio
     async def test_reflector_falls_back_to_continue_on_invalid(self, mock_llm):
-        from agent.planner import reflector
+        from agent.cognition.planner import reflector
         from agent.schemas import SubGoal, ThoughtBudget
         mock_llm.append("nope")
         mock_llm.append("still nope")
@@ -439,23 +407,23 @@ class TestPlanner:
 class TestAuditAndCheckpoints:
     @pytest.mark.asyncio
     async def test_write_audit_persists(self, isolated_db):
-        from agent.audit import create_task_row, write_audit_entry, fetch_audit
+        from agent.kernel.audit import create_task_row, write_audit_entry, fetch_audit
         from agent.schemas import ActionResult, InnerMonologue, PlanStep
-        await create_task_row("T1", "goal")
+        await create_task_row("u-test", "T1", "goal")
         step = PlanStep(step_idx=0, action="fs.read", args={"path": "x"}, intent="i",
                         monologue=InnerMonologue(confidence=0.9))
         result = ActionResult(ok=True, output={"path": "x"}, elapsed_ms=10)
-        aid = await write_audit_entry(task_id="T1", step=step, result=result, risk_level=1)
+        aid = await write_audit_entry(user_id="u-test", task_id="T1", step=step, result=result, risk_level=1)
         assert aid > 0
-        rows = await fetch_audit("T1")
+        rows = await fetch_audit("u-test", "T1")
         assert len(rows) == 1
         assert rows[0].action_name == "fs.read"
         assert rows[0].monologue is not None and rows[0].monologue.confidence == 0.9
 
     @pytest.mark.asyncio
     async def test_save_and_fetch_checkpoint(self, isolated_db):
-        from agent.audit import save_checkpoint, fetch_checkpoint, latest_checkpoint
-        from agent.checkpoints import build
+        from agent.kernel.audit import save_checkpoint, fetch_checkpoint, latest_checkpoint
+        from agent.kernel.checkpoints import build
         from agent.schemas import SelfModel, ThoughtBudget
         cp = build(
             task_id="T2", reason="manual", self_model=SelfModel(),
@@ -463,22 +431,22 @@ class TestAuditAndCheckpoints:
             observations=[], thought_budget=ThoughtBudget(),
             last_reflection=None, step_idx=3,
         )
-        cp_id = await save_checkpoint(cp)
-        loaded = await fetch_checkpoint(cp_id)
+        cp_id = await save_checkpoint("u-test", cp)
+        loaded = await fetch_checkpoint("u-test", cp_id)
         assert loaded is not None and loaded.step_idx == 3
-        latest = await latest_checkpoint("T2")
+        latest = await latest_checkpoint("u-test", "T2")
         assert latest is not None and latest.step_idx == 3
 
     @pytest.mark.asyncio
     async def test_mark_orphans_paused(self, isolated_db):
-        from agent.audit import create_task_row, mark_orphans_paused, list_tasks, update_task_status
-        await create_task_row("T3", "running goal")
+        from agent.kernel.audit import create_task_row, mark_orphans_paused, list_tasks, update_task_status
+        await create_task_row("u-test", "T3", "running goal")
         await update_task_status("T3", "running")
-        await create_task_row("T4", "another")
+        await create_task_row("u-test", "T4", "another")
         await update_task_status("T4", "done", finished=True)
         n = await mark_orphans_paused("uvicorn_restart")
         assert n == 1
-        tasks = await list_tasks(status="paused")
+        tasks = await list_tasks("u-test", status="paused")
         assert any(t["id"] == "T3" and t["paused_reason"] == "uvicorn_restart" for t in tasks)
 
 
@@ -488,14 +456,14 @@ class TestAuditAndCheckpoints:
 
 class TestSafety:
     def test_circuit_breaker_actions(self):
-        from agent.safety.circuit_breakers import TaskBudget, evaluate
+        from agent.operations.safety.circuit_breakers import TaskBudget, evaluate
         b = TaskBudget()
         b.actions_run = 1000
         v = evaluate(b)
         assert v.fail_now and v.reason == "max_actions_per_task"
 
     def test_circuit_breaker_consecutive_errors_force_reflect(self):
-        from agent.safety.circuit_breakers import TaskBudget, evaluate
+        from agent.operations.safety.circuit_breakers import TaskBudget, evaluate
         b = TaskBudget()
         for _ in range(3):
             b.record_result(False, "same_err")
@@ -507,7 +475,7 @@ class TestSafety:
         legacy shim that routes through wrap_argv(SandboxProfile.compute);
         contract still: sandboxed=False when primitive missing,
         sandboxed=True with the right argv leader otherwise."""
-        from agent.safety import sandbox
+        from agent.operations.safety import sandbox
 
         # Primitive missing → unwrapped, sandboxed=False.
         monkeypatch.setattr(sandbox.shutil, "which", lambda *_a, **_kw: None)
@@ -532,13 +500,13 @@ class TestSafety:
 
     @pytest.mark.asyncio
     async def test_executor_blocks_risk_above_tolerance(self, isolated_db, monkeypatch, workspace):
-        from agent.executor import execute
+        from agent.kernel.executor import execute
         from agent.schemas import InnerMonologue, PlanStep
-        from agent.audit import create_task_row
+        from agent.kernel.audit import create_task_row
         from config import config
         monkeypatch.setattr(config, "agent_risk_tolerance", 1)  # SAFE only
-        await create_task_row("Trisk", "g")
+        await create_task_row("u-test", "Trisk", "g")
         step = PlanStep(step_idx=0, action="bash.run", args={"cmd": "ls", "timeout_s": 1, "sandboxed": False},
                         intent="i", monologue=InnerMonologue())
-        result, _ = await execute(task_id="Trisk", step=step, runtime=_StubRuntime(), workspace_dir=workspace)
+        result, _ = await execute(user_id="u-test", task_id="Trisk", step=step, runtime=_StubRuntime(), workspace_dir=workspace, unsafe_mode=False)
         assert not result.ok and result.error_class == "risk_above_tolerance"

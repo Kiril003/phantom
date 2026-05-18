@@ -4,22 +4,24 @@ Agent API — task control + read endpoints + feedback. All require JWT auth.
 from __future__ import annotations
 
 import logging
+import os
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from pydantic import BaseModel, Field
 
-from agent.audit import (
+from agent.kernel.audit import (
     fetch_audit,
     fetch_checkpoint,
     get_task as fetch_task_row,
     list_tasks as audit_list_tasks,
     write_feedback,
 )
-from agent.needs import info_need_registry, validate_response
-from agent.orchestrator import Council, build_default_council_roles
-from agent.reports import compose_task_report
-from agent.runtime import agent_runtime
+from agent.cognition.will.needs import info_need_registry, validate_response
+from agent.operations.orchestrator import Council, build_default_council_roles
+from agent.missions.reports import compose_task_report
+from agent.kernel.runtime import agent_runtime
 from agent.schemas import CouncilSituation, InfoNeedResponse, InnerMonologue
+from agent.cognition.org_chart import get_org_chart, update_role_orders, OrgChartSchema
 from security.auth import require_auth
 from security.jwt_manager import TokenPayload
 
@@ -28,10 +30,56 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/agent", tags=["agent"])
 
 
+# ── Org-Chart ───────────────────────────────────────────────────────────────
+
+@router.get("/org-chart", response_model=OrgChartSchema)
+async def get_agent_org_chart(_auth: TokenPayload = Depends(require_auth)):
+    """Returns the persistent agent hierarchy and role definitions."""
+    try:
+        return await get_org_chart()
+    except Exception as exc:
+        logger.error("API: get_org_chart failed: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
+class UpdateRoleOrdersRequest(BaseModel):
+    role_id: str
+    orders: str
+
+@router.post("/org-chart/orders")
+async def update_agent_role_orders(
+    req: UpdateRoleOrdersRequest,
+    _auth: TokenPayload = Depends(require_auth)
+):
+    """Updates the standing orders for a specific sub-agent role."""
+    try:
+        await update_role_orders(req.role_id, req.orders)
+        return {"status": "ok"}
+    except Exception as exc:
+        logger.error("API: update_role_orders failed: %s", exc)
+        raise HTTPException(status_code=500, detail=str(exc))
+
+
 # ── Schemas ──────────────────────────────────────────────────────────────────
 
 class StartTaskRequest(BaseModel):
     goal: str = Field(..., min_length=1, max_length=2000)
+    # Day-NN "no-leash" — operator-issued waiver for THIS task only.
+    # When True: bash/process actions skip the bwrap sandbox and the
+    # risk-tolerance gate auto-approves every step. Default False so
+    # raw `POST /agent/task {goal}` retains the standard guards.
+    unsafe_mode: bool = False
+
+
+class SafetyToggleRequest(BaseModel):
+    enabled: bool
+
+
+class ParallelChatRequest(BaseModel):
+    message: str = Field(..., min_length=1, max_length=4000)
+    # Optional: caller may pin a task_id to bind the thread to a specific task.
+    # When absent the endpoint resolves to the current foreground task (if any).
+    task_id: str | None = Field(default=None, max_length=36)
 
 
 class InterveneRequest(BaseModel):
@@ -58,16 +106,165 @@ class FeedbackRequest(BaseModel):
 async def start_task(
     req: StartTaskRequest,
     response: Response,
-    _: TokenPayload = Depends(require_auth),
+    token: TokenPayload = Depends(require_auth),
 ) -> dict:
-    task_id, started = await agent_runtime.start_task(req.goal)
+    task_id, started = await agent_runtime.start_task(
+        user_id=token.user_id, goal=req.goal, unsafe_mode=req.unsafe_mode,
+    )
+
     if not started:
         return {
             "task_id": task_id,
             "started": False,
             "detail": "Foreground slot busy — pause/stop the running task first.",
         }
-    return {"task_id": task_id, "started": True}
+    return {"task_id": task_id, "started": True, "unsafe_mode": req.unsafe_mode}
+
+
+@router.post("/task/{task_id}/safety")
+async def toggle_task_safety(
+    task_id: str,
+    req: SafetyToggleRequest,
+    _: TokenPayload = Depends(require_auth),
+) -> dict:
+    """Flip the per-task `unsafe_mode` flag on the live runtime.
+
+    `enabled=True` waives sandbox + risk gate for the running task; the
+    next action step picks up the new mode. Returns 404 when the task
+    is not currently active (already finished / not yet spawned).
+    """
+    ok = await agent_runtime.set_unsafe_mode(task_id, req.enabled)
+    if not ok:
+        raise HTTPException(status_code=404, detail="task not active")
+    return {"task_id": task_id, "unsafe_mode": req.enabled}
+
+
+@router.post("/chat")
+async def parallel_chat(
+    req: ParallelChatRequest,
+    token: TokenPayload = Depends(require_auth),
+) -> dict:
+    """V2 — stateful memory-backed conversational agent loop.
+
+    Loads the last N thread turns + recall + lessons + live observations
+    + substate into a rich agent-voice prompt, runs through chat_pipeline
+    (tool-use enabled, same dispatcher gate), streams token + tool events
+    over agent.stream WS, persists both turns, returns {reply} for
+    non-WS callers (back-compat preserved).
+    """
+    from db.database import get_session
+    from agent.cognition.chat_prompt import build_agent_chat_prompt, persist_turn
+
+    # Resolve task_id: explicit > foreground slot
+    task_id: str = req.task_id or ""
+    active_task = agent_runtime.foreground_slot
+    if not task_id and active_task:
+        task_id = active_task.id
+    if not task_id:
+        task_id = f"chat:{token.user_id}"
+
+    try:
+        async with get_session() as db:
+            system_prompt, history = await build_agent_chat_prompt(
+                user_message=req.message,
+                task_id=task_id,
+                db=db,
+                foreground_slot=active_task,
+                foreground_substate=agent_runtime.foreground_substate,
+            )
+
+            # Persist the user turn before we call the LLM so a crash
+            # mid-response doesn't lose it.
+            await persist_turn(db, task_id, "user", req.message)
+
+        # Broadcast user message to WS subscribers so the FE can render it
+        # without waiting for the full round-trip.
+        try:
+            await agent_runtime._broadcast("agent.chat.user_message", {  # noqa: SLF001
+                "task_id": task_id,
+                "message": req.message,
+            })
+        except Exception:
+            pass
+
+        # Run through the real chat pipeline (tool-use + dispatcher gate).
+        from ai import chat_pipeline
+        async with get_session() as db:
+            response = await chat_pipeline.run(
+                user_message=req.message,
+                system_prompt=system_prompt,
+                history=history,
+                user_id=token.user_id,
+                db=db,
+            )
+
+        reply_text = response.content or ""
+
+        # Persist assistant turn.
+        async with get_session() as db:
+            await persist_turn(db, task_id, "assistant", reply_text)
+
+        # Stream the reply over WS agent.stream channel.
+        try:
+            await agent_runtime._broadcast("agent.chat.reply", {  # noqa: SLF001
+                "task_id": task_id,
+                "reply": reply_text,
+                "response_form": response.response_form or "text",
+                "attachments": response.attachments or [],
+            })
+        except Exception:
+            pass
+
+        return {"reply": reply_text, "task_id": task_id}
+
+    except Exception as exc:
+        logger.error("parallel_chat failed: %s", exc)
+        raise HTTPException(status_code=503, detail="Агент недоступний")
+
+
+@router.get("/chat/thread")
+async def get_chat_thread(
+    task_id: str | None = Query(default=None),
+    limit: int = Query(default=40, ge=1, le=200),
+    token: TokenPayload = Depends(require_auth),
+) -> dict:
+    """V2 — return the persisted chat thread for a task (FE hydration on mount).
+
+    task_id defaults to the current foreground task when absent. Returns
+    {task_id, messages: [{role, content, created_at}]}.
+    """
+    from db.database import get_session
+    from db.models import AgentChatThread
+    from sqlalchemy import select as _select
+
+    resolved = task_id or ""
+    if not resolved and agent_runtime.foreground_slot:
+        resolved = agent_runtime.foreground_slot.id
+    if not resolved:
+        resolved = f"chat:{token.user_id}"
+
+    try:
+        async with get_session() as db:
+            result = await db.execute(
+                _select(AgentChatThread)
+                .where(AgentChatThread.task_id == resolved)
+                .order_by(AgentChatThread.created_at.desc())
+                .limit(limit)
+            )
+            rows = list(result.scalars())
+            rows.reverse()
+        messages = [
+            {
+                "role": r.role,
+                "content": r.content,
+                "created_at": r.created_at.isoformat() if r.created_at else None,
+            }
+            for r in rows
+        ]
+        return {"task_id": resolved, "messages": messages}
+    except Exception as exc:
+        logger.error("get_chat_thread failed: %s", exc)
+        return {"task_id": resolved, "messages": []}
 
 
 @router.post("/task/{task_id}/pause")
@@ -116,14 +313,14 @@ async def create_checkpoint(task_id: str, _: TokenPayload = Depends(require_auth
 async def resume_from_checkpoint(
     task_id: str,
     req: ResumeFromCheckpointRequest,
-    _: TokenPayload = Depends(require_auth),
+    token: TokenPayload = Depends(require_auth),
 ) -> dict:
-    cp = await fetch_checkpoint(req.checkpoint_id)
+    cp = await fetch_checkpoint(token.user_id, req.checkpoint_id)
     if cp is None:
         raise HTTPException(status_code=404, detail="checkpoint not found")
     if cp.task_id != task_id:
         raise HTTPException(status_code=400, detail="checkpoint belongs to a different task")
-    ok = await agent_runtime.resume_from_checkpoint(task_id, req.checkpoint_id)
+    ok = await agent_runtime.resume_from_checkpoint(token.user_id, task_id, req.checkpoint_id)
     if not ok:
         raise HTTPException(status_code=409, detail="cannot resume — slot busy or task already running")
     return {"resumed": True}
@@ -133,18 +330,19 @@ async def resume_from_checkpoint(
 async def list_tasks(
     status: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=500),
-    _: TokenPayload = Depends(require_auth),
+    token: TokenPayload = Depends(require_auth),
 ) -> dict:
-    rows = await audit_list_tasks(status=status, limit=limit)
+    rows = await audit_list_tasks(user_id=token.user_id, status=status, limit=limit)
     return {"tasks": [_serialize_task(r) for r in rows]}
+
 
 
 @router.get("/task/{task_id}")
 async def get_task(task_id: str, _: TokenPayload = Depends(require_auth)) -> dict:
-    row = await fetch_task_row(task_id)
+    row = await fetch_task_row(_.user_id, task_id)
     if row is None:
         raise HTTPException(status_code=404, detail="task not found")
-    last_audit = await fetch_audit(task_id, limit=50)
+    last_audit = await fetch_audit(_.user_id, task_id, limit=50)
     return {
         "task": _serialize_task(row),
         "sub_goals": row.get("sub_goals") or [],
@@ -159,9 +357,9 @@ async def get_task(task_id: str, _: TokenPayload = Depends(require_auth)) -> dic
 async def get_audit(
     task_id: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=500),
-    _: TokenPayload = Depends(require_auth),
+    token: TokenPayload = Depends(require_auth),
 ) -> dict:
-    rows = await fetch_audit(task_id, limit=limit)
+    rows = await fetch_audit(token.user_id, task_id, limit=limit)
     return {"audit": [a.model_dump(mode="json") for a in rows]}
 
 
@@ -184,7 +382,11 @@ async def get_task_report(
     if cached is not None:
         return {"report": cached, "from_cache": True}
 
-    report = await compose_task_report(task_id, prefer_llm=prefer_llm)
+    report = await compose_task_report(
+        user_id=_.user_id,
+        task_id=task_id,
+        prefer_llm=prefer_llm
+    )
     if report is None:
         raise HTTPException(status_code=404, detail="task not found")
     return {"report": report.model_dump(mode="json"), "from_cache": False}
@@ -227,7 +429,7 @@ async def resume_task_as_conversation(
     """
     cached = agent_runtime.get_pending_report(task_id)
     if cached is None:
-        report = await compose_task_report(task_id, prefer_llm=True)
+        report = await compose_task_report(_.user_id, task_id, prefer_llm=True)
         if report is None:
             raise HTTPException(status_code=404, detail="task not found")
         cached = report.model_dump(mode="json")
@@ -591,7 +793,7 @@ async def get_self_model(_: TokenPayload = Depends(require_auth)) -> dict:
     if sm is None:
         # Build an ad-hoc one for inspection
         from agent.actions.registry import registry as _reg
-        from agent.self_model import build_self_model
+        from agent.cognition.self_model import build_self_model
         sm = await build_self_model(_reg)
     return {"self_model": sm.model_dump(mode="json"), "substate": agent_runtime.substate}
 
@@ -599,9 +801,9 @@ async def get_self_model(_: TokenPayload = Depends(require_auth)) -> dict:
 @router.post("/feedback")
 async def submit_feedback(
     req: FeedbackRequest,
-    _: TokenPayload = Depends(require_auth),
+    token: TokenPayload = Depends(require_auth),
 ) -> dict:
-    fb_id = await write_feedback(req.audit_entry_id, req.rating, req.comment)
+    fb_id = await write_feedback(token.user_id, req.audit_entry_id, req.rating, req.comment)
     return {"id": fb_id}
 
 
@@ -710,9 +912,9 @@ async def create_standing_order(
 ) -> dict:
     import json as _json
     from sqlalchemy import select
-    from agent.standing_orders.schedules import parse_schedule
-    from agent.standing_orders.conditions import evaluate_condition  # noqa: F401
-    from agent.standing_orders.schedules import ConditionalSchedule
+    from agent.operations.standing_orders.schedules import parse_schedule
+    from agent.operations.standing_orders.conditions import evaluate_condition  # noqa: F401
+    from agent.operations.standing_orders.schedules import ConditionalSchedule
     from db.database import get_session
     from db.models import StandingOrder as _SO
 
@@ -733,7 +935,7 @@ async def create_standing_order(
         ):
             raise HTTPException(status_code=422, detail="invalid condition DSL")
         # Also assert metric is known.
-        from agent.standing_orders.conditions import KNOWN_CONDITIONS
+        from agent.operations.standing_orders.conditions import KNOWN_CONDITIONS
         metric = schedule.condition.split()[0]
         if metric not in KNOWN_CONDITIONS:
             raise HTTPException(
@@ -795,7 +997,7 @@ async def patch_standing_order(
         if req.description is not None:
             row.description = req.description
         if req.schedule is not None:
-            from agent.standing_orders.schedules import parse_schedule
+            from agent.operations.standing_orders.schedules import parse_schedule
             payload = dict(req.schedule)
             payload.setdefault("kind", row.kind)
             try:
@@ -828,6 +1030,341 @@ async def delete_standing_order(
         await db.execute(delete(_SO).where(_SO.id == order_id))
         await db.commit()
     return {"deleted": True, "id": order_id}
+
+
+# ── Block C-2 — Mission endpoints ────────────────────────────────────────────
+
+
+class MissionBriefRequest(BaseModel):
+    brief: str = Field(..., min_length=1, max_length=4000)
+    quality_bar: str = Field(default="", max_length=1000)
+    deadline_at: str | None = Field(
+        default=None,
+        description="Optional ISO-8601 wall-clock deadline (UTC).",
+    )
+    budget_constraints: dict | None = Field(default=None)
+    unsafe_mode: bool = False
+
+
+@router.post("/mission")
+async def start_mission(
+    req: MissionBriefRequest,
+    response: Response,
+    token: TokenPayload = Depends(require_auth),
+) -> dict:
+    """Initiate a long-horizon mission.
+
+    Calls plan_mission() to decompose the brief into phases, persists all
+    Mission + Phase rows, and spawns the foreground task loop.
+
+    Returns 409 when the foreground slot is already occupied by an active task
+    or mission. Returns 503 when the LLM planner cannot produce a plan.
+    """
+    from datetime import datetime, timezone as _tz
+
+    from agent.schemas import BudgetConstraints, MissionBrief
+
+    # Parse deadline_at.
+    deadline_at = None
+    if req.deadline_at:
+        try:
+            deadline_at = datetime.fromisoformat(req.deadline_at.replace("Z", "+00:00"))
+        except ValueError:
+            raise HTTPException(
+                status_code=422,
+                detail="deadline_at must be a valid ISO-8601 datetime string.",
+            )
+
+    # Parse budget_constraints.
+    budget_constraints = None
+    if req.budget_constraints:
+        try:
+            budget_constraints = BudgetConstraints(**req.budget_constraints)
+        except Exception as exc:
+            raise HTTPException(
+                status_code=422,
+                detail=f"invalid budget_constraints: {exc}",
+            )
+
+    brief = MissionBrief(
+        brief=req.brief,
+        quality_bar=req.quality_bar,
+        deadline_at=deadline_at,
+        budget_constraints=budget_constraints,
+    )
+
+    try:
+        mission_id, task_id = await agent_runtime.start_mission(
+            user_id=token.user_id,
+            brief=brief,
+            unsafe_mode=req.unsafe_mode,
+        )
+    except RuntimeError as exc:
+        err = str(exc)
+        if err.startswith("foreground_busy:"):
+            busy_id = err.split(":", 1)[1]
+            response.status_code = 409
+            return {
+                "mission_id": None,
+                "task_id": busy_id,
+                "started": False,
+                "detail": "Foreground slot busy — pause/stop the running task first.",
+            }
+        raise HTTPException(status_code=503, detail=f"Mission planning failed: {err}")
+
+    return {
+        "mission_id": mission_id,
+        "task_id": task_id,
+        "started": True,
+    }
+
+
+@router.get("/missions")
+async def list_missions(
+    status: str | None = Query(default=None),
+    limit: int = Query(default=20, ge=1, le=200),
+    token: TokenPayload = Depends(require_auth),
+) -> dict:
+    """Return missions for the authenticated user, optionally filtered by status."""
+    from agent.missions.store import list_missions as store_list_missions
+
+    rows = await store_list_missions(
+        user_id=token.user_id,
+        status=status,
+        limit=limit,
+    )
+    return {
+        "missions": [_serialize_mission(m) for m in rows],
+    }
+
+
+@router.get("/mission/{mission_id}")
+async def get_mission(
+    mission_id: str,
+    token: TokenPayload = Depends(require_auth),
+) -> dict:
+    """Return full mission detail: mission row + ordered phases + ledger text."""
+    from agent.missions.store import get_mission as store_get_mission
+    from agent.missions.store import list_phases as store_list_phases
+    from agent.missions.ledger import LedgerReader
+
+    try:
+        mission = await store_get_mission(token.user_id, mission_id)
+    except PermissionError:
+        raise HTTPException(status_code=404, detail="mission not found")
+
+    if mission is None:
+        raise HTTPException(status_code=404, detail="mission not found")
+
+    phases = await store_list_phases(mission_id)
+
+    ledger_text = ""
+    if mission.ledger_path:
+        try:
+            reader = LedgerReader(mission.ledger_path)
+            ledger_text = await reader.read_full()
+        except Exception:
+            pass
+
+    return {
+        "mission": _serialize_mission(mission),
+        "phases": [_serialize_phase(p) for p in phases],
+        "ledger": ledger_text,
+    }
+
+
+def _serialize_mission(mission) -> dict:
+    """Serialize a Mission ORM row to a JSON-safe dict."""
+    return {
+        "id": mission.id,
+        "user_id": mission.user_id,
+        "brief": mission.brief,
+        "success_criteria": mission.success_criteria,
+        "quality_bar": mission.quality_bar,
+        "deadline_at": (
+            mission.deadline_at.isoformat() if mission.deadline_at else None
+        ),
+        "budget_constraints": mission.budget_constraints_json,
+        "status": mission.status,
+        "created_at": (
+            mission.created_at.isoformat() if mission.created_at else None
+        ),
+        "finished_at": (
+            mission.finished_at.isoformat() if mission.finished_at else None
+        ),
+        "ledger_path": mission.ledger_path,
+    }
+
+
+def _serialize_phase(phase) -> dict:
+    """Serialize a Phase ORM row to a JSON-safe dict."""
+    import json as _json
+    artifacts = []
+    if phase.artifacts_json:
+        try:
+            artifacts = _json.loads(phase.artifacts_json)
+        except Exception:
+            pass
+    return {
+        "id": phase.id,
+        "mission_id": phase.mission_id,
+        "idx": phase.idx,
+        "description": phase.description,
+        "rationale": phase.rationale,
+        "success_criteria": phase.success_criteria,
+        "expected_duration_h": phase.expected_duration_h,
+        "status": phase.status,
+        "artifacts": artifacts,
+        "started_at": phase.started_at.isoformat() if phase.started_at else None,
+        "finished_at": phase.finished_at.isoformat() if phase.finished_at else None,
+    }
+
+
+# ── Vertical V10 — Mission Report + Export endpoints ─────────────────────────
+
+
+class MissionReportRequest(BaseModel):
+    prefer_llm: bool = True
+
+
+class MissionExportRequest(BaseModel):
+    format: str = Field(..., pattern=r"^(pdf|dashboard|ledger_md)$")
+    style: str = Field(default="minimal", pattern=r"^(minimal|branded)$")
+    inline_assets: bool = False
+
+
+@router.post("/mission/{mission_id}/report")
+async def get_mission_report(
+    mission_id: str,
+    req: MissionReportRequest,
+    token: TokenPayload = Depends(require_auth),
+) -> dict:
+    """Compose and return the full MissionReport JSON for a mission.
+
+    Triggers MissionReportComposer with LLM narration when prefer_llm=True.
+    Falls back to deterministic summary on any LLM failure/timeout.
+    Per-user isolated — returns 404 for cross-user access.
+    """
+    from agent.missions.reports import compose_mission_report
+
+    try:
+        report = await compose_mission_report(
+            token.user_id,
+            mission_id,
+            prefer_llm=req.prefer_llm,
+        )
+    except PermissionError:
+        raise HTTPException(status_code=404, detail="mission not found")
+
+    if report is None:
+        raise HTTPException(status_code=404, detail="mission not found")
+
+    return {"report": report.model_dump(mode="json")}
+
+
+@router.post("/mission/{mission_id}/export")
+async def export_mission(
+    mission_id: str,
+    req: MissionExportRequest,
+    token: TokenPayload = Depends(require_auth),
+) -> dict:
+    """Export the mission as PDF, static-HTML dashboard, or raw ledger markdown.
+
+    Returns ``{"path": str, "format": str, "bytes": int}`` on success.
+    Returns ``{"ok": False, "reason": str, ...}`` on failure (no 5xx — the
+    operator needs to know the reason, not just that it failed).
+
+    Per-user isolated — 404 on cross-user access.
+    """
+    fmt = req.format
+
+    if fmt == "ledger_md":
+        # Fast path — just return the ledger file path.
+        from agent.missions.store import get_mission as store_get_mission
+        try:
+            mission = await store_get_mission(token.user_id, mission_id)
+        except PermissionError:
+            raise HTTPException(status_code=404, detail="mission not found")
+        if mission is None:
+            raise HTTPException(status_code=404, detail="mission not found")
+        ledger_path = mission.ledger_path or ""
+        try:
+            size = int(os.path.getsize(ledger_path)) if ledger_path else 0
+        except OSError:
+            size = 0
+        return {"path": ledger_path, "format": "ledger_md", "bytes": size}
+
+    if fmt == "pdf":
+        from agent.missions.pdf_export import export_mission_pdf
+        result = await export_mission_pdf(
+            token.user_id,
+            mission_id,
+            style=req.style,  # type: ignore[arg-type]
+        )
+        if not result.get("ok"):
+            raise HTTPException(
+                status_code=422,
+                detail=result,
+            )
+        return {
+            "path": result["path"],
+            "format": "pdf",
+            "bytes": result.get("bytes", 0),
+        }
+
+    if fmt == "dashboard":
+        from agent.missions.html_dashboard import export_mission_dashboard
+        result = await export_mission_dashboard(
+            token.user_id,
+            mission_id,
+            inline_assets=req.inline_assets,
+        )
+        if not result.get("ok"):
+            raise HTTPException(
+                status_code=422,
+                detail=result,
+            )
+        try:
+            size = int(os.path.getsize(result["path"]))
+        except OSError:
+            size = 0
+        return {
+            "path": result["path"],
+            "format": "dashboard",
+            "bytes": size,
+        }
+
+    # Should not reach here (pattern validation).
+    raise HTTPException(status_code=422, detail=f"unsupported format: {fmt}")
+
+
+@router.get("/mission/{mission_id}/assets")
+async def list_mission_assets(
+    mission_id: str,
+    token: TokenPayload = Depends(require_auth),
+) -> dict:
+    """Return the visual asset list for a mission.
+
+    Per-user isolated — 404 on cross-user access.
+    """
+    from agent.missions.store import get_mission as store_get_mission
+    from agent.missions.visual_assets import asset_store_for_mission
+
+    try:
+        mission = await store_get_mission(token.user_id, mission_id)
+    except PermissionError:
+        raise HTTPException(status_code=404, detail="mission not found")
+    if mission is None:
+        raise HTTPException(status_code=404, detail="mission not found")
+
+    store = asset_store_for_mission(mission_id)
+    assets = store.list_assets()
+    # Strip abs_path from the API response — clients should use rel_path.
+    safe_assets = [
+        {k: v for k, v in a.items() if k != "abs_path"}
+        for a in assets
+    ]
+    return {"mission_id": mission_id, "assets": safe_assets}
 
 
 def _serialize_task(row: dict) -> dict:

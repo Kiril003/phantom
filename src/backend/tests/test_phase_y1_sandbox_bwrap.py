@@ -42,17 +42,24 @@ import pytest
 
 
 class TestSandboxProfileEnum:
-    def test_closed_to_three_values(self):
-        from agent.safety.sandbox import SandboxProfile
+    def test_closed_to_four_values(self):
+        """Day-NN: `read_host` joins the enum as the graduated middle tier
+        between fully-hermetic `compute` and per-task `unsafe_mode`. External
+        audit flagged that the binary choice (closed sandbox vs no sandbox)
+        made simple introspection (dpkg, journalctl, /var/log) require the
+        full no-leash escape hatch — `read_host` is read-only /var /opt
+        /home + retained network with caps still dropped.
+        """
+        from agent.operations.safety.sandbox import SandboxProfile
 
         names = {m.name for m in SandboxProfile}
-        assert names == {"compute", "net_observe", "radio_privileged"}, (
+        assert names == {"compute", "net_observe", "radio_privileged", "read_host"}, (
             f"Y-1: SandboxProfile drifted; got {names!r}. Adding a "
             "profile requires an ADR amendment."
         )
 
     def test_radio_privileged_unimplemented_on_day4(self):
-        from agent.safety.sandbox import SandboxProfile, wrap_argv
+        from agent.operations.safety.sandbox import SandboxProfile, wrap_argv
 
         with pytest.raises(NotImplementedError):
             wrap_argv(SandboxProfile.radio_privileged, ["true"])
@@ -63,7 +70,7 @@ class TestSandboxProfileEnum:
 
 class TestCleanEnv:
     def test_returns_only_allowlisted_keys(self):
-        from agent.safety.sandbox import clean_env
+        from agent.operations.safety.sandbox import clean_env
 
         env = clean_env()
         assert set(env.keys()) == {"PATH", "LANG", "LC_ALL", "TERM"}
@@ -72,7 +79,7 @@ class TestCleanEnv:
         assert env["TERM"] == "dumb"
 
     def test_workspace_dir_sets_home(self, tmp_path):
-        from agent.safety.sandbox import clean_env
+        from agent.operations.safety.sandbox import clean_env
 
         env = clean_env(workspace_dir=str(tmp_path))
         assert env["HOME"] == str(tmp_path)
@@ -83,7 +90,7 @@ class TestCleanEnv:
     def test_does_not_leak_secrets_even_when_set_in_parent(self, monkeypatch):
         """Defensive: even if os.environ has all the audit-named leaks
         set, clean_env starts from empty and never carries them."""
-        from agent.safety.sandbox import clean_env
+        from agent.operations.safety.sandbox import clean_env
 
         monkeypatch.setenv("JWT_SECRET_KEY", "super-secret-leak-canary")
         monkeypatch.setenv("AI_GEMINI_API_KEY", "leak-canary-2")
@@ -101,7 +108,7 @@ class TestCleanEnv:
 
 class TestAssertEnvSafe:
     def test_passes_on_clean_env(self):
-        from agent.safety.sandbox import assert_env_safe, clean_env
+        from agent.operations.safety.sandbox import assert_env_safe, clean_env
 
         # Must not raise.
         assert_env_safe(clean_env())
@@ -121,7 +128,7 @@ class TestAssertEnvSafe:
         ],
     )
     def test_raises_on_sensitive_keys(self, leaked_key):
-        from agent.safety.sandbox import assert_env_safe
+        from agent.operations.safety.sandbox import assert_env_safe
 
         bad_env = {"PATH": "/usr/bin", leaked_key: "x"}
         with pytest.raises(AssertionError):
@@ -137,7 +144,7 @@ class TestWrapArgvBwrapPresent:
         """Pretend bwrap is installed; the test environment may not
         actually have it. The pin is on the *argv* the builder produces,
         not on a real subprocess invocation."""
-        import agent.safety.sandbox as sb
+        import agent.operations.safety.sandbox as sb
 
         def _which(cmd, *_a, **_kw):
             if cmd == "bwrap":
@@ -149,7 +156,7 @@ class TestWrapArgvBwrapPresent:
         monkeypatch.setattr(sb.shutil, "which", _which)
 
     def test_compute_profile_drops_network(self):
-        from agent.safety.sandbox import SandboxProfile, wrap_argv
+        from agent.operations.safety.sandbox import SandboxProfile, wrap_argv
 
         argv, sandboxed = wrap_argv(
             SandboxProfile.compute,
@@ -169,7 +176,7 @@ class TestWrapArgvBwrapPresent:
         assert argv[-1] == "hi"
 
     def test_net_observe_profile_keeps_network(self):
-        from agent.safety.sandbox import SandboxProfile, wrap_argv
+        from agent.operations.safety.sandbox import SandboxProfile, wrap_argv
 
         argv, sandboxed = wrap_argv(
             SandboxProfile.net_observe,
@@ -183,7 +190,7 @@ class TestWrapArgvBwrapPresent:
         )
 
     def test_workspace_dir_binds_and_chdirs(self, tmp_path):
-        from agent.safety.sandbox import SandboxProfile, wrap_argv
+        from agent.operations.safety.sandbox import SandboxProfile, wrap_argv
 
         argv, _ = wrap_argv(
             SandboxProfile.compute,
@@ -202,7 +209,7 @@ class TestWrapArgvBwrapPresent:
         assert argv[chdir_idx + 1] == "/workspace"
 
     def test_memory_limit_wraps_with_prlimit(self):
-        from agent.safety.sandbox import SandboxProfile, wrap_argv
+        from agent.operations.safety.sandbox import SandboxProfile, wrap_argv
 
         argv, _ = wrap_argv(
             SandboxProfile.compute,
@@ -218,7 +225,7 @@ class TestWrapArgvBwrapPresent:
 
 class TestWrapArgvBwrapMissing:
     def test_returns_unwrapped_with_sandboxed_false(self, monkeypatch, caplog):
-        import agent.safety.sandbox as sb
+        import agent.operations.safety.sandbox as sb
 
         monkeypatch.setattr(sb.shutil, "which", lambda *_a, **_kw: None)
         with caplog.at_level(logging.WARNING):
@@ -237,7 +244,7 @@ class TestWrapArgvBwrapMissing:
 
 class TestFirejailStaleDetector:
     def test_always_returns_false(self):
-        from agent.safety.sandbox import firejail_available
+        from agent.operations.safety.sandbox import firejail_available
 
         assert firejail_available() is False, (
             "Y-1: firejail_available() must always return False post-Y-1; "
@@ -250,7 +257,7 @@ class TestFirejailStaleDetector:
 
 class TestWrapShellCmdShim:
     def test_unsandboxed_bypass_unchanged(self):
-        from agent.safety.sandbox import wrap_shell_cmd
+        from agent.operations.safety.sandbox import wrap_shell_cmd
 
         argv, sandboxed = wrap_shell_cmd("echo hi", sandboxed=False)
         assert sandboxed is False
@@ -259,7 +266,7 @@ class TestWrapShellCmdShim:
     def test_sandboxed_routes_through_wrap_argv(self, monkeypatch):
         """Sandbox=True should produce a bwrap-wrapped argv via the
         new compute profile (when bwrap is available)."""
-        import agent.safety.sandbox as sb
+        import agent.operations.safety.sandbox as sb
 
         monkeypatch.setattr(
             sb.shutil,

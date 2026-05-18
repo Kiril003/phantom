@@ -65,15 +65,20 @@ class SelfRecall(Action):
 
     async def execute(self, ctx: ActionContext) -> ActionResult:
         t0 = time.monotonic()
+        user_id = self._extract_user_id(ctx)
         episodes: list[dict] = []
         try:
-            from ..memory.recall import recall as episodic_recall
-            episodes = await episodic_recall(self.query or "(any)", k=self.limit)
+            from ..cognition.memory.recall import recall as episodic_recall
+            episodes = await episodic_recall(
+                self.query or "(any)",
+                k=self.limit,
+                user_id=user_id,
+            )
         except Exception:
             episodes = []
 
         if not episodes:
-            episodes = await self._sql_fallback()
+            episodes = await self._sql_fallback(user_id=user_id)
 
         return ActionResult(
             ok=True,
@@ -87,7 +92,23 @@ class SelfRecall(Action):
             elapsed_ms=int((time.monotonic() - t0) * 1000),
         )
 
-    async def _sql_fallback(self) -> list[dict]:
+    @staticmethod
+    def _extract_user_id(ctx: ActionContext) -> str | None:
+        runtime = ctx.runtime
+        if runtime is None:
+            return None
+        try:
+            state = runtime._state_for_task(ctx.task_id)  # noqa: SLF001
+        except Exception:
+            return None
+        if state is None:
+            return None
+        try:
+            return state.self_model.user_id
+        except Exception:
+            return None
+
+    async def _sql_fallback(self, *, user_id: str | None) -> list[dict]:
         from sqlalchemy import select
         from db.database import get_session
         from db.models import AgentMemorySeed
@@ -95,9 +116,12 @@ class SelfRecall(Action):
         seeds: list[dict] = []
         try:
             async with get_session() as db:
+                conditions = [AgentMemorySeed.summary.like(like)]
+                if user_id:
+                    conditions.append(AgentMemorySeed.user_id == user_id)
                 stmt = (
                     select(AgentMemorySeed)
-                    .where(AgentMemorySeed.summary.like(like))
+                    .where(*conditions)
                     .order_by(AgentMemorySeed.created_at.desc())
                     .limit(self.limit)
                 )

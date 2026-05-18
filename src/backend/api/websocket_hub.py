@@ -31,10 +31,21 @@ def _sanitize(obj: Any) -> Any:
 
 
 class WSClient:
-    def __init__(self, ws: WebSocket, client_id: str, user_id: str | None = None):
+    def __init__(
+        self,
+        ws: WebSocket,
+        client_id: str,
+        user_id: str | None = None,
+        profile_id: str | None = None,
+    ):
         self.ws = ws
         self.client_id = client_id
         self.user_id = user_id
+        # Phase 1-B (companion-v2) — companion phones subscribe under a
+        # specific Profile. Desktop clients leave this None and fall
+        # through the legacy user-scope filter unchanged. See
+        # `WebSocketHub.broadcast` for the precedence rules.
+        self.profile_id = profile_id
         self._connected = True
         # Phase 19-6 (Mobile Companion design §6) — channel subscription
         # filter. `None` = receive every channel (the desktop default,
@@ -81,18 +92,33 @@ class WebSocketHub:
         self._handlers: dict[Channel, list[MessageHandler]] = {}
         self._lock = asyncio.Lock()
 
-    async def connect(self, ws: WebSocket, client_id: str, user_id: str | None = None) -> WSClient:
+    async def connect(
+        self,
+        ws: WebSocket,
+        client_id: str,
+        user_id: str | None = None,
+        profile_id: str | None = None,
+    ) -> WSClient:
         await ws.accept()
-        client = WSClient(ws, client_id, user_id)
+        client = WSClient(ws, client_id, user_id, profile_id)
         async with self._lock:
             self._clients[client_id] = client
-        logger.info("WS client connected: %s (user=%s)", client_id, user_id)
+        logger.info(
+            "WS client connected: %s (user=%s profile=%s)",
+            client_id,
+            user_id,
+            profile_id,
+        )
         return client
 
     async def disconnect(self, client_id: str) -> None:
         async with self._lock:
             client = self._clients.pop(client_id, None)
         if client:
+            # Phase 32-VISION: stop vision stream if client was subscribed
+            if client.channels and "vision" in client.channels:
+                from api.vision_streamer import streamer
+                await streamer.stop()
             await client.close()
             logger.info("WS client disconnected: %s", client_id)
 
@@ -105,8 +131,20 @@ class WebSocketHub:
         type_: str,
         data: dict[str, Any],
         user_id: str | None = None,
+        profile_id: str | None = None,
     ) -> None:
-        """Broadcast to all clients (or to specific user if user_id provided)."""
+        """Broadcast to all clients, optionally narrowed by user / profile.
+
+        Filter precedence (most-specific filter wins):
+          • ``profile_id`` set → only clients whose own ``profile_id``
+            matches receive. Companion-v2 phones use this to keep
+            persona-scoped traffic out of sibling profiles on the same
+            device tree (Phase 1-B).
+          • ``user_id`` set → all clients of that user receive,
+            regardless of profile. This is the legacy desktop scope
+            and stays byte-equivalent to the pre-Phase-1-B behaviour.
+          • Both unset → fan out to every connected client.
+        """
         # Day-4 V-6 (ADR-RTP-002): WS broadcast fan-out latency histogram.
         # Observed end-to-end: lock-snapshot + per-client send gather +
         # disconnected cleanup. Closes audit U8-PERF-M1.
@@ -117,6 +155,8 @@ class WebSocketHub:
 
         tasks = []
         for client in targets:
+            if profile_id is not None and client.profile_id != profile_id:
+                continue
             if user_id is not None and client.user_id != user_id:
                 continue
             # Phase 19-6 — respect per-client channel subscription. The
@@ -170,6 +210,8 @@ class WebSocketHub:
                 type_ = msg.get("type", "")
                 data = msg.get("data", {})
 
+                logger.debug("WS incoming: channel=%s type=%s data=%r", channel, type_, data)
+
                 if not channel:
                     continue
 
@@ -216,9 +258,15 @@ class WebSocketHub:
         if control == "subscribe":
             current = client.channels if client.channels is not None else set()
             client.channels = current | wanted
+            if "vision" in wanted:
+                from api.vision_streamer import streamer
+                await streamer.start()
         elif control == "unsubscribe":
             if client.channels is not None:
                 client.channels = client.channels - wanted
+            if "vision" in wanted:
+                from api.vision_streamer import streamer
+                await streamer.stop()
         elif control == "subscribe_all":
             client.channels = None
         else:

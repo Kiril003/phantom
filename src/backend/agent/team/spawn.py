@@ -43,7 +43,7 @@ from config import config
 from core.event_bus import event_bus
 
 if TYPE_CHECKING:
-    from ..runtime import AgentRuntime, TaskState
+    from agent.kernel.runtime import AgentRuntime, TaskState
 
 logger = logging.getLogger(__name__)
 
@@ -133,6 +133,7 @@ async def spawn_subagent(
     constraints: str = "",
     timeout_s: int | None = None,
     extra_origin: str = "delegate",
+    branch: str | None = None,
 ) -> str:
     """Spawn a child sub-agent and return its task_id.
 
@@ -305,9 +306,9 @@ async def _run_subagent(
       • Semaphore release in finally so a crashing child still frees
         the slot
     """
-    from ..audit import create_task_row, update_task_status
-    from ..loop import run_task_loop
-    from ..runtime import TaskState
+    from ..kernel.audit import create_task_row, update_task_status
+    from agent.kernel.loop import run_task_loop
+    from agent.kernel.runtime import TaskState
     from ..self_model import build_self_model
     from ..actions.registry import registry as default_registry
 
@@ -329,6 +330,7 @@ async def _run_subagent(
             parent_task_id=parent_task_id,
             subagent_role=role,
             delegation_depth=depth,
+            branch_isolation=branch,
         )
         await create_task_row(child_id, decorated, "background")
         try:
@@ -377,4 +379,6 @@ async def _run_subagent(
                 summary=f"runner aborted before TaskState: {exc}",
             ))
     finally:
+        sem.release()
+  finally:
         sem.release()

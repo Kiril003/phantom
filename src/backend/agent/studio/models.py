@@ -49,6 +49,8 @@ AgentCardKind = Literal[
     "create_report", "notify",
     # Council
     "review_by_council",
+    # Artifact
+    "artifact",
 ]
 
 
@@ -173,11 +175,21 @@ class CustomAgentRun(BaseModel):
     triggered_by: Literal["manual", "schedule", "chat", "api", "card"] = "manual"
 
 
+def make_artifact_card(*, title: str, html: str, capabilities: list[str]) -> AgentCard:
+    return AgentCard(
+        kind="artifact",
+        category="output",
+        title=title or "Артефакт",
+        config={"html": html, "capabilities": capabilities},
+    )
+
+
 __all__ = [
     "CardCategory",
     "AgentCardKind",
     "AgentCardLink",
     "AgentCard",
+    "make_artifact_card",
     "RecipientChannel",
     "Recipient",
     "ScheduleKind",

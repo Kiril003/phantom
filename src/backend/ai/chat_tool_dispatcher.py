@@ -44,11 +44,14 @@ logger = logging.getLogger(__name__)
 # and DB-backed; the original "Tier C" deferral was placeholder intent,
 # not an active security constraint.
 _CHAT_SAFE_TOOL_NAMES: tuple[str, ...] = (
+    "search_nearby_places",
     "search_locationhistory",
     "query_temporal_anchors",
     "recall_memory_facts",
     "get_system_metrics",
     "get_sensor_status",
+    "get_my_location",
+    "get_internal_state",
     # ── Phase 19: Write tools unlocked ──────────────────────────────
     "create_alarm",
     "set_alarm_active",
@@ -88,6 +91,8 @@ _CHAT_SAFE_TOOL_NAMES: tuple[str, ...] = (
     # expected to justify each reveal in the call args; every reveal
     # is audited with actor="ai" so the operator can review.
     "vault_reveal",
+    # Day-5: Execute terminal commands directly from chat (God mode)
+    "run_terminal_command",
 )
 
 

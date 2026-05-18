@@ -11,7 +11,7 @@ Sources (closed enum — adding a 6th requires (a) extending
 `src/shared/types/chat.ts`, (c) adding a resolver, (d) ADR amendment):
 
   ollama_models   — list of locally-installed Ollama models
-  voice_voices    — list of available StyleTTS2 Ukrainian voices
+  voice_voices    — list of available Piper/installed TTS voices
   mms_languages   — list of MMS NPU language codes
   serial_ports    — list of /dev/tty* candidates the daemon can see
   tts_speakers    — list of TTS speaker presets (subset of voices for
@@ -133,8 +133,8 @@ async def _resolve_ollama_models() -> list[DynamicPickerOption]:
 
 
 async def _resolve_voice_voices() -> list[DynamicPickerOption]:
-    """List available StyleTTS2 Ukrainian voices. Reads from the existing
-    voice api so the same names that show in Settings show in chat picker."""
+    """List available installed TTS voices. Reads from the existing voice
+    API so the same names that show in Settings show in the chat picker."""
     try:
         from voice.tts_engine import list_available_voices
     except Exception as exc:  # noqa: BLE001

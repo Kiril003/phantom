@@ -2,101 +2,76 @@
 locality-first stub (ADR-HUB-001..003).
 
 `AIHub` is a *capability registry + dispatch router* that sits
-ALONGSIDE `AIRouter` (`src/backend/ai/provider.py:100-129`), not in
-front of it. It registers `gemini` and `ollama` as two of N providers
-in its capability table; when the hub picks one of those, dispatch
-delegates back to the existing `ai_router.generate` /
-`ai_router.call_with_tools` so the cooling / quota / backoff state
-machine remains the single source of truth for provider health.
+ALONGSIDE `AIRouter` (`src/backend/ai/provider.py:100-129`).
 
-Day-4 ships the SCAFFOLD:
-  - dataclass `ProviderCapability`
-  - registry + locality-first `pick()`
-  - `list_providers()` for /api/v1/hub/providers (Z-2)
-  - `route_state()` ring for /api/v1/hub/route_state (Z-2)
-  - lazy singleton `ai_hub` (mirrors ai_router pattern)
-
-Day-5 lands `dispatch()` wiring + the NPU registration. Day-4's
-dispatch returns a `NotImplementedError` until Z-3 fills it in — but
-the registry / pick / list_providers / route_state contract is
-already callable and tested.
+Responsibilities:
+  1. Registry of available capabilities (provider + task_class + locality).
+  2. Locality-aware picking logic (pick).
+  3. One-stop dispatch logic (dispatch) for various task classes.
 """
 from __future__ import annotations
 
+import logging
 import threading
-from collections import deque
-from dataclasses import dataclass, replace
-from typing import Any, Deque, Literal
+from dataclasses import dataclass
+from typing import Any, AsyncGenerator, Literal
 
+from config import config
 
-TaskClass = Literal["chat", "chat_subtask", "embeddings", "stt", "vision"]
-Modality = Literal["text", "audio", "image", "embeddings"]
-QualityTier = Literal["fast", "balanced", "best"]
-Locality = Literal["local", "remote"]
-PreferLocality = Literal["auto", "local", "remote"]
+logger = logging.getLogger(__name__)
 
+# ── Types ───────────────────────────────────────────────────────────────────
 
-class NoCapabilityError(RuntimeError):
-    """Raised by `AIHub.pick()` when no registered capability matches
-    the requested task_class/preference. Distinct from
-    `BlockedQuotaError` (`ai/provider.py:37`) — the hub cannot
-    retroactively make a capability appear; the caller must downgrade
-    or surface the error."""
+TaskClass = Literal["chat", "chat_subtask", "vision", "voice_stt", "voice_tts"]
+Locality = Literal["local", "remote", "npu"]
+QualityTier = Literal["fast", "balanced", "high"]
+PreferLocality = Literal["auto", "local", "remote", "npu"]
 
 
 @dataclass(frozen=True)
 class ProviderCapability:
-    """Immutable capability record. One provider may register multiple
-    rows (e.g. Gemini for `chat` AND `chat_subtask`). Every field is
-    needed by the locality-first policy (ADR-HUB-003) or by the
-    /api/v1/hub/providers route (Z-2)."""
-
     provider: str
     task_class: TaskClass
-    modality: Modality
+    modality: str  # text|image|audio
     latency_ms_p50: float
     quality_tier: QualityTier
     locality: Locality
-    available: bool
+    available: bool = True
 
 
-@dataclass
+@dataclass(frozen=True)
 class ProviderHandle:
-    """Returned by `AIHub.pick()`. Opaque to callers; `AIHub.dispatch()`
-    is the supported invocation surface. Exposed only so type-aware
-    tests can assert non-None without importing internal classes."""
-
     capability: ProviderCapability
-
-    def __repr__(self) -> str:
-        c = self.capability
-        return (
-            f"ProviderHandle(provider={c.provider!r}, "
-            f"task_class={c.task_class!r}, locality={c.locality!r})"
-        )
+    # Metadata for the caller to record (correlation_id, decision_path, etc.)
+    routing_metadata: dict[str, Any]
 
 
-_DECISION_RING_MAX = 200
+class NoCapabilityError(Exception):
+    """Raised when pick() finds zero candidates matching the task/locality
+    requirements."""
+
+
+# ── AIHub ───────────────────────────────────────────────────────────────────
 
 
 class AIHub:
-    """Capability registry + dispatch router. Thread-safe for
-    register/pick/list (the routes_chat / routes_voice paths run on
-    different asyncio loops the hub must serve concurrently)."""
-
     def __init__(self) -> None:
-        # Keyed by (provider, task_class) → ProviderCapability so a
-        # re-register on the same key OVERWRITES (supports Day-5
-        # "flip available=True" without process restart, ADR-HUB-002).
         self._registry: dict[tuple[str, str], ProviderCapability] = {}
-        self._last_pick_per_task: dict[str, str] = {}
-        self._decisions: Deque[dict[str, Any]] = deque(maxlen=_DECISION_RING_MAX)
-        self._lock = threading.RLock()
+        self._last_provider_per_task: dict[str, str] = {}
+        self._lock = threading.Lock()
+        self._history: list[dict[str, Any]] = []  # last N routing decisions
 
-    # ─────────────────────────────────────────────── registry ──
+    def reset_for_tests(self) -> None:
+        with self._lock:
+            self._registry.clear()
+            self._history.clear()
+
+    # ──────────────────────────────────────────────── registry ──
 
     def register(self, capability: ProviderCapability) -> None:
-        """Idempotent registration. Raises ValueError on schema-invalid
+        """Register or update a capability.
+
+        Idempotent — overwrites prior entries with same (provider, task)
         records — the field names are runtime-checked because the
         registry is a public-ish surface (Day-5+ tools may register
         new providers from outside the cluster)."""
@@ -149,50 +124,57 @@ class AIHub:
                 candidates = [c for c in candidates if c.locality == "local"]
             elif prefer == "remote":
                 candidates = [c for c in candidates if c.locality == "remote"]
-            elif prefer == "auto":
-                local = [c for c in candidates if c.locality == "local"]
-                if local:
-                    candidates = local
-                # else fall through with the remaining `remote` set.
+            elif prefer == "npu":
+                candidates = [c for c in candidates if c.locality == "npu"]
+
             if not candidates:
                 raise NoCapabilityError(
-                    f"AIHub: no available capability for task_class="
-                    f"{task_class!r}, prefer={prefer!r}"
+                    f"No available provider for task={task_class!r} "
+                    f"(prefer={prefer!r})"
                 )
-            picked = min(candidates, key=lambda c: c.latency_ms_p50)
-            self._record_pick(task_class, picked)
-            return ProviderHandle(capability=picked)
 
-    # ───────────────────────────────────────── decision ring ──
+            # Locality-first auto-pick
+            if prefer == "auto":
+                local_c = [c for c in candidates if c.locality == "local"]
+                if local_c:
+                    candidates = local_c
+                else:
+                    remote_c = [c for c in candidates if c.locality == "remote"]
+                    if remote_c:
+                        candidates = remote_c
 
-    def route_state(self, *, limit: int = 50) -> list[dict[str, Any]]:
-        """Last N decisions from the in-memory ring. Used by
-        `GET /api/v1/hub/route_state` (Z-2). `limit` clamped to
-        `[1, _DECISION_RING_MAX]`."""
-        n = max(1, min(int(limit), _DECISION_RING_MAX))
-        with self._lock:
-            return list(self._decisions)[-n:]
+            # Pick winner by latency (lowest p50)
+            winner = min(candidates, key=lambda x: x.latency_ms_p50)
+            
+            # Day-4 Z-1: track provider changes for the 'changed' flag in route_state
+            prev = self._last_provider_per_task.get(task_class)
+            changed = prev != winner.provider
+            self._last_provider_per_task[task_class] = winner.provider
 
-    def _record_pick(
-        self, task_class: str, capability: ProviderCapability
-    ) -> None:
-        """Append to the decision ring. Records the pick + a
-        ``changed`` flag so a Prometheus counter can fire only on
-        actual route changes (ADR-HUB-005 telemetry hint)."""
-        prev = self._last_pick_per_task.get(task_class)
-        self._last_pick_per_task[task_class] = capability.provider
-        self._decisions.append(
-            {
+            # Record in history
+            from datetime import datetime, timezone
+            decision = {
                 "task_class": task_class,
-                "provider": capability.provider,
-                "locality": capability.locality,
-                "latency_ms_p50": capability.latency_ms_p50,
-                "changed": prev != capability.provider,
+                "provider": winner.provider,
+                "locality": winner.locality,
+                "timestamp": datetime.now(timezone.utc).isoformat(),
+                "changed": changed,
                 "previous_provider": prev,
             }
-        )
+            self._history.append(decision)
+            if len(self._history) > 100:
+                self._history.pop(0)
 
-    # ─────────────────────────────────────────────── dispatch ──
+            return ProviderHandle(
+                capability=winner,
+                routing_metadata={"decision": decision}
+            )
+
+    def route_state(self, limit: int = 10) -> list[dict]:
+        with self._lock:
+            return list(self._history[-limit:])
+
+    # ──────────────────────────────────────────────── dispatch ──
 
     async def dispatch(
         self,
@@ -201,46 +183,91 @@ class AIHub:
         *,
         task_id: str | None = None,
         prefer: PreferLocality = "auto",
-    ) -> dict[str, Any]:
-        """Day-4 stub. Z-3 (Day-5) wires this through to
-        `ai_router.generate` for chat/chat_subtask + the NPU/MMS
-        provider objects for stt. Until then, `pick()` works but
-        `dispatch()` raises so call sites can't accidentally cut over
-        to the hub before the router-delegate path is wired."""
-        del payload, task_id, prefer  # silence linters
-        raise NotImplementedError(
-            "AIHub.dispatch lands in Z-3 (Day-5). Use AIHub.pick() to "
-            "resolve a capability and call ai_router.generate / the "
-            "STT provider object directly until then."
-        )
+        provider_hint: str | None = None,
+    ) -> Any:
+        """High-level dispatch entry point.
 
-    # ─────────────────────────────────────────── test utilities ──
+        Resolve a provider via `pick()` (or `provider_hint`) and forward
+        the call to the target service (AIRouter / Voice / Vision).
 
-    def reset_for_tests(self) -> None:
-        """Clear the registry + decision ring. Tests use this to keep
-        each pin independent without monkey-patching the singleton."""
-        with self._lock:
-            self._registry.clear()
-            self._last_pick_per_task.clear()
-            self._decisions.clear()
+        Phase 17b: forward to `ai_router.generate` or `call_with_tools`
+        using the result of `pick()` as a provider_hint.
+
+        Payload for chat tasks:
+          - user_message: str
+          - system_prompt: str
+          - history: list[dict]
+          - user_id: str | None
+          - tools: list | None (triggers call_with_tools)
+          - stream: bool (triggers generate_stream)
+        """
+        try:
+            if provider_hint:
+                provider_name = provider_hint
+            else:
+                handle = self.pick(task_class, prefer=prefer)
+                provider_name = handle.capability.provider
+
+            if task_class in ("chat", "chat_subtask"):
+                from ai.provider import ai_router
+
+                user_message = payload.get("user_message", "")
+                system_prompt = payload.get("system_prompt", "")
+                history = payload.get("history", [])
+                user_id = payload.get("user_id")
+
+                if "tools" in payload:
+                    return await ai_router.call_with_tools(
+                        system_prompt=system_prompt,
+                        user_message=user_message,
+                        tools=payload["tools"],
+                        history=history,
+                        user_id=user_id,
+                        task_id=task_id,
+                        provider_hint=provider_name,
+                        step_idx=payload.get("step_idx"),
+                        max_total_retries=payload.get("max_total_retries"),
+                    )
+
+                if payload.get("stream"):
+                    return ai_router.generate_stream(
+                        user_message=user_message,
+                        system_prompt=system_prompt,
+                        history=history,
+                        task_id=task_id,
+                        provider_hint=provider_name,
+                    )
+
+                return await ai_router.generate(
+                    user_message=user_message,
+                    system_prompt=system_prompt,
+                    history=history,
+                    task_id=task_id,
+                    user_id=user_id,
+                    provider_hint=provider_name,
+                )
+
+            # 2026-05-14 — if we have a provider but it's not a chat task,
+            # and we don't have a specific handler, raise NotImplementedError
+            # as expected by Day-4 audit tests.
+            raise NotImplementedError(
+                f"AIHub: dispatch not implemented for task_class={task_class!r}"
+            )
+        except Exception as exc:
+            logger.error("AIHub.dispatch failed (task=%s, hint=%s): %s",
+                         task_class, provider_hint, exc, exc_info=True)
+            raise
 
 
-# ─────────────────────────────────────────────────── lazy singleton ──
-
+# ── Singleton ─────────────────────────────────────────────────────────────────
 
 _AI_HUB_SINGLETON: AIHub | None = None
-_SINGLETON_LOCK = threading.Lock()
 
 
 def get_ai_hub() -> AIHub:
-    """Lazy module-level singleton — same pattern as
-    `ai/provider.py:921-933`. Tests can call `reset_for_tests()` to
-    clear state between runs."""
     global _AI_HUB_SINGLETON
     if _AI_HUB_SINGLETON is None:
-        with _SINGLETON_LOCK:
-            if _AI_HUB_SINGLETON is None:
-                _AI_HUB_SINGLETON = AIHub()
+        _AI_HUB_SINGLETON = AIHub()
     return _AI_HUB_SINGLETON
 
 
@@ -255,42 +282,44 @@ def __getattr__(name: str) -> Any:
 
 
 def register_default_capabilities(*, hub: AIHub | None = None) -> None:
-    """Day-4 Z-1 stub: register Gemini (remote) + Ollama (local) as
-    `chat` + `chat_subtask` capabilities. Latency p50 numbers are
-    placeholders that Z-3 will replace with a live read from the
-    ai_router's `last_call_summary`. Day-5 adds the NPU slot per Z-5.
-
-    `register` is idempotent so calling this from a lifespan hook
-    never blows up; tests pass an explicit `hub=` so they don't
-    pollute the singleton.
+    """Day-4 Z-1 stub: register Gemini (remote) tiers.
+    
+    Phase 30 — Removed Ollama (local) to avoid "lobotomy" on fallback.
+    Registering tiered Gemini capabilities:
+    - 'balanced': gemini-3.1-pro (Brain)
+    - 'fast': gemini-2.0-flash (Execution)
     """
     h = hub if hub is not None else get_ai_hub()
-    # Gemini — remote, balanced quality.
+    
+    # Gemini — remote
+    gemini_ok = bool(config.ai_gemini_api_key)
+    
+    # Pro Tier (Strategic/Reasoning)
     for task in ("chat", "chat_subtask"):
         h.register(
             ProviderCapability(
                 provider="gemini",
                 task_class=task,  # type: ignore[arg-type]
                 modality="text",
-                latency_ms_p50=900.0,
-                quality_tier="balanced",
+                latency_ms_p50=1200.0, # Reasoning is slower
+                quality_tier="high",
                 locality="remote",
-                available=True,
+                available=gemini_ok,
             )
         )
-    # Ollama — local, fast.
-    for task in ("chat", "chat_subtask"):
-        h.register(
-            ProviderCapability(
-                provider="ollama",
-                task_class=task,  # type: ignore[arg-type]
-                modality="text",
-                latency_ms_p50=1800.0,
-                quality_tier="fast",
-                locality="local",
-                available=True,
-            )
+    
+    # Flash Tier (Tactical/Speed)
+    h.register(
+        ProviderCapability(
+            provider="gemini-flash", # Virtual provider for routing
+            task_class="chat", 
+            modality="text",
+            latency_ms_p50=300.0,
+            quality_tier="fast",
+            locality="remote",
+            available=gemini_ok,
         )
+    )
 
 
 __all__ = [

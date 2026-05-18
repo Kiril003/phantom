@@ -171,7 +171,16 @@ async def test_empty_content_with_attachments_is_preserved(monkeypatch):
     result = await provider.generate("plot", "system", [])
 
     # Attachment present → we do NOT override empty content with placeholder.
+    # NOTE: post Day-4 W-2c, `parse_function_call` also auto-promotes a
+    # typed `scene` envelope alongside `chart_data` (see
+    # response_formatter._should_auto_attach_scene — deliberate, audited
+    # behaviour). The Phase-09.3 intent is only "empty content preserved +
+    # the chart still renders", so assert the chart_data attachment is
+    # present rather than pinning an exact (pre-scene-era) count.
     assert result.content == ""
     assert result.response_form == "chart"
-    assert len(result.attachments) == 1
-    assert result.attachments[0]["type"] == "chart_data"
+    chart_atts = [
+        a for a in result.attachments
+        if isinstance(a, dict) and a.get("type") == "chart_data"
+    ]
+    assert len(chart_atts) == 1

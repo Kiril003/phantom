@@ -69,13 +69,13 @@ class TestCouncilSituationKind:
 
 class TestPickOrchestratorModeHighRisk:
     def test_high_risk_action_picks_council_in_auto(self) -> None:
-        from agent.orchestrator.modes import pick_orchestrator_mode
+        from agent.operations.orchestrator.modes import pick_orchestrator_mode
         from agent.schemas import CouncilSituation
         sit = CouncilSituation(kind="high_risk_action", task_id="t", summary="s")
         assert pick_orchestrator_mode(sit, user_setting="auto") == "council"
 
     def test_high_risk_action_in_auto_council_kinds_set(self) -> None:
-        from agent.orchestrator.modes import _AUTO_COUNCIL_KINDS
+        from agent.operations.orchestrator.modes import _AUTO_COUNCIL_KINDS
         assert "high_risk_action" in _AUTO_COUNCIL_KINDS, (
             "Phase 23-D regression: high_risk_action dropped out of the auto "
             "council set; the loop's risk gate would silently lose council "
@@ -86,7 +86,7 @@ class TestPickOrchestratorModeHighRisk:
         """Operator's explicit `single` choice wins over the auto council
         path — they have signalled they want the cheap route even for risky
         asks (the existing risk-gate prompt + phone approval still runs)."""
-        from agent.orchestrator.modes import pick_orchestrator_mode
+        from agent.operations.orchestrator.modes import pick_orchestrator_mode
         from agent.schemas import CouncilSituation
         sit = CouncilSituation(kind="high_risk_action", task_id="t", summary="s")
         assert pick_orchestrator_mode(sit, user_setting="single") == "single"
@@ -95,7 +95,7 @@ class TestPickOrchestratorModeHighRisk:
         """Adding 'high_risk_action' must not perturb the other kinds'
         behaviour — confirm a 'low_confidence' situation without low
         confidence still yields 'single'."""
-        from agent.orchestrator.modes import pick_orchestrator_mode
+        from agent.operations.orchestrator.modes import pick_orchestrator_mode
         from agent.schemas import CouncilSituation, InnerMonologue
         sit = CouncilSituation(
             kind="low_confidence",

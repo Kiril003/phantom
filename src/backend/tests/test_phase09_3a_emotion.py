@@ -92,8 +92,8 @@ def test_emotion_summary_flow_state():
 
 @pytest.mark.asyncio
 async def test_task_started_delta(isolated_db):
-    from agent.emotion import update_emotion_on_event
-    from agent.runtime import AgentRuntime, TaskState
+    from agent.cognition.emotion import update_emotion_on_event
+    from agent.kernel.runtime import AgentRuntime, TaskState
     from agent.schemas import SelfModel
 
     rt = AgentRuntime()
@@ -112,8 +112,8 @@ async def test_task_started_delta(isolated_db):
 
 @pytest.mark.asyncio
 async def test_task_failed_raises_concern_and_fatigue(isolated_db):
-    from agent.emotion import update_emotion_on_event
-    from agent.runtime import AgentRuntime, TaskState
+    from agent.cognition.emotion import update_emotion_on_event
+    from agent.kernel.runtime import AgentRuntime, TaskState
     from agent.schemas import SelfModel
 
     rt = AgentRuntime()
@@ -133,7 +133,7 @@ async def test_task_failed_raises_concern_and_fatigue(isolated_db):
 @pytest.mark.asyncio
 async def test_reflection_completed_verdict_branches(isolated_db):
     """reflection.completed uses verdict to pick a delta key."""
-    from agent.emotion import resolve_event_key
+    from agent.cognition.emotion import resolve_event_key
 
     assert resolve_event_key("reflection.completed", {"verdict": "continue"}) == \
         "reflection.completed:continue"
@@ -150,8 +150,8 @@ async def test_reflection_completed_verdict_branches(isolated_db):
 @pytest.mark.asyncio
 async def test_blocked_quota_entered_from_alias(isolated_db):
     """Runtime emits `task.blocked_quota`; emotion maps it to blocked_quota.entered."""
-    from agent.emotion import update_emotion_on_event
-    from agent.runtime import AgentRuntime, TaskState
+    from agent.cognition.emotion import update_emotion_on_event
+    from agent.kernel.runtime import AgentRuntime, TaskState
     from agent.schemas import SelfModel
 
     rt = AgentRuntime()
@@ -168,8 +168,8 @@ async def test_blocked_quota_entered_from_alias(isolated_db):
 @pytest.mark.asyncio
 async def test_no_foreground_task_is_silent(isolated_db):
     """Emotion updates no-op when there's no active task."""
-    from agent.emotion import update_emotion_on_event
-    from agent.runtime import AgentRuntime
+    from agent.cognition.emotion import update_emotion_on_event
+    from agent.kernel.runtime import AgentRuntime
 
     rt = AgentRuntime()
     assert rt.foreground_slot is None
@@ -183,8 +183,8 @@ async def test_no_foreground_task_is_silent(isolated_db):
 
 @pytest.mark.asyncio
 async def test_decay_drifts_toward_baseline(isolated_db, monkeypatch):
-    from agent.emotion import decay_loop
-    from agent.runtime import AgentRuntime, TaskState
+    from agent.cognition.emotion import decay_loop
+    from agent.kernel.runtime import AgentRuntime, TaskState
     from agent.schemas import EmotionVector, SelfModel
     from config import config
 
@@ -230,7 +230,7 @@ async def test_decay_drifts_toward_baseline(isolated_db, monkeypatch):
 
 
 def test_tactical_prompt_omits_emotion_at_baseline():
-    from agent.planner.tactical import _build_user_message
+    from agent.cognition.planner.tactical import _build_user_message
     from agent.schemas import SelfModel, SubGoal
     sm = SelfModel()
     sg = SubGoal(description="x", rationale="y", expected_actions=1,
@@ -241,7 +241,7 @@ def test_tactical_prompt_omits_emotion_at_baseline():
 
 
 def test_tactical_prompt_includes_emotion_when_elevated():
-    from agent.planner.tactical import _build_user_message
+    from agent.cognition.planner.tactical import _build_user_message
     from agent.schemas import EmotionVector, SelfModel, SubGoal
     sm = SelfModel(emotion=EmotionVector(concern=0.8, fatigue=0.7))
     sg = SubGoal(description="x", rationale="y", expected_actions=1,
@@ -271,8 +271,8 @@ def test_emotion_persists_across_checkpoint_roundtrip():
 @pytest.mark.asyncio
 async def test_concurrent_updates_stay_clamped(isolated_db):
     """Fire 30 events in parallel; emotion stays bounded in [0, 1]."""
-    from agent.emotion import update_emotion_on_event
-    from agent.runtime import AgentRuntime, TaskState
+    from agent.cognition.emotion import update_emotion_on_event
+    from agent.kernel.runtime import AgentRuntime, TaskState
     from agent.schemas import SelfModel
 
     rt = AgentRuntime()

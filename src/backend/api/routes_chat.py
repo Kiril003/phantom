@@ -22,12 +22,22 @@ from config import config
 from db.database import get_db, get_session
 from db.models import ChatMessage, ChatSession
 from security.auth import get_current_user, require_auth
+from security.device_auth import get_user_or_device_user
 from security.jwt_manager import TokenPayload
-from ai.provider import ai_router
+from ai.hub import ai_hub
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/chat", tags=["chat"])
+
+# Day-4/5: keep a reference to fire-and-forget background tasks so they
+# aren't garbage collected before they finish.
+_BACKGROUND_TASKS: set[asyncio.Task] = set()
+
+
+def _track_task(task: asyncio.Task) -> None:
+    _BACKGROUND_TASKS.add(task)
+    task.add_done_callback(_BACKGROUND_TASKS.discard)
 
 
 # ── Schemas ────────────────────────────────────────────────────────────────────
@@ -69,6 +79,11 @@ class SendMessageRequest(BaseModel):
 
 class UpdateSessionRequest(BaseModel):
     summary: str
+
+
+class ArtifactActionRequest(BaseModel):
+    tool: str
+    args: dict = {}
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────
@@ -205,6 +220,55 @@ async def _get_or_create_session(
     return session
 
 
+async def _hydrate_session_memory_from_db(
+    db: AsyncSession,
+    *,
+    user_id: str,
+    session_id: str,
+) -> None:
+    """Warm the in-RAM chat history from persisted messages.
+
+    ``session_memory`` is process-local, so reopening an old session after a
+    backend restart used to give the model zero conversational history even
+    though the UI showed the transcript from SQLite. Hydrate once before
+    appending the current user turn.
+    """
+    from memory.session_memory import session_memory
+
+    if session_memory.session_exists(session_id):
+        return
+
+    limit = max(2, min(200, int(config.chat_max_session_history) * 2))
+    result = await db.execute(
+        select(ChatMessage)
+        .where(
+            ChatMessage.session_id == session_id,
+            ChatMessage.user_id == user_id,
+        )
+        .order_by(ChatMessage.created_at.desc())
+        .limit(limit)
+    )
+    rows = list(reversed(result.scalars().all()))
+    for msg in rows:
+        attachments: list[dict[str, Any]] = []
+        try:
+            loaded = json.loads(msg.attachments_json or "[]")
+            if isinstance(loaded, list):
+                attachments = [a for a in loaded if isinstance(a, dict)]
+        except Exception as exc:
+            logger.debug(
+                "chat hydrate: attachments_json corrupt for msg=%s — %s",
+                msg.id, exc,
+            )
+        session_memory.add_message(
+            session_id,
+            msg.role,
+            msg.content or "",
+            response_form=msg.response_form or "text",
+            attachments=attachments,
+        )
+
+
 async def _build_ai_response(
     user_message: str,
     session_id: str,
@@ -235,8 +299,9 @@ async def _build_ai_response(
         build_history_messages,
         fetch_recent_places,
     )
+    from memory.brain import memory_brain
     from memory.session_memory import session_memory
-    from memory.strategic_memory import retrieve_relevant, extract_and_store_facts
+    from memory.strategic_memory import extract_and_store_facts
     from memory.user_model import (
         get_behavioral_model, save_behavioral_model,
         update_trust, update_vocabulary, update_language_stats,
@@ -247,24 +312,56 @@ async def _build_ai_response(
     snapshot = context_engine.get_snapshot()
     behavioral_model = await get_behavioral_model(db, user.id)
 
-    # 1. Retrieve memory hints
-    hints = await retrieve_relevant(
-        user_id=user.id,
-        query=user_message,
-        top_k=config.memory_top_k,
-    )
+    # 0. Endocrine Stimuli — Phase 14
+    # React to user input: CAPSLOCK increases cortisol, "дякую" increases oxytocin
+    c_delta, d_delta, o_delta = 0.0, 0.0, 0.0
+    if user_message.isupper() and len(user_message) > 5:
+        c_delta += 0.15 # User is shouting
+    if any(w in user_message.lower() for w in ["дякую", "thanks", "спасибо"]):
+        o_delta += 0.1
+        d_delta += 0.05
+    
+    from ai.sentience.endocrine import endocrine_system
+    endocrine_system.update(300) # Natural decay
+    endocrine_system.stimulus(cortisol_delta=c_delta, dopamine_delta=d_delta, oxytocin_delta=o_delta)
+    hormones = endocrine_system.state.model_dump()
+
+    where = snapshot.get("where", {})
+    lat = where.get("lat")
+    lon = where.get("lon")
+
+    # 1. Unified memory + recent places. MemoryBrain fans out across
+    # strategic Chroma, tactical SQLite, geo-tagged facts, and agent seeds.
+    try:
+        hints = await memory_brain.recall_for_prompt(
+            db=db,
+            user_id=user.id,
+            query=user_message,
+            limit=config.memory_top_k,
+            lat=float(lat) if lat is not None else None,
+            lon=float(lon) if lon is not None else None,
+            include_agent=True,
+        )
+    except Exception as exc:
+        logger.debug("memory brain recall failed (non-critical): %s", exc)
+        hints = []
+
+    try:
+        recent_places = await fetch_recent_places(db, user.id, hours=24, limit=5)
+    except Exception as exc:
+        logger.debug("recent places fetch failed (non-critical): %s", exc)
+        recent_places = []
+
     context_engine.set_memory_hints(hints)
     snapshot["memory_hints"] = hints
-
-    # 1b. Recent places — Phase 9.4c-qw fix #2 ("де я був вчора?")
-    recent_places = await fetch_recent_places(db, user.id, hours=24, limit=5)
+    # recent_places already unpacked above
 
     # 1c. Emotion — Phase 9.4c-qw fix #5. Best-effort: only populated
     # when an agent task currently owns the foreground slot. Mirrors the
     # gating already used by the 9.3a self-model hook above.
     emotion_dict: dict | None = None
     try:
-        from agent.runtime import agent_runtime  # noqa: PLC0415
+        from agent.kernel.runtime import agent_runtime  # noqa: PLC0415
         slot = agent_runtime.foreground_slot
         if slot is not None and slot.self_model is not None:
             emo = getattr(slot.self_model, "emotion", None)
@@ -293,6 +390,7 @@ async def _build_ai_response(
         memory_hints=hints,
         recent_places=recent_places,
         emotion=emotion_dict,
+        hormones=hormones,
     )
 
     # 4. Get history from session memory (already in RAM from this session)
@@ -317,9 +415,20 @@ async def _build_ai_response(
     if config.chat_tools_enabled is True:
         from ai.chat_pipeline import run as chat_pipeline_run
         from ai.agents.orchestrator import run_orchestrator
+
+        # Pick the provider once at the start of the turn per ADR-HUB-003.
+        # The hub's locality-first auto-pick would always grab Ollama,
+        # so we project the operator's Settings → AI → Provider choice
+        # onto a locality preference (gemini=remote, ollama=local) and
+        # let the hub still select the lowest-latency match in that
+        # bucket. AIRouter handles failure-fallback internally.
+        _prefer = "remote" if config.ai_primary_provider == "gemini" else "local"
+        handle = ai_hub.pick("chat", prefer=_prefer)
+        provider_name = handle.capability.provider
+
         ai_response = await run_orchestrator(
             user_text=user_message,
-            provider=ai_router.active_provider_name,
+            provider=provider_name,
             chat_pipeline_run=chat_pipeline_run,
             user_message=user_message,
             system_prompt=system_prompt,
@@ -331,74 +440,81 @@ async def _build_ai_response(
         # Day-5 — true streaming: yield text deltas to the WS as Gemini
         # generates them. The visible bubble grows live; final
         # response_form / attachments / scene envelope are computed from
-        # the fully-assembled text via parse_plain_text below. Function-
-        # calling won't fire on this path (Gemini's streaming function
-        # call surface needs a different consumer); the chat-tools path
-        # above stays non-streaming until we wire tool_call_chunks.
+        # the fully-assembled text via parse_plain_text below.
         from ai.provider import AIResponse
         from ai.response_formatter import parse_plain_text
         full_text_chunks: list[str] = []
         try:
-            async for chunk in ai_router.generate_stream(
-                user_message=user_message,
-                system_prompt=system_prompt,
-                history=history,
-            ):
+            stream = await ai_hub.dispatch(
+                "chat",
+                {
+                    "user_message": user_message,
+                    "system_prompt": system_prompt,
+                    "history": history,
+                    "stream": True,
+                    "user_id": user.id,
+                },
+                provider_hint=config.ai_primary_provider,
+            )
+            async for chunk in stream:
                 if not chunk:
                     continue
                 full_text_chunks.append(chunk)
-                # Best-effort fan-out — a failing WS broadcast (client
-                # gone, hub blocked) MUST NOT cancel generation.
                 try:
                     await on_delta(chunk)
                 except Exception as exc:  # noqa: BLE001
                     logger.debug("on_delta fan-out failed: %s", exc)
         except Exception as exc:
-            # Streaming path failed — fall back to non-streaming so the
-            # operator still gets an answer. This mirrors the resilience
-            # promise of ai_router.generate which already retries with
-            # the fallback provider on primary failure.
             logger.warning("chat stream failed (%s) — falling back to generate()", exc)
-            ai_response = await ai_router.generate(
-                user_message=user_message,
-                system_prompt=system_prompt,
-                history=history,
-                user_id=user.id,
+            ai_response = await ai_hub.dispatch(
+                "chat",
+                {
+                    "user_message": user_message,
+                    "system_prompt": system_prompt,
+                    "history": history,
+                    "user_id": user.id,
+                },
+                provider_hint=config.ai_primary_provider,
             )
         else:
             full_text = "".join(full_text_chunks).strip()
             if not full_text:
-                # The streaming path yielded nothing (mocked ai_router in
-                # tests, provider returned an empty stream, etc.). Fall
-                # through to non-streaming generate() so the operator
-                # still gets a real reply.
-                ai_response = await ai_router.generate(
-                    user_message=user_message,
-                    system_prompt=system_prompt,
-                    history=history,
-                    user_id=user.id,
+                ai_response = await ai_hub.dispatch(
+                    "chat",
+                    {
+                        "user_message": user_message,
+                        "system_prompt": system_prompt,
+                        "history": history,
+                        "user_id": user.id,
+                    },
+                    provider_hint=config.ai_primary_provider,
                 )
             else:
                 response_form, content, attachments = parse_plain_text(full_text)
-                # Active provider was tracked by the router during the
-                # stream. Defensive: tests may mock ai_router and
-                # `_active` returns a MagicMock — coerce to a JSON-safe
-                # string fallback.
-                _maybe = getattr(ai_router, "_active", None)
-                active_provider = _maybe if isinstance(_maybe, str) else "gemini"
+                # Active provider was tracked by the hub during pick/dispatch.
+                # We can peek at the last decision for this task class.
+                last_route = ai_hub.route_state(limit=1)
+                active_provider = "gemini"
+                if last_route and last_route[0]["task_class"] == "chat":
+                    active_provider = last_route[0]["provider"]
+
                 ai_response = AIResponse(
                     content=content,
                     response_form=response_form,
                     attachments=attachments,
                     provider=active_provider,
-                    tokens_used=0,  # stream path doesn't surface usage counts
+                    tokens_used=0,
                 )
     else:
-        ai_response = await ai_router.generate(
-            user_message=user_message,
-            system_prompt=system_prompt,
-            history=history,
-            user_id=user.id,
+        ai_response = await ai_hub.dispatch(
+            "chat",
+            {
+                "user_message": user_message,
+                "system_prompt": system_prompt,
+                "history": history,
+                "user_id": user.id,
+            },
+            provider_hint=config.ai_primary_provider,
         )
 
     # 5b. Phase 16 (audit-2026-04-28 step 4) — best-effort prompt
@@ -441,6 +557,26 @@ async def _build_ai_response(
     # 6. Post-turn: vocabulary + language stats update
     update_vocabulary(behavioral_model, user_message)
     update_language_stats(behavioral_model, user_message)
+
+    # ── Phase 13: Voice Nerve — Streaming Trigger ───────────────────────────
+    # If TTS is enabled globally, we push the text response to the voice
+    # nerve (EventBus). Any active voice WebSocket session for this user
+    # will catch this and begin streaming audio chunks immediately.
+    if (
+        config.voice_tts_enabled
+        and ai_response.content
+        and ai_response.response_form in ("text", "mixed")
+    ):
+        try:
+            from core.event_bus import event_bus
+            event_bus.emit("voice.say", {
+                "user_id": user.id,
+                "text": ai_response.content
+            })
+        except Exception as exc:
+            logger.debug("voice nerve emit failed: %s", exc)
+    # ────────────────────────────────────────────────────────────────────────
+
     interaction = Interaction(
         followed_advice=False,
         cancelled_or_ignored=False,
@@ -455,7 +591,7 @@ async def _build_ai_response(
     # legitimately quote a tool-result verbatim (locationhistory rows,
     # recall_memory hits, sensor snapshot fields), and persisting that
     # back into ChromaDB creates a self-poisoning loop — the next turn's
-    # retrieve_relevant() pulls back the AI's own paraphrase as a "fact"
+    # memory recall pulls back the AI's own paraphrase as a "fact"
     # and the LLM treats it as ground truth. Until the D2-I1 output-
     # safety classifier lands, the safe default is "store user words
     # only". Operator-stated facts are recoverable; tool-echo facts are
@@ -487,7 +623,7 @@ async def _build_ai_response(
     try:
         # Day-5 perf — fire-and-forget. Failure inside the task is
         # logged at DEBUG; the chat handler returns without waiting.
-        asyncio.create_task(_bg_extract_facts())
+        _track_task(asyncio.create_task(_bg_extract_facts()))
     except Exception as exc:  # noqa: BLE001
         logger.debug("Failed to schedule background fact extraction: %s", exc)
 
@@ -552,28 +688,48 @@ async def _build_ai_response(
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
 
+@router.post("/artifact-action")
+async def artifact_action(
+    req: ArtifactActionRequest,
+    db: AsyncSession = Depends(get_db),
+    user=Depends(get_user_or_device_user),
+) -> dict:
+    # Thin proxy — RBAC/audit/dangerous-pattern checks live in the dispatcher.
+    from ai.chat_tool_dispatcher import dispatch as chat_dispatch
+    return await chat_dispatch(req.tool, req.args, user_id=user.id, db=db)
+
+
 @router.post("/message")
 async def send_message(
     req: SendMessageRequest,
-    token_data: TokenPayload = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
+    user=Depends(get_user_or_device_user),
 ) -> dict:
-    from security.auth import get_current_user as _get_user
+
+    """Phase 4 — accepts user JWT (desktop) OR device JWT (paired phone).
+
+    `get_user_or_device_user` resolves both audiences to the same User
+    row. The body downstream only needs `user.id`, so the dual-auth
+    swap is local to the dependency line — no other changes needed in
+    this handler.
+    """
     from core.context_engine import context_engine
 
-    # Resolve user
-    from sqlalchemy import select as _select
-    from db.models import User as _User
-    result = await db.execute(_select(_User).where(_User.id == token_data.user_id))
-    user = result.scalar_one_or_none()
-    if not user:
-        raise HTTPException(status_code=404, detail="User not found")
+    # Reset the idle clock the moment a chat message lands. Without this
+    # the state machine's `_conversation_ended` predicate (idle > 30 s)
+    # fires while the operator is reading the AI reply and bounces them
+    # out of DIALOGUE back to SHADOW. record_interaction() existed but
+    # was wired only in tests prior to 2026-05-09.
+    context_engine.record_interaction()
 
     # Get or create session
     session = await _get_or_create_session(db, user.id, req.session_id)
 
     # Record user message in session RAM cache
     from memory.session_memory import session_memory
+    await _hydrate_session_memory_from_db(
+        db, user_id=user.id, session_id=session.id,
+    )
     session_memory.add_message(session.id, "user", req.content)
 
     # Store user message in DB
@@ -614,8 +770,8 @@ async def send_message(
     # idle chat doesn't carry residual state between tasks. Best-effort:
     # any failure here must NOT block chat reply.
     try:
-        from agent.runtime import agent_runtime
-        from agent.self_model import (
+        from agent.kernel.runtime import agent_runtime
+        from agent.cognition.self_model import (
             maybe_add_concern_from_user_text,
             note_interaction,
         )
@@ -629,7 +785,7 @@ async def send_message(
     # it can reset its silence clock. Independent of whether a task is
     # active — proactive respects "no recent chat" across tasks.
     try:
-        from agent.proactive import get_loop
+        from agent.cognition.proactive.loop import get_loop
         ploop = get_loop()
         if ploop is not None:
             ploop.note_user_interaction()
@@ -644,7 +800,7 @@ async def send_message(
     # they've implicitly abandoned).
     pending_fired_task_id: str | None = None
     try:
-        from agent.proactive import get_loop as _get_loop_p94a
+        from agent.cognition.proactive.loop import get_loop as _get_loop_p94a
         ploop4a = _get_loop_p94a()
         if ploop4a is not None and ploop4a.has_pending_action():
             pending_fired_task_id = await ploop4a.resolve_pending_action(req.content)
@@ -767,7 +923,6 @@ async def send_message(
         async def _bg_summarize_session() -> None:
             try:
                 from db.database import get_session as _get_bg_session
-                from ai.provider import ai_router
                 from sqlalchemy import select as _bg_select
                 async with _get_bg_session() as bg_db:
                     res = await bg_db.execute(
@@ -775,11 +930,15 @@ async def send_message(
                     )
                     bg_session = res.scalar_one_or_none()
                     if bg_session:
-                        summary_resp = await ai_router.generate(
-                            user_message="Summarize this chat in 2-4 words maximum, capitalize it like a title. Return ONLY the title and nothing else.",
-                            system_prompt="You are an AI generating very brief, 2-4 word chat titles.",
-                            history=[{"role": "user", "content": req.content}, {"role": "assistant", "content": content}],
-                            user_id=user.id,
+                        summary_resp = await ai_hub.dispatch(
+                            "chat_subtask",
+                            {
+                                "user_message": "Summarize this chat in 2-4 words maximum, capitalize it like a title. Return ONLY the title and nothing else.",
+                                "system_prompt": "You are an AI generating very brief, 2-4 word chat titles.",
+                                "history": [{"role": "user", "content": req.content}, {"role": "assistant", "content": content}],
+                                "user_id": user.id,
+                            },
+                            provider_hint=config.ai_primary_provider,
                         )
                         if summary_resp.content:
                             title = summary_resp.content.replace("\"", "").strip()
@@ -789,7 +948,7 @@ async def send_message(
             except Exception as exc:
                 logger.debug("Background session summarize failed: %s", exc)
 
-        asyncio.create_task(_bg_summarize_session())
+        _track_task(asyncio.create_task(_bg_summarize_session()))
 
 
     # Create TemporalAnchor — "what was happening at this moment"
@@ -958,6 +1117,9 @@ async def _ws_chat_handler(type_: str, data: dict, client: Any) -> None:
             # Session cache + user DB message
             from memory.session_memory import session_memory
             from core.context_engine import context_engine
+            await _hydrate_session_memory_from_db(
+                db, user_id=user.id, session_id=session.id,
+            )
             session_memory.add_message(session.id, "user", content)
 
             user_msg = ChatMessage(
@@ -980,8 +1142,8 @@ async def _ws_chat_handler(type_: str, data: dict, client: Any) -> None:
             # Phase 9.3b — mirror the REST path's self-model + proactive hooks
             # so WS chat updates the loop's silence clock too.
             try:
-                from agent.runtime import agent_runtime
-                from agent.self_model import (
+                from agent.kernel.runtime import agent_runtime
+                from agent.cognition.self_model import (
                     maybe_add_concern_from_user_text,
                     note_interaction,
                 )
@@ -992,7 +1154,7 @@ async def _ws_chat_handler(type_: str, data: dict, client: Any) -> None:
             except Exception as exc:
                 logger.debug("9.3a chat self-model hook (ws) failed: %s", exc)
             try:
-                from agent.proactive import get_loop
+                from agent.cognition.proactive.loop import get_loop
                 ploop = get_loop()
                 if ploop is not None:
                     ploop.note_user_interaction()

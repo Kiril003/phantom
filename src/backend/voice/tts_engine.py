@@ -156,20 +156,38 @@ class PiperTTSProvider(TTSProvider):
             path = _resolve_piper_model(config.voice_tts_voice)
         
         if path is None:
-            logger.warning("Default voice not found, searching for any available Piper model...")
+            # Phase 13 — Extreme Resilience
+            # If default is also missing, try English fallback, then Ukrainian fallback specifically
+            fallbacks = [config.voice_tts_voice_en, config.voice_tts_voice_uk, "en_US-lessac-medium"]
+            for f in fallbacks:
+                path = _resolve_piper_model(f)
+                if path:
+                    logger.warning("Default voice missing, found fallback: %s", f)
+                    break
+
+        if path is None:
+            logger.warning("All configured fallbacks missing, searching for any available Piper model...")
             path = _find_any_piper_model()
 
         if path is None:
             raise RuntimeError(
-                f"No Piper voice models found. Drop a .onnx + .onnx.json pair "
-                f"under ~/piper-voices/ (e.g. {requested}.onnx)."
+                "No Piper voice models found in any search path. "
+                "Voice subsystem is non-functional. "
+                "Please install at least one .onnx model to ~/piper-voices/"
             )
         
         if self._voice_path == path and self._voice is not None:
             return self._voice
         logger.info("Loading Piper voice %s", path)
-        self._voice = PiperVoice.load(str(path))
-        self._voice_path = path
+        try:
+            self._voice = PiperVoice.load(str(path))
+            self._voice_path = path
+        except Exception as exc:
+            logger.error("Failed to load Piper model %s: %s", path, exc)
+            # If loading failed, invalidate path so we don't retry same failure
+            self._voice_path = None
+            self._voice = None
+            raise
         return self._voice
 
     async def synthesize(self, text: str, voice: str, speed: float) -> TTSResult:

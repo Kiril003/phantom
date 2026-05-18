@@ -23,7 +23,7 @@
 import { useEffect, useRef } from 'react';
 import { useSystemStore } from '../stores/systemStore';
 import { useFamiliarStore } from '../stores/familiarStore';
-import type { SystemState } from '@shared/types';
+import { FAMILIAR_STATE_BEHAVIOR, type SystemState } from '@shared/types';
 
 const HINTS_LS_KEY = 'phantom-familiar-hints-seen';
 const IDLE_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutes
@@ -110,7 +110,12 @@ export function useFamiliarTriggers(): void {
     if (lastStateRef.current !== null && lastStateRef.current !== systemState) {
       // Skip the very first paint (lastStateRef.current === null) so the
       // initial mount doesn't always fire a summon.
-      useFamiliarStore.getState().manifest('state-transition');
+      const behavior = FAMILIAR_STATE_BEHAVIOR[systemState];
+      useFamiliarStore.getState().manifest('state-transition', {
+        pose: behavior.pose,
+        emotion: behavior.emotion,
+        message: behavior.message,
+      });
     }
     lastStateRef.current = systemState;
     // previousState is included only as a refresh trigger for systems

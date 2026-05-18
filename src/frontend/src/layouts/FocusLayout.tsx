@@ -59,7 +59,7 @@ export default function FocusLayout() {
       <AmbientGlows />
       <StatusBar />
 
-      <main className="flex-1 grid grid-cols-12 gap-4 px-4 py-4 min-h-0 z-10">
+      <main className="flex-1 grid grid-cols-12 gap-2 px-2 py-2 min-h-0 z-10">
         {/* ─── Left — system + environment ─────────────────────────────── */}
         <section className="col-span-3 flex flex-col gap-3 min-h-0">
           <SectionLabel>SYSTEM_CORE</SectionLabel>
@@ -134,18 +134,18 @@ export default function FocusLayout() {
             aria-hidden
             className="absolute rounded-full animate-pulse-slow"
             style={{
-              width: 380,
-              height: 380,
+              width: 320,
+              height: 320,
               background: 'var(--accent-glow)',
-              filter: 'blur(80px)',
-              opacity: 0.55,
+              filter: 'blur(60px)',
+              opacity: 0.5,
             }}
           />
 
           <Orb size="lg" />
 
           <motion.div
-            className="mt-6 flex flex-col items-center gap-2 text-center"
+            className="mt-4 flex flex-col items-center gap-1 text-center"
             initial={{ opacity: 0, y: 8 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.3, duration: 0.6 }}
@@ -272,8 +272,8 @@ function SectionLabel({ children }: { children: React.ReactNode }) {
 function Card({ children, className = '' }: { children: React.ReactNode; className?: string }) {
   return (
     <div
-      className={`glass flex flex-col gap-2 ${className}`}
-      style={{ padding: '12px 14px' }}
+      className={`glass flex flex-col gap-1.5 ${className}`}
+      style={{ padding: '8px 10px', borderRadius: 12 }}
     >
       {children}
     </div>
@@ -344,7 +344,7 @@ function Gauge1({ value, unit }: { value: number | undefined; unit?: string }) {
           className="tabular"
           style={{
             fontFamily: 'var(--font-display)',
-            fontSize: 26,
+            fontSize: 22,
             fontWeight: 600,
             color,
             letterSpacing: 'var(--tracking-tight)',

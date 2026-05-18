@@ -469,6 +469,12 @@ class AlwaysOnOrchestrator:
             await self._send({"type": "rejected"})
             return
 
+        try:
+            from core.context_engine import context_engine
+            context_engine.record_heard_speech(text)
+        except Exception as exc:
+            logger.warning("orchestrator: failed to record heard speech: %s", exc)
+
         if self._mode == MODE_WAKE_WORD:
             if not self._wake_phrase:
                 # Defensive — config validator forbids empty, but if we
@@ -514,6 +520,12 @@ class AlwaysOnOrchestrator:
         if not text:
             await self._send({"type": "rejected"})
             return
+
+        try:
+            from core.context_engine import context_engine
+            context_engine.record_heard_speech(text)
+        except Exception as exc:
+            logger.warning("orchestrator: failed to record heard speech: %s", exc)
 
         # Wake-word gating. Identical to the non-streaming Whisper path
         # so behaviour stays consistent regardless of voice_streaming_partials.

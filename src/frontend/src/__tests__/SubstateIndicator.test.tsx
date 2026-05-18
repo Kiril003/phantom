@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { SubstateIndicator } from '../components/agent/SubstateIndicator';
+import { SubstateIndicator } from '../components/agent/status/SubstateIndicator';
 
 describe('<SubstateIndicator />', () => {
   it('renders the thinking label when substate is thinking', () => {

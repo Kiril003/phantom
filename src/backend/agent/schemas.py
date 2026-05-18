@@ -141,6 +141,9 @@ class StrategicPlan(BaseModel):
     sub_goals: list[SubGoal]
     estimated_total_actions: int = 0
     risk_assessment: str = ""
+    # Phase 28-IDEAL — Extreme Professionalism additions.
+    architectural_rationale: str = "" # High-level justification for the chosen approach (ADR-lite)
+    required_capabilities: list[str] = Field(default_factory=list) # Declared tool/package dependencies
 
 
 # ── Observations ─────────────────────────────────────────────────────────────
@@ -172,6 +175,8 @@ class ActionResult(BaseModel):
     error: str | None = None
     error_class: str | None = None
     elapsed_ms: int = 0
+    # Phase 28-IDEAL — mark actions that significantly exceeded expectations.
+    performance_warning: str | None = None
     sandboxed: bool | None = None
     side_effects: list[str] = Field(default_factory=list)
 
@@ -273,6 +278,8 @@ class SelfModel(BaseModel):
     # auth-hooked dependency on every authenticated call that reaches the
     # agent so the planner can tailor prompts.
     relationships: dict[str, Relationship] = Field(default_factory=dict)
+    # Phase 28-STABILITY — proven dead ends for this task.
+    dead_ends: list[str] = Field(default_factory=list)
     # Phase 9.3a — FIFO short strings, max 10. Populated by heuristics
     # (user-text keyword match, system-state thresholds, recurring task
     # failures). Items decay if not refreshed in 24h.
@@ -281,6 +288,9 @@ class SelfModel(BaseModel):
     # signal for 9.3b proactive decisions ("recently on a roll → confident
     # enough to suggest X").
     recent_successes: list[str] = Field(default_factory=list)
+    # Phase 28-IDEAL — track performance trends per action name.
+    # { "action_name": [ms1, ms2, ... ms5] }
+    performance_history: dict[str, list[int]] = Field(default_factory=dict)
 
 
 class ThoughtBudget(BaseModel):
@@ -543,6 +553,89 @@ class InfoNeedResponse(BaseModel):
     submitted_at: datetime = Field(default_factory=_utcnow)
 
 
+# ── Block C-1 — Mission + Phase Pydantic schemas ─────────────────────────────
+#
+# MissionBrief    — what the operator submits (input gate).
+# MissionPlan     — what the strategic planner emits (decomposed phases).
+# PhaseSpec       — per-phase plan shape, mirrors Phase ORM minus DB metadata.
+#
+# acceptance_criteria_raw on PhaseSpec intentionally stays as list[dict] —
+# Block D will formalise the AcceptanceCriterion model. Keeping it raw here
+# avoids a breaking schema change when D lands.
+
+MissionStatus = Literal[
+    "planning",
+    "running",
+    "paused",
+    "done",
+    "failed",
+    "abandoned",
+]
+
+
+class BudgetConstraints(BaseModel):
+    """Optional resource cap for a mission."""
+    max_usd: float | None = None
+    max_wall_hours: float | None = None
+    extra: dict[str, Any] = Field(default_factory=dict)
+
+
+class MissionBrief(BaseModel):
+    """What the operator provides when initiating a mission.
+
+    Only ``brief`` is required. The planner derives ``success_criteria`` and
+    emits them via ``MissionPlan`` after the first LLM call.
+    """
+    brief: str = Field(..., description="Operator's original prompt, verbatim.")
+    quality_bar: str = Field(
+        default="",
+        description="Operator's qualitative 'what good looks like'. May be empty.",
+    )
+    deadline_at: datetime | None = Field(
+        default=None,
+        description="Optional wall-clock deadline (UTC).",
+    )
+    budget_constraints: BudgetConstraints | None = Field(
+        default=None,
+        description="Optional resource caps (USD, wall hours, etc.).",
+    )
+
+
+class PhaseSpec(BaseModel):
+    """Planner-emitted spec for a single mission phase.
+
+    Mirrors the Phase ORM shape minus DB-managed metadata (id, mission_id,
+    started_at, finished_at). ``acceptance_criteria_raw`` is intentionally
+    untyped until Block D formalises AcceptanceCriterion.
+    """
+    description: str
+    rationale: str = ""
+    success_criteria: str = ""
+    expected_duration_h: float = 0.0
+    # Declared output files: [{"path": "...", "kind": "file|blend|...", "produced": false}]
+    artifacts: list[dict[str, Any]] = Field(default_factory=list)
+    # Block D will replace this with list[AcceptanceCriterion]; raw for now.
+    acceptance_criteria_raw: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class MissionPlan(BaseModel):
+    """What the strategic planner emits after decomposing the operator's brief.
+
+    ``phases`` must be ordered (index 0 = first phase to execute).
+    ``success_criteria`` is the top-level mission acceptance bar, distinct from
+    per-phase criteria inside each PhaseSpec.
+    """
+    success_criteria: str = Field(
+        ...,
+        description="Top-level acceptance bar for the entire mission.",
+    )
+    phases: list[PhaseSpec] = Field(
+        ...,
+        description="Ordered phase decomposition (idx 0 = first).",
+    )
+    risk_assessment: str = ""
+
+
 __all__ = [
     "RiskLevel",
     "Substate",
@@ -586,4 +679,66 @@ __all__ = [
     "InfoNeedOption",
     "InfoNeed",
     "InfoNeedResponse",
+    # Block C-1 — Mission + Phase
+    "MissionStatus",
+    "BudgetConstraints",
+    "MissionBrief",
+    "PhaseSpec",
+    "MissionPlan",
+    # Vertical V10 — Mission Report
+    "MissionReportPhase",
+    "MissionReport",
 ]
+
+
+# ── Vertical V10 — Mission Report schemas ─────────────────────────────────────
+#
+# MissionReport is the operator-facing postmortem for a completed (or stopped)
+# mission. It is composed by MissionReportComposer in agent/reports.py and
+# exported to PDF / HTML dashboard via agent/missions/pdf_export.py and
+# agent/missions/html_dashboard.py.
+#
+# Design decisions:
+#  • `visual_snapshot_b64` is optional per phase — most phases won't have a
+#    screenshot; only those where the agent ran `mission.snapshot`.
+#  • `resource_summary` is a free dict so we can extend with per-device fields
+#    (GPU temp, disk iops, etc.) without a schema break.
+#  • `budget_spent_usd` is None when no budget tracking was in use.
+
+
+class MissionReportPhase(BaseModel):
+    """Per-phase slice of the mission postmortem."""
+
+    idx: int
+    description: str
+    success_criteria: str
+    status: str
+    duration_h: float | None
+    achievements: list[str]
+    decisions: list[dict[str, str]]     # [{summary, verdict, objection?}]
+    artifacts: list[dict[str, str]]     # [{path, kind, size_bytes, embedded?}]
+    lessons: list[str]
+    failure_modes: list[str]
+    visual_snapshot_b64: str | None = None  # embedded preview if available
+
+
+class MissionReport(BaseModel):
+    """Structured postmortem for a complete mission. Vertical V10."""
+
+    mission_id: str
+    brief: str
+    success_criteria: str
+    quality_bar: str | None
+    status: str
+    started_at: str
+    finished_at: str | None
+    wall_duration_h: float
+    overall_summary: str
+    phases: list[MissionReportPhase]
+    total_artifacts: int
+    total_decisions: int
+    aggregate_lessons: list[str]
+    resource_summary: dict[str, Any]
+    council_engagements: int
+    budget_spent_usd: float | None
+    composed_at: str

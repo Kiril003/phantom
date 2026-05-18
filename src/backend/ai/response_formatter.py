@@ -7,6 +7,8 @@ from __future__ import annotations
 
 from typing import Any
 
+from config import config
+
 # ── Tool definitions (provider-agnostic schema) ───────────────────────────────
 
 RESPONSE_FORM_TOOLS: list[dict[str, Any]] = [
@@ -191,6 +193,42 @@ RESPONSE_FORM_TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "respond_artifact",
+        "description": (
+            "Інтерактивний/анімований віджет під екран 1024×600. "
+            "Використовуй ЗАВЖДИ коли користувач просить віджет, UI, "
+            "гру, візуалізацію, дашборд, анімацію або щось, чого "
+            "стандартні форми не покривають. НІКОЛИ не вставляй HTML "
+            "як текст у звичайну відповідь — лише через цей виклик. "
+            "Зроби насичений повноекранний дизайн що заповнює поверхню, "
+            "а не крихітний елемент по центру. Без мережі/CDN, ≤64KB."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "title": {"type": "string", "description": "Назва для шапки"},
+                "html": {
+                    "type": "string",
+                    "description": (
+                        "Повний самодостатній HTML-документ. Заповни всю "
+                        "поверхню (≈1024×600), сучасний насичений дизайн, "
+                        "осмислені анімації. Лише inline CSS/JS, canvas, "
+                        "SVG. Без мережі/CDN/зовнішніх бібліотек."
+                    ),
+                },
+                "capabilities": {
+                    "type": "array",
+                    "description": (
+                        "Підмножина: read:context read:sensors read:memory "
+                        "read:state action:tools"
+                    ),
+                    "items": {"type": "string"},
+                },
+            },
+            "required": ["title", "html"],
+        },
+    },
+    {
         "name": "respond_mixed",
         "description": "Комбінована відповідь: кілька блоків різних форм в одному повідомленні",
         "parameters": {
@@ -211,7 +249,15 @@ RESPONSE_FORM_TOOLS: list[dict[str, Any]] = [
                 "metrics": {
                     "type": "array",
                     "description": "Опціонально: [{label, value, trend}]",
-                    "items": {"type": "object"},
+                    "items": {
+                        "type": "object",
+                        "properties": {
+                            "label": {"type": "string"},
+                            "value": {"type": "number"},
+                            "trend": {"type": "string", "enum": ["up", "down", "stable"]},
+                        },
+                        "required": ["label", "value", "trend"],
+                    },
                 },
                 "map": {
                     "type": "object",
@@ -242,6 +288,7 @@ _FORM_MAP: dict[str, str] = {
     "respond_alarm":    "text",
     "respond_timer":    "text",
     "respond_calendar": "text",
+    "respond_artifact": "artifact",
 }
 
 
@@ -260,11 +307,10 @@ _FORM_MAP: dict[str, str] = {
 #   code / terminal   → 'code-preview'   leading text panel + code-preview panel
 #   metric_cards      → 'list'           leading text panel + list panel
 #
-# `chart`, `diagram`, `mixed` deliberately NOT mapped on Day-4 — those
-# require richer panel kinds the W-1 closed enum does not yet expose
-# (e.g., `chart`-shaped data points). When the operator wants those
-# rendered as scenes we extend `ScenePanelKind` first, ADR-amend the
-# closed enum, then add their entries here.
+# Phase-28-A — `chart` and `diagram` now have first-class panel kinds
+# (Recharts wrapper + d3 force/tree/flow wrapper). `mixed` still has
+# no preset coverage (would need a multi-payload composer beyond the
+# current single-attachment lookup) — left on the legacy renderer.
 _FORM_TO_SCENE_KIND: dict[str, str] = {
     "text": "text",
     "markdown": "text",
@@ -272,7 +318,14 @@ _FORM_TO_SCENE_KIND: dict[str, str] = {
     "code": "code-preview",
     "terminal": "code-preview",
     "metric_cards": "list",
+    "chart": "chart",
+    "diagram": "diagram",
+    "artifact": "artifact",
 }
+
+_ARTIFACT_CAPS = frozenset(
+    {"read:context", "read:sensors", "read:memory", "read:state", "action:tools"}
+)
 
 
 def _should_auto_attach_scene(
@@ -415,6 +468,82 @@ def _scene_list_panel(idx: int, raw: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def _scene_chart_panel(idx: int, raw: dict[str, Any]) -> dict[str, Any]:
+    """Phase-28-A — build a `chart` ScenePanel from a chart_data
+    attachment payload. The frontend SceneChartPanel wraps Recharts
+    (line/bar/area/pie); we forward the AI-emitted shape with one
+    rename: `data` (Recharts row array) → `rows` (panel field) so
+    the panel-data union doesn't collide with the outer ChatScene
+    `data` discriminator key."""
+    chart_type_raw = raw.get("chart_type")
+    chart_type = (
+        chart_type_raw
+        if chart_type_raw in ("line", "bar", "area", "pie")
+        else "bar"
+    )
+    rows_raw = raw.get("data")
+    rows = [r for r in rows_raw if isinstance(r, dict)] if isinstance(rows_raw, list) else []
+    panel_data: dict[str, Any] = {
+        "chart_type": chart_type,
+        "rows": rows,
+    }
+    if "title" in raw and raw["title"]:
+        panel_data["title"] = str(raw["title"])
+    if "x_key" in raw and raw["x_key"]:
+        panel_data["x_key"] = str(raw["x_key"])
+    if "y_keys" in raw and isinstance(raw["y_keys"], list):
+        panel_data["y_keys"] = [str(k) for k in raw["y_keys"]]
+    if "colors" in raw and isinstance(raw["colors"], list):
+        panel_data["colors"] = [str(c) for c in raw["colors"]]
+    return {
+        "id": f"p{idx}",
+        "kind": "chart",
+        "data": panel_data,
+    }
+
+
+def _scene_diagram_panel(idx: int, raw: dict[str, Any]) -> dict[str, Any]:
+    """Phase-28-A — build a `diagram` ScenePanel from a chart_data
+    attachment with a `diagram` payload (force / tree / flow). The
+    parser stores the diagram body under `chart_data.data.diagram`
+    (see `respond_diagram` arm in `parse_function_call`); we lift
+    that shape directly with light validation on the discriminator."""
+    body = raw.get("diagram") if isinstance(raw.get("diagram"), dict) else raw
+    kind_raw = body.get("kind")
+    kind_val = kind_raw if kind_raw in ("force", "tree", "flow") else "force"
+    nodes_raw = body.get("nodes")
+    nodes = [n for n in nodes_raw if isinstance(n, dict) and n.get("id")] if isinstance(nodes_raw, list) else []
+    links_raw = body.get("links")
+    links = [
+        l for l in links_raw
+        if isinstance(l, dict) and l.get("source") and l.get("target")
+    ] if isinstance(links_raw, list) else []
+    panel_data: dict[str, Any] = {
+        "kind": kind_val,
+        "nodes": nodes,
+        "links": links,
+    }
+    if body.get("title"):
+        panel_data["title"] = str(body["title"])
+    return {
+        "id": f"p{idx}",
+        "kind": "diagram",
+        "data": panel_data,
+    }
+
+
+def _scene_artifact_panel(idx: int, raw: dict[str, Any]) -> dict[str, Any]:
+    return {
+        "id": f"p{idx}",
+        "kind": "artifact",
+        "data": {
+            "html": str(raw.get("html", "")),
+            "title": str(raw.get("title", "")),
+            "capabilities": raw.get("capabilities", []),
+        },
+    }
+
+
 def build_scene_envelope(
     response_form: str,
     content: str,
@@ -478,6 +607,37 @@ def build_scene_envelope(
             if isinstance(att, dict) and att.get("type") == "metric_card":
                 data = att.get("data") if isinstance(att.get("data"), dict) else {}
                 panels.append(_scene_list_panel(idx, data))
+                idx += 1
+                break
+    elif kind == "chart":
+        # Phase-28-A — chart_data attachments without a `diagram` body
+        # are bar/line/area/pie charts. Skip ones nested under a
+        # `diagram` key (those are diagram payloads, not charts).
+        for att in attachments:
+            if not isinstance(att, dict) or att.get("type") != "chart_data":
+                continue
+            data = att.get("data") if isinstance(att.get("data"), dict) else {}
+            if isinstance(data.get("diagram"), dict):
+                continue
+            panels.append(_scene_chart_panel(idx, data))
+            idx += 1
+            break
+    elif kind == "diagram":
+        # Phase-28-A — diagram bodies are nested under chart_data.diagram.
+        for att in attachments:
+            if not isinstance(att, dict) or att.get("type") != "chart_data":
+                continue
+            data = att.get("data") if isinstance(att.get("data"), dict) else {}
+            if not isinstance(data.get("diagram"), dict):
+                continue
+            panels.append(_scene_diagram_panel(idx, data))
+            idx += 1
+            break
+    elif kind == "artifact":
+        for att in attachments:
+            if isinstance(att, dict) and att.get("type") == "artifact_data":
+                data = att.get("data") if isinstance(att.get("data"), dict) else {}
+                panels.append(_scene_artifact_panel(idx, data))
                 idx += 1
                 break
 
@@ -579,6 +739,27 @@ def parse_function_call(
             },
         })
 
+    elif fn_name == "respond_artifact":
+        html = str(fn_args.get("html", ""))
+        caps = fn_args.get("capabilities") or []
+        bad = (
+            not config.chat_artifacts_enabled
+            or len(html.encode("utf-8")) > config.chat_artifact_html_cap_bytes
+            or not isinstance(caps, list)
+            or not set(caps) <= _ARTIFACT_CAPS
+        )
+        if bad:
+            response_form = "text"
+        else:
+            attachments.append({
+                "type": "artifact_data",
+                "data": {
+                    "html": html,
+                    "title": str(fn_args.get("title", "")),
+                    "capabilities": list(caps),
+                },
+            })
+
     elif fn_name == "respond_mixed":
         chart = fn_args.get("chart")
         if isinstance(chart, dict) and chart.get("data"):
@@ -603,10 +784,12 @@ def parse_function_call(
             })
         metrics = fn_args.get("metrics")
         if isinstance(metrics, list) and metrics:
-            attachments.append({
-                "type": "metric_card",
-                "data": {"metrics": metrics},
-            })
+            valid_metrics = [m for m in metrics if isinstance(m, dict) and "label" in m and "value" in m]
+            if valid_metrics:
+                attachments.append({
+                    "type": "metric_card",
+                    "data": {"metrics": valid_metrics},
+                })
         map_data = fn_args.get("map")
         if isinstance(map_data, dict) and map_data.get("markers"):
             attachments.append({

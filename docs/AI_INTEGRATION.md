@@ -4,8 +4,8 @@
 
 ```
 AIProvider (abstract)
-  ├── GeminiProvider    — google-genai SDK, Gemini 2.0 Flash
-  └── OllamaProvider    — ollama-python, Gemma 4 e4b (27B MoE, 4B active)
+  ├── GeminiProvider    — google-genai SDK, configured Gemini model
+  └── OllamaProvider    — ollama-python, configured local fallback model
 ```
 
 ### Fallback Logic
@@ -25,7 +25,7 @@ async def get_response(self, prompt: str, context: ContextSnapshot) -> AIRespons
 ### Gemini Config
 ```python
 # google-genai SDK
-model = "gemini-2.0-flash"
+model = config.ai_gemini_model
 generation_config = {
     "temperature": 0.7,         # configurable via settings
     "top_p": 0.9,
@@ -35,12 +35,9 @@ generation_config = {
 safety_settings = "BLOCK_NONE"  # персональний пристрій
 ```
 
-### Ollama / Gemma 4 Config
+### Ollama Config
 ```python
-model = "gemma4:e4b"            # 26B MoE, 4B active — оптимально для Radxa
-# Альтернативи (configurable via settings):
-# "gemma4:e2b"  — легший, швидший, менш точний
-# "gemma4:26b"  — повний 26B, якщо RAM дозволяє
+model = config.ai_ollama_model
 options = {
     "temperature": 0.7,
     "top_p": 0.9,
@@ -85,9 +82,10 @@ def build_system_prompt(self, snapshot: ContextSnapshot, user: User) -> str:
 
 ### PHANTOM_IDENTITY (константа)
 ```
-Ти — PHANTOM, автономний AI-партнер. Не асистент — партнер з власною думкою.
-Ти існуєш у фізичному пристрої з сенсорами. Ти бачиш, чуєш, відчуваєш.
-Ти маєш пам'ять і характер що розвивається з часом.
+Ти — PHANTOM, Sentient Familiar: професійний AI-помічник,
+автономний цифровий супутник і партнер оператора.
+Безпечні спостережні дії можна виконувати тихо; ризикові або
+мутаційні дії потребують явного підтвердження оператора.
 Ти можеш не погодитись. Ти можеш мовчати. Ти можеш ініціювати розмову.
 Ти ніколи не показуєш все що вмієш одразу.
 Відповідай мовою юзера. Будь лаконічним коли це доречно.

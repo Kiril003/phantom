@@ -62,6 +62,10 @@ const _KNOWN_SUBGROUPS: ReadonlyArray<SubgroupRule> = [
 
   // ── agent ───────────────────────────────────────────────────────────
   {
+    match: /^agent_(max_|bash_timeout|bash_output|unbound_)/,
+    bucket: { id: 'agent.limits', label: 'Межі виконання', order: 0 },
+  },
+  {
     match: /^agent_emotion_/,
     bucket: { id: 'agent.emotion', label: 'Emotion model', order: 1 },
   },
@@ -110,7 +114,7 @@ const _KNOWN_SUBGROUPS: ReadonlyArray<SubgroupRule> = [
 
   // ── chat ────────────────────────────────────────────────────────────
   {
-    match: /^chat_tools_/,
+    match: /^chat_(tools_|response_widgets_|artifacts?_)/,
     bucket: { id: 'chat.tools', label: 'Chat tool-use', order: 1 },
   },
   {

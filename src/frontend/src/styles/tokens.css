@@ -37,11 +37,11 @@
                        radial-gradient(ellipse 80% 60% at 50% 120%, #f4af25 0%, rgba(244,175,37,0) 50%),
                        linear-gradient(180deg, #fdf6e9 0%, #faf3ec 100%);
 
-  /* ── Glass — bright translucent panels (per design DNA) ───────────── */
-  --glass-subtle:       rgba(255, 255, 255, 0.40);
-  --glass-panel:        rgba(255, 255, 255, 0.60);
-  --glass-card:         rgba(255, 255, 255, 0.70);
-  --glass-elevated:     rgba(255, 255, 255, 0.78);
+  /* ─── Glass — bright translucent panels (per design DNA) ───────────── */
+  --glass-subtle:       rgba(255, 255, 255, 0.25);
+  --glass-panel:        rgba(255, 255, 255, 0.45);
+  --glass-card:         rgba(255, 255, 255, 0.55);
+  --glass-elevated:     rgba(255, 255, 255, 0.65);
 
   --glass-border:       rgba(255, 255, 255, 0.55);
   --glass-border-hover: rgba(255, 255, 255, 0.75);
@@ -53,11 +53,11 @@
   --glow-warm:          rgba(244, 175, 37, 0.30);
   --glow-coral:         rgba(239, 68, 68, 0.30);
 
-  /* ── Ink — warm dark text on cream ────────────────────────────────── */
-  --ink-primary:        #1a1612;                 /* near-black warm */
-  --ink-secondary:      #5b5147;
-  --ink-muted:          #8a7f72;
-  --ink-faint:          #b3a99a;
+  /* ─── Ink — warm dark text on cream ────────────────────────────────── */
+  --ink-primary:        #120f0b;                 /* near-black warm */
+  --ink-secondary:      #453d34;
+  --ink-muted:          #716455;
+  --ink-faint:          #a39686;
   --ink-inverse:        #fdf6e9;                 /* cream — for text on dark */
 
   /* ── Lines — dark-on-cream dividers ───────────────────────────────── */
@@ -97,6 +97,7 @@
    * Default 1 so identical behaviour when unset. */
   --fs-scale:   1;
   --fs-micro:   calc(12px * var(--fs-scale, 1));
+  --fs-xxs:     calc(10px * var(--fs-scale, 1));
   --fs-xs:      calc(13px * var(--fs-scale, 1));
   --fs-sm:      calc(15px * var(--fs-scale, 1));
   --fs-base:    calc(16px * var(--fs-scale, 1));
@@ -314,6 +315,117 @@
   --accent-fade:    rgba(100, 116, 139, 0);
   --accent-glow:    rgba(100, 116, 139, 0.2);
   --accent-radial:  radial-gradient(circle at 30% 30%, #475569, #1e293b);
+}
+
+/* ─── Pro-console theme (High-density terminal aesthetic) ──────────────
+ * Phase 28 — operator-requested "professional" look.
+ * Similar to Claude Code / Gemini CLI. Strictly dark, monospace focus.
+ * Zero glassmorphism, zero glows, zero toy-like elements.
+ * high contrast, high density. */
+
+[data-theme="pro-console"] {
+  --primary:           #06b6d4;                  /* cyan-500 */
+  --primary-soft:      #22d3ee;
+  --primary-deep:      #0891b2;
+  --primary-shadow:    #155e75;
+  --orange:            #f59e0b;
+  --coral:             #ef4444;
+  --coral-soft:        #f87171;
+  --coral-deep:        #991b1b;
+
+  /* ── Surfaces — pure pitch and charcoal ──────────────────────────── */
+  --surface-base:      #000000;                  /* deep black */
+  --surface-deep:      #0a0a0a;                  /* slightly lighter */
+  --surface-raised:    #121212;                  /* raised sections */
+  --surface-void:      #000000;
+  --surface-sunrise:   linear-gradient(180deg, #0a0a0a 0%, #000000 100%);
+  --surface-coral:     linear-gradient(180deg, #1a0a0a 0%, #000000 100%);
+
+  /* ── Glass — stripped of "glass" — just solid subtle borders ────── */
+  --glass-subtle:       rgba(255, 255, 255, 0.03);
+  --glass-panel:        rgba(255, 255, 255, 0.05);
+  --glass-card:         rgba(255, 255, 255, 0.07);
+  --glass-elevated:     rgba(255, 255, 255, 0.10);
+
+  --glass-border:       rgba(255, 255, 255, 0.08);
+  --glass-border-hover: rgba(255, 255, 255, 0.15);
+  --glass-highlight:    rgba(255, 255, 255, 0.02);
+
+  /* ── No glows in pro mode ────────────────────────────────────────── */
+  --glow-primary:       transparent;
+  --glow-secondary:     transparent;
+  --glow-warm:          transparent;
+  --glow-coral:         transparent;
+
+  /* ── Ink — high contrast light gray / white ──────────────────────── */
+  --ink-primary:        #e5e5e5;                  /* gray-200 */
+  --ink-secondary:      #a3a3a3;                  /* gray-400 */
+  --ink-muted:          #525252;                  /* gray-600 */
+  --ink-faint:          #262626;                  /* gray-800 */
+  --ink-inverse:        #000000;
+
+  /* ── Lines — clean hard dividers ─────────────────────────────────── */
+  --line-subtle:        rgba(255, 255, 255, 0.05);
+  --line-default:       rgba(255, 255, 255, 0.10);
+  --line-strong:        rgba(255, 255, 255, 0.20);
+
+  /* ── Semantic signals ────────────────────────────────────────────── */
+  --signal-ok:          #10b981;
+  --signal-warn:        #f59e0b;
+  --signal-alert:       #ef4444;
+  --signal-info:        #06b6d4;
+
+  /* ── Chart palette ────────────────────────────────────────────────── */
+  --chart-1: #06b6d4;
+  --chart-2: #8b5cf6;
+  --chart-3: #10b981;
+  --chart-4: #f59e0b;
+  --chart-5: #ef4444;
+
+  /* ── No shadows in pro mode ──────────────────────────────────────── */
+  --shadow-sm:          none;
+  --shadow-md:          none;
+  --shadow-lg:          none;
+  --shadow-xl:          none;
+  --shadow-glow:        none;
+  --shadow-glow-coral:  none;
+
+  /* ── Forced Monospace ────────────────────────────────────────────── */
+  --font-display:   "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+  --font-body:      "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+  
+  --fs-scale:   0.95; /* tighter density */
+  
+  --accent:         #06b6d4;
+  --accent-rgb:     6, 182, 212;
+  --accent-glow:    transparent;
+  --accent-radial:  none;
+  
+  --radius-sm:      2px;
+  --radius-md:      4px;
+  --radius-lg:      6px;
+  --radius-xl:      8px;
+}
+
+[data-theme="pro-console"][data-state="SHADOW"],
+[data-theme="pro-console"] [data-state="SHADOW"] {
+  --accent:         #404040;
+  --ui-opacity:     0.8;
+}
+
+[data-theme="pro-console"][data-state="FOCUS"],
+[data-theme="pro-console"] [data-state="FOCUS"] {
+  --accent:         #06b6d4;
+}
+
+[data-theme="pro-console"][data-state="SENTINEL"],
+[data-theme="pro-console"] [data-state="SENTINEL"] {
+  --accent:         #ef4444;
+}
+
+[data-theme="pro-console"][data-state="GHOST"],
+[data-theme="pro-console"] [data-state="GHOST"] {
+  --accent:         #10b981;
 }
 
 /* ─── State accent overrides — sunrise palette ───────────────────────── */

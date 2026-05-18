@@ -37,6 +37,9 @@ import { SceneMapPinPanel } from './panels/SceneMapPinPanel';
 import { ScenePlanStepPanel } from './panels/ScenePlanStepPanel';
 import { SceneCodePreviewPanel } from './panels/SceneCodePreviewPanel';
 import { SceneIdentityCardPanel } from './panels/SceneIdentityCardPanel';
+import { SceneChartPanel } from './panels/SceneChartPanel';
+import { SceneDiagramPanel } from './panels/SceneDiagramPanel';
+import { SceneArtifactPanel } from './panels/SceneArtifactPanel';
 
 /** Operator-tunable; stagger CANNOT exceed this even if the envelope says so. */
 export const STAGGER_CLAMP_MAX_MS = 240;
@@ -100,6 +103,12 @@ function PanelByKind({ panel }: { panel: ScenePanel }) {
       return <SceneCodePreviewPanel data={panel.data} />;
     case 'identity-card':
       return <SceneIdentityCardPanel data={panel.data} />;
+    case 'chart':
+      return <SceneChartPanel data={panel.data} />;
+    case 'diagram':
+      return <SceneDiagramPanel data={panel.data} />;
+    case 'artifact':
+      return <SceneArtifactPanel data={panel.data} />;
     default: {
       // Exhaustiveness check — adding a new ScenePanelKind without a case
       // here triggers a compile error at `_exhaustive: never`.

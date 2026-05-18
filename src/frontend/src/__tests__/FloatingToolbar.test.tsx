@@ -66,6 +66,9 @@ describe('FloatingToolbar — Voice mode cycle (Phase 12.0)', () => {
     useUIStore.setState({
       moreMenuOpen: true,
       pendingVoiceActivation: false,
+      // OperatorLayout v3 chrome-collapse defaults Toolbar to collapsed; the
+      // existing assertions render the full toolbar, so expand it explicitly.
+      chrome: { statusBar: false, roster: false, hud: false, toolbar: false },
     } as never);
     useSystemStore.setState({ state: SystemState.SHADOW } as never);
   });

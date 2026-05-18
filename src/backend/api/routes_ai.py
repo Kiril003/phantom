@@ -18,7 +18,8 @@ from fastapi import APIRouter, Depends
 from pydantic import BaseModel
 
 from config import config
-from security.auth import get_current_user
+from security.auth import get_current_user, require_auth
+from security.jwt_manager import TokenPayload
 from db.models import User
 
 logger = logging.getLogger(__name__)
@@ -141,3 +142,11 @@ async def test_provider(
         latency_ms=latency,
         reply_preview="pong",
     )
+
+
+@router.post("/reset")
+async def reset_ai_router(_: TokenPayload = Depends(require_auth)) -> dict:
+    """Manually clear all cooling and quota states in the AI router."""
+    from ai.provider import ai_router
+    ai_router.reset_cooling()
+    return {"ok": True, "message": "AI router state reset successful"}

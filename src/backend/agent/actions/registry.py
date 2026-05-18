@@ -22,7 +22,8 @@ from .device import (
     GameInputBurst, ScreenCapture, ScreenClick,
     ScreenKeyCombo, ScreenOCR, ScreenScroll, ScreenType,
 )
-from .fs import FsRead, FsWrite
+from .fs import FsRead, FsWrite, FsBackup, FsCodeSearch, FsPatchHash
+from .lsp import LspDiagnostics, LspGotoDefinition, LspGetSymbols
 from .net import NetScan
 from .notify import NotifyDesktop
 from .process import ProcessList
@@ -31,7 +32,7 @@ from .self_introspect import SelfCapability, SelfRecall
 from .time_ import TimeWait
 from .voice_listen import VoiceListen
 from .voice_say import VoiceSay
-from .vision import SeeScreen
+from .vision import SeeCamera, SeeScreen
 from .visual import (
     VisualClickTarget, VisualFindTarget, VisualSceneDescribe, VisualWaitFor,
 )
@@ -40,9 +41,17 @@ from .delegate import AgentDelegate
 from .team_assemble import AgentAssembleTeam
 from .map import MAP_ACTIONS
 from .web import WebSearch
+from .git_checkpoint import GitCheckpoint, GitRollback
+from .git_branch import GitBranchManage
+from .mission_assets import MissionSnapshot
+from .grounded import TestRun
+from .intelligence import DistillFactsFromChats, ExcludeFactFromPrompts, IntelligenceUpsertKnowledge
+from .synthesize_capability import SynthesizeCapability
+from .optimize_capability import OptimizeCapability
 
 _REGISTERED: list[Type[Action]] = [
-    FsRead, FsWrite,
+    FsRead, FsWrite, FsBackup, FsCodeSearch, FsPatchHash,
+    LspDiagnostics, LspGotoDefinition, LspGetSymbols,
     BashRun,
     BrowserNavigate, BrowserExtract, BrowserClickByDescription,
     NetScan,
@@ -51,6 +60,7 @@ _REGISTERED: list[Type[Action]] = [
     TimeWait,
     SelfCapability, SelfRecall,
     WebSearch,
+    GitCheckpoint, GitRollback, GitBranchManage,
     # Phase 17a.5 — typed prompt to the operator.
     AskUser,
     # Phase 17a.5 — iterative corroboration search.
@@ -70,6 +80,10 @@ _REGISTERED: list[Type[Action]] = [
     VoiceSay, VoiceListen,
     # Phase 23-B — agent-initiated vision via Gemini multimodal.
     SeeScreen,
+    # Day-NN — physical camera vision via OpenCV + Gemini multimodal.
+    # Closes the audit-flagged Level-4 gap: agent can finally LOOK at
+    # the room, not just the desktop. Same JSON shape as SeeScreen.
+    SeeCamera,
     # Phase 23-C — agent-driven ESP32 servo aim + buzzer alert.
     ESP32ServoAim, ESP32BuzzerAlert,
     # Phase 24-V — visual acting layer. Composes screen capture +
@@ -94,12 +108,86 @@ _REGISTERED: list[Type[Action]] = [
     # (spawns matching team_lead which re-delegates to its seniors),
     # explicit (caller names roles).
     AgentAssembleTeam,
+    # Vertical V10 — mission.snapshot. Captures a visual PNG from screen /
+    # camera / blender / file, optionally describes it via Gemini multimodal,
+    # stores it in the mission asset dir, and appends an image directive to
+    # the active ledger phase section.
+    MissionSnapshot,
+    TestRun,
+    # Vertical V11 — intelligence.distill_from_chats + intelligence.exclude_fact.
+    # Distillation scans recent chat history via Gemini and proposes new personal
+    # facts; exclude_fact toggles the exclude_from_prompts gate on a UserFact.
+    DistillFactsFromChats,
+    ExcludeFactFromPrompts,
+    IntelligenceUpsertKnowledge,
+    # V4 — self-synthesizing capability. When the planner identifies a gap
+    # (no registered action fits a step) it emits a synthesize_capability step.
+    # The action drafts a Python Action subclass via LLM, smoke-tests it in the
+    # existing bwrap sandbox, and on green registers it into THIS registry so
+    # subsequent steps can pick it immediately.
+    SynthesizeCapability,
+    # Phase 28-IDEAL — autonomous code optimization. Rewrites existing synth
+    # actions to improve performance based on latency warnings.
+    OptimizeCapability,
 ]
+
+
+def _load_synth_actions() -> list[Type[Action]]:
+    """Discover persisted _synth/*.py files and return importable Action classes.
+
+    Called once at registry construction so synthesized actions from previous
+    sessions are available immediately after boot. Errors on individual files
+    are logged and skipped — a corrupt synth file must not block startup.
+    """
+    import importlib.util
+    import sys
+    import logging as _log
+    from pathlib import Path
+    from .base import Action as _Action
+
+    _logger = _log.getLogger(__name__)
+    synth_dir = Path(__file__).parent / "_synth"
+    result: list[Type[_Action]] = []
+
+    for py_file in sorted(synth_dir.glob("*.py")):
+        if py_file.name.startswith("_"):
+            continue  # skip __init__.py and internal helpers
+        slug = py_file.stem
+        module_name = f"agent.actions._synth.{slug}"
+        if module_name in sys.modules:
+            mod = sys.modules[module_name]
+        else:
+            try:
+                spec = importlib.util.spec_from_file_location(module_name, str(py_file))
+                if spec is None or spec.loader is None:
+                    continue
+                mod = importlib.util.module_from_spec(spec)
+                sys.modules[module_name] = mod
+                spec.loader.exec_module(mod)  # type: ignore[union-attr]
+            except Exception as exc:
+                _logger.warning("agent-synth: skipping %s at boot: %s", py_file.name, exc)
+                sys.modules.pop(module_name, None)
+                continue
+
+        for v in vars(mod).values():
+            if (
+                isinstance(v, type)
+                and issubclass(v, _Action)
+                and v is not _Action
+                and getattr(v, "name", "abstract") != "abstract"
+            ):
+                result.append(v)
+
+    return result
 
 
 class ActionRegistry:
     def __init__(self) -> None:
         self._by_name: dict[str, Type[Action]] = {cls.name: cls for cls in _REGISTERED}
+        # Boot-time auto-load: persisted synth actions from previous sessions.
+        for cls in _load_synth_actions():
+            if cls.name not in self._by_name:
+                self._by_name[cls.name] = cls
 
     def all(self) -> list[Type[Action]]:
         return list(self._by_name.values())

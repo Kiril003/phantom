@@ -104,10 +104,15 @@ class OllamaProvider(AIProvider):
         client = self._client()
         messages = _build_messages(user_message, system_prompt, history)
         
-        # Only use RESPONSE_FORM_TOOLS if this is a chat turn (user_id is present).
-        # Planners (like strategic planner) do not pass user_id and expect strict JSON,
-        # so passing chat tools confuses the model.
-        tools = _build_ollama_tools() if user_id is not None else None
+        # Only expose response-form tools when widgets are explicitly
+        # enabled. Otherwise the local fallback can hallucinate a widget
+        # tool call for a normal conversational turn and the UI renders an
+        # unwanted card/map.
+        tools = (
+            _build_ollama_tools()
+            if config.chat_response_widgets_enabled is True and user_id is not None
+            else None
+        )
         
         kwargs = {
             "model": config.ai_ollama_model,
@@ -177,6 +182,8 @@ class OllamaProvider(AIProvider):
         system_prompt: str,
         user_message: str,
         tools: list[ToolSchema],
+        history: list[dict] | None = None,
+        user_id: str | None = None,
         max_retries: int = 3,
     ) -> ToolCallResult | ToolUseError:
         """
@@ -364,11 +371,12 @@ def _build_tool_prompt(
     """Build the strict-JSON prompt for prompt-based tool selection."""
     feedback_block = f"\n\nIMPORTANT FEEDBACK FROM PREVIOUS ATTEMPT:\n{feedback}" if feedback else ""
     return (
-        f"You must respond with ONE valid JSON object — no markdown, no prose, "
-        f"no fences. The object schema is:\n\n"
-        f'{{"tool": "<exact tool name>", "arguments": {{<args object>}}, '
-        f'"reasoning": "<one sentence on why>"}}\n\n'
+        f"You are a precise tool-selector. You must respond with EXACTLY ONE valid JSON object. "
+        f"Do not include any text before or after the JSON. Do not use markdown blocks.\n\n"
+        f"The required JSON schema is:\n"
+        f'{{"tool": "<exact_tool_name>", "arguments": {{<args_dict>}}, "reasoning": "<why>", "confidence": 0.0..1.0}}\n\n'
         f"Available tools:\n{catalog_block}\n\n"
-        f"Request:\n{user_message}{feedback_block}\n\n"
-        f"Respond with JSON only."
+        f"User Request: {user_message}\n"
+        f"{feedback_block}\n"
+        f"Your JSON response:"
     )

@@ -73,6 +73,9 @@ class WebSearch(Action):
     name: ClassVar[str] = "web.search"
     risk_level: ClassVar[RiskLevel] = RiskLevel.SAFE
 
+    # Block B — resource declarations.
+    requires_network: ClassVar[bool] = True
+
     query: str = Field(..., description="search query")
     max_results: int = Field(default=5, ge=1, le=15)
 

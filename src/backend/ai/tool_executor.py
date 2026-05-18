@@ -25,7 +25,7 @@ from sqlalchemy import and_, select
 
 from config import config
 from db import database as _db
-from db.models import CalendarEvent, LocationHistory, MemoryFact, TemporalAnchor
+from db.models import CalendarEvent, LocationHistory, TemporalAnchor
 
 
 def _session_factory():
@@ -301,50 +301,45 @@ async def _tool_recall_memory_facts(args: dict[str, Any], user_id: str) -> dict[
     if len(query) > 500:
         return _err("invalid_args", "query exceeds 500 chars")
     layer = args.get("layer")
+    if layer is not None and layer not in ("strategic", "tactical", "archive", "geo", "episode"):
+        return _err("invalid_args", "layer must be strategic, tactical, archive, geo, or episode")
 
-    # Layer 'strategic' = ChromaDB vector search. 'tactical'/'archive' = SQL layer.
-    # When no layer is passed, fan out to strategic (the best for 'what do you know about X'),
-    # and fall through to tactical-SQL if strategic yields nothing.
-    results: list[dict[str, Any]] = []
+    try:
+        from memory.brain import memory_brain
 
-    want_strategic = layer is None or layer == "strategic"
-    want_sql_layer = layer in (None, "tactical", "archive")
-
-    if want_strategic:
-        try:
-            from memory.strategic_memory import retrieve_relevant
-
-            hits = await retrieve_relevant(user_id=user_id, query=query, top_k=5)
-            for h in hits:
-                results.append({"content": h, "layer": "strategic", "source": "chroma"})
-        except Exception as exc:
-            logger.debug("chroma retrieve failed: %s", exc)
-
-    if want_sql_layer and len(results) < 5:
         async with _session_factory()() as db:
-            conditions = [MemoryFact.user_id == user_id, MemoryFact.is_sealed.is_(False)]
-            if layer in ("tactical", "archive"):
-                conditions.append(MemoryFact.layer == layer)
-            stmt = (
-                select(MemoryFact)
-                .where(and_(*conditions))
-                .order_by(MemoryFact.importance.desc(), MemoryFact.created_at.desc())
-                .limit(5 - len(results))
+            hits = await memory_brain.recall(
+                db=db,
+                user_id=user_id,
+                query=query,
+                limit=5,
+                include_agent=layer in (None, "episode"),
             )
-            rows = (await db.execute(stmt)).scalars().all()
-            for r in rows:
-                results.append(
-                    {
-                        "content": r.content,
-                        "layer": r.layer,
-                        "category": r.category,
-                        "importance": r.importance,
-                        "created_at": r.created_at.isoformat() if r.created_at else None,
-                        "place_name": r.place_name,
-                    }
-                )
+    except Exception as exc:
+        logger.debug("memory brain recall failed: %s", exc)
+        hits = []
 
-    return _ok(results=results[:5], count=len(results[:5]))
+    results: list[dict[str, Any]] = []
+    for hit in hits:
+        if layer is not None and hit.layer != layer:
+            continue
+        item: dict[str, Any] = {
+            "content": hit.content,
+            "layer": hit.layer,
+            "source": hit.source,
+        }
+        if hit.category:
+            item["category"] = hit.category
+        if hit.importance:
+            item["importance"] = hit.importance
+        if hit.created_at:
+            item["created_at"] = hit.created_at
+        item.update({k: v for k, v in hit.metadata.items() if v is not None})
+        results.append(item)
+        if len(results) >= 5:
+            break
+
+    return _ok(results=results, count=len(results))
 
 
 async def _tool_get_system_metrics(args: dict[str, Any], user_id: str) -> dict[str, Any]:
@@ -1162,7 +1157,7 @@ async def _tool_create_checkpoint(args: dict[str, Any], user_id: str) -> dict[st
     if not isinstance(goal, str) or not goal.strip():
         return _err("invalid_args", "goal must be non-empty string")
     try:
-        from agent.audit import save_checkpoint
+        from agent.kernel.audit import save_checkpoint
         from agent.schemas import Checkpoint, SelfModel
     except Exception as exc:
         return _err("not_implemented", f"checkpoint stack unavailable: {exc}")
@@ -2119,15 +2114,150 @@ async def _tool_vault_restore(args: dict[str, Any], user_id: str) -> dict[str, A
     return _ok(card=_vault_serialise(card))
 
 
+async def _tool_get_my_location(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    try:
+        from core.context_engine import context_engine
+        snap = context_engine.get_snapshot()
+    except Exception as exc:
+        return _err("network", f"context_engine unavailable: {exc}")
+
+    where = snap.get("where", {})
+    if where.get("lat") is None or where.get("lon") is None:
+        return _ok(
+            lat=None,
+            lon=None,
+            place_name=where.get("place_name"),
+            accuracy_m=None,
+            fix=False,
+        )
+
+    return _ok(
+        lat=where["lat"],
+        lon=where["lon"],
+        place_name=where.get("place_name"),
+        accuracy_m=where.get("accuracy_m"),
+        fix=where.get("fix", False),
+    )
+
+
+async def _tool_get_internal_state(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    try:
+        from ai.sentience.endocrine import endocrine_system
+        bias = endocrine_system.get_personality_bias()
+        return _ok(
+            tone_warmth=float(bias["tone_warmth"]),
+            verbosity=float(bias["verbosity"]),
+            creativity=float(bias["creativity"]),
+            mood_trend=str(bias.get("mood_trend", "stable")),
+        )
+    except Exception as exc:
+        return _err("internal", f"endocrine_system unavailable: {exc}")
+
+
+async def _tool_get_recent_hearing(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    window_s = int(args.get("window_s", 30))
+    try:
+        from core.context_engine import context_engine
+        recent = context_engine.get_recent_hearing(window_s)
+        return _ok(
+            window_s=window_s,
+            transcripts=recent,
+            count=len(recent)
+        )
+    except Exception as exc:
+        return _err("internal", f"failed to get hearing buffer: {exc}")
+
+
+async def _tool_run_terminal_command(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    # Day-5: Execute arbitrary terminal command directly from chat.
+    # Wraps asyncio.create_subprocess_shell to provide raw access without strict bwrap.
+    import asyncio
+    command = args.get("command")
+    if not command:
+        return {"ok": False, "error": "command required", "error_kind": "validation"}
+    
+    timeout_s = int(args.get("timeout_s", 60))
+    
+    try:
+        proc = await asyncio.create_subprocess_shell(
+            command,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=timeout_s)
+            stdout = stdout_b.decode("utf-8", errors="replace")
+            stderr = stderr_b.decode("utf-8", errors="replace")
+            return {
+                "ok": True,
+                "stdout": stdout,
+                "stderr": stderr,
+                "return_code": proc.returncode,
+            }
+        except asyncio.TimeoutError:
+            proc.terminate()
+            # Try to get whatever was outputted before timeout
+            try:
+                stdout_b, stderr_b = await asyncio.wait_for(proc.communicate(), timeout=2.0)
+                stdout = stdout_b.decode("utf-8", errors="replace")
+                stderr = stderr_b.decode("utf-8", errors="replace")
+            except asyncio.TimeoutError:
+                proc.kill()
+                stdout = "<process killed, no output captured>"
+                stderr = ""
+                
+            return {
+                "ok": False, 
+                "error": f"timeout after {timeout_s}s", 
+                "error_kind": "timeout",
+                "stdout": stdout,
+                "stderr": stderr
+            }
+    except Exception as e:
+        return {"ok": False, "error": str(e), "error_kind": "execution_failed"}
+
+
+
+async def _tool_search_nearby_places(args: dict[str, Any], user_id: str, db: AsyncSession) -> dict[str, Any]:
+    from agent.actions.map.query_nearby import MapQueryNearby
+    from agent.base import ActionContext
+    
+    query = args.get("query")
+    try:
+        radius_m = int(args.get("radius_m", 1000))
+    except (ValueError, TypeError):
+        radius_m = 1000
+        
+    action = MapQueryNearby(
+        query=query,
+        radius_m=radius_m,
+        lat=None,
+        lon=None,
+        user_id=user_id
+    )
+    ctx = ActionContext(session_id="chat", message_id="chat", step=1, extras={"user_id": user_id})
+    res = await action.execute(ctx)
+    
+    if res.ok:
+        return _ok(res.output)
+    else:
+        return _err(res.output.get("reason", "unknown"), str(res.output.get("error", "Unknown error")))
+
 # ── Dispatcher ────────────────────────────────────────────────────────────────
 
 
+
 _HANDLERS: dict[str, Any] = {
+    "search_nearby_places": _tool_search_nearby_places,
     "search_locationhistory": _tool_search_locationhistory,
     "query_temporal_anchors": _tool_query_temporal_anchors,
     "recall_memory_facts": _tool_recall_memory_facts,
     "get_system_metrics": _tool_get_system_metrics,
     "get_sensor_status": _tool_get_sensor_status,
+    "get_my_location": _tool_get_my_location,
+    "get_internal_state": _tool_get_internal_state,
+    "get_recent_hearing": _tool_get_recent_hearing,
+    "run_terminal_command": _tool_run_terminal_command,
     "search_web": _tool_search_web,
     "get_calendar_events": _tool_get_calendar_events,
     "create_calendar_event": _tool_create_calendar_event,

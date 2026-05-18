@@ -20,7 +20,9 @@ export type AgentCardKind =
   | 'write_file' | 'send_email' | 'send_telegram' | 'post_to_api'
   | 'create_report' | 'notify'
   // council
-  | 'review_by_council';
+  | 'review_by_council'
+  // artifact
+  | 'artifact';
 
 export interface AgentCardLink {
   from_card_id: string;

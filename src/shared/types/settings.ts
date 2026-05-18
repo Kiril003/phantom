@@ -50,7 +50,7 @@ export interface SettingDefinition {
  * clock + `prefers-color-scheme`. Once the operator picks a theme
  * explicitly the explicit choice always wins.
  */
-export type ThemeId = 'sunrise-warm' | 'amber-night' | 'cyberdeck-cold';
+export type ThemeId = 'sunrise-warm' | 'amber-night' | 'cyberdeck-cold' | 'pro-console';
 
 export interface ThemeSettings {
   active: ThemeId;
@@ -60,12 +60,14 @@ export const THEME_IDS: ReadonlyArray<ThemeId> = [
   'sunrise-warm',
   'amber-night',
   'cyberdeck-cold',
+  'pro-console',
 ];
 
 export function isThemeId(value: unknown): value is ThemeId {
   return (
     value === 'sunrise-warm' ||
     value === 'amber-night' ||
-    value === 'cyberdeck-cold'
+    value === 'cyberdeck-cold' ||
+    value === 'pro-console'
   );
 }

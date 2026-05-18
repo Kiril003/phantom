@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { SystemState, StateTransition, ContextSnapshot } from '@shared/types';
+import { contextApi } from '../services/api';
 
 /**
  * ESP32 bridge status. `unknown` = /health not yet fetched once.
@@ -19,6 +20,12 @@ interface SystemStoreState {
   esp32: Esp32Status;
   /** Live mic amplitude [0, 1] — updated by useVoiceRecorder while listening. */
   voiceAmplitude: number;
+  /** Digital Endocrine System state — updated by inner_monologue.stream events. */
+  sentience: {
+    cortisol: number;
+    dopamine: number;
+    oxytocin: number;
+  };
 
   setState: (s: SystemState, transition?: Omit<StateTransition, 'from' | 'to'>) => void;
   setContext: (ctx: ContextSnapshot) => void;
@@ -26,6 +33,7 @@ interface SystemStoreState {
   setWsConnected: (v: boolean) => void;
   setEsp32: (s: Esp32Status) => void;
   setVoiceAmplitude: (amp: number) => void;
+  setSentience: (s: { cortisol: number; dopamine: number; oxytocin: number }) => void;
 
   // Audit walkthrough fix — shorthand transitions consumed by Overlays
   // (AppsOverlay) and DreamLayout / GhostLayout. Each routes through
@@ -55,6 +63,7 @@ export const useSystemStore = create<SystemStoreState>((set, get) => ({
   wsConnected: false,
   esp32: 'unknown',
   voiceAmplitude: 0,
+  sentience: { cortisol: 0.2, dopamine: 0.5, oxytocin: 0.5 },
 
   setState: (to, extra) => {
     const from = get().state;
@@ -73,6 +82,12 @@ export const useSystemStore = create<SystemStoreState>((set, get) => ({
       previousState: from,
       stateHistory: [...s.stateHistory.slice(-99), transition],
     }));
+
+    // If it's a manual transition (e.g. from the UI), notify the backend
+    // so the state machines stay in sync.
+    if (!transition.auto) {
+      void contextApi.setState(to, transition.trigger);
+    }
   },
 
   setContext: (ctx) => set({ context: ctx }),
@@ -85,6 +100,8 @@ export const useSystemStore = create<SystemStoreState>((set, get) => ({
     if (Math.abs(current - amp) < 0.02 && amp < 0.02) return;
     set({ voiceAmplitude: amp });
   },
+
+  setSentience: (s) => set({ sentience: s }),
 
   goShadow: () =>
     get().setState(SystemState.SHADOW, { trigger: 'go-shorthand', timestamp: Date.now(), auto: false }),

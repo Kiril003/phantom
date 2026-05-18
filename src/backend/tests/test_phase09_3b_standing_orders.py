@@ -50,7 +50,7 @@ async def isolated_db(monkeypatch):
 
 
 def test_interval_schedule_round_trip():
-    from agent.standing_orders.schedules import IntervalSchedule, parse_schedule
+    from agent.operations.standing_orders.schedules import IntervalSchedule, parse_schedule
     s = IntervalSchedule(every_s=60)
     back = parse_schedule(s.model_dump_json())
     assert isinstance(back, IntervalSchedule)
@@ -58,7 +58,7 @@ def test_interval_schedule_round_trip():
 
 
 def test_interval_next_fire_with_last_fired():
-    from agent.standing_orders.schedules import IntervalSchedule, next_fire_time
+    from agent.operations.standing_orders.schedules import IntervalSchedule, next_fire_time
     s = IntervalSchedule(every_s=30)
     now = datetime(2026, 4, 20, 12, 0, 0, tzinfo=timezone.utc)
     last = now - timedelta(seconds=15)
@@ -68,7 +68,7 @@ def test_interval_next_fire_with_last_fired():
 
 
 def test_interval_first_fire_is_immediate():
-    from agent.standing_orders.schedules import IntervalSchedule, next_fire_time
+    from agent.operations.standing_orders.schedules import IntervalSchedule, next_fire_time
     s = IntervalSchedule(every_s=30)
     now = datetime.now(tz=timezone.utc)
     nxt = next_fire_time(s, now, last_fired_at=None)
@@ -76,7 +76,7 @@ def test_interval_first_fire_is_immediate():
 
 
 def test_cron_schedule_next_fire_within_hour():
-    from agent.standing_orders.schedules import CronSchedule, next_fire_time
+    from agent.operations.standing_orders.schedules import CronSchedule, next_fire_time
     s = CronSchedule(minute="*/15")
     now = datetime(2026, 4, 20, 12, 7, 0, tzinfo=timezone.utc)
     nxt = next_fire_time(s, now, last_fired_at=None)
@@ -86,7 +86,7 @@ def test_cron_schedule_next_fire_within_hour():
 
 
 def test_conditional_cooldown_enforced():
-    from agent.standing_orders.schedules import ConditionalSchedule, next_fire_time
+    from agent.operations.standing_orders.schedules import ConditionalSchedule, next_fire_time
     s = ConditionalSchedule(check_every_s=60, condition="cpu_percent > 50", cooldown_s=600)
     now = datetime(2026, 4, 20, 12, 0, 0, tzinfo=timezone.utc)
     last = now - timedelta(seconds=100)  # within cooldown
@@ -98,7 +98,7 @@ def test_conditional_cooldown_enforced():
 
 
 def test_one_shot_fires_once():
-    from agent.standing_orders.schedules import OneShotSchedule, next_fire_time
+    from agent.operations.standing_orders.schedules import OneShotSchedule, next_fire_time
     fire_at = datetime(2026, 4, 20, 14, 0, 0, tzinfo=timezone.utc)
     s = OneShotSchedule(at=fire_at)
     now = datetime(2026, 4, 20, 13, 59, 0, tzinfo=timezone.utc)
@@ -112,7 +112,7 @@ def test_one_shot_fires_once():
 
 @pytest.mark.asyncio
 async def test_condition_hour_equals():
-    from agent.standing_orders.conditions import evaluate_condition
+    from agent.operations.standing_orders.conditions import evaluate_condition
     now_hour = datetime.now(tz=timezone.utc).hour
     assert await evaluate_condition(f"hour == {now_hour}") is True
     assert await evaluate_condition(f"hour == {(now_hour + 1) % 24}") is False
@@ -120,14 +120,14 @@ async def test_condition_hour_equals():
 
 @pytest.mark.asyncio
 async def test_condition_unknown_metric_raises():
-    from agent.standing_orders.conditions import evaluate_condition
+    from agent.operations.standing_orders.conditions import evaluate_condition
     with pytest.raises(ValueError):
         await evaluate_condition("nonsense_metric > 0")
 
 
 @pytest.mark.asyncio
 async def test_condition_malformed_raises():
-    from agent.standing_orders.conditions import evaluate_condition
+    from agent.operations.standing_orders.conditions import evaluate_condition
     with pytest.raises(ValueError):
         await evaluate_condition("this is not a condition")
 
@@ -136,7 +136,7 @@ async def test_condition_malformed_raises():
 async def test_condition_broken_metric_returns_false(monkeypatch):
     """If the underlying metric call raises, condition evaluates False —
     fail-safe so a broken probe doesn't cause spurious firing."""
-    from agent.standing_orders import conditions
+    from agent.operations.standing_orders import conditions
 
     def _boom():
         raise RuntimeError("psutil crashed")
@@ -148,13 +148,13 @@ async def test_condition_broken_metric_returns_false(monkeypatch):
 @pytest.mark.asyncio
 async def test_condition_fatigue_reads_foreground_emotion():
     """fatigue metric reads from the runtime's foreground task."""
-    from agent.runtime import AgentRuntime, TaskState
+    from agent.kernel.runtime import AgentRuntime, TaskState
     from agent.schemas import EmotionVector, SelfModel
-    from agent.standing_orders.conditions import evaluate_condition
-    import agent.standing_orders.conditions as cond_mod
+    from agent.operations.standing_orders.conditions import evaluate_condition
+    import agent.operations.standing_orders.conditions as cond_mod
 
     # Patch the agent_runtime import target to a fresh runtime.
-    import agent.runtime as runtime_mod
+    import agent.kernel.runtime as runtime_mod
     sm = SelfModel(emotion=EmotionVector(fatigue=0.9))
     runtime_mod.agent_runtime.foreground_slot = TaskState(
         id="x", goal="g", track="foreground", status="running", self_model=sm,
@@ -171,8 +171,8 @@ async def test_condition_fatigue_reads_foreground_emotion():
 
 @pytest.mark.asyncio
 async def test_runner_fires_due_interval_order(isolated_db, monkeypatch):
-    from agent.runtime import AgentRuntime
-    from agent.standing_orders.runner import StandingOrderRunner
+    from agent.kernel.runtime import AgentRuntime
+    from agent.operations.standing_orders.runner import StandingOrderRunner
     from db.database import get_session
     from db.models import StandingOrder, User
 
@@ -217,9 +217,9 @@ async def test_runner_fires_due_interval_order(isolated_db, monkeypatch):
 async def test_runner_fires_on_background_even_when_foreground_busy(isolated_db, monkeypatch):
     """Phase 9.4a — background track is independent, so a busy foreground
     user conversation must NOT block a due standing order."""
-    from agent.runtime import AgentRuntime, TaskState
+    from agent.kernel.runtime import AgentRuntime, TaskState
     from agent.schemas import SelfModel
-    from agent.standing_orders.runner import StandingOrderRunner
+    from agent.operations.standing_orders.runner import StandingOrderRunner
     from db.database import get_session
     from db.models import StandingOrder, User
 
@@ -261,8 +261,8 @@ async def test_runner_fires_on_background_even_when_foreground_busy(isolated_db,
 
 @pytest.mark.asyncio
 async def test_runner_respects_disabled_order(isolated_db, monkeypatch):
-    from agent.runtime import AgentRuntime
-    from agent.standing_orders.runner import StandingOrderRunner
+    from agent.kernel.runtime import AgentRuntime
+    from agent.operations.standing_orders.runner import StandingOrderRunner
     from db.database import get_session
     from db.models import StandingOrder, User
 
@@ -290,9 +290,9 @@ async def test_runner_respects_disabled_order(isolated_db, monkeypatch):
 @pytest.mark.asyncio
 async def test_runner_evaluates_conditional_schedule(isolated_db, monkeypatch):
     """Conditional order fires only when condition is True."""
-    from agent.runtime import AgentRuntime
-    from agent.standing_orders import conditions as cond_mod
-    from agent.standing_orders.runner import StandingOrderRunner
+    from agent.kernel.runtime import AgentRuntime
+    from agent.operations.standing_orders import conditions as cond_mod
+    from agent.operations.standing_orders.runner import StandingOrderRunner
     from db.database import get_session
     from db.models import StandingOrder, User
 
@@ -331,8 +331,8 @@ async def test_runner_evaluates_conditional_schedule(isolated_db, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_runner_start_stop_cleanly():
-    from agent.runtime import AgentRuntime
-    from agent.standing_orders.runner import StandingOrderRunner
+    from agent.kernel.runtime import AgentRuntime
+    from agent.operations.standing_orders.runner import StandingOrderRunner
     from config import config
 
     runtime = AgentRuntime()
@@ -354,7 +354,7 @@ async def test_runner_start_stop_cleanly():
 
 def test_api_parse_rejects_invalid_schedule():
     """The API validator rejects schedules that can't be parsed."""
-    from agent.standing_orders.schedules import parse_schedule
+    from agent.operations.standing_orders.schedules import parse_schedule
 
     with pytest.raises(Exception):
         parse_schedule({"kind": "interval", "every_s": -5})

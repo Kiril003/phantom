@@ -194,6 +194,9 @@ class WebResearch(Action):
     name: ClassVar[str] = "web.research"
     risk_level: ClassVar[RiskLevel] = RiskLevel.SAFE
 
+    # Block B — resource declarations.
+    requires_network: ClassVar[bool] = True
+
     query: str = Field(..., description="initial search query")
     context: str = Field(default="", description="extra terms to bias variants")
     min_sources: int = Field(default=3, ge=1, le=10)

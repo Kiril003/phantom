@@ -14,8 +14,8 @@ import pytest
 
 from agent.actions.base import Action, ActionContext
 from agent.actions.registry import ActionRegistry
-from agent.executor import StepCancelled, execute as execute_action
-from agent.runtime import AgentRuntime
+from agent.kernel.executor import StepCancelled, execute as execute_action
+from agent.kernel.runtime import AgentRuntime
 from agent.schemas import ActionResult, PlanStep, RiskLevel
 
 
@@ -39,7 +39,7 @@ def slow_registry() -> ActionRegistry:
 async def test_cancel_step_cancels_in_flight_action(slow_registry: ActionRegistry) -> None:
     runtime = AgentRuntime()
     # Seed a foreground slot so cancel_step's task_id check passes.
-    from agent.runtime import TaskState
+    from agent.kernel.runtime import TaskState
     from agent.schemas import SelfModel
 
     sm = SelfModel()
@@ -58,6 +58,7 @@ async def test_cancel_step_cancels_in_flight_action(slow_registry: ActionRegistr
     t0 = time.monotonic()
     with pytest.raises(StepCancelled):
         await execute_action(
+            user_id="u-test",
             task_id=task_id,
             step=step,
             runtime=runtime,
@@ -75,7 +76,7 @@ async def test_current_action_task_cleared_after_completion(slow_registry: Actio
     regardless of success / failure / cancellation.
     """
     runtime = AgentRuntime()
-    from agent.runtime import TaskState
+    from agent.kernel.runtime import TaskState
     from agent.schemas import SelfModel
 
     class _QuickAction(Action):
@@ -94,7 +95,7 @@ async def test_current_action_task_cleared_after_completion(slow_registry: Actio
     )
     step = PlanStep(step_idx=0, sub_goal_id=None, action="test.quick", args={})
     result, _audit_id = await execute_action(
-        task_id="t-quick", step=step, runtime=runtime,
+        user_id="u-test", task_id="t-quick", step=step, runtime=runtime,
         workspace_dir="/tmp", registry_=reg,
     )
     assert result.ok is True

@@ -120,6 +120,7 @@ def _get_candidates(
     stt_listening: bool = False,
     tts_playing: bool = False,
     ai_initiative: bool = False,
+    time_in_state_ms: int = 0,
 ) -> list[StateTransition]:
     """Return all valid transitions from current state given snapshot."""
     now_ms = int(time.time() * 1000)
@@ -164,11 +165,20 @@ def _get_candidates(
             add(SystemState.DREAM, "breathing_sleep_night", 6)
 
     elif current == SystemState.DIALOGUE:
-        if _conversation_ended(snap, stt_listening, tts_playing):
-            if previous == SystemState.FOCUS:
-                add(SystemState.FOCUS, "conversation_ended_return_focus", 5)
-            else:
-                add(SystemState.SHADOW, "conversation_ended", 7)
+        # 2026-05-09 — DIALOGUE auto-exit removed. Both the 30 s grace
+        # (c28f0cd) and the record_interaction wiring (f3b9831) still
+        # could not stop the bouncing because the operator types for
+        # longer than the predicate's window. Real ad-hoc conversations
+        # have arbitrary pauses; an idle-clock kick is the wrong
+        # signal. DIALOGUE now exits only via:
+        #   • explicit POST /context/state from the UI / hotkey,
+        #   • SENTINEL pre-emption (threat detected, priority 1),
+        #   • GHOST toggle (priority 0),
+        # …all of which are evaluated above this branch. A future
+        # sensor-driven exit (operator walked away — radar empty +
+        # camera lost face for 5 min) can be added back here without
+        # reintroducing the chat-typing race.
+        pass
 
     elif current == SystemState.SENTINEL:
         if not _threat_detected(snap):
@@ -266,6 +276,12 @@ class StateMachine:
         Called every 500ms. Evaluates guard conditions and applies best transition.
         Returns the applied transition or None if state unchanged.
         """
+        now_ms = int(time.time() * 1000)
+        last_ts_ms = (
+            self._last_transition.timestamp if self._last_transition else now_ms
+        )
+        time_in_state_ms = max(0, now_ms - last_ts_ms)
+
         candidates = _get_candidates(
             current=self._current,
             snap=snapshot,
@@ -273,6 +289,7 @@ class StateMachine:
             stt_listening=self._stt_listening,
             tts_playing=self._tts_playing,
             ai_initiative=self._ai_initiative,
+            time_in_state_ms=time_in_state_ms,
         )
         if not candidates:
             return None

@@ -6,11 +6,20 @@
  * `sandbox.<session_id>` WS channel. ROOT sessions render with a coral
  * header tint to make privilege escalation impossible to miss.
  */
+import { useSettingsStore } from '../../../stores/settingsStore';
+import { Terminal, ShieldAlert } from 'lucide-react';
 import type { SandboxSceneData, SandboxStepStatus } from '@shared/types';
 
 interface SandboxSceneProps {
   data: SandboxSceneData;
 }
+
+const STEP_COLORS: Record<SandboxStepStatus, string> = {
+  pending: 'var(--neutral-600)',
+  running: 'var(--primary)',
+  done: 'var(--signal-ok)',
+  failed: 'var(--signal-alert)',
+};
 
 const STEP_DISPLAY: Record<SandboxStepStatus, { icon: string; tint: string; spin: boolean }> = {
   pending: { icon: 'radio_button_unchecked', tint: 'var(--ink-muted)', spin: false },
@@ -26,8 +35,61 @@ function fmtMs(ms?: number): string {
 }
 
 export function SandboxScene({ data }: SandboxSceneProps) {
+  const currentTheme = useSettingsStore((s) => s.getActiveTheme());
+  const isPro = currentTheme === 'pro-console';
+
   const headerTint = data.root ? 'var(--coral)' : 'var(--primary-deep)';
   const headerLabel = data.root ? 'SANDBOX · ROOT' : 'SANDBOX';
+
+  if (isPro) {
+    return (
+      <div 
+        className="w-full max-w-[600px] bg-black border border-white/10 flex flex-col font-mono text-[11px] overflow-hidden"
+        data-testid="scene-sandbox"
+      >
+        <div className={`px-3 py-1 flex items-center justify-between border-b border-white/5 ${data.root ? 'bg-red-950/20' : 'bg-neutral-950'}`}>
+           <div className="flex items-center gap-2">
+              {data.root ? <ShieldAlert size={12} className="text-red-500" /> : <Terminal size={12} className="text-cyan-500" />}
+              <span className="font-bold uppercase tracking-widest">
+                {data.root ? 'SESSION_ROOT_ESC' : 'SANDBOX_ENV'}
+              </span>
+           </div>
+           <div className="flex items-center gap-2 text-[9px] text-neutral-500 uppercase">
+              {data.live ? <span className="text-green-500 animate-pulse">STREAMING</span> : 'PROCESS_COMPLETED'}
+           </div>
+        </div>
+
+        {data.steps.length > 0 && (
+          <div className="px-3 py-2 flex flex-col gap-0.5 border-b border-white/5 bg-neutral-950/30">
+            {data.steps.map((step) => (
+              <div key={step.step_id} className="flex items-center gap-2">
+                 <div className="w-1 h-1 rounded-full" style={{ background: STEP_COLORS[step.status] }} />
+                 <span className="text-neutral-400 truncate flex-1">{step.text}</span>
+                 {step.duration_ms !== undefined && <span className="text-[9px] text-neutral-700">{fmtMs(step.duration_ms)}</span>}
+              </div>
+            ))}
+          </div>
+        )}
+
+        {(data.recent_stdout.length > 0 || data.recent_stderr.length > 0) && (
+          <div className="bg-black p-3 max-h-[160px] overflow-y-auto font-mono text-[10px] leading-tight select-text">
+            {data.recent_stdout.map((line, i) => (
+               <div key={i} className="text-neutral-300">$ {line}</div>
+            ))}
+            {data.recent_stderr.map((line, i) => (
+               <div key={i} className="text-red-500/80">! {line}</div>
+            ))}
+            {data.live && <span className="inline-block w-1.5 h-3 bg-cyan-500 ml-1 align-middle animate-pulse" />}
+          </div>
+        )}
+
+        <div className="px-3 py-1 flex items-center justify-between bg-neutral-950/50 border-t border-white/5 text-[9px] text-neutral-600">
+           <span>EXIT_CODE: {data.exit_code ?? 'RUNNING'}</span>
+           <span>LATENCY: {fmtMs(data.duration_ms)}</span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -43,6 +105,7 @@ export function SandboxScene({ data }: SandboxSceneProps) {
       data-sandbox-session={data.session_id}
       data-sandbox-root={data.root ? 'true' : 'false'}
     >
+...
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
           <span className="msym" aria-hidden style={{ fontSize: 14, color: headerTint }}>

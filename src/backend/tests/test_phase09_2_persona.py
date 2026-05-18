@@ -21,7 +21,7 @@ os.environ.setdefault("PHANTOM_SERIAL_ENABLED", "false")
 class TestSelfModelUkrainian:
     @pytest.mark.asyncio
     async def test_build_self_model_uses_ukrainian_identity_and_language_fields(self):
-        from agent.self_model import build_self_model
+        from agent.cognition.self_model import build_self_model
         from agent.actions.registry import registry
 
         sm = await build_self_model(registry)
@@ -40,7 +40,7 @@ class TestSelfModelUkrainian:
 class TestPlannerPromptsUkrainian:
     @pytest.mark.asyncio
     async def test_strategic_prompt_has_ua_and_en_technical_terms(self, monkeypatch):
-        from agent.planner import strategic, _llm
+        from agent.cognition.planner import strategic, _llm
         from agent.schemas import SelfModel
 
         captured: list[str] = []
@@ -66,14 +66,14 @@ class TestPlannerPromptsUkrainian:
 
     @pytest.mark.asyncio
     async def test_tactical_legacy_prompt_has_ua_and_en_technical_terms(self, monkeypatch):
-        from agent.planner import tactical
+        from agent.cognition.planner import tactical
         from agent.schemas import SelfModel, SubGoal
         from config import config
 
         # Force legacy path so we can capture the prompt body.
         monkeypatch.setattr(config, "agent_use_native_tool_calling", False)
 
-        from agent.planner import _llm
+        from agent.cognition.planner import _llm
         captured: list[str] = []
 
         async def fake_call(prompt: str) -> str:

@@ -1,5 +1,5 @@
 """
-PHANTOM OS — Gemini 2.0 Flash provider via google-genai SDK.
+PHANTOM OS — Gemini provider via google-genai SDK.
 """
 from __future__ import annotations
 
@@ -69,6 +69,10 @@ def _classify_gemini_error(exc: Exception) -> tuple[ToolErrorKind, bool, float |
             return ToolErrorKind.QUOTA_EXHAUSTED, False, retry_after
         return ToolErrorKind.RATE_LIMIT, True, retry_after
 
+    # Phase 23-D — 400 INVALID_ARGUMENT is a semantic/schema error, NOT retriable.
+    if "400" in msg or "INVALID_ARGUMENT" in msg:
+        return ToolErrorKind.INVALID_ARGS, False, None
+
     # 5xx — provider-side hiccup, retriable.
     if any(code in msg for code in (" 500", " 502", " 503", " 504", "INTERNAL", "UNAVAILABLE")):
         return ToolErrorKind.PROVIDER_UNAVAILABLE, True, retry_after
@@ -94,58 +98,11 @@ def _build_gemini_tools(tool_dicts: list[dict[str, Any]] | None = None) -> list[
     catalog = RESPONSE_FORM_TOOLS if tool_dicts is None else tool_dicts
     declarations: list[types.FunctionDeclaration] = []
     for tool in catalog:
-        params_schema = tool["parameters"]
-        properties: dict[str, types.Schema] = {}
-        required: list[str] = params_schema.get("required", [])
-
-        for prop_name, prop_def in params_schema.get("properties", {}).items():
-            prop_type_str = prop_def.get("type", "string")
-            if prop_type_str == "string":
-                prop_type = types.Type.STRING
-            elif prop_type_str == "integer":
-                prop_type = types.Type.INTEGER
-            elif prop_type_str == "number":
-                prop_type = types.Type.NUMBER
-            elif prop_type_str == "boolean":
-                prop_type = types.Type.BOOLEAN
-            elif prop_type_str == "array":
-                prop_type = types.Type.ARRAY
-            else:
-                prop_type = types.Type.OBJECT
-
-            schema_kwargs: dict[str, Any] = {"type": prop_type}
-            if "enum" in prop_def:
-                schema_kwargs["enum"] = prop_def["enum"]
-            if "description" in prop_def:
-                schema_kwargs["description"] = prop_def["description"]
-            if prop_type_str == "array":
-                items = prop_def.get("items") or {"type": "object"}
-                item_type_str = items.get("type", "object")
-                item_type = {
-                    "string": types.Type.STRING,
-                    "integer": types.Type.INTEGER,
-                    "number": types.Type.NUMBER,
-                    "boolean": types.Type.BOOLEAN,
-                    "object": types.Type.OBJECT,
-                }.get(item_type_str, types.Type.OBJECT)
-                schema_kwargs["items"] = types.Schema(type=item_type)
-
-            properties[prop_name] = types.Schema(**schema_kwargs)
-
-        # Only pass `required` when it's non-empty — Gemini rejects an empty
-        # required list paired with an empty properties map.
-        schema_kwargs_outer: dict[str, Any] = {
-            "type": types.Type.OBJECT,
-            "properties": properties,
-        }
-        if required:
-            schema_kwargs_outer["required"] = required
-
         declarations.append(
             types.FunctionDeclaration(
-                name=tool["name"],
+                name=_sanitize_name(tool["name"]),
                 description=tool["description"],
-                parameters=types.Schema(**schema_kwargs_outer),
+                parameters=_json_schema_to_genai_schema(tool["parameters"]),
             )
         )
     return [types.Tool(function_declarations=declarations)]
@@ -180,7 +137,7 @@ def _build_contents(
 
 
 class GeminiProvider(AIProvider):
-    """Gemini 2.0 Flash via google-genai async SDK."""
+    """Configured Gemini model via google-genai async SDK."""
 
     async def generate(
         self,
@@ -189,6 +146,7 @@ class GeminiProvider(AIProvider):
         history: list[dict],
         *,
         user_id: str | None = None,
+        model_override: str | None = None,
     ) -> AIResponse:
         """
         Chat response with optional data-tool roundtrip (Phase 10).
@@ -204,19 +162,32 @@ class GeminiProvider(AIProvider):
 
         client = _get_client()
         contents = _build_contents(user_message, history)
-
-        with_data_tools = user_id is not None
         
-        # Only use chat tools if user_id is provided. Planners (like strategic planner)
-        # do not pass user_id and expect strict text/JSON output, so passing tools
-        # would confuse the model into calling a response formatter tool.
-        if user_id is not None:
-            catalog = [*RESPONSE_FORM_TOOLS, *CHAT_DATA_TOOLS]
-            tools = _build_gemini_tools(catalog)
-            tools_no_data = _build_gemini_tools(list(RESPONSE_FORM_TOOLS))
-        else:
-            tools = None
-            tools_no_data = None
+        # Phase 30 — Tiered routing
+        model_name = model_override or config.ai_gemini_model
+
+        # Native function calling is split into data tools and response
+        # widgets. Data tools ground the answer; widgets/cards are a
+        # separate opt-in because AUTO tool selection can otherwise turn
+        # ordinary conversation into unwanted UI surfaces.
+        data_tools_enabled = config.chat_tools_enabled is True and user_id is not None
+        widgets_enabled = (
+            config.chat_response_widgets_enabled is True
+            and user_id is not None
+        )
+        with_data_tools = data_tools_enabled
+        catalog: list[dict[str, Any]] = []
+        if widgets_enabled:
+            catalog.extend(RESPONSE_FORM_TOOLS)
+        if data_tools_enabled:
+            catalog.extend(CHAT_DATA_TOOLS)
+
+        tools = _build_gemini_tools(catalog) if catalog else None
+        tools_no_data = (
+            _build_gemini_tools(list(RESPONSE_FORM_TOOLS))
+            if widgets_enabled
+            else None
+        )
 
         base_gen_kwargs = dict(
             system_instruction=system_prompt,
@@ -251,7 +222,7 @@ class GeminiProvider(AIProvider):
                 
             gen_config = types.GenerateContentConfig(**gen_kwargs)
             response = await client.aio.models.generate_content(
-                model=config.ai_gemini_model,
+                model=model_name,
                 contents=contents,
                 config=gen_config,
             )
@@ -261,17 +232,28 @@ class GeminiProvider(AIProvider):
                     getattr(response.usage_metadata, "total_token_count", 0) or 0
                 )
 
-            fn_name: str | None = None
+            fn_name_raw: str | None = None
             fn_args: dict[str, Any] = {}
             text_parts: list[str] = []
             candidate = response.candidates[0] if response.candidates else None
             if candidate and candidate.content and candidate.content.parts:
                 for part in candidate.content.parts:
                     if hasattr(part, "function_call") and part.function_call:
-                        fn_name = part.function_call.name
+                        fn_name_raw = part.function_call.name
                         fn_args = dict(part.function_call.args) if part.function_call.args else {}
                     elif hasattr(part, "text") and part.text:
                         text_parts.append(part.text)
+
+            # Map name back if we have a catalog to check against.
+            fn_name = fn_name_raw
+            if fn_name_raw and catalog is not None:
+                # In generate() we don't have ToolSchema objects, just dicts.
+                # Build a temporary ToolSchema list for _restore_name.
+                temp_tools = [
+                    ToolSchema(name=t["name"], description=t.get("description", ""))
+                    for t in catalog
+                ]
+                fn_name = _restore_name(fn_name_raw, temp_tools)
 
             # Data tool? Execute, push tool_response, loop.
             if (
@@ -296,14 +278,14 @@ class GeminiProvider(AIProvider):
                 # (with function_response) so the follow-up call has full context.
                 contents.append({
                     "role": "model",
-                    "parts": [{"function_call": {"name": fn_name, "args": fn_args}}],
+                    "parts": [{"function_call": {"name": fn_name_raw, "args": fn_args}}],
                 })
                 contents.append({
                     "role": "user",
                     "parts": [
                         {
                             "function_response": {
-                                "name": fn_name,
+                                "name": fn_name_raw,
                                 "response": tool_result,
                             }
                         }
@@ -354,6 +336,44 @@ class GeminiProvider(AIProvider):
                 provider="gemini",
                 tokens_used=tokens_total,
             )
+
+    async def generate_raw(
+        self,
+        *,
+        system_prompt: str,
+        user_message: str,
+        model: str,
+        max_output_tokens: int,
+        temperature: float = 0.7,
+    ) -> str:
+        """Single-turn, NO function-call tools, caller-forced model and
+        token budget. Returns the model's text body verbatim. Used by
+        ArtifactStudio so artifact generation is independent of the
+        chat model/budget — the chat path is untouched."""
+        from google.genai import types
+
+        client = _get_client()
+        contents = _build_contents(user_message, [])
+        gen_config = types.GenerateContentConfig(
+            system_instruction=system_prompt,
+            temperature=temperature,
+            top_p=config.ai_top_p,
+            top_k=40,
+            max_output_tokens=max_output_tokens,
+            safety_settings=[types.SafetySetting(**s) for s in _SAFETY_OFF],
+        )
+        response = await client.aio.models.generate_content(
+            model=model,
+            contents=contents,
+            config=gen_config,
+        )
+        parts: list[str] = []
+        candidate = response.candidates[0] if response.candidates else None
+        if candidate and candidate.content and candidate.content.parts:
+            for part in candidate.content.parts:
+                if getattr(part, "text", None):
+                    parts.append(part.text)
+        return " ".join(parts).strip() or (getattr(response, "text", "") or "").strip()
 
     async def generate_stream(
         self,
@@ -412,7 +432,10 @@ class GeminiProvider(AIProvider):
         system_prompt: str,
         user_message: str,
         tools: list[ToolSchema],
+        history: list[dict] | None = None,
+        user_id: str | None = None,
         max_retries: int = 3,
+        model_override: str | None = None,
     ) -> ToolCallResult | ToolUseError:
         """
         Native Gemini function calling. Returns ToolCallResult if Gemini picked
@@ -421,13 +444,15 @@ class GeminiProvider(AIProvider):
         Retries up to `max_retries-1` times on UNKNOWN_TOOL / INVALID_ARGS by
         appending the validation error to the prompt.
         """
+        model_name = model_override or config.ai_gemini_model
+        
         if not tools:
             return ToolUseError(
                 kind=ToolErrorKind.INVALID_ARGS,
                 message="no tools provided",
                 retriable=False,
                 provider="gemini",
-                model=config.ai_gemini_model,
+                model=model_name,
             )
 
         from google.genai import types
@@ -441,41 +466,49 @@ class GeminiProvider(AIProvider):
             attempts += 1
             try:
                 client = _get_client()
+                gemini_tools = [_tools_for_call_with_tools(tools)]
+                
+                # Diagnostic log for 400s
+                tool_names = [d.name for t in gemini_tools for d in t.function_declarations]
+                logger.debug("Gemini call_with_tools: attempts=%d tools=%s", attempts, tool_names)
+
                 gen_config = types.GenerateContentConfig(
                     system_instruction=system_prompt,
                     temperature=config.ai_temperature,
                     max_output_tokens=config.ai_max_tokens,
-                    tools=[_tools_for_call_with_tools(tools)],
+                    tools=gemini_tools,
                     tool_config=types.ToolConfig(
                         function_calling_config=types.FunctionCallingConfig(mode="ANY"),
                     ),
                     safety_settings=[types.SafetySetting(**s) for s in _SAFETY_OFF],
                 )
                 response = await client.aio.models.generate_content(
-                    model=config.ai_gemini_model,
+                    model=model_name,
                     contents=[{"role": "user", "parts": [{"text": prompt}]}],
                     config=gen_config,
                 )
             except Exception as exc:
                 kind, retriable, retry_after_s = _classify_gemini_error(exc)
+                if kind == ToolErrorKind.INVALID_ARGS:
+                    logger.warning("Gemini 400 REJECTION for tools: %s | msg: %s", tool_names, exc)
                 return ToolUseError(
                     kind=kind,
                     message=f"gemini network/api error: {exc}",
                     retriable=retriable,
                     provider="gemini",
-                    model=config.ai_gemini_model,
+                    model=model_name,
                     parse_attempts=attempts,
                     retry_after_s=retry_after_s,
                 )
 
-            fn_name, fn_args, text = _extract_function_call(response)
+            fn_name, fn_args, text = _extract_function_call(response, tools)
             if fn_name is None:
                 last_error = ToolUseError(
                     kind=ToolErrorKind.MODEL_REFUSED,
                     message=f"gemini returned text without a function_call: {text[:200]!r}",
                     retriable=True,
                     provider="gemini",
-                    model=config.ai_gemini_model,
+                    model=model_name,
                     parse_attempts=attempts,
                 )
                 prompt = (
@@ -494,7 +527,7 @@ class GeminiProvider(AIProvider):
                     ),
                     retriable=True,
                     provider="gemini",
-                    model=config.ai_gemini_model,
+                    model=model_name,
                     parse_attempts=attempts,
                 )
                 prompt = (
@@ -511,7 +544,7 @@ class GeminiProvider(AIProvider):
                 confidence=1.0,
                 parse_attempts=attempts,
                 provider="gemini",
-                model=config.ai_gemini_model,
+                model=model_name,
             )
 
         return last_error or ToolUseError(
@@ -519,7 +552,7 @@ class GeminiProvider(AIProvider):
             message=f"gemini call_with_tools exhausted retries (attempts={attempts})",
             retriable=False,
             provider="gemini",
-            model=config.ai_gemini_model,
+            model=model_name,
             parse_attempts=attempts,
         )
 
@@ -527,11 +560,42 @@ class GeminiProvider(AIProvider):
 # ── Helpers for call_with_tools ────────────────────────────────────────────────
 
 
+def _sanitize_name(name: str) -> str:
+    """Gemini rejects dots in tool names. Coerce to double underscores."""
+    return name.replace(".", "__")
+
+
+def _restore_name(sanitized_name: str, original_tools: list[ToolSchema]) -> str:
+    """Map a sanitized name back to its original from the provided tool list."""
+    # First check exact match in case it wasn't sanitized (or had no dots).
+    for t in original_tools:
+        if t.name == sanitized_name:
+            return t.name
+    # Then try the double-underscore mapping.
+    for t in original_tools:
+        if _sanitize_name(t.name) == sanitized_name:
+            return t.name
+    return sanitized_name
+
+
 def _json_schema_to_genai_schema(prop: dict[str, Any]) -> Any:
-    """Translate one JSON-Schema property dict → google.genai.types.Schema."""
+    """Translate one JSON-Schema property dict → google.genai.types.Schema.
+    
+    Gemini schema validation is pedantic:
+    1. Every property MUST have a description.
+    2. Types must be singular (no 'null' or ['string', 'null']).
+    """
     from google.genai import types
 
-    js_type = (prop.get("type") or "string").lower()
+    raw_type = prop.get("type") or "string"
+    # Simplify union types like ["string", "null"] -> "string"
+    if isinstance(raw_type, list):
+        # Pick the first non-null type, or default to string
+        types_list = [t for t in raw_type if t != "null"]
+        js_type = (types_list[0] if types_list else "string").lower()
+    else:
+        js_type = str(raw_type).lower()
+
     type_map = {
         "string": types.Type.STRING,
         "integer": types.Type.INTEGER,
@@ -540,9 +604,15 @@ def _json_schema_to_genai_schema(prop: dict[str, Any]) -> Any:
         "array": types.Type.ARRAY,
         "object": types.Type.OBJECT,
     }
-    kwargs: dict[str, Any] = {"type": type_map.get(js_type, types.Type.STRING)}
-    if "description" in prop:
-        kwargs["description"] = prop["description"]
+    
+    # Gemini 2.0 REQUIREMENT: every field must have a description.
+    desc = prop.get("description") or f"Parameter: {js_type}"
+    
+    kwargs: dict[str, Any] = {
+        "type": type_map.get(js_type, types.Type.STRING),
+        "description": desc,
+    }
+    
     if "enum" in prop:
         kwargs["enum"] = list(prop["enum"])
     if js_type == "array":
@@ -565,27 +635,26 @@ def _tools_for_call_with_tools(tools: list[ToolSchema]) -> Any:
 
     declarations: list[Any] = []
     for tool in tools:
+        # Gemini requirement: every FunctionDeclaration.parameters (Schema)
+        # MUST have a description, even at the top level.
         params = tool.parameters or {"type": "object", "properties": {}}
-        properties: dict[str, Any] = {}
-        for pname, pdef in (params.get("properties") or {}).items():
-            properties[pname] = _json_schema_to_genai_schema(pdef)
-        schema_kwargs: dict[str, Any] = {
-            "type": types.Type.OBJECT,
-            "properties": properties,
-        }
-        if tool.required:
-            schema_kwargs["required"] = list(tool.required)
+        if "description" not in params:
+            params["description"] = f"Arguments for {tool.name}"
+
         declarations.append(
             types.FunctionDeclaration(
-                name=tool.name,
+                name=_sanitize_name(tool.name),
                 description=(tool.description or "")[:1024],
-                parameters=types.Schema(**schema_kwargs),
+                parameters=_json_schema_to_genai_schema(params),
             )
         )
     return types.Tool(function_declarations=declarations)
 
 
-def _extract_function_call(response: Any) -> tuple[str | None, dict[str, Any], str]:
+def _extract_function_call(
+    response: Any, 
+    original_tools: list[ToolSchema] | None = None
+) -> tuple[str | None, dict[str, Any], str]:
     """Pull (function_name, args, text) out of a Gemini response."""
     fn_name: str | None = None
     fn_args: dict[str, Any] = {}
@@ -595,7 +664,11 @@ def _extract_function_call(response: Any) -> tuple[str | None, dict[str, Any], s
     if candidate and getattr(candidate, "content", None) and candidate.content.parts:
         for part in candidate.content.parts:
             if hasattr(part, "function_call") and part.function_call:
-                fn_name = part.function_call.name
+                raw_name = part.function_call.name
+                if original_tools:
+                    fn_name = _restore_name(raw_name, original_tools)
+                else:
+                    fn_name = raw_name
                 args = part.function_call.args
                 fn_args = dict(args) if args else {}
             elif hasattr(part, "text") and part.text:

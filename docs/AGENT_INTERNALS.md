@@ -1,8 +1,8 @@
-# AGENT_INTERNALS — як насправді працює `agent/loop.py`
+# AGENT_INTERNALS — як насправді працює `agent/kernel/loop.py`
 
 > Phase 23-F — карта внутрішніх контурів агентового циклу. Тримай поряд
 > коли працюєш над будь-чим у `src/backend/agent/`. Канонічні імена з
-> публічного API — `agent.planner.strategic_plan`, `tactical_plan`,
+> публічного API — `agent.cognition.planner.strategic_plan`, `tactical_plan`,
 > `tactical_plan_safe`, `reflect`.
 
 ## Мета документа
@@ -19,12 +19,12 @@
 |---|---|---|
 | Контракти | `agent/schemas.py` | Pydantic-моделі: `TaskState`, `SubGoal`, `PlanStep`, `Observation`, `RiskLevel`, `CouncilSituation`, `ReflectionResult` |
 | Реєстр дій | `agent/actions/registry.py` + `agent/actions/*.py` | `Action` класи з полями `risk_level`, `preconditions`, `execute()` + `tool_schema` для LLM tool-calling |
-| Планер | `agent/planner/` (`strategic.py`, `tactical.py`, `reflector.py`, `_llm.py`) | LLM-розмови, що повертають типізовані `StrategicPlan` / `PlanStep` / `ReflectionResult` |
-| Виконавець | `agent/executor.py` | Викликає `Action.execute()` з sandbox + budget + audit |
-| Вердикти | `agent/orchestrator/` (`council.py`, `quality_gate.py`, `modes.py`, `runtime_hooks.py`) | Council (6 ролей) + Producer→Critic→Verifier loop |
-| Безпека | `agent/safety/sandbox.py`, `agent/approve_on_phone.py`, `agent/loop.py` risk-gate | Tolerance gate, Council pre-approval (Phase 23-D), phone/desktop intervene |
-| Runtime | `agent/runtime.py` | Foreground+background slots, `_broadcast()` WS, intervention queue, audit |
-| Цикл | `agent/loop.py` (`_run_task_loop_impl`) | Склеює всі контури в один async loop |
+| Планер | `agent/cognition/planner/` (`strategic.py`, `tactical.py`, `reflector.py`, `_llm.py`) | LLM-розмови, що повертають типізовані `StrategicPlan` / `PlanStep` / `ReflectionResult` |
+| Виконавець | `agent/kernel/executor.py` | Викликає `Action.execute()` з sandbox + budget + audit |
+| Вердикти | `agent/operations/orchestrator/` (`council.py`, `quality_gate.py`, `modes.py`, `runtime_hooks.py`) | Council (6 ролей) + Producer→Critic→Verifier loop |
+| Безпека | `agent/operations/safety/sandbox.py`, `agent/kernel/loop.py` risk-gate (+ `routes_approve.py` для phone/desktop) | Tolerance gate, Council pre-approval (Phase 23-D), phone/desktop intervene. V1: caps `<=0` ⇒ unbound; sandbox/`unsafe_mode` switch unchanged |
+| Runtime | `agent/kernel/runtime.py` | Foreground+background slots, `_broadcast()` WS, intervention queue, audit |
+| Цикл | `agent/kernel/loop.py` (`_run_task_loop_impl`) | Склеює всі контури в один async loop |
 
 ## Канонічна послідовність одного steps
 
@@ -114,7 +114,7 @@
 
 ## Council — коли вмикається
 
-`agent/orchestrator/runtime_hooks.py::maybe_consult_council` єдина точка
+`agent/operations/orchestrator/runtime_hooks.py::maybe_consult_council` єдина точка
 входу. Mode picker (`modes.pick_orchestrator_mode`) повертає `"council"`
 автоматично для шести (тепер семи) `CouncilSituationKind`:
 
@@ -141,7 +141,7 @@ Verdict семантика:
 ## Quality Gate — як перевіряє результат
 
 Sentinel action `DONE_TASK` (planner повертає коли вважає що мета досягнута)
-не виконується відразу. Замість цього `agent/orchestrator/quality_gate.py`
+не виконується відразу. Замість цього `agent/operations/orchestrator/quality_gate.py`
 запускає Producer→Critic→Verifier round (LLM-based; deterministic
 fallback на regex). Якщо Critic знайшов blocker, loop:
 1. Інкрементує `state.quality_gate_failures`
@@ -183,11 +183,11 @@ Settings: `agent_risk_tolerance` (1/3/5/7), `agent_council_for_high_risk`
 
 ## Executor — що робить між planner і Action.execute
 
-`agent/executor.py::execute()`:
+`agent/kernel/executor.py::execute()`:
 1. Перевіряє preconditions (key/required/failure_mode)
 2. Витягує SandboxProfile (compute|net_observe; radio_privileged
    зарезервовано)
-3. Огортає subprocess через `agent/safety/sandbox.py::wrap_argv` (bwrap)
+3. Огортає subprocess через `agent/operations/safety/sandbox.py::wrap_argv` (bwrap)
 4. Викликає `Action.execute(ctx, args)` під `_current_action_task`
    handle (для `cancel_step`)
 5. Записує audit row через `agent/audit.py`
@@ -285,18 +285,60 @@ finalize_task(state, "done")
 Settings: `agent_lessons_enabled` (default True), `agent_lessons_top_k`
 (3), `agent_lessons_min_relevance` (0.35).
 
-Внутрішні модулі (`agent.planner.strategic`, `.tactical`, `.reflector`,
+Внутрішні модулі (`agent.cognition.planner.strategic`, `.tactical`, `.reflector`,
 `._llm`) лишаються імпортовними для тестів і просунутих call sites,
 але їх API не контракт — зміна сигнатури в submodule НЕ вважається
 breaking change поки публічні імена вище не змінились.
 
 ## Куди дивитись далі
 
-- `agent/loop.py::_run_task_loop_impl` — головний loop, ~1100 LOC
-- `agent/orchestrator/council.py::Council.run_round` — як 6 ролей
+- `agent/kernel/loop.py::_run_task_loop_impl` — головний loop, ~1100 LOC
+- `agent/operations/orchestrator/council.py::Council.run_round` — як 6 ролей
   голосують і консенсусять
-- `agent/orchestrator/quality_gate.py::QualityGate.run` — Producer→
+- `agent/operations/orchestrator/quality_gate.py::QualityGate.run` — Producer→
   Critic→Verifier
-- `agent/runtime.py::AgentRuntime` — двослотовий runtime
+- `agent/kernel/runtime.py::AgentRuntime` — двослотовий runtime
 - `docs/audit-2026-04-30-day3/FINDINGS.md` + `audit-2026-05-01-day4/FINDINGS.md`
   — попередні аудити шарів вище
+
+## Conversational Mode (Agent Ascension V2, 2026-05-16)
+
+`POST /api/v1/agent/chat` — справжній stateful діалог з агентом (не
+one-shot goal). Тред персиститься в `agent_chat_thread` (SQLite,
+міграція 016). Кожен виклик: останні N реплік треду +
+`recall(message, k=5)` + `recall_lessons(message)` +
+`state.observations[-20:]` + поточний inner-monologue/substate →
+багатий agent-voice промпт → проходить через наявний tool-use
+pipeline (`ai.chat_pipeline` / `chat_tool_dispatcher`, той самий gate)
+→ стрім токенів+tool-подій по агентовому WS-каналі → обидві репліки
+персистяться. Назад-сумісно: не-WS виклики й далі отримують
+`{"reply": ...}`. Фронт: `agentStore.agentChat` (переживає закриття
+дровера), `ParallelChatDrawer` рендерить стрім + tool-chips +
+substate/monologue хедер. Файли: `agent/cognition/chat_prompt.py`,
+`api/routes_agent.py::parallel_chat`, `db/migrations/016_*`.
+
+## Self-Synthesis (Agent Ascension V4, 2026-05-16)
+
+`SynthesizeCapability` action + `agent/actions/_synth/synthesizer.py`:
+коли план потребує дії, якої немає в реєстрі, агент (1) драфтить
+Python-`Action`-сабклас через `ai_router.generate_raw` проти реального
+`Action` ABC, (2) пише в `agent/actions/_synth/<slug>.py`, (3) ганяє
+smoke-тест у НАЯВНОМУ bwrap-sandbox (`SandboxProfile.compute`, той
+самий шлях що `BashRun` — межа виконання не послаблена), (4) на зелене
+— реєструє в живий `ActionRegistry` + лесон; на провал — fail-closed,
+не реєструє, лесон фіксує причину. Bounded: `config.
+agent_synth_max_per_task` (0 = unbound). `registry._load_synth_actions()`
+автопідхоплює `_synth/*.py` на старті. Це самозбільшуваний,
+персистентний тулсет, злитий з lesson-loop — спроможність, якої немає
+в Claude Code / інших ШІ-інструментах.
+
+## Limitless (Agent Ascension V1, 2026-05-16)
+
+Будь-який cap `<=0` ⇒ UNBOUND: `agent_max_actions_per_task`,
+`agent_max_elapsed_s_per_task`, `agent_max_llm_calls_per_task[_background]`,
+`agent_bash_timeout_s`, `agent_bash_output_cap_bytes`. Енфорс:
+`circuit_breakers.TaskBudget.{actions,time}_exceeded` (`cap>0 and ...`),
+`runtime._llm_cap_for` + note_llm_call gate, `bash._bash_timeout_cap/
+_bash_output_cap`. Settings → «Агент / Межі» + «Безмежний режим». Sandbox
++ `unsafe_mode` (operator switch) НЕ зачеплені — лише квоти стали
+operator-configurable.

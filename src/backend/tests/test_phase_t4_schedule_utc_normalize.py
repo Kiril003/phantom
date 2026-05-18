@@ -35,7 +35,7 @@ import pytest
 
 class TestOneShotUtcNormalisation:
     def test_naive_at_is_coerced_to_utc_with_warning(self, caplog):
-        from agent.standing_orders.schedules import OneShotSchedule
+        from agent.operations.standing_orders.schedules import OneShotSchedule
 
         naive = datetime(2026, 5, 1, 12, 0, 0)  # no tzinfo
         with caplog.at_level(logging.WARNING):
@@ -51,7 +51,7 @@ class TestOneShotUtcNormalisation:
         )
 
     def test_utc_aware_at_round_trips_unchanged(self):
-        from agent.standing_orders.schedules import OneShotSchedule
+        from agent.operations.standing_orders.schedules import OneShotSchedule
 
         aware = datetime(2026, 5, 1, 12, 0, 0, tzinfo=timezone.utc)
         s = OneShotSchedule(at=aware)
@@ -59,7 +59,7 @@ class TestOneShotUtcNormalisation:
         assert s.at.tzinfo is timezone.utc
 
     def test_non_utc_aware_at_preserved(self):
-        from agent.standing_orders.schedules import OneShotSchedule
+        from agent.operations.standing_orders.schedules import OneShotSchedule
 
         # +02:00 — Kyiv summer.
         offset = timezone(timedelta(hours=2))
@@ -74,7 +74,7 @@ class TestOneShotUtcNormalisation:
         """Operators rely on `model_dump_json()` for the persisted
         column. After T-4 the JSON must NEVER contain a naive ISO
         string — the UTC offset suffix is the audit trail."""
-        from agent.standing_orders.schedules import OneShotSchedule
+        from agent.operations.standing_orders.schedules import OneShotSchedule
 
         s = OneShotSchedule(at=datetime(2026, 5, 1, 12, 0, 0))  # naive in
         payload = json.loads(s.model_dump_json())
@@ -92,7 +92,7 @@ class TestOneShotUtcNormalisation:
 class TestParseScheduleCronEarlyCheck:
     def test_cron_spec_rejected_when_croniter_missing(self):
         """Simulate the no-croniter env via patch."""
-        import agent.standing_orders.schedules as sched
+        import agent.operations.standing_orders.schedules as sched
 
         with patch.object(sched, "_HAS_CRONITER", False):
             with pytest.raises(ValueError) as exc:
@@ -105,7 +105,7 @@ class TestParseScheduleCronEarlyCheck:
         """Today's CI has croniter installed (per requirements.txt). The
         positive case is the boundary we care about — a misconfigured
         env should fail loud, a healthy env should round-trip."""
-        from agent.standing_orders.schedules import (
+        from agent.operations.standing_orders.schedules import (
             CronSchedule,
             _HAS_CRONITER,
             parse_schedule,
@@ -122,7 +122,7 @@ class TestParseScheduleCronEarlyCheck:
         """The early check fires only on the cron path — interval /
         conditional / one-shot specs MUST round-trip whether or not
         croniter is present."""
-        import agent.standing_orders.schedules as sched
+        import agent.operations.standing_orders.schedules as sched
 
         with patch.object(sched, "_HAS_CRONITER", False):
             interval = sched.parse_schedule({"kind": "interval", "every_s": 60})
@@ -156,7 +156,7 @@ class TestNextFireTimeDefensive:
         tz-aware result back from next_fire_time. The function is
         total over its declared input domain — no naive datetimes leak
         downstream."""
-        from agent.standing_orders.schedules import (
+        from agent.operations.standing_orders.schedules import (
             OneShotSchedule,
             next_fire_time,
         )
@@ -182,7 +182,7 @@ class TestNextFireTimeDefensive:
         """The naive-coercion guard MUST NOT change the post-fire
         contract: an OneShotSchedule that already fired returns None
         regardless of `at`'s tz state."""
-        from agent.standing_orders.schedules import (
+        from agent.operations.standing_orders.schedules import (
             OneShotSchedule,
             next_fire_time,
         )
@@ -198,7 +198,7 @@ class TestNextFireTimeDefensive:
         croniter (would-be impossible after parse_schedule's check, but
         possible via direct construction), raise a RuntimeError with a
         clear cross-reference to parse_schedule."""
-        import agent.standing_orders.schedules as sched
+        import agent.operations.standing_orders.schedules as sched
 
         s = sched.CronSchedule(minute="*/15")
         now = datetime(2026, 5, 1, 12, 0, 0, tzinfo=timezone.utc)
@@ -217,7 +217,7 @@ class TestNextFireTimeDefensive:
 
 class TestModuleLevelContract:
     def test_has_croniter_flag_is_boolean(self):
-        from agent.standing_orders.schedules import _HAS_CRONITER
+        from agent.operations.standing_orders.schedules import _HAS_CRONITER
 
         assert isinstance(_HAS_CRONITER, bool)
 
@@ -234,7 +234,7 @@ class TestModuleLevelContract:
         `next_fire_time` would dangle on the old module). The contract
         is testable by attribute inspection alone.
         """
-        import agent.standing_orders.schedules as sched
+        import agent.operations.standing_orders.schedules as sched
 
         assert hasattr(sched, "_HAS_CRONITER")
         assert hasattr(sched, "parse_schedule")

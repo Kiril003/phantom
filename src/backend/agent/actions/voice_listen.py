@@ -54,6 +54,12 @@ class VoiceListen(Action):
     requires_consent: ClassVar[bool] = False
     reversible: ClassVar[bool] = True  # purely observational
 
+    # Block B — resource declarations. STT engine (faster-whisper) peaks
+    # at ~1.5 GB RAM when loading the medium model on first call.
+    estimated_peak_ram_mb: ClassVar[int] = 1500
+    requires_network: ClassVar[bool] = False
+    estimated_wall_seconds: ClassVar[int] = 10
+
     timeout_s: float = Field(
         default=15.0, gt=0.0, le=120.0,
         description="How long to wait for a transcript before giving up.",

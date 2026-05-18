@@ -85,9 +85,10 @@ class TestSafeToolFilter:
         names = {t["name"] for t in tools}
         # Must be a subset of the dispatcher's safe set.
         assert names.issubset(set(_CHAT_SAFE_TOOL_NAMES))
-        # Must not contain any of the deferred / mutating tools.
-        forbidden = {"create_calendar_event", "search_web",
-                     "bash.run", "shell.run", "exec"}
+        # Phase 19 unlocked write-tools (create_calendar_event,
+        # create_timer, create_alarm, search_web). True forbidden surface
+        # is the unconstrained shell — those names must NEVER appear.
+        forbidden = {"bash.run", "shell.run", "exec", "subprocess.run"}
         assert names.isdisjoint(forbidden), (
             f"TM-17B-E2 / D2-E2 regression: chat tool catalog "
             f"includes forbidden tools: {names & forbidden}"
@@ -119,10 +120,11 @@ class TestRunHappyPath:
             )
 
         # Stub the dispatcher to return a canned ok result.
+        # 2026-05-14: recall_memory_facts expects 'results' key in payload.
         async def _stub_dispatch(name, args, *, user_id, db):
             return {
                 "ok": True, "name": name,
-                "result": {"facts": ["a", "b"]},
+                "result": {"results": [{"content": "you visited foo"}]},
                 "elapsed_ms": 5,
             }
 
@@ -160,7 +162,10 @@ class TestRunHappyPath:
         )
         # Counter incremented exactly once per dispatch.
         assert sum(chat_tool_calls_total._values.values()) == baseline + 1
-        # Final content surfaced.
+        # 2026-05-14: Step 4.5 now short-circuits recall_memory_facts
+        # to a deterministic markdown summary, so 'you visited foo'
+        # appears in the auto-rendered bullets, not from the final LLM turn.
+        assert "Що я пам'ятаю" in result.content
         assert "you visited foo" in result.content
 
 
@@ -262,8 +267,11 @@ class TestDegradePaths:
         monkeypatch.setattr(
             chat_pipeline.ai_router, "generate", _stub_generate
         )
+        # Ensure we don't hit the wall-clock deadline in the test
+        monkeypatch.setattr("time.monotonic", lambda: 0.0)
+        
         result = await chat_pipeline.run(
             user_message="hi", system_prompt="sys", history=[],
             user_id="u-test", db=None,  # type: ignore[arg-type]
         )
-        assert "apologised" in result.content
+        assert "LLM apologised" in result.content

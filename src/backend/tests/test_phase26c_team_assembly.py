@@ -146,10 +146,11 @@ class _FakeRuntime:
 
 
 def _make_parent():
-    from agent.runtime import TaskState
+    from agent.kernel.runtime import TaskState
     from agent.schemas import SelfModel
     return TaskState(
         id="parent-task",
+        user_id="u-test",
         goal="parent goal",
         track="foreground",
         status="running",

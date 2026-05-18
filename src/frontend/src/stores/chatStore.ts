@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { ChatMessage, ChatSession, SystemState } from '@shared/types';
+import { type ChatMessage, type ChatSession, SystemState } from '@shared/types';
 import { chatApi } from '../services/api';
 
 export interface StreamingMessage {
@@ -51,6 +51,7 @@ interface ChatStoreState {
     inputMethod?: InputMethod,
     stateAtTime?: SystemState
   ) => Promise<void>;
+  consumeAgentSeed: (seed: import('../services/agentApi').AgentResumeAsConversationResponse) => void;
 }
 
 function makeOptimisticUserMessage(
@@ -67,7 +68,7 @@ function makeOptimisticUserMessage(
     content,
     response_form: 'text',
     metadata: {
-      state_at_time: (stateAtTime ?? 'DIALOGUE') as SystemState,
+      state_at_time: stateAtTime ?? SystemState.DIALOGUE,
       context_snapshot_id: '',
       ai_provider: 'gemini',
       latency_ms: 0,
@@ -294,7 +295,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           : 0;
       const friendly =
         maybeStatus === 503
-          ? 'AI провайдер недоступний. Перевір Settings → AI → Provider'
+          ? 'AI провайдер недоступний. Перевір Settings → AI → Головний провайдер'
           : err instanceof Error
             ? err.message
             : 'Failed to send message';
@@ -307,4 +308,39 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       }));
     }
   },
+
+  consumeAgentSeed: (seed) => {
+    // Phase 16 — landed from an AgentReportScreen 'Continue as Conversation' click.
+    // We create a "virtual" session (or target a new one) and seed the messages.
+    // Note: the backend actually creates the session on /resume-as-conversation,
+    // so we just need to switch to it and load its summary/messages.
+    set({
+      currentSessionId: seed.task_id, // Usually matches taskId for simplicity in BE
+      messages: [
+        {
+          id: `seed-${seed.task_id}`,
+          session_id: seed.task_id,
+          user_id: 'assistant',
+          role: 'assistant',
+          content: seed.seed_summary,
+          response_form: 'text',
+          metadata: {
+            state_at_time: SystemState.DIALOGUE,
+            context_snapshot_id: '',
+            ai_provider: 'gemini',
+            latency_ms: 0,
+            tokens_used: 0,
+            tone: 'informative',
+            input_method: 'encoder'
+          },
+          attachments: [],
+          created_at: new Date().toISOString()
+        }
+      ],
+      sending: false,
+      isTyping: false
+    });
+    // Refresh the sidebar so the seeded session appears.
+    void get().loadSessions();
+  }
 }));

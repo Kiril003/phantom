@@ -254,7 +254,7 @@ class TestOllamaErrorClassification:
 class TestStrategicQuotaPropagation:
     @pytest.mark.asyncio
     async def test_strategic_propagates_blocked_quota_via_llm_json(self, isolated_db, monkeypatch):
-        from agent.planner import _llm
+        from agent.cognition.planner import _llm
         from ai.provider import BlockedQuotaError
 
         async def _raise(prompt, *, task_id=None):

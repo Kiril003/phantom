@@ -62,7 +62,7 @@ def test_caveats_serialise_roundtrip():
 
 def test_tactical_prompt_contains_caveat_block():
     """Active caveats appear in the tactical user prompt."""
-    from agent.planner.tactical import _build_user_message
+    from agent.cognition.planner.tactical import _build_user_message
     from agent.schemas import Observation, SelfModel, SubGoal
 
     sm = SelfModel(active_caveats=[
@@ -84,7 +84,7 @@ def test_tactical_prompt_contains_caveat_block():
 
 def test_tactical_prompt_no_caveat_block_when_empty():
     """Empty active_caveats → no block in the prompt (clean output)."""
-    from agent.planner.tactical import _build_user_message
+    from agent.cognition.planner.tactical import _build_user_message
     from agent.schemas import SelfModel, SubGoal
 
     sm = SelfModel()
@@ -105,8 +105,8 @@ def test_caveat_survives_many_observations():
     """Simulates a long task: the 10-obs tactical window slides off the
     original resume-hint observation, but the caveat on SelfModel persists
     in the prompt."""
-    from agent.observations import build_system
-    from agent.planner.tactical import _build_user_message
+    from agent.cognition.observations import build_system
+    from agent.cognition.planner.tactical import _build_user_message
     from agent.schemas import SelfModel, SubGoal
 
     sm = SelfModel(active_caveats=[
@@ -134,8 +134,8 @@ async def test_resume_from_checkpoint_populates_caveat(isolated_db, monkeypatch)
     exists in the audit trail."""
     import json
     from agent import audit as audit_mod
-    from agent.audit import create_task_row, save_checkpoint
-    from agent.runtime import AgentRuntime
+    from agent.kernel.audit import create_task_row, save_checkpoint
+    from agent.kernel.runtime import AgentRuntime
     from agent.schemas import (
         Checkpoint, Observation, SelfModel, SubGoal, ThoughtBudget,
     )
@@ -181,7 +181,7 @@ async def test_resume_from_checkpoint_populates_caveat(isolated_db, monkeypatch)
     # Stub loop runner so resume doesn't actually spawn the agent loop.
     async def _fake_loop(*_a, **_kw):
         return
-    import agent.loop as _loop_mod
+    import agent.kernel.loop as _loop_mod
     monkeypatch.setattr(_loop_mod, "run_task_loop", _fake_loop)
 
     ok = await runtime.resume_from_checkpoint(task_id, cp_id)
@@ -195,7 +195,7 @@ async def test_resume_from_checkpoint_populates_caveat(isolated_db, monkeypatch)
 def test_caveat_cleared_by_successful_browser_navigate():
     """Executor clears the browser_session_reset caveat once a real
     browser.navigate lands successfully."""
-    from agent.runtime import TaskState
+    from agent.kernel.runtime import TaskState
     from agent.schemas import ActionResult, InnerMonologue, PlanStep, SelfModel
 
     class _FakeRuntime:

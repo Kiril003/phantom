@@ -84,9 +84,11 @@ def _fake_genai_types(monkeypatch):
 
 class TestChatToolsCatalog:
     def test_catalog_has_expected_tools(self):
-        from ai.chat_tools import CHAT_DATA_TOOLS, DATA_TOOL_NAMES
-
-        assert len(CHAT_DATA_TOOLS) == 8
+        from ai.chat_tools import CHAT_DATA_TOOLS
+    
+        # Phase 25/26 — catalog has grown significantly
+        assert len(CHAT_DATA_TOOLS) >= 8
+    
         expected = {
             "search_locationhistory",
             "query_temporal_anchors",
@@ -97,8 +99,9 @@ class TestChatToolsCatalog:
             "get_calendar_events",
             "create_calendar_event",
         }
-        assert set(t["name"] for t in CHAT_DATA_TOOLS) == expected
-        assert DATA_TOOL_NAMES == frozenset(expected)
+        names = set(t["name"] for t in CHAT_DATA_TOOLS)
+        for name in expected:
+            assert name in names
 
     def test_each_tool_has_valid_schema(self):
         from ai.chat_tools import CHAT_DATA_TOOLS
@@ -176,8 +179,12 @@ class TestPromptGuidance:
         ]:
             assert name in DATA_TOOLS_GUIDANCE, f"{name!r} missing from guidance"
 
-    def test_build_system_prompt_appends_data_tools_block(self):
+    def test_build_system_prompt_appends_data_tools_block(self, monkeypatch):
+        # Data-tool guidance is controlled separately from response-form
+        # widgets so chat can be grounded without card/widget spam.
         from ai.prompt_builder import build_system_prompt
+        from config import config
+        monkeypatch.setattr(config, "chat_tools_enabled", True)
 
         prompt = build_system_prompt(
             snapshot={"where": {}, "when": {"hour": 12}, "body": {},
@@ -189,9 +196,7 @@ class TestPromptGuidance:
             recent_places=[],
         )
         assert "ДАНІ СИСТЕМИ" in prompt
-        # Must come AFTER the response-forms block so data-tool guidance is
-        # above the registers block but below form guidance.
-        assert prompt.index("ДАНІ СИСТЕМИ") > prompt.index("ФОРМИ ВІДПОВІДІ")
+        assert "ФОРМИ ВІДПОВІДІ" not in prompt
         # Phase 10.3 — register guidance is appended LAST so it's the
         # freshest instruction in Gemini's context.
         assert "РЕГІСТР І ТОН" in prompt
@@ -515,6 +520,9 @@ class TestGenerateToolLoop:
         ]
         models = _ScriptedModels(responses)
         monkeypatch.setattr(gp, "_get_client", lambda: _FakeClient(models))
+        from config import config
+        monkeypatch.setattr(config, "chat_tools_enabled", True)
+        monkeypatch.setattr(config, "chat_response_widgets_enabled", True)
 
         async def _fake_exec(name, args, user_id, timeout_s=5.0):
             return {"ok": True, "cpu_pct": 42.0, "ram_pct": 50.0}
@@ -550,6 +558,8 @@ class TestGenerateToolLoop:
         ]
         models = _ScriptedModels(responses)
         monkeypatch.setattr(gp, "_get_client", lambda: _FakeClient(models))
+        from config import config
+        monkeypatch.setattr(config, "chat_response_widgets_enabled", True)
 
         async def _fake_exec(name, args, user_id, timeout_s=5.0):
             return {"ok": True}
@@ -562,9 +572,12 @@ class TestGenerateToolLoop:
         assert "fallback text after cap" in result.content
         # 4 total calls (3 data tool calls + 1 final forced without data tools)
         assert len(models.captured_contents) == 4
-        # First three calls use the full catalog (7 response forms + 8 data = 15);
-        # the fourth must use the reduced catalog (7 response forms only).
-        expected_full = len(RESPONSE_FORM_TOOLS) + 8
+        # First three calls use the full catalog (response forms + data
+        # tools, exactly what gemini_provider.generate merges); the
+        # fourth must use the reduced catalog (response forms only).
+        from ai.chat_tools import CHAT_DATA_TOOLS
+
+        expected_full = len(RESPONSE_FORM_TOOLS) + len(CHAT_DATA_TOOLS)
         expected_reduced = len(RESPONSE_FORM_TOOLS)
         assert models.captured_tool_counts[0] == expected_full
         assert models.captured_tool_counts[3] == expected_reduced

@@ -280,6 +280,50 @@ class _VoiceSession:
             logger.exception("voice WS frame processing failed: %s", exc)
             await self.send({"type": "error", "message": f"frame: {exc}"})
 
+    async def say(self, text: str) -> None:
+        """Phase 13 — outgoing TTS stream. Split text into sentences and
+        stream synthesized audio chunks back to the client immediately.
+        """
+        if not text or self.closed:
+            return
+
+        import base64
+        import re
+        from voice.pipeline import synthesize_text, select_voice_for_text
+
+        # Split by sentences (simple regex)
+        sentences = re.split(r'(?<=[.!?])\s+', text)
+        sentences = [s.strip() for s in sentences if s.strip()]
+
+        if not sentences:
+            return
+
+        voice = select_voice_for_text(text)
+        speed = config.voice_tts_speed
+
+        await self.send({"type": "tts_start", "text": text})
+
+        for idx, part in enumerate(sentences):
+            if self.closed:
+                break
+            try:
+                # Synthesize in thread pool to not block WS loop
+                result = await synthesize_text(part, voice, speed)
+                b64_audio = base64.b64encode(result.audio_wav).decode("utf-8")
+
+                await self.send({
+                    "type": "tts_chunk",
+                    "index": idx,
+                    "is_final": idx == len(sentences) - 1,
+                    "audio": b64_audio,
+                    "text": part,
+                    "sample_rate": result.sample_rate
+                })
+            except Exception as exc:
+                logger.warning("TTS stream chunk failed: %s", exc)
+
+        await self.send({"type": "tts_end"})
+
 
 async def voice_ws_handler(ws: WebSocket, token: Optional[str] = None) -> None:
     """Entry point registered in main.py's ``_register_ws``."""
@@ -289,6 +333,17 @@ async def voice_ws_handler(ws: WebSocket, token: Optional[str] = None) -> None:
 
     client_id = str(uuid.uuid4())
     session = _VoiceSession(ws, user_id, client_id)
+
+    # Phase 13 — Subscribe to global voice events
+    from core.event_bus import event_bus
+
+    async def on_voice_say(payload: dict):
+        if payload.get("user_id") == user_id:
+            # Run in background so we don't block the event bus delivery
+            asyncio.create_task(session.say(payload.get("text", "")))
+
+    event_bus.on("voice.say", on_voice_say)
+
     logger.info(
         "voice WS connected: client=%s user=%s voice_mode=%s",
         client_id, user_id, config.voice_mode,
@@ -354,6 +409,7 @@ async def voice_ws_handler(ws: WebSocket, token: Optional[str] = None) -> None:
         logger.error("voice WS loop failed: %s", exc)
     finally:
         session.closed = True
+        event_bus.off("voice.say", on_voice_say)
         logger.info("voice WS closed: client=%s", client_id)
 
 

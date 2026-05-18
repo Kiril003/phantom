@@ -190,6 +190,18 @@ def _reset_system_metrics_sampler_per_test():
         pass
 
 
+@pytest.fixture(autouse=True)
+def _register_ai_hub_capabilities_per_test():
+    """Ensure AIHub starts with default capabilities (Gemini, Ollama) for every
+    test. Isolation is maintained by resetting the hub singleton before
+    each run."""
+    from ai.hub import ai_hub, register_default_capabilities
+    ai_hub.reset_for_tests()
+    register_default_capabilities(hub=ai_hub)
+    yield
+    ai_hub.reset_for_tests()
+
+
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 

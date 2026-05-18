@@ -94,6 +94,10 @@ class AgentAssembleTeam(Action):
         description="When True, all members run via asyncio.gather; sequential when False.",
     )
     timeout_s: int = Field(default=600, ge=30, le=3600)
+    isolate_in_branch: bool = Field(
+        default=True,
+        description="When True, creates a unique git branch for this team's work to prevent workspace pollution."
+    )
 
     async def execute(self, ctx: ActionContext) -> ActionResult:  # noqa: PLR0911
         runtime = ctx.runtime
@@ -103,6 +107,22 @@ class AgentAssembleTeam(Action):
                 error="agent.assemble_team requires runtime context",
                 error_class="no_runtime",
             )
+        
+        # ── Git Isolation (Premium Feature) ──
+        branch_created = False
+        branch_name = f"agent/team-{ctx.task_id[:8]}"
+        if self.isolate_in_branch and not ctx.unsafe_mode:
+            try:
+                # Use our new GitBranchManage logic (internal call)
+                from .git_branch import GitBranchManage
+                branch_action = GitBranchManage(op="create", branch_name=branch_name, base_branch="main")
+                branch_res = await branch_action.execute(ctx)
+                if branch_res.ok:
+                    branch_created = True
+                    logger.info("Team work isolated in branch: %s", branch_name)
+            except Exception as exc:
+                logger.warning("Failed to create isolation branch: %s", exc)
+
         if self.mode not in _MODES:
             return ActionResult(
                 ok=False,
@@ -218,6 +238,7 @@ class AgentAssembleTeam(Action):
                     role=role,
                     constraints=plan.rationale[:200],
                     timeout_s=member_timeout,
+                    branch=branch_name if branch_created else None,
                 )
                 spawned.append((child_id, role))
             except DelegationDepthExceeded as exc:
@@ -251,7 +272,7 @@ class AgentAssembleTeam(Action):
         failures = len(reports) - successes
         elapsed_ms = int((time.monotonic() - started) * 1000)
 
-        consolidated = self._consolidate(plan, reports, spawn_errors)
+        consolidated = self._consolidate(plan, reports, spawn_errors, branch_name if branch_created else None)
 
         ok = (failures == 0) and (not spawn_errors) and bool(reports)
         return ActionResult(
@@ -259,6 +280,7 @@ class AgentAssembleTeam(Action):
             output={
                 "mode": self.mode,
                 "department": self.department,
+                "branch_isolation": branch_name if branch_created else None,
                 "total_members": len(reports),
                 "successes": successes,
                 "failures": failures,
@@ -292,12 +314,15 @@ class AgentAssembleTeam(Action):
         plan: Any,
         reports: list[Any],
         spawn_errors: list[dict[str, Any]],
+        branch: str | None = None,
     ) -> str:
         """Build a UA synthesis the parent's planner can read in one
         Observation. Bounded so a chatty team doesn't blow context."""
         if not reports and not spawn_errors:
             return "Команда не була зібрана."
         lines: list[str] = []
+        if branch:
+            lines.append(f"Ізоляція: гілка `{branch}`")
         if plan.rationale:
             lines.append(f"План: {plan.rationale[:200]}")
         for r in reports:

@@ -449,10 +449,11 @@ describe('ChatWindow', () => {
   it('renders empty state prompt', async () => {
     const { ChatWindow } = await import('../components/chat/ChatWindow');
     render(<ChatWindow minimalChrome />);
+    // Phase 27-d — empty state collapsed to title-only; the italic
+    // serif blurb ("Ask anything. PHANTOM reads context, …") was
+    // dropped to reclaim ~50px on the 600px display. The input
+    // placeholder already communicates the affordance.
     expect(screen.getByText(/New conversation|Session loaded/)).toBeDefined();
-    expect(
-      screen.getByText(/Ask anything\. PHANTOM reads context/)
-    ).toBeDefined();
   });
 
   it('renders existing messages', async () => {

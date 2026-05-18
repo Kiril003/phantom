@@ -48,6 +48,21 @@ operator never feels the feature is broken when summoning explicitly.
 The rarity choice is persisted in `localStorage['phantom-familiar-rarity']`;
 seen feature hints are persisted in `localStorage['phantom-familiar-hints-seen']`.
 
+## Sunrise state language
+
+The Familiar is the visible body of PHANTOM's state machine, not decoration.
+The frontend maps every system state through `FAMILIAR_STATE_BEHAVIOR`:
+
+| State | Familiar behaviour |
+| --- | --- |
+| `SHADOW` | peeking, neutral: "В тіні. Спостерігаю." |
+| `FOCUS` | idle, alert: "Фокус. Тримаю шум низько." |
+| `DIALOGUE` | waving, happy: "Я тут." |
+| `SENTINEL` | pointing, alert: "Аномалія. Дивись сюди." |
+| `GHOST` | vanishing, sleepy: "Зникаю з поверхні." |
+| `DREAM` | sleeping, sleepy: "Консолідую памʼять." |
+| `OPERATOR` | floating, neutral: "Операторський режим." |
+
 ## Backend
 
 `POST /api/v1/familiar/manifest` (ROOT/OPERATOR-only) accepts

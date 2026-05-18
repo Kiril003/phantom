@@ -20,7 +20,7 @@ os.environ.setdefault("PHANTOM_SERIAL_ENABLED", "false")
 
 
 def _build_runtime():
-    from agent.runtime import AgentRuntime
+    from agent.kernel.runtime import AgentRuntime
     return AgentRuntime()
 
 
@@ -46,7 +46,7 @@ def fake_hub(monkeypatch):
 @pytest.mark.asyncio
 async def test_decide_returns_kind_action_populates_goal(monkeypatch, fake_hub):
     """When decide returns kind=action, _maybe_speak dispatches an action."""
-    from agent.proactive import ProactiveLoop
+    from agent.cognition.proactive.loop import ProactiveLoop
 
     captured_fire: list[dict] = []
     runtime = _build_runtime()
@@ -80,7 +80,7 @@ async def test_decide_returns_kind_action_populates_goal(monkeypatch, fake_hub):
 
 @pytest.mark.asyncio
 async def test_action_without_confirm_fires_immediately(monkeypatch, fake_hub):
-    from agent.proactive import ProactiveLoop
+    from agent.cognition.proactive.loop import ProactiveLoop
 
     runtime = _build_runtime()
     fired: list[str] = []
@@ -115,7 +115,7 @@ async def test_action_without_confirm_fires_immediately(monkeypatch, fake_hub):
 
 @pytest.mark.asyncio
 async def test_action_with_confirm_parks_pending(monkeypatch, fake_hub):
-    from agent.proactive import ProactiveLoop
+    from agent.cognition.proactive.loop import ProactiveLoop
 
     runtime = _build_runtime()
     fired: list[str] = []
@@ -129,7 +129,7 @@ async def test_action_with_confirm_parks_pending(monkeypatch, fake_hub):
     monkeypatch.setattr(loop, "_should_consider_speaking", lambda ctx: True)
     # _emit_speech would hit DB; stub it.
     emitted: list[str] = []
-    async def fake_emit(msg, reason, priority, ctx):
+    async def fake_emit(msg, reason, priority, ctx, causality=""):
         emitted.append(msg)
     monkeypatch.setattr(loop, "_emit_speech", fake_emit)
 
@@ -161,7 +161,7 @@ async def test_action_with_confirm_parks_pending(monkeypatch, fake_hub):
 
 @pytest.mark.asyncio
 async def test_affirmative_reply_fires_pending_action(monkeypatch, fake_hub):
-    from agent.proactive import PendingAction, ProactiveLoop, _utcnow
+    from agent.cognition.proactive.loop import PendingAction, ProactiveLoop, _utcnow
 
     runtime = _build_runtime()
     fired: list[str] = []
@@ -186,7 +186,7 @@ async def test_affirmative_reply_fires_pending_action(monkeypatch, fake_hub):
 
 @pytest.mark.asyncio
 async def test_non_affirmative_reply_clears_pending_no_fire(monkeypatch, fake_hub):
-    from agent.proactive import PendingAction, ProactiveLoop, _utcnow
+    from agent.cognition.proactive.loop import PendingAction, ProactiveLoop, _utcnow
 
     runtime = _build_runtime()
     fired: list[str] = []
@@ -210,7 +210,7 @@ async def test_non_affirmative_reply_clears_pending_no_fire(monkeypatch, fake_hu
 
 @pytest.mark.asyncio
 async def test_pending_action_times_out(monkeypatch, fake_hub):
-    from agent.proactive import PENDING_ACTION_TIMEOUT_S, PendingAction, ProactiveLoop, _utcnow
+    from agent.cognition.proactive.loop import PENDING_ACTION_TIMEOUT_S, PendingAction, ProactiveLoop, _utcnow
 
     runtime = _build_runtime()
     loop = ProactiveLoop(runtime)
@@ -231,8 +231,8 @@ async def test_pending_action_times_out(monkeypatch, fake_hub):
 async def test_full_background_queue_skips_action(monkeypatch, fake_hub):
     """Proactive is best-effort — a saturated background queue should
     result in a silent skip, not an error."""
-    from agent.errors import TrackBusyError
-    from agent.proactive import ProactiveLoop
+    from agent.kernel.errors import TrackBusyError
+    from agent.cognition.proactive.loop import ProactiveLoop
 
     runtime = _build_runtime()
     async def refuse(goal, **kwargs):
@@ -264,7 +264,7 @@ async def test_full_background_queue_skips_action(monkeypatch, fake_hub):
 async def test_decide_speak_with_prior_pending_does_not_race(monkeypatch, fake_hub):
     """A speak decision while a pending action exists should emit speech
     and NOT accidentally clear the pending intent."""
-    from agent.proactive import PendingAction, ProactiveLoop, _utcnow
+    from agent.cognition.proactive.loop import PendingAction, ProactiveLoop, _utcnow
 
     runtime = _build_runtime()
     loop = ProactiveLoop(runtime)
@@ -273,7 +273,7 @@ async def test_decide_speak_with_prior_pending_does_not_race(monkeypatch, fake_h
     )
     monkeypatch.setattr(loop, "_should_consider_speaking", lambda ctx: True)
     emitted: list[str] = []
-    async def fake_emit(msg, reason, priority, ctx):
+    async def fake_emit(msg, reason, priority, ctx, causality=""):
         emitted.append(msg)
     monkeypatch.setattr(loop, "_emit_speech", fake_emit)
     async def fake_decide(ctx):
@@ -294,7 +294,7 @@ async def test_decide_speak_with_prior_pending_does_not_race(monkeypatch, fake_h
 
 
 def test_affirmative_regex_boundaries():
-    from agent.proactive import AFFIRMATIVE_RX
+    from agent.cognition.proactive.loop import AFFIRMATIVE_RX
 
     for yes in ["так", "Так.", "YES", "ok", "ok!", "давай", "ГО"]:
         assert AFFIRMATIVE_RX.match(yes) is not None, yes

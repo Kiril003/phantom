@@ -99,7 +99,6 @@ export interface AgentInnerMonologue {
   objection: string | null;
   confidence: number;
 }
-
 export interface AgentSubGoal {
   id: string;
   description: string;
@@ -108,6 +107,20 @@ export interface AgentSubGoal {
   acceptance_criteria: string;
   status: AgentSubGoalStatus;
   actions_used: number;
+}
+
+/* ─── 7-Horizon Planner (Phase 29) ────────────────────────────────────────── */
+
+export interface HorizonGoal {
+  id: string;
+  parent_id: string | null;
+  horizon_level: number;
+  horizon_name: string;
+  description: string;
+  status: string;
+  progress: number;
+  deadline: string | null;
+  children: HorizonGoal[];
 }
 
 export interface AgentPlanStep {
@@ -380,6 +393,31 @@ export interface AgentInfoNeedResponse {
   submitted_at: string;
 }
 
+/* ─── Org-Chart (Phase 30) ────────────────────────────────────────────────── */
+
+export interface AgentRole {
+  id: string;
+  name: string;
+  description: string;
+  standing_orders: string;
+  system_prompt_extension: string;
+  avatar_url: string | null;
+  created_at: string;
+}
+
+export interface AgentRelation {
+  id: string;
+  source_role_id: string;
+  target_role_id: string;
+  relation_type: 'COMMANDS' | 'AUDITS' | 'ADVISES';
+  trust_level: number;
+}
+
+export interface OrgChart {
+  roles: AgentRole[];
+  relations: AgentRelation[];
+}
+
 /* ─── WS event surface ────────────────────────────────────────────────────── */
 
 export type AgentEventType =
@@ -449,7 +487,23 @@ export type AgentEventType =
   | 'proactive.pending_action'
   // Audit B-18 — proactive action spawned a background task.
   | 'proactive.action_fired'
-  | 'notification';
+  // Day-NN "no-leash" — per-task safety toggle was flipped on the backend
+  // (either by this client, the paired phone, or any other ROOT surface).
+  | 'task.safety_changed'
+  | 'notification'
+  // Block C-2 — long-horizon mission lifecycle events.
+  // Handlers on the frontend are no-ops for now; the event surface must exist
+  // so the loop can broadcast cleanly and a follow-up UI agent can wire them.
+  | 'mission.started'
+  | 'mission.phase_started'
+  | 'mission.phase_completed'
+  | 'mission.completed'
+  | 'mission.failed'
+  // Block A-1 — emitted when a task is resumed from a crash-recovery rehydrate.
+  | 'task.resumed_from_crash'
+  // V2 Agent Chat — WS broadcast for each turn so paired surfaces stay in sync.
+  | 'agent.chat.user_message'
+  | 'agent.chat.reply';
 
 export interface AgentEvent {
   type: AgentEventType;

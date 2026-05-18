@@ -15,7 +15,7 @@ vi.mock('../services/api', () => ({
 import { mapApi } from '../services/api';
 import { LayerLibraryPanel } from '../components/map/panels/LayerLibraryPanel';
 
-const sample = (overrides: Partial<Record<string, unknown>> = {}) => ({
+const sample = (overrides: Partial<Record<string, unknown>> = {}): any => ({
   id: 'frontline',
   name_ua: 'Лінія фронту',
   name_en: 'Frontline',

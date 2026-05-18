@@ -71,6 +71,40 @@ export function MessageBubble({ message, streaming = false, compact = false }: M
     );
   }
 
+  // Full-bleed surfaces (an arbitrary artifact widget) are not text:
+  // they must escape the 82%-capped padded chat bubble or they render
+  // squeezed into a phone-width column. Render them on the full chat
+  // surface, sized for the 1024×600 device.
+  const sceneKind = (message.scene as { kind?: string } | undefined)?.kind;
+  if (message.scene && sceneKind === 'artifact') {
+    return (
+      <motion.div
+        data-testid="scene-breakout"
+        className="self-stretch w-full"
+        style={{ maxWidth: 1024 }}
+        initial={{ opacity: 0, y: 6 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={getPhantomTransition('bubbleEnter')}
+      >
+        <ChatScene scene={message.scene} />
+        {!compact && (
+          <div
+            className="flex items-center gap-2 justify-start mt-1"
+            style={{
+              fontFamily: 'var(--font-display)',
+              fontSize: 'var(--fs-micro)',
+              color: 'var(--ink-muted)',
+              letterSpacing: 'var(--tracking-wide)',
+            }}
+          >
+            <span>{formatTime(message.created_at)}</span>
+            {provider && <span className="capitalize">{provider}</span>}
+          </div>
+        )}
+      </motion.div>
+    );
+  }
+
   return (
     <motion.div
       className={`flex items-start gap-3 ${isUser ? 'self-end flex-row-reverse' : 'self-start'}`}
@@ -220,7 +254,10 @@ export function MessageBubble({ message, streaming = false, compact = false }: M
                 {provider}
               </span>
             )}
-            {!isUser && latency != null && latency > 0 && <span>{latency}ms</span>}
+            {/* Phase 27-e — only surface latency when it's actually
+                noteworthy (>100ms). Green-path responses run sub-100
+                and the chip was just chrome on every assistant row. */}
+            {!isUser && latency != null && latency > 100 && <span>{latency}ms</span>}
             {!isUser && tokens != null && tokens > 0 && (
               <span className="inline-flex items-center gap-0.5">
                 <Hash size={9} strokeWidth={1.75} />

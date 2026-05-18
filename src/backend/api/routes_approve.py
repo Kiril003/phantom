@@ -28,7 +28,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from agent.approve_on_phone import resolve_pending, signing_message
+from agent.operations.approve_on_phone import resolve_pending, signing_message
 from db.database import get_db
 from db.models import MobileApprovalRequest, PairedDevice
 from security.device_auth import get_current_device

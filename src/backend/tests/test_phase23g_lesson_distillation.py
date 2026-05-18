@@ -28,7 +28,7 @@ os.environ.setdefault("PHANTOM_SERIAL_ENABLED", "false")
 
 class TestPublicSurface:
     def test_module_exports(self) -> None:
-        from agent.memory import lessons as lm
+        from agent.cognition.memory import lessons as lm
         assert hasattr(lm, "distill_lesson")
         assert hasattr(lm, "write_lesson")
         assert hasattr(lm, "recall_lessons")
@@ -69,11 +69,11 @@ class TestConfigDefaults:
 
 class TestFormat:
     def test_empty_list_yields_empty_string(self) -> None:
-        from agent.memory.lessons import format_lessons_for_prompt
+        from agent.cognition.memory.lessons import format_lessons_for_prompt
         assert format_lessons_for_prompt([]) == ""
 
     def test_single_lesson_renders_all_three_clauses(self) -> None:
-        from agent.memory.lessons import format_lessons_for_prompt
+        from agent.cognition.memory.lessons import format_lessons_for_prompt
         text = format_lessons_for_prompt([
             {
                 "what_worked": "використовуй grep -n",
@@ -87,7 +87,7 @@ class TestFormat:
         assert "коли" in text  # applicability prefix appears
 
     def test_lesson_with_only_what_worked_still_renders(self) -> None:
-        from agent.memory.lessons import format_lessons_for_prompt
+        from agent.cognition.memory.lessons import format_lessons_for_prompt
         text = format_lessons_for_prompt([
             {"what_worked": "використовуй pytest -k", "what_avoid": "", "applicability": ""}
         ])
@@ -99,7 +99,7 @@ class TestFormat:
         """Edge case — a row with all empty clauses renders just the header,
         which would be weird. Confirm the behaviour is deterministic so we
         notice if it ever changes."""
-        from agent.memory.lessons import format_lessons_for_prompt
+        from agent.cognition.memory.lessons import format_lessons_for_prompt
         text = format_lessons_for_prompt([
             {"what_worked": "", "what_avoid": "", "applicability": ""}
         ])
@@ -114,7 +114,7 @@ class TestFormat:
 class TestDistillLessonDisabled:
     @pytest.mark.asyncio
     async def test_returns_none_when_disabled(self, monkeypatch) -> None:
-        from agent.memory import lessons as lm
+        from agent.cognition.memory import lessons as lm
         from config import config
         monkeypatch.setattr(config, "agent_lessons_enabled", False)
         result = await lm.distill_lesson(
@@ -145,7 +145,7 @@ class _FakeRouter:
 class TestDistillLessonLLM:
     @pytest.mark.asyncio
     async def test_parses_valid_json(self, monkeypatch) -> None:
-        from agent.memory import lessons as lm
+        from agent.cognition.memory import lessons as lm
         valid_json = (
             '{"what_worked":"бери grep -n","what_avoid":"уникай rm -rf",'
             '"applicability":"шукати символи у коді"}'
@@ -165,7 +165,7 @@ class TestDistillLessonLLM:
 
     @pytest.mark.asyncio
     async def test_strips_markdown_fences(self, monkeypatch) -> None:
-        from agent.memory import lessons as lm
+        from agent.cognition.memory import lessons as lm
         wrapped = (
             "```json\n"
             '{"what_worked":"use parallel reads","what_avoid":"",'
@@ -183,7 +183,7 @@ class TestDistillLessonLLM:
 
     @pytest.mark.asyncio
     async def test_returns_none_on_invalid_json(self, monkeypatch) -> None:
-        from agent.memory import lessons as lm
+        from agent.cognition.memory import lessons as lm
         fake = _FakeRouter("not json at all, plain prose response")
         monkeypatch.setattr("ai.provider.ai_router", fake)
         result = await lm.distill_lesson(
@@ -193,7 +193,7 @@ class TestDistillLessonLLM:
 
     @pytest.mark.asyncio
     async def test_returns_none_on_router_failure(self, monkeypatch) -> None:
-        from agent.memory import lessons as lm
+        from agent.cognition.memory import lessons as lm
 
         class _BoomRouter:
             async def generate(self, **_kwargs):
@@ -209,7 +209,7 @@ class TestDistillLessonLLM:
     async def test_empty_clauses_drop_lesson(self, monkeypatch) -> None:
         """LLM that returns both clauses empty should yield no lesson —
         we don't pollute the collection with vacuous rows."""
-        from agent.memory import lessons as lm
+        from agent.cognition.memory import lessons as lm
         fake = _FakeRouter('{"what_worked":"","what_avoid":"","applicability":""}')
         monkeypatch.setattr("ai.provider.ai_router", fake)
         result = await lm.distill_lesson(
@@ -219,7 +219,7 @@ class TestDistillLessonLLM:
 
     @pytest.mark.asyncio
     async def test_applicability_falls_back_to_goal_when_missing(self, monkeypatch) -> None:
-        from agent.memory import lessons as lm
+        from agent.cognition.memory import lessons as lm
         fake = _FakeRouter(
             '{"what_worked":"do thing","what_avoid":"","applicability":""}'
         )
@@ -238,7 +238,7 @@ class TestDistillLessonLLM:
 class TestRecallDisabled:
     @pytest.mark.asyncio
     async def test_returns_empty_when_disabled(self, monkeypatch) -> None:
-        from agent.memory import lessons as lm
+        from agent.cognition.memory import lessons as lm
         from config import config
         monkeypatch.setattr(config, "agent_lessons_enabled", False)
         result = await lm.recall_lessons("any query")
@@ -246,7 +246,7 @@ class TestRecallDisabled:
 
     @pytest.mark.asyncio
     async def test_zero_top_k_returns_empty(self, monkeypatch) -> None:
-        from agent.memory import lessons as lm
+        from agent.cognition.memory import lessons as lm
         from config import config
         monkeypatch.setattr(config, "agent_lessons_top_k", 0)
         result = await lm.recall_lessons("query")
@@ -256,7 +256,7 @@ class TestRecallDisabled:
     async def test_relevance_filter_drops_low_scores(self, monkeypatch) -> None:
         """When the underlying collection returns rows below the relevance
         threshold, recall_lessons must drop them so cold prompts stay clean."""
-        from agent.memory import lessons as lm
+        from agent.cognition.memory import lessons as lm
         from config import config
         monkeypatch.setattr(config, "agent_lessons_min_relevance", 0.5)
 
@@ -321,7 +321,7 @@ class TestPlannerInjection:
 
 class TestUserMessageContainsLessonsBlock:
     def test_user_message_renders_lessons_block_when_provided(self) -> None:
-        from agent.planner.tactical import _build_user_message
+        from agent.cognition.planner.tactical import _build_user_message
         from agent.schemas import SubGoal, SelfModel
         sg = SubGoal(
             description="d",
@@ -341,7 +341,7 @@ class TestUserMessageContainsLessonsBlock:
         assert "роби Y" in msg
 
     def test_user_message_unchanged_when_no_lessons(self) -> None:
-        from agent.planner.tactical import _build_user_message
+        from agent.cognition.planner.tactical import _build_user_message
         from agent.schemas import SubGoal, SelfModel
         sg = SubGoal(
             description="d",

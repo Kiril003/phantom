@@ -13,6 +13,7 @@ import { AmbientGlows } from '../components/core/AmbientGlows';
 import { FloatingToolbar } from '../components/core/FloatingToolbar';
 import { useSystemStore } from '../stores/systemStore';
 import { EASE_PHANTOM } from '../styles/motion';
+import { formatRelativeClock } from '../utils/format';
 
 /**
  * SHADOW — passive observation, sunrise dawn surface (R1 redesign).
@@ -717,12 +718,6 @@ function ekgPath(amplitude: number): string {
     'L186 25',
     'L200 25',
   ].join(' ');
-}
-
-/** Format a relative-seconds value as `HH:MM` for the moments timeline. */
-function formatRelativeClock(secondsAgo: number): string {
-  const target = new Date(Date.now() - secondsAgo * 1000);
-  return target.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
 }
 
 /** Pick the NEXUS suggestion line based on actual context signals. */

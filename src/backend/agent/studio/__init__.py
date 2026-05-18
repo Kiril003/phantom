@@ -6,7 +6,7 @@ autonomous agents ("Васі-агенти"). A custom agent is a parameterised
 re-runnable workflow built from cards (sources / transforms / decisions /
 outputs / council). The whole flow can also be authored conversationally —
 PHANTOM walks the user through naming, sourcing, transforming, recipients,
-and schedule via InfoNeed prompts (see agent.needs).
+and schedule via InfoNeed prompts (see agent.cognition.will.needs).
 
 Persistence: SQL `custom_agents`, `agent_cards`, `agent_runs` tables. Runs
 are regular agent_runtime tasks tagged with the custom agent's metadata so

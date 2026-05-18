@@ -17,8 +17,15 @@ import type {
   AgentTaskStatus,
   AgentTaskSummary,
   AgentThoughtBudget,
+  HorizonGoal,
 } from '@shared/types';
 import { agentApi, type AgentResumeAsConversationResponse } from '../services/agentApi';
+
+export interface AgentChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+  created_at: string | null;
+}
 
 const EVENT_CAP = 500;
 
@@ -133,10 +140,41 @@ interface AgentState {
   bgTaskGoals: Record<string, string>;
   progressLoading: Record<string, boolean>;
 
+  // Phase 29 — 7-Horizon Planner
+  horizons: HorizonGoal[];
+  horizonsLoading: boolean;
+  horizonsError: string | null;
+
+  // Phase 30 — Org-Chart.
+  orgChart: import('@shared/types').OrgChart | null;
+  orgChartLoading: boolean;
+
+  // V2 Agent Chat — persistent thread that survives drawer close/remount.
+  agentChat: {
+    threadId: string | null;
+    messages: AgentChatMessage[];
+    streaming: boolean;
+  };
+
+  // Day-NN "no-leash" — operator-controlled safety override.
+  //   unsafeMode        — current state of the active task (synced via WS
+  //                       `task.safety_changed`). False when no task active.
+  //   unsafeModeIntent  — operator's chosen mode for the *next* task. Persists
+  //                       through localStorage so a deliberate "off the leash"
+  //                       choice survives reloads. Defaults false.
+  unsafeMode: boolean;
+  unsafeModeIntent: boolean;
+
   // Setters
   setWSConnected: (connected: boolean) => void;
   setPromptToUser: (prompt: string | null) => void;
   setConversationSeed: (seed: AgentResumeAsConversationResponse | null) => void;
+
+  // Day-NN "no-leash" — flip the safety toggle. When a task is active,
+  // pushes to backend (POST /agent/task/{id}/safety) so the running
+  // task picks up the new mode at its next step; otherwise just stores
+  // the operator's intent for the next startTask call.
+  setUnsafeMode: (enabled: boolean) => Promise<void>;
 
   // Async actions
   startTask: (goal: string) => Promise<void>;
@@ -175,12 +213,25 @@ interface AgentState {
     },
   ) => Promise<AgentCouncilDecision | null>;
   dismissCouncil: () => void;
+
+  // Phase 30 — Org-Chart
+  loadOrgChart: () => Promise<void>;
+  updateRoleOrders: (roleId: string, orders: string) => Promise<void>;
   // Phase 16 — past-run browsing.
   loadHistory: (status?: string, limit?: number) => Promise<void>;
   clearHistory: () => void;
   // Phase 18-COMPLETE — progress hydration (REST replay after WS reconnect).
   loadProgress: (taskId: string) => Promise<AgentProgressSnapshot | null>;
   clearProgress: (taskId: string) => void;
+
+  // Phase 29 — 7-Horizon Planner actions
+  loadHorizons: () => Promise<void>;
+  createHorizonGoal: (description: string, level: number, parentId?: string) => Promise<void>;
+
+  // V2 Agent Chat actions.
+  sendAgentMessage: (message: string) => Promise<void>;
+  loadAgentThread: (taskId?: string) => Promise<void>;
+  clearAgentChat: () => void;
 
   // Event surface
   handleEvent: (e: AgentEvent) => void;
@@ -238,19 +289,72 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   bgTaskGoals: {},
   progressLoading: {},
 
+  // Phase 29
+  horizons: [],
+  horizonsLoading: false,
+  horizonsError: null,
+
+  // Phase 30 — Org-Chart
+  orgChart: null,
+  orgChartLoading: false,
+
+  agentChat: { threadId: null, messages: [], streaming: false },
+
+  // Day-NN "no-leash" — restore persisted operator intent (boolean
+  // stored under "phantom_unsafe_mode_intent"). Defaults false so the
+  // safe-by-default contract holds for first-run + cleared state.
+  unsafeMode: false,
+  unsafeModeIntent:
+    typeof localStorage !== 'undefined' &&
+    localStorage.getItem('phantom_unsafe_mode_intent') === '1',
+
   setWSConnected: (connected) => set({ wsConnected: connected }),
   setPromptToUser: (prompt) => set({ promptToUser: prompt }),
   setConversationSeed: (seed) => set({ conversationSeed: seed }),
 
+  setUnsafeMode: async (enabled) => {
+    // Persist intent — survives reloads, applies to the next task.
+    try {
+      if (enabled) localStorage.setItem('phantom_unsafe_mode_intent', '1');
+      else localStorage.removeItem('phantom_unsafe_mode_intent');
+    } catch {
+      /* SSR / restricted storage: ignore */
+    }
+    // Optimistic local flip so the UI reacts instantly.
+    set({ unsafeModeIntent: enabled, unsafeMode: enabled });
+    // If a task is currently running, push the toggle so the runtime
+    // bypasses (or re-engages) guards on the next step. We *do not*
+    // throw on 404 — the task may have just finished, and the intent
+    // is still preserved for the next startTask.
+    const taskId = get().currentTask?.task.id;
+    if (taskId) {
+      try {
+        await agentApi.setSafety(taskId, enabled);
+      } catch (err) {
+        // Roll back the live flag (intent stays) so the UI reflects
+        // backend reality. The toggle widget surfaces the error.
+        set({ unsafeMode: !enabled });
+        throw err;
+      }
+    }
+  },
+
   startTask: async (goal) => {
     set({ connectionStatus: 'starting', promptToUser: null });
     try {
-      const resp = await agentApi.startTask(goal);
+      const intent = get().unsafeModeIntent;
+      const resp = await agentApi.startTask(goal, { unsafe_mode: intent });
       if (!resp.started) {
         // 409 — task already running, refresh state instead
         await get().refreshTask(resp.task_id);
       } else {
-        set({ status: 'running', connectionStatus: 'running' });
+        set({
+          status: 'running',
+          connectionStatus: 'running',
+          // Seed live state from the intent — backend echoes it back
+          // on the start response so we don't have to wait for WS.
+          unsafeMode: !!resp.unsafe_mode || intent,
+        });
       }
     } catch (err) {
       set({ connectionStatus: 'idle' });
@@ -439,6 +543,78 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     });
   },
 
+  loadHorizons: async () => {
+    set({ horizonsLoading: true, horizonsError: null });
+    try {
+      const resp = await agentApi.getHorizons();
+      set({ horizons: resp.tree, horizonsLoading: false });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'failed to load horizons';
+      set({ horizonsLoading: false, horizonsError: msg });
+    }
+  },
+
+  createHorizonGoal: async (description, level, parentId) => {
+    try {
+      await agentApi.createHorizonGoal({ description, horizon_level: level, parent_id: parentId });
+      await get().loadHorizons();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : 'failed to create horizon goal';
+      set({ horizonsError: msg });
+      throw err;
+    }
+  },
+
+  // ── V2 Agent Chat ────────────────────────────────────────────────────────
+
+  sendAgentMessage: async (message) => {
+    const { agentChat, currentTask } = get();
+    const threadId = agentChat.threadId ?? currentTask?.task.id ?? null;
+    const userMsg: AgentChatMessage = { role: 'user', content: message, created_at: new Date().toISOString() };
+    set({
+      agentChat: {
+        threadId,
+        messages: [...agentChat.messages, userMsg],
+        streaming: true,
+      },
+    });
+    try {
+      const resp = await agentApi.parallelChat(message, threadId ?? undefined);
+      const assistantMsg: AgentChatMessage = {
+        role: 'assistant',
+        content: resp.reply,
+        created_at: new Date().toISOString(),
+      };
+      set((s) => ({
+        agentChat: {
+          threadId: resp.task_id,
+          messages: [...s.agentChat.messages, assistantMsg],
+          streaming: false,
+        },
+      }));
+    } catch (err) {
+      set((s) => ({ agentChat: { ...s.agentChat, streaming: false } }));
+      throw err;
+    }
+  },
+
+  loadAgentThread: async (taskId) => {
+    try {
+      const resp = await agentApi.getChatThread(taskId);
+      const messages: AgentChatMessage[] = resp.messages.map((m) => ({
+        role: m.role as 'user' | 'assistant',
+        content: m.content,
+        created_at: m.created_at,
+      }));
+      set({ agentChat: { threadId: resp.task_id, messages, streaming: false } });
+    } catch (err) {
+      console.warn('loadAgentThread failed', err);
+    }
+  },
+
+  clearAgentChat: () =>
+    set({ agentChat: { threadId: null, messages: [], streaming: false } }),
+
   // ── Phase 17a.5 — InfoNeed ───────────────────────────────────────────────
 
   respondToInfoNeed: async (answer) => {
@@ -528,9 +704,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
           last_audit: [],
         };
         patch.subGoals = [];
-        patch.observations = [];
-        patch.recentActions = [];
-        patch.reflections = [];
+        // Phase 32-TERMINAL — preserve history for the terminal-style activity stream.
+        // We only clear the sub-goals since they are task-specific and rendered in a separate panel.
+        // observations, recentActions, and reflections are cumulative.
         patch.thoughtBudget = EMPTY_BUDGET;
         patch.llmCallsUsed = 0;
         patch.llmCallsCap = 50;
@@ -937,11 +1113,75 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         };
         break;
       }
+      case 'task.safety_changed': {
+        // Day-NN "no-leash" — backend echoed a per-task safety flip.
+        // Mirror it so the shield widget shows the authoritative state,
+        // even if the operator never touched the local toggle (e.g.
+        // another paired surface flipped it).
+        patch.unsafeMode = Boolean(e.payload.unsafe_mode);
+        break;
+      }
+      case 'agent.chat.user_message': {
+        const content = String(e.payload.content ?? '');
+        const threadIdWs = String(e.payload.task_id ?? '');
+        if (content) {
+          const msg: AgentChatMessage = { role: 'user', content, created_at: new Date(e.ts).toISOString() };
+          const prev = get().agentChat;
+          patch.agentChat = {
+            threadId: threadIdWs || prev.threadId,
+            messages: [...prev.messages, msg],
+            streaming: prev.streaming,
+          };
+        }
+        break;
+      }
+      case 'agent.chat.reply': {
+        const content = String(e.payload.content ?? '');
+        const threadIdWs = String(e.payload.task_id ?? '');
+        if (content) {
+          const msg: AgentChatMessage = { role: 'assistant', content, created_at: new Date(e.ts).toISOString() };
+          const prev = get().agentChat;
+          patch.agentChat = {
+            threadId: threadIdWs || prev.threadId,
+            messages: [...prev.messages, msg],
+            streaming: false,
+          };
+        }
+        break;
+      }
       default:
         break;
     }
 
     set(patch as AgentState);
+  },
+
+  loadOrgChart: async () => {
+    try {
+      set({ orgChartLoading: true });
+      const data = await agentApi.getOrgChart();
+      set({ orgChart: data });
+    } catch (err) {
+      console.error('agentStore.loadOrgChart failed:', err);
+    } finally {
+      set({ orgChartLoading: false });
+    }
+  },
+
+  updateRoleOrders: async (roleId: string, orders: string) => {
+    try {
+      await agentApi.updateRoleOrders({ role_id: roleId, orders });
+      set((state) => {
+        if (!state.orgChart) return {};
+        const newRoles = state.orgChart.roles.map((r) => 
+          r.id === roleId ? { ...r, standing_orders: orders } : r
+        );
+        return { orgChart: { ...state.orgChart, roles: newRoles } };
+      });
+    } catch (err) {
+      console.error('agentStore.updateRoleOrders failed:', err);
+      throw err;
+    }
   },
 
   reset: () => set({
@@ -987,5 +1227,10 @@ export const useAgentStore = create<AgentState>((set, get) => ({
     promotedToBackgroundAt: {},
     bgTaskGoals: {},
     progressLoading: {},
+    // V2 Agent Chat — clear thread on reset.
+    agentChat: { threadId: null, messages: [], streaming: false },
+    // Phase 30 — Org-Chart
+    orgChart: null,
+    orgChartLoading: false,
   }),
 }));

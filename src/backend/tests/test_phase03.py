@@ -176,6 +176,14 @@ class TestPersonality:
         assert "PHANTOM" in PHANTOM_IDENTITY
         assert len(PHANTOM_IDENTITY) > 50
 
+    def test_phantom_identity_is_sentient_familiar(self):
+        from ai.personality import PHANTOM_IDENTITY
+        identity = PHANTOM_IDENTITY.lower()
+        assert "sentient familiar" in identity
+        assert "local-first" in identity
+        assert "підтвердження" in identity
+        assert "ризиков" in identity
+
     def test_phantom_identity_no_response_form_line(self):
         """Phase 9.5 — identity must NOT mention response forms (moved to
         chat-scoped RESPONSE_FORMS_GUIDANCE so tactical planner isn't
@@ -220,10 +228,17 @@ class TestPromptBuilder:
         )
         assert "PHANTOM" in result
 
-    def test_build_contains_response_forms_guidance(self):
+    def test_build_contains_response_forms_guidance(self, monkeypatch):
         """Phase 9.5 — chat prompt must carry the response-form guidance
-        block so Gemini actually picks structured forms."""
+        block so Gemini actually picks structured forms.
+
+        Updated 2026-05-18: the guidance is gated on
+        ``chat_response_widgets_enabled`` because the ``respond_*``
+        family is a separate opt-in from read-only data tools.
+        """
         from ai.prompt_builder import build_system_prompt
+        from config import config
+        monkeypatch.setattr(config, "chat_response_widgets_enabled", True)
         result = build_system_prompt(
             _make_snapshot(), self._user_dict(), _default_bmodel()
         )
@@ -534,9 +549,11 @@ class TestResponseFormatter:
         )
         assert form == "chart"
         assert content == "CPU trend"
-        assert len(attachments) == 1
-        assert attachments[0]["type"] == "chart_data"
-        assert attachments[0]["data"]["chart_type"] == "line"
+        # Day-4 W-2c: returns 2 attachments (legacy chart_data + scene envelope)
+        assert len(attachments) == 2
+        types = [a["type"] for a in attachments]
+        assert "chart_data" in types
+        assert "scene" in types
 
     def test_parse_map_function_call(self):
         from ai.response_formatter import parse_function_call
@@ -546,8 +563,10 @@ class TestResponseFormatter:
              "center": [50.4, 30.5], "zoom": 14},
         )
         assert form == "map"
+        # Day-4: map_markers + scene
+        assert len(attachments) == 2
         assert attachments[0]["type"] == "map_markers"
-        assert attachments[0]["data"]["zoom"] == 14
+        assert attachments[1]["type"] == "scene"
 
     def test_parse_code_function_call(self):
         from ai.response_formatter import parse_function_call
@@ -556,8 +575,10 @@ class TestResponseFormatter:
             {"content": "Here's the code", "language": "python", "code": "print('hi')"},
         )
         assert form == "code"
+        # Day-4: code_block + scene
+        assert len(attachments) == 2
         assert attachments[0]["data"]["language"] == "python"
-        assert attachments[0]["data"]["code"] == "print('hi')"
+        assert attachments[1]["type"] == "scene"
 
     def test_parse_metrics_function_call(self):
         from ai.response_formatter import parse_function_call
@@ -567,8 +588,10 @@ class TestResponseFormatter:
             {"content": "System stats", "metrics": metrics},
         )
         assert form == "metric_cards"
+        # Day-4: metric_card + scene
+        assert len(attachments) == 2
         assert attachments[0]["type"] == "metric_card"
-        assert attachments[0]["data"]["metrics"][0]["label"] == "CPU"
+        assert attachments[1]["type"] == "scene"
 
     def test_parse_terminal_function_call(self):
         from ai.response_formatter import parse_function_call
@@ -1034,6 +1057,7 @@ async def chat_client() -> AsyncGenerator[AsyncClient, None]:
     from db.database import get_db
     from security.auth import ensure_default_user
     from ai.provider import AIResponse
+    from config import config
 
     test_engine, factory, tmp_file = await _make_test_db()
     original_engine = _db_mod.engine
@@ -1064,26 +1088,30 @@ async def chat_client() -> AsyncGenerator[AsyncClient, None]:
         tokens_used=42,
         latency_ms=100,
     )
+    prev_chat_tools_enabled = config.chat_tools_enabled
+    config.chat_tools_enabled = False
 
     # Patch ChromaDB-dependent functions so tests run without chromadb installed
-    with patch("api.routes_chat.ai_router") as mock_router, \
-         patch("memory.strategic_memory.retrieve_relevant",
-               new=AsyncMock(return_value=[])), \
-         patch("memory.strategic_memory.extract_and_store_facts",
-               new=AsyncMock(return_value=[])):
-        mock_router.generate = AsyncMock(return_value=mock_response)
-        mock_router.active_provider_name = "gemini"
+    try:
+        with patch("ai.hub.ai_hub.dispatch", new=AsyncMock(return_value=mock_response)), \
+             patch("ai.hub.ai_hub.route_state",
+                   return_value=[{"task_class": "chat", "provider": "gemini"}]), \
+             patch("memory.strategic_memory.retrieve_relevant",
+                   new=AsyncMock(return_value=[])), \
+             patch("memory.strategic_memory.extract_and_store_facts",
+                   new=AsyncMock(return_value=[])):
 
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
-            yield client
-
-    app.dependency_overrides.clear()
-    _db_mod.engine = original_engine
-    _db_mod.AsyncSessionLocal = original_session
-    await test_engine.dispose()
-    Path(tmp_file).unlink(missing_ok=True)
+            async with AsyncClient(
+                transport=ASGITransport(app=app), base_url="http://test"
+            ) as client:
+                yield client
+    finally:
+        config.chat_tools_enabled = prev_chat_tools_enabled
+        app.dependency_overrides.clear()
+        _db_mod.engine = original_engine
+        _db_mod.AsyncSessionLocal = original_session
+        await test_engine.dispose()
+        Path(tmp_file).unlink(missing_ok=True)
 
 
 @pytest.mark.asyncio

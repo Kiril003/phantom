@@ -438,6 +438,39 @@ class FasterWhisperSTTProvider(STTProvider):
         )
 
 
+# ── Hybrid provider ───────────────────────────────────────────────────────────
+
+
+class HybridSTTProvider(STTProvider):
+    """
+    Wraps a primary provider with a fallback. If the primary times out
+    (5 s) or raises an exception, the fallback takes over.
+    """
+
+    def __init__(self, primary: STTProvider, fallback: STTProvider) -> None:
+        self.primary = primary
+        self.fallback = fallback
+        self.name = f"hybrid({primary.name}->{fallback.name})"
+
+    async def transcribe(self, audio: np.ndarray, language: str) -> STTResult:
+        try:
+            # Audit-2026-05-09: 5s ceiling for primary engine (Whisper/NPU).
+            # If it hangs or is too slow, we fall back to Vosk immediately.
+            return await asyncio.wait_for(
+                self.primary.transcribe(audio, language),
+                timeout=5.0,
+            )
+        except (asyncio.TimeoutError, Exception) as exc:
+            logger.warning(
+                "Primary STT (%s) failed or timed out: %s. Falling back to %s",
+                self.primary.name,
+                exc,
+                self.fallback.name,
+            )
+            # If fallback also fails, it will raise to the caller.
+            return await self.fallback.transcribe(audio, language)
+
+
 # ── Factory ───────────────────────────────────────────────────────────────────
 
 
@@ -543,11 +576,27 @@ def build_stt_provider() -> STTProvider:
         chain = _full_chain() if (mms_first or npu_first) else [_try_whisper, _try_vosk]
     else:  # "hybrid" + anything unknown
         chain = _full_chain() if (mms_first or npu_first) else [_try_whisper, _try_vosk]
+    
+    # Instantiate the chain and wrap in Hybrid if plural.
+    available: list[STTProvider] = []
     for builder in chain:
-        provider = builder()
-        if provider is not None:
-            return provider
-    return NoopSTTProvider()
+        p = builder()
+        if p is not None:
+            available.append(p)
+
+    if not available:
+        return NoopSTTProvider()
+    
+    if len(available) > 1 and mode != "vosk":
+        # Wrap primary in Hybrid with the last available (usually Vosk) as fallback.
+        # But we only want to wrap if the primary isn't already Vosk.
+        primary = available[0]
+        # Find a suitable fallback engine (Vosk is the best one for this).
+        vosk_fallback = next((p for p in available if p.name == "vosk"), None)
+        if vosk_fallback and primary.name != "vosk":
+            return HybridSTTProvider(primary, vosk_fallback)
+    
+    return available[0]
 
 
 def contains_wake_word(text: str) -> bool:

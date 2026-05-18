@@ -70,8 +70,8 @@ class Specialist:
 # stays the safety net.
 
 _LEAD_TOOL_FILTER = frozenset({
-    "agent.delegate", "self.recall", "self.capability",
-    "ask_user", "fs.read",
+    "agent.delegate", "agent.assemble_team", "self.recall", "self.capability",
+    "ask_user", "fs.read", "git.branch_manage", "git.checkpoint", "fs.code_search"
 })
 
 

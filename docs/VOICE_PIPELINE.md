@@ -23,8 +23,8 @@
                     │            │               │
                     │            ▼               │
                     │  ┌────────────────────┐   │
-                    │  │   StyleTTS2 UA     │   │
-                    │  │  (GPU preferred)   │   │
+                    │  │     Piper TTS      │   │
+                    │  │ current runtime    │   │
                     │  └─────────┬──────────┘   │
                     │            │ audio         │
                     └────────────┼───────────────┘
@@ -121,63 +121,15 @@ segments, info = model.transcribe(
 )
 ```
 
-## 3. TTS: StyleTTS2 Ukrainian
+## 3. TTS: Piper now, StyleTTS2 later
 
-### Модель
-Використовуємо `patriotyk/styletts2-ukrainian` — натреновано на українському мультиспікерному датасеті.
-Голоси: Марина, Панас, Лада, Тетяна, Микита (configurable).
+The active runtime is `voice/tts_engine.py` with Piper as the default neural
+TTS provider and a silent fallback when TTS is disabled or unavailable. The
+bundled Ukrainian voice is `uk_UA-ukrainian_tts-medium`.
 
-### Integration
-```python
-class StyleTTS2Engine:
-    def __init__(self, settings):
-        self.model = None  # lazy load
-        self.voice_path = settings.tts_voice_path
-        self.speed = settings.tts_speed         # 0.5-2.0
-        self.alpha = settings.tts_alpha          # 0.3 — timbre
-        self.beta = settings.tts_beta            # 0.7 — prosody
-        self.diffusion_steps = settings.tts_diffusion_steps  # 5
-        self.embedding_scale = settings.tts_emotion_scale    # 1.0
-    
-    def _ensure_loaded(self):
-        if self.model is None:
-            from styletts2_ukrainian import StyleTTS2UA
-            self.model = StyleTTS2UA(
-                checkpoint_path=self.settings.tts_model_path,
-                config_path=self.settings.tts_config_path,
-            )
-    
-    async def synthesize(self, text: str) -> np.ndarray:
-        self._ensure_loaded()
-        
-        # Preprocessing: normalize numbers, abbreviations
-        text = self._normalize_text(text)
-        
-        # Synthesize in thread pool (blocking call)
-        audio = await asyncio.get_event_loop().run_in_executor(
-            self.thread_pool,
-            lambda: self.model.inference(
-                text,
-                target_voice_path=self.voice_path,
-                output_sample_rate=24000,
-                alpha=self.alpha,
-                beta=self.beta,
-                diffusion_steps=self.diffusion_steps,
-                embedding_scale=self.embedding_scale,
-                speed=self.speed,
-            )
-        )
-        return audio
-    
-    def _normalize_text(self, text: str) -> str:
-        """Нормалізація чисел, скорочень для TTS."""
-        # 123 → "сто двадцять три"
-        # 15:30 → "п'ятнадцять тридцять"
-        # °C → "градусів цельсія"
-        # % → "відсотків"
-        # Кожне речення закінчується крапкою (StyleTTS2 краще з повними реченнями)
-        ...
-```
+StyleTTS2 remains a future voice-quality track. It is intentionally not
+documented as the current implementation until a real provider, model
+download path, settings UI, and tests exist.
 
 ### Tone Adaptation для TTS
 ```python
@@ -236,12 +188,9 @@ class WakeWordDetector:
 | voice.stt_language | select | uk | uk / en / auto |
 | voice.stt_hybrid_threshold | range | 0.3 | Levenshtein порог для whisper override |
 | voice.tts_enabled | boolean | true | |
-| voice.tts_voice | select | Марина | доступні голоси |
+| voice.tts_voice | select | uk_UA-ukrainian_tts-medium | Piper voice model |
 | voice.tts_speed | range | 1.0 | 0.5-2.0 |
-| voice.tts_alpha | range | 0.3 | 0-1, timbre |
-| voice.tts_beta | range | 0.7 | 0-1, prosody |
-| voice.tts_diffusion_steps | range | 5 | 1-20 |
-| voice.tts_emotion_scale | range | 1.0 | 0-3.0 |
+| voice.tts_auto_language | boolean | true | choose Ukrainian/English Piper fallback |
 | voice.wake_words | text | фантом | comma-separated |
 | voice.wake_word_enabled | boolean | true | |
 | voice.vad_silence_ms | range | 500 | 200-2000 |

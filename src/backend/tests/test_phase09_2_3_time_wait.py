@@ -15,8 +15,8 @@ import pytest
 
 from agent.actions.base import ActionContext
 from agent.actions.time_ import TimeWait
-from agent.controls import ControlBus
-from agent.planner._llm import BlockedQuotaError
+from agent.kernel.controls import ControlBus
+from agent.cognition.planner._llm import BlockedQuotaError
 
 
 # -----------------------------------------------------------------------------
@@ -93,7 +93,7 @@ async def test_strategic_plan_propagates_blocked_quota_error(monkeypatch: pytest
     agent loop relies on the type to park the task on blocked_quota rather
     than finalise as failed.
     """
-    from agent.planner import _llm, strategic
+    from agent.cognition.planner import _llm, strategic
     from agent.schemas import SelfModel
 
     async def fake_llm_json(prompt: str, retry_message: str | None = None, *, task_id: str | None = None) -> dict:
@@ -119,7 +119,7 @@ async def test_legacy_tactical_plan_surfaces_blocked_quota(monkeypatch: pytest.M
     too — the 9.1-era path is no longer quota-blind.
     """
     from agent.actions.registry import registry as default_registry
-    from agent.planner import _llm, tactical
+    from agent.cognition.planner import _llm, tactical
     from agent.schemas import SelfModel, SubGoal
 
     async def fake_llm_json(prompt: str, retry_message: str | None = None, *, task_id: str | None = None) -> dict:

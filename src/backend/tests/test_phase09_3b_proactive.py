@@ -48,7 +48,7 @@ async def isolated_db(monkeypatch):
 
 
 def _build_runtime_with_fg_task(concern: float = 0.1, fatigue: float = 0.0, focus: float = 0.5):
-    from agent.runtime import AgentRuntime, TaskState
+    from agent.kernel.runtime import AgentRuntime, TaskState
     from agent.schemas import EmotionVector, SelfModel
 
     runtime = AgentRuntime()
@@ -56,13 +56,18 @@ def _build_runtime_with_fg_task(concern: float = 0.1, fatigue: float = 0.0, focu
         emotion=EmotionVector(focus=focus, curiosity=0.5, concern=concern, fatigue=fatigue),
     )
     runtime.foreground_slot = TaskState(
-        id="t1", goal="g", track="foreground", status="running", self_model=sm,
+        id="t1",
+        user_id="u-proactive-test",
+        goal="g",
+        track="foreground",
+        status="running",
+        self_model=sm,
     )
     return runtime
 
 
 def _build_bare_runtime():
-    from agent.runtime import AgentRuntime
+    from agent.kernel.runtime import AgentRuntime
     return AgentRuntime()
 
 
@@ -71,7 +76,7 @@ def _build_bare_runtime():
 
 @pytest.mark.asyncio
 async def test_loop_start_stop_cleanly():
-    from agent.proactive import ProactiveLoop
+    from agent.cognition.proactive.loop import ProactiveLoop
     from config import config
 
     r = _build_bare_runtime()
@@ -96,7 +101,7 @@ async def test_loop_start_stop_cleanly():
 async def test_shutdown_during_sleep_exits_quickly():
     """Start loop with long interval, stop; should exit within ~1s even
     though interval is 60s (wait_for on stop_event allows immediate wake)."""
-    from agent.proactive import ProactiveLoop
+    from agent.cognition.proactive.loop import ProactiveLoop
     from config import config
 
     r = _build_bare_runtime()
@@ -122,7 +127,7 @@ async def test_shutdown_during_sleep_exits_quickly():
 
 
 def test_compute_interval_shortens_on_high_concern():
-    from agent.proactive import ProactiveLoop
+    from agent.cognition.proactive.loop import ProactiveLoop
     from config import config
 
     r = _build_runtime_with_fg_task(concern=0.7)
@@ -135,7 +140,7 @@ def test_compute_interval_shortens_on_high_concern():
 
 
 def test_compute_interval_extends_on_calm_baseline():
-    from agent.proactive import ProactiveLoop
+    from agent.cognition.proactive.loop import ProactiveLoop
     from config import config
 
     r = _build_runtime_with_fg_task(concern=0.05, fatigue=0.05, focus=0.5)
@@ -148,7 +153,7 @@ def test_compute_interval_extends_on_calm_baseline():
 
 
 def test_compute_interval_respects_min_max_bounds():
-    from agent.proactive import ProactiveLoop
+    from agent.cognition.proactive.loop import ProactiveLoop
     from config import config
 
     r = _build_runtime_with_fg_task(concern=0.95)
@@ -164,7 +169,7 @@ def test_compute_interval_respects_min_max_bounds():
 
 
 def test_guard_cooldown_blocks_within_window():
-    from agent.proactive import ProactiveLoop
+    from agent.cognition.proactive.loop import ProactiveLoop
     from config import config
 
     r = _build_bare_runtime()
@@ -175,18 +180,20 @@ def test_guard_cooldown_blocks_within_window():
     assert loop._should_consider_speaking(ctx) is False
 
 
-def test_guard_active_task_blocks():
-    from agent.proactive import ProactiveLoop
+@pytest.mark.asyncio
+async def test_guard_active_task_blocks():
+    from agent.cognition.proactive.loop import ProactiveLoop
 
     r = _build_runtime_with_fg_task()  # has foreground task
     loop = ProactiveLoop(r)
     loop.note_user_interaction()
-    ctx = loop._build_context()
+    ctx = await loop._build_context()
     assert loop._should_consider_speaking(ctx) is False
 
 
-def test_guard_no_recent_chat_blocks():
-    from agent.proactive import ProactiveLoop
+@pytest.mark.asyncio
+async def test_guard_no_recent_chat_blocks():
+    from agent.cognition.proactive.loop import ProactiveLoop
     from config import config
 
     r = _build_bare_runtime()
@@ -195,13 +202,14 @@ def test_guard_no_recent_chat_blocks():
     config.agent_proactive_long_silence_threshold_min = 60
     # minutes_since_user > threshold → "no recent chat"
     loop._last_user_interaction_at = datetime.now(tz=timezone.utc) - timedelta(hours=4)
-    ctx = loop._build_context()
+    ctx = await loop._build_context()
     assert loop._should_consider_speaking(ctx) is False
 
 
-def test_guard_pass_on_emotion_and_recent_chat():
-    from agent.proactive import ProactiveLoop
-    from agent.proactive_triggers import ProactiveTrigger, ProactiveTriggerKind
+@pytest.mark.asyncio
+async def test_guard_pass_on_emotion_and_recent_chat():
+    from agent.cognition.proactive.loop import ProactiveLoop
+    from agent.cognition.proactive.triggers import ProactiveTrigger, ProactiveTriggerKind
     from config import config
 
     r = _build_runtime_with_fg_task(concern=0.6)  # off-baseline
@@ -217,7 +225,7 @@ def test_guard_pass_on_emotion_and_recent_chat():
         context={},
         priority=6,
     ))
-    ctx = loop._build_context()
+    ctx = await loop._build_context()
     # emotion is None (no foreground), but triggers are present — pass.
     assert loop._should_consider_speaking(ctx) is True
 
@@ -226,8 +234,8 @@ def test_guard_pass_on_emotion_and_recent_chat():
 
 
 def test_trigger_accumulation_capped():
-    from agent.proactive import ProactiveLoop
-    from agent.proactive_triggers import ProactiveTrigger, ProactiveTriggerKind
+    from agent.cognition.proactive.loop import ProactiveLoop
+    from agent.cognition.proactive.triggers import ProactiveTrigger, ProactiveTriggerKind
 
     r = _build_bare_runtime()
     loop = ProactiveLoop(r)
@@ -242,7 +250,7 @@ def test_trigger_accumulation_capped():
 
 
 def test_fatigue_spike_dedup_within_10_min():
-    from agent.proactive import ProactiveLoop
+    from agent.cognition.proactive.loop import ProactiveLoop
 
     r = _build_bare_runtime()
     loop = ProactiveLoop(r)
@@ -254,7 +262,7 @@ def test_fatigue_spike_dedup_within_10_min():
 
 
 def test_fatigue_spike_ignores_below_threshold():
-    from agent.proactive import ProactiveLoop
+    from agent.cognition.proactive.loop import ProactiveLoop
 
     r = _build_bare_runtime()
     loop = ProactiveLoop(r)
@@ -264,7 +272,7 @@ def test_fatigue_spike_ignores_below_threshold():
 
 
 def test_streak_success_fires_after_three_dedup_after():
-    from agent.proactive import ProactiveLoop
+    from agent.cognition.proactive.loop import ProactiveLoop
 
     r = _build_bare_runtime()
     loop = ProactiveLoop(r)
@@ -278,7 +286,7 @@ def test_streak_success_fires_after_three_dedup_after():
 
 
 def test_reset_streak_breaks_progress():
-    from agent.proactive import ProactiveLoop
+    from agent.cognition.proactive.loop import ProactiveLoop
 
     r = _build_bare_runtime()
     loop = ProactiveLoop(r)
@@ -294,24 +302,26 @@ def test_reset_streak_breaks_progress():
 # ── Decide context assembly ──────────────────────────────────────────────────
 
 
-def test_build_context_pulls_top_3_concerns():
-    from agent.proactive import ProactiveLoop
-    from agent.self_model import add_concern
+@pytest.mark.asyncio
+async def test_build_context_pulls_top_3_concerns():
+    from agent.cognition.proactive.loop import ProactiveLoop
+    from agent.cognition.self_model import add_concern
 
     r = _build_runtime_with_fg_task()
     sm = r.foreground_slot.self_model
     for i in range(5):
         add_concern(sm, f"concern-{i}")
     loop = ProactiveLoop(r)
-    ctx = loop._build_context()
+    ctx = await loop._build_context()
     assert len(ctx["active_concerns"]) == 3
     # FIFO tail — newest first.
     assert "concern-4" in ctx["active_concerns"]
 
 
-def test_build_context_emits_recent_triggers():
-    from agent.proactive import ProactiveLoop
-    from agent.proactive_triggers import ProactiveTrigger, ProactiveTriggerKind
+@pytest.mark.asyncio
+async def test_build_context_emits_recent_triggers():
+    from agent.cognition.proactive.loop import ProactiveLoop
+    from agent.cognition.proactive.triggers import ProactiveTrigger, ProactiveTriggerKind
 
     r = _build_runtime_with_fg_task()
     loop = ProactiveLoop(r)
@@ -321,8 +331,18 @@ def test_build_context_emits_recent_triggers():
             context={"i": i},
             priority=4,
         ))
-    ctx = loop._build_context()
+    ctx = await loop._build_context()
     assert len(ctx["triggers"]) == 5  # last 5 surfaced to prompt
+
+
+def test_decide_prompt_encodes_ask_for_risk_policy():
+    from agent.cognition.proactive import loop as proactive_loop
+
+    assert "Sentient Familiar" in proactive_loop._DECIDE_SYSTEM
+    assert "medium/high risk" in proactive_loop._DECIDE_TEMPLATE
+    assert "confirm_with_user=true" in proactive_loop._DECIDE_TEMPLATE
+    assert "read-only" in proactive_loop._DECIDE_TEMPLATE
+    assert "confirm_with_user=false" in proactive_loop._DECIDE_TEMPLATE
 
 
 # ── Emit speech (DB write) ───────────────────────────────────────────────────
@@ -332,7 +352,7 @@ def test_build_context_emits_recent_triggers():
 async def test_emit_speech_writes_to_chat_messages(isolated_db):
     """When there's a chat session, _emit_speech appends a new assistant
     message row with origin=proactive."""
-    from agent.proactive import ProactiveLoop
+    from agent.cognition.proactive.loop import ProactiveLoop
     from db.database import get_session
     from db.models import ChatMessage, ChatSession, User
 
@@ -368,7 +388,7 @@ async def test_emit_speech_writes_to_chat_messages(isolated_db):
 @pytest.mark.asyncio
 async def test_emit_speech_noop_without_session(isolated_db):
     """No chat session exists → _emit_speech silently skips."""
-    from agent.proactive import ProactiveLoop
+    from agent.cognition.proactive.loop import ProactiveLoop
     from db.database import get_session
     from db.models import ChatMessage
 
@@ -386,7 +406,7 @@ async def test_emit_speech_noop_without_session(isolated_db):
 
 def test_config_hot_reload_affects_interval():
     """Changing config mid-flight changes the next interval calculation."""
-    from agent.proactive import ProactiveLoop
+    from agent.cognition.proactive.loop import ProactiveLoop
     from config import config
 
     r = _build_runtime_with_fg_task(concern=0.1)
@@ -405,8 +425,8 @@ def test_config_hot_reload_affects_interval():
 
 
 def test_check_long_silence_pushes_trigger_when_threshold_exceeded():
-    from agent.proactive import ProactiveLoop, check_long_silence, set_loop
-    from agent.proactive_triggers import ProactiveTriggerKind
+    from agent.cognition.proactive.loop import ProactiveLoop, check_long_silence, set_loop
+    from agent.cognition.proactive.triggers import ProactiveTriggerKind
     from config import config
 
     r = _build_bare_runtime()
@@ -425,7 +445,7 @@ def test_check_long_silence_pushes_trigger_when_threshold_exceeded():
 
 
 def test_check_long_silence_noop_when_no_interaction_recorded():
-    from agent.proactive import ProactiveLoop, check_long_silence, set_loop
+    from agent.cognition.proactive.loop import ProactiveLoop, check_long_silence, set_loop
 
     r = _build_bare_runtime()
     loop = ProactiveLoop(r)

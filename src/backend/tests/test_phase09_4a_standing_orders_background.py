@@ -88,8 +88,8 @@ async def _seed_interval_order(
 
 @pytest.mark.asyncio
 async def test_standing_order_fires_on_background_track(isolated_db, monkeypatch):
-    from agent.runtime import AgentRuntime
-    from agent.standing_orders.runner import StandingOrderRunner
+    from agent.kernel.runtime import AgentRuntime
+    from agent.operations.standing_orders.runner import StandingOrderRunner
 
     await _seed_user(isolated_db)
     order_id = await _seed_interval_order(isolated_db)
@@ -119,9 +119,9 @@ async def test_standing_order_fires_on_background_track(isolated_db, monkeypatch
 
 @pytest.mark.asyncio
 async def test_order_fires_even_when_foreground_task_active(isolated_db, monkeypatch):
-    from agent.runtime import AgentRuntime, TaskState
+    from agent.kernel.runtime import AgentRuntime, TaskState
     from agent.schemas import SelfModel
-    from agent.standing_orders.runner import StandingOrderRunner
+    from agent.operations.standing_orders.runner import StandingOrderRunner
 
     await _seed_user(isolated_db)
     await _seed_interval_order(isolated_db, goal="bg while fg busy")
@@ -150,9 +150,9 @@ async def test_order_fires_even_when_foreground_task_active(isolated_db, monkeyp
 
 @pytest.mark.asyncio
 async def test_order_defers_on_track_busy_error(isolated_db, monkeypatch):
-    from agent.errors import TrackBusyError
-    from agent.runtime import AgentRuntime
-    from agent.standing_orders.runner import StandingOrderRunner
+    from agent.kernel.errors import TrackBusyError
+    from agent.kernel.runtime import AgentRuntime
+    from agent.operations.standing_orders.runner import StandingOrderRunner
     from db.database import get_session
     from db.models import StandingOrder
 
@@ -190,8 +190,8 @@ async def test_queued_fire_still_records_success(isolated_db, monkeypatch):
     """A fire that lands in the background queue (rather than directly on
     the slot) is still a legitimate fire — fire_count++ and last_outcome
     records the queued task_id."""
-    from agent.runtime import AgentRuntime
-    from agent.standing_orders.runner import StandingOrderRunner
+    from agent.kernel.runtime import AgentRuntime
+    from agent.operations.standing_orders.runner import StandingOrderRunner
     from db.database import get_session
     from db.models import StandingOrder
 
@@ -219,9 +219,9 @@ async def test_queued_fire_still_records_success(isolated_db, monkeypatch):
 
 @pytest.mark.asyncio
 async def test_conditional_order_fires_on_background(isolated_db, monkeypatch):
-    from agent.runtime import AgentRuntime
-    from agent.standing_orders import conditions as cond_mod
-    from agent.standing_orders.runner import StandingOrderRunner
+    from agent.kernel.runtime import AgentRuntime
+    from agent.operations.standing_orders import conditions as cond_mod
+    from agent.operations.standing_orders.runner import StandingOrderRunner
     from db.database import get_session
     from db.models import StandingOrder, User
 

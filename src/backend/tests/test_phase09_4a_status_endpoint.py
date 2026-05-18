@@ -36,7 +36,7 @@ async def client(monkeypatch, tmp_path):
     from config import config
     monkeypatch.setattr(config, "agent_workspace_dir", str(tmp_path))
 
-    from agent.runtime import agent_runtime
+    from agent.kernel.runtime import agent_runtime
     agent_runtime.foreground_slot = None
     agent_runtime.background_slot = None
     agent_runtime._track_queues["foreground"].clear()
@@ -84,7 +84,7 @@ async def test_status_idle_returns_both_slots_inactive(client):
 async def test_status_reflects_active_background_slot(client):
     """Plant a task directly on the background slot and verify the endpoint
     surfaces it with the right origin/goal."""
-    from agent.runtime import agent_runtime, TaskState
+    from agent.kernel.runtime import agent_runtime, TaskState
     from agent.schemas import SelfModel
 
     agent_runtime.background_slot = TaskState(

@@ -12,7 +12,7 @@ from unittest.mock import AsyncMock
 
 import pytest
 
-from agent.runtime import AgentRuntime, TaskState
+from agent.kernel.runtime import AgentRuntime, TaskState
 from agent.schemas import SelfModel
 
 
@@ -140,7 +140,7 @@ async def test_consent_timeout_wait_for_wrapping() -> None:
     ceiling. Matches the loop's new pattern at the risky-action and ask_user
     sites.
     """
-    from agent.controls import ControlBus
+    from agent.kernel.controls import ControlBus
     bus = ControlBus()
     with pytest.raises(asyncio.TimeoutError):
         await asyncio.wait_for(bus.intervention_queue.get(), timeout=0.2)
@@ -151,7 +151,7 @@ async def test_consent_queue_deliver_before_timeout() -> None:
     """Sanity check: intervention arriving before the timeout resolves
     the wait_for normally — guards against a future regression that makes
     the TimeoutError path swallow legitimate inputs."""
-    from agent.controls import ControlBus
+    from agent.kernel.controls import ControlBus
     bus = ControlBus()
 
     async def deliver() -> None:

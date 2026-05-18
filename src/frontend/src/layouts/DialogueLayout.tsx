@@ -303,10 +303,15 @@ export default function DialogueLayout() {
               same warm panel as the bio card on the left. */}
           <div
             aria-hidden
-            className="absolute inset-0 glass"
-            style={{ borderRadius: 24 }}
+            className="absolute inset-0 rounded-[24px]"
+            style={{ 
+              background: 'rgba(255, 255, 255, 0.8)',
+              backdropFilter: 'blur(30px)',
+              border: '1px solid rgba(255, 255, 255, 0.5)',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)'
+            }}
           />
-          <div className="relative h-full">
+          <div className="relative h-full overflow-hidden rounded-[24px]">
             <ChatWindow
               onVoiceToggle={handleVoiceToggle}
               placeholder="Message PHANTOM…"

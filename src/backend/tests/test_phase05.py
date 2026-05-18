@@ -265,13 +265,13 @@ async def ws_env() -> AsyncGenerator[tuple[Any, Any, Any, Any], None]:
     ))
 
     try:
-        with patch("api.routes_chat.ai_router") as ar, \
+        with patch("api.routes_chat.ai_hub") as ah, \
              patch("memory.strategic_memory.retrieve_relevant",
                    new=AsyncMock(return_value=[])), \
              patch("memory.strategic_memory.extract_and_store_facts",
                    new=AsyncMock(return_value=[])):
-            ar.generate = ai_mock
-            ar.active_provider_name = "gemini"
+            ah.dispatch = ai_mock
+            ah.route_state = lambda **kw: [{"task_class": "chat", "provider": "gemini"}]
             yield fake_hub, client, factory, ai_mock
     finally:
         whub.hub = original_hub  # type: ignore[assignment]
@@ -397,15 +397,15 @@ async def chat_client_p5() -> AsyncGenerator[tuple[AsyncClient, _FakeHub], None]
 
     fake_hub = _FakeHub()
 
-    with patch("api.routes_chat.ai_router") as ar, \
+    with patch("ai.hub.ai_hub.dispatch", new=AsyncMock(return_value=mock_response)), \
+         patch("ai.hub.ai_hub.route_state",
+               return_value=[{"task_class": "chat", "provider": "gemini"}]), \
          patch("api.routes_chat.hub", fake_hub, create=True) if False else \
          patch.dict(os.environ, os.environ.copy()), \
          patch("memory.strategic_memory.retrieve_relevant",
                new=AsyncMock(return_value=[])), \
          patch("memory.strategic_memory.extract_and_store_facts",
                new=AsyncMock(return_value=[])):
-        ar.generate = AsyncMock(return_value=mock_response)
-        ar.active_provider_name = "gemini"
 
         # Inject fake hub by patching the module-level reference inside routes_chat
         import api.websocket_hub as _whub

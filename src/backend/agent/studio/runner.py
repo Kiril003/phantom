@@ -15,7 +15,7 @@ import logging
 from datetime import datetime, timezone
 from typing import Literal
 
-from agent.runtime import agent_runtime
+from agent.kernel.runtime import agent_runtime
 
 from .compiler import CompiledRun, compile as compile_agent
 from .models import CustomAgent, CustomAgentRun, RunSpec
@@ -46,6 +46,7 @@ async def run_custom_agent(
     # it up as a hint (the planner reads runtime.current_task and ignores
     # unknown extras gracefully).
     task_id, started = await agent_runtime.start_task(
+        user_id=agent.owner_user_id,
         goal=tagged_goal,
         origin=triggered_by,
         track=spec.track,

@@ -63,7 +63,7 @@ def isolate_runtime(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "agent_reflection_every_n_actions", 5)
     monkeypatch.setattr(config, "agent_max_actions_per_task", 20)
 
-    from agent.runtime import agent_runtime
+    from agent.kernel.runtime import agent_runtime
     agent_runtime.foreground_slot = None
     agent_runtime.background_slot = None
     agent_runtime.task_runner = None
@@ -102,9 +102,9 @@ def mock_llm(monkeypatch):
             })
         return queue.pop(0)
 
-    from agent.planner import _llm
-    from agent.memory import recall as _recall_mod
-    from agent.memory import seeds as _seeds
+    from agent.cognition.planner import _llm
+    from agent.cognition.memory import recall as _recall_mod
+    from agent.cognition.memory import seeds as _seeds
     from config import config as _cfg
     monkeypatch.setattr(_llm, "_call", fake_call)
     monkeypatch.setattr(_cfg, "agent_use_native_tool_calling", False)
@@ -163,7 +163,7 @@ async def _wait_for_done(slot_getter, timeout=3.0):
 class TestForegroundDefault:
     @pytest.mark.asyncio
     async def test_start_task_defaults_to_foreground(self, isolated_db, mock_llm):
-        from agent.runtime import agent_runtime as rt
+        from agent.kernel.runtime import agent_runtime as rt
         mock_llm.extend([_strategic(1), _done()])
 
         task_id, started = await rt.start_task("hello world")
@@ -179,7 +179,7 @@ class TestForegroundDefault:
     @pytest.mark.asyncio
     async def test_foreground_busy_refuses_instead_of_queuing(self, isolated_db, mock_llm):
         """Preserve Phase 9.1 contract: foreground refuses while busy."""
-        from agent.runtime import agent_runtime as rt
+        from agent.kernel.runtime import agent_runtime as rt
         mock_llm.extend([_strategic(1), _done(), _strategic(1), _done()])
 
         id1, started1 = await rt.start_task("first")
@@ -199,7 +199,7 @@ class TestForegroundDefault:
 class TestBackgroundTrack:
     @pytest.mark.asyncio
     async def test_background_task_runs_on_background_slot(self, isolated_db, mock_llm):
-        from agent.runtime import agent_runtime as rt
+        from agent.kernel.runtime import agent_runtime as rt
         mock_llm.extend([_strategic(1), _done("bg-ok")])
 
         task_id, started = await rt.start_task("bg goal", track="background")
@@ -212,7 +212,7 @@ class TestBackgroundTrack:
     @pytest.mark.asyncio
     async def test_concurrent_foreground_and_background(self, isolated_db, mock_llm):
         """Both tracks run independently."""
-        from agent.runtime import agent_runtime as rt
+        from agent.kernel.runtime import agent_runtime as rt
         # Queue both plans + terminals. Order doesn't matter — each
         # task pulls from the same scripted queue; as long as there are 4
         # responses, the order interleaves naturally.
@@ -236,9 +236,9 @@ class TestBackgroundQueue:
     @pytest.mark.asyncio
     async def test_background_busy_queues(self, isolated_db):
         """When background slot is occupied, new start_task queues the work."""
-        from agent.runtime import agent_runtime as rt
-        from agent.runtime import TaskState
-        from agent.self_model import build_self_model
+        from agent.kernel.runtime import agent_runtime as rt
+        from agent.kernel.runtime import TaskState
+        from agent.cognition.self_model import build_self_model
         from agent.actions.registry import registry
 
         # Plant a long-running background task directly on the slot so
@@ -263,10 +263,10 @@ class TestBackgroundQueue:
 
     @pytest.mark.asyncio
     async def test_background_queue_full_raises(self, isolated_db, monkeypatch):
-        from agent.runtime import agent_runtime as rt
-        from agent.runtime import TaskState, QueuedTask
-        from agent.errors import TrackBusyError
-        from agent.self_model import build_self_model
+        from agent.kernel.runtime import agent_runtime as rt
+        from agent.kernel.runtime import TaskState, QueuedTask
+        from agent.kernel.errors import TrackBusyError
+        from agent.cognition.self_model import build_self_model
         from agent.actions.registry import registry
 
         sm = await build_self_model(registry)
@@ -301,8 +301,8 @@ class TestBackgroundTimeout:
         self, isolated_db, mock_llm, monkeypatch,
     ):
         """Override per-task timeout to 1s; a never-terminating script exceeds."""
-        from agent.runtime import agent_runtime as rt
-        from agent.audit import get_task
+        from agent.kernel.runtime import agent_runtime as rt
+        from agent.kernel.audit import get_task
 
         # Plan has 1 sub-goal but we make tactical sleep forever by returning
         # action that the real executor doesn't know — loop will keep
@@ -311,7 +311,7 @@ class TestBackgroundTimeout:
         # tactical plan to sleep.
         mock_llm.extend([_strategic(1)])
 
-        from agent.planner import tactical as _tactical_mod
+        from agent.cognition.planner import tactical as _tactical_mod
         async def _slow_plan(**kw):
             await asyncio.sleep(10.0)
             raise RuntimeError("should not reach")
@@ -350,8 +350,8 @@ class TestBackgroundBudget:
     async def test_note_llm_call_uses_background_cap(self, isolated_db, monkeypatch):
         """Background tasks hit the tighter per-task cap."""
         from config import config
-        from agent.runtime import agent_runtime as rt, TaskState
-        from agent.self_model import build_self_model
+        from agent.kernel.runtime import agent_runtime as rt, TaskState
+        from agent.cognition.self_model import build_self_model
         from agent.actions.registry import registry
 
         monkeypatch.setattr(config, "agent_max_llm_calls_per_background_task", 3)
@@ -378,7 +378,7 @@ class TestBroadcastDiscipline:
     @pytest.mark.asyncio
     async def test_background_substate_not_broadcast(self, monkeypatch):
         """set_substate on background logs only — no WS emission."""
-        from agent.runtime import agent_runtime as rt, current_track
+        from agent.kernel.runtime import agent_runtime as rt, current_track
 
         # Capture hub broadcasts.
         captured: list[tuple[str, str, dict]] = []
@@ -406,7 +406,7 @@ class TestBroadcastDiscipline:
     @pytest.mark.asyncio
     async def test_background_boundary_routes_to_background_events(self, monkeypatch):
         """task.started/completed/failed for bg go to `background_events` channel."""
-        from agent.runtime import agent_runtime as rt, current_track
+        from agent.kernel.runtime import agent_runtime as rt, current_track
 
         captured: list[tuple[str, str, dict]] = []
 
@@ -434,7 +434,7 @@ class TestBroadcastDiscipline:
 
     @pytest.mark.asyncio
     async def test_foreground_broadcast_still_uses_agent_stream(self, monkeypatch):
-        from agent.runtime import agent_runtime as rt, current_track
+        from agent.kernel.runtime import agent_runtime as rt, current_track
 
         captured: list[tuple[str, str, dict]] = []
 
@@ -464,7 +464,7 @@ class TestSharedState:
     async def test_self_model_shared_semantics(self, isolated_db, mock_llm):
         """Foreground + background each get a SelfModel built from the same
         registry; emotion/capabilities/etc. reflect the same environment."""
-        from agent.runtime import agent_runtime as rt
+        from agent.kernel.runtime import agent_runtime as rt
         mock_llm.extend([_strategic(1), _strategic(1), _done(), _done()])
 
         await rt.start_task("fg", track="foreground")

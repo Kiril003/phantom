@@ -14,6 +14,7 @@ export interface StartTaskResponse {
   task_id: string;
   started: boolean;
   detail?: string;
+  unsafe_mode?: boolean;
 }
 
 export interface RouterStateSnapshot {
@@ -50,7 +51,15 @@ export interface AgentResumeAsConversationResponse {
 }
 
 export const agentApi = {
-  startTask: (goal: string) => req<StartTaskResponse>('POST', '/agent/task', { goal }),
+  startTask: (goal: string, opts?: { unsafe_mode?: boolean }) =>
+    req<StartTaskResponse>('POST', '/agent/task', {
+      goal,
+      unsafe_mode: !!opts?.unsafe_mode,
+    }),
+  setSafety: (id: string, enabled: boolean) =>
+    req<{ task_id: string; unsafe_mode: boolean }>(
+      'POST', `/agent/task/${id}/safety`, { enabled },
+    ),
   pause: (id: string) => req<{ paused: boolean }>('POST', `/agent/task/${id}/pause`),
   resume: (id: string) => req<{ resumed: boolean }>('POST', `/agent/task/${id}/resume`),
   intervene: (id: string, instruction: string) =>
@@ -78,6 +87,19 @@ export const agentApi = {
   status: () => req<AgentStatusSnapshot>('GET', '/agent/status'),
   feedback: (audit_entry_id: number, rating: 'up' | 'down' | 'comment', comment?: string) =>
     req<{ id: number }>('POST', '/agent/feedback', { audit_entry_id, rating, comment: comment ?? null }),
+  parallelChat: (message: string, taskId?: string) =>
+    req<{ reply: string; task_id: string }>('POST', '/agent/chat', {
+      message,
+      ...(taskId ? { task_id: taskId } : {}),
+    }),
+  getChatThread: (taskId?: string, limit = 40) => {
+    const qs = new URLSearchParams();
+    if (taskId) qs.set('task_id', taskId);
+    qs.set('limit', String(limit));
+    return req<{ task_id: string; messages: Array<{ role: string; content: string; created_at: string | null }> }>(
+      'GET', `/agent/chat/thread?${qs.toString()}`,
+    );
+  },
   // Phase 16 — task report endpoints.
   getReport: (id: string, preferLLM = true) => {
     const qs = new URLSearchParams();
@@ -202,4 +224,14 @@ export const agentApi = {
     req<import('@shared/types').AgentProgressSnapshot>(
       'GET', `/agent/task/${taskId}/progress`,
     ),
+
+  // Phase 29 — 7-Horizon Planner.
+  getHorizons: () => req<{ tree: import('@shared/types').HorizonGoal[] }>('GET', '/agent/will/horizons'),
+  createHorizonGoal: (body: { description: string; horizon_level: number; parent_id?: string; deadline?: string }) =>
+    req<{ id: string }>('POST', '/agent/will/horizons', body),
+
+  // Phase 30 — Org-Chart.
+  getOrgChart: () => req<import('@shared/types').OrgChart>('GET', '/agent/org-chart'),
+  updateRoleOrders: (body: { role_id: string; orders: string }) =>
+    req<{ status: string }>('POST', '/agent/org-chart/orders', body),
 };

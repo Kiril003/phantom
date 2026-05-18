@@ -7,7 +7,7 @@ from __future__ import annotations
 import logging
 from typing import Any, Literal
 
-from pydantic import AliasChoices, Field, model_validator
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 _logger = logging.getLogger(__name__)
@@ -31,7 +31,24 @@ class PhantomConfig(BaseSettings):
     port: int = 8000
     debug: bool = False
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
-    cors_origins: list[str] = ["http://localhost:5173", "http://localhost:8000"]
+    cors_origins: list[str] = [
+        "http://localhost:5173",
+        "http://localhost:8000",
+        "http://localhost",
+        "https://localhost",
+        "capacitor://localhost",
+        "http://phantom.local:5173",
+        "http://phantom.local:8000",
+        "http://phantom.local",
+        "http://158.196.114.238:5173",
+        "http://158.196.114.238:8000",
+        "http://158.196.114.238",
+    ]
+    # Hostname embedded in pairing QR codes. Phones dial back to this
+    # host during /pair/claim. Defaults to mDNS; operators on networks
+    # without mDNS (university WiFi, cellular hotspot, anything where
+    # `phantom.local` doesn't resolve) MUST override via env PAIR_HOST.
+    pair_host: str = "phantom.local"
 
     # ── Database ──────────────────────────────────────────────────────────────
     database_url: str = "sqlite+aiosqlite:///./phantom.db"
@@ -47,19 +64,35 @@ class PhantomConfig(BaseSettings):
 
     # ── AI ────────────────────────────────────────────────────────────────────
     # ai_primary_provider accepts either AI_PRIMARY_PROVIDER or the shorter AI_PROVIDER.
-    ai_primary_provider: Literal["gemini", "ollama"] = Field(
+    ai_primary_provider: Literal["anthropic", "gemini", "ollama"] = Field(
         default="gemini",
         validation_alias=AliasChoices("AI_PRIMARY_PROVIDER", "AI_PROVIDER"),
     )
-    ai_fallback_provider: Literal["gemini", "ollama", "none"] = "ollama"
-    ai_timeout_s: float = 120.0
-    ai_gemini_model: str = "gemini-2.5-flash-lite"
+    ai_fallback_provider: Literal["anthropic", "gemini", "ollama", "none"] = "none"
+    ai_timeout_s: float = 180.0 # Increased for Deep Think models
+    
+    # Tiered Gemini models (Phase 30 upgrade — EXACT API IDs)
+    # 3.1 Pro Preview — Brain & Long Context (Max Power)
+    # 2.5 Pro — Execution (Stable High-End)
+    ai_gemini_model: str = "gemini-2.5-pro"
     ai_gemini_api_key: str = ""
-    ai_ollama_model: str = "llama3.2:3b"
+    
+    # Specific tier overrides
+    ai_planner_model: str = "gemini-3.1-pro-preview"
+    ai_reflector_model: str = "gemini-3.1-pro-preview"
+    ai_tactical_model: str = "gemini-2.5-pro"
+    ai_long_context_model: str = "gemini-3.1-pro-preview"
+
+    # Anthropic Claude
+    ai_anthropic_model: str = "claude-3-7-sonnet-20250219"
+    ai_anthropic_api_key: str = ""
+    
+    ai_ollama_model: str = "llama3.1:8b" # Upgraded from 3b just in case
     ai_ollama_host: str = "http://localhost:11434"
-    ai_ollama_num_ctx: int = 8192
+    ai_ollama_num_ctx: int = 32768
+    
     ai_temperature: float = 0.7
-    ai_max_tokens: int = 2048
+    ai_max_tokens: int = 4096
     ai_top_p: float = 0.9
     ai_system_prompt_extra: str = ""
     ai_response_language: Literal["auto", "uk", "en", "ru"] = "auto"
@@ -67,11 +100,9 @@ class PhantomConfig(BaseSettings):
     ai_initiative_cooldown_s: int = 300
     ai_streaming: bool = True
     # Phase 9.2 — total retries across primary+fallback for tool-use calls.
-    ai_tool_use_max_total_retries: int = 5
+    ai_tool_use_max_total_retries: int = 3
     # Phase 9.2.1 — minimum interval between successive LLM calls per provider.
-    # 3000ms keeps us well under Gemini 2.5-flash free-tier 10 RPM ceiling
-    # while still letting paid-tier deployments raise it via settings.
-    ai_call_min_interval_ms: int = 3000
+    ai_call_min_interval_ms: int = 1000 # Reduced for Flash performance
 
     # Chat (Phase 5) — WS stream emission cadence.
     # Day-4 Wave-2 W-5 (audit U8-PERF-C2): default chat_stream_delay_s
@@ -264,11 +295,17 @@ class PhantomConfig(BaseSettings):
         "sunrise-warm",
         "amber-night",
         "cyberdeck-cold",
+        "pro-console",
         "dark",
         "light",
         "auto",
     ] = "sunrise-warm"
     ui_density: Literal["compact", "normal", "comfortable"] = "normal"
+    # V5 — OPERATOR screen layout mode.
+    # 'conversation': conversational surface is primary center; AgentVitals +
+    #   Tape demoted to collapsed peek strips.
+    # 'telemetry': current dense 3-column layout (Vitals + FocusPanel + Tape).
+    ui_agent_layout: Literal["conversation", "telemetry"] = "conversation"
     # Day-4 Wave-2 W-5 (audit U2-ANIM-C2 + U8-PERF): hardware-tier
     # gate. Frontend reads this and disables backdrop-filter / caps
     # animation framerate / drops AmbientGlows when "low" so weaker
@@ -276,7 +313,7 @@ class PhantomConfig(BaseSettings):
     # Default "mid" matches the Q6A baseline; operators on a fully
     # capable desktop can flip to "high"; CI / VM deploys flip to
     # "low".
-    ui_hardware_tier: Literal["low", "mid", "high"] = "mid"
+    ui_hardware_tier: Literal["low", "mid", "high"] = "low"
     ui_color_cyan: str = "#00D4FF"
     ui_color_warning: str = "#FF6B35"
     ui_color_success: str = "#39FF14"
@@ -360,7 +397,7 @@ class PhantomConfig(BaseSettings):
     # by default; operator must explicitly raise the slider in Settings
     # to authorise MEDIUM actions. Mitigates blast radius until the full
     # linux/dangerous_patterns.py blocklist + UI confirm pipeline lands.
-    agent_risk_tolerance: int = 3            # caps executable actions: 1/3/5/7
+    agent_risk_tolerance: int = 7            # caps executable actions: 1/3/5/7
     # Phase 23-D — when True (default), the risk gate consults the Council
     # BEFORE asking the operator (phone or desktop). A "abort"/"revise"
     # verdict short-circuits the prompt, so the operator never even sees a
@@ -397,7 +434,7 @@ class PhantomConfig(BaseSettings):
     agent_workspace_dir: str = "~/phantom/workspace"
     # Day-4 Wave-2 Y-5 (ADR-SBX-002): default SandboxProfile applied to
     # bash.run + MCP adapter spawns. Closed enum mirrors the
-    # `agent.safety.sandbox.SandboxProfile` Python enum (compute |
+    # `agent.operations.safety.sandbox.SandboxProfile` Python enum (compute |
     # net_observe). `radio_privileged` is intentionally NOT exposed in
     # Settings on Day-4 — it's reserved for the Day-6 BT/Wi-Fi work
     # and toggling it on early would silently re-enable CAP_NET_RAW
@@ -419,6 +456,13 @@ class PhantomConfig(BaseSettings):
     agent_max_llm_calls_per_background_task: int = 10
     agent_warn_llm_calls_per_background_task: int = 6
     agent_background_task_timeout_s: int = 300
+    # V1 limitless — bash caps now config-driven; any cap <=0 means
+    # UNBOUND (no timeout / no truncation / no action / no LLM stop).
+    # agent_unbound_default is the Settings master toggle that zeroes
+    # the action/LLM caps. Sandbox + unsafe_mode are untouched.
+    agent_bash_timeout_s: int = 120
+    agent_bash_output_cap_bytes: int = 16384
+    agent_unbound_default: bool = False
     agent_background_queue_max: int = 20
     # Phase 9.4c audit E1 — foreground queue is never enqueued in current
     # code (foreground refuses when busy) but the deque is bounded so a
@@ -434,6 +478,18 @@ class PhantomConfig(BaseSettings):
     # ask_user precondition before timing out and rejecting the step. Stops
     # tasks from hanging forever if the operator walks away from the console.
     agent_user_consent_timeout_s: int = 300
+    # 2026-05-13 — autonomy switch. When True AND no paired phone has the
+    # "approvals" capability, the loop auto-approves risky actions instead
+    # of falling back to the desktop intervene queue (which currently waits
+    # `agent_user_consent_timeout_s` then rejects). This is what makes a
+    # 20+ hour unattended run possible: without it, the very first MEDIUM-
+    # risk action burns 300s and dies. Phone-paired path is UNAFFECTED —
+    # if a companion is paired the loop still asks the phone and respects
+    # the operator's tap. Hot-reloadable via Settings.
+    #
+    # Default False so a fresh install stays safe by default; the operator
+    # toggles it on for autonomous runs (Settings → Agent → Autonomy).
+    agent_auto_approve_when_no_companion: bool = False
     # Phase 9.3a — structured emotional state decay cadence. Every
     # `agent_emotion_decay_interval_s` seconds a background loop drifts each
     # EmotionVector axis toward its baseline by `agent_emotion_decay_rate`
@@ -469,6 +525,11 @@ class PhantomConfig(BaseSettings):
     # Phase 9.3b — inner monologue channel rate limit (events per second).
     agent_monologue_rate_limit_eps: int = 10
     agent_reflection_every_n_actions: int = 5
+    # V4 — self-synthesizing capability. Max new Action subclasses the agent
+    # may author+sandbox-test+register within a SINGLE task. 0 = disabled.
+    # Each synthesis costs 1 LLM call + 1 sandbox smoke run. Default 3 is a
+    # conservative ceiling that allows real tool-gap filling without runaway.
+    agent_synth_max_per_task: int = 3
     agent_thought_budget_force_reflect_ratio: float = 2.0
     agent_strategic_warn_actions: int = 30
     agent_browser_user_agent: str = (
@@ -572,11 +633,18 @@ class PhantomConfig(BaseSettings):
     # ── Chat tool-use (Phase 17a, audit-2026-04-28 F-01) ──────────────────────
     # The chat path can call data-fetching tools (search_locationhistory,
     # query_temporal_anchors, recall_memory_facts, get_system_metrics,
-    # get_sensor_status) before answering. Off by default; flip on once
-    # the call_with_tools wiring lands in Phase 17b. Per-tool result-row
-    # caps below shape the response size that goes back to the LLM —
-    # higher = more recall but more tokens.
-    chat_tools_enabled: bool = True
+    # get_sensor_status) before answering. Default stays OFF: ordinary
+    # chat should behave like a calm professional assistant and use the
+    # memory/context already hydrated into the prompt. Operators can opt
+    # in when they want extra read-only grounding. Risky/mutating
+    # autonomy still flows through the agent approval gates.
+    chat_tools_enabled: bool = False
+    # Rich response widgets (`respond_chart`, `respond_map`,
+    # `respond_artifact`, etc.) are a separate opt-in from data tools.
+    # Keeping them off by default prevents normal conversation from
+    # turning into half-built UI cards while preserving the catalog for
+    # labs/demo deployments that explicitly enable it.
+    chat_response_widgets_enabled: bool = False
     # Day-4 Wave-2 X-1 (ADR-ORC-001): orchestrator scaffold flag. When
     # OFF (default), routes_chat calls chat_pipeline.run unchanged —
     # back-compat invariant preserved. When ON AND the active provider
@@ -609,6 +677,14 @@ class PhantomConfig(BaseSettings):
     # headroom over the typical case while keeping p99 within the
     # tolerable chat-turn budget.
     chat_tool_max_total_ms: int = 12_000
+    chat_artifacts_enabled: bool = False
+    chat_artifact_html_cap_bytes: int = 262144
+    ai_artifact_model: str = "gemini-3.1-pro"
+    ai_artifact_max_tokens: int = 32768
+    ai_artifact_max_revisions: int = 2
+    # Strategic/reflector planner needs reliable strict-JSON.
+    ai_planner_model: str = "gemini-3.1-pro"
+    ai_planner_max_tokens: int = 8192
 
     # Day-2 (audit-2026-04-29 Tier E): structured JSON log output.
     # Defaults to off so local-dev keeps the human-readable line format
@@ -653,6 +729,17 @@ class PhantomConfig(BaseSettings):
     apply_db_overrides = apply_overrides
 
     # ── Cross-field validators (Phase 9.4c audit §7) ─────────────────────────
+    @field_validator("debug", mode="before")
+    @classmethod
+    def _coerce_debug_env(cls, value: Any) -> Any:
+        if isinstance(value, str):
+            normalized = value.strip().lower()
+            if normalized in {"release", "prod", "production"}:
+                return False
+            if normalized in {"dev", "development"}:
+                return True
+        return value
+
     @model_validator(mode="after")
     def _validate_provider_distinction(self) -> "PhantomConfig":
         """Primary and fallback AI providers must differ unless fallback is

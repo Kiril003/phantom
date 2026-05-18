@@ -55,6 +55,12 @@ class VoiceSay(Action):
     requires_consent: ClassVar[bool] = False
     reversible: ClassVar[bool] = False
 
+    # Piper is the current local TTS runtime; keep a conservative resource
+    # declaration for first-call model load and synthesis.
+    estimated_peak_ram_mb: ClassVar[int] = 512
+    requires_network: ClassVar[bool] = False
+    estimated_wall_seconds: ClassVar[int] = 10
+
     text: str = Field(
         ..., min_length=1, max_length=512,
         description="What to say. Keep short — proactive speech is friction.",

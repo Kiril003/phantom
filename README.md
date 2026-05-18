@@ -1,6 +1,6 @@
 # PHANTOM OS
 
-A live AI assistant for custom hardware. Not a dashboard. Not a chat-bot. An autonomous system with a personality that observes, adapts, anticipates and acts.
+PHANTOM OS is a **Sentient Familiar**: a local-first AI shell that observes context, remembers, anticipates, and acts as a professional autonomous companion. It is not just a dashboard or a chat surface; the chat, voice, memory, agent runtime, and Sunrise UI are one behavioural system.
 
 Targets a [Radxa Dragon Q6A](https://radxa.com/products/dragon/q6a) (Snapdragon QCM6490, Hexagon V68 NPU) paired with an ESP32-S3 sensor hub, running a 7" 1024×600 touchscreen — but the backend deploys cleanly to any Linux box where Gemini or a local Ollama can reach the network.
 
@@ -50,15 +50,16 @@ npm run typecheck && npm run build                      # frontend strict TS + v
 
 The repo's `start-phantom.sh` is the operator's restart helper — it stops both processes, kicks them off again, and curls `/healthz` to confirm the backend is up.
 
-## What ships in v0.19.0-jarvis-online
+## What ships now
 
 | Layer | Status | Notes |
 |---|---|---|
 | Backend (FastAPI · Pydantic 2 · SQLAlchemy 2 async · ChromaDB) | Production | ~1230 pytest green (Day-3 +35) |
 | Frontend (React 18 · Vite 5 · TypeScript strict · Zustand) | Production | strict tsc clean · vite build clean |
-| Voice stack (Vosk → faster-whisper → NPU Whisper → MMS-1B + CTC) | Production | three latency tiers — instant 60-90 ms (NPU), refined 600-1000 ms (CPU) |
-| Gemini → Ollama AI router | Production | quota-aware cooling, retry policy, audit log, `phantom_ai_router_fallthrough_total` metric live |
-| **Phase 17b chat tool-use** (`ai/chat_pipeline.py`) | Opt-in via `chat_tools_enabled` | Bounded one-tool turn: nonced envelope (TM-17B-S1), 4000-char content cap, `output_safety.sanitize` on the final answer (TM-17B-I1), 5-name read-only catalog only via `chat_tool_dispatcher` (TM-17B-E2) |
+| Voice stack (Vosk → faster-whisper → NPU Whisper → MMS-1B + CTC) | Production | STT has instant/refined tiers; TTS currently uses Piper voices. StyleTTS2 is future work, not the active runtime. |
+| Gemini → Ollama AI router | Production | cloud-first when configured, offline-capable fallback through local Ollama, quota-aware cooling, retry policy, audit log |
+| **Chat tool-use** (`ai/chat_pipeline.py`) | Opt-in, read-only bounded tools | Ordinary chat is text-first and uses prompt-hydrated memory/context. Operators can enable extra grounding in memory, system metrics, location history, and sensor status. Mutating/risky autonomy still goes through agent approval gates. |
+| Rich chat widgets/artifacts | Opt-in labs surface | Charts, maps, metric cards, and HTML artifacts are disabled by default so unfinished UI surfaces do not interrupt normal conversation. |
 | Chat tool catalog | Production read-only | search_locationhistory, query_temporal_anchors, recall_memory_facts, get_system_metrics, get_sensor_status |
 | `dispatch/` package (state_broadcaster) | Production | Single subscriber owns WS state-transition broadcast + OLED side effect (closes Day-2 F-02 + F-03 dup) |
 | Auth boundary | Hardened | Default-PIN remote refusal, XFF-aware lockout (`security_trust_xff`), strict JWT `orig_iat` cap, `/refresh` lockout, login-lockout on RFID/PIN |
@@ -75,8 +76,9 @@ The repo's `start-phantom.sh` is the operator's restart helper — it stops both
   default-PIN no longer reachable from the LAN, F-15 lockout
   XFF-aware, F-17 chroma-janitor wired to lifespan, `_probe_chroma`
   pings the client.
-* **Phase 17b** ships behind `chat_tools_enabled` (default off);
-  operators flip it on per deploy. Tag `v0.19.0-jarvis-online`.
+* **Concept coherence pass** makes PHANTOM's canonical identity explicit:
+  Sentient Familiar, local-first privacy posture, proactive but approval-aware
+  autonomy, and Sunrise/Familiar state language.
 * **Settings UI auto-render** — Day-2 + Day-3 config keys now
   surface in `routes_settings.CATEGORY_SPEC` so the operator can
   flip them without touching `.env`.
@@ -100,7 +102,7 @@ The non-negotiables are documented in `CLAUDE.md`:
 ## Where to read next
 
 - **`docs/AUTONOMOUS_DAY_PLAN.md`** — the canonical day-plan that produced v0.18.0-saas-base.
-- **`docs/AUTONOMOUS_DAY_PLAN_DAY3.md`** — Day-3 multi-agent plan that produced v0.19.0-jarvis-online.
+- **`docs/AUTONOMOUS_DAY_PLAN_DAY3.md`** — historical Day-3 multi-agent plan.
 - **`docs/audit-2026-04-28/FINDINGS.md`** — Day-1 multi-perspective audit (69 findings).
 - **`docs/audit-2026-04-29-day2/FINDINGS.md`** — Day-2 audit (24 closures).
 - **`docs/audit-2026-04-30-day3/FINDINGS.md`** — Day-3 audit (12 Tier-A + 4 TM-17B Critical mitigations).

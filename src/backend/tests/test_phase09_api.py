@@ -39,7 +39,7 @@ async def client(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "agent_workspace_dir", str(tmp_path))
 
     # Reset runtime
-    from agent.runtime import agent_runtime
+    from agent.kernel.runtime import agent_runtime
     agent_runtime.foreground_slot = None
     agent_runtime.task_runner = None
     agent_runtime.controls.reset()
@@ -93,7 +93,7 @@ def mock_llm(monkeypatch):
             })
         return queue.pop(0)
 
-    from agent.planner import _llm
+    from agent.cognition.planner import _llm
     monkeypatch.setattr(_llm, "_call", fake_call)
     return queue
 
@@ -116,11 +116,12 @@ class TestAPI:
         existing task_id. We bypass the LLM entirely by pre-occupying the
         foreground slot — no real planner call is needed to exercise the
         conflict code path."""
-        from agent.runtime import agent_runtime, TaskState
+        from agent.kernel.runtime import agent_runtime, TaskState
         from agent.schemas import SelfModel
 
         agent_runtime.foreground_slot = TaskState(
             id="preoccupied",
+            user_id="u1",
             goal="placeholder",
             track="foreground",
             status="running",
@@ -139,10 +140,10 @@ class TestAPI:
     @pytest.mark.asyncio
     async def test_list_tasks_filtered(self, client):
         # Seed two tasks directly via the audit helper
-        from agent.audit import create_task_row, update_task_status
-        await create_task_row("done-1", "g1")
+        from agent.kernel.audit import create_task_row, update_task_status
+        await create_task_row("u-test", "done-1", "g1")
         await update_task_status("done-1", "done", finished=True)
-        await create_task_row("paused-1", "g2")
+        await create_task_row("u-test", "paused-1", "g2")
         await update_task_status("paused-1", "paused", paused_reason="uvicorn_restart")
 
         r = await client.get("/api/v1/agent/tasks?status=paused")
@@ -153,13 +154,13 @@ class TestAPI:
 
     @pytest.mark.asyncio
     async def test_audit_endpoint_returns_entries(self, client):
-        from agent.audit import create_task_row, write_audit_entry
+        from agent.kernel.audit import create_task_row, write_audit_entry
         from agent.schemas import ActionResult, InnerMonologue, PlanStep
-        await create_task_row("Tapi", "goal")
+        await create_task_row("u-test", "Tapi", "goal")
         for i in range(3):
             step = PlanStep(step_idx=i, action="fs.read", args={"path": f"p{i}"},
                             intent="i", monologue=InnerMonologue(confidence=1.0))
-            await write_audit_entry(task_id="Tapi", step=step,
+            await write_audit_entry(user_id="u-test", task_id="Tapi", step=step,
                                     result=ActionResult(ok=True, elapsed_ms=1), risk_level=1)
         r = await client.get("/api/v1/agent/audit?task_id=Tapi&limit=10")
         assert r.status_code == 200
@@ -168,12 +169,12 @@ class TestAPI:
 
     @pytest.mark.asyncio
     async def test_feedback_persists(self, client):
-        from agent.audit import create_task_row, write_audit_entry
+        from agent.kernel.audit import create_task_row, write_audit_entry
         from agent.schemas import ActionResult, InnerMonologue, PlanStep
-        await create_task_row("Tfb", "goal")
+        await create_task_row("u-test", "Tfb", "goal")
         step = PlanStep(step_idx=0, action="fs.read", args={"path": "x"},
                         intent="i", monologue=InnerMonologue())
-        aid = await write_audit_entry(task_id="Tfb", step=step,
+        aid = await write_audit_entry(user_id="u-test", task_id="Tfb", step=step,
                                       result=ActionResult(ok=True, elapsed_ms=1), risk_level=1)
         r = await client.post("/api/v1/agent/feedback",
                               json={"audit_entry_id": aid, "rating": "up", "comment": None})

@@ -4,6 +4,26 @@ const config: Config = {
   content: ['./index.html', './src/**/*.{js,ts,jsx,tsx}'],
   theme: {
     extend: {
+      colors: {
+        primary: 'var(--primary)',
+        'primary-soft': 'var(--primary-soft)',
+        'primary-deep': 'var(--primary-deep)',
+        'primary-shadow': 'var(--primary-shadow)',
+        accent: 'var(--accent)',
+        'ink-primary': 'var(--ink-primary)',
+        'ink-secondary': 'var(--ink-secondary)',
+        'ink-muted': 'var(--ink-muted)',
+        'ink-faint': 'var(--ink-faint)',
+        'ink-inverse': 'var(--ink-inverse)',
+        'glass-border': 'var(--glass-border)',
+        'glass-panel': 'var(--glass-panel)',
+        'glass-card': 'var(--glass-card)',
+        'glass-elevated': 'var(--glass-elevated)',
+        'signal-ok': 'var(--signal-ok)',
+        'signal-warn': 'var(--signal-warn)',
+        'signal-alert': 'var(--signal-alert)',
+        'signal-info': 'var(--signal-info)',
+      },
       fontFamily: {
         display: ['Space Grotesk', 'Outfit', 'system-ui', 'sans-serif'],
         sans: ['Space Grotesk', 'Outfit', 'system-ui', 'sans-serif'],

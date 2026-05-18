@@ -54,17 +54,17 @@ async def test_emergency_stop_interrupts_probe_sleep(isolated_db, monkeypatch):
     parallel coroutine sets emergency_stop after 100ms. enter_blocked_quota
     must return False within ~250ms total, not 10s.
     """
-    from agent.audit import create_task_row
-    from agent.runtime import AgentRuntime, TaskState
+    from agent.kernel.audit import create_task_row
+    from agent.kernel.runtime import AgentRuntime, TaskState
     from agent.schemas import SelfModel
     from config import config
 
     task_id = str(uuid.uuid4())
-    await create_task_row(task_id, "interrupt test", "foreground")
+    await create_task_row("u-test", task_id, "interrupt test", "foreground")
 
     runtime = AgentRuntime()
     state = TaskState(
-        id=task_id, goal="interrupt test",
+        id=task_id, user_id="u-test", goal="interrupt test",
         track="foreground", status="running",
         self_model=SelfModel(),
     )
@@ -101,17 +101,17 @@ async def test_probe_recovers_after_full_interval(isolated_db, monkeypatch):
     Happy path: probe fails once, waits for full interval, then recovers.
     Ensures the new wait_for logic still allows normal cadence.
     """
-    from agent.audit import create_task_row
-    from agent.runtime import AgentRuntime, TaskState
+    from agent.kernel.audit import create_task_row
+    from agent.kernel.runtime import AgentRuntime, TaskState
     from agent.schemas import SelfModel
     from config import config
 
     task_id = str(uuid.uuid4())
-    await create_task_row(task_id, "cadence test", "foreground")
+    await create_task_row("u-test", task_id, "cadence test", "foreground")
 
     runtime = AgentRuntime()
     state = TaskState(
-        id=task_id, goal="cadence test",
+        id=task_id, user_id="u-test", goal="cadence test",
         track="foreground", status="running",
         self_model=SelfModel(),
     )

@@ -787,8 +787,19 @@ def _apply_runtime_side_effect(key: str, value: Any) -> None:
         try:
             from core.context_engine import context_engine
             context_engine.set_ai_provider(value)
+            
+            # Reset cooling for the new primary so it's usable immediately
+            from ai.provider import ai_router
+            ai_router.reset_cooling(value)
         except Exception as exc:
-            logger.debug("context_engine.set_ai_provider failed: %s", exc)
+            logger.debug("context_engine.set_ai_provider or reset_cooling failed: %s", exc)
+    elif key in ("ai_gemini_api_key", "ai_ollama_host", "ai_anthropic_api_key"):
+        # If credentials or host changed, clear cooling for that provider
+        try:
+            from ai.provider import ai_router
+            provider = key.split("_")[1] # e.g. "gemini"
+            ai_router.reset_cooling(provider)
+        except Exception: pass
     elif key == "system_hostname":
         # Keep the running logger formatter in sync so subsequent records carry
         # the new hostname without a restart.

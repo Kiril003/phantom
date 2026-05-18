@@ -72,8 +72,8 @@ async def check_and_emit(lat: float, lon: float) -> Optional[dict]:
         "content": top["content"][:160],
     }
     try:
-        from agent.proactive import get_loop
-        from agent.proactive_triggers import ProactiveTrigger, ProactiveTriggerKind
+        from agent.cognition.proactive.loop import get_loop
+        from agent.cognition.proactive.triggers import ProactiveTrigger, ProactiveTriggerKind
         loop = get_loop()
         if loop is not None:
             loop.push_trigger(ProactiveTrigger(

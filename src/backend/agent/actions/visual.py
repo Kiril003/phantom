@@ -56,6 +56,12 @@ class VisualFindTarget(Action):
     risk_level: ClassVar[RiskLevel] = RiskLevel.SAFE
     reversible: ClassVar[bool] = True
 
+    # Block B — resource declarations. OmniParser V2 model weights
+    # require ~700 MB RAM on first load; network used for Gemini grounding.
+    estimated_peak_ram_mb: ClassVar[int] = 700
+    requires_network: ClassVar[bool] = True
+    estimated_wall_seconds: ClassVar[int] = 20
+
     description: str = Field(
         description="Natural-language description of the target element "
                     "('кнопка Замовити', 'червоний x у правому верхньому "
@@ -140,6 +146,12 @@ class VisualClickTarget(Action):
     risk_level: ClassVar[RiskLevel] = RiskLevel.LOW
     reversible: ClassVar[bool] = False
 
+    # Block B — resource declarations (same as VisualFindTarget — uses the
+    # same OmniParser + Gemini grounding stack).
+    estimated_peak_ram_mb: ClassVar[int] = 700
+    requires_network: ClassVar[bool] = True
+    estimated_wall_seconds: ClassVar[int] = 20
+
     description: str = Field(
         description="Natural-language description of the click target.",
         min_length=2, max_length=300,
@@ -206,6 +218,11 @@ class VisualWaitFor(Action):
     risk_level: ClassVar[RiskLevel] = RiskLevel.SAFE
     reversible: ClassVar[bool] = True
 
+    # Block B — resource declarations (polling uses OmniParser + Gemini).
+    estimated_peak_ram_mb: ClassVar[int] = 700
+    requires_network: ClassVar[bool] = True
+    estimated_wall_seconds: ClassVar[int] = 20
+
     description: str = Field(min_length=2, max_length=300)
     expected_type: str = Field(default="any", max_length=40)
     timeout_s: float = Field(default=10.0, gt=0.0, le=120.0)
@@ -266,6 +283,11 @@ class VisualSceneDescribe(Action):
     name: ClassVar[str] = "visual.scene_describe"
     risk_level: ClassVar[RiskLevel] = RiskLevel.SAFE
     reversible: ClassVar[bool] = True
+
+    # Block B — resource declarations (OmniParser V2 full scene parse).
+    estimated_peak_ram_mb: ClassVar[int] = 700
+    requires_network: ClassVar[bool] = True
+    estimated_wall_seconds: ClassVar[int] = 20
 
     max_elements: int = Field(default=30, ge=1, le=100)
 

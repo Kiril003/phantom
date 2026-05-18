@@ -285,7 +285,7 @@ class TestNearRememberedTrigger:
             def push_trigger(self, t): self.pushed.append(t)
 
         loop = _FakeLoop()
-        monkeypatch.setattr("agent.proactive.get_loop", lambda: loop)
+        monkeypatch.setattr("agent.cognition.proactive.loop.get_loop", lambda: loop)
 
         payload = await check_and_emit(50.4500, 30.5234)
         assert payload is not None
@@ -304,7 +304,7 @@ class TestNearRememberedTrigger:
             def push_trigger(self, t): self.pushed.append(t)
 
         loop = _FakeLoop()
-        monkeypatch.setattr("agent.proactive.get_loop", lambda: loop)
+        monkeypatch.setattr("agent.cognition.proactive.loop.get_loop", lambda: loop)
 
         await check_and_emit(50.4500, 30.5234)
         # Second call within dedup window: no new trigger.

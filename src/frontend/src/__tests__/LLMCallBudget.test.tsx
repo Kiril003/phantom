@@ -7,7 +7,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { LLMCallBudget } from '../components/agent/LLMCallBudget';
+import { LLMCallBudget } from '../components/agent/status/LLMCallBudget';
 
 describe('<LLMCallBudget />', () => {
   it('renders count and cap', () => {

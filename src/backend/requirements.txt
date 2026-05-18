@@ -46,8 +46,15 @@ cryptography==43.0.0
 # JS-free for QR encoding (~25 KB lib, no add-on packages on the wire).
 segno==1.6.1
 
+# Phase ecosystem (2026-05-04) — mDNS / DNS-SD service advertisement so
+# PHANTOM Companion phones discover the host on the local Wi-Fi without
+# scanning a stale-IP QR. Phone-side picks up `_phantom._tcp.local.` via
+# the in-app Kotlin MdnsPlugin (NsdManager + multicast lock).
+zeroconf>=0.148,<1.0
+
 # System monitoring
 psutil==6.0.0
+platformdirs==4.3.6
 
 # Agent (Phase 09.1+) — browser.navigate / browser.extract actions
 playwright>=1.47.0
@@ -65,6 +72,15 @@ cachetools==7.0.6
 # Phase 24-A — YAML manifests for the OmniMap layer registry. Pure-Python
 # parser; no native deps. Used by `geo.layer_registry.LayerRegistry.load`.
 PyYAML==6.0.2
+
+# Vertical V10 — Mission reporting / PDF / HTML dashboard
+# markdown: converts ledger.md to HTML for weasyprint and dashboard.
+markdown==3.7
+# weasyprint: HTML→PDF renderer (optional — production code gracefully degrades
+# to reportlab or plain-text if not installed). NOT installed by default in CI.
+# weasyprint==62.3
+# reportlab: plain-PDF fallback when weasyprint unavailable (optional).
+# reportlab==4.2.5
 
 # Testing
 pytest==8.3.2

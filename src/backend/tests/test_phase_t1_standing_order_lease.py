@@ -13,8 +13,8 @@ Coverage:
    claimed_at).
 2. Default values: NULL/NULL on insert (Day-3 back-compat invariant).
 3. config.agent_standing_orders_lease_ttl_s default = 300.
-4. agent.audit.task_status returns "missing" for unknown task_id.
-5. agent.audit.task_status returns "done"/"error"/"cancelled"/"running"
+4. agent.kernel.audit.task_status returns "missing" for unknown task_id.
+5. agent.kernel.audit.task_status returns "done"/"error"/"cancelled"/"running"
    from an AgentTask row.
 6. recover_stale_leases finds rows older than lease_ttl AND with
    in_flight_task_id set.
@@ -67,20 +67,20 @@ class TestSchemaAndConfig:
 class TestAuditTaskStatus:
     @pytest.mark.asyncio
     async def test_unknown_task_returns_missing(self):
-        from agent.audit import task_status
+        from agent.kernel.audit import task_status
 
         assert await task_status("no-such-task-id") == "missing"
 
     @pytest.mark.asyncio
     async def test_empty_id_returns_missing(self):
-        from agent.audit import task_status
+        from agent.kernel.audit import task_status
 
         assert await task_status("") == "missing"
 
     @pytest.mark.asyncio
     async def test_known_task_status_round_trip(self, auth_root_user):
         """Insert AgentTask + read its status."""
-        from agent.audit import create_task_row, task_status, update_task_status
+        from agent.kernel.audit import create_task_row, task_status, update_task_status
 
         tid = f"t1-trip-{uuid.uuid4().hex[:8]}"
         await create_task_row(tid, goal="trip", track="foreground")
@@ -101,9 +101,9 @@ class TestRecoverStaleLeases:
         """Stale lease + AgentTask.done → lease cleared, count==1."""
         from sqlalchemy import select
 
-        from agent.audit import create_task_row, update_task_status
-        from agent.runtime import AgentRuntime
-        from agent.standing_orders.runner import StandingOrderRunner
+        from agent.kernel.audit import create_task_row, update_task_status
+        from agent.kernel.runtime import AgentRuntime
+        from agent.operations.standing_orders.runner import StandingOrderRunner
         from db.database import get_session
         from db.models import StandingOrder
 
@@ -148,8 +148,8 @@ class TestRecoverStaleLeases:
         by the original dispatch)."""
         from sqlalchemy import select
 
-        from agent.runtime import AgentRuntime
-        from agent.standing_orders.runner import StandingOrderRunner
+        from agent.kernel.runtime import AgentRuntime
+        from agent.operations.standing_orders.runner import StandingOrderRunner
         from db.database import get_session
         from db.models import StandingOrder
 
@@ -186,9 +186,9 @@ class TestRecoverStaleLeases:
         leaves it alone even if the clock says stale."""
         from sqlalchemy import select
 
-        from agent.audit import create_task_row
-        from agent.runtime import AgentRuntime
-        from agent.standing_orders.runner import StandingOrderRunner
+        from agent.kernel.audit import create_task_row
+        from agent.kernel.runtime import AgentRuntime
+        from agent.operations.standing_orders.runner import StandingOrderRunner
         from db.database import get_session
         from db.models import StandingOrder
 
@@ -231,8 +231,8 @@ class TestRecoverStaleLeases:
         """A lease claimed RECENTLY (within ttl) is not even queried."""
         from sqlalchemy import select
 
-        from agent.runtime import AgentRuntime
-        from agent.standing_orders.runner import StandingOrderRunner
+        from agent.kernel.runtime import AgentRuntime
+        from agent.operations.standing_orders.runner import StandingOrderRunner
         from db.database import get_session
         from db.models import StandingOrder
 

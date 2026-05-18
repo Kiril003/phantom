@@ -27,27 +27,27 @@ import pytest
 
 class TestActionSpecModels:
     def test_speak_action_required_fields(self):
-        from agent.standing_orders.actions import SpeakAction
+        from agent.operations.standing_orders.actions import SpeakAction
 
         a = SpeakAction(text="hello world")
         assert a.kind == "speak"
         assert a.voice is None
 
     def test_notify_action_required_fields(self):
-        from agent.standing_orders.actions import NotifyAction
+        from agent.operations.standing_orders.actions import NotifyAction
 
         a = NotifyAction(title="Heads up", body="nothing burning")
         assert a.kind == "notify"
         assert a.target_user_id is None
 
     def test_task_action_required_fields(self):
-        from agent.standing_orders.actions import TaskAction
+        from agent.operations.standing_orders.actions import TaskAction
 
         a = TaskAction(goal="run nightly summary")
         assert a.kind == "task"
 
     def test_webhook_action_defaults_to_post(self):
-        from agent.standing_orders.actions import WebhookAction
+        from agent.operations.standing_orders.actions import WebhookAction
 
         a = WebhookAction(url="https://api.example.com/hook")
         assert a.kind == "webhook"
@@ -59,14 +59,14 @@ class TestActionSpecModels:
 
 class TestParseAction:
     def test_speak_round_trip(self):
-        from agent.standing_orders.actions import SpeakAction, parse_action
+        from agent.operations.standing_orders.actions import SpeakAction, parse_action
 
         out = parse_action({"kind": "speak", "text": "hi"})
         assert isinstance(out, SpeakAction)
         assert out.text == "hi"
 
     def test_notify_round_trip(self):
-        from agent.standing_orders.actions import NotifyAction, parse_action
+        from agent.operations.standing_orders.actions import NotifyAction, parse_action
 
         out = parse_action(
             {"kind": "notify", "title": "T", "body": "B"}
@@ -75,14 +75,14 @@ class TestParseAction:
         assert out.body == "B"
 
     def test_task_round_trip(self):
-        from agent.standing_orders.actions import TaskAction, parse_action
+        from agent.operations.standing_orders.actions import TaskAction, parse_action
 
         out = parse_action({"kind": "task", "goal": "do stuff"})
         assert isinstance(out, TaskAction)
         assert out.goal == "do stuff"
 
     def test_webhook_round_trip(self):
-        from agent.standing_orders.actions import WebhookAction, parse_action
+        from agent.operations.standing_orders.actions import WebhookAction, parse_action
 
         out = parse_action(
             {
@@ -97,8 +97,8 @@ class TestParseAction:
     def test_legacy_goal_shorthand_promotes_to_task(self):
         """Day-3 rows: {"goal": "..."} sans `kind` → TaskAction +
         one DeprecationWarning per process."""
-        from agent.standing_orders import actions as mod
-        from agent.standing_orders.actions import TaskAction, parse_action
+        from agent.operations.standing_orders import actions as mod
+        from agent.operations.standing_orders.actions import TaskAction, parse_action
 
         # Reset the one-time warning sentinel so this test is
         # repeatable in any order.
@@ -122,7 +122,7 @@ class TestParseAction:
         )
 
     def test_missing_kind_no_goal_raises(self):
-        from agent.standing_orders.actions import parse_action
+        from agent.operations.standing_orders.actions import parse_action
 
         with pytest.raises(ValueError):
             parse_action({})
@@ -130,13 +130,13 @@ class TestParseAction:
             parse_action({"text": "no kind"})
 
     def test_invalid_kind_raises(self):
-        from agent.standing_orders.actions import parse_action
+        from agent.operations.standing_orders.actions import parse_action
 
         with pytest.raises(ValueError):
             parse_action({"kind": "totally_made_up", "x": 1})
 
     def test_non_dict_raises(self):
-        from agent.standing_orders.actions import parse_action
+        from agent.operations.standing_orders.actions import parse_action
 
         with pytest.raises(ValueError):
             parse_action("oops")  # type: ignore[arg-type]
@@ -147,7 +147,7 @@ class TestParseAction:
 
 class TestActionKindForRow:
     def test_typed_kind_returned(self):
-        from agent.standing_orders.actions import action_kind_for_row
+        from agent.operations.standing_orders.actions import action_kind_for_row
 
         assert (
             action_kind_for_row(json.dumps({"kind": "speak", "text": "x"}))
@@ -155,22 +155,22 @@ class TestActionKindForRow:
         )
 
     def test_legacy_goal_returns_task(self):
-        from agent.standing_orders.actions import action_kind_for_row
+        from agent.operations.standing_orders.actions import action_kind_for_row
 
         assert action_kind_for_row(json.dumps({"goal": "x"})) == "task"
 
     def test_corrupt_json_returns_task(self):
-        from agent.standing_orders.actions import action_kind_for_row
+        from agent.operations.standing_orders.actions import action_kind_for_row
 
         assert action_kind_for_row("{not-json") == "task"
 
     def test_empty_string_returns_task(self):
-        from agent.standing_orders.actions import action_kind_for_row
+        from agent.operations.standing_orders.actions import action_kind_for_row
 
         assert action_kind_for_row("") == "task"
 
     def test_unknown_kind_returns_task(self):
-        from agent.standing_orders.actions import action_kind_for_row
+        from agent.operations.standing_orders.actions import action_kind_for_row
 
         assert action_kind_for_row(json.dumps({"kind": "alien"})) == "task"
 

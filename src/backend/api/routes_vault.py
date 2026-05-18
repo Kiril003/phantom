@@ -45,6 +45,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from db.database import get_db
 from db.models import User, VaultAuditEntry, VaultCard
 from security.auth import get_current_user
+from security.device_auth import get_user_or_device_user
 from security.vault_crypto import (
     InvalidVaultToken, decrypt_field, encrypt_field,
 )
@@ -239,7 +240,7 @@ async def list_cards(
     kind: Optional[str] = Query(default=None, max_length=32),
     tag: Optional[str] = Query(default=None, max_length=64),
     include_deleted: bool = Query(default=False),
-    me: User = Depends(get_current_user),
+    me: User = Depends(get_user_or_device_user),
     db: AsyncSession = Depends(get_db),
 ) -> CardsListResponse:
     stmt = select(VaultCard).where(VaultCard.owner_user_id == me.id)
@@ -260,7 +261,7 @@ async def list_cards(
 @router.get("/cards/{card_id}", response_model=CardOut)
 async def get_card(
     card_id: str,
-    me: User = Depends(get_current_user),
+    me: User = Depends(get_user_or_device_user),
     db: AsyncSession = Depends(get_db),
 ) -> CardOut:
     card = await _load_owned_card(db, card_id=card_id, user_id=me.id)
@@ -270,7 +271,7 @@ async def get_card(
 @router.post("/cards", response_model=CardOut, status_code=status.HTTP_201_CREATED)
 async def create_card(
     payload: CardCreate,
-    me: User = Depends(get_current_user),
+    me: User = Depends(get_user_or_device_user),
     db: AsyncSession = Depends(get_db),
 ) -> CardOut:
     _validate_kind(payload.kind)
@@ -300,7 +301,7 @@ async def create_card(
 async def patch_card(
     card_id: str,
     payload: CardPatch,
-    me: User = Depends(get_current_user),
+    me: User = Depends(get_user_or_device_user),
     db: AsyncSession = Depends(get_db),
 ) -> CardOut:
     card = await _load_owned_card(db, card_id=card_id, user_id=me.id)
@@ -345,7 +346,7 @@ async def patch_card(
 )
 async def delete_card(
     card_id: str,
-    me: User = Depends(get_current_user),
+    me: User = Depends(get_user_or_device_user),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     card = await _load_owned_card(db, card_id=card_id, user_id=me.id)
@@ -360,7 +361,7 @@ async def delete_card(
 @router.post("/cards/{card_id}/restore", response_model=CardOut)
 async def restore_card(
     card_id: str,
-    me: User = Depends(get_current_user),
+    me: User = Depends(get_user_or_device_user),
     db: AsyncSession = Depends(get_db),
 ) -> CardOut:
     card = await _load_owned_card(
@@ -408,7 +409,7 @@ class RevealResponse(BaseModel):
 async def reveal_field(
     card_id: str,
     payload: RevealRequest,
-    me: User = Depends(get_current_user),
+    me: User = Depends(get_user_or_device_user),
     db: AsyncSession = Depends(get_db),
 ) -> RevealResponse:
     """Decrypt and return the plaintext for ONE secret field on ONE card.
@@ -491,11 +492,118 @@ async def reveal_field(
     )
 
 
+# ─── Card-context AI thread ────────────────────────────────────────────────
+#
+# Lightweight "Ask AI about this card" — companion needs an in-card AI
+# surface that's tighter than the global chat. The endpoint takes the
+# user's free-form question and one card id, builds a non-secret
+# preamble (kind + label + plain field values + tags), feeds it to the
+# active AI provider, and returns the answer + the active provider
+# name. Secret fields are NEVER threaded into the preamble; the model
+# only sees what the operator could see in list view.
+
+
+class CardAskIn(BaseModel):
+    """Body for `POST /vault/cards/{id}/ask`. `question` is the user's
+    natural-language question. `history` is optional prior turns so the
+    operator can keep a conversation about one card without re-quoting
+    it. Each history entry is `{role: "user"|"assistant", content: str}`."""
+
+    question: str = Field(..., min_length=1, max_length=2000)
+    history: list[dict[str, str]] = Field(default_factory=list)
+
+
+class CardAskOut(BaseModel):
+    answer: str
+    provider: str
+    tokens_used: int = 0
+    latency_ms: int = 0
+
+
+def _build_card_preamble(card: VaultCard) -> str:
+    """Compose a system-prompt preamble that gives the model just
+    enough card context to answer questions without leaking secrets."""
+    try:
+        fields = json.loads(card.fields_json or "{}")
+    except json.JSONDecodeError:
+        fields = {}
+    try:
+        tags = json.loads(getattr(card, "tags_json", "[]") or "[]")
+    except json.JSONDecodeError:
+        tags = []
+    safe_lines: list[str] = []
+    for name, value in fields.items():
+        if isinstance(value, dict) and value.get("secret") is True:
+            safe_lines.append(f"- {name}: ••••• (secret, hidden)")
+        elif isinstance(value, dict):
+            safe_lines.append(f"- {name}: {value.get('v', '')}")
+        else:
+            safe_lines.append(f"- {name}: {value}")
+    fields_block = "\n".join(safe_lines) if safe_lines else "(no fields)"
+    tags_block = ", ".join(tags) if tags else "—"
+    return (
+        "Ти — асистент PHANTOM. Користувач питає про одну особисту картку у "
+        "своєму Vault. Картка зашифрована end-to-end на пристрої власника, "
+        "ти бачиш тільки публічні поля. Поясни, допоможи спланувати дію "
+        "(заповнити форму, надіслати, оновити), не вигадуй пароль чи ключ "
+        "якого тебе НЕ показали — якщо потрібен secret-польове значення, "
+        "відкажи, що операторові треба зробити reveal вручну.\n\n"
+        f"Картка `{card.label}` (kind={card.kind}, tags=[{tags_block}]):\n"
+        f"{fields_block}\n"
+    )
+
+
+@router.post("/cards/{card_id}/ask", response_model=CardAskOut)
+async def ask_card(
+    card_id: str,
+    body: CardAskIn,
+    me: User = Depends(get_user_or_device_user),
+    db: AsyncSession = Depends(get_db),
+) -> CardAskOut:
+    """AI thread anchored to one Vault card. Companion surfaces this
+    as an inline expander on the card detail; desktop opens it in a
+    side panel."""
+    card = (
+        await db.execute(
+            select(VaultCard).where(
+                VaultCard.id == card_id,
+                VaultCard.owner_user_id == me.id,
+                VaultCard.deleted_at.is_(None),
+            )
+        )
+    ).scalar_one_or_none()
+    if card is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, detail={"code": "card_not_found"})
+
+    from ai.provider import ai_router
+
+    preamble = _build_card_preamble(card)
+    try:
+        response = await ai_router.generate(
+            user_message=body.question,
+            system_prompt=preamble,
+            history=body.history or [],
+            user_id=me.id,
+        )
+    except Exception as exc:  # pragma: no cover — guard against provider blowups
+        logger.warning("vault.ask_card AI failure: %s", exc)
+        raise HTTPException(
+            status.HTTP_503_SERVICE_UNAVAILABLE, detail={"code": "ai_unavailable"}
+        ) from exc
+
+    return CardAskOut(
+        answer=response.content,
+        provider=response.provider or "unknown",
+        tokens_used=response.tokens_used,
+        latency_ms=response.latency_ms,
+    )
+
+
 @router.get("/audit", response_model=AuditResponse)
 async def list_audit(
     card_id: Optional[str] = Query(default=None),
     limit: int = Query(default=100, ge=1, le=500),
-    me: User = Depends(get_current_user),
+    me: User = Depends(get_user_or_device_user),
     db: AsyncSession = Depends(get_db),
 ) -> AuditResponse:
     stmt = select(VaultAuditEntry).where(VaultAuditEntry.user_id == me.id)

@@ -7,16 +7,6 @@ the outcome as a structured Observation the parent can reflect on.
 
 Risk = LOW: spawning is recoverable (we cap depth + concurrency); the
 sub-agent's own actions go through their own risk gate independently.
-
-Failure modes that the LLM should learn to handle:
-  • depth_exceeded   — try doing the work yourself instead.
-  • spawn_disabled   — agent_team_enabled is False; same advice.
-  • timeout          — sub-agent took too long; you may retry with
-                       narrower goal or longer timeout.
-  • failed           — sub-agent crashed or returned outcome=failed;
-                       summary carries the error class.
-  • done             — happy path; details.action_counts +
-                       last_observation are usable as inputs.
 """
 from __future__ import annotations
 
@@ -32,22 +22,6 @@ from .base import Action, ActionContext
 class AgentDelegate(Action):
     """Spawn a child sub-agent with a goal + role + constraints, await
     its completion, return the structured report as the action result.
-
-    The result.output shape:
-        {
-          "child_task_id": str,
-          "role": str,
-          "outcome": "done|failed|timeout|stopped|depth_exceeded|...",
-          "summary": str,
-          "details": {
-            "action_counts": {...},
-            "step_idx": int,
-            "sub_goals_done": int,
-            "last_observation": str,
-            "depth": int,
-          },
-          "elapsed_s": float,
-        }
     """
 
     name: ClassVar[str] = "agent.delegate"
@@ -86,6 +60,10 @@ class AgentDelegate(Action):
         ge=10, le=3600,
         description="Wall-clock deadline. Bounded so a stuck child can't hang the parent.",
     )
+    branch: str | None = Field(
+        default=None,
+        description="Optional git branch name to isolate this sub-agent's work. If not provided, inherits parent's branch."
+    )
 
     async def execute(self, ctx: ActionContext) -> ActionResult:
         runtime = ctx.runtime
@@ -96,12 +74,6 @@ class AgentDelegate(Action):
                 error_class="no_runtime",
             )
 
-        # Resolve the parent TaskState. The runtime keeps track of the
-        # currently-active task per asyncio context (foreground +
-        # background slots + child sub-agents register in `_inflight`).
-        # We use `runtime.current_task` which respects the per-track
-        # ContextVar — this works even when the action runs inside a
-        # sub-agent's own loop (recursive delegate).
         try:
             parent = runtime.current_task
         except Exception:
@@ -133,6 +105,7 @@ class AgentDelegate(Action):
                 role=self.role,
                 constraints=self.constraints,
                 timeout_s=self.timeout_s,
+                branch=self.branch,
             )
         except DelegationDepthExceeded as exc:
             return ActionResult(
@@ -156,9 +129,6 @@ class AgentDelegate(Action):
                 elapsed_ms=int((time.monotonic() - started) * 1000),
             )
 
-        # Await with a small slack on top of the timeout so the parent
-        # doesn't surface "no completion event" before the runner's own
-        # timeout fired and emitted its synthetic report.
         report = await await_subagent(
             child_id, timeout_s=float(self.timeout_s) + 5.0,
         )

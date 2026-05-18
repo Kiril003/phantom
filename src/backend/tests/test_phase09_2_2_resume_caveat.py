@@ -45,15 +45,15 @@ async def isolated_db(monkeypatch):
 
 async def _seed_task_with_checkpoint(task_id="t-resume", with_browser=True):
     """Insert a task row + checkpoint + optional browser audit row."""
-    from agent.checkpoints import build as build_cp
-    from agent.audit import (
+    from agent.kernel.checkpoints import build as build_cp
+    from agent.kernel.audit import (
         create_task_row, write_audit_entry, save_checkpoint, update_task_status,
     )
     from agent.schemas import (
         ActionResult, InnerMonologue, PlanStep, SelfModel, SubGoal, ThoughtBudget,
     )
 
-    await create_task_row(task_id, "navigate to example", "foreground")
+    await create_task_row("u-test", task_id, "navigate to example", "foreground")
     await update_task_status(task_id, "paused", paused_reason="user_paused")
 
     if with_browser:
@@ -70,7 +70,7 @@ async def _seed_task_with_checkpoint(task_id="t-resume", with_browser=True):
             ),
         )
         nav_result = ActionResult(ok=True, output={"loaded": True}, elapsed_ms=42)
-        await write_audit_entry(task_id=task_id, step=nav_step, result=nav_result, risk_level=1)
+        await write_audit_entry(user_id="u-test", task_id=task_id, step=nav_step, result=nav_result, risk_level=1)
 
     self_model = SelfModel()
     sub = SubGoal(description="d", rationale="r", expected_actions=1, acceptance_criteria="")
@@ -86,7 +86,7 @@ async def _seed_task_with_checkpoint(task_id="t-resume", with_browser=True):
         last_reflection=None,
         step_idx=1,
     )
-    cp_id = await save_checkpoint(cp)
+    cp_id = await save_checkpoint("u-test", cp)
     return task_id, cp_id
 
 
@@ -98,7 +98,7 @@ async def _seed_task_with_checkpoint(task_id="t-resume", with_browser=True):
 class TestResumeWithBrowserHistory:
     @pytest.mark.asyncio
     async def test_resume_adds_observation_and_emits_event(self, isolated_db, monkeypatch):
-        from agent.runtime import AgentRuntime
+        from agent.kernel.runtime import AgentRuntime
 
         rt = AgentRuntime()
         # Don't actually start the loop.
@@ -112,7 +112,7 @@ class TestResumeWithBrowserHistory:
         monkeypatch.setattr(rt, "_broadcast", fake_broadcast)
 
         task_id, cp_id = await _seed_task_with_checkpoint(with_browser=True)
-        ok = await rt.resume_from_checkpoint(task_id, cp_id)
+        ok = await rt.resume_from_checkpoint("u-test", task_id, cp_id)
         assert ok is True
 
         assert rt.foreground_slot is not None
@@ -136,7 +136,7 @@ class TestResumeWithBrowserHistory:
 class TestResumeWithoutBrowserHistory:
     @pytest.mark.asyncio
     async def test_resume_no_caveat_when_no_browser_actions(self, isolated_db, monkeypatch):
-        from agent.runtime import AgentRuntime
+        from agent.kernel.runtime import AgentRuntime
 
         rt = AgentRuntime()
         async def fake_create_task(coro, name=None):
@@ -151,7 +151,7 @@ class TestResumeWithoutBrowserHistory:
         task_id, cp_id = await _seed_task_with_checkpoint(
             task_id="t-no-browser", with_browser=False
         )
-        ok = await rt.resume_from_checkpoint(task_id, cp_id)
+        ok = await rt.resume_from_checkpoint("u-test", task_id, cp_id)
         assert ok is True
         observations = rt.foreground_slot.observations
         hits = [o for o in observations if "hint:browser_reset_after_resume" in o.entities]
@@ -167,6 +167,6 @@ class TestResumeWithoutBrowserHistory:
 
 class TestTacticalPromptResumeHint:
     def test_prompt_mentions_browser_reset_pattern(self):
-        from agent.planner.tactical import _SYSTEM_PROMPT_UA
+        from agent.cognition.planner.tactical import _SYSTEM_PROMPT_UA
         assert "hint:browser_reset_after_resume" in _SYSTEM_PROMPT_UA
         assert "browser.navigate" in _SYSTEM_PROMPT_UA

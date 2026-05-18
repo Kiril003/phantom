@@ -287,11 +287,23 @@ class TestAIHubRouteState:
 class TestAIHubDispatchStub:
     @pytest.mark.asyncio
     async def test_dispatch_raises_not_implemented(self):
-        from ai.hub import AIHub
+        from ai.hub import AIHub, ProviderCapability
 
         h = AIHub()
+        # Register something so pick() doesn't raise NoCapabilityError
+        h.register(
+            ProviderCapability(
+                provider="stub",
+                task_class="vision",
+                modality="image",
+                latency_ms_p50=100.0,
+                quality_tier="balanced",
+                locality="local",
+                available=True,
+            )
+        )
         with pytest.raises(NotImplementedError):
-            await h.dispatch("chat", {})
+            await h.dispatch("vision", {})
 
 
 # ─────────────────────────────────────────────────── singleton ──

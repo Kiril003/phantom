@@ -149,6 +149,11 @@ class SeeScreen(Action):
     requires_consent: ClassVar[bool] = False
     reversible: ClassVar[bool] = True  # observational
 
+    # Block B — resource declarations.
+    estimated_peak_ram_mb: ClassVar[int] = 600
+    requires_network: ClassVar[bool] = True
+    estimated_wall_seconds: ClassVar[int] = 15
+
     focus: str = Field(
         default="",
         description=(
@@ -275,6 +280,179 @@ class SeeScreen(Action):
         side = (description.get("summary") or "").strip()
         side = side[:120] + ("…" if len(side) > 120 else "")
         side_effects = [f"saw screen: {side}"] if side else ["saw screen (empty summary)"]
+
+        return ActionResult(
+            ok=True,
+            output=out,
+            side_effects=side_effects,
+            elapsed_ms=int((time.monotonic() - t0) * 1000),
+        )
+
+
+class SeeCamera(Action):
+    """Capture a frame from the physical camera and describe it via Gemini.
+
+    Day-NN — closes the audit-flagged Level-4 gap: until now agent
+    vision was limited to the desktop screen. `vision.see_camera`
+    grabs a single PNG frame off the host USB/MIPI camera (OpenCV
+    backend) and runs it through the same multimodal pipeline as
+    `vision.see_screen`, returning the same `{summary, people_present,
+    objects, lighting, notable_text}` shape.
+
+    Privacy contract is the same as the rest of the camera surface:
+    capture is on-demand and one-shot — we never hold the camera
+    between calls, so the operator's video apps + the face-tracking
+    pipeline keep working.
+    """
+
+    name: ClassVar[str] = "vision.see_camera"
+    risk_level: ClassVar[RiskLevel] = RiskLevel.SAFE
+    requires_consent: ClassVar[bool] = False
+    reversible: ClassVar[bool] = True  # observational
+
+    # Block B — resource declarations.
+    estimated_peak_ram_mb: ClassVar[int] = 600
+    requires_network: ClassVar[bool] = True
+    estimated_wall_seconds: ClassVar[int] = 15
+
+    focus: str = Field(
+        default="",
+        description=(
+            "Optional focus question. Empty uses the default "
+            "'describe-everything' prompt; otherwise narrows the "
+            "description to this question (e.g. 'who is in frame?')."
+        ),
+    )
+    device_index: int = Field(
+        default=0,
+        ge=0,
+        le=9,
+        description=(
+            "Camera device index (0 = default webcam). Bump to 1+ if "
+            "the host has multiple cameras and you want a specific one."
+        ),
+    )
+    warmup_frames: int = Field(
+        default=3,
+        ge=1,
+        le=10,
+        description=(
+            "How many frames to read before keeping one — most webcams "
+            "ship a black/auto-exposure-adjusting frame or two right "
+            "after open(). Three is the safe default."
+        ),
+    )
+    include_image_b64: bool = Field(
+        default=False,
+        description=(
+            "If True, return the captured PNG as base64 alongside the "
+            "description so an operator-facing UI can display it."
+        ),
+    )
+
+    async def execute(self, ctx: ActionContext) -> ActionResult:
+        t0 = time.monotonic()
+
+        # --- credentials gate -------------------------------------------------
+        from config import config as cfg
+
+        api_key = (cfg.ai_gemini_api_key or "").strip()
+        model = (cfg.ai_gemini_model or "").strip()
+        if not api_key:
+            return ActionResult(
+                ok=False,
+                output={
+                    "reason": "no_api_key",
+                    "hint": (
+                        "vision.see_camera needs ai_gemini_api_key set in "
+                        "settings — only Gemini supports vision so far."
+                    ),
+                },
+                side_effects=[],
+                elapsed_ms=int((time.monotonic() - t0) * 1000),
+            )
+        if not model:
+            return ActionResult(
+                ok=False,
+                output={"reason": "no_model", "hint": "ai_gemini_model is empty"},
+                side_effects=[],
+                elapsed_ms=int((time.monotonic() - t0) * 1000),
+            )
+
+        # --- camera capture ---------------------------------------------------
+        try:
+            from vision.camera_capture import (
+                CameraCaptureError,
+                CameraFrame,
+                capture as camera_capture,
+            )
+            frame = await camera_capture(
+                device_index=self.device_index,
+                warmup_frames=self.warmup_frames,
+            )
+        except Exception as exc:
+            logger.warning("vision: camera capture import/run failed: %s", exc)
+            return ActionResult(
+                ok=False,
+                output={"reason": "capture_failed", "error": str(exc)},
+                side_effects=[],
+                elapsed_ms=int((time.monotonic() - t0) * 1000),
+            )
+
+        if isinstance(frame, CameraCaptureError):
+            return ActionResult(
+                ok=False,
+                output={
+                    "reason": "capture_failed",
+                    "error": frame.error,
+                    "tried": frame.tried,
+                },
+                side_effects=[],
+                elapsed_ms=int((time.monotonic() - t0) * 1000),
+            )
+        if not isinstance(frame, CameraFrame):
+            return ActionResult(
+                ok=False,
+                output={"reason": "capture_unknown_type"},
+                side_effects=[],
+                elapsed_ms=int((time.monotonic() - t0) * 1000),
+            )
+
+        # --- prompt + vision call --------------------------------------------
+        focus_question = self.focus.strip() or _DEFAULT_FOCUS
+        prompt = f"{focus_question}\n\n{_RESPONSE_SCHEMA_HINT}"
+
+        try:
+            description = await _call_gemini_vision(
+                frame.png_bytes, prompt, model=model, api_key=api_key,
+            )
+        except Exception as exc:
+            logger.warning("vision: Gemini call failed (camera): %s", exc)
+            return ActionResult(
+                ok=False,
+                output={"reason": "vision_call_failed", "error": str(exc)},
+                side_effects=[],
+                elapsed_ms=int((time.monotonic() - t0) * 1000),
+            )
+
+        out: dict[str, Any] = {
+            "description": description,
+            "frame": {
+                "width": frame.width,
+                "height": frame.height,
+                "strategy": frame.strategy,
+                "captured_at": frame.captured_at,
+            },
+            "model": model,
+            "source": "camera",
+        }
+        if self.include_image_b64:
+            out["image_b64"] = base64.b64encode(frame.png_bytes).decode("ascii")
+            out["image_mime"] = "image/png"
+
+        side = (description.get("summary") or "").strip()
+        side = side[:120] + ("…" if len(side) > 120 else "")
+        side_effects = [f"saw camera: {side}"] if side else ["saw camera (empty summary)"]
 
         return ActionResult(
             ok=True,

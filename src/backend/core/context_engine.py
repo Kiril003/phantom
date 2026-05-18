@@ -12,6 +12,7 @@ from collections import deque
 from datetime import datetime, timezone
 from typing import Optional
 
+import socket
 import psutil
 
 from config import config
@@ -19,6 +20,29 @@ from sensors.sensor_parser import SensorBatch, RadarData
 from core.event_bus import event_bus
 
 logger = logging.getLogger(__name__)
+
+def _check_internet() -> bool:
+    try:
+        # Connect to a reliable IP (Google DNS)
+        socket.create_connection(("8.8.8.8", 53), timeout=1.0)
+        return True
+    except (OSError, socket.timeout):
+        return False
+
+def _check_wifi() -> bool:
+    # On Linux, /proc/net/wireless presence or checking interfaces via psutil
+    try:
+        addrs = psutil.net_if_addrs()
+        # Look for typical wifi interface names or any with wireless stats
+        for iface in ["wlan0", "wlp", "wifi0"]:
+            if any(iface in name for name in addrs):
+                # Simple check: has IP address
+                for addr in addrs.get(iface, []):
+                    if addr.family == socket.AF_INET:
+                        return True
+        return False
+    except Exception:
+        return False
 
 # ── Breathing state thresholds ─────────────────────────────────────────────────
 _BREATHING_STATES = [
@@ -112,9 +136,9 @@ def _empty_snapshot() -> dict:
             "last_interaction_ago_s": 999,
             "last_state_change_ago_s": 0,
             "mood_trend": "stable",
-            "active_timers": 0,
             "pending_events_1h": 0,
         },
+        "last_input_method": "none",
         "memory_hints": [],
         # Phase 9.4c-qw fix #3 — best-effort nearby OSM features cache
         # populated by resolve_localization(). Empty until the resolver
@@ -148,6 +172,7 @@ class ContextEngine:
     def __init__(self) -> None:
         self._snapshot: dict = _empty_snapshot()
         self._history: deque[dict] = deque(maxlen=720)   # 6 min @ 500ms
+        self._hearing_buffer: deque[dict] = deque(maxlen=20) # Audio transcripts
         self._start_time = time.monotonic()
         # Audit-2026-04-28 F-05: backdate so first tick reports 999 s idle
         # (matches _empty_snapshot default), letting idle guards trip
@@ -170,6 +195,12 @@ class ContextEngine:
         self._nearby_cache_data: list[dict] = []
 
         self._lock = asyncio.Lock()
+
+        # Connectivity & Slow fields state
+        self._internet_available = False
+        self._wifi_connected = False
+        self._pending_events_1h = 0
+        self._last_slow_refresh = 0.0
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -231,8 +262,19 @@ class ContextEngine:
             "role": role,
         }
 
-    def record_interaction(self) -> None:
+    def record_interaction(self, method: str = "voice") -> None:
         self._last_interaction_ts = time.monotonic()
+        self._snapshot["last_input_method"] = method
+
+    def record_heard_speech(self, text: str) -> None:
+        if not text:
+            return
+        now = time.time()
+        self._hearing_buffer.append({"text": text.strip(), "ts": now})
+
+    def get_recent_hearing(self, window_s: int = 30) -> list[str]:
+        now = time.time()
+        return [item["text"] for item in self._hearing_buffer if now - item["ts"] <= window_s]
 
     def set_ai_provider(self, provider: str) -> None:
         self._ai_provider = provider
@@ -258,6 +300,10 @@ class ContextEngine:
         enc = batch.encoder
         if enc is None:
             return
+            
+        if enc.delta != 0 or enc.button or enc.long_press:
+            self.record_interaction(method="encoder")
+            
         self._snapshot["encoder"] = {
             "position": enc.position,
             "delta": enc.delta,
@@ -269,6 +315,10 @@ class ContextEngine:
         btns = batch.buttons
         if btns is None:
             return
+            
+        if btns.any_pressed:
+            self.record_interaction(method="touch")
+            
         self._snapshot["buttons"] = {
             "rgb_states": list(btns.rgb_states),
             "any_pressed": btns.any_pressed,
@@ -435,6 +485,9 @@ class ContextEngine:
             nearby = await self._refresh_nearby(float(cur_lat), float(cur_lon))
             async with self._lock:
                 self._snapshot["nearby"] = nearby
+                if nearby:
+                    self._snapshot["where"]["place_name"] = nearby[0]["name"]
+                    self._snapshot["where"]["place_known"] = True
 
     def _apply_env(self, batch: SensorBatch) -> None:
         e = batch.env
@@ -455,15 +508,12 @@ class ContextEngine:
             cpu, ram, disk = 0.0, 0.0, 0.0
 
         uptime = time.monotonic() - self._start_time
-        # Reconcile the cached provider with the live config each tick so a
-        # Settings → AI primary change propagates to the snapshot (and thus
-        # the StatusBar) within one 500 ms broadcast cycle. AIRouter still
-        # calls set_ai_provider() after a response, which briefly surfaces
-        # the actual responder (useful when primary failed and fallback
-        # answered); the next tick converges back to the configured primary.
-        configured = config.ai_primary_provider
-        if self._ai_provider != configured:
-            self._ai_provider = configured
+        
+        # Day-4 Z-3: consult the router for the truly active responder.
+        # This property now polls AIHub for dynamic routing decisions.
+        from ai.provider import ai_router
+        self._ai_provider = ai_router.active_provider_name
+        
         self._snapshot["system"].update({
             "state": self._system_state,
             "uptime_s": int(uptime),
@@ -471,7 +521,70 @@ class ContextEngine:
             "ram_percent": ram,
             "disk_percent": disk,
             "ai_provider": self._ai_provider,
+            "internet_available": self._internet_available,
+            "wifi_connected": self._wifi_connected,
         })
+
+    async def refresh_slow_context(self) -> None:
+        """Update connectivity and DB-heavy metrics (every 30-60s)."""
+        now = time.monotonic()
+        if (now - self._last_slow_refresh) < 30.0:
+            return
+
+        # 1. Connectivity
+        self._internet_available = await asyncio.to_thread(_check_internet)
+        self._wifi_connected = _check_wifi()
+
+        # 2. Database lookups (Events in next 1h & First visit)
+        try:
+            from db.database import get_session
+            from db.models import CalendarEvent, User, LocationHistory
+            from sqlalchemy import select, and_
+            from datetime import datetime, timedelta, timezone
+
+            # Pick first user if not authenticated (common for single-user kiosk)
+            user_id = self._snapshot["who"].get("user_id")
+            if not user_id:
+                async with get_session() as db:
+                    stmt = select(User).order_by(User.created_at.asc()).limit(1)
+                    u = (await db.execute(stmt)).scalar_one_or_none()
+                    user_id = u.id if u else None
+
+            if user_id:
+                t0 = datetime.now(tz=timezone.utc)
+                t1 = t0 + timedelta(hours=1)
+
+                async with get_session() as db:
+                    # Events
+                    stmt_ev = select(CalendarEvent).where(
+                        and_(
+                            CalendarEvent.user_id == user_id,
+                            CalendarEvent.start_time >= t0,
+                            CalendarEvent.start_time <= t1
+                        )
+                    )
+                    res_ev = await db.execute(stmt_ev)
+                    self._pending_events_1h = len(res_ev.scalars().all())
+
+                    # First Visit (bounding box ~500m)
+                    lat = self._snapshot["where"].get("lat")
+                    lon = self._snapshot["where"].get("lon")
+                    if lat is not None and lon is not None:
+                        stmt_loc = select(LocationHistory).where(
+                            and_(
+                                LocationHistory.user_id == user_id,
+                                LocationHistory.lat.between(lat - 0.005, lat + 0.005),
+                                LocationHistory.lon.between(lon - 0.005, lon + 0.005),
+                                LocationHistory.timestamp < (t0 - timedelta(days=1))
+                            )
+                        ).limit(1)
+                        res_loc = await db.execute(stmt_loc)
+                        self._snapshot["where"]["first_visit"] = (res_loc.scalar_one_or_none() is None)
+        except Exception as exc:
+            logger.debug("Slow context DB refresh failed: %s", exc)
+            self._pending_events_1h = 0
+
+        self._last_slow_refresh = now
 
     def _update_time(self) -> None:
         now = datetime.now(tz=timezone.utc)
@@ -521,6 +634,7 @@ class ContextEngine:
             "last_interaction_ago_s": interaction_ago,
             "last_state_change_ago_s": state_change_ago,
             "mood_trend": trend,
+            "pending_events_1h": self._pending_events_1h,
         })
 
 

@@ -384,6 +384,7 @@ export function PhantomFamiliar() {
           >
             <Familiar3D
               pose={manifestation.pose}
+              emotion={manifestation.emotion}
               pointAngle={anchor.pointAngle}
               pointLength={anchor.pointLength}
               onLoaded={() => useFamiliarStore.getState().startTimer(manifestation.id)}

@@ -10,6 +10,7 @@ export type ResponseForm =
   | 'terminal'
   | 'code'
   | 'metric_cards'
+  | 'artifact'
   | 'mixed';
 
 // ─── Scene primitives — Day-4 Block W-1 (ADR-CS-001 / ADR-CS-002) ─────────────
@@ -28,14 +29,25 @@ export type ResponseForm =
 // `response_formatter.scene_kind_for_form()` mapping, (d) extend pixel-snapshot
 // suite. No "stringly typed" backdoors.
 
-/** Closed enum, Day-4. New kinds require ADR amendment. */
+/** Closed enum, Day-4 + phase-28-A (chart/diagram) + companion-v2-phase-0 (artifact). New kinds require
+ *  ADR amendment. */
 export type SceneKind =
   | 'text'
   | 'list'
   | 'map-pin'
   | 'plan'
   | 'code-preview'
-  | 'identity-card';
+  | 'identity-card'
+  | 'chart'
+  | 'diagram'
+  | 'artifact';
+
+export type ArtifactCapability =
+  | 'read:context'
+  | 'read:sensors'
+  | 'read:memory'
+  | 'read:state'
+  | 'action:tools';
 
 /** Reveal choreography; lives on <ChatScene>, never on individual panels. */
 export type RevealPolicy = 'sequential' | 'cascade' | 'instant';
@@ -53,7 +65,10 @@ export type ScenePanelKind =
   | 'map-pin'
   | 'plan-step'
   | 'code-preview'
-  | 'identity-card';
+  | 'identity-card'
+  | 'chart'
+  | 'diagram'
+  | 'artifact';
 
 export type ScenePanel =
   | { id: string; kind: 'text'; data: { markdown: string } }
@@ -110,6 +125,51 @@ export type ScenePanel =
           value: string;
           sensitive?: boolean;
         }>;
+      };
+    }
+  /* phase-28-A — chart panel mirrors ChartResponse data shape so the
+     existing Recharts renderer can be wrapped with no schema drift. */
+  | {
+      id: string;
+      kind: 'chart';
+      data: {
+        chart_type: 'line' | 'bar' | 'area' | 'pie';
+        title?: string;
+        rows: Array<Record<string, unknown>>;
+        x_key?: string;
+        y_keys?: string[];
+        colors?: string[];
+      };
+    }
+  /* phase-28-A — diagram panel mirrors DiagramResponse data shape so
+     the existing d3 force/tree/flow renderer can be wrapped. */
+  | {
+      id: string;
+      kind: 'diagram';
+      data: {
+        kind?: 'force' | 'tree' | 'flow';
+        title?: string;
+        nodes: Array<{
+          id: string;
+          label?: string;
+          group?: string | number;
+          value?: number;
+        }>;
+        links: Array<{
+          source: string;
+          target: string;
+          value?: number;
+          label?: string;
+        }>;
+      };
+    }
+  | {
+      id: string;
+      kind: 'artifact';
+      data: {
+        html: string;
+        title: string;
+        capabilities: ArtifactCapability[];
       };
     };
 
@@ -479,6 +539,22 @@ export type ChatToolScene =
  */
 export type ChatScene = ChatSceneComposer | ChatToolScene;
 
+// ─── V3 progressive artifact render — additive WS event ──────────────────────
+//
+// Emitted by the backend over the 'chat' WS channel (type
+// 'scene.artifact.progress') during ArtifactStudio generation. The panel
+// subscribes and reveals progressively; the final committed scene envelope is
+// unchanged (back-compat invariant). htmlPreview is absent for the
+// 'critiquing' phase (no new html yet).
+
+export type ArtifactPhase = 'draft' | 'critiquing' | 'polishing' | 'done';
+
+export interface ArtifactProgressEvent {
+  phase: ArtifactPhase;
+  /** Live HTML snapshot; absent during 'critiquing'. */
+  htmlPreview?: string;
+}
+
 export interface ChatMessage {
   id: string;
   session_id: string;
@@ -514,7 +590,9 @@ export interface ChatAttachment {
     | 'map_markers'
     | 'terminal_output'
     | 'code_block'
-    | 'metric_card';
+    | 'metric_card'
+    | 'artifact_data'
+    | 'scene';
   data: Record<string, unknown>;
 }
 

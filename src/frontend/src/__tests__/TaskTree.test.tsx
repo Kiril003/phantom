@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { TaskTree } from '../components/agent/TaskTree';
+import { TaskTree } from '../components/agent/workspace/TaskTree';
 import type { AgentSubGoal } from '@shared/types';
 
 const subGoals: AgentSubGoal[] = [

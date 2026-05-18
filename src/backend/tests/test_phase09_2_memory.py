@@ -24,7 +24,7 @@ os.environ.setdefault("PHANTOM_SERIAL_ENABLED", "false")
 async def isolated_collection(monkeypatch):
     """Each test gets a unique ChromaDB collection so they can't see each other."""
     from config import config
-    from agent.memory.embedder import wipe
+    from agent.cognition.memory.embedder import wipe
     name = f"agent_episodes_test_{uuid.uuid4().hex[:12]}"
     monkeypatch.setattr(config, "agent_episodic_collection", name)
     yield name
@@ -67,7 +67,7 @@ async def isolated_db(monkeypatch):
 class TestEmbedder:
     @pytest.mark.asyncio
     async def test_collection_round_trip(self, isolated_collection):
-        from agent.memory.embedder import get_collection, count
+        from agent.cognition.memory.embedder import get_collection, count
         coll = await get_collection()
         assert coll is not None
         # Fresh collection starts empty.
@@ -75,7 +75,7 @@ class TestEmbedder:
 
     @pytest.mark.asyncio
     async def test_uses_phase3_chromadb_singletons(self, isolated_collection):
-        from agent.memory.embedder import get_collection
+        from agent.cognition.memory.embedder import get_collection
         from memory.strategic_memory import _get_client, _get_ef
         coll = await get_collection()
         # Same client process-wide — confirms Phase 3 instance is reused.
@@ -94,8 +94,8 @@ class TestEmbedder:
 class TestSeeds:
     @pytest.mark.asyncio
     async def test_write_episode_persists_to_chroma(self, isolated_collection):
-        from agent.memory.seeds import write_episode
-        from agent.memory.embedder import count
+        from agent.cognition.memory.seeds import write_episode
+        from agent.cognition.memory.embedder import count
         ep = await write_episode(
             task_id="t-write-1", goal="read /etc/hostname",
             outcome="done", summary="прочитав файл /etc/hostname успішно",
@@ -106,8 +106,8 @@ class TestSeeds:
 
     @pytest.mark.asyncio
     async def test_write_episode_idempotent(self, isolated_collection):
-        from agent.memory.seeds import write_episode
-        from agent.memory.embedder import count
+        from agent.cognition.memory.seeds import write_episode
+        from agent.cognition.memory.embedder import count
         for _ in range(3):
             await write_episode(
                 task_id="t-idem", goal="g", outcome="done",
@@ -117,7 +117,7 @@ class TestSeeds:
 
     @pytest.mark.asyncio
     async def test_compose_summary_falls_back_when_llm_unreachable(self, monkeypatch):
-        from agent.memory import seeds
+        from agent.cognition.memory import seeds
 
         class _BrokenRouter:
             async def generate(self, *a, **k):
@@ -143,14 +143,14 @@ class TestSeeds:
 class TestRecall:
     @pytest.mark.asyncio
     async def test_recall_empty_returns_empty(self, isolated_collection):
-        from agent.memory.recall import recall
+        from agent.cognition.memory.recall import recall
         out = await recall("anything")
         assert out == []
 
     @pytest.mark.asyncio
     async def test_recall_returns_top_k(self, isolated_collection):
-        from agent.memory.recall import recall
-        from agent.memory.seeds import write_episode
+        from agent.cognition.memory.recall import recall
+        from agent.cognition.memory.seeds import write_episode
 
         await write_episode(task_id="a", goal="weather in Ostrava", outcome="done",
                             summary="знайшов погоду в Острові", action_counts={"web.search": 1})
@@ -167,7 +167,7 @@ class TestRecall:
 
     @pytest.mark.asyncio
     async def test_format_episodes_for_prompt_handles_empty(self):
-        from agent.memory.recall import format_episodes_for_prompt
+        from agent.cognition.memory.recall import format_episodes_for_prompt
         assert format_episodes_for_prompt([]) == ""
 
 
@@ -181,8 +181,8 @@ class TestStrategicWithMemory:
     async def test_strategic_prompt_includes_past_episodes(
         self, monkeypatch, isolated_collection
     ):
-        from agent.memory.seeds import write_episode
-        from agent.planner import strategic, _llm
+        from agent.cognition.memory.seeds import write_episode
+        from agent.cognition.planner import strategic, _llm
         from agent.schemas import SelfModel
 
         await write_episode(
@@ -211,7 +211,7 @@ class TestStrategicWithMemory:
     async def test_strategic_prompt_omits_section_when_empty(
         self, monkeypatch, isolated_collection
     ):
-        from agent.planner import strategic, _llm
+        from agent.cognition.planner import strategic, _llm
         from agent.schemas import SelfModel
 
         captured: list[str] = []
@@ -241,9 +241,9 @@ class TestBackfill:
     async def test_backfill_all_imports_sql_seeds(
         self, isolated_db, isolated_collection
     ):
-        from agent.audit import write_memory_seed
-        from agent.memory.backfill import backfill_all
-        from agent.memory.embedder import count
+        from agent.kernel.audit import write_memory_seed
+        from agent.cognition.memory.backfill import backfill_all
+        from agent.cognition.memory.embedder import count
 
         await write_memory_seed(
             task_id="seed-1", goal="g1", outcome="done",
@@ -268,7 +268,7 @@ class TestBackfill:
     async def test_backfill_if_behind_skips_when_in_sync(
         self, isolated_db, isolated_collection
     ):
-        from agent.memory.backfill import backfill_if_behind
+        from agent.cognition.memory.backfill import backfill_if_behind
         # Empty DB, empty collection → nothing to do
         result = await backfill_if_behind()
         assert result is None
@@ -284,7 +284,7 @@ class TestSelfRecallAction:
     async def test_self_recall_returns_chroma_episodes(self, isolated_collection):
         from agent.actions.self_introspect import SelfRecall
         from agent.actions.base import ActionContext
-        from agent.memory.seeds import write_episode
+        from agent.cognition.memory.seeds import write_episode
 
         await write_episode(
             task_id="recall-test-1", goal="read hostname",

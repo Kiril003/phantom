@@ -100,7 +100,7 @@ class TestTaskStateDelegationFields:
         """A normally-spawned (operator-initiated) task must default to
         depth=0, no parent, no role — so existing code paths that don't
         touch delegation are unchanged."""
-        from agent.runtime import TaskState
+        from agent.kernel.runtime import TaskState
         from agent.schemas import SelfModel
         state = TaskState(
             id="t-1",
@@ -120,7 +120,7 @@ class TestTaskStateDelegationFields:
 def _make_parent_state(*, depth: int = 0):
     """Build a minimal parent TaskState for spawn tests. We don't run a
     real loop — the spawn is mocked at the runner level."""
-    from agent.runtime import TaskState
+    from agent.kernel.runtime import TaskState
     from agent.schemas import SelfModel
     return TaskState(
         id=str(uuid.uuid4()),
@@ -174,7 +174,7 @@ class TestNotifyAwaitRoundTrip:
     async def test_notify_publishes_to_subscribers(self) -> None:
         """notify_subagent_completed → event_bus.emit → await_subagent
         unblocks with the report."""
-        from agent.runtime import TaskState
+        from agent.kernel.runtime import TaskState
         from agent.schemas import SelfModel
         from agent.team.spawn import (
             await_subagent, notify_subagent_completed,
@@ -217,7 +217,7 @@ class TestNotifyAwaitRoundTrip:
         """A task that wasn't spawned by another (parent_task_id=None)
         must NOT publish a completion event so the channel stays clean
         for the operator's foreground tasks."""
-        from agent.runtime import TaskState
+        from agent.kernel.runtime import TaskState
         from agent.schemas import SelfModel
         from agent.team.spawn import notify_subagent_completed
         from core.event_bus import event_bus as bus

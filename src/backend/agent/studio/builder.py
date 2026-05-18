@@ -3,7 +3,7 @@ Phase 17b — Conversational BuilderSession.
 
 PHANTOM walks the operator through creating a CustomAgent in chat. The session
 is a state machine: each step asks one focused question (re-using
-`agent.needs.InfoNeed`), the user answers, the next step's question is
+`agent.cognition.will.needs.InfoNeed`), the user answers, the next step's question is
 prepared with auto-suggested options that depend on the running draft.
 
 Pipeline:

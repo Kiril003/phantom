@@ -1,16 +1,19 @@
 import { useEffect } from 'react';
 import { wsClient, type WSMessage } from '../services/websocket';
 import { useAgentStore } from '../stores/agentStore';
+import { useMissionStore } from '../stores/missionStore';
+import { useSystemStore } from '../stores/systemStore';
 import { agentApi } from '../services/agentApi';
 import type { AgentEvent, AgentEventType } from '@shared/types';
 
 /**
  * Subscribe to the `agent.stream` WS channel and route every event into the
- * agent store. Auto-reconnect comes for free from wsClient — we only need to
- * surface the connection state.
+ * agent and mission stores. Auto-reconnect comes for free from wsClient —
+ * we only need to surface the connection state.
  */
 export function useAgentStream(): void {
-  const handleEvent = useAgentStore((s) => s.handleEvent);
+  const handleAgentEvent = useAgentStore((s) => s.handleEvent);
+  const handleMissionEvent = useMissionStore((s) => s.handleEvent);
   const setWSConnected = useAgentStore((s) => s.setWSConnected);
 
   useEffect(() => {
@@ -29,8 +32,24 @@ export function useAgentStream(): void {
         ts: msg.ts ?? Date.now(),
         payload: (msg.data ?? {}) as Record<string, unknown>,
       };
-      handleEvent(event);
+      handleAgentEvent(event);
+      handleMissionEvent(event);
     });
+
+    const offMonologue = wsClient.on('inner_monologue.stream', (msg: WSMessage) => {
+      // Phase 14 — extract endocrine state from monologue events
+      if (msg.type === 'emotion_shift' || msg.type === 'reflection') {
+        const endocrine = (msg.data as any)?.endocrine || (msg.data as any)?.state;
+        if (endocrine && typeof endocrine === 'object') {
+          useSystemStore.getState().setSentience({
+            cortisol: endocrine.cortisol ?? 0.2,
+            dopamine: endocrine.dopamine ?? 0.5,
+            oxytocin: endocrine.oxytocin ?? 0.5
+          });
+        }
+      }
+    });
+
     const offConnect = wsClient.onConnect(() => setWSConnected(true));
     const offDisconnect = wsClient.onDisconnect(() => setWSConnected(false));
 
@@ -38,8 +57,9 @@ export function useAgentStream(): void {
 
     return () => {
       offChannel();
+      offMonologue();
       offConnect();
       offDisconnect();
     };
-  }, [handleEvent, setWSConnected]);
+  }, [handleAgentEvent, handleMissionEvent, setWSConnected]);
 }

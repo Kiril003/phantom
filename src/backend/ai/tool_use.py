@@ -16,12 +16,20 @@ failure as an observation.
 from __future__ import annotations
 
 from enum import StrEnum
-from typing import Any, Protocol, runtime_checkable
+from typing import TYPE_CHECKING, Any, Protocol, runtime_checkable
 
 from pydantic import BaseModel, Field
 
-from agent.actions.registry import ActionRegistry
 from agent.schemas import RiskLevel
+
+if TYPE_CHECKING:
+    # Annotation-only. `from __future__ import annotations` (above) keeps all
+    # annotations as strings, so this symbol is never needed at runtime.
+    # Importing it eagerly creates a circular import:
+    # agent.actions.registry → ask_user → cognition.will → cognition.planner
+    # → tactical → ai.tool_use → (back here). Deferring to TYPE_CHECKING
+    # breaks that back-edge with zero behaviour change.
+    from agent.actions.registry import ActionRegistry
 
 
 # ── Schemas ────────────────────────────────────────────────────────────────────

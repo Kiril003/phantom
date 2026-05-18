@@ -24,7 +24,7 @@ Hard guarantees (see CONTRACTS_R1.md SandboxEvent + spec):
   * timeout 30 s — watchdog SIGKILLs the session group on overrun.
   * uid sandbox via setuid(nobody) when the parent is root and the user
     exists; otherwise the existing uid is reused. firejail/bwrap not
-    invoked here — `agent.safety.sandbox.wrap_argv` is the right primitive
+    invoked here — `agent.operations.safety.sandbox.wrap_argv` is the right primitive
     for code we *generate* and Day-4 already audits that path; here we
     are accepting an interactive ROOT operator command, so we lean on
     rlimit + cwd jail + dangerous-pattern + WS audit instead.
@@ -33,7 +33,7 @@ Hard guarantees (see CONTRACTS_R1.md SandboxEvent + spec):
     `task_id="sandbox:<sid>"` so the existing audit list view picks them
     up without schema changes.
   * Optional checkpoint: `process.completed` with `checkpoint=True` calls
-    `agent.audit.save_checkpoint` capturing stdout + cwd path so the
+    `agent.kernel.audit.save_checkpoint` capturing stdout + cwd path so the
     operator can resume.
 
 Public surface intentionally small:
@@ -60,7 +60,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, Awaitable, Callable
 
-from agent.safety.sandbox import assert_env_safe, clean_env
+from agent.operations.safety.sandbox import assert_env_safe, clean_env
 
 from . import dangerous_patterns
 
@@ -490,7 +490,7 @@ class SandboxExecutor:
         if session is None or session.is_running():
             return None
         try:
-            from agent.audit import save_checkpoint
+            from agent.kernel.audit import save_checkpoint
             from agent.schemas import Checkpoint, SelfModel
         except Exception as exc:  # noqa: BLE001
             logger.warning("linux.executor: checkpoint save unavailable: %s", exc)

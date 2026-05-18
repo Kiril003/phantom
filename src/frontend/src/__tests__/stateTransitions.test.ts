@@ -1,9 +1,15 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { useSystemStore } from '../stores/systemStore';
-import { SystemState } from '@shared/types';
+import { FAMILIAR_STATE_BEHAVIOR, SystemState } from '@shared/types';
 
 describe('State transition sequences', () => {
   beforeEach(() => {
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => (
+      new Response(JSON.stringify({ ok: true }), {
+        status: 200,
+        headers: { 'Content-Type': 'application/json' },
+      })
+    ));
     useSystemStore.setState({
       state: SystemState.SHADOW,
       previousState: null,
@@ -12,6 +18,10 @@ describe('State transition sequences', () => {
       authenticated: false,
       wsConnected: false,
     });
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
   });
 
   it('SHADOW → FOCUS → DIALOGUE → FOCUS → SHADOW', () => {
@@ -105,5 +115,26 @@ describe('SystemState enum completeness', () => {
     expect(SystemState.GHOST).toBe('GHOST');
     expect(SystemState.DREAM).toBe('DREAM');
     expect(SystemState.OPERATOR).toBe('OPERATOR');
+  });
+});
+
+describe('Familiar state language', () => {
+  it('maps every system state to a Familiar pose and emotion', () => {
+    for (const state of Object.values(SystemState)) {
+      const behavior = FAMILIAR_STATE_BEHAVIOR[state];
+      expect(behavior).toBeDefined();
+      expect(behavior.pose).toBeTruthy();
+      expect(behavior.emotion).toBeTruthy();
+      expect(behavior.message.length).toBeGreaterThan(3);
+    }
+  });
+
+  it('uses meaningful poses for core Sunrise states', () => {
+    expect(FAMILIAR_STATE_BEHAVIOR[SystemState.SHADOW].pose).toBe('peeking');
+    expect(FAMILIAR_STATE_BEHAVIOR[SystemState.FOCUS].pose).toBe('idle');
+    expect(FAMILIAR_STATE_BEHAVIOR[SystemState.DIALOGUE].pose).toBe('waving');
+    expect(FAMILIAR_STATE_BEHAVIOR[SystemState.SENTINEL].pose).toBe('pointing');
+    expect(FAMILIAR_STATE_BEHAVIOR[SystemState.GHOST].pose).toBe('vanishing');
+    expect(FAMILIAR_STATE_BEHAVIOR[SystemState.DREAM].pose).toBe('sleeping');
   });
 });

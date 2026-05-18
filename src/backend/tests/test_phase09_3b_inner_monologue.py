@@ -45,7 +45,7 @@ def recording_hub(monkeypatch):
 
 @pytest.mark.asyncio
 async def test_emit_monologue_publishes_on_channel(recording_hub):
-    from agent.monologue_emitter import MonologueEvent, emit_monologue
+    from agent.cognition.monologue_emitter import MonologueEvent, emit_monologue
 
     ok = await emit_monologue(MonologueEvent(
         kind="plan",
@@ -64,7 +64,7 @@ async def test_emit_monologue_publishes_on_channel(recording_hub):
 
 @pytest.mark.asyncio
 async def test_emit_reflection_payload(recording_hub):
-    from agent.monologue_emitter import MonologueEvent, emit_monologue
+    from agent.cognition.monologue_emitter import MonologueEvent, emit_monologue
 
     await emit_monologue(MonologueEvent(
         kind="reflection",
@@ -79,7 +79,7 @@ async def test_emit_reflection_payload(recording_hub):
 
 @pytest.mark.asyncio
 async def test_emit_emotion_shift_payload(recording_hub):
-    from agent.monologue_emitter import MonologueEvent, emit_monologue
+    from agent.cognition.monologue_emitter import MonologueEvent, emit_monologue
 
     await emit_monologue(MonologueEvent(
         kind="emotion_shift",
@@ -98,7 +98,7 @@ async def test_emit_emotion_shift_payload(recording_hub):
 
 @pytest.mark.asyncio
 async def test_emit_proactive_payload(recording_hub):
-    from agent.monologue_emitter import MonologueEvent, emit_monologue
+    from agent.cognition.monologue_emitter import MonologueEvent, emit_monologue
 
     await emit_monologue(MonologueEvent(
         kind="proactive",
@@ -116,7 +116,7 @@ async def test_emit_proactive_payload(recording_hub):
 async def test_rate_limit_drops_overflow(recording_hub, monkeypatch):
     """With a 3 events/s limit, the 4th+ in the same window are dropped."""
     from config import config
-    from agent.monologue_emitter import MonologueEvent, emit_monologue
+    from agent.cognition.monologue_emitter import MonologueEvent, emit_monologue
 
     monkeypatch.setattr(config, "agent_monologue_rate_limit_eps", 3)
     results: list[bool] = []
@@ -135,7 +135,7 @@ async def test_rate_limit_drops_overflow(recording_hub, monkeypatch):
 @pytest.mark.asyncio
 async def test_rate_limit_window_refills_after_1s(recording_hub, monkeypatch):
     from config import config
-    from agent.monologue_emitter import MonologueEvent, emit_monologue
+    from agent.cognition.monologue_emitter import MonologueEvent, emit_monologue
 
     monkeypatch.setattr(config, "agent_monologue_rate_limit_eps", 2)
     # Burn the window.
@@ -157,7 +157,7 @@ async def test_rate_limit_window_refills_after_1s(recording_hub, monkeypatch):
 def test_channel_name_is_inner_monologue_stream():
     """Module constant-style assertion — the channel string must match
     the frontend's services/websocket.ts declaration."""
-    from agent.monologue_emitter import MonologueEvent
+    from agent.cognition.monologue_emitter import MonologueEvent
     # Ensure MonologueEvent still has the right `kind` literal types.
     ev = MonologueEvent(kind="plan", source="x", monologue={})
     assert ev.kind == "plan"

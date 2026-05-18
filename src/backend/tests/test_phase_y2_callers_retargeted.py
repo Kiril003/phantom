@@ -102,7 +102,7 @@ async def test_bash_run_sandboxed_true_audit_truth_when_bwrap_missing(
 ):
     """If bwrap is missing on PATH, BashRun(sandboxed=True) must
     return ActionResult.sandboxed=False (audit truth invariant)."""
-    import agent.safety.sandbox as sb
+    import agent.operations.safety.sandbox as sb
     from agent.actions.bash import BashRun
     from agent.actions.base import ActionContext
 

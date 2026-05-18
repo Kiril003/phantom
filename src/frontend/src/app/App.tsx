@@ -1,6 +1,6 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { AnimatePresence } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { Providers } from './providers';
 import { StateTransitionController } from './StateTransitionController';
 import { ViewportFrame } from './ViewportFrame';
@@ -10,14 +10,16 @@ import { useSystemStore } from '../stores/systemStore';
 import { SystemState } from '@shared/types';
 import { geolocationService, BrowserGeolocationService } from '../services/geolocation';
 import { ToolsOverlay } from '../components/tools/ToolsOverlay';
-import { AgentSessionHistory } from '../components/agent/AgentSessionHistory';
-import { AgentVisionPanel } from '../components/agent/AgentVisionPanel';
+import { AgentSessionHistory } from '../components/agent/overlays/AgentSessionHistory';
+import { AgentVisionPanel } from '../components/agent/workspace/AgentVisionPanel';
+import { WillPanel } from '../components/agent/workspace/WillPanel';
 import { AgentStudioOverlay } from '../components/studio/AgentStudioOverlay';
+import { IntelligenceHub } from '../components/intelligence/IntelligenceHub';
 import { useUIStore } from '../stores/uiStore';
 import { useFamiliarTriggers } from '../hooks/useFamiliarTriggers';
+import { useAuthStore } from '../stores/authStore';
 import { FamiliarReactor } from '../components/familiar/FamiliarReactor';
 import { PhantomFamiliar } from '../components/familiar/PhantomFamiliar';
-import { useAuthStore } from '../stores/authStore';
 
 function GlobalGeolocationManager() {
   const authenticated = useSystemStore((s) => s.authenticated);
@@ -33,6 +35,8 @@ function GlobalGeolocationManager() {
 
   return null;
 }
+
+import { CompanionShowcase } from '../components/companion/CompanionShowcase';
 
 /* ─── Lazy layouts ────────────────────────────────────────────────────────── */
 
@@ -129,7 +133,6 @@ function AutoLoginManager() {
 /* ─── App Root ────────────────────────────────────────────────────────────── */
 
 export function App() {
-  console.log('PHANTOM OS: App rendering');
   return (
     <Providers>
       <AutoLoginManager />
@@ -159,6 +162,10 @@ export function App() {
                   </React.Suspense>
                 }
               />
+              <Route
+                path="/companion"
+                element={<CompanionShowcase />}
+              />
               <Route path="/*" element={<StateRouter />} />
             </Routes>
             <Overlays />
@@ -169,6 +176,8 @@ export function App() {
             <AgentSessionHistoryMount />
             <StudioOverlayMount />
             <AgentVisionMount />
+            <WillPanelMount />
+            <IntelligenceHubMount />
           </div>
         </ViewportFrame>
       </BrowserRouter>
@@ -186,6 +195,33 @@ function AgentVisionMount() {
   const open = useUIStore((s) => s.visionOpen);
   const setOpen = useUIStore((s) => s.setVisionOpen);
   return <AgentVisionPanel open={open} onClose={() => setOpen(false)} />;
+}
+
+function WillPanelMount() {
+  const open = useUIStore((s) => s.willOpen);
+  const setOpen = useUIStore((s) => s.setWillOpen);
+
+  return (
+    <AnimatePresence>
+      {open && (
+        <motion.div
+          initial={{ opacity: 0, x: 100 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: 100 }}
+          transition={{ duration: 0.3, ease: 'easeOut' }}
+          className="absolute right-4 top-[84px] bottom-[84px] w-[360px] z-[100]"
+        >
+          <WillPanel />
+          <button 
+            onClick={() => setOpen(false)}
+            className="absolute top-4 right-4 p-2 hover:bg-black/5 rounded-full transition-colors z-10"
+          >
+            <span className="msym text-ink-muted">close</span>
+          </button>
+        </motion.div>
+      )}
+    </AnimatePresence>
+  );
 }
 
 function ToolsOverlayMount() {
@@ -218,4 +254,10 @@ function AgentSessionHistoryMount() {
       }}
     />
   );
+}
+
+function IntelligenceHubMount() {
+  const open = useUIStore((s) => s.intelligenceHubOpen);
+  const setOpen = useUIStore((s) => s.setIntelligenceHubOpen);
+  return <IntelligenceHub isOpen={open} onClose={() => setOpen(false)} />;
 }

@@ -490,7 +490,7 @@ class TestRouter:
 class TestTacticalWithTools:
     @pytest.mark.asyncio
     async def test_tactical_picks_via_native_path(self, monkeypatch):
-        from agent.planner import tactical
+        from agent.cognition.planner import tactical
         from agent.schemas import SelfModel, SubGoal
         from ai.tool_use import ToolCallResult
         from config import config
@@ -524,7 +524,7 @@ class TestTacticalWithTools:
 
     @pytest.mark.asyncio
     async def test_tactical_replans_when_objection_missing_for_medium(self, monkeypatch):
-        from agent.planner import tactical
+        from agent.cognition.planner import tactical
         from agent.schemas import SelfModel, SubGoal
         from ai.tool_use import ToolCallResult
         from config import config

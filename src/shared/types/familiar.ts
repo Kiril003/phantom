@@ -18,6 +18,8 @@
  *   5. `backend/ai/scenes.py` (the AI tool registry mirror),
  *   6. `docs/PHANTOM_FAMILIAR.md` (the design batch-3 prompt).
  */
+import { SystemState } from './system';
+
 
 /**
  * Closed enum of poses the Familiar can settle into. The visual file
@@ -32,6 +34,11 @@ export type FamiliarPose =
   | 'sleeping'
   | 'waving'
   | 'vanishing';
+
+/**
+ * Closed enum of emotional states that affect the Familiar's visual style.
+ */
+export type FamiliarEmotion = 'neutral' | 'alert' | 'happy' | 'sleepy';
 
 /**
  * Closed enum of reasons the Familiar appears. Each trigger has a
@@ -81,6 +88,8 @@ export interface FamiliarTarget {
 export interface FamiliarManifestation {
   id: string;
   pose: FamiliarPose;
+  /** Emotional state (affects eyes, colors, movement speed). */
+  emotion?: FamiliarEmotion;
   /** Total wall-clock lifetime in ms. The store auto-dismisses on expiry. */
   durationMs: number;
   trigger: ManifestTrigger;
@@ -124,6 +133,53 @@ export const DEFAULT_DURATION_FOR_POSE: Record<FamiliarPose, number> = {
   sleeping: 12000,
   waving: 4500,
   vanishing: 1600,
+};
+
+/**
+ * Canonical Sunrise state-language for the Familiar. State transitions use
+ * this table so SHADOW/FOCUS/DIALOGUE/SENTINEL/GHOST/DREAM carry visible
+ * meaning instead of generic decorative motion.
+ */
+export const FAMILIAR_STATE_BEHAVIOR: Record<SystemState, {
+  pose: FamiliarPose;
+  emotion: FamiliarEmotion;
+  message: string;
+}> = {
+  [SystemState.SHADOW]: {
+    pose: 'peeking',
+    emotion: 'neutral',
+    message: 'В тіні. Спостерігаю.',
+  },
+  [SystemState.FOCUS]: {
+    pose: 'idle',
+    emotion: 'alert',
+    message: 'Фокус. Тримаю шум низько.',
+  },
+  [SystemState.DIALOGUE]: {
+    pose: 'waving',
+    emotion: 'happy',
+    message: 'Я тут.',
+  },
+  [SystemState.SENTINEL]: {
+    pose: 'pointing',
+    emotion: 'alert',
+    message: 'Аномалія. Дивись сюди.',
+  },
+  [SystemState.GHOST]: {
+    pose: 'vanishing',
+    emotion: 'sleepy',
+    message: 'Зникаю з поверхні.',
+  },
+  [SystemState.DREAM]: {
+    pose: 'sleeping',
+    emotion: 'sleepy',
+    message: 'Консолідую памʼять.',
+  },
+  [SystemState.OPERATOR]: {
+    pose: 'floating',
+    emotion: 'neutral',
+    message: 'Операторський режим.',
+  },
 };
 
 /**

@@ -20,6 +20,7 @@ interface FamiliarSVGProps {
   reduceMotion?: boolean;
   pointAngle?: number; // radians; 0 = right
   pointLength?: number; // Distance to point target
+  emotion?: FamiliarEmotion;
 }
 
 const VB_W = 100;
@@ -33,6 +34,13 @@ const BREATH: Transition = {
   repeat: Infinity,
   repeatType: "reverse",
   ease: "easeInOut",
+};
+
+const EMOTION_STYLES: Record<FamiliarEmotion, { glow: string, duration: number }> = {
+  neutral: { glow: "#f4af25", duration: 3.4 },
+  alert:   { glow: "#f4af25", duration: 1.8 }, // faster breath
+  happy:   { glow: "#f4af25", duration: 2.8 },
+  sleepy:  { glow: "#f4af25", duration: 5.5 }, // slow breath
 };
 
 // ── Inverse Kinematics (IK) Solver ──────────────────────────────────────
@@ -76,7 +84,11 @@ export function FamiliarSVG({
   reduceMotion = false,
   pointAngle = 0,
   pointLength = 28,
+  emotion = 'neutral',
 }: FamiliarSVGProps) {
+  const style = EMOTION_STYLES[emotion] || EMOTION_STYLES.neutral;
+  const breathTrans = { ...BREATH, duration: style.duration };
+
   return (
     <svg
       viewBox={`0 0 ${VB_W} ${VB_H}`}
@@ -85,14 +97,14 @@ export function FamiliarSVG({
       style={{
         overflow: "visible",
         filter:
-          "drop-shadow(0 8px 22px rgba(244,175,37,0.15)) drop-shadow(0 0 18px rgba(244,175,37,0.22))",
+          `drop-shadow(0 8px 22px ${style.glow}26) drop-shadow(0 0 18px ${style.glow}38)`,
       }}
       aria-hidden
     >
       <defs>
         <radialGradient id="phantom-glass-glow" cx="50%" cy="50%" r="55%">
-          <stop offset="0%" stopColor="#f4af25" stopOpacity="0.45" />
-          <stop offset="100%" stopColor="#f4af25" stopOpacity="0" />
+          <stop offset="0%" stopColor={style.glow} stopOpacity="0.45" />
+          <stop offset="100%" stopColor={style.glow} stopOpacity="0" />
         </radialGradient>
         <linearGradient id="phantom-glass-body" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="rgba(255, 255, 255, 0.45)" />
@@ -115,7 +127,7 @@ export function FamiliarSVG({
             ? { opacity: 0.5 }
             : { opacity: [0.35, 0.65, 0.35], scale: [0.95, 1.05, 0.95] }
         }
-        transition={reduceMotion ? undefined : BREATH}
+        transition={reduceMotion ? undefined : breathTrans}
         style={{ transformOrigin: `${BODY_CX}px ${BODY_CY}px` }}
       />
 
@@ -133,7 +145,7 @@ export function FamiliarSVG({
             reduceMotion={reduceMotion}
             pointAngle={pointAngle}
             pointLength={pointLength}
-            emotion={'neutral'}
+            emotion={emotion}
           />
         </motion.g>
       </AnimatePresence>

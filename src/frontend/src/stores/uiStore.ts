@@ -2,6 +2,75 @@ import { create } from 'zustand';
 
 export type OverlayName = 'terminal' | 'wardriving' | 'camera' | 'apps' | 'standing_orders';
 
+// ─── OperatorLayout v3 — focused-agent / toast / chrome slices ────────────
+//
+// These three slices live alongside the overlay-window state because the
+// surface they drive (Roster, ToastRail, chrome handles) is rendered inside
+// every layout — we don't want a parallel store just for that.
+
+export type FocusedAgent =
+  | 'foreground'
+  | 'background'
+  | 'standing_orders'
+  | 'proactive'
+  | 'council'
+  | 'horizons'
+  | 'org_chart';
+
+export type ToastKind = 'error' | 'warn' | 'info' | 'success';
+
+export interface Toast {
+  id: string;
+  kind: ToastKind;
+  message: string;
+  ts: number;
+}
+
+export type ChromeKey = 'statusBar' | 'roster' | 'hud' | 'toolbar';
+
+export interface ChromeState {
+  /** true = compact (top-mounted) or collapsed (bottom-mounted). */
+  statusBar: boolean;
+  roster: boolean;
+  hud: boolean;
+  toolbar: boolean;
+}
+
+// Bumped to v2 so first-run after the discoverability fix lands the new
+// default (HUD expanded so Stop/Side-Channel/Vault are visible without
+// hunting). Existing v1 localStorage rows are ignored.
+const CHROME_KEY = 'phantom.chrome.v2';
+const CHROME_DEFAULT: ChromeState = {
+  statusBar: true,
+  roster: true,
+  // HUD expanded by default — it owns the Stop button and the
+  // Side-Channel / Vault / Parallel-chat icons. Collapsing it hides
+  // those, which made operators think the controls were broken.
+  hud: false,
+  toolbar: true,
+};
+
+function loadChromePersisted(): ChromeState {
+  if (typeof localStorage === 'undefined') return CHROME_DEFAULT;
+  try {
+    const raw = localStorage.getItem(CHROME_KEY);
+    if (!raw) return CHROME_DEFAULT;
+    const parsed = JSON.parse(raw) as Partial<ChromeState>;
+    return { ...CHROME_DEFAULT, ...parsed };
+  } catch {
+    return CHROME_DEFAULT;
+  }
+}
+
+function persistChrome(state: ChromeState): void {
+  if (typeof localStorage === 'undefined') return;
+  try {
+    localStorage.setItem(CHROME_KEY, JSON.stringify(state));
+  } catch {
+    /* quota — ignore */
+  }
+}
+
 // Logical frame size used when positioning overlays. Matches App shell.
 const FRAME_W = 1024;
 const FRAME_H = 600;
@@ -115,6 +184,8 @@ interface UIStoreState {
    */
   agentHistoryOpen: boolean;
   setAgentHistoryOpen: (v: boolean) => void;
+  toggleAgentHistory: () => void;
+  closeAgentHistory: () => void;
 
   /**
    * Phase 17b — Agent Studio overlay (saved CustomAgents library +
@@ -131,6 +202,53 @@ interface UIStoreState {
    */
   visionOpen: boolean;
   setVisionOpen: (v: boolean) => void;
+
+  /**
+   * Phase 28 — Will Engine panel.
+   */
+  willOpen: boolean;
+  setWillOpen: (v: boolean) => void;
+
+  /**
+   * V11 — Intelligence Hub overlay.
+   * Shows the aggregated "what PHANTOM knows about me" surface:
+   * vault metadata, personal facts, lessons, memory, decisions.
+   */
+  intelligenceHubOpen: boolean;
+  setIntelligenceHubOpen: (v: boolean) => void;
+
+  /**
+   * C-3 — Mission UI overlays + HUD toggle state.
+   * `missionModeArmed` is the persisted operator preference (Task vs Mission
+   * on the HUD RUN button). The remaining flags gate the three overlay
+   * screens (brief dialog → detail screen → report screen) + the roster.
+   */
+  missionModeArmed: boolean;
+  setMissionModeArmed: (v: boolean) => void;
+  missionBriefOpen: boolean;
+  setMissionBriefOpen: (v: boolean) => void;
+  missionBriefObjective: string;
+  setMissionBriefObjective: (v: string) => void;
+  missionDetailOpen: boolean;
+  setMissionDetailOpen: (v: boolean) => void;
+  missionDetailId: string | null;
+  setMissionDetailId: (id: string | null) => void;
+  missionReportOpen: boolean;
+  setMissionReportOpen: (v: boolean) => void;
+  missionRosterOpen: boolean;
+  setMissionRosterOpen: (v: boolean) => void;
+
+  // ─── OperatorLayout v3 slices ───────────────────────────────────────────
+  focusedAgent: FocusedAgent;
+  setFocusedAgent: (a: FocusedAgent) => void;
+
+  toasts: Toast[];
+  toast: (t: Omit<Toast, 'id' | 'ts'>) => string;
+  dismissToast: (id: string) => void;
+
+  chrome: ChromeState;
+  setChromeCollapsed: (key: ChromeKey, collapsed: boolean) => void;
+  toggleChrome: (key: ChromeKey) => void;
 }
 
 /**
@@ -354,10 +472,71 @@ export const useUIStore = create<UIStoreState>((set, get) => ({
 
   agentHistoryOpen: false,
   setAgentHistoryOpen: (v) => set({ agentHistoryOpen: v }),
+  toggleAgentHistory: () => set((s) => ({ agentHistoryOpen: !s.agentHistoryOpen })),
+  closeAgentHistory: () => set({ agentHistoryOpen: false }),
 
   studioOpen: false,
   setStudioOpen: (v) => set({ studioOpen: v }),
 
   visionOpen: false,
   setVisionOpen: (v) => set({ visionOpen: v }),
+
+  willOpen: false,
+  setWillOpen: (v) => set({ willOpen: v }),
+
+  intelligenceHubOpen: false,
+  setIntelligenceHubOpen: (v) => set({ intelligenceHubOpen: v }),
+
+  // C-3 — mission mode HUD toggle persists across reloads.
+  missionModeArmed:
+    typeof localStorage !== 'undefined' &&
+    localStorage.getItem('phantom_mission_mode_armed') === '1',
+  setMissionModeArmed: (v) => {
+    try {
+      if (v) localStorage.setItem('phantom_mission_mode_armed', '1');
+      else localStorage.removeItem('phantom_mission_mode_armed');
+    } catch {
+      /* SSR / restricted storage: ignore */
+    }
+    set({ missionModeArmed: v });
+  },
+  missionBriefOpen: false,
+  setMissionBriefOpen: (v) => set({ missionBriefOpen: v }),
+  missionBriefObjective: '',
+  setMissionBriefObjective: (v) => set({ missionBriefObjective: v }),
+  missionDetailOpen: false,
+  setMissionDetailOpen: (v) => set({ missionDetailOpen: v }),
+  missionDetailId: null,
+  setMissionDetailId: (id) => set({ missionDetailId: id }),
+  missionReportOpen: false,
+  setMissionReportOpen: (v) => set({ missionReportOpen: v }),
+  missionRosterOpen: false,
+  setMissionRosterOpen: (v) => set({ missionRosterOpen: v }),
+
+  // ─── OperatorLayout v3 slices ───────────────────────────────────────────
+  focusedAgent: 'foreground',
+  setFocusedAgent: (a) => set({ focusedAgent: a }),
+
+  toasts: [],
+  toast: (t) => {
+    const id = `t-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+    set((s) => ({ toasts: [...s.toasts, { ...t, id, ts: Date.now() }] }));
+    return id;
+  },
+  dismissToast: (id) =>
+    set((s) => ({ toasts: s.toasts.filter((x) => x.id !== id) })),
+
+  chrome: loadChromePersisted(),
+  setChromeCollapsed: (key, collapsed) =>
+    set((s) => {
+      const next = { ...s.chrome, [key]: collapsed };
+      persistChrome(next);
+      return { chrome: next };
+    }),
+  toggleChrome: (key) =>
+    set((s) => {
+      const next = { ...s.chrome, [key]: !s.chrome[key] };
+      persistChrome(next);
+      return { chrome: next };
+    }),
 }));

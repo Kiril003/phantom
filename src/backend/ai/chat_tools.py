@@ -176,6 +176,47 @@ CHAT_DATA_TOOLS: list[dict[str, Any]] = [
         },
     },
     {
+        "name": "map.plan_route",
+        "description": (
+            "Побудувати маршрут між двома точками або від поточної локації до пункту призначення. "
+            "Використовуй для запитів 'маршрут до X', 'як доїхати до Y', 'проклади шлях'. "
+            "destination — куди їхати (назва або адреса). mode — спосіб: car, walk, bike."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "destination": {"type": "string", "description": "Пункт призначення (адреса або назва)."},
+                "origin": {"type": "string", "description": "Пункт відправлення. Якщо пусто — береться поточна локація."},
+                "mode": {"type": "string", "enum": ["car", "walk", "bike"], "default": "car"}
+            },
+            "required": ["destination"]
+        }
+    },
+    {
+        "name": "agent.delegate",
+        "description": (
+            "Делегувати виконання складної або спеціалізованої задачі одному з під-агентів. "
+            "Використовуй коли потрібен професіонал: Security Auditor, Backend Dev, UX Designer тощо. "
+            "role_id: id ролі спеціаліста (напр. 'role-sec', 'role-back', 'role-ux', 'role-qa'). "
+            "goal: Чітка інструкція що саме треба зробити. "
+            "Агент працюватиме автономно у фоновому режимі."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "role_id": {
+                    "type": "string",
+                    "description": "ID ролі спеціаліста з орг-структури.",
+                },
+                "goal": {
+                    "type": "string",
+                    "description": "Повний опис завдання для спеціаліста.",
+                },
+            },
+            "required": ["role_id", "goal"],
+        },
+    },
+    {
         "name": "search_web",
         "description": (
             "Пошук актуальної інформації у вебі через Google Search grounding. "

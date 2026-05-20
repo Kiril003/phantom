@@ -232,8 +232,27 @@ async def run(
         "Adjust your tone to match this internal state."
     )
     
-    # ── Inner Monologue Reflection ───────────────────────────────────────
-    await phantom_monologue.reflect(user_message, bias)
+    # ── Inner Monologue Reflection (Non-blocking) ────────────────────────
+    # Run reflection in the background so it doesn't block the chat turn latency.
+    asyncio.create_task(
+        phantom_monologue.reflect(user_message, bias),
+        name="sentient_reflection",
+    )
+
+    # ── Fast Track Short-circuit ─────────────────────────────────────────
+    # If the message is a simple greeting or very short, skip tool-selection
+    # and go straight to generation. Saves 3-5 seconds of latency.
+    clean_msg = user_message.strip().lower().strip("?!. ")
+    is_greeting = clean_msg in {
+        "привіт", "здоров", "хай", "ку", "вітаю", "добрий день", "добрий вечір",
+        "hi", "hello", "hey", "yo", "greeting",
+        "як справи", "як ти", "що робиш", "how are you", "what's up",
+    }
+    if is_greeting or len(user_message) < 4:
+        logger.debug("chat_pipeline: fast-track active for %r", clean_msg)
+        return await _plain_generate(
+            user_message, sentient_prompt, history, user_id, db, provider_hint=provider_hint
+        )
 
     deadline = started + (
         max(1, int(config.chat_tool_max_total_ms)) / 1000.0
@@ -270,47 +289,6 @@ async def run(
     if isinstance(tool_choice, ToolCallResult):
         if not tool_choice.tool_name:
             raw_text = tool_choice.raw_reasoning or ""
-            salvage = (
-                _extract_artifact_html(raw_text)
-                if config.chat_artifacts_enabled
-                else None
-            )
-            if salvage is not None:
-                fast_html, prose = salvage
-                from ai.artifact_studio import (
-                    Brief, build_artifact, ArtifactStudioError,
-                )
-
-                title = _artifact_title(prose)
-                try:
-                    title, html = await build_artifact(
-                        Brief(title=title, request=prose or "інтерактивний віджет",
-                              hint=fast_html),
-                        user_id=user_id,
-                        on_phase=_make_artifact_phase_cb(user_id),
-                    )
-                    tool = "respond_artifact_salvage_studio"
-                except ArtifactStudioError as exc:
-                    logger.warning(
-                        "artifact_studio salvage failed, using fast html: %s", exc
-                    )
-                    html = fast_html
-                    tool = "respond_artifact_salvage"
-                form, _c, attachments = response_formatter.parse_function_call(
-                    "respond_artifact",
-                    {"html": html, "title": title, "capabilities": []},
-                )
-                if form == "artifact":
-                    chat_tool_calls_total.inc(success="true", tool=tool)
-                    sanitized = await output_safety.sanitize(
-                        prose or "Ось віджет.", user_id=user_id, db=db
-                    )
-                    return AIResponse(
-                        content=sanitized.text,
-                        response_form=form,
-                        attachments=attachments,
-                        provider=tool_choice.provider,
-                    )
             sanitized = await output_safety.sanitize(raw_text, user_id=user_id, db=db)
             return AIResponse(
                 content=sanitized.text,
@@ -352,7 +330,8 @@ async def run(
     tool_scene = (dispatch_result.get("result") or {}).get("scene")
     
     auto_response = _auto_render_envelope(
-        tool_choice.tool_name, dispatch_result, tool_scene
+        tool_choice.tool_name, dispatch_result, tool_scene,
+        provider=tool_choice.provider,
     )
     if auto_response is not None:
         return auto_response
@@ -364,12 +343,18 @@ async def run(
             fallback_attachments.append({"type": "scene", "data": tool_scene})
         return AIResponse(
             content=_dispatch_fallback_text(dispatch_result, started),
-            provider="chat_pipeline",
+            provider=tool_choice.provider,
             response_form="text",
             attachments=fallback_attachments,
         )
 
+    # Day-5 Wave-2: structure history properly so LLM sees its own intent.
+    # We add a model turn representing the tool call, then the tool result.
     appended_history = list(history) + [
+        {
+            "role": "assistant",
+            "content": f"Використовую інструмент {tool_choice.tool_name}...",
+        },
         {
             "role": "tool",
             "name": tool_choice.tool_name,
@@ -396,7 +381,7 @@ async def run(
         
     except Exception as exc:
         logger.exception("chat_pipeline error in Step 5: %s", exc)
-        return _dispatch_fallback_text_response(dispatch_result, started, tool_scene)
+        return _dispatch_fallback_text_response(dispatch_result, started, tool_scene, provider=tool_choice.provider)
 
 
 async def _plain_generate(
@@ -479,6 +464,7 @@ def _auto_render_envelope(
     tool_name: str,
     dispatch_result: dict,
     tool_scene: dict[str, Any] | None,
+    provider: str = "unknown",
 ) -> AIResponse | None:
     """Map a tool's dispatch envelope directly to a widget AIResponse."""
     if not dispatch_result.get("ok"):
@@ -508,6 +494,7 @@ def _auto_render_envelope(
             content="Поточні показники системи.",
             response_form="metric_cards",
             attachments=[{"type": "metric_card", "data": {"metrics": items}}],
+            provider=provider,
         )
 
     if tool_name == "get_my_location":
@@ -518,6 +505,7 @@ def _auto_render_envelope(
             return AIResponse(
                 content=f"GPS недоступний. Останнє відоме місце: {place}",
                 response_form="text",
+                provider=provider,
             )
         return AIResponse(
             content=f"Твоя локація: {place}",
@@ -530,6 +518,7 @@ def _auto_render_envelope(
                     "zoom": 15,
                 }
             }],
+            provider=provider,
         )
 
     if tool_name == "recall_memory_facts":
@@ -538,6 +527,7 @@ def _auto_render_envelope(
             return AIResponse(
                 content="Поки що немає збережених фактів про тебе.",
                 response_form="text",
+                provider=provider,
             )
         bullets = "\n".join(
             f"• {f.get('content', '')}".rstrip()
@@ -547,6 +537,7 @@ def _auto_render_envelope(
         return AIResponse(
             content=f"Що я пам'ятаю:\n{bullets}",
             response_form="markdown",
+            provider=provider,
         )
 
     if tool_name == "search_web":
@@ -575,6 +566,7 @@ def _auto_render_envelope(
         return AIResponse(
             content="\n".join(lines).strip(),
             response_form="markdown",
+            provider=provider,
         )
 
     return None
@@ -590,14 +582,19 @@ def _dispatch_fallback_text(dispatch_result: dict, started_at: float) -> str:
     return f"[{name} error] \"{error}\""
 
 
-def _dispatch_fallback_text_response(dispatch_result: dict, started_at: float, tool_scene: dict | None) -> AIResponse:
+def _dispatch_fallback_text_response(
+    dispatch_result: dict,
+    started_at: float,
+    tool_scene: dict | None,
+    provider: str = "chat_pipeline",
+) -> AIResponse:
     """Create a full AIResponse fallback."""
     attachments = []
     if tool_scene:
         attachments.append({"type": "scene", "data": tool_scene})
     return AIResponse(
         content=_dispatch_fallback_text(dispatch_result, started_at),
-        provider="chat_pipeline",
+        provider=provider,
         response_form="text",
         attachments=attachments,
     )

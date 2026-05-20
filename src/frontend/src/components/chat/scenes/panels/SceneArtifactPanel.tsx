@@ -93,11 +93,19 @@ export function SceneArtifactPanel({ data }: Props) {
       className="rounded-xl border border-white/10 overflow-hidden"
       style={
         expanded
-          ? { position: 'fixed', inset: 0, zIndex: 50, maxWidth: 'none', background: '#0b0f14' }
+          ? {
+              position: 'fixed',
+              inset: 0,
+              zIndex: 1000,
+              maxWidth: 'none',
+              background: '#0b0f14',
+              display: 'flex',
+              flexDirection: 'column',
+            }
           : { width: '100%', maxWidth: 1024 }
       }
     >
-      <div className="flex items-center justify-between px-3 py-1.5 text-xs">
+      <div className="flex shrink-0 items-center justify-between px-3 py-1.5 text-xs bg-white/5 border-b border-white/5">
         <span className="opacity-70">
           {buildPhase !== null
             ? PHASE_LABELS[buildPhase]
@@ -158,9 +166,10 @@ export function SceneArtifactPanel({ data }: Props) {
           sandbox="allow-scripts"
           srcDoc={srcdoc}
           onError={() => setFailed(true)}
+          className={expanded ? 'flex-1' : ''}
           style={{
             width: '100%',
-            height: expanded ? 'calc(100vh - 34px)' : 520,
+            height: expanded ? 'auto' : 520,
             border: 0,
             background: '#0b0f14',
             display: 'block',

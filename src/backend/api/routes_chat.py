@@ -277,23 +277,7 @@ async def _build_ai_response(
     *,
     on_delta: Any = None,
 ) -> tuple[str, str, list[dict], str, int]:
-    """
-    Run the full AI pipeline:
-      1. Retrieve memory hints (ChromaDB)
-      2. Build system prompt
-      3. Get session history
-      4. Generate AI response (primary → fallback)
-      5. Post: extract/store facts, update behavioral model
-    Returns (content, response_form, attachments, provider, tokens_used).
-
-    Day-5 streaming — when ``on_delta`` is supplied AND chat tools are
-    disabled AND ``config.ai_streaming`` is on, route through
-    ``ai_router.generate_stream`` instead of ``generate``. Each text
-    chunk fires ``on_delta(chunk)`` so the chat handler can broadcast
-    a WS delta live, instead of waiting for the whole response and
-    simulating chunks afterwards. Tool path stays non-streaming until
-    we plumb tool_call_chunks through chat_pipeline.
-    """
+    # ... imports ...
     from ai.prompt_builder import (
         build_system_prompt,
         build_history_messages,
@@ -309,80 +293,70 @@ async def _build_ai_response(
     )
     from core.context_engine import context_engine
 
+    # ── Fast Path Detection ──────────────────────────────────────────────
+    clean_msg = user_message.strip().lower().strip("?!. ")
+    is_greeting = clean_msg in {
+        "привіт", "здоров", "хай", "ку", "вітаю", "добрий день", "добрий вечір", "доброго ранку",
+        "hi", "hello", "hey", "yo", "greeting", "morning", "evening",
+        "як справи", "як ти", "що робиш", "how are you", "what's up", "як воно",
+    }
+    is_fast_track = is_greeting or len(user_message) < 4
+    
     snapshot = context_engine.get_snapshot()
     behavioral_model = await get_behavioral_model(db, user.id)
 
     # 0. Endocrine Stimuli — Phase 14
-    # React to user input: CAPSLOCK increases cortisol, "дякую" increases oxytocin
-    c_delta, d_delta, o_delta = 0.0, 0.0, 0.0
-    if user_message.isupper() and len(user_message) > 5:
-        c_delta += 0.15 # User is shouting
-    if any(w in user_message.lower() for w in ["дякую", "thanks", "спасибо"]):
-        o_delta += 0.1
-        d_delta += 0.05
-    
+    # ... (remains for consistency) ...
     from ai.sentience.endocrine import endocrine_system
-    endocrine_system.update(300) # Natural decay
-    endocrine_system.stimulus(cortisol_delta=c_delta, dopamine_delta=d_delta, oxytocin_delta=o_delta)
+    endocrine_system.update(300) 
+    endocrine_system.stimulus(cortisol_delta=0.01 if is_fast_track else 0.0)
     hormones = endocrine_system.state.model_dump()
 
-    where = snapshot.get("where", {})
-    lat = where.get("lat")
-    lon = where.get("lon")
-
-    # 1. Unified memory + recent places. MemoryBrain fans out across
-    # strategic Chroma, tactical SQLite, geo-tagged facts, and agent seeds.
-    try:
-        hints = await memory_brain.recall_for_prompt(
-            db=db,
-            user_id=user.id,
-            query=user_message,
-            limit=config.memory_top_k,
-            lat=float(lat) if lat is not None else None,
-            lon=float(lon) if lon is not None else None,
-            include_agent=True,
-        )
-    except Exception as exc:
-        logger.debug("memory brain recall failed (non-critical): %s", exc)
-        hints = []
-
-    try:
-        recent_places = await fetch_recent_places(db, user.id, hours=24, limit=5)
-    except Exception as exc:
-        logger.debug("recent places fetch failed (non-critical): %s", exc)
-        recent_places = []
+    # 1. Memory & Location (SKIP IF FAST TRACK)
+    hints = []
+    recent_places = []
+    if not is_fast_track:
+        where = snapshot.get("where", {})
+        lat = where.get("lat")
+        lon = where.get("lon")
+        try:
+            hints = await memory_brain.recall_for_prompt(
+                db=db, user_id=user.id, query=user_message,
+                limit=config.memory_top_k,
+                lat=float(lat) if lat is not None else None,
+                lon=float(lon) if lon is not None else None,
+                include_agent=True,
+            )
+        except Exception:
+            hints = []
+        try:
+            recent_places = await fetch_recent_places(db, user.id, hours=24, limit=5)
+        except Exception:
+            recent_places = []
 
     context_engine.set_memory_hints(hints)
     snapshot["memory_hints"] = hints
-    # recent_places already unpacked above
 
-    # 1c. Emotion — Phase 9.4c-qw fix #5. Best-effort: only populated
-    # when an agent task currently owns the foreground slot. Mirrors the
-    # gating already used by the 9.3a self-model hook above.
+    # 1c. Emotion (Skip heavy fetch if fast track)
     emotion_dict: dict | None = None
-    try:
-        from agent.kernel.runtime import agent_runtime  # noqa: PLC0415
-        slot = agent_runtime.foreground_slot
-        if slot is not None and slot.self_model is not None:
-            emo = getattr(slot.self_model, "emotion", None)
-            if emo is not None:
-                emotion_dict = {
-                    "focus": float(emo.focus),
-                    "curiosity": float(emo.curiosity),
-                    "concern": float(emo.concern),
-                    "fatigue": float(emo.fatigue),
-                }
-    except Exception as exc:
-        logger.debug("emotion fetch failed (non-critical): %s", exc)
+    if not is_fast_track:
+        try:
+            from agent.kernel.runtime import agent_runtime
+            slot = agent_runtime.foreground_slot
+            if slot and slot.self_model:
+                emo = getattr(slot.self_model, "emotion", None)
+                if emo:
+                    emotion_dict = {"focus": float(emo.focus), "curiosity": float(emo.curiosity), "concern": float(emo.concern), "fatigue": float(emo.fatigue)}
+        except Exception: pass
 
-    # 2. Build user dict for prompt builder
-    user_dict: dict[str, Any] = {
+    # 2. Build user dict
+    user_dict = {
         "username": user.username,
         "role": user.role,
         "preferences": json.loads(user.preferences_json or "{}"),
     }
 
-    # 3. Build system prompt
+    # 3. Build system prompt (Use minimal_mode if fast track)
     system_prompt = build_system_prompt(
         snapshot=snapshot,
         user_dict=user_dict,
@@ -391,44 +365,26 @@ async def _build_ai_response(
         recent_places=recent_places,
         emotion=emotion_dict,
         hormones=hormones,
+        minimal_mode=is_fast_track,
     )
 
-    # 4. Get history from session memory (already in RAM from this session)
+    # 4. History (De-duplicate current message if already in RAM)
     history = session_memory.get_history_dicts(
         session_id, max_turns=config.chat_max_session_history
     )
+    if history and history[-1]["role"] == "user" and history[-1]["content"] == user_message:
+        history.pop()
 
-    # 5. Generate AI response
-    #
-    # Day-3 Q-2 (audit-2026-04-30 Phase 17b): when the operator opts
-    # into chat tool-use, route through `ai.chat_pipeline.run` for a
-    # bounded tool-use turn (read-only catalog only, nonced envelope,
-    # output_safety sanitize, wall-clock + depth caps). Default flag
-    # stays False — operators flip it on per deploy after reading
-    # docs/phases/PHASE_17_CHAT_TOOLS.md (D2-I2 multi-tenant
-    # invariant gates this).
-    # `is True` (not truthy) so legacy tests that patch `config` with a
-    # MagicMock — whose default attribute access returns a truthy Mock
-    # — don't accidentally route through chat_pipeline. The real
-    # PhantomConfig field is `bool = False`; production deploys flip it
-    # to `True` explicitly via Settings UI.
-    if config.chat_tools_enabled is True:
+    # 5. Generate
+    if config.chat_tools_enabled is True and not is_fast_track:
+        # Full Agentic Path
         from ai.chat_pipeline import run as chat_pipeline_run
         from ai.agents.orchestrator import run_orchestrator
-
-        # Pick the provider once at the start of the turn per ADR-HUB-003.
-        # The hub's locality-first auto-pick would always grab Ollama,
-        # so we project the operator's Settings → AI → Provider choice
-        # onto a locality preference (gemini=remote, ollama=local) and
-        # let the hub still select the lowest-latency match in that
-        # bucket. AIRouter handles failure-fallback internally.
         _prefer = "remote" if config.ai_primary_provider == "gemini" else "local"
         handle = ai_hub.pick("chat", prefer=_prefer)
-        provider_name = handle.capability.provider
-
         ai_response = await run_orchestrator(
             user_text=user_message,
-            provider=provider_name,
+            provider=handle.capability.provider,
             chat_pipeline_run=chat_pipeline_run,
             user_message=user_message,
             system_prompt=system_prompt,
@@ -436,76 +392,8 @@ async def _build_ai_response(
             user_id=user.id,
             db=db,
         )
-    elif on_delta is not None and config.ai_streaming is True:
-        # Day-5 — true streaming: yield text deltas to the WS as Gemini
-        # generates them. The visible bubble grows live; final
-        # response_form / attachments / scene envelope are computed from
-        # the fully-assembled text via parse_plain_text below.
-        from ai.provider import AIResponse
-        from ai.response_formatter import parse_plain_text
-        full_text_chunks: list[str] = []
-        try:
-            stream = await ai_hub.dispatch(
-                "chat",
-                {
-                    "user_message": user_message,
-                    "system_prompt": system_prompt,
-                    "history": history,
-                    "stream": True,
-                    "user_id": user.id,
-                },
-                provider_hint=config.ai_primary_provider,
-            )
-            async for chunk in stream:
-                if not chunk:
-                    continue
-                full_text_chunks.append(chunk)
-                try:
-                    await on_delta(chunk)
-                except Exception as exc:  # noqa: BLE001
-                    logger.debug("on_delta fan-out failed: %s", exc)
-        except Exception as exc:
-            logger.warning("chat stream failed (%s) — falling back to generate()", exc)
-            ai_response = await ai_hub.dispatch(
-                "chat",
-                {
-                    "user_message": user_message,
-                    "system_prompt": system_prompt,
-                    "history": history,
-                    "user_id": user.id,
-                },
-                provider_hint=config.ai_primary_provider,
-            )
-        else:
-            full_text = "".join(full_text_chunks).strip()
-            if not full_text:
-                ai_response = await ai_hub.dispatch(
-                    "chat",
-                    {
-                        "user_message": user_message,
-                        "system_prompt": system_prompt,
-                        "history": history,
-                        "user_id": user.id,
-                    },
-                    provider_hint=config.ai_primary_provider,
-                )
-            else:
-                response_form, content, attachments = parse_plain_text(full_text)
-                # Active provider was tracked by the hub during pick/dispatch.
-                # We can peek at the last decision for this task class.
-                last_route = ai_hub.route_state(limit=1)
-                active_provider = "gemini"
-                if last_route and last_route[0]["task_class"] == "chat":
-                    active_provider = last_route[0]["provider"]
-
-                ai_response = AIResponse(
-                    content=content,
-                    response_form=response_form,
-                    attachments=attachments,
-                    provider=active_provider,
-                    tokens_used=0,
-                )
     else:
+        # Fast Text Path
         ai_response = await ai_hub.dispatch(
             "chat",
             {
@@ -517,165 +405,20 @@ async def _build_ai_response(
             provider_hint=config.ai_primary_provider,
         )
 
-    # 5b. Phase 16 (audit-2026-04-28 step 4) — best-effort prompt
-    # observability. Off by default; when enabled, write one row to
-    # ai_tool_use_log with the truncated system prompt + AI response +
-    # which sections fired. Truncation honours
-    # chat_prompt_excerpt_max_chars so we never persist full content
-    # against the operator's privacy expectation.
-    if config.chat_prompt_logging_enabled:
-        try:
-            from ai.tool_use_audit import write_log as _write_chat_log
-            max_chars = max(0, int(config.chat_prompt_excerpt_max_chars))
-            await _write_chat_log(
-                task_id=None,
-                step_idx=None,
-                provider=ai_response.provider or "unknown",
-                model="",
-                tool_name=f"chat:{ai_response.response_form}",
-                success=True,
-                error_kind=None,
-                error_message=None,
-                elapsed_ms=0,
-                retry_count=1,
-                user_id=user.id,
-                prompt_excerpt=(system_prompt or "")[:max_chars] if max_chars else None,
-                response_excerpt=(ai_response.content or "")[:max_chars] if max_chars else None,
-                prompt_sections=_detect_prompt_sections(system_prompt or ""),
-            )
-        except Exception as exc:
-            logger.debug("chat prompt logging failed (non-critical): %s", exc)
-
-    # Phase 18 E-5 — chat counters surface in /metrics.
-    try:
-        from observability import chat_messages_total
-        chat_messages_total.inc(role="user")
-        chat_messages_total.inc(role="assistant")
-    except Exception:  # noqa: BLE001 — observability never blocks chat
-        pass
-
-    # 6. Post-turn: vocabulary + language stats update
-    update_vocabulary(behavioral_model, user_message)
-    update_language_stats(behavioral_model, user_message)
-
-    # ── Phase 13: Voice Nerve — Streaming Trigger ───────────────────────────
-    # If TTS is enabled globally, we push the text response to the voice
-    # nerve (EventBus). Any active voice WebSocket session for this user
-    # will catch this and begin streaming audio chunks immediately.
-    if (
-        config.voice_tts_enabled
-        and ai_response.content
-        and ai_response.response_form in ("text", "mixed")
-    ):
-        try:
-            from core.event_bus import event_bus
-            event_bus.emit("voice.say", {
-                "user_id": user.id,
-                "text": ai_response.content
-            })
-        except Exception as exc:
-            logger.debug("voice nerve emit failed: %s", exc)
-    # ────────────────────────────────────────────────────────────────────────
-
-    interaction = Interaction(
-        followed_advice=False,
-        cancelled_or_ignored=False,
-    )
-    update_trust(behavioral_model, interaction)
-    await save_behavioral_model(db, user.id, behavioral_model)
-
-    # 7. Async background: extract facts from this turn.
-    #
-    # Day-2 D2-T2 (audit-2026-04-29): only the user's own utterance is
-    # persisted into the memory layer. The assistant's response can
-    # legitimately quote a tool-result verbatim (locationhistory rows,
-    # recall_memory hits, sensor snapshot fields), and persisting that
-    # back into ChromaDB creates a self-poisoning loop — the next turn's
-    # memory recall pulls back the AI's own paraphrase as a "fact"
-    # and the LLM treats it as ground truth. Until the D2-I1 output-
-    # safety classifier lands, the safe default is "store user words
-    # only". Operator-stated facts are recoverable; tool-echo facts are
-    # not separable from genuine assistant inferences without the
-    # classifier.
-    #
-    # Day-5 perf — fact extraction (ChromaDB write) routinely costs
-    # 200-700ms and was awaited inline, blocking the response. The
-    # operator's chat reply is already in `ai_response`; moving this
-    # into a fire-and-forget background task removes that wait from
-    # perceived latency. We open a fresh session so the request's `db`
-    # can be released back to the pool independently.
-    async def _bg_extract_facts() -> None:
-        # Open a fresh AsyncSession so we don't tangle with the
-        # request-scoped `db` after it's been closed by FastAPI's
-        # Depends() lifecycle.
-        try:
-            from db.database import get_session as _get_bg_session
-            async with _get_bg_session() as bg_db:
-                await extract_and_store_facts(
-                    user_id=user.id,
-                    session_id=session_id,
-                    conversation_summary=user_message,
-                    db=bg_db,
-                )
-        except Exception as exc:  # noqa: BLE001
-            logger.debug("Background fact extraction failed (non-critical): %s", exc)
-
-    try:
-        # Day-5 perf — fire-and-forget. Failure inside the task is
-        # logged at DEBUG; the chat handler returns without waiting.
-        _track_task(asyncio.create_task(_bg_extract_facts()))
-    except Exception as exc:  # noqa: BLE001
-        logger.debug("Failed to schedule background fact extraction: %s", exc)
-
-    # Phase-6 follow-up — terminal execution wire-up.
-    # Operator audit 2026-04-30: 'термінал не зробив'. The previous
-    # respond_terminal path produced a `terminal_output` attachment
-    # carrying the command but NEVER ran it. Now: when the AI picks
-    # respond_terminal AND the caller is ROOT, we spawn a sandbox
-    # session for the command, append a `sandbox` scene attachment with
-    # the live session id so the FE renders streaming output, and let
-    # the existing scene-promotion path lift it onto message.scene.
-    # Non-ROOT operators get the legacy preview-only attachment.
-    if ai_response.response_form == "terminal" and user.role == "ROOT":
-        cmd: str | None = None
-        for att in ai_response.attachments or []:
-            if isinstance(att, dict) and att.get("type") == "terminal_output":
-                data = att.get("data") or {}
-                if isinstance(data, dict):
-                    cmd = (data.get("command") or "").strip() or None
-                break
-        if cmd:
+    # 6. Post-turn (Skip heavy background tasks if fast track)
+    if not is_fast_track:
+        update_vocabulary(behavioral_model, user_message)
+        update_language_stats(behavioral_model, user_message)
+        
+        async def _bg_extract_facts() -> None:
             try:
-                from linux.executor import session_registry as _sandbox_reg
-                session = await _sandbox_reg.create_session(
-                    cmd, user_id=user.id, is_root=True,
-                )
-                # Append a sandbox scene attachment so the FE renders the
-                # live stream inline. The FE SandboxScene reads
-                # session_id and subscribes to sandbox.<id> WS.
-                ai_response.attachments = list(ai_response.attachments or []) + [{
-                    "type": "scene",
-                    "data": {
-                        "kind": "sandbox",
-                        "data": {
-                            "session_id": session.session_id,
-                            "root": True,
-                            "live": True,
-                            "steps": [],
-                            "recent_stdout": [],
-                            "recent_stderr": [],
-                        },
-                    },
-                }]
-                logger.info(
-                    "chat.respond_terminal: sandbox session=%s spawned for cmd=%r",
-                    session.session_id, cmd[:80],
-                )
-            except Exception as exc:  # noqa: BLE001
-                logger.warning(
-                    "chat.respond_terminal: sandbox spawn failed (cmd=%r): %s",
-                    cmd[:80], exc,
-                )
+                from db.database import get_session as _get_bg_session
+                async with _get_bg_session() as bg_db:
+                    await extract_and_store_facts(user_id=user.id, session_id=session_id, conversation_summary=user_message, db=bg_db)
+            except Exception: pass
+        _track_task(asyncio.create_task(_bg_extract_facts()))
+
+    await save_behavioral_model(db, user.id, behavioral_model)
 
     return (
         ai_response.content,

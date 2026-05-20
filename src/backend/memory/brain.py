@@ -8,6 +8,7 @@ episode seeds. MemoryBrain makes them behave like one coherent memory system.
 """
 from __future__ import annotations
 
+import asyncio
 import logging
 import re
 from dataclasses import dataclass, field
@@ -158,7 +159,8 @@ async def extract_memory_writes(text: str, *, max_items: int = 8) -> list[Memory
             history=[],
             tools=[_EXTRACT_TOOL],
             user_id=None,
-            provider_hint="gemini-flash"
+            provider_hint="gemini-flash",
+            timeout_s=10.0,
         )
         if isinstance(choice, ToolCallResult) and choice.tool_name == "extract_facts":
             writes = []
@@ -200,6 +202,7 @@ class MemoryBrain:
         from memory.tactical_memory import store_fact as tactical_store
         from memory import strategic_memory
 
+        strategic_tasks = []
         for write in writes:
             existing = await db.execute(
                 select(MemoryFact)
@@ -229,8 +232,9 @@ class MemoryBrain:
             report.stored_ids.append(fact_id)
 
             if durable and write.durable:
-                try:
-                    await strategic_memory.store_fact(
+                # Store the promise, execute later in parallel
+                strategic_tasks.append(
+                    strategic_memory.store_fact(
                         user_id=user_id,
                         fact_id=fact_id,
                         content=write.content,
@@ -242,18 +246,24 @@ class MemoryBrain:
                             "memory_brain_reason": write.reason,
                         },
                     )
-                    report.strategic_ids.append(fact_id)
-                    try:
-                        row_result = await db.execute(
-                            select(MemoryFact).where(MemoryFact.id == fact_id)
-                        )
-                        sql_row = row_result.scalar_one_or_none()
-                        if sql_row is not None:
-                            sql_row.embedding_id = fact_id
-                    except Exception:
-                        pass
-                except Exception as exc:
-                    logger.debug("strategic memory write failed: %s", exc)
+                )
+                report.strategic_ids.append(fact_id)
+                # Phase 10 — mark in SQLite that this fact is now in strategic store.
+                try:
+                    row_result = await db.execute(
+                        select(MemoryFact).where(MemoryFact.id == fact_id)
+                    )
+                    sql_row = row_result.scalar_one_or_none()
+                    if sql_row is not None:
+                        sql_row.embedding_id = fact_id
+                except Exception:
+                    pass
+
+        if strategic_tasks:
+            # Phase 10 — exquisite fix: run ChromaDB writes in parallel
+            # to hide the ~200ms per-fact embedding latency.
+            await asyncio.gather(*strategic_tasks, return_exceptions=True)
+
         await db.flush()
         return report
 

@@ -12,6 +12,7 @@ from sqlalchemy.ext.asyncio import (
     create_async_engine,
 )
 from sqlalchemy.orm import DeclarativeBase
+from sqlalchemy import event
 
 from config import config
 
@@ -23,12 +24,18 @@ class Base(DeclarativeBase):
 engine = create_async_engine(
     config.database_url,
     echo=config.debug,
-    # Phase 10 — `timeout=30.0` bumps SQLite's BUSY wait from the default 5s
-    # so a tool handler opening a second session during a chat turn (which
-    # already holds the request's write session) doesn't get "database is
-    # locked" instantly. Single-writer SQLite + chat + tools = contention.
-    connect_args={"check_same_thread": False, "timeout": 30.0},
+    # Phase 10 — `timeout=60.0` bumps SQLite's BUSY wait from 5s.
+    # connect_args: PRAGMA journal_mode=WAL is applied in `engine.begin()` 
+    # below during init_db for persistence, but we can also set it per-connection.
+    connect_args={"check_same_thread": False, "timeout": 60.0},
 )
+
+@event.listens_for(engine.sync_engine, "connect")
+def set_sqlite_pragma(dbapi_connection, connection_record):
+    cursor = dbapi_connection.cursor()
+    cursor.execute("PRAGMA journal_mode=WAL")
+    cursor.execute("PRAGMA synchronous=NORMAL")
+    cursor.close()
 
 AsyncSessionLocal = async_sessionmaker(
     bind=engine,

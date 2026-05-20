@@ -35,6 +35,8 @@ async def _call(prompt: str, *, task_id: str | None = None, model: str | None = 
     counts strategic / reflector / seeds calls.
     """
     effective_model = model or config.ai_planner_model
+    if effective_model == "auto":
+        effective_model = config.ai_gemini_model
     return await ai_router.generate_raw(
         system_prompt=(
             "You are PHANTOM's internal planner. "

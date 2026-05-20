@@ -35,8 +35,9 @@ def _session_factory():
 logger = logging.getLogger(__name__)
 
 
-TOOL_TIMEOUT_S: float = 10.0
-MAX_TOOL_CALLS_PER_TURN: int = 3
+TOOL_TIMEOUT_S: float = 30.0
+MAX_TOOL_CALLS_PER_TURN: int = 5
+
 
 # Why 10s, not 5s: chat routes hold an open AsyncSession for the whole turn
 # (user write → LLM loop → assistant write), so a tool handler that opens a
@@ -2175,9 +2176,9 @@ async def _tool_run_terminal_command(args: dict[str, Any], user_id: str) -> dict
     command = args.get("command")
     if not command:
         return {"ok": False, "error": "command required", "error_kind": "validation"}
-    
+
     timeout_s = int(args.get("timeout_s", 60))
-    
+
     try:
         proc = await asyncio.create_subprocess_shell(
             command,
@@ -2205,10 +2206,10 @@ async def _tool_run_terminal_command(args: dict[str, Any], user_id: str) -> dict
                 proc.kill()
                 stdout = "<process killed, no output captured>"
                 stderr = ""
-                
+
             return {
-                "ok": False, 
-                "error": f"timeout after {timeout_s}s", 
+                "ok": False,
+                "error": f"timeout after {timeout_s}s",
                 "error_kind": "timeout",
                 "stdout": stdout,
                 "stderr": stderr
@@ -2217,8 +2218,32 @@ async def _tool_run_terminal_command(args: dict[str, Any], user_id: str) -> dict
         return {"ok": False, "error": str(e), "error_kind": "execution_failed"}
 
 
+async def _tool_agent_delegate(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    """Phase 30 — delegate a goal to a specific sub-agent role."""
+    role_id = str(args.get("role_id", ""))
+    goal = str(args.get("goal", ""))
+    if not role_id or not goal:
+        return _err("invalid_args", "missing 'role_id' or 'goal'")
 
-async def _tool_search_nearby_places(args: dict[str, Any], user_id: str, db: AsyncSession) -> dict[str, Any]:
+    from agent.kernel.runtime import agent_runtime
+    try:
+        # Delegation starts the task in 'background' track by default
+        task_id, started = await agent_runtime.start_task(
+            user_id=user_id,
+            goal=goal,
+            subagent_role=role_id,
+            track="background",
+            origin="delegation",
+        )
+        if not started:
+            return _err("busy", "Foreground slot busy or too many background tasks.")
+
+        return _ok(task_id=task_id, status="started", role_id=role_id)
+    except Exception as exc:
+        return _err("delegation_failed", str(exc))
+
+
+async def _tool_search_nearby_places(args: dict[str, Any], user_id: str) -> dict[str, Any]:
     from agent.actions.map.query_nearby import MapQueryNearby
     from agent.base import ActionContext
     
@@ -2247,6 +2272,58 @@ async def _tool_search_nearby_places(args: dict[str, Any], user_id: str, db: Asy
 
 
 
+async def _tool_agent_delegate(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    """Phase 30 — delegate a goal to a specific sub-agent role."""
+    role_id = str(args.get("role_id", ""))
+    goal = str(args.get("goal", ""))
+    if not role_id or not goal:
+        return _err("invalid_args", "missing 'role_id' or 'goal'")
+
+    from agent.kernel.runtime import agent_runtime
+    try:
+        # Delegation starts the task in 'background' track by default
+        task_id, started = await agent_runtime.start_task(
+            user_id=user_id,
+            goal=goal,
+            subagent_role=role_id,
+            track="background",
+            origin="delegation",
+        )
+        if not started:
+            return _err("busy", "Foreground slot busy or too many background tasks.")
+
+        return _ok(task_id=task_id, status="started", role_id=role_id)
+    except Exception as exc:
+        return _err("delegation_failed", str(exc))
+
+
+async def _tool_map_plan_route(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    """Phase 30 — plan a route using the map engine."""
+    from agent.actions.map.plan_route import MapPlanRoute
+    from agent.base import ActionContext
+
+    destination = args.get("destination")
+    if not destination:
+        return _err("invalid_args", "missing 'destination'")
+
+    origin = args.get("origin")
+    mode = args.get("mode", "car")
+
+    action = MapPlanRoute(
+        destination=destination,
+        origin=origin,
+        mode=mode,
+        user_id=user_id
+    )
+    ctx = ActionContext(session_id="chat", message_id="chat", step=1, extras={"user_id": user_id})
+    res = await action.execute(ctx)
+
+    if res.ok:
+        return _ok(res.output)
+    else:
+        return _err(res.output.get("reason", "unknown"), str(res.output.get("error", "Unknown error")))
+
+
 _HANDLERS: dict[str, Any] = {
     "search_nearby_places": _tool_search_nearby_places,
     "search_locationhistory": _tool_search_locationhistory,
@@ -2258,6 +2335,8 @@ _HANDLERS: dict[str, Any] = {
     "get_internal_state": _tool_get_internal_state,
     "get_recent_hearing": _tool_get_recent_hearing,
     "run_terminal_command": _tool_run_terminal_command,
+    "agent.delegate": _tool_agent_delegate,
+    "map.plan_route": _tool_map_plan_route,
     "search_web": _tool_search_web,
     "get_calendar_events": _tool_get_calendar_events,
     "create_calendar_event": _tool_create_calendar_event,

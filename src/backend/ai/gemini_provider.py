@@ -126,13 +126,28 @@ def _build_contents(
 ) -> list[dict[str, Any]]:
     """
     Build the contents list for Gemini from conversation history + new user message.
-    Gemini expects: [{"role": "user"|"model", "parts": [{"text": "..."}]}, ...]
+    Handles 'user', 'assistant' (model), and 'tool' roles.
     """
     contents: list[dict[str, Any]] = []
     for msg in history:
-        role = "model" if msg.get("role") == "assistant" else "user"
-        contents.append({"role": role, "parts": [{"text": msg.get("content", "")}]})
-    contents.append({"role": "user", "parts": [{"text": user_message}]})
+        role = msg.get("role")
+        content = msg.get("content", "")
+
+        if role == "tool":
+            # Gemini expects function_response in 'user' role or dedicated 'tool' role
+            # depending on the SDK version, but google-genai aio expects function_response parts.
+            # However, for generic history, we map it to a part.
+            # NOTE: True tool-use history is usually handled by the internal loop.
+            # For archived turns, we convert it back to text if it's not structured.
+            contents.append({"role": "user", "parts": [{"text": f"TOOL_RESULT: {content}"}]})
+        elif role == "assistant":
+            contents.append({"role": "model", "parts": [{"text": content or "…"}]})
+        else:
+            contents.append({"role": "user", "parts": [{"text": content or "…"}]})
+
+    # Add the current user message
+    if user_message:
+        contents.append({"role": "user", "parts": [{"text": user_message}]})
     return contents
 
 
@@ -478,13 +493,16 @@ class GeminiProvider(AIProvider):
                     max_output_tokens=config.ai_max_tokens,
                     tools=gemini_tools,
                     tool_config=types.ToolConfig(
-                        function_calling_config=types.FunctionCallingConfig(mode="ANY"),
+                        function_calling_config=types.FunctionCallingConfig(mode="AUTO"),
                     ),
                     safety_settings=[types.SafetySetting(**s) for s in _SAFETY_OFF],
                 )
+                # Build full contents list including history
+                contents = _build_contents(user_message, history)
+
                 response = await client.aio.models.generate_content(
                     model=model_name,
-                    contents=[{"role": "user", "parts": [{"text": prompt}]}],
+                    contents=contents,
                     config=gen_config,
                 )
             except Exception as exc:
@@ -502,21 +520,19 @@ class GeminiProvider(AIProvider):
                 )
 
             fn_name, fn_args, text = _extract_function_call(response, tools)
+            
+            # If no function call, but we got text, return it as success (with no tool_name).
+            # This allows Step 2 in chat_pipeline to finish immediately.
             if fn_name is None:
-                last_error = ToolUseError(
-                    kind=ToolErrorKind.MODEL_REFUSED,
-                    message=f"gemini returned text without a function_call: {text[:200]!r}",
-                    retriable=True,
+                return ToolCallResult(
+                    tool_name="",
+                    arguments={},
+                    raw_reasoning=text,
+                    confidence=1.0,
+                    parse_attempts=attempts,
                     provider="gemini",
                     model=model_name,
-                    parse_attempts=attempts,
                 )
-                prompt = (
-                    user_message
-                    + f"\n\nYour previous reply was prose, not a function_call. "
-                    f"Pick exactly one tool from: {sorted(valid_names)}."
-                )
-                continue
 
             if fn_name not in valid_names:
                 last_error = ToolUseError(

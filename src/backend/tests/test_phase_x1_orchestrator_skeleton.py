@@ -89,12 +89,11 @@ class TestDecideMode:
         )
 
     def test_flag_on_with_gemini_returns_single_on_day4(self):
-        """Day-4 ships the scaffold: even with flag ON + Gemini, the
-        decision is hard-coded 'single'. X-3 flips this to parallel-K
-        for tool-heavy queries."""
+        """X-3 implemented: with flag ON + Gemini, the
+        decision is 'parallel_k'."""
         from ai.agents import OrchestratorMode, decide_mode
 
-        assert decide_mode(provider="gemini", flag_enabled=True) is OrchestratorMode.single
+        assert decide_mode(provider="gemini", flag_enabled=True) is OrchestratorMode.parallel_k
 
     def test_flag_default_reads_from_config(self, monkeypatch):
         """When flag_enabled is None, decide_mode reads config.
@@ -106,8 +105,8 @@ class TestDecideMode:
         monkeypatch.setattr(config, "chat_orchestrator_enabled", True)
         # Provider != gemini → single.
         assert decide_mode(provider="ollama") is OrchestratorMode.single
-        # Provider == gemini → still single on Day-4 (X-3 flips later).
-        assert decide_mode(provider="gemini") is OrchestratorMode.single
+        # Provider == gemini → parallel-K in Phase A implementation.
+        assert decide_mode(provider="gemini") is OrchestratorMode.parallel_k
 
 
 # ───────────────────────────────────────────────────── run_orchestrator ──

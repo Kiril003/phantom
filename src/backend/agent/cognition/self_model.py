@@ -176,11 +176,32 @@ def _list_active_ws_clients() -> list[str]:
         return []
 
 
-async def build_self_model(registry: ActionRegistry) -> SelfModel:
+async def build_self_model(
+    registry: ActionRegistry,
+    *,
+    role_id: str | None = None,
+) -> SelfModel:
     raw_tolerance = max(1, min(7, int(config.agent_risk_tolerance)))
     # Snap to a known enum value (1/3/5/7) — pick the highest level not over the raw cap.
     rt_value = max((lvl for lvl in (RiskLevel.SAFE, RiskLevel.LOW, RiskLevel.MEDIUM, RiskLevel.HIGH)
                     if int(lvl) <= raw_tolerance), default=RiskLevel.SAFE)
+
+    # Phase 30 — Org-Chart context resolution
+    role_context = None
+    if role_id:
+        try:
+            from .org_chart import get_org_chart
+            chart = await get_org_chart()
+            role = next((r for r in chart.roles if r.id == role_id), None)
+            if role:
+                role_context = {
+                    "name": role.name,
+                    "description": role.description,
+                    "standing_orders": role.standing_orders,
+                    "system_prompt_extension": role.system_prompt_extension,
+                }
+        except Exception as exc:
+            logger.debug("self_model: org_chart lookup failed for role %s: %s", role_id, exc)
 
     return SelfModel(
         identity=(
@@ -202,6 +223,8 @@ async def build_self_model(registry: ActionRegistry) -> SelfModel:
         recent_task_summary=await _last_memory_seed_summary(),
         language_primary=str(config.agent_language_primary),
         language_fallback=str(config.agent_language_fallback),
+        agent_role_id=role_id,
+        agent_role_context=role_context,
     )
 
 

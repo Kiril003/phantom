@@ -195,37 +195,31 @@ RESPONSE_FORM_TOOLS: list[dict[str, Any]] = [
     {
         "name": "respond_artifact",
         "description": (
-            "Інтерактивний/анімований віджет під екран 1024×600. "
+            "Інтерактивний віджет під екран (A2UI формат). "
             "Використовуй ЗАВЖДИ коли користувач просить віджет, UI, "
-            "гру, візуалізацію, дашборд, анімацію або щось, чого "
-            "стандартні форми не покривають. НІКОЛИ не вставляй HTML "
-            "як текст у звичайну відповідь — лише через цей виклик. "
-            "Зроби насичений повноекранний дизайн що заповнює поверхню, "
-            "а не крихітний елемент по центру. Без мережі/CDN, ≤64KB."
+            "дашборд, або інтерфейс керування. НІКОЛИ не вставляй HTML. "
+            "Генеруй декларативний JSON-дерево (A2UI Protocol)."
         ),
         "parameters": {
             "type": "object",
             "properties": {
-                "title": {"type": "string", "description": "Назва для шапки"},
-                "html": {
-                    "type": "string",
-                    "description": (
-                        "Повний самодостатній HTML-документ. Заповни всю "
-                        "поверхню (≈1024×600), сучасний насичений дизайн, "
-                        "осмислені анімації. Лише inline CSS/JS, canvas, "
-                        "SVG. Без мережі/CDN/зовнішніх бібліотек."
-                    ),
-                },
-                "capabilities": {
+                "title": {"type": "string", "description": "Назва для шапки віджета"},
+                "components": {
                     "type": "array",
                     "description": (
-                        "Підмножина: read:context read:sensors read:memory "
-                        "read:state action:tools"
+                        "Список компонентів інтерфейсу (плоский масив). "
+                        "Кожен компонент має type (text, button, card, input, flex), "
+                        "props (властивості) та опціональний children (масив id). "
+                        "Приклад: [{'id': 'c1', 'type': 'card', 'props': {'title': 'Main'}, 'children': ['t1']}]"
                     ),
-                    "items": {"type": "string"},
+                    "items": {"type": "object"}
                 },
+                "root_id": {
+                    "type": "string",
+                    "description": "ID кореневого компонента (з масиву components), з якого починається рендер."
+                }
             },
-            "required": ["title", "html"],
+            "required": ["title", "components", "root_id"],
         },
     },
     {
@@ -740,23 +734,22 @@ def parse_function_call(
         })
 
     elif fn_name == "respond_artifact":
-        html = str(fn_args.get("html", ""))
-        caps = fn_args.get("capabilities") or []
-        bad = (
-            not config.chat_artifacts_enabled
-            or len(html.encode("utf-8")) > config.chat_artifact_html_cap_bytes
-            or not isinstance(caps, list)
-            or not set(caps) <= _ARTIFACT_CAPS
-        )
+        components = fn_args.get("components", [])
+        root_id = str(fn_args.get("root_id", ""))
+        title = str(fn_args.get("title", ""))
+        
+        bad = not config.chat_artifacts_enabled or not isinstance(components, list)
+        
         if bad:
             response_form = "text"
         else:
             attachments.append({
                 "type": "artifact_data",
                 "data": {
-                    "html": html,
-                    "title": str(fn_args.get("title", "")),
-                    "capabilities": list(caps),
+                    "a2ui": True,
+                    "title": title,
+                    "components": components,
+                    "root_id": root_id,
                 },
             })
 

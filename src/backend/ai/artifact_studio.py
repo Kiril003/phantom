@@ -47,41 +47,30 @@ def _strip_to_document(text: str) -> str | None:
 
 
 ELITE_SYSTEM_PROMPT = (
-    "Ти — елітний інженер-дизайнер інтерактивних артефактів рівня Claude. "
-    "Згенеруй ОДИН повний самодостатній HTML-документ — закінчений продукт, "
-    "не демо.\n"
+    "Ти — елітний інженер-дизайнер інтерактивних артефактів. "
+    "Згенеруй ОДИН повний самодостатній HTML-документ — закінчений, "
+    "високоякісний продукт.\n"
     "ВИМОГИ:\n"
-    "• Виразний, оригінальний візуал — НЕ генеричний AI-вигляд. Продумана "
-    "типографіка, простір, кольорова система, глибина.\n"
-    "• Заповни поверхню 1024×600 landscape повністю. Без крихітних "
-    "елементів по центру, без скролу хост-екрана.\n"
-    "• Осмислена анімація що несе сенс (стан, перехід, дані) — не "
-    "декоративна.\n"
-    "• Повна інтерактивність якщо бриф це передбачає: робочі контролі, "
-    "стан, зворотний звʼязок.\n"
-    "• НУЛЬ заглушок: жодних TODO, lorem, '// implement', порожніх "
-    "обробників, мертвих кнопок.\n"
-    "• НУЛЬ мережі: inline CSS/JS, <canvas>/SVG, зображення лише data:. "
-    "Жодних CDN/зовнішніх бібліотек/fetch/WebSocket.\n"
-    "• Доступність: клавіатура + ARIA. Стійкий JS — жодних неперехоплених "
-    "виключень.\n"
-    "ВИВІД: ТІЛЬКИ документ (від <!doctype html> до </html>). Без прози, "
-    "без markdown-огорожі, без пояснень."
+    "• ПОВНА СВОБОДА ДИЗАЙНУ: Створюй унікальний, вражаючий візуал. "
+    "Вибирай кольорову гаму, стиль та типографіку відповідно до запиту.\n"
+    "• АДАПТИВНІСТЬ: Артефакт має ідеально заповнювати 100% ширини та висоти "
+    "контейнера. Використовуй сучасні методи верстки (Flexbox, Grid).\n"
+    "• ІНТЕРАКТИВНІСТЬ ТА АНІМАЦІЯ: Додавай глибоку інтерактивність та "
+    "осмислені анімації, якщо це доречно.\n"
+    "• НУЛЬ ЗАГЛУШОК: Жодних TODO чи порожніх елементів.\n"
+    "• САМОДОСТАТНІСТЬ: Всі стилі та скрипти мають бути всередині документа. "
+    "Нічого не завантажуй з мережі.\n"
+    "ВИВІД: ТІЛЬКИ документ (від <!doctype html> до </html>). Без прози."
 )
 
+
 CRITIQUE_SYSTEM_PROMPT = (
-    "Ти — суворий арт-директор. Оціни HTML-артефакт за рубрикою. Якщо "
-    "КОЖНА вісь проходить — відповідай РІВНО `OK` (два символи, нічого "
-    "більше). Інакше — поверни ПОВНІСТЮ переписаний кращий документ "
-    "(тільки документ, без прози, без огорожі), що усуває найслабші осі.\n"
-    "РУБРИКА:\n"
-    "1. Візуальна насиченість і оригінальність (не генерично).\n"
-    "2. Повнота — нуль заглушок/мертвих контролів.\n"
-    "3. Глибина інтерактивності відповідно до брифа.\n"
-    "4. Влучання в поверхню 1024×600 без overflow.\n"
-    "5. Осмисленість анімації.\n"
-    "6. Продуктивність — без jank, обмежені цикли.\n"
-    "7. Самодостатність — нуль мережі/CDN."
+    "Ти — арт-директор. Оціни HTML-артефакт.\n"
+    "1. Чи відповідає дизайн високим стандартам якості?\n"
+    "2. Чи заповнює він весь доступний простір адаптивно?\n"
+    "3. Чи є він повністю робочим та самодостатнім?\n"
+    "Якщо все чудово — відповідай `OK`. Інакше — перепиши документ ПОВНІСТЮ, "
+    "зробивши його досконалим."
 )
 
 
@@ -89,8 +78,8 @@ def _brief_message(b: Brief) -> str:
     parts = [f"НАЗВА: {b.title}".strip(), f"ЗАПИТ КОРИСТУВАЧА:\n{b.request}".strip()]
     if b.hint.strip():
         parts.append(
-            "ЧЕРНЕТКА-НАТЯК (лише як сигнал наміру, НЕ копіюй, зроби "
-            f"набагато краще):\n{b.hint[:4000]}"
+            "ЧЕРНЕТКА-СИГНАЛ (якщо є, врахуй намір, але зроби професійніше):\n"
+            f"{b.hint[:4000]}"
         )
     return "\n\n".join(p for p in parts if p)
 
@@ -104,14 +93,6 @@ async def build_artifact(
     """Return (title, html). Draft pass then ≤ ai_artifact_max_revisions
     critique/rewrite passes; stop early on `OK`. Raises
     ArtifactStudioError if the draft pass yields no document.
-
-    When ``on_phase`` is supplied it is awaited at each generation phase:
-      on_phase("draft", html)       — after draft html is extracted
-      on_phase("critiquing", None)  — before each critique/rewrite pass
-      on_phase("polishing", html)   — after a critique rewrites html
-      on_phase("done", html)        — at the very end
-
-    Absent callback ⇒ byte-identical existing behaviour.
     """
     async def _emit(phase: str, preview: str | None) -> None:
         if on_phase is not None:
@@ -120,11 +101,16 @@ async def build_artifact(
             except Exception as exc:  # noqa: BLE001
                 logger.debug("artifact on_phase callback failed (%s): %s", phase, exc)
 
+    # Resolve model: if 'auto', use the primary gemini model
+    model = config.ai_artifact_model
+    if model == "auto":
+        model = config.ai_gemini_model
+
     try:
         draft_text = await ai_router.generate_raw(
             system_prompt=ELITE_SYSTEM_PROMPT,
             user_message=_brief_message(brief),
-            model=config.ai_artifact_model,
+            model=model,
             max_output_tokens=config.ai_artifact_max_tokens,
             temperature=0.8,
         )
@@ -143,7 +129,7 @@ async def build_artifact(
             verdict = await ai_router.generate_raw(
                 system_prompt=CRITIQUE_SYSTEM_PROMPT,
                 user_message=html,
-                model=config.ai_artifact_model,
+                model=model,
                 max_output_tokens=config.ai_artifact_max_tokens,
                 temperature=0.4,
             )

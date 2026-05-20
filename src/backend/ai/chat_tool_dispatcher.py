@@ -93,6 +93,10 @@ _CHAT_SAFE_TOOL_NAMES: tuple[str, ...] = (
     "vault_reveal",
     # Day-5: Execute terminal commands directly from chat (God mode)
     "run_terminal_command",
+    # Phase 30: Maps & Routing
+    "map.plan_route",
+    # Phase 30: Delegation
+    "agent.delegate",
 )
 
 

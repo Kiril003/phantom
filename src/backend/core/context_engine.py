@@ -587,7 +587,8 @@ class ContextEngine:
         self._last_slow_refresh = now
 
     def _update_time(self) -> None:
-        now = datetime.now(tz=timezone.utc)
+        # Use local time for the 'when' block so the AI knows the user's actual time
+        now = datetime.now().astimezone()
         work_start = config.tools_work_hours_start  # "09:00"
         work_end = config.tools_work_hours_end       # "18:00"
         try:

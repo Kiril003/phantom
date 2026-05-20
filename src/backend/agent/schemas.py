@@ -263,6 +263,13 @@ class SelfModel(BaseModel):
     # Phase 9.2 — Ukrainian primary persona, English technical-term fallback.
     language_primary: str = "uk"
     language_fallback: str = "en"
+    
+    # Phase 30 — Org-Chart Role Integration
+    # agent_role_id: ID from agent_roles table (e.g. 'role-back', 'role-ceo')
+    # agent_role_context: Full context object including extension prompt and orders.
+    agent_role_id: str | None = None
+    agent_role_context: dict[str, Any] | None = None
+    
     # Phase 9.3a (AD-01) — persistent caveats injected into every planner
     # prompt. Observations slide off the 10-item tactical window on long
     # tasks; the SelfModel is read in full every turn, so resume hints

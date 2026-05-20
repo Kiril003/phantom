@@ -171,6 +171,25 @@ class IpApiLocator:
             resp.raise_for_status()
             data = resp.json()
         except (httpx.HTTPError, ValueError) as exc:
+            # Phase 10 — exquisite fix: secondary fallback to ip-api.com (free, no key).
+            # If the primary service is down or rate-limited, we try this before giving up.
+            try:
+                logger.debug("ipapi failed, trying ip-api.com fallback...")
+                async with httpx.AsyncClient(timeout=5.0) as client:
+                    resp = await client.get("http://ip-api.com/json/")
+                resp.raise_for_status()
+                data = resp.json()
+                if data.get("status") == "success":
+                    lat = float(data["lat"])
+                    lon = float(data["lon"])
+                    self._rate_limit.mark_request()
+                    acc = 50_000.0
+                    self._cache[_CURRENT_KEY] = (lat, lon, acc)
+                    self._record_success()
+                    return self._build_estimate(lat, lon, acc)
+            except Exception as fexc:
+                logger.debug("ip-api.com fallback also failed: %s", fexc)
+
             logger.warning("ipapi lookup network/parse failure: %s", exc)
             service_health.mark_failure("ipapi", str(exc))
             self._record_failure(exc)

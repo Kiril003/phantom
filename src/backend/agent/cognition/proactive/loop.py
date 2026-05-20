@@ -282,6 +282,9 @@ class ProactiveLoop:
                     })
 
             try:
+                # Phase 10 — exquisite fix: pulse the long-silence trigger check
+                # every cycle so it's actually used in production.
+                check_long_silence()
                 await self._maybe_speak()
             except Exception as exc:
                 logger.warning("proactive _maybe_speak raised: %s", exc)
@@ -574,13 +577,16 @@ class ProactiveLoop:
         emotion: EmotionVector | None = ctx.get("emotion")  # type: ignore[assignment]
         off_baseline = False
         if emotion is not None:
+            # Phase 10 — relaxed baseline check: high focus/curiosity or
+            # any concern/fatigue should be enough to consider speaking.
             off_baseline = (
-                abs(emotion.focus - 0.5) > 0.2
-                or abs(emotion.curiosity - 0.5) > 0.2
-                or emotion.concern > 0.3
-                or emotion.fatigue > 0.5
+                abs(emotion.focus - 0.5) > 0.1
+                or abs(emotion.curiosity - 0.5) > 0.1
+                or emotion.concern > 0.1
+                or emotion.fatigue > 0.4
             )
-        if not off_baseline and not self._recent_triggers:
+        # Initiative if emotional OR triggers OR pending concerns
+        if not off_baseline and not self._recent_triggers and not ctx.get("concerns_top"):
             return False
         return True
 

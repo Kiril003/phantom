@@ -66,16 +66,16 @@ def envelope_key_for_sub(sub_idx: int, sub_nonce: str) -> str:
 
 
 def merge_envelope_key() -> str:
-    """The merge LLM's envelope key. Reuses chat_pipeline._PROCESS_NONCE
+    """The merge LLM's envelope key. Reuses chat_pipeline._ENVELOPE_NONCE
     so a forged leaf cannot also forge the merge envelope.
 
     Imported lazily because chat_pipeline is a sibling module under
     ai/ — the X-3 import-gate audit (test_phase_x3_ai_agents_import_
     gate.py) only forbids `agent.*` imports from `ai/agents/**`, not
     `ai.*` siblings, so this is allowed."""
-    from ai.chat_pipeline import _PROCESS_NONCE  # noqa: PLC0415
+    from ai.chat_pipeline import _ENVELOPE_NONCE  # noqa: PLC0415
 
-    return f"_phantom_merge_{_PROCESS_NONCE}"
+    return f"_phantom_merge_{_ENVELOPE_NONCE}"
 
 
 async def sanitize_leaf_draft(

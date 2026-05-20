@@ -167,10 +167,15 @@ class AIRouter:
         prov = self.get_provider("gemini")
         if prov is None or not hasattr(prov, "generate_raw"):
             raise RuntimeError("generate_raw: gemini provider unavailable")
+            
+        effective_model = model
+        if effective_model == "auto":
+            effective_model = config.ai_gemini_model
+
         return await prov.generate_raw(
             system_prompt=system_prompt,
             user_message=user_message,
-            model=model,
+            model=effective_model,
             max_output_tokens=max_output_tokens,
             temperature=temperature,
         )
@@ -225,7 +230,7 @@ class AIRouter:
             effective_model = model_override
             if not effective_model:
                 if prov_name == "gemini-flash":
-                    effective_model = config.ai_tactical_model
+                    effective_model = config.ai_tactical_model if config.ai_tactical_model != "auto" else config.ai_gemini_model
                 elif prov_name == "gemini":
                     effective_model = config.ai_gemini_model
                 elif prov_name == "ollama":
@@ -263,6 +268,10 @@ class AIRouter:
                     )
                     # Success
                     result.latency_ms = int((time.monotonic() - t0) * 1000)
+                    # Phase 30: Map technical name back to canonical for the UI
+                    ui_name = "gemini" if prov_name == "gemini-flash" else prov_name
+                    result.provider = ui_name
+                    
                     self._active = prov_name
                     self._sync_context(prov_name)
                     self._last_call_at[prov_name] = time.monotonic()
@@ -395,7 +404,7 @@ class AIRouter:
             # Phase 30 — Model selection logic for tool calling
             effective_model = None
             if prov_name == "gemini-flash":
-                effective_model = config.ai_tactical_model
+                effective_model = config.ai_tactical_model if config.ai_tactical_model != "auto" else config.ai_gemini_model
             elif prov_name == "gemini":
                 effective_model = config.ai_gemini_model
             elif prov_name == "ollama":
@@ -433,6 +442,9 @@ class AIRouter:
 
                     if isinstance(outcome, ToolCallResult):
                         # Success — write audit log + update router state
+                        ui_name = "gemini" if prov_name == "gemini-flash" else prov_name
+                        outcome.provider = ui_name
+                        
                         await write_log(
                             task_id=task_id,
                             step_idx=step_idx,

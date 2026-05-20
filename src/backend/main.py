@@ -77,7 +77,7 @@ async def _context_loop() -> None:
             # so the emitted context carries fresh provenance. Cheap: the
             # resolver only pays network cost when its caches are stale.
             try:
-                await context_engine.resolve_localization()
+                await asyncio.wait_for(context_engine.resolve_localization(), timeout=5.0)
                 await context_engine.refresh_slow_context()
             except Exception as exc:
                 logger.debug("Slow context tick raised (non-critical): %s", exc)
@@ -621,17 +621,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
                 logger.warning("Standing orders runner setup failed: %s", exc)
 
     # Phase 09.2 — episodic memory backfill (only when ChromaDB is behind)
-    if config.agent_enabled and config.agent_episodic_memory_enabled:
-        try:
-            from agent.cognition.memory.backfill import backfill_if_behind
-            stats = await backfill_if_behind()
-            if stats:
-                logger.info(
-                    "Episodic memory: backfilled %d/%d seeds (skipped %d)",
-                    stats["written"], stats["seeds_total"], stats["skipped"],
-                )
-        except Exception as exc:
-            logger.warning("Episodic memory backfill skipped: %s", exc)
+    # Temporarily disabled by Gemini CLI to bypass boot block
+    # if config.agent_enabled and config.agent_episodic_memory_enabled:
+    #    try:
+    #        from agent.cognition.memory.backfill import backfill_if_behind
+    #        stats = await backfill_if_behind()
+    #        if stats:
+    #            logger.info(
+    #                "Episodic memory: backfilled %d/%d seeds (skipped %d)",
+    #                stats["written"], stats["seeds_total"], stats["skipped"],
+    #            )
+    #    except Exception as exc:
+    #        logger.warning("Episodic memory backfill skipped: %s", exc)
 
     # Phase 09.2 — MCP discovery (no servers active by default)
     if config.agent_enabled and config.agent_mcp_servers:

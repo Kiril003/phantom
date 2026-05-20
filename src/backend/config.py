@@ -72,16 +72,16 @@ class PhantomConfig(BaseSettings):
     ai_timeout_s: float = 180.0 # Increased for Deep Think models
     
     # Tiered Gemini models (Phase 30 upgrade — EXACT API IDs)
-    # 3.1 Pro Preview — Brain & Long Context (Max Power)
-    # 2.5 Pro — Execution (Stable High-End)
-    ai_gemini_model: str = "gemini-2.5-pro"
+    # If set to "auto", they follow ai_gemini_model.
+    ai_gemini_model: str = "gemini-2.0-flash"
     ai_gemini_api_key: str = ""
     
-    # Specific tier overrides
-    ai_planner_model: str = "gemini-3.1-pro-preview"
-    ai_reflector_model: str = "gemini-3.1-pro-preview"
-    ai_tactical_model: str = "gemini-2.5-pro"
-    ai_long_context_model: str = "gemini-3.1-pro-preview"
+    # Specific tier overrides (set to "auto" to follow system model)
+    ai_planner_model: str = "auto"
+    ai_reflector_model: str = "auto"
+    ai_tactical_model: str = "auto"
+    ai_long_context_model: str = "auto"
+    ai_artifact_model: str = "auto"
 
     # Anthropic Claude
     ai_anthropic_model: str = "claude-3-7-sonnet-20250219"
@@ -102,7 +102,7 @@ class PhantomConfig(BaseSettings):
     # Phase 9.2 — total retries across primary+fallback for tool-use calls.
     ai_tool_use_max_total_retries: int = 3
     # Phase 9.2.1 — minimum interval between successive LLM calls per provider.
-    ai_call_min_interval_ms: int = 1000 # Reduced for Flash performance
+    ai_call_min_interval_ms: int = 200 # Reduced for Flash performance
 
     # Chat (Phase 5) — WS stream emission cadence.
     # Day-4 Wave-2 W-5 (audit U8-PERF-C2): default chat_stream_delay_s
@@ -505,10 +505,10 @@ class PhantomConfig(BaseSettings):
     agent_proactive_enabled: bool = True
     agent_proactive_interval_s: int = 60
     agent_proactive_interval_min_s: int = 30
-    agent_proactive_interval_max_s: int = 300
-    agent_proactive_cooldown_s: int = 300
-    agent_proactive_long_silence_threshold_min: int = 120
-    agent_proactive_require_recent_chat: bool = True
+    agent_proactive_interval_max_s: int = 120
+    agent_proactive_cooldown_s: int = 120
+    agent_proactive_long_silence_threshold_min: int = 30
+    agent_proactive_require_recent_chat: bool = False
     # Phase 9.3b — standing orders (persistent triggers). Runner checks every
     # `agent_standing_orders_poll_s` seconds; disabled by default so nothing
     # fires without operator opt-in. Hot-reloadable.
@@ -638,13 +638,13 @@ class PhantomConfig(BaseSettings):
     # memory/context already hydrated into the prompt. Operators can opt
     # in when they want extra read-only grounding. Risky/mutating
     # autonomy still flows through the agent approval gates.
-    chat_tools_enabled: bool = False
+    chat_tools_enabled: bool = True
     # Rich response widgets (`respond_chart`, `respond_map`,
     # `respond_artifact`, etc.) are a separate opt-in from data tools.
     # Keeping them off by default prevents normal conversation from
     # turning into half-built UI cards while preserving the catalog for
     # labs/demo deployments that explicitly enable it.
-    chat_response_widgets_enabled: bool = False
+    chat_response_widgets_enabled: bool = True
     # Day-4 Wave-2 X-1 (ADR-ORC-001): orchestrator scaffold flag. When
     # OFF (default), routes_chat calls chat_pipeline.run unchanged —
     # back-compat invariant preserved. When ON AND the active provider
@@ -659,31 +659,31 @@ class PhantomConfig(BaseSettings):
     chat_orchestrator_merge_reserve_ms: int = 1500
     chat_tool_locationhistory_limit: int = 20
     chat_tool_anchors_limit: int = 30
-    chat_tool_max_calls_per_turn: int = 4
+    chat_tool_max_calls_per_turn: int = 5
     # Day-2 D2-D1: per-call wall-clock cap for one chat-tool dispatch.
     # tool_executor's own asyncio.wait_for already covers the SQL/IO path;
     # this is the dispatcher-layer fallback that fires if a delegate
     # mock-installed by tests or by future call_with_tools paths hangs
-    # outside tool_executor. 10 s mirrors TOOL_TIMEOUT_S so legitimate
+    # outside tool_executor. 30 s mirrors TOOL_TIMEOUT_S so legitimate
     # chroma + nominatim retries can complete; tighten to 5 s if the
     # tier-D wall-clock budget pressure forces it.
-    chat_tool_call_timeout_s: float = 10.0
+    chat_tool_call_timeout_s: float = 30.0
     # Day-2 PERF-17b: per-turn wall-clock ceiling for the entire chat
     # tool-use loop (sum of all iterations: LLM ⇄ tool ⇄ LLM …). 4
     # iterations × Gemini ~2.1 s p50 = 8.4 s typical; p99 reaches 25 s
     # without a cap. Phase 17b's call_with_tools loop must abort and
     # surface the last-good response when this is exceeded — Tier D's
-    # chat_pipeline.py reads this before each iteration. 12 s leaves
+    # chat_pipeline.py reads this before each iteration. 60 s leaves
     # headroom over the typical case while keeping p99 within the
     # tolerable chat-turn budget.
-    chat_tool_max_total_ms: int = 12_000
-    chat_artifacts_enabled: bool = False
+    chat_tool_max_total_ms: int = 60_000
+    chat_artifacts_enabled: bool = True
     chat_artifact_html_cap_bytes: int = 262144
-    ai_artifact_model: str = "gemini-3.1-pro"
+    ai_artifact_model: str = "gemini-2.0-flash"
     ai_artifact_max_tokens: int = 32768
     ai_artifact_max_revisions: int = 2
     # Strategic/reflector planner needs reliable strict-JSON.
-    ai_planner_model: str = "gemini-3.1-pro"
+    ai_planner_model: str = "gemini-2.0-flash"
     ai_planner_max_tokens: int = 8192
 
     # Day-2 (audit-2026-04-29 Tier E): structured JSON log output.

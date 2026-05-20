@@ -99,16 +99,16 @@ class TestEnvelopeKeys:
             envelope_key_for_sub(0, 12345)  # type: ignore[arg-type]
 
     def test_merge_envelope_uses_process_nonce(self):
-        """The merge envelope key MUST embed chat_pipeline._PROCESS_NONCE
+        """The merge envelope key MUST embed chat_pipeline._ENVELOPE_NONCE
         so a forged leaf cannot also forge the merge marker."""
         from ai.agents import merge_envelope_key
-        from ai.chat_pipeline import _PROCESS_NONCE
+        from ai.chat_pipeline import _ENVELOPE_NONCE
 
         key = merge_envelope_key()
-        assert _PROCESS_NONCE in key, (
-            f"X-2: merge_envelope_key() = {key!r} does not embed "
-            f"_PROCESS_NONCE = {_PROCESS_NONCE!r}; the cross-forge guard "
-            "is broken."
+        assert _ENVELOPE_NONCE in key, (
+            f"Expected merge envelope key {key!r} to contain "
+            f"_ENVELOPE_NONCE = {_ENVELOPE_NONCE!r}; the cross-forge guard "
+            f"requires them to match."
         )
         assert key.startswith("_phantom_merge_")
 

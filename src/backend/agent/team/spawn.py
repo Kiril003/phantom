@@ -296,6 +296,7 @@ async def _run_subagent(
     parent_task_id: str,
     depth: int,
     origin: str,
+    branch: str | None = None,
 ) -> None:
     """Coroutine body for one sub-agent. Owns:
       • TaskState build with parent linkage + role
@@ -315,7 +316,10 @@ async def _run_subagent(
     sem = team_semaphore()
     state: "TaskState | None" = None
     try:
-        self_model = await build_self_model(default_registry)
+        # Phase 30 — Inject role_id (subagent_role) into self-model builder
+        # This loads standing_orders and prompt extensions for the specialist.
+        self_model = await build_self_model(default_registry, role_id=role)
+        
         decorated = _build_subagent_goal(
             role=role, constraints=constraints, base_goal=goal,
         )
@@ -379,6 +383,4 @@ async def _run_subagent(
                 summary=f"runner aborted before TaskState: {exc}",
             ))
     finally:
-        sem.release()
-  finally:
         sem.release()

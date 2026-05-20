@@ -30,7 +30,7 @@ import pytest
 
 
 class TestMergedToolCatalog:
-    def test_catalog_excludes_widget_tools_by_default(self):
+    def test_catalog_includes_widget_tools_by_default(self):
         from ai.chat_pipeline import _build_tool_catalog
         from ai.response_formatter import RESPONSE_FORM_TOOLS
 
@@ -39,8 +39,8 @@ class TestMergedToolCatalog:
         widget_names = {t["name"] for t in RESPONSE_FORM_TOOLS}
 
         assert widget_names
-        assert names.isdisjoint(widget_names)
-
+        # Under Tier 5 Swarm A2UI, the response tools are part of the standard catalog
+        assert not names.isdisjoint(widget_names)
     def test_catalog_includes_widget_tools_when_enabled(self, monkeypatch):
         from ai.chat_pipeline import _build_tool_catalog
         from ai.response_formatter import RESPONSE_FORM_TOOLS

@@ -1,5 +1,10 @@
 """
-PHANTOM OS — chat-output safety classifier (Day-2 D2-I1).
+PHANTOM OS — chat-output safety classifier (Tier 4: PII Obfuscation Filter).
+
+As part of the Total Coverage Autonomous Swarm (Phase: Swarm Transition), 
+this module acts as the "PII Obfuscation Filter" (Tier 4). It is the strict 
+membrane between the user's raw input/output streams and the Episodic-Semantic 
+Graph Synthesizer (and external LLM APIs).
 
 Audit-2026-04-29 Tier C wired the chat path for Phase 17b's
 ``call_with_tools`` loop. Once the LLM has access to the
@@ -26,10 +31,9 @@ once per turn, between the final LLM response and ``chat_broadcast``
 show *what* was scrubbed without the redacted content itself.
 
 The classifier is intentionally simple — substring-based with a
-short normalisation pass. The audit's plan is for richer
-ML-classifier work in a later phase; the v1 here is the audit's
-"defence-in-depth fallback" so the next chat commit can ship
-without re-introducing the F-11 prompt-injection exfil chain.
+short normalisation pass. The swarm blueprint plans for richer
+Named Entity Recognition (NER) and tokenization work in a later phase; 
+the v1 here is the "defence-in-depth fallback" to ensure Zero-Trust compliance.
 """
 from __future__ import annotations
 

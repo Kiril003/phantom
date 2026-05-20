@@ -28,7 +28,7 @@ class MapQueryNearby(Action):
 
     async def execute(self, ctx: ActionContext) -> ActionResult:
         t0 = time.monotonic()
-        lat, lon = lat, lon
+        lat, lon = self.lat, self.lon
         if lat is None or lon is None:
             from agent.localization.resolver import get_resolver
             resolver = get_resolver()

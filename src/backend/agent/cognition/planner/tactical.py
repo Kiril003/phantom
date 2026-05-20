@@ -604,9 +604,19 @@ async def plan(
             rendered = horizons_block + "\n" + rendered
         return rendered
 
+    # Phase 30 — Org-Chart Role context
+    role_block = ""
+    if self_model.agent_role_context:
+        ctx = self_model.agent_role_context
+        role_block = (
+            f"\nПОТОЧНА РОЛЬ: {ctx.get('name')} ({ctx.get('description')})\n"
+            f"ПОСТІЙНІ ПОРЯДКИ: {ctx.get('standing_orders')}\n"
+            f"ІНСТРУКЦІЇ РОЛІ: {ctx.get('system_prompt_extension')}\n"
+        )
+
     async def _call_native(note: str) -> ToolCallResult | ToolUseError:
         return await ai_router.call_with_tools(
-            system_prompt=_SYSTEM_PROMPT_UA,
+            system_prompt=_SYSTEM_PROMPT_UA + role_block,
             user_message=_render_user_msg(note),
             tools=tools,
             task_id=task_id,

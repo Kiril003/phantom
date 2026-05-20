@@ -200,29 +200,23 @@ def build_system_prompt(
     recent_places: list[tuple[str, datetime]] | None = None,
     emotion: dict | None = None,
     hormones: dict[str, float] | None = None,
+    minimal_mode: bool = False,
 ) -> str:
     """
     Build the full dynamic system prompt for one AI turn.
-
-    Args:
-        snapshot:          ContextSnapshot dict (from ContextEngine).
-        user_dict:         User fields: username, role, preferences.
-        behavioral_model:  BehavioralModel dict (trust_level, honest_gap, …).
-        memory_hints:      Top-K relevant facts from ChromaDB (optional override).
-
-    Returns:
-        Assembled system prompt string.
     """
-    # Day-5 perf — Gemini implicit prompt-cache wants a STABLE prefix.
-    # Pre-Day-5 layout interleaved dynamic data (state, time, body) into
-    # the static guidance, so the first byte of every turn could differ
-    # and the model paid a fresh ~3.5K-token tokenisation pass each time.
-    # Now: ALL static text first (deterministic prefix → cache hit on
-    # turn N+1), THEN per-turn dynamic data. Test contracts preserved
-    # — the relative order ФОРМИ → ДАНІ → РЕГІСТР is unchanged.
     parts: list[str] = []
 
     parts.append(PHANTOM_IDENTITY)
+    
+    if minimal_mode:
+        parts.append("\nЦе коротка взаємодія. Будь лаконічним, відповідай як живий Familiar.")
+        # Minimal state info
+        state = snapshot.get("system", {}).get("state", "SHADOW")
+        parts.append(f"\nCURRENT STATE: {state}")
+        parts.append(f"\nTIME: {snapshot.get('when', {}).get('time', '??:??')}")
+        return "\n".join(parts)
+
     parts.append("\n" + BREVITY_DISCIPLINE)
     # Structured response widgets and data tools are separate controls.
     # Do not teach the model to produce cards/maps/artifacts unless the
@@ -264,9 +258,10 @@ def build_system_prompt(
 
     # 5. Memory hints
     hints = memory_hints if memory_hints is not None else snapshot.get("memory_hints", [])
-    if hints:
-        hints_str = "; ".join(hints[:5])
-        parts.append(f"\nRELEVANT MEMORY: {hints_str}")
+    if hints and not minimal_mode:
+        hints_str = "\n".join([f"  • {h}" for h in hints[:5]])
+        parts.append(f"\nДОВГОСТРОКОВА ПАМ'ЯТЬ (минулі сесії):\n{hints_str}")
+        parts.append("\nВАЖЛИВО: Використовуй ці факти лише якщо вони стосуються ПОТОЧНОГО запиту. Не змішуй старі завдання з новими.")
 
     # 5b. Recent visited places (Phase 9.4c-qw fix #2)
     recent_block = _format_recent_places_block(recent_places)

@@ -22,6 +22,8 @@ logger = logging.getLogger(__name__)
 _PROMPT = """\
 Ти — стратегічний архітектор PHANTOM. Твоє завдання — розбити складну мету на послідовність із 1–7 під-цілей (SubGoals).
 
+{role_block}
+
 МЕТА: {goal}
 
 КОНТЕКСТ ПАМ'ЯТІ ТА СТАНУ:
@@ -232,8 +234,18 @@ async def plan(
             memory_block + "\n\n" + empty_episode_note
         ).strip() if memory_block else empty_episode_note
 
+    # Phase 30 — Org-Chart Role context
+    role_block = ""
+    if self_model.agent_role_context:
+        ctx = self_model.agent_role_context
+        role_block = (
+            f"ПОТОЧНА РОЛЬ: {ctx.get('name')} ({ctx.get('description')})\n"
+            f"ПОСТІЙНІ ПОРЯДКИ: {ctx.get('standing_orders')}\n"
+            f"ІНСТРУКЦІЇ РОЛІ: {ctx.get('system_prompt_extension')}\n"
+        )
+
     prompt = _PROMPT.format(
-        self_model_json=json.dumps(self_model.model_dump(mode="json"), ensure_ascii=False),
+        role_block=role_block,
         memory_block=memory_block or "(пам'ять порожня)",
         goal=goal,
         revise_note=("REVISION NOTE:\n" + revise_note) if revise_note else "",

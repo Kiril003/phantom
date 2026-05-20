@@ -446,16 +446,11 @@ class AgentRuntime:
         order_id: str | None = None,
         timeout_s: int | None = None,
         unsafe_mode: bool = True,
+        subagent_role: str | None = None,
+        parent_task_id: str | None = None,
+        delegation_depth: int = 0,
     ) -> tuple[str, bool]:
-        """Start a task on the specified track.
-
-        Foreground semantics (preserves Phase 9.1 contract):
-          * If busy → return (existing_task_id, False) without queueing.
-        Background semantics (Phase 9.4a):
-          * If free → spawn loop, return (task_id, True).
-          * If busy with queue space → enqueue, return (task_id, False).
-          * If busy with queue full → raise TrackBusyError.
-        """
+        """Start a task on the specified track."""
         if track not in ("foreground", "background"):
             raise ValueError(f"invalid track {track!r}")
 
@@ -468,6 +463,9 @@ class AgentRuntime:
                 user_id=user_id, goal=goal, track="foreground", origin=origin,
                 order_id=order_id, timeout_s=timeout_s,
                 unsafe_mode=unsafe_mode,
+                subagent_role=subagent_role,
+                parent_task_id=parent_task_id,
+                delegation_depth=delegation_depth,
             )
 
         # Background path.
@@ -494,6 +492,9 @@ class AgentRuntime:
             user_id=user_id, goal=goal, track="background", origin=origin,
             order_id=order_id, timeout_s=timeout_s,
             unsafe_mode=unsafe_mode,
+            subagent_role=subagent_role,
+            parent_task_id=parent_task_id,
+            delegation_depth=delegation_depth,
         )
 
     async def _spawn_task(
@@ -507,24 +508,21 @@ class AgentRuntime:
         timeout_s: int | None,
         task_id: str | None = None,
         unsafe_mode: bool = True,
+        subagent_role: str | None = None,
+        parent_task_id: str | None = None,
+        delegation_depth: int = 0,
     ) -> tuple[str, bool]:
-        """Internal: actually create the TaskState + DB row and start the loop.
-
-        Used by both start_task() and the post-finalize queue drain.
-        """
+        """Internal: actually create the TaskState + DB row and start the loop."""
         from agent.cognition.self_model import build_self_model
         from agent.actions.registry import registry as default_registry
 
         ensure_workspace()
-        # Reset control bus only when this spawn begins a foreground session.
-        # Background tasks share the bus's pause/stop semantics with foreground
-        # — emergency_stop still halts everything — so we do NOT clear it
-        # mid-flight; the bus is reset once at foreground entry.
         if track == "foreground":
             self.controls.reset()
 
         task_id = task_id or str(uuid.uuid4())
-        self_model = await build_self_model(default_registry)
+        # Phase 30 — Inject role_id (subagent_role) into self-model builder
+        self_model = await build_self_model(default_registry, role_id=subagent_role)
         
         # Phase 32-CONTEXT — Pull recent chat history to maintain continuity
         # even when a new task is started in the Workspace.
@@ -570,6 +568,9 @@ class AgentRuntime:
             timeout_s=timeout_s,
             unsafe_mode=unsafe_mode,
             observations=initial_observations,
+            subagent_role=subagent_role,
+            parent_task_id=parent_task_id,
+            delegation_depth=delegation_depth,
         )
         self._set_slot(track, state)
         await create_task_row(user_id, task_id, goal, track)

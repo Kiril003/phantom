@@ -1,5 +1,9 @@
 # PHANTOM OS — Архітектура Системи
 
+> **УВАГА: Оновлення Архітектури (Swarm Transition)**
+> Система наразі перебуває в процесі міграції до архітектури **Total Coverage Autonomous Swarm**, що передбачає 6 рівнів агентної взаємодії, включаючи MARS (Multi-Agent Review System), генеративний UI та графову пам'ять. 
+> Детальний маніфест та стратегія впровадження описані у [`docs/architecture/total-coverage-swarm.md`](architecture/total-coverage-swarm.md).
+
 ## 1. Огляд Архітектури
 
 ```

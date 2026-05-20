@@ -16,3 +16,6 @@ export { ScenePlanStepPanel } from './panels/ScenePlanStepPanel';
 export { SceneCodePreviewPanel } from './panels/SceneCodePreviewPanel';
 export { SceneIdentityCardPanel } from './panels/SceneIdentityCardPanel';
 export { PhantomManifestScene } from './PhantomManifestScene';
+export { OrchestrationFlowScene } from './OrchestrationFlowScene';
+export { ObjectionScene } from './ObjectionScene';
+export { PatchFileScene } from './PatchFileScene';

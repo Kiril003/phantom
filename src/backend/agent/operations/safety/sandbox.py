@@ -1,5 +1,12 @@
-"""Day-4 Wave-2 Y-1 — bubblewrap sandbox primitive.
+"""
+PHANTOM OS - Tier 1: Virtualization Sandbox Governor
 
+This module implements the "Virtualization Sandbox Governor" role from the Total Coverage
+Autonomous Swarm blueprint. It intercepts hardware and filesystem intents, translating
+them into sandboxed operations using `bwrap(1)`. It serves as the absolute execution
+boundary between the cognitive swarm and the host OS.
+
+Day-4 Wave-2 Y-1 — bubblewrap sandbox primitive.
 Closes audit U4-SEC-C2 (firejail not installed → today's "sandbox" is a
 no-op fall-through). Implements ADR-SBX-001 / ADR-SBX-002 / ADR-SBX-003.
 
@@ -9,7 +16,7 @@ Landlock is per-thread (wrong granularity).
 
 Public API (callers in Y-2 import only these):
 
-  SandboxProfile         — closed enum (compute | net_observe | radio_privileged).
+  SandboxProfile         — closed enum (compute | net_observe | radio_privileged | read_host).
   wrap_argv(...)         — returns (argv, sandboxed: bool) for a given profile.
   clean_env()            — start-from-empty allowlist; never calls os.environ.copy().
   firejail_available()   — preserved as a STALE-CONFIG DETECTOR returning False.

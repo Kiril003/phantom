@@ -40,6 +40,9 @@ import { LocationScene } from './LocationScene';
 import { CheckpointScene } from './CheckpointScene';
 import { SandboxScene } from './SandboxScene';
 import { PhantomManifestScene } from './PhantomManifestScene';
+import { OrchestrationFlowScene } from './OrchestrationFlowScene';
+import { ObjectionScene } from './ObjectionScene';
+import { PatchFileScene } from './PatchFileScene';
 
 export { STAGGER_CLAMP_MAX_MS };
 
@@ -84,6 +87,12 @@ export function ChatScene({ scene, reduceMotion = false }: ChatSceneProps) {
       return <SandboxScene data={scene.data} />;
     case 'phantom_manifest':
       return <PhantomManifestScene data={scene.data} />;
+    case 'orchestration_flow':
+      return <OrchestrationFlowScene data={scene.data} />;
+    case 'objection':
+      return <ObjectionScene data={scene.data} />;
+    case 'patch_file':
+      return <PatchFileScene data={scene.data} />;
     default: {
       // Exhaustiveness check — adding a new ToolSceneKind without a case
       // here triggers a compile error at `_exhaustive: never`.

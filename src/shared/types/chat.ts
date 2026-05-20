@@ -209,7 +209,10 @@ export type ToolSceneKind =
   | 'location'
   | 'checkpoint'
   | 'sandbox'
-  | 'phantom_manifest';
+  | 'phantom_manifest'
+  | 'orchestration_flow'
+  | 'objection'
+  | 'patch_file';
 
 // ─── Phantom Familiar ────────────────────────────────────────────────────────
 //
@@ -510,6 +513,38 @@ export interface SandboxSceneData {
   duration_ms?: number;
 }
 
+// ─── Orchestration Flow ──────────────────────────────────────────────────────
+export interface OrchestrationNode {
+  id: string;
+  label: string;
+  agentId: string;
+  status: 'completed' | 'running' | 'pending' | 'failed';
+  subtasks: Array<{ text: string; done: boolean }>;
+}
+
+export interface OrchestrationFlowSceneData {
+  rootLabel: string;
+  nodes: OrchestrationNode[];
+}
+
+// ─── Objection ───────────────────────────────────────────────────────────────
+export interface ObjectionSceneData {
+  signature: string;
+  node: string;
+  conflict: string;
+  state: string;
+  details: string;
+}
+
+// ─── Patch File ──────────────────────────────────────────────────────────────
+export interface PatchFileSceneData {
+  filename: string;
+  additions: number;
+  deletions: number;
+  description: string;
+  codePreview?: string;
+}
+
 // ─── Tool-scene discriminated union ───────────────────────────────────────────
 export type ChatToolScene =
   | { kind: 'timer'; data: TimerSceneData }
@@ -521,7 +556,10 @@ export type ChatToolScene =
   | { kind: 'location'; data: LocationSceneData }
   | { kind: 'checkpoint'; data: CheckpointSceneData }
   | { kind: 'sandbox'; data: SandboxSceneData }
-  | { kind: 'phantom_manifest'; data: PhantomManifestSceneData };
+  | { kind: 'phantom_manifest'; data: PhantomManifestSceneData }
+  | { kind: 'orchestration_flow'; data: OrchestrationFlowSceneData }
+  | { kind: 'objection'; data: ObjectionSceneData }
+  | { kind: 'patch_file'; data: PatchFileSceneData };
 
 /**
  * Phase-5 — `ChatScene` is the super-union of (a) the Day-4 W-2 panel

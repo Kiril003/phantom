@@ -307,6 +307,7 @@ async def _tool_recall_memory_facts(args: dict[str, Any], user_id: str) -> dict[
 
     try:
         from memory.brain import memory_brain
+        from ai.sentience.graph_memory import get_graph_synthesizer
 
         async with _session_factory()() as db:
             hits = await memory_brain.recall(
@@ -316,6 +317,12 @@ async def _tool_recall_memory_facts(args: dict[str, Any], user_id: str) -> dict[
                 limit=5,
                 include_agent=layer in (None, "episode"),
             )
+            
+            # Phase C (Tier 2): Graph memory associative traversal hook
+            graph = get_graph_synthesizer()
+            # In the future, hits from the flat RAG (memory_brain) will seed the initial_nodes
+            # for `graph.spreading_activation(initial_nodes=[...])`.
+            
     except Exception as exc:
         logger.debug("memory brain recall failed: %s", exc)
         hits = []

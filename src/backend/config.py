@@ -91,13 +91,15 @@ class PhantomConfig(BaseSettings):
     
     # Tiered Gemini models (Phase 30 upgrade — EXACT API IDs)
     # If set to "auto", they follow ai_gemini_model.
-    ai_gemini_model: str = "gemini-2.0-flash"
+    ai_gemini_model: str = "gemini-2.5-flash"
     ai_gemini_api_key: str = ""
 
-    # Chat tier routing — conversational vs complex vs background
-    ai_conversational_model: str = "gemini-2.0-flash"   # live chat, high TPM, fast
-    ai_reasoning_model: str = "gemini-3-flash"           # complex queries + tools
-    ai_background_model: str = "gemini-1.5-flash"        # background synthesis tasks
+    # Chat tier routing — conversational vs complex vs background.
+    # Verified live (2026-06): 2.0/2.0-lite are quota-exhausted; 1.5 retired (404).
+    # 2.5-flash + 3.5-flash + flash-lite-latest have quota and valid IDs.
+    ai_conversational_model: str = "gemini-2.5-flash"        # live chat — fast + smart, has quota
+    ai_reasoning_model: str = "gemini-3.5-flash"             # complex queries + tools — smartest flash
+    ai_background_model: str = "gemini-flash-lite-latest"    # background synthesis — cheap + fast
 
     # Specific tier overrides (set to "auto" to follow system model)
     ai_planner_model: str = "auto"

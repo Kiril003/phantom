@@ -160,7 +160,6 @@ async def extract_memory_writes(text: str, *, max_items: int = 8) -> list[Memory
             tools=[_EXTRACT_TOOL],
             user_id=None,
             provider_hint="gemini-flash",
-            timeout_s=10.0,
         )
         if isinstance(choice, ToolCallResult) and choice.tool_name == "extract_facts":
             writes = []
@@ -177,6 +176,20 @@ async def extract_memory_writes(text: str, *, max_items: int = 8) -> list[Memory
         logger.warning("LLM memory extraction failed: %s", exc)
 
     return []
+
+
+def analyze_sentiment(text: str) -> float:
+    lower = text.lower()
+    positive = ["люблю", "подобається", "обожнюю", "класно", "love", "like", "great", "enjoy"]
+    negative = ["ненавиджу", "не люблю", "терпіти не можу", "жахливо", "hate", "dislike", "awful", "sucks"]
+    score = 0.0
+    for w in positive:
+        if w in lower:
+            score += 0.5
+    for w in negative:
+        if w in lower:
+            score -= 0.5
+    return max(-1.0, min(1.0, score))
 
 
 class MemoryBrain:
@@ -214,12 +227,15 @@ class MemoryBrain:
                 .order_by(MemoryFact.created_at.desc())
                 .limit(1)
             )
+            sentiment = analyze_sentiment(write.content)
+            slot = None
             row = existing.scalar_one_or_none()
             if row is not None:
                 row.accessed_at = datetime.now(tz=timezone.utc)  # type: ignore[assignment]
                 row.access_count = int(row.access_count or 0) + 1
                 row.importance = max(float(row.importance or 0.0), write.importance)
                 fact_id = str(row.id)
+                slot = getattr(row, "entity_slot", None)
             else:
                 fact_id = await tactical_store(
                     db=db,
@@ -229,6 +245,18 @@ class MemoryBrain:
                     category=write.category,
                     importance=write.importance,
                 )
+                from memory.resolver import resolve_conflicts
+                slot = await resolve_conflicts(db, user_id, write.content, fact_id)
+                try:
+                    row_result = await db.execute(
+                        select(MemoryFact).where(MemoryFact.id == fact_id)
+                    )
+                    sql_row = row_result.scalar_one_or_none()
+                    if sql_row is not None:
+                        sql_row.entity_slot = slot
+                        sql_row.sentiment_score = sentiment
+                except Exception as e:
+                    logger.debug("Failed to set entity_slot/sentiment on MemoryFact: %s", e)
             report.stored_ids.append(fact_id)
 
             if durable and write.durable:
@@ -244,6 +272,8 @@ class MemoryBrain:
                             "source": source,
                             "source_session_id": session_id,
                             "memory_brain_reason": write.reason,
+                            "entity_slot": slot or "none",
+                            "sentiment_score": sentiment,
                         },
                     )
                 )
@@ -285,6 +315,15 @@ class MemoryBrain:
             return []
         hits: list[MemoryHit] = []
 
+        user_trust_level = 0.5
+        if db is not None:
+            try:
+                from memory.user_model import get_behavioral_model
+                model = await get_behavioral_model(db, user_id)
+                user_trust_level = model.trust_level
+            except Exception:
+                pass
+
         strategic_limit = max(max_hits, 5)
         try:
             from memory import strategic_memory
@@ -292,6 +331,7 @@ class MemoryBrain:
                 user_id=user_id,
                 query=query,
                 top_k=strategic_limit,
+                user_trust_level=user_trust_level,
             )
             for idx, doc in enumerate(docs):
                 text = _compact_text(doc, 800)
@@ -499,6 +539,20 @@ class MemoryBrain:
             if len(out) >= limit:
                 break
         return out
+
+    async def predictive_warm(self, user_id: str, state: str) -> None:
+        """Pre-warm strategic memory cache by querying relevant state concepts."""
+        try:
+            from memory import strategic_memory
+            # Query with a dummy text matching the state to load ONNX/ChromaDB cache
+            await strategic_memory.retrieve_relevant(
+                user_id=user_id,
+                query=f"state {state}",
+                top_k=3,
+            )
+            logger.info("Predictive memory warmup triggered for state %s", state)
+        except Exception as exc:
+            logger.debug("Predictive memory warmup failed: %s", exc)
 
 
 memory_brain = MemoryBrain()

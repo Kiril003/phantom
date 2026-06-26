@@ -362,6 +362,7 @@ async def record_synth_lesson(
     action_name: str,
     success: bool,
     failure_reason: str = "",
+    user_id: str | None = None,
 ) -> None:
     """Write a lesson to the lessons store recording the synth outcome."""
     try:
@@ -393,6 +394,7 @@ async def record_synth_lesson(
             goal=f"синтез дії для: {goal_class}",
             outcome=outcome,
             lesson=lesson,
+            user_id=user_id,
         )
     except Exception as exc:
         logger.debug("agent-synth: lesson write failed (non-fatal): %s", exc)

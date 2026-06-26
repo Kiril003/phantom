@@ -29,20 +29,30 @@ export function useChatStream(): void {
     const off = wsClient.on<WSMessage>('chat', (msg) => {
       if (msg.type === 'stream') {
         const m = msg as ChatStreamMessage;
-        const { message_id, delta, done, message } = m.data;
-        useChatStore.getState().setStreamChunk(message_id, delta, done, message);
+        const { message_id, delta, done, message, session_id } = m.data;
+        const state = useChatStore.getState();
+        
+        if (!state.currentSessionId && session_id) {
+          state.setCurrentSession(session_id);
+        }
+
+        if (!session_id || session_id === state.currentSessionId) {
+          useChatStore.getState().setStreamChunk(message_id, delta, done, message);
+        }
         return;
       }
 
       if (msg.type === 'message') {
         const m = msg as ChatMessageEvent;
         const state = useChatStore.getState();
-        const existing = state.messages.find((x) => x.id === m.data.message.id);
-        if (!existing) {
-          state.appendMessage(m.data.message);
-        }
-        if (state.streaming && state.streaming.id === m.data.message.id) {
-          state.clearStreaming();
+        if (m.data.session_id === state.currentSessionId) {
+          const existing = state.messages.find((x) => x.id === m.data.message.id);
+          if (!existing) {
+            state.appendMessage(m.data.message);
+          }
+          if (state.streaming && state.streaming.id === m.data.message.id) {
+            state.clearStreaming();
+          }
         }
       }
 
@@ -53,9 +63,11 @@ export function useChatStream(): void {
       if (msg.type === 'message.proactive') {
         const m = msg as ChatProactiveEvent;
         const state = useChatStore.getState();
-        const existing = state.messages.find((x) => x.id === m.data.message.id);
-        if (!existing) {
-          state.appendMessage(m.data.message);
+        if (m.data.session_id === state.currentSessionId) {
+          const existing = state.messages.find((x) => x.id === m.data.message.id);
+          if (!existing) {
+            state.appendMessage(m.data.message);
+          }
         }
       }
 

@@ -1,44 +1,55 @@
+import { useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { OmniMap } from '../components/map/OmniMap';
 import { StatusBar } from '../components/core/StatusBar';
 import { FloatingToolbar } from '../components/core/FloatingToolbar';
 import { EASE_PHANTOM } from '../styles/motion';
 import { useSettingsStore } from '../stores/settingsStore';
+import { useAuthStore } from '../stores/authStore';
+import { useSystemStore } from '../stores/systemStore';
 import '../styles/map.css';
 
 const DEFAULT_ZOOM = 15;
 
-/**
- * MapLayout — sunrise-warm tactical map shell.
- *
- * Reference: docs/design-handoff/project/screen-5-map.jsx
- *
- * The frame paints a warm cream backdrop with a soft amber sunrise glow
- * around the lower-centre and a faint orange wash on the upper-right
- * (matching the design DNA radial gradient stack). The actual cartography
- * + glass HUD lives inside `TacticalMap`. The frame here is responsible
- * for:
- *   - locking 1024×600 dimensions (no scroll on the primary surface),
- *   - rendering the sunrise gradient + soft sun-orb fixture,
- *   - composing StatusBar (top) + FloatingToolbar (bottom) so the map
- *     gets a true full-bleed canvas in between.
- *
- * AmbientGlows is intentionally NOT used here — the map needs a
- * predictable warm gutter (cream paper) so MapLibre tile gaps don't
- * suddenly reveal a moving accent gradient. We render a static blur stack
- * tuned for cartographic legibility instead.
- *
- * `prefers-reduced-motion`: the sun-orb breathing animation lives in
- * map.css and is gated on `(prefers-reduced-motion: no-preference)`; this
- * component uses Framer's enter fade only on first paint (no loop).
- */
 export default function MapLayout() {
+  const authenticated = useSystemStore((s) => s.authenticated);
+  const token = useAuthStore((s) => s.token);
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    if (!authenticated && !token) {
+      navigate('/login', { replace: true });
+    }
+  }, [authenticated, token, navigate]);
+
   // Pull the user's preferred default zoom from the persisted settings store.
   // bootstrapSettings seeds this at startup; falls back to 15 when the store
   // hasn't loaded yet (first frame after a cold start).
   const zoomRaw = useSettingsStore((s) => s.values.ui_map_default_zoom);
   const initialZoom =
     typeof zoomRaw === 'number' && Number.isFinite(zoomRaw) ? zoomRaw : DEFAULT_ZOOM;
+
+  if (!authenticated) {
+    return (
+      <div
+        className="w-[1024px] h-[600px] flex flex-col items-center justify-center"
+        style={{ background: 'var(--surface-void)' }}
+      >
+        <div className="flex flex-col items-center gap-3">
+          <div
+            className="w-8 h-8 border-2 rounded-full animate-spin"
+            style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }}
+          />
+          <span
+            className="tracking-widest font-mono text-ink-muted text-xs"
+          >
+            PHANTOM OS
+          </span>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <motion.div

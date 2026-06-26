@@ -133,7 +133,7 @@ async def plan_mission(
     # Pull distilled lessons relevant to the mission brief.
     try:
         from ..memory.lessons import format_lessons_for_prompt, recall_lessons
-        lessons = await recall_lessons(brief.brief)
+        lessons = await recall_lessons(brief.brief, user_id=user_id)
         lesson_block = format_lessons_for_prompt(lessons)
         if lesson_block:
             memory_block = lesson_block

@@ -117,6 +117,7 @@ class SynthesizeCapability(Action):
                     await record_synth_lesson(
                         task_id=ctx.task_id, goal_class=self.spec[:120],
                         action_name=f"synth.{slug}", success=False, failure_reason=reason,
+                        user_id=ctx.user_id,
                     )
                     return ActionResult(
                         ok=False, error=reason, error_class="synth_draft_failed",
@@ -140,6 +141,7 @@ class SynthesizeCapability(Action):
                     await record_synth_lesson(
                         task_id=ctx.task_id, goal_class=self.spec[:120],
                         action_name=f"synth.{slug}", success=False, failure_reason=smoke_reason,
+                        user_id=ctx.user_id,
                     )
                     return ActionResult(
                         ok=False, error=f"smoke_failed: {smoke_reason}",
@@ -156,6 +158,7 @@ class SynthesizeCapability(Action):
             await record_synth_lesson(
                 task_id=ctx.task_id, goal_class=self.spec[:120],
                 action_name=f"synth.{slug}", success=False, failure_reason=reason,
+                user_id=ctx.user_id,
             )
             return ActionResult(
                 ok=False, error=reason, error_class="synth_register_failed",
@@ -167,6 +170,7 @@ class SynthesizeCapability(Action):
         await record_synth_lesson(
             task_id=ctx.task_id, goal_class=self.spec[:120],
             action_name=action_name, success=True,
+            user_id=ctx.user_id,
         )
 
         return ActionResult(

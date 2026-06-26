@@ -218,20 +218,22 @@ async def run(
     user_id: str,
     db: AsyncSession,
     provider_hint: str | None = None,
+    model_override: str | None = None,
+    on_delta: Any | None = None,
 ) -> AIResponse:
     """Entry point for the Chat Tool Pipeline."""
     started = time.monotonic()
-    
+
     # Apply endocrine personality bias to the prompt.
     bias = endocrine_system.get_personality_bias()
-    
+
     sentient_prompt = (
         f"{system_prompt}\n\n"
         f"[SENTIENT STATE: warmth={bias['tone_warmth']:.2f}, "
         f"brevity={bias['verbosity']:.2f}, creativity={bias['creativity']:.2f}]\n"
         "Adjust your tone to match this internal state."
     )
-    
+
     # ── Inner Monologue Reflection (Non-blocking) ────────────────────────
     # Run reflection in the background so it doesn't block the chat turn latency.
     asyncio.create_task(
@@ -251,7 +253,8 @@ async def run(
     if is_greeting or len(user_message) < 4:
         logger.debug("chat_pipeline: fast-track active for %r", clean_msg)
         return await _plain_generate(
-            user_message, sentient_prompt, history, user_id, db, provider_hint=provider_hint
+            user_message, sentient_prompt, history, user_id, db,
+            provider_hint=provider_hint, model_override=model_override, on_delta=on_delta,
         )
 
     deadline = started + (
@@ -265,123 +268,195 @@ async def run(
     if not tool_catalog:
         return await _plain_generate(user_message, sentient_prompt, history, user_id, db, provider_hint=provider_hint)
 
-    # ── Step 2: ask LLM to pick one tool ────────────────────────────────────
-    if time.monotonic() > deadline:
-        return await _plain_generate(user_message, sentient_prompt, history, user_id, db, provider_hint=provider_hint)
+    current_history = list(history)
+    max_turns = int(getattr(config, "chat_tool_max_calls_per_turn", 4) or 4)
+    turn = 0
+    accumulated_tokens = 0
+    last_provider = provider_hint or "gemini"
+    tool_scene = None
+    dispatch_result = None
 
-    try:
-        raw_tools = [c.function for c in tool_catalog]
+    called_tools = set()
 
-        # Round 1: Call LLM with tool choice.
-        tool_choice = await ai_router.call_with_tools(
-            user_message=user_message,
-            system_prompt=sentient_prompt,
-            history=history,
-            tools=raw_tools,
-            user_id=user_id,
-            provider_hint=provider_hint,
-        )
-    except Exception as exc:
-        logger.warning("chat_pipeline Step 2 failed: %s", exc)
-        return await _plain_generate(user_message, sentient_prompt, history, user_id, db, provider_hint=provider_hint)
+    # Multi-Step Loop
+    while turn < max_turns:
+        turn += 1
+        if time.monotonic() > deadline:
+            logger.warning("chat_pipeline: loop turn %d reached deadline, finalizing", turn)
+            break
 
-    # If LLM didn't pick a tool, return the text answer it gave instead.
-    if isinstance(tool_choice, ToolCallResult):
-        if not tool_choice.tool_name:
-            raw_text = tool_choice.raw_reasoning or ""
-            sanitized = await output_safety.sanitize(raw_text, user_id=user_id, db=db)
-            return AIResponse(
-                content=sanitized.text,
-                provider=tool_choice.provider,
+        # Emit "thinking" signal on first tool turn so UI shows activity immediately
+        if turn == 1:
+            try:
+                from api.websocket_hub import hub as _ws_hub
+                await _ws_hub.broadcast(
+                    "chat", "thinking",
+                    {"session_id": "unknown"},
+                    user_id=user_id,
+                )
+            except Exception:
+                pass
+
+        # Step 2: ask LLM to pick one tool
+        try:
+            raw_tools = [c.function for c in tool_catalog]
+            tool_choice = await ai_router.call_with_tools(
+                user_message=user_message,
+                system_prompt=sentient_prompt,
+                history=current_history,
+                tools=raw_tools,
+                user_id=user_id,
+                provider_hint=provider_hint,
             )
-    else:
-        return await _plain_generate(user_message, sentient_prompt, history, user_id, db, provider_hint=provider_hint)
+        except Exception as exc:
+            logger.warning("chat_pipeline Step 2 failed on turn %d: %s", turn, exc)
+            break
 
-    # Case: LLM picked a widget tool directly (short-circuit).
-    if tool_choice.tool_name.startswith("respond_"):
+        # If LLM didn't pick a tool, return the text answer it gave instead.
+        if isinstance(tool_choice, ToolCallResult):
+            accumulated_tokens += getattr(tool_choice, "tokens_used", 0) or 0
+            if tool_choice.provider:
+                last_provider = tool_choice.provider
+
+            if not tool_choice.tool_name:
+                raw_text = tool_choice.raw_reasoning or ""
+                sanitized = await output_safety.sanitize(raw_text, user_id=user_id, db=db)
+                return AIResponse(
+                    content=sanitized.text,
+                    provider=last_provider,
+                    tokens_used=accumulated_tokens,
+                )
+        else:
+            break
+
+        # Repeat tool call protection
+        tool_key = (tool_choice.tool_name, json.dumps(tool_choice.arguments or {}, sort_keys=True))
+        if tool_key in called_tools:
+            logger.warning("chat_pipeline: repeat tool call detected for %s, breaking loop", tool_choice.tool_name)
+            break
+        called_tools.add(tool_key)
+
+        # Case: LLM picked a widget tool directly (short-circuit).
+        if tool_choice.tool_name.startswith("respond_"):
+            chat_tool_calls_total.inc(
+                success="true",
+                tool=tool_choice.tool_name,
+            )
+            widget_resp = await _widget_response(tool_choice, user_id, db)
+            widget_resp.tokens_used = (widget_resp.tokens_used or 0) + accumulated_tokens
+            return widget_resp
+
+        # Emit thought step monologue to WS
+        from agent.cognition.monologue_emitter import emit_monologue, MonologueEvent
+        await emit_monologue(MonologueEvent(
+            kind="plan",
+            source="tactical",
+            monologue={"what_i_plan": f"Запуск інструменту {tool_choice.tool_name}..."}
+        ))
+
+        # Step 3: dispatch via chat_tool_dispatcher (TM-17B-E2)
+        from ai.chat_tool_dispatcher import dispatch as chat_dispatch
+        
+        try:
+            dispatch_result = await chat_dispatch(
+                tool_choice.tool_name,
+                tool_choice.arguments,
+                user_id=user_id,
+                db=db,
+            )
+            ok = bool(dispatch_result.get("ok"))
+        except Exception as exc:
+            dispatch_result = {"ok": False, "error": str(exc)}
+            ok = False
+        
         chat_tool_calls_total.inc(
-            success="true",
+            success="true" if ok else "false",
             tool=tool_choice.tool_name,
         )
-        return await _widget_response(tool_choice, user_id, db)
 
-    # ── Step 3: dispatch via chat_tool_dispatcher (TM-17B-E2) ───────────────
-    if time.monotonic() > deadline:
-        return await _plain_generate(user_message, sentient_prompt, history, user_id, db, provider_hint=provider_hint)
+        # Step 4: wrap result in envelope (TM-17B-S1)
+        envelope = _build_envelope(tool_choice.tool_name, dispatch_result)
+        
+        # Emit outcome monologue to WS for self-reflection and tracking
+        if ok:
+            await emit_monologue(MonologueEvent(
+                kind="reflection",
+                source="reflector",
+                monologue={"note": f"Інструмент {tool_choice.tool_name} успішно виконано. Аналізую результат..."}
+            ))
+        else:
+            err_msg = dispatch_result.get("error") or "невідома помилка"
+            await emit_monologue(MonologueEvent(
+                kind="reflection",
+                source="reflector",
+                monologue={"note": f"Помилка при виклику {tool_choice.tool_name}: {err_msg}. Виконую автокорекцію..."}
+            ))
 
-    from ai.chat_tool_dispatcher import dispatch as chat_dispatch
-    
-    dispatch_result = await chat_dispatch(
-        tool_choice.tool_name,
-        tool_choice.arguments,
-        user_id=user_id,
-        db=db,
-    )
-    
-    chat_tool_calls_total.inc(
-        success="true" if dispatch_result.get("ok") else "false",
-        tool=tool_choice.tool_name,
-    )
+        # Step 4.5: Auto-rendering short-circuit
+        tool_scene = (dispatch_result.get("result") or {}).get("scene")
+        auto_response = _auto_render_envelope(
+            tool_choice.tool_name, dispatch_result, tool_scene,
+            provider=last_provider,
+        )
+        if auto_response is not None:
+            auto_response.tokens_used = (auto_response.tokens_used or 0) + accumulated_tokens
+            return auto_response
 
-    # ── Step 4: wrap result in envelope (TM-17B-S1) ─────────────────────────
-    envelope = _build_envelope(tool_choice.tool_name, dispatch_result)
-    
-    # ── Step 4.5: Auto-rendering short-circuit ──────────────────────────────
-    tool_scene = (dispatch_result.get("result") or {}).get("scene")
-    
-    auto_response = _auto_render_envelope(
-        tool_choice.tool_name, dispatch_result, tool_scene,
-        provider=tool_choice.provider,
-    )
-    if auto_response is not None:
-        return auto_response
+        # Append to running history for subsequent loop cycles
+        current_history.append({
+            "role": "assistant",
+            "content": f"Використовую інструмент {tool_choice.tool_name}...",
+        })
+        current_history.append({
+            "role": "tool",
+            "name": tool_choice.tool_name,
+            "content": json.dumps(envelope, ensure_ascii=False, default=str),
+        })
 
-    # ── Step 5: ask LLM for final answer with envelope in history ───────────
+    # Step 5: ask LLM for final answer
     if time.monotonic() > deadline:
         fallback_attachments: list[dict[str, Any]] = []
         if tool_scene:
             fallback_attachments.append({"type": "scene", "data": tool_scene})
+        fb_text = _dispatch_fallback_text(dispatch_result, started) if dispatch_result else "Перевищено ліміт часу."
         return AIResponse(
-            content=_dispatch_fallback_text(dispatch_result, started),
-            provider=tool_choice.provider,
+            content=fb_text,
+            provider=last_provider,
             response_form="text",
             attachments=fallback_attachments,
+            tokens_used=accumulated_tokens,
         )
 
-    # Day-5 Wave-2: structure history properly so LLM sees its own intent.
-    # We add a model turn representing the tool call, then the tool result.
-    appended_history = list(history) + [
-        {
-            "role": "assistant",
-            "content": f"Використовую інструмент {tool_choice.tool_name}...",
-        },
-        {
-            "role": "tool",
-            "name": tool_choice.tool_name,
-            "content": json.dumps(envelope, ensure_ascii=False, default=str),
-        }
-    ]
-
     try:
-        # Round 2: Final LLM call with tool results.
+        # Final LLM call with complete tool trace in history.
         final_ans = await ai_router.generate(
             user_message=user_message,
             system_prompt=sentient_prompt,
-            history=appended_history,
+            history=current_history,
             user_id=user_id,
             provider_hint=provider_hint,
+            model_override=model_override,
         )
-        
+
         if tool_scene and not any(a.get("type") == "scene" for a in final_ans.attachments):
             final_ans.attachments.append({"type": "scene", "data": tool_scene})
-            
+
         sanitized = await output_safety.sanitize(final_ans.content, user_id=user_id, db=db)
         final_ans.content = sanitized.text
+        final_ans.tokens_used = (final_ans.tokens_used or 0) + accumulated_tokens
         return final_ans
-        
+
     except Exception as exc:
-        logger.exception("chat_pipeline error in Step 5: %s", exc)
-        return _dispatch_fallback_text_response(dispatch_result, started, tool_scene, provider=tool_choice.provider)
+        logger.exception("chat_pipeline error in final generate: %s", exc)
+        if dispatch_result:
+            fb_resp = _dispatch_fallback_text_response(dispatch_result, started, tool_scene, provider=last_provider)
+            fb_resp.tokens_used = (fb_resp.tokens_used or 0) + accumulated_tokens
+            return fb_resp
+        return await _plain_generate(
+            user_message, sentient_prompt, history, user_id, db,
+            provider_hint=provider_hint, model_override=model_override, on_delta=on_delta,
+        )
+
 
 
 async def _plain_generate(
@@ -391,14 +466,46 @@ async def _plain_generate(
     user_id: str,
     db: AsyncSession,
     provider_hint: str | None = None,
+    model_override: str | None = None,
+    on_delta: Any | None = None,
 ) -> AIResponse:
-    """Fall back to plain text generation without tools."""
+    """Plain text generation without tools. Streams via on_delta when available."""
+    if on_delta is not None and config.ai_streaming:
+        chunks: list[str] = []
+        last_provider = provider_hint or "gemini"
+        try:
+            async for chunk in ai_router.generate_stream(
+                user_message=user_message,
+                system_prompt=system_prompt,
+                history=history,
+                provider_hint=provider_hint,
+            ):
+                if chunk:
+                    chunks.append(chunk)
+                    try:
+                        await on_delta(chunk)
+                    except Exception:
+                        pass
+            content = "".join(chunks)
+        except Exception as exc:
+            logger.warning("_plain_generate stream failed, falling back: %s", exc)
+            content = ""
+
+        if content:
+            sanitized = await output_safety.sanitize(content, user_id=user_id, db=db)
+            return AIResponse(
+                content=sanitized.text,
+                provider=last_provider,
+                tokens_used=0,
+            )
+
     ans = await ai_router.generate(
         user_message=user_message,
         system_prompt=system_prompt,
         history=history,
         user_id=user_id,
         provider_hint=provider_hint,
+        model_override=model_override,
     )
     sanitized = await output_safety.sanitize(ans.content, user_id=user_id, db=db)
     ans.content = sanitized.text
@@ -406,47 +513,8 @@ async def _plain_generate(
 
 
 async def _widget_response(choice: ToolCallResult, user_id: str, db: AsyncSession) -> AIResponse:
-    """Round-1 `respond_*` widget pick. For `respond_artifact` the fast
-    model's `html` arg is a weak draft — discard it and regenerate via
-    ArtifactStudio (Gemini 2.5 Pro, multi-pass). On studio failure
-    degrade to text (never a dead bubble). All other `respond_*` forms
+    """Round-1 `respond_*` widget pick. All `respond_*` forms
     go through `parse_function_call` unchanged."""
-    if choice.tool_name == "respond_artifact" and config.chat_artifacts_enabled:
-        from ai.artifact_studio import Brief, build_artifact, ArtifactStudioError
-
-        args = choice.arguments or {}
-        brief = Brief(
-            title=str(args.get("title", "") or "Артефакт"),
-            request=str(args.get("content") or args.get("title") or ""),
-            hint=str(args.get("html", "") or ""),
-        )
-        caps = args.get("capabilities") or []
-        try:
-            title, html = await build_artifact(
-                brief, user_id=user_id,
-                on_phase=_make_artifact_phase_cb(user_id),
-            )
-        except ArtifactStudioError as exc:
-            logger.warning("artifact_studio failed, degrading to text: %s", exc)
-            sanitized = await output_safety.sanitize(
-                "Не зміг зібрати віджет потрібної якості — переформулюй, "
-                "будь ласка, або спробуй ще раз.",
-                user_id=user_id, db=db,
-            )
-            return AIResponse(
-                content=sanitized.text, response_form="text",
-                provider=choice.provider,
-            )
-        form, content, attachments = response_formatter.parse_function_call(
-            "respond_artifact",
-            {"title": title, "html": html, "capabilities": caps},
-        )
-        chat_tool_calls_total.inc(success="true", tool="respond_artifact_studio")
-        sanitized = await output_safety.sanitize(content, user_id=user_id, db=db)
-        return AIResponse(
-            content=sanitized.text, response_form=form,
-            attachments=attachments, provider=choice.provider,
-        )
 
     form, content, attachments = response_formatter.parse_function_call(
         choice.tool_name, choice.arguments or {}

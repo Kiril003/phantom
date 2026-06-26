@@ -51,16 +51,34 @@ class PhantomConfig(BaseSettings):
     pair_host: str = "phantom.local"
 
     # ── Database ──────────────────────────────────────────────────────────────
-    database_url: str = "sqlite+aiosqlite:///./phantom.db"
+    database_url: str = Field(
+        default_factory=lambda: f"sqlite+aiosqlite:///{__import__('paths').resolve_data_dir('sqlite') / 'phantom.db'}"
+    )
 
     # ── ChromaDB ──────────────────────────────────────────────────────────────
-    chroma_path: str = "./chroma_data"
+    chroma_path: str = Field(
+        default_factory=lambda: str(__import__('paths').resolve_data_dir('chroma'))
+    )
     embedding_model: str = "all-MiniLM-L6-v2"
     memory_top_k: int = 5
     memory_importance_threshold: float = 0.3
     memory_tactical_window_h: int = 24
     memory_auto_archive_days: int = 90
     memory_max_facts_per_user: int = 10000
+
+    # ── Cognitive Memory Engine (Phase 12) ────────────────────────────────────
+    cognitive_memory_enabled: bool = True
+    cognitive_memory_decay_half_life_days: float = 30.0
+    cognitive_memory_semantic_similarity_threshold: float = 0.90
+    cognitive_memory_idle_timeout_min: int = 20
+    cognitive_memory_consolidation_interval_min: int = 60
+    cognitive_memory_min_importance: float = 0.3
+    cognitive_memory_disclosure_threshold: float = 0.5
+    cognitive_memory_semantic_weight: float = 0.60
+    cognitive_memory_recency_weight: float = 0.15
+    cognitive_memory_recall_weight: float = 0.15
+    cognitive_memory_sentiment_weight: float = 0.10
+    cognitive_memory_state_weight: float = 0.0
 
     # ── AI ────────────────────────────────────────────────────────────────────
     # ai_primary_provider accepts either AI_PRIMARY_PROVIDER or the shorter AI_PROVIDER.
@@ -75,7 +93,12 @@ class PhantomConfig(BaseSettings):
     # If set to "auto", they follow ai_gemini_model.
     ai_gemini_model: str = "gemini-2.0-flash"
     ai_gemini_api_key: str = ""
-    
+
+    # Chat tier routing — conversational vs complex vs background
+    ai_conversational_model: str = "gemini-2.0-flash"   # live chat, high TPM, fast
+    ai_reasoning_model: str = "gemini-3-flash"           # complex queries + tools
+    ai_background_model: str = "gemini-1.5-flash"        # background synthesis tasks
+
     # Specific tier overrides (set to "auto" to follow system model)
     ai_planner_model: str = "auto"
     ai_reflector_model: str = "auto"
@@ -115,7 +138,7 @@ class PhantomConfig(BaseSettings):
     # skips the sleep entirely.
     chat_stream_chunk_chars: int = 24
     chat_stream_delay_s: float = 0.0
-    chat_max_session_history: int = 50
+    chat_max_session_history: int = 15  # ~30 min of conversation; ToM/hints stripped for short turns
 
     # ── Voice / STT ───────────────────────────────────────────────────────────
     # Phase 15 — "npu" added. When voice_stt_npu_enabled is True the factory
@@ -506,7 +529,7 @@ class PhantomConfig(BaseSettings):
     agent_proactive_interval_s: int = 60
     agent_proactive_interval_min_s: int = 30
     agent_proactive_interval_max_s: int = 120
-    agent_proactive_cooldown_s: int = 120
+    agent_proactive_cooldown_s: int = 90
     agent_proactive_long_silence_threshold_min: int = 30
     agent_proactive_require_recent_chat: bool = False
     # Phase 9.3b — standing orders (persistent triggers). Runner checks every
@@ -638,7 +661,7 @@ class PhantomConfig(BaseSettings):
     # memory/context already hydrated into the prompt. Operators can opt
     # in when they want extra read-only grounding. Risky/mutating
     # autonomy still flows through the agent approval gates.
-    chat_tools_enabled: bool = True
+    chat_tools_enabled: bool = False
     # Rich response widgets (`respond_chart`, `respond_map`,
     # `respond_artifact`, etc.) are a separate opt-in from data tools.
     # Keeping them off by default prevents normal conversation from

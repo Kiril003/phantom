@@ -12,34 +12,32 @@ def test_artifact_config_defaults():
 
 def test_respond_artifact_in_catalog():
     assert any(t["name"] == "respond_artifact" for t in RESPONSE_FORM_TOOLS)
-    assert _FORM_MAP["respond_artifact"] == "artifact"
+    assert _FORM_MAP["respond_artifact"] == "react_artifact"
 
 
 def test_parse_artifact_builds_panel(monkeypatch):
     monkeypatch.setattr(config, "chat_artifacts_enabled", True)
     form, content, atts = parse_function_call(
         "respond_artifact",
-        {"title": "Pulse", "components": [{"type": "card", "id": "1"}], "root_id": "1"},
+        {"title": "Pulse", "code": "export default function App() {}"},
     )
-    assert form == "artifact"
+    assert form == "react_artifact"
     art = next(a for a in atts if a["type"] == "artifact_data")
-    assert art["data"]["a2ui"] is True
     assert art["data"]["title"] == "Pulse"
-    assert art["data"]["components"][0]["type"] == "card"
-    assert art["data"]["root_id"] == "1"
+    assert art["data"]["code"] == "export default function App() {}"
 
 
-def test_parse_artifact_no_components_degrades_to_text(monkeypatch):
+def test_parse_artifact_no_code_degrades_to_text(monkeypatch):
     monkeypatch.setattr(config, "chat_artifacts_enabled", True)
     form, _, atts = parse_function_call(
-        "respond_artifact", {"title": "x", "components": "not_a_list", "root_id": "1"})
+        "respond_artifact", {"title": "x", "code": ""})
     assert form == "text"
 
 
 def test_parse_artifact_disabled_degrades_to_text(monkeypatch):
     monkeypatch.setattr(config, "chat_artifacts_enabled", False)
     form, _, atts = parse_function_call(
-        "respond_artifact", {"title": "x", "components": [], "root_id": "1"})
+        "respond_artifact", {"title": "x", "code": "export default function App() {}"})
     assert form == "text"
 
 
@@ -99,7 +97,7 @@ async def test_run_no_salvage_when_disabled(monkeypatch):
 
     monkeypatch.setattr(chat_pipeline.ai_router, "call_with_tools", _stub_cwt)
     result = await chat_pipeline.run(
-        user_message="x", system_prompt="s", history=[],
+        user_message="html не артефакт тест", system_prompt="s", history=[],
         user_id="u", db=None,  # type: ignore[arg-type]
     )
     assert result.response_form != "artifact"

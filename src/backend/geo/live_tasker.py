@@ -246,6 +246,51 @@ async def setup_default_tasks(tasker: Optional[LiveTasker] = None) -> LiveTasker
         fetch=fetch_alarms_ua,
         on_diff=default_on_diff,
     )
+    
+    # Phase 24-L — Proximity alerts engine (every 5 seconds)
+    async def fetch_proximity() -> list[Any]:
+        # This is a bit different as it triggers side effects directly
+        # but we can return the active geofences as the "payload"
+        from .geofence_engine import GeofenceEngine
+        from core.context_engine import get_context_engine
+        from db.database import SessionLocal
+        from db.models import Geofence
+        from sqlalchemy import select
+        
+        ctx = get_context_engine().get_snapshot()
+        if not ctx or not ctx.get("where") or ctx["where"].get("lat") is None:
+            return []
+            
+        lat, lon = ctx["where"]["lat"], ctx["where"]["lon"]
+        
+        async with SessionLocal() as db:
+            # For simplicity, we just check ALL active geofences
+            # In production this would be spatial-indexed
+            result = await db.execute(
+                select(Geofence).where(Geofence.is_active == True)
+            )
+            gfs = result.scalars().all()
+            
+            triggered = []
+            for gf in gfs:
+                if GeofenceEngine.is_inside(lat, lon, gf):
+                    triggered.append({"id": gf.id, "label": gf.label, "state": "inside"})
+                else:
+                    triggered.append({"id": gf.id, "label": gf.label, "state": "outside"})
+            return triggered
+
+    async def on_proximity_diff(name: str, payload: list[Any]) -> None:
+        # payload here is the list of statuses.
+        # LiveTasker's default on_diff broadcasts it.
+        await default_on_diff(name, payload)
+
+    tk.register(
+        "proximity",
+        interval_s=5.0,
+        fetch=fetch_proximity,
+        on_diff=on_proximity_diff,
+    )
+
     return tk
 
 

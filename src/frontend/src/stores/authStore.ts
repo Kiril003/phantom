@@ -137,5 +137,18 @@ if (typeof window !== 'undefined') {
   window.addEventListener('phantom:unauthorized', () => {
     useAuthStore.getState().clearAuth();
     useSystemStore.getState().setAuthenticated(false);
+    
+    // 24-PRE: Auth-token UX
+    import('./uiStore').then(({ useUIStore }) => {
+      useUIStore.getState().toast({
+        kind: 'warn',
+        message: 'Сесія прострочена. Будь ласка, увійдіть знову.',
+      });
+    });
+    
+    // Redirect to login if not already there
+    if (window.location.pathname !== '/login') {
+      window.location.href = '/login';
+    }
   });
 }

@@ -330,6 +330,7 @@ class AIRouter:
         *,
         task_id: str | None = None,
         provider_hint: str | None = None,
+        model_override: str | None = None,
     ) -> AsyncGenerator[str, None]:
         """Stream from primary, fall back to generate() on failure."""
         if not await _runtime_note_llm_call(task_id):
@@ -341,7 +342,12 @@ class AIRouter:
             if primary:
                 try:
                     await self._respect_min_interval(primary_name)
-                    stream = primary.generate_stream(user_message, system_prompt, history)
+                    stream_kwargs = {}
+                    import inspect as _inspect
+                    _stream_code = primary.generate_stream
+                    if "model_override" in _inspect.signature(_stream_code).parameters:
+                        stream_kwargs["model_override"] = model_override
+                    stream = primary.generate_stream(user_message, system_prompt, history, **stream_kwargs)
                     async for chunk in stream:
                         yield chunk
                     self._active = primary_name
@@ -352,7 +358,7 @@ class AIRouter:
                     logger.warning("Stream failed for %s, falling back to generate", primary_name)
 
         # Fallback to non-streaming generate
-        resp = await self.generate(user_message, system_prompt, history, task_id=task_id, provider_hint=provider_hint)
+        resp = await self.generate(user_message, system_prompt, history, task_id=task_id, provider_hint=provider_hint, model_override=model_override)
         yield resp.content
 
     async def health_check_all(self) -> dict[str, bool]:
@@ -384,6 +390,14 @@ class AIRouter:
         """Tool-use routing with resilience and audit logging."""
         from ai.tool_use import ToolCallResult, ToolErrorKind, ToolUseError
         from ai.tool_use_audit import write_log
+
+        if not await _runtime_note_llm_call(task_id):
+            await _write_budget_exhausted_audit(task_id, caller="call_with_tools")
+            return ToolUseError(
+                kind=ToolErrorKind.UNKNOWN,
+                message="call_budget_exhausted",
+                retriable=False,
+            )
 
         tools = _coerce_tool_schemas(tools)
         sequence = self._available_sequence(primary_override=provider_hint)
@@ -466,6 +480,12 @@ class AIRouter:
 
                     # Provider returned a ToolUseError (refusal, invalid args, etc.)
                     last_error = outcome
+                    is_rate_limit = outcome.kind == ToolErrorKind.RATE_LIMIT
+                    is_unavail = outcome.kind == ToolErrorKind.PROVIDER_UNAVAILABLE
+                    will_cool = (
+                        (is_rate_limit and tries > extra_retries) or
+                        (is_unavail and tries > _TRANSIENT_RETRIES)
+                    )
                     await write_log(
                         task_id=task_id,
                         step_idx=step_idx,
@@ -479,10 +499,13 @@ class AIRouter:
                         retry_count=tries - 1,
                         retry_after_s=outcome.retry_after_s,
                         fell_through_to_fallback=is_fallback,
+                        cooling_triggered=will_cool,
                         user_id=user_id,
                     )
 
                     if not outcome.retriable:
+                        if outcome.kind == ToolErrorKind.QUOTA_EXHAUSTED:
+                            self._mark_quota_exhausted(prov_name)
                         break
 
                     # Retry logic for RATE_LIMIT / TIMEOUT / PROVIDER_UNAVAILABLE
@@ -511,6 +534,12 @@ class AIRouter:
                         retry_after_s=retry_after_s,
                     )
 
+                    is_rate_limit = kind == ToolErrorKind.RATE_LIMIT
+                    is_unavail = kind == ToolErrorKind.PROVIDER_UNAVAILABLE
+                    will_cool = (
+                        (is_rate_limit and tries > extra_retries) or
+                        (is_unavail and tries > _TRANSIENT_RETRIES)
+                    )
                     await write_log(
                         task_id=task_id,
                         step_idx=step_idx,
@@ -534,6 +563,7 @@ class AIRouter:
                         retry_count=tries - 1,
                         retry_after_s=retry_after_s,
                         fell_through_to_fallback=is_fallback,
+                        cooling_triggered=will_cool,
                         user_id=user_id,
                     )
 

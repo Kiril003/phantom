@@ -147,7 +147,7 @@ async def plan(
     # leaves the memory_block unchanged.
     try:
         from ..memory.lessons import format_lessons_for_prompt, recall_lessons
-        lessons = await recall_lessons(goal)
+        lessons = await recall_lessons(goal, user_id=user_id)
         lesson_block = format_lessons_for_prompt(lessons)
         if lesson_block:
             memory_block = (

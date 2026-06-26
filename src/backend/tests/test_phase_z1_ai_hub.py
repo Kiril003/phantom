@@ -294,7 +294,7 @@ class TestAIHubDispatchStub:
         h.register(
             ProviderCapability(
                 provider="stub",
-                task_class="vision",
+                task_class="unsupported",
                 modality="image",
                 latency_ms_p50=100.0,
                 quality_tier="balanced",
@@ -303,7 +303,7 @@ class TestAIHubDispatchStub:
             )
         )
         with pytest.raises(NotImplementedError):
-            await h.dispatch("vision", {})
+            await h.dispatch("unsupported", {})
 
 
 # ─────────────────────────────────────────────────── singleton ──
@@ -328,7 +328,8 @@ class TestSingletonAndDefaults:
         rows = h.list_providers()
         providers = {r.provider for r in rows}
         assert {"gemini", "ollama"} <= providers
-        # Every default registration is for chat or chat_subtask.
+        # Every default registration for gemini/ollama is for chat or chat_subtask.
         for r in rows:
-            assert r.task_class in ("chat", "chat_subtask")
+            if r.provider in ("gemini", "ollama"):
+                assert r.task_class in ("chat", "chat_subtask")
             assert r.available is True

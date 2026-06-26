@@ -6,6 +6,7 @@ has conversational context without hitting the DB on every turn.
 from __future__ import annotations
 
 import time
+from core.clock import clock
 from collections import deque
 from dataclasses import dataclass, field
 from typing import Any
@@ -15,9 +16,22 @@ from typing import Any
 class SessionMessage:
     role: str           # "user" | "assistant" | "system"
     content: str
-    ts: float = field(default_factory=time.time)
+    ts: float = field(default_factory=clock.time)
     response_form: str = "text"
     attachments: list[dict[str, Any]] = field(default_factory=list)
+
+
+@dataclass
+class DeferredThought:
+    id: str
+    session_id: str
+    kind: str  # "speak" | "scene"
+    content: str
+    priority: int
+    value: float
+    created_at: float  # time.monotonic()
+    ttl: float = 600.0  # 10 minute default
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class SessionMemory:
@@ -31,6 +45,8 @@ class SessionMemory:
         self._max = max_messages_per_session
         # session_id → deque[SessionMessage]
         self._sessions: dict[str, deque[SessionMessage]] = {}
+        # session_id → list[DeferredThought]
+        self._deferred_thoughts: dict[str, list[DeferredThought]] = {}
 
     # ── Public API ─────────────────────────────────────────────────────────────
 
@@ -81,6 +97,7 @@ class SessionMemory:
 
     def clear_session(self, session_id: str) -> None:
         self._sessions.pop(session_id, None)
+        self._deferred_thoughts.pop(session_id, None)
 
     def session_exists(self, session_id: str) -> bool:
         return session_id in self._sessions and bool(self._sessions[session_id])
@@ -103,6 +120,50 @@ class SessionMemory:
 
     def active_session_ids(self) -> list[str]:
         return [sid for sid, buf in self._sessions.items() if buf]
+
+    def defer_thought(
+        self,
+        session_id: str,
+        kind: str,
+        content: str,
+        priority: int,
+        value: float,
+        ttl: float = 600.0,
+        metadata: dict[str, Any] | None = None,
+    ) -> str:
+        import uuid
+        thought_id = str(uuid.uuid4())
+        thought = DeferredThought(
+            id=thought_id,
+            session_id=session_id,
+            kind=kind,
+            content=content,
+            priority=priority,
+            value=value,
+            created_at=clock.time(),
+            ttl=ttl,
+            metadata=metadata or {},
+        )
+        if session_id not in self._deferred_thoughts:
+            self._deferred_thoughts[session_id] = []
+        self._deferred_thoughts[session_id].append(thought)
+        return thought_id
+
+    def get_deferred_thoughts(self, session_id: str) -> list[DeferredThought]:
+        return self._deferred_thoughts.get(session_id, [])
+
+    def prune_expired_thoughts(self, session_id: str) -> None:
+        if session_id not in self._deferred_thoughts:
+            return
+        now = clock.time()
+        active = []
+        for t in self._deferred_thoughts[session_id]:
+            if now - t.created_at <= t.ttl:
+                active.append(t)
+        self._deferred_thoughts[session_id] = active
+
+    def clear_deferred_thoughts(self, session_id: str) -> None:
+        self._deferred_thoughts.pop(session_id, None)
 
 
 # Singleton

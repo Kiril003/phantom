@@ -257,7 +257,50 @@ export const mapApi = {
     ),
   getAttribution: () =>
     request<AttributionPayload>('GET', '/map/attribution'),
+  // Phase 24-G — Offline region manager.
+  getOfflineRegions: () =>
+    request<OfflineRegionsResponse>('GET', '/map/offline/regions'),
+  deleteOfflineRegion: (id: string) =>
+    request<{ ok: boolean }>('DELETE', `/map/offline/regions/${encodeURIComponent(id)}`),
+  // Phase 24-I — Geofences.
+  getGeofences: () =>
+    request<GeofenceResponse[]>('GET', '/map/geofences/'),
+
+  // Generic helpers for new analytics endpoints
+  get: (url: string) => request<any>('GET', url),
+  post: (url: string, body: any) => request<any>('POST', url, body),
 };
+
+// ── Phase 24-I — Geofence types ──────────────────────────────────────────
+
+export interface GeofenceResponse {
+  id: string;
+  label: string;
+  kind: string;
+  geometry: any;
+  is_active: boolean;
+  on_enter: any[];
+  on_exit: any[];
+  created_at: string;
+}
+
+// ── Phase 24-G — Offline region manager types ────────────────────────────
+
+export interface OfflineRegion {
+  id: string;
+  name: string;
+  file_path: string;
+  size_bytes: number;
+  mtime: number;
+  layers: string[];
+}
+
+export interface OfflineRegionsResponse {
+  regions: OfflineRegion[];
+  total: number;
+  capacity_bytes: number;
+  used_bytes: number;
+}
 
 // ── Phase 24-A — OmniMap Layer Registry types ────────────────────────────
 

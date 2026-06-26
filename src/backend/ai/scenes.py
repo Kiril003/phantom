@@ -19,6 +19,8 @@ from typing import Annotated, Literal, Optional
 
 from pydantic import BaseModel, ConfigDict, Field, NonNegativeInt
 
+from api.schemas.react_artifact import ReactArtifactSceneData
+
 
 # ── Shared model config ──────────────────────────────────────────────────────
 
@@ -233,7 +235,8 @@ class CheckpointSceneData(_SceneBase):
 ToolSceneKind = Literal[
     "timer", "alarm", "calendar", "files",
     "audit", "wardriving", "location", "checkpoint",
-    "phantom_manifest",
+    "phantom_manifest", "patch_file",
+    "react_artifact",
 ]
 
 
@@ -275,7 +278,7 @@ class ChatToolScene(_SceneBase):
     data: (
         TimerSceneData | AlarmSceneData | CalendarSceneData | FilesSceneData
         | AuditSceneData | WardrivingSceneData | LocationSceneData
-        | CheckpointSceneData | PhantomManifestSceneData
+        | CheckpointSceneData | PhantomManifestSceneData | ReactArtifactSceneData
     )
 
 
@@ -314,6 +317,7 @@ __all__ = [
     "PhantomManifestSceneData",
     "FamiliarTargetData",
     "FamiliarPose",
+    "PhantomDOMSceneData",
     "ChatToolScene",
     "ToolResult",
     "ToolSceneKind",

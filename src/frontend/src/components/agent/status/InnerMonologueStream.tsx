@@ -86,6 +86,7 @@ export function InnerMonologueStream() {
               <div
                 key={`${ev.ts}-${idx}`}
                 className="flex flex-col border-l border-white/[0.03] pl-2 mb-0.5"
+                data-testid="monologue-entry"
               >
                 <button
                   type="button"

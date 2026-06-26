@@ -125,6 +125,7 @@ def _empty_snapshot() -> dict:
             "temp_c": None,
             "pressure_hpa": None,
             "aqi": None,
+            "light_lux": None,
         },
         "presence": {
             "user_detected": False,
@@ -183,6 +184,12 @@ class ContextEngine:
         self._mood_window: deque[float] = deque(maxlen=20)
         self._system_state = "SHADOW"
         self._ai_provider = config.ai_primary_provider
+        self._last_voice_activity_ts = time.monotonic() - 999.0
+        self._voice_active = False
+        self._is_calm = False
+        self._calm_delay_s = 8.0
+        self._gap_delay_s = 2.0
+        self._gap_emitted = True
 
         # Track "other person" detection with hysteresis
         self._other_detected_count = 0
@@ -242,9 +249,20 @@ class ContextEngine:
         return [s for s in self._history if s.get("timestamp", 0) >= cutoff_ms]
 
     def set_state(self, state: str) -> None:
+        old_state = self._system_state
         self._system_state = state
         self._snapshot["system"]["state"] = state
         self._last_state_change_ts = time.monotonic()
+        if old_state != state:
+            user_id = self._snapshot["who"].get("user_id")
+            if user_id:
+                try:
+                    loop = asyncio.get_running_loop()
+                    if loop.is_running():
+                        from memory.brain import memory_brain
+                        loop.create_task(memory_brain.predictive_warm(user_id, state))
+                except RuntimeError:
+                    pass
 
     def set_authenticated_user(
         self,
@@ -265,6 +283,34 @@ class ContextEngine:
     def record_interaction(self, method: str = "voice") -> None:
         self._last_interaction_ts = time.monotonic()
         self._snapshot["last_input_method"] = method
+        self._gap_emitted = False
+        if self._is_calm:
+            self._is_calm = False
+            event_bus.emit("context_signal", {
+                "type": "calm_window",
+                "name": "calm_window_closed",
+                "timestamp": time.time(),
+                "payload": {}
+            })
+            event_bus.emit("calm_window_closed", {})
+
+    def record_voice_activity(self, active: bool) -> None:
+        self._voice_active = active
+        if active:
+            self._last_voice_activity_ts = time.monotonic()
+            self._gap_emitted = False
+            if self._is_calm:
+                self._is_calm = False
+                event_bus.emit("context_signal", {
+                    "type": "calm_window",
+                    "name": "calm_window_closed",
+                    "timestamp": time.time(),
+                    "payload": {}
+                })
+                event_bus.emit("calm_window_closed", {})
+
+    def is_calm(self) -> bool:
+        return self._is_calm
 
     def record_heard_speech(self, text: str) -> None:
         if not text:
@@ -497,6 +543,7 @@ class ContextEngine:
             "temp_c": e.temp_c,
             "pressure_hpa": e.pressure_hpa,
             "aqi": e.aqi,
+            "light_lux": getattr(e, "light_lux", None),
         })
 
     def _update_system(self) -> None:
@@ -599,13 +646,27 @@ class ContextEngine:
         except (ValueError, TypeError, AttributeError):
             work_hours = False
 
+        hour = now.hour
+        lux = self._snapshot["env"].get("light_lux")
+        is_night = (hour >= 22 and (lux is None or lux < 5.0)) or hour < 6
+
+        old_is_night = self._snapshot["when"].get("is_night", False)
+        if old_is_night != is_night:
+            event_bus.emit("context_signal", {
+                "type": "night_mode",
+                "name": "night_mode_changed",
+                "timestamp": time.time(),
+                "payload": {"is_night": is_night, "lux": lux}
+            })
+            event_bus.emit("night_mode_changed", {"is_night": is_night, "lux": lux})
+
         self._snapshot["when"].update({
             "time": now.strftime("%H:%M"),
-            "hour": now.hour,
+            "hour": hour,
             "day_of_week": now.strftime("%a").lower(),
             "date": now.strftime("%Y-%m-%d"),
             "work_hours": work_hours,
-            "is_night": now.hour >= 23 or now.hour < 6,
+            "is_night": is_night,
         })
 
     def _update_history_metrics(self) -> None:
@@ -630,6 +691,48 @@ class ContextEngine:
                 trend = "stable"
         else:
             trend = "stable"
+
+        voice_ago = now - self._last_voice_activity_ts
+        is_calm = (
+            interaction_ago >= self._calm_delay_s
+            and voice_ago >= self._calm_delay_s
+            and not self._voice_active
+        )
+
+        if is_calm != self._is_calm:
+            self._is_calm = is_calm
+            if is_calm:
+                payload = {
+                    "last_interaction_ago_s": interaction_ago,
+                    "last_voice_activity_ago_s": voice_ago
+                }
+                event_bus.emit("context_signal", {
+                    "type": "calm_window",
+                    "name": "calm_window_opened",
+                    "timestamp": time.time(),
+                    "payload": payload
+                })
+                event_bus.emit("calm_window_opened", payload)
+            else:
+                event_bus.emit("context_signal", {
+                    "type": "calm_window",
+                    "name": "calm_window_closed",
+                    "timestamp": time.time(),
+                    "payload": {}
+                })
+                event_bus.emit("calm_window_closed", {})
+
+        # Speech gap detection:
+        if not self._voice_active and self._last_voice_activity_ts > 0:
+            gap_elapsed = now - self._last_voice_activity_ts
+            if gap_elapsed >= self._gap_delay_s and not self._gap_emitted:
+                self._gap_emitted = True
+                event_bus.emit("context_signal", {
+                    "type": "speech_gap",
+                    "name": "gap_detected",
+                    "timestamp": time.time(),
+                    "payload": {"gap_duration_s": gap_elapsed}
+                })
 
         self._snapshot["history"].update({
             "last_interaction_ago_s": interaction_ago,

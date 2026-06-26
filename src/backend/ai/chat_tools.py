@@ -1132,6 +1132,65 @@ CHAT_DATA_TOOLS: list[dict[str, Any]] = [
             "required": ["command"],
         },
     },
+    {
+        "name": "list_user_facts",
+        "description": (
+            "Отримати список збережених фактів про користувача (таких як email, "
+            "телефон, контакти telegram/discord тощо)."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string",
+                    "enum": ["email", "phone", "telegram", "discord", "file_pointer"],
+                    "description": "Опціональний фільтр за категорією фактів.",
+                },
+            },
+            "required": [],
+        },
+    },
+    {
+        "name": "create_user_fact",
+        "description": (
+            "Створити новий зашифрований факт про користувача у певній категорії."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "category": {
+                    "type": "string",
+                    "enum": ["email", "phone", "telegram", "discord", "file_pointer"],
+                    "description": "Категорія факту.",
+                },
+                "value": {
+                    "type": "string",
+                    "description": "Значення факту для збереження.",
+                },
+                "label": {
+                    "type": "string",
+                    "description": "Опціональний текстовий ярлик для уточнення значення.",
+                },
+            },
+            "required": ["category", "value"],
+        },
+    },
+    {
+        "name": "delete_user_fact",
+        "description": (
+            "Видалити збережений факт про користувача за його ідентифікатором."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "fact_id": {
+                    "type": "string",
+                    "description": "Унікальний ідентифікатор факту (UUID), який потрібно видалити.",
+                },
+            },
+            "required": ["fact_id"],
+        },
+    },
 ]
 
 

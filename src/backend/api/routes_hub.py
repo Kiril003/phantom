@@ -90,7 +90,25 @@ async def list_providers(
     currently registered with the AIHub."""
     _ensure_default_registrations()
     hub = get_ai_hub()
-    rows = [_serialise_capability(c) for c in hub.list_providers()]
+    from ai.provider import ai_router
+
+    rows = []
+    for cap in hub.list_providers():
+        available_now = cap.available
+        if cap.task_class in ("chat", "chat_subtask"):
+            available_now = ai_router._is_provider_available(cap.provider)
+        
+        row = ProviderRow(
+            provider=cap.provider,
+            task_class=cap.task_class,
+            modality=cap.modality,
+            latency_ms_p50=cap.latency_ms_p50,
+            quality_tier=cap.quality_tier,
+            locality=cap.locality,
+            available=available_now,
+        )
+        rows.append(row)
+
     return HubProvidersResponse(providers=rows, total=len(rows))
 
 

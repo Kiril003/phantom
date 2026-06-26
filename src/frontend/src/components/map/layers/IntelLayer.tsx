@@ -38,9 +38,17 @@ export function IntelLayer() {
       inner.style.width = '18px';
       inner.style.height = '18px';
       inner.style.borderRadius = poi.category === 'threat' ? '3px' : '50%';
-      inner.style.background = poiColor(tokens, poi.category);
+      
+      // Phase 24-N — GHOST mode styling for secret markers.
+      const baseColor = poiColor(tokens, poi.category);
+      const isSecret = poi.is_secret;
+      
+      inner.style.background = isSecret ? '#16a34a' : baseColor;
       inner.style.border = `2px solid ${tokens.surfaceDeep}`;
-      inner.style.boxShadow = `0 0 10px ${poiColor(tokens, poi.category)}`;
+      inner.style.boxShadow = isSecret 
+        ? `0 0 12px #16a34a, 0 0 4px #16a34a`
+        : `0 0 10px ${baseColor}`;
+        
       inner.style.display = 'flex';
       inner.style.alignItems = 'center';
       inner.style.justifyContent = 'center';

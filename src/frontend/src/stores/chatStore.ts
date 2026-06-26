@@ -23,6 +23,8 @@ interface ChatStoreState {
   // mic is mid-utterance. Updated by the partial-transcript stream and
   // cleared once the message is committed via sendMessage.
   userPreview: string | null;
+  sendingSessionIds: Record<string, boolean>;
+
 
   // Setters
   setSessions: (sessions: ChatSession[]) => void;
@@ -91,6 +93,8 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   sending: false,
   error: null,
   userPreview: null,
+  sendingSessionIds: {},
+
 
   setSessions: (sessions) => set({ sessions }),
   setCurrentSession: (id) => set({ currentSessionId: id }),
@@ -172,13 +176,33 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   },
 
   openSession: async (sessionId: string) => {
-    set({ currentSessionId: sessionId, messages: [], streaming: null });
+    set((s) => {
+      const activeSending = !!s.sendingSessionIds[sessionId];
+      return {
+        currentSessionId: sessionId,
+        messages: [],
+        streaming: null,
+        sending: activeSending,
+        isTyping: activeSending,
+      };
+    });
     await get().loadMessages(sessionId);
   },
 
   startNewSession: () => {
-    set({ currentSessionId: null, messages: [], streaming: null, error: null });
+    set((s) => {
+      const activeSending = !!s.sendingSessionIds[''];
+      return {
+        currentSessionId: null,
+        messages: [],
+        streaming: null,
+        error: null,
+        sending: activeSending,
+        isTyping: activeSending,
+      };
+    });
   },
+
 
   deleteSession: async (sessionId: string) => {
     try {
@@ -228,12 +252,13 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   ) => {
     const trimmed = content.trim();
     if (!trimmed) return;
-    if (get().sending) return;
-
     const sessionId = get().currentSessionId ?? '';
+    if (get().sendingSessionIds[sessionId]) return;
+
     const optimistic = makeOptimisticUserMessage(trimmed, sessionId, inputMethod, stateAtTime);
 
     set((s) => ({
+      sendingSessionIds: { ...s.sendingSessionIds, [sessionId]: true },
       sending: true,
       isTyping: true,
       error: null,
@@ -256,7 +281,29 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
       // so the sidebar shows it without a page reload.
       const sessionIsNew = !get().sessions.some((x) => x.id === resp.session_id);
 
+      const nowActiveSessionId = get().currentSessionId;
+      const isStillOnSameSession =
+        nowActiveSessionId === sessionId ||
+        (sessionId === '' && nowActiveSessionId === resp.session_id);
+
       set((s) => {
+        const nextSendingSessionIds = { ...s.sendingSessionIds };
+        delete nextSendingSessionIds[sessionId];
+        if (sessionId === '' && resp.session_id) {
+          delete nextSendingSessionIds[resp.session_id];
+        }
+
+        const activeSending = s.currentSessionId ? !!nextSendingSessionIds[s.currentSessionId] : !!nextSendingSessionIds[''];
+
+        if (!isStillOnSameSession) {
+          return {
+            sendingSessionIds: nextSendingSessionIds,
+            sending: activeSending,
+            isTyping: activeSending,
+            streaming: null,
+          };
+        }
+
         // Replace the optimistic placeholder IN PLACE with the confirmed
         // user message. Previously we rebuilt the array as
         // `[...withoutOptimistic, confirmedUser]` which, when the WS had
@@ -275,8 +322,9 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         return {
           currentSessionId: resp.session_id,
           messages: nextMessages,
-          sending: false,
-          isTyping: false,
+          sendingSessionIds: nextSendingSessionIds,
+          sending: activeSending,
+          isTyping: activeSending,
           streaming: null,
         };
       });
@@ -299,13 +347,19 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           : err instanceof Error
             ? err.message
             : 'Failed to send message';
-      set((s) => ({
-        sending: false,
-        isTyping: false,
-        error: friendly,
-        // Keep optimistic message so user sees it; no rollback.
-        messages: s.messages,
-      }));
+      set((s) => {
+        const nextSendingSessionIds = { ...s.sendingSessionIds };
+        delete nextSendingSessionIds[sessionId];
+        const activeSending = s.currentSessionId ? !!nextSendingSessionIds[s.currentSessionId] : !!nextSendingSessionIds[''];
+        return {
+          sendingSessionIds: nextSendingSessionIds,
+          sending: activeSending,
+          isTyping: activeSending,
+          error: friendly,
+          // Keep optimistic message so user sees it; no rollback.
+          messages: s.messages,
+        };
+      });
     }
   },
 

@@ -41,6 +41,7 @@ class EnvData:
     temp_c: float
     pressure_hpa: float
     aqi: int
+    light_lux: Optional[float] = None
 
 
 @dataclass
@@ -170,6 +171,7 @@ class SensorParser:
                 temp_c=float(e.get("temp", 0.0)),
                 pressure_hpa=float(e.get("press", 1013.25)),
                 aqi=int(e.get("aqi", 0)),
+                light_lux=float(e["lux"]) if e.get("lux") is not None else None,
             )
 
         # RFID

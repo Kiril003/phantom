@@ -80,7 +80,7 @@ class _StubProvider:
         self._seq = list(sequence)
         self.calls = 0
 
-    async def call_with_tools(self, *, system_prompt, user_message, tools, max_retries=3):
+    async def call_with_tools(self, *, system_prompt, user_message, tools, max_retries=3, **_kw):
         self.calls += 1
         if not self._seq:
             return _ok()
@@ -334,7 +334,7 @@ class TestCallBudget:
         from agent.schemas import SelfModel
         rt = AgentRuntime()
         rt.foreground_slot = TaskState(
-            id="t1", goal="g", track="foreground", status="running",
+            id="t1", user_id="u1", goal="g", track="foreground", status="running",
             self_model=SelfModel(),
         )
         broadcasts: list[tuple[str, dict]] = []
@@ -361,7 +361,7 @@ class TestCallBudget:
         from agent.schemas import SelfModel
         rt = AgentRuntime()
         rt.foreground_slot = TaskState(
-            id="t2", goal="g", track="foreground", status="running",
+            id="t2", user_id="u1", goal="g", track="foreground", status="running",
             self_model=SelfModel(),
         )
         async def _np(*_a, **_kw): pass

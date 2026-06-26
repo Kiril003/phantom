@@ -750,24 +750,32 @@ async def post_optimize_visit(
     }
 
 
-@router.post("/snap")
-async def post_snap_track(
-    body: _SnapTrackBody,
+# ── Phase 24-G — Analytics & Elevation ──────────────────────────────────────
+
+
+class _ElevationProfileRequest(BaseModel):
+    points: list[list[float]] = Field(..., min_length=2, max_length=500)
+
+
+@router.get("/elevation")
+async def get_elevation(
+    lat: float = Query(..., ge=-90.0, le=90.0),
+    lon: float = Query(..., ge=-180.0, le=180.0),
     token_data: TokenPayload = Depends(require_auth),
 ) -> dict[str, Any]:
-    from geo.routing import SnapMatchRequest, get_router
-    from geo.routing.adapters import RoutingError
+    """Fetch elevation for a single point."""
+    from geo.elevation import get_elevation_service
+    elev = await get_elevation_service().get_elevation(lat, lon)
+    return {"lat": lat, "lon": lon, "elevation_m": elev}
 
-    profile = _resolve_profile(body.profile)
-    if body.timestamps_ms is not None and len(body.timestamps_ms) != len(body.points):
-        raise HTTPException(status_code=400, detail="timestamps_ms length mismatch")
-    req = SnapMatchRequest(
-        points=[{"lat": p[0], "lon": p[1]} for p in body.points],
-        timestamps_ms=body.timestamps_ms,
-        profile=profile,
-    )
-    try:
-        result = await get_router().snap_match(req)
-    except RoutingError as exc:
-        raise HTTPException(status_code=502, detail=f"no snap provider: {exc}") from exc
-    return result.model_dump(mode="json")
+
+@router.post("/elevation/profile")
+async def post_elevation_profile(
+    body: _ElevationProfileRequest,
+    token_data: TokenPayload = Depends(require_auth),
+) -> dict[str, Any]:
+    """Compute elevation profile along a path."""
+    from geo.elevation import get_elevation_service
+    points = [(p[0], p[1]) for p in body.points]
+    profile = await get_elevation_service().get_profile(points)
+    return {"profile": [s.model_dump() for s in profile]}

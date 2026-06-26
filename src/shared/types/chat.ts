@@ -212,7 +212,8 @@ export type ToolSceneKind =
   | 'phantom_manifest'
   | 'orchestration_flow'
   | 'objection'
-  | 'patch_file';
+  | 'patch_file'
+  | 'phantom_dom';
 
 // ─── Phantom Familiar ────────────────────────────────────────────────────────
 //
@@ -545,6 +546,13 @@ export interface PatchFileSceneData {
   codePreview?: string;
 }
 
+// ─── React Artifact ─────────────────────────────────────────────────────────────
+export interface ReactArtifactSceneData {
+  code: string;
+  dependencies?: Record<string, string>;
+  title?: string;
+}
+
 // ─── Tool-scene discriminated union ───────────────────────────────────────────
 export type ChatToolScene =
   | { kind: 'timer'; data: TimerSceneData }
@@ -559,7 +567,8 @@ export type ChatToolScene =
   | { kind: 'phantom_manifest'; data: PhantomManifestSceneData }
   | { kind: 'orchestration_flow'; data: OrchestrationFlowSceneData }
   | { kind: 'objection'; data: ObjectionSceneData }
-  | { kind: 'patch_file'; data: PatchFileSceneData };
+  | { kind: 'patch_file'; data: PatchFileSceneData }
+  | { kind: 'react_artifact'; data: ReactArtifactSceneData };
 
 /**
  * Phase-5 — `ChatScene` is the super-union of (a) the Day-4 W-2 panel
@@ -608,6 +617,11 @@ export interface ChatMessage {
     tokens_used: number;
     tone: string;
     input_method: 'voice' | 'text' | 'encoder';
+    hormones?: {
+      cortisol: number;
+      dopamine: number;
+      oxytocin: number;
+    };
   };
   attachments: ChatAttachment[];
   created_at: string;

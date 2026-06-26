@@ -1232,3 +1232,80 @@ class TestChatRoutes:
         )
         ids = [s["id"] for s in sessions.json()["sessions"]]
         assert session_id not in ids
+
+    async def test_list_sessions_cleans_empty_sessions(self, chat_client):
+        """Empty sessions (message_count == 0) are cleaned on list_sessions."""
+        token = await self._login(chat_client)
+        # Create an empty session directly in the DB
+        import db.database as _db_mod
+        from db.models import ChatSession
+        async with _db_mod.AsyncSessionLocal() as session:
+            from sqlalchemy import select
+            from db.models import User
+            res = await session.execute(select(User).where(User.username == "phantom"))
+            user = res.scalar_one()
+            empty_sess = ChatSession(id=str(uuid.uuid4()), user_id=user.id, message_count=0)
+            session.add(empty_sess)
+            await session.commit()
+            empty_id = empty_sess.id
+
+        # List sessions
+        resp = await chat_client.get(
+            "/api/v1/chat/sessions",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        # Check that the empty session is not in the list and has been deleted
+        ids = [s["id"] for s in resp.json()["sessions"]]
+        assert empty_id not in ids
+
+        # Verify deletion from DB
+        async with _db_mod.AsyncSessionLocal() as session:
+            res = await session.execute(select(ChatSession).where(ChatSession.id == empty_id))
+            assert res.scalar_one_or_none() is None
+
+    async def test_list_sessions_cleans_failed_sessions(self, chat_client):
+        """Sessions with message_count <= 2 and assistant message matching fallback error are cleaned."""
+        token = await self._login(chat_client)
+        import db.database as _db_mod
+        from db.models import ChatSession, ChatMessage, User
+        async with _db_mod.AsyncSessionLocal() as session:
+            from sqlalchemy import select
+            res = await session.execute(select(User).where(User.username == "phantom"))
+            user = res.scalar_one()
+            
+            # Create a session with a user prompt and a failed/fallback reply
+            failed_sess = ChatSession(id=str(uuid.uuid4()), user_id=user.id, message_count=2)
+            session.add(failed_sess)
+            await session.flush()
+            
+            msg1 = ChatMessage(
+                id=str(uuid.uuid4()), session_id=failed_sess.id, user_id=user.id,
+                role="user", content="Test prompt", response_form="text", attachments_json="[]"
+            )
+            msg2 = ChatMessage(
+                id=str(uuid.uuid4()), session_id=failed_sess.id, user_id=user.id,
+                role="assistant", content="Не встиг сформулювати — перепитай?", response_form="text", attachments_json="[]"
+            )
+            session.add(msg1)
+            session.add(msg2)
+            await session.commit()
+            failed_id = failed_sess.id
+
+        # List sessions
+        resp = await chat_client.get(
+            "/api/v1/chat/sessions",
+            headers={"Authorization": f"Bearer {token}"},
+        )
+        assert resp.status_code == 200
+        ids = [s["id"] for s in resp.json()["sessions"]]
+        assert failed_id not in ids
+
+        # Verify deletion of session and messages from DB
+        async with _db_mod.AsyncSessionLocal() as session:
+            res = await session.execute(select(ChatSession).where(ChatSession.id == failed_id))
+            assert res.scalar_one_or_none() is None
+            
+            res_msg = await session.execute(select(ChatMessage).where(ChatMessage.session_id == failed_id))
+            assert res_msg.scalars().all() == []
+

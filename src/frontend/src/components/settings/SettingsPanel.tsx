@@ -43,6 +43,8 @@ import {
 } from './SettingsAccordion';
 import { AgentLimitsGroup } from './AgentLimitsGroup';
 import { AgentLayoutGroup } from './AgentLayoutGroup';
+import { DesktopShellGroup } from './DesktopShellGroup';
+import { Monitor } from 'lucide-react';
 
 type ThemeId = 'sunrise-warm' | 'amber-night' | 'cyberdeck-cold';
 
@@ -110,16 +112,26 @@ export default function SettingsPanel() {
     }
   }, [categories, activeCategoryId]);
 
+  const allCategories = useMemo(() => {
+    const virtual: any = {
+      id: 'desktop',
+      label: 'Desktop Shell',
+      icon: <Monitor size={14} />,
+      settings: [],
+    };
+    return [...categories, virtual];
+  }, [categories]);
+
   const activeCategory = useMemo(
-    () => categories.find((c) => c.id === activeCategoryId),
-    [categories, activeCategoryId]
+    () => allCategories.find((c) => c.id === activeCategoryId),
+    [allCategories, activeCategoryId]
   );
 
   const dirtyInCategory = useMemo(() => {
     if (!activeCategory) return [] as string[];
-    return activeCategory.settings
-      .map((d) => d.key)
-      .filter((k) => dirty.has(k));
+    return (activeCategory.settings || [])
+      .map((d: any) => d.key)
+      .filter((k: string) => dirty.has(k));
   }, [activeCategory, dirty]);
 
   /* ── Aggregate progress (configured / total) across all categories.
@@ -190,11 +202,11 @@ export default function SettingsPanel() {
      the main pane width. ─────────────────────────────────────────── */
   const diffSummary = useMemo(() => {
     if (!activeCategory) return null;
-    const dirtyKeys = activeCategory.settings.filter((d) => dirty.has(d.key));
+    const dirtyKeys = (activeCategory.settings || []).filter((d: any) => dirty.has(d.key));
     if (dirtyKeys.length === 0) return null;
     const head = dirtyKeys.slice(0, 2);
     const rest = dirtyKeys.length - head.length;
-    const parts = head.map((d) => {
+    const parts = head.map((d: any) => {
       const next = values[d.key];
       const prev = d.value;
       const fmt = (v: unknown) =>
@@ -262,13 +274,12 @@ export default function SettingsPanel() {
             minHeight: 0,
           }}
         >
-          {categories.map((cat) => {
+          {allCategories.map((cat: any) => {
             const active = cat.id === activeCategoryId;
-            const dirtyCount = cat.settings.filter((d) =>
+            const dirtyCount = (cat.settings || []).filter((d: any) =>
               dirty.has(d.key)
             ).length;
-            const total = cat.settings.length;
-            const done = total - dirtyCount;
+            const total = (cat.settings || []).length;            const done = total - dirtyCount;
             const pillBg = dirtyCount > 0
               ? 'rgba(244,175,37,0.20)'
               : 'rgba(34,197,94,0.18)';
@@ -617,11 +628,17 @@ export default function SettingsPanel() {
               <VaultPanel />
             )}
 
+            {/* Desktop Shell status and native features */}
+            {loaded && activeCategory && activeCategory.id === 'desktop' && (
+              <DesktopShellGroup />
+            )}
+
             {loaded &&
               activeCategory &&
               activeCategory.id !== 'about' &&
               activeCategory.id !== 'mobile' &&
-              activeCategory.id !== 'vault' && (
+              activeCategory.id !== 'vault' &&
+              activeCategory.id !== 'desktop' && (
               <>
                 {activeCategory.id === 'ai' && <AIProviderDiagnostics />}
                 {activeCategory.id === 'voice' && <NPUDiagnostics />}
@@ -652,7 +669,7 @@ export default function SettingsPanel() {
                 )}
                 {(() => {
                   const q = query.trim().toLowerCase();
-                  const visible = activeCategory.settings.filter((def) => {
+                  const visible = (activeCategory.settings || []).filter((def: any) => {
                     if (def.key === 'voice_always_on_enabled') return false;
                     // Phase 22 — gate advanced rows behind the toggle. Search
                     // overrides the gate: if the operator types into the
@@ -682,7 +699,7 @@ export default function SettingsPanel() {
                       return seed;
                     })();
                   if (groups.length <= 1) {
-                    return groups[0]?.items.map((def) => (
+                    return groups[0]?.items.map((def: any) => (
                       <SettingRow
                         key={def.key}
                         def={def}
@@ -694,7 +711,7 @@ export default function SettingsPanel() {
                   }
                   return groups.map((g) => {
                     const open = stateForCategory[g.bucket.id] ?? false;
-                    const dirtyCount = g.items.filter((d) =>
+                    const dirtyCount = g.items.filter((d: any) =>
                       dirty.has(d.key)
                     ).length;
                     return (
@@ -720,7 +737,7 @@ export default function SettingsPanel() {
                           );
                         }}
                       >
-                        {g.items.map((def) => (
+                        {g.items.map((def: any) => (
                           <SettingRow
                             key={def.key}
                             def={def}

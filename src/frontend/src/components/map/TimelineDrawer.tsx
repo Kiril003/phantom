@@ -6,7 +6,7 @@
  * entry centers the map there (via the `onSelect` callback).
  */
 import { useEffect, useMemo, useState } from 'react';
-import { Clock, RefreshCw, X } from 'lucide-react';
+import { Clock, RefreshCw, X, AlertTriangle } from 'lucide-react';
 import { mapApi, type LocationHistoryEntry } from '../../services/api';
 
 export interface TimelineDrawerProps {
@@ -48,7 +48,7 @@ export function TimelineDrawer({ open, onClose, onSelect }: TimelineDrawerProps)
   const grouped = useMemo(() => {
     const byDay = new Map<string, LocationHistoryEntry[]>();
     for (const e of entries) {
-      const day = new Date(e.timestamp).toLocaleDateString();
+      const day = new Date(e.timestamp).toLocaleDateString('uk-UA', { weekday: 'long', day: 'numeric', month: 'long' });
       if (!byDay.has(day)) byDay.set(day, []);
       byDay.get(day)!.push(e);
     }
@@ -60,85 +60,88 @@ export function TimelineDrawer({ open, onClose, onSelect }: TimelineDrawerProps)
   return (
     <div
       role="dialog"
-      aria-label="Location timeline"
-      className="absolute top-0 right-0 h-full w-[360px] bg-black/80 backdrop-blur-md border-l border-cyan-500/20 flex flex-col z-30"
+      className="h-full w-[360px] bg-black/75 backdrop-blur-2xl border-l border-white/10 flex flex-col shadow-2xl animate-in slide-in-from-right duration-300"
     >
-      <header className="flex items-center justify-between px-4 py-3 border-b border-cyan-500/20">
-        <div className="flex items-center gap-2">
-          <Clock size={16} className="text-cyan-400" />
-          <span className="text-sm uppercase tracking-wider text-cyan-300">
-            Timeline
+      <header className="flex items-center justify-between px-5 py-4 border-b border-white/5">
+        <div className="flex items-center gap-3">
+          <div className="p-2 rounded-xl bg-amber-500/10 text-amber-500">
+            <Clock size={18} />
+          </div>
+          <span className="text-sm font-bold uppercase tracking-widest text-ink-primary">
+            Історія переміщень
           </span>
         </div>
         <div className="flex items-center gap-1">
           <button
             type="button"
-            aria-label="Refresh timeline"
             onClick={() => void load()}
             disabled={loading}
-            className="w-8 h-8 min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-cyan-500/10 disabled:opacity-40"
+            className="p-2 rounded-full hover:bg-white/5 disabled:opacity-20 transition-colors"
           >
-            <RefreshCw size={14} className={loading ? 'animate-spin' : ''} />
+            <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
           </button>
           <button
             type="button"
-            aria-label="Close timeline"
             onClick={onClose}
-            className="w-8 h-8 min-w-[44px] min-h-[44px] flex items-center justify-center rounded hover:bg-cyan-500/10"
+            aria-label="Close timeline"
+            className="p-2 rounded-full hover:bg-white/5 transition-colors"
           >
-            <X size={14} />
+            <X size={18} />
           </button>
         </div>
       </header>
 
-      <div className="flex-1 overflow-y-auto px-2 py-3 text-[13px]">
+      <div className="flex-1 overflow-y-auto py-4 custom-scrollbar">
         {error ? (
-          <div className="px-4 py-6 text-sm text-red-400">{error}</div>
+          <div className="px-6 py-10 text-center">
+            <AlertTriangle size={32} className="mx-auto text-rose-500 mb-3 opacity-50" />
+            <div className="text-sm text-rose-400">{error}</div>
+          </div>
         ) : entries.length === 0 && !loading ? (
-          <div className="px-4 py-6 text-sm text-white/50">
-            No entries yet. The history writer appends when you move more than
-            50 m or every 5 minutes.
+          <div className="px-8 py-20 text-center space-y-3">
+            <Clock size={48} className="mx-auto text-white/5" />
+            <div className="text-xs text-white/30 italic font-serif leading-relaxed">
+              Історія порожня. Записи з'являться автоматично при переміщенні або кожні 5 хвилин.
+            </div>
           </div>
         ) : (
           grouped.map(([day, items]) => (
-            <div key={day} className="mb-3">
-              <div className="px-3 text-xs uppercase tracking-wide text-white/40 mb-1">
-                {day}
+            <div key={day} className="mb-6 px-3">
+              <div className="px-3 text-[10px] font-bold uppercase tracking-[0.2em] text-white/30 mb-3 flex items-center gap-4">
+                <span className="shrink-0">{day}</span>
+                <span className="h-px bg-white/5 flex-1" />
               </div>
-              <ul className="space-y-1">
+              <div className="space-y-1">
                 {items.map((e) => (
-                  <li key={e.id}>
-                    <button
-                      type="button"
-                      onClick={() => onSelect?.(e)}
-                      className="w-full text-left px-3 py-2 rounded hover:bg-cyan-500/10 flex items-start justify-between gap-3"
-                    >
-                      <div className="min-w-0 flex-1">
-                        <div className="text-white truncate">
-                          {e.place_name ||
-                            e.city ||
-                            `${e.lat.toFixed(5)}, ${e.lon.toFixed(5)}`}
-                        </div>
-                        <div className="text-white/50 text-xs flex items-center gap-2">
-                          <span>
-                            {new Date(e.timestamp).toLocaleTimeString([], {
-                              hour: '2-digit',
-                              minute: '2-digit',
-                            })}
-                          </span>
-                          <span className="uppercase">
-                            {sourceLabel[e.source] ?? e.source}
-                          </span>
-                          {e.country_code && <span>{e.country_code}</span>}
-                        </div>
+                  <button
+                    key={e.id}
+                    type="button"
+                    onClick={() => onSelect?.(e)}
+                    className="w-full text-left px-3 py-3 rounded-2xl hover:bg-white/5 flex items-start justify-between gap-4 transition-all group active:scale-[0.98]"
+                  >
+                    <div className="min-w-0 flex-1">
+                      <div className="text-[13px] text-white/80 group-hover:text-white truncate font-display mb-0.5">
+                        {e.place_name || e.city || `${e.lat.toFixed(5)}, ${e.lon.toFixed(5)}`}
                       </div>
-                      <span className="text-[11px] text-white/40 mt-1">
-                        {Math.round((e.confidence ?? 0) * 100)}%
-                      </span>
-                    </button>
-                  </li>
+                      <div className="flex items-center gap-2 text-[10px] font-mono text-white/30 uppercase tracking-tighter">
+                        <span className="text-amber-500/50">
+                          {new Date(e.timestamp).toLocaleTimeString([], {
+                            hour: '2-digit',
+                            minute: '2-digit',
+                          })}
+                        </span>
+                        <span className="px-1.5 py-0.5 rounded bg-white/5 border border-white/5">
+                          {sourceLabel[e.source] ?? e.source}
+                        </span>
+                        {e.country_code && <span className="opacity-60">{e.country_code}</span>}
+                      </div>
+                    </div>
+                    <div className="text-[9px] font-bold text-emerald-500/40 mt-1">
+                      {Math.round((e.confidence ?? 0) * 100)}%
+                    </div>
+                  </button>
                 ))}
-              </ul>
+              </div>
             </div>
           ))
         )}

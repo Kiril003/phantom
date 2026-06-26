@@ -1,6 +1,6 @@
 # PHANTOM OS
 
-PHANTOM OS is a **Sentient Familiar**: a local-first AI shell that observes context, remembers, anticipates, and acts as a professional autonomous companion. It is not just a dashboard or a chat surface; the chat, voice, memory, agent runtime, and Sunrise UI are one behavioural system.
+3PHANTOM OS is a **Sentient Familiar**: a local-first AI shell that observes context, remembers, anticipates, and acts as a professional autonomous companion. It is not just a dashboard or a chat surface; the chat, voice, memory, agent runtime, and Sunrise UI are one behavioural system.
 
 Targets a [Radxa Dragon Q6A](https://radxa.com/products/dragon/q6a) (Snapdragon QCM6490, Hexagon V68 NPU) paired with an ESP32-S3 sensor hub, running a 7" 1024×600 touchscreen — but the backend deploys cleanly to any Linux box where Gemini or a local Ollama can reach the network.
 

@@ -1,6 +1,12 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { useSystemStore } from '../stores/systemStore';
 import { SystemState } from '@shared/types';
+
+vi.mock('../services/api', () => ({
+  contextApi: {
+    setState: vi.fn().mockResolvedValue({}),
+  },
+}));
 
 describe('systemStore', () => {
   beforeEach(() => {

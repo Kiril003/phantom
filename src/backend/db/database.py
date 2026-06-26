@@ -35,6 +35,7 @@ def set_sqlite_pragma(dbapi_connection, connection_record):
     cursor = dbapi_connection.cursor()
     cursor.execute("PRAGMA journal_mode=WAL")
     cursor.execute("PRAGMA synchronous=NORMAL")
+    cursor.execute("PRAGMA foreign_keys=ON")
     cursor.close()
 
 AsyncSessionLocal = async_sessionmaker(
@@ -49,7 +50,7 @@ AsyncSessionLocal = async_sessionmaker(
 async def init_db() -> None:
     """Create all tables on first startup, then apply numbered migrations."""
     async with engine.begin() as conn:
-        from db import models  # noqa: F401 — registers models with Base
+        from db import models, tom_models  # noqa: F401 — registers models with Base
         await conn.run_sync(Base.metadata.create_all)
 
     # Phase 9.2.1 — pending column-add migrations. Idempotent; safe on fresh DBs.

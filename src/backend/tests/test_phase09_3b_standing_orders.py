@@ -157,7 +157,7 @@ async def test_condition_fatigue_reads_foreground_emotion():
     import agent.kernel.runtime as runtime_mod
     sm = SelfModel(emotion=EmotionVector(fatigue=0.9))
     runtime_mod.agent_runtime.foreground_slot = TaskState(
-        id="x", goal="g", track="foreground", status="running", self_model=sm,
+        id="x", user_id="u-test", goal="g", track="foreground", status="running", self_model=sm,
     )
     try:
         assert await evaluate_condition("fatigue > 0.5") is True
@@ -240,7 +240,7 @@ async def test_runner_fires_on_background_even_when_foreground_busy(isolated_db,
     runtime = AgentRuntime()
     # Simulate active user task in foreground slot.
     runtime.foreground_slot = TaskState(
-        id="active", goal="user-task", track="foreground",
+        id="active", user_id=user_id, goal="user-task", track="foreground",
         status="running", self_model=SelfModel(),
     )
     started: list[tuple[str, dict]] = []

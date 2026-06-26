@@ -82,6 +82,12 @@ class User(Base):
     agent_feedback: Mapped[list["AgentFeedback"]] = relationship(
         "AgentFeedback", back_populates="user", cascade="all, delete-orphan"
     )
+    core_narratives: Mapped[list["CoreNarrativeLog"]] = relationship(
+        "CoreNarrativeLog", back_populates="user", cascade="all, delete-orphan"
+    )
+    curiosity_questions: Mapped[list["CuriosityQuestion"]] = relationship(
+        "CuriosityQuestion", back_populates="user", cascade="all, delete-orphan"
+    )
 
 
 # ── Profiles (companion-v2 multi-identity) ─────────────────────────────────────
@@ -206,6 +212,12 @@ class MemoryFact(Base):
     access_count: Mapped[int] = mapped_column(Integer, default=0)
     is_sealed: Mapped[bool] = mapped_column(Boolean, default=False)
     decay_factor: Mapped[float] = mapped_column(Float, default=1.0)
+    # Phase 12.0 — temporal cognitive memory fields
+    valid_from: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    valid_until: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    superseded_by: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    entity_slot: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    sentiment_score: Mapped[float] = mapped_column(Float, default=0.0)
     # Phase 9.4b — memory-to-geo bridge. When a fact mentions or is attached
     # to a place, these carry the geocoded coordinates + provenance. All
     # nullable so prior facts keep working without backfill.
@@ -232,6 +244,31 @@ class TemporalAnchor(Base):
     mood: Mapped[str] = mapped_column(String(64), nullable=False)
 
     user: Mapped["User"] = relationship("User", back_populates="temporal_anchors")
+
+
+class CoreNarrativeLog(Base):
+    __tablename__ = "core_narrative_log"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    version: Mapped[int] = mapped_column(Integer, default=1)
+    text: Mapped[str] = mapped_column(Text, nullable=False)
+    diff_summary: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, index=True)
+
+    user: Mapped["User"] = relationship("User", back_populates="core_narratives")
+
+
+class CuriosityQuestion(Base):
+    __tablename__ = "curiosity_queue"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True)
+    question: Mapped[str] = mapped_column(Text, nullable=False)
+    status: Mapped[str] = mapped_column(String(16), default="pending", nullable=False)  # pending | asked | skipped
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, index=True)
+
+    user: Mapped["User"] = relationship("User", back_populates="curiosity_questions")
 
 
 # ── Wardriving ─────────────────────────────────────────────────────────────────
@@ -1112,3 +1149,133 @@ class AgentRelation(Base):
     target_role: Mapped["AgentRole"] = relationship(
         "AgentRole", foreign_keys=[target_role_id], back_populates="inbound_relations"
     )
+
+
+# ── Phase 24-I — Geofences ────────────────────────────────────────────────────
+
+
+class Geofence(Base):
+    """Phase 24-I — Geofence definition (Circle or Polygon).
+    
+    Coordinates stored as JSON.
+    kind: "circle" | "polygon"
+    trigger_on: "enter" | "exit" | "dwell"
+    """
+    __tablename__ = "map_geofences"
+    __table_args__ = (
+        Index("ix_map_geofences_user_active", "user_id", "is_active"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    label: Mapped[str] = mapped_column(String(160), nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), default="circle")
+    # For circle: {"lat": float, "lon": float, "radius_m": float}
+    # For polygon: {"points": [[lon, lat], ...]}
+    geometry_json: Mapped[str] = mapped_column(Text, nullable=False)
+    
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+    # JSON list of actions: [{"type": "toast", "message": "..."}, {"type": "voice", "text": "..."}]
+    on_enter_json: Mapped[str] = mapped_column(Text, default="[]")
+    on_exit_json: Mapped[str] = mapped_column(Text, default="[]")
+    
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now)
+    last_triggered_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
+# ── Phase 25 — Trajectory Pattern Learning ───────────────────────────────────
+
+
+class TrajectoryPattern(Base):
+    """Phase 25 — Learned movement pattern.
+    
+    Stores clusters of locations (e.g. "Work", "Gym") and typical
+    arrival/departure time windows.
+    """
+    __tablename__ = "map_trajectory_patterns"
+    __table_args__ = (
+        Index("ix_map_trajectory_user_label", "user_id", "label"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    label: Mapped[str] = mapped_column(String(64), nullable=False) # "Home", "Office"
+    lat: Mapped[float] = mapped_column(Float, nullable=False)
+    lon: Mapped[float] = mapped_column(Float, nullable=False)
+    radius_m: Mapped[float] = mapped_column(Float, default=100.0)
+    
+    # Typical time windows: [{"dow": 0..6, "start": "09:00", "end": "18:00"}]
+    schedule_json: Mapped[str] = mapped_column(Text, default="[]")
+    
+    confidence: Mapped[float] = mapped_column(Float, default=0.5)
+    last_detected_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+
+# ── Team Chat Messages (Slack-style multi-agent dialogue) ─────────────────────
+
+class TeamChatMessage(Base):
+    """Slack-style multi-agent dialogue and tasks execution/delegation log.
+    Allows root and sub-agents to chat, report status, and share deliverables.
+    """
+    __tablename__ = "team_chat_messages"
+    __table_args__ = (
+        Index("ix_team_chat_messages_task", "task_id"),
+        Index("ix_team_chat_messages_task_created", "task_id", "created_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    task_id: Mapped[str] = mapped_column(String(36), nullable=False) # Root task ID
+    parent_task_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True) # Direct parent task ID
+    sender: Mapped[str] = mapped_column(String(64), nullable=False) # e.g. "CEO (Chief Executive)"
+    receiver: Mapped[str] = mapped_column(String(64), nullable=False) # e.g. "Developer"
+    message: Mapped[str] = mapped_column(Text, nullable=False)
+    message_type: Mapped[str] = mapped_column(String(32), default="text", nullable=False) # "text", "delegate", "progress", "report"
+    media_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True) # JSON list of media attachments
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, nullable=False)
+
+
+# ── Phantom Mind State (PMState) ──────────────────────────────────────────────
+
+
+class PhantomMindState(Base):
+    """Per-user compressed mind-state: what PHANTOM is thinking between turns.
+
+    One row per user (unique on user_id). state_json holds:
+      focus, open_loops (list), emotional_thread, last_insight.
+    Updated asynchronously after each chat turn via memory.mind_state.
+    """
+    __tablename__ = "phantom_mind_state"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(36), index=True, unique=True, nullable=False)
+    state_json: Mapped[str] = mapped_column(Text, default="{}", nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=_now, onupdate=_now
+    )
+
+
+class PhantomNarrative(Base):
+    """Per-user living narrative: interpretive 3-paragraph story updated every N turns.
+
+    Unlike raw facts, this is a synthesized human-readable account of who
+    the user is RIGHT NOW — focus, patterns, unmet needs. Updated in the
+    background every 10 chat turns via memory.narrative.update_narrative_if_due.
+    """
+    __tablename__ = "phantom_narrative"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
+    user_id: Mapped[str] = mapped_column(String(36), index=True, unique=True, nullable=False)
+    narrative_text: Mapped[str] = mapped_column(Text, default="", nullable=False)
+    turn_count: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=_now, onupdate=_now
+    )
+
+
+

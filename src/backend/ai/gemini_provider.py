@@ -395,11 +395,13 @@ class GeminiProvider(AIProvider):
         user_message: str,
         system_prompt: str,
         history: list[dict],
+        model_override: str | None = None,
     ) -> AsyncIterator[str]:
         from google.genai import types
 
         client = _get_client()
         contents = _build_contents(user_message, history)
+        model_name = model_override or config.ai_gemini_model
 
         gen_config = types.GenerateContentConfig(
             system_instruction=system_prompt,
@@ -413,7 +415,7 @@ class GeminiProvider(AIProvider):
         )
 
         async for chunk in await client.aio.models.generate_content_stream(
-            model=config.ai_gemini_model,
+            model=model_name,
             contents=contents,
             config=gen_config,
         ):

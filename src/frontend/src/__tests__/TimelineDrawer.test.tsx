@@ -40,7 +40,7 @@ describe('TimelineDrawer', () => {
 
   it('is hidden when open=false', () => {
     const { container } = render(
-      <TimelineDrawer open={false} onClose={() => {}} />
+      <TimelineDrawer open={false} onClose={() => { }} />
     );
     expect(container.firstChild).toBeNull();
   });
@@ -49,7 +49,7 @@ describe('TimelineDrawer', () => {
     vi.mocked(mapApi.getLocationHistory).mockResolvedValue({
       entries: sampleEntries, total: 2,
     });
-    render(<TimelineDrawer open={true} onClose={() => {}} />);
+    render(<TimelineDrawer open={true} onClose={() => { }} />);
     await waitFor(() => expect(mapApi.getLocationHistory).toHaveBeenCalled());
     expect(screen.getByText('Київ')).toBeInTheDocument();
   });
@@ -69,7 +69,7 @@ describe('TimelineDrawer', () => {
       entries: sampleEntries, total: 2,
     });
     const onSelect = vi.fn();
-    render(<TimelineDrawer open={true} onClose={() => {}} onSelect={onSelect} />);
+    render(<TimelineDrawer open={true} onClose={() => { }} onSelect={onSelect} />);
     await waitFor(() => screen.getByText('Київ'));
     fireEvent.click(screen.getByText('Київ'));
     expect(onSelect).toHaveBeenCalledWith(sampleEntries[0]);
@@ -79,7 +79,7 @@ describe('TimelineDrawer', () => {
     vi.mocked(mapApi.getLocationHistory).mockResolvedValue({
       entries: [sampleEntries[1]], total: 1,
     });
-    render(<TimelineDrawer open={true} onClose={() => {}} />);
+    render(<TimelineDrawer open={true} onClose={() => { }} />);
     await waitFor(() => expect(mapApi.getLocationHistory).toHaveBeenCalled());
     expect(screen.getByText(/50\.46000, 30\.53000/)).toBeInTheDocument();
   });
@@ -88,8 +88,8 @@ describe('TimelineDrawer', () => {
     vi.mocked(mapApi.getLocationHistory).mockResolvedValue({
       entries: [], total: 0,
     });
-    render(<TimelineDrawer open={true} onClose={() => {}} />);
+    render(<TimelineDrawer open={true} onClose={() => { }} />);
     await waitFor(() => expect(mapApi.getLocationHistory).toHaveBeenCalled());
-    expect(screen.getByText(/No entries yet/i)).toBeInTheDocument();
+    expect(screen.getByText(/Історія порожня/i)).toBeInTheDocument();
   });
 });

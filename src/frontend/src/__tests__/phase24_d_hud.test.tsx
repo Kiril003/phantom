@@ -14,7 +14,7 @@ import {
   ElevationProfileSheet,
   type ElevationSample,
 } from '../components/map/hud/ElevationProfileSheet';
-import { StatusChips } from '../components/map/hud/StatusChips';
+import { StatusChip } from '../components/map/hud/StatusChips';
 
 import { useMapStore } from '../stores/mapStore';
 import { useSystemStore } from '../stores/systemStore';
@@ -234,16 +234,23 @@ describe('ElevationProfileSheet', () => {
   });
 });
 
-// ── StatusChips ──────────────────────────────────────────────────────────
+// ── StatusChip ──────────────────────────────────────────────────────────
 
 
-describe('StatusChips', () => {
-  it('renders four chips even when context is null', () => {
-    render(<StatusChips bearing={45} />);
-    expect(screen.getByTestId('status-chip-gps')).toBeInTheDocument();
-    expect(screen.getByTestId('status-chip-altitude')).toBeInTheDocument();
-    expect(screen.getByTestId('status-chip-speed')).toBeInTheDocument();
-    expect(screen.getByTestId('status-chip-heading')).toHaveTextContent(/45°/);
+describe('StatusChip', () => {
+  it('shows Syncing when loading=true', () => {
+    render(<StatusChip loading={true} zoom={12} />);
+    expect(screen.getByText('Syncing')).toBeInTheDocument();
+  });
+
+  it('shows Live when loading=false', () => {
+    render(<StatusChip loading={false} zoom={14} />);
+    expect(screen.getByText('Live')).toBeInTheDocument();
+  });
+
+  it('renders zoom level', () => {
+    render(<StatusChip loading={false} zoom={15} />);
+    expect(screen.getByText('z15')).toBeInTheDocument();
   });
 });
 

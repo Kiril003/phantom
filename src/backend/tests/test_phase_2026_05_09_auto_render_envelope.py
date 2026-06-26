@@ -231,7 +231,7 @@ class TestAutoRenderShortCircuitsStep5:
         monkeypatch.setattr(chat_pipeline.ai_router, "generate", _stub_generate)
 
         result = await chat_pipeline.run(
-            user_message="?", system_prompt="sys",
+            user_message="інформація про систему", system_prompt="sys",
             history=[], user_id="u-test", db=None,  # type: ignore[arg-type]
         )
 

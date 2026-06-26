@@ -26,6 +26,8 @@ import logging
 from datetime import datetime, timezone
 from typing import TYPE_CHECKING
 
+from core.clock import clock
+
 from sqlalchemy import select, update
 
 from config import config
@@ -45,7 +47,7 @@ logger = logging.getLogger(__name__)
 
 
 def _utcnow() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return clock.now()
 
 
 class StandingOrderRunner:
@@ -114,7 +116,7 @@ class StandingOrderRunner:
                 getattr(config, "agent_standing_orders_lease_ttl_s", 300) or 300
             ),
         )
-        cutoff = datetime.now(timezone.utc) - timedelta(seconds=ttl_s)
+        cutoff = clock.now() - timedelta(seconds=ttl_s)
         # SQLAlchemy stores DateTime without TZ on SQLite; the cutoff
         # comparison still works because the persisted column is the
         # `_now` UTC value (db.models._now returns naive UTC).
@@ -204,7 +206,7 @@ class StandingOrderRunner:
         from db.database import get_session
         from db.models import StandingOrder
 
-        cycle_at_iso = _datetime.now(timezone.utc).isoformat()
+        cycle_at_iso = clock.now().isoformat()
 
         async with get_session() as db:
             result = await db.execute(
@@ -291,7 +293,7 @@ class StandingOrderRunner:
                     "action_kind": getattr(order, "action_kind", None) or "task",
                     "task_id": getattr(order, "in_flight_task_id", None),
                     "outcome_summary": "ok",
-                    "fired_at_iso": _dt.now(timezone.utc).isoformat(),
+                    "fired_at_iso": clock.now().isoformat(),
                 },
             )
         except Exception as exc:  # noqa: BLE001
@@ -312,7 +314,7 @@ class StandingOrderRunner:
                     "order_id": order.id,
                     "action_kind": getattr(order, "action_kind", None) or "task",
                     "reason": reason,
-                    "at_iso": _dt.now(timezone.utc).isoformat(),
+                    "at_iso": clock.now().isoformat(),
                 },
             )
         except Exception as exc:  # noqa: BLE001

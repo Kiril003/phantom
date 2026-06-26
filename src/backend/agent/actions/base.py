@@ -25,6 +25,7 @@ class ActionContext(BaseModel):
     # agent gets full host access — the operator has explicitly waived
     # the safety net for this task.
     unsafe_mode: bool = True
+    user_id: str = "default"
 
 
 class Action(BaseModel, ABC):

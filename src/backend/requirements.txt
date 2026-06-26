@@ -73,6 +73,9 @@ cachetools==7.0.6
 # parser; no native deps. Used by `geo.layer_registry.LayerRegistry.load`.
 PyYAML==6.0.2
 
+# Phase 24-I — Spatial analysis for geofencing.
+shapely==2.0.5
+
 # Vertical V10 — Mission reporting / PDF / HTML dashboard
 # markdown: converts ledger.md to HTML for weasyprint and dashboard.
 markdown==3.7

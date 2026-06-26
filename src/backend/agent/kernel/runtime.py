@@ -1286,6 +1286,7 @@ class AgentRuntime:
                         goal=state.goal,
                         outcome=outcome_kind,
                         lesson=lesson,
+                        user_id=state.user_id,
                     )
 
         with contextlib.suppress(Exception):

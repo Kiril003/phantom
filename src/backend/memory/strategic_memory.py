@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import math
 import re
 import uuid
 from datetime import datetime, timezone
@@ -31,7 +32,26 @@ def _get_client() -> Any:
     global _chroma_client
     if _chroma_client is None:
         import chromadb as _chromadb
-        _chroma_client = _chromadb.PersistentClient(path=config.chroma_path)
+        import os
+        import shutil
+        try:
+            client = _chromadb.PersistentClient(path=config.chroma_path)
+            # Try to list collections to see if the DB metadata is corrupted
+            client.list_collections()
+            _chroma_client = client
+        except (KeyError, Exception) as exc:
+            logger.warning("ChromaDB initialization failed (corrupted DB?): %s. Recreating...", exc)
+            if os.path.exists(config.chroma_path):
+                try:
+                    shutil.rmtree(config.chroma_path)
+                except Exception as wipe_exc:
+                    logger.error("Failed to clean chroma path %s: %s", config.chroma_path, wipe_exc)
+            os.makedirs(config.chroma_path, exist_ok=True)
+            try:
+                _chroma_client = _chromadb.PersistentClient(path=config.chroma_path)
+            except Exception as retry_exc:
+                logger.error("ChromaDB initialization failed again: %s", retry_exc)
+                raise retry_exc
     return _chroma_client
 
 
@@ -84,24 +104,85 @@ def _sync_prune_orphans(
 ) -> dict[str, Any]:
     client = _get_client()
     cols = client.list_collections()
+    
+    # Dynamically resolve expected collection names for all active user ids
+    expected_names = set()
+    
+    from agent.cognition.memory.embedder import _collection_name as ep_col_name
+    from agent.cognition.memory.lessons import _collection_name as les_col_name
+    
+    import hashlib
+    def _old_strategic_name(uid_str: str) -> str:
+        safe_id = re.sub(r"[^a-zA-Z0-9_-]", "", uid_str)
+        body_budget = 49
+        needs_disambig = safe_id != uid_str or len(safe_id) > body_budget or not safe_id
+        if needs_disambig:
+            digest = hashlib.sha256(uid_str.encode("utf-8")).hexdigest()[:8]
+            body = safe_id[:body_budget] if safe_id else "x"
+            return f"user_{body}_{digest}"
+        return f"user_{safe_id}"
+
+    def _old_episodes_name(uid_str: str | None = None) -> str:
+        u = uid_str or "default"
+        safe_id = re.sub(r"[^a-zA-Z0-9_-]", "", u)
+        body_budget = 45
+        needs_disambig = safe_id != u or len(safe_id) > body_budget or not safe_id
+        if needs_disambig:
+            digest = hashlib.sha256(u.encode("utf-8")).hexdigest()[:8]
+            body = safe_id[:body_budget] if safe_id else "x"
+            return f"episodes_{body}_{digest}"
+        return f"episodes_{safe_id}"
+
+    def _old_lessons_name(uid_str: str | None = None) -> str:
+        u = uid_str or "default"
+        safe_id = re.sub(r"[^a-zA-Z0-9_-]", "", u)
+        body_budget = 46
+        needs_disambig = safe_id != u or len(safe_id) > body_budget or not safe_id
+        if needs_disambig:
+            digest = hashlib.sha256(u.encode("utf-8")).hexdigest()[:8]
+            body = safe_id[:body_budget] if safe_id else "x"
+            return f"lessons_{body}_{digest}"
+            
+        return f"lessons_{safe_id}"
+
+    uids = list(known_user_ids) + ["default"]
+    for uid in uids:
+        # New versioned collections
+        expected_names.add(_collection_name(uid))
+        expected_names.add(ep_col_name(uid))
+        expected_names.add(les_col_name(uid))
+        
+        # Legacy collections for backward-compatibility
+        if uid != "default":
+            expected_names.add(_old_strategic_name(uid))
+        expected_names.add(_old_episodes_name(uid))
+        expected_names.add(_old_lessons_name(uid))
+        
     deleted: list[str] = []
     kept: list[str] = []
     failures: list[dict[str, str]] = []
+    
+    prefixes = (
+        "user_",
+        "episodes_",
+        "lessons_",
+        "phantom_v1_user_",
+        "phantom_v1_episodes_",
+        "phantom_v1_lessons_",
+    )
+    
     for col in cols:
-        # PersistentClient returns Collection objects; the .name attribute
-        # is the canonical lookup key for delete_collection.
         name = getattr(col, "name", None) or str(col)
-        if not name.startswith("user_"):
+        
+        # Only touch collections matching our prefixes
+        if not any(name.startswith(p) for p in prefixes):
             kept.append(name)
             continue
-        # Strip the prefix and compare against known users. The prefix
-        # safe_id is sanitised in `_collection_name` so this is a direct
-        # match — no test-fixture leakage logic here, that lives in
-        # `_sync_retrieve`.
-        suffix = name[len("user_") :]
-        if suffix in known_user_ids:
+            
+        if name in expected_names:
             kept.append(name)
             continue
+            
         if dry_run:
             deleted.append(name)
             continue
@@ -110,6 +191,7 @@ def _sync_prune_orphans(
             deleted.append(name)
         except Exception as exc:  # noqa: BLE001
             failures.append({"name": name, "error": f"{type(exc).__name__}: {exc}"})
+            
     return {
         "scanned": len(cols),
         "kept": len(kept),
@@ -291,11 +373,11 @@ def _collection_name(user_id: str) -> str:
         )
 
     safe_id = re.sub(r"[^a-zA-Z0-9_-]", "", user_id)
-    # Chroma's max collection name is 63 chars; "user_" prefix = 5,
-    # "_" + 8-char hash = 9, leaves 49 for the body when we need to
+    # Chroma's max collection name is 63 chars; "phantom_v1_user_" prefix = 16,
+    # "_" + 8-char hash = 9, leaves 38 for the body when we need to
     # disambiguate. Short, already-sanitised ids skip the hash so the
-    # H6 janitor test fixtures (e.g. ``user_alice_safe``) keep matching.
-    body_budget = 49
+    # H6 janitor test fixtures keep matching.
+    body_budget = 38
     needs_disambiguation = (
         safe_id != user_id  # stripping changed something
         or len(safe_id) > body_budget  # over the chroma length budget
@@ -305,8 +387,8 @@ def _collection_name(user_id: str) -> str:
         import hashlib
         digest = hashlib.sha256(user_id.encode("utf-8")).hexdigest()[:8]
         body = safe_id[:body_budget] if safe_id else "x"
-        return f"user_{body}_{digest}"
-    return f"user_{safe_id}"
+        return f"phantom_v1_user_{body}_{digest}"
+    return f"phantom_v1_user_{safe_id}"
 
 
 # ── Sync helpers (run inside to_thread) ───────────────────────────────────────
@@ -325,15 +407,33 @@ def _sync_store_fact(
         name=_collection_name(user_id),
         embedding_function=ef,  # type: ignore[arg-type]
     )
+    now_iso = datetime.now(tz=timezone.utc).isoformat()
     meta: dict[str, Any] = {
         "user_id": user_id,
         "category": category,
         "importance": float(importance),
-        "created_at": datetime.now(tz=timezone.utc).isoformat(),
+        "created_at": now_iso,
         "is_sealed": False,
+        "valid_from": now_iso,
+        "valid_until": "none",
+        "superseded_by": "none",
+        "entity_slot": "none",
+        "sentiment_score": 0.0,
+        "recall_count": 0,
+        "last_recalled_at": "none",
     }
     if metadata_extra:
-        meta.update(metadata_extra)
+        # Sanitize metadata_extra for ChromaDB compat
+        sanitized = {}
+        for k, v in metadata_extra.items():
+            if v is None:
+                sanitized[k] = "none"
+            elif isinstance(v, datetime):
+                sanitized[k] = v.isoformat()
+            else:
+                sanitized[k] = v
+        meta.update(sanitized)
+        
     # MemoryBrain writes durable user facts immediately while the janitor can
     # later promote the same tactical fact id. Upsert keeps that path
     # idempotent instead of failing on duplicate Chroma ids.
@@ -346,7 +446,7 @@ def _sync_store_fact(
 
 
 def _sync_retrieve(
-    user_id: str, query: str, k: int, min_importance: float
+    user_id: str, query: str, k: int, min_importance: float, user_trust_level: float = 0.5
 ) -> list[str]:
     client = _get_client()
     ef = _get_ef()
@@ -360,10 +460,7 @@ def _sync_retrieve(
     if count == 0:
         return []
 
-    # C-4 defense-in-depth: AND the user_id filter on every read so a
-    # legacy collection (or a future shared-collection writer that
-    # bypassed the per-user routing) can't leak. ChromaDB's where
-    # operator requires explicit `$and` when stacking >1 clause.
+    # C-4 defense-in-depth: AND the user_id filter on every read
     clauses: list[dict[str, Any]] = [
         {"is_sealed": False},
         {"user_id": user_id},
@@ -373,29 +470,42 @@ def _sync_retrieve(
     where: dict[str, Any] = {"$and": clauses} if len(clauses) > 1 else clauses[0]
 
     try:
+        # Fetch up to 20 candidates for multi-signal reranking
+        n_candidates = min(max(20, k), count)
         results = collection.query(
             query_texts=[query],
-            n_results=min(k, count),
+            n_results=n_candidates,
             where=where,
         )
         docs = results.get("documents", [[]])[0]
+        ids = results.get("ids", [[]])[0]
         metas = results.get("metadatas", [[]])[0] or [{} for _ in docs]
-        # Phase 9.4c-qw fix #4 — defensive filter against test-fixture
-        # leakage. Pre-cleanup the prod DB had ~70 rows of the form
-        # ("Fact N", "Place N") at (50.0, 30.0) that competed with
-        # real geo facts for top-K slots.
-        out: list[str] = []
-        for doc, meta in zip(docs, metas):
+        distances = results.get("distances", [[]])[0] or [0.0 for _ in docs]
+
+        # Retrieve weights and settings
+        w1 = getattr(config, "cognitive_memory_semantic_weight", 0.60)
+        w2 = getattr(config, "cognitive_memory_recency_weight", 0.15)
+        w3 = getattr(config, "cognitive_memory_recall_weight", 0.15)
+        w4 = getattr(config, "cognitive_memory_sentiment_weight", 0.10)
+        w5 = getattr(config, "cognitive_memory_state_weight", 0.0)
+        half_life = getattr(config, "cognitive_memory_decay_half_life_days", 30.0)
+
+        now = datetime.now(tz=timezone.utc)
+        now_iso = now.isoformat()
+        reranked: list[tuple[float, str, dict[str, Any], str]] = []
+
+        for doc, fid, meta, dist in zip(docs, ids, metas, distances):
             if not doc:
                 continue
-            # C-4 belt-and-braces: even if chroma's where-filter mis-fires
-            # on a corrupt index, refuse any row whose metadata user_id
-            # doesn't match the caller. Records without user_id metadata
-            # are stale fixtures (pre-C-4 schema) — drop them.
-            meta_user = (meta or {}).get("user_id") if isinstance(meta, dict) else None
+
+            meta_dict = dict(meta or {})
+            # C-4 belt-and-braces: refuse any row whose metadata user_id doesn't match
+            meta_user = meta_dict.get("user_id")
             if meta_user is None or meta_user != user_id:
                 continue
-            place_name = (meta or {}).get("place_name") if isinstance(meta, dict) else None
+
+            # Phase 9.4c-qw fix #4 — defensive filter against test-fixture leakage
+            place_name = meta_dict.get("place_name")
             if (
                 isinstance(doc, str)
                 and doc.startswith("Fact ")
@@ -403,8 +513,68 @@ def _sync_retrieve(
                 and place_name.startswith("Place ")
             ):
                 continue
-            out.append(str(doc))
-        return out
+
+            # Phase 12.0 Temporal filter: skip if superseded/invalidated
+            if meta_dict.get("valid_until", "none") != "none":
+                continue
+
+            # Phase 12.5 Trust-Gate filter: skip if disclosure_threshold > user_trust_level
+            disclosure_threshold = float(meta_dict.get("disclosure_threshold", 0.0))
+            if disclosure_threshold > user_trust_level:
+                continue
+
+            # Scorer calculation:
+            # 1) Semantic similarity (1 - cosine distance)
+            semantic_sim = max(0.0, min(1.0, 1.0 - float(dist)))
+            
+            # 2) Recency decay
+            valid_from_str = meta_dict.get("valid_from", meta_dict.get("created_at", now_iso))
+            try:
+                valid_from = datetime.fromisoformat(valid_from_str)
+                age_days = max(0.0, (now - valid_from).total_seconds() / (24 * 3600))
+            except Exception:
+                age_days = 0.0
+            decay = 2.0 ** (-age_days / max(1.0, half_life))
+
+            # 3) Log recall count
+            recall_count = int(meta_dict.get("recall_count", 0))
+            recall_score = math.log(max(0, recall_count) + 1)
+
+            # 4) Sentiment score contribution
+            sentiment_score = abs(float(meta_dict.get("sentiment_score", 0.0)))
+
+            # State bonus (w5) is currently inactive/0 by default
+            state_bonus = 0.0
+
+            # Combined scorer formula
+            score = (
+                w1 * semantic_sim
+                + w2 * decay
+                + w3 * recall_score
+                + w4 * sentiment_score
+                + w5 * state_bonus
+            )
+
+            reranked.append((score, doc, meta_dict, fid))
+
+        # Sort by score descending
+        reranked.sort(key=lambda item: -item[0])
+
+        # Take top-k, increment recall count for those matches asynchronously (or locally here)
+        top_matches = reranked[:k]
+        out_docs: list[str] = []
+        for score, doc, meta_dict, fid in top_matches:
+            out_docs.append(str(doc))
+            
+            # Increment recall metadata in ChromaDB (background update)
+            try:
+                meta_dict["recall_count"] = int(meta_dict.get("recall_count", 0)) + 1
+                meta_dict["last_recalled_at"] = now_iso
+                collection.update(ids=[fid], metadatas=[meta_dict])
+            except Exception as e:
+                logger.debug("Failed to update recall count for fact %s: %s", fid, e)
+
+        return out_docs
     except Exception as exc:
         logger.warning("ChromaDB query failed for user %s: %s", user_id, exc)
         return []
@@ -419,6 +589,67 @@ def _sync_update_meta(user_id: str, fact_id: str, updates: dict[str, Any]) -> No
         collection.update(ids=[fact_id], metadatas=[updates])  # type: ignore[list-item]
     except Exception as exc:
         logger.warning("ChromaDB update failed for %s: %s", fact_id, exc)
+
+
+def _sync_supersede_fact(user_id: str, old_fact_id: str, new_fact_id: str) -> None:
+    client = _get_client()
+    ef = _get_ef()
+    coll_name = _collection_name(user_id)
+    try:
+        collection = client.get_collection(name=coll_name, embedding_function=ef)
+        # Fetch current metadata to preserve other fields
+        res = collection.get(ids=[old_fact_id], include=["metadatas"])
+        metas = res.get("metadatas", [])
+        if metas and metas[0]:
+            updated_meta = dict(metas[0])
+            updated_meta["valid_until"] = datetime.now(tz=timezone.utc).isoformat()
+            updated_meta["superseded_by"] = new_fact_id
+            collection.update(ids=[old_fact_id], metadatas=[updated_meta])
+    except Exception as exc:
+        logger.warning("ChromaDB supersede failed for %s: %s", old_fact_id, exc)
+
+
+def _sync_query_with_distances(user_id: str, query: str, k: int) -> list[dict[str, Any]]:
+    client = _get_client()
+    ef = _get_ef()
+    coll_name = _collection_name(user_id)
+    try:
+        collection = client.get_collection(name=coll_name, embedding_function=ef)
+    except Exception:
+        return []
+
+    count = collection.count()
+    if count == 0:
+        return []
+
+    where = {"user_id": user_id}
+    try:
+        results = collection.query(
+            query_texts=[query],
+            n_results=min(k, count),
+            where=where,
+        )
+        ids = results.get("ids", [[]])[0]
+        docs = results.get("documents", [[]])[0]
+        metas = results.get("metadatas", [[]])[0] or [{} for _ in ids]
+        distances = results.get("distances", [[]])[0] or [0.0 for _ in ids]
+        
+        out = []
+        for fid, doc, meta, dist in zip(ids, docs, metas, distances):
+            meta_dict = dict(meta or {})
+            # Filter out superseded facts (if valid_until is set to something other than "none")
+            if meta_dict.get("valid_until", "none") != "none":
+                continue
+            out.append({
+                "id": fid,
+                "content": str(doc or ""),
+                "metadata": meta_dict,
+                "distance": float(dist),
+            })
+        return out
+    except Exception as exc:
+        logger.warning("ChromaDB query_with_distances failed for user %s: %s", user_id, exc)
+        return []
 
 
 def _sync_delete(user_id: str, fact_id: str) -> None:
@@ -513,10 +744,21 @@ async def retrieve_relevant(
     query: str,
     top_k: int | None = None,
     min_importance: float = 0.0,
+    user_trust_level: float = 0.5,
 ) -> list[str]:
     """Semantic search over the user's strategic memory. Returns relevant fact strings."""
     k = top_k if top_k is not None else config.memory_top_k
-    return await asyncio.to_thread(_sync_retrieve, user_id, query, k, min_importance)
+    return await asyncio.to_thread(_sync_retrieve, user_id, query, k, min_importance, user_trust_level)
+
+
+async def supersede_fact(user_id: str, old_fact_id: str, new_fact_id: str) -> None:
+    """Mark an old fact as superseded by a new fact in ChromaDB metadata."""
+    await asyncio.to_thread(_sync_supersede_fact, user_id, old_fact_id, new_fact_id)
+
+
+async def query_with_distances(user_id: str, query: str, k: int) -> list[dict[str, Any]]:
+    """Perform a raw query over ChromaDB returning facts with their cosine distances."""
+    return await asyncio.to_thread(_sync_query_with_distances, user_id, query, k)
 
 
 async def seal_fact(user_id: str, fact_id: str) -> None:

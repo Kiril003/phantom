@@ -1,6 +1,6 @@
 import { useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { X, Trash2, Navigation, Signal, Shield, Wifi, Sparkles } from 'lucide-react';
+import { X, Trash2, Navigation, Signal, Shield, Wifi, Sparkles, Target } from 'lucide-react';
 import { useMapStore } from '../../stores/mapStore';
 import { EASE_PHANTOM } from '../../styles/motion';
 import { poiColor, getMapTokens } from './mapTokens';
@@ -42,14 +42,16 @@ export function MarkerCard() {
               ? selection.poi.id
               : selection.kind === 'wardriving'
                 ? selection.record.id
-                : selection.fact.id
+                : selection.kind === 'fact'
+                  ? selection.fact.id
+                  : selection.geofence.id
           }`}
           initial={{ x: 320, opacity: 0 }}
           animate={{ x: 0, opacity: 1 }}
           exit={{ x: 320, opacity: 0 }}
           transition={{ duration: 0.28, ease: EASE_PHANTOM as unknown as number[] }}
-          className="glass-elevated absolute top-3 right-3 bottom-3 w-[300px] flex flex-col z-20"
-          style={{ borderRadius: 18 }}
+          className="glass-elevated absolute top-3 right-3 bottom-3 w-[300px] flex flex-col z-[50] shadow-2xl"
+          style={{ borderRadius: 18, border: '1px solid var(--glass-border)' }}
           role="dialog"
           aria-label="Marker details"
         >
@@ -110,13 +112,70 @@ export function MarkerCard() {
               <PoiDetails poi={selection.poi} onDelete={() => deletePOI(selection.poi.id)} />
             ) : selection.kind === 'wardriving' ? (
               <WardrivingDetails record={selection.record} />
-            ) : (
+            ) : selection.kind === 'fact' ? (
               <FactDetails fact={selection.fact} />
+            ) : (
+              <GeofenceDetails geofence={selection.geofence} />
             )}
           </div>
         </motion.aside>
       )}
     </AnimatePresence>
+  );
+}
+
+function GeofenceDetails({ geofence }: { geofence: any }) {
+  return (
+    <>
+      <div className="flex items-center gap-3">
+        <div
+          className="flex items-center justify-center"
+          style={{
+            width: 44,
+            height: 44,
+            borderRadius: 14,
+            background: 'rgba(239, 68, 68, 0.10)',
+            color: '#ef4444',
+            border: '1px solid rgba(239, 68, 68, 0.30)',
+          }}
+        >
+          <Shield size={20} strokeWidth={1.75} />
+        </div>
+        <div className="flex flex-col flex-1 min-w-0">
+          <span
+            className="truncate playfair"
+            style={{
+              color: 'var(--ink-primary)',
+              fontSize: 'var(--fs-md)',
+              lineHeight: 1.2,
+            }}
+          >
+            {geofence.label}
+          </span>
+          <span
+            className="micro-label"
+            style={{ color: 'var(--coral-deep)' }}
+          >
+            GEOFENCE ({geofence.kind.toUpperCase()})
+          </span>
+        </div>
+      </div>
+
+      {geofence.kind === 'circle' && (
+        <CoordinatesRow lat={geofence.geometry.lat} lon={geofence.geometry.lon} />
+      )}
+
+      <div className="grid grid-cols-1 gap-2">
+        <StatTile
+          icon={<Target size={14} strokeWidth={1.5} />}
+          label="Status"
+          value={geofence.is_active ? 'ACTIVE' : 'INACTIVE'}
+          sub={geofence.is_active ? 'Monitoring enabled' : 'Paused'}
+        />
+      </div>
+
+      <MetaRow label="Created" value={new Date(geofence.created_at).toLocaleString('uk-UA')} />
+    </>
   );
 }
 

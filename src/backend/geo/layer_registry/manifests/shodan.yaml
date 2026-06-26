@@ -1,0 +1,32 @@
+id: shodan_iocs
+name_ua: Shodan IOCs
+name_en: Shodan Indicators of Compromise
+category: hacker
+license: Shodan Academic
+attribution: "Shodan.io"
+source:
+  type: api
+  url: "https://api.shodan.io/shodan/host/search"
+  auth: { kind: api_key }
+  ttl_s: 86400
+  bbox_required: true
+geometry: point
+style:
+  fill: hacker/neon
+  fill_opacity: 0.8
+  point_radius: 4
+  icon: terminal
+agent_verbs:
+  - map.lookup_vulns
+  - map.scan_nearby_ip
+require_internet: true
+require_setting: layers.shodan.enabled
+require_root: true
+private: true
+priority: elevated
+default_active: false
+available_offline: false
+tags:
+  - osint
+  - cve
+  - security

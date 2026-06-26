@@ -62,6 +62,7 @@ export default function ShadowLayout() {
 
   // Local clock for the small relative-time line beneath the activity log.
   const [, force] = useState(0);
+  const [panelCollapsed, setPanelCollapsed] = useState(false);
   useEffect(() => {
     const t = setInterval(() => force((n) => (n + 1) % 60), 30_000);
     return () => clearInterval(t);
@@ -492,17 +493,52 @@ export default function ShadowLayout() {
           right: 12,
           top: 56,
           bottom: 76,
-          width: 240,
           display: 'flex',
           flexDirection: 'column',
           gap: 10,
           zIndex: 4,
+          overflow: 'visible',
         }}
         initial={{ opacity: 0, x: 16 }}
-        animate={{ opacity: 1, x: 0 }}
+        animate={{ 
+          opacity: 1, 
+          x: 0,
+          width: panelCollapsed ? 52 : 240,
+        }}
         transition={{ delay: 0.18, duration: 0.5, ease: EASE_PHANTOM as unknown as number[] }}
       >
-        {/* Weather card */}
+        {/* Toggle Collapse Button */}
+        <button
+          onClick={() => setPanelCollapsed(!panelCollapsed)}
+          className="absolute -left-3 top-1/2 -translate-y-1/2 w-6 h-12 rounded-full flex items-center justify-center border border-amber-500/30 bg-amber-100 hover:bg-amber-200 dark:bg-amber-950 dark:hover:bg-amber-900 text-amber-700 dark:text-amber-300 hover:scale-105 active:scale-95 transition-all shadow-md"
+          style={{ zIndex: 10 }}
+          title={panelCollapsed ? "Розгорнути панель" : "Згорнути панель"}
+        >
+          <span style={{ fontSize: 10, transform: panelCollapsed ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▶</span>
+        </button>
+
+        {panelCollapsed ? (
+          <div className="flex flex-col items-center gap-4 py-4 h-full bg-white/70 dark:bg-neutral-900/60 border border-white/50 dark:border-white/5 rounded-2xl">
+            <motion.div
+              className="flex items-center justify-center shrink-0"
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 8,
+                background: 'rgba(244,175,37,0.15)',
+                border: '1px solid rgba(244,175,37,0.3)',
+                color: '#b07a10',
+              }}
+            >
+              <Sun size={18} />
+            </motion.div>
+            <div className="vertical-text font-mono text-[8px] tracking-widest text-[#b07a10] font-bold uppercase select-none opacity-60" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
+              AMBIENT PANEL
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Weather card */}
         <div className="glass" style={{ padding: 14 }}>
           <div className="flex items-center justify-between">
             <div className="micro-label">
@@ -682,6 +718,8 @@ export default function ShadowLayout() {
             </button>
           </div>
         </div>
+          </>
+        )}
       </motion.div>
 
       <FloatingToolbar />

@@ -47,17 +47,24 @@ export function getMapTokens(): MapTokens {
   // amber-night both want the warm cream/espresso gradient. Falling back
   // to surface-base means a fresh boot before the theme attribute is set
   // still picks the right side per token defaults.
-  const fallbackAccent = theme === 'cyberdeck-cold' ? '#22d3ee' : '#b07a10';
-  const fallbackInkPrimary = theme === 'cyberdeck-cold' ? '#f1f5f9' : '#1a1612';
-  const fallbackInkMuted = theme === 'cyberdeck-cold' ? '#64748b' : '#8a7f72';
+  const fallbackAccent = 
+    theme === 'ghost' ? '#16a34a' :
+    theme === 'cyberdeck-cold' ? '#22d3ee' : '#b07a10';
+  
+  const fallbackInkPrimary = theme === 'cyberdeck-cold' || theme === 'ghost' ? '#f1f5f9' : '#1a1612';
+  const fallbackInkMuted = theme === 'cyberdeck-cold' || theme === 'ghost' ? '#64748b' : '#8a7f72';
   const fallbackSurfaceDeep =
-    theme === 'cyberdeck-cold' ? '#0a0f1a' : '#f5f1ea';
+    theme === 'cyberdeck-cold' ? '#0a0f1a' : 
+    theme === 'ghost' ? '#000000' : '#f5f1ea';
+    
   return {
     accent: resolveCssVar('--accent', fallbackAccent),
     accentGlow: resolveCssVar(
       '--accent-glow',
       theme === 'cyberdeck-cold'
-        ? 'rgba(34,211,238,0.4)'
+        ? 'rgba(34,211,238,0.4)' :
+      theme === 'ghost'
+        ? 'rgba(22,163,74,0.4)'
         : 'rgba(244,175,37,0.4)',
     ),
     surfaceVoid: resolveCssVar('--surface-void', '#000000'),
@@ -229,7 +236,23 @@ function satellitePresetForTheme(theme: string): PaintPreset {
   };
 }
 
+function ghostPreset(): PaintPreset {
+  return {
+    source: { tiles: OSM_TILES, attribution: '© OpenStreetMap [GHOST]' },
+    paint: {
+      'raster-opacity': 0.15,
+      'raster-brightness-min': 0.0,
+      'raster-brightness-max': 0.25,
+      'raster-saturation': -1.0,
+      'raster-contrast': 0.5,
+    },
+  };
+}
+
 function presetFor(style: PhantomMapStyle, theme: string): PaintPreset {
+  // Phase 24-N — GHOST mode override.
+  if (theme === 'ghost') return ghostPreset();
+  
   switch (style) {
     case 'satellite':
       return satellitePresetForTheme(theme);

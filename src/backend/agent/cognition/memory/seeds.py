@@ -77,9 +77,9 @@ async def compose_summary(
     )[:500]
 
 
-def _upsert_sync(*, episode_id: str, document: str, metadata: dict[str, Any]) -> None:
+def _upsert_sync(*, episode_id: str, document: str, metadata: dict[str, Any], user_id: str | None = None) -> None:
     from .embedder import _get_collection_sync
-    coll = _get_collection_sync()
+    coll = _get_collection_sync(user_id)
     # Chroma metadata is flat key→primitive — JSON-encode lists/dicts.
     safe_meta: dict[str, Any] = {}
     for k, v in metadata.items():
@@ -115,15 +115,15 @@ async def write_episode(
         "created_at": datetime.now(tz=timezone.utc).isoformat(),
         "duration_s": float(duration_s),
         "action_counts_json": json.dumps(action_counts, ensure_ascii=False),
+        "user_id": user_id or "default",
     }
-    if user_id:
-        metadata["user_id"] = user_id
     try:
         await asyncio.to_thread(
             _upsert_sync,
             episode_id=episode_id,
             document=summary[:1500],
             metadata=metadata,
+            user_id=user_id,
         )
     except Exception as exc:
         logger.warning("episodic write_episode failed (non-fatal): %s", exc)

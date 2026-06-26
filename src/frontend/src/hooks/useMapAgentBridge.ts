@@ -88,6 +88,11 @@ export function useMapAgentBridge(options: UseMapAgentBridgeOptions = {}): void 
       } else if (op === 'disable_layer') {
         const key = asLayerKey(payload.layer_id);
         if (key) store.setLayer(key, false);
+      } else if (op === 'time_travel') {
+        const iso = payload.iso_date;
+        if (typeof iso === 'string') {
+          store.setTemporalDate(iso);
+        }
       }
 
       if (narrative) {

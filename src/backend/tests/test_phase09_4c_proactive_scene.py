@@ -70,7 +70,7 @@ async def test_proactive_scene_emitted(monkeypatch, isolated_db):
     # Verify WS broadcast
     assert any(c[1] == "message.proactive" for c in captured_ws)
     payload = [c[2] for c in captured_ws if c[1] == "message.proactive"][0]
-    assert payload["message"]["response_form"] == "artifact"
+    assert payload["message"]["response_form"] == "react_artifact"
     assert "here is your dashboard" in payload["message"]["content"]
     assert any(a["type"] == "artifact_data" for a in payload["message"]["attachments"])
 

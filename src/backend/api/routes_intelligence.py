@@ -264,7 +264,7 @@ async def _load_lessons(user_id: str, top_k: int = 20) -> list[LessonView]:
     """Pull top-k lessons from ChromaDB.  Returns [] if ChromaDB unavailable."""
     try:
         from agent.cognition.memory.lessons import recall_lessons
-        rows = await recall_lessons(query=f"user:{user_id}", k=top_k)
+        rows = await recall_lessons(query=f"user:{user_id}", k=top_k, user_id=user_id)
         out: list[LessonView] = []
         for r in rows:
             out.append(LessonView(
@@ -492,7 +492,7 @@ async def search_intelligence(
     if "lessons" in sources:
         try:
             from agent.cognition.memory.lessons import recall_lessons
-            lessons = await recall_lessons(query=q, k=req.top_k)
+            lessons = await recall_lessons(query=q, k=req.top_k, user_id=user_id)
             for lesson in lessons:
                 snippet = " | ".join(filter(None, [
                     lesson.get("what_worked", "")[:120],
@@ -569,3 +569,15 @@ async def search_intelligence(
 
     elapsed_ms = int((time.monotonic() - t0) * 1000)
     return SearchResponse(hits=hits, query=q, elapsed_ms=elapsed_ms)
+
+
+@router.post("/intelligence-hub/consolidate")
+async def trigger_consolidation(
+    token: TokenPayload = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+) -> dict[str, Any]:
+    """Manually trigger the memory consolidation cycle for the authenticated user."""
+    from memory.consolidation import run_consolidation_cycle
+    user_id = token.user_id
+    report = await run_consolidation_cycle(db, user_id)
+    return {"ok": True, "report": report}

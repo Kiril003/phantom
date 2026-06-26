@@ -15,7 +15,8 @@ export type FocusedAgent =
   | 'proactive'
   | 'council'
   | 'horizons'
-  | 'org_chart';
+  | 'org_chart'
+  | 'team_chat';
 
 export type ToastKind = 'error' | 'warn' | 'info' | 'success';
 
@@ -66,6 +67,7 @@ function persistChrome(state: ChromeState): void {
   if (typeof localStorage === 'undefined') return;
   try {
     localStorage.setItem(CHROME_KEY, JSON.stringify(state));
+    localStorage.setItem('phantom.chrome.v1', JSON.stringify(state));
   } catch {
     /* quota — ignore */
   }

@@ -3,6 +3,15 @@ import maplibregl from 'maplibre-gl';
 import { TacticalMap } from './TacticalMap';
 import { HudShell } from './hud/HudShell';
 import { LayerLibraryPanel } from './panels/LayerLibraryPanel';
+import { OfflinePanel } from './panels/OfflinePanel';
+import { AnalysisPanel } from './panels/AnalysisPanel';
+import { SearchResultsPanel, type SearchResult } from './panels/SearchResultsPanel';
+import { StoryPanel } from './panels/StoryPanel';
+import { GhostPanel } from './panels/GhostPanel';
+import { TimelineDrawer } from './TimelineDrawer';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { useMapStore } from '../../stores/mapStore';
+import { settingsApi } from '../../services/api';
 
 /**
  * Phase 24-D — root OmniMap shell.
@@ -41,6 +50,40 @@ export function OmniMap({
   const [bearing, setBearing] = useState<number | null>(null);
   // Phase 24-E — LayerLibrary slide-in panel state.
   const [libraryOpen, setLibraryOpen] = useState(false);
+  // Phase 24-G — Offline region manager state.
+  const [offlineOpen, setOfflineOpen] = useState(false);
+  // Phase 9.4b — Timeline drawer state.
+  const [timelineOpen, setTimelineOpen] = useState(false);
+  // Phase 24-G — Analysis panel state.
+  const [analysisOpen, setAnalysisOpen] = useState(false);
+  // Phase 24-G — Search results state.
+  const [searchResultsOpen, setSearchResultsOpen] = useState(false);
+  const [storyOpen, setStoryOpen] = useState(false);
+  const [ghostOpen, setGhostOpen] = useState(false);
+  const [searchResults, setSearchResults] = useState<{
+    remembered: SearchResult[];
+    osm: SearchResult[];
+    pois: SearchResult[];
+  }>({ remembered: [], osm: [], pois: [] });
+
+  // Phase 24-PRE — HUD action handlers.
+  const [zoomIn, setZoomIn] = useState<() => void>(() => { });
+  const [zoomOut, setZoomOut] = useState<() => void>(() => { });
+  const [centerToMe, setCenterToMe] = useState<() => void>(() => { });
+  const [addPoi, setAddPoi] = useState<() => void>(() => { });
+  const [resetBearing, setResetBearing] = useState<() => void>(() => { });
+
+  const mapStyle = useSettingsStore((s) => s.values.ui_map_style as string) || 'dark';
+  const setSettingValue = useSettingsStore((s) => s.setValue);
+  const center = useMapStore((s) => s.center);
+
+  const cycleMapStyle = () => {
+    const styles = ['dark', 'satellite', 'streets'];
+    const idx = styles.indexOf(mapStyle);
+    const next = styles[(idx + 1) % styles.length];
+    setSettingValue('ui_map_style', next);
+    settingsApi.set('ui_map_style', next).catch(() => {});
+  };
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -72,16 +115,68 @@ export function OmniMap({
       data-testid="omnimap"
       className={`relative w-full h-full ${className}`}
     >
-      <TacticalMap initialCenter={initialCenter} initialZoom={initialZoom} />
+      <TacticalMap
+        initialCenter={initialCenter}
+        initialZoom={initialZoom}
+        onZoomIn={(fn) => setZoomIn(() => fn)}
+        onZoomOut={(fn) => setZoomOut(() => fn)}
+        onCenterToMe={(fn) => setCenterToMe(() => fn)}
+        onAddPoi={(fn) => setAddPoi(() => fn)}
+        onResetBearing={(fn) => setResetBearing(() => fn)}
+      />
       <HudShell
         bearing={bearing}
         bridgeAgent={bridgeAgent}
+        mapStyle={mapStyle}
+        onCycleStyle={cycleMapStyle}
+        onResetBearing={resetBearing}
+        timelineOpen={timelineOpen}
+        onToggleTimeline={() => setTimelineOpen(!timelineOpen)}
+        offlineOpen={offlineOpen}
+        onToggleOffline={() => setOfflineOpen(!offlineOpen)}
+        analysisOpen={analysisOpen}
+        onToggleAnalysis={() => setAnalysisOpen(!analysisOpen)}
+        storyOpen={storyOpen}
+        onToggleStory={() => setStoryOpen(!storyOpen)}
+        ghostOpen={ghostOpen}
+        onToggleGhost={() => setGhostOpen(!ghostOpen)}
+        onZoomIn={zoomIn}
+        onZoomOut={zoomOut}
+        onCenter={centerToMe}
+        onAddPoi={addPoi}
         onOpenLibrary={() => {
           setLibraryOpen(true);
           onOpenLibrary?.();
         }}
+        onSearchResults={(res) => {
+          setSearchResults(res as any);
+          setSearchResultsOpen(true);
+        }}
       />
       <LayerLibraryPanel open={libraryOpen} onClose={() => setLibraryOpen(false)} />
+      <OfflinePanel open={offlineOpen} onClose={() => setOfflineOpen(false)} />
+      <AnalysisPanel open={analysisOpen} onClose={() => setAnalysisOpen(false)} />
+      <StoryPanel open={storyOpen} onClose={() => setStoryOpen(false)} viewportCenter={(center ?? [30.52, 50.45]) as any} />
+      <GhostPanel open={ghostOpen} onClose={() => setGhostOpen(false)} systemState="SHADOW" />
+      <SearchResultsPanel
+        open={searchResultsOpen}
+        onClose={() => setSearchResultsOpen(false)}
+        results={searchResults}
+        onSelect={(res) => {
+          useMapStore.getState().setCenter([res.lon, res.lat]);
+          useMapStore.getState().setZoom(17);
+        }}
+      />
+      <TimelineDrawer
+        open={timelineOpen}
+        onClose={() => setTimelineOpen(false)}
+        onSelect={(e) => {
+          // This should ideally use the mapRef from TacticalMap
+          // I'll ensure setCenter/setZoom is called via store
+          useMapStore.getState().setCenter([e.lon, e.lat]);
+          useMapStore.getState().setZoom(17);
+        }}
+      />
     </div>
   );
 }

@@ -80,7 +80,7 @@ describe('NearbyPanel', () => {
     render(<NearbyPanel lat={50.45} lon={30.52} zoom={16} />);
     await waitFor(() => expect(mapApi.getNearby).toHaveBeenCalled());
     await waitFor(() => {
-      expect(screen.getByText(/No nearby features/i)).toBeInTheDocument();
+      expect(screen.getByText(/Околиці пусті/i)).toBeInTheDocument();
     });
   });
 
@@ -98,18 +98,18 @@ describe('NearbyPanel', () => {
     vi.mocked(mapApi.getNearby).mockResolvedValue(populatedResponse);
     render(<NearbyPanel lat={50.45} lon={30.52} zoom={16} />);
     await waitFor(() => {
-      expect(screen.getByText(/3 nearby/)).toBeInTheDocument();
+      expect(screen.getByText(/3 поруч/)).toBeInTheDocument();
     });
   });
 
   it('expands to show three sections on click', async () => {
     vi.mocked(mapApi.getNearby).mockResolvedValue(populatedResponse);
     render(<NearbyPanel lat={50.45} lon={30.52} zoom={16} />);
-    await waitFor(() => screen.getByText(/3 nearby/));
+    await waitFor(() => screen.getByText(/3 поруч/));
     fireEvent.click(screen.getByRole('button', { name: /3 places nearby/i }));
-    expect(screen.getByText('Remembered')).toBeInTheDocument();
-    expect(screen.getByText('OSM')).toBeInTheDocument();
-    expect(screen.getByText('Saved')).toBeInTheDocument();
+    expect(screen.getByText("Пам'ять")).toBeInTheDocument();
+    expect(screen.getByText("Об'єкти")).toBeInTheDocument();
+    expect(screen.getByText("Збережене")).toBeInTheDocument();
   });
 
   it('invokes onSelect with the correct kind when entry clicked', async () => {
@@ -118,7 +118,7 @@ describe('NearbyPanel', () => {
     render(
       <NearbyPanel lat={50.45} lon={30.52} zoom={16} onSelect={onSelect} />
     );
-    await waitFor(() => screen.getByText(/3 nearby/));
+    await waitFor(() => screen.getByText(/3 поруч/));
     fireEvent.click(screen.getByRole('button', { name: /3 places nearby/i }));
     fireEvent.click(screen.getByText('Home'));
     expect(onSelect).toHaveBeenCalledWith(

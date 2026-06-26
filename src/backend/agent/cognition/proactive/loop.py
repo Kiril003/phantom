@@ -38,6 +38,8 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import TYPE_CHECKING, Any
 
+from core.clock import clock
+
 from config import config
 
 from .triggers import ProactiveTrigger, ProactiveTriggerKind
@@ -51,7 +53,7 @@ logger = logging.getLogger(__name__)
 
 
 def _utcnow() -> datetime:
-    return datetime.now(tz=timezone.utc)
+    return clock.now()
 
 
 # ── Phase 9.4a: pending-action plumbing ─────────────────────────────────────
@@ -185,6 +187,7 @@ class ProactiveLoop:
         self._pending_action: PendingAction | None = None
         # Phase 9.4b — interruptibility stash
         self._stashed: list[StashedProactive] = []
+        self._unsubscribe_signal = None
 
     # ── Lifecycle ────────────────────────────────────────────────────────────
 
@@ -193,18 +196,102 @@ class ProactiveLoop:
         if self._task is not None and not self._task.done():
             return
         self._stop_event.clear()
+        
+        # Subscribe to context signals
+        from core.event_bus import event_bus
+        self._unsubscribe_signal = event_bus.subscribe("context_signal", self._handle_context_signal)
+        
         self._task = asyncio.create_task(self._run(), name="agent_proactive_loop")
         logger.info("Proactive loop started (enabled=%s)", config.agent_proactive_enabled)
 
     async def stop(self) -> None:
         """Graceful shutdown — wakes the sleeping wait_for within 1s."""
         self._stop_event.set()
+        if self._unsubscribe_signal:
+            self._unsubscribe_signal()
+            self._unsubscribe_signal = None
         if self._task is None:
             return
         self._task.cancel()
         with contextlib.suppress(asyncio.CancelledError, Exception):
             await self._task
         self._task = None
+
+    def _handle_context_signal(self, signal: dict[str, Any]) -> None:
+        """Process incoming ContextEngine events."""
+        name = signal.get("name")
+        if name in ("calm_window_opened", "gap_detected"):
+            # Trigger release queue asynchronously
+            asyncio.create_task(self._release_deferred_thoughts())
+
+    async def _release_deferred_thoughts(self) -> None:
+        """Evaluate, decay, and release stashed thoughts to the referee."""
+        session_id = await self._most_recent_session_id()
+        if not session_id:
+            return
+
+        import time
+        from memory.session_memory import session_memory
+        session_memory.prune_expired_thoughts(session_id)
+        deferred = session_memory.get_deferred_thoughts(session_id)
+        if not deferred:
+            return
+
+        # Sort thoughts by decayed value
+        valid_candidates = []
+        now = clock.time()
+        for t in deferred:
+            age = now - t.created_at
+            # Linear decay: value reduces to 0 over its TTL
+            decayed_value = t.value * (1.0 - age / t.ttl)
+            if decayed_value >= 0.2:
+                # Update t.value to decayed value
+                t.value = decayed_value
+                valid_candidates.append(t)
+
+        if not valid_candidates:
+            # Clear stashed thoughts if all decayed below threshold
+            session_memory.clear_deferred_thoughts(session_id)
+            return
+
+        # Sort by value descending
+        valid_candidates.sort(key=lambda x: x.value, reverse=True)
+        top_thought = valid_candidates[0]
+
+        # Prepare OutputFrame
+        from core.referee import system_referee, OutputFrame, PriorityTier
+        
+        frame = OutputFrame(
+            key=f"proactive_{top_thought.id}",
+            tier=PriorityTier.CONVERSATION,
+            payload={
+                "kind": top_thought.kind,
+                "message": top_thought.content,
+                "reason": top_thought.metadata.get("reason", "deferred"),
+                "priority": top_thought.priority,
+                "causality": top_thought.metadata.get("causality", ""),
+                "scene_brief": top_thought.metadata.get("scene_brief"),
+                "session_id": session_id,
+            },
+            ttl=top_thought.ttl - (now - top_thought.created_at)
+        )
+
+        logger.info(
+            "Re-routing released thought %s to referee (decayed value %.2f)",
+            top_thought.id[:8], top_thought.value
+        )
+        
+        # Try to emit via SystemReferee
+        approved = await system_referee.emit(frame)
+        session_memory.clear_deferred_thoughts(session_id)
+        
+        # Play a thought released earcon or sound if approved
+        if approved:
+            try:
+                from voice.earcons import play_earcon
+                await play_earcon("success")
+            except Exception:
+                pass
 
     # ── External hooks ───────────────────────────────────────────────────────
 
@@ -367,18 +454,36 @@ class ProactiveLoop:
 
         # speak or scene -> check if we should stash or emit
         if is_focused and priority < 8:
-            logger.info("Proactive %s stashed (user focused, priority %d)", kind, priority)
-            self._stashed.append(StashedProactive(
-                kind=kind,
-                message=decision.get("message") or "",
-                reason=reason,
-                causality=causality,
-                priority=priority,
-                scene_brief=decision.get("scene_brief")
-            ))
-            # Keep stash small
-            if len(self._stashed) > 5:
-                self._stashed.pop(0)
+            session_id = await self._most_recent_session_id()
+            if session_id:
+                logger.info("Proactive %s deferred to session %s (user focused, priority %d)", kind, session_id[:8], priority)
+                from memory.session_memory import session_memory
+                
+                # Check for existing queued items and keep queue size <= 5
+                deferred = session_memory.get_deferred_thoughts(session_id)
+                if len(deferred) >= 5:
+                    # Remove the oldest one
+                    deferred.pop(0)
+                
+                session_memory.defer_thought(
+                    session_id=session_id,
+                    kind=kind,
+                    content=decision.get("message") or "",
+                    priority=priority,
+                    value=float(priority) / 10.0,  # Map 1-10 priority to 0.1-1.0 value
+                    ttl=600.0,
+                    metadata={
+                        "reason": reason,
+                        "causality": causality,
+                        "scene_brief": decision.get("scene_brief")
+                    }
+                )
+                # Play thought_parked earcon
+                try:
+                    from voice.earcons import play_earcon
+                    await play_earcon("thought_parked")
+                except Exception:
+                    pass
             return
 
         # Immediate emit
@@ -407,25 +512,32 @@ class ProactiveLoop:
 
     async def _flush_stash(self, ctx: dict[str, Any]) -> None:
         """Release stashed intents when user is interruptible."""
-        if not self._stashed:
+        session_id = await self._most_recent_session_id()
+        if not session_id:
+            return
+            
+        from memory.session_memory import session_memory
+        session_memory.prune_expired_thoughts(session_id)
+        deferred = session_memory.get_deferred_thoughts(session_id)
+        if not deferred:
             return
 
-        # Take the highest priority item from stash
-        self._stashed.sort(key=lambda x: x.priority, reverse=True)
-        item = self._stashed.pop(0)
+        # Sort by value descending
+        deferred.sort(key=lambda x: x.value, reverse=True)
+        item = deferred.pop(0)
 
         intro = "Поки ти був зайнятий, я підготував це: " if item.kind == "scene" else "Поки ти працював, я подумав про таке: "
-        message = f"{intro}\n{item.message}"
+        message = f"{intro}\n{item.content}"
 
         logger.info("Flushing stashed proactive %s", item.kind)
         if item.kind == "speak":
-            await self._emit_speech(message, f"flushed: {item.reason}", item.priority, ctx, causality=item.causality)
+            await self._emit_speech(message, f"flushed: {item.metadata.get('reason')}", item.priority, ctx, causality=item.metadata.get('causality', ''))
         else:
-            await self._emit_scene(message, item.scene_brief or "", f"flushed: {item.reason}", item.priority, ctx, causality=item.causality)
+            await self._emit_scene(message, item.metadata.get('scene_brief') or "", f"flushed: {item.metadata.get('reason')}", item.priority, ctx, causality=item.metadata.get('causality', ''))
 
         self._last_speech_at = _utcnow()
         # Clear rest of stash to avoid spamming
-        self._stashed.clear()
+        session_memory.clear_deferred_thoughts(session_id)
 
     async def _dispatch_action(
         self, action_goal: str, reason: str, priority: int, confirm_with_user: bool,
@@ -585,8 +697,21 @@ class ProactiveLoop:
                 or emotion.concern > 0.1
                 or emotion.fatigue > 0.4
             )
-        # Initiative if emotional OR triggers OR pending concerns
-        if not off_baseline and not self._recent_triggers and not ctx.get("concerns_top"):
+        # Allow if 2+ hours since last proactive speech (even without triggers)
+        _two_hours_idle = (
+            self._last_speech_at is None
+            or (_utcnow() - self._last_speech_at).total_seconds() > 7200
+        )
+        # Allow if consciousness stream has a pending insight for any user
+        _has_stream_insight = False
+        try:
+            from agent.consciousness_stream import consciousness_stream as _cs
+            _has_stream_insight = _cs.has_any_pending()
+        except Exception:
+            pass
+        # Initiative if emotional OR triggers OR pending concerns OR stream insight OR 2h idle
+        if (not off_baseline and not self._recent_triggers and not ctx.get("concerns_top")
+                and not _has_stream_insight and not _two_hours_idle):
             return False
         return True
 
@@ -792,7 +917,7 @@ class ProactiveLoop:
             )
             form, content_val, attachments = parse_function_call(
                 "respond_artifact",
-                {"title": title, "html": html, "capabilities": []},
+                {"title": title, "code": html},
             )
 
             msg = ChatMessage(

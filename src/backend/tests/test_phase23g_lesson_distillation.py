@@ -260,7 +260,7 @@ class TestRecallDisabled:
         from config import config
         monkeypatch.setattr(config, "agent_lessons_min_relevance", 0.5)
 
-        def _fake_query(query: str, k: int):
+        def _fake_query(query: str, k: int, user_id: str | None = None):
             return [
                 {"what_worked": "high", "relevance": 0.9, "applicability": "x"},
                 {"what_worked": "low", "relevance": 0.1, "applicability": "y"},
@@ -282,7 +282,7 @@ class TestPlannerInjection:
         from pathlib import Path
         src = (
             Path(__file__).resolve().parent.parent
-            / "agent" / "planner" / "strategic.py"
+            / "agent" / "cognition" / "planner" / "strategic.py"
         ).read_text(encoding="utf-8")
         assert "from ..memory.lessons import" in src
         assert "recall_lessons" in src
@@ -292,7 +292,7 @@ class TestPlannerInjection:
         from pathlib import Path
         src = (
             Path(__file__).resolve().parent.parent
-            / "agent" / "planner" / "tactical.py"
+            / "agent" / "cognition" / "planner" / "tactical.py"
         ).read_text(encoding="utf-8")
         assert "from ..memory.lessons import" in src
         assert "recall_lessons" in src
@@ -307,13 +307,14 @@ class TestPlannerInjection:
         from pathlib import Path
         src = (
             Path(__file__).resolve().parent.parent
-            / "agent" / "runtime.py"
+            / "agent" / "kernel" / "runtime.py"
         ).read_text(encoding="utf-8")
-        assert "from .memory.lessons import distill_lesson" in src
+        assert "from agent.cognition.memory.lessons import distill_lesson" in src
         assert "write_lesson" in src
         # Gating on outcome == 'done' is required so failed/timeout tasks
         # don't poison the lessons store.
         assert 'outcome == "done"' in src or "outcome=='done'" in src
+
 
 
 # ─── 8. End-to-end round trip via the planner template ──────────────────────

@@ -71,6 +71,7 @@ _SYSTEM_PROMPT_UA = """\
 3. ПРІОРИТЕТ ПАТЧІВ: Для редагування файлів використовуй `fs.patch_hash`.
 4. ВАЛІДАЦІЯ: Після кожної зміни коду викликай `lsp.diagnostics`.
 5. ТЕСТУВАННЯ: Перед звітом про успіх ти МАЄШ верифікувати результат.
+6. ПАТЕРНИ ВІДНОВЛЕННЯ: Якщо селектор не знайдено, використовуй альтернативні патерни відновлення (наприклад, `browser.click_by_description`).
 
 Стиль: Професійний інженер, лаконічний, але змістовний. Ніяких "роботизованих" заготовок.
 """
@@ -81,12 +82,13 @@ _USER_TEMPLATE = """\
 {sub_goal_description}
 Acceptance: {acceptance}
 Rationale: {rationale}
-
+{branch_block}{caveats_block}{lessons_block}{recall_block}{will_block}{resource_block}{emotion_block}
 ОСТАННІ СПОСТЕРЕЖЕННЯ:
 {observations_block}
 {dead_ends_block}
 {stricter_note}
 """
+
 
 def _format_branch_block(state: TaskState) -> str:
     if state.branch_isolation:
@@ -534,7 +536,7 @@ async def plan(
     lessons_block = ""
     try:
         from ..memory.lessons import format_lessons_for_prompt, recall_lessons
-        lessons = await recall_lessons(sub_goal.description)
+        lessons = await recall_lessons(sub_goal.description, user_id=user_id)
         lessons_block = format_lessons_for_prompt(lessons)
     except Exception as exc:
         logger.debug("tactical: lessons recall skipped (%s)", exc)

@@ -1,0 +1,84 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="ChangeListManager">
+    <list default="true" id="2b2de9de-db88-4327-b9d6-d27c4b884671" name="Changes" comment="">
+      <change beforePath="$PROJECT_DIR$/src/backend/agent/actions/delegate.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/agent/actions/delegate.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/agent/kernel/audit.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/agent/kernel/audit.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/agent/kernel/loop.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/agent/kernel/loop.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/agent/kernel/rehydrate.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/agent/kernel/rehydrate.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/agent/kernel/runtime.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/agent/kernel/runtime.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/agent/team/spawn.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/agent/team/spawn.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/api/routes_agent.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/api/routes_agent.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/config.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/config.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/db/models.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/db/models.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/geo/live_tasker.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/geo/live_tasker.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/lifespan_warmup.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/lifespan_warmup.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/main.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/main.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/paths.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/paths.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/phantom.db-shm" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/phantom.db-shm" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/phantom.db-wal" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/phantom.db-wal" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/requirements.txt" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/requirements.txt" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/tests/test_chat_tool_gating_memory.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/tests/test_chat_tool_gating_memory.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/backend/tests/test_phase_2026_05_09_auto_render_envelope.py" beforeDir="false" afterPath="$PROJECT_DIR$/src/backend/tests/test_phase_2026_05_09_auto_render_envelope.py" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/frontend/src/__tests__/systemStore.test.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/frontend/src/__tests__/systemStore.test.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/frontend/src/components/agent/hud/AgentCommandCenter.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/frontend/src/components/agent/hud/AgentCommandCenter.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/frontend/src/components/agent/overlays/AgentRoster.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/frontend/src/components/agent/overlays/AgentRoster.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/frontend/src/components/agent/status/InnerMonologueStream.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/frontend/src/components/agent/status/InnerMonologueStream.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/frontend/src/components/agent/workspace/AgentActivityStream.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/frontend/src/components/agent/workspace/AgentActivityStream.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/frontend/src/components/agent/workspace/FocusPanel.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/frontend/src/components/agent/workspace/FocusPanel.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/frontend/src/components/agent/workspace/Tape.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/frontend/src/components/agent/workspace/Tape.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/frontend/src/components/core/FloatingToolbar.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/frontend/src/components/core/FloatingToolbar.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/frontend/src/components/map/MarkerCard.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/frontend/src/components/map/MarkerCard.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/frontend/src/components/map/OmniMap.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/frontend/src/components/map/OmniMap.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/frontend/src/components/map/TacticalMap.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/frontend/src/components/map/TacticalMap.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/frontend/src/components/map/hud/HudShell.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/frontend/src/components/map/hud/HudShell.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/frontend/src/components/map/layers/IntelLayer.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/frontend/src/components/map/layers/IntelLayer.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/frontend/src/components/map/mapTokens.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/frontend/src/components/map/mapTokens.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/frontend/src/hooks/useAgentStream.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/frontend/src/hooks/useAgentStream.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/frontend/src/hooks/useMapAgentBridge.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/frontend/src/hooks/useMapAgentBridge.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/frontend/src/layouts/GhostLayout.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/frontend/src/layouts/GhostLayout.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/frontend/src/layouts/OperatorLayout.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/frontend/src/layouts/OperatorLayout.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/frontend/src/layouts/SentinelLayout.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/frontend/src/layouts/SentinelLayout.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/frontend/src/layouts/ShadowLayout.tsx" beforeDir="false" afterPath="$PROJECT_DIR$/src/frontend/src/layouts/ShadowLayout.tsx" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/frontend/src/services/agentApi.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/frontend/src/services/agentApi.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/frontend/src/services/api.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/frontend/src/services/api.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/frontend/src/stores/agentStore.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/frontend/src/stores/agentStore.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/frontend/src/stores/authStore.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/frontend/src/stores/authStore.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/frontend/src/stores/mapStore.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/frontend/src/stores/mapStore.ts" afterDir="false" />
+      <change beforePath="$PROJECT_DIR$/src/frontend/src/stores/uiStore.ts" beforeDir="false" afterPath="$PROJECT_DIR$/src/frontend/src/stores/uiStore.ts" afterDir="false" />
+    </list>
+    <option name="SHOW_DIALOG" value="false" />
+    <option name="HIGHLIGHT_CONFLICTS" value="true" />
+    <option name="HIGHLIGHT_NON_ACTIVE_CHANGELIST" value="false" />
+    <option name="LAST_RESOLUTION" value="IGNORE" />
+  </component>
+  <component name="Git.Settings">
+    <option name="RECENT_GIT_ROOT_PATH" value="$PROJECT_DIR$" />
+  </component>
+  <component name="ProjectColorInfo"><![CDATA[{
+  "associatedIndex": 1
+}]]></component>
+  <component name="ProjectId" id="3Dzc6ZoFgvOuCDAx3eho6INB0C1" />
+  <component name="ProjectViewState">
+    <option name="hideEmptyMiddlePackages" value="true" />
+    <option name="showLibraryContents" value="true" />
+  </component>
+  <component name="PropertiesComponent"><![CDATA[{
+  "keyToString": {
+    "RunOnceActivity.ShowReadmeOnStart": "true",
+    "git-widget-placeholder": "companion-v2-phase-0",
+    "kotlin-language-version-configured": "true"
+  }
+}]]></component>
+  <component name="SpellCheckerSettings" RuntimeDictionaries="0" Folders="0" CustomDictionaries="0" DefaultDictionary="application-level" UseSingleDictionary="true" transferred="true" />
+  <component name="TaskManager">
+    <task active="true" id="Default" summary="Default task">
+      <changelist id="2b2de9de-db88-4327-b9d6-d27c4b884671" name="Changes" comment="" />
+      <created>1779288163605</created>
+      <option name="number" value="Default" />
+      <option name="presentableId" value="Default" />
+      <updated>1779288163605</updated>
+    </task>
+    <servers />
+  </component>
+</project>

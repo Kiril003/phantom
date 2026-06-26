@@ -384,6 +384,18 @@ def _register(metric: Any) -> Any:
 chat_messages_total: Counter = _register(
     Counter("phantom_chat_messages_total", "Total chat messages produced (by role).")
 )
+ai_hub_dispatch_total: Counter = _register(
+    Counter(
+        "phantom_ai_hub_dispatch_total",
+        "AIHub dispatch counts by task class and provider.",
+    )
+)
+ai_hub_route_decision_total: Counter = _register(
+    Counter(
+        "phantom_ai_hub_route_decision_total",
+        "AIHub route decisions by task class, provider, and changed flag.",
+    )
+)
 voice_stt_total: Counter = _register(
     Counter("phantom_voice_stt_total", "Total STT invocations (by engine).")
 )
@@ -591,6 +603,8 @@ __all__ = [
     "_register_observability",
     "ai_provider_used_total",
     "ai_router_fallthrough_total",
+    "ai_hub_dispatch_total",
+    "ai_hub_route_decision_total",
     "chat_messages_total",
     "chat_tool_calls_total",
     "correlation_id_middleware",

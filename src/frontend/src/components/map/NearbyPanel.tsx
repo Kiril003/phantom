@@ -82,47 +82,38 @@ export function NearbyPanel({
 
   if (!shouldFetch) return null;
 
-  // Error state — surface failures with a retry instead of silently hiding.
+  // Error state
   if (error) {
     return (
       <button
         type="button"
         onClick={() => void fetchNow()}
-        className="absolute bottom-24 right-4 z-20 px-3 py-2 min-w-[44px] min-h-[44px] rounded-full bg-black/70 backdrop-blur border border-red-500/40 text-xs text-red-200 hover:bg-red-500/10 flex items-center gap-2"
         aria-label="Nearby lookup failed — retry"
+        className="px-3 py-2 min-h-[40px] rounded-full bg-rose-500/10 border border-rose-500/30 text-[10px] font-bold uppercase tracking-wider text-rose-300 hover:bg-rose-500/20 flex items-center gap-2 shadow-2xl"
       >
         <AlertTriangle size={14} />
-        <span>Nearby failed — tap to retry</span>
+        <span>Помилка пошуку — повторити</span>
       </button>
     );
   }
 
-  // Loading state with no prior data — show the scanning pill so the
-  // operator sees the subsystem is working.
+  // Loading state
   if (loading && total === 0) {
     return (
       <div
-        className="absolute bottom-24 right-4 z-20 px-3 py-2 min-w-[44px] min-h-[44px] rounded-full bg-black/70 backdrop-blur border border-cyan-500/30 text-xs text-cyan-200/80 flex items-center gap-2"
-        role="status"
-        aria-live="polite"
-        aria-label="Scanning surroundings"
+        className="px-3 py-2 min-h-[40px] rounded-full bg-black/65 backdrop-blur-xl border border-white/10 text-[10px] font-bold uppercase tracking-wider text-amber-200/80 flex items-center gap-2 shadow-2xl"
       >
-        <RefreshCw size={14} className="animate-spin" />
-        <span>Scanning surroundings…</span>
+        <RefreshCw size={14} className="animate-spin text-amber-500" />
+        <span>Сканування околиць…</span>
       </div>
     );
   }
 
-  // Genuinely empty — keep the pill visible so operator knows lookup ran
-  // but nothing was found at this radius.
   if (total === 0) {
     return (
-      <div
-        className="absolute bottom-24 right-4 z-20 px-3 py-2 min-w-[44px] min-h-[44px] rounded-full bg-black/60 backdrop-blur border border-white/10 text-xs text-white/50 flex items-center gap-2"
-        aria-label="No nearby features"
-      >
+      <div className="px-3 py-2 min-h-[40px] rounded-full bg-black/50 backdrop-blur-xl border border-white/5 text-[10px] font-bold uppercase tracking-wider text-white/30 flex items-center gap-2">
         <MapPin size={12} />
-        <span>No nearby features</span>
+        <span>Околиці пусті</span>
       </div>
     );
   }
@@ -132,12 +123,12 @@ export function NearbyPanel({
       <button
         type="button"
         onClick={() => setExpanded(true)}
-        className="absolute bottom-24 right-4 z-20 px-3 py-2 min-w-[44px] min-h-[44px] rounded-full bg-black/70 backdrop-blur border border-cyan-500/30 text-xs text-cyan-200 hover:bg-cyan-500/10 flex items-center gap-2"
-        aria-label={`${total} places nearby — expand`}
+        aria-label={`${total} places nearby`}
+        className="px-3 py-2 min-h-[40px] rounded-full bg-black/65 backdrop-blur-xl border border-white/10 text-[10px] font-bold uppercase tracking-wider text-amber-400 hover:bg-white/5 flex items-center gap-2 shadow-2xl active:scale-95 transition-all"
       >
-        <MapPin size={14} />
-        <span>{total} nearby</span>
-        <ChevronRight size={12} />
+        <MapPin size={14} className="text-amber-500" />
+        <span>{total} поруч</span>
+        <ChevronRight size={12} className="opacity-50" />
       </button>
     );
   }
@@ -145,35 +136,33 @@ export function NearbyPanel({
   return (
     <div
       role="dialog"
-      aria-label="Nearby places"
-      className="absolute bottom-4 right-4 w-[320px] max-h-[60%] z-20 bg-black/80 backdrop-blur-md border border-cyan-500/30 rounded-lg flex flex-col text-[13px]"
+      className="w-[320px] max-h-[400px] bg-black/75 backdrop-blur-2xl border border-white/10 rounded-2xl flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200"
     >
-      <header className="px-4 py-2 border-b border-cyan-500/20 flex items-center justify-between">
-        <span className="text-cyan-300 uppercase tracking-wider text-xs">
-          Nearby ({total})
+      <header className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
+        <span className="text-amber-400 font-bold uppercase tracking-widest text-[10px]">
+          Околиці ({total})
         </span>
         <button
           type="button"
           onClick={() => setExpanded(false)}
-          className="text-white/60 hover:text-white px-2 min-w-[44px] min-h-[44px] text-xs"
-          aria-label="Collapse nearby panel"
+          className="text-white/40 hover:text-white transition-colors"
         >
-          ✕
+          <ChevronRight size={16} className="rotate-90" />
         </button>
       </header>
 
-      <div className="flex-1 overflow-y-auto py-2">
+      <div className="flex-1 overflow-y-auto py-2 custom-scrollbar">
         {data?.remembered && data.remembered.length > 0 && (
-          <Section icon={<Brain size={14} />} label="Remembered" tone="cyan">
+          <Section icon={<Brain size={14} />} label="Пам'ять" tone="cyan">
             {data.remembered.map((m) => (
               <button
                 key={m.id}
                 type="button"
                 onClick={() => onSelect?.({ kind: 'remembered', item: m })}
-                className="w-full text-left px-3 py-1.5 hover:bg-cyan-500/10 rounded flex items-center justify-between gap-2"
+                className="w-full text-left px-3 py-2 hover:bg-white/5 rounded-xl flex items-center justify-between gap-2 transition-colors group"
               >
-                <span className="truncate">{m.place_name || m.content}</span>
-                <span className="text-white/40 text-[11px] shrink-0">
+                <span className="truncate text-xs text-white/80 group-hover:text-white">{m.place_name || m.content}</span>
+                <span className="text-[10px] font-mono text-white/30 shrink-0">
                   {m.distance_m}m
                 </span>
               </button>
@@ -181,18 +170,18 @@ export function NearbyPanel({
           </Section>
         )}
         {data?.osm && data.osm.length > 0 && (
-          <Section icon={<Landmark size={14} />} label="OSM" tone="white">
+          <Section icon={<Landmark size={14} />} label="Об'єкти" tone="white">
             {data.osm.slice(0, 10).map((f) => (
               <button
                 key={f.osm_id}
                 type="button"
                 onClick={() => onSelect?.({ kind: 'osm', item: f })}
-                className="w-full text-left px-3 py-1.5 hover:bg-white/10 rounded flex items-center justify-between gap-2"
+                className="w-full text-left px-3 py-2 hover:bg-white/5 rounded-xl flex items-center justify-between gap-2 transition-colors group"
               >
-                <span className="truncate">
+                <span className="truncate text-xs text-white/80 group-hover:text-white">
                   {f.name || f.type || `node#${f.osm_id}`}
                 </span>
-                <span className="text-white/40 text-[11px] shrink-0">
+                <span className="text-[10px] font-mono text-white/30 shrink-0">
                   {f.distance_m}m
                 </span>
               </button>
@@ -200,16 +189,16 @@ export function NearbyPanel({
           </Section>
         )}
         {data?.pois && data.pois.length > 0 && (
-          <Section icon={<MapPin size={14} />} label="Saved" tone="yellow">
+          <Section icon={<MapPin size={14} />} label="Збережене" tone="yellow">
             {data.pois.map((p) => (
               <button
                 key={p.id}
                 type="button"
                 onClick={() => onSelect?.({ kind: 'poi', item: p })}
-                className="w-full text-left px-3 py-1.5 hover:bg-yellow-500/10 rounded flex items-center justify-between gap-2"
+                className="w-full text-left px-3 py-2 hover:bg-white/5 rounded-xl flex items-center justify-between gap-2 transition-colors group"
               >
-                <span className="truncate">{p.name}</span>
-                <span className="text-white/40 text-[11px] shrink-0">
+                <span className="truncate text-xs text-white/80 group-hover:text-white">{p.name}</span>
+                <span className="text-[10px] font-mono text-white/30 shrink-0">
                   {p.distance_m}m
                 </span>
               </button>
@@ -217,14 +206,13 @@ export function NearbyPanel({
           </Section>
         )}
       </div>
-      <footer className="px-3 py-1.5 text-[11px] text-white/40 border-t border-cyan-500/10 flex items-center justify-between">
-        <span>{loading ? 'Refreshing…' : `radius ${radiusM}m`}</span>
+      <footer className="px-4 py-2 text-[9px] font-bold uppercase tracking-widest text-white/20 border-t border-white/5 flex items-center justify-between">
+        <span>Радіус {radiusM}м</span>
         <button
           type="button"
           onClick={() => void fetchNow()}
           disabled={loading}
-          className="text-white/60 hover:text-white disabled:opacity-40 min-h-[44px] min-w-[44px] flex items-center justify-center"
-          aria-label="Refresh nearby"
+          className="hover:text-amber-400 transition-colors disabled:opacity-20"
         >
           <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
         </button>
@@ -246,17 +234,17 @@ function Section({
 }) {
   const toneClass =
     tone === 'cyan'
-      ? 'text-cyan-300'
+      ? 'text-cyan-400'
       : tone === 'yellow'
-        ? 'text-yellow-300'
-        : 'text-white/70';
+        ? 'text-amber-500'
+        : 'text-white/50';
   return (
-    <div className="mb-2">
-      <div className={`px-3 text-[11px] uppercase tracking-wider mb-0.5 flex items-center gap-1.5 ${toneClass}`}>
+    <div className="mb-2 px-1">
+      <div className={`px-3 py-1 text-[9px] font-bold uppercase tracking-widest flex items-center gap-1.5 ${toneClass}`}>
         {icon}
         <span>{label}</span>
       </div>
-      <div className="px-1">{children}</div>
+      <div className="space-y-0.5">{children}</div>
     </div>
   );
 }

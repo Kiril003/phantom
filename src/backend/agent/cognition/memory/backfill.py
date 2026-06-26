@@ -24,11 +24,11 @@ from .seeds import write_episode
 logger = logging.getLogger(__name__)
 
 
-def _sample_missing_user_id_sync(limit: int = 50) -> bool:
+def _sample_missing_user_id_sync(user_id: str | None = None, limit: int = 50) -> bool:
     """Return True when legacy Chroma episode rows lack user_id metadata."""
     try:
         from .embedder import _get_collection_sync
-        coll = _get_collection_sync()
+        coll = _get_collection_sync(user_id)
         n_avail = int(coll.count())
         if n_avail <= 0:
             return False
@@ -88,19 +88,34 @@ async def backfill_all() -> dict[str, int]:
 async def backfill_if_behind() -> dict[str, int] | None:
     """Lifespan helper — only backfills when ChromaDB is behind SQL."""
     async with get_session() as db:
-        result = await db.execute(select(AgentMemorySeed.id))
-        sql_count = len(list(result.scalars().all()))
-    chroma_count = await collection_count()
-    if chroma_count >= sql_count:
-        if not await asyncio.to_thread(_sample_missing_user_id_sync):
-            return None
-        logger.info(
-            "Episodic memory backfill: chroma rows lack user_id metadata, syncing"
-        )
+        result = await db.execute(select(AgentMemorySeed.user_id).distinct())
+        user_ids = [r for r in result.scalars().all() if r]
+
+    if "default" not in user_ids:
+        user_ids.append("default")
+
+    needs_backfill = False
+    for uid in user_ids:
+        async with get_session() as db:
+            result = await db.execute(select(AgentMemorySeed.id).where(AgentMemorySeed.user_id == uid))
+            sql_count = len(list(result.scalars().all()))
+        chroma_count = await collection_count(uid)
+        if chroma_count < sql_count:
+            logger.info("Episodic memory backfill: chroma=%d < sql=%d for user %s, syncing",
+                        chroma_count, sql_count, uid)
+            needs_backfill = True
+            break
+        if await asyncio.to_thread(_sample_missing_user_id_sync, uid):
+            logger.info(
+                "Episodic memory backfill: chroma rows lack user_id metadata for user %s, syncing",
+                uid
+            )
+            needs_backfill = True
+            break
+
+    if needs_backfill:
         return await backfill_all()
-    logger.info("Episodic memory backfill: chroma=%d < sql=%d, syncing",
-                chroma_count, sql_count)
-    return await backfill_all()
+    return None
 
 
 async def _main_cli() -> None:

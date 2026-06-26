@@ -172,11 +172,11 @@ function resetStores() {
     loading: false,
     error: null,
     toast: null,
-    loadWardriving: vi.fn(async () => {}),
-    loadHeatmap: vi.fn(async () => {}),
-    loadPOIs: vi.fn(async () => {}),
-    loadTrack: vi.fn(async () => {}),
-    loadGeoTaggedFacts: vi.fn(async () => {}),
+    loadWardriving: vi.fn(async () => { }),
+    loadHeatmap: vi.fn(async () => { }),
+    loadPOIs: vi.fn(async () => { }),
+    loadTrack: vi.fn(async () => { }),
+    loadGeoTaggedFacts: vi.fn(async () => { }),
     savePOI: vi.fn(async () => null),
   });
   useSettingsStore.setState({
@@ -206,8 +206,8 @@ describe('Phase 24-PRE — Satellite style cycle', () => {
   beforeEach(resetStores);
 
   it('cycles ui_map_style dark → satellite → streets → dark on each click', async () => {
-    const { TacticalMap } = await import('../components/map/TacticalMap');
-    render(<TacticalMap />);
+    const { OmniMap } = await import('../components/map/OmniMap');
+    render(<OmniMap bridgeAgent={false} />);
     const btn = await screen.findByLabelText(/Style · /);
     expect(useSettingsStore.getState().values.ui_map_style).toBe('dark');
 
@@ -224,8 +224,8 @@ describe('Phase 24-PRE — Satellite style cycle', () => {
 
   it('survives backend persist failure (offline / pre-auth)', async () => {
     settingsSetSpy.mockRejectedValueOnce(new Error('network'));
-    const { TacticalMap } = await import('../components/map/TacticalMap');
-    render(<TacticalMap />);
+    const { OmniMap } = await import('../components/map/OmniMap');
+    render(<OmniMap bridgeAgent={false} />);
     const btn = await screen.findByLabelText(/Style · /);
     fireEvent.click(btn);
     // Local optimistic state still flips even if backend rejects.
@@ -233,8 +233,8 @@ describe('Phase 24-PRE — Satellite style cycle', () => {
   });
 
   it('rebuilds MapLibre style on setting change after ready', async () => {
-    const { TacticalMap } = await import('../components/map/TacticalMap');
-    render(<TacticalMap />);
+    const { OmniMap } = await import('../components/map/OmniMap');
+    render(<OmniMap bridgeAgent={false} />);
     // Wait for async load fire then style-rebuild effect.
     await waitFor(() => {
       expect(FakeMap.lastFakeMap?.listeners.some((l) => l.evt === 'load')).toBe(true);
@@ -254,14 +254,14 @@ describe('Phase 24-PRE — Compass bearing chip', () => {
   beforeEach(resetStores);
 
   it('renders bearing 000° initially', async () => {
-    const { TacticalMap } = await import('../components/map/TacticalMap');
-    render(<TacticalMap />);
+    const { OmniMap } = await import('../components/map/OmniMap');
+    render(<OmniMap bridgeAgent={false} />);
     expect(await screen.findByLabelText(/Bearing · 000°/)).toBeDefined();
   });
 
   it('updates label when map.rotate fires with a new bearing', async () => {
-    const { TacticalMap } = await import('../components/map/TacticalMap');
-    render(<TacticalMap />);
+    const { OmniMap } = await import('../components/map/OmniMap');
+    render(<OmniMap bridgeAgent={false} />);
     await screen.findByLabelText(/Bearing · 000°/);
     expect(FakeMap.lastFakeMap).not.toBeNull();
     act(() => {
@@ -271,8 +271,8 @@ describe('Phase 24-PRE — Compass bearing chip', () => {
   });
 
   it('resets bearing and pitch to 0 on click', async () => {
-    const { TacticalMap } = await import('../components/map/TacticalMap');
-    render(<TacticalMap />);
+    const { OmniMap } = await import('../components/map/OmniMap');
+    render(<OmniMap bridgeAgent={false} />);
     await screen.findByLabelText(/Bearing · 000°/);
     act(() => {
       FakeMap.lastFakeMap!.setBearing(120);
@@ -295,16 +295,16 @@ describe('Phase 24-PRE — error surfacing', () => {
         throw new Error('boom');
       }),
     });
-    const { TacticalMap } = await import('../components/map/TacticalMap');
-    render(<TacticalMap />);
+    const { OmniMap } = await import('../components/map/OmniMap');
+    render(<OmniMap bridgeAgent={false} />);
     await waitFor(() => {
       expect(useMapStore.getState().toast ?? '').toMatch(/Wardriving: boom/);
     });
   });
 
   it('toasts when MapLibre emits an error event', async () => {
-    const { TacticalMap } = await import('../components/map/TacticalMap');
-    render(<TacticalMap />);
+    const { OmniMap } = await import('../components/map/OmniMap');
+    render(<OmniMap bridgeAgent={false} />);
     await waitFor(() => expect(FakeMap.lastFakeMap).not.toBeNull());
     act(() => {
       FakeMap.lastFakeMap!.fire('error', { error: { message: 'tile 504' } });
@@ -328,8 +328,8 @@ describe('Phase 24-PRE — ready-timeout fallback', () => {
 
   it('renders style-failed overlay if load never fires within 5s', async () => {
     FakeMap.suppressNextLoad = true;
-    const { TacticalMap } = await import('../components/map/TacticalMap');
-    render(<TacticalMap />);
+    const { OmniMap } = await import('../components/map/OmniMap');
+    render(<OmniMap bridgeAgent={false} />);
     // Advance the 5s ready-timeout — nothing else should be running.
     await act(async () => {
       vi.advanceTimersByTime(5100);
@@ -340,8 +340,8 @@ describe('Phase 24-PRE — ready-timeout fallback', () => {
 
   it('Retry button re-mounts the MapLibre instance', async () => {
     FakeMap.suppressNextLoad = true;
-    const { TacticalMap } = await import('../components/map/TacticalMap');
-    render(<TacticalMap />);
+    const { OmniMap } = await import('../components/map/OmniMap');
+    render(<OmniMap bridgeAgent={false} />);
     await act(async () => {
       vi.advanceTimersByTime(5100);
     });

@@ -18,6 +18,8 @@ interface SystemStoreState {
   authenticated: boolean;
   wsConnected: boolean;
   esp32: Esp32Status;
+  /** Whether we are running inside a Tauri shell (desktop mode). */
+  isTauri: boolean;
   /** Live mic amplitude [0, 1] — updated by useVoiceRecorder while listening. */
   voiceAmplitude: number;
   /** Digital Endocrine System state — updated by inner_monologue.stream events. */
@@ -62,6 +64,7 @@ export const useSystemStore = create<SystemStoreState>((set, get) => ({
   authenticated: false,
   wsConnected: false,
   esp32: 'unknown',
+  isTauri: typeof window !== 'undefined' && !!(window as any).__TAURI_INTERNALS__,
   voiceAmplitude: 0,
   sentience: { cortisol: 0.2, dopamine: 0.5, oxytocin: 0.5 },
 

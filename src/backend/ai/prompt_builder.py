@@ -201,6 +201,7 @@ def build_system_prompt(
     emotion: dict | None = None,
     hormones: dict[str, float] | None = None,
     minimal_mode: bool = False,
+    core_narrative: str | None = None,
 ) -> str:
     """
     Build the full dynamic system prompt for one AI turn.
@@ -246,6 +247,9 @@ def build_system_prompt(
     parts.append(f"\nUSER: {username}, role={role}, trust={trust:.2f}")
     if response_pref:
         parts.append(f"PREFERENCE: {response_pref}")
+
+    if core_narrative:
+        parts.append(core_narrative)
 
     # Preferred language
     prefs: dict[str, Any] = user_dict.get("preferences", {})

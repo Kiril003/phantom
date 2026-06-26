@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 
 
 def _query_sync(query: str, k: int, user_id: str | None = None) -> list[dict[str, Any]]:
-    coll = _get_collection_sync()
+    coll = _get_collection_sync(user_id)
     try:
         n_avail = int(coll.count())
     except Exception:
@@ -24,10 +24,10 @@ def _query_sync(query: str, k: int, user_id: str | None = None) -> list[dict[str
     if n_avail == 0:
         return []
     try:
-        where = {"user_id": user_id} if user_id else None
+        uid = user_id or "default"
+        where = {"user_id": uid}
         kwargs: dict[str, Any] = {"query_texts": [query], "n_results": min(k, n_avail)}
-        if where is not None:
-            kwargs["where"] = where
+        kwargs["where"] = where
         results = coll.query(**kwargs)
     except Exception as exc:
         logger.warning("episodic recall query failed: %s", exc)

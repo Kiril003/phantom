@@ -38,8 +38,10 @@ goals like Y" — prescriptive, transferable, NOT bound to one task.
 from __future__ import annotations
 
 import asyncio
+import hashlib
 import json
 import logging
+import re
 from datetime import datetime, timezone
 from typing import Any
 
@@ -48,7 +50,24 @@ from config import config
 logger = logging.getLogger(__name__)
 
 
-_LESSON_COLLECTION = "agent_lessons"
+def _collection_name(user_id: str | None = None) -> str:
+    """Per-user collection name for hard cross-user isolation."""
+    uid = user_id or "default"
+    # Keep the chroma constraint of 3..63 chars + ``[a-zA-Z0-9_-]``.
+    safe_id = re.sub(r"[^a-zA-Z0-9_-]", "", uid)
+    # Chroma's max collection name is 63 chars; "phantom_v1_lessons_" prefix = 19,
+    # "_" + 8-char hash = 9, leaves 35 for the body.
+    body_budget = 35
+    needs_disambiguation = (
+        safe_id != uid  # stripping changed something
+        or len(safe_id) > body_budget  # over the chroma length budget
+        or not safe_id  # empty after sanitisation
+    )
+    if needs_disambiguation:
+        digest = hashlib.sha256(uid.encode("utf-8")).hexdigest()[:8]
+        body = safe_id[:body_budget] if safe_id else "x"
+        return f"phantom_v1_lessons_{body}_{digest}"
+    return f"phantom_v1_lessons_{safe_id}"
 
 
 # ─── Distillation ────────────────────────────────────────────────────────────
@@ -149,7 +168,7 @@ async def distill_lesson(
 # ─── Storage ─────────────────────────────────────────────────────────────────
 
 
-def _get_lessons_collection_sync() -> Any:
+def _get_lessons_collection_sync(user_id: str | None = None) -> Any:
     """Resolve the dedicated lessons collection, lazy-initialising on first
     call. Reuses Phase-3 strategic_memory's PersistentClient + embedding
     function singletons so we don't reload the SentenceTransformer or
@@ -157,14 +176,15 @@ def _get_lessons_collection_sync() -> Any:
     from memory.strategic_memory import _get_client, _get_ef
     client = _get_client()
     ef = _get_ef()
+    coll_name = _collection_name(user_id)
     return client.get_or_create_collection(
-        name=_LESSON_COLLECTION,
+        name=coll_name,
         embedding_function=ef,
     )
 
 
-def _upsert_lesson_sync(*, lesson_id: str, document: str, metadata: dict[str, Any]) -> None:
-    coll = _get_lessons_collection_sync()
+def _upsert_lesson_sync(*, lesson_id: str, document: str, metadata: dict[str, Any], user_id: str | None = None) -> None:
+    coll = _get_lessons_collection_sync(user_id)
     safe_meta: dict[str, Any] = {}
     for k, v in metadata.items():
         if isinstance(v, (str, int, float, bool)) or v is None:
@@ -180,6 +200,7 @@ async def write_lesson(
     goal: str,
     outcome: str,
     lesson: dict[str, str],
+    user_id: str | None = None,
 ) -> str:
     """Persist a distilled lesson. Returns the lesson id (empty string when
     lessons are disabled or storage failed). Idempotent per task_id."""
@@ -209,6 +230,7 @@ async def write_lesson(
         "what_avoid": lesson.get("what_avoid", ""),
         "applicability": lesson.get("applicability", ""),
         "created_at": datetime.now(tz=timezone.utc).isoformat(),
+        "user_id": user_id or "default",
     }
     try:
         await asyncio.to_thread(
@@ -216,6 +238,7 @@ async def write_lesson(
             lesson_id=lesson_id,
             document=document,
             metadata=metadata,
+            user_id=user_id,
         )
     except Exception as exc:
         logger.warning("lessons write_lesson failed (non-fatal): %s", exc)
@@ -226,9 +249,9 @@ async def write_lesson(
 # ─── Recall + format ─────────────────────────────────────────────────────────
 
 
-def _query_lessons_sync(query: str, k: int) -> list[dict[str, Any]]:
+def _query_lessons_sync(query: str, k: int, user_id: str | None = None) -> list[dict[str, Any]]:
     try:
-        coll = _get_lessons_collection_sync()
+        coll = _get_lessons_collection_sync(user_id)
     except Exception as exc:
         logger.debug("lessons collection unavailable: %s", exc)
         return []
@@ -239,7 +262,9 @@ def _query_lessons_sync(query: str, k: int) -> list[dict[str, Any]]:
     if n_avail == 0:
         return []
     try:
-        results = coll.query(query_texts=[query], n_results=min(k, n_avail))
+        uid = user_id or "default"
+        where = {"user_id": uid}
+        results = coll.query(query_texts=[query], n_results=min(k, n_avail), where=where)
     except Exception as exc:
         logger.warning("lessons recall query failed: %s", exc)
         return []
@@ -266,7 +291,7 @@ def _query_lessons_sync(query: str, k: int) -> list[dict[str, Any]]:
     return out
 
 
-async def recall_lessons(query: str, k: int | None = None) -> list[dict[str, Any]]:
+async def recall_lessons(query: str, k: int | None = None, *, user_id: str | None = None) -> list[dict[str, Any]]:
     """Top-k similar lessons for the given query (usually the new task's
     goal string). Returns lessons whose relevance is above the configured
     minimum so cold-cache or off-topic lessons do not get injected."""
@@ -275,7 +300,7 @@ async def recall_lessons(query: str, k: int | None = None) -> list[dict[str, Any
     limit = k if k is not None else int(config.agent_lessons_top_k)
     if limit <= 0:
         return []
-    rows = await asyncio.to_thread(_query_lessons_sync, query, max(1, int(limit)))
+    rows = await asyncio.to_thread(_query_lessons_sync, query, max(1, int(limit)), user_id)
     threshold = float(getattr(config, "agent_lessons_min_relevance", 0.35) or 0.0)
     return [r for r in rows if r.get("relevance", 0.0) >= threshold]
 

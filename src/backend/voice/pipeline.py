@@ -153,8 +153,69 @@ def reset_vosk_model() -> None:
         _vosk_model = None
 
 
+def process_dysfluency(text: str) -> str:
+    """Replaces ToM confidence tags with paralinguistic voice markers for synthesis.
+    Displays tags in text, but speaks pauses/hesitations instead of raw tags.
+    """
+    # Replace band tags with Ukrainian paralinguistic counterparts:
+    # [припускаю] -> "хм... е-е... " (sigh/uncertainty)
+    # [ймовірно] -> "гм... " (brief doubt)
+    # [встановлено] -> "" (direct, clear flow)
+    processed = text
+    processed = processed.replace("[припускаю]", "хм... е-е... ")
+    processed = processed.replace("[ймовірно]", "гм... ")
+    processed = processed.replace("[встановлено]", "")
+    return processed
+
+
+def voice_params(p: dict, state: str) -> dict:
+    """Computes stability, style, rate, and pauses based on affect vector and FSM state.
+    Matches ElevenLabs stability/style and adjusts Piper rate accordingly.
+    """
+    if state == "CRISIS_MODE":
+        return {"stability": 0.85, "style": 0.10, "rate": 1.05, "pauses": "short"}
+    if p.get("fatigue", 0.0) > 0.6 and p.get("valence", 0.5) < 0.4:
+        return {"stability": 0.80, "style": 0.15, "rate": 0.90, "pauses": "long"}
+    if p.get("valence", 0.5) > 0.6 and p.get("arousal", 0.0) > 0.5:
+        return {"stability": 0.45, "style": 0.55, "rate": 1.00, "pauses": "natural"}
+    return {"stability": 0.60, "style": 0.30, "rate": 1.00, "pauses": "natural"}
+
+
 async def synthesize_text(text: str, voice: str, speed: float) -> TTSResult:
-    return await get_tts_provider().synthesize(text, voice, speed)
+    # 1. Strip and replace band tags
+    spoken_text = process_dysfluency(text)
+    
+    # 2. Get real-time user affect and state from context_engine
+    from core.context_engine import context_engine
+    snap = context_engine.get_snapshot()
+    
+    stress = snap.get("body", {}).get("stress_level") or 0.2
+    current_fsm_state = snap.get("system", {}).get("state", "SHADOW")
+    
+    # Map stress to arousal/valence
+    p = {
+        "valence": 0.5,
+        "arousal": stress,
+        "fatigue": 0.0
+    }
+    
+    # Check night hours for fatigue
+    hour = snap.get("when", {}).get("hour", 12)
+    if hour >= 23 or hour < 6:
+        p["fatigue"] = 0.7
+        p["valence"] = min(p["valence"], 0.3)
+        
+    state = current_fsm_state
+    if stress > 0.8:
+        state = "CRISIS_MODE"
+        
+    params = voice_params(p, state)
+    
+    # 3. Multiply standard speed by the affect-computed rate
+    adjusted_speed = speed * params["rate"]
+    
+    # 4. Synthesize speech using the calculated adjusted speed
+    return await get_tts_provider().synthesize(spoken_text, voice, adjusted_speed)
 
 
 # ─── Phase 12.0 — startup preload (Bug 2 fix) ───────────────────────────────

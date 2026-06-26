@@ -20,7 +20,9 @@ from sqlalchemy import select
 from db.database import get_session
 from db.models import (
     AgentAuditEntry, AgentCheckpoint, AgentFeedback, AgentMemorySeed, AgentTask,
+    TeamChatMessage,
 )
+
 
 from ..schemas import (
     ActionResult,
@@ -366,3 +368,50 @@ def _serialize_task_row(row: AgentTask) -> dict[str, Any]:
         "self_model": _maybe_json(row.self_model_json),
         "thought_budget": _maybe_json(row.thought_budget_json),
     }
+
+
+async def write_team_message(
+    *,
+    task_id: str,
+    sender: str,
+    receiver: str,
+    message: str,
+    message_type: str = "text",
+    media: list[dict[str, Any]] | None = None,
+    parent_task_id: str | None = None,
+) -> None:
+    """Log a team chat message in the database and broadcast it to WebSockets."""
+    import uuid as _uuid_lib
+    media_json = json.dumps(media, ensure_ascii=False) if media else None
+    
+    async with get_session() as db:
+        msg = TeamChatMessage(
+            id=str(_uuid_lib.uuid4()),
+            task_id=task_id,
+            parent_task_id=parent_task_id,
+            sender=sender,
+            receiver=receiver,
+            message=message,
+            message_type=message_type,
+            media_json=media_json,
+        )
+        db.add(msg)
+        await db.commit()
+
+    from agent.kernel.runtime import agent_runtime
+    if agent_runtime is not None:
+        try:
+            await agent_runtime._broadcast("team.message", {
+                "id": msg.id,
+                "task_id": task_id,
+                "parent_task_id": parent_task_id,
+                "sender": sender,
+                "receiver": receiver,
+                "message": message,
+                "message_type": message_type,
+                "media": media,
+                "created_at": msg.created_at.isoformat() if hasattr(msg.created_at, "isoformat") else str(msg.created_at),
+            })
+        except Exception as exc:
+            logger.debug("write_team_message WS broadcast failed: %s", exc)
+

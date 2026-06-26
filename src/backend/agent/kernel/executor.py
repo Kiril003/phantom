@@ -164,6 +164,7 @@ async def execute(
         workspace_dir=workspace_dir,
         runtime=runtime,
         unsafe_mode=unsafe_mode,
+        user_id=user_id,
     )
 
     # Phase 18-COMPLETE — promote long-running actions onto the background

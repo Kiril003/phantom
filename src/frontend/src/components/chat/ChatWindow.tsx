@@ -28,6 +28,7 @@ import {
   voiceAlwaysOnUnduck,
 } from '../../hooks/useVoiceAlwaysOn';
 import type { ChatMessage } from '@shared/types';
+import { wsClient } from '../../services/websocket';
 
 interface ChatWindowProps {
   minimalChrome?: boolean;
@@ -107,6 +108,35 @@ export function ChatWindow({
   const [editSessionText, setEditSessionText] = useState('');
 
   const [input, setInput] = useState('');
+  const [activeThoughts, setActiveThoughts] = useState<Array<{ text: string; kind: string; id: string }>>([]);
+
+  // Subscribe to monologue stream
+  useEffect(() => {
+    const off = wsClient.on('inner_monologue.stream', (msg) => {
+      const data = msg.data as any;
+      let text = '';
+      if (data.monologue?.what_i_plan) text = data.monologue.what_i_plan;
+      else if (data.monologue?.note) text = data.monologue.note;
+      else if (data.monologue?.decision) text = data.monologue.decision;
+      else if (data.monologue?.summary) text = data.monologue.summary;
+
+      if (text) {
+        setActiveThoughts((prev) => {
+          const id = Math.random().toString(36).substring(2);
+          const next = [...prev, { text, kind: data.kind, id }].slice(-3); // Keep last 3 thoughts
+          return next;
+        });
+      }
+    });
+    return off;
+  }, []);
+
+  // Clear thoughts when generation completes
+  useEffect(() => {
+    if (!isTyping && !sending && !streaming) {
+      setActiveThoughts([]);
+    }
+  }, [isTyping, sending, streaming]);
   const [voiceError, setVoiceError] = useState<string | null>(null);
   const [transcribing, setTranscribing] = useState(false);
   // Day-5 input-pill redesign D5-DSGN3: track focus + textarea ref so
@@ -155,6 +185,18 @@ export function ChatWindow({
     if (stickyBottomRef.current && endRef.current) {
       endRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
     }
+  }, [messages, streaming, isTyping]);
+
+  useEffect(() => {
+    const listEl = listRef.current;
+    if (!listEl) return;
+    const observer = new ResizeObserver(() => {
+      if (stickyBottomRef.current && endRef.current) {
+        endRef.current.scrollIntoView({ behavior: 'smooth', block: 'end' });
+      }
+    });
+    observer.observe(listEl);
+    return () => observer.disconnect();
   }, [messages, streaming, isTyping]);
 
   // Day-5 — textarea autosize. Reset to single-line height first
@@ -904,6 +946,55 @@ export function ChatWindow({
             attachment chips render above the rail too.
             Phase 27-e — outer pb-3→pb-2; ModelCard now lazy. */}
         <div className="px-5 pb-2 pt-1 shrink-0">
+          {/* Real-time thought stream */}
+          <AnimatePresence>
+            {activeThoughts.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, height: 0 }}
+                animate={{ opacity: 1, height: 'auto' }}
+                exit={{ opacity: 0, height: 0 }}
+                className="px-4 py-2 mb-2 rounded-xl border border-white/[0.04] bg-white/[0.02] backdrop-blur font-mono flex flex-col gap-1.5 overflow-hidden"
+                style={{
+                  boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.02)',
+                  borderColor: 'rgba(255,255,255,0.04)',
+                }}
+              >
+                <div className="flex items-center gap-1.5 text-[9px] text-neutral-500 uppercase tracking-widest font-bold border-b border-white/[0.04] pb-1">
+                  <Sparkles size={10} className="animate-pulse" style={{ color: 'var(--accent)' }} />
+                  <span>Потік Свідомості / Thought Stream</span>
+                </div>
+                <div className="flex flex-col gap-1 text-[11px] leading-tight">
+                  {activeThoughts.map((t, idx) => {
+                    const colors: Record<string, string> = {
+                      plan: '#06b6d4',      // cyan
+                      reflection: '#a3a3a3', // gray
+                      proactive: '#f59e0b',  // amber
+                      emotion_shift: '#10b981', // green
+                    };
+                    const isLast = idx === activeThoughts.length - 1;
+                    return (
+                      <motion.div
+                        key={t.id}
+                        initial={{ opacity: 0, x: -4 }}
+                        animate={{ opacity: isLast ? 1 : 0.45, x: 0 }}
+                        className="flex items-start gap-2"
+                      >
+                        <span
+                          className="font-bold text-[9px] uppercase shrink-0 mt-0.5"
+                          style={{ color: colors[t.kind] || 'var(--accent)' }}
+                        >
+                          {t.kind.slice(0, 4)}:
+                        </span>
+                        <span className="text-neutral-400 font-serif italic">
+                          “{t.text}”
+                        </span>
+                      </motion.div>
+                    );
+                  })}
+                </div>
+              </motion.div>
+            )}
+          </AnimatePresence>
           {/* Day-4 W-3 — ModelCard echo. Phase 27-e: only render when
               the operator is engaged with the rail (focused, has input,
               or sending) so the idle empty rail doesn't reserve 26px

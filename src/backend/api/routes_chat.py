@@ -320,14 +320,22 @@ async def _build_ai_response(
         lat = where.get("lat")
         lon = where.get("lon")
         try:
-            hints = await memory_brain.recall_for_prompt(
-                db=db, user_id=user.id, query=user_message,
-                limit=config.memory_top_k,
-                lat=float(lat) if lat is not None else None,
-                lon=float(lon) if lon is not None else None,
-                include_agent=True,
+            from memory.tom_service import affect_match_retrieve
+            user_prosody = {
+                "valence": 0.5,
+                "arousal": 0.5,
+                "fatigue": 0.0,
+                "hesitation": 0.0
+            }
+            hints = await affect_match_retrieve(
+                db=db,
+                user_id=user.id,
+                query=user_message,
+                query_prosody=user_prosody,
+                k=config.memory_top_k
             )
-        except Exception:
+        except Exception as exc:
+            logger.debug("ToM affect_match_retrieve failed: %s", exc)
             hints = []
         try:
             recent_places = await fetch_recent_places(db, user.id, hours=24, limit=5)
@@ -356,19 +364,104 @@ async def _build_ai_response(
         "preferences": json.loads(user.preferences_json or "{}"),
     }
 
-    # 3. Build system prompt (Use minimal_mode if fast track)
+    # 2b. Fetch Core Narrative context
+    core_narrative_context = ""
+    try:
+        from memory.core_narrative import inject_core_narrative_context
+        core_narrative_context = await inject_core_narrative_context(db, user.id)
+    except Exception as exc:
+        logger.debug("Failed to fetch core narrative context: %s", exc)
+
+    # 3. Build system prompt — full personality always; skip heavy context for short turns
+    _is_short_turn = len(user_message) < 80 and "\n" not in user_message
+    _model_hint = config.ai_conversational_model if _is_short_turn else config.ai_reasoning_model
+
+    # PMState — load and inject as leading context block
+    mind_state_block = ""
+    _mind_state: dict = {}
+    try:
+        from memory.mind_state import get_mind_state, format_for_prompt as _fmt_mind
+        _mind_state = await get_mind_state(db, user.id)
+        mind_state_block = _fmt_mind(_mind_state)
+    except Exception as _ms_exc:
+        logger.debug("PMState load failed: %s", _ms_exc)
+
+    # Tactical memory injection — only for non-short turns
+    if not _is_short_turn:
+        try:
+            from memory.tactical_memory import get_recent_facts
+            _tactical_facts = await get_recent_facts(db, user.id, limit=5)
+            if _tactical_facts:
+                _tactical_hints = [f"[тактична: {f.get('content', '')}]" for f in _tactical_facts]
+                hints = _tactical_hints + (hints or [])
+        except Exception as _tac_exc:
+            logger.debug("tactical facts: %s", _tac_exc)
+
     system_prompt = build_system_prompt(
         snapshot=snapshot,
         user_dict=user_dict,
         behavioral_model=behavioral_model.to_dict(),
-        memory_hints=hints,
-        recent_places=recent_places,
+        memory_hints=[] if _is_short_turn else hints,
+        recent_places=None if _is_short_turn else recent_places,
         emotion=emotion_dict,
         hormones=hormones,
-        minimal_mode=is_fast_track,
+        minimal_mode=False,
+        core_narrative=None if _is_short_turn else core_narrative_context,
     )
 
-    # 4. History (De-duplicate current message if already in RAM)
+    # Inject PMState as first contextual block after base system prompt
+    if mind_state_block:
+        system_prompt = system_prompt + "\n\n" + mind_state_block
+
+    # Theory of Mind injection — skip for short turns to keep latency low
+    if not _is_short_turn:
+        try:
+            from memory.tom_service import get_tom_prompt_context
+            tom_context = await get_tom_prompt_context(db, user.id)
+            tom_block = (
+                f"\n\n[USER MODEL - THEORY OF MIND]\n"
+                f"Твоя поточна модель користувача (ToM):\n{tom_context['tom_beliefs_with_band_tags']}\n\n"
+                f"Відкриті петлі зобов'язань користувача:\n{tom_context['open_loops']}\n\n"
+                f"[AGENDA / INTERRUPTION PROBES]\n"
+                f"Якщо є природний момент, перевір наступне:\n{tom_context['active_probes']}"
+            )
+            system_prompt += tom_block
+        except Exception as exc:
+            logger.debug("ToM prompt context injection failed: %s", exc)
+
+    # Living narrative injection — only for complex turns to avoid prompt bloat
+    if not _is_short_turn:
+        try:
+            from memory.narrative import get_narrative, format_narrative_for_prompt
+            _narrative_text = await get_narrative(db, user.id)
+            _narrative_block = format_narrative_for_prompt(_narrative_text)
+            if _narrative_block:
+                system_prompt += _narrative_block
+        except Exception as _narr_exc:
+            logger.debug("narrative load failed: %s", _narr_exc)
+
+    # Always-on minimal temporal/state context (~20 tokens, even for short turns)
+    _snap_sys = snapshot.get("system", {}) if snapshot else {}
+    _snap_when = snapshot.get("when", {}) if snapshot else {}
+    system_prompt += (
+        f"\n[NOW: {_snap_when.get('time', '?')} | "
+        f"{_snap_when.get('day_name', '?')} | "
+        f"state={_snap_sys.get('state', 'SHADOW')}]"
+    )
+
+    # Consciousness stream pending thought
+    try:
+        from agent.consciousness_stream import consciousness_stream as _cstream
+        _pending = _cstream.get_pending_insight(user.id)
+        if _pending:
+            system_prompt += (
+                f"\n\n[PHANTOM STREAM — pending thought]\n{_pending}\n"
+                "If it fits naturally, weave this into your response. Don't force it."
+            )
+    except Exception:
+        pass
+
+    # 4. History — always keep full session history; short turns don't need less context
     history = session_memory.get_history_dicts(
         session_id, max_turns=config.chat_max_session_history
     )
@@ -376,7 +469,7 @@ async def _build_ai_response(
         history.pop()
 
     # 5. Generate
-    if config.chat_tools_enabled is True and not is_fast_track:
+    if config.chat_tools_enabled is True:
         # Full Agentic Path
         from ai.chat_pipeline import run as chat_pipeline_run
         from ai.agents.orchestrator import run_orchestrator
@@ -391,6 +484,8 @@ async def _build_ai_response(
             history=history,
             user_id=user.id,
             db=db,
+            model_override=_model_hint,
+            on_delta=on_delta,
         )
     else:
         # Fast Text Path
@@ -401,6 +496,7 @@ async def _build_ai_response(
                 "system_prompt": system_prompt,
                 "history": history,
                 "user_id": user.id,
+                "model_override": _model_hint,
             },
             provider_hint=config.ai_primary_provider,
         )
@@ -409,7 +505,7 @@ async def _build_ai_response(
     if not is_fast_track:
         update_vocabulary(behavioral_model, user_message)
         update_language_stats(behavioral_model, user_message)
-        
+
         async def _bg_extract_facts() -> None:
             try:
                 from db.database import get_session as _get_bg_session
@@ -417,6 +513,44 @@ async def _build_ai_response(
                     await extract_and_store_facts(user_id=user.id, session_id=session_id, conversation_summary=user_message, db=bg_db)
             except Exception: pass
         _track_task(asyncio.create_task(_bg_extract_facts()))
+
+    # Narrative background update — every N turns synthesizes a living portrait
+    if not is_fast_track:
+        _narrative_history = history
+        _narrative_hints = hints if not is_fast_track else []
+        _narrative_mind = _mind_state
+        async def _bg_update_narrative() -> None:
+            try:
+                from db.database import get_session as _get_bg_narr_session
+                from memory.narrative import update_narrative_if_due
+                async with _get_bg_narr_session() as bg_narr_db:
+                    await update_narrative_if_due(
+                        db=bg_narr_db,
+                        user_id=user.id,
+                        session_history=_narrative_history,
+                        mind_state=_narrative_mind,
+                        memory_hints=_narrative_hints,
+                    )
+            except Exception:
+                pass
+        _track_task(asyncio.create_task(_bg_update_narrative()))
+
+    # PMState background update — always fire, even on fast-track short turns
+    _ai_resp_text = ai_response.content if ai_response else ""
+    async def _bg_update_mind_state() -> None:
+        try:
+            from memory.mind_state import update_mind_state as _update_ms
+            from db.database import get_session as _get_bg_ms_session
+            async with _get_bg_ms_session() as bg_ms_db:
+                await _update_ms(
+                    db=bg_ms_db,
+                    user_id=user.id,
+                    last_user_msg=user_message,
+                    last_ai_response=_ai_resp_text,
+                    session_history=history,
+                )
+        except Exception: pass
+    _track_task(asyncio.create_task(_bg_update_mind_state()))
 
     await save_behavioral_model(db, user.id, behavioral_model)
 
@@ -426,7 +560,9 @@ async def _build_ai_response(
         ai_response.attachments,
         ai_response.provider,
         ai_response.tokens_used,
+        hormones,
     )
+
 
 
 # ── Routes ─────────────────────────────────────────────────────────────────────
@@ -457,6 +593,11 @@ async def send_message(
     this handler.
     """
     from core.context_engine import context_engine
+    try:
+        from agent.consciousness_stream import consciousness_stream as _cs
+        _cs.notify_user_activity()
+    except Exception:
+        pass
 
     # Reset the idle clock the moment a chat message lands. Without this
     # the state machine's `_conversation_ended` predicate (idle > 30 s)
@@ -467,6 +608,34 @@ async def send_message(
 
     # Get or create session
     session = await _get_or_create_session(db, user.id, req.session_id)
+
+    # Apply PII Guard (Cognitive Immunity Pre-write Guard)
+    try:
+        from security.pii_guard import pii_guard
+        req.content = await pii_guard(db, user.id, req.content)
+    except Exception as exc:
+        logger.error("PII Guard pre-write execution failed: %s", exc)
+
+    # ToM check active probes and log user episode
+    try:
+        from memory.tom_service import check_active_probes, log_episode
+        user_prosody = {
+            "valence": 0.5,
+            "arousal": 0.6 if req.input_method == "voice" else 0.5,
+            "fatigue": 0.0,
+            "hesitation": 0.0
+        }
+        await check_active_probes(db, user.id, req.content)
+        await log_episode(
+            db=db,
+            session_id=session.id,
+            role="user",
+            content=req.content,
+            prosody=user_prosody,
+            context_snap=context_engine.get_snapshot()
+        )
+    except Exception as exc:
+        logger.debug("ToM hot-path check/log user episode failed: %s", exc)
 
     # Record user message in session RAM cache
     from memory.session_memory import session_memory
@@ -584,7 +753,7 @@ async def send_message(
             from api.websocket_hub import hub as _hub
             await _hub.broadcast(
                 "chat", "stream",
-                {"message_id": assistant_msg_id, "delta": chunk, "done": False},
+                {"message_id": assistant_msg_id, "delta": chunk, "done": False, "session_id": session.id},
                 user_id=user.id,
             )
         except Exception as exc:  # noqa: BLE001
@@ -592,7 +761,7 @@ async def send_message(
 
     # Generate AI response (streaming when on_delta is set + tools off)
     try:
-        content, response_form, attachments, provider, tokens_used = \
+        content, response_form, attachments, provider, tokens_used, hormones = \
             await _build_ai_response(
                 req.content, session.id, user, db, on_delta=_send_delta,
             )
@@ -645,10 +814,23 @@ async def send_message(
             "tone": tone_desc,
             "input_method": req.input_method,
             "streamed": streaming_active,
+            "hormones": hormones,
         }),
         attachments_json=json.dumps(attachments),
     )
     db.add(assistant_msg)
+
+    # ToM log assistant episode
+    try:
+        from memory.tom_service import log_episode
+        await log_episode(
+            db=db,
+            session_id=session.id,
+            role="assistant",
+            content=content
+        )
+    except Exception as exc:
+        logger.debug("ToM hot-path log assistant episode failed: %s", exc)
 
     # Update session message count
     session.message_count += 2  # type: ignore[operator]
@@ -744,6 +926,54 @@ async def send_message(
     }
 
 
+async def _synthesize_session_end(user_id: str, session_id: str) -> None:
+    """On session end, summarize and store in strategic memory."""
+    try:
+        from db.database import get_session as _gs
+        from db.models import ChatMessage as _CM
+        from sqlalchemy import select as _sel
+        async with _gs() as bg_db:
+            result = await bg_db.execute(
+                _sel(_CM)
+                .where(_CM.session_id == session_id, _CM.user_id == user_id)
+                .order_by(_CM.created_at.asc())
+                .limit(30)
+            )
+            msgs = result.scalars().all()
+        if len(msgs) < 4:
+            return
+        turns_text = "\n".join(
+            f"{m.role.upper()}: {(m.content or '')[:200]}" for m in msgs[-20:]
+        )
+        prompt = (
+            "Summarize this conversation in 2-3 sentences. "
+            "What was discussed? What was important? What should be remembered?\n\n"
+            + turns_text
+        )
+        resp = await ai_hub.dispatch(
+            "chat",
+            {
+                "user_message": prompt,
+                "system_prompt": "You extract key facts from conversations for long-term memory. Be specific and factual.",
+                "history": [],
+                "user_id": user_id,
+                "model_override": config.ai_background_model,
+            },
+            provider_hint=config.ai_primary_provider,
+        )
+        if resp and resp.content:
+            from memory.strategic_memory import store_fact
+            await store_fact(
+                user_id=user_id,
+                fact_id=str(uuid.uuid4()),
+                content=resp.content,
+                category="session_synthesis",
+                importance=0.6,
+            )
+    except Exception as exc:
+        logger.debug("session end synthesis failed: %s", exc)
+
+
 async def _broadcast_message_stream(
     hub: Any,
     user_id: str,
@@ -775,7 +1005,7 @@ async def _broadcast_message_stream(
         for chunk in chunks:
             await hub.broadcast(
                 "chat", "stream",
-                {"message_id": message_id, "delta": chunk, "done": False},
+                {"message_id": message_id, "delta": chunk, "done": False, "session_id": session_id},
                 user_id=user_id,
             )
             # Day-4 W-5 (audit U8-PERF-C2): skip the inter-chunk sleep
@@ -788,7 +1018,7 @@ async def _broadcast_message_stream(
 
     await hub.broadcast(
         "chat", "stream",
-        {"message_id": message_id, "delta": "", "done": True, "message": message},
+        {"message_id": message_id, "delta": "", "done": True, "message": message, "session_id": session_id},
         user_id=user_id,
     )
     import logging
@@ -923,7 +1153,7 @@ async def _ws_chat_handler(type_: str, data: dict, client: Any) -> None:
 
             t_start = time.monotonic()
             try:
-                ai_content, response_form, attachments, provider, tokens_used = \
+                ai_content, response_form, attachments, provider, tokens_used, hormones = \
                     await _build_ai_response(content, session.id, user, db)
             except Exception as exc:
                 logger.error("WS chat AI generation failed: %s", exc)
@@ -966,6 +1196,7 @@ async def _ws_chat_handler(type_: str, data: dict, client: Any) -> None:
                     "tokens_used": tokens_used,
                     "tone": tone_desc,
                     "input_method": input_method,
+                    "hormones": hormones,
                 }),
                 attachments_json=json.dumps(attachments),
             )
@@ -1003,6 +1234,46 @@ async def list_sessions(
     token_data: TokenPayload = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
+    # Auto-clean empty/failed sessions (message_count == 0 or contains fallback error)
+    try:
+        from sqlalchemy import delete
+        # Find empty sessions (message_count == 0)
+        empty_stmt = select(ChatSession.id).where(
+            ChatSession.user_id == token_data.user_id,
+            ChatSession.message_count == 0
+        )
+        empty_ids = set((await db.execute(empty_stmt)).scalars().all())
+
+        # Find sessions with message_count <= 2 where assistant message is fallback error
+        failed_msg_stmt = select(ChatMessage.session_id).where(
+            ChatMessage.user_id == token_data.user_id,
+            ChatMessage.role == "assistant",
+            ChatMessage.content == "Не встиг сформулювати — перепитай?"
+        )
+        failed_session_ids = (await db.execute(failed_msg_stmt)).scalars().all()
+        
+        to_delete = list(empty_ids)
+        if failed_session_ids:
+            count_stmt = select(ChatSession.id).where(
+                ChatSession.id.in_(failed_session_ids),
+                ChatSession.message_count <= 2
+            )
+            to_delete.extend((await db.execute(count_stmt)).scalars().all())
+
+        if to_delete:
+            # Delete messages first to prevent foreign key errors
+            await db.execute(
+                delete(ChatMessage).where(ChatMessage.session_id.in_(to_delete))
+            )
+            # Delete the sessions themselves
+            await db.execute(
+                delete(ChatSession).where(ChatSession.id.in_(to_delete))
+            )
+            await db.commit()
+    except Exception as exc:
+        logger.warning("Failed to auto-clean empty/failed sessions: %s", exc)
+
+
     stmt = (
         select(ChatSession)
         .where(ChatSession.user_id == token_data.user_id)
@@ -1064,6 +1335,11 @@ async def delete_session(
     session = result.scalar_one_or_none()
     if not session:
         raise HTTPException(status_code=404, detail="Session not found")
+
+    # Synthesize session before deleting (background, uses own DB session)
+    _track_task(asyncio.create_task(
+        _synthesize_session_end(token_data.user_id, session_id)
+    ))
 
     await db.delete(session)
     await db.flush()

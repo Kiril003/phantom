@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Maximize2, Minimize2, Download, X, Check } from 'lucide-react';
 import type { ArtifactCapability, ArtifactPhase } from '@shared/types/chat';
 import { ArtifactBroker } from '../artifactBroker';
 import { wsClient } from '../../../../services/websocket';
@@ -42,6 +43,31 @@ export function SceneArtifactPanel({ data }: Props) {
   const [alive, setAlive] = useState(true);
   const [failed, setFailed] = useState(false);
   const [expanded, setExpanded] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  const handleSave = async () => {
+    try {
+      await fetch('/api/v1/studio/agents', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({
+          name: data.title || 'Артефакт',
+          cards: [{
+            kind: 'artifact',
+            category: 'output',
+            title: data.title,
+            config: { html: data.html, capabilities: data.capabilities }
+          }],
+        }),
+      });
+      setSaved(true);
+      setTimeout(() => setSaved(false), 1500);
+    } catch (err) {
+      // eslint-disable-next-line no-console
+      console.error(err);
+    }
+  };
 
   // Progressive render state. null = no progress events received yet →
   // render committed data.html exactly as before (back-compat invariant).
@@ -111,29 +137,32 @@ export function SceneArtifactPanel({ data }: Props) {
             ? PHASE_LABELS[buildPhase]
             : (data.title || 'Артефакт')}
         </span>
-        <div className="flex gap-3">
+        <div className="flex gap-2">
           {!isBuilding && (
             <button
               aria-label={expanded ? 'згорнути артефакт' : 'розгорнути артефакт'}
               onClick={() => setExpanded((v) => !v)}
+              className="artifact-control-btn"
             >
-              {expanded ? '⤡' : '⤢'}
+              {expanded ? <Minimize2 size={13} strokeWidth={2} /> : <Maximize2 size={13} strokeWidth={2} />}
             </button>
           )}
           {!isBuilding && (
-            <button aria-label="зберегти артефакт" onClick={() => {
-              void fetch('/api/v1/studio/agents', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                credentials: 'include',
-                body: JSON.stringify({
-                  name: data.title || 'Артефакт',
-                  cards: [{ kind: 'artifact', category: 'output', title: data.title, config: { html: data.html, capabilities: data.capabilities } }],
-                }),
-              });
-            }}>⭳</button>
+            <button
+              aria-label="зберегти артефакт"
+              onClick={handleSave}
+              className={`artifact-control-btn ${saved ? 'success' : ''}`}
+            >
+              {saved ? <Check size={13} strokeWidth={2.5} /> : <Download size={13} strokeWidth={2} />}
+            </button>
           )}
-          <button aria-label="зупинити артефакт" onClick={() => setAlive(false)}>✕</button>
+          <button
+            aria-label="зупинити артефакт"
+            onClick={() => setAlive(false)}
+            className="artifact-control-btn alert"
+          >
+            <X size={13} strokeWidth={2} />
+          </button>
         </div>
       </div>
 

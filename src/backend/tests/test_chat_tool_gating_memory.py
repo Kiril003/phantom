@@ -51,6 +51,17 @@ async def test_gemini_plain_chat_does_not_advertise_response_tools_when_disabled
     fake_types.ToolConfig = lambda **kw: kw  # type: ignore[attr-defined]
     fake_types.FunctionCallingConfig = lambda **kw: kw  # type: ignore[attr-defined]
     fake_types.SafetySetting = lambda **kw: kw  # type: ignore[attr-defined]
+    fake_types.FunctionDeclaration = lambda **kw: kw  # type: ignore[attr-defined]
+    fake_types.Tool = lambda **kw: kw  # type: ignore[attr-defined]
+    fake_types.Schema = lambda **kw: kw  # type: ignore[attr-defined]
+    class FakeType:
+        STRING = "STRING"
+        INTEGER = "INTEGER"
+        NUMBER = "NUMBER"
+        BOOLEAN = "BOOLEAN"
+        ARRAY = "ARRAY"
+        OBJECT = "OBJECT"
+    fake_types.Type = FakeType  # type: ignore[attr-defined]
     fake_genai = _pytypes.ModuleType("google.genai")
     fake_genai.types = fake_types  # type: ignore[attr-defined]
     fake_google = sys.modules.get("google") or _pytypes.ModuleType("google")
@@ -62,6 +73,7 @@ async def test_gemini_plain_chat_does_not_advertise_response_tools_when_disabled
     models = _CapturingAioModels()
     monkeypatch.setattr(gp, "_get_client", lambda: _FakeClient(models))
     monkeypatch.setattr(config, "chat_tools_enabled", False)
+    monkeypatch.setattr(config, "chat_response_widgets_enabled", False)
 
     result = await gp.GeminiProvider().generate(
         "привіт",

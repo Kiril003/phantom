@@ -83,7 +83,7 @@ class TestAuditTaskStatus:
         from agent.kernel.audit import create_task_row, task_status, update_task_status
 
         tid = f"t1-trip-{uuid.uuid4().hex[:8]}"
-        await create_task_row(tid, goal="trip", track="foreground")
+        await create_task_row(auth_root_user.id, tid, goal="trip", track="foreground")
         # Default status from create_task_row is "planning" → mapped
         # to "running" by task_status.
         assert await task_status(tid) == "running"
@@ -109,7 +109,7 @@ class TestRecoverStaleLeases:
 
         # Seed an AgentTask in a terminal state.
         tid = f"t1-stale-done-{uuid.uuid4().hex[:8]}"
-        await create_task_row(tid, goal="stale_done", track="foreground")
+        await create_task_row(auth_root_user.id, tid, goal="stale_done", track="foreground")
         await update_task_status(tid, "done", finished=True)
 
         # Seed a StandingOrder with a stale lease (>300s old).
@@ -193,7 +193,7 @@ class TestRecoverStaleLeases:
         from db.models import StandingOrder
 
         tid = f"t1-long-{uuid.uuid4().hex[:8]}"
-        await create_task_row(tid, goal="long", track="foreground")
+        await create_task_row(auth_root_user.id, tid, goal="long", track="foreground")
         # status default "planning" → mapped to "running" by task_status.
 
         async with get_session() as db:

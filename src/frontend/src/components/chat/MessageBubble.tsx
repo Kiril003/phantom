@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { motion } from 'framer-motion';
+import { AnimatePresence, motion } from 'framer-motion';
 import { User, Sparkles, Mic, Hash, Info, Copy, Check } from 'lucide-react';
 import type { ChatMessage } from '@shared/types';
 import { ResponseRenderer } from './ResponseRenderer';
@@ -23,6 +23,17 @@ function formatTime(iso: string): string {
   }
 }
 
+function getHormoneGlowClass(hormones?: { cortisol: number; dopamine: number; oxytocin: number }): string {
+  if (!hormones) return '';
+  const { cortisol, dopamine, oxytocin } = hormones;
+  const maxVal = Math.max(cortisol, dopamine, oxytocin);
+  if (maxVal < 0.3) return ''; // too low to emit a visual aura
+  if (maxVal === cortisol && cortisol > 0.4) return 'glow-cortisol';
+  if (maxVal === dopamine && dopamine > 0.45) return 'glow-dopamine';
+  if (maxVal === oxytocin && oxytocin > 0.45) return 'glow-oxytocin';
+  return '';
+}
+
 export function MessageBubble({ message, streaming = false, compact = false }: MessageBubbleProps) {
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
@@ -31,6 +42,7 @@ export function MessageBubble({ message, streaming = false, compact = false }: M
   const provider = (meta as { ai_provider?: string }).ai_provider;
   const latency = (meta as { latency_ms?: number }).latency_ms;
   const tokens = (meta as { tokens_used?: number }).tokens_used;
+  const [showHormones, setShowHormones] = useState(false);
 
   // Day-5 D5-DSGN5 — copy-to-clipboard. Touch-device-friendly: tap
   // toggles to a "Copied" state for ~1.4s then resets. We copy the
@@ -107,6 +119,7 @@ export function MessageBubble({ message, streaming = false, compact = false }: M
 
   return (
     <motion.div
+      data-testid="message-bubble-root"
       className={`flex items-start gap-3 ${isUser ? 'self-end flex-row-reverse' : 'self-start'}`}
       style={{ maxWidth: '82%' }}
       initial={{ opacity: 0, y: 6 }}
@@ -134,7 +147,7 @@ export function MessageBubble({ message, streaming = false, compact = false }: M
       <div className="flex flex-col gap-1 min-w-0 group">
         {/* Bubble */}
         <div
-          className={`relative ${isUser ? 'glass-subtle' : 'glass-panel'}`}
+          className={`relative ${isUser ? 'glass-subtle' : 'glass-panel'} ${!isUser ? getHormoneGlowClass((meta as any).hormones) : ''}`}
           style={{
             padding: '12px 16px',
             borderRadius: 18,
@@ -253,6 +266,71 @@ export function MessageBubble({ message, streaming = false, compact = false }: M
                 />
                 {provider}
               </span>
+            )}
+            {!isUser && (meta as any).hormones && (
+              <div className="relative inline-flex items-center">
+                <button
+                  type="button"
+                  onClick={() => setShowHormones(!showHormones)}
+                  onMouseEnter={() => setShowHormones(true)}
+                  onMouseLeave={() => setShowHormones(false)}
+                  className="flex items-center gap-0.5 px-1 py-0.5 rounded bg-white/[0.04] border border-white/[0.06] hover:bg-white/[0.08] transition-colors shrink-0"
+                  style={{ minWidth: 0, minHeight: 0, height: 16 }}
+                  title="Ендокринний відбиток"
+                >
+                  <span
+                    className="block w-1 h-3 rounded-full"
+                    style={{
+                      background: 'var(--coral)',
+                      opacity: 0.3 + ((meta as any).hormones.cortisol ?? 0) * 0.7,
+                      boxShadow: ((meta as any).hormones.cortisol ?? 0) > 0.5 ? '0 0 4px var(--coral)' : 'none',
+                    }}
+                  />
+                  <span
+                    className="block w-1 h-3 rounded-full"
+                    style={{
+                      background: 'var(--primary)',
+                      opacity: 0.3 + ((meta as any).hormones.dopamine ?? 0) * 0.7,
+                      boxShadow: ((meta as any).hormones.dopamine ?? 0) > 0.5 ? '0 0 4px var(--primary)' : 'none',
+                    }}
+                  />
+                  <span
+                    className="block w-1 h-3 rounded-full"
+                    style={{
+                      background: '#ec4899',
+                      opacity: 0.3 + ((meta as any).hormones.oxytocin ?? 0) * 0.7,
+                      boxShadow: ((meta as any).hormones.oxytocin ?? 0) > 0.5 ? '0 0 4px #ec4899' : 'none',
+                    }}
+                  />
+                </button>
+                <AnimatePresence>
+                  {showHormones && (
+                    <motion.div
+                      className="absolute bottom-5 left-0 z-30 flex flex-col gap-1 p-2 rounded-lg border bg-black/90 border-white/[0.08] backdrop-blur text-[10px] text-neutral-300 pointer-events-none"
+                      style={{ width: 140 }}
+                      initial={{ opacity: 0, y: 2 }}
+                      animate={{ opacity: 1, y: 0 }}
+                      exit={{ opacity: 0 }}
+                    >
+                      <div className="font-bold border-b border-white/[0.06] pb-1 mb-1 text-white uppercase tracking-wider text-[9px]">
+                        Хімія Синтезу
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span>Кортизол (стрес):</span>
+                        <span className="font-bold text-red-400">{Math.round(((meta as any).hormones.cortisol ?? 0) * 100)}%</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span>Дофамін (драйв):</span>
+                        <span className="font-bold text-amber-400">{Math.round(((meta as any).hormones.dopamine ?? 0) * 100)}%</span>
+                      </div>
+                      <div className="flex justify-between items-center">
+                        <span>Окситоцин (довіра):</span>
+                        <span className="font-bold text-pink-400">{Math.round(((meta as any).hormones.oxytocin ?? 0) * 100)}%</span>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
             )}
             {/* Phase 27-e — only surface latency when it's actually
                 noteworthy (>100ms). Green-path responses run sub-100

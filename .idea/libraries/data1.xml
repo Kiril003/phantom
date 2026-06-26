@@ -1,0 +1,12 @@
+<component name="libraryTable">
+  <library name="data1">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/src/backend/.venv/lib/python3.12/site-packages/pandas/tests/io/parser/data/utf32_ex_small.zip!/" />
+      <root url="jar://$PROJECT_DIR$/src/backend/.venv/lib/python3.12/site-packages/pandas/tests/io/parser/data/salaries.csv.zip!/" />
+      <root url="jar://$PROJECT_DIR$/src/backend/.venv/lib/python3.12/site-packages/pandas/tests/io/parser/data/utf8_ex_small.zip!/" />
+      <root url="jar://$PROJECT_DIR$/src/backend/.venv/lib/python3.12/site-packages/pandas/tests/io/parser/data/utf16_ex_small.zip!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

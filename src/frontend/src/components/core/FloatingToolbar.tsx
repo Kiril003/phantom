@@ -4,6 +4,8 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { useSystemStore } from '../../stores/systemStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useUIStore, type OverlayName } from '../../stores/uiStore';
+import { useSettingsStore } from '../../stores/settingsStore';
+import { settingsApi } from '../../services/api';
 import { SystemState } from '@shared/types';
 import { EASE_PHANTOM } from '../../styles/motion';
 import { ChromeHandle } from './ChromeHandle';
@@ -73,6 +75,33 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
   // Phase 28 — Will Engine.
   const willOpen = useUIStore((s) => s.willOpen);
   const setWillOpen = useUIStore((s) => s.setWillOpen);
+
+  const voiceMode = useSettingsStore(
+    (s) => (s.values.voice_mode as 'off' | 'continuous' | 'wake_word' | undefined) ?? 'off',
+  );
+  const applyRemote = useSettingsStore((s) => s.applyRemote);
+
+  const cycleVoiceMode = () => {
+    const next: 'off' | 'continuous' | 'wake_word' =
+      voiceMode === 'off'
+        ? 'continuous'
+        : voiceMode === 'continuous'
+          ? 'wake_word'
+          : 'off';
+    const previous = voiceMode;
+    applyRemote('voice_mode', next);
+    void settingsApi
+      .set('voice_mode', next)
+      .catch(() => applyRemote('voice_mode', previous));
+  };
+
+  const voiceModeActive = voiceMode === 'continuous' || voiceMode === 'wake_word';
+  const voiceModeTooltip =
+    voiceMode === 'continuous'
+      ? 'Голос: постійний (тап → wake-фраза)'
+      : voiceMode === 'wake_word'
+        ? 'Голос: wake-фраза (тап → вимкнути)'
+        : 'Голос: вимкнено (тап → постійний)';
 
   const isOverlayOpen = (name: OverlayName) => windows[name].open && !windows[name].minimized;
   const isRoot = user?.role === 'ROOT';
@@ -211,6 +240,17 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
       active: willOpen,
       onClick: () => {
         setWillOpen(!willOpen);
+        setMoreMenuOpen(false);
+      },
+    },
+    {
+      id: 'always-on',
+      icon: 'settings_voice',
+      label: 'Voice mode',
+      tooltip: voiceModeTooltip,
+      active: voiceModeActive,
+      onClick: () => {
+        cycleVoiceMode();
         setMoreMenuOpen(false);
       },
     },
@@ -401,32 +441,23 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
                   onPointerLeave={onHomePointerUp}
                   onClick={onHomeClick}
                 />
-                <AnimatePresence>
-                  {showMoreHint && !moreMenuOpen && (
-                    <motion.span
-                      key="more-hint"
-                      initial={{ opacity: 0, scale: 0.6 }}
-                      animate={{ opacity: [0.3, 0.9, 0.3], scale: 1 }}
-                      exit={{ opacity: 0, scale: 0.6 }}
-                      transition={{
-                        opacity: { duration: 1.6, repeat: Infinity, ease: 'easeInOut' },
-                        scale: { duration: 0.18 },
-                      }}
-                      aria-hidden
-                      style={{
-                        position: 'absolute',
-                        right: 4,
-                        bottom: 4,
-                        width: 6,
-                        height: 6,
-                        borderRadius: 999,
-                        background: 'rgba(244,175,37,0.95)',
-                        boxShadow: '0 0 6px rgba(244,175,37,0.85)',
-                        pointerEvents: 'none',
-                      }}
-                    />
-                  )}
-                </AnimatePresence>
+                {showMoreHint && !moreMenuOpen && (
+                  <span
+                    aria-hidden
+                    className="animate-pulse"
+                    style={{
+                      position: 'absolute',
+                      right: 4,
+                      bottom: 4,
+                      width: 6,
+                      height: 6,
+                      borderRadius: 999,
+                      background: 'rgba(244,175,37,0.95)',
+                      boxShadow: '0 0 6px rgba(244,175,37,0.85)',
+                      pointerEvents: 'none',
+                    }}
+                  />
+                )}
               </div>
             );
           }

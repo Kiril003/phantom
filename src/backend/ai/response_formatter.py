@@ -195,31 +195,24 @@ RESPONSE_FORM_TOOLS: list[dict[str, Any]] = [
     {
         "name": "respond_artifact",
         "description": (
-            "Інтерактивний віджет під екран (A2UI формат). "
-            "Використовуй ЗАВЖДИ коли користувач просить віджет, UI, "
-            "дашборд, або інтерфейс керування. НІКОЛИ не вставляй HTML. "
-            "Генеруй декларативний JSON-дерево (A2UI Protocol)."
+            "Інтерактивний віджет, UI компонент, або міні-аплікація (React + Tailwind). "
+            "Використовуй ЗАВЖДИ коли користувач просить віджет, дашборд, калькулятор, "
+            "графік зі складною логікою або будь-який інтерактивний інтерфейс. "
+            "Генеруй ВЕСЬ React-код як один суцільний рядок. "
+            "Код МАЄ мати дефолтний експорт (export default function App() {...}). "
+            "Використовуй Tailwind CSS (класи) для стилізації. "
+            "Можна використовувати lucide-react, recharts, framer-motion."
         ),
         "parameters": {
             "type": "object",
             "properties": {
                 "title": {"type": "string", "description": "Назва для шапки віджета"},
-                "components": {
-                    "type": "array",
-                    "description": (
-                        "Список компонентів інтерфейсу (плоский масив). "
-                        "Кожен компонент має type (text, button, card, input, flex), "
-                        "props (властивості) та опціональний children (масив id). "
-                        "Приклад: [{'id': 'c1', 'type': 'card', 'props': {'title': 'Main'}, 'children': ['t1']}]"
-                    ),
-                    "items": {"type": "object"}
-                },
-                "root_id": {
+                "code": {
                     "type": "string",
-                    "description": "ID кореневого компонента (з масиву components), з якого починається рендер."
+                    "description": "Повний вихідний код React-компонента (JSX/TSX)."
                 }
             },
-            "required": ["title", "components", "root_id"],
+            "required": ["title", "code"],
         },
     },
     {
@@ -282,7 +275,7 @@ _FORM_MAP: dict[str, str] = {
     "respond_alarm":    "text",
     "respond_timer":    "text",
     "respond_calendar": "text",
-    "respond_artifact": "artifact",
+    "respond_artifact": "react_artifact",
 }
 
 
@@ -314,7 +307,7 @@ _FORM_TO_SCENE_KIND: dict[str, str] = {
     "metric_cards": "list",
     "chart": "chart",
     "diagram": "diagram",
-    "artifact": "artifact",
+    "react_artifact": "react_artifact",
 }
 
 _ARTIFACT_CAPS = frozenset(
@@ -529,11 +522,11 @@ def _scene_diagram_panel(idx: int, raw: dict[str, Any]) -> dict[str, Any]:
 def _scene_artifact_panel(idx: int, raw: dict[str, Any]) -> dict[str, Any]:
     return {
         "id": f"p{idx}",
-        "kind": "artifact",
+        "kind": "react_artifact",
         "data": {
-            "html": str(raw.get("html", "")),
+            "code": str(raw.get("code", "")),
             "title": str(raw.get("title", "")),
-            "capabilities": raw.get("capabilities", []),
+            "dependencies": raw.get("dependencies", {}),
         },
     }
 
@@ -627,7 +620,7 @@ def build_scene_envelope(
             panels.append(_scene_diagram_panel(idx, data))
             idx += 1
             break
-    elif kind == "artifact":
+    elif kind == "react_artifact":
         for att in attachments:
             if isinstance(att, dict) and att.get("type") == "artifact_data":
                 data = att.get("data") if isinstance(att.get("data"), dict) else {}
@@ -734,11 +727,11 @@ def parse_function_call(
         })
 
     elif fn_name == "respond_artifact":
-        components = fn_args.get("components", [])
-        root_id = str(fn_args.get("root_id", ""))
+        code = str(fn_args.get("code", ""))
         title = str(fn_args.get("title", ""))
+        dependencies = fn_args.get("dependencies", {})
         
-        bad = not config.chat_artifacts_enabled or not isinstance(components, list)
+        bad = not config.chat_artifacts_enabled or not code
         
         if bad:
             response_form = "text"
@@ -746,10 +739,9 @@ def parse_function_call(
             attachments.append({
                 "type": "artifact_data",
                 "data": {
-                    "a2ui": True,
                     "title": title,
-                    "components": components,
-                    "root_id": root_id,
+                    "code": code,
+                    "dependencies": dependencies,
                 },
             })
 

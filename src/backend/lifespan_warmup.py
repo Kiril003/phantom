@@ -65,6 +65,14 @@ async def _lane_chroma_eager() -> None:
     of the LB rotation."""
     try:
         from memory.strategic_memory import init_chroma_eager
+        from memory.migrate_chroma_v1 import migrate_old_collections
+        from db.database import get_session
+
+        # Run ChromaDB migrations first
+        async with get_session() as db:
+            migration_stats = await migrate_old_collections(db)
+            logger.info("ChromaDB migration completed on startup: %s", migration_stats)
+
         chroma_init = await init_chroma_eager()
         if chroma_init.get("ok") is False:
             logger.warning("Chroma eager init failed: %s", chroma_init.get("error"))
@@ -76,7 +84,7 @@ async def _lane_chroma_eager() -> None:
                 int(chroma_init.get("elapsed_ms", 0)),
             )
     except Exception as exc:  # noqa: BLE001
-        logger.warning("Chroma eager init skipped: %s", exc)
+        logger.warning("Chroma eager init/migration skipped: %s", exc)
         lifespan_g2_failures_total.inc(lane="chroma_eager")
 
 
@@ -136,10 +144,8 @@ async def _lane_voice_preload() -> None:
     cold connect if this lane skipped — first WS hit just waits longer."""
     try:
         from voice.pipeline import preload_voice_models
-        silero_path = (
-            Path(__file__).resolve().parent
-            / "voice" / "models" / "silero-vad" / "silero_vad.onnx"
-        )
+        from paths import resolve_data_dir
+        silero_path = resolve_data_dir("voice_models") / "silero-vad" / "silero_vad.onnx"
         statuses = await asyncio.to_thread(
             preload_voice_models,
             str(silero_path) if silero_path.is_file() else None,

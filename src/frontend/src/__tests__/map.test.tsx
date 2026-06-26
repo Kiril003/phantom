@@ -93,7 +93,7 @@ vi.mock('maplibre-gl', () => {
     }
   }
   class FakeMarker {
-    constructor(public opts: { element?: HTMLElement } = {}) {}
+    constructor(public opts: { element?: HTMLElement } = {}) { }
     setLngLat() {
       return this;
     }
@@ -309,17 +309,17 @@ describe('TacticalMap', () => {
     resetStores();
     // Stub map API calls
     useMapStore.setState({
-      loadWardriving: vi.fn(async () => {}),
-      loadHeatmap: vi.fn(async () => {}),
-      loadPOIs: vi.fn(async () => {}),
-      loadTrack: vi.fn(async () => {}),
+      loadWardriving: vi.fn(async () => { }),
+      loadHeatmap: vi.fn(async () => { }),
+      loadPOIs: vi.fn(async () => { }),
+      loadTrack: vi.fn(async () => { }),
       savePOI: vi.fn(async () => null),
     });
   });
 
   it('mounts and renders layer panel', async () => {
-    const { TacticalMap } = await import('../components/map/TacticalMap');
-    render(<TacticalMap />);
+    const { OmniMap } = await import('../components/map/OmniMap');
+    render(<OmniMap bridgeAgent={false} />);
     expect(screen.getByLabelText('Tactical map')).toBeDefined();
     expect(screen.getByLabelText('Base')).toBeDefined();
     expect(screen.getByLabelText('Wardriving')).toBeDefined();
@@ -327,8 +327,8 @@ describe('TacticalMap', () => {
   });
 
   it('layer toggle updates store', async () => {
-    const { TacticalMap } = await import('../components/map/TacticalMap');
-    render(<TacticalMap />);
+    const { OmniMap } = await import('../components/map/OmniMap');
+    render(<OmniMap bridgeAgent={false} />);
     const heatBtn = screen.getByLabelText('Heatmap');
     expect(useMapStore.getState().layers.heatmap).toBe(false);
     fireEvent.click(heatBtn);
@@ -355,8 +355,8 @@ describe('TacticalMap', () => {
         system: { state: SystemState.FOCUS, uptime_s: 0, cpu_percent: 0, ram_percent: 0, disk_percent: 0, wifi_connected: false, internet_available: false, ai_provider: 'gemini', stt_engine: 'whisper' },
       },
     });
-    const { TacticalMap } = await import('../components/map/TacticalMap');
-    render(<TacticalMap />);
+    const { OmniMap } = await import('../components/map/OmniMap');
+    render(<OmniMap bridgeAgent={false} />);
     const btn = screen.getByLabelText('Centre on operator') as HTMLButtonElement;
     expect(btn.disabled).toBe(true);
   });
@@ -364,8 +364,8 @@ describe('TacticalMap', () => {
   it('drop POI button calls savePOI (after confirm)', async () => {
     const saveSpy = vi.fn(async () => null);
     useMapStore.setState({ savePOI: saveSpy });
-    const { TacticalMap } = await import('../components/map/TacticalMap');
-    render(<TacticalMap />);
+    const { OmniMap } = await import('../components/map/OmniMap');
+    render(<OmniMap bridgeAgent={false} />);
     await waitFor(() => screen.getByLabelText('Drop POI'));
     act(() => {
       fireEvent.click(screen.getByLabelText('Drop POI'));
@@ -383,23 +383,23 @@ describe('TacticalMap', () => {
   });
 
   it('shows Live status chip when not loading', async () => {
-    const { TacticalMap } = await import('../components/map/TacticalMap');
-    render(<TacticalMap />);
+    const { OmniMap } = await import('../components/map/OmniMap');
+    render(<OmniMap bridgeAgent={false} />);
     expect(screen.getByText('Live')).toBeDefined();
   });
 
   it('shows Syncing status chip when loading', async () => {
     useMapStore.setState({ loading: true });
-    const { TacticalMap } = await import('../components/map/TacticalMap');
-    render(<TacticalMap />);
+    const { OmniMap } = await import('../components/map/OmniMap');
+    render(<OmniMap bridgeAgent={false} />);
     expect(screen.getByText('Syncing')).toBeDefined();
   });
 
   it('renders marker card when selection is set', async () => {
     const poi = makePOI({ name: 'OpsCenter', category: 'intel' });
     useMapStore.setState({ selection: { kind: 'poi', poi } });
-    const { TacticalMap } = await import('../components/map/TacticalMap');
-    render(<TacticalMap />);
+    const { OmniMap } = await import('../components/map/OmniMap');
+    render(<OmniMap bridgeAgent={false} />);
     expect(screen.getByText('OpsCenter')).toBeDefined();
   });
 });

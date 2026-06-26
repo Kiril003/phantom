@@ -1,0 +1,9 @@
+<component name="libraryTable">
+  <library name="tsframe_v012.json">
+    <CLASSES>
+      <root url="jar://$PROJECT_DIR$/src/backend/.venv/lib64/python3.12/site-packages/pandas/tests/io/json/data/tsframe_v012.json.zip!/" />
+    </CLASSES>
+    <JAVADOC />
+    <SOURCES />
+  </library>
+</component>

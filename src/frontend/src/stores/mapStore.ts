@@ -21,6 +21,7 @@ export type MapSelection =
   | { kind: 'poi'; poi: MapPOI }
   | { kind: 'wardriving'; record: WardrivingRecord }
   | { kind: 'fact'; fact: GeoTaggedFact }
+  | { kind: 'geofence'; geofence: any }
   | null;
 
 interface MapStoreState {
@@ -29,12 +30,26 @@ interface MapStoreState {
   pois: MapPOI[];
   track: TrackPoint[];
   geoTaggedFacts: GeoTaggedFact[];
+  geofences: any[];
   center: [number, number] | null;
   zoom: number;
   layers: Record<MapLayerKey, boolean>;
   selection: MapSelection;
   loading: boolean;
   error: string | null;
+  /** Phase 24-H — Time Machine date (ISO string). Defaults to 'today'. */
+  temporalDate: string;
+  
+  /** Phase 24-PRE — Tactical HUD info synced from context. */
+  tactical: {
+    lat: number | null;
+    lon: number | null;
+    bearing: number;
+    satellites: number;
+    speed: number;
+    fix: boolean;
+    source: string;
+  };
 
   setWardrivingRecords: (records: WardrivingRecord[]) => void;
   appendWardrivingRecords: (records: WardrivingRecord[]) => void;
@@ -44,8 +59,11 @@ interface MapStoreState {
   removePOI: (id: string) => void;
   setTrack: (points: TrackPoint[]) => void;
   appendTrackPoint: (point: TrackPoint) => void;
+  setGeofences: (gfs: any[]) => void;
   setCenter: (center: [number, number]) => void;
   setZoom: (zoom: number) => void;
+  setTemporalDate: (date: string) => void;
+  setTactical: (info: Partial<MapStoreState['tactical']>) => void;
 
   searchQuery: string;
   setSearchQuery: (q: string) => void;
@@ -62,6 +80,7 @@ interface MapStoreState {
   loadPOIs: (category?: string) => Promise<void>;
   loadTrack: (hours?: number) => Promise<void>;
   loadGeoTaggedFacts: () => Promise<void>;
+  loadGeofences: () => Promise<void>;
   savePOI: (poi: Omit<MapPOI, 'id' | 'created_at' | 'user_id'>) => Promise<MapPOI | null>;
   deletePOI: (id: string) => Promise<boolean>;
 }
@@ -82,12 +101,23 @@ export const useMapStore = create<MapStoreState>((set, get) => ({
   pois: [],
   track: [],
   geoTaggedFacts: [],
+  geofences: [],
   center: null,
   zoom: 15,
   layers: DEFAULT_LAYERS,
   selection: null,
   loading: false,
   error: null,
+  temporalDate: new Date().toISOString().split('T')[0],
+  tactical: {
+    lat: null,
+    lon: null,
+    bearing: 0,
+    satellites: 0,
+    speed: 0,
+    fix: false,
+    source: 'none',
+  },
 
   setWardrivingRecords: (records) => set({ wardrivingRecords: records }),
   appendWardrivingRecords: (records) =>
@@ -105,8 +135,11 @@ export const useMapStore = create<MapStoreState>((set, get) => ({
   setTrack: (points) => set({ track: points }),
   appendTrackPoint: (point) =>
     set((s) => ({ track: [...s.track.slice(-(MAX_TRACK_HISTORY - 1)), point] })),
+  setGeofences: (gfs) => set({ geofences: gfs }),
   setCenter: (center) => set({ center }),
   setZoom: (zoom) => set({ zoom }),
+  setTemporalDate: (date) => set({ temporalDate: date }),
+  setTactical: (info) => set((s) => ({ tactical: { ...s.tactical, ...info } })),
 
   searchQuery: '',
   setSearchQuery: (q) => set({ searchQuery: q }),
@@ -179,6 +212,15 @@ export const useMapStore = create<MapStoreState>((set, get) => ({
     } catch (err) {
       // Non-critical — silently leave previous facts in place.
       console.warn('Failed to load geo-tagged facts:', err);
+    }
+  },
+
+  loadGeofences: async () => {
+    try {
+      const data = await mapApi.getGeofences();
+      set({ geofences: data });
+    } catch (err) {
+      console.warn('Failed to load geofences:', err);
     }
   },
 

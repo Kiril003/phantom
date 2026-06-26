@@ -64,7 +64,7 @@ export interface StateMessage extends WSMessage {
 export interface ChatStreamMessage extends WSMessage {
   channel: 'chat';
   type: 'stream';
-  data: { message_id: string; delta: string; done: boolean; message?: ChatMessage };
+  data: { message_id: string; delta: string; done: boolean; session_id?: string; message?: ChatMessage };
 }
 
 export interface VoiceMessage extends WSMessage {

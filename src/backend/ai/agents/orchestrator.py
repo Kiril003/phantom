@@ -11,7 +11,9 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import re
 import secrets
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Awaitable, Callable
 
@@ -24,6 +26,84 @@ from ai.agents.sub_agent import run_leaf, LeafResult
 from ai.agents.merge import fold
 
 logger = logging.getLogger(__name__)
+
+_VOWELS = set("aeiouаеєиіїоуюяАЕЄИІЇОУЮЯ")
+_GREETINGS = {
+    "привіт", "здоров", "хай", "ку", "вітаю", "добрий день", "добрий вечір",
+    "доброго ранку", "hi", "hello", "hey", "yo", "morning", "evening",
+    "як справи", "як ти", "що робиш", "how are you", "what's up", "як воно",
+    "ok", "ок", "окей", "добре", "ясно", "зрозумів", "зрозуміла",
+    # Emotional / social
+    "дякую", "дякую велике", "спасибі", "спасибо", "thanks", "thank you",
+    "чудово", "відмінно", "супер", "круто", "клас", "класно", "чудесно",
+    "ти молодець", "молодець", "добре зробив", "добре зроблено",
+    # Simple confirmations
+    "так", "ні", "ага", "угу", "неа", "nope", "nah", "yeah", "yep", "sure",
+    # Opinion prompts too short to need tools
+    "що думаєш", "як думаєш", "твоя думка",
+}
+
+# Zero-latency regex patterns for factual time/date queries
+_TIME_QUERY_RE = re.compile(
+    r"(котра|яка)\s+(година|час|пора)|скільки\s+(час|години|зараз)"
+    r"|(котра|яка)\s+зараз|(which|what)\s+time",
+    re.I,
+)
+_DATE_QUERY_RE = re.compile(
+    r"(який|яке|яка)\s+(день|дата|число|тиждень|місяць|рік)"
+    r"|сьогодні\s+(що|яке|яка)|яке\s+сьогодні"
+    r"|today.*date|what.*date.*today",
+    re.I,
+)
+
+_MONTHS_UA = [
+    "січня", "лютого", "березня", "квітня", "травня", "червня",
+    "липня", "серпня", "вересня", "жовтня", "листопада", "грудня",
+]
+
+
+def _is_conversational(text: str) -> bool:
+    """True → skip orchestrator, go straight to chat_pipeline."""
+    stripped = text.strip()
+    if len(stripped) <= 15:
+        return True
+    if len(stripped) <= 20 and " " not in stripped:
+        return True
+    lower = stripped.lower().strip("?!. ")
+    if lower in _GREETINGS:
+        return True
+    # Emotional / social messages (longer variants not in _GREETINGS exact set)
+    if lower.startswith(("дякую", "спасибі", "дуже дякую", "молодець", "чудово")):
+        return True
+    # Typo/random chars: short token with very low vowel ratio
+    first_token = stripped.split()[0] if stripped.split() else stripped
+    if len(first_token) >= 3:
+        vowel_count = sum(1 for c in first_token if c in _VOWELS)
+        if vowel_count == 0:
+            return True
+        ratio = vowel_count / len(first_token)
+        if ratio < 0.1 and len(first_token) <= 8:
+            return True
+    return False
+
+
+def _build_time_response() -> Any:
+    """Pre-built AIResponse for time queries — zero LLM calls."""
+    from ai.provider import AIResponse
+    now = datetime.now(tz=timezone.utc)
+    time_str = now.strftime("%H:%M")
+    return AIResponse(content=f"Зараз {time_str} (UTC).", provider="system", tokens_used=0)
+
+
+def _build_date_response() -> Any:
+    """Pre-built AIResponse for date queries — zero LLM calls."""
+    from ai.provider import AIResponse
+    now = datetime.now(tz=timezone.utc)
+    day = now.day
+    month = _MONTHS_UA[now.month - 1]
+    year = now.year
+    return AIResponse(content=f"Сьогодні {day} {month} {year} року.", provider="system", tokens_used=0)
+
 
 class OrchestratorMode(Enum):
     single = "single"
@@ -60,6 +140,20 @@ async def run_orchestrator(
     chat_pipeline_run: ChatPipelineRun,
     **chat_pipeline_kwargs: Any,
 ) -> Any:
+    # Zero-latency: factual time/date queries never need an LLM call
+    if _TIME_QUERY_RE.search(user_text):
+        logger.debug("run_orchestrator: zero-latency time query")
+        return _build_time_response()
+    if _DATE_QUERY_RE.search(user_text):
+        logger.debug("run_orchestrator: zero-latency date query")
+        return _build_date_response()
+
+    # Fast-track: conversational/short/typo messages bypass orchestrator entirely
+    if _is_conversational(user_text):
+        logger.debug("run_orchestrator: fast-track for %r", user_text[:30])
+        chat_pipeline_kwargs.setdefault("provider_hint", provider)
+        return await chat_pipeline_run(**chat_pipeline_kwargs)
+
     mode = decide_mode(provider=provider, user_text=user_text)
     chat_pipeline_kwargs.setdefault("provider_hint", provider)
     

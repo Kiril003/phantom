@@ -60,7 +60,7 @@ class _CountingProvider:
     def __init__(self):
         self.calls = 0
 
-    async def call_with_tools(self, *, system_prompt, user_message, tools, max_retries=3):
+    async def call_with_tools(self, *, system_prompt, user_message, tools, max_retries=3, **_kw):
         self.calls += 1
         return _ok_result()
 
@@ -74,6 +74,7 @@ async def fresh_runtime(monkeypatch):
     rt = AgentRuntime()
     rt.foreground_slot = TaskState(
         id="task-budget-1",
+        user_id="u1",
         goal="g",
         track="foreground",
         status="running",

@@ -161,7 +161,7 @@ async def build_agent_chat_prompt(
     # ── Lesson recall ────────────────────────────────────────────────────────
     try:
         from agent.cognition.memory.lessons import recall_lessons, format_lessons_for_prompt
-        lessons = await recall_lessons(user_message, k=3)
+        lessons = await recall_lessons(user_message, k=3, user_id=operator_user_id)
         lesson_text = format_lessons_for_prompt(lessons)
         if lesson_text:
             sections.append(lesson_text)

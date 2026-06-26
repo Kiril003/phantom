@@ -2331,6 +2331,109 @@ async def _tool_map_plan_route(args: dict[str, Any], user_id: str) -> dict[str, 
         return _err(res.output.get("reason", "unknown"), str(res.output.get("error", "Unknown error")))
 
 
+async def _tool_list_user_facts(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    category = args.get("category")
+    if category is not None and category not in ("email", "phone", "telegram", "discord", "file_pointer"):
+        return _err("invalid_args", "category must be email, phone, telegram, discord, or file_pointer")
+
+    try:
+        from db.models import UserFact
+        from security.crypto import decrypt_pii, InvalidToken
+        from sqlalchemy import select
+
+        async with _session_factory()() as db:
+            stmt = select(UserFact).where(UserFact.user_id == user_id)
+            if category:
+                stmt = stmt.where(UserFact.category == category)
+            stmt = stmt.order_by(UserFact.created_at)
+
+            rows = (await db.execute(stmt)).scalars().all()
+            facts = []
+            for r in rows:
+                try:
+                    val = decrypt_pii(r.value_encrypted)
+                except InvalidToken:
+                    val = "[corrupt]"
+                facts.append({
+                    "id": r.id,
+                    "category": r.category,
+                    "label": r.label,
+                    "value": val,
+                    "created_at": r.created_at.isoformat() if r.created_at else None,
+                    "updated_at": r.updated_at.isoformat() if r.updated_at else None,
+                    "exclude_from_prompts": bool(r.exclude_from_prompts),
+                })
+            return _ok(facts=facts)
+    except Exception as exc:
+        logger.exception("list_user_facts failed")
+        return _err("db_error", f"Помилка бази даних: {exc}")
+
+
+async def _tool_create_user_fact(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    category = args.get("category")
+    value = args.get("value")
+    label = args.get("label")
+
+    if not category or category not in ("email", "phone", "telegram", "discord", "file_pointer"):
+        return _err("invalid_args", "Категорія повинна бути однією з: email, phone, telegram, discord, file_pointer")
+    if not isinstance(value, str) or not value.strip():
+        return _err("invalid_args", "Значення (value) обов'язкове і має бути текстом")
+    if label is not None and not isinstance(label, str):
+        return _err("invalid_args", "Ярлик (label) має бути текстовим")
+
+    try:
+        from db.models import UserFact
+        from security.crypto import encrypt_pii
+
+        async with _session_factory()() as db:
+            fact = UserFact(
+                user_id=user_id,
+                category=category,
+                label=label.strip() if label else None,
+                value_encrypted=encrypt_pii(value.strip()),
+            )
+            db.add(fact)
+            await db.commit()
+            await db.refresh(fact)
+
+            return _ok(
+                message="Факт успішно збережено та зашифровано.",
+                fact={
+                    "id": fact.id,
+                    "category": fact.category,
+                    "label": fact.label,
+                    "value": value.strip(),
+                    "created_at": fact.created_at.isoformat() if fact.created_at else None,
+                }
+            )
+    except Exception as exc:
+        logger.exception("create_user_fact failed")
+        return _err("db_error", f"Помилка збереження факту: {exc}")
+
+
+async def _tool_delete_user_fact(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    fact_id = args.get("fact_id")
+    if not fact_id or not isinstance(fact_id, str):
+        return _err("invalid_args", "Ідентифікатор факту (fact_id) обов'язковий")
+
+    try:
+        from db.models import UserFact
+        from sqlalchemy import select
+
+        async with _session_factory()() as db:
+            stmt = select(UserFact).where(UserFact.id == fact_id, UserFact.user_id == user_id)
+            fact = (await db.execute(stmt)).scalar_one_or_none()
+            if not fact:
+                return _err("not_found", "Факт із вказаним ідентифікатором не знайдено або він належить іншому користувачу")
+
+            await db.delete(fact)
+            await db.commit()
+            return _ok(message="Факт успішно видалено.")
+    except Exception as exc:
+        logger.exception("delete_user_fact failed")
+        return _err("db_error", f"Помилка видалення факту: {exc}")
+
+
 _HANDLERS: dict[str, Any] = {
     "search_nearby_places": _tool_search_nearby_places,
     "search_locationhistory": _tool_search_locationhistory,
@@ -2391,6 +2494,10 @@ _HANDLERS: dict[str, Any] = {
     # Gated upstream by the agent loop's risk gate (Phase 23-D Council
     # + Phase 19-4 phone approval) BEFORE this handler runs.
     "vault_reveal": _tool_vault_reveal,
+    # FACTS-1 UserFacts tools
+    "list_user_facts": _tool_list_user_facts,
+    "create_user_fact": _tool_create_user_fact,
+    "delete_user_fact": _tool_delete_user_fact,
 }
 
 

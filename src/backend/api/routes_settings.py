@@ -306,6 +306,11 @@ CATEGORY_SPEC: list[dict[str, Any]] = [
             "agent_episodic_top_k",
             "agent_localization_enabled",
             "agent_sandbox_profile_default",
+            "cognitive_memory_enabled",
+            "cognitive_memory_decay_half_life_days",
+            "cognitive_memory_semantic_similarity_threshold",
+            "cognitive_memory_idle_timeout_min",
+            "cognitive_memory_disclosure_threshold",
         ],
     },
     {
@@ -479,6 +484,18 @@ LABEL_OVERRIDES: dict[str, str] = {
     "agent_emotion_enabled": "Емоційний стан агента",
     "agent_sandbox_profile_default": "Профіль пісочниці за замовч.",
     "agent_reflection_every_n_actions": "Рефлексія кожні N дій",
+    "cognitive_memory_enabled": "Когнітивна пам'ять увімкнена",
+    "cognitive_memory_decay_half_life_days": "Період напіврозпаду фактів (днів)",
+    "cognitive_memory_semantic_similarity_threshold": "Поріг семантичної подібності",
+    "cognitive_memory_idle_timeout_min": "Таймаут неактивності для консолідації (хв)",
+    "cognitive_memory_disclosure_threshold": "Поріг розкриття інформації",
+    "cognitive_memory_semantic_weight": "Вага семантики (w1)",
+    "cognitive_memory_recency_weight": "Вага новизни (w2)",
+    "cognitive_memory_recall_weight": "Вага згадувань (w3)",
+    "cognitive_memory_sentiment_weight": "Вага емоційного забарвлення (w4)",
+    "cognitive_memory_state_weight": "Вага контексту стану (w5)",
+    "cognitive_memory_min_importance": "Мінімальна важливість для стратегічної пам'яті",
+    "cognitive_memory_consolidation_interval_min": "Максимальний інтервал консолідації (хв)",
 }
 
 PASSWORD_KEYS = {"ai_gemini_api_key", "jwt_secret_key"}
@@ -517,6 +534,14 @@ ADVANCED_KEYS: set[str] = {
     "agent_max_llm_calls_per_background_task",
     "agent_background_task_timeout_s",
     "agent_monologue_rate_limit_eps",
+    # Cognitive Memory Engine weights & advanced tunables
+    "cognitive_memory_semantic_weight",
+    "cognitive_memory_recency_weight",
+    "cognitive_memory_recall_weight",
+    "cognitive_memory_sentiment_weight",
+    "cognitive_memory_state_weight",
+    "cognitive_memory_min_importance",
+    "cognitive_memory_consolidation_interval_min",
     # Chat orchestrator + tool-call internals
     "chat_orchestrator_enabled",
     "chat_orchestrator_max_steps",

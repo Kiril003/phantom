@@ -1,5 +1,5 @@
 import { motion } from 'framer-motion';
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import {
   ShieldAlert,
   Eye,
@@ -39,6 +39,7 @@ import { EASE_PHANTOM } from '../styles/motion';
  * runs unconditionally before any render branch.
  */
 export default function SentinelLayout() {
+  const [panelCollapsed, setPanelCollapsed] = useState(false);
   const context = useSystemStore((s) => s.context);
 
   const otherDetected = context?.presence.other_detected ?? false;
@@ -338,19 +339,56 @@ export default function SentinelLayout() {
           right: 12,
           top: 68,
           bottom: 76,
-          width: 380,
-          padding: 16,
           borderRadius: 18,
           borderColor: 'rgba(239,68,68,0.4)',
           background: 'rgba(255,255,255,0.78)',
           boxShadow: 'var(--shadow-glow-coral)',
           zIndex: 4,
+          overflow: 'visible',
         }}
         initial={{ x: 24, opacity: 0 }}
-        animate={{ x: 0, opacity: 1 }}
+        animate={{ 
+          x: 0, 
+          opacity: 1,
+          width: panelCollapsed ? 52 : 380,
+          padding: panelCollapsed ? 8 : 16,
+        }}
         transition={{ duration: 0.3, ease: EASE_PHANTOM as unknown as number[] }}
       >
-        {/* Header — pulsing shield */}
+        {/* Toggle Collapse Button */}
+        <button
+          onClick={() => setPanelCollapsed(!panelCollapsed)}
+          className="absolute -left-3 top-1/2 -translate-y-1/2 w-6 h-12 rounded-full flex items-center justify-center border border-red-500/30 bg-red-100 hover:bg-red-200 dark:bg-red-950 dark:hover:bg-red-900 text-red-700 dark:text-red-300 hover:scale-105 active:scale-95 transition-all shadow-md"
+          style={{ zIndex: 10 }}
+          title={panelCollapsed ? "Розгорнути панель" : "Згорнути панель"}
+        >
+          <span style={{ fontSize: 10, transform: panelCollapsed ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▶</span>
+        </button>
+
+        {panelCollapsed ? (
+          <div className="flex flex-col items-center gap-4 py-4 h-full">
+            <motion.div
+              className="flex items-center justify-center shrink-0"
+              style={{
+                width: 32,
+                height: 32,
+                borderRadius: 8,
+                background: 'rgba(239,68,68,0.15)',
+                border: '1px solid rgba(239,68,68,0.3)',
+                color: '#b9201f',
+              }}
+              animate={{ scale: [1, 1.08, 1] }}
+              transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+            >
+              <ShieldAlert size={18} strokeWidth={2} />
+            </motion.div>
+            <div className="vertical-text font-mono text-[8px] tracking-widest text-[#b9201f] font-bold uppercase select-none opacity-60" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
+              SENTINEL PANEL
+            </div>
+          </div>
+        ) : (
+          <>
+            {/* Header — pulsing shield */}
         <div className="flex items-start gap-3">
           <motion.div
             className="flex items-center justify-center"
@@ -518,14 +556,16 @@ export default function SentinelLayout() {
           <ActionButton icon={<Check size={14} />} label="DISMISS" />
         </div>
 
-        {/* Footer — last-scan timestamp */}
-        <div
-          className="flex items-center justify-between"
-          style={{ fontSize: 9, color: 'var(--ink-muted)' }}
-        >
-          <span>LAST SCAN · {lastScan}</span>
-          <span className="mono">sentinel.v0.4</span>
-        </div>
+            {/* Footer — last-scan timestamp */}
+            <div
+              className="flex items-center justify-between"
+              style={{ fontSize: 9, color: 'var(--ink-muted)' }}
+            >
+              <span>LAST SCAN · {lastScan}</span>
+              <span className="mono">sentinel.v0.4</span>
+            </div>
+          </>
+        )}
       </motion.aside>
 
       {/* Audit H-MM-2 — keep the FloatingToolbar so the operator can

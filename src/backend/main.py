@@ -21,6 +21,8 @@ from api.routes_chat import router as chat_router, register_ws_handlers as regis
 from api.routes_context import router as context_router
 from api.routes_settings import router as settings_router
 from api.routes_map import router as map_router
+from api.routes_geo_offline import router as geo_offline_router
+from api.routes_geo_geofences import router as geo_geofences_router
 from api.routes_linux import router as linux_router
 from api.routes_tools import router as tools_router
 from api.routes_files import router as files_router
@@ -46,6 +48,7 @@ from api.routes_handoff import router as handoff_router
 from api.routes_companion_control import router as companion_control_router
 from api.routes_backup import router as backup_router
 from api.routes_intelligence import router as intelligence_router
+from api.routes_chronicle import router as chronicle_router
 
 logging.basicConfig(
     level=getattr(logging, config.log_level),
@@ -357,6 +360,8 @@ def _refuse_lan_bind_in_packaged_mode() -> None:
 async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     """Startup / shutdown lifecycle."""
     logger.info("PHANTOM OS starting...")
+    from paths import ensure_data_dirs
+    ensure_data_dirs()
     _refuse_ci_default_secret()
     _refuse_unsupported_deployment_mode()
     _refuse_lan_bind_in_packaged_mode()
@@ -620,6 +625,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             except Exception as exc:
                 logger.warning("Standing orders runner setup failed: %s", exc)
 
+    # PHANTOM STREAM — background consciousness tick.
+    try:
+        from agent.consciousness_stream import consciousness_stream
+        consciousness_stream.start()
+        logger.info("ConsciousnessStream started")
+    except Exception as exc:
+        logger.warning("ConsciousnessStream startup failed: %s", exc)
+
     # Phase 09.2 — episodic memory backfill (only when ChromaDB is behind)
     # Temporarily disabled by Gemini CLI to bypass boot block
     # if config.agent_enabled and config.agent_episodic_memory_enabled:
@@ -739,6 +752,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except Exception as exc:
             logger.debug("Standing orders runner shutdown raised: %s", exc)
 
+    try:
+        from agent.consciousness_stream import consciousness_stream
+        consciousness_stream.stop()
+    except Exception as exc:
+        logger.debug("ConsciousnessStream shutdown raised: %s", exc)
+
     # Phase 09.2 — close any active MCP clients
     if config.agent_enabled and config.agent_mcp_servers:
         try:
@@ -835,6 +854,8 @@ def create_app() -> FastAPI:
     app.include_router(context_router, prefix=prefix)
     app.include_router(settings_router, prefix=prefix)
     app.include_router(map_router, prefix=prefix)
+    app.include_router(geo_offline_router, prefix=prefix)
+    app.include_router(geo_geofences_router, prefix=prefix)
     app.include_router(linux_router, prefix=prefix)
     app.include_router(tools_router, prefix=prefix)
     app.include_router(files_router, prefix=prefix)
@@ -920,6 +941,7 @@ def create_app() -> FastAPI:
     # (vault metadata, user facts, lessons, strategic memory, agent decisions)
     # plus cross-corpus semantic search.
     app.include_router(intelligence_router, prefix=prefix)
+    app.include_router(chronicle_router, prefix=prefix)
 
     _register_ws(app)
     register_voice_ws(app)
@@ -956,7 +978,9 @@ def create_app() -> FastAPI:
     # /metrics, /ws, and /docs all win route resolution.
     import os as _os
     from fastapi.staticfiles import StaticFiles  # noqa: PLC0415
-    _dist_path = _os.environ.get("PHANTOM_FRONTEND_DIST", "/app/dist")
+    from paths import resolve_data_dir  # noqa: PLC0415
+    
+    _dist_path = str(resolve_data_dir("frontend_dist"))
     if _os.path.isdir(_dist_path):
         app.mount(
             "/",

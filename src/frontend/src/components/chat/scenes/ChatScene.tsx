@@ -43,6 +43,7 @@ import { PhantomManifestScene } from './PhantomManifestScene';
 import { OrchestrationFlowScene } from './OrchestrationFlowScene';
 import { ObjectionScene } from './ObjectionScene';
 import { PatchFileScene } from './PatchFileScene';
+import { ReactArtifactRenderer } from '../dom/ReactArtifactRenderer';
 
 export { STAGGER_CLAMP_MAX_MS };
 
@@ -93,6 +94,8 @@ export function ChatScene({ scene, reduceMotion = false }: ChatSceneProps) {
       return <ObjectionScene data={scene.data} />;
     case 'patch_file':
       return <PatchFileScene data={scene.data} />;
+    case 'react_artifact':
+      return <ReactArtifactRenderer data={scene.data as any} />;
     default: {
       // Exhaustiveness check — adding a new ToolSceneKind without a case
       // here triggers a compile error at `_exhaustive: never`.

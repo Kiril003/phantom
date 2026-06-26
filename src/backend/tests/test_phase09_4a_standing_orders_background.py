@@ -128,7 +128,7 @@ async def test_order_fires_even_when_foreground_task_active(isolated_db, monkeyp
 
     runtime = AgentRuntime()
     runtime.foreground_slot = TaskState(
-        id="fg-active", goal="user-chat", track="foreground",
+        id="fg-active", user_id="u1", goal="user-chat", track="foreground",
         status="running", self_model=SelfModel(),
     )
     captured: list[dict] = []

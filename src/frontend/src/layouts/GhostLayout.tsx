@@ -1,7 +1,6 @@
 import { motion } from 'framer-motion';
 import { ShieldOff } from 'lucide-react';
 import { useSystemStore } from '../stores/systemStore';
-import { formatUptime } from '../utils/format';
 
 /**
  * GHOST — Encrypted recording mode.
@@ -62,22 +61,27 @@ export default function GhostLayout() {
         />
       </motion.div>
 
-      {/* Recording duration — extremely subtle, center bottom */}
-      {context && (
-        <motion.div
-          className="absolute bottom-3 left-1/2 -translate-x-1/2"
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 0.08 }}
-          transition={{ delay: 2, duration: 1 }}
-        >
-          <span
-            className="font-mono tabular-nums"
-            style={{ fontSize: 'var(--fs-micro)', color: 'var(--accent)' }}
+      {context && (() => {
+        const uptime = context.system.uptime_s;
+        const hh = String(Math.floor(uptime / 3600)).padStart(2, '0');
+        const mm = String(Math.floor((uptime % 3600) / 60)).padStart(2, '0');
+        const ss = String(uptime % 60).padStart(2, '0');
+        return (
+          <motion.div
+            className="absolute bottom-3 left-1/2 -translate-x-1/2"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 0.08 }}
+            transition={{ delay: 2, duration: 1 }}
           >
-            {formatUptime(context.system.uptime_s)}
-          </span>
-        </motion.div>
-      )}
+            <span
+              className="font-mono tabular-nums"
+              style={{ fontSize: 'var(--fs-micro)', color: 'var(--accent)' }}
+            >
+              {`${hh}:${mm}:${ss}`}
+            </span>
+          </motion.div>
+        );
+      })()}
     </motion.div>
   );
 }

@@ -35,6 +35,17 @@ class EventBus:
 
         return unsubscribe
 
+    def on(self, event: str, handler: Handler) -> Callable[[], None]:
+        """Alias for subscribe."""
+        return self.subscribe(event, handler)
+
+    def off(self, event: str, handler: Handler) -> None:
+        """Unsubscribe a handler from an event."""
+        handlers = self._handlers.get(event, [])
+        if handler in handlers:
+            handlers.remove(handler)
+
+
     def _track(self, task: asyncio.Task, event: str) -> None:
         self._pending_tasks.add(task)
 

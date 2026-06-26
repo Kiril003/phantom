@@ -958,6 +958,8 @@ class PersistentGoal(Base):
     kpi: Mapped[Optional[str]] = mapped_column(String(256), nullable=True)
     deadline: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     blockers_json: Mapped[str] = mapped_column(Text, default="[]")
+    # seeded (operator) | self_generated (will reflection)
+    source: Mapped[str] = mapped_column(String(16), default="seeded", nullable=False)
     # pending, running, done, failed, snoozed, cancelled
     status: Mapped[str] = mapped_column(String(24), default="pending", nullable=False)
     
@@ -1279,3 +1281,25 @@ class PhantomNarrative(Base):
 
 
 
+
+class WillBudgetLedger(Base):
+    """Daily LLM spend ledger for the Will Engine (per user, per local date)."""
+    __tablename__ = "will_budget_ledger"
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    ledger_date: Mapped[str] = mapped_column(String(10), primary_key=True)  # YYYY-MM-DD
+    llm_calls: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    tokens: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    updated_at: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
+
+
+class WillJournal(Base):
+    """Append-only post-facto record of will decisions and outcomes."""
+    __tablename__ = "will_journal"
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), index=True, nullable=False)
+    ts: Mapped[float] = mapped_column(Float, nullable=False)
+    decision_json: Mapped[str] = mapped_column(Text, default="{}")
+    action: Mapped[str] = mapped_column(String(64), default="")
+    task_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
+    outcome: Mapped[str] = mapped_column(Text, default="")
+    budget_delta_json: Mapped[str] = mapped_column(Text, default="{}")

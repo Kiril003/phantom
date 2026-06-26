@@ -48,8 +48,12 @@ from .grounded import TestRun
 from .intelligence import DistillFactsFromChats, ExcludeFactFromPrompts, IntelligenceUpsertKnowledge
 from .synthesize_capability import SynthesizeCapability
 from .optimize_capability import OptimizeCapability
+from .will_seed import WillSeedGoal
+from .will_status import WillStatus
 
 _REGISTERED: list[Type[Action]] = [
+    # Sub-project A — Will Engine operator surface.
+    WillSeedGoal, WillStatus,
     FsRead, FsWrite, FsBackup, FsCodeSearch, FsPatchHash,
     LspDiagnostics, LspGotoDefinition, LspGetSymbols,
     BashRun,

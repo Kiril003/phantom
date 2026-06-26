@@ -56,6 +56,12 @@ def _utcnow() -> datetime:
     return clock.now()
 
 
+def _intent_available_for_proactive() -> bool:
+    """Proactive interjection is allowed only when the will isn't acting."""
+    from agent.will.arbitration import intent_mutex
+    return intent_mutex.held_by is None
+
+
 # ── Phase 9.4a: pending-action plumbing ─────────────────────────────────────
 
 # Conservative affirmative matcher — ambiguous replies are treated as "no"
@@ -235,6 +241,8 @@ class ProactiveLoop:
         session_memory.prune_expired_thoughts(session_id)
         deferred = session_memory.get_deferred_thoughts(session_id)
         if not deferred:
+            return
+        if not _intent_available_for_proactive():
             return
 
         # Sort thoughts by decayed value

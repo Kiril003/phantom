@@ -633,6 +633,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as exc:
         logger.warning("ConsciousnessStream startup failed: %s", exc)
 
+    # Will Engine — unified conductor of intent (sub-project A). Default off.
+    try:
+        from agent.will.engine import will_engine
+        await will_engine.start()
+    except Exception as exc:
+        logger.warning("will engine start failed: %s", exc)
+
     # Phase 09.2 — episodic memory backfill (only when ChromaDB is behind)
     # Temporarily disabled by Gemini CLI to bypass boot block
     # if config.agent_enabled and config.agent_episodic_memory_enabled:
@@ -751,6 +758,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
             await standing_orders_runner_obj.stop()
         except Exception as exc:
             logger.debug("Standing orders runner shutdown raised: %s", exc)
+    try:
+        from agent.will.engine import will_engine
+        await will_engine.stop()
+    except Exception:
+        pass
 
     try:
         from agent.consciousness_stream import consciousness_stream

@@ -531,6 +531,14 @@ class PhantomConfig(BaseSettings):
     agent_proactive_interval_s: int = 60
     agent_proactive_interval_min_s: int = 30
     agent_proactive_interval_max_s: int = 120
+
+    # ── Will Engine (sub-project A) ───────────────────────────────────────────
+    will_enabled: bool = False                 # master kill switch
+    will_tick_interval_s: int = 300            # 5-min deliberation cadence
+    will_daily_llm_calls: int = 200            # daily budget — LLM calls
+    will_daily_token_cap: int = 300_000        # daily budget — tokens
+    will_reflect_hour_local: int = 4           # daily self-generation hour (local)
+    will_max_active_day_goals: int = 3         # anti-sprawl on the DAY horizon
     agent_proactive_cooldown_s: int = 90
     agent_proactive_long_silence_threshold_min: int = 30
     agent_proactive_require_recent_chat: bool = False

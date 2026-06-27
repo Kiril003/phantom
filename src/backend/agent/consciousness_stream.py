@@ -54,6 +54,19 @@ class ConsciousnessStream:
             return None
         return queue.pop(0)
 
+    def push_insight(self, user_id: str, text: str, *, max_queue: int = 5) -> None:
+        """Queue a pending insight for a user (e.g. from the ambient guardian).
+        Deduplicates against what is already queued and caps the backlog so a
+        chatty source can't flood the next conversation turn."""
+        if not user_id or not text:
+            return
+        queue = self._pending_insights.setdefault(user_id, [])
+        if text in queue:
+            return
+        queue.append(text)
+        if len(queue) > max_queue:
+            del queue[0]
+
     def has_any_pending(self) -> bool:
         """True if any user has a pending insight — used by proactive loop."""
         return any(bool(q) for q in self._pending_insights.values())

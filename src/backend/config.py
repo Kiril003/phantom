@@ -532,6 +532,20 @@ class PhantomConfig(BaseSettings):
     agent_proactive_interval_min_s: int = 30
     agent_proactive_interval_max_s: int = 120
 
+    # ── Ambient Guardian (perception → proactive care) ────────────────────────
+    ambient_guardian_enabled: bool = True      # watch env/system/body, warn user
+    ambient_guardian_interval_s: int = 60      # rule-scan cadence
+    ambient_aqi_unhealthy: int = 150           # AQI ≥ → unhealthy warning
+    ambient_aqi_hazardous: int = 200           # AQI ≥ → hazardous warning
+    ambient_temp_hot_c: float = 32.0
+    ambient_temp_cold_c: float = 0.0
+    ambient_pressure_drop_hpa: float = 3.0     # drop since last tick → storm
+    ambient_disk_full_pct: float = 92.0
+    ambient_cpu_high_pct: float = 92.0
+    ambient_stress_high: float = 0.7
+    ambient_late_hour_start: int = 2           # deep-night-awake window (local)
+    ambient_late_hour_end: int = 5
+
     # ── Will Engine (sub-project A) ───────────────────────────────────────────
     will_enabled: bool = False                 # master kill switch
     will_tick_interval_s: int = 300            # 5-min deliberation cadence

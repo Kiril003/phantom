@@ -633,6 +633,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as exc:
         logger.warning("ConsciousnessStream startup failed: %s", exc)
 
+    # Ambient Guardian — watch environment/system/body, warn the user proactively.
+    try:
+        from agent.cognition.ambient import ambient_guardian
+        ambient_guardian.start()
+    except Exception as exc:
+        logger.warning("AmbientGuardian startup failed: %s", exc)
+
     # Drives — restore persisted motivational state so satisfaction earned by
     # the will (reward on goal completion) survives restarts.
     try:
@@ -777,6 +784,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         consciousness_stream.stop()
     except Exception as exc:
         logger.debug("ConsciousnessStream shutdown raised: %s", exc)
+
+    try:
+        from agent.cognition.ambient import ambient_guardian
+        ambient_guardian.stop()
+    except Exception as exc:
+        logger.debug("AmbientGuardian shutdown raised: %s", exc)
 
     # Phase 09.2 — close any active MCP clients
     if config.agent_enabled and config.agent_mcp_servers:

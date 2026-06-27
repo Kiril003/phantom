@@ -88,3 +88,39 @@ async def create_horizon_goal(
     await goal_stack.push(new_goal)
     return {"id": new_goal.id}
 
+
+@router.get("/journal")
+async def get_will_journal(
+    token: TokenPayload = Depends(require_auth),
+    limit: int = 20,
+):
+    """Recent Will Engine decisions/actions (post-facto report)."""
+    from db.database import get_session
+    from agent.will.journal import WillJournalWriter
+    async with get_session() as db:
+        rows = await WillJournalWriter().recent(db, token.user_id, n=min(max(limit, 1), 100))
+    return {"entries": rows}
+
+
+@router.get("/engine")
+async def get_will_engine_state(
+    token: TokenPayload = Depends(require_auth),
+):
+    """Live Will Engine status — enabled flag + today's budget consumption."""
+    from config import config
+    from db.database import get_session
+    from agent.will.budget import BudgetGovernor
+    async with get_session() as db:
+        budget = await BudgetGovernor().remaining(db, token.user_id)
+    return {
+        "enabled": config.will_enabled,
+        "tick_interval_s": config.will_tick_interval_s,
+        "budget": {
+            "calls_used": budget.calls_used,
+            "calls_cap": budget.calls_cap,
+            "tokens_used": budget.tokens_used,
+            "tokens_cap": budget.tokens_cap,
+            "exhausted": not budget.ok,
+        },
+    }
+

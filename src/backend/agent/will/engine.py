@@ -12,6 +12,7 @@ from agent.will.budget import BudgetGovernor
 from agent.will.journal import WillJournalWriter
 from agent.will.decide import decide_next
 from agent.will.reflect import reflect_and_seed
+from agent.will.self_growth import grow_identity_from_journal
 from agent.will.decompose import decompose_goal
 from agent.will.arbitration import intent_mutex, IntentBusy
 from agent.will.types import WillTickResult, WillDecision
@@ -102,6 +103,18 @@ class WillEngine:
                     notes.append(f"reflected:{len(created)}")
             except Exception as exc:
                 logger.debug("orient reflect failed: %s", exc)
+            # Identity grows from deeds — fold the recent journal into the
+            # self-narrative once per reflection, so who PHANTOM is reflects
+            # what it has actually done. Budget-gated, best-effort.
+            if await self.governor.can_spend(db, user_id):
+                try:
+                    grew = await grow_identity_from_journal(
+                        db, user_id, dispatch_llm=self.dispatch_llm)
+                    await self.governor.note_spend(db, user_id, calls=1, tokens=0)
+                    if grew:
+                        notes.append("grew_identity")
+                except Exception as exc:
+                    logger.debug("orient identity growth failed: %s", exc)
 
         active2 = await goals_repo.list_active(db, user_id)
         target = None

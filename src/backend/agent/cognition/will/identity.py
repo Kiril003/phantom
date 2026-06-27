@@ -12,11 +12,15 @@ from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
+# The narrative lives next to this module; resolve absolutely so the real
+# self-narrative loads regardless of the process CWD.
+_NARRATIVE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "self_narrative.md")
+
 
 class IdentitySystem:
     """Manages PHANTOM's self-narrative and personality."""
 
-    def __init__(self, narrative_path: str = "src/backend/agent/will/self_narrative.md") -> None:
+    def __init__(self, narrative_path: str = _NARRATIVE_PATH) -> None:
         self.narrative_path = narrative_path
         self.personality_vector = {
             "openness": 0.8,

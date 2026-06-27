@@ -27,39 +27,41 @@ layer, and the path to fully unify them.
 data layer — the goal tree IS the shared spine. The split is motivation (why) vs
 conduct (when/how).
 
-## What is bridged so far (2026-06-27)
+## What is bridged so far
 
 - `engine._motivation()` composes `identity_system.summary()` + `drive_system.dominant()`
   and injects it into `decide_next`'s prompt → the conductor's goal choice is now
   coloured by who PHANTOM is and what it currently needs. First bridge. Best-effort,
   lazy, never fails a tick.
 
-## Full unification path (next, in order)
+## Full unification path — ALL FIVE SHIPPED (2026-06-27)
 
-1. **Values gate on ACT (safety + coherence).** Before the engine dispatches a
-   `start_task`/`standing_order` whose `action_text` implies an irreversible/external
-   effect, call `values_system.evaluate(action_text)`; if the verdict rejects, journal
-   `outcome="vetoed_by_values"` and skip dispatch. Note: fix `ValuesSystem.values_path`
-   — it currently points at `src/backend/agent/will/values.md` but the doctrine lives at
-   `agent/cognition/will/values.md`. (Adds 1 LLM call only for risky decisions.)
+1. **Values gate on ACT — DONE** (`271c4c1` wired it; `f842639` made it real). The
+   engine evaluates effectful `start_task`/`standing_order` decisions against the
+   doctrine and journals `vetoed_by_values` on a confident rejection. Fixed
+   `ValuesSystem.values_path` — was a non-existent CWD-relative path, so the gate
+   silently used a generic fallback; now resolved module-relative to the real
+   `agent/cognition/will/values.md`.
 
-2. **Drive satisfaction feedback.** When a will-dispatched task completes (journal
-   outcome), call `drive_system` to mark the relevant drive satisfied
-   (lower its pressure). Closes the motivation→action→satisfaction loop so drives
-   actually move as the will acts.
+2. **Drive satisfaction feedback — DONE** (`9327e8d`). `finalize_task` rewards
+   autonomy + achievement when a `origin=will` task completes (`DriveSystem.reward`
+   satisfies + persists). Drives are `load()`ed at startup so the change survives a
+   restart. Motivation→action→satisfaction is a closed loop.
 
-3. **Identity grows from outcomes.** Periodically fold the will journal into
-   `self_narrative.md` / `IdentitySystem` so PHANTOM's sense of self is shaped by what
-   it has actually done — not a static file.
+3. **Identity grows from deeds — DONE** (`c845351`). Once per daily reflection,
+   `agent/will/self_growth.grow_identity_from_journal` folds the character-defining
+   journal entries (dispatched deeds + principled vetoes) into `self_narrative.md`.
+   Also fixed `IdentitySystem.narrative_path` (same CWD bug as values). summary()
+   feeds `_motivation`, so deeds → identity → next decisions is a real loop.
 
-4. **Reflection consults values + drives.** `reflect.propose_goals` should receive the
-   values doctrine + dominant drives as observations, so self-generated goals serve the
-   entity's values, not drift.
+4. **Reflection consults values + drives — DONE** (`558e863`).
+   `reflect._gather_observations` now carries the doctrine + dominant drive, so
+   self-generated goals serve the entity's values and needs, not drift.
 
-5. **Retire the duplicate goal writer.** `goal_stack.PersistentGoalStack` and
-   `agent/will/goals.py` both write `goals_persistent`. Pick the conductor's `goals.py`
-   as the single writer; make `goal_stack` read-through or delegate, to remove the last
-   structural fork.
+5. **Single goal writer — DONE** (`3aab50a`). `goals.py` is the sole INSERT path;
+   `goal_stack.push` delegates to the extended `goals.seed` (priority components
+   preserved). The last structural fork is gone — the two layers are one entity at
+   data, motivation, conduct, and memory levels.
 
 ## Why this matters
 

@@ -11,6 +11,8 @@ from agent.will import goals as goals_repo
 from agent.will.budget import BudgetGovernor
 from agent.will.journal import WillJournalWriter
 from agent.will.decide import decide_next
+from agent.will.reflect import reflect_and_seed
+from agent.will.decompose import decompose_goal
 from agent.will.arbitration import intent_mutex, IntentBusy
 from agent.will.types import WillTickResult, WillDecision
 
@@ -41,6 +43,49 @@ class WillEngine:
         self.start_task: Callable[..., Awaitable[tuple[str, bool]]] = _default_start_task
         self._task: asyncio.Task | None = None
         self._stop = asyncio.Event()
+        self._last_reflect: dict[str, str] = {}  # user_id → YYYY-MM-DD of last reflection
+
+    async def orient(self, db: AsyncSession, user_id: str, active, *, now=None) -> str:
+        """Deepen the goal tree (decompose) and self-generate goals (reflect).
+        Budget-gated; at most one decompose + one reflect per tick. Returns a note."""
+        from datetime import datetime
+        notes: list[str] = []
+
+        should_reflect = not active
+        if active:
+            n = now or datetime.now().astimezone()
+            today = n.strftime("%Y-%m-%d")
+            if n.hour == config.will_reflect_hour_local and self._last_reflect.get(user_id) != today:
+                should_reflect = True
+                self._last_reflect[user_id] = today
+
+        if should_reflect and await self.governor.can_spend(db, user_id):
+            try:
+                created = await reflect_and_seed(db, user_id, dispatch_llm=self.dispatch_llm)
+                await self.governor.note_spend(db, user_id, calls=1, tokens=0)
+                if created:
+                    notes.append(f"reflected:{len(created)}")
+            except Exception as exc:
+                logger.debug("orient reflect failed: %s", exc)
+
+        active2 = await goals_repo.list_active(db, user_id)
+        target = None
+        for g in sorted(active2, key=lambda x: x.horizon_level):
+            if g.horizon_level < 6:
+                kids = await goals_repo.children(db, user_id, g.id)
+                if not kids:
+                    target = g
+                    break
+        if target is not None and await self.governor.can_spend(db, user_id):
+            try:
+                created = await decompose_goal(db, user_id, target, dispatch_llm=self.dispatch_llm)
+                await self.governor.note_spend(db, user_id, calls=1, tokens=0)
+                if created:
+                    notes.append(f"decomposed:{len(created)}")
+            except Exception as exc:
+                logger.debug("orient decompose failed: %s", exc)
+
+        return ",".join(notes)
 
     async def run_once(self, db: AsyncSession, user_id: str, *, snapshot: dict,
                        now=None) -> WillTickResult:
@@ -50,6 +95,9 @@ class WillEngine:
         if not await self.governor.can_spend(db, user_id):
             return WillTickResult(WillDecision(kind="noop"), note="budget_exhausted")
 
+        active = await goals_repo.list_active(db, user_id)
+        # ORIENT — deepen the tree + self-generate goals before deciding.
+        await self.orient(db, user_id, active, now=now)
         active = await goals_repo.list_active(db, user_id)
         budget = await self.governor.remaining(db, user_id)
         decision = await decide_next(snapshot, active, budget, dispatch_llm=self.dispatch_llm)

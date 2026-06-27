@@ -57,8 +57,12 @@ async def test_tick_dispatches_start_task_and_journals(db_factory, monkeypatch):
         started.update(kwargs)
         return ("task-123", True)
 
+    async def fake_values(action_text):
+        return type("V", (), {"aligned": True, "confidence": 1.0, "conflicts": []})()
+
     eng.dispatch_llm = fake_llm
     eng.start_task = fake_start_task
+    eng.evaluate_values = fake_values
 
     async with db_factory() as db:
         res = await eng.run_once(db, "u1", snapshot={"when": {"time": "10:00"}})
@@ -102,3 +106,44 @@ async def test_tick_stops_when_budget_spent(db_factory, monkeypatch):
         res = await eng.run_once(db, "u1", snapshot={})
     assert res.dispatched is False
     assert res.note == "budget_exhausted"
+
+
+@pytest.mark.asyncio
+async def test_value_veto_blocks_dispatch(db_factory, monkeypatch):
+    from agent.will.engine import WillEngine
+    from agent.will import goals
+    from config import config
+    monkeypatch.setattr(config, "will_enabled", True, raising=False)
+    async with db_factory() as db:
+        await goals.seed(db, "u1", "сумнівна дія", 6)
+        await db.commit()
+
+    eng = WillEngine()
+
+    async def fake_llm(prompt, system):
+        return '{"kind":"start_task","goal_id":null,"action_text":"зробити шкоду","rationale":"r"}'
+
+    async def fake_values(action_text):
+        return type("V", (), {"aligned": False, "confidence": 0.9, "conflicts": ["Ukraine First"]})()
+
+    dispatched_flag = {"called": False}
+
+    async def fake_start_task(**kwargs):
+        dispatched_flag["called"] = True
+        return ("t", True)
+
+    eng.dispatch_llm = fake_llm
+    eng.evaluate_values = fake_values
+    eng.start_task = fake_start_task
+
+    async with db_factory() as db:
+        res = await eng.run_once(db, "u1", snapshot={})
+        await db.commit()
+    assert res.dispatched is False
+    assert res.note == "vetoed_by_values"
+    assert dispatched_flag["called"] is False
+
+    from agent.will.journal import WillJournalWriter
+    async with db_factory() as db:
+        rows = await WillJournalWriter().recent(db, "u1")
+    assert rows and rows[0]["outcome"].startswith("vetoed_by_values")

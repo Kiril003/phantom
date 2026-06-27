@@ -35,12 +35,24 @@ async def _default_start_task(**kwargs) -> tuple[str, bool]:
     return await agent_runtime.start_task(**kwargs)
 
 
+async def _default_evaluate_values(action_text: str):
+    """Best-effort value check. Returns a ValueVerdict, or None on failure
+    (fail-open — a broken values subsystem must not freeze the will)."""
+    try:
+        from agent.cognition.will.values import values_system
+        return await values_system.evaluate(action_text)
+    except Exception as exc:
+        logger.debug("values evaluate failed: %s", exc)
+        return None
+
+
 class WillEngine:
     def __init__(self) -> None:
         self.governor = BudgetGovernor()
         self.journal = WillJournalWriter()
         self.dispatch_llm: Callable[[str, str], Awaitable[str]] = _default_dispatch_llm
         self.start_task: Callable[..., Awaitable[tuple[str, bool]]] = _default_start_task
+        self.evaluate_values: Callable[[str], Awaitable] = _default_evaluate_values
         self._task: asyncio.Task | None = None
         self._stop = asyncio.Event()
         self._last_reflect: dict[str, str] = {}  # user_id → YYYY-MM-DD of last reflection
@@ -135,6 +147,20 @@ class WillEngine:
         task_id = None
         try:
             async with intent_mutex.hold("will"):
+                # Value gate — effectful decisions are checked against the
+                # values doctrine; a confident rejection vetoes the action.
+                if decision.kind in ("start_task", "standing_order"):
+                    verdict = await self.evaluate_values(decision.action_text)
+                    await self.governor.note_spend(db, user_id, calls=1, tokens=0)
+                    if (verdict is not None and not getattr(verdict, "aligned", True)
+                            and getattr(verdict, "confidence", 0.0) >= 0.5):
+                        conflicts = ", ".join(getattr(verdict, "conflicts", []) or [])
+                        await self.journal.record(
+                            db, user_id, decision, outcome=f"vetoed_by_values:{conflicts}",
+                            budget_delta={"calls": 2})
+                        return WillTickResult(decision, dispatched=False,
+                                              note="vetoed_by_values")
+
                 if decision.kind == "start_task":
                     task_id, started = await self.start_task(
                         user_id=user_id, goal=decision.action_text,

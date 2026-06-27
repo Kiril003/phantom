@@ -71,6 +71,7 @@ class AmbientGuardian:
     def __post_init__(self) -> None:
         self._task: asyncio.Task | None = None
         self._stop = asyncio.Event()
+        self._last_aqi_fetch: float = -1e18
 
     def ensure_rules(self) -> None:
         if not self.rules:
@@ -108,10 +109,35 @@ class AmbientGuardian:
                 continue
             try:
                 snapshot = context_engine.get_snapshot()
+                await self._enrich_env(snapshot)
                 for alert in self.scan(snapshot):
                     await self._surface(snapshot, alert)
             except Exception as exc:
                 logger.debug("ambient guardian tick error: %s", exc)
+
+    async def _enrich_env(self, snapshot: dict) -> None:
+        """Best-effort: when the user has a location fix, fetch live air quality
+        (keyless Open-Meteo) so the air-quality rule has real data even without
+        a hardware air sensor. Refreshed slowly — air quality drifts gradually."""
+        from config import config
+        refresh = float(getattr(config, "ambient_aqi_refresh_s", 1800) or 1800)
+        now = time.time()
+        if now - self._last_aqi_fetch < refresh:
+            return
+        where = snapshot.get("where") or {}
+        lat, lon = where.get("lat"), where.get("lon")
+        if lat is None or lon is None:
+            return
+        self._last_aqi_fetch = now
+        try:
+            from geo.sources.environmental import EnvironmentalAdapter
+            aqi = await EnvironmentalAdapter().fetch_us_aqi(lat, lon)
+            if aqi is not None:
+                from core.context_engine import context_engine
+                context_engine.set_env_aqi(aqi)
+                snapshot.setdefault("env", {})["aqi"] = aqi
+        except Exception as exc:
+            logger.debug("ambient env enrich failed: %s", exc)
 
     async def _surface(self, snapshot: dict, alert: AmbientAlert) -> None:
         """Tell the user: weave into the next conversation turn (consciousness

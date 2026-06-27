@@ -80,6 +80,22 @@ def test_broken_rule_does_not_break_scan():
     assert [a.rule_id for a in alerts] == ["ok"]
 
 
+def test_open_meteo_aqi_parser():
+    from geo.sources.environmental import EnvironmentalAdapter
+    assert EnvironmentalAdapter.parse_open_meteo_aqi({"current": {"us_aqi": 73}}) == 73.0
+    assert EnvironmentalAdapter.parse_open_meteo_aqi({"current": {}}) is None
+    assert EnvironmentalAdapter.parse_open_meteo_aqi({}) is None
+    assert EnvironmentalAdapter.parse_open_meteo_aqi({"current": {"us_aqi": "bad"}}) is None
+
+
+def test_set_env_aqi_is_sticky_and_guards_none():
+    from core.context_engine import context_engine
+    context_engine.set_env_aqi(140.0)
+    assert context_engine.get_snapshot()["env"]["aqi"] == 140.0
+    context_engine.set_env_aqi(None)  # must not clobber
+    assert context_engine.get_snapshot()["env"]["aqi"] == 140.0
+
+
 def test_consciousness_push_dedups_and_caps():
     cs = ConsciousnessStream()
     cs.push_insight("u1", "a")

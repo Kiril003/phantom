@@ -329,6 +329,12 @@ class ContextEngine:
     def set_memory_hints(self, hints: list[str]) -> None:
         self._snapshot["memory_hints"] = hints[:5]
 
+    def set_env_aqi(self, aqi: float | None) -> None:
+        """Inject a location-sourced air-quality index into the snapshot.
+        Hardware air sensors (if any) still override via _apply_env."""
+        if aqi is not None:
+            self._snapshot["env"]["aqi"] = aqi
+
     # ── Internal update methods ────────────────────────────────────────────────
 
     def _apply_batch(self, batch: SensorBatch) -> None:
@@ -542,9 +548,12 @@ class ContextEngine:
         self._snapshot["env"].update({
             "temp_c": e.temp_c,
             "pressure_hpa": e.pressure_hpa,
-            "aqi": e.aqi,
             "light_lux": getattr(e, "light_lux", None),
         })
+        # Don't clobber an externally-sourced AQI (e.g. location-based) with a
+        # None from hardware that has no air sensor; let real readings override.
+        if e.aqi is not None:
+            self._snapshot["env"]["aqi"] = e.aqi
 
     def _update_system(self) -> None:
         try:

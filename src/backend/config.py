@@ -535,6 +535,7 @@ class PhantomConfig(BaseSettings):
     # ── Ambient Guardian (perception → proactive care) ────────────────────────
     ambient_guardian_enabled: bool = True      # watch env/system/body, warn user
     ambient_guardian_interval_s: int = 60      # rule-scan cadence
+    ambient_aqi_refresh_s: int = 1800          # live air-quality fetch cadence
     ambient_aqi_unhealthy: int = 150           # AQI ≥ → unhealthy warning
     ambient_aqi_hazardous: int = 200           # AQI ≥ → hazardous warning
     ambient_temp_hot_c: float = 32.0

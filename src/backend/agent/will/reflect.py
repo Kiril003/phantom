@@ -101,6 +101,24 @@ async def _gather_observations(db: AsyncSession, user_id: str) -> str:
             parts.append(f"[НАРАТИВ]\n{narr[:800]}")
     except Exception as exc:
         logger.debug("reflect narrative read failed: %s", exc)
+    # Self-generated goals must serve the entity's values and current needs,
+    # not drift — give reflection the doctrine and the dominant drive.
+    try:
+        from agent.cognition.will.values import values_system
+        doctrine = values_system._load_doctrine()
+        if doctrine:
+            parts.append(f"[ЦІННОСТІ — ЦІЛІ МАЮТЬ ЇМ СЛУЖИТИ]\n{doctrine[:600]}")
+    except Exception as exc:
+        logger.debug("reflect values read failed: %s", exc)
+    try:
+        from agent.cognition.will.drives import drive_system
+        drive_system.tick()
+        dominant = drive_system.dominant()
+        if dominant is not None:
+            parts.append(f"[ДОМІНАНТНИЙ ДРАЙВ ЗАРАЗ] {dominant.name} "
+                         f"(тиск {dominant.pressure():.2f}) — врахуй цю потребу.")
+    except Exception as exc:
+        logger.debug("reflect drive read failed: %s", exc)
     return "\n\n".join(parts)
 
 

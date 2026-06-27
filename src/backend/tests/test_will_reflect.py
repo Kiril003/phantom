@@ -85,3 +85,15 @@ async def test_reflect_and_seed_persists_self_generated(db_factory):
     assert len(active) == 1
     assert active[0].source == "self_generated"
     assert active[0].description == "Самопороджена ціль"
+
+
+@pytest.mark.asyncio
+async def test_gather_observations_includes_values_and_drives(db_factory):
+    """Self-generated goals must serve the entity's values + needs, so the
+    reflection context carries the doctrine and the dominant drive."""
+    from agent.will.reflect import _gather_observations
+    async with db_factory() as db:
+        obs = await _gather_observations(db, "u1")
+    assert "ЦІННОСТІ" in obs
+    assert "Україна понад усе" in obs
+    assert "ДОМІНАНТНИЙ ДРАЙВ" in obs

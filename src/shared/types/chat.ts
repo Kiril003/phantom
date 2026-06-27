@@ -10,6 +10,10 @@ export type ResponseForm =
   | 'terminal'
   | 'code'
   | 'metric_cards'
+  | 'comparison'
+  | 'timeline'
+  | 'definition'
+  | 'stat_highlight'
   | 'artifact'
   | 'mixed';
 
@@ -643,6 +647,10 @@ export interface ChatAttachment {
     | 'terminal_output'
     | 'code_block'
     | 'metric_card'
+    | 'comparison_data'
+    | 'timeline_data'
+    | 'definition_data'
+    | 'stat_data'
     | 'artifact_data'
     | 'scene';
   data: Record<string, unknown>;

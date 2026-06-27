@@ -6,6 +6,10 @@ import { DiagramResponse, type DiagramData } from './DiagramResponse';
 import { MapResponse, type MapData } from './MapResponse';
 import { TerminalResponse, type TerminalData } from './TerminalResponse';
 import { MetricCards, type MetricCardData } from './MetricCards';
+import { ComparisonResponse, type ComparisonData } from './ComparisonResponse';
+import { TimelineResponse, type TimelineData } from './TimelineResponse';
+import { DefinitionResponse, type DefinitionData } from './DefinitionResponse';
+import { StatHighlightResponse, type StatData } from './StatHighlightResponse';
 
 interface ResponseRendererProps {
   message: ChatMessage;
@@ -114,6 +118,50 @@ export function ResponseRenderer({ message, streaming = false }: ResponseRendere
         <div className="flex flex-col gap-2">
           {content && <MarkdownResponse content={content} />}
           <MetricCards data={data} />
+        </div>
+      );
+    }
+
+    case 'comparison': {
+      const data = attachmentByType<ComparisonData>(attachments, 'comparison_data');
+      if (!data) return text;
+      return (
+        <div className="flex flex-col gap-2">
+          {content && <MarkdownResponse content={content} />}
+          <ComparisonResponse data={data} />
+        </div>
+      );
+    }
+
+    case 'timeline': {
+      const data = attachmentByType<TimelineData>(attachments, 'timeline_data');
+      if (!data) return text;
+      return (
+        <div className="flex flex-col gap-2">
+          {content && <MarkdownResponse content={content} />}
+          <TimelineResponse data={data} />
+        </div>
+      );
+    }
+
+    case 'definition': {
+      const data = attachmentByType<DefinitionData>(attachments, 'definition_data');
+      if (!data) return text;
+      return (
+        <div className="flex flex-col gap-2">
+          {content && <MarkdownResponse content={content} />}
+          <DefinitionResponse data={data} />
+        </div>
+      );
+    }
+
+    case 'stat_highlight': {
+      const data = attachmentByType<StatData>(attachments, 'stat_data');
+      if (!data) return text;
+      return (
+        <div className="flex flex-col gap-2">
+          {content && <MarkdownResponse content={content} />}
+          <StatHighlightResponse data={data} />
         </div>
       );
     }

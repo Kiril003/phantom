@@ -254,6 +254,100 @@ RESPONSE_FORM_TOOLS: list[dict[str, Any]] = [
             "required": ["content"],
         },
     },
+    {
+        "name": "respond_comparison",
+        "description": (
+            "Порівняння двох-трьох варіантів за рядом критеріїв (X проти Y). "
+            "Використовуй коли користувач просить порівняти, обрати між, "
+            "зважити плюси/мінуси опцій. Кожен рядок — критерій зі значенням "
+            "для кожного варіанта; познач переможця рядка якщо доречно."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "content": {"type": "string", "description": "Короткий висновок/контекст (markdown)"},
+                "title": {"type": "string", "description": "Заголовок порівняння"},
+                "options": {
+                    "type": "array",
+                    "description": "Назви варіантів, 2-3 шт.",
+                    "items": {"type": "string"},
+                },
+                "rows": {
+                    "type": "array",
+                    "description": "[{criterion, values:[по одному на варіант], winner?:індекс}]",
+                    "items": {"type": "object"},
+                },
+                "recommendation": {"type": "string", "description": "Опціонально: що радиш і чому"},
+            },
+            "required": ["content", "options", "rows"],
+        },
+    },
+    {
+        "name": "respond_timeline",
+        "description": (
+            "Послідовність подій або кроків у часі/порядку. Використовуй для "
+            "історії, інструкцій 'крок за кроком', планів, хронології, roadmap. "
+            "Кожен пункт має заголовок і опис; час/дата та статус — опціонально."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "content": {"type": "string", "description": "Вступ/контекст (markdown)"},
+                "title": {"type": "string"},
+                "events": {
+                    "type": "array",
+                    "description": "[{time?, title, detail?, status?:done|active|future}]",
+                    "items": {"type": "object"},
+                },
+            },
+            "required": ["content", "events"],
+        },
+    },
+    {
+        "name": "respond_definition",
+        "description": (
+            "Картка-визначення поняття/терміна. Використовуй коли користувач "
+            "питає 'що таке X', просить пояснити термін, дати визначення. "
+            "Містить термін, вимову/категорію, суть, приклади."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "content": {"type": "string", "description": "Розгорнене пояснення (markdown)"},
+                "term": {"type": "string", "description": "Слово/поняття"},
+                "category": {"type": "string", "description": "Категорія/частина мови/галузь"},
+                "pronunciation": {"type": "string", "description": "Опціонально: вимова"},
+                "definition": {"type": "string", "description": "Стисла суть одним-двома реченнями"},
+                "examples": {
+                    "type": "array",
+                    "description": "Опціонально: приклади вживання",
+                    "items": {"type": "string"},
+                },
+            },
+            "required": ["term", "definition"],
+        },
+    },
+    {
+        "name": "respond_stat",
+        "description": (
+            "Виділене ключове число/факт із контекстом. Використовуй коли "
+            "відповідь зводиться до однієї важливої цифри чи факту, який варто "
+            "подати ефектно (геро-число, рекорд, показник)."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "content": {"type": "string", "description": "Пояснення навколо числа (markdown)"},
+                "value": {"type": "string", "description": "Саме число/факт, як показати (напр. '42 млн')"},
+                "label": {"type": "string", "description": "Що це за показник"},
+                "unit": {"type": "string", "description": "Опціонально: одиниця"},
+                "delta": {"type": "string", "description": "Опціонально: зміна (напр. '+12% р/р')"},
+                "trend": {"type": "string", "enum": ["up", "down", "stable"], "description": "Опціонально"},
+                "source": {"type": "string", "description": "Опціонально: джерело"},
+            },
+            "required": ["value", "label"],
+        },
+    },
 ]
 
 # Map function name → ResponseForm string.
@@ -269,6 +363,10 @@ _FORM_MAP: dict[str, str] = {
     "respond_metrics":  "metric_cards",
     "respond_diagram":  "diagram",
     "respond_mixed":    "mixed",
+    "respond_comparison": "comparison",
+    "respond_timeline":   "timeline",
+    "respond_definition": "definition",
+    "respond_stat":       "stat_highlight",
     # Day-5 W-2c — hallucination safety aliases. Some versions of Gemini
     # tend to invent respond_alarm/calendar based on tool names; coerce
     # those back to text so the pipeline proceeds to the tool-scene promotion.
@@ -785,6 +883,51 @@ def parse_function_call(
                     "zoom": map_data.get("zoom", 13),
                 },
             })
+
+    elif fn_name == "respond_comparison":
+        attachments.append({
+            "type": "comparison_data",
+            "data": {
+                "title": fn_args.get("title", ""),
+                "options": fn_args.get("options", []),
+                "rows": fn_args.get("rows", []),
+                "recommendation": fn_args.get("recommendation", ""),
+            },
+        })
+
+    elif fn_name == "respond_timeline":
+        attachments.append({
+            "type": "timeline_data",
+            "data": {
+                "title": fn_args.get("title", ""),
+                "events": fn_args.get("events", []),
+            },
+        })
+
+    elif fn_name == "respond_definition":
+        attachments.append({
+            "type": "definition_data",
+            "data": {
+                "term": fn_args.get("term", ""),
+                "category": fn_args.get("category", ""),
+                "pronunciation": fn_args.get("pronunciation", ""),
+                "definition": fn_args.get("definition", ""),
+                "examples": fn_args.get("examples", []),
+            },
+        })
+
+    elif fn_name == "respond_stat":
+        attachments.append({
+            "type": "stat_data",
+            "data": {
+                "value": fn_args.get("value", ""),
+                "label": fn_args.get("label", ""),
+                "unit": fn_args.get("unit", ""),
+                "delta": fn_args.get("delta", ""),
+                "trend": fn_args.get("trend", "stable"),
+                "source": fn_args.get("source", ""),
+            },
+        })
 
     # Day-4 W-2c — promote to a typed scene envelope when the form has
     # preset coverage. The W-1 _serialize_message in routes_chat lifts

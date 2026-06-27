@@ -157,6 +157,25 @@ class AmbientGuardian:
             })
         except Exception as exc:
             logger.debug("ambient surface→broadcast failed: %s", exc)
+        # Make it a cognitive signal, not just a notification: a serious alert
+        # becomes a proactive trigger so PHANTOM can decide to *help*, not only
+        # warn (recommend an action, reroute, etc.).
+        from config import config
+        if alert.severity >= int(getattr(config, "ambient_trigger_min_severity", 6)):
+            try:
+                from agent.cognition.proactive.loop import get_loop
+                from agent.cognition.proactive.triggers import (
+                    ProactiveTrigger, ProactiveTriggerKind)
+                loop = get_loop()
+                if loop is not None:
+                    loop.push_trigger(ProactiveTrigger(
+                        kind=ProactiveTriggerKind.AMBIENT_ALERT,
+                        priority=min(10, alert.severity),
+                        context={"rule": alert.rule_id, "category": alert.category,
+                                 "message": alert.message},
+                    ))
+            except Exception as exc:
+                logger.debug("ambient surface→trigger failed: %s", exc)
 
 
 ambient_guardian = AmbientGuardian()

@@ -33,6 +33,8 @@ class ProactiveTriggerKind(str, Enum):
     # Phase 9.4b — spatial intelligence triggers.
     REGION_CHANGED = "region_changed"          # user moved to a new country
     NEAR_REMEMBERED_PLACE = "near_remembered_place"  # within N m of a place in memory
+    # Ambient guardian — environment/system/body crossed a care threshold.
+    AMBIENT_ALERT = "ambient_alert"
 
 
 class ProactiveTrigger(BaseModel):

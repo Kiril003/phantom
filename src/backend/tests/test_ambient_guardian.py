@@ -1,5 +1,7 @@
 """Ambient guardian — perception → proactive care (slice 1)."""
-from agent.cognition.ambient.guardian import AmbientGuardian, AmbientRule
+import pytest
+
+from agent.cognition.ambient.guardian import AmbientGuardian, AmbientRule, AmbientAlert
 from agent.cognition.ambient.rules import default_rules
 from agent.consciousness_stream import ConsciousnessStream
 
@@ -94,6 +96,31 @@ def test_set_env_aqi_is_sticky_and_guards_none():
     assert context_engine.get_snapshot()["env"]["aqi"] == 140.0
     context_engine.set_env_aqi(None)  # must not clobber
     assert context_engine.get_snapshot()["env"]["aqi"] == 140.0
+
+
+class _FakeLoop:
+    def __init__(self):
+        self.triggers = []
+    def push_trigger(self, t):
+        self.triggers.append(t)
+
+
+@pytest.mark.asyncio
+async def test_serious_alert_becomes_proactive_trigger():
+    from agent.cognition.proactive.loop import set_loop, get_loop
+    from agent.cognition.proactive.triggers import ProactiveTriggerKind
+    prev = get_loop()
+    fake = _FakeLoop()
+    set_loop(fake)
+    try:
+        g = AmbientGuardian(rules=[])
+        await g._surface(_snap(), AmbientAlert("air_quality", "environment", 7, "погане повітря"))
+        await g._surface(_snap(), AmbientAlert("internet_lost", "system", 3, "зник інтернет"))
+    finally:
+        set_loop(prev)
+    kinds = [t.kind for t in fake.triggers]
+    assert ProactiveTriggerKind.AMBIENT_ALERT in kinds
+    assert len(fake.triggers) == 1  # only the severity-7 alert crossed the bar
 
 
 def test_consciousness_push_dedups_and_caps():

@@ -633,6 +633,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as exc:
         logger.warning("ConsciousnessStream startup failed: %s", exc)
 
+    # Drives — restore persisted motivational state so satisfaction earned by
+    # the will (reward on goal completion) survives restarts.
+    try:
+        from agent.cognition.will.drives import drive_system
+        await drive_system.load()
+    except Exception as exc:
+        logger.warning("drive system load failed: %s", exc)
+
     # Will Engine — unified conductor of intent (sub-project A). Default off.
     try:
         from agent.will.engine import will_engine

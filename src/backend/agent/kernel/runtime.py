@@ -1181,8 +1181,19 @@ class AgentRuntime:
         episode_summary = await self._finalize_persist(state, outcome, summary)
         await self._finalize_broadcast(state, outcome, summary, error)
         self._finalize_release_slot(state)
+        await self._finalize_reward_drives(state, outcome)
         # Keep episode_summary accessible for any future caller-level logging.
         _ = episode_summary
+
+    async def _finalize_reward_drives(self, state: TaskState, outcome: TaskStatus) -> None:
+        """Close the will loop: a self-initiated goal that completed lowers the
+        pressure of the drives it served (autonomy + achievement). Best-effort —
+        a broken drive subsystem must never fail task finalisation."""
+        if outcome != "done" or getattr(state, "origin", "user") != "will":
+            return
+        with contextlib.suppress(Exception):
+            from agent.cognition.will.drives import drive_system
+            await drive_system.reward({"autonomy": 0.12, "achievement": 0.12})
 
     async def _finalize_persist(
         self,

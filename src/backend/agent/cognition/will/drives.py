@@ -135,6 +135,16 @@ class DriveSystem:
             drive.current_level = max(0.0, min(1.0, drive.current_level + amount))
             drive.last_satisfied_at = datetime.now(tz=timezone.utc)
 
+    async def reward(self, satisfactions: dict[str, float]) -> None:
+        """Satisfy one or more drives at once and persist the result.
+
+        Closes the will loop: when PHANTOM completes a goal it set itself,
+        the drives that goal served lose pressure — and the change survives a
+        restart, so motivation actually moves as the will acts."""
+        for name, amount in satisfactions.items():
+            self.satisfy(name, amount)
+        await self.save()
+
 
 # Singleton
 drive_system = DriveSystem()

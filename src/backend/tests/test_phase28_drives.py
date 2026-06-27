@@ -45,7 +45,7 @@ async def test_drive_tick_hormonal_modulation():
     
     from unittest.mock import patch
     future_now = ds._last_tick.timestamp() + 3600
-    with patch('agent.will.drives.datetime') as mock_date:
+    with patch('agent.cognition.will.drives.datetime') as mock_date:
         mock_date.now.return_value = datetime.fromtimestamp(future_now, tz=timezone.utc)
         initial_curiosity = ds.drives["curiosity"].current_level
         ds.tick()
@@ -74,3 +74,24 @@ async def test_drive_persistence(isolated_db):
     
     assert ds2.drives["curiosity"].current_level == pytest.approx(0.8)
     assert ds2.drives["beauty"].current_level == pytest.approx(0.2)
+
+
+@pytest.mark.asyncio
+async def test_drive_reward_lowers_pressure_and_persists(isolated_db):
+    """A completed will-goal satisfies the drives it served; the change
+    persists so motivation actually moves across restarts (will loop)."""
+    ds = DriveSystem()
+    ds.drives["autonomy"].current_level = 0.4
+    ds.drives["achievement"].current_level = 0.4
+
+    await ds.reward({"autonomy": 0.12, "achievement": 0.12})
+
+    # Pressure dropped in-memory.
+    assert ds.drives["autonomy"].current_level == pytest.approx(0.52)
+    assert ds.drives["achievement"].current_level == pytest.approx(0.52)
+
+    # And the reward was persisted (survives a restart).
+    ds2 = DriveSystem()
+    await ds2.load()
+    assert ds2.drives["autonomy"].current_level == pytest.approx(0.52)
+    assert ds2.drives["achievement"].current_level == pytest.approx(0.52)

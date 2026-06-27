@@ -13,6 +13,9 @@ _SYSTEM = ("Ти — воля PHANTOM. Обери РІВНО ОДНУ найці
            "Поверни ЛИШЕ JSON, без прози.")
 
 _PROMPT = """\
+[ХТО ТИ / ЩО ТЕБЕ ЗАРАЗ РУХАЄ]
+{motivation}
+
 [ЧАС/КОНТЕКСТ]
 {ctx}
 
@@ -48,6 +51,7 @@ async def decide_next(
     budget: Budget,
     *,
     dispatch_llm: Callable[[str, str], Awaitable[str]],
+    motivation: str = "",
 ) -> WillDecision:
     if not goals:
         return WillDecision(kind="noop", rationale="no active goals")
@@ -58,6 +62,7 @@ async def decide_next(
         for g in goals
     )
     prompt = _PROMPT.format(
+        motivation=motivation or "(нейтральний стан)",
         ctx=json.dumps(snapshot.get("when", {}), ensure_ascii=False),
         goals=goal_lines,
         calls_left=budget.calls_cap - budget.calls_used,

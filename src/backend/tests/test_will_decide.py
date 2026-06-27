@@ -50,3 +50,16 @@ async def test_decide_noop_on_garbage():
         return "not json at all"
     d = await decide_next({}, [_g("a1", 6, "x")], Budget(0, 0, 200, 300_000), dispatch_llm=fake_llm)
     assert d.kind == "noop"
+
+
+@pytest.mark.asyncio
+async def test_decide_includes_motivation_in_prompt():
+    seen = {}
+
+    async def fake_llm(prompt, system):
+        seen["prompt"] = prompt
+        return '{"kind":"noop"}'
+    await decide_next({}, [_g("a1", 6, "x")], Budget(0, 0, 200, 300_000),
+                      dispatch_llm=fake_llm, motivation="Я PHANTOM. Драйв: допитливість.")
+    assert "Я PHANTOM" in seen["prompt"]
+    assert "допитливість" in seen["prompt"]

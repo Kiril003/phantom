@@ -45,6 +45,29 @@ class WillEngine:
         self._stop = asyncio.Event()
         self._last_reflect: dict[str, str] = {}  # user_id → YYYY-MM-DD of last reflection
 
+    def _motivation(self) -> str:
+        """Compose 'who I am + what drives me now' from the motivational layer.
+        Best-effort: the conductor stays coherent with PHANTOM's identity, but
+        never fails a tick if the drives/identity subsystems are unavailable."""
+        parts: list[str] = []
+        try:
+            from agent.cognition.will.identity import identity_system
+            summary = identity_system.summary(max_words=40)
+            if summary:
+                parts.append(summary)
+        except Exception as exc:
+            logger.debug("motivation identity read failed: %s", exc)
+        try:
+            from agent.cognition.will.drives import drive_system
+            drive_system.tick()
+            dominant = drive_system.dominant()
+            if dominant is not None:
+                parts.append(f"Домінантний драйв зараз: {dominant.name} "
+                             f"(тиск {dominant.pressure():.2f}).")
+        except Exception as exc:
+            logger.debug("motivation drive read failed: %s", exc)
+        return " ".join(parts)
+
     async def orient(self, db: AsyncSession, user_id: str, active, *, now=None) -> str:
         """Deepen the goal tree (decompose) and self-generate goals (reflect).
         Budget-gated; at most one decompose + one reflect per tick. Returns a note."""
@@ -100,7 +123,9 @@ class WillEngine:
         await self.orient(db, user_id, active, now=now)
         active = await goals_repo.list_active(db, user_id)
         budget = await self.governor.remaining(db, user_id)
-        decision = await decide_next(snapshot, active, budget, dispatch_llm=self.dispatch_llm)
+        motivation = self._motivation()
+        decision = await decide_next(snapshot, active, budget,
+                                     dispatch_llm=self.dispatch_llm, motivation=motivation)
         await self.governor.note_spend(db, user_id, calls=1, tokens=0)
 
         if decision.kind == "noop":

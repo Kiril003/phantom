@@ -16,6 +16,10 @@ from agent.cognition.planner._llm import llm_json
 
 logger = logging.getLogger(__name__)
 
+# The doctrine lives next to this module; resolve absolutely so loading is
+# independent of the process CWD (uvicorn, pytest, and CLI all differ).
+_DOCTRINE_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "values.md")
+
 
 class ValueVerdict(BaseModel):
     aligned: bool
@@ -27,7 +31,7 @@ class ValueVerdict(BaseModel):
 class ValuesSystem:
     """Manages the values doctrine and evaluates alignment."""
 
-    def __init__(self, values_path: str = "src/backend/agent/will/values.md") -> None:
+    def __init__(self, values_path: str = _DOCTRINE_PATH) -> None:
         self.values_path = values_path
         self._cache: dict[str, tuple[float, ValueVerdict]] = {}
         self._cache_ttl = 60.0  # seconds

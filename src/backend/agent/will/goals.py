@@ -24,11 +24,23 @@ def _to_goal(row: PersistentGoal) -> Goal:
 
 async def seed(db: AsyncSession, user_id: str, description: str, horizon_level: int,
                *, parent_id: str | None = None, kpi: str | None = None,
-               source: str = "seeded") -> str:
-    gid = str(uuid.uuid4())
+               source: str = "seeded", goal_id: str | None = None,
+               owner_agent: str = "CEO", deadline=None, blockers: list[str] | None = None,
+               status: str = "pending", value_alignment: float = 1.0,
+               drive_pull: float = 1.0, urgency: float = 0.5,
+               tractability: float = 0.5, progress: float = 0.0) -> str:
+    """The single writer for goals_persistent. The conductor seeds with the
+    minimal signature; callers that carry priority components (goal_stack)
+    pass them through so ranking survives. Optional goal_id preserves a
+    caller-assigned id."""
+    gid = goal_id or str(uuid.uuid4())
     db.add(PersistentGoal(
         id=gid, user_id=user_id, parent_id=parent_id, horizon_level=horizon_level,
-        description=description, kpi=kpi, status="pending", source=source,
+        description=description, kpi=kpi, status=status, source=source,
+        owner_agent=owner_agent, deadline=deadline,
+        blockers_json=json.dumps(blockers or [], ensure_ascii=False),
+        value_alignment=value_alignment, drive_pull=drive_pull, urgency=urgency,
+        tractability=tractability, progress=progress,
     ))
     await db.flush()
     return gid

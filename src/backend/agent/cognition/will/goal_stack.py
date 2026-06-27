@@ -54,27 +54,21 @@ class PersistentGoalStack:
     """Heap-priority stack for long-term autonomous goals."""
 
     async def push(self, goal: Goal) -> None:
-        """Add a new goal to the stack and persist it."""
+        """Add a new goal to the stack and persist it. Delegates the actual
+        INSERT to the conductor's goals repo — the single writer of
+        goals_persistent — so there is no second row-construction fork."""
+        from agent.will import goals as goals_repo
         try:
             async with get_session() as db:
-                row = PersistentGoal(
-                    id=goal.id,
-                    user_id=goal.user_id,
-                    parent_id=goal.parent_id,
-                    horizon_level=goal.horizon_level,
-                    description=goal.description,
-                    owner_agent=goal.owner_agent,
-                    kpi=goal.kpi,
-                    deadline=goal.deadline,
-                    blockers_json=json.dumps(goal.blockers),
-                    status=goal.status,
-                    value_alignment=goal.value_alignment,
-                    drive_pull=goal.drive_pull,
-                    urgency=goal.urgency,
-                    tractability=goal.tractability,
+                await goals_repo.seed(
+                    db, goal.user_id, goal.description, goal.horizon_level,
+                    parent_id=goal.parent_id, kpi=goal.kpi, goal_id=goal.id,
+                    owner_agent=goal.owner_agent, deadline=goal.deadline,
+                    blockers=goal.blockers, status=goal.status,
+                    value_alignment=goal.value_alignment, drive_pull=goal.drive_pull,
+                    urgency=goal.urgency, tractability=goal.tractability,
                     progress=goal.progress,
                 )
-                db.add(row)
                 await db.commit()
                 logger.info("GoalStack: pushed goal %s: %s", goal.id[:8], goal.description[:60])
         except Exception as exc:

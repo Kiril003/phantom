@@ -77,6 +77,38 @@ async def test_orient_decomposes_high_horizon_childless_goal(db_factory):
 
 
 @pytest.mark.asyncio
+async def test_orient_stops_decomposing_at_active_goal_ceiling(db_factory, monkeypatch):
+    """Anti-sprawl: once the tree reaches will_max_active_goals, orient must NOT
+    decompose further — budget flows to action instead of endless planning."""
+    from agent.will.engine import WillEngine
+    from agent.will import goals
+    from config import config
+    monkeypatch.setattr(config, "will_max_active_goals", 3, raising=False)
+
+    calls = {"n": 0}
+
+    async def fake_llm(prompt, system):
+        calls["n"] += 1
+        return '["мав би розбити, але не повинен"]'
+    eng = WillEngine()
+    eng.dispatch_llm = fake_llm
+    async with db_factory() as db:
+        vid = await goals.seed(db, "u1", "VISION", 0)  # childless, decomposable
+        await goals.seed(db, "u1", "leaf a", 6)
+        await goals.seed(db, "u1", "leaf b", 6)        # 3 active total == ceiling
+        await db.commit()
+    async with db_factory() as db:
+        active = await goals.list_active(db, "u1")
+        note = await eng.orient(db, "u1", active, now=datetime(2026, 6, 27, 12, 0))
+        await db.commit()
+    assert "decomposed" not in note
+    assert calls["n"] == 0  # no LLM spent on decomposition at the ceiling
+    async with db_factory() as db:
+        kids = await goals.children(db, "u1", vid)
+    assert kids == []
+
+
+@pytest.mark.asyncio
 async def test_orient_scheduled_reflect_only_once_per_day(db_factory, monkeypatch):
     from agent.will.engine import WillEngine
     from agent.will import goals

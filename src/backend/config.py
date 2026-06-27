@@ -539,6 +539,9 @@ class PhantomConfig(BaseSettings):
     will_daily_token_cap: int = 300_000        # daily budget — tokens
     will_reflect_hour_local: int = 4           # daily self-generation hour (local)
     will_max_active_day_goals: int = 3         # anti-sprawl on the DAY horizon
+    will_max_active_goals: int = 20            # anti-sprawl on the WHOLE tree —
+    #   once the tree has this many active goals, orient() stops decomposing so
+    #   budget flows to action (decide) instead of endless planning.
     agent_proactive_cooldown_s: int = 90
     agent_proactive_long_silence_threshold_min: int = 30
     agent_proactive_require_recent_chat: bool = False

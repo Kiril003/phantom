@@ -118,12 +118,17 @@ class WillEngine:
 
         active2 = await goals_repo.list_active(db, user_id)
         target = None
-        for g in sorted(active2, key=lambda x: x.horizon_level):
-            if g.horizon_level < 6:
-                kids = await goals_repo.children(db, user_id, g.id)
-                if not kids:
-                    target = g
-                    break
+        # Anti-sprawl: stop deepening once the tree is large enough so budget
+        # flows to action (decide) instead of endless planning. Without this the
+        # will decomposes a childless goal every tick until the daily budget is
+        # exhausted and it never acts (observed on the first live wake).
+        if len(active2) < config.will_max_active_goals:
+            for g in sorted(active2, key=lambda x: x.horizon_level):
+                if g.horizon_level < 6:
+                    kids = await goals_repo.children(db, user_id, g.id)
+                    if not kids:
+                        target = g
+                        break
         if target is not None and await self.governor.can_spend(db, user_id):
             try:
                 created = await decompose_goal(db, user_id, target, dispatch_llm=self.dispatch_llm)

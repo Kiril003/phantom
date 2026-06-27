@@ -9,8 +9,13 @@ from agent.cognition.will.goal_stack import PersistentGoalStack, Goal
 @pytest.fixture
 async def isolated_db(monkeypatch):
     from db.database import Base, engine, get_session
+    from db.models import User
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+    # goals_persistent.user_id is a FK to users.id — seed the test owner.
+    async with get_session() as s:
+        s.add(User(id="test", username="test"))
+        await s.commit()
     yield get_session
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.drop_all)
@@ -18,6 +23,7 @@ async def isolated_db(monkeypatch):
 @pytest.mark.asyncio
 async def test_goal_priority():
     g = Goal(
+        user_id="test",
         description="test",
         value_alignment=0.8,
         drive_pull=0.9,
@@ -31,8 +37,8 @@ async def test_goal_priority():
 async def test_goal_stack_push_and_pop(isolated_db):
     gs = PersistentGoalStack()
     
-    g1 = Goal(description="low priority", urgency=0.1)
-    g2 = Goal(description="high priority", urgency=0.9)
+    g1 = Goal(user_id="test", description="low priority", urgency=0.1)
+    g2 = Goal(user_id="test", description="high priority", urgency=0.9)
     
     await gs.push(g1)
     await gs.push(g2)
@@ -49,7 +55,7 @@ async def test_goal_stack_push_and_pop(isolated_db):
 @pytest.mark.asyncio
 async def test_goal_stack_mark_done(isolated_db):
     gs = PersistentGoalStack()
-    g = Goal(description="to be done")
+    g = Goal(user_id="test", description="to be done")
     await gs.push(g)
     
     await gs.mark_done(g.id, summary="finished well")
@@ -61,7 +67,7 @@ async def test_goal_stack_mark_done(isolated_db):
 @pytest.mark.asyncio
 async def test_goal_stack_persistence(isolated_db):
     gs = PersistentGoalStack()
-    g = Goal(description="persistent goal")
+    g = Goal(user_id="test", description="persistent goal")
     await gs.push(g)
     
     # New stack instance should see it

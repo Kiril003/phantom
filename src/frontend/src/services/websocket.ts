@@ -208,7 +208,18 @@ class WebSocketClient {
   private _open(): void {
     const url = new URL('/ws', window.location.href);
     url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
-    if (this.token) url.searchParams.set('token', this.token);
+    // Always prefer the freshest token from storage: connect() caches the
+    // token once, but it may have been refreshed since (the cached one can
+    // expire). A reconnect on the stale/expired token authenticates as
+    // user=None on the backend, which then filters this client out of all
+    // user-scoped broadcasts — so chat replies silently never arrive.
+    const liveToken =
+      (typeof localStorage !== 'undefined' && localStorage.getItem('phantom_token')) ||
+      this.token;
+    if (liveToken) {
+      this.token = liveToken;
+      url.searchParams.set('token', liveToken);
+    }
 
     let ws: WebSocket;
     try {

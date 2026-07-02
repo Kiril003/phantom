@@ -94,3 +94,8 @@ src/frontend/chroma_data/
 # voice_models / workspace caches. Packaged builds resolve under
 # platformdirs.user_data_dir, which lives outside the repo by design.
 .phantom-data/
+
+# G0.1 (PHANTOM_FORGE_PLAN Part II): graphify code graph is a regenerable
+# ~50MB local artifact (`graphify update .`), not a commit-worthy blob.
+# Same precedent as phantom-companion's .gitignore.
+graphify-out/

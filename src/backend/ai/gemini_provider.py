@@ -289,12 +289,11 @@ class GeminiProvider(AIProvider):
                     fn_name, data_calls_made, MAX_TOOL_CALLS_PER_TURN,
                     "ok" if tool_result.get("ok") else tool_result.get("error_kind", "err"),
                 )
-                # Append the model turn (with function_call) and the user turn
-                # (with function_response) so the follow-up call has full context.
-                contents.append({
-                    "role": "model",
-                    "parts": [{"function_call": {"name": fn_name_raw, "args": fn_args}}],
-                })
+                # Replay the model turn VERBATIM (candidate.content), not a
+                # rebuilt {"function_call": ...} dict: thinking models attach
+                # a thought_signature to the function-call part, and dropping
+                # it makes the follow-up call 400 (INVALID_ARGUMENT).
+                contents.append(candidate.content)
                 contents.append({
                     "role": "user",
                     "parts": [

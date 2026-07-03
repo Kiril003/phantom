@@ -82,6 +82,13 @@ aihub_assets_*/
 src/backend/test_script/
 src/frontend/chroma_data/
 
+# F0.2 — root scratch/fix scripts must never return (repo-hygiene law)
+/scratch.py
+/fix_fasttrack.py
+/refactor_imports.py
+/*_flake8.log
+/*_vulture.log
+
 # Ruflo / claude-flow swarm artifacts (Day-4 onwards)
 .claude/
 .claude-flow/

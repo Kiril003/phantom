@@ -691,8 +691,17 @@ export interface ChatAttachment {
     | 'definition_data'
     | 'stat_data'
     | 'artifact_data'
-    | 'scene';
+    | 'scene'
+    | 'image';
   data: Record<string, unknown>;
+}
+
+/** `data` payload of an `image` ChatAttachment. `url` is a signed
+ *  relative URL (/api/v1/files/raw?…) or a data: URL. */
+export interface ImageAttachmentData {
+  url: string;
+  name?: string;
+  caption?: string | null;
 }
 
 export interface ChatSession {

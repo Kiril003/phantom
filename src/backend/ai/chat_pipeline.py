@@ -543,6 +543,21 @@ def _auto_render_envelope(
     # (a) shows the card within seconds, while the build's workbench.phase
     # events still have a listener to land on, and (b) skips the Step-5
     # summary call — one less LLM request per build on a 20/day free tier.
+    # Images: the photo IS the answer — ship the attachment directly so it
+    # can't be dropped by the Step-5 prose call (which keeps only scenes).
+    if tool_name == "show_image":
+        att = result.get("attachment")
+        if isinstance(att, dict) and att.get("type") == "image":
+            data = att.get("data") or {}
+            caption = data.get("caption") or data.get("name") or "зображення"
+            return AIResponse(
+                content=str(caption),
+                response_form="text",
+                attachments=[att],
+                provider=provider,
+            )
+        return None
+
     if tool_name in ("create_workbench", "refine_workbench") and tool_scene:
         title = (tool_scene.get("data") or {}).get("title") or "творіння"
         verb = "Відкрив майстерню" if tool_name == "create_workbench" \

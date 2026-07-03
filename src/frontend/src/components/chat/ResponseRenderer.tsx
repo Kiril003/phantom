@@ -10,6 +10,8 @@ import { ComparisonResponse, type ComparisonData } from './ComparisonResponse';
 import { TimelineResponse, type TimelineData } from './TimelineResponse';
 import { DefinitionResponse, type DefinitionData } from './DefinitionResponse';
 import { StatHighlightResponse, type StatData } from './StatHighlightResponse';
+import { ImageResponse } from './ImageResponse';
+import type { ImageAttachmentData } from '@shared/types';
 
 interface ResponseRendererProps {
   message: ChatMessage;
@@ -42,6 +44,28 @@ export function ResponseRenderer({ message, streaming = false }: ResponseRendere
   const content = message.content;
   const attachments = message.attachments;
 
+  // Images render under EVERY form — a photo attached to any message
+  // must never be silently dropped by a form-specific switch arm.
+  const images = (attachments ?? [])
+    .filter((a) => a.type === 'image')
+    .map((a) => a.data as unknown as ImageAttachmentData)
+    .filter((d) => typeof d?.url === 'string' && d.url.length > 0);
+  const body = renderForm(form, content, attachments, streaming);
+  if (images.length === 0) return body;
+  return (
+    <div className="flex flex-col gap-2">
+      {body}
+      <ImageResponse images={images} />
+    </div>
+  );
+}
+
+function renderForm(
+  form: ResponseForm,
+  content: string,
+  attachments: ChatAttachment[] | undefined,
+  streaming: boolean,
+) {
   const text = content ? (
     <MarkdownResponse content={content} />
   ) : null;

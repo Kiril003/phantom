@@ -101,6 +101,8 @@ _CHAT_SAFE_TOOL_NAMES: tuple[str, ...] = (
     "create_workbench",
     "refine_workbench",
     "list_workbenches",
+    # Images inline in chat.
+    "show_image",
 )
 
 

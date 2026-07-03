@@ -2507,6 +2507,39 @@ async def _tool_refine_workbench(args: dict[str, Any], user_id: str) -> dict[str
     )
 
 
+async def _tool_show_image(args: dict[str, Any], user_id: str) -> dict[str, Any]:  # noqa: ARG001
+    """Show a photo/image from disk inline in chat. Returns an `image`
+    attachment with a short-lived signed URL (`<img>` can't carry JWT)."""
+    path = str(args.get("path") or "").strip()
+    caption = str(args.get("caption") or "").strip()
+    if not path:
+        return _err("invalid_args", "path is required")
+    try:
+        from api.routes_files import RAW_MIME, sign_raw_url
+        from tools.file_manager import _resolve_inside_allowed
+        target = _resolve_inside_allowed(path)
+        if not target.is_file():
+            return _err("not_found", f"немає файла: {path}")
+        if target.suffix.lower() not in RAW_MIME:
+            return _err("invalid_args",
+                        f"не зображення ({target.suffix}); підтримую "
+                        f"{', '.join(sorted(RAW_MIME))}")
+        url = sign_raw_url(str(target))
+    except ValueError as exc:
+        return _err("forbidden", str(exc))
+    except Exception as exc:
+        logger.exception("show_image failed")
+        return _err("exception", f"show_image: {exc}")
+    return _ok(
+        attachment={
+            "type": "image",
+            "data": {"url": url, "name": target.name,
+                     "caption": caption or None},
+        },
+        name=target.name,
+    )
+
+
 async def _tool_list_workbenches(_args: dict[str, Any], user_id: str) -> dict[str, Any]:  # noqa: ARG001
     try:
         from workbench.service import workbench_service
@@ -2588,6 +2621,8 @@ _HANDLERS: dict[str, Any] = {
     "create_workbench": _tool_create_workbench,
     "refine_workbench": _tool_refine_workbench,
     "list_workbenches": _tool_list_workbenches,
+    # Images inline in chat.
+    "show_image": _tool_show_image,
 }
 
 

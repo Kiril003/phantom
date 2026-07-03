@@ -40,6 +40,73 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/files", tags=["files"])
 
+# ── Signed raw access (images in chat) ───────────────────────────────────────
+#
+# <img src> can't carry the JWT header, so raw binary access is granted by
+# a short-lived HMAC over (path, exp) minted server-side by the show_image
+# chat tool. Same pattern as the workbench preview token.
+
+RAW_CAP_BYTES = 10 * 1024 * 1024
+RAW_MIME: dict[str, str] = {
+    ".png": "image/png", ".jpg": "image/jpeg", ".jpeg": "image/jpeg",
+    ".gif": "image/gif", ".webp": "image/webp", ".svg": "image/svg+xml",
+    ".bmp": "image/bmp",
+}
+
+
+def _raw_sig(path: str, exp: int) -> str:
+    import hashlib
+    import hmac as _hmac
+    from config import config
+    key = (config.jwt_secret_key or "phantom-dev").encode()
+    return _hmac.new(key, f"{path}|{exp}".encode(), hashlib.sha256).hexdigest()
+
+
+def sign_raw_url(path: str, *, ttl_s: int = 3600) -> str:
+    """Mint a signed relative URL for one file. Caller must have validated
+    the path is inside the allow-list (we re-validate on GET anyway)."""
+    import time as _time
+    from urllib.parse import quote
+    exp = int(_time.time()) + ttl_s
+    return (f"/api/v1/files/raw?path={quote(path)}&exp={exp}"
+            f"&sig={_raw_sig(path, exp)}")
+
+
+@router.get("/raw")
+async def api_raw_file(
+    path: str = Query(...),
+    exp: int = Query(...),
+    sig: str = Query(...),
+):
+    import hmac as _hmac
+    import time as _time
+    from pathlib import Path as _Path
+
+    from fastapi import Response
+
+    if _time.time() > exp:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="link expired")
+    if not _hmac.compare_digest(sig, _raw_sig(path, exp)):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="bad signature")
+    from tools.file_manager import _resolve_inside_allowed
+    try:
+        target: _Path = _resolve_inside_allowed(path)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail=str(exc))
+    if not target.is_file():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="not a file")
+    mime = RAW_MIME.get(target.suffix.lower())
+    if mime is None:
+        raise HTTPException(
+            status_code=status.HTTP_415_UNSUPPORTED_MEDIA_TYPE,
+            detail="raw access is image-only",
+        )
+    if target.stat().st_size > RAW_CAP_BYTES:
+        raise HTTPException(status_code=status.HTTP_413_REQUEST_ENTITY_TOO_LARGE,
+                            detail="file exceeds raw cap")
+    return Response(content=target.read_bytes(), media_type=mime,
+                    headers={"Cache-Control": "private, max-age=3600"})
+
 
 @router.get("/list")
 async def api_list_files(

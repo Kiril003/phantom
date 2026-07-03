@@ -1247,6 +1247,29 @@ CHAT_DATA_TOOLS: list[dict[str, Any]] = [
         "description": "Список творінь майстерні (id, назва, статус).",
         "parameters": {"type": "object", "properties": {}},
     },
+    {
+        "name": "show_image",
+        "description": (
+            "Показати фото/зображення з диска ПРЯМО в чаті (png/jpg/gif/"
+            "webp/svg). Використовуй після search_files/list_files, коли "
+            "користувач просить показати фото, скріншот, картинку — не "
+            "описуй словами те, що можна показати."
+        ),
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "path": {
+                    "type": "string",
+                    "description": "Повний шлях до файла зображення.",
+                },
+                "caption": {
+                    "type": "string",
+                    "description": "Короткий підпис під фото (опційно).",
+                },
+            },
+            "required": ["path"],
+        },
+    },
 ]
 
 

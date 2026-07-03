@@ -15,6 +15,7 @@ Asserts the three latency mechanics shipped in the B1 sprint:
 """
 from __future__ import annotations
 
+import asyncio
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, patch
 
@@ -345,6 +346,139 @@ class TestToolRelevance:
         trimmed = _trim_tool_catalog(full, "постав будильник на 7 ранку")
         assert len(trimmed) <= MAX_ROUND1_TOOLS < len(full)
         assert any(t.name == "create_alarm" for t in trimmed)
+
+
+# ── incremental sentence TTS ──────────────────────────────────────────────────
+
+
+class TestSentenceSplit:
+    def test_incomplete_tail_stays_buffered(self):
+        from voice.incremental_tts import split_complete_sentences
+
+        done, tail = split_complete_sentences("Перше речення. Друге ще не")
+        assert done == ["Перше речення."]
+        assert tail == "Друге ще не"
+
+    def test_multiple_boundaries(self):
+        from voice.incremental_tts import split_complete_sentences
+
+        done, tail = split_complete_sentences("Раз. Два! Три? Чотир")
+        assert done == ["Раз.", "Два!", "Три?"]
+        assert tail == "Чотир"
+
+    def test_newline_flushes(self):
+        from voice.incremental_tts import split_complete_sentences
+
+        done, tail = split_complete_sentences("Пункт перший\nПункт другий")
+        assert done == ["Пункт перший"]
+        assert tail == "Пункт другий"
+
+    def test_speakable_strips_markdown_and_code(self):
+        from voice.incremental_tts import speakable
+
+        text = (
+            "Ось **код**:\n```python\nprint('hi')\n```\n"
+            "Дивись [доки](https://example.com) або https://raw.link/x."
+        )
+        out = speakable(text)
+        assert "print" not in out
+        assert "```" not in out
+        assert "https://" not in out
+        assert "**" not in out
+        assert "доки" in out
+
+
+class TestSentenceSpeaker:
+    @pytest.mark.asyncio
+    async def test_feeds_synthesize_and_broadcast_in_order(self, monkeypatch):
+        from voice import incremental_tts
+        from voice.tts_engine import TTSResult
+
+        events: list[tuple[str, dict]] = []
+
+        async def _fake_broadcast(user_id, type_, payload):
+            events.append((type_, payload))
+
+        async def _fake_synth(text, voice, speed):
+            return TTSResult(audio_wav=b"RIFFxx", sample_rate=22050, engine="piper", voice=voice)
+
+        monkeypatch.setattr(incremental_tts, "_broadcast", _fake_broadcast)
+        monkeypatch.setattr("voice.pipeline.synthesize_text", _fake_synth)
+
+        speaker = incremental_tts.SentenceSpeaker("u1", "msg1", "sess1")
+        speaker.start()
+        await speaker.feed("Перше речення. Дру")
+        await speaker.feed("ге речення! Хвіст без крап")
+        await speaker.finish()
+        await asyncio.wait_for(speaker._worker, timeout=5)
+
+        assert speaker.accepted_any
+        kinds = [k for k, _ in events]
+        assert kinds == ["tts.sentence"] * 3
+        seqs = [p["seq"] for _, p in events]
+        assert seqs == [1, 2, 3]
+        texts = [p["text"] for _, p in events]
+        assert texts == ["Перше речення.", "Друге речення!", "Хвіст без крап"]
+        assert all(p["message_id"] == "msg1" for _, p in events)
+        import base64 as _b64
+        assert _b64.b64decode(events[0][1]["audio_b64"]) == b"RIFFxx"
+
+    @pytest.mark.asyncio
+    async def test_silent_engine_ships_nothing(self, monkeypatch):
+        from voice import incremental_tts
+        from voice.tts_engine import TTSResult
+
+        events: list[tuple[str, dict]] = []
+
+        async def _fake_broadcast(user_id, type_, payload):
+            events.append((type_, payload))
+
+        async def _fake_synth(text, voice, speed):
+            return TTSResult(audio_wav=b"", sample_rate=22050, engine="silent", voice=voice)
+
+        monkeypatch.setattr(incremental_tts, "_broadcast", _fake_broadcast)
+        monkeypatch.setattr("voice.pipeline.synthesize_text", _fake_synth)
+
+        speaker = incremental_tts.SentenceSpeaker("u1", "msg1", "sess1")
+        speaker.start()
+        await speaker.feed("Тихе речення.")
+        await speaker.finish()
+        await asyncio.wait_for(speaker._worker, timeout=5)
+        assert events == []
+
+    @pytest.mark.asyncio
+    async def test_new_speaker_interrupts_previous(self, monkeypatch):
+        from voice import incremental_tts
+
+        events: list[tuple[str, dict]] = []
+
+        async def _fake_broadcast(user_id, type_, payload):
+            events.append((type_, payload))
+
+        monkeypatch.setattr(incremental_tts, "_broadcast", _fake_broadcast)
+
+        first = await incremental_tts.start_speaker("u9", "msgA", "s1")
+        second = await incremental_tts.start_speaker("u9", "msgB", "s1")
+        assert first._cancelled
+        assert not second._cancelled
+        stops = [p for k, p in events if k == "tts.stop"]
+        assert [s["message_id"] for s in stops] == ["msgA"]
+        await incremental_tts.stop_for_user("u9")
+        assert second._cancelled
+
+    @pytest.mark.asyncio
+    async def test_cancelled_speaker_ignores_feed(self, monkeypatch):
+        from voice import incremental_tts
+
+        async def _fake_broadcast(user_id, type_, payload):
+            pass
+
+        monkeypatch.setattr(incremental_tts, "_broadcast", _fake_broadcast)
+        speaker = incremental_tts.SentenceSpeaker("u1", "m", "s")
+        speaker.start()
+        await speaker.cancel()
+        await speaker.feed("Це вже нікому не потрібно.")
+        assert not speaker.accepted_any
 
 
 # ── thought_signature — verbatim function-call replay ─────────────────────────

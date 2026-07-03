@@ -746,6 +746,23 @@ async def send_message(
     assistant_msg_id = str(uuid.uuid4())
     streaming_active = False
 
+    # B1 liveness — a new message interrupts whatever PHANTOM is saying;
+    # voice turns get a sentence-streaming speaker so audio starts with
+    # the first complete sentence of the delta stream, not after the
+    # full reply.
+    from voice import incremental_tts
+    tts_speaker = None
+    try:
+        if req.input_method == "voice" and config.voice_tts_enabled:
+            tts_speaker = await incremental_tts.start_speaker(
+                user.id, assistant_msg_id, session.id,
+            )
+        else:
+            await incremental_tts.stop_for_user(user.id)
+    except Exception as exc:  # noqa: BLE001
+        logger.debug("incremental TTS setup failed: %s", exc)
+        tts_speaker = None
+
     async def _send_delta(chunk: str) -> None:
         nonlocal streaming_active
         streaming_active = True
@@ -758,6 +775,11 @@ async def send_message(
             )
         except Exception as exc:  # noqa: BLE001
             logger.debug("WS chunk broadcast failed: %s", exc)
+        if tts_speaker is not None:
+            try:
+                await tts_speaker.feed(chunk)
+            except Exception as exc:  # noqa: BLE001
+                logger.debug("incremental TTS feed failed: %s", exc)
 
     # Generate AI response (streaming when on_delta is set + tools off)
     try:
@@ -767,10 +789,25 @@ async def send_message(
             )
     except Exception as exc:
         logger.error("AI generation failed: %s", exc)
+        if tts_speaker is not None:
+            try:
+                await tts_speaker.cancel()
+            except Exception:  # noqa: BLE001
+                pass
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail=f"AI unavailable: {exc}",
         )
+
+    # Non-streamed replies (tool/widget answers) still speak: feed the
+    # final text whole — the speaker sentence-splits it the same way.
+    if tts_speaker is not None:
+        try:
+            if not streaming_active and content:
+                await tts_speaker.feed(content)
+            await tts_speaker.finish()
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("incremental TTS finish failed: %s", exc)
 
     latency_ms = int((time.monotonic() - t_start) * 1000)
     # Day-4 V-6 (ADR-RTP-002): chat response latency histogram. Wired
@@ -914,9 +951,12 @@ async def send_message(
 
     # Phase 11b — tell the frontend to auto-play TTS for voice-originated
     # turns. Text/encoder turns keep the current opt-in behaviour.
+    # B1 — when the sentence speaker already shipped audio for this turn,
+    # suppress the legacy whole-reply auto-TTS so it can't double-play.
     auto_tts = (
         req.input_method == "voice"
         and config.voice_tts_enabled
+        and not (tts_speaker is not None and tts_speaker.accepted_any)
     )
 
     return {

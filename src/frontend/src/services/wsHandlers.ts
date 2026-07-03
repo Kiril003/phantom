@@ -12,6 +12,7 @@
  *   - `familiar` channel → `familiarStore.manifest('ai-summon', …)`
  */
 import { wsClient } from './websocket';
+import { registerTtsPlayerWsHandler } from './ttsPlayer';
 import { useFamiliarStore } from '../stores/familiarStore';
 import type {
   FamiliarPose,
@@ -88,7 +89,11 @@ export function registerFamiliarWsHandler(): () => void {
  * register here.
  */
 export function registerWsHandlers(): () => void {
-  const unsubs: Array<() => void> = [registerFamiliarWsHandler()];
+  const unsubs: Array<() => void> = [
+    registerFamiliarWsHandler(),
+    // B1 — incremental sentence TTS playback (chat/tts.sentence + tts.stop).
+    registerTtsPlayerWsHandler(),
+  ];
   return () => {
     unsubs.forEach((u) => {
       try {

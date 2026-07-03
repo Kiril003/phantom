@@ -642,6 +642,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as exc:
         logger.warning("AmbientGuardian startup failed: %s", exc)
 
+    # ПОЛІС — resume unfinished mission graphs after reboot.
+    try:
+        from agent.fabric.service import get_polis
+        await get_polis().rehydrate()
+    except Exception as exc:
+        logger.warning("Polis rehydrate failed: %s", exc)
+
     # Drives — restore persisted motivational state so satisfaction earned by
     # the will (reward on goal completion) survives restarts.
     try:
@@ -978,6 +985,9 @@ def create_app() -> FastAPI:
     app.include_router(intelligence_router, prefix=prefix)
     app.include_router(chronicle_router, prefix=prefix)
     app.include_router(workbench_router, prefix=prefix)
+    # ПОЛІС — universal agency substrate: missions, gates, KeyVault.
+    from api.routes_polis import router as polis_router
+    app.include_router(polis_router, prefix=prefix)
     # F0.3 — signed node manifest, UNPREFIXED + unauthenticated (a peer reads
     # /node/manifest before pairing to pin the key and trust capabilities).
     app.include_router(node_router)

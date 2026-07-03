@@ -1292,6 +1292,45 @@ class WillBudgetLedger(Base):
     updated_at: Mapped[float] = mapped_column(Float, default=0.0, nullable=False)
 
 
+class PolisMissionRow(Base):
+    """ПОЛІС mission: full PlanGraph persisted as JSON, reboot-proof."""
+    __tablename__ = "polis_missions"
+    __table_args__ = (Index("ix_polis_missions_user_status", "user_id", "status"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    title: Mapped[str] = mapped_column(String(200), nullable=False, default="")
+    brief: Mapped[str] = mapped_column(Text, nullable=False)
+    pipeline: Mapped[str] = mapped_column(String(32), nullable=False, default="generic")
+    domain: Mapped[str] = mapped_column(String(16), nullable=False, default="generic")
+    status: Mapped[str] = mapped_column(String(24), nullable=False, default="planning")
+    graph_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
+    updated_at: Mapped[datetime] = mapped_column(
+        DateTime, nullable=False, default=_now, onupdate=_now
+    )
+
+
+class ManagedKeyRow(Base):
+    """KeyVault: encrypted API key with rotation state and lifetime meters."""
+    __tablename__ = "managed_keys"
+    __table_args__ = (Index("ix_managed_keys_provider_prio", "provider", "priority"),)
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    provider: Mapped[str] = mapped_column(String(32), nullable=False, index=True)
+    label: Mapped[str] = mapped_column(String(64), nullable=False, default="")
+    encrypted_key: Mapped[str] = mapped_column(Text, nullable=False)
+    key_hint: Mapped[str] = mapped_column(String(12), nullable=False, default="")
+    priority: Mapped[int] = mapped_column(Integer, nullable=False, default=100)
+    state: Mapped[str] = mapped_column(String(16), nullable=False, default="active")
+    cooldown_until: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    requests_total: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    tokens_total: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    failures_total: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    last_used_at: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
+
+
 class WillJournal(Base):
     """Append-only post-facto record of will decisions and outcomes."""
     __tablename__ = "will_journal"

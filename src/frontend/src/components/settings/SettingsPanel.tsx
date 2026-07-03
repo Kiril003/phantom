@@ -1129,6 +1129,8 @@ function ValueEditor({
 
   if (def.type === 'boolean') {
     const on = !!value;
+    // 44×44 hit area is the transparent button; the visible pill is a
+    // compact 40×22 track so the switch reads as a switch, not a slab.
     return (
       <button
         type="button"
@@ -1136,35 +1138,47 @@ function ValueEditor({
         aria-pressed={on}
         style={{
           minHeight: 44,
-          minWidth: 64,
-          width: 64,
-          height: 28,
-          padding: '0 4px',
-          borderRadius: 9999,
-          background: on
-            ? 'linear-gradient(135deg,#f4af25,#fb923c)'
-            : 'rgba(0,0,0,0.12)',
+          minWidth: 44,
+          padding: 0,
           border: 'none',
-          position: 'relative',
+          background: 'transparent',
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
           cursor: 'pointer',
-          boxShadow: on
-            ? '0 0 0 1px rgba(244,175,37,0.50), inset 0 0 8px rgba(255,255,255,0.30)'
-            : 'inset 0 0 0 1px rgba(0,0,0,0.06)',
         }}
       >
         <span
+          aria-hidden
           style={{
-            position: 'absolute',
-            top: 2,
-            left: on ? 38 : 2,
-            width: 22,
+            position: 'relative',
+            display: 'inline-block',
+            width: 40,
             height: 22,
             borderRadius: 9999,
-            background: 'white',
-            boxShadow: '0 1px 4px rgba(0,0,0,0.20)',
-            transition: 'left 200ms ease',
+            background: on
+              ? 'linear-gradient(135deg,#f4af25,#fb923c)'
+              : 'rgba(0,0,0,0.12)',
+            boxShadow: on
+              ? '0 0 0 1px rgba(244,175,37,0.50), inset 0 0 8px rgba(255,255,255,0.30)'
+              : 'inset 0 0 0 1px rgba(0,0,0,0.06)',
+            transition: 'background 200ms ease',
           }}
-        />
+        >
+          <span
+            style={{
+              position: 'absolute',
+              top: 2,
+              left: on ? 20 : 2,
+              width: 18,
+              height: 18,
+              borderRadius: 9999,
+              background: 'white',
+              boxShadow: '0 1px 4px rgba(0,0,0,0.20)',
+              transition: 'left 200ms ease',
+            }}
+          />
+        </span>
       </button>
     );
   }

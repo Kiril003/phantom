@@ -598,6 +598,95 @@ class AIRouter:
             retriable=False,
         )
 
+    async def call_with_tools_stream(
+        self,
+        *,
+        system_prompt: str,
+        user_message: str,
+        tools: list,
+        history: list[dict] | None = None,
+        user_id: str | None = None,
+        task_id: str | None = None,
+        provider_hint: str | None = None,
+        on_delta=None,
+    ):
+        """B1 liveness — round-1 with live text deltas. Tries ONLY the
+        primary provider's streaming function-call path; any failure
+        (error outcome or exception) falls back to the fully-resilient
+        non-streaming `call_with_tools`. Deltas already emitted before a
+        fallback are harmless — the final WS message replaces the bubble."""
+        from ai.tool_use import ToolCallResult, ToolErrorKind
+
+        tools = _coerce_tool_schemas(tools)
+        primary = provider_hint or config.ai_primary_provider
+        real_primary = "gemini" if primary == "gemini-flash" else primary
+        provider = (
+            self.get_provider(primary)
+            if self._is_provider_available(primary)
+            else None
+        )
+        if provider is not None and hasattr(provider, "call_with_tools_stream"):
+            if not await _runtime_note_llm_call(task_id):
+                await _write_budget_exhausted_audit(task_id, caller="call_with_tools_stream")
+                from ai.tool_use import ToolUseError
+                return ToolUseError(
+                    kind=ToolErrorKind.UNKNOWN,
+                    message="call_budget_exhausted",
+                    retriable=False,
+                )
+            effective_model = (
+                config.ai_tactical_model
+                if primary == "gemini-flash" and config.ai_tactical_model != "auto"
+                else config.ai_gemini_model if real_primary == "gemini"
+                else None
+            )
+            try:
+                await self._respect_min_interval(primary)
+                outcome = await asyncio.wait_for(
+                    provider.call_with_tools_stream(
+                        system_prompt=system_prompt,
+                        user_message=user_message,
+                        tools=tools,
+                        history=history or [],
+                        user_id=user_id,
+                        model_override=effective_model,
+                        on_delta=on_delta,
+                    ),
+                    timeout=config.ai_timeout_s,
+                )
+                if isinstance(outcome, ToolCallResult):
+                    outcome.provider = real_primary
+                    self._active = primary
+                    self._sync_context(primary)
+                    self._last_call_at[primary] = time.monotonic()
+                    return outcome
+                if outcome.kind == ToolErrorKind.QUOTA_EXHAUSTED:
+                    self._mark_quota_exhausted(primary)
+                elif outcome.kind == ToolErrorKind.PROVIDER_UNAVAILABLE:
+                    self._mark_cooling(primary, _COOLING_PROVIDER_5XX_S, "provider_unavailable")
+                logger.warning(
+                    "AIRouter.call_with_tools_stream: %s failed (%s), falling back to sync path",
+                    primary, outcome.kind,
+                )
+            except Exception as exc:
+                kind, _, _ = _classify_provider_exception(real_primary, exc)
+                if kind == ToolErrorKind.QUOTA_EXHAUSTED:
+                    self._mark_quota_exhausted(primary)
+                logger.warning(
+                    "AIRouter.call_with_tools_stream: %s raised (%s): %s — falling back",
+                    primary, kind, exc,
+                )
+
+        return await self.call_with_tools(
+            system_prompt=system_prompt,
+            user_message=user_message,
+            tools=tools,
+            history=history,
+            user_id=user_id,
+            task_id=task_id,
+            provider_hint=provider_hint,
+        )
+
     def _is_provider_available(self, name: str) -> bool:
         self._ensure_state_dicts()
         if name in self._quota_exhausted:

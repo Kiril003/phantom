@@ -573,6 +573,119 @@ class GeminiProvider(AIProvider):
             parse_attempts=attempts,
         )
 
+    # ── B1 liveness — streaming round-1 ───────────────────────────────────────
+
+    async def call_with_tools_stream(
+        self,
+        *,
+        system_prompt: str,
+        user_message: str,
+        tools: list[ToolSchema],
+        history: list[dict] | None = None,
+        user_id: str | None = None,
+        model_override: str | None = None,
+        on_delta: Any | None = None,
+    ) -> ToolCallResult | ToolUseError:
+        """Streaming variant of `call_with_tools`: text deltas flow to
+        `on_delta` the moment they arrive; the first function_call part
+        aborts consumption and switches the caller onto the tool path.
+        Same return contract — a no-tool answer comes back as
+        ToolCallResult(tool_name="") with the full text in raw_reasoning
+        (already streamed to the UI)."""
+        from google.genai import types
+
+        model_name = model_override or config.ai_gemini_model
+        if not tools:
+            return ToolUseError(
+                kind=ToolErrorKind.INVALID_ARGS,
+                message="no tools provided",
+                retriable=False,
+                provider="gemini",
+                model=model_name,
+            )
+
+        fn_name_raw: str | None = None
+        fn_args: dict[str, Any] = {}
+        text_parts: list[str] = []
+        try:
+            client = _get_client()
+            gen_config = types.GenerateContentConfig(
+                system_instruction=system_prompt,
+                temperature=config.ai_temperature,
+                max_output_tokens=config.ai_max_tokens,
+                tools=[_tools_for_call_with_tools(tools)],
+                tool_config=types.ToolConfig(
+                    function_calling_config=types.FunctionCallingConfig(mode="AUTO"),
+                ),
+                safety_settings=[types.SafetySetting(**s) for s in _SAFETY_OFF],
+            )
+            contents = _build_contents(user_message, history)
+
+            async for chunk in await client.aio.models.generate_content_stream(
+                model=model_name,
+                contents=contents,
+                config=gen_config,
+            ):
+                candidate = chunk.candidates[0] if getattr(chunk, "candidates", None) else None
+                parts = (
+                    candidate.content.parts
+                    if candidate and getattr(candidate, "content", None) and candidate.content.parts
+                    else []
+                )
+                for part in parts:
+                    if getattr(part, "function_call", None):
+                        fn_name_raw = part.function_call.name
+                        fn_args = dict(part.function_call.args) if part.function_call.args else {}
+                        break
+                    if getattr(part, "text", None):
+                        text_parts.append(part.text)
+                        if on_delta is not None:
+                            try:
+                                await on_delta(part.text)
+                            except Exception:  # noqa: BLE001 — UI hiccup never kills the turn
+                                pass
+                if fn_name_raw:
+                    break
+        except Exception as exc:
+            kind, retriable, retry_after_s = _classify_gemini_error(exc)
+            return ToolUseError(
+                kind=kind,
+                message=f"gemini stream error: {exc}",
+                retriable=retriable,
+                provider="gemini",
+                model=model_name,
+                retry_after_s=retry_after_s,
+            )
+
+        text = "".join(text_parts).strip()
+        if fn_name_raw is None:
+            return ToolCallResult(
+                tool_name="",
+                arguments={},
+                raw_reasoning=text,
+                confidence=1.0,
+                provider="gemini",
+                model=model_name,
+            )
+
+        fn_name = _restore_name(fn_name_raw, tools)
+        if fn_name not in {t.name for t in tools}:
+            return ToolUseError(
+                kind=ToolErrorKind.UNKNOWN_TOOL,
+                message=f"gemini stream chose unknown tool '{fn_name}'",
+                retriable=True,
+                provider="gemini",
+                model=model_name,
+            )
+        return ToolCallResult(
+            tool_name=fn_name,
+            arguments=fn_args,
+            raw_reasoning=text,
+            confidence=1.0,
+            provider="gemini",
+            model=model_name,
+        )
+
 
 # ── Helpers for call_with_tools ────────────────────────────────────────────────
 

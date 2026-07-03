@@ -297,17 +297,30 @@ async def run(
             except Exception:
                 pass
 
-        # Step 2: ask LLM to pick one tool
+        # Step 2: ask LLM to pick one tool. Turn 1 streams (B1 liveness):
+        # text deltas reach the UI immediately; a functionCall part
+        # switches us onto the tool path. Turns ≥2 stay non-streaming.
         try:
             raw_tools = [c.function for c in tool_catalog]
-            tool_choice = await ai_router.call_with_tools(
-                user_message=user_message,
-                system_prompt=sentient_prompt,
-                history=current_history,
-                tools=raw_tools,
-                user_id=user_id,
-                provider_hint=provider_hint,
-            )
+            if turn == 1 and on_delta is not None and config.ai_streaming:
+                tool_choice = await ai_router.call_with_tools_stream(
+                    user_message=user_message,
+                    system_prompt=sentient_prompt,
+                    history=current_history,
+                    tools=raw_tools,
+                    user_id=user_id,
+                    provider_hint=provider_hint,
+                    on_delta=on_delta,
+                )
+            else:
+                tool_choice = await ai_router.call_with_tools(
+                    user_message=user_message,
+                    system_prompt=sentient_prompt,
+                    history=current_history,
+                    tools=raw_tools,
+                    user_id=user_id,
+                    provider_hint=provider_hint,
+                )
         except Exception as exc:
             logger.warning("chat_pipeline Step 2 failed on turn %d: %s", turn, exc)
             break

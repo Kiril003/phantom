@@ -185,6 +185,8 @@ async def run_orchestrator(
         # Ensure user_message is set for the leaf if not already present
         kwargs.setdefault("user_message", user_text)
         kwargs["system_prompt"] = prompts[sub_idx]
+        # K parallel leaves must never interleave deltas into one bubble.
+        kwargs.pop("on_delta", None)
         
         coros.append(
             run_leaf(

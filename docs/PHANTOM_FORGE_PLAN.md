@@ -1523,9 +1523,122 @@ graphify refresh на merge; diagnose multigraph чистий.
 
 ---
 
-## Salvage Ledger (F0.1 output — append below when the audit runs)
+## Salvage Ledger (F0.1 output)
 
-*(empty until F0.1)*
+### 2026-07-03 — commit context `1722b94` (F0.1 audit)
+
+**Method (evidence, not vibes).** Backend module inventory = 402 non-test
+`.py` under `src/backend` (excl. `venv/`, `tests/`, `test_*`). Consumer map
+built two ways and cross-checked: (a) graphify `imports`/`imports_from`/
+`re_exports` edges from `graphify-out/graph.json`; (b) a single-pass import
+resolver over every `from/import` line (`scripts/`-external, in scratch) that
+resolves dotted + relative targets to files — graphify's static pass misses
+lazy/in-function imports (e.g. `main.py` lifespan lazy-imports
+`agent.kernel.runtime`, `proactive.loop`, `standing_orders.runner`), so (b) is
+authoritative and (a) corroborates. Dynamic dispatch checked by hand where a
+registry exists (`agent/actions/registry.py`, `_synth` boot auto-loader,
+`db/migrations` runner). Verdict basis: **zero production import-consumers AND
+no named future-phase consumer** ⇒ FREEZE/DELETE; real consumers OR a named
+F/G phase ⇒ KEEP/WIRE. Result: **402 modules → 326 consumed, 76 zero-consumer**;
+of the 76, most are structural (`__init__.py`, `main.py`, 25 migrations, entry
+points) that are KEEP-by-design, leaving **~20 modules needing WIRE/FREEZE/
+DELETE**, itemized below.
+
+### ⚠ Reality contradicts the plan's FREEZE guesses (surfaced per directive)
+
+The plan's F0.1 candidate lists were written from memory; the graph disagrees
+in two load-bearing places. **These are not freezable — freezing breaks live
+chat / map:**
+
+1. **`ai/sentience/*` + `agent/consciousness_stream` + `memory/core_narrative`
+   are NOT off-mission poetry — they are wired into the live chat path.**
+   Consumer counts (production, import-verified):
+   `sentience/endocrine` **6** (`ai/tool_executor`, `ai/chat_pipeline`,
+   `api/routes_chat`, `agent/cognition/emotion`, `agent/cognition/will/drives`,
+   `sentience/reflex`), `sentience/monologue` **2**, `sentience/graph_memory`
+   **1**, `consciousness_stream` **5** (incl. `main.py`, `routes_chat`,
+   `will/engine`, `guardian`, `proactive/loop`), `core_narrative` **2**,
+   `mind_state` **3**, `narrative` **2**. → **KEEP/WIRE, not FREEZE.** G1.5's
+   "default FREEZE" must be overridden here: the named consumer is the chat
+   pipeline. Only `sentience/reflex` (0) and `memory/tom_dream` (0) are truly
+   orphaned.
+2. **`wardriving/*` is NOT a dead lane.** `wardriving/collector` +
+   `wardriving/heatmap` are consumed by `main.py`, `api/routes_map`,
+   `api/routes_mobile_sensors` → **KEEP.** Only the separate
+   `tools/wardriving_query` (0 consumers) is an orphan duplicate → DELETE.
+
+### KEEP (default — 326 modules consumed on a live or named path)
+
+Stated by domain (per-module rows only for the non-obvious). All of `ai/*`
+providers + dispatcher, `agent/kernel/*` (the F2/G1.2 spine — reached via
+`main.py` lifespan lazy-import), `agent/will/*` (via `routes_will` + proactive
+loop), `agent/cognition/*` chat path, `core/{context_engine,state_machine,
+event_bus,decision_tree,system_monitor}`, `memory/{session,tactical,strategic,
+resolver,consolidation,mind_state,narrative,core_narrative,user_model,brain,
+geo_*}`, `geo/*` (pmtiles/routing/elevation/layer_registry), `vision/{screen_
+capture,screen_ocr,grounding,camera_capture}`, `voice/*`, `security/*` (jwt,
+device_token, pair crypto, vault, pii_guard, lockout, auth), all 37 `api/*`
+routers (all `include_router`-ed in `main.py`), `linux/*`, `sensors/*`,
+`input/*`, `dispatch/*`. Structural KEEP-by-design: every `__init__.py`,
+`main.py`, `_phantom_entry.py`, `lifespan_warmup.py`, `system_metrics_sampler.py`,
+`tests/conftest.py`. **`db/migrations/001..025` (25 files): KEEP** — never
+imported by name; applied by the migration runner via directory discovery
+(`db/migrations/__init__.py` ← `lifespan_warmup`). **`agent/actions/_synth/
+{say_voice_pythonic,voice_greet_synth}.py`: KEEP** — runtime-synthesized
+Actions auto-loaded at boot by `registry._load_synth_actions` (filesystem
+discovery, not import); note: these are runtime data leaked into the tree,
+relocate to `.phantom-data` in G5.3.
+
+### WIRE (real, orphaned now — named consumer phase required)
+
+| module | LoC | consumer phase | evidence |
+|---|---|---|---|
+| `core/salience_arbiter.py` | 253 | G3.3 / F8 (calm contract) | 0 import-consumers; plan G3.3 names it |
+| `core/referee.py` | 300 | G3.3 / F8 | 0 prod, 3 test consumers; plan G3.3 names it |
+| `tools/checkpoint_service.py` | 221 | F2.3 (checkpoint & resurrection) | 0 consumers; plan F0.1 + F2.3 name it |
+| `tools/location_history_service.py` | 168 | F6.4 / G2 (memory on map) | 0 consumers; geo-history use is named |
+| `memory/archive_memory.py` | 164 | G2 (one memory — Sealed/Dead-Zone tier) | 0 consumers; tier of the memory system G2 unifies |
+| `security/ghost_recorder.py` | 49 | G4.3 (perception ledger) | 0 consumers; plan G4.3 "wire into perception ledger or freeze" |
+| `security/witness.py` | 199 | G4.3 (perception ledger) | 0 prod, 1 test; same G4.3 clause |
+| `agent/missions/util.py` | 40 | G1.2 / F2 (Foundry organs) | 0 consumers; rides missions→Foundry absorption |
+| `agent/operations/standing_orders/actions.py` | 195 | F2.5 / G1.2 (recurring trigger) | 0 consumers; runner IS live via lifespan, this action-set folds into F2.5 |
+| `agent/cognition/memory/backfill.py` | 128 | G2 (memory backfill) | 1 thin reference; keep pending G2 |
+
+### FREEZE (real, off-mission, no consumer, no near-term phase — exclude from startup)
+
+| module | LoC | note |
+|---|---|---|
+| `memory/tom_dream.py` | 924 | 0 consumers; matches plan G1.5. Largest single freeze. |
+| `ai/sentience/reflex.py` | 51 | 0 consumers; G1.5 default FREEZE (the ONE sentience file that IS orphaned). |
+| `agent/localization/nearby_watch.py` | 112 | 0 consumers; re-WIRE at F6.4 if place-localization returns. |
+| `agent/localization/translit.py` | 246 | 0 consumers; re-WIRE at F6.4. |
+| `geo/trajectory_learner.py` | 63 | 0 consumers; re-WIRE at F6.2 (corridor/trajectory analysis). |
+
+FREEZE subtotal: **1396 LoC** excluded from the runtime once G1.5/G-phases execute.
+
+### DELETE (dead, zero consumers, provably superseded, no named phase)
+
+| module | LoC | superseded by (evidence) |
+|---|---|---|
+| `agent/actions/map/add_layer.py` | 192 | 24-B `MAP_ACTIONS` — `map/__init__.py` imports 16 newer verbs, NOT this |
+| `agent/actions/map/create_geofence.py` | 69 | same — not in `MAP_ACTIONS` tuple |
+| `agent/actions/map/get_elevation_profile.py` | 42 | same |
+| `agent/actions/map/list_geofences.py` | 49 | same |
+| `agent/actions/map/time_travel.py` | 67 | same |
+| `tools/timer_service.py` | 130 | `db/tools_repo` — `routes_tools` uses the repo, not this service |
+| `tools/alarm_service.py` | 145 | `db/tools_repo` (same) |
+| `tools/calendar_service.py` | 197 | `db/tools_repo` (same) |
+| `tools/audit_service.py` | 181 | `ai/tool_use_audit` + `agent/kernel/audit`; this one 0 consumers |
+| `tools/wardriving_query.py` | 156 | orphan duplicate; live path is `wardriving/collector` |
+
+DELETE subtotal: **1228 LoC** removable (execution deferred to the consuming
+G-phases per the net-negative law; F0.1 is the inventory, not the surgery —
+the 5 superseded map actions + 3 tool-service duplicates are the safest first
+cuts for G1/G4).
+
+**Ledger totals:** KEEP 326 · WIRE 10 · FREEZE 5 · DELETE 10 (of the 402;
+structural/migration/synth KEEP folded into the 326). Net reclaimable by
+Part II: ~2.6k LoC FREEZE+DELETE, before the monolith splits.
 
 ---
 

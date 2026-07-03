@@ -213,3 +213,54 @@ class TestChatTools:
         for name in ("create_workbench", "refine_workbench", "list_workbenches"):
             assert name in DATA_TOOL_NAMES
             assert name in supported_tools()
+
+    def test_auto_render_short_circuits_workbench(self):
+        """The card must reach the user instantly — no Step-5 LLM call."""
+        from ai.chat_pipeline import _auto_render_envelope
+        scene = {"kind": "workbench", "data": {"title": "Плита"}}
+        resp = _auto_render_envelope(
+            "create_workbench",
+            {"ok": True, "result": {"scene": scene}},
+            scene, provider="gemini")
+        assert resp is not None
+        assert resp.attachments == [{"type": "scene", "data": scene}]
+        assert "Плита" in resp.content
+        # failure envelopes fall through to the normal prose path
+        assert _auto_render_envelope(
+            "create_workbench", {"ok": False}, scene) is None
+
+
+class TestAtelierResilience:
+    @pytest.mark.asyncio
+    async def test_generate_reads_airesponse_content(self):
+        """Regression: live run failed with 'AIResponse has no attribute
+        text' — _generate must read .content off the router response."""
+        from ai.provider import AIResponse
+        from workbench import atelier
+        manifest = {"entry": "index.html",
+                    "files": [{"path": "index.html", "content": "<p>ok</p>"}]}
+        fake = AIResponse(content=json.dumps(manifest))
+        with patch("ai.provider.ai_router") as router:
+            router.generate = AsyncMock(return_value=fake)
+            out = await atelier._generate("бриф", "system")
+        assert out["files"][0]["path"] == "index.html"
+
+    @pytest.mark.asyncio
+    async def test_dead_critic_ships_instead_of_failing(self, tmp_path, monkeypatch):
+        """Files exist + every critic down (quota) → SHIP honestly, not FAIL."""
+        monkeypatch.setenv("PHANTOM_DATA_DIR", str(tmp_path))
+        from workbench import atelier
+        ws = await workbench_service.create(
+            title="Q", brief="сторінка з квотою", user_id="u1")
+        manifest = {"entry": "index.html",
+                    "files": [{"path": "index.html", "content": "<p>x</p>"}]}
+        with patch.object(atelier, "_generate",
+                          AsyncMock(return_value=manifest)), \
+             patch.object(atelier, "_screenshot",
+                          AsyncMock(return_value=None)), \
+             patch.object(atelier, "_critique_source",
+                          AsyncMock(side_effect=RuntimeError("429 quota"))):
+            meta = await atelier.build(ws.id)
+        assert meta["status"] == "ready"
+        assert meta["passes"][0]["verdict"] == "SHIP"
+        assert "критик недоступний" in meta["passes"][0]["critique"]

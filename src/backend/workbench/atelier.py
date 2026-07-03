@@ -84,7 +84,7 @@ async def _generate(brief: str, system: str, *, prior: str = "") -> dict[str, An
         ai_router.generate(prompt, system, []),
         timeout=GEN_TIMEOUT_S,
     )
-    return _parse_manifest(resp.text)
+    return _parse_manifest(resp.content)
 
 
 async def _screenshot(url: str) -> Optional[bytes]:
@@ -150,7 +150,7 @@ async def _critique_source(files: list[dict], brief: str) -> dict[str, Any]:
         timeout=CRITIQUE_TIMEOUT_S,
     )
     try:
-        return json.loads(strip_json_fences(resp.text))
+        return json.loads(strip_json_fences(resp.content))
     except json.JSONDecodeError:
         return {"verdict": "SHIP", "score": 5,
                 "critique": "critique unparseable — accepting as-is",
@@ -216,12 +216,22 @@ async def build(workbench_id: str, *, refine_instruction: str = "",
             if png is not None:
                 verdict = await _critique_visual(png, ws.brief)
             if verdict is None:
-                files = [
-                    {"path": t["path"],
-                     "content": svc.read_file(workbench_id, t["path"])}
-                    for t in svc.tree(workbench_id)
-                ]
-                verdict = await _critique_source(files, ws.brief)
+                # The files already exist and serve — a dead critic (quota,
+                # provider down) must not kill a living creation. Ship with
+                # an honest note instead of failing the build.
+                try:
+                    files = [
+                        {"path": t["path"],
+                         "content": svc.read_file(workbench_id, t["path"])}
+                        for t in svc.tree(workbench_id)
+                    ]
+                    verdict = await _critique_source(files, ws.brief)
+                except Exception as exc:
+                    logger.warning("atelier: all critics down (%s) — shipping as-is", exc)
+                    verdict = {"verdict": "SHIP", "score": 0,
+                               "critique": "критик недоступний (квота/провайдер) — "
+                                           "віддаю як є, без перевірки",
+                               "fix_instructions": ""}
                 blind = True
 
             entry = {

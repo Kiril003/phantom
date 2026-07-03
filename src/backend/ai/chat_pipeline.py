@@ -539,6 +539,22 @@ def _auto_render_envelope(
         return None
     result = dispatch_result.get("result") or {}
 
+    # Atelier: the workbench card IS the answer. Returning it directly
+    # (a) shows the card within seconds, while the build's workbench.phase
+    # events still have a listener to land on, and (b) skips the Step-5
+    # summary call — one less LLM request per build on a 20/day free tier.
+    if tool_name in ("create_workbench", "refine_workbench") and tool_scene:
+        title = (tool_scene.get("data") or {}).get("title") or "творіння"
+        verb = "Відкрив майстерню" if tool_name == "create_workbench" \
+            else "Заходжу на нове коло правок"
+        return AIResponse(
+            content=f"{verb}: «{title}». Будую, дивлюсь на результат і правлю "
+                    "— фази йдуть у картці нижче.",
+            response_form="text",
+            attachments=[{"type": "scene", "data": tool_scene}],
+            provider=provider,
+        )
+
     if tool_name == "get_system_metrics":
         items: list[dict[str, Any]] = []
         for key, label, unit in (

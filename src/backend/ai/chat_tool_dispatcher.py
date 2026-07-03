@@ -97,6 +97,10 @@ _CHAT_SAFE_TOOL_NAMES: tuple[str, ...] = (
     "map.plan_route",
     # Phase 30: Delegation
     "agent.delegate",
+    # Atelier Chat W1-W2 — multi-file living creations with the seeing loop.
+    "create_workbench",
+    "refine_workbench",
+    "list_workbenches",
 )
 
 

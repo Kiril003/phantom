@@ -2434,6 +2434,92 @@ async def _tool_delete_user_fact(args: dict[str, Any], user_id: str) -> dict[str
         return _err("db_error", f"Помилка видалення факту: {exc}")
 
 
+def _workbench_scene(meta: dict[str, Any], file_count: int, note: str) -> dict[str, Any]:
+    return {
+        "kind": "workbench",
+        "data": {
+            "workbench_id": meta["id"],
+            "title": meta["title"],
+            "status": meta["status"],
+            "entry": meta["entry"],
+            "preview_url": (
+                f"/api/v1/workbench/{meta['id']}/preview/{meta['entry']}"
+                f"?t={meta['preview_token']}"
+            ),
+            "file_count": file_count,
+            "passes": meta.get("passes", []),
+            "ai_note": note,
+        },
+    }
+
+
+async def _tool_create_workbench(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    """Atelier Chat W1/W2 — start a seeing build of a multi-file project.
+    Returns immediately with a workbench scene; phases stream over the
+    chat WS channel as `workbench.phase` events."""
+    title = str(args.get("title") or "").strip()
+    brief = str(args.get("brief") or "").strip()
+    if len(brief) < 8:
+        return _err("invalid_args", "brief must describe the project (min 8 chars)")
+    try:
+        from workbench.service import workbench_service
+        from api.routes_workbench import _spawn_build
+        ws = await workbench_service.create(
+            title=title or brief[:60], brief=brief, user_id=user_id)
+        _spawn_build(ws.id)
+    except Exception as exc:
+        logger.exception("create_workbench failed")
+        return _err("exception", f"workbench create failed: {exc}")
+    return _ok(
+        workbench_id=ws.id,
+        status="building",
+        scene=_workbench_scene(
+            ws.meta_dict(), 0,
+            "Майстерня відкрита — будую, дивлюсь на результат і правлю. "
+            "Фази зʼявляться в цій картці.",
+        ),
+    )
+
+
+async def _tool_refine_workbench(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    workbench_id = str(args.get("workbench_id") or "").strip()
+    instruction = str(args.get("instruction") or "").strip()
+    if not workbench_id or len(instruction) < 3:
+        return _err("invalid_args", "workbench_id and instruction are required")
+    try:
+        from workbench.service import WorkbenchError, workbench_service
+        from api.routes_workbench import _spawn_build
+        ws = workbench_service.get(workbench_id)
+        workbench_service.journal(ws.id, "refine_requested",
+                                  {"instruction": instruction[:500], "via": "chat"})
+        _spawn_build(ws.id, refine=instruction)
+        file_count = len(workbench_service.tree(ws.id))
+    except Exception as exc:
+        logger.exception("refine_workbench failed")
+        return _err("exception", f"refine failed: {exc}")
+    return _ok(
+        workbench_id=ws.id,
+        status="building",
+        scene=_workbench_scene(
+            workbench_service.get(ws.id).meta_dict(), file_count,
+            f"Правлю за вказівкою: {instruction[:120]}",
+        ),
+    )
+
+
+async def _tool_list_workbenches(_args: dict[str, Any], user_id: str) -> dict[str, Any]:  # noqa: ARG001
+    try:
+        from workbench.service import workbench_service
+        items = [
+            {"id": w.id, "title": w.title, "status": w.status,
+             "updated_at_ms": w.updated_at_ms, "passes": len(w.passes)}
+            for w in workbench_service.list()
+        ]
+    except Exception as exc:
+        return _err("exception", f"list failed: {exc}")
+    return _ok(workbenches=items, count=len(items))
+
+
 _HANDLERS: dict[str, Any] = {
     "search_nearby_places": _tool_search_nearby_places,
     "search_locationhistory": _tool_search_locationhistory,
@@ -2498,6 +2584,10 @@ _HANDLERS: dict[str, Any] = {
     "list_user_facts": _tool_list_user_facts,
     "create_user_fact": _tool_create_user_fact,
     "delete_user_fact": _tool_delete_user_fact,
+    # Atelier Chat (W1-W2) — living multi-file creations.
+    "create_workbench": _tool_create_workbench,
+    "refine_workbench": _tool_refine_workbench,
+    "list_workbenches": _tool_list_workbenches,
 }
 
 

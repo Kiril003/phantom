@@ -236,8 +236,33 @@ ToolSceneKind = Literal[
     "timer", "alarm", "calendar", "files",
     "audit", "wardriving", "location", "checkpoint",
     "phantom_manifest", "patch_file",
-    "react_artifact",
+    "react_artifact", "workbench",
 ]
+
+
+# ── Workbench (Atelier Chat W1-W2) ───────────────────────────────────────────
+
+WorkbenchStatus = Literal["building", "ready", "failed"]
+
+
+class WorkbenchPass(_SceneBase):
+    n: NonNegativeInt
+    verdict: Literal["SHIP", "REVISE"]
+    score: NonNegativeInt
+    critique: str
+    blind: bool = False
+    has_screenshot: bool = False
+
+
+class WorkbenchSceneData(_SceneBase):
+    workbench_id: str
+    title: str
+    status: WorkbenchStatus
+    entry: str
+    preview_url: str
+    file_count: NonNegativeInt
+    passes: list[WorkbenchPass]
+    ai_note: Optional[str] = None
 
 
 # ── Phantom Familiar (R1-FAMILIAR-1) ────────────────────────────────────────
@@ -279,6 +304,7 @@ class ChatToolScene(_SceneBase):
         TimerSceneData | AlarmSceneData | CalendarSceneData | FilesSceneData
         | AuditSceneData | WardrivingSceneData | LocationSceneData
         | CheckpointSceneData | PhantomManifestSceneData | ReactArtifactSceneData
+        | WorkbenchSceneData
     )
 
 
@@ -317,6 +343,8 @@ __all__ = [
     "PhantomManifestSceneData",
     "FamiliarTargetData",
     "FamiliarPose",
+    "WorkbenchSceneData",
+    "WorkbenchPass",
     "PhantomDOMSceneData",
     "ChatToolScene",
     "ToolResult",

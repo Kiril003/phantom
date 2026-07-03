@@ -34,6 +34,8 @@ export type WSChannel =
   // list without polling.
   | 'pair'
   | 'vision'
+  // ПОЛІС — mission fabric deltas: node/mission status, gates, keys, waves.
+  | 'polis'
   | '_meta';
 
 export interface WSMessage {

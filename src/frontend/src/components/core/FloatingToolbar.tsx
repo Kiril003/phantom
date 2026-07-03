@@ -222,6 +222,17 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
       },
     },
     {
+      id: 'polis',
+      icon: 'location_city',
+      label: 'Поліс',
+      tooltip: 'Внутрішнє місто — місії, громадяни, реактори ключів',
+      active: location.pathname === '/polis',
+      onClick: () => {
+        navigate('/polis');
+        setMoreMenuOpen(false);
+      },
+    },
+    {
       id: 'vision',
       icon: 'visibility',
       label: 'Очі',

@@ -50,6 +50,7 @@ const OperatorLayout = React.lazy(() => import('../layouts/OperatorLayout'));
 const LoginScreen = React.lazy(() => import('../components/auth/LoginScreen'));
 const SettingsPanel = React.lazy(() => import('../components/settings/SettingsPanel'));
 const MapLayout = React.lazy(() => import('../layouts/MapLayout'));
+const PolisLayout = React.lazy(() => import('../layouts/PolisLayout'));
 
 /* ─── State → Layout routing ─────────────────────────────────────────────── */
 
@@ -165,6 +166,14 @@ export function App() {
               <Route
                 path="/companion"
                 element={<CompanionShowcase />}
+              />
+              <Route
+                path="/polis"
+                element={
+                  <React.Suspense fallback={<PhantomLoader />}>
+                    <PolisLayout />
+                  </React.Suspense>
+                }
               />
               <Route path="/*" element={<StateRouter />} />
             </Routes>

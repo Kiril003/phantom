@@ -19,3 +19,4 @@ export { PhantomManifestScene } from './PhantomManifestScene';
 export { OrchestrationFlowScene } from './OrchestrationFlowScene';
 export { ObjectionScene } from './ObjectionScene';
 export { PatchFileScene } from './PatchFileScene';
+export { WorkbenchScene } from './WorkbenchScene';

@@ -51,7 +51,8 @@ export type ArtifactCapability =
   | 'read:sensors'
   | 'read:memory'
   | 'read:state'
-  | 'action:tools';
+  | 'action:tools'
+  | 'feed:live';
 
 /** Reveal choreography; lives on <ChatScene>, never on individual panels. */
 export type RevealPolicy = 'sequential' | 'cascade' | 'instant';
@@ -557,6 +558,43 @@ export interface ReactArtifactSceneData {
   title?: string;
 }
 
+// ─── Workbench (Atelier Chat W1-W2) ──────────────────────────────────────────
+export type WorkbenchStatus = 'building' | 'ready' | 'failed';
+
+export interface WorkbenchPass {
+  n: number;
+  verdict: 'SHIP' | 'REVISE';
+  score: number;
+  critique: string;
+  blind?: boolean;
+  has_screenshot?: boolean;
+}
+
+export interface WorkbenchSceneData {
+  workbench_id: string;
+  title: string;
+  status: WorkbenchStatus;
+  entry: string;
+  preview_url: string;
+  file_count: number;
+  passes: WorkbenchPass[];
+  ai_note?: string | null;
+}
+
+/** WS event on the 'chat' channel while the Atelier loop runs. */
+export interface WorkbenchPhaseEvent {
+  workbench_id: string;
+  phase: 'generate' | 'see' | 'critique' | 'verdict' | 'patch' | 'ready' | 'failed';
+  pass?: number;
+  verdict?: 'SHIP' | 'REVISE';
+  score?: number;
+  critique?: string;
+  error?: string;
+  elapsed_s?: number;
+  passes?: number;
+  blind?: boolean;
+}
+
 // ─── Tool-scene discriminated union ───────────────────────────────────────────
 export type ChatToolScene =
   | { kind: 'timer'; data: TimerSceneData }
@@ -572,7 +610,8 @@ export type ChatToolScene =
   | { kind: 'orchestration_flow'; data: OrchestrationFlowSceneData }
   | { kind: 'objection'; data: ObjectionSceneData }
   | { kind: 'patch_file'; data: PatchFileSceneData }
-  | { kind: 'react_artifact'; data: ReactArtifactSceneData };
+  | { kind: 'react_artifact'; data: ReactArtifactSceneData }
+  | { kind: 'workbench'; data: WorkbenchSceneData };
 
 /**
  * Phase-5 — `ChatScene` is the super-union of (a) the Day-4 W-2 panel

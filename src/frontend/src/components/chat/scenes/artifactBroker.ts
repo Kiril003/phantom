@@ -1,4 +1,5 @@
 import type { ArtifactCapability } from '@shared/types/chat';
+import { wsClient, type WSChannel, type WSMessage } from '../../../services/websocket';
 
 const READ_KEYS: Record<string, ArtifactCapability> = {
   'context.snapshot': 'read:context',
@@ -7,10 +8,14 @@ const READ_KEYS: Record<string, ArtifactCapability> = {
   'system.state': 'read:state',
 };
 
+/** W3 — WS channels an artifact may stream live. Curated, never '*'. */
+const FEED_CHANNELS: readonly string[] = ['context', 'system', 'map'];
+
 type ReadFn = (key: string) => Promise<unknown>;
 
 export class ArtifactBroker {
   private onMsg = (e: MessageEvent) => this.handle(e);
+  private feedOffs = new Map<string, () => void>();
 
   constructor(
     private frame: Window,
@@ -19,7 +24,12 @@ export class ArtifactBroker {
   ) {}
 
   attach() { window.addEventListener('message', this.onMsg); }
-  detach() { window.removeEventListener('message', this.onMsg); }
+
+  detach() {
+    window.removeEventListener('message', this.onMsg);
+    for (const off of this.feedOffs.values()) off();
+    this.feedOffs.clear();
+  }
 
   private reply(m: object) { this.frame.postMessage(m, '*'); }
 
@@ -38,6 +48,31 @@ export class ArtifactBroker {
       } catch {
         this.reply({ type: 'phantom.read.result', reqId: d.reqId, error: 'read_failed' });
       }
+      return;
+    }
+
+    if (d.type === 'phantom.subscribe') {
+      const channel = String(d.channel ?? '');
+      if (!this.caps.includes('feed:live') || !FEED_CHANNELS.includes(channel)) {
+        this.reply({ type: 'phantom.subscribe.result', reqId: d.reqId,
+                     ok: false, error: 'forbidden' });
+        return;
+      }
+      if (!this.feedOffs.has(channel)) {
+        const off = wsClient.on(channel as WSChannel, (msg: WSMessage) => {
+          this.reply({ type: 'phantom.feed', channel, event: msg.type, data: msg.data });
+        });
+        this.feedOffs.set(channel, off);
+      }
+      this.reply({ type: 'phantom.subscribe.result', reqId: d.reqId, ok: true, channel });
+      return;
+    }
+
+    if (d.type === 'phantom.unsubscribe') {
+      const channel = String(d.channel ?? '');
+      this.feedOffs.get(channel)?.();
+      this.feedOffs.delete(channel);
+      this.reply({ type: 'phantom.unsubscribe.result', reqId: d.reqId, ok: true, channel });
       return;
     }
 

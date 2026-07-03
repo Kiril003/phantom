@@ -184,6 +184,20 @@ def _build_tool_catalog() -> list[_CatalogTool]:
     return catalog
 
 
+def _trim_tool_catalog(
+    catalog: list[_CatalogTool], user_message: str
+) -> list[_CatalogTool]:
+    """B1 liveness — trim the merged ~60-declaration catalog to ~15
+    contextually likely tools (`tool_relevance` stem heuristics): a
+    smaller round-1 prompt is a faster (and better-aimed) pick. Never
+    returns an empty list while the full catalog has entries."""
+    from ai.tool_relevance import select_relevant
+
+    keep = set(select_relevant(user_message, [c.name for c in catalog]))
+    trimmed = [c for c in catalog if c.name in keep]
+    return trimmed or catalog
+
+
 def _make_artifact_phase_cb(user_id: str):
     """Return an on_phase callback that broadcasts scene.artifact.progress
     over the chat WS channel for the given user.
@@ -262,7 +276,7 @@ async def run(
     )
 
     # ── Step 1: build merged tool catalog ───────────────────────────────────
-    tool_catalog = _build_tool_catalog()
+    tool_catalog = _trim_tool_catalog(_build_tool_catalog(), user_message)
 
     # If no tools allowed, fall back to plain generate.
     if not tool_catalog:

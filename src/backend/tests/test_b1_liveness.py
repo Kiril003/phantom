@@ -278,6 +278,75 @@ class TestPipelineTurn1Streams:
         assert resp.content == "відповідь"
 
 
+# ── tool_relevance — round-1 catalog trim ─────────────────────────────────────
+
+
+class TestToolRelevance:
+    def _available(self) -> list[str]:
+        from ai.chat_tool_dispatcher import supported_tools
+        from ai.response_formatter import RESPONSE_FORM_TOOLS
+
+        return supported_tools() + [t["name"] for t in RESPONSE_FORM_TOOLS]
+
+    def test_cap_15(self):
+        from ai.tool_relevance import select_relevant, MAX_ROUND1_TOOLS
+
+        picked = select_relevant(
+            "створи таймер, подію в календарі, знайди маршрут, покажи метрики "
+            "і порівняй курси у графіку через агента в терміналі",
+            self._available(),
+        )
+        assert 0 < len(picked) <= MAX_ROUND1_TOOLS
+
+    def test_family_match_beats_core(self):
+        from ai.tool_relevance import select_relevant
+
+        picked = select_relevant("постав будильник на 7 ранку", self._available())
+        assert picked[0] == "create_alarm"
+        assert "vault_reveal" not in picked
+
+    def test_no_signal_falls_back_to_core(self):
+        from ai.tool_relevance import select_relevant, CORE_TOOLS
+
+        picked = select_relevant(
+            "розкажи про квантову заплутаність", self._available(),
+        )
+        assert picked
+        assert set(picked).issubset(set(CORE_TOOLS))
+
+    def test_widget_triggers(self):
+        from ai.tool_relevance import select_relevant
+
+        picked = select_relevant(
+            "намалюй графік температури за тиждень", self._available(),
+        )
+        assert "respond_chart" in picked
+
+    def test_only_available_names_survive(self):
+        from ai.tool_relevance import select_relevant
+
+        picked = select_relevant("постав таймер на 5 хв", ["create_timer"])
+        assert picked == ["create_timer"]
+
+    def test_pipeline_trim_never_empties_catalog(self):
+        from ai.chat_pipeline import _CatalogTool, _trim_tool_catalog
+
+        catalog = [_CatalogTool(name="weird_tool_zzz", function={"name": "weird_tool_zzz"})]
+        out = _trim_tool_catalog(catalog, "розкажи про квантову заплутаність")
+        assert out == catalog  # nothing matched → full catalog, never []
+
+    def test_pipeline_trim_filters_merged_catalog(self, monkeypatch):
+        from config import config
+        from ai.chat_pipeline import _build_tool_catalog, _trim_tool_catalog
+        from ai.tool_relevance import MAX_ROUND1_TOOLS
+
+        monkeypatch.setattr(config, "chat_response_widgets_enabled", True)
+        full = _build_tool_catalog()
+        trimmed = _trim_tool_catalog(full, "постав будильник на 7 ранку")
+        assert len(trimmed) <= MAX_ROUND1_TOOLS < len(full)
+        assert any(t.name == "create_alarm" for t in trimmed)
+
+
 # ── thought_signature — verbatim function-call replay ─────────────────────────
 
 

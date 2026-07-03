@@ -48,6 +48,7 @@ from api.routes_handoff import router as handoff_router
 from api.routes_companion_control import router as companion_control_router
 from api.routes_backup import router as backup_router
 from api.routes_intelligence import router as intelligence_router
+from api.routes_node import router as node_router
 from api.routes_chronicle import router as chronicle_router
 
 logging.basicConfig(
@@ -975,6 +976,9 @@ def create_app() -> FastAPI:
     # plus cross-corpus semantic search.
     app.include_router(intelligence_router, prefix=prefix)
     app.include_router(chronicle_router, prefix=prefix)
+    # F0.3 — signed node manifest, UNPREFIXED + unauthenticated (a peer reads
+    # /node/manifest before pairing to pin the key and trust capabilities).
+    app.include_router(node_router)
 
     _register_ws(app)
     register_voice_ws(app)

@@ -1,0 +1,23 @@
+# PHANTOM node identity & capability manifest — the mesh honesty anchor (F0.3).
+# Lists ONLY what is real and usable at this commit. Each F-phase that lands a
+# new hand appends here; nothing is advertised before it is wired end-to-end
+# (Laws 1 & 2). Served Ed25519-signed at GET /node/manifest. The private key
+# lives under .phantom-data/identity (gitignored) — never in the repo.
+
+[node]
+name = "Кузня"            # the Forge — muscle & long horizon
+role = "forge"            # peer role in the two-body organism (phone = "companion")
+platform = "linux-arm64"  # Radxa Dragon Q6A
+schema = 1
+
+[capabilities]
+# real at F0 — usable today, backed by a live service or endpoint
+shell = true          # linux/executor + dangerous_patterns (routes_linux)
+voice = true          # STT (faster-whisper → vosk) + TTS (StyleTTS2/piper)
+vision_screen = true  # vision/screen_capture + screen_ocr
+always_on = true      # persistent daemon on mains power
+disk = true           # local persistent storage
+
+# Advertised by later phases once wired end-to-end (do NOT pre-list):
+#   mesh (F1) · foundry (F2) · shell_mesh/browser/download/media/doc/git/coder (F3)
+#   seeing_loop (F4) · blender (F5) · geo_compute (F6) · agency (F7) · watchtower (F8)

@@ -13,7 +13,7 @@ import type {
 import { polisApi } from '../services/polisApi';
 
 export type PolisView = 'world' | 'staff' | 'focus';
-export type RoomTab = 'talk' | 'docs' | 'graph' | 'world';
+export type RoomTab = 'talk' | 'docs' | 'graph' | 'plan' | 'world';
 
 interface PolisState {
   loaded: boolean;

@@ -12,14 +12,68 @@ import { ConversationPanel } from '../components/polis/room/ConversationPanel';
 import { DocumentsPanel } from '../components/polis/room/DocumentsPanel';
 import { WorkersRail, WorkerInspector } from '../components/polis/room/WorkersRail';
 import { MissionFocus } from '../components/polis/MissionFocus';
+import { GraphCanvas } from '../components/polis/room/GraphCanvas';
 import { NewMissionSheet } from '../components/polis/NewMissionSheet';
 
 const TABS: { id: RoomTab; label: string }[] = [
   { id: 'talk', label: 'Розмова' },
   { id: 'docs', label: 'Документи' },
   { id: 'graph', label: 'Граф' },
+  { id: 'plan', label: 'План' },
   { id: 'world', label: 'Світ' },
 ];
+
+function MissionControlBar() {
+  const mission = usePolisStore((s) =>
+    s.missions.find((m) => m.id === s.selectedMissionId),
+  );
+  const pause = usePolisStore((s) => s.pauseMission);
+  const resume = usePolisStore((s) => s.resumeMission);
+  const kill = usePolisStore((s) => s.killMission);
+  if (!mission) return null;
+  const pressure = mission.budget.max_tokens
+    ? Math.round((mission.budget.spent_tokens / mission.budget.max_tokens) * 100)
+    : 0;
+  return (
+    <div
+      className="flex items-center gap-3 px-4 py-2"
+      style={{ borderBottom: '1px solid var(--glass-border)' }}
+    >
+      <span className="font-mono" style={{ fontSize: 'var(--fs-xs)', color: 'var(--ink-muted)' }}>
+        {Math.round(mission.progress * 100)}% · {mission.budget.spent_llm_calls}/
+        {mission.budget.max_llm_calls} викл. · бюджет {pressure}%
+      </span>
+      <div className="flex-1" />
+      {mission.status === 'running' && (
+        <button
+          onClick={() => void pause(mission.id)}
+          className="min-h-[36px] px-3 rounded-lg active:scale-[0.97]"
+          style={{ background: 'rgba(244,175,37,0.15)', color: '#f4af25', fontSize: 'var(--fs-xs)' }}
+        >
+          Пауза
+        </button>
+      )}
+      {mission.status === 'paused' && (
+        <button
+          onClick={() => void resume(mission.id)}
+          className="min-h-[36px] px-3 rounded-lg active:scale-[0.97]"
+          style={{ background: 'rgba(34,211,238,0.15)', color: '#22d3ee', fontSize: 'var(--fs-xs)' }}
+        >
+          Продовжити
+        </button>
+      )}
+      {!['done', 'killed', 'failed'].includes(mission.status) && (
+        <button
+          onClick={() => void kill(mission.id)}
+          className="min-h-[36px] px-3 rounded-lg active:scale-[0.97]"
+          style={{ background: 'rgba(244,63,94,0.12)', color: '#fb7185', fontSize: 'var(--fs-xs)' }}
+        >
+          Зупинити
+        </button>
+      )}
+    </div>
+  );
+}
 
 export default function PolisLayout() {
   const hydrate = usePolisStore((s) => s.hydrate);
@@ -102,7 +156,15 @@ export default function PolisLayout() {
         <div className="flex-1 min-h-0">
           {roomTab === 'talk' && <ConversationPanel />}
           {roomTab === 'docs' && <DocumentsPanel />}
-          {roomTab === 'graph' && <MissionFocus />}
+          {roomTab === 'graph' && (
+            <div className="h-full flex flex-col">
+              <MissionControlBar />
+              <div className="flex-1 min-h-0">
+                <GraphCanvas />
+              </div>
+            </div>
+          )}
+          {roomTab === 'plan' && <MissionFocus />}
           {roomTab === 'world' && <CityCanvas />}
         </div>
       </main>

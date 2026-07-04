@@ -112,7 +112,11 @@ class MissionGraph(BaseModel):
             if node.status not in ("pending", "ready"):
                 continue
             deps = [self.nodes[d] for d in node.depends_on if d in self.nodes]
-            if any(d.status in DEAD and d.attempts >= d.max_attempts for d in deps):
+            if any(
+                d.status == "blocked"
+                or (d.status in DEAD and d.attempts >= d.max_attempts)
+                for d in deps
+            ):
                 node.status = "blocked"
                 continue
             if all(d.status in TERMINAL for d in deps):

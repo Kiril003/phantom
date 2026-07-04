@@ -906,7 +906,7 @@ class ProactiveLoop:
         from db.database import get_session
         from db.models import ChatMessage, ChatSession
         from ai.artifact_studio import Brief, build_artifact
-        from ai.response_formatter import parse_function_call
+        from ai.response_formatter import build_artifact_scene_attachment
 
         async with get_session() as db:
             result = await db.execute(
@@ -918,23 +918,23 @@ class ProactiveLoop:
                 return
             user_id = session.user_id
 
-            # Call Studio
+            # Studio → HTML → artifact scene (offline iframe render).
+            # Pre-fix this shipped the HTML as react_artifact `code`,
+            # which Sandpack cannot execute — guaranteed broken render.
             title, html = await build_artifact(
                 Brief(title=scene_brief[:60], request=scene_brief, hint="Proactive artifact"),
                 user_id=user_id,
             )
-            form, content_val, attachments = parse_function_call(
-                "respond_artifact",
-                {"title": title, "code": html},
-            )
+            scene_att = build_artifact_scene_attachment(title, html)
+            attachments = [scene_att]
 
             msg = ChatMessage(
                 id=str(uuid.uuid4()),
                 session_id=session.id,
                 user_id=session.user_id,
                 role="assistant",
-                content=content_val[:2000] if content_val else (message[:2000] if message else "Я підготував цей віджет для вас."),
-                response_form=form,
+                content=message[:2000] if message else "Я підготував цей віджет для тебе.",
+                response_form="text",
                 metadata_json=json.dumps({
                     "origin": "proactive",
                     "priority": priority,
@@ -959,13 +959,17 @@ class ProactiveLoop:
                     "response_form": msg.response_form,
                     "metadata": json.loads(msg.metadata_json),
                     "created_at": msg.created_at.isoformat() if msg.created_at else None,
-                    "attachments": attachments,
+                    # Mirror routes_chat._serialize_message: the scene
+                    # attachment promotes to `message.scene`; the live WS
+                    # bubble must match what a reload renders.
+                    "attachments": [],
+                    "scene": scene_att["data"],
                 },
                 "session_id": msg.session_id,
                 "origin": "proactive",
                 "priority": priority,
             }
-        
+
         with contextlib.suppress(Exception):
             from api.websocket_hub import hub
             await hub.broadcast("chat", "message.proactive", payload)

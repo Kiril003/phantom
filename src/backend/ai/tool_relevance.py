@@ -97,10 +97,15 @@ _FAMILIES: tuple[tuple[re.Pattern[str], tuple[str, ...]], ...] = tuple(
             ("run_terminal_command", "respond_terminal"),
         ),
         (
+            r"віджет|дашборд|калькулятор|симуляц|інтерактив|панел[ьі]|"
+            r"widget|dashboard|calculator|simulation|interactive",
+            ("respond_artifact",),
+        ),
+        (
             r"створи|зроби|збудуй|згенеруй|намалюй|сторінк|сайт|додаток|гр[ау]|"
-            r"дашборд|переро[бб]|доопрацюй|build|create|make|generate|page|app|"
-            r"game|website|dashboard|refine",
-            ("create_workbench", "refine_workbench", "list_workbenches"),
+            r"переро[бб]|доопрацюй|build|create|make|generate|page|app|"
+            r"game|website|refine",
+            ("create_workbench", "refine_workbench", "list_workbenches", "respond_artifact"),
         ),
         (
             r"фото|картинк|зображенн|покажи|скріншот|photo|image|picture|screenshot",
@@ -108,7 +113,7 @@ _FAMILIES: tuple[tuple[re.Pattern[str], tuple[str, ...]], ...] = tuple(
         ),
         (
             r"графік|діаграм|візуаліз|chart|plot|graph",
-            ("respond_chart", "respond_stat"),
+            ("respond_chart", "respond_stat", "respond_artifact"),
         ),
         (
             r"порівня|против|versus|\bvs\b|compare",

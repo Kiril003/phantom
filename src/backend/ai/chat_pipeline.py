@@ -369,7 +369,10 @@ async def run(
                 success="true",
                 tool=tool_choice.tool_name,
             )
-            widget_resp = await _widget_response(tool_choice, user_id, db)
+            widget_resp = await _widget_response(
+                tool_choice, user_id, db,
+                user_message=user_message, on_delta=on_delta,
+            )
             widget_resp.tokens_used = (widget_resp.tokens_used or 0) + accumulated_tokens
             return widget_resp
 
@@ -539,9 +542,25 @@ async def _plain_generate(
     return ans
 
 
-async def _widget_response(choice: ToolCallResult, user_id: str, db: AsyncSession) -> AIResponse:
-    """Round-1 `respond_*` widget pick. All `respond_*` forms
-    go through `parse_function_call` unchanged."""
+async def _widget_response(
+    choice: ToolCallResult,
+    user_id: str,
+    db: AsyncSession,
+    *,
+    user_message: str = "",
+    on_delta: Any | None = None,
+) -> AIResponse:
+    """Round-1 `respond_*` widget pick. `respond_artifact` reroutes to
+    ArtifactStudio (cloud-only HTML build); every other form goes
+    through `parse_function_call` unchanged."""
+
+    if choice.tool_name == "respond_artifact" and config.chat_artifacts_enabled:
+        studio_resp = await _artifact_studio_response(
+            choice, user_message=user_message, user_id=user_id,
+            db=db, on_delta=on_delta,
+        )
+        if studio_resp is not None:
+            return studio_resp
 
     form, content, attachments = response_formatter.parse_function_call(
         choice.tool_name, choice.arguments or {}
@@ -552,6 +571,84 @@ async def _widget_response(choice: ToolCallResult, user_id: str, db: AsyncSessio
         response_form=form,
         attachments=attachments,
         provider=choice.provider,
+    )
+
+
+_ARTIFACT_PHASE_DELTAS = {
+    "draft": "⚙️ Чернетка готова — запускаю самокритику…\n",
+    "critiquing": "🔍 Арт-директор дивиться на результат…\n",
+    "polishing": "✨ Полірую фінальну версію…\n",
+}
+
+
+async def _artifact_studio_response(
+    choice: ToolCallResult,
+    *,
+    user_message: str,
+    user_id: str,
+    db: AsyncSession,
+    on_delta: Any | None,
+) -> AIResponse | None:
+    """Build the visualization through ArtifactStudio: Gemini-only
+    draft → critique → rewrite producing a self-contained HTML document
+    that renders offline in the sandboxed SceneArtifactPanel iframe.
+
+    Never touches the local (Ollama) provider: `build_artifact` runs on
+    `ai_router.generate_raw`, which raises when Gemini is unavailable.
+    On failure: salvage an HTML hint if the round-1 model shipped one,
+    else return None → caller falls to the legacy widget path (React
+    code via Sandpack, or a graceful text apology).
+    """
+    from ai.artifact_studio import ArtifactStudioError, Brief, build_artifact
+
+    args = choice.arguments or {}
+    title = str(args.get("title") or "").strip() or _artifact_title(user_message)
+    spec = str(args.get("spec") or "").strip()
+    hint = str(args.get("code") or "")
+    request = user_message.strip()
+    if spec:
+        request = f"{request}\n\nПЛАН ВІД АСИСТЕНТА:\n{spec}" if request else spec
+
+    ws_phase = _make_artifact_phase_cb(user_id)
+
+    async def _phase(phase: str, preview: str | None) -> None:
+        await ws_phase(phase, preview)
+        delta = _ARTIFACT_PHASE_DELTAS.get(phase)
+        if on_delta is not None and delta:
+            try:
+                await on_delta(delta)
+            except Exception:  # noqa: BLE001 — status text is best-effort
+                pass
+
+    if on_delta is not None:
+        try:
+            await on_delta(f"🛠️ Будую «{title}» у студії артефактів…\n")
+        except Exception:  # noqa: BLE001
+            pass
+
+    try:
+        final_title, html = await build_artifact(
+            Brief(title=title, request=request, hint=hint),
+            user_id=user_id,
+            on_phase=_phase,
+        )
+    except ArtifactStudioError as exc:
+        logger.warning("artifact studio failed, falling back: %s", exc)
+        if hint and _HTML_DOC_RE.search(hint):
+            final_title, html = title, hint
+        else:
+            return None
+
+    scene_att = response_formatter.build_artifact_scene_attachment(final_title, html)
+    sanitized = await output_safety.sanitize(
+        f"Готово — «{final_title}». Тисни на картку, щоб розгорнути на весь екран.",
+        user_id=user_id, db=db,
+    )
+    return AIResponse(
+        content=sanitized.text,
+        response_form="text",
+        attachments=[scene_att],
+        provider="gemini",
     )
 
 

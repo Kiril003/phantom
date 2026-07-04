@@ -101,3 +101,149 @@ async def test_run_no_salvage_when_disabled(monkeypatch):
         user_id="u", db=None,  # type: ignore[arg-type]
     )
     assert result.response_form != "artifact"
+
+
+# ── ArtifactStudio reroute (companion-v2 visualization overhaul) ─────────────
+
+def test_build_artifact_scene_attachment_shape():
+    from ai.response_formatter import build_artifact_scene_attachment
+
+    att = build_artifact_scene_attachment("Пульс", ART)
+    assert att["type"] == "scene"
+    scene = att["data"]
+    assert scene["kind"] == "artifact"
+    assert scene["reveal"]["policy"] == "instant"
+    assert len(scene["panels"]) == 1
+    panel = scene["panels"][0]
+    assert panel["kind"] == "artifact"
+    assert panel["data"]["html"] == ART
+    assert panel["data"]["title"] == "Пульс"
+    assert panel["data"]["capabilities"] == []
+
+
+def test_build_artifact_scene_attachment_with_prose():
+    from ai.response_formatter import build_artifact_scene_attachment
+
+    att = build_artifact_scene_attachment("X", ART, prose="Ось твій дашборд")
+    panels = att["data"]["panels"]
+    assert [p["kind"] for p in panels] == ["text", "artifact"]
+    assert panels[0]["data"]["markdown"] == "Ось твій дашборд"
+
+
+@pytest.mark.asyncio
+async def test_widget_response_reroutes_to_studio(monkeypatch):
+    from ai import chat_pipeline
+    from ai.tool_use import ToolCallResult
+
+    monkeypatch.setattr(config, "chat_artifacts_enabled", True)
+    seen = {}
+
+    async def fake_build(brief, *, user_id, on_phase=None):
+        seen["brief"] = brief
+        if on_phase is not None:
+            await on_phase("draft", ART)
+        return "Пульс", ART
+
+    monkeypatch.setattr("ai.artifact_studio.build_artifact", fake_build)
+
+    deltas: list[str] = []
+
+    async def on_delta(chunk: str) -> None:
+        deltas.append(chunk)
+
+    choice = ToolCallResult(
+        tool_name="respond_artifact",
+        arguments={"title": "Пульс", "spec": "дашборд серцебиття"},
+        provider="gemini", model="m",
+    )
+    resp = await chat_pipeline._widget_response(
+        choice, "u", None,  # type: ignore[arg-type]
+        user_message="покажи пульс", on_delta=on_delta,
+    )
+    assert resp.response_form == "text"
+    assert resp.provider == "gemini"
+    scene = next(a for a in resp.attachments if a["type"] == "scene")
+    assert scene["data"]["kind"] == "artifact"
+    assert scene["data"]["panels"][0]["data"]["html"] == ART
+    assert "покажи пульс" in seen["brief"].request
+    assert "дашборд серцебиття" in seen["brief"].request
+    assert deltas  # liveness status reached the stream
+
+
+@pytest.mark.asyncio
+async def test_widget_response_studio_failure_salvages_html_hint(monkeypatch):
+    from ai import chat_pipeline
+    from ai.artifact_studio import ArtifactStudioError
+    from ai.tool_use import ToolCallResult
+
+    monkeypatch.setattr(config, "chat_artifacts_enabled", True)
+
+    async def fake_build(brief, *, user_id, on_phase=None):
+        raise ArtifactStudioError("gemini down")
+
+    monkeypatch.setattr("ai.artifact_studio.build_artifact", fake_build)
+
+    choice = ToolCallResult(
+        tool_name="respond_artifact",
+        arguments={"title": "X", "spec": "s", "code": ART},
+        provider="gemini", model="m",
+    )
+    resp = await chat_pipeline._widget_response(
+        choice, "u", None,  # type: ignore[arg-type]
+        user_message="візуалізуй",
+    )
+    scene = next(a for a in resp.attachments if a["type"] == "scene")
+    assert scene["data"]["panels"][0]["data"]["html"] == ART
+
+
+@pytest.mark.asyncio
+async def test_widget_response_studio_failure_react_code_falls_to_legacy(monkeypatch):
+    from ai import chat_pipeline
+    from ai.artifact_studio import ArtifactStudioError
+    from ai.tool_use import ToolCallResult
+
+    monkeypatch.setattr(config, "chat_artifacts_enabled", True)
+
+    async def fake_build(brief, *, user_id, on_phase=None):
+        raise ArtifactStudioError("gemini down")
+
+    monkeypatch.setattr("ai.artifact_studio.build_artifact", fake_build)
+
+    choice = ToolCallResult(
+        tool_name="respond_artifact",
+        arguments={"title": "X", "spec": "s", "code": "export default function App() {}"},
+        provider="gemini", model="m",
+    )
+    resp = await chat_pipeline._widget_response(
+        choice, "u", None,  # type: ignore[arg-type]
+        user_message="візуалізуй",
+    )
+    assert resp.response_form == "react_artifact"
+    art = next(a for a in resp.attachments if a["type"] == "artifact_data")
+    assert art["data"]["code"] == "export default function App() {}"
+
+
+@pytest.mark.asyncio
+async def test_widget_response_studio_failure_no_code_apologizes(monkeypatch):
+    from ai import chat_pipeline
+    from ai.artifact_studio import ArtifactStudioError
+    from ai.tool_use import ToolCallResult
+
+    monkeypatch.setattr(config, "chat_artifacts_enabled", True)
+
+    async def fake_build(brief, *, user_id, on_phase=None):
+        raise ArtifactStudioError("gemini down")
+
+    monkeypatch.setattr("ai.artifact_studio.build_artifact", fake_build)
+
+    choice = ToolCallResult(
+        tool_name="respond_artifact",
+        arguments={"title": "X", "spec": "s"},
+        provider="gemini", model="m",
+    )
+    resp = await chat_pipeline._widget_response(
+        choice, "u", None,  # type: ignore[arg-type]
+        user_message="візуалізуй",
+    )
+    assert resp.response_form == "text"
+    assert resp.content.strip()  # graceful apology, never an empty bubble

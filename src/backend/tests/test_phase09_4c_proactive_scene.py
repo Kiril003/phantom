@@ -67,12 +67,18 @@ async def test_proactive_scene_emitted(monkeypatch, isolated_db):
     
     await loop._maybe_speak()
     
-    # Verify WS broadcast
+    # Verify WS broadcast — studio HTML rides an `artifact` scene
+    # (offline iframe render), promoted to message.scene like the REST
+    # serializer does. Pre-fix it shipped HTML as react_artifact code.
     assert any(c[1] == "message.proactive" for c in captured_ws)
     payload = [c[2] for c in captured_ws if c[1] == "message.proactive"][0]
-    assert payload["message"]["response_form"] == "react_artifact"
+    assert payload["message"]["response_form"] == "text"
     assert "here is your dashboard" in payload["message"]["content"]
-    assert any(a["type"] == "artifact_data" for a in payload["message"]["attachments"])
+    scene = payload["message"]["scene"]
+    assert scene["kind"] == "artifact"
+    art_panel = next(p for p in scene["panels"] if p["kind"] == "artifact")
+    assert art_panel["data"]["html"] == "<html>test</html>"
+    assert payload["message"]["attachments"] == []
 
 # Fixture from test_phase09_3b_proactive.py
 @pytest.fixture

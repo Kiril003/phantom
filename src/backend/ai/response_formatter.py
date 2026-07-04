@@ -195,24 +195,30 @@ RESPONSE_FORM_TOOLS: list[dict[str, Any]] = [
     {
         "name": "respond_artifact",
         "description": (
-            "Інтерактивний віджет, UI компонент, або міні-аплікація (React + Tailwind). "
-            "Використовуй ЗАВЖДИ коли користувач просить віджет, дашборд, калькулятор, "
+            "Інтерактивна візуалізація: віджет, дашборд, калькулятор, симуляція, "
             "графік зі складною логікою або будь-який інтерактивний інтерфейс. "
-            "Генеруй ВЕСЬ React-код як один суцільний рядок. "
-            "Код МАЄ мати дефолтний експорт (export default function App() {...}). "
-            "Використовуй Tailwind CSS (класи) для стилізації. "
-            "Можна використовувати lucide-react, recharts, framer-motion."
+            "Використовуй ЗАВЖДИ коли користувач просить щось інтерактивне чи візуальне, "
+            "що виходить за межі простого чарту. НЕ пиши код сам — передай title і spec: "
+            "детальний опис що збудувати (дані, layout, взаємодії, стиль). "
+            "Спеціалізована студія збудує повний HTML-артефакт за твоїм описом."
         ),
         "parameters": {
             "type": "object",
             "properties": {
                 "title": {"type": "string", "description": "Назва для шапки віджета"},
+                "spec": {
+                    "type": "string",
+                    "description": (
+                        "Детальний опис артефакту: які дані показати, структура, "
+                        "інтерактивність, стиль. Конкретні числа/факти з розмови включай сюди."
+                    ),
+                },
                 "code": {
                     "type": "string",
-                    "description": "Повний вихідний код React-компонента (JSX/TSX)."
-                }
+                    "description": "(опційно) Чернетка коду як підказка для студії.",
+                },
             },
-            "required": ["title", "code"],
+            "required": ["title", "spec"],
         },
     },
     {
@@ -629,6 +635,43 @@ def _scene_artifact_panel(idx: int, raw: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+def build_artifact_scene_attachment(
+    title: str,
+    html: str,
+    *,
+    prose: str = "",
+    capabilities: list[str] | None = None,
+) -> dict[str, Any]:
+    """Wrap an ArtifactStudio HTML document as a `{type:'scene'}`
+    attachment with scene kind `artifact` — the full-bleed breakout
+    surface (MessageBubble) + offline iframe renderer
+    (SceneArtifactPanel). Producers: chat respond_artifact reroute and
+    the proactive `_emit_scene` loop.
+    """
+    panels: list[dict[str, Any]] = []
+    idx = 1
+    if prose.strip():
+        panels.append(_scene_text_panel(idx, prose.strip()))
+        idx += 1
+    panels.append({
+        "id": f"p{idx}",
+        "kind": "artifact",
+        "data": {
+            "html": html,
+            "title": title,
+            "capabilities": list(capabilities or []),
+        },
+    })
+    return {
+        "type": "scene",
+        "data": {
+            "kind": "artifact",
+            "panels": panels,
+            "reveal": {"policy": "instant", "staggerMs": 0},
+        },
+    }
+
+
 def build_scene_envelope(
     response_form: str,
     content: str,
@@ -825,14 +868,21 @@ def parse_function_call(
         })
 
     elif fn_name == "respond_artifact":
+        # Legacy/fallback arm — the primary chat path intercepts
+        # respond_artifact in chat_pipeline._widget_response and routes
+        # it through ArtifactStudio (cloud HTML). This arm only fires
+        # when the studio is unavailable AND the model shipped raw code.
         code = str(fn_args.get("code", ""))
         title = str(fn_args.get("title", ""))
         dependencies = fn_args.get("dependencies", {})
-        
-        bad = not config.chat_artifacts_enabled or not code
-        
-        if bad:
+
+        if not config.chat_artifacts_enabled or not code:
             response_form = "text"
+            if not content:
+                content = (
+                    f"Не зміг збудувати «{title or 'артефакт'}» — "
+                    "студія артефактів недоступна. Спробуй ще раз пізніше."
+                )
         else:
             attachments.append({
                 "type": "artifact_data",

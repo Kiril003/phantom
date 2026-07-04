@@ -101,12 +101,12 @@ class PhantomConfig(BaseSettings):
     ai_reasoning_model: str = "gemini-3.5-flash"             # complex queries + tools — smartest flash
     ai_background_model: str = "gemini-flash-lite-latest"    # background synthesis — cheap + fast
 
-    # Specific tier overrides (set to "auto" to follow system model)
-    ai_planner_model: str = "auto"
+    # Specific tier overrides (set to "auto" to follow system model).
+    # ai_planner_model / ai_artifact_model live in the chat-tools block
+    # below — a duplicate field here would silently lose to it.
     ai_reflector_model: str = "auto"
     ai_tactical_model: str = "auto"
     ai_long_context_model: str = "auto"
-    ai_artifact_model: str = "auto"
 
     # Anthropic Claude
     ai_anthropic_model: str = "claude-3-7-sonnet-20250219"
@@ -731,7 +731,7 @@ class PhantomConfig(BaseSettings):
     chat_tool_max_total_ms: int = 60_000
     chat_artifacts_enabled: bool = True
     chat_artifact_html_cap_bytes: int = 262144
-    ai_artifact_model: str = "gemini-2.0-flash"
+    ai_artifact_model: str = "auto"  # "auto" → ai_gemini_model; cloud-only, never Ollama
     ai_artifact_max_tokens: int = 32768
     ai_artifact_max_revisions: int = 2
     # Strategic/reflector planner needs reliable strict-JSON.

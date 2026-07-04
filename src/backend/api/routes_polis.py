@@ -63,7 +63,58 @@ async def get_mission(
     m = get_polis().missions.get(mission_id)
     if m is None:
         raise HTTPException(404, "mission not found")
-    return {"mission": m.to_dict()}
+    return {"mission": m.to_dict(), "chat": m.chat[-100:]}
+
+
+class MissionChatRequest(BaseModel):
+    text: str = Field(min_length=1, max_length=8000)
+
+
+@router.post("/missions/{mission_id}/chat")
+async def mission_chat(
+    mission_id: str,
+    body: MissionChatRequest,
+    _: TokenPayload = Depends(require_auth),
+) -> dict:
+    try:
+        reply = await get_polis().chat(mission_id, body.text)
+    except KeyError:
+        raise HTTPException(404, "mission not found")
+    return {"reply": reply}
+
+
+@router.get("/missions/{mission_id}/artifacts")
+async def mission_artifacts(
+    mission_id: str, _: TokenPayload = Depends(require_auth)
+) -> dict:
+    return {"artifacts": get_polis().list_artifacts(mission_id)}
+
+
+@router.get("/missions/{mission_id}/artifacts/{name}")
+async def mission_artifact(
+    mission_id: str, name: str, _: TokenPayload = Depends(require_auth)
+) -> dict:
+    content = get_polis().read_artifact(mission_id, name)
+    if content is None:
+        raise HTTPException(404, "artifact not found")
+    return {"name": name, "content": content}
+
+
+@router.get("/missions/{mission_id}/workers")
+async def mission_workers(
+    mission_id: str, _: TokenPayload = Depends(require_auth)
+) -> dict:
+    return {"workers": get_polis().workers(mission_id)}
+
+
+@router.get("/missions/{mission_id}/workers/{node_id}")
+async def worker_transcript(
+    mission_id: str, node_id: str, _: TokenPayload = Depends(require_auth)
+) -> dict:
+    return {
+        "node_id": node_id,
+        "transcript": get_polis().worker_transcript(mission_id, node_id),
+    }
 
 
 @router.post("/missions/{mission_id}/pause")

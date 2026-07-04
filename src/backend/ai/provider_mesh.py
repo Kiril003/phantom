@@ -113,6 +113,56 @@ class ProviderMesh:
                 setattr(config, attr, env_secret)
 
 
+    async def generate_stream(
+        self,
+        *,
+        system_prompt: str,
+        user_message: str,
+        provider: str = "gemini",
+        on_delta,
+    ) -> str:
+        """Streamed generation with vault lease; returns the full text.
+        on_delta(str) is awaited for every chunk. Falls back to blocking
+        generate() when the provider cannot stream."""
+        vault = get_vault()
+        lease = await vault.acquire(provider)
+        attr = _CONFIG_ATTR.get(provider)
+        env_secret = getattr(config, attr, "") if attr else ""
+        if lease and attr:
+            setattr(config, attr, lease.secret)
+        prov = self._get_router().get_provider(provider)
+        try:
+            if prov is None or not hasattr(prov, "generate_stream"):
+                raise RuntimeError(f"provider {provider} unavailable for stream")
+            parts: list[str] = []
+            async for delta in prov.generate_stream(user_message, system_prompt, []):
+                parts.append(delta)
+                await on_delta(delta)
+            text = "".join(parts)
+            if not text.strip():
+                raise RuntimeError("empty stream")
+            if lease:
+                await vault.report(lease.id, "ok",
+                                   tokens=_rough_tokens(system_prompt, user_message, text))
+            return text
+        except Exception as exc:
+            if lease:
+                await vault.report(lease.id, classify_outcome(exc))
+            logger.info("mesh stream failed (%s) — blocking fallback", exc)
+            resp = await self.generate(
+                system_prompt=system_prompt,
+                user_message=user_message,
+                provider=provider,
+            )
+            text = getattr(resp, "text", "") or getattr(resp, "content", "") or ""
+            if text:
+                await on_delta(text)
+            return text
+        finally:
+            if lease and attr and env_secret:
+                setattr(config, attr, env_secret)
+
+
 def _rough_tokens(*parts: str) -> int:
     return sum(len(p) for p in parts if p) // 4
 

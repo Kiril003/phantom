@@ -1306,6 +1306,7 @@ class PolisMissionRow(Base):
     domain: Mapped[str] = mapped_column(String(16), nullable=False, default="generic")
     status: Mapped[str] = mapped_column(String(24), nullable=False, default="planning")
     graph_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    chat_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
     created_at: Mapped[datetime] = mapped_column(DateTime, nullable=False, default=_now)
     updated_at: Mapped[datetime] = mapped_column(
         DateTime, nullable=False, default=_now, onupdate=_now

@@ -11,6 +11,7 @@ import asyncio
 import json
 import logging
 import os
+import re
 import time
 import uuid
 from datetime import datetime, timezone
@@ -21,7 +22,7 @@ from sqlalchemy import select
 from db.database import get_session
 from db.models import PolisMissionRow
 
-from agent.fabric.graph import MissionGraph, PlanNode
+from agent.fabric.graph import CrewSpec, MissionGraph, PlanNode
 from agent.fabric.pipelines import PIPELINES, plan_mission
 
 logger = logging.getLogger(__name__)
@@ -57,7 +58,8 @@ class Gate:
 
 class ActiveMission:
     def __init__(self, row_id: str, user_id: str, title: str, brief: str,
-                 pipeline: str, graph: MissionGraph) -> None:
+                 pipeline: str, graph: MissionGraph,
+                 chat: list[dict] | None = None) -> None:
         self.id = row_id
         self.user_id = user_id
         self.title = title
@@ -70,6 +72,8 @@ class ActiveMission:
         self.task: asyncio.Task | None = None
         self.pause = asyncio.Event()
         self.pause.set()  # set = running
+        self.chat: list[dict] = chat or []
+        self.transcripts: dict[str, str] = {}
 
     def to_dict(self) -> dict:
         return {
@@ -116,6 +120,7 @@ class PolisService:
                 return
             row.status = m.status
             row.graph_json = m.graph.to_json()
+            row.chat_json = json.dumps(m.chat[-200:], ensure_ascii=False)
             await db.commit()
 
     async def rehydrate(self) -> None:
@@ -134,8 +139,12 @@ class PolisService:
                 if node.status in ("running", "review", "ready"):
                     node.status = "pending"
                     node.started_at = None
+            try:
+                chat = json.loads(row.chat_json or "[]")
+            except (json.JSONDecodeError, ValueError):
+                chat = []
             m = ActiveMission(row.id, row.user_id, row.title, row.brief,
-                              row.pipeline, graph)
+                              row.pipeline, graph, chat=chat)
             self.missions[m.id] = m
             m.task = asyncio.create_task(self._run(m))
             logger.info("polis: rehydrated mission %s (%s)", m.id, m.title)
@@ -198,6 +207,201 @@ class PolisService:
         gate.event.set()
         return True
 
+    # ── mission chat — the operator steers with words ──────────────────
+
+    async def _chat_append(self, m: ActiveMission, msg: dict) -> None:
+        msg["ts"] = _now_iso()
+        m.chat.append(msg)
+        await self._emit("chat_message", {"mission_id": m.id, "message": msg})
+
+    async def _chat_system(self, m: ActiveMission, text: str,
+                           node_id: str | None = None) -> None:
+        await self._chat_append(m, {"role": "system", "text": text,
+                                    "node_id": node_id})
+
+    def add_node(self, mission_id: str, *, title: str, prompt: str,
+                 after: list[str] | None = None, role: str | None = None) -> str:
+        """Rolling-wave: inject a node into a live graph; the frontier
+        picks it up on the next wave."""
+        m = self.missions[mission_id]
+        deps = [d for d in (after or []) if d in m.graph.nodes]
+        node = PlanNode(
+            title=title[:120], prompt=prompt, domain=m.domain,
+            depends_on=deps,
+            crew=CrewSpec(roles=[role], size=1) if role else None,
+        )
+        m.graph.add(node)
+        return node.id
+
+    _STEER_SYSTEM = (
+        "Ти — PHANTOM, керівник місії у власному Полісі. Оператор пише тобі "
+        "посеред виконання. Ти бачиш стан графа місії. Відповідай стисло і по "
+        "суті українською, а якщо треба ЗМІНИТИ хід місії — додай дії.\n"
+        "Формат відповіді — ТІЛЬКИ JSON:\n"
+        '{"reply": "текст оператору", "actions": [\n'
+        '  {"type": "add_node", "title": "...", "prompt": "повне ТЗ для '
+        'воркера", "after": ["node_id", "..."]},\n'
+        '  {"type": "pause"} | {"type": "resume"} |\n'
+        '  {"type": "approve_gate", "gate_id": "..."} | '
+        '{"type": "deny_gate", "gate_id": "..."}\n'
+        "]}\n"
+        "Дій додавай тільки коли оператор явно просить змінити роботу. "
+        "Питання про стан → просто reply з фактами зі стану."
+    )
+
+    def _mission_state_brief(self, m: ActiveMission) -> str:
+        lines = [
+            f"Місія: {m.title} [{m.status}] прогрес {int(m.graph.progress() * 100)}%",
+            f"Бриф: {m.brief[:400]}",
+            "Вузли:",
+        ]
+        for n in m.graph.nodes.values():
+            lines.append(
+                f"  {n.id} [{n.status}] {n.title}"
+                + (f" → {n.output_summary[:100]}" if n.output_summary else "")
+                + (f" ✗ {n.error[:80]}" if n.error else "")
+            )
+        for g in self.gates.values():
+            if g.mission_id == m.id:
+                lines.append(f"Відкритий gate {g.id}: {g.question}")
+        return "\n".join(lines)
+
+    async def chat(self, mission_id: str, text: str) -> dict:
+        m = self.missions.get(mission_id)
+        if m is None:
+            raise KeyError(mission_id)
+        await self._chat_append(m, {"role": "operator", "text": text})
+
+        from ai.provider_mesh import get_mesh
+        history = [
+            {"role": "user" if c["role"] == "operator" else "assistant",
+             "content": c["text"]}
+            for c in m.chat[-12:-1] if c["role"] in ("operator", "phantom")
+        ]
+        applied: list[str] = []
+        try:
+            resp = await get_mesh().generate(
+                system_prompt=self._STEER_SYSTEM + "\n\nСТАН:\n"
+                + self._mission_state_brief(m),
+                user_message=text,
+                history=history,
+                user_id=m.user_id,
+            )
+            raw = getattr(resp, "text", "") or ""
+            match = re.search(r"\{.*\}", raw, re.S)
+            payload = json.loads(match.group(0)) if match else {"reply": raw}
+        except Exception as exc:
+            logger.warning("mission chat LLM failed: %s", exc)
+            payload = {
+                "reply": "Зв'язок з розумом міста зараз слабкий — стан місії: "
+                + self._mission_state_brief(m)[:400],
+                "actions": [],
+            }
+
+        for act in payload.get("actions", []) or []:
+            try:
+                kind = act.get("type")
+                if kind == "add_node":
+                    nid = self.add_node(
+                        m.id, title=act.get("title", "Додатковий крок"),
+                        prompt=act.get("prompt", ""), after=act.get("after"),
+                    )
+                    applied.append(f"add_node:{nid}")
+                elif kind == "pause":
+                    self.pause_mission(m.id)
+                    applied.append("pause")
+                elif kind == "resume":
+                    self.resume_mission(m.id)
+                    applied.append("resume")
+                elif kind in ("approve_gate", "deny_gate"):
+                    ok = await self.resolve_gate(
+                        act.get("gate_id", ""), kind == "approve_gate"
+                    )
+                    if ok:
+                        applied.append(kind)
+            except Exception as exc:
+                logger.warning("chat action %s failed: %s", act, exc)
+
+        reply = {
+            "role": "phantom",
+            "text": str(payload.get("reply", ""))[:4000],
+            "applied": applied,
+        }
+        await self._chat_append(m, reply)
+        await self._persist(m)
+        if applied:
+            await self._emit("mission_status", {"mission": m.to_dict()})
+        return reply
+
+    # ── artifacts & workers — everything visible ────────────────────────
+
+    def list_artifacts(self, mission_id: str) -> list[dict]:
+        m = self.missions.get(mission_id)
+        base = os.path.join(_POLIS_HOME, mission_id)
+        out: list[dict] = []
+        if not os.path.isdir(base):
+            return out
+        for name in sorted(os.listdir(base)):
+            path = os.path.join(base, name)
+            if not os.path.isfile(path):
+                continue
+            stem = os.path.splitext(name)[0]
+            node = m.graph.nodes.get(stem) if m else None
+            st = os.stat(path)
+            out.append({
+                "name": name,
+                "node_id": stem if node else None,
+                "title": node.title if node else name,
+                "size": st.st_size,
+                "updated_at": datetime.fromtimestamp(
+                    st.st_mtime, tz=timezone.utc
+                ).isoformat(),
+            })
+        return out
+
+    def read_artifact(self, mission_id: str, name: str) -> str | None:
+        safe = os.path.basename(name)
+        path = os.path.join(_POLIS_HOME, mission_id, safe)
+        if not os.path.isfile(path):
+            return None
+        with open(path, encoding="utf-8") as f:
+            return f.read()[:400_000]
+
+    def workers(self, mission_id: str) -> list[dict]:
+        m = self.missions.get(mission_id)
+        if m is None:
+            return []
+        out = []
+        for n in m.graph.nodes.values():
+            transcript = m.transcripts.get(n.id, "")
+            if not transcript and n.status in ("pending", "ready"):
+                continue
+            out.append({
+                "node_id": n.id,
+                "title": n.title,
+                "role": (n.crew.roles[0] if n.crew and n.crew.roles else None),
+                "status": n.status,
+                "chars": len(transcript),
+                "tail": transcript[-600:],
+                "spent_llm_calls": n.budget.spent_llm_calls,
+            })
+        return out
+
+    def worker_transcript(self, mission_id: str, node_id: str) -> str:
+        m = self.missions.get(mission_id)
+        if m is None:
+            return ""
+        text = m.transcripts.get(node_id, "")
+        if not text:
+            node = m.graph.nodes.get(node_id)
+            for p in (node.artifact_paths if node else []):
+                try:
+                    with open(p, encoding="utf-8") as f:
+                        text = f.read()[:400_000]
+                except OSError:
+                    pass
+        return text
+
     # ── the wave loop ──────────────────────────────────────────────────
 
     async def _run(self, m: ActiveMission) -> None:
@@ -245,6 +449,17 @@ class PolisService:
             except Exception as exc:
                 m.graph.mark_failed(node.id, str(exc))
             await self._node_event(m, node)
+            if node.status == "done":
+                await self._chat_system(
+                    m, f"✓ «{node.title}» виконано" +
+                    (f" — {node.output_summary[:120]}" if node.output_summary else ""),
+                    node_id=node.id,
+                )
+            elif node.status == "failed":
+                await self._chat_system(
+                    m, f"✗ «{node.title}» зірвано: {node.error or 'невідома причина'}",
+                    node_id=node.id,
+                )
             await self._budget_watch(m)
 
     async def _execute(self, m: ActiveMission, node: PlanNode) -> None:
@@ -253,12 +468,36 @@ class PolisService:
         system = self._role_system(role)
         from ai.provider_mesh import get_mesh
         t0 = time.monotonic()
-        resp = await get_mesh().generate(
+
+        m.transcripts[node.id] = ""
+        buf: list[str] = []
+        last_emit = 0.0
+
+        async def on_delta(delta: str) -> None:
+            nonlocal last_emit
+            m.transcripts[node.id] += delta
+            buf.append(delta)
+            now = time.monotonic()
+            if now - last_emit >= 0.4 or sum(len(b) for b in buf) > 400:
+                await self._emit("worker_delta", {
+                    "mission_id": m.id, "node_id": node.id,
+                    "delta": "".join(buf),
+                    "total_chars": len(m.transcripts[node.id]),
+                })
+                buf.clear()
+                last_emit = now
+
+        text = await get_mesh().generate_stream(
             system_prompt=system,
             user_message=(context + "\n\n" + node.prompt).strip(),
-            user_id=m.user_id,
+            on_delta=on_delta,
         )
-        text = getattr(resp, "text", "") or getattr(resp, "content", "") or str(resp)
+        if buf:
+            await self._emit("worker_delta", {
+                "mission_id": m.id, "node_id": node.id,
+                "delta": "".join(buf),
+                "total_chars": len(m.transcripts[node.id]),
+            })
         node.budget.spent_llm_calls += 1
         node.budget.spent_tokens += max(1, len(text) // 4)
         node.eta_minutes = max(1, int((time.monotonic() - t0) / 60) or node.eta_minutes)

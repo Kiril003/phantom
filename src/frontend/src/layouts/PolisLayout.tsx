@@ -4,6 +4,14 @@
  * видно наживо. */
 import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
+import {
+  MessageSquareText,
+  FileText,
+  Workflow,
+  ListChecks,
+  Users,
+  Building2,
+} from 'lucide-react';
 import { usePolisStore, registerPolisWsHandler, type RoomTab } from '../stores/polisStore';
 import { wsClient } from '../services/websocket';
 import { CityCanvas } from '../components/polis/CityCanvas';
@@ -15,15 +23,26 @@ import { MissionFocus } from '../components/polis/MissionFocus';
 import { GraphCanvas } from '../components/polis/room/GraphCanvas';
 import { CitizensGallery } from '../components/polis/room/CitizensGallery';
 import { NewMissionSheet } from '../components/polis/NewMissionSheet';
+import { domainToken } from '../components/polis/theme';
 
-const TABS: { id: RoomTab; label: string }[] = [
-  { id: 'talk', label: 'Розмова' },
-  { id: 'docs', label: 'Документи' },
-  { id: 'graph', label: 'Граф' },
-  { id: 'plan', label: 'План' },
-  { id: 'citizens', label: 'Населення' },
-  { id: 'world', label: 'Світ' },
+const TABS: { id: RoomTab; label: string; Icon: typeof FileText }[] = [
+  { id: 'talk', label: 'Розмова', Icon: MessageSquareText },
+  { id: 'docs', label: 'Документи', Icon: FileText },
+  { id: 'graph', label: 'Граф', Icon: Workflow },
+  { id: 'plan', label: 'План', Icon: ListChecks },
+  { id: 'citizens', label: 'Населення', Icon: Users },
+  { id: 'world', label: 'Світ', Icon: Building2 },
 ];
+
+const STATUS_CHIP: Record<string, { label: string; tint: string }> = {
+  planning: { label: 'планування', tint: 'var(--ink-muted)' },
+  running: { label: 'у роботі', tint: 'var(--signal-ok)' },
+  paused: { label: 'пауза', tint: 'var(--primary)' },
+  awaiting_gate: { label: 'чекає тебе', tint: 'var(--primary)' },
+  done: { label: 'готово', tint: 'var(--signal-ok)' },
+  failed: { label: 'зрив', tint: 'var(--signal-alert)' },
+  killed: { label: 'зупинено', tint: 'var(--ink-faint)' },
+};
 
 function MissionControlBar() {
   const mission = usePolisStore((s) =>
@@ -109,6 +128,9 @@ export default function PolisLayout() {
 
   const mission = missions.find((m) => m.id === selectedMissionId);
 
+  const chip = mission ? STATUS_CHIP[mission.status] ?? STATUS_CHIP.planning : null;
+  const domainTint = mission ? domainToken(mission.domain) : 'var(--accent)';
+
   return (
     <motion.div
       initial={{ opacity: 0 }}
@@ -116,43 +138,86 @@ export default function PolisLayout() {
       exit={{ opacity: 0 }}
       className="w-full h-full relative overflow-hidden flex gap-3 p-3"
       data-testid="polis-layout"
+      style={{ background: 'var(--surface-base)' }}
     >
-      <div className="w-[236px] shrink-0 h-full">
+      {/* signature sunrise wash + soft amber glows beneath everything */}
+      <div aria-hidden className="absolute inset-0 pointer-events-none" style={{ zIndex: 0 }}>
+        <div className="absolute inset-0" style={{ background: 'var(--surface-sunrise)', opacity: 0.9 }} />
+        <div
+          className="absolute rounded-full animate-pulse-slow"
+          style={{ top: '-20%', left: '-8%', width: '45%', height: '70%', filter: 'blur(120px)', background: 'var(--glow-warm)', opacity: 0.6 }}
+        />
+        <div
+          className="absolute rounded-full animate-pulse-slow"
+          style={{ bottom: '-25%', right: '-6%', width: '42%', height: '65%', filter: 'blur(120px)', background: 'var(--glow-primary)', opacity: 0.45, animationDelay: '2s' }}
+        />
+      </div>
+
+      <div className="w-[236px] shrink-0 h-full relative" style={{ zIndex: 1 }}>
         <MissionRail onNewMission={() => setSheetOpen(true)} />
       </div>
 
-      <main className="flex-1 min-w-0 h-full glass-panel rounded-2xl flex flex-col overflow-hidden">
+      <main
+        className="flex-1 min-w-0 h-full glass-card rounded-3xl flex flex-col overflow-hidden relative"
+        style={{ zIndex: 1 }}
+      >
         <header
-          className="flex items-center gap-1 px-3 pt-2 pb-0"
+          className="flex items-center gap-3 px-4 h-[58px] shrink-0"
           style={{ borderBottom: '1px solid var(--glass-border)' }}
         >
           <span
-            className="text-gradient font-medium mr-2"
-            style={{ fontSize: 'var(--fs-md)' }}
+            className="w-2.5 h-2.5 rounded-full shrink-0"
+            style={{ background: domainTint, boxShadow: `0 0 10px ${domainTint}` }}
+          />
+          <h1
+            className="font-semibold truncate min-w-0 flex-1"
+            style={{ fontSize: 'var(--fs-md)', color: 'var(--ink-primary)' }}
+            title={mission?.title}
           >
             {mission ? mission.title : 'ПОЛІС'}
-          </span>
-          <div className="flex-1" />
-          {TABS.map((t) => (
-            <button
-              key={t.id}
-              onClick={() => setRoomTab(t.id)}
-              className="min-h-[44px] px-3 font-mono uppercase active:scale-[0.97]"
-              style={{
-                fontSize: 'var(--fs-micro)',
-                letterSpacing: 'var(--tracking-widest)',
-                color: roomTab === t.id ? 'var(--accent)' : 'var(--ink-muted)',
-                borderBottom:
-                  roomTab === t.id
-                    ? '2px solid var(--accent)'
-                    : '2px solid transparent',
-              }}
-              data-testid={`room-tab-${t.id}`}
+          </h1>
+          {chip && (
+            <span
+              className="shrink-0 flex items-center gap-1.5 pr-1"
+              style={{ fontSize: 'var(--fs-micro)', color: chip.tint }}
             >
-              {t.label}
-              {t.id === 'docs' && docsCount > 0 ? ` ${docsCount}` : ''}
-            </button>
-          ))}
+              <span className="w-1.5 h-1.5 rounded-full" style={{ background: chip.tint }} />
+              {chip.label}
+            </span>
+          )}
+          <nav
+            className="flex items-center gap-0.5 shrink-0 p-1 rounded-2xl"
+            style={{ background: 'var(--glass-subtle)' }}
+          >
+            {TABS.map((t) => {
+              const active = roomTab === t.id;
+              return (
+                <button
+                  key={t.id}
+                  onClick={() => setRoomTab(t.id)}
+                  className="relative w-[38px] h-[38px] rounded-xl flex items-center justify-center active:scale-[0.94] transition-all"
+                  style={{
+                    color: active ? 'var(--ink-inverse)' : 'var(--ink-muted)',
+                    background: active ? 'var(--accent)' : 'transparent',
+                    boxShadow: active ? 'var(--shadow-glow)' : 'none',
+                  }}
+                  title={t.label}
+                  aria-label={t.label}
+                  data-testid={`room-tab-${t.id}`}
+                >
+                  <t.Icon size={18} strokeWidth={active ? 2.3 : 1.8} />
+                  {t.id === 'docs' && docsCount > 0 && (
+                    <span
+                      className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 rounded-full flex items-center justify-center font-bold"
+                      style={{ fontSize: 9, background: 'var(--primary)', color: 'var(--ink-inverse)' }}
+                    >
+                      {docsCount}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </nav>
         </header>
 
         <div className="flex-1 min-h-0">
@@ -172,7 +237,7 @@ export default function PolisLayout() {
         </div>
       </main>
 
-      <div className="w-[264px] shrink-0 h-full">
+      <div className="w-[264px] shrink-0 h-full relative" style={{ zIndex: 1 }}>
         <WorkersRail />
       </div>
 

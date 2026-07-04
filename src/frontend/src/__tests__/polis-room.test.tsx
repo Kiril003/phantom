@@ -86,8 +86,10 @@ describe('ConversationPanel', () => {
       role: 'phantom', text: 'Додав крок.', applied: ['add_node:x1'],
     });
     render(<ConversationPanel />);
-    expect(screen.getByText('✓ «Архітектура» виконано')).toBeTruthy();
-    expect(screen.getByText(/застосовано: add_node:x1/)).toBeTruthy();
+    // system events render the body without the leading glyph (dot instead)
+    expect(screen.getByText('«Архітектура» виконано')).toBeTruthy();
+    // applied actions render as chips: "⚙ add_node:x1"
+    expect(screen.getByText(/add_node:x1/)).toBeTruthy();
   });
 
   it('shows gate inline with approve action', async () => {

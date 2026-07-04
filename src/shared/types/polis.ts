@@ -100,7 +100,7 @@ export interface ManagedKeyMetrics {
   requests_24h: number;
   tokens_24h: number;
   failures_24h: number;
-  last_used_at?: string;
+  last_used_at?: number;
 }
 
 export interface ManagedKeyPublic {
@@ -109,7 +109,7 @@ export interface ManagedKeyPublic {
   label: string;
   priority: number;
   state: ManagedKeyState;
-  cooldown_until?: string;
+  cooldown_until?: number;
   key_hint: string;
   metrics: ManagedKeyMetrics;
 }

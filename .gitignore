@@ -106,3 +106,5 @@ src/frontend/chroma_data/
 # ~50MB local artifact (`graphify update .`), not a commit-worthy blob.
 # Same precedent as phantom-companion's .gitignore.
 graphify-out/
+src/frontend/polis-preview.html
+src/frontend/src/polis-preview.tsx

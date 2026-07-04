@@ -509,6 +509,18 @@ class PolisService:
         from ai.provider_mesh import get_mesh
         t0 = time.monotonic()
 
+        if node.domain == "research" and node.kind == "workstream":
+            from agent.fabric.harvest import harvest, render_sources
+            query = f"{node.title} {m.brief}"[:180]
+            sources = await harvest(query)
+            if sources:
+                context = (render_sources(sources) + "\n\n" + context).strip()
+                await self._chat_system(
+                    m,
+                    f"🌐 «{node.title}»: зібрано {len(sources)} живих джерел",
+                    node_id=node.id,
+                )
+
         m.transcripts[node.id] = ""
         buf: list[str] = []
         last_emit = 0.0

@@ -25,6 +25,7 @@ class FakeMesh:
         return FakeResp(self.replies.pop(0))
 
     async def generate_stream(self, *, system_prompt, user_message, on_delta, **kw):
+        self.calls.append({"system_prompt": system_prompt, "user_message": user_message})
         text = self.replies.pop(0)
         for i in range(0, len(text), 7):
             await on_delta(text[i : i + 7])
@@ -187,6 +188,47 @@ async def test_forge_writes_real_file_tree(svc, tmp_path, monkeypatch):
     assert svc.read_artifact("mroom", "workspace/../../etc/passwd") is None
     forged_msgs = [c for c in m.chat if c["role"] == "system" and "викував" in c["text"]]
     assert len(forged_msgs) == 1 and "2 файл" in forged_msgs[0]["text"]
+
+
+@pytest.mark.asyncio
+async def test_research_node_grounds_in_live_sources(svc, tmp_path, monkeypatch):
+    monkeypatch.setattr("agent.fabric.service._POLIS_HOME", str(tmp_path))
+
+    async def fake_harvest(query, **kw):
+        assert "Ядро" in query
+        return [{"title": "Джерело", "url": "https://ex.ua/a", "extract": "факт 42"}]
+
+    import agent.fabric.harvest as h
+    monkeypatch.setattr(h, "harvest", fake_harvest)
+
+    mesh = FakeMesh(["Звіт на основі джерел."])
+    _patch_mesh(monkeypatch, mesh)
+    m = svc.missions["mroom"]
+    node = m.graph.nodes["b"]
+    node.domain = "research"
+    m.graph.mark_running("b")
+    await svc._execute(m, node)
+
+    # harvested extract + citation instruction reached the worker prompt
+    sent = mesh.calls[0]["user_message"]
+    assert "факт 42" in sent and "https://ex.ua/a" in sent
+    assert "цитуй" in sent
+    assert node.status == "done"
+    web_msgs = [c for c in m.chat if c["role"] == "system" and "🌐" in c["text"]]
+    assert len(web_msgs) == 1 and "1 живих джерел" in web_msgs[0]["text"]
+
+
+@pytest.mark.asyncio
+async def test_harvest_renders_capped_sources():
+    from agent.fabric.harvest import render_sources
+    sources = [
+        {"title": "A", "url": "https://a", "extract": "x" * 10_000},
+        {"title": "B", "url": "https://b", "extract": "y" * 10_000},
+    ]
+    text = render_sources(sources, cap_chars=12_000)
+    assert "[1] A" in text and "https://a" in text
+    assert len(text) < 13_000
+    assert render_sources([]) == ""
 
 
 @pytest.mark.asyncio

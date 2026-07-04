@@ -153,6 +153,34 @@ export interface PolisSnapshot {
   governor: PolisGovernorState;
 }
 
+/* ── Mission room: chat, documents, workers ───────────────────────────── */
+
+export interface PolisChatMessage {
+  role: 'operator' | 'phantom' | 'system';
+  text: string;
+  ts?: string;
+  node_id?: string | null;
+  applied?: string[];
+}
+
+export interface PolisArtifactMeta {
+  name: string;
+  node_id: string | null;
+  title: string;
+  size: number;
+  updated_at: string;
+}
+
+export interface PolisWorker {
+  node_id: string;
+  title: string;
+  role: string | null;
+  status: PolisNodeStatus;
+  chars: number;
+  tail: string;
+  spent_llm_calls: number;
+}
+
 /* ── WS deltas (channel: "polis") ─────────────────────────────────────── */
 
 export type PolisWsType =

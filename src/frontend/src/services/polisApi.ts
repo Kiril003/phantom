@@ -1,5 +1,12 @@
 import { request as req } from './api';
-import type { PolisSnapshot, PolisMission, ManagedKeyPublic } from '@shared/types';
+import type {
+  PolisSnapshot,
+  PolisMission,
+  ManagedKeyPublic,
+  PolisChatMessage,
+  PolisArtifactMeta,
+  PolisWorker,
+} from '@shared/types';
 
 export const polisApi = {
   state: () => req<PolisSnapshot>('GET', '/polis/state'),
@@ -15,7 +22,31 @@ export const polisApi = {
     }),
 
   mission: (id: string) =>
-    req<{ mission: PolisMission }>('GET', `/polis/missions/${id}`),
+    req<{ mission: PolisMission; chat: PolisChatMessage[] }>(
+      'GET',
+      `/polis/missions/${id}`,
+    ),
+
+  chat: (id: string, text: string) =>
+    req<{ reply: PolisChatMessage }>('POST', `/polis/missions/${id}/chat`, { text }),
+
+  artifacts: (id: string) =>
+    req<{ artifacts: PolisArtifactMeta[] }>('GET', `/polis/missions/${id}/artifacts`),
+
+  artifact: (id: string, name: string) =>
+    req<{ name: string; content: string }>(
+      'GET',
+      `/polis/missions/${id}/artifacts/${encodeURIComponent(name)}`,
+    ),
+
+  workers: (id: string) =>
+    req<{ workers: PolisWorker[] }>('GET', `/polis/missions/${id}/workers`),
+
+  workerTranscript: (id: string, nodeId: string) =>
+    req<{ node_id: string; transcript: string }>(
+      'GET',
+      `/polis/missions/${id}/workers/${nodeId}`,
+    ),
 
   pause: (id: string) => req<{ ok: boolean }>('POST', `/polis/missions/${id}/pause`),
   resume: (id: string) => req<{ ok: boolean }>('POST', `/polis/missions/${id}/resume`),

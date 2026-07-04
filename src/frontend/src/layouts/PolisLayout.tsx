@@ -1,20 +1,36 @@
-/** ПОЛІС — three zoom levels of one truth:
- * СВІТ (living canvas city) ⇄ ШТАБ (command deck) ⇄ Фокус (one mission). */
+/** ПОЛІС — операційний зал. Одна поверхня, три синхронні зони:
+ * місії зліва · розмова/документи/граф/світ у центрі · воркери справа.
+ * Місія — це чат; документи народжуються на очах; кожного воркера
+ * видно наживо. */
 import { useEffect, useState } from 'react';
-import { motion, AnimatePresence } from 'framer-motion';
-import { usePolisStore, registerPolisWsHandler } from '../stores/polisStore';
+import { motion } from 'framer-motion';
+import { usePolisStore, registerPolisWsHandler, type RoomTab } from '../stores/polisStore';
 import { wsClient } from '../services/websocket';
 import { CityCanvas } from '../components/polis/CityCanvas';
-import { StaffDeck } from '../components/polis/StaffDeck';
+import { MissionRail } from '../components/polis/room/MissionRail';
+import { ConversationPanel } from '../components/polis/room/ConversationPanel';
+import { DocumentsPanel } from '../components/polis/room/DocumentsPanel';
+import { WorkersRail, WorkerInspector } from '../components/polis/room/WorkersRail';
 import { MissionFocus } from '../components/polis/MissionFocus';
 import { NewMissionSheet } from '../components/polis/NewMissionSheet';
 
+const TABS: { id: RoomTab; label: string }[] = [
+  { id: 'talk', label: 'Розмова' },
+  { id: 'docs', label: 'Документи' },
+  { id: 'graph', label: 'Граф' },
+  { id: 'world', label: 'Світ' },
+];
+
 export default function PolisLayout() {
-  const view = usePolisStore((s) => s.view);
-  const setView = usePolisStore((s) => s.setView);
   const hydrate = usePolisStore((s) => s.hydrate);
-  const gates = usePolisStore((s) => s.gates);
+  const roomTab = usePolisStore((s) => s.roomTab);
+  const setRoomTab = usePolisStore((s) => s.setRoomTab);
+  const selectedMissionId = usePolisStore((s) => s.selectedMissionId);
+  const selectMission = usePolisStore((s) => s.selectMission);
   const missions = usePolisStore((s) => s.missions);
+  const docsCount = usePolisStore((s) =>
+    s.selectedMissionId ? (s.artifacts[s.selectedMissionId] ?? []).length : 0,
+  );
   const [sheetOpen, setSheetOpen] = useState(false);
 
   useEffect(() => {
@@ -22,100 +38,80 @@ export default function PolisLayout() {
     const off = registerPolisWsHandler((ch, cb) =>
       wsClient.on(ch as 'polis', cb as never),
     );
-    const poll = window.setInterval(() => void hydrate(), 15_000);
+    const poll = window.setInterval(() => void hydrate(), 20_000);
     return () => {
       off();
       window.clearInterval(poll);
     };
   }, [hydrate]);
 
-  const activeCount = missions.filter(
-    (m) => !['done', 'killed', 'failed'].includes(m.status),
-  ).length;
+  useEffect(() => {
+    if (!selectedMissionId && missions.length > 0) {
+      selectMission(missions[0].id);
+    }
+  }, [selectedMissionId, missions, selectMission]);
+
+  const mission = missions.find((m) => m.id === selectedMissionId);
 
   return (
     <motion.div
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="w-full h-full relative overflow-hidden"
+      className="w-full h-full relative overflow-hidden flex gap-3 p-3"
       data-testid="polis-layout"
     >
-      <header className="absolute top-0 left-0 right-0 z-20 flex items-center gap-3 px-5 pt-3">
-        <h1
-          className="text-gradient font-medium"
-          style={{ fontSize: 'var(--fs-md)', letterSpacing: 'var(--tracking-wide)' }}
-        >
-          ПОЛІС
-        </h1>
-        <span className="font-mono" style={{ fontSize: 'var(--fs-xs)', color: 'var(--ink-muted)' }}>
-          {activeCount} активних місій
-        </span>
-        <div className="flex-1" />
-        {view !== 'focus' && (
-          <div
-            className="flex rounded-xl overflow-hidden"
-            style={{ border: '1px solid var(--glass-border)' }}
-          >
-            {(['world', 'staff'] as const).map((v) => (
-              <button
-                key={v}
-                onClick={() => setView(v)}
-                className="min-h-[44px] px-4 font-mono uppercase active:scale-[0.97]"
-                style={{
-                  fontSize: 'var(--fs-micro)',
-                  letterSpacing: 'var(--tracking-widest)',
-                  background: view === v ? 'var(--glass-card)' : 'transparent',
-                  color: view === v ? 'var(--accent)' : 'var(--ink-muted)',
-                }}
-                data-testid={`polis-view-${v}`}
-              >
-                {v === 'world' ? 'Світ' : 'Штаб'}
-              </button>
-            ))}
-          </div>
-        )}
-        <button
-          onClick={() => setSheetOpen(true)}
-          className="min-h-[44px] min-w-[44px] px-4 rounded-xl font-medium active:scale-[0.97]"
-          style={{ background: 'var(--accent)', color: 'var(--ink-inverse)', fontSize: 'var(--fs-sm)' }}
-          data-testid="polis-new-mission"
-        >
-          + Місія
-        </button>
-      </header>
-
-      {gates.length > 0 && view === 'world' && (
-        <button
-          onClick={() => setView('staff')}
-          className="absolute top-[60px] left-1/2 -translate-x-1/2 z-20 glass-card rounded-full px-4 py-2 flex items-center gap-2 active:scale-[0.97]"
-          style={{ border: '1px solid rgba(244,175,37,0.4)' }}
-          data-testid="polis-bell-banner"
-        >
-          <span className="w-2 h-2 rounded-full animate-ping" style={{ background: '#f4af25' }} />
-          <span style={{ fontSize: 'var(--fs-xs)', color: '#f4af25' }}>
-            дзвін Ратуші: {gates.length} рішення чекає
-          </span>
-        </button>
-      )}
-
-      <div className="absolute inset-0 pt-[56px]">
-        <AnimatePresence mode="wait">
-          <motion.div
-            key={view}
-            initial={{ opacity: 0, scale: view === 'focus' ? 1.03 : 0.98 }}
-            animate={{ opacity: 1, scale: 1 }}
-            exit={{ opacity: 0 }}
-            transition={{ duration: 0.25 }}
-            className="w-full h-full"
-          >
-            {view === 'world' && <CityCanvas />}
-            {view === 'staff' && <StaffDeck />}
-            {view === 'focus' && <MissionFocus />}
-          </motion.div>
-        </AnimatePresence>
+      <div className="w-[236px] shrink-0 h-full">
+        <MissionRail onNewMission={() => setSheetOpen(true)} />
       </div>
 
+      <main className="flex-1 min-w-0 h-full glass-panel rounded-2xl flex flex-col overflow-hidden">
+        <header
+          className="flex items-center gap-1 px-3 pt-2 pb-0"
+          style={{ borderBottom: '1px solid var(--glass-border)' }}
+        >
+          <span
+            className="text-gradient font-medium mr-2"
+            style={{ fontSize: 'var(--fs-md)' }}
+          >
+            {mission ? mission.title : 'ПОЛІС'}
+          </span>
+          <div className="flex-1" />
+          {TABS.map((t) => (
+            <button
+              key={t.id}
+              onClick={() => setRoomTab(t.id)}
+              className="min-h-[44px] px-3 font-mono uppercase active:scale-[0.97]"
+              style={{
+                fontSize: 'var(--fs-micro)',
+                letterSpacing: 'var(--tracking-widest)',
+                color: roomTab === t.id ? 'var(--accent)' : 'var(--ink-muted)',
+                borderBottom:
+                  roomTab === t.id
+                    ? '2px solid var(--accent)'
+                    : '2px solid transparent',
+              }}
+              data-testid={`room-tab-${t.id}`}
+            >
+              {t.label}
+              {t.id === 'docs' && docsCount > 0 ? ` ${docsCount}` : ''}
+            </button>
+          ))}
+        </header>
+
+        <div className="flex-1 min-h-0">
+          {roomTab === 'talk' && <ConversationPanel />}
+          {roomTab === 'docs' && <DocumentsPanel />}
+          {roomTab === 'graph' && <MissionFocus />}
+          {roomTab === 'world' && <CityCanvas />}
+        </div>
+      </main>
+
+      <div className="w-[264px] shrink-0 h-full">
+        <WorkersRail />
+      </div>
+
+      <WorkerInspector />
       <NewMissionSheet open={sheetOpen} onClose={() => setSheetOpen(false)} />
     </motion.div>
   );

@@ -27,15 +27,15 @@ const NODE_TINT: Record<string, string> = {
 };
 
 export function MissionFocus() {
-  const missionId = usePolisStore((s) => s.focusMissionId);
+  const missionId = usePolisStore((s) => s.focusMissionId ?? s.selectedMissionId);
   const mission = usePolisStore((s) =>
-    s.missions.find((m) => m.id === s.focusMissionId),
+    s.missions.find((m) => m.id === (s.focusMissionId ?? s.selectedMissionId)),
   );
   const focusMission = usePolisStore((s) => s.focusMission);
   const pause = usePolisStore((s) => s.pauseMission);
   const resume = usePolisStore((s) => s.resumeMission);
   const kill = usePolisStore((s) => s.killMission);
-  const setView = usePolisStore((s) => s.setView);
+  const setRoomTab = usePolisStore((s) => s.setRoomTab);
 
   if (!missionId || !mission) {
     return (
@@ -54,11 +54,11 @@ export function MissionFocus() {
         <button
           onClick={() => {
             focusMission(null);
-            setView('world');
+            setRoomTab('talk');
           }}
           className="min-w-[44px] min-h-[44px] rounded-xl flex items-center justify-center active:scale-[0.95]"
           style={{ background: 'var(--glass-subtle)', color: 'var(--ink-secondary)' }}
-          aria-label="назад до міста"
+          aria-label="до розмови"
         >
           ←
         </button>

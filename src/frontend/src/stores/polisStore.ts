@@ -7,10 +7,13 @@ import type {
   PolisCitizen,
   ManagedKeyPublic,
   PolisGovernorState,
+  PolisChatMessage,
+  PolisArtifactMeta,
 } from '@shared/types';
 import { polisApi } from '../services/polisApi';
 
 export type PolisView = 'world' | 'staff' | 'focus';
+export type RoomTab = 'talk' | 'docs' | 'graph' | 'world';
 
 interface PolisState {
   loaded: boolean;
@@ -23,6 +26,16 @@ interface PolisState {
   governor: PolisGovernorState;
   budgetAlerts: Record<string, number>;
 
+  /* mission room */
+  selectedMissionId: string | null;
+  roomTab: RoomTab;
+  chats: Record<string, PolisChatMessage[]>;
+  transcripts: Record<string, string>; // `${missionId}:${nodeId}`
+  artifacts: Record<string, PolisArtifactMeta[]>;
+  openDoc: { name: string; content: string } | null;
+  inspectorNodeId: string | null;
+  chatBusy: boolean;
+
   setView: (v: PolisView) => void;
   focusMission: (id: string | null) => void;
   hydrate: () => Promise<void>;
@@ -32,6 +45,16 @@ interface PolisState {
   gateOpened: (gate: PolisGate) => void;
   gateClosed: (gateId: string) => void;
   budgetAlert: (missionId: string, pressure: number) => void;
+
+  selectMission: (id: string | null) => void;
+  setRoomTab: (t: RoomTab) => void;
+  appendChat: (missionId: string, msg: PolisChatMessage) => void;
+  appendDelta: (missionId: string, nodeId: string, delta: string) => void;
+  sendChat: (text: string) => Promise<void>;
+  loadArtifacts: (missionId: string) => Promise<void>;
+  openArtifact: (missionId: string, name: string) => Promise<void>;
+  closeArtifact: () => void;
+  openInspector: (nodeId: string | null) => void;
 
   createMission: (brief: string, pipeline: string) => Promise<void>;
   resolveGate: (gateId: string, approved: boolean) => Promise<void>;
@@ -59,6 +82,15 @@ export const usePolisStore = create<PolisState>((set, get) => ({
   gates: [],
   governor: EMPTY_GOVERNOR,
   budgetAlerts: {},
+
+  selectedMissionId: null,
+  roomTab: 'talk',
+  chats: {},
+  transcripts: {},
+  artifacts: {},
+  openDoc: null,
+  inspectorNodeId: null,
+  chatBusy: false,
 
   setView: (v) => set({ view: v }),
   focusMission: (id) =>
@@ -120,9 +152,92 @@ export const usePolisStore = create<PolisState>((set, get) => ({
       budgetAlerts: { ...st.budgetAlerts, [missionId]: pressure },
     })),
 
+  selectMission: (id) => {
+    set({ selectedMissionId: id, openDoc: null, inspectorNodeId: null });
+    if (!id) return;
+    void polisApi
+      .mission(id)
+      .then(({ mission, chat }) => {
+        get().applyMissionStatus(mission);
+        set((st) => ({ chats: { ...st.chats, [id]: chat } }));
+      })
+      .catch(() => undefined);
+    void get().loadArtifacts(id);
+  },
+
+  setRoomTab: (t) => set({ roomTab: t }),
+
+  appendChat: (missionId, msg) =>
+    set((st) => ({
+      chats: {
+        ...st.chats,
+        [missionId]: [...(st.chats[missionId] ?? []), msg].slice(-200),
+      },
+    })),
+
+  appendDelta: (missionId, nodeId, delta) =>
+    set((st) => {
+      const key = `${missionId}:${nodeId}`;
+      const next = ((st.transcripts[key] ?? '') + delta).slice(-40_000);
+      return { transcripts: { ...st.transcripts, [key]: next } };
+    }),
+
+  sendChat: async (text) => {
+    const id = get().selectedMissionId;
+    if (!id || !text.trim() || get().chatBusy) return;
+    set({ chatBusy: true });
+    get().appendChat(id, { role: 'operator', text });
+    try {
+      await polisApi.chat(id, text);
+      // phantom reply arrives via WS chat_message; REST response is backup
+    } catch {
+      get().appendChat(id, {
+        role: 'system',
+        text: 'Не вдалося достукатись до міста — перевір бекенд.',
+      });
+    } finally {
+      set({ chatBusy: false });
+    }
+  },
+
+  loadArtifacts: async (missionId) => {
+    try {
+      const { artifacts } = await polisApi.artifacts(missionId);
+      set((st) => ({ artifacts: { ...st.artifacts, [missionId]: artifacts } }));
+    } catch {
+      /* keep stale */
+    }
+  },
+
+  openArtifact: async (missionId, name) => {
+    try {
+      const doc = await polisApi.artifact(missionId, name);
+      set({ openDoc: doc, roomTab: 'docs' });
+    } catch {
+      /* ignore */
+    }
+  },
+
+  closeArtifact: () => set({ openDoc: null }),
+
+  openInspector: (nodeId) => {
+    set({ inspectorNodeId: nodeId });
+    const id = get().selectedMissionId;
+    if (!id || !nodeId) return;
+    void polisApi
+      .workerTranscript(id, nodeId)
+      .then(({ transcript }) =>
+        set((st) => ({
+          transcripts: { ...st.transcripts, [`${id}:${nodeId}`]: transcript },
+        })),
+      )
+      .catch(() => undefined);
+  },
+
   createMission: async (brief, pipeline) => {
     const { mission } = await polisApi.createMission(brief, pipeline);
     get().applyMissionStatus(mission);
+    get().selectMission(mission.id);
   },
 
   resolveGate: async (gateId, approved) => {
@@ -177,13 +292,29 @@ export function registerPolisWsHandler(
       case 'snapshot':
         st.applySnapshot(msg.data as PolisSnapshot);
         break;
-      case 'node_status':
+      case 'node_status': {
         st.applyNodeStatus(
           msg.data.mission_id,
           msg.data.node as PolisNode,
           msg.data.progress ?? 0,
         );
+        const node = msg.data.node as PolisNode;
+        if (
+          msg.data.mission_id === st.selectedMissionId &&
+          (node.status === 'done' || node.status === 'failed')
+        ) {
+          void st.loadArtifacts(msg.data.mission_id);
+        }
         break;
+      }
+      case 'worker_delta':
+        st.appendDelta(msg.data.mission_id, msg.data.node_id, msg.data.delta ?? '');
+        break;
+      case 'chat_message': {
+        const m = msg.data.message as PolisChatMessage;
+        if (m.role !== 'operator') st.appendChat(msg.data.mission_id, m);
+        break;
+      }
       case 'mission_status':
         st.applyMissionStatus(msg.data.mission as PolisMission);
         break;

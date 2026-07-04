@@ -37,8 +37,8 @@ export function CityCanvas() {
   const hits = useRef<HitZone[]>([]);
   const raf = useRef<number>(0);
 
-  const focusMission = usePolisStore((s) => s.focusMission);
-  const setView = usePolisStore((s) => s.setView);
+  const selectMission = usePolisStore((s) => s.selectMission);
+  const setRoomTab = usePolisStore((s) => s.setRoomTab);
 
   const draw = useCallback((ctx: CanvasRenderingContext2D, t: number) => {
     const { missions, citizens, keys, gates, governor } =
@@ -98,8 +98,12 @@ export function CityCanvas() {
     const y = ((e.clientY - rect.top) / rect.height) * CITY_H;
     for (const z of [...hits.current].reverse()) {
       if (x >= z.x && x <= z.x + z.w && y >= z.y && y <= z.y + z.h) {
-        if (z.kind === 'mission') focusMission(z.id);
-        else if (z.kind === 'bell' || z.kind === 'power') setView('staff');
+        if (z.kind === 'mission') {
+          selectMission(z.id);
+          setRoomTab('talk');
+        } else if (z.kind === 'bell') {
+          setRoomTab('talk');
+        }
         return;
       }
     }

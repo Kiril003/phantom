@@ -44,7 +44,8 @@ import {
 import { AgentLimitsGroup } from './AgentLimitsGroup';
 import { AgentLayoutGroup } from './AgentLayoutGroup';
 import { DesktopShellGroup } from './DesktopShellGroup';
-import { Monitor } from 'lucide-react';
+import { Monitor, KeyRound } from 'lucide-react';
+import { KeyVaultPanel } from './KeyVaultPanel';
 
 type ThemeId = 'sunrise-warm' | 'amber-night' | 'cyberdeck-cold';
 
@@ -119,7 +120,13 @@ export default function SettingsPanel() {
       icon: <Monitor size={14} />,
       settings: [],
     };
-    return [...categories, virtual];
+    const polisKeys: any = {
+      id: 'polis_keys',
+      label: 'Ключі Поліса',
+      icon: <KeyRound size={14} />,
+      settings: [],
+    };
+    return [...categories, polisKeys, virtual];
   }, [categories]);
 
   const activeCategory = useMemo(
@@ -633,12 +640,18 @@ export default function SettingsPanel() {
               <DesktopShellGroup />
             )}
 
+            {/* ПОЛІС — encrypted multi-key vault, fully UI-operated. */}
+            {loaded && activeCategory && activeCategory.id === 'polis_keys' && (
+              <KeyVaultPanel />
+            )}
+
             {loaded &&
               activeCategory &&
               activeCategory.id !== 'about' &&
               activeCategory.id !== 'mobile' &&
               activeCategory.id !== 'vault' &&
-              activeCategory.id !== 'desktop' && (
+              activeCategory.id !== 'desktop' &&
+              activeCategory.id !== 'polis_keys' && (
               <>
                 {activeCategory.id === 'ai' && <AIProviderDiagnostics />}
                 {activeCategory.id === 'voice' && <NPUDiagnostics />}

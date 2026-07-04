@@ -4,7 +4,6 @@ import { StatusBar } from '../components/core/StatusBar';
 import { AmbientGlows } from '../components/core/AmbientGlows';
 import { FloatingToolbar } from '../components/core/FloatingToolbar';
 import { MissionMounts } from '../components/mission/MissionMounts';
-import { ToastRail } from '../components/core/ToastRail';
 import { SafetyShieldToggle } from '../components/agent/hud/SafetyShieldToggle';
 import { AgentCommandCenter } from '../components/agent/hud/AgentCommandCenter';
 import { AgentVault } from '../components/agent/overlays/AgentVault';
@@ -216,8 +215,6 @@ export default function OperatorLayout() {
           onClose={dismissCouncil}
         />
       )}
-      
-      <ToastRail />
     </motion.div>
   );
 }

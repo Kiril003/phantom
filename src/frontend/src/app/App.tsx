@@ -20,6 +20,7 @@ import { useFamiliarTriggers } from '../hooks/useFamiliarTriggers';
 import { useAuthStore } from '../stores/authStore';
 import { FamiliarReactor } from '../components/familiar/FamiliarReactor';
 import { PhantomFamiliar } from '../components/familiar/PhantomFamiliar';
+import { ToastRail } from '../components/core/ToastRail';
 
 function GlobalGeolocationManager() {
   const authenticated = useSystemStore((s) => s.authenticated);
@@ -178,6 +179,7 @@ export function App() {
               <Route path="/*" element={<StateRouter />} />
             </Routes>
             <Overlays />
+            <ToastRail />
             <FamiliarTriggers />
             <FamiliarReactor />
             <PhantomFamiliar />

@@ -14,6 +14,7 @@
 import { wsClient } from './websocket';
 import { registerTtsPlayerWsHandler } from './ttsPlayer';
 import { useFamiliarStore } from '../stores/familiarStore';
+import { useUIStore } from '../stores/uiStore';
 import type {
   FamiliarPose,
   FamiliarTarget,
@@ -88,11 +89,42 @@ export function registerFamiliarWsHandler(): () => void {
  * keep the returned cleanup for unmount. Future WS-driven features
  * register here.
  */
+/**
+ * ПОЛІС — global bell. Gates, budget alarms and mission endings must be
+ * audible from ANY screen, not only inside /polis. Room deltas are wired
+ * separately in `polisStore.registerPolisWsHandler`.
+ */
+export function registerPolisBellHandler(): () => void {
+  return wsClient.on('polis', (msg) => {
+    const toast = useUIStore.getState().toast;
+    if (msg.type === 'gate_opened') {
+      const q =
+        ((msg.data as Record<string, any>)?.gate?.question as string) ??
+        'рішення чекає';
+      toast({ kind: 'warn', message: `🔔 Поліс: ${q}` });
+    } else if (msg.type === 'budget_alert') {
+      const p = Math.round(
+        (((msg.data as Record<string, any>)?.pressure as number) ?? 0) * 100,
+      );
+      toast({ kind: 'warn', message: `₿ Поліс: бюджет місії на ${p}%` });
+    } else if (msg.type === 'mission_status') {
+      const m = (msg.data as Record<string, any>)?.mission;
+      if (m?.status === 'done') {
+        toast({ kind: 'success', message: `Поліс: «${m.title}» виконано` });
+      } else if (m?.status === 'failed') {
+        toast({ kind: 'error', message: `Поліс: «${m.title}» зірвано` });
+      }
+    }
+  });
+}
+
 export function registerWsHandlers(): () => void {
   const unsubs: Array<() => void> = [
     registerFamiliarWsHandler(),
     // B1 — incremental sentence TTS playback (chat/tts.sentence + tts.stop).
     registerTtsPlayerWsHandler(),
+    // ПОЛІС — глобальний дзвін Ратуші.
+    registerPolisBellHandler(),
   ];
   return () => {
     unsubs.forEach((u) => {

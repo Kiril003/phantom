@@ -158,6 +158,38 @@ def test_worker_transcript_falls_back_to_artifact(svc, tmp_path, monkeypatch):
 
 
 @pytest.mark.asyncio
+async def test_forge_writes_real_file_tree(svc, tmp_path, monkeypatch):
+    monkeypatch.setattr("agent.fabric.service._POLIS_HOME", str(tmp_path))
+    code = (
+        "Ось збірка:\n"
+        "```file:src/app.py\nprint('polis')\n```\n"
+        "і стилі\n"
+        "```file:web/style.css\nbody{color:#fff}\n```\n"
+        "спроба втечі\n"
+        "```file:../evil.sh\nrm -rf\n```\n"
+    )
+    mesh = FakeMesh([code])
+    _patch_mesh(monkeypatch, mesh)
+    m = svc.missions["mroom"]
+    node = m.graph.nodes["b"]
+    m.graph.mark_running("b")
+    await svc._execute(m, node)
+
+    ws = tmp_path / "mroom" / "workspace"
+    assert (ws / "src" / "app.py").read_text() == "print('polis')\n"
+    assert (ws / "web" / "style.css").read_text() == "body{color:#fff}\n"
+    assert not (tmp_path / "evil.sh").exists()
+    assert not (tmp_path.parent / "evil.sh").exists()
+
+    names = [a["name"] for a in svc.list_artifacts("mroom")]
+    assert "workspace/src/app.py" in names and "workspace/web/style.css" in names
+    assert svc.read_artifact("mroom", "workspace/src/app.py") == "print('polis')\n"
+    assert svc.read_artifact("mroom", "workspace/../../etc/passwd") is None
+    forged_msgs = [c for c in m.chat if c["role"] == "system" and "викував" in c["text"]]
+    assert len(forged_msgs) == 1 and "2 файл" in forged_msgs[0]["text"]
+
+
+@pytest.mark.asyncio
 async def test_system_events_recorded_into_chat(svc):
     m = svc.missions["mroom"]
     await svc._chat_system(m, "✓ «Архітектура» виконано", node_id="a")

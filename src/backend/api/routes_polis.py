@@ -90,7 +90,7 @@ async def mission_artifacts(
     return {"artifacts": get_polis().list_artifacts(mission_id)}
 
 
-@router.get("/missions/{mission_id}/artifacts/{name}")
+@router.get("/missions/{mission_id}/artifact")
 async def mission_artifact(
     mission_id: str, name: str, _: TokenPayload = Depends(require_auth)
 ) -> dict:

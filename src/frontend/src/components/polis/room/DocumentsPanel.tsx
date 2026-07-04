@@ -44,7 +44,20 @@ export function DocumentsPanel() {
           className="flex-1 min-h-0 overflow-y-auto px-5 py-4"
           style={{ fontSize: 'var(--fs-sm)', color: 'var(--ink-primary)' }}
         >
-          <MarkdownResponse content={openDoc.content} />
+          {openDoc.name.endsWith('.md') ? (
+            <MarkdownResponse content={openDoc.content} />
+          ) : (
+            <pre
+              className="font-mono whitespace-pre-wrap break-words"
+              style={{
+                fontSize: 'var(--fs-xs)',
+                color: 'var(--ink-secondary)',
+                lineHeight: 1.7,
+              }}
+            >
+              {openDoc.content}
+            </pre>
+          )}
         </div>
       </div>
     );
@@ -74,7 +87,10 @@ export function DocumentsPanel() {
               className="truncate"
               style={{ fontSize: 'var(--fs-sm)', color: 'var(--ink-primary)' }}
             >
-              📄 {a.title}
+              {a.name.startsWith('workspace/') ? '⚒' : '📄'}{' '}
+              {a.name.startsWith('workspace/')
+                ? a.name.slice('workspace/'.length)
+                : a.title}
             </p>
             <p
               className="font-mono mt-1"

@@ -333,6 +333,35 @@ class PolisService:
             await self._emit("mission_status", {"mission": m.to_dict()})
         return reply
 
+    # ── file forge — workers emit real file trees ───────────────────────
+
+    _FILE_FENCE = re.compile(r"```file:([^\n`]+)\n(.*?)```", re.S)
+    _MAX_FORGED = 40
+
+    @staticmethod
+    def _safe_rel(path: str) -> str | None:
+        rel = os.path.normpath(path.strip().lstrip("/"))
+        if rel.startswith("..") or os.path.isabs(rel) or rel in (".", ""):
+            return None
+        return rel
+
+    def _forge_files(self, m: ActiveMission, node: PlanNode, text: str) -> list[str]:
+        forged: list[str] = []
+        base = os.path.join(_POLIS_HOME, m.id, "workspace")
+        for match in self._FILE_FENCE.finditer(text):
+            if len(forged) >= self._MAX_FORGED:
+                break
+            rel = self._safe_rel(match.group(1))
+            if rel is None:
+                continue
+            path = os.path.join(base, rel)
+            os.makedirs(os.path.dirname(path), exist_ok=True)
+            with open(path, "w", encoding="utf-8") as f:
+                f.write(match.group(2)[:600_000])
+            node.artifact_paths.append(path)
+            forged.append(rel)
+        return forged
+
     # ── artifacts & workers — everything visible ────────────────────────
 
     def list_artifacts(self, mission_id: str) -> list[dict]:
@@ -341,27 +370,38 @@ class PolisService:
         out: list[dict] = []
         if not os.path.isdir(base):
             return out
-        for name in sorted(os.listdir(base)):
-            path = os.path.join(base, name)
-            if not os.path.isfile(path):
-                continue
-            stem = os.path.splitext(name)[0]
+
+        def _entry(rel: str, path: str) -> dict:
+            stem = os.path.splitext(os.path.basename(rel))[0]
             node = m.graph.nodes.get(stem) if m else None
             st = os.stat(path)
-            out.append({
-                "name": name,
+            return {
+                "name": rel,
                 "node_id": stem if node else None,
-                "title": node.title if node else name,
+                "title": node.title if node else rel,
                 "size": st.st_size,
                 "updated_at": datetime.fromtimestamp(
                     st.st_mtime, tz=timezone.utc
                 ).isoformat(),
-            })
+            }
+
+        for name in sorted(os.listdir(base)):
+            path = os.path.join(base, name)
+            if os.path.isfile(path):
+                out.append(_entry(name, path))
+        ws = os.path.join(base, "workspace")
+        for root, _dirs, files in os.walk(ws):
+            for fname in sorted(files):
+                path = os.path.join(root, fname)
+                rel = os.path.relpath(path, base)
+                out.append(_entry(rel, path))
         return out
 
     def read_artifact(self, mission_id: str, name: str) -> str | None:
-        safe = os.path.basename(name)
-        path = os.path.join(_POLIS_HOME, mission_id, safe)
+        rel = self._safe_rel(name)
+        if rel is None:
+            return None
+        path = os.path.join(_POLIS_HOME, mission_id, rel)
         if not os.path.isfile(path):
             return None
         with open(path, encoding="utf-8") as f:
@@ -498,6 +538,15 @@ class PolisService:
                 "delta": "".join(buf),
                 "total_chars": len(m.transcripts[node.id]),
             })
+
+        forged = self._forge_files(m, node, text)
+        if forged:
+            await self._chat_system(
+                m,
+                f"⚒ «{node.title}» викував {len(forged)} файл(и): "
+                + ", ".join(forged[:5]) + ("…" if len(forged) > 5 else ""),
+                node_id=node.id,
+            )
         node.budget.spent_llm_calls += 1
         node.budget.spent_tokens += max(1, len(text) // 4)
         node.eta_minutes = max(1, int((time.monotonic() - t0) / 60) or node.eta_minutes)
@@ -584,7 +633,10 @@ class PolisService:
         base = (
             "Ти — громадянин Поліса, внутрішнього міста PHANTOM OS. Працюєш у "
             "команді: твій результат читатимуть наступні кроки, тому пиши повно, "
-            "конкретно, без води і без заглушок."
+            "конкретно, без води і без заглушок. Коли створюєш файл коду чи "
+            "документа — подавай його БЛОКОМ:\n"
+            "```file:шлях/до/файлу.ext\n<повний вміст>\n```\n"
+            "— кожен такий блок стає справжнім файлом у робочому просторі місії."
         )
         if not role:
             return base

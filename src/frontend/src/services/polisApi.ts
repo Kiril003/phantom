@@ -36,7 +36,7 @@ export const polisApi = {
   artifact: (id: string, name: string) =>
     req<{ name: string; content: string }>(
       'GET',
-      `/polis/missions/${id}/artifacts/${encodeURIComponent(name)}`,
+      `/polis/missions/${id}/artifact?name=${encodeURIComponent(name)}`,
     ),
 
   workers: (id: string) =>

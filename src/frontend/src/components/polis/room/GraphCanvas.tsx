@@ -4,22 +4,11 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { usePolisStore } from '../../../stores/polisStore';
 import type { PolisMission, PolisNode } from '@shared/types';
-import { DOMAIN_TINT } from '../cityMap';
+import { domainColor, statusColor, themeColor, withAlpha } from '../theme';
 
 const W = 900;
 const H = 460;
 const R = 30;
-
-const STATUS_TINT: Record<string, string> = {
-  running: '#22d3ee',
-  review: '#f4af25',
-  done: '#34d399',
-  failed: '#f43f5e',
-  blocked: '#f43f5e',
-  pending: '#64748b',
-  ready: '#94a3b8',
-  skipped: '#475569',
-};
 
 interface Placed {
   node: PolisNode;
@@ -80,7 +69,7 @@ export function GraphCanvas() {
     const mission = st.missions.find((m) => m.id === st.selectedMissionId);
     ctx.clearRect(0, 0, W, H);
     if (!mission) return;
-    const tint = DOMAIN_TINT[mission.domain] ?? DOMAIN_TINT.generic;
+    const tint = domainColor(mission.domain);
     const placed = layout(mission);
     hits.current = [...placed.values()];
 
@@ -95,7 +84,7 @@ export function GraphCanvas() {
         ctx.moveTo(from.x + R, from.y);
         const midX = (from.x + x) / 2;
         ctx.bezierCurveTo(midX, from.y, midX, y, x - R, y);
-        ctx.strokeStyle = active ? `${tint}` : depDone ? `${tint}44` : 'rgba(148,163,184,0.15)';
+        ctx.strokeStyle = active ? `${tint}` : depDone ? withAlpha(tint, 0.28) : withAlpha(themeColor('--ink-faint'), 0.25);
         ctx.lineWidth = active ? 2 : 1;
         ctx.stroke();
         if (active) {
@@ -116,7 +105,7 @@ export function GraphCanvas() {
 
     // nodes
     for (const { node, x, y } of placed.values()) {
-      const c = STATUS_TINT[node.status] ?? '#64748b';
+      const c = statusColor(node.status);
       const running = node.status === 'running';
       const pulse = running ? 1 + Math.sin(t * 4) * 0.06 : 1;
       ctx.save();
@@ -126,13 +115,13 @@ export function GraphCanvas() {
       if (running) {
         ctx.beginPath();
         ctx.arc(0, 0, R + 6, 0, Math.PI * 2);
-        ctx.strokeStyle = `${c}55`;
+        ctx.strokeStyle = withAlpha(c, 0.34);
         ctx.lineWidth = 2;
         ctx.stroke();
       }
       ctx.beginPath();
       ctx.arc(0, 0, R, 0, Math.PI * 2);
-      ctx.fillStyle = 'rgba(15,23,42,0.9)';
+      ctx.fillStyle = themeColor('--glass-card');
       ctx.fill();
       ctx.lineWidth = node.kind === 'gate' ? 3 : 2;
       ctx.strokeStyle = c;
@@ -169,7 +158,7 @@ export function GraphCanvas() {
       ctx.restore();
 
       // label
-      ctx.fillStyle = 'rgba(241,245,249,0.85)';
+      ctx.fillStyle = themeColor('--ink-primary');
       ctx.font = '10px "Space Grotesk", sans-serif';
       ctx.textAlign = 'center';
       ctx.textBaseline = 'top';

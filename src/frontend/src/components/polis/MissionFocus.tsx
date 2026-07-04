@@ -16,14 +16,14 @@ const NODE_STATUS_UA: Record<string, string> = {
 };
 
 const NODE_TINT: Record<string, string> = {
-  running: '#22d3ee',
-  review: '#f4af25',
-  done: '#34d399',
-  failed: '#f43f5e',
-  blocked: '#f43f5e',
-  skipped: '#475569',
-  pending: '#64748b',
-  ready: '#94a3b8',
+  running: 'var(--accent)',
+  review: 'var(--primary)',
+  done: 'var(--signal-ok)',
+  failed: 'var(--signal-alert)',
+  blocked: 'var(--signal-alert)',
+  skipped: 'var(--ink-faint)',
+  pending: 'var(--ink-muted)',
+  ready: 'var(--ink-muted)',
 };
 
 export function MissionFocus() {
@@ -78,7 +78,7 @@ export function MissionFocus() {
           <button
             onClick={() => void pause(mission.id)}
             className="min-h-[44px] px-4 rounded-xl active:scale-[0.97]"
-            style={{ background: 'rgba(244,175,37,0.15)', color: '#f4af25' }}
+            style={{ background: 'color-mix(in srgb, var(--primary) 18%, transparent)', color: 'var(--primary)' }}
           >
             Пауза
           </button>
@@ -86,7 +86,7 @@ export function MissionFocus() {
           <button
             onClick={() => void resume(mission.id)}
             className="min-h-[44px] px-4 rounded-xl active:scale-[0.97]"
-            style={{ background: 'rgba(34,211,238,0.15)', color: '#22d3ee' }}
+            style={{ background: 'color-mix(in srgb, var(--accent) 18%, transparent)', color: 'var(--accent)' }}
           >
             Продовжити
           </button>
@@ -95,7 +95,7 @@ export function MissionFocus() {
           <button
             onClick={() => void kill(mission.id)}
             className="min-h-[44px] px-4 rounded-xl active:scale-[0.97]"
-            style={{ background: 'rgba(244,63,94,0.12)', color: '#fb7185' }}
+            style={{ background: 'color-mix(in srgb, var(--signal-alert) 14%, transparent)', color: 'var(--signal-alert)' }}
           >
             Зупинити
           </button>
@@ -122,14 +122,14 @@ function NodeRow({
   tint: string;
   critical: boolean;
 }) {
-  const st = NODE_TINT[n.status] ?? '#64748b';
+  const st = NODE_TINT[n.status] ?? 'var(--ink-muted)';
   return (
     <motion.li
       layout
       className="rounded-xl px-3 py-2.5 flex items-center gap-3"
       style={{
         background: 'var(--glass-subtle)',
-        border: `1px solid ${critical ? `${tint}44` : 'var(--glass-border)'}`,
+        border: `1px solid color-mix(in srgb, ${critical ? `${tint} 28%, transparent)` : 'var(--glass-border)'}`,
       }}
       data-testid={`node-${n.id}`}
     >
@@ -154,7 +154,7 @@ function NodeRow({
             className="truncate"
             style={{
               fontSize: 'var(--fs-xs)',
-              color: n.error ? '#fb7185' : 'var(--ink-muted)',
+              color: n.error ? 'var(--signal-alert)' : 'var(--ink-muted)',
             }}
           >
             {n.error ?? n.output_summary}

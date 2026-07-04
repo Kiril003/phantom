@@ -50,7 +50,7 @@ function MissionControlBar() {
         <button
           onClick={() => void pause(mission.id)}
           className="min-h-[36px] px-3 rounded-lg active:scale-[0.97]"
-          style={{ background: 'rgba(244,175,37,0.15)', color: '#f4af25', fontSize: 'var(--fs-xs)' }}
+          style={{ background: 'color-mix(in srgb, var(--primary) 18%, transparent)', color: 'var(--primary)', fontSize: 'var(--fs-xs)' }}
         >
           Пауза
         </button>
@@ -59,7 +59,7 @@ function MissionControlBar() {
         <button
           onClick={() => void resume(mission.id)}
           className="min-h-[36px] px-3 rounded-lg active:scale-[0.97]"
-          style={{ background: 'rgba(34,211,238,0.15)', color: '#22d3ee', fontSize: 'var(--fs-xs)' }}
+          style={{ background: 'color-mix(in srgb, var(--accent) 18%, transparent)', color: 'var(--accent)', fontSize: 'var(--fs-xs)' }}
         >
           Продовжити
         </button>
@@ -68,7 +68,7 @@ function MissionControlBar() {
         <button
           onClick={() => void kill(mission.id)}
           className="min-h-[36px] px-3 rounded-lg active:scale-[0.97]"
-          style={{ background: 'rgba(244,63,94,0.12)', color: '#fb7185', fontSize: 'var(--fs-xs)' }}
+          style={{ background: 'color-mix(in srgb, var(--signal-alert) 14%, transparent)', color: 'var(--signal-alert)', fontSize: 'var(--fs-xs)' }}
         >
           Зупинити
         </button>

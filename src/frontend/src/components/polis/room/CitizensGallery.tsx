@@ -9,11 +9,11 @@ import type { CitizenDossier } from '@shared/types';
 import { DOMAIN_TINT } from '../cityMap';
 
 const TIER_TINT: Record<string, string> = {
-  майстер: '#34d399',
-  досвідчений: '#22d3ee',
-  стабільний: '#f4af25',
-  нестабільний: '#fb7185',
-  новачок: '#64748b',
+  майстер: 'var(--signal-ok)',
+  досвідчений: 'var(--accent)',
+  стабільний: 'var(--primary)',
+  нестабільний: 'var(--signal-alert)',
+  новачок: 'var(--ink-muted)',
 };
 
 export function CitizensGallery() {
@@ -48,10 +48,10 @@ export function CitizensGallery() {
       )}
       <div className="grid grid-cols-3 gap-3">
         {citizens.map((c) => {
-          const tint = TIER_TINT[c.tier] ?? '#64748b';
+          const tint = TIER_TINT[c.tier] ?? 'var(--ink-muted)';
           const domainTint = c.top_domain
-            ? DOMAIN_TINT[c.top_domain] ?? '#94a3b8'
-            : '#475569';
+            ? DOMAIN_TINT[c.top_domain] ?? 'var(--ink-muted)'
+            : 'var(--ink-faint)';
           const act = activityOf(c.role);
           const working = act === 'working' || act === 'reviewing';
           return (
@@ -61,7 +61,7 @@ export function CitizensGallery() {
               className="rounded-2xl p-3 text-left active:scale-[0.98]"
               style={{
                 background: 'var(--glass-card)',
-                border: `1px solid ${working ? `${domainTint}66` : 'var(--glass-border)'}`,
+                border: `1px solid color-mix(in srgb, ${working ? `${domainTint} 40%, transparent)` : 'var(--glass-border)'}`,
               }}
               data-testid={`citizen-${c.role}`}
             >
@@ -69,9 +69,9 @@ export function CitizensGallery() {
                 <div
                   className="w-9 h-9 rounded-full flex items-center justify-center shrink-0"
                   style={{
-                    background: `${domainTint}22`,
+                    background: `color-mix(in srgb, ${domainTint} 14%, transparent)`,
                     border: `1.5px solid ${domainTint}`,
-                    boxShadow: working ? `0 0 10px ${domainTint}66` : 'none',
+                    boxShadow: working ? `0 0 10px color-mix(in srgb, ${domainTint} 40%, transparent)` : 'none',
                   }}
                 >
                   <span style={{ fontSize: 'var(--fs-sm)', color: domainTint }}>
@@ -96,7 +96,7 @@ export function CitizensGallery() {
               <div className="flex items-center gap-1.5 mt-2">
                 <div
                   className="flex-1 h-1 rounded-full overflow-hidden"
-                  style={{ background: 'rgba(255,255,255,0.07)' }}
+                  style={{ background: 'var(--line-subtle)' }}
                 >
                   <div
                     className="h-full rounded-full"
@@ -130,7 +130,7 @@ export function CitizensGallery() {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="absolute inset-0 z-40 flex items-center justify-center p-6"
-            style={{ background: 'rgba(2,6,23,0.7)' }}
+            style={{ background: 'rgba(20,15,8,0.72)' }}
             onClick={() => setOpenRole(null)}
             data-testid="citizen-dossier"
           >
@@ -151,14 +151,14 @@ export function CitizensGallery() {
 }
 
 function Dossier({ c, onClose }: { c: CitizenDossier; onClose: () => void }) {
-  const tint = TIER_TINT[c.tier] ?? '#64748b';
-  const domainTint = c.top_domain ? DOMAIN_TINT[c.top_domain] ?? '#94a3b8' : '#475569';
+  const tint = TIER_TINT[c.tier] ?? 'var(--ink-muted)';
+  const domainTint = c.top_domain ? DOMAIN_TINT[c.top_domain] ?? 'var(--ink-muted)' : 'var(--ink-faint)';
   return (
     <>
       <div className="flex items-center gap-3">
         <div
           className="w-14 h-14 rounded-2xl flex items-center justify-center shrink-0"
-          style={{ background: `${domainTint}22`, border: `2px solid ${domainTint}` }}
+          style={{ background: `color-mix(in srgb, ${domainTint} 14%, transparent)`, border: `2px solid ${domainTint}` }}
         >
           <span style={{ fontSize: 'var(--fs-lg)', color: domainTint }}>
             {c.name.slice(0, 1).toUpperCase()}
@@ -190,10 +190,10 @@ function Dossier({ c, onClose }: { c: CitizenDossier; onClose: () => void }) {
       )}
 
       <div className="grid grid-cols-4 gap-2 mt-4">
-        <Stat label="виконано" value={String(c.successes)} tint="#34d399" />
-        <Stat label="зривів" value={String(c.failures)} tint="#fb7185" />
-        <Stat label="ревізій" value={String(c.revisions)} tint="#f4af25" />
-        <Stat label="токенів" value={`${Math.round(c.tokens_produced / 1000)}k`} tint="#22d3ee" />
+        <Stat label="виконано" value={String(c.successes)} tint="var(--signal-ok)" />
+        <Stat label="зривів" value={String(c.failures)} tint="var(--signal-alert)" />
+        <Stat label="ревізій" value={String(c.revisions)} tint="var(--primary)" />
+        <Stat label="токенів" value={`${Math.round(c.tokens_produced / 1000)}k`} tint="var(--accent)" />
       </div>
 
       {Object.keys(c.domains).length > 0 && (
@@ -210,8 +210,8 @@ function Dossier({ c, onClose }: { c: CitizenDossier; onClose: () => void }) {
                   className="px-2 py-1 rounded-lg font-mono"
                   style={{
                     fontSize: 'var(--fs-micro)',
-                    background: `${DOMAIN_TINT[d] ?? '#475569'}18`,
-                    color: DOMAIN_TINT[d] ?? '#94a3b8',
+                    background: `color-mix(in srgb, ${DOMAIN_TINT[d] ?? 'var(--ink-faint)'} 10%, transparent)`,
+                    color: DOMAIN_TINT[d] ?? 'var(--ink-muted)',
                   }}
                 >
                   {d} ×{n}

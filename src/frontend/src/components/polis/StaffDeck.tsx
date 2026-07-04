@@ -95,7 +95,7 @@ export function StaffDeck() {
             style={{
               fontSize: 'var(--fs-micro)',
               letterSpacing: 'var(--tracking-widest)',
-              color: gates.length ? '#f4af25' : 'var(--ink-secondary)',
+              color: gates.length ? 'var(--primary)' : 'var(--ink-secondary)',
             }}
           >
             Рішення оператора {gates.length ? `· ${gates.length}` : ''}
@@ -135,7 +135,7 @@ export function StaffDeck() {
             громадян · {inField} у полі
           </p>
           {governor.night_mode && (
-            <p className="mt-2" style={{ fontSize: 'var(--fs-xs)', color: '#f4af25' }}>
+            <p className="mt-2" style={{ fontSize: 'var(--fs-xs)', color: 'var(--primary)' }}>
               нічна хвиля активна
             </p>
           )}
@@ -181,14 +181,14 @@ function MissionRow({
           className="font-mono shrink-0"
           style={{
             fontSize: 'var(--fs-xs)',
-            color: m.status === 'awaiting_gate' ? '#f4af25' : 'var(--ink-muted)',
+            color: m.status === 'awaiting_gate' ? 'var(--primary)' : 'var(--ink-muted)',
           }}
         >
           {STATUS_UA[m.status] ?? m.status} · {etaLabel(m.eta_minutes)}
         </span>
       </div>
       <div className="flex items-center gap-2 mt-1.5">
-        <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(255,255,255,0.06)' }}>
+        <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'var(--line-subtle)' }}>
           <div
             className="h-full rounded-full transition-all duration-700"
             style={{ width: `${Math.round(m.progress * 100)}%`, background: tint }}
@@ -198,7 +198,7 @@ function MissionRow({
           className="font-mono shrink-0"
           style={{
             fontSize: 'var(--fs-micro)',
-            color: pressure > 0.8 ? '#f43f5e' : 'var(--ink-faint)',
+            color: pressure > 0.8 ? 'var(--signal-alert)' : 'var(--ink-faint)',
           }}
         >
           ₿{Math.round(pressure * 100)}%
@@ -210,13 +210,13 @@ function MissionRow({
 
 function ReactorRow({ k }: { k: ManagedKeyPublic }) {
   const stateTint: Record<string, string> = {
-    active: '#22d3ee',
-    cooling: '#f4af25',
-    exhausted: '#f4af25',
-    invalid: '#f43f5e',
-    disabled: '#475569',
+    active: 'var(--accent)',
+    cooling: 'var(--primary)',
+    exhausted: 'var(--primary)',
+    invalid: 'var(--signal-alert)',
+    disabled: 'var(--ink-faint)',
   };
-  const tint = stateTint[k.state] ?? '#475569';
+  const tint = stateTint[k.state] ?? 'var(--ink-faint)';
   return (
     <div
       className="flex items-center gap-2 rounded-lg px-2 py-1.5"
@@ -263,7 +263,7 @@ function GateCard({
       animate={{ opacity: 1, y: 0 }}
       exit={{ opacity: 0, x: 60 }}
       className="rounded-xl p-3"
-      style={{ background: 'var(--glass-card)', border: '1px solid rgba(244,175,37,0.35)' }}
+      style={{ background: 'var(--glass-card)', border: '1px solid color-mix(in srgb, var(--primary) 35%, transparent)' }}
       data-testid={`gate-${gate.id}`}
     >
       <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--ink-primary)' }}>
@@ -281,14 +281,14 @@ function GateCard({
         <button
           onClick={() => void onResolve(gate.id, true)}
           className="flex-1 min-h-[44px] rounded-lg font-medium active:scale-[0.97]"
-          style={{ background: 'rgba(34,211,238,0.15)', color: '#22d3ee', fontSize: 'var(--fs-sm)' }}
+          style={{ background: 'color-mix(in srgb, var(--accent) 18%, transparent)', color: 'var(--accent)', fontSize: 'var(--fs-sm)' }}
         >
           Схвалити
         </button>
         <button
           onClick={() => void onResolve(gate.id, false)}
           className="flex-1 min-h-[44px] rounded-lg font-medium active:scale-[0.97]"
-          style={{ background: 'rgba(244,63,94,0.12)', color: '#fb7185', fontSize: 'var(--fs-sm)' }}
+          style={{ background: 'color-mix(in srgb, var(--signal-alert) 14%, transparent)', color: 'var(--signal-alert)', fontSize: 'var(--fs-sm)' }}
         >
           Відхилити
         </button>

@@ -9,11 +9,11 @@ import type { ManagedKeyPublic } from '@shared/types';
 const PROVIDERS = ['gemini', 'anthropic', 'openrouter', 'openai'];
 
 const STATE_UA: Record<string, { label: string; tint: string }> = {
-  active: { label: 'активний', tint: '#22d3ee' },
-  cooling: { label: 'охолодження', tint: '#f4af25' },
-  exhausted: { label: 'квота вичерпана', tint: '#f4af25' },
-  invalid: { label: 'невалідний', tint: '#f43f5e' },
-  disabled: { label: 'вимкнено', tint: '#475569' },
+  active: { label: 'активний', tint: 'var(--accent)' },
+  cooling: { label: 'охолодження', tint: 'var(--primary)' },
+  exhausted: { label: 'квота вичерпана', tint: 'var(--primary)' },
+  invalid: { label: 'невалідний', tint: 'var(--signal-alert)' },
+  disabled: { label: 'вимкнено', tint: 'var(--ink-faint)' },
 };
 
 export function KeyVaultPanel() {
@@ -108,9 +108,9 @@ export function KeyVaultPanel() {
                 className="px-3 min-h-[44px] rounded-lg font-mono active:scale-[0.97]"
                 style={{
                   fontSize: 'var(--fs-xs)',
-                  background: provider === p ? 'rgba(34,211,238,0.15)' : 'var(--glass-subtle)',
-                  color: provider === p ? '#22d3ee' : 'var(--ink-secondary)',
-                  border: `1px solid ${provider === p ? '#22d3ee55' : 'var(--glass-border)'}`,
+                  background: provider === p ? 'color-mix(in srgb, var(--accent) 18%, transparent)' : 'var(--glass-subtle)',
+                  color: provider === p ? 'var(--accent)' : 'var(--ink-secondary)',
+                  border: `1px solid ${provider === p ? 'color-mix(in srgb, var(--accent) 34%, transparent)' : 'var(--glass-border)'}`,
                 }}
               >
                 {p}
@@ -157,7 +157,7 @@ export function KeyVaultPanel() {
       )}
 
       {error && (
-        <p style={{ fontSize: 'var(--fs-xs)', color: '#fb7185' }}>{error}</p>
+        <p style={{ fontSize: 'var(--fs-xs)', color: 'var(--signal-alert)' }}>{error}</p>
       )}
 
       {loading ? (
@@ -218,7 +218,7 @@ export function KeyVaultPanel() {
                   className="min-w-[44px] min-h-[44px] rounded-lg flex items-center justify-center active:scale-[0.95]"
                   style={{
                     background: 'var(--glass-subtle)',
-                    color: k.state === 'disabled' ? 'var(--ink-faint)' : '#22d3ee',
+                    color: k.state === 'disabled' ? 'var(--ink-faint)' : 'var(--accent)',
                   }}
                   aria-label={k.state === 'disabled' ? 'увімкнути' : 'вимкнути'}
                 >
@@ -227,7 +227,7 @@ export function KeyVaultPanel() {
                 <button
                   onClick={() => void remove(k)}
                   className="min-w-[44px] min-h-[44px] rounded-lg flex items-center justify-center active:scale-[0.95]"
-                  style={{ background: 'rgba(244,63,94,0.1)', color: '#fb7185' }}
+                  style={{ background: 'color-mix(in srgb, var(--signal-alert) 12%, transparent)', color: 'var(--signal-alert)' }}
                   aria-label="видалити ключ"
                 >
                   <Trash2 size={18} strokeWidth={1.5} />

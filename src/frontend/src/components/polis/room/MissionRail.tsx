@@ -61,8 +61,8 @@ export function MissionRail({ onNewMission }: { onNewMission: () => void }) {
               onClick={() => selectMission(m.id)}
               className="rounded-xl px-3 py-2.5 text-left min-h-[56px] active:scale-[0.98]"
               style={{
-                background: active ? `${tint}18` : 'var(--glass-subtle)',
-                border: `1px solid ${active ? `${tint}66` : 'var(--glass-border)'}`,
+                background: active ? `color-mix(in srgb, ${tint} 10%, transparent)` : 'var(--glass-subtle)',
+                border: `1px solid color-mix(in srgb, ${active ? `${tint} 40%, transparent)` : 'var(--glass-border)'}`,
               }}
               data-testid={`rail-mission-${m.id}`}
             >
@@ -70,7 +70,7 @@ export function MissionRail({ onNewMission }: { onNewMission: () => void }) {
                 <span
                   className="w-2 h-2 rounded-full shrink-0"
                   style={{
-                    background: waiting ? '#f4af25' : tint,
+                    background: waiting ? 'var(--primary)' : tint,
                     boxShadow:
                       m.status === 'running' ? `0 0 8px ${tint}` : 'none',
                   }}
@@ -85,7 +85,7 @@ export function MissionRail({ onNewMission }: { onNewMission: () => void }) {
               <div className="flex items-center gap-2 mt-1.5">
                 <div
                   className="flex-1 h-1 rounded-full overflow-hidden"
-                  style={{ background: 'rgba(255,255,255,0.07)' }}
+                  style={{ background: 'var(--line-subtle)' }}
                 >
                   <div
                     className="h-full rounded-full transition-all duration-700"
@@ -99,7 +99,7 @@ export function MissionRail({ onNewMission }: { onNewMission: () => void }) {
                   className="font-mono"
                   style={{
                     fontSize: 'var(--fs-micro)',
-                    color: waiting ? '#f4af25' : 'var(--ink-muted)',
+                    color: waiting ? 'var(--primary)' : 'var(--ink-muted)',
                   }}
                 >
                   {STATUS_UA[m.status] ?? m.status}
@@ -124,10 +124,10 @@ export function MissionRail({ onNewMission }: { onNewMission: () => void }) {
               style={{
                 background:
                   k.state === 'active'
-                    ? '#22d3ee'
+                    ? 'var(--accent)'
                     : k.state === 'invalid'
-                      ? '#f43f5e'
-                      : '#f4af25',
+                      ? 'var(--signal-alert)'
+                      : 'var(--primary)',
                 opacity: k.state === 'disabled' ? 0.3 : 1,
               }}
             />
@@ -136,7 +136,7 @@ export function MissionRail({ onNewMission }: { onNewMission: () => void }) {
             <span
               className="w-1.5 h-4 rounded-sm animate-pulse"
               title="без ключів — Ollama"
-              style={{ background: '#f43f5e' }}
+              style={{ background: 'var(--signal-alert)' }}
             />
           )}
         </div>
@@ -151,8 +151,8 @@ export function MissionRail({ onNewMission }: { onNewMission: () => void }) {
             className="font-mono px-2 py-0.5 rounded-full"
             style={{
               fontSize: 'var(--fs-micro)',
-              color: '#f4af25',
-              background: 'rgba(244,175,37,0.12)',
+              color: 'var(--primary)',
+              background: 'color-mix(in srgb, var(--primary) 14%, transparent)',
             }}
           >
             🔔 {gates.length}

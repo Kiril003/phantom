@@ -45,7 +45,7 @@ export function NewMissionSheet({
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           className="absolute inset-0 z-40 flex items-end"
-          style={{ background: 'rgba(2,6,23,0.6)' }}
+          style={{ background: 'rgba(20,15,8,0.64)' }}
           onClick={onClose}
           data-testid="new-mission-sheet"
         >
@@ -84,7 +84,7 @@ export function NewMissionSheet({
                     onClick={() => setPipeline(p.id)}
                     className="shrink-0 rounded-xl px-3 py-2 min-h-[56px] text-left active:scale-[0.97]"
                     style={{
-                      background: active ? `${tint}1f` : 'var(--glass-subtle)',
+                      background: active ? `color-mix(in srgb, ${tint} 12%, transparent)` : 'var(--glass-subtle)',
                       border: `1px solid ${active ? tint : 'var(--glass-border)'}`,
                       minWidth: 132,
                     }}

@@ -6,14 +6,14 @@ import { usePolisStore } from '../../../stores/polisStore';
 import { DOMAIN_TINT } from '../cityMap';
 
 const STATUS_TINT: Record<string, string> = {
-  running: '#22d3ee',
-  review: '#f4af25',
-  done: '#34d399',
-  failed: '#f43f5e',
-  blocked: '#f43f5e',
-  pending: '#64748b',
-  ready: '#94a3b8',
-  skipped: '#475569',
+  running: 'var(--accent)',
+  review: 'var(--primary)',
+  done: 'var(--signal-ok)',
+  failed: 'var(--signal-alert)',
+  blocked: 'var(--signal-alert)',
+  pending: 'var(--ink-muted)',
+  ready: 'var(--ink-muted)',
+  skipped: 'var(--ink-faint)',
 };
 
 export function WorkersRail() {
@@ -58,7 +58,7 @@ export function WorkersRail() {
       <div className="flex-1 min-h-0 overflow-y-auto p-2.5 flex flex-col gap-2">
         <AnimatePresence initial={false}>
           {nodes.map((n) => {
-            const st = STATUS_TINT[n.status] ?? '#64748b';
+            const st = STATUS_TINT[n.status] ?? 'var(--ink-muted)';
             const tail = transcripts[`${missionId}:${n.id}`]?.slice(-220) ?? '';
             const live = n.status === 'running';
             return (
@@ -70,8 +70,8 @@ export function WorkersRail() {
                 onClick={() => openInspector(n.id)}
                 className="rounded-xl p-2.5 text-left min-h-[56px] active:scale-[0.98]"
                 style={{
-                  background: live ? `${tint}10` : 'var(--glass-subtle)',
-                  border: `1px solid ${live ? `${tint}55` : 'var(--glass-border)'}`,
+                  background: live ? `color-mix(in srgb, ${tint} 8%, transparent)` : 'var(--glass-subtle)',
+                  border: `1px solid color-mix(in srgb, ${live ? `${tint} 34%, transparent)` : 'var(--glass-border)'}`,
                 }}
                 data-testid={`worker-${n.id}`}
               >
@@ -148,7 +148,7 @@ export function WorkerInspector() {
           animate={{ opacity: 1 }}
           exit={{ opacity: 0 }}
           className="absolute inset-0 z-40 flex items-center justify-center p-6"
-          style={{ background: 'rgba(2,6,23,0.7)' }}
+          style={{ background: 'rgba(20,15,8,0.72)' }}
           onClick={() => openInspector(null)}
           data-testid="worker-inspector"
         >
@@ -166,7 +166,7 @@ export function WorkerInspector() {
               <span
                 className="w-2.5 h-2.5 rounded-full"
                 style={{
-                  background: STATUS_TINT[node.status] ?? '#64748b',
+                  background: STATUS_TINT[node.status] ?? 'var(--ink-muted)',
                   boxShadow:
                     node.status === 'running'
                       ? `0 0 10px ${STATUS_TINT.running}`
@@ -213,7 +213,7 @@ export function WorkerInspector() {
                   ? 'Воркер ще не почав — чекає своєї хвилі.'
                   : 'Транскрипт порожній.')}
               {node.status === 'running' && (
-                <span className="animate-pulse" style={{ color: '#22d3ee' }}>
+                <span className="animate-pulse" style={{ color: 'var(--accent)' }}>
                   ▍
                 </span>
               )}

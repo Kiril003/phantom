@@ -59,7 +59,7 @@ export function ConversationPanel() {
                   className="font-mono text-center px-3 py-1 rounded-full"
                   style={{
                     fontSize: 'var(--fs-micro)',
-                    color: m.text.startsWith('✗') ? '#fb7185' : 'var(--ink-muted)',
+                    color: m.text.startsWith('✗') ? 'var(--signal-alert)' : 'var(--ink-muted)',
                     background: 'var(--glass-subtle)',
                   }}
                 >
@@ -71,7 +71,7 @@ export function ConversationPanel() {
                   style={{
                     background:
                       m.role === 'operator'
-                        ? 'rgba(34,211,238,0.12)'
+                        ? 'color-mix(in srgb, var(--accent) 14%, transparent)'
                         : 'var(--glass-card)',
                     border: '1px solid var(--glass-border)',
                   }}
@@ -101,11 +101,11 @@ export function ConversationPanel() {
             className="self-center w-[92%] rounded-2xl p-3"
             style={{
               background: 'var(--glass-card)',
-              border: '1px solid rgba(244,175,37,0.45)',
+              border: '1px solid color-mix(in srgb, var(--primary) 45%, transparent)',
             }}
             data-testid={`chat-gate-${g.id}`}
           >
-            <p style={{ fontSize: 'var(--fs-sm)', color: '#f4af25' }}>
+            <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--primary)' }}>
               🔔 {g.question}
             </p>
             {g.payload_preview && (
@@ -120,14 +120,14 @@ export function ConversationPanel() {
               <button
                 onClick={() => void resolveGate(g.id, true)}
                 className="flex-1 min-h-[44px] rounded-lg active:scale-[0.97]"
-                style={{ background: 'rgba(34,211,238,0.15)', color: '#22d3ee' }}
+                style={{ background: 'color-mix(in srgb, var(--accent) 18%, transparent)', color: 'var(--accent)' }}
               >
                 Схвалити
               </button>
               <button
                 onClick={() => void resolveGate(g.id, false)}
                 className="flex-1 min-h-[44px] rounded-lg active:scale-[0.97]"
-                style={{ background: 'rgba(244,63,94,0.12)', color: '#fb7185' }}
+                style={{ background: 'color-mix(in srgb, var(--signal-alert) 14%, transparent)', color: 'var(--signal-alert)' }}
               >
                 Відхилити
               </button>

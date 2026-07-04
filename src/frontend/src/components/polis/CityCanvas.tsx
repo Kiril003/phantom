@@ -5,14 +5,8 @@
 import React, { useEffect, useRef, useCallback } from 'react';
 import { usePolisStore } from '../../stores/polisStore';
 import type { PolisMission, PolisCitizen, ManagedKeyPublic } from '@shared/types';
-import {
-  CITY_W,
-  CITY_H,
-  DISTRICTS,
-  districtOf,
-  slotIn,
-  DOMAIN_TINT,
-} from './cityMap';
+import { CITY_W, CITY_H, DISTRICTS, districtOf, slotIn } from './cityMap';
+import { domainColor, themeColor, withAlpha } from './theme';
 
 interface Walker {
   x: number;
@@ -47,15 +41,15 @@ export function CityCanvas() {
     ctx.clearRect(0, 0, CITY_W, CITY_H);
 
     const night = governor.night_mode;
-    ctx.fillStyle = night ? 'rgba(2,6,23,0.35)' : 'rgba(15,23,42,0.15)';
+    ctx.fillStyle = night ? withAlpha(themeColor('--surface-void'), 0.28) : withAlpha(themeColor('--ink-faint'), 0.10);
     ctx.fillRect(0, 0, CITY_W, CITY_H);
 
     for (const d of DISTRICTS) {
-      ctx.strokeStyle = 'rgba(255,255,255,0.07)';
+      ctx.strokeStyle = withAlpha(themeColor('--ink-faint'), 0.20);
       ctx.lineWidth = 1;
       roundRect(ctx, d.x, d.y, d.w, d.h, 14);
       ctx.stroke();
-      ctx.fillStyle = 'rgba(148,163,184,0.55)';
+      ctx.fillStyle = withAlpha(themeColor('--ink-muted'), 0.75);
       ctx.font = '10px "JetBrains Mono", monospace';
       ctx.letterSpacing = '2px';
       ctx.fillText(d.label, d.x + 10, d.y + 16);
@@ -67,9 +61,9 @@ export function CityCanvas() {
     drawCitizens(ctx, t, citizens, walkers.current, missions);
 
     if (night) {
-      ctx.fillStyle = 'rgba(2,6,23,0.18)';
+      ctx.fillStyle = withAlpha(themeColor('--surface-void'), 0.20);
       ctx.fillRect(0, 0, CITY_W, CITY_H);
-      ctx.fillStyle = 'rgba(241,245,249,0.8)';
+      ctx.fillStyle = themeColor('--ink-primary');
       ctx.font = '11px "JetBrains Mono", monospace';
       ctx.fillText('нічна хвиля', CITY_W - 110, 20);
     }
@@ -150,7 +144,7 @@ function drawTownHall(
   const d = districtOf('townhall');
   const cx = d.x + d.w / 2;
   const base = d.y + d.h - 18;
-  ctx.fillStyle = 'rgba(148,163,184,0.25)';
+  ctx.fillStyle = withAlpha(themeColor('--ink-muted'), 0.30);
   roundRect(ctx, cx - 34, base - 46, 68, 46, 6);
   ctx.fill();
   ctx.beginPath();
@@ -158,16 +152,16 @@ function drawTownHall(
   ctx.lineTo(cx, base - 74);
   ctx.lineTo(cx + 40, base - 46);
   ctx.closePath();
-  ctx.fillStyle = 'rgba(148,163,184,0.35)';
+  ctx.fillStyle = withAlpha(themeColor('--ink-muted'), 0.40);
   ctx.fill();
 
   const swing = hasGates ? Math.sin(t * 6) * 0.6 : 0;
   ctx.save();
   ctx.translate(cx, base - 78);
   ctx.rotate(swing);
-  ctx.fillStyle = hasGates ? '#f4af25' : 'rgba(148,163,184,0.6)';
+  ctx.fillStyle = hasGates ? themeColor('--primary') : withAlpha(themeColor('--ink-muted'), 0.60);
   if (hasGates) {
-    ctx.shadowColor = '#f4af25';
+    ctx.shadowColor = themeColor('--primary');
     ctx.shadowBlur = 14 + Math.sin(t * 6) * 6;
   }
   ctx.beginPath();
@@ -197,7 +191,7 @@ function drawPower(
     const alive = k.state === 'active';
     const cooling = k.state === 'cooling' || k.state === 'exhausted';
     const h = 34;
-    ctx.fillStyle = 'rgba(15,23,42,0.8)';
+    ctx.fillStyle = themeColor('--glass-card');
     roundRect(ctx, x - 8, y - h, 16, h, 5);
     ctx.fill();
     const glow = alive
@@ -206,15 +200,15 @@ function drawPower(
         ? 0.15
         : 0;
     if (glow > 0) {
-      ctx.fillStyle = alive ? `rgba(34,211,238,${glow})` : `rgba(244,175,37,${glow})`;
-      ctx.shadowColor = alive ? '#22d3ee' : '#f4af25';
+      ctx.fillStyle = withAlpha(alive ? themeColor('--accent') : themeColor('--primary'), glow);
+      ctx.shadowColor = alive ? themeColor('--accent') : themeColor('--primary');
       ctx.shadowBlur = alive ? 12 : 4;
       roundRect(ctx, x - 5, y - h + 6, 10, h - 12, 3);
       ctx.fill();
       ctx.shadowBlur = 0;
     }
     if (k.state === 'invalid') {
-      ctx.strokeStyle = '#f43f5e';
+      ctx.strokeStyle = themeColor('--signal-alert');
       ctx.lineWidth = 2;
       ctx.beginPath();
       ctx.moveTo(x - 6, y - h + 6);
@@ -225,14 +219,14 @@ function drawPower(
     }
   });
   if (!shown.length) {
-    ctx.fillStyle = 'rgba(244,63,94,0.7)';
+    ctx.fillStyle = withAlpha(themeColor('--signal-alert'), 0.75);
     ctx.font = '10px "JetBrains Mono", monospace';
     ctx.fillText('аварійна лампа: локальний Ollama', d.x + 12, d.y + d.h / 2 + 8);
     const lampGlow = 0.4 + 0.3 * Math.abs(Math.sin(t * 1.5));
     ctx.beginPath();
     ctx.arc(d.x + d.w - 24, d.y + 28, 5, 0, Math.PI * 2);
-    ctx.fillStyle = `rgba(244,63,94,${lampGlow})`;
-    ctx.shadowColor = '#f43f5e';
+    ctx.fillStyle = withAlpha(themeColor('--signal-alert'), lampGlow);
+    ctx.shadowColor = themeColor('--signal-alert');
     ctx.shadowBlur = 10;
     ctx.fill();
     ctx.shadowBlur = 0;
@@ -260,13 +254,13 @@ function drawMissions(
       const groundY = Math.min(cyBase + 26, d.y + d.h - 8);
       const height = 26 + Math.round(m.progress * 52);
       const w = 34;
-      const tint = DOMAIN_TINT[domain] ?? DOMAIN_TINT.generic;
+      const tint = domainColor(domain);
       const running = m.nodes.some((n) => n.status === 'running');
       const failed = m.nodes.some((n) => n.status === 'failed');
       const blocked = m.status === 'paused' || m.status === 'awaiting_gate';
 
-      ctx.fillStyle = 'rgba(15,23,42,0.85)';
-      ctx.strokeStyle = `${tint}55`;
+      ctx.fillStyle = themeColor('--glass-card');
+      ctx.strokeStyle = withAlpha(tint, 0.34);
       ctx.lineWidth = 1;
       roundRect(ctx, cx - w / 2, groundY - height, w, height, 4);
       ctx.fill();
@@ -276,7 +270,7 @@ function drawMissions(
       for (let f = 0; f < floors; f++) {
         const wy = groundY - 8 - f * 12;
         const lit = running && (f + Math.floor(t)) % 2 === 0;
-        ctx.fillStyle = lit ? tint : `${tint}30`;
+        ctx.fillStyle = lit ? tint : withAlpha(tint, 0.2);
         if (lit) {
           ctx.shadowColor = tint;
           ctx.shadowBlur = 6;
@@ -295,7 +289,7 @@ function drawMissions(
       }
       if (failed) {
         const sy = groundY - height - 6 - (t * 12) % 18;
-        ctx.fillStyle = `rgba(244,63,94,${0.5 - ((t * 12) % 18) / 40})`;
+        ctx.fillStyle = withAlpha(themeColor('--signal-alert'), 0.5 - ((t * 12) % 18) / 40);
         ctx.beginPath();
         ctx.arc(cx, sy, 4, 0, Math.PI * 2);
         ctx.fill();
@@ -315,7 +309,7 @@ function drawMissions(
         ctx.fill();
       }
 
-      ctx.fillStyle = 'rgba(241,245,249,0.75)';
+      ctx.fillStyle = withAlpha(themeColor('--ink-primary'), 0.85);
       ctx.font = '9px "JetBrains Mono", monospace';
       const short =
         m.title.length > 14 ? `${m.title.slice(0, 13)}…` : m.title;
@@ -368,10 +362,8 @@ function drawCitizens(
     const working = c.activity === 'working';
     const reviewing = c.activity === 'reviewing';
     const tint = working || reviewing
-      ? DOMAIN_TINT[
-          missions.find((m) => m.id === c.mission_id)?.domain ?? 'generic'
-        ] ?? '#94a3b8'
-      : 'rgba(148,163,184,0.8)';
+      ? domainColor(missions.find((m) => m.id === c.mission_id)?.domain ?? 'generic')
+      : withAlpha(themeColor('--ink-muted'), 0.80);
 
     const bob = Math.sin(t * 3 + w.phase) * (dist > 2 ? 1.6 : 0.6);
     ctx.beginPath();
@@ -388,7 +380,7 @@ function drawCitizens(
       const spin = t * 4 + w.phase;
       ctx.beginPath();
       ctx.arc(w.x + Math.cos(spin) * 8, w.y + bob + Math.sin(spin) * 8, 1.2, 0, Math.PI * 2);
-      ctx.fillStyle = `${tint}aa`;
+      ctx.fillStyle = withAlpha(tint, 0.67);
       ctx.fill();
     } else if (reviewing) {
       ctx.strokeStyle = tint;

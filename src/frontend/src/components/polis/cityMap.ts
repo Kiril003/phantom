@@ -41,11 +41,11 @@ export function slotIn(d: DistrictSpec, i: number, total: number): [number, numb
   return [d.x + gx * (col + 1), d.y + gy * (row + 1)];
 }
 
-export const DOMAIN_TINT: Record<string, string> = {
-  dev: '#22d3ee',
-  research: '#a78bfa',
-  analytics: '#f4af25',
-  document: '#34d399',
-  game: '#fb7185',
-  generic: '#94a3b8',
-};
+/** @deprecated use domainToken()/domainColor() from ./theme — kept as a
+ * thin re-export so DOM callers get warm `var(--...)` strings. */
+import { domainToken } from './theme';
+
+export const DOMAIN_TINT: Record<string, string> = new Proxy(
+  {},
+  { get: (_t, key: string) => domainToken(key) },
+) as Record<string, string>;

@@ -1,4 +1,6 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
+import { Maximize2 } from 'lucide-react';
+import { FullscreenPortal } from './dom/FullscreenPortal';
 import {
   LineChart,
   Line,
@@ -47,6 +49,7 @@ function resolveCssVar(name: string): string {
 }
 
 export function ChartResponse({ data }: ChartResponseProps) {
+  const [expanded, setExpanded] = useState(false);
   const {
     chart_type = 'bar',
     title,
@@ -83,8 +86,6 @@ export function ChartResponse({ data }: ChartResponseProps) {
     );
   }
 
-  const height = 220;
-
   const tooltipStyle = {
     background: 'var(--surface-raised)',
     border: '1px solid var(--line-default)',
@@ -93,22 +94,7 @@ export function ChartResponse({ data }: ChartResponseProps) {
     color: 'var(--ink-primary)',
   };
 
-  return (
-    <div
-      className="rounded-md p-3"
-      style={{
-        background: 'var(--surface-raised)',
-        border: '1px solid var(--line-subtle)',
-      }}
-    >
-      {title && (
-        <div
-          className="mb-2 font-mono tracking-wider uppercase"
-          style={{ color: 'var(--ink-secondary)', fontSize: 'var(--fs-micro)' }}
-        >
-          {title}
-        </div>
-      )}
+  const renderChart = (height: number | string, large = false) => (
       <div style={{ width: '100%', height }}>
         <ResponsiveContainer>
           {chart_type === 'line' ? (
@@ -165,8 +151,8 @@ export function ChartResponse({ data }: ChartResponseProps) {
                 data={rows}
                 dataKey={validY[0] ?? 'value'}
                 nameKey={x_key}
-                innerRadius={40}
-                outerRadius={80}
+                innerRadius={large ? 100 : 40}
+                outerRadius={large ? 200 : 80}
                 paddingAngle={2}
                 isAnimationActive
               >
@@ -196,6 +182,48 @@ export function ChartResponse({ data }: ChartResponseProps) {
           )}
         </ResponsiveContainer>
       </div>
+  );
+
+  return (
+    <div
+      className="rounded-md p-3"
+      style={{
+        background: 'var(--surface-raised)',
+        border: '1px solid var(--line-subtle)',
+      }}
+    >
+      <div className="flex items-start justify-between gap-2 mb-1">
+        <div
+          className="font-mono tracking-wider uppercase pt-1 min-w-0 truncate"
+          style={{ color: 'var(--ink-secondary)', fontSize: 'var(--fs-micro)' }}
+        >
+          {title || ' '}
+        </div>
+        <button
+          type="button"
+          aria-label="розгорнути графік"
+          data-testid="chart-expand"
+          onClick={() => setExpanded(true)}
+          className="flex items-center justify-center shrink-0 rounded-md"
+          style={{
+            minWidth: 40,
+            minHeight: 40,
+            background: 'none',
+            border: 0,
+            color: 'var(--ink-muted)',
+          }}
+        >
+          <Maximize2 size={15} strokeWidth={2} />
+        </button>
+      </div>
+      {renderChart(220)}
+      {expanded && (
+        <FullscreenPortal title={title || 'Графік'} onClose={() => setExpanded(false)}>
+          <div className="p-4" style={{ width: '100%', height: '100%' }}>
+            {renderChart('100%', true)}
+          </div>
+        </FullscreenPortal>
+      )}
     </div>
   );
 }

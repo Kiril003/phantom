@@ -43,6 +43,22 @@ async def polis_pipelines(_: TokenPayload = Depends(require_auth)) -> dict:
     return {"pipelines": [{"id": k, "domain": v} for k, v in PIPELINES.items()]}
 
 
+@router.get("/citizens")
+async def polis_citizens(_: TokenPayload = Depends(require_auth)) -> dict:
+    from agent.fabric.citizens import get_population
+    pop = get_population()
+    await pop.load()
+    return {"citizens": pop.census()}
+
+
+@router.get("/citizens/{role}")
+async def polis_citizen(role: str, _: TokenPayload = Depends(require_auth)) -> dict:
+    from agent.fabric.citizens import get_population
+    pop = get_population()
+    await pop.load()
+    return {"citizen": pop.dossier(role)}
+
+
 @router.post("/missions")
 async def create_mission(
     body: CreateMissionRequest,

@@ -13,6 +13,7 @@ import { DocumentsPanel } from '../components/polis/room/DocumentsPanel';
 import { WorkersRail, WorkerInspector } from '../components/polis/room/WorkersRail';
 import { MissionFocus } from '../components/polis/MissionFocus';
 import { GraphCanvas } from '../components/polis/room/GraphCanvas';
+import { CitizensGallery } from '../components/polis/room/CitizensGallery';
 import { NewMissionSheet } from '../components/polis/NewMissionSheet';
 
 const TABS: { id: RoomTab; label: string }[] = [
@@ -20,6 +21,7 @@ const TABS: { id: RoomTab; label: string }[] = [
   { id: 'docs', label: 'Документи' },
   { id: 'graph', label: 'Граф' },
   { id: 'plan', label: 'План' },
+  { id: 'citizens', label: 'Населення' },
   { id: 'world', label: 'Світ' },
 ];
 
@@ -165,6 +167,7 @@ export default function PolisLayout() {
             </div>
           )}
           {roomTab === 'plan' && <MissionFocus />}
+          {roomTab === 'citizens' && <CitizensGallery />}
           {roomTab === 'world' && <CityCanvas />}
         </div>
       </main>

@@ -6,6 +6,7 @@ import type {
   PolisChatMessage,
   PolisArtifactMeta,
   PolisWorker,
+  CitizenDossier,
 } from '@shared/types';
 
 export const polisApi = {
@@ -13,6 +14,11 @@ export const polisApi = {
 
   pipelines: () =>
     req<{ pipelines: { id: string; domain: string }[] }>('GET', '/polis/pipelines'),
+
+  citizens: () => req<{ citizens: CitizenDossier[] }>('GET', '/polis/citizens'),
+
+  citizen: (role: string) =>
+    req<{ citizen: CitizenDossier }>('GET', `/polis/citizens/${role}`),
 
   createMission: (brief: string, pipeline: string, title?: string) =>
     req<{ mission: PolisMission }>('POST', '/polis/missions', {

@@ -489,6 +489,8 @@ class PolisService:
             except Exception as exc:
                 m.graph.mark_failed(node.id, str(exc))
             await self._node_event(m, node)
+            if node.status in ("done", "failed") and node.crew and node.crew.roles:
+                await self._credit_citizens(m, node)
             if node.status == "done":
                 await self._chat_system(
                     m, f"✓ «{node.title}» виконано" +
@@ -501,6 +503,20 @@ class PolisService:
                     node_id=node.id,
                 )
             await self._budget_watch(m)
+
+    async def _credit_citizens(self, m: ActiveMission, node: PlanNode) -> None:
+        try:
+            from agent.fabric.citizens import get_population
+            pop = get_population()
+            await pop.load()
+            for role in node.crew.roles:
+                await pop.record(
+                    role, ok=(node.status == "done"), domain=node.domain,
+                    attempts=node.attempts, tokens=node.budget.spent_tokens,
+                    title=node.title,
+                )
+        except Exception as exc:
+            logger.debug("citizen credit failed: %s", exc)
 
     async def _execute(self, m: ActiveMission, node: PlanNode) -> None:
         context = self._dep_context(m, node)
@@ -714,17 +730,25 @@ class PolisService:
             roster = [(s.name, s.name) for s in all_specialists()]
         except Exception:
             roster = [(r, r) for r in busy]
+        try:
+            from agent.fabric.citizens import get_population
+            reps = {d["role"]: d for d in get_population().census()}
+        except Exception:
+            reps = {}
         for name, role in roster:
             b = busy.get(role)
             m_id, n_id, act = b if b else (None, None, "idle")
             domain = "plaza"
             if m_id and m_id in self.missions:
                 domain = self.missions[m_id].domain
+            rep = reps.get(role, {})
             out.append({
                 "id": role, "name": name.replace("_", " "), "role": role,
                 "district": domain if b else "plaza",
                 "activity": act, "mission_id": m_id, "node_id": n_id,
-                "missions_done": self._role_stats.get(role, 0),
+                "missions_done": rep.get("successes", self._role_stats.get(role, 0)),
+                "reliability": rep.get("reliability", 0.0),
+                "tier": rep.get("tier", "новачок"),
             })
         return out
 

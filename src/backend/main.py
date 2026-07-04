@@ -642,9 +642,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as exc:
         logger.warning("AmbientGuardian startup failed: %s", exc)
 
-    # ПОЛІС — resume unfinished mission graphs after reboot.
+    # ПОЛІС — resume unfinished mission graphs after reboot + load population.
     try:
         from agent.fabric.service import get_polis
+        from agent.fabric.citizens import get_population
+        await get_population().load()
         await get_polis().rehydrate()
     except Exception as exc:
         logger.warning("Polis rehydrate failed: %s", exc)

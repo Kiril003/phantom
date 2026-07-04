@@ -1313,6 +1313,19 @@ class PolisMissionRow(Base):
     )
 
 
+class PolisCitizenRow(Base):
+    """ПОЛІС citizen — a specialist's persistent reputation across missions."""
+    __tablename__ = "polis_citizens"
+    role: Mapped[str] = mapped_column(String(64), primary_key=True)
+    successes: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    failures: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    revisions: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    tokens_produced: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    domains_json: Mapped[str] = mapped_column(Text, nullable=False, default="{}")
+    recent_titles_json: Mapped[str] = mapped_column(Text, nullable=False, default="[]")
+    last_active: Mapped[Optional[float]] = mapped_column(Float, nullable=True)
+
+
 class ManagedKeyRow(Base):
     """KeyVault: encrypted API key with rotation state and lifetime meters."""
     __tablename__ = "managed_keys"

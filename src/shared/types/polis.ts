@@ -125,6 +125,26 @@ export interface PolisCitizen {
   mission_id?: string;
   node_id?: string;
   missions_done: number;
+  reliability?: number;
+  tier?: string;
+}
+
+export interface CitizenDossier {
+  role: string;
+  name: string;
+  successes: number;
+  failures: number;
+  revisions: number;
+  reliability: number;
+  tier: string;
+  tokens_produced: number;
+  top_domain: string | null;
+  domains: Record<string, number>;
+  last_active: number;
+  recent_titles: string[];
+  department?: string;
+  description?: string;
+  personality?: string;
 }
 
 export interface PolisGovernorState {

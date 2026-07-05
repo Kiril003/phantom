@@ -44,8 +44,9 @@ import {
 import { AgentLimitsGroup } from './AgentLimitsGroup';
 import { AgentLayoutGroup } from './AgentLayoutGroup';
 import { DesktopShellGroup } from './DesktopShellGroup';
-import { Monitor, KeyRound } from 'lucide-react';
+import { Monitor, KeyRound, ShieldCheck } from 'lucide-react';
 import { KeyVaultPanel } from './KeyVaultPanel';
+import { LicenseGroup } from './LicenseGroup';
 
 type ThemeId = 'sunrise-warm' | 'amber-night' | 'cyberdeck-cold';
 
@@ -126,7 +127,13 @@ export default function SettingsPanel() {
       icon: <KeyRound size={14} />,
       settings: [],
     };
-    return [...categories, polisKeys, virtual];
+    const license: any = {
+      id: 'license',
+      label: 'Ліцензія',
+      icon: <ShieldCheck size={14} />,
+      settings: [],
+    };
+    return [...categories, polisKeys, license, virtual];
   }, [categories]);
 
   const activeCategory = useMemo(
@@ -645,13 +652,19 @@ export default function SettingsPanel() {
               <KeyVaultPanel />
             )}
 
+            {/* Licensing — status, activation, revalidate, deactivate. */}
+            {loaded && activeCategory && activeCategory.id === 'license' && (
+              <LicenseGroup />
+            )}
+
             {loaded &&
               activeCategory &&
               activeCategory.id !== 'about' &&
               activeCategory.id !== 'mobile' &&
               activeCategory.id !== 'vault' &&
               activeCategory.id !== 'desktop' &&
-              activeCategory.id !== 'polis_keys' && (
+              activeCategory.id !== 'polis_keys' &&
+              activeCategory.id !== 'license' && (
               <>
                 {activeCategory.id === 'ai' && <AIProviderDiagnostics />}
                 {activeCategory.id === 'voice' && <NPUDiagnostics />}

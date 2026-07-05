@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel, Field
 
 from db.models import User
-from licensing import activator
+from licensing import activator, enforcement
 from licensing.verifier import license_status
 from security.permissions import require_root
 
@@ -31,6 +31,7 @@ async def api_license_activate(
         status = await activator.activate(req.license_key, req.device_name)
     except activator.ActivationError as exc:
         raise HTTPException(status_code=exc.status_code or 502, detail=str(exc))
+    enforcement.invalidate_cache()
     return status.as_dict()
 
 
@@ -39,6 +40,7 @@ async def api_license_deactivate(
     req: DeactivateRequest, user: User = Depends(require_root)
 ) -> dict:
     await activator.deactivate(req.license_key)
+    enforcement.invalidate_cache()
     return license_status().as_dict()
 
 

@@ -25,6 +25,7 @@ from api.routes_geo_offline import router as geo_offline_router
 from api.routes_geo_geofences import router as geo_geofences_router
 from api.routes_linux import router as linux_router
 from api.routes_tools import router as tools_router
+from api.routes_license import router as license_router
 from api.routes_files import router as files_router
 from api.routes_voice import router as voice_router
 from api.routes_voice_stream import register_voice_ws
@@ -902,6 +903,10 @@ def create_app() -> FastAPI:
     app.include_router(geo_geofences_router, prefix=prefix)
     app.include_router(linux_router, prefix=prefix)
     app.include_router(tools_router, prefix=prefix)
+    # Commerce — /license/* binds this device to an Ed25519-signed
+    # certificate from the platform license server; verified offline
+    # against the embedded public key. ROOT-only.
+    app.include_router(license_router, prefix=prefix)
     app.include_router(files_router, prefix=prefix)
     app.include_router(voice_router, prefix=prefix)
     app.include_router(ai_router, prefix=prefix)

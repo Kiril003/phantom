@@ -35,7 +35,7 @@ fi
 # Avoid killing init / systemd / sshd. Prefer killing Ollama / Whisper /
 # Chrome / Firefox before the backend itself.
 cat >/etc/default/earlyoom <<'EARLYOOM_CONF'
-EARLYOOM_ARGS="-m 8 -s 10 -r 60 --avoid '^(init|systemd|sshd|uvicorn|python)$' --prefer '^(ollama|whisper|gemma|chrome|firefox|node)$' -N"
+EARLYOOM_ARGS="-m 8 -s 10 -r 60 --avoid ^(init|systemd|sshd|uvicorn|python)$ --prefer ^(ollama|whisper|gemma|chrome|firefox|node)$"
 EARLYOOM_CONF
 
 systemctl enable earlyoom >/dev/null 2>&1 || true

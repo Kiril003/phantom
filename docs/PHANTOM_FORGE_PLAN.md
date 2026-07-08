@@ -916,7 +916,14 @@ s7  Chronicle-компілятор + wiring agent/lesson_distill.py: уроки 
 - Файли <500 рядків. Кожен коміт net-negative або нейтральний по LoC
   (ти ЗАМІНЮЄШ мертвий розділ, не додаєш поверх).
 - Kill -9 посеред місії = юніт-тест: реплей із checkpoint.
-- Бюджет чесний: dial показує реальні токени/час, Quartermaster вміє
+- Бюджет чесний: dial показує реальні токени/час, Quartermaster
+
+
+
+
+
+
+ вміє
   відмовляти в делегуванні.
 - Кожен новий tool → Gemini adapter schema (закон companion Law 4).
 

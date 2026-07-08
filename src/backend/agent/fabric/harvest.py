@@ -7,7 +7,9 @@ ungrounded."""
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import logging
+from urllib.parse import urlparse
 
 import httpx
 
@@ -17,14 +19,37 @@ logger = logging.getLogger(__name__)
 
 _DDG_HTML_URL = "https://html.duckduckgo.com/html/"
 _UA = "Mozilla/5.0 (X11; Linux aarch64) PhantomOS/1.0 polis-harvester"
+_MAX_BODY = 2_000_000
+
+
+def _url_ok(url: str) -> bool:
+    """Public http(s) only — a search result must never aim the harvester
+    at localhost or the LAN (this box serves its own admin APIs)."""
+    try:
+        parsed = urlparse(url)
+    except ValueError:
+        return False
+    if parsed.scheme not in ("http", "https") or not parsed.hostname:
+        return False
+    host = parsed.hostname
+    if host == "localhost" or host.endswith(".local"):
+        return False
+    try:
+        return ipaddress.ip_address(host).is_global
+    except ValueError:
+        return True  # a DNS name, not an IP literal — allowed
 
 
 async def _fetch_extract(client: httpx.AsyncClient, url: str, cap: int) -> str:
+    if not _url_ok(url):
+        return ""
     try:
         resp = await client.get(url)
         resp.raise_for_status()
         ctype = resp.headers.get("content-type", "")
         if "html" not in ctype and "text" not in ctype:
+            return ""
+        if len(resp.content) > _MAX_BODY:
             return ""
         return _strip_tags(resp.text)[:cap].strip()
     except Exception as exc:

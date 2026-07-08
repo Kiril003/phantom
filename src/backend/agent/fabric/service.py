@@ -12,6 +12,7 @@ import json
 import logging
 import os
 import re
+import shutil
 import time
 import uuid
 from datetime import datetime, timezone
@@ -22,13 +23,28 @@ from sqlalchemy import select
 from db.database import get_session
 from db.models import PolisMissionRow
 
-from agent.fabric.graph import CrewSpec, MissionGraph, PlanNode
+from agent.fabric.graph import CrewSpec, MissionGraph, NodeBudget, PlanNode
 from agent.fabric.pipelines import PIPELINES, plan_mission
 
 logger = logging.getLogger(__name__)
 
 MAX_WAVE = 4
+MAX_DECOMP_DEPTH = 2   # a task may split, its children may split — then stop
+MAX_GRAPH_NODES = 64   # runaway guard: past this, big tasks are done in one pass
 _POLIS_HOME = os.path.expanduser("~/.phantom/polis")
+
+# server-minted ids are uuid4().hex[:12]; anything else never touches the fs
+_ID_RE = re.compile(r"^[0-9a-f]{6,40}$")
+
+_DECOMP_DIRECTIVE = (
+    "\n\nЯКЩО це завдання завелике, щоб зробити його якісно за один прохід — "
+    "НЕ виконуй його. Натомість поверни ТІЛЬКИ блок розбиття на 2-5 самостійних "
+    "підзадач (кожну виконає окремий воркер, а ти потім зведеш їхні результати):\n"
+    "```spawn\n"
+    '[{"title": "коротка назва", "prompt": "повне ТЗ підзадачі", "role": "роль"}]\n'
+    "```\n"
+    "Якщо задача підйомна за один прохід — просто виконай її повністю, без блоку."
+)
 
 
 def _now_iso() -> str:
@@ -101,6 +117,7 @@ class PolisService:
         self.gates: dict[str, Gate] = {}
         self.sem = asyncio.Semaphore(MAX_WAVE)
         self._role_stats: dict[str, int] = {}
+        self._bg_tasks: set[asyncio.Task] = set()
 
     # ── broadcast ──────────────────────────────────────────────────────
 
@@ -199,6 +216,35 @@ class PolisService:
         await self._emit("mission_status", {"mission": m.to_dict()})
         return True
 
+    async def delete_mission(self, mission_id: str) -> bool:
+        """Remove a mission entirely: cancel it, drop its row, wipe workspace."""
+        m = self.missions.pop(mission_id, None)
+        if not m:
+            async with get_session() as db:
+                row = await db.get(PolisMissionRow, mission_id)
+                if row is None:
+                    return False
+                await db.delete(row)
+                await db.commit()
+            return True
+        if m.task:
+            m.task.cancel()
+        for g in [g for g in self.gates.values() if g.mission_id == mission_id]:
+            g.approved = False
+            g.event.set()
+            self.gates.pop(g.id, None)
+        async with get_session() as db:
+            row = await db.get(PolisMissionRow, mission_id)
+            if row is not None:
+                await db.delete(row)
+                await db.commit()
+        try:
+            shutil.rmtree(os.path.join(_POLIS_HOME, mission_id), ignore_errors=True)
+        except Exception:
+            pass
+        await self._emit("mission_deleted", {"mission_id": mission_id})
+        return True
+
     async def resolve_gate(self, gate_id: str, approved: bool) -> bool:
         gate = self.gates.get(gate_id)
         if not gate:
@@ -287,7 +333,7 @@ class PolisService:
                 history=history,
                 user_id=m.user_id,
             )
-            raw = getattr(resp, "text", "") or ""
+            raw = getattr(resp, "content", "") or getattr(resp, "text", "") or ""
             match = re.search(r"\{.*\}", raw, re.S)
             payload = json.loads(match.group(0)) if match else {"reply": raw}
         except Exception as exc:
@@ -336,25 +382,55 @@ class PolisService:
     # ── file forge — workers emit real file trees ───────────────────────
 
     _FILE_FENCE = re.compile(r"```file:([^\n`]+)\n(.*?)```", re.S)
+    _SPAWN_FENCE = re.compile(r"```spawn\s*(.*?)```", re.S)
     _MAX_FORGED = 40
+
+    @classmethod
+    def _parse_spawn(cls, text: str) -> list[dict]:
+        """Extract a worker's self-decomposition: a ```spawn``` JSON list of
+        sub-tasks. Returns [] unless it's a genuine split (≥2 valid items)."""
+        match = cls._SPAWN_FENCE.search(text)
+        if not match:
+            return []
+        try:
+            data = json.loads(match.group(1).strip())
+        except (json.JSONDecodeError, ValueError):
+            return []
+        if not isinstance(data, list):
+            return []
+        out: list[dict] = []
+        for item in data[:5]:
+            if isinstance(item, dict) and item.get("title") and item.get("prompt"):
+                out.append(item)
+        return out if len(out) >= 2 else []
 
     @staticmethod
     def _safe_rel(path: str) -> str | None:
         rel = os.path.normpath(path.strip().lstrip("/"))
-        if rel.startswith("..") or os.path.isabs(rel) or rel in (".", ""):
+        if os.path.isabs(rel) or rel in (".", ""):
+            return None
+        if rel == ".." or rel.startswith(".." + os.sep):
             return None
         return rel
+
+    @staticmethod
+    def _contained(base: str, rel: str) -> str | None:
+        """Resolve rel under base; None unless the real path stays inside."""
+        root = os.path.realpath(base)
+        path = os.path.realpath(os.path.join(root, rel))
+        return path if path.startswith(root + os.sep) else None
 
     def _forge_files(self, m: ActiveMission, node: PlanNode, text: str) -> list[str]:
         forged: list[str] = []
         base = os.path.join(_POLIS_HOME, m.id, "workspace")
+        os.makedirs(base, exist_ok=True)
         for match in self._FILE_FENCE.finditer(text):
             if len(forged) >= self._MAX_FORGED:
                 break
             rel = self._safe_rel(match.group(1))
-            if rel is None:
+            path = self._contained(base, rel) if rel else None
+            if path is None:
                 continue
-            path = os.path.join(base, rel)
             os.makedirs(os.path.dirname(path), exist_ok=True)
             with open(path, "w", encoding="utf-8") as f:
                 f.write(match.group(2)[:600_000])
@@ -365,6 +441,8 @@ class PolisService:
     # ── artifacts & workers — everything visible ────────────────────────
 
     def list_artifacts(self, mission_id: str) -> list[dict]:
+        if not _ID_RE.fullmatch(mission_id):
+            return []
         m = self.missions.get(mission_id)
         base = os.path.join(_POLIS_HOME, mission_id)
         out: list[dict] = []
@@ -398,11 +476,14 @@ class PolisService:
         return out
 
     def read_artifact(self, mission_id: str, name: str) -> str | None:
-        rel = self._safe_rel(name)
-        if rel is None:
+        if not _ID_RE.fullmatch(mission_id):
             return None
-        path = os.path.join(_POLIS_HOME, mission_id, rel)
-        if not os.path.isfile(path):
+        rel = self._safe_rel(name)
+        path = (
+            self._contained(os.path.join(_POLIS_HOME, mission_id), rel)
+            if rel else None
+        )
+        if path is None or not os.path.isfile(path):
             return None
         with open(path, encoding="utf-8") as f:
             return f.read()[:400_000]
@@ -470,12 +551,14 @@ class PolisService:
                 m.status = "done"
         except asyncio.CancelledError:
             return
-        except Exception as exc:
-            logger.error("polis mission %s crashed: %s", m.id, exc)
+        except Exception:
+            logger.exception("polis mission %s crashed", m.id)
             m.status = "failed"
         finally:
-            await self._persist(m)
-            await self._emit("mission_status", {"mission": m.to_dict()})
+            # a deleted mission must not persist or broadcast a ghost row
+            if self.missions.get(m.id) is m:
+                await self._persist(m)
+                await self._emit("mission_status", {"mission": m.to_dict()})
 
     async def _run_node(self, m: ActiveMission, node: PlanNode) -> None:
         async with self.sem:
@@ -519,9 +602,43 @@ class PolisService:
             logger.debug("citizen credit failed: %s", exc)
 
     async def _execute(self, m: ActiveMission, node: PlanNode) -> None:
+        if node.budget.exhausted:
+            node.attempts = node.max_attempts
+            m.graph.mark_failed(
+                node.id, "бюджет вузла вичерпано — підніми ліміт через gate"
+            )
+            return
         context = self._dep_context(m, node)
         role = (node.crew.roles[0] if node.crew and node.crew.roles else None)
         system = self._role_system(role)
+
+        can_decompose = (
+            node.kind == "workstream"
+            and not node.decomposed
+            and node.depth < MAX_DECOMP_DEPTH
+            and len(m.graph.nodes) < MAX_GRAPH_NODES
+        )
+        if can_decompose:
+            system += _DECOMP_DIRECTIVE
+        elif node.decomposed:
+            system += (
+                "\n\nЦе завдання ти раніше розбив на підзадачі — їхні результати "
+                "вище. Тепер ЗВЕДИ їх у цілісний несуперечливий результат: усунь "
+                "дублювання, заповни шви між частинами, дай фінальну версію."
+            )
+
+        if role:
+            try:
+                from agent.fabric.citizens import get_population
+                pop = get_population()
+                await pop.load()
+                rel = pop.reliability_of(role)
+                # an established-but-shaky citizen earns an extra retry
+                if 0.0 < rel < 0.5 and node.max_attempts < 3:
+                    node.max_attempts = 3
+            except Exception:
+                pass
+
         from ai.provider_mesh import get_mesh
         t0 = time.monotonic()
 
@@ -567,6 +684,36 @@ class PolisService:
                 "total_chars": len(m.transcripts[node.id]),
             })
 
+        if can_decompose:
+            spawn = self._parse_spawn(text)
+            if spawn:
+                children = [
+                    PlanNode(
+                        title=str(c["title"])[:120],
+                        prompt=str(c["prompt"]),
+                        domain=node.domain,
+                        kind="workstream",
+                        crew=(
+                            CrewSpec(roles=[r], size=1)
+                            if (r := (str(c.get("role") or role or "").strip() or None))
+                            else None
+                        ),
+                        eta_minutes=max(1, int(c.get("eta_minutes", 12) or 12)),
+                        budget=NodeBudget(max_tokens=100_000, max_llm_calls=20),
+                    )
+                    for c in spawn
+                ]
+                ids = m.graph.attach_children(node.id, children)
+                node.budget.spent_llm_calls += 1
+                node.budget.spent_tokens += max(1, len(text) // 4)
+                await self._chat_system(
+                    m,
+                    f"🌱 «{node.title}» завелике — розгалужено на {len(ids)} підзадач",
+                    node_id=node.id,
+                )
+                await self._node_event(m, node)
+                return
+
         forged = self._forge_files(m, node, text)
         if forged:
             await self._chat_system(
@@ -603,7 +750,7 @@ class PolisService:
         await self._emit("gate_opened", {"gate": gate.to_dict()})
         await self._persist(m)
         await gate.event.wait()
-        del self.gates[gate.id]
+        self.gates.pop(gate.id, None)
         m.status = prev if prev != "awaiting_gate" else "running"
         await self._emit("gate_closed", {"gate_id": gate.id, "approved": gate.approved})
         if gate.approved:
@@ -635,24 +782,34 @@ class PolisService:
                     m.pause.set()
                 await self._emit("gate_closed",
                                  {"gate_id": gate.id, "approved": gate.approved})
-            asyncio.create_task(waiter())
+            task = asyncio.create_task(waiter())
+            self._bg_tasks.add(task)
+            task.add_done_callback(self._bg_tasks.discard)
         elif pressure >= 0.8:
             await self._emit("budget_alert",
                              {"mission_id": m.id, "pressure": round(pressure, 2)})
 
+    _DEP_CONTEXT_CAP = 48_000
+
     def _dep_context(self, m: ActiveMission, node: PlanNode) -> str:
-        parts = []
+        """Concatenate every dependency artifact (not just the last file),
+        bounded so a fan-in node can't blow the prompt."""
+        parts: list[str] = []
+        total = 0
         for dep_id in node.depends_on:
             dep = m.graph.nodes.get(dep_id)
-            if not dep:
+            if not dep or total >= self._DEP_CONTEXT_CAP:
                 continue
-            body = ""
+            chunks: list[str] = []
             for p in dep.artifact_paths:
                 try:
                     with open(p, encoding="utf-8") as f:
-                        body = f.read()[:12_000]
+                        chunks.append(f.read()[:12_000])
                 except OSError:
-                    body = dep.output_summary or ""
+                    continue
+            body = "\n\n".join(chunks) or dep.output_summary or ""
+            body = body[: self._DEP_CONTEXT_CAP - total]
+            total += len(body)
             parts.append(f"── Результат кроку «{dep.title}» ──\n{body}")
         return "\n\n".join(parts)
 
@@ -708,7 +865,7 @@ class PolisService:
             "keys": keys,
             "gates": [g.to_dict() for g in self.gates.values()],
             "governor": {
-                "wave_size": MAX_WAVE - self.sem._value,  # noqa: SLF001
+                "wave_size": min(running, MAX_WAVE),
                 "max_wave": MAX_WAVE,
                 "running_nodes": running,
                 "queued_nodes": queued,

@@ -12,6 +12,9 @@ import {
   Menu,
   Edit3,
   Check,
+  Compass,
+  Settings,
+  Shield,
 } from 'lucide-react';
 import { MessageBubble } from './MessageBubble';
 import { AttachDrawer, type AttachSelection } from './AttachDrawer';
@@ -226,6 +229,16 @@ export function ChatWindow({
     lastUserInputMethodRef.current = 'text';
     sendMessage(text, 'text', systemState);
   }, [input, sending, sendMessage, systemState]);
+
+  const handleQuickPrompt = useCallback(
+    (text: string) => {
+      if (sending) return;
+      stickyBottomRef.current = true;
+      lastUserInputMethodRef.current = 'encoder';
+      sendMessage(text, 'encoder', systemState);
+    },
+    [sending, sendMessage, systemState]
+  );
 
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
@@ -795,8 +808,8 @@ export function ChatWindow({
               initial={{ opacity: 0, y: 20 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
-              className="self-center my-auto flex flex-col items-center gap-2 text-center"
-              style={{ maxWidth: 400 }}
+              className="self-center my-auto flex flex-col items-center gap-3 text-center"
+              style={{ maxWidth: 520 }}
             >
               <div
                 className="flex items-center justify-center"
@@ -810,7 +823,7 @@ export function ChatWindow({
                   boxShadow: '0 0 14px var(--accent-glow)',
                 }}
               >
-                <Sparkles size={16} strokeWidth={1.75} />
+                  <Sparkles size={16} strokeWidth={1.75} />
               </div>
               <p
                 className="text-gradient"
@@ -823,6 +836,65 @@ export function ChatWindow({
               >
                 {currentSessionId ? 'Session loaded' : 'New conversation'}
               </p>
+              <div
+                style={{
+                  fontFamily: 'var(--font-display)',
+                  fontSize: 'var(--fs-xs)',
+                  color: 'var(--ink-muted)',
+                  lineHeight: 1.45,
+                  maxWidth: 420,
+                }}
+              >
+                Обери дію або напиши напряму. PHANTOM краще відповідає, коли бачить контекст, ціль і бажаний формат.
+              </div>
+              <div
+                className="flex flex-wrap justify-center gap-2"
+                style={{ marginTop: 2 }}
+                aria-label="Quick chat actions"
+              >
+                {[
+                  {
+                    icon: <Compass size={14} strokeWidth={1.75} />,
+                    label: 'План дня',
+                    prompt: 'Допоможи зібрати короткий план дня: пріоритети, ризики, наступні 3 дії.',
+                  },
+                  {
+                    icon: <Shield size={14} strokeWidth={1.75} />,
+                    label: 'Перевір ризики',
+                    prompt: 'Подивись на поточний стан системи й скажи, що потребує уваги першим.',
+                  },
+                  {
+                    icon: <Settings size={14} strokeWidth={1.75} />,
+                    label: 'Поясни налаштування',
+                    prompt: 'Поясни ключові налаштування PHANTOM простими словами і що варто змінити спочатку.',
+                  },
+                ].map((action) => (
+                  <button
+                    key={action.label}
+                    type="button"
+                    onClick={() => handleQuickPrompt(action.prompt)}
+                    disabled={sending}
+                    className="inline-flex items-center gap-2 active:scale-95 transition-all"
+                    style={{
+                      minHeight: 40,
+                      padding: '8px 12px',
+                      borderRadius: 12,
+                      background: 'var(--glass-subtle)',
+                      border: '1px solid var(--glass-border)',
+                      color: 'var(--ink-secondary)',
+                      fontFamily: 'var(--font-display)',
+                      fontSize: 'var(--fs-xs)',
+                      fontWeight: 600,
+                      boxShadow: 'inset 0 1px 0 var(--glass-highlight)',
+                      opacity: sending ? 0.55 : 1,
+                    }}
+                    title={action.prompt}
+                  >
+                    <span style={{ color: 'var(--accent)' }}>{action.icon}</span>
+                    <span>{action.label}</span>
+                  </button>
+                ))}
+              </div>
             </motion.div>
           )}
 
@@ -1170,7 +1242,7 @@ export function ChatWindow({
                 onKeyDown={handleKeyDown}
                 onFocus={() => setInputFocused(true)}
                 onBlur={() => setInputFocused(false)}
-                placeholder={placeholder}
+                placeholder={sending ? 'PHANTOM відповідає…' : placeholder}
                 rows={1}
                 aria-label="Chat input"
                 className="flex-1 resize-none outline-none bg-transparent"
@@ -1187,6 +1259,7 @@ export function ChatWindow({
                   fontSize: 'var(--fs-base)',
                   lineHeight: 'var(--lh-normal)',
                   border: 'none',
+                  opacity: sending ? 0.72 : 1,
                 }}
               />
 

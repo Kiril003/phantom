@@ -10,10 +10,7 @@ import { useSystemStore } from '../stores/systemStore';
 import { SystemState } from '@shared/types';
 import { geolocationService, BrowserGeolocationService } from '../services/geolocation';
 import { ToolsOverlay } from '../components/tools/ToolsOverlay';
-import { AgentSessionHistory } from '../components/agent/overlays/AgentSessionHistory';
-import { AgentVisionPanel } from '../components/agent/workspace/AgentVisionPanel';
 import { WillPanel } from '../components/agent/workspace/WillPanel';
-import { AgentStudioOverlay } from '../components/studio/AgentStudioOverlay';
 import { IntelligenceHub } from '../components/intelligence/IntelligenceHub';
 import { useUIStore } from '../stores/uiStore';
 import { useFamiliarTriggers } from '../hooks/useFamiliarTriggers';
@@ -36,8 +33,6 @@ function GlobalGeolocationManager() {
 
   return null;
 }
-
-import { CompanionShowcase } from '../components/companion/CompanionShowcase';
 
 /* ─── Lazy layouts ────────────────────────────────────────────────────────── */
 
@@ -165,10 +160,6 @@ export function App() {
                 }
               />
               <Route
-                path="/companion"
-                element={<CompanionShowcase />}
-              />
-              <Route
                 path="/polis"
                 element={
                   <React.Suspense fallback={<PhantomLoader />}>
@@ -184,9 +175,6 @@ export function App() {
             <FamiliarReactor />
             <PhantomFamiliar />
             <ToolsOverlayMount />
-            <AgentSessionHistoryMount />
-            <StudioOverlayMount />
-            <AgentVisionMount />
             <WillPanelMount />
             <IntelligenceHubMount />
           </div>
@@ -194,18 +182,6 @@ export function App() {
       </BrowserRouter>
     </Providers>
   );
-}
-
-function StudioOverlayMount() {
-  const open = useUIStore((s) => s.studioOpen);
-  const setOpen = useUIStore((s) => s.setStudioOpen);
-  return <AgentStudioOverlay open={open} onClose={() => setOpen(false)} />;
-}
-
-function AgentVisionMount() {
-  const open = useUIStore((s) => s.visionOpen);
-  const setOpen = useUIStore((s) => s.setVisionOpen);
-  return <AgentVisionPanel open={open} onClose={() => setOpen(false)} />;
 }
 
 function WillPanelMount() {
@@ -244,25 +220,6 @@ function ToolsOverlayMount() {
       open={open}
       initialTab={initialTab}
       onClose={() => setOpen(false)}
-    />
-  );
-}
-
-function AgentSessionHistoryMount() {
-  const open = useUIStore((s) => s.agentHistoryOpen);
-  const setOpen = useUIStore((s) => s.setAgentHistoryOpen);
-  const setSystemState = useSystemStore((s) => s.setState);
-  return (
-    <AgentSessionHistory
-      open={open}
-      onClose={() => setOpen(false)}
-      onContinueAsConversation={() => {
-        setSystemState(SystemState.DIALOGUE, {
-          trigger: 'agent_resume_as_conversation',
-          timestamp: Date.now(),
-          auto: false,
-        });
-      }}
     />
   );
 }

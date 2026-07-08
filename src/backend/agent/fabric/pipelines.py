@@ -253,18 +253,33 @@ async def build_generic(brief: str) -> MissionGraph:
             ),
             user_message=brief,
         )
-        match = _JSON_BLOCK.search(getattr(resp, "text", "") or "")
-        steps = json.loads(match.group(0))["steps"] if match else []
+        match = _JSON_BLOCK.search(
+            getattr(resp, "content", "") or getattr(resp, "text", "") or ""
+        )
+        steps = json.loads(match.group(0)).get("steps", []) if match else []
+        if not isinstance(steps, list):
+            steps = []
         ids: list[str] = []
         for step in steps[:7]:
-            deps = [ids[i] for i in step.get("depends_on", []) if 0 <= i < len(ids)]
+            if not isinstance(step, dict):
+                continue
+            raw_deps = step.get("depends_on")
+            if not isinstance(raw_deps, list):
+                raw_deps = []
+            deps = [
+                ids[i] for i in raw_deps if isinstance(i, int) and 0 <= i < len(ids)
+            ]
+            try:
+                eta = min(240, max(1, int(step.get("eta_minutes", 15))))
+            except (TypeError, ValueError):
+                eta = 15
             node = _node(
-                str(step.get("title", "Крок"))[:120],
+                str(step.get("title") or "Крок")[:120],
                 domain="generic",
                 deps=deps,
-                roles=[str(step.get("role", "domain_researcher"))],
-                eta=int(step.get("eta_minutes", 15)),
-                prompt=str(step.get("prompt", brief)),
+                roles=[str(step.get("role") or "domain_researcher")[:64]],
+                eta=eta,
+                prompt=str(step.get("prompt") or brief),
             )
             g.add(node)
             ids.append(node.id)

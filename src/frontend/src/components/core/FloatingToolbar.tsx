@@ -63,15 +63,6 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
   const toggleOverlay = useUIStore((s) => s.toggleOverlay);
   const moreMenuOpen = useUIStore((s) => s.moreMenuOpen);
   const setMoreMenuOpen = useUIStore((s) => s.setMoreMenuOpen);
-  // Phase 16 — agent run history overlay (mounted at App level).
-  const agentHistoryOpen = useUIStore((s) => s.agentHistoryOpen);
-  const setAgentHistoryOpen = useUIStore((s) => s.setAgentHistoryOpen);
-  // Phase 17b — Agent Studio overlay (mounted at App level).
-  const studioOpen = useUIStore((s) => s.studioOpen);
-  const setStudioOpen = useUIStore((s) => s.setStudioOpen);
-  // Phase 18 — AgentVisionPanel (мощуть бачити що бачить агент).
-  const visionOpen = useUIStore((s) => s.visionOpen);
-  const setVisionOpen = useUIStore((s) => s.setVisionOpen);
   // Phase 28 — Will Engine.
   const willOpen = useUIStore((s) => s.willOpen);
   const setWillOpen = useUIStore((s) => s.setWillOpen);
@@ -132,11 +123,6 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
     if (state === SystemState.GHOST) toolbarTransition(previousState ?? SystemState.SHADOW);
     else toolbarTransition(SystemState.GHOST);
   };
-  const goOperator = () => {
-    if (location.pathname !== '/') navigate('/');
-    if (state === SystemState.OPERATOR) toolbarTransition(previousState ?? SystemState.SHADOW);
-    else toolbarTransition(SystemState.OPERATOR);
-  };
   const signOut = () => {
     clearAuth();
     setAuthenticated(false);
@@ -190,56 +176,13 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
 
   const secondaryAll: ToolbarAction[] = [
     {
-      id: 'agent',
-      icon: 'memory',
-      label: 'Agent',
-      active: state === SystemState.OPERATOR,
-      onClick: () => {
-        goOperator();
-        setMoreMenuOpen(false);
-      },
-    },
-    {
-      id: 'agent-history',
-      icon: 'history',
-      label: 'Історія',
-      tooltip: 'Перегляд минулих прогонів агента',
-      active: agentHistoryOpen,
-      onClick: () => {
-        setAgentHistoryOpen(!agentHistoryOpen);
-        setMoreMenuOpen(false);
-      },
-    },
-    {
-      id: 'studio',
-      icon: 'auto_awesome',
-      label: 'Studio',
-      tooltip: 'Створювати власних агентів — Васі-агенти',
-      active: studioOpen,
-      onClick: () => {
-        setStudioOpen(!studioOpen);
-        setMoreMenuOpen(false);
-      },
-    },
-    {
       id: 'polis',
       icon: 'location_city',
       label: 'Поліс',
-      tooltip: 'Внутрішнє місто — місії, громадяни, реактори ключів',
+      tooltip: 'Агентство — місії як чат, документи, воркери, громадяни, ключі',
       active: location.pathname === '/polis',
       onClick: () => {
         navigate('/polis');
-        setMoreMenuOpen(false);
-      },
-    },
-    {
-      id: 'vision',
-      icon: 'visibility',
-      label: 'Очі',
-      tooltip: 'Бачити що бачить агент (екран + OCR)',
-      active: visionOpen,
-      onClick: () => {
-        setVisionOpen(!visionOpen);
         setMoreMenuOpen(false);
       },
     },

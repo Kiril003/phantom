@@ -61,6 +61,8 @@ interface PolisState {
   pauseMission: (id: string) => Promise<void>;
   resumeMission: (id: string) => Promise<void>;
   killMission: (id: string) => Promise<void>;
+  deleteMission: (id: string) => Promise<void>;
+  removeMissionLocal: (id: string) => void;
   refreshKeys: () => Promise<void>;
 }
 
@@ -168,12 +170,15 @@ export const usePolisStore = create<PolisState>((set, get) => ({
   setRoomTab: (t) => set({ roomTab: t }),
 
   appendChat: (missionId, msg) =>
-    set((st) => ({
-      chats: {
-        ...st.chats,
-        [missionId]: [...(st.chats[missionId] ?? []), msg].slice(-200),
-      },
-    })),
+    set((st) => {
+      const prev = st.chats[missionId] ?? [];
+      const last = prev[prev.length - 1];
+      // dedupe: REST reply + WS echo of the same message must not double up
+      if (last && last.role === msg.role && last.text === msg.text) return {};
+      return {
+        chats: { ...st.chats, [missionId]: [...prev, msg].slice(-200) },
+      };
+    }),
 
   appendDelta: (missionId, nodeId, delta) =>
     set((st) => {
@@ -188,8 +193,9 @@ export const usePolisStore = create<PolisState>((set, get) => ({
     set({ chatBusy: true });
     get().appendChat(id, { role: 'operator', text });
     try {
-      await polisApi.chat(id, text);
-      // phantom reply arrives via WS chat_message; REST response is backup
+      // REST reply is authoritative; WS chat_message may also echo it (deduped)
+      const { reply } = await polisApi.chat(id, text);
+      if (reply && reply.text) get().appendChat(id, reply);
     } catch {
       get().appendChat(id, {
         role: 'system',
@@ -272,6 +278,34 @@ export const usePolisStore = create<PolisState>((set, get) => ({
     }));
   },
 
+  removeMissionLocal: (id) =>
+    set((st) => {
+      const missions = st.missions.filter((m) => m.id !== id);
+      const chats = { ...st.chats };
+      delete chats[id];
+      const artifacts = { ...st.artifacts };
+      delete artifacts[id];
+      return {
+        missions,
+        chats,
+        artifacts,
+        gates: st.gates.filter((g) => g.mission_id !== id),
+        selectedMissionId:
+          st.selectedMissionId === id
+            ? (missions[0]?.id ?? null)
+            : st.selectedMissionId,
+      };
+    }),
+
+  deleteMission: async (id) => {
+    get().removeMissionLocal(id);
+    try {
+      await polisApi.deleteMission(id);
+    } catch {
+      /* server already gone or unreachable — local removal stands */
+    }
+  },
+
   refreshKeys: async () => {
     try {
       const { keys } = await polisApi.keys();
@@ -282,44 +316,72 @@ export const usePolisStore = create<PolisState>((set, get) => ({
   },
 }));
 
+/** Everything the backend broadcasts on the "polis" WS channel. The
+ * socket is an untyped boundary; this union is the single cast point. */
+interface PolisWsData {
+  snapshot: PolisSnapshot;
+  node_status: { mission_id: string; node: PolisNode; progress?: number };
+  worker_delta: {
+    mission_id: string;
+    node_id: string;
+    delta?: string;
+    total_chars?: number;
+  };
+  chat_message: { mission_id: string; message: PolisChatMessage };
+  mission_status: { mission: PolisMission };
+  mission_deleted: { mission_id: string };
+  gate_opened: { gate: PolisGate };
+  gate_closed: { gate_id: string; approved?: boolean };
+  key_state: Record<string, unknown>;
+  budget_alert: { mission_id: string; pressure: number };
+  wave: { mission_id: string; size: number; queued: number };
+}
+
+export type PolisWsMessage = {
+  [K in keyof PolisWsData]: { type: K; data: PolisWsData[K] };
+}[keyof PolisWsData];
+
 /** Wire the "polis" WS channel into the store. Returns unsubscribe. */
 export function registerPolisWsHandler(
-  on: (channel: string, cb: (msg: { type: string; data: any }) => void) => () => void,
+  on: (
+    channel: string,
+    cb: (msg: { type: string; data: unknown }) => void,
+  ) => () => void,
 ): () => void {
-  return on('polis', (msg) => {
+  return on('polis', (raw) => {
+    const msg = raw as PolisWsMessage;
     const st = usePolisStore.getState();
     switch (msg.type) {
       case 'snapshot':
-        st.applySnapshot(msg.data as PolisSnapshot);
+        st.applySnapshot(msg.data);
         break;
       case 'node_status': {
-        st.applyNodeStatus(
-          msg.data.mission_id,
-          msg.data.node as PolisNode,
-          msg.data.progress ?? 0,
-        );
-        const node = msg.data.node as PolisNode;
+        const { mission_id, node, progress } = msg.data;
+        st.applyNodeStatus(mission_id, node, progress ?? 0);
         if (
-          msg.data.mission_id === st.selectedMissionId &&
+          mission_id === st.selectedMissionId &&
           (node.status === 'done' || node.status === 'failed')
         ) {
-          void st.loadArtifacts(msg.data.mission_id);
+          void st.loadArtifacts(mission_id);
         }
         break;
       }
       case 'worker_delta':
         st.appendDelta(msg.data.mission_id, msg.data.node_id, msg.data.delta ?? '');
         break;
-      case 'chat_message': {
-        const m = msg.data.message as PolisChatMessage;
-        if (m.role !== 'operator') st.appendChat(msg.data.mission_id, m);
+      case 'chat_message':
+        if (msg.data.message.role !== 'operator') {
+          st.appendChat(msg.data.mission_id, msg.data.message);
+        }
         break;
-      }
       case 'mission_status':
-        st.applyMissionStatus(msg.data.mission as PolisMission);
+        st.applyMissionStatus(msg.data.mission);
+        break;
+      case 'mission_deleted':
+        st.removeMissionLocal(msg.data.mission_id);
         break;
       case 'gate_opened':
-        st.gateOpened(msg.data.gate as PolisGate);
+        st.gateOpened(msg.data.gate);
         break;
       case 'gate_closed':
         st.gateClosed(msg.data.gate_id);

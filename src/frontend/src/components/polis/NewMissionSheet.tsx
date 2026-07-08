@@ -2,6 +2,7 @@
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { usePolisStore } from '../../stores/polisStore';
+import { useUIStore } from '../../stores/uiStore';
 import { DOMAIN_TINT } from './cityMap';
 
 const PIPELINE_CARDS = [
@@ -24,6 +25,7 @@ export function NewMissionSheet({
   const [pipeline, setPipeline] = useState('generic');
   const [busy, setBusy] = useState(false);
   const createMission = usePolisStore((s) => s.createMission);
+  const toast = useUIStore((s) => s.toast);
 
   const submit = async () => {
     if (brief.trim().length < 3 || busy) return;
@@ -32,6 +34,13 @@ export function NewMissionSheet({
       await createMission(brief.trim(), pipeline);
       setBrief('');
       onClose();
+    } catch (e) {
+      toast({
+        kind: 'error',
+        message: `Не вдалося запустити місію: ${
+          e instanceof Error ? e.message : 'сервер відхилив запит'
+        }`,
+      });
     } finally {
       setBusy(false);
     }

@@ -1,9 +1,10 @@
 /** Right rail — live workers: streaming tails per node, tap = inspector
  * with the full transcript following in real time. */
-import { useEffect, useRef } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { usePolisStore } from '../../../stores/polisStore';
 import { DOMAIN_TINT } from '../cityMap';
+import type { PolisNode } from '@shared/types';
 
 const STATUS_TINT: Record<string, string> = {
   running: 'var(--accent)',
@@ -16,13 +17,115 @@ const STATUS_TINT: Record<string, string> = {
   skipped: 'var(--ink-faint)',
 };
 
+const STATUS_LABEL: Record<string, string> = {
+  running: 'у роботі',
+  review: 'рев’ю',
+  done: 'готово',
+  failed: 'зрив',
+  blocked: 'блок',
+  pending: 'черга',
+  ready: 'готовий',
+  skipped: '—',
+};
+
+/** One node card; subscribes to its own transcript tail so a streaming
+ * delta re-renders only the card that is actually streaming. */
+const WorkerCard = memo(function WorkerCard({
+  n,
+  missionId,
+  tint,
+}: {
+  n: PolisNode;
+  missionId: string;
+  tint: string;
+}) {
+  const tail = usePolisStore(
+    (s) => s.transcripts[`${missionId}:${n.id}`]?.slice(-160) ?? '',
+  );
+  const openInspector = usePolisStore((s) => s.openInspector);
+  const st = STATUS_TINT[n.status] ?? 'var(--ink-muted)';
+  const live = n.status === 'running';
+  const role = n.crew?.roles?.[0]?.replace(/_/g, ' ');
+  const preview = live
+    ? tail
+    : n.status === 'done'
+      ? n.output_summary || 'готово'
+      : n.status === 'failed'
+        ? n.error || 'зрив'
+        : n.status === 'pending' || n.status === 'ready'
+          ? 'очікує своєї хвилі'
+          : STATUS_LABEL[n.status] ?? '';
+  return (
+    <motion.button
+      layout
+      initial={{ opacity: 0, x: 20 }}
+      animate={{ opacity: 1, x: 0 }}
+      onClick={() => openInspector(n.id)}
+      className="rounded-xl p-3 text-left flex flex-col gap-1.5 active:scale-[0.98]"
+      style={{
+        background: live
+          ? `color-mix(in srgb, ${tint} 8%, transparent)`
+          : 'var(--glass-subtle)',
+        border: `1px solid ${
+          live
+            ? `color-mix(in srgb, ${tint} 34%, transparent)`
+            : 'var(--glass-border)'
+        }`,
+      }}
+      data-testid={`worker-${n.id}`}
+    >
+      <div className="flex items-center gap-2">
+        <span
+          className="w-2 h-2 rounded-full shrink-0"
+          style={{ background: st, boxShadow: live ? `0 0 8px ${st}` : 'none' }}
+        />
+        <span
+          className="flex-1 truncate font-medium"
+          style={{ fontSize: 'var(--fs-sm)', color: 'var(--ink-primary)' }}
+        >
+          {n.title}
+        </span>
+        <span
+          className="shrink-0"
+          style={{ fontSize: 'var(--fs-micro)', color: st, opacity: 0.9 }}
+        >
+          {STATUS_LABEL[n.status] ?? n.status}
+        </span>
+      </div>
+      {role && (
+        <div className="flex items-center gap-1.5 pl-4">
+          <span
+            className="truncate"
+            style={{ fontSize: 'var(--fs-micro)', color: 'var(--ink-faint)' }}
+          >
+            {role}
+          </span>
+        </div>
+      )}
+      <p
+        className="line-clamp-2 break-words pl-4"
+        style={{
+          fontSize: 'var(--fs-xs)',
+          color: live ? 'var(--ink-secondary)' : 'var(--ink-muted)',
+          lineHeight: 'var(--lh-snug)',
+          minHeight: '2.4em',
+          fontStyle: live ? 'normal' : 'italic',
+          opacity: live || n.status === 'done' || n.status === 'failed' ? 1 : 0.7,
+        }}
+      >
+        {preview}
+        {live && (
+          <span className="animate-pulse" style={{ color: tint }}> ▍</span>
+        )}
+      </p>
+    </motion.button>
+  );
+});
+
 export function WorkersRail() {
-  const missionId = usePolisStore((s) => s.selectedMissionId);
   const mission = usePolisStore((s) =>
     s.missions.find((m) => m.id === s.selectedMissionId),
   );
-  const transcripts = usePolisStore((s) => s.transcripts);
-  const openInspector = usePolisStore((s) => s.openInspector);
 
   if (!mission) {
     return (
@@ -57,65 +160,9 @@ export function WorkersRail() {
       </header>
       <div className="flex-1 min-h-0 overflow-y-auto p-2.5 flex flex-col gap-2">
         <AnimatePresence initial={false}>
-          {nodes.map((n) => {
-            const st = STATUS_TINT[n.status] ?? 'var(--ink-muted)';
-            const tail = transcripts[`${missionId}:${n.id}`]?.slice(-220) ?? '';
-            const live = n.status === 'running';
-            return (
-              <motion.button
-                key={n.id}
-                layout
-                initial={{ opacity: 0, x: 20 }}
-                animate={{ opacity: 1, x: 0 }}
-                onClick={() => openInspector(n.id)}
-                className="rounded-xl p-2.5 text-left min-h-[56px] active:scale-[0.98]"
-                style={{
-                  background: live ? `color-mix(in srgb, ${tint} 8%, transparent)` : 'var(--glass-subtle)',
-                  border: `1px solid color-mix(in srgb, ${live ? `${tint} 34%, transparent)` : 'var(--glass-border)'}`,
-                }}
-                data-testid={`worker-${n.id}`}
-              >
-                <div className="flex items-center gap-2">
-                  <span
-                    className="w-2 h-2 rounded-full shrink-0"
-                    style={{
-                      background: st,
-                      boxShadow: live ? `0 0 8px ${st}` : 'none',
-                    }}
-                  />
-                  <span
-                    className="flex-1 truncate"
-                    style={{ fontSize: 'var(--fs-xs)', color: 'var(--ink-primary)' }}
-                  >
-                    {n.title}
-                  </span>
-                </div>
-                {n.crew?.roles?.[0] && (
-                  <p
-                    className="font-mono truncate mt-0.5"
-                    style={{ fontSize: 'var(--fs-micro)', color: 'var(--ink-faint)' }}
-                  >
-                    {n.crew.roles[0].replace(/_/g, ' ')}
-                  </p>
-                )}
-                {live && tail && (
-                  <p
-                    className="font-mono mt-1 line-clamp-2 break-words"
-                    style={{
-                      fontSize: 'var(--fs-micro)',
-                      color: 'var(--ink-muted)',
-                      lineHeight: 1.5,
-                    }}
-                  >
-                    {tail}
-                    <span className="animate-pulse" style={{ color: tint }}>
-                      ▍
-                    </span>
-                  </p>
-                )}
-              </motion.button>
-            );
-          })}
+          {nodes.map((n) => (
+            <WorkerCard key={n.id} n={n} missionId={mission.id} tint={tint} />
+          ))}
         </AnimatePresence>
       </div>
     </aside>
@@ -181,7 +228,6 @@ export function WorkerInspector() {
                   {node.title}
                 </p>
                 <p
-                  className="font-mono"
                   style={{ fontSize: 'var(--fs-micro)', color: 'var(--ink-muted)' }}
                 >
                   {node.crew?.roles?.join(' · ').replace(/_/g, ' ') || 'воркер'} ·{' '}
@@ -200,9 +246,9 @@ export function WorkerInspector() {
             </header>
             <div
               ref={scrollRef}
-              className="flex-1 min-h-0 overflow-y-auto px-5 py-4 font-mono whitespace-pre-wrap break-words"
+              className="flex-1 min-h-0 overflow-y-auto px-5 py-4 whitespace-pre-wrap break-words"
               style={{
-                fontSize: 'var(--fs-xs)',
+                fontSize: 'var(--fs-sm)',
                 color: 'var(--ink-secondary)',
                 lineHeight: 1.7,
               }}

@@ -73,6 +73,8 @@ class PlanNode(BaseModel):
     finished_at: str | None = None
     prompt: str = ""
     submission_graph: dict | None = None
+    depth: int = 0            # recursion level; children run at depth+1
+    decomposed: bool = False  # this node has already split into children
 
 
 class MissionGraph(BaseModel):
@@ -223,6 +225,34 @@ class MissionGraph(BaseModel):
             node.finished_at = None
         else:
             node.status = "failed"
+
+    def attach_children(self, parent_id: str, children: list[PlanNode]) -> list[str]:
+        """Recursive decomposition in place: a node too large for one pass
+        splits into children that run first; the parent stays as their
+        integrator (re-runs once they finish, reading their outputs).
+
+        Scale = node count, never new architecture. Children inherit the
+        parent's upstream deps (already terminal, so they're immediately
+        ready), the parent is re-pointed to depend on them, and everything
+        downstream of the parent still waits for the parent — untouched.
+        """
+        parent = self.nodes[parent_id]
+        upstream = list(parent.depends_on)
+        ids: list[str] = []
+        for child in children:
+            child.depends_on = list(upstream)
+            child.depth = parent.depth + 1
+            self.add(child)
+            ids.append(child.id)
+        parent.depends_on = ids
+        parent.decomposed = True
+        parent.status = "pending"
+        parent.attempts = 0
+        parent.started_at = None
+        parent.finished_at = None
+        parent.error = None
+        self.validate_acyclic()
+        return ids
 
     def collapse(self, nid: str) -> "MissionGraph":
         """Expand a submission node into its own nested MissionGraph."""

@@ -127,6 +127,58 @@ def test_submission_collapse():
         build_sample().collapse("a")
 
 
+def test_attach_children_recursive_decomposition():
+    g = _g()
+    up = g.add(PlanNode(id="up", title="upstream", prompt="x"))
+    big = g.add(PlanNode(id="big", title="big", depends_on=["up"], prompt="x"))
+    down = g.add(PlanNode(id="down", title="down", depends_on=["big"], prompt="x"))
+    # upstream done → big is the frontier and gets expanded in place
+    g.mark_running("up"); g.mark_done("up")
+    assert [n.id for n in g.frontier()] == ["big"]
+
+    kids = [PlanNode(title="k1", prompt="a"), PlanNode(title="k2", prompt="b")]
+    ids = g.attach_children("big", kids)
+
+    assert big.decomposed and big.status == "pending" and big.attempts == 0
+    # children inherit big's upstream deps and its depth+1, and are ready now
+    for cid in ids:
+        assert g.nodes[cid].depends_on == ["up"]
+        assert g.nodes[cid].depth == 1
+    assert set(ids) == {n.id for n in g.frontier()}   # children, not big, run next
+    assert big.depends_on == ids                       # big now integrates them
+    assert down.depends_on == ["big"]                  # downstream untouched
+    g.validate_acyclic()
+
+    # children finish → big returns to the frontier as integrator
+    for cid in ids:
+        g.mark_running(cid); g.mark_done(cid)
+    assert [n.id for n in g.frontier()] == ["big"]
+
+
+def test_attach_children_stays_acyclic_and_json_safe():
+    g = _g()
+    root = g.add(PlanNode(id="root", title="root", prompt="x"))
+    g.attach_children("root", [PlanNode(title="c1", prompt="a"),
+                               PlanNode(title="c2", prompt="b")])
+    g.validate_acyclic()
+    g2 = MissionGraph.from_json(g.to_json())
+    assert g2.nodes["root"].decomposed is True
+    assert all(n.depth == 1 for n in g2.nodes.values() if n.id != "root")
+
+
+@pytest.mark.parametrize("text,expected_titles", [
+    ('```spawn\n[{"title":"A","prompt":"pa"},{"title":"B","prompt":"pb"}]\n```', ["A", "B"]),
+    ('nope, just did the work', []),                              # no fence
+    ('```spawn\n[{"title":"only","prompt":"p"}]\n```', []),        # <2 → not a split
+    ('```spawn\n[{"title":"A"},{"prompt":"p"}]\n```', []),         # invalid items
+    ('```spawn\nnot json\n```', []),                              # garbage
+])
+def test_parse_spawn(text, expected_titles):
+    from agent.fabric.service import PolisService
+    got = [c["title"] for c in PolisService._parse_spawn(text)]
+    assert got == expected_titles
+
+
 # ── pipelines shape ──────────────────────────────────────────────────────
 
 

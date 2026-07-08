@@ -54,6 +54,9 @@ export const polisApi = {
       `/polis/missions/${id}/workers/${nodeId}`,
     ),
 
+  deleteMission: (id: string) =>
+    req<{ ok: boolean }>('DELETE', `/polis/missions/${id}`),
+
   pause: (id: string) => req<{ ok: boolean }>('POST', `/polis/missions/${id}/pause`),
   resume: (id: string) => req<{ ok: boolean }>('POST', `/polis/missions/${id}/resume`),
   kill: (id: string) => req<{ ok: boolean }>('POST', `/polis/missions/${id}/kill`),

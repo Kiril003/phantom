@@ -68,7 +68,7 @@ function MissionControlBar() {
       {mission.status === 'running' && (
         <button
           onClick={() => void pause(mission.id)}
-          className="min-h-[36px] px-3 rounded-lg active:scale-[0.97]"
+          className="min-h-[44px] px-4 rounded-lg active:scale-[0.97]"
           style={{ background: 'color-mix(in srgb, var(--primary) 18%, transparent)', color: 'var(--primary)', fontSize: 'var(--fs-xs)' }}
         >
           Пауза
@@ -77,7 +77,7 @@ function MissionControlBar() {
       {mission.status === 'paused' && (
         <button
           onClick={() => void resume(mission.id)}
-          className="min-h-[36px] px-3 rounded-lg active:scale-[0.97]"
+          className="min-h-[44px] px-4 rounded-lg active:scale-[0.97]"
           style={{ background: 'color-mix(in srgb, var(--accent) 18%, transparent)', color: 'var(--accent)', fontSize: 'var(--fs-xs)' }}
         >
           Продовжити
@@ -86,7 +86,7 @@ function MissionControlBar() {
       {!['done', 'killed', 'failed'].includes(mission.status) && (
         <button
           onClick={() => void kill(mission.id)}
-          className="min-h-[36px] px-3 rounded-lg active:scale-[0.97]"
+          className="min-h-[44px] px-4 rounded-lg active:scale-[0.97]"
           style={{ background: 'color-mix(in srgb, var(--signal-alert) 14%, transparent)', color: 'var(--signal-alert)', fontSize: 'var(--fs-xs)' }}
         >
           Зупинити
@@ -162,7 +162,7 @@ export default function PolisLayout() {
         style={{ zIndex: 1 }}
       >
         <header
-          className="flex items-center gap-3 px-4 h-[58px] shrink-0"
+          className="flex items-center gap-2 px-3.5 h-[54px] shrink-0"
           style={{ borderBottom: '1px solid var(--glass-border)' }}
         >
           <span
@@ -178,15 +178,15 @@ export default function PolisLayout() {
           </h1>
           {chip && (
             <span
-              className="shrink-0 flex items-center gap-1.5 pr-1"
-              style={{ fontSize: 'var(--fs-micro)', color: chip.tint }}
-            >
-              <span className="w-1.5 h-1.5 rounded-full" style={{ background: chip.tint }} />
-              {chip.label}
-            </span>
+              className="shrink-0 w-2 h-2 rounded-full"
+              style={{ background: chip.tint, boxShadow: `0 0 8px ${chip.tint}` }}
+              title={chip.label}
+            />
           )}
           <nav
-            className="flex items-center gap-0.5 shrink-0 p-1 rounded-2xl"
+            role="tablist"
+            aria-label="зони місії"
+            className="flex items-center gap-0 shrink-0 p-0.5 rounded-xl"
             style={{ background: 'var(--glass-subtle)' }}
           >
             {TABS.map((t) => {
@@ -194,8 +194,10 @@ export default function PolisLayout() {
               return (
                 <button
                   key={t.id}
+                  role="tab"
+                  aria-selected={active}
                   onClick={() => setRoomTab(t.id)}
-                  className="relative w-[38px] h-[38px] rounded-xl flex items-center justify-center active:scale-[0.94] transition-all"
+                  className="relative w-[44px] h-[44px] rounded-lg flex items-center justify-center active:scale-[0.94] transition-all"
                   style={{
                     color: active ? 'var(--ink-inverse)' : 'var(--ink-muted)',
                     background: active ? 'var(--accent)' : 'transparent',
@@ -205,10 +207,10 @@ export default function PolisLayout() {
                   aria-label={t.label}
                   data-testid={`room-tab-${t.id}`}
                 >
-                  <t.Icon size={18} strokeWidth={active ? 2.3 : 1.8} />
+                  <t.Icon size={16} strokeWidth={active ? 2.4 : 1.9} />
                   {t.id === 'docs' && docsCount > 0 && (
                     <span
-                      className="absolute -top-1 -right-1 min-w-[16px] h-[16px] px-1 rounded-full flex items-center justify-center font-bold"
+                      className="absolute -top-1 -right-1 min-w-[15px] h-[15px] px-1 rounded-full flex items-center justify-center font-bold"
                       style={{ fontSize: 9, background: 'var(--primary)', color: 'var(--ink-inverse)' }}
                     >
                       {docsCount}
@@ -220,17 +222,12 @@ export default function PolisLayout() {
           </nav>
         </header>
 
-        <div className="flex-1 min-h-0">
+        <MissionControlBar />
+
+        <div className="flex-1 min-h-0" role="tabpanel">
           {roomTab === 'talk' && <ConversationPanel />}
           {roomTab === 'docs' && <DocumentsPanel />}
-          {roomTab === 'graph' && (
-            <div className="h-full flex flex-col">
-              <MissionControlBar />
-              <div className="flex-1 min-h-0">
-                <GraphCanvas />
-              </div>
-            </div>
-          )}
+          {roomTab === 'graph' && <GraphCanvas />}
           {roomTab === 'plan' && <MissionFocus />}
           {roomTab === 'citizens' && <CitizensGallery />}
           {roomTab === 'world' && <CityCanvas />}

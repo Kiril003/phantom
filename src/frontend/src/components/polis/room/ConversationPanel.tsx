@@ -66,7 +66,12 @@ export function ConversationPanel() {
 
   return (
     <div className="h-full flex flex-col" data-testid="conversation-panel">
-      <div ref={scrollRef} className="flex-1 min-h-0 overflow-y-auto px-4 py-3 flex flex-col gap-2">
+      <div
+        ref={scrollRef}
+        role="log"
+        aria-live="polite"
+        className="flex-1 min-h-0 overflow-y-auto px-4 py-3 flex flex-col gap-2"
+      >
         {chat.length === 0 && (
           <p style={{ fontSize: 'var(--fs-sm)', color: 'var(--ink-muted)' }}>
             Це командний канал місії. Питай про стан, міняй курс словами:
@@ -220,7 +225,9 @@ export function ConversationPanel() {
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
-          onKeyDown={(e) => e.key === 'Enter' && submit()}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' && !e.nativeEvent.isComposing) submit();
+          }}
           placeholder={
             missionId ? 'Наказ, питання або зміна курсу…' : 'Обери місію зліва'
           }

@@ -5,15 +5,16 @@
   "identifier": "os.phantom.aegis.film",
   "build": {
     "beforeDevCommand": "npm run dev",
-    "devUrl": "http://localhost:1420",
     "beforeBuildCommand": "npm run build",
     "frontendDist": "../dist"
   },
   "app": {
+    "withGlobalTauri": true,
     "windows": [
       {
         "label": "film",
         "title": "AEGIS Film",
+        "url": "index.html",
         "width": 1280,
         "height": 800,
         "visible": false,
@@ -27,6 +28,25 @@
         "maximizable": false,
         "minimizable": false,
         "closable": false,
+        "visibleOnAllWorkspaces": true
+      },
+      {
+        "label": "breath",
+        "title": "Breath Line",
+        "url": "breath.html",
+        "width": 900,
+        "height": 220,
+        "center": true,
+        "visible": false,
+        "transparent": true,
+        "decorations": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "focus": true,
+        "shadow": false,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": false,
         "visibleOnAllWorkspaces": true
       }
     ],

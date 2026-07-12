@@ -1,0 +1,69 @@
+/* AEGIS Film tokens — subset of docs/VISUAL_SYSTEM.md canon, desktop membrane scale. */
+:root {
+  --ink-primary: #f1f5f9;
+  --ink-secondary: #94a3b8;
+  --ink-muted: #64748b;
+  --ink-faint: #475569;
+
+  --font-display: 'Space Grotesk', system-ui, sans-serif;
+  --font-serif: 'Playfair Display', Georgia, serif;
+
+  --sigil-size: 18px;
+  --sigil-breath: 8s;
+  --motion-scale: 1;
+}
+
+[data-state='shadow'] {
+  --accent: #64748b;
+  --accent-glow: rgba(100, 116, 139, 0.2);
+  --accent-radial: radial-gradient(circle at 30% 30%, #475569, #1e293b);
+  --sigil-size: 18px;
+  --sigil-breath: 8s;
+  --motion-scale: 0.5;
+}
+
+[data-state='focus'],
+[data-state='operator'] {
+  --accent: #22d3ee;
+  --accent-glow: rgba(34, 211, 238, 0.4);
+  --accent-radial: radial-gradient(circle at 30% 30%, #22d3ee, #0ea5e9, #6366f1);
+  --sigil-size: 20px;
+  --sigil-breath: 8s;
+  --motion-scale: 1;
+}
+
+[data-state='dialogue'] {
+  --accent: #8b5cf6;
+  --accent-glow: rgba(139, 92, 246, 0.4);
+  --accent-radial: radial-gradient(circle at 30% 30%, #a78bfa, #8b5cf6, #6366f1);
+  --sigil-size: 28px;
+  --sigil-breath: 5s;
+  --motion-scale: 1.1;
+}
+
+[data-state='sentinel'] {
+  --accent: #f43f5e;
+  --accent-glow: rgba(244, 63, 94, 0.5);
+  --accent-radial: radial-gradient(circle at 30% 30%, #fb7185, #f43f5e, #be123c);
+  --sigil-size: 22px;
+  --sigil-breath: 2.5s;
+  --motion-scale: 1.3;
+}
+
+[data-state='ghost'] {
+  --accent: #10b981;
+  --accent-glow: rgba(16, 185, 129, 0.3);
+  --accent-radial: radial-gradient(circle at 30% 30%, #34d399, #10b981, #047857);
+  --sigil-size: 14px;
+  --sigil-breath: 10s;
+  --motion-scale: 0.8;
+}
+
+[data-state='dream'] {
+  --accent: #f4af25;
+  --accent-glow: rgba(244, 175, 37, 0.2);
+  --accent-radial: radial-gradient(circle at 30% 30%, #fbbf24, #f59e0b, #b45309);
+  --sigil-size: 18px;
+  --sigil-breath: 12s;
+  --motion-scale: 0.4;
+}

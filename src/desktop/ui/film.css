@@ -1,0 +1,180 @@
+/* The Film — Law V: the symbiote owns the periphery. Everything here is
+   pointer-transparent; the compositor-level click-through is the real guarantee,
+   this is defence in depth. */
+html,
+body {
+  margin: 0;
+  width: 100vw;
+  height: 100vh;
+  overflow: hidden;
+  background: transparent;
+  pointer-events: none;
+  user-select: none;
+}
+
+#film {
+  position: fixed;
+  inset: 0;
+}
+
+/* ── The Sigil ─────────────────────────────────────────────────────────── */
+.sigil {
+  position: fixed;
+  right: 12px;
+  bottom: 12px;
+  width: var(--sigil-size);
+  height: var(--sigil-size);
+  border-radius: 50%;
+  background: var(--accent-radial);
+  box-shadow: 0 0 18px var(--accent-glow), 0 0 42px var(--accent-glow);
+  opacity: 0.55;
+  animation: sigil-breathe var(--sigil-breath) ease-in-out infinite;
+  transition:
+    width 1.2s cubic-bezier(0.16, 1, 0.3, 1),
+    height 1.2s cubic-bezier(0.16, 1, 0.3, 1),
+    opacity 1.2s ease,
+    filter 1.2s ease;
+  will-change: transform, opacity;
+}
+
+@keyframes sigil-breathe {
+  0%,
+  100% {
+    transform: scale(1);
+    opacity: 0.55;
+  }
+  50% {
+    transform: scale(1.18);
+    opacity: 0.85;
+  }
+}
+
+/* Graceful absence (§9) — the backend died; presence pales like a living
+   thing weakening, never like software crashing. */
+.sigil.absent {
+  background: radial-gradient(circle at 30% 30%, var(--ink-faint), #1e293b);
+  box-shadow: 0 0 10px rgba(71, 85, 105, 0.25);
+  animation-duration: 16s;
+  opacity: 0.35;
+}
+
+/* A single event ripple — aliveness acknowledged, then stillness again. */
+.sigil.pulse {
+  animation: sigil-pulse 0.9s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes sigil-pulse {
+  0% {
+    transform: scale(1);
+  }
+  30% {
+    transform: scale(1.45);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* Working sparks — ANIMA labor sheds infrequent motes drifting up the edge. */
+.spark {
+  position: fixed;
+  width: 3px;
+  height: 3px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 6px var(--accent-glow);
+  pointer-events: none;
+  animation: spark-drift 3.2s ease-out forwards;
+}
+
+@keyframes spark-drift {
+  0% {
+    opacity: 0;
+    transform: translateY(0);
+  }
+  15% {
+    opacity: 0.9;
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(-140px);
+  }
+}
+
+/* ── Murmurs ───────────────────────────────────────────────────────────── */
+/* Breath on cold glass: condensation in, evaporation out. Never a slide,
+   never a bounce, never a stack. */
+.murmur {
+  position: fixed;
+  right: 44px;
+  bottom: 14px;
+  max-width: 400px;
+  text-align: right;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--ink-primary);
+  text-shadow:
+    0 1px 8px rgba(2, 6, 23, 0.9),
+    0 0 24px rgba(2, 6, 23, 0.7);
+  opacity: 0;
+  filter: blur(6px);
+  transition:
+    opacity 0.4s ease,
+    filter 0.4s ease;
+}
+
+.murmur.visible {
+  opacity: 0.92;
+  filter: blur(0);
+}
+
+.murmur.voice-entity {
+  font-family: var(--font-serif);
+  font-style: italic;
+}
+
+.murmur.voice-system {
+  font-family: var(--font-display);
+  font-size: 13px;
+  letter-spacing: 0.02em;
+  color: var(--ink-secondary);
+}
+
+/* ── SENTINEL perimeter ring (§6) — the one licensed seizure ──────────── */
+.perimeter {
+  position: fixed;
+  inset: 0;
+  border: 2px solid var(--accent);
+  box-shadow:
+    inset 0 0 24px var(--accent-glow),
+    0 0 12px var(--accent-glow);
+  opacity: 0;
+  transition: opacity 0.6s ease;
+  pointer-events: none;
+}
+
+[data-state='sentinel'] .perimeter {
+  opacity: 0.85;
+  animation: perimeter-pulse 2.5s ease-in-out infinite;
+}
+
+@keyframes perimeter-pulse {
+  0%,
+  100% {
+    opacity: 0.85;
+  }
+  50% {
+    opacity: 0.45;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .sigil,
+  .perimeter {
+    animation-duration: 20s;
+  }
+  .spark {
+    display: none;
+  }
+}

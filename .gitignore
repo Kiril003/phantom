@@ -35,6 +35,10 @@ src/frontend/tailwind.config.js
 src/frontend/vite.config.d.ts
 src/frontend/vite.config.js
 
+# AEGIS desktop (Stratum 0) — Rust build artifacts + tauri codegen
+src/desktop/src-tauri/target/
+src/desktop/src-tauri/gen/
+
 # Playwright e2e artifacts
 src/frontend/playwright-report/
 src/frontend/test-results/

@@ -1,0 +1,7 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "default",
+  "description": "The Film webview needs nothing from the host — it renders presence only.",
+  "windows": ["film"],
+  "permissions": ["core:default"]
+}

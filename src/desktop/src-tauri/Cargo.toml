@@ -1,0 +1,34 @@
+[package]
+name = "aegis-film"
+version = "0.1.0"
+edition = "2021"
+description = "AEGIS Stratum 0 — the Film: PHANTOM's optical membrane over the host OS"
+license = "UNLICENSED"
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = [] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"
+gdk = "0.18"
+gtk-layer-shell = { version = "0.8", features = ["v0_6"], optional = true }
+
+[features]
+default = []
+# Wayland wlr-layer-shell path (sway/hyprland/wlroots). X11 and Mutter fall
+# back to the Dock-hint override path in overlay.rs.
+layer-shell = ["dep:gtk-layer-shell"]
+
+# The board is RAM-starved; debuginfo is the single biggest build-memory cost.
+[profile.dev]
+debug = 0
+
+[profile.release]
+lto = "thin"
+codegen-units = 4
+strip = true

@@ -3,12 +3,14 @@ import '@fontsource/playfair-display/400-italic.css';
 import './tokens.css';
 import './film.css';
 import './facet.css';
+import './deep.css';
 
 import { HubClient, HubStatus } from './ws';
 import { MurmurLane } from './murmur';
 import { Sigil } from './sigil';
 import { FacetManager, LedgerRow, MonitorTask } from './facet/manager';
 import { Verb } from './facet/types';
+import { Deep } from './deep/deep';
 import { HubEnvelope, StateTransitionPayload, extractText, parseSystemState, toMurmurLine } from './types';
 
 const BACKEND = import.meta.env.AEGIS_BACKEND ?? 'ws://127.0.0.1:8000';
@@ -33,6 +35,15 @@ facets.expose();
 // verb is about to strike.
 facets.setTargetReporter((label) => {
   void invoke('facet_targeted', { label });
+});
+
+// The Deep (Stratum 3 scaffold): the camera descends *through* the aimed Facet
+// and hands the aim back on surfacing, so focus survives the dive.
+const deep = new Deep(film, {
+  aim: () => facets.aim(),
+  restore: (id) => facets.retarget(id),
+  recede: () => facets.surfaceRecede(),
+  resurface: () => facets.surfaceReturn(),
 });
 
 let wasAbsent = false;
@@ -116,7 +127,7 @@ function onAnimaEvent(type: string, data: Record<string, unknown>): void {
 // The Film never listens to the keyboard — it only ever receives verbs that the
 // Breath Line captured locally and Rust validated against the closed allowlist.
 interface AegisCmd {
-  action: 'verb' | 'target' | 'spawn';
+  action: 'verb' | 'target' | 'spawn' | 'depth';
   verb?: Verb;
   dir?: 1 | -1;
   kind?: 'log' | 'dossier' | 'monitor' | 'answer';
@@ -141,6 +152,10 @@ function dossierLines(): string[] {
       break;
     case 'target':
       if (cmd.dir) facets.cycleTarget(cmd.dir);
+      break;
+    case 'depth':
+      if (cmd.dir === 1) deep.descend();
+      else if (cmd.dir === -1) deep.ascend();
       break;
     case 'spawn':
       if (cmd.kind === 'log') facets.spawnLog(transcript);

@@ -3,7 +3,7 @@ import '@fontsource/playfair-display/400-italic.css';
 import './tokens.css';
 import './breath.css';
 
-import { parseSpawn, resolveKey } from './facet/keymap';
+import { parseDepth, parseSpawn, resolveKey } from './facet/keymap';
 
 // Vanilla IPC via withGlobalTauri — no framework, no bundle weight.
 const tauri = (window as { __TAURI__?: any }).__TAURI__;
@@ -94,6 +94,16 @@ async function submit(): Promise<void> {
       spawn('answer', answer.textContent, lastQuestion);
       clearAnswer();
     }
+    return;
+  }
+
+  // `/deep` and `/surface` are navigation, not questions: semantic zoom is the
+  // only way to move, so the dive is a word typed into the same one line.
+  const depth = parseDepth(text);
+  if (depth) {
+    void invoke('facet_command', { action: 'depth', dir: depth });
+    line.value = '';
+    clearAnswer();
     return;
   }
 

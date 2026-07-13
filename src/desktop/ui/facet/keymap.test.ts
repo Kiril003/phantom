@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { parseSpawn, resolveKey } from './keymap';
+import { parseDepth, parseSpawn, resolveKey } from './keymap';
 import { Verb } from './types';
 
 const alt = (code: string) => ({ code, altKey: true });
@@ -55,5 +55,20 @@ describe('spawn sigil', () => {
 
   it('rejects an unknown slash word rather than guessing', () => {
     expect(parseSpawn('/nonsense')).toBeNull();
+  });
+});
+
+describe('the dive words', () => {
+  it('descends and surfaces by word — semantic zoom is the navigation', () => {
+    expect(parseDepth('/deep')).toBe(1);
+    expect(parseDepth('/dive')).toBe(1);
+    expect(parseDepth('/surface')).toBe(-1);
+    expect(parseDepth('/up')).toBe(-1);
+  });
+
+  it('does not mistake a question, or a spawn, for a dive', () => {
+    expect(parseDepth('how deep is the ocean')).toBeNull();
+    expect(parseDepth('/monitor')).toBeNull();
+    expect(parseDepth('')).toBeNull();
   });
 });

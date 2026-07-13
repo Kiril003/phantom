@@ -71,11 +71,18 @@ impl PressTracker {
     }
 }
 
-/// Force keyboard focus onto the summoned Breath Line, bypassing the WM's
-/// focus-stealing prevention that intermittently denies a normal focus request.
-pub fn focus_breath() {
+/// Pin focus onto the Breath Line and keep re-asserting until the X server
+/// confirms we hold it. Returns false if it never landed. This is what makes the
+/// summon trustworthy: a shown-but-unfocused line silently routes the operator's
+/// keystrokes into the host app, which is worse than not summoning at all.
+pub fn pin_breath_focus() -> bool {
     #[cfg(target_os = "linux")]
-    linux_x11::focus_window_named("Breath Line");
+    {
+        // ~1.2s of patience, abandoned the moment focus verifiably lands.
+        return linux_x11::pin_focus("Breath Line", 20, 60);
+    }
+    #[cfg(not(target_os = "linux"))]
+    false
 }
 
 /// Spawn the platform keyboard hook on its own thread. Returns immediately;

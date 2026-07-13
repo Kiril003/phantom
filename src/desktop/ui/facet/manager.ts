@@ -207,6 +207,17 @@ export class FacetManager {
     return f ? f.state.kind : null;
   }
 
+  /** The Facet holding the aim — the Deep anchors its dive on it. */
+  aim(): string | null {
+    return this.targetId;
+  }
+
+  /** Hand the aim back (used when surfacing from the Deep, so focus survives
+   *  the dive). A shard that died while we were below is simply not restored. */
+  retarget(id: string | null): void {
+    this.setTarget(id);
+  }
+
   /** Walk the shards in materialization order. */
   cycleTarget(dir: 1 | -1): void {
     const ids = [...this.facets.keys()];
@@ -270,6 +281,28 @@ export class FacetManager {
       this.render(res.sibling.id);
       this.layer.appendChild(el);
       requestAnimationFrame(() => el.classList.add('born'));
+    }
+  }
+
+  /** The whole Surface recedes as the camera descends past it — and condenses
+   *  back, unchanged, on surfacing. Not a hide: hiding a shard on this stack does
+   *  not clear its pixels (no paint, no damage — it stays burned onto the glass).
+   *  The *dissolve* does clear, because the shard animates its own region right up
+   *  to the moment it leaves. So the dive reuses the one mechanism proven to
+   *  clear here, which is also the mechanism Law III already demands: the Surface
+   *  is never switched off, it recedes. No state is touched, so this is reversible
+   *  by construction — the shards, their content and the aim all survive the dive. */
+  surfaceRecede(): void {
+    for (const f of this.facets.values()) {
+      f.el.classList.remove('born');
+      f.el.classList.add('receding');
+    }
+  }
+
+  surfaceReturn(): void {
+    for (const f of this.facets.values()) {
+      f.el.classList.remove('receding');
+      requestAnimationFrame(() => f.el.classList.add('born'));
     }
   }
 

@@ -35,14 +35,24 @@ use super::{classify, ConduitEvent, PressTracker};
 
 const CAPS_LOCK_KEYSYM: u32 = 0xFFE5;
 
-/// Give a window keyboard focus by name, via a **direct** `SetInputFocus` +
-/// raise. mutter mediates `_NET_ACTIVE_WINDOW` client messages through its
-/// focus-stealing prevention (so Tauri's `set_focus` is intermittently
-/// denied), but core `SetInputFocus` is not WM-mediated — it always lands.
-/// This is what makes the summon focus *flawless* rather than best-effort.
-pub fn focus_window_named(name: &str) {
-    if let Ok((conn, screen_num)) = x11rb::connect(None) {
-        let root = conn.setup().roots[screen_num].root;
+/// Pin focus onto a window and **verify it landed**, retrying until it does.
+///
+/// mutter mediates `_NET_ACTIVE_WINDOW` client messages through its focus-stealing
+/// prevention, so Tauri's `set_focus` is intermittently denied; core `SetInputFocus`
+/// is not WM-mediated and always lands. But issuing it once is still not enough: the
+/// window's first map races the request, and mutter can hand the keyboard straight
+/// back to the previously-active app. A fixed retry schedule wins that race only
+/// while the board is idle — under load it loses, and the summon then *looks* fine
+/// (the glass is on screen) while every keystroke goes to the host app. So we ask
+/// the server who actually holds focus and keep re-asserting until the answer is us,
+/// on one connection, stopping the instant it lands.
+pub fn pin_focus(name: &str, attempts: u32, gap_ms: u64) -> bool {
+    let Ok((conn, screen_num)) = x11rb::connect(None) else {
+        return false;
+    };
+    let root = conn.setup().roots[screen_num].root;
+
+    for _ in 0..attempts {
         if let Some(win) = find_named(&conn, root, name, 4) {
             let _ = conn.set_input_focus(InputFocus::PARENT, win, x11rb::CURRENT_TIME);
             let _ = conn.configure_window(
@@ -50,8 +60,18 @@ pub fn focus_window_named(name: &str) {
                 &ConfigureWindowAux::new().stack_mode(StackMode::ABOVE),
             );
             let _ = conn.flush();
+
+            if let Ok(cookie) = conn.get_input_focus() {
+                if let Ok(reply) = cookie.reply() {
+                    if reply.focus == win {
+                        return true;
+                    }
+                }
+            }
         }
+        std::thread::sleep(std::time::Duration::from_millis(gap_ms));
     }
+    false
 }
 
 /// Breadth-limited search for a top-level window whose WM_NAME equals `name`.

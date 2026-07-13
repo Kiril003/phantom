@@ -66,3 +66,12 @@ export function parseSpawn(line: string): { kind: Spawnable; arg: string } | nul
   const kind = SPAWNABLE.find((k) => k === (word ?? '').toLowerCase());
   return kind ? { kind, arg: rest.join(' ') } : null;
 }
+
+/** The dive (§Law IV): `/deep` descends to the ATLAS floor, `/surface` returns.
+ *  Semantic zoom is navigation, so descending is a *word*, not a window. */
+export function parseDepth(line: string): 1 | -1 | null {
+  const word = line.trim().toLowerCase();
+  if (word === '/deep' || word === '/dive') return 1;
+  if (word === '/surface' || word === '/up') return -1;
+  return null;
+}

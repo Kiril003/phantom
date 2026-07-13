@@ -149,15 +149,16 @@ fn toggle_breath(app: &AppHandle) {
             let _ = win.show();
             let _ = win.set_focus();
             let _ = win.eval("window.__breathFocus&&window.__breathFocus()");
-            // Tauri's set_focus is WM-mediated and mutter's focus-stealing
-            // guard can deny it; a direct XSetInputFocus is not WM-mediated and
-            // always lands. Retry across a few frames — the first-ever map of
-            // the webview is slower than later ones. Then re-focus the input.
+            // Tauri's set_focus is WM-mediated and mutter's focus-stealing guard
+            // can deny it. A direct XSetInputFocus is not WM-mediated — but a
+            // *fixed* retry schedule only wins the race while the board is idle;
+            // under load the line would map without the keyboard, and every
+            // keystroke would silently land in the host app. So keep re-asserting
+            // until the X server confirms we hold focus, then focus the input.
             let win2 = win.clone();
             std::thread::spawn(move || {
-                for delay in [120u64, 130, 150] {
-                    std::thread::sleep(std::time::Duration::from_millis(delay));
-                    conduit::focus_breath();
+                if !conduit::pin_breath_focus() {
+                    eprintln!("conduit: summon could not take focus — line left unsummoned");
                 }
                 let win3 = win2.clone();
                 let _ = win2.run_on_main_thread(move || {
@@ -197,6 +198,12 @@ fn facet_command(
         "target" => {
             if !matches!(dir, Some(1) | Some(-1)) {
                 return Err("target dir must be +1 or -1".into());
+            }
+        }
+        // The dive (§Law IV): +1 descends toward the ATLAS floor, -1 surfaces.
+        "depth" => {
+            if !matches!(dir, Some(1) | Some(-1)) {
+                return Err("depth dir must be +1 or -1".into());
             }
         }
         "spawn" => {

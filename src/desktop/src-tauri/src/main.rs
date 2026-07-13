@@ -60,6 +60,21 @@ fn main() {
             // exists once the surface is realized.
             film.set_ignore_cursor_events(true)?;
 
+            // Verification hook (inert unless AEGIS_DEMO is set): drive the
+            // Facet engine's scripted materialization through the Film webview,
+            // the same eval path the Breath Line uses. Never fires in normal
+            // operation — the real Facets are born from live WS task events.
+            if std::env::var_os("AEGIS_DEMO").is_some() {
+                let film2 = film.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(1500));
+                    let film3 = film2.clone();
+                    let _ = film2.run_on_main_thread(move || {
+                        let _ = film3.eval("window.__aegis&&window.__aegis.demo()");
+                    });
+                });
+            }
+
             // The Breath Line stays a hidden surface until the Conduit summons
             // it. Unlike the Film it MUST be able to take focus — it is the one
             // place the operator types (§9: focus by summon). hide/show handles

@@ -7,11 +7,16 @@ import './facet.css';
 import { HubClient, HubStatus } from './ws';
 import { MurmurLane } from './murmur';
 import { Sigil } from './sigil';
-import { FacetManager, LedgerRow } from './facet/manager';
+import { FacetManager, LedgerRow, MonitorTask } from './facet/manager';
+import { Verb } from './facet/types';
 import { HubEnvelope, StateTransitionPayload, extractText, parseSystemState, toMurmurLine } from './types';
 
 const BACKEND = import.meta.env.AEGIS_BACKEND ?? 'ws://127.0.0.1:8000';
 const CHANNELS = ['state', 'chat', 'alert', 'familiar', 'background_events', 'agent.stream'];
+
+const tauri = (window as { __TAURI__?: any }).__TAURI__;
+const invoke: (cmd: string, args?: unknown) => Promise<unknown> =
+  tauri?.core?.invoke ?? (async () => undefined);
 
 const film = document.getElementById('film')!;
 
@@ -23,6 +28,12 @@ const sigil = new Sigil(film);
 const lane = new MurmurLane(film);
 const facets = new FacetManager(film);
 facets.expose();
+
+// Name the aimed shard back to the Breath Line, so the operator sees what a
+// verb is about to strike.
+facets.setTargetReporter((label) => {
+  void invoke('facet_targeted', { label });
+});
 
 let wasAbsent = false;
 
@@ -42,7 +53,10 @@ function onStatus(status: HubStatus): void {
 // The engine renders labor as light; here we translate the kernel's task events
 // (background_events / agent.stream) into that surface. The in-flight task
 // count drives the Weather; each event is one Ledger line.
-const activeTasks = new Set<string>();
+const activeTasks = new Map<string, MonitorTask>();
+const transcript: LedgerRow[] = [];
+let completed = 0;
+let failed = 0;
 let lastGoal = 'фонова робота';
 
 function labourText(data: Record<string, unknown>): string {
@@ -50,13 +64,16 @@ function labourText(data: Record<string, unknown>): string {
   return t ? toMurmurLine(t, 64) : '';
 }
 
-function row(tone: LedgerRow['tone'], text: string): LedgerRow {
-  return {
+function record(tone: LedgerRow['tone'], text: string): LedgerRow {
+  const r: LedgerRow = {
     id: `row-${Date.now()}-${Math.random().toString(36).slice(2, 6)}`,
     at: Date.now(),
     tone,
     text,
   };
+  transcript.push(r);
+  if (transcript.length > 60) transcript.shift();
+  return r;
 }
 
 function onAnimaEvent(type: string, data: Record<string, unknown>): void {
@@ -67,28 +84,72 @@ function onAnimaEvent(type: string, data: Record<string, unknown>): void {
   switch (type) {
     case 'task.started':
     case 'task.promoted_to_background':
-      if (taskId) activeTasks.add(taskId);
-      facets.ledgerEvent(row('task', `розпочато — ${phrase || 'задача'}`));
+      if (taskId) {
+        activeTasks.set(taskId, { id: taskId, goal: phrase || 'задача', since: Date.now() });
+      }
+      facets.ledgerEvent(record('task', `розпочато — ${phrase || 'задача'}`));
       break;
     case 'task.completed':
       if (taskId) activeTasks.delete(taskId);
-      facets.ledgerEvent(row('task', `завершено — ${phrase || 'задача'}`));
+      completed += 1;
+      facets.ledgerEvent(record('task', `завершено — ${phrase || 'задача'}`));
       break;
     case 'task.failed':
     case 'task.stopped':
     case 'task.timeout':
       if (taskId) activeTasks.delete(taskId);
-      facets.ledgerEvent(row('warn', `${type.slice(5)} — ${phrase || 'задача'}`));
+      failed += 1;
+      facets.ledgerEvent(record('warn', `${type.slice(5)} — ${phrase || 'задача'}`));
       break;
     case 'warning.issued':
-      facets.ledgerEvent(row('warn', phrase || 'попередження'));
+      facets.ledgerEvent(record('warn', phrase || 'попередження'));
       break;
     default:
       return; // observation/thinking spam stays out of the Ledger.
   }
   facets.weather(activeTasks.size, lastGoal, activeTasks.size === 0);
+  facets.updateMonitor([...activeTasks.values()]);
   sigil.spark();
 }
+
+// ── Commands routed from the Breath Line via Rust (objectives 1 + 2) ────────
+// The Film never listens to the keyboard — it only ever receives verbs that the
+// Breath Line captured locally and Rust validated against the closed allowlist.
+interface AegisCmd {
+  action: 'verb' | 'target' | 'spawn';
+  verb?: Verb;
+  dir?: 1 | -1;
+  kind?: 'log' | 'dossier' | 'monitor' | 'answer';
+  /** Material: the Feed payload, or the answer body when promoting. */
+  text?: string;
+  question?: string;
+}
+
+function dossierLines(): string[] {
+  return [
+    `у роботі: ${activeTasks.size}`,
+    `завершено: ${completed} · зірвано: ${failed}`,
+    `остання праця: ${lastGoal}`,
+    `записів у стрічці: ${transcript.length}`,
+  ];
+}
+
+(window as unknown as { __aegisCmd?: (c: AegisCmd) => void }).__aegisCmd = (cmd) => {
+  switch (cmd.action) {
+    case 'verb':
+      if (cmd.verb) facets.verbOnTarget(cmd.verb, cmd.text);
+      break;
+    case 'target':
+      if (cmd.dir) facets.cycleTarget(cmd.dir);
+      break;
+    case 'spawn':
+      if (cmd.kind === 'log') facets.spawnLog(transcript);
+      else if (cmd.kind === 'monitor') facets.spawnMonitor([...activeTasks.values()]);
+      else if (cmd.kind === 'dossier') facets.spawnDossier('ANIMA', dossierLines());
+      else if (cmd.kind === 'answer') facets.spawnAnswer(cmd.question ?? '', cmd.text ?? '');
+      break;
+  }
+};
 
 function onEnvelope(env: HubEnvelope): void {
   switch (env.channel) {

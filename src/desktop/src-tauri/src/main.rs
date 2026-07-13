@@ -35,7 +35,12 @@ fn main() {
 
     tauri::Builder::default()
         .manage(ask::AskState::from_env())
-        .invoke_handler(tauri::generate_handler![dismiss_breath, submit_breath])
+        .invoke_handler(tauri::generate_handler![
+            dismiss_breath,
+            submit_breath,
+            facet_command,
+            facet_targeted
+        ])
         .setup(|app| {
             let film = app
                 .get_webview_window("film")
@@ -161,6 +166,70 @@ fn toggle_breath(app: &AppHandle) {
             });
         }
     });
+}
+
+/// Route a Facet command from the Breath Line (the one window that owns focus)
+/// to the Facet engine in the Film. Nothing is trusted: the action, the verb and
+/// the spawn kind are each checked against a closed allowlist before anything is
+/// forwarded, so only the six verbs of §2.2 can ever reach the engine. Delivery
+/// is the proven `eval` path — no global grabs, no focus change, and the Film
+/// stays click-through throughout.
+#[tauri::command]
+fn facet_command(
+    app: AppHandle,
+    action: String,
+    verb: Option<String>,
+    dir: Option<i32>,
+    kind: Option<String>,
+    text: Option<String>,
+    question: Option<String>,
+) -> Result<(), String> {
+    const VERBS: [&str; 6] = ["approach", "recede", "pin", "feed", "cleave", "trace"];
+    const KINDS: [&str; 4] = ["log", "dossier", "monitor", "answer"];
+
+    match action.as_str() {
+        "verb" => {
+            let v = verb.as_deref().ok_or("verb missing")?;
+            if !VERBS.contains(&v) {
+                return Err(format!("unknown verb: {v}"));
+            }
+        }
+        "target" => {
+            if !matches!(dir, Some(1) | Some(-1)) {
+                return Err("target dir must be +1 or -1".into());
+            }
+        }
+        "spawn" => {
+            let k = kind.as_deref().ok_or("kind missing")?;
+            if !KINDS.contains(&k) {
+                return Err(format!("unknown facet kind: {k}"));
+            }
+        }
+        other => return Err(format!("unknown action: {other}")),
+    }
+
+    let payload = serde_json::json!({
+        "action": action, "verb": verb, "dir": dir,
+        "kind": kind, "text": text, "question": question,
+    });
+    let film = app
+        .get_webview_window("film")
+        .ok_or("film window missing")?;
+    film.eval(format!("window.__aegisCmd&&window.__aegisCmd({payload})"))
+        .map_err(|e| e.to_string())
+}
+
+/// The Film reports which shard now holds the aim; the Breath Line names it
+/// beneath the input so a verb is never fired blind.
+#[tauri::command]
+fn facet_targeted(app: AppHandle, label: Option<String>) -> Result<(), String> {
+    let breath = app
+        .get_webview_window("breath")
+        .ok_or("breath window missing")?;
+    let payload = serde_json::json!({ "label": label });
+    breath
+        .eval(format!("window.__breathTarget&&window.__breathTarget({payload})"))
+        .map_err(|e| e.to_string())
 }
 
 /// Esc from within the Breath Line — recede (Law III: never a ✕, just hide).

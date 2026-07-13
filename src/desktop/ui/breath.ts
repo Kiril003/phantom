@@ -3,6 +3,8 @@ import '@fontsource/playfair-display/400-italic.css';
 import './tokens.css';
 import './breath.css';
 
+import { parseSpawn, resolveKey } from './facet/keymap';
+
 // Vanilla IPC via withGlobalTauri — no framework, no bundle weight.
 const tauri = (window as { __TAURI__?: any }).__TAURI__;
 const invoke: (cmd: string, args?: unknown) => Promise<unknown> =
@@ -10,6 +12,7 @@ const invoke: (cmd: string, args?: unknown) => Promise<unknown> =
 
 const line = document.getElementById('line') as HTMLInputElement;
 const answer = document.getElementById('answer') as HTMLDivElement;
+const target = document.getElementById('target') as HTMLDivElement;
 line.placeholder = 'Спитай, познач, поклич…';
 
 function setMode(mode: 'idle' | 'thinking'): void {
@@ -34,37 +37,99 @@ function focusLine(): void {
 }
 (window as { __breathFocus?: () => void }).__breathFocus = focusLine;
 
+// The Film names the shard now holding the aim (§ objective 3): the operator
+// reads what a verb will strike before striking it.
+(window as unknown as { __breathTarget?: (p: { label: string | null }) => void }).__breathTarget = (
+  p,
+) => {
+  if (p?.label) {
+    target.textContent = `▸ ${p.label}`;
+    target.hidden = false;
+    // A bare textContent swap leaves stale glyphs on this software-GL webkit
+    // stack (transparent window, compositing off): the region never invalidates
+    // and the old label paints through the new one. Re-triggering the animation
+    // forces a clean repaint — and reads as the aim shifting.
+    target.classList.remove('shift');
+    void target.offsetWidth;
+    target.classList.add('shift');
+  } else {
+    target.hidden = true;
+  }
+};
+
 let inFlight = false;
+/** The last exchange, so `Enter` on an empty line can promote it to a Facet. */
+let lastQuestion = '';
 
-async function submit(): Promise<void> {
-  const text = line.value.trim();
-  if (!text || inFlight) return;
+async function ask(text: string): Promise<void> {
   inFlight = true;
-
   setMode('thinking');
   answer.hidden = false;
   answer.textContent = '…';
-
+  lastQuestion = text;
   try {
     const reply = (await invoke('submit_breath', { text })) as string;
     answer.textContent = reply?.trim() || '—';
   } catch (e) {
-    answer.textContent =
-      typeof e === 'string' && e ? e : 'Мовчання. Зв’язку немає.';
+    answer.textContent = typeof e === 'string' && e ? e : 'Мовчання. Зв’язку немає.';
   }
-
   setMode('idle');
-  // The line clears so a follow-up can be typed immediately (the Rust side
-  // threads the session); the answer stays until Esc recedes the line.
   line.value = '';
   line.focus();
   inFlight = false;
 }
 
-// Listen on the window (capture) so Esc/Enter act regardless of focus target.
+function spawn(kind: string, text?: string, question?: string): void {
+  void invoke('facet_command', { action: 'spawn', kind, text, question });
+}
+
+async function submit(): Promise<void> {
+  if (inFlight) return;
+  const text = line.value.trim();
+
+  // Empty line with an answer resting beneath it: Enter promotes that answer
+  // out of the Breath Line and into a Facet of its own (§4.2).
+  if (!text) {
+    if (!answer.hidden && answer.textContent && answer.textContent !== '…') {
+      spawn('answer', answer.textContent, lastQuestion);
+      clearAnswer();
+    }
+    return;
+  }
+
+  // `/` is the verb sigil: the line calls a Facet into being instead of asking.
+  const spawnable = parseSpawn(text);
+  if (spawnable) {
+    spawn(spawnable.kind);
+    line.value = '';
+    clearAnswer();
+    return;
+  }
+
+  await ask(text);
+}
+
+// Everything is captured *locally*, inside the one window that legitimately owns
+// focus. No global grab exists, and the Film never takes the keyboard — so the
+// host OS keeps every keystroke that isn't ours.
 window.addEventListener(
   'keydown',
   (e) => {
+    // Alt-modified keys are the Facet grammar; they never reach the text input.
+    const cmd = resolveKey(e);
+    if (cmd) {
+      e.preventDefault();
+      if (cmd.action === 'target') {
+        void invoke('facet_command', { action: 'target', dir: cmd.dir });
+      } else {
+        // Feed hands the typed line to the shard as material, then empties it.
+        const text = cmd.verb === 'feed' ? line.value.trim() : undefined;
+        void invoke('facet_command', { action: 'verb', verb: cmd.verb, text });
+        if (cmd.verb === 'feed') line.value = '';
+      }
+      return;
+    }
+
     if (e.key === 'Escape') {
       e.preventDefault();
       void invoke('dismiss_breath');

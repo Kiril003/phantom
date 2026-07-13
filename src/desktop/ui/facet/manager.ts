@@ -22,13 +22,35 @@ interface WeatherContent {
   active: number;
   phrase: string;
 }
+interface AnswerContent {
+  question: string;
+  text: string;
+}
+interface DossierContent {
+  title: string;
+  lines: string[];
+}
+export interface MonitorTask {
+  id: string;
+  goal: string;
+  since: number;
+}
+interface MonitorContent {
+  tasks: MonitorTask[];
+}
 
 const LEDGER_SIZE = { w: 360, h: 236 };
 const WEATHER_SIZE = { w: 300, h: 100 };
+const ANSWER_SIZE = { w: 380, h: 200 };
+const DOSSIER_SIZE = { w: 340, h: 200 };
+const MONITOR_SIZE = { w: 340, h: 180 };
 const LEDGER_MAX_ROWS = 8;
 const LEDGER_MORTAL_MS = 45_000;
+const ANSWER_MORTAL_MS = 90_000;
+const DOSSIER_MORTAL_MS = 90_000;
 const GHOST_FADE_MS = 12_000;
 const MORTALITY_TICK_MS = 1_000;
+const ILLUMINATE_MS = 700;
 
 let seq = 0;
 const uid = (p: string): string => `${p}-${++seq}`;
@@ -44,12 +66,23 @@ export class FacetManager {
   private readonly layer: HTMLDivElement;
   private ledgerId: string | null = null;
   private weatherId: string | null = null;
+  private monitorId: string | null = null;
+  /** The shard a keyboard verb lands on. Illuminated so the operator always
+   *  knows which glass is listening (objective 3). */
+  private targetId: string | null = null;
+  private onTarget: ((label: string | null) => void) | null = null;
 
   constructor(root: HTMLElement) {
     this.layer = document.createElement('div');
     this.layer.className = 'facet-layer';
     root.appendChild(this.layer);
     window.setInterval(() => this.sweep(), MORTALITY_TICK_MS);
+  }
+
+  /** Report the current target back to the Breath Line so it can name what it
+   *  is about to command. */
+  setTargetReporter(cb: (label: string | null) => void): void {
+    this.onTarget = cb;
   }
 
   private viewport(): Viewport {
@@ -110,6 +143,8 @@ export class FacetManager {
     this.layer.appendChild(el);
     // Born, not drawn — condense out of the Film on the next frame.
     requestAnimationFrame(() => el.classList.add('born'));
+    // The newest shard takes the aim: verbs land on what just appeared.
+    this.setTarget(state.id);
     return state.id;
   }
 
@@ -157,6 +192,62 @@ export class FacetManager {
     }
   }
 
+  // ── Targeting + illumination (objective 3) ───────────────────────────────
+
+  private setTarget(id: string | null): void {
+    const prev = this.targetId;
+    this.targetId = id && this.facets.has(id) ? id : null;
+    if (prev && prev !== this.targetId) this.render(prev);
+    if (this.targetId) this.render(this.targetId);
+    this.onTarget?.(this.targetLabel());
+  }
+
+  private targetLabel(): string | null {
+    const f = this.targetId ? this.facets.get(this.targetId) : undefined;
+    return f ? f.state.kind : null;
+  }
+
+  /** Walk the shards in materialization order. */
+  cycleTarget(dir: 1 | -1): void {
+    const ids = [...this.facets.keys()];
+    if (ids.length === 0) {
+      this.setTarget(null);
+      return;
+    }
+    const at = this.targetId ? ids.indexOf(this.targetId) : -1;
+    const next = ids[(((at + dir) % ids.length) + ids.length) % ids.length]!;
+    this.setTarget(next);
+    this.illuminate(next);
+  }
+
+  /** Apply a verb to the illuminated target — the whole point of the bridge.
+   *  Feed's material is shaped to the shard it lands on: the grammar stays
+   *  kind-agnostic, so the kind semantics live here. */
+  verbOnTarget(v: Verb, arg?: unknown): void {
+    if (!this.targetId) return;
+    const id = this.targetId;
+    const f = this.facets.get(id);
+    if (!f) return;
+    this.illuminate(id);
+    const material = v === Verb.Feed ? shapeMaterial(f.state.kind, String(arg ?? '')) : arg;
+    // Nothing sensible to give this shard — the illumination still confirms the
+    // key was heard, but the Facet is left untouched.
+    if (v === Verb.Feed && material === null) return;
+    this.verb(id, v, material);
+  }
+
+  /** A temporal luminance shift in the glass: the shard receiving the command
+   *  brightens for a beat, so a verb is never fired blindly. */
+  private illuminate(id: string): void {
+    const f = this.facets.get(id);
+    if (!f) return;
+    f.el.classList.remove('verb-hit');
+    // Reflow so the animation restarts even on a repeated verb.
+    void f.el.offsetWidth;
+    f.el.classList.add('verb-hit');
+    window.setTimeout(() => f.el.classList.remove('verb-hit'), ILLUMINATE_MS);
+  }
+
   // ── Verb application ─────────────────────────────────────────────────────
 
   verb(id: string, v: Verb, arg?: unknown): void {
@@ -192,6 +283,9 @@ export class FacetManager {
     this.facets.delete(id);
     if (this.ledgerId === id) this.ledgerId = null;
     if (this.weatherId === id) this.weatherId = null;
+    if (this.monitorId === id) this.monitorId = null;
+    // The aim never dangles on a dissolved shard.
+    if (this.targetId === id) this.setTarget([...this.facets.keys()][0] ?? null);
     this.renderGhost(ghost);
   }
 
@@ -214,7 +308,48 @@ export class FacetManager {
     const now = Date.now();
     for (const [id, f] of [...this.facets]) {
       if (isExpired(f.state, now)) this.verb(id, Verb.Recede);
+      // The monitor is a live instrument — its elapsed times tick.
+      else if (f.state.kind === 'monitor') this.render(id);
     }
+  }
+
+  // ── Spawned from the Breath Line (objective 1) ───────────────────────────
+
+  spawnAnswer(question: string, text: string): void {
+    this.materialize('answer', ANSWER_SIZE, { question, text } as AnswerContent, ANSWER_MORTAL_MS);
+  }
+
+  spawnDossier(title: string, lines: string[]): void {
+    this.materialize('dossier', DOSSIER_SIZE, { title, lines } as DossierContent, DOSSIER_MORTAL_MS);
+  }
+
+  /** The process monitor is a Fixture-grade instrument: immortal while it lives,
+   *  updated in place as tasks come and go. */
+  spawnMonitor(tasks: MonitorTask[]): void {
+    if (this.monitorId && this.facets.has(this.monitorId)) {
+      this.setTarget(this.monitorId);
+      this.updateMonitor(tasks);
+      return;
+    }
+    this.monitorId = this.materialize('monitor', MONITOR_SIZE, { tasks } as MonitorContent, null);
+  }
+
+  updateMonitor(tasks: MonitorTask[]): void {
+    if (!this.monitorId) return;
+    const f = this.facets.get(this.monitorId);
+    if (!f) return;
+    f.state = { ...f.state, content: { tasks } as MonitorContent, touchedAt: Date.now() };
+    this.render(this.monitorId);
+  }
+
+  /** `/log` pulls the recent ANIMA transcript into its own shard. */
+  spawnLog(rows: LedgerRow[]): void {
+    this.materialize(
+      'ledger',
+      LEDGER_SIZE,
+      { rows: rows.slice(-LEDGER_MAX_ROWS) } as LedgerContent,
+      LEDGER_MORTAL_MS,
+    );
   }
 
   // ── Rendering ────────────────────────────────────────────────────────────
@@ -226,7 +361,8 @@ export class FacetManager {
     el.dataset.plane = String(state.plane);
     el.classList.toggle('pinned', state.pinned);
     el.classList.toggle('tracing', state.tracing);
-    el.innerHTML = state.kind === 'ledger' ? ledgerHTML(state) : weatherHTML(state);
+    el.classList.toggle('targeted', this.targetId === state.id);
+    el.innerHTML = bodyHTML(state);
   }
 
   // ── Verification surface (inert unless invoked; used for live board test) ─
@@ -280,26 +416,105 @@ export class FacetManager {
   }
 }
 
+/** What it means to feed each kind. A Ledger takes a line of transcript, a
+ *  Dossier takes a fact; the Weather and the Monitor are instruments read from
+ *  the world, not written to by hand, and an Answer is what it was. */
+function shapeMaterial(kind: FacetKind, text: string): unknown | null {
+  const t = text.trim();
+  if (!t) return null;
+  switch (kind) {
+    case 'ledger':
+      return { id: uid('row'), at: Date.now(), tone: 'system', text: t } satisfies LedgerRow;
+    case 'dossier':
+      return t;
+    default:
+      return null;
+  }
+}
+
+function bodyHTML(s: FacetState): string {
+  switch (s.kind) {
+    case 'ledger':
+      return ledgerHTML(s);
+    case 'weather':
+      return weatherHTML(s);
+    case 'answer':
+      return answerHTML(s);
+    case 'dossier':
+      return dossierHTML(s);
+    case 'monitor':
+      return monitorHTML(s);
+  }
+}
+
+/** Every shard wears the same furniture: its name, its Fixture mark, and its
+ *  provenance thread when Traced — learning one Facet is learning all. */
+function chrome(s: FacetState, title: string): { head: string; thread: string } {
+  const fixture = s.pinned ? '<span class="facet-fixture">✦</span>' : '';
+  return {
+    head: `<div class="facet-title">${title}${fixture}</div>`,
+    thread: s.tracing ? '<div class="facet-thread"></div>' : '',
+  };
+}
+
+function answerHTML(s: FacetState): string {
+  const c = s.content as AnswerContent;
+  const { head, thread } = chrome(s, 'Answer');
+  return (
+    `${head}<div class="answer-question">${escapeHtml(c.question)}</div>` +
+    `<div class="answer-text">${escapeHtml(c.text)}</div>${thread}`
+  );
+}
+
+function dossierHTML(s: FacetState): string {
+  const c = s.content as DossierContent;
+  const { head, thread } = chrome(s, 'Dossier');
+  const lines = (c.lines ?? [])
+    .map((l) => `<div class="dossier-line">${escapeHtml(String(l))}</div>`)
+    .join('');
+  return (
+    `${head}<div class="dossier-name">${escapeHtml(c.title)}</div>` +
+    `<div class="dossier-lines">${lines}</div>${thread}`
+  );
+}
+
+function monitorHTML(s: FacetState): string {
+  const c = s.content as MonitorContent;
+  const { head, thread } = chrome(s, 'Monitor');
+  const now = Date.now();
+  const tasks = c.tasks ?? [];
+  const body = tasks.length
+    ? tasks
+        .map(
+          (t) =>
+            `<div class="monitor-row"><span class="monitor-pip"></span>` +
+            `<span class="monitor-goal">${escapeHtml(t.goal)}</span>` +
+            `<span class="monitor-age">${Math.max(0, Math.round((now - t.since) / 1000))}s</span></div>`,
+        )
+        .join('')
+    : '<div class="monitor-idle">нічого не виконується</div>';
+  return `${head}<div class="monitor-rows">${body}</div>${thread}`;
+}
+
 function ledgerHTML(s: FacetState): string {
-  const rows = (s.content as LedgerContent).rows
+  const rows = ((s.content as LedgerContent).rows ?? [])
     .map(
       (r) =>
         `<div class="ledger-row tone-${r.tone}"><span class="ledger-dot"></span>` +
         `<span class="ledger-text">${escapeHtml(r.text)}</span></div>`,
     )
     .join('');
-  const fixture = s.pinned ? '<span class="facet-fixture">✦</span>' : '';
-  const thread = s.tracing ? '<div class="facet-thread"></div>' : '';
-  return `<div class="facet-title">Ledger${fixture}</div><div class="ledger-rows">${rows}</div>${thread}`;
+  const { head, thread } = chrome(s, 'Ledger');
+  return `${head}<div class="ledger-rows">${rows}</div>${thread}`;
 }
 
 function weatherHTML(s: FacetState): string {
   const c = s.content as WeatherContent;
   const pct = Math.round(c.intensity * 100);
-  const thread = s.tracing ? '<div class="facet-thread"></div>' : '';
+  const { head, thread } = chrome(s, 'Weather');
   return (
     `<div class="weather-aurora" style="--intensity:${c.intensity}"></div>` +
-    `<div class="weather-body"><div class="facet-title">Weather</div>` +
+    `<div class="weather-body">${head}` +
     `<div class="weather-phrase">${escapeHtml(c.phrase)}</div>` +
     `<div class="weather-meter"><span style="width:${pct}%"></span></div></div>${thread}`
   );

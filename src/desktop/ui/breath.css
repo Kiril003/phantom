@@ -58,6 +58,33 @@ body {
   font-family: var(--font-serif, 'Playfair Display', Georgia, serif);
 }
 
+/* The aim: which shard the next verb will strike. One quiet word, never a
+   toolbar — the Breath Line stays a line. */
+#target {
+  align-self: flex-start;
+  padding: 0 26px;
+  font-size: 11px;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--accent, #8b5cf6);
+  opacity: 0.8;
+}
+
+#target.shift {
+  animation: target-shift 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes target-shift {
+  from {
+    opacity: 0;
+    filter: blur(4px);
+  }
+  to {
+    opacity: 0.8;
+    filter: blur(0);
+  }
+}
+
 /* The answer condenses beneath the line — the entity's own voice, serif italic
    (§4.2). No panel chrome: text on the void, like breath settling on glass. */
 #answer {

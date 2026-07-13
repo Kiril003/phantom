@@ -8,7 +8,9 @@
 export const Plane = { REALITY: 0, FILM: 1, FOCUS: 2, DEEP: 3 } as const;
 export type Plane = (typeof Plane)[keyof typeof Plane];
 
-export type FacetKind = 'ledger' | 'weather';
+/** `ledger`/`weather` are born from ANIMA's labor; `answer`/`dossier`/`monitor`
+ *  are promoted into being by the operator from the Breath Line (§4.2). */
+export type FacetKind = 'ledger' | 'weather' | 'answer' | 'dossier' | 'monitor';
 
 /** The six universal verbs (§2.2) — learning one Facet is learning all. */
 export enum Verb {

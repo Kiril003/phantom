@@ -61,6 +61,21 @@ describe('facet grammar — the six verbs', () => {
     expect(replaced.state.content).toBe('y');
   });
 
+  it('Feed grows a structured payload without gutting it', () => {
+    // Regression: feeding a raw string used to REPLACE the whole payload, so a
+    // shard's renderer then read fields that no longer existed — which threw,
+    // aborted render(), and silently swallowed the next verb.
+    const led = applyVerb(base({ content: { rows: ['a'] } }), Verb.Feed, 1, 'b');
+    if (led.kind !== 'update') throw new Error('unreachable');
+    expect(led.state.content).toEqual({ rows: ['a', 'b'] });
+
+    // A structured payload with no list to grow is left exactly as it was.
+    const monitorish = { tasks: [{ id: 't' }], intensity: 0.5 };
+    const untouched = applyVerb(base({ content: monitorish }), Verb.Feed, 1, 'junk');
+    if (untouched.kind !== 'update') throw new Error('unreachable');
+    expect(untouched.state.content).toEqual(monitorish);
+  });
+
   it('Cleave spawns a distinct, unpinned sibling', () => {
     const r = applyVerb(base({ pinned: true }), Verb.Cleave, 1, 'shard');
     expect(r.kind).toBe('spawn');

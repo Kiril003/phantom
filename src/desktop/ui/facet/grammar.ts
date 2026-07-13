@@ -87,7 +87,17 @@ export function isExpired(state: FacetState, now: number): boolean {
   );
 }
 
+/** Feed grows a Facet; it must never gut it. A bare list gains an item, a
+ *  structured payload gains a row in whichever list it keeps, and anything else
+ *  is replaced. Clobbering a structured shard with a raw string would leave the
+ *  renderer reading fields that no longer exist. */
 function feed(content: unknown, material: unknown): unknown {
+  if (material === undefined || material === null) return content;
   if (Array.isArray(content)) return [...content, material];
-  return material ?? content;
+  if (content && typeof content === 'object') {
+    const c = content as Record<string, unknown>;
+    const list = ['rows', 'lines'].find((k) => Array.isArray(c[k]));
+    return list ? { ...c, [list]: [...(c[list] as unknown[]), material] } : content;
+  }
+  return material;
 }

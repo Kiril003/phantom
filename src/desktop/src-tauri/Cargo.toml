@@ -12,6 +12,8 @@ tauri-build = { version = "2", features = [] }
 tauri = { version = "2", features = [] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+# Loopback-only HTTP to the co-located backend; no TLS backend pulled in.
+reqwest = { version = "0.12", default-features = false, features = ["json"] }
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18"

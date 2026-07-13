@@ -35,7 +35,7 @@
         "title": "Breath Line",
         "url": "breath.html",
         "width": 900,
-        "height": 220,
+        "height": 600,
         "center": true,
         "visible": false,
         "transparent": true,

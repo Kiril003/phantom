@@ -2,25 +2,37 @@
 html,
 body {
   margin: 0;
+  min-height: 100vh;
   width: 100vw;
-  height: 100vh;
   overflow: hidden;
   background: transparent;
   user-select: none;
 }
 
-#breath {
-  position: fixed;
-  inset: 0;
+/* The window is a fixed, fully-transparent slab (tauri.conf) — only the glass
+   line and its answer are ever visible, so there is no resize and thus no
+   configure event for mutter to steal focus on. The line is anchored at a
+   stable height; the answer condenses directly beneath it. */
+body {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  justify-content: center;
-  padding: 0 8vw;
+  justify-content: flex-start;
+  padding: 190px 8vw 0;
+  box-sizing: border-box;
+}
+
+#breath {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  max-width: 720px;
 }
 
 #line {
   width: 100%;
-  max-width: 720px;
   padding: 18px 26px;
   border: 1px solid var(--accent, #8b5cf6);
   border-radius: 18px;
@@ -44,5 +56,59 @@ body {
   color: var(--ink-muted, #64748b);
   font-style: italic;
   font-family: var(--font-serif, 'Playfair Display', Georgia, serif);
+}
+
+/* The answer condenses beneath the line — the entity's own voice, serif italic
+   (§4.2). No panel chrome: text on the void, like breath settling on glass. */
+#answer {
+  width: 100%;
+  padding: 2px 26px 6px;
+  box-sizing: border-box;
+  max-height: 340px;
+  overflow-y: auto;
+  color: var(--ink-secondary, #94a3b8);
+  font-family: var(--font-serif, 'Playfair Display', Georgia, serif);
+  font-style: italic;
+  font-size: 19px;
+  line-height: 1.55;
+  letter-spacing: 0.01em;
+  text-align: left;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  /* Arrive with a focus-pull from blur, the murmur physics (§3.3). */
+  animation: answer-condense 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes answer-condense {
+  from {
+    opacity: 0;
+    filter: blur(6px);
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+    transform: none;
+  }
+}
+
+/* Thinking: the line quiets and the nascent answer breathes until it lands. */
+body[data-mode='thinking'] #line {
+  opacity: 0.7;
+}
+
+body[data-mode='thinking'] #answer {
+  color: var(--ink-muted, #64748b);
+  animation: answer-pulse 1.2s ease-in-out infinite;
+}
+
+@keyframes answer-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 0.8;
+  }
 }
 

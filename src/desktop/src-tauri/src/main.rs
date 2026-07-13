@@ -1,11 +1,20 @@
 #![cfg_attr(all(not(debug_assertions), target_os = "windows"), windows_subsystem = "windows")]
 
+mod ask;
 mod conduit;
 mod overlay;
+
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use tauri::{AppHandle, Manager, PhysicalPosition, PhysicalSize};
 
 use conduit::ConduitEvent;
+
+/// Whether the Breath Line is currently summoned. The startup pre-warm maps the
+/// window off-screen for ~1.2s, which pollutes `is_visible()` — so summon state
+/// is tracked explicitly here and is the single source of truth for the tap
+/// toggle, the Esc dismiss, and the pre-warm's own deferred hide.
+static SUMMONED: AtomicBool = AtomicBool::new(false);
 
 fn main() {
     // webkitgtk's dmabuf renderer blanks the webview on software-GL stacks
@@ -25,6 +34,7 @@ fn main() {
     }
 
     tauri::Builder::default()
+        .manage(ask::AskState::from_env())
         .invoke_handler(tauri::generate_handler![dismiss_breath, submit_breath])
         .setup(|app| {
             let film = app
@@ -65,11 +75,15 @@ fn main() {
                 let handle = app.handle().clone();
                 std::thread::spawn(move || {
                     std::thread::sleep(std::time::Duration::from_millis(1200));
-                    if let Some(b) = handle.get_webview_window("breath") {
-                        let b2 = b.clone();
-                        let _ = b.run_on_main_thread(move || {
-                            let _ = b2.hide();
-                        });
+                    // If the operator summoned during the warm-up window, leave
+                    // it up — hiding now would swallow their summon.
+                    if !SUMMONED.load(Ordering::Acquire) {
+                        if let Some(b) = handle.get_webview_window("breath") {
+                            let b2 = b.clone();
+                            let _ = b.run_on_main_thread(move || {
+                                let _ = b2.hide();
+                            });
+                        }
                     }
                 });
             }
@@ -107,9 +121,10 @@ fn toggle_breath(app: &AppHandle) {
         return;
     };
     let _ = app.run_on_main_thread(move || {
-        if win.is_visible().unwrap_or(false) {
+        if SUMMONED.swap(false, Ordering::AcqRel) {
             let _ = win.hide();
         } else {
+            SUMMONED.store(true, Ordering::Release);
             let _ = win.center();
             let _ = win.show();
             let _ = win.set_focus();
@@ -136,16 +151,22 @@ fn toggle_breath(app: &AppHandle) {
 /// Esc from within the Breath Line — recede (Law III: never a ✕, just hide).
 #[tauri::command]
 fn dismiss_breath(window: tauri::WebviewWindow) {
+    SUMMONED.store(false, Ordering::Release);
     let _ = window.hide();
 }
 
-/// Enter in the Breath Line. Stratum 1 records the intent and recedes; the
-/// answer-in-place pipeline (§4.2) lands in the next step.
+/// Enter in the Breath Line (§4.2): ask, and return the answer text to render
+/// beneath the line. The window stays — only `Esc`/`dismiss_breath` recedes it
+/// (Law III). An empty line is a no-op. Errors surface as a message the glass
+/// can show, never a crash.
 #[tauri::command]
-fn submit_breath(text: String, window: tauri::WebviewWindow) {
+async fn submit_breath(
+    text: String,
+    state: tauri::State<'_, ask::AskState>,
+) -> Result<String, String> {
     let trimmed = text.trim();
-    if !trimmed.is_empty() {
-        println!("[breath] {trimmed}");
+    if trimmed.is_empty() {
+        return Ok(String::new());
     }
-    let _ = window.hide();
+    state.ask(trimmed).await
 }

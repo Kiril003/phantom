@@ -112,9 +112,16 @@ class PhantomConfig(BaseSettings):
     ai_anthropic_model: str = "claude-3-7-sonnet-20250219"
     ai_anthropic_api_key: str = ""
     
-    ai_ollama_model: str = "llama3.1:8b" # Upgraded from 3b just in case
-    ai_ollama_host: str = "http://localhost:11434"
-    ai_ollama_num_ctx: int = 32768
+    # The Memory Covenant (src/ollama-covenant): local inference is a guest in
+    # this board's 11 GB, not a resident. The proxy forces keep_alive=0 and a
+    # num_ctx ceiling on every request; pointing the host at it means the
+    # covenant binds even if these values drift.
+    #   - 8b was configured but never installed, so the fallback could not load
+    #     at all (a chat that fell back simply hung). 3b is installed and fits.
+    #   - 32768 ctx was the ballooning case: the KV cache grows with the window.
+    ai_ollama_model: str = "llama3.2:3b"
+    ai_ollama_host: str = "http://127.0.0.1:11435"
+    ai_ollama_num_ctx: int = 4096
     
     ai_temperature: float = 0.7
     ai_max_tokens: int = 4096

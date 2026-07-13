@@ -1,0 +1,27 @@
+[package]
+name = "ollama-covenant"
+version = "0.1.0"
+edition = "2021"
+description = "Memory Covenant — enforces auto-unload + a context ceiling on local Ollama inference"
+license = "UNLICENSED"
+
+[dependencies]
+tokio = { version = "1", features = ["rt", "macros", "net", "time"] }
+hyper = { version = "1", features = ["server", "http1"] }
+hyper-util = { version = "0.1", features = ["tokio"] }
+http-body-util = "0.1"
+# Loopback HTTP only — no TLS backend pulled in.
+reqwest = { version = "0.12", default-features = false, features = ["json", "stream"] }
+serde_json = "1"
+bytes = "1"
+futures-util = "0.3"
+
+# The board is RAM-starved; debuginfo is the biggest build-memory cost.
+[profile.dev]
+debug = 0
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+strip = true
+opt-level = "s"

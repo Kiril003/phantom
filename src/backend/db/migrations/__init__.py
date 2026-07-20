@@ -18,7 +18,15 @@ logger = logging.getLogger(__name__)
 
 
 async def apply_pending(engine) -> list[str]:
-    """Run every numbered migration in this package, in order. Returns names applied."""
+    """Run every numbered migration in this package, in order.
+
+    Rebuild P1: FAIL-CLOSED. A failing migration raises RuntimeError and
+    the caller (init_db) refuses to boot — the previous swallow-and-warn
+    behaviour let the daemon serve a half-migrated schema. This runner is
+    now only invoked once per legacy DB, to bring it to the Alembic
+    baseline (see db/database.init_db); new schema changes go into
+    db/alembic/versions/.
+    """
     applied: list[str] = []
     names = sorted(
         name
@@ -33,5 +41,8 @@ async def apply_pending(engine) -> list[str]:
                     await module.apply(conn)
                     applied.append(name)
             except Exception as exc:
-                logger.warning("migration %s failed (continuing): %s", name, exc)
+                raise RuntimeError(
+                    f"legacy migration {name} failed — refusing to boot on a "
+                    f"half-migrated schema: {exc}"
+                ) from exc
     return applied

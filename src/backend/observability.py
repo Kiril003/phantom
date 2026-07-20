@@ -580,6 +580,18 @@ def _register_observability(app: FastAPI) -> None:
         checks: dict[str, dict[str, Any]] = {}
         db_ok, db_detail = await _probe_db()
         checks["db"] = {"ok": db_ok, "detail": db_detail}
+        # Rebuild P1 — schema version gate: not-at-head means a missed or
+        # failed migration (or a newer DB opened by an older build); the
+        # instance must not take traffic.
+        try:
+            from db.database import get_schema_status
+            schema = await get_schema_status()
+            checks["schema"] = {
+                "ok": schema["at_head"],
+                "detail": f"{schema['current'] or 'unstamped'} (head: {schema['head']})",
+            }
+        except Exception as exc:  # noqa: BLE001
+            checks["schema"] = {"ok": False, "detail": f"schema: {type(exc).__name__}"}
         chroma_ok, chroma_detail = await _probe_chroma()
         checks["chroma"] = {"ok": chroma_ok, "detail": chroma_detail}
         ai_ok, ai_detail = _probe_ai_provider()

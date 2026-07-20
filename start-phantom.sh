@@ -3,7 +3,7 @@
 # Usage: ./start-phantom.sh
 
 set -e
-PROJECT="$HOME/programming/my_own/phantom_ai/PHANTOM_OS_BLUEPRINT/phantom-os"
+PROJECT="$HOME/phantom_ai/PHANTOM_OS_BLUEPRINT/phantom-os"
 
 echo "==> Stopping old processes..."
 pkill -9 -f "uvicorn main:app" 2>/dev/null || true

@@ -13,9 +13,13 @@ as `audio/wav` without re-encoding.
 from __future__ import annotations
 
 import asyncio
+import importlib.util
 import io
 import logging
 import os
+import subprocess
+import sys
+import tempfile
 import wave
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
@@ -134,27 +138,48 @@ def _find_any_piper_model() -> Optional[Path]:
 
 class PiperTTSProvider(TTSProvider):
     """
-    Piper-TTS via its Python bindings. Per-voice models are cached so a
-    settings change from one voice to another doesn't leak memory: we
-    keep exactly ONE voice alive, evicting on change.
+    Piper-TTS invoked as an external CLI subprocess — never imported
+    in-process.
+
+    LEGAL (master-plan P0): piper-tts (the `piper1-gpl` distribution on
+    PyPI) is GPL-3.0-or-later. Loading it into this process via
+    `import piper` would make this proprietary backend a derivative
+    work subject to the GPL. Shelling out to `python -m piper` as a
+    separate OS process is mere aggregation and carries no copyleft
+    obligation. DO NOT add `import piper` / `from piper import ...`
+    anywhere in this file (or elsewhere in the codebase) — the CLI via
+    `subprocess` is the only permitted integration point.
+
+    Known cost: every call spawns a fresh `python -m piper` process,
+    so each synthesis pays full model load time (~0.5-2s) in addition
+    to inference, since nothing is kept warm between calls. A
+    persistent-subprocess pool (or a swap to a non-GPL engine such as
+    Supertonic-3) is tracked as a later milestone; this provider trades
+    some latency for license safety today.
     """
     name = "piper"
 
     def __init__(self) -> None:
-        try:
-            from piper import PiperVoice  # noqa: F401
-        except Exception as exc:
-            raise RuntimeError(f"piper-tts not importable: {exc}") from exc
+        if importlib.util.find_spec("piper") is None:
+            # Spec lookup only checks importability — it does not execute
+            # or link the GPL package, so this stays subprocess-safe.
+            raise RuntimeError("piper-tts is not installed (no 'piper' module found)")
         self._voice_path: Optional[Path] = None
-        self._voice = None  # PiperVoice instance
+        self._resolved_for: Optional[str] = None  # cache key: last requested voice name
 
-    def _ensure_voice(self, requested: str):
-        from piper import PiperVoice
+    def _resolve_voice(self, requested: str) -> Path:
+        """Resolve `requested` to an on-disk .onnx model path, with the
+        same fallback chain as before. The resolved path is cached
+        against the requested voice name so repeated calls for the same
+        voice don't re-scan the filesystem."""
+        if self._voice_path is not None and self._resolved_for == requested:
+            return self._voice_path
+
         path = _resolve_piper_model(requested)
         if path is None and requested != config.voice_tts_voice:
             logger.warning("Voice %s not found, falling back to default %s", requested, config.voice_tts_voice)
             path = _resolve_piper_model(config.voice_tts_voice)
-        
+
         if path is None:
             # Phase 13 — Extreme Resilience
             # If default is also missing, try English fallback, then Ukrainian fallback specifically
@@ -175,41 +200,53 @@ class PiperTTSProvider(TTSProvider):
                 "Voice subsystem is non-functional. "
                 "Please install at least one .onnx model to ~/piper-voices/"
             )
-        
-        if self._voice_path == path and self._voice is not None:
-            return self._voice
-        logger.info("Loading Piper voice %s", path)
-        try:
-            self._voice = PiperVoice.load(str(path))
-            self._voice_path = path
-        except Exception as exc:
-            logger.error("Failed to load Piper model %s: %s", path, exc)
-            # If loading failed, invalidate path so we don't retry same failure
-            self._voice_path = None
-            self._voice = None
-            raise
-        return self._voice
+
+        self._voice_path = path
+        self._resolved_for = requested
+        return path
 
     async def synthesize(self, text: str, voice: str, speed: float) -> TTSResult:
         return await asyncio.to_thread(self._synthesize_sync, text, voice, speed)
 
     def _synthesize_sync(self, text: str, voice: str, speed: float) -> TTSResult:
-        from piper.config import SynthesisConfig
-        v = self._ensure_voice(voice)
+        model_path = self._resolve_voice(voice)
         # Piper's length_scale maps inversely to "speed" — >1 slower, <1 faster.
         # We present speed in the UI (1.0 = natural), so convert.
         length_scale = 1.0 / max(speed, 0.1)
-        syn_cfg = SynthesisConfig(length_scale=length_scale)
 
-        buf = io.BytesIO()
-        with wave.open(buf, "wb") as wav_file:
-            v.synthesize_wav(text, wav_file, syn_config=syn_cfg)
-        data = buf.getvalue()
+        tmp_file = tempfile.NamedTemporaryFile(suffix=".wav", delete=False)
+        tmp_path = Path(tmp_file.name)
+        tmp_file.close()
+        try:
+            proc = subprocess.run(
+                [
+                    sys.executable, "-m", "piper",
+                    "-m", str(model_path),
+                    "--output-file", str(tmp_path),
+                    "--length-scale", str(length_scale),
+                ],
+                input=text,
+                text=True,
+                capture_output=True,
+                timeout=120,
+            )
+            if proc.returncode != 0:
+                stderr_tail = (proc.stderr or "").strip()[-2000:]
+                raise RuntimeError(
+                    f"piper subprocess exited with code {proc.returncode}: {stderr_tail}"
+                )
 
-        # Pull the sample rate back out of the WAV header so clients know
-        # what they're playing.
-        with wave.open(io.BytesIO(data), "rb") as rb:
-            sr = rb.getframerate()
+            data = tmp_path.read_bytes()
+            # Pull the sample rate back out of the WAV header so clients
+            # know what they're playing.
+            with wave.open(io.BytesIO(data), "rb") as rb:
+                sr = rb.getframerate()
+        finally:
+            try:
+                tmp_path.unlink()
+            except OSError:
+                pass
+
         return TTSResult(
             audio_wav=data,
             sample_rate=sr,

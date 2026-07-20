@@ -55,6 +55,25 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: true,
+    rollupOptions: {
+      output: {
+        // Split heavy libraries into their own cacheable chunks. Combined
+        // with lazy-loading their sole consumers (three.js via
+        // PhantomFamiliar, maplibre via MapLayout, recharts/d3 via the
+        // Dialogue chat renderers), this keeps the entry chunk lean and
+        // lets a chat with no charts never download recharts/d3.
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+          if (id.match(/[\\/]node_modules[\\/](three|@react-three)[\\/]/)) return 'vendor-three';
+          if (id.match(/[\\/]node_modules[\\/](recharts|d3-|d3[\\/]|victory-)/)) return 'vendor-charts';
+          if (id.includes('@codesandbox/sandpack')) return 'vendor-sandpack';
+          if (id.includes('maplibre-gl')) return 'vendor-maplibre';
+          if (id.includes('framer-motion')) return 'vendor-motion';
+          if (id.match(/[\\/]node_modules[\\/](onnxruntime-web|@ricky0123)/)) return 'vendor-voice';
+          return undefined;
+        },
+      },
+    },
   },
   test: {
     globals: true,

@@ -10,13 +10,22 @@ import { useSystemStore } from '../stores/systemStore';
 import { SystemState } from '@shared/types';
 import { geolocationService, BrowserGeolocationService } from '../services/geolocation';
 import { ToolsOverlay } from '../components/tools/ToolsOverlay';
-import { WillPanel } from '../components/agent/workspace/WillPanel';
+// Lazy: WillPanel statically pulls recharts (~170 kB gz). It's mounted at
+// App root but only rendered when willOpen — lazy keeps the charts vendor
+// chunk out of the initial load.
+const WillPanel = React.lazy(() =>
+  import('../components/agent/workspace/WillPanel').then((m) => ({ default: m.WillPanel })),
+);
 import { IntelligenceHub } from '../components/intelligence/IntelligenceHub';
 import { useUIStore } from '../stores/uiStore';
 import { useFamiliarTriggers } from '../hooks/useFamiliarTriggers';
 import { useAuthStore } from '../stores/authStore';
 import { FamiliarReactor } from '../components/familiar/FamiliarReactor';
-import { PhantomFamiliar } from '../components/familiar/PhantomFamiliar';
+// Lazy: PhantomFamiliar is the ONLY consumer of three.js/@react-three at
+// App root — eager-importing it pulled the whole 3D stack (~600 kB) into
+// the entry chunk. Lazy + Suspense(null) defers it to an async chunk so
+// first paint never pays for the familiar.
+const PhantomFamiliar = React.lazy(() => import('../components/familiar/PhantomFamiliar'));
 import { ToastRail } from '../components/core/ToastRail';
 
 function GlobalGeolocationManager() {
@@ -173,7 +182,9 @@ export function App() {
             <ToastRail />
             <FamiliarTriggers />
             <FamiliarReactor />
-            <PhantomFamiliar />
+            <React.Suspense fallback={null}>
+              <PhantomFamiliar />
+            </React.Suspense>
             <ToolsOverlayMount />
             <WillPanelMount />
             <IntelligenceHubMount />
@@ -198,8 +209,10 @@ function WillPanelMount() {
           transition={{ duration: 0.3, ease: 'easeOut' }}
           className="absolute right-4 top-[84px] bottom-[84px] w-[360px] z-[100]"
         >
-          <WillPanel />
-          <button 
+          <React.Suspense fallback={null}>
+            <WillPanel />
+          </React.Suspense>
+          <button
             onClick={() => setOpen(false)}
             className="absolute top-4 right-4 p-2 hover:bg-black/5 rounded-full transition-colors z-10"
           >

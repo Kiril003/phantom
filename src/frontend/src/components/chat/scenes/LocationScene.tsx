@@ -7,6 +7,7 @@
  * unrecognised stops.
  */
 import type { LocationSceneData, LocationStopKind } from '@shared/types';
+import { PhantomIcon } from '../../core/PhantomIcon';
 
 interface LocationSceneProps {
   data: LocationSceneData;
@@ -37,9 +38,7 @@ export function LocationScene({ data }: LocationSceneProps) {
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span className="msym" aria-hidden style={{ fontSize: 14, color: 'var(--primary-deep)' }}>
-            map
-          </span>
+          <PhantomIcon name="map" size={14} color="var(--primary-deep)" aria-hidden />
           <span className="eyebrow-amber">LOCATION · {data.window_display.toUpperCase()}</span>
         </div>
         <span
@@ -66,13 +65,7 @@ export function LocationScene({ data }: LocationSceneProps) {
                 border: '1px solid rgba(0,0,0,0.04)',
               }}
             >
-              <span
-                className="msym"
-                aria-hidden
-                style={{ fontSize: 16, color: k.tint, flexShrink: 0 }}
-              >
-                {k.icon}
-              </span>
+              <PhantomIcon name={k.icon} size={16} color={k.tint} style={{ flexShrink: 0 }} aria-hidden />
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div
                   style={{
@@ -111,9 +104,7 @@ export function LocationScene({ data }: LocationSceneProps) {
             gap: 8,
           }}
         >
-          <span className="msym" aria-hidden style={{ fontSize: 14, color: 'var(--coral)' }}>
-            visibility_off
-          </span>
+          <PhantomIcon name="visibility_off" size={14} color="var(--coral)" aria-hidden />
           <span style={{ fontSize: 10, color: 'var(--ink-secondary)' }}>
             {data.unknowns} unrecognised stop{data.unknowns === 1 ? '' : 's'} — label or seal?
           </span>

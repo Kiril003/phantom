@@ -18,6 +18,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore } from '../../stores/authStore';
+import { PhantomIcon } from '../core/PhantomIcon';
 
 const API_PREFIX = '/api/v1';
 
@@ -198,9 +199,7 @@ export function TimerManager() {
             gap: 6,
           }}
         >
-          <span className="msym" aria-hidden style={{ fontSize: 16 }}>
-            {showNew ? 'close' : 'add'}
-          </span>
+          <PhantomIcon name={showNew ? 'close' : 'add'} size={16} aria-hidden />
           {showNew ? 'Скасувати' : 'Новий'}
         </button>
       </div>
@@ -328,13 +327,13 @@ function TimerRow({
         border: `1px solid ${expired ? 'rgba(239,68,68,0.32)' : 'rgba(244,175,37,0.32)'}`,
       }}
     >
-      <span
-        className="msym"
+      <PhantomIcon
+        name={expired ? 'notifications_active' : 'timer'}
+        size={22}
+        color={tint}
+        style={{ flexShrink: 0 }}
         aria-hidden
-        style={{ fontSize: 22, color: tint, flexShrink: 0 }}
-      >
-        {expired ? 'notifications_active' : 'timer'}
-      </span>
+      />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
           style={{
@@ -572,7 +571,7 @@ function RowButton({
         opacity: disabled ? 0.4 : 1,
       }}
     >
-      <span className="msym" aria-hidden style={{ fontSize: 18 }}>{icon}</span>
+      <PhantomIcon name={icon} size={18} aria-hidden />
     </button>
   );
 }

@@ -10,6 +10,7 @@
  * Pure render. The full BSSID is never displayed — privacy guarded.
  */
 import type { WardrivingSceneData, WardrivingSecurity } from '@shared/types';
+import { PhantomIcon } from '../../core/PhantomIcon';
 
 interface WardrivingSceneProps {
   data: WardrivingSceneData;
@@ -50,9 +51,7 @@ export function WardrivingScene({ data }: WardrivingSceneProps) {
       />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 8 }}>
-        <span className="msym" aria-hidden style={{ fontSize: 16, color: 'var(--primary-deep)' }}>
-          cell_tower
-        </span>
+        <PhantomIcon name="cell_tower" size={16} color="var(--primary-deep)" aria-hidden />
         <span className="eyebrow-amber" style={{ fontSize: 10 }}>
           WARDRIVING · {data.window_display.toUpperCase()} · {data.area_display.toUpperCase()}
         </span>

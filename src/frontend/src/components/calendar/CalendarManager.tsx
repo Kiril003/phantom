@@ -19,6 +19,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore } from '../../stores/authStore';
+import { PhantomIcon } from '../core/PhantomIcon';
 
 const API_PREFIX = '/api/v1';
 
@@ -342,7 +343,7 @@ function Header({
             gap: 6,
           }}
         >
-          <span className="msym" aria-hidden style={{ fontSize: 16 }}>add</span>
+          <PhantomIcon name="add" size={16} aria-hidden />
           Подія
         </button>
       </div>
@@ -366,7 +367,7 @@ function NavButton({ icon, label, onClick }: { icon: string; label: string; onCl
         cursor: 'pointer',
       }}
     >
-      <span className="msym" aria-hidden style={{ fontSize: 20 }}>{icon}</span>
+      <PhantomIcon name={icon} size={20} aria-hidden />
     </button>
   );
 }
@@ -577,7 +578,7 @@ function DayPanel({
           gap: 6,
         }}
       >
-        <span className="msym" aria-hidden style={{ fontSize: 16 }}>add</span>
+        <PhantomIcon name="add" size={16} aria-hidden />
         Нова подія
       </button>
     </div>
@@ -686,7 +687,7 @@ function EventEditor({ mode, initial, onClose, onSubmit, onDelete }: EventEditor
               cursor: 'pointer',
             }}
           >
-            <span className="msym" aria-hidden style={{ fontSize: 16 }}>close</span>
+            <PhantomIcon name="close" size={16} aria-hidden />
           </button>
         </div>
 

@@ -15,6 +15,7 @@
  */
 import { useMemo, useEffect, useState } from 'react';
 import type { TimerSceneData } from '@shared/types';
+import { PhantomIcon } from '../../core/PhantomIcon';
 
 const RING_RADIUS = 56;
 const RING_CIRCUMFERENCE = 2 * Math.PI * RING_RADIUS;
@@ -88,9 +89,7 @@ export function TimerScene({ data }: TimerSceneProps) {
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span className="msym" aria-hidden style={{ fontSize: 14, color: 'var(--primary-deep)' }}>
-            timer
-          </span>
+          <PhantomIcon name="timer" size={14} color="var(--primary-deep)" aria-hidden />
           <span className="eyebrow-amber">TIMER · {data.label.toUpperCase()}</span>
         </div>
         <span
@@ -294,9 +293,7 @@ function ActionButton({
         fontFamily: 'var(--font-display)',
       }}
     >
-      <span className="msym" aria-hidden style={{ fontSize: 12 }}>
-        {icon}
-      </span>
+      <PhantomIcon name={icon} size={12} aria-hidden />
       {children}
     </button>
   );

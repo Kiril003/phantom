@@ -11,6 +11,7 @@
  * to wire keyboard/voice via the floating toolbar.
  */
 import type { FilesSceneData, FilesIconKey, FilesTone, FilesMatch } from '@shared/types';
+import { PhantomIcon } from '../../core/PhantomIcon';
 
 interface FilesSceneProps {
   data: FilesSceneData;
@@ -54,9 +55,7 @@ export function FilesScene({ data }: FilesSceneProps) {
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span className="msym" aria-hidden style={{ fontSize: 14, color: 'var(--primary-deep)' }}>
-            folder_open
-          </span>
+          <PhantomIcon name="folder_open" size={14} color="var(--primary-deep)" aria-hidden />
           <span className="eyebrow-amber">
             FILES · {data.root_display.toUpperCase()} · {data.total_matches} MATCHES
           </span>
@@ -72,18 +71,14 @@ export function FilesScene({ data }: FilesSceneProps) {
             border: '1px solid rgba(255,255,255,0.55)',
           }}
         >
-          <span className="msym" aria-hidden style={{ fontSize: 11, color: 'var(--ink-muted)' }}>
-            search
-          </span>
+          <PhantomIcon name="search" size={11} color="var(--ink-muted)" aria-hidden />
           <span
             className="playfair"
             style={{ fontSize: 10, fontStyle: 'italic', color: 'var(--ink-muted)' }}
           >
             {data.filter_placeholder ?? 'filter…'}
           </span>
-          <span className="msym" aria-hidden style={{ fontSize: 10, color: 'var(--primary-deep)' }}>
-            mic
-          </span>
+          <PhantomIcon name="mic" size={10} color="var(--primary-deep)" aria-hidden />
         </div>
       </div>
 
@@ -129,9 +124,7 @@ export function FilesScene({ data }: FilesSceneProps) {
                   border: '1px solid rgba(255,255,255,0.4)',
                 }}
               >
-                <span className="msym" aria-hidden style={{ fontSize: 24, color: tone.icon }}>
-                  {icon}
-                </span>
+                <PhantomIcon name={icon} size={24} color={tone.icon} aria-hidden />
               </div>
               <div
                 style={{
@@ -196,9 +189,7 @@ export function FilesScene({ data }: FilesSceneProps) {
             gap: 8,
           }}
         >
-          <span className="msym" aria-hidden style={{ fontSize: 11, color: 'var(--primary-deep)' }}>
-            auto_awesome
-          </span>
+          <PhantomIcon name="auto_awesome" size={11} color="var(--primary-deep)" aria-hidden />
           <span
             className="playfair"
             style={{
@@ -210,9 +201,7 @@ export function FilesScene({ data }: FilesSceneProps) {
           >
             “{data.ai_note}”
           </span>
-          <span className="msym" aria-hidden style={{ fontSize: 13, color: 'var(--primary-deep)' }}>
-            check_circle
-          </span>
+          <PhantomIcon name="check_circle" size={13} color="var(--primary-deep)" aria-hidden />
         </div>
       )}
     </div>

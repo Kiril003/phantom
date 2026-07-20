@@ -8,6 +8,7 @@ import { SystemState } from '@shared/types';
 import { OledEyePreview } from './OledEyePreview';
 import { ChromeHandle } from './ChromeHandle';
 import { useChromeCollapse } from '../../hooks/useChromeCollapse';
+import { PhantomIcon } from './PhantomIcon';
 
 import { useSettingsStore } from '../../stores/settingsStore';
 
@@ -61,18 +62,7 @@ function MSym({
   color?: string;
 }) {
   return (
-    <span
-      className="msym"
-      aria-hidden
-      style={{
-        fontSize: size,
-        lineHeight: 1,
-        color,
-        fontVariationSettings: `'FILL' ${fill}, 'wght' ${weight}, 'GRAD' 0, 'opsz' 24`,
-      }}
-    >
-      {name}
-    </span>
+    <PhantomIcon name={name} size={size} weight={weight} filled={fill === 1} color={color} aria-hidden />
   );
 }
 

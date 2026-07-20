@@ -7,6 +7,7 @@
  * nudge when `ripe_for_cleanup > 0`.
  */
 import type { CheckpointSceneData } from '@shared/types';
+import { PhantomIcon } from '../../core/PhantomIcon';
 
 interface CheckpointSceneProps {
   data: CheckpointSceneData;
@@ -33,9 +34,7 @@ export function CheckpointScene({ data }: CheckpointSceneProps) {
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span className="msym" aria-hidden style={{ fontSize: 14, color: 'var(--primary-deep)' }}>
-            save
-          </span>
+          <PhantomIcon name="save" size={14} color="var(--primary-deep)" aria-hidden />
           <span className="eyebrow-amber">CHECKPOINT · {data.checkpoint_id}</span>
         </div>
         <span
@@ -85,17 +84,13 @@ export function CheckpointScene({ data }: CheckpointSceneProps) {
               fontSize: 11,
             }}
           >
-            <span
-              className="msym"
+            <PhantomIcon
+              name={inc.included ? 'check_circle' : 'remove_circle_outline'}
+              size={14}
+              color={inc.included ? 'var(--primary)' : 'var(--ink-muted)'}
+              style={{ opacity: inc.included ? 1 : 0.5 }}
               aria-hidden
-              style={{
-                fontSize: 14,
-                color: inc.included ? 'var(--primary)' : 'var(--ink-muted)',
-                opacity: inc.included ? 1 : 0.5,
-              }}
-            >
-              {inc.included ? 'check_circle' : 'remove_circle_outline'}
-            </span>
+            />
             <span
               style={{
                 color: inc.included ? 'var(--ink-secondary)' : 'var(--ink-muted)',

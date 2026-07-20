@@ -9,6 +9,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore } from '../../stores/authStore';
+import { PhantomIcon } from '../core/PhantomIcon';
 
 const API_PREFIX = '/api/v1';
 
@@ -157,9 +158,7 @@ export function AlarmManager() {
             gap: 6,
           }}
         >
-          <span className="msym" aria-hidden style={{ fontSize: 16 }}>
-            {showNew ? 'close' : 'add'}
-          </span>
+          <PhantomIcon name={showNew ? 'close' : 'add'} size={16} aria-hidden />
           {showNew ? 'Скасувати' : 'Новий'}
         </button>
       </div>
@@ -248,16 +247,12 @@ function AlarmRow({
         opacity: alarm.active ? 1 : 0.55,
       }}
     >
-      <span
-        className="msym"
+      <PhantomIcon
+        name="alarm"
+        size={22}
+        color={alarm.active ? 'var(--primary, #f4af25)' : 'var(--ink-muted)'}
         aria-hidden
-        style={{
-          fontSize: 22,
-          color: alarm.active ? 'var(--primary, #f4af25)' : 'var(--ink-muted)',
-        }}
-      >
-        alarm
-      </span>
+      />
       <div style={{ flex: 1, minWidth: 0 }}>
         <div
           className="tabular"
@@ -290,7 +285,7 @@ function AlarmRow({
           cursor: busy ? 'not-allowed' : 'pointer',
         }}
       >
-        <span className="msym" aria-hidden style={{ fontSize: 18 }}>delete</span>
+        <PhantomIcon name="delete" size={18} aria-hidden />
       </button>
     </div>
   );

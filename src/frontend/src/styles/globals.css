@@ -236,26 +236,6 @@ a {
     animation: phantom-status-pulse 1.6s ease-in-out infinite;
   }
 
-  /* Material Symbols Outlined helper */
-  .msym {
-    font-family: 'Material Symbols Outlined';
-    font-weight: normal;
-    font-style: normal;
-    line-height: 1;
-    letter-spacing: normal;
-    text-transform: none;
-    display: inline-block;
-    white-space: nowrap;
-    word-wrap: normal;
-    direction: ltr;
-    -webkit-font-feature-settings: 'liga';
-    -webkit-font-smoothing: antialiased;
-    font-variation-settings: 'FILL' 0, 'wght' 400, 'GRAD' 0, 'opsz' 24;
-    /* override the global min-width: 44px we set on icon-bearing buttons */
-    min-width: 0;
-    min-height: 0;
-  }
-
   /* Hover lift used on operator cards / file tiles */
   .lift {
     transition: transform .25s ease, box-shadow .25s ease;

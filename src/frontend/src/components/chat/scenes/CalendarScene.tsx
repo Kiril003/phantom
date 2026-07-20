@@ -11,6 +11,7 @@
  * to the 1024×600 chassis (≤ 144 px column height as in prototype).
  */
 import type { CalendarEvent, CalendarSceneData, CalendarEventCategory } from '@shared/types';
+import { PhantomIcon } from '../../core/PhantomIcon';
 
 interface CalendarSceneProps {
   data: CalendarSceneData;
@@ -60,9 +61,7 @@ export function CalendarScene({ data }: CalendarSceneProps) {
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span className="msym" aria-hidden style={{ fontSize: 14, color: 'var(--primary-deep)' }}>
-            calendar_view_week
-          </span>
+          <PhantomIcon name="calendar_view_week" size={14} color="var(--primary-deep)" aria-hidden />
           <span className="eyebrow-amber">WEEK · {data.date_labels[0]}–{data.date_labels[6]}</span>
         </div>
         <span style={{ fontSize: 9, color: 'var(--ink-muted)' }}>
@@ -165,9 +164,7 @@ export function CalendarScene({ data }: CalendarSceneProps) {
             gap: 8,
           }}
         >
-          <span className="msym" aria-hidden style={{ fontSize: 12, color: 'var(--primary-deep)' }}>
-            auto_awesome
-          </span>
+          <PhantomIcon name="auto_awesome" size={12} color="var(--primary-deep)" aria-hidden />
           <div style={{ flex: 1 }}>
             <div className="micro-label" style={{ fontSize: 8, marginBottom: 1 }}>
               NEXUS SUGGESTS
@@ -203,9 +200,7 @@ export function CalendarScene({ data }: CalendarSceneProps) {
               fontFamily: 'var(--font-display)',
             }}
           >
-            <span className="msym" aria-hidden style={{ fontSize: 11 }}>
-              add
-            </span>
+            <PhantomIcon name="add" size={11} aria-hidden />
             Add
           </button>
         </div>

@@ -18,6 +18,7 @@
  */
 import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { PhantomIcon } from '../core/PhantomIcon';
 
 interface AddProfileWizardProps {
   open: boolean;
@@ -205,7 +206,7 @@ export function AddProfileWizard({ open, onClose, onCreated }: AddProfileWizardP
                   justifyContent: 'center',
                 }}
               >
-                <span className="msym" aria-hidden style={{ fontSize: 16 }}>close</span>
+                <PhantomIcon name="close" size={16} aria-hidden />
               </button>
             </div>
 
@@ -275,9 +276,11 @@ export function AddProfileWizard({ open, onClose, onCreated }: AddProfileWizardP
 
             {step === 'submitting' && (
               <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--ink-muted)' }}>
-                <span className="msym" style={{ fontSize: 32, animation: 'phantom-spin 1.2s linear infinite' }}>
-                  progress_activity
-                </span>
+                <PhantomIcon
+                  name="progress_activity"
+                  size={32}
+                  style={{ animation: 'phantom-spin 1.2s linear infinite' }}
+                />
                 <div className="playfair" style={{ marginTop: 8, fontSize: 14 }}>
                   Створюю профіль…
                 </div>

@@ -13,6 +13,7 @@
  */
 import { useEffect, useState } from 'react';
 import type { AlarmSceneData } from '@shared/types';
+import { PhantomIcon } from '../../core/PhantomIcon';
 
 interface AlarmSceneProps {
   data: AlarmSceneData;
@@ -65,9 +66,7 @@ export function AlarmScene({ data }: AlarmSceneProps) {
       />
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginLeft: 8 }}>
-        <span className="msym" aria-hidden style={{ fontSize: 16, color: 'var(--primary-deep)' }}>
-          alarm
-        </span>
+        <PhantomIcon name="alarm" size={16} color="var(--primary-deep)" aria-hidden />
         <span className="eyebrow-amber" style={{ fontSize: 10 }}>
           БУДИЛЬНИК · {data.repeat_daily ? 'ЩОДНЯ' : 'ОДНОРАЗОВО'}
         </span>
@@ -114,9 +113,7 @@ export function AlarmScene({ data }: AlarmSceneProps) {
           marginTop: 10,
         }}
       >
-        <span className="msym" aria-hidden style={{ fontSize: 12, color: 'var(--primary-deep)' }}>
-          music_note
-        </span>
+        <PhantomIcon name="music_note" size={12} color="var(--primary-deep)" aria-hidden />
         <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--ink-primary)' }}>{data.sound}</span>
         <span style={{ display: 'inline-flex', alignItems: 'center', gap: 1.5, height: 12 }} aria-hidden>
           {waveform.map((h, i) => (
@@ -152,9 +149,7 @@ export function AlarmScene({ data }: AlarmSceneProps) {
             color: 'var(--primary-deep)',
           }}
         >
-          <span className="msym" aria-hidden style={{ fontSize: 12 }}>
-            play_arrow
-          </span>
+          <PhantomIcon name="play_arrow" size={12} aria-hidden />
         </button>
       </div>
 

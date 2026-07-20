@@ -2,8 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 // Self-hosted fonts (OFL-1.1). Replaces the Google Fonts CDN <link>s that
 // broke offline/air-gapped/Tauri-webview cold start and violated the
-// project's own no-CDN canon. Material Symbols is NOT yet self-hosted —
-// it is still CDN-loaded in index.html until the msym→lucide sweep lands.
+// project's own no-CDN canon.
 import '@fontsource/manrope/300.css';
 import '@fontsource/manrope/400.css';
 import '@fontsource/manrope/500.css';

@@ -10,6 +10,7 @@ import { SystemState } from '@shared/types';
 import { EASE_PHANTOM } from '../../styles/motion';
 import { ChromeHandle } from './ChromeHandle';
 import { useChromeCollapse } from '../../hooks/useChromeCollapse';
+import { PhantomIcon } from './PhantomIcon';
 
 /**
  * FloatingToolbar (sunrise build).
@@ -492,16 +493,7 @@ function ToolbarIcon({
       aria-pressed={item.active}
       title={item.tooltip ?? item.label}
     >
-      <span
-        className="msym"
-        style={{
-          fontSize: 18,
-          lineHeight: 1,
-          fontVariationSettings: `'FILL' ${fillIcon}, 'wght' ${wghtIcon}, 'GRAD' 0, 'opsz' 24`,
-        }}
-      >
-        {item.icon}
-      </span>
+      <PhantomIcon name={item.icon} size={18} weight={wghtIcon} filled={fillIcon === 1} />
     </button>
   );
 }
@@ -553,18 +545,14 @@ function MoreMenuItem({ action }: { action: ToolbarAction }) {
       aria-pressed={action.active}
       title={action.tooltip ?? action.label}
     >
-      <span
-        className="msym"
+      <PhantomIcon
+        name={action.icon}
+        size={18}
+        color="inherit"
+        weight={action.active ? 500 : 400}
+        filled={action.active}
         aria-hidden
-        style={{
-          fontSize: 18,
-          lineHeight: 1,
-          color: 'inherit',
-          fontVariationSettings: `'FILL' ${action.active ? 1 : 0}, 'wght' ${action.active ? 500 : 400}, 'GRAD' 0, 'opsz' 24`,
-        }}
-      >
-        {action.icon}
-      </span>
+      />
       <span className="flex-1">{action.label}</span>
       {action.active && (
         <span

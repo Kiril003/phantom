@@ -32,6 +32,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { authApi } from '../../services/api';
 import { EASE_PHANTOM } from '../../styles/motion';
 import { AddProfileWizard } from './AddProfileWizard';
+import { PhantomIcon } from '../core/PhantomIcon';
 
 interface PickerTile {
   id: string;
@@ -707,15 +708,7 @@ function VoiceCommandPill() {
           padding: 0,
         }}
       >
-        <span
-          className="msym"
-          style={{
-            fontSize: 18,
-            fontVariationSettings: "'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24",
-          }}
-        >
-          mic
-        </span>
+        <PhantomIcon name="mic" size={18} filled />
       </button>
     </div>
   );
@@ -779,9 +772,7 @@ function AddProfileTile({ index, disabled, onActivate }: AddProfileTileProps) {
           color: '#8a5e0a',
         }}
       >
-        <span className="msym" aria-hidden style={{ fontSize: 44, fontVariationSettings: "'wght' 300" }}>
-          add
-        </span>
+        <PhantomIcon name="add" size={44} weight={300} aria-hidden />
       </div>
       <div style={{ textAlign: 'center' }}>
         <div

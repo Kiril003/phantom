@@ -13,6 +13,7 @@ import { useEffect, useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { useAuthStore } from '../../stores/authStore';
 import { EditProfileDialog } from './EditProfileDialog';
+import { PhantomIcon } from '../core/PhantomIcon';
 
 const API_PREFIX = '/api/v1';
 
@@ -347,7 +348,7 @@ function RowButton({
         opacity: disabled ? 0.4 : 1,
       }}
     >
-      <span className="msym" aria-hidden style={{ fontSize: 18 }}>{icon}</span>
+      <PhantomIcon name={icon} size={18} aria-hidden />
     </button>
   );
 }

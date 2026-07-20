@@ -9,6 +9,7 @@
  */
 import { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { PhantomIcon } from '../core/PhantomIcon';
 
 const API_PREFIX = '/api/v1';
 
@@ -157,7 +158,7 @@ export function EditProfileDialog({
                   justifyContent: 'center',
                 }}
               >
-                <span className="msym" aria-hidden style={{ fontSize: 16 }}>close</span>
+                <PhantomIcon name="close" size={16} aria-hidden />
               </button>
             </div>
 

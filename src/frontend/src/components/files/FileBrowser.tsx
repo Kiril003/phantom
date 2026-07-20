@@ -16,6 +16,7 @@
  */
 import { useCallback, useEffect, useState } from 'react';
 import { useAuthStore } from '../../stores/authStore';
+import { PhantomIcon } from '../core/PhantomIcon';
 
 const API_PREFIX = '/api/v1';
 
@@ -167,7 +168,7 @@ export function FileBrowser() {
               color: list?.parent ? 'var(--ink-secondary)' : 'var(--ink-muted)',
             }}
           >
-            <span className="msym" aria-hidden style={{ fontSize: 16 }}>arrow_upward</span>
+            <PhantomIcon name="arrow_upward" size={16} aria-hidden />
           </button>
           <span
             className="micro-label"
@@ -221,13 +222,12 @@ export function FileBrowser() {
                 fontSize: 12,
               }}
             >
-              <span
-                className="msym"
+              <PhantomIcon
+                name={e.is_dir ? 'folder' : 'description'}
+                size={16}
+                color={e.is_dir ? 'var(--primary, #f4af25)' : 'var(--ink-muted)'}
                 aria-hidden
-                style={{ fontSize: 16, color: e.is_dir ? 'var(--primary, #f4af25)' : 'var(--ink-muted)' }}
-              >
-                {e.is_dir ? 'folder' : 'description'}
-              </span>
+              />
               <span style={{ flex: 1, color: 'var(--ink-primary)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                 {e.name}
               </span>
@@ -274,7 +274,7 @@ export function FileBrowser() {
                     cursor: busy ? 'not-allowed' : 'pointer',
                   }}
                 >
-                  <span className="msym" aria-hidden style={{ fontSize: 18 }}>delete</span>
+                  <PhantomIcon name="delete" size={18} aria-hidden />
                 </button>
               )}
             </div>

@@ -10,6 +10,7 @@
  * Pure render. The buttons emit `data-audit-action` for parent wiring.
  */
 import type { AuditEvent, AuditEventStatus, AuditSceneData } from '@shared/types';
+import { PhantomIcon } from '../../core/PhantomIcon';
 
 interface AuditSceneProps {
   data: AuditSceneData;
@@ -35,9 +36,7 @@ export function AuditScene({ data }: AuditSceneProps) {
     >
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span className="msym" aria-hidden style={{ fontSize: 14, color: 'var(--primary-deep)' }}>
-            schedule
-          </span>
+          <PhantomIcon name="schedule" size={14} color="var(--primary-deep)" aria-hidden />
           <span className="eyebrow-amber">
             AUDIT · {data.window_display.toUpperCase()} · {data.total_actions} ACTIONS
           </span>
@@ -160,9 +159,7 @@ export function AuditScene({ data }: AuditSceneProps) {
             fontFamily: 'var(--font-display)',
           }}
         >
-          <span className="msym" aria-hidden style={{ fontSize: 12 }}>
-            replay
-          </span>
+          <PhantomIcon name="replay" size={12} aria-hidden />
           Replay
         </button>
         <button
@@ -185,9 +182,7 @@ export function AuditScene({ data }: AuditSceneProps) {
             fontFamily: 'var(--font-display)',
           }}
         >
-          <span className="msym" aria-hidden style={{ fontSize: 12 }}>
-            download
-          </span>
+          <PhantomIcon name="download" size={12} aria-hidden />
           Export
         </button>
         <span style={{ flex: 1 }} />

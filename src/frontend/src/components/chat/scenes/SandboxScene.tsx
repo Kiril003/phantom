@@ -9,6 +9,7 @@
 import { useSettingsStore } from '../../../stores/settingsStore';
 import { Terminal, ShieldAlert } from 'lucide-react';
 import type { SandboxSceneData, SandboxStepStatus } from '@shared/types';
+import { PhantomIcon } from '../../core/PhantomIcon';
 
 interface SandboxSceneProps {
   data: SandboxSceneData;
@@ -108,9 +109,7 @@ export function SandboxScene({ data }: SandboxSceneProps) {
 ...
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span className="msym" aria-hidden style={{ fontSize: 14, color: headerTint }}>
-            {data.root ? 'shield_lock' : 'terminal'}
-          </span>
+          <PhantomIcon name={data.root ? 'shield_lock' : 'terminal'} size={14} color={headerTint} aria-hidden />
           <span
             className="eyebrow-amber"
             style={{ color: data.root ? 'var(--coral)' : undefined }}
@@ -161,17 +160,13 @@ export function SandboxScene({ data }: SandboxSceneProps) {
                   fontSize: 11,
                 }}
               >
-                <span
-                  className="msym"
+                <PhantomIcon
+                  name={s.icon}
+                  size={14}
+                  color={s.tint}
+                  style={{ animation: s.spin ? 'phantom-spin 1.2s linear infinite' : 'none' }}
                   aria-hidden
-                  style={{
-                    fontSize: 14,
-                    color: s.tint,
-                    animation: s.spin ? 'phantom-spin 1.2s linear infinite' : 'none',
-                  }}
-                >
-                  {s.icon}
-                </span>
+                />
                 <span
                   style={{
                     flex: 1,

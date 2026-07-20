@@ -28,6 +28,7 @@ import { FamiliarReactor } from '../components/familiar/FamiliarReactor';
 // first paint never pays for the familiar.
 const PhantomFamiliar = React.lazy(() => import('../components/familiar/PhantomFamiliar'));
 import { ToastRail } from '../components/core/ToastRail';
+import { PhantomIcon } from '../components/core/PhantomIcon';
 
 function GlobalGeolocationManager() {
   const authenticated = useSystemStore((s) => s.authenticated);
@@ -219,7 +220,7 @@ function WillPanelMount() {
             onClick={() => setOpen(false)}
             className="absolute top-4 right-4 p-2 hover:bg-black/5 rounded-full transition-colors z-10"
           >
-            <span className="msym text-ink-muted">close</span>
+            <PhantomIcon name="close" className="text-ink-muted" />
           </button>
         </motion.div>
       )}

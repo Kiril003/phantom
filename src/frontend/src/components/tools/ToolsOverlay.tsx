@@ -16,6 +16,7 @@ import { TimerManager } from './TimerManager';
 import { AlarmManager } from './AlarmManager';
 import { CalendarManager } from '../calendar/CalendarManager';
 import { FileBrowser } from '../files/FileBrowser';
+import { PhantomIcon } from '../core/PhantomIcon';
 
 type ToolsTab = 'timer' | 'alarm' | 'calendar' | 'files';
 
@@ -100,7 +101,7 @@ export function ToolsOverlay({ open, initialTab = 'timer', onClose }: ToolsOverl
                   justifyContent: 'center',
                 }}
               >
-                <span className="msym" aria-hidden style={{ fontSize: 18 }}>close</span>
+                <PhantomIcon name="close" size={18} aria-hidden />
               </button>
             </div>
 
@@ -141,7 +142,7 @@ export function ToolsOverlay({ open, initialTab = 'timer', onClose }: ToolsOverl
                   }}
                   title={t.ready ? t.label : `${t.label} — coming next phase`}
                 >
-                  <span className="msym" aria-hidden style={{ fontSize: 18 }}>{t.icon}</span>
+                  <PhantomIcon name={t.icon} size={18} aria-hidden />
                   {t.label}
                   {!t.ready && (
                     <span

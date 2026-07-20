@@ -4,6 +4,7 @@ import { AnimatePresence, motion } from 'framer-motion';
 import { Providers } from './providers';
 import { StateTransitionController } from './StateTransitionController';
 import { ViewportFrame } from './ViewportFrame';
+import { ErrorBoundary } from '../components/core/ErrorBoundary';
 import { Overlays } from '../components/core/Overlays';
 import { VoiceAlwaysOnGate } from '../components/chat/VoiceAlwaysOnGate';
 import { useSystemStore } from '../stores/systemStore';
@@ -147,6 +148,7 @@ export function App() {
         <GlobalAlwaysOnGate />
         <GlobalGeolocationManager />
         <ViewportFrame>
+          <ErrorBoundary>
           <div
             className="w-[1024px] h-[600px] overflow-hidden relative"
             style={{ background: 'var(--surface-void)' }}
@@ -189,6 +191,7 @@ export function App() {
             <WillPanelMount />
             <IntelligenceHubMount />
           </div>
+          </ErrorBoundary>
         </ViewportFrame>
       </BrowserRouter>
     </Providers>

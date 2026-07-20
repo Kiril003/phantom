@@ -214,6 +214,20 @@ def decode_to_mono16k(raw: bytes) -> np.ndarray:
     return data
 
 
+async def decode_to_mono16k_async(raw: bytes) -> np.ndarray:
+    """Async-safe wrapper around :func:`decode_to_mono16k`.
+
+    Brief 02 defect A-1: ``decode_to_mono16k`` can fall back to
+    ``_ffmpeg_decode_to_mono16k``, which blocks on ``subprocess.run`` for
+    up to 10s. Callers reachable from the event loop (routes, the voice
+    pipeline) must go through this wrapper — or offload to a worker
+    thread themselves — so a slow ffmpeg decode never stalls the loop.
+    Synchronous callers (tests, scripts) should keep calling
+    ``decode_to_mono16k`` directly; its own contract is unchanged.
+    """
+    return await asyncio.to_thread(decode_to_mono16k, raw)
+
+
 def _resample_linear(data: np.ndarray, src_rate: int, dst_rate: int) -> np.ndarray:
     """
     Linear interpolation resampler. Low-quality by audiophile standards but

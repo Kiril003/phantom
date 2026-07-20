@@ -3,6 +3,7 @@ Git Rollback Actions — Phase Agent Expansion.
 Provides `git.checkpoint` and `git.rollback` allowing the agent to save
 and restore the state of the workspace directory.
 """
+import asyncio
 import subprocess
 from pydantic import Field
 
@@ -25,7 +26,8 @@ class GitCheckpoint(Action):
     async def execute(self, ctx: ActionContext) -> ActionResult:
         # Check if the workspace is a git repository
         try:
-            res = subprocess.run(
+            res = await asyncio.to_thread(
+                subprocess.run,
                 ["git", "rev-parse", "--is-inside-work-tree"],
                 cwd=ctx.workspace_dir,
                 capture_output=True,
@@ -34,15 +36,16 @@ class GitCheckpoint(Action):
             )
             if res.returncode != 0:
                 # Initialize it if it's not
-                subprocess.run(["git", "init"], cwd=ctx.workspace_dir, capture_output=True, check=True)
+                await asyncio.to_thread(subprocess.run, ["git", "init"], cwd=ctx.workspace_dir, capture_output=True, check=True)
                 # Need an initial commit before we can branch or reset cleanly in some cases
-                subprocess.run(["git", "commit", "--allow-empty", "-m", "Initial empty commit"], cwd=ctx.workspace_dir, capture_output=True, check=False)
-            
+                await asyncio.to_thread(subprocess.run, ["git", "commit", "--allow-empty", "-m", "Initial empty commit"], cwd=ctx.workspace_dir, capture_output=True, check=False)
+
             # Add all changes
-            subprocess.run(["git", "add", "."], cwd=ctx.workspace_dir, capture_output=True, check=True)
-            
+            await asyncio.to_thread(subprocess.run, ["git", "add", "."], cwd=ctx.workspace_dir, capture_output=True, check=True)
+
             # Commit
-            commit_res = subprocess.run(
+            commit_res = await asyncio.to_thread(
+                subprocess.run,
                 ["git", "commit", "-m", f"phantom_auto_checkpoint: {self.message}"],
                 cwd=ctx.workspace_dir,
                 capture_output=True,
@@ -72,7 +75,8 @@ class GitRollback(Action):
     
     async def execute(self, ctx: ActionContext) -> ActionResult:
         try:
-            res = subprocess.run(
+            res = await asyncio.to_thread(
+                subprocess.run,
                 ["git", "reset", "--hard", "HEAD~1"],
                 cwd=ctx.workspace_dir,
                 capture_output=True,

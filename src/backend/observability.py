@@ -440,6 +440,13 @@ lifespan_g2_failures_total: Counter = _register(
         "G2 lifespan warmup lane failures (lane=minilm|chroma_eager|chroma_janitor|cpu_sampler|voice_preload).",
     )
 )
+# Rebuild P1-4 — supervised long-lived task restarts (task=<name>).
+supervisor_restarts_total: Counter = _register(
+    Counter(
+        "phantom_supervisor_restarts_total",
+        "Supervised background task restarts, labelled by task name.",
+    )
+)
 # Day-4 Wave-2 V-6 (ADR-RTP-002): three latency Histograms — chat
 # response, STT, WS broadcast. Observation points wired in
 # routes_chat._build_ai_response, voice.stt_engine.transcribe wrappers,

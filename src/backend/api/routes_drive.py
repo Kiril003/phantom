@@ -34,6 +34,7 @@ Android perms.
 """
 from __future__ import annotations
 
+import asyncio
 import base64
 import io
 import logging
@@ -203,7 +204,8 @@ async def drive_clipboard(
     ):
         if shutil.which(argv[0]):
             try:
-                proc = subprocess.run(
+                proc = await asyncio.to_thread(
+                    subprocess.run,
                     argv,
                     input=text.encode("utf-8"),
                     timeout=4,
@@ -318,7 +320,8 @@ async def drive_keystroke(
     # because wtype interprets the trailing arg as a literal.
     if shutil.which("wtype"):
         try:
-            proc = subprocess.run(
+            proc = await asyncio.to_thread(
+                subprocess.run,
                 ["wtype", "-d", delay_str, "-"],
                 input=text_with_newline.encode("utf-8"),
                 capture_output=True,
@@ -337,7 +340,8 @@ async def drive_keystroke(
     # round-trips cleanly without shell escapes.
     if not succeeded and shutil.which("xdotool"):
         try:
-            proc = subprocess.run(
+            proc = await asyncio.to_thread(
+                subprocess.run,
                 ["xdotool", "type", "--delay", delay_str, "--file", "-"],
                 input=text_with_newline.encode("utf-8"),
                 capture_output=True,
@@ -394,7 +398,8 @@ async def drive_screen(
     try:
         sid = os.environ.get("XDG_SESSION_ID", "")
         if sid:
-            proc = subprocess.run(
+            proc = await asyncio.to_thread(
+                subprocess.run,
                 ["loginctl", "show-session", sid, "-p", "LockedHint", "--value"],
                 capture_output=True,
                 text=True,
@@ -419,7 +424,7 @@ async def drive_screen(
             ["import", "-window", "root", str(tmp)],
         ):
             if shutil.which(argv[0]):
-                proc = subprocess.run(argv, timeout=8, capture_output=True, check=False)
+                proc = await asyncio.to_thread(subprocess.run, argv, timeout=8, capture_output=True, check=False)
                 if proc.returncode == 0 and tmp.exists():
                     break
         else:

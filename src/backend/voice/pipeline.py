@@ -13,6 +13,7 @@ import threading
 from typing import Optional
 
 from voice.stt_engine import (
+    decode_to_mono16k_async,
     STTProvider,
     STTResult,
     build_stt_provider,
@@ -82,7 +83,9 @@ async def transcribe_blob(raw: bytes, language: str) -> STTResult:
     import time as _time
     from observability import voice_stt_latency_ms
 
-    audio = decode_to_mono16k(raw)
+    # A-1: decode may shell out to ffmpeg (up to ~10s) — offload so the
+    # WebM/Opus fallback never stalls the event loop.
+    audio = await decode_to_mono16k_async(raw)
     t0 = _time.monotonic()
     result = await get_stt_provider().transcribe(audio, language)
     elapsed_ms = (_time.monotonic() - t0) * 1000.0

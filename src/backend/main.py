@@ -231,8 +231,15 @@ async def _start_serial_bridge() -> None:
 
     serial_bridge.on_batch(on_batch)
 
-    # Start in background task — reconnects automatically
-    asyncio.create_task(serial_bridge.start(), name="serial_bridge")
+    # Start in background task — reconnects automatically. Adopted by the
+    # supervisor (P1-4) so a strong reference is held (no mid-flight GC)
+    # and a crash is logged instead of vanishing. The bridge owns its own
+    # reconnect loop, so this is track (no restart), not spawn.
+    from core.supervisor import supervisor
+    supervisor.track(
+        "serial_bridge",
+        asyncio.create_task(serial_bridge.start(), name="serial_bridge"),
+    )
 
 
 _CI_FIXED_SECRET: str = "ci-fixed-secret-do-not-reuse"
@@ -538,13 +545,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         except Exception as exc:
             logger.warning("LocationHistory setup failed: %s", exc)
 
-    # Start tick loop for time-driven context updates
-    loop_task = asyncio.create_task(_context_loop(), name="context_loop")
+    # Start tick loop for time-driven context updates. Supervised (P1-4):
+    # if the loop ever raises out it restarts with exponential backoff and
+    # quarantines after repeated failures, instead of dying silently or
+    # (via its internal bare-except) spinning an error every 500ms forever.
+    from core.supervisor import supervisor
+    loop_task = supervisor.spawn("context_loop", _context_loop)
 
     # Audit-2026-04-29 — tactical memory janitor (promotes expired facts
     # to strategic memory + prunes stale rows, once per hour).
-    janitor_task = asyncio.create_task(
-        _tactical_memory_janitor_loop(), name="tactical_memory_janitor",
+    janitor_task = supervisor.spawn(
+        "tactical_memory_janitor", _tactical_memory_janitor_loop,
     )
 
     # Start OLED face animator (Phase 08). It self-gates on
@@ -717,16 +728,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception:
         pass
 
-    loop_task.cancel()
-    janitor_task.cancel()
-    try:
-        await loop_task
-    except asyncio.CancelledError:
-        pass
-    try:
-        await janitor_task
-    except asyncio.CancelledError:
-        pass
+    # P1-4 — cancel every supervised task (context loop, tactical janitor,
+    # serial bridge) in one call; each is awaited with exceptions swallowed.
+    from core.supervisor import supervisor
+    await supervisor.shutdown()
 
     # Phase 24-F — stop live OmniMap tasker.
     try:

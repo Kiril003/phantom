@@ -55,6 +55,20 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: true,
+    // Weak-device-first: three.js (~600 kB) and recharts/d3 (~170 kB) sit
+    // behind lazy boundaries (PhantomFamiliar summon, chart/diagram render),
+    // but Vite hoists the static deps of App.tsx's entry-level React.lazy
+    // imports into `<link rel="modulepreload">` in index.html — so the browser
+    // downloads them during first paint even when the operator never summons
+    // the familiar or renders a chart. Drop just those two vendor chunks from
+    // the preload manifest; the runtime `__vitePreload` still fetches them the
+    // instant their lazy boundary actually mounts, so nothing loads slower in
+    // practice — it just no longer taxes the initial waterfall. framer-motion
+    // (used at App root) and the rest stay preloaded.
+    modulePreload: {
+      resolveDependencies: (_filename, deps) =>
+        deps.filter((dep) => !/vendor-(three|charts)-/.test(dep)),
+    },
     rollupOptions: {
       output: {
         // Split heavy libraries into their own cacheable chunks. Combined

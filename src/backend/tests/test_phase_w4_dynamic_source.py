@@ -2,16 +2,15 @@
 
 Coverage:
 
-1. Five sources are exposed at GET /api/v1/dynamic_source/{source}.
+1. Four sources are exposed at GET /api/v1/dynamic_source/{source}.
 2. Each resolver returns a DynamicPickerResponse envelope with the
    right `source` echoed back + a non-negative ttl_s.
 3. Defensive: a broken/missing resolver dep yields an EMPTY options
    list (NOT 500 — the picker shows its placeholder).
 4. ttl cache works: a second call within ttl_s returns the same
    `fetched_at` timestamp; bumping past ttl_s re-resolves.
-5. mms_languages returns the canonical 10-language closed list.
-6. ollama_models cap = 50.
-7. serial_ports defensive: pyserial absent → empty list.
+5. ollama_models cap = 50.
+6. serial_ports defensive: pyserial absent → empty list.
 """
 from __future__ import annotations
 
@@ -48,7 +47,6 @@ class TestRouteSurface:
         [
             "ollama_models",
             "voice_voices",
-            "mms_languages",
             "serial_ports",
             "tts_speakers",
         ],
@@ -68,20 +66,6 @@ class TestRouteSurface:
 
 
 class TestPerResolver:
-    def test_mms_languages_returns_closed_list(self, client):
-        r = client.get("/api/v1/dynamic_source/mms_languages")
-        body = r.json()
-        codes = {opt["value"] for opt in body["options"]}
-        # Closed list pinned in the resolver — at minimum these are
-        # present (operator-relevant subset).
-        assert {"ukr", "eng"}.issubset(codes), (
-            f"mms_languages must include the operator-default subset; "
-            f"got {codes!r}"
-        )
-        # Each option must carry meta.lang per the contract.
-        for opt in body["options"]:
-            assert opt["meta"]["lang"] == opt["value"]
-
     def test_ollama_models_defensive_when_dep_missing(self, client, monkeypatch):
         """Simulate the no-ollama-installed branch by monkey-patching the
         provider import to raise."""
@@ -150,12 +134,12 @@ class TestTtlCache:
             return []
 
         monkeypatch.setitem(
-            mod._RESOLVERS, "mms_languages", (_counting_resolver, 30.0)
+            mod._RESOLVERS, "voice_voices", (_counting_resolver, 30.0)
         )
         mod._clear_cache_for_tests()
 
-        r1 = client.get("/api/v1/dynamic_source/mms_languages")
-        r2 = client.get("/api/v1/dynamic_source/mms_languages")
+        r1 = client.get("/api/v1/dynamic_source/voice_voices")
+        r2 = client.get("/api/v1/dynamic_source/voice_voices")
         assert r1.status_code == 200 and r2.status_code == 200
         # Resolver invoked exactly once → second call hit the cache.
         assert call_count["n"] == 1
@@ -172,12 +156,12 @@ class TestTtlCache:
 
         # Use a 0-second ttl to force re-resolve on every call.
         monkeypatch.setitem(
-            mod._RESOLVERS, "mms_languages", (_counting_resolver, 0.0)
+            mod._RESOLVERS, "voice_voices", (_counting_resolver, 0.0)
         )
         mod._clear_cache_for_tests()
 
-        client.get("/api/v1/dynamic_source/mms_languages")
+        client.get("/api/v1/dynamic_source/voice_voices")
         # Tiny sleep so wall-clock advances past 0 ttl.
         time.sleep(0.01)
-        client.get("/api/v1/dynamic_source/mms_languages")
+        client.get("/api/v1/dynamic_source/voice_voices")
         assert call_count["n"] == 2

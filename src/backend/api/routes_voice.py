@@ -50,7 +50,7 @@ class STTResponse(BaseModel):
     text: str
     confidence: float
     engine: str
-    # Day-2 D2-A3 (audit F-25): NPU / MMS providers populate this when
+    # Day-2 D2-A3 (audit F-25): NPU providers populate this when
     # inference fails so the route can return 503 instead of an empty
     # transcript that looks indistinguishable from silence. Stays None
     # for healthy responses; clients ignore the field on success.
@@ -118,10 +118,10 @@ async def transcribe_speech(
     except Exception:  # noqa: BLE001
         pass
     # Day-2 D2-A3 (audit F-25): if the provider populated engine_error
-    # (NPU / MMS forward failed), surface 503 so the operator sees
+    # (NPU forward failed), surface 503 so the operator sees
     # "STT temporarily unavailable" instead of treating the empty
     # transcript as silence. Provider also resets its session so the
-    # next call rebuilds — see whisper_npu_provider / mms_npu_provider.
+    # next call rebuilds — see whisper_npu_provider.
     if result.engine_error:
         logger.warning(
             "STT provider reported engine_error: %s — surfacing 503",

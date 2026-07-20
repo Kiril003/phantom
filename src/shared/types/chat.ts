@@ -719,7 +719,7 @@ export interface ChatSession {
 // Cross-context contract between `chat-input` (W-3 ModelCard consumer) and
 // `dynamic-source-picker` (W-4 producer). Sources are a CLOSED enum at the
 // cluster boundary; backend resolvers MUST mirror this exact list at
-// `src/backend/api/schemas/dynamic_source.py`. Adding a 6th source requires
+// `src/backend/api/schemas/dynamic_source.py`. Adding a 5th source requires
 // (a) extending this union, (b) the backend resolver, (c) a vitest mock,
 // (d) an ADR amendment.
 
@@ -727,7 +727,6 @@ export interface ChatSession {
 export type DynamicPickerSource =
   | 'ollama_models'
   | 'voice_voices'
-  | 'mms_languages'
   | 'serial_ports'
   | 'tts_speakers';
 

@@ -172,16 +172,16 @@ describe('DynamicPicker (W-4)', () => {
 
   it('shows the option LABEL when value matches an option, not the raw id', async () => {
     mockFetch(
-      ENVELOPE('mms_languages', [
-        { value: 'ukr', label: 'Ukrainian' },
-        { value: 'eng', label: 'English' },
+      ENVELOPE('ollama_models', [
+        { value: 'llama3', label: 'Llama 3' },
+        { value: 'gemma', label: 'Gemma' },
       ])
     );
 
     render(
       <DynamicPicker
-        source="mms_languages"
-        value="ukr"
+        source="ollama_models"
+        value="llama3"
         onChange={() => {}}
       />
     );
@@ -190,17 +190,17 @@ describe('DynamicPicker (W-4)', () => {
     await waitFor(() =>
       expect(screen.getByTestId('dynamic-picker').getAttribute('data-loading')).toBe('0')
     );
-    expect(trigger).toHaveTextContent('Ukrainian');
-    expect(trigger.textContent).not.toMatch(/^ukr$/);
+    expect(trigger).toHaveTextContent('Llama 3');
+    expect(trigger.textContent).not.toMatch(/^llama3$/);
   });
 
   it('shows the raw value when no option matches (defensive)', async () => {
-    mockFetch(ENVELOPE('mms_languages', [{ value: 'eng', label: 'English' }]));
+    mockFetch(ENVELOPE('ollama_models', [{ value: 'gemma', label: 'Gemma' }]));
 
     render(
       <DynamicPicker
-        source="mms_languages"
-        value="ukr-removed"
+        source="ollama_models"
+        value="llama3-removed"
         onChange={() => {}}
       />
     );
@@ -209,7 +209,7 @@ describe('DynamicPicker (W-4)', () => {
     await waitFor(() =>
       expect(screen.getByTestId('dynamic-picker').getAttribute('data-loading')).toBe('0')
     );
-    expect(trigger).toHaveTextContent('ukr-removed');
+    expect(trigger).toHaveTextContent('llama3-removed');
   });
 
   it('respects the disabled prop', async () => {

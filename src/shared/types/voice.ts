@@ -18,8 +18,7 @@ export type STTEngineName =
   | "whisper"
   | "vosk"
   | "noop"
-  | "whisper_npu"
-  | "mms_npu";
+  | "whisper_npu";
 
 /**
  * Authoritative transcript shape on the wire.

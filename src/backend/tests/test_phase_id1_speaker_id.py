@@ -52,7 +52,7 @@ class TestSpeakerIdDefault:
 
     @pytest.mark.parametrize(
         "engine",
-        ["whisper", "vosk", "noop", "whisper_npu", "mms_npu"],
+        ["whisper", "vosk", "noop", "whisper_npu"],
     )
     def test_all_engines_accept_speaker_id(self, engine):
         from voice.stt_engine import STTResult

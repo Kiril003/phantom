@@ -12,7 +12,6 @@ Sources (closed enum — adding a 6th requires (a) extending
 
   ollama_models   — list of locally-installed Ollama models
   voice_voices    — list of available Piper/installed TTS voices
-  mms_languages   — list of MMS NPU language codes
   serial_ports    — list of /dev/tty* candidates the daemon can see
   tts_speakers    — list of TTS speaker presets (subset of voices for
                     the chat-input ModelCard "next reply voice" slot)
@@ -47,7 +46,6 @@ router = APIRouter(prefix="/dynamic_source", tags=["dynamic_source"])
 DynamicSource = Literal[
     "ollama_models",
     "voice_voices",
-    "mms_languages",
     "serial_ports",
     "tts_speakers",
 ]
@@ -152,32 +150,6 @@ async def _resolve_voice_voices() -> list[DynamicPickerOption]:
     ][:30]
 
 
-async def _resolve_mms_languages() -> list[DynamicPickerOption]:
-    """Static-ish list of MMS NPU language codes. Expensive to enumerate
-    from the bundle dir for every keystroke; ship the closed list the
-    audit pinned in `voice_stt_mms_lang` Literal."""
-    # The MMS provider supports ~100 languages; we surface the
-    # operator-relevant subset here. ADR-XC-007 keeps the list small.
-    BUILTINS: list[tuple[str, str]] = [
-        ("ukr", "Ukrainian"),
-        ("eng", "English"),
-        ("rus", "Russian"),
-        ("pol", "Polish"),
-        ("deu", "German"),
-        ("fra", "French"),
-        ("spa", "Spanish"),
-        ("ita", "Italian"),
-        ("por", "Portuguese"),
-        ("tur", "Turkish"),
-    ]
-    return [
-        DynamicPickerOption(
-            value=code, label=label, meta={"lang": code}
-        )
-        for code, label in BUILTINS
-    ]
-
-
 async def _resolve_serial_ports() -> list[DynamicPickerOption]:
     """List candidate serial ports for the ESP32 bridge. Defensive — if
     pyserial isn't installed (unlikely on the device but possible in
@@ -224,7 +196,6 @@ async def _resolve_tts_speakers() -> list[DynamicPickerOption]:
 _RESOLVERS: dict[str, tuple[Callable[[], Awaitable[list[DynamicPickerOption]]], float]] = {
     "ollama_models": (_resolve_ollama_models, 30.0),
     "voice_voices": (_resolve_voice_voices, 60.0),
-    "mms_languages": (_resolve_mms_languages, 3600.0),
     "serial_ports": (_resolve_serial_ports, 5.0),
     "tts_speakers": (_resolve_tts_speakers, 60.0),
 }
@@ -238,8 +209,7 @@ async def get_dynamic_source(
     source: DynamicSource = Path(
         ...,
         description=(
-            "One of: ollama_models | voice_voices | mms_languages | "
-            "serial_ports | tts_speakers"
+            "One of: ollama_models | voice_voices | serial_ports | tts_speakers"
         ),
     ),
 ) -> DynamicPickerResponse:

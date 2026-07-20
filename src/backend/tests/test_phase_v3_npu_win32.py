@@ -4,22 +4,20 @@ Closes audit-2026-05-01-day4 finding U5-PKG-C3 ("onnxruntime-qnn import
 alone may segfault on x86_64 Windows"). Implements ADR-DSH-001 §6:
 
     NPU win32 hard-skip is a factory branch, not import-time. The
-    `sys.platform == "win32"` check is inserted in `_try_npu` and
-    `_try_mms` BEFORE the NPU provider modules are imported. Linux
-    behaviour is unchanged.
+    `sys.platform == "win32"` check is inserted in `_try_npu` BEFORE
+    the NPU provider module is imported. Linux behaviour is unchanged.
 
 The contract is:
 
-* On `sys.platform == "win32"`, `_try_npu()` and `_try_mms()` return
-  `None` *without* importing `voice.whisper_npu_provider` or
-  `voice.mms_npu_provider`. We assert this both on the return value and
-  via `sys.modules` so any future regression that flips the order
-  (import → check) is caught.
+* On `sys.platform == "win32"`, `_try_npu()` returns `None` *without*
+  importing `voice.whisper_npu_provider`. We assert this both on the
+  return value and via `sys.modules` so any future regression that
+  flips the order (import → check) is caught.
 * On Linux (the normal dev/test platform) the early-return remains gated
-  by `voice_stt_npu_enabled` / `voice_stt_mms_enabled` exactly as today
-  — no behavioural drift on the hardware target.
+  by `voice_stt_npu_enabled` exactly as today — no behavioural drift on
+  the hardware target.
 * `build_stt_provider()` falls through to `_try_whisper` / `_try_vosk`
-  (or NoopSTTProvider) when both NPU branches are skipped.
+  (or NoopSTTProvider) when the NPU branch is skipped.
 """
 from __future__ import annotations
 
@@ -32,22 +30,14 @@ from config import config as live_config
 
 @pytest.fixture(autouse=True)
 def _purge_npu_modules():
-    """Strip any previously-imported NPU provider modules before each
+    """Strip any previously-imported NPU provider module before each
     test so `sys.modules` is a clean slate. Without this, an earlier
     test that runs on Linux (where the import succeeds) would leave the
     module behind and the win32-hard-skip assertion would mis-fire.
     """
-    for mod_name in (
-        "voice.whisper_npu_provider",
-        "voice.mms_npu_provider",
-    ):
-        sys.modules.pop(mod_name, None)
+    sys.modules.pop("voice.whisper_npu_provider", None)
     yield
-    for mod_name in (
-        "voice.whisper_npu_provider",
-        "voice.mms_npu_provider",
-    ):
-        sys.modules.pop(mod_name, None)
+    sys.modules.pop("voice.whisper_npu_provider", None)
 
 
 # ─────────────────────────────────────────────── win32 factory branch ──
@@ -75,41 +65,25 @@ class TestWin32HardSkip:
             "Move the sys.platform check ABOVE the import."
         )
 
-    def test_try_mms_returns_none_on_win32_without_import(self, monkeypatch):
-        from voice import stt_engine
-
-        monkeypatch.setattr(sys, "platform", "win32")
-        monkeypatch.setattr(live_config, "voice_stt_mms_enabled", True)
-
-        result = stt_engine._try_mms()
-
-        assert result is None
-        assert "voice.mms_npu_provider" not in sys.modules, (
-            "V-3 regression: mms_npu_provider was imported on win32"
-        )
-
     def test_build_stt_provider_falls_through_on_win32(self, monkeypatch):
-        """End-to-end: with both NPU flags ON and platform=win32,
+        """End-to-end: with the NPU flag ON and platform=win32,
         `build_stt_provider()` must transparently land on whisper or
-        vosk — never on `WhisperNPUProvider` / `MMSNPUProvider`. The
-        test asserts the negative (NPU classes never appear) rather
-        than pinning the exact downstream provider, since CI runners
-        don't always have whisper or vosk installed."""
+        vosk — never on `WhisperNPUProvider`. The test asserts the
+        negative (NPU class never appears) rather than pinning the
+        exact downstream provider, since CI runners don't always have
+        whisper or vosk installed."""
         from voice import stt_engine
 
         monkeypatch.setattr(sys, "platform", "win32")
         monkeypatch.setattr(live_config, "voice_stt_npu_enabled", True)
-        monkeypatch.setattr(live_config, "voice_stt_mms_enabled", True)
         monkeypatch.setattr(live_config, "voice_stt_mode", "hybrid")
 
         provider = stt_engine.build_stt_provider()
 
-        assert provider.__class__.__name__ not in {
-            "WhisperNPUProvider",
-            "MMSNPUProvider",
-        }, f"win32 selected NPU provider: {type(provider).__name__}"
+        assert provider.__class__.__name__ != "WhisperNPUProvider", (
+            f"win32 selected NPU provider: {type(provider).__name__}"
+        )
         assert "voice.whisper_npu_provider" not in sys.modules
-        assert "voice.mms_npu_provider" not in sys.modules
 
 
 # ─────────────────────────────────────────────── linux dev parity ──
@@ -127,15 +101,6 @@ class TestLinuxParityPreserved:
 
         assert stt_engine._try_npu() is None
         assert "voice.whisper_npu_provider" not in sys.modules
-
-    def test_try_mms_disabled_returns_none_on_linux(self, monkeypatch):
-        from voice import stt_engine
-
-        monkeypatch.setattr(sys, "platform", "linux")
-        monkeypatch.setattr(live_config, "voice_stt_mms_enabled", False)
-
-        assert stt_engine._try_mms() is None
-        assert "voice.mms_npu_provider" not in sys.modules
 
     def test_try_npu_enabled_on_linux_attempts_import(self, monkeypatch):
         """Linux + flag ON — `_try_npu` will try to import and (on a
@@ -177,6 +142,4 @@ class TestLinuxParityPreserved:
         from voice import stt_engine
 
         src_npu = inspect.getsource(stt_engine._try_npu)
-        src_mms = inspect.getsource(stt_engine._try_mms)
         assert 'sys.platform == "win32"' in src_npu, src_npu
-        assert 'sys.platform == "win32"' in src_mms, src_mms

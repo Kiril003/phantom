@@ -456,7 +456,7 @@ chat_response_latency_ms: Histogram = _register(
 voice_stt_latency_ms: Histogram = _register(
     Histogram(
         "phantom_voice_stt_latency_ms",
-        "STT latency in ms by engine (engine=vosk|whisper|whisper_npu|mms_npu).",
+        "STT latency in ms by engine (engine=vosk|whisper|whisper_npu).",
     )
 )
 ws_broadcast_latency_ms: Histogram = _register(

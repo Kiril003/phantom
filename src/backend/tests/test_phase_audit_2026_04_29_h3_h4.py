@@ -1,6 +1,6 @@
 """Tier-A H-3 + H-4 regressions — Day-2 audit D2-A3 + D2-A4.
 
-H-3 (D2-A3): NPU/MMS providers populate STTResult.engine_error on
+H-3 (D2-A3): NPU providers populate STTResult.engine_error on
 inference failure. Day-1 wired the field but the route ignored it; the
 silent-empty-transcript bug stayed observable. Day-2 surfaces the
 failure as 503 + resets the wedged session so the next call rebuilds.
@@ -112,42 +112,6 @@ class TestH3WhisperNpuSessionReset:
             "D2-A3 regression: WhisperNPU did not reset _model after forward failure"
         )
         assert prov._processor is None
-
-
-class TestH3MmsNpuSessionReset:
-    @pytest.mark.asyncio
-    async def test_provider_resets_session_after_failure(self):
-        from voice.mms_npu_provider import MMSNPUProvider
-
-        class _BoomSession:
-            def get_inputs(self):
-                class _I:
-                    name = "x"
-                return [_I()]
-
-            def run(self, *_a, **_k):
-                raise RuntimeError("HTP wedged synthetic")
-
-        class _Tok:
-            pad_token_id = 0
-
-            def decode(self, *_a, **_k):
-                return ""
-
-        prov = MMSNPUProvider.__new__(MMSNPUProvider)
-        prov._session = _BoomSession()
-        prov._tokenizer = _Tok()
-        prov._lang = "uk"
-        prov._mode = "qnn-htp"
-        prov._max_samples = 16_000 * 3
-
-        import numpy as np
-        result = prov._transcribe_sync(np.zeros(16_000, dtype=np.float32), "uk")
-        assert result.engine_error is not None
-        assert "mms_npu_forward_failed" in result.engine_error
-        assert prov._session is None, (
-            "D2-A3 regression: MMSNPU did not reset _session after forward failure"
-        )
 
 
 # ── H-4 — middleware order ────────────────────────────────────────────────────

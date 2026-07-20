@@ -85,7 +85,7 @@ _FFMPEG_BIN: Optional[str] = _resolve_ffmpeg_bin()
 # ── Response dataclass ────────────────────────────────────────────────────────
 
 
-STTEngineName = Literal["whisper", "vosk", "noop", "whisper_npu", "mms_npu"]
+STTEngineName = Literal["whisper", "vosk", "noop", "whisper_npu"]
 
 
 @dataclass
@@ -94,11 +94,11 @@ class STTResult:
     confidence: float
     # Audit-2026-04-28 F-39: tighten the type. Previous string-typed comment
     # said "whisper | vosk | noop" but the codebase now also emits
-    # "whisper_npu" and "mms_npu", and frontend switches were probably
-    # missing those branches.
+    # "whisper_npu", and frontend switches were probably missing that
+    # branch.
     engine: STTEngineName
     language: str
-    # Audit-2026-04-28 F-25: NPU/MMS providers can no longer report
+    # Audit-2026-04-28 F-25: NPU providers can no longer report
     # inference failures as "successful empty transcript". When forward
     # fails, populate `engine_error` with a short reason; the route
     # handler returns 503 instead of pretending the user said nothing.
@@ -516,50 +516,21 @@ def _try_npu() -> Optional[STTProvider]:
         return None
 
 
-def _try_mms() -> Optional[STTProvider]:
-    """Phase 15b — instant-tier CTC NPU path.
-
-    MMS-1B with per-language adapter compiled into a single QNN context
-    binary; non-autoregressive forward pass yields a transcript in
-    ~60–90 ms. Tried before WhisperNPUProvider in the chain when the
-    operator has opted in via voice_stt_mms_enabled.
-
-    Day-4 Block V-3 (ADR-DSH-001 / U5-PKG-C3): same win32 hard-skip
-    rationale as ``_try_npu`` — ``mms_npu_provider`` re-uses the QNN EP
-    plugin and would inherit the same x86_64 Windows segfault.
-    """
-    if sys.platform == "win32":
-        return None
-    if not getattr(config, "voice_stt_mms_enabled", False):
-        return None
-    try:
-        from voice.mms_npu_provider import MMSNPUProvider
-        return MMSNPUProvider()
-    except Exception as exc:
-        logger.info("MMS NPU STT unavailable: %s", exc)
-        return None
-
-
 def build_stt_provider() -> STTProvider:
     """
     Pick an STT provider based on `config.voice_stt_mode`. Falls back
     through the chain: requested mode → other engine → noop.
 
-    Phase 15  — voice_stt_npu_enabled  → WhisperNPUProvider tried first.
-    Phase 15b — voice_stt_mms_enabled  → MMSNPUProvider tried before Whisper-NPU
-                                          (it's the lower-latency primary).
+    Phase 15 — voice_stt_npu_enabled → WhisperNPUProvider tried first.
 
     Explicit "vosk" still pins Vosk-only — operator intent wins over auto-
     upgrade.
     """
     mode = config.voice_stt_mode
-    mms_first = bool(getattr(config, "voice_stt_mms_enabled", False))
     npu_first = bool(getattr(config, "voice_stt_npu_enabled", False))
 
     def _full_chain() -> list:
         c: list = []
-        if mms_first:
-            c.append(_try_mms)
         if npu_first:
             c.append(_try_npu)
         c.extend([_try_whisper, _try_vosk])
@@ -568,15 +539,13 @@ def build_stt_provider() -> STTProvider:
     chain: list = []
     if mode == "vosk":
         chain = [_try_vosk]  # explicit Vosk-only
-    elif mode == "mms":
-        chain = [_try_mms, _try_npu, _try_whisper, _try_vosk]
     elif mode == "npu":
-        chain = [_try_mms, _try_npu, _try_whisper, _try_vosk] if mms_first else [_try_npu, _try_whisper, _try_vosk]
+        chain = [_try_npu, _try_whisper, _try_vosk]
     elif mode == "whisper":
-        chain = _full_chain() if (mms_first or npu_first) else [_try_whisper, _try_vosk]
+        chain = _full_chain() if npu_first else [_try_whisper, _try_vosk]
     else:  # "hybrid" + anything unknown
-        chain = _full_chain() if (mms_first or npu_first) else [_try_whisper, _try_vosk]
-    
+        chain = _full_chain() if npu_first else [_try_whisper, _try_vosk]
+
     # Instantiate the chain and wrap in Hybrid if plural.
     available: list[STTProvider] = []
     for builder in chain:

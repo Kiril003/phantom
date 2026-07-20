@@ -61,6 +61,11 @@ PUBLIC_ROUTE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset({
     # 60 s. Payload is outage timestamps + reason strings (no PII, no
     # location data). N-sec NEW-SEC-08 re-eval same as face/status.
     ("GET",  "/api/v1/map/services_health"),
+    # Node identity manifest (F0.3) — unauthenticated BY DESIGN: peers
+    # verify the Ed25519 signature over the capability manifest before
+    # any pairing/auth exists. Payload is the public capability set from
+    # phantom_node.toml + signature; no user data, no secrets.
+    ("GET",  "/node/manifest"),
     # Day-4 Wave-2 IDB-2 (ADR-IDB-003): pre-PinPad picker tile list.
     # Whitelist {id, username, avatar_url} only — every sensitive
     # field stripped. The LoginScreen consumes this BEFORE auth so
@@ -70,7 +75,7 @@ PUBLIC_ROUTE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset({
     ("GET",  "/api/v1/auth/users/picker"),
     # Day-4 Wave-2 W-4 (ADR-XC-007): dynamic-source picker resolver.
     # Public-by-design — the chat-input ModelCard reads provider /
-    # voice / mms-language lists pre-auth so the splash → ready →
+    # voice option lists pre-auth so the splash → ready →
     # first-query path renders without a token. Per-source ttl cache
     # caps cost; defensive resolvers return empty list (NEVER 500)
     # so an attacker can't probe internal state via 5xx differentials.

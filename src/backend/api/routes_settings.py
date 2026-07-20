@@ -257,13 +257,6 @@ CATEGORY_SPEC: list[dict[str, Any]] = [
             "voice_stt_npu_enabled",
             "voice_stt_npu_model_path",
             "voice_stt_npu_compute",
-            # Phase 15b — MMS (Meta) instant-tier CTC NPU.
-            "voice_stt_mms_enabled",
-            "voice_stt_mms_lang",
-            "voice_stt_mms_bundle_dir",
-            "voice_stt_mms_compute",
-            "voice_stt_mms_refine_with_turbo",
-            "voice_stt_mms_refine_confidence_min",
         ],
     },
     {
@@ -455,12 +448,6 @@ LABEL_OVERRIDES: dict[str, str] = {
     "voice_stt_npu_enabled": "STT на NPU (Hexagon)",
     "voice_stt_npu_model_path": "NPU модель — шлях",
     "voice_stt_npu_compute": "NPU precision (int8/fp16)",
-    "voice_stt_mms_enabled": "MMS instant-tier (NPU)",
-    "voice_stt_mms_lang": "MMS мова (ukr/eng/rus/...)",
-    "voice_stt_mms_bundle_dir": "MMS bundle dir",
-    "voice_stt_mms_compute": "MMS precision (int8/fp16)",
-    "voice_stt_mms_refine_with_turbo": "Refine via Whisper-Turbo",
-    "voice_stt_mms_refine_confidence_min": "MMS впевненість для refine (0..1)",
     "face_tracking_enabled": "Face tracking",
     "face_tracking_auto_switch_profile": "Auto-switch profile",
     "face_tracking_privacy_mode": "Privacy mode",
@@ -526,7 +513,7 @@ PASSWORD_KEYS = {"ai_gemini_api_key", "jwt_secret_key"}
 # in the SettingsPanel header. Aim is "even the owner should understand each
 # setting in the basic view"; expert tuning lives in advanced.
 ADVANCED_KEYS: set[str] = {
-    # Voice — streaming refinement + NPU/MMS expert tuning
+    # Voice — streaming refinement + NPU expert tuning
     "voice_partial_debounce_ms",
     "voice_refine_with_whisper",
     "voice_refine_diff_threshold",
@@ -534,11 +521,6 @@ ADVANCED_KEYS: set[str] = {
     "voice_stt_npu_enabled",
     "voice_stt_npu_model_path",
     "voice_stt_npu_compute",
-    "voice_stt_mms_enabled",
-    "voice_stt_mms_bundle_dir",
-    "voice_stt_mms_lang",
-    "voice_stt_mms_min_speech_ms",
-    "voice_stt_mms_max_partial_ms",
     # Agent cognitive subsystem internals
     "agent_emotion_enabled",
     "agent_emotion_decay_minutes",
@@ -596,7 +578,7 @@ HIDDEN_KEYS: set[str] = {
 #
 # Kept tight: only ship a name when the FE has a real component for it.
 # Discovery-style editors (Gemini models, Piper voices, serial-port
-# scanner, NPU/MMS bundle pickers) need backend `/discover/*` routes
+# scanner, NPU bundle picker) need backend `/discover/*` routes
 # before they can surface — added back here once those land.
 AUTO_DETECT_EDITORS: dict[str, str] = {
     "ai_ollama_model": "OllamaModelEditor",
@@ -873,12 +855,6 @@ def _apply_runtime_side_effect(key: str, value: Any) -> None:
             "voice_stt_npu_enabled",
             "voice_stt_npu_model_path",
             "voice_stt_npu_compute",
-            # Phase 15b — same logic for the MMS instant-tier path. Lang
-            # change loads a different per-language bundle, so reset too.
-            "voice_stt_mms_enabled",
-            "voice_stt_mms_lang",
-            "voice_stt_mms_bundle_dir",
-            "voice_stt_mms_compute",
         }
         if key in invalidating_keys:
             try:

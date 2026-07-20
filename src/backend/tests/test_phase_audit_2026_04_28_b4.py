@@ -1,7 +1,7 @@
 """Block B-4 regression tests — audit 2026-04-28 voice + perf hot-spots.
 
 Covers:
-  F-25: STTResult carries an engine_error field; NPU/MMS providers populate it
+  F-25: STTResult carries an engine_error field; NPU providers populate it
         on inference failure instead of returning a silent empty transcript.
   F-31: EventBus tracks async handler tasks with strong refs so the GC cannot
         collect them mid-flight.
@@ -37,55 +37,19 @@ class TestF25EngineErrorSurfacing:
     def test_sttresult_to_dict_includes_engine_error_when_set(self):
         from voice.stt_engine import STTResult
         d = STTResult(
-            text="", confidence=0.0, engine="mms_npu", language="uk",
-            engine_error="mms_npu_forward_failed: HTP wedged",
+            text="", confidence=0.0, engine="whisper_npu", language="uk",
+            engine_error="whisper_npu_generate_failed: HTP wedged",
         ).to_dict()
-        assert d["engine_error"].startswith("mms_npu_forward_failed")
+        assert d["engine_error"].startswith("whisper_npu_generate_failed")
         assert d["text"] == ""
 
-    @pytest.mark.asyncio
-    async def test_mms_provider_populates_engine_error_on_forward_failure(self):
-        # Build a provider with a fake session that raises, then call
-        # _transcribe_sync via the public path. The provider should
-        # return STTResult with engine_error populated, NOT swallow.
-        from voice.mms_npu_provider import MMSNPUProvider
 
-        class _BoomSession:
-            def get_inputs(self):
-                class _I:
-                    name = "x"
-                return [_I()]
-
-            def run(self, *_a, **_k):
-                raise RuntimeError("HTP wedged")
-
-        class _Tok:
-            pad_token_id = 0
-
-            def decode(self, *_a, **_k):
-                return ""
-
-        prov = MMSNPUProvider.__new__(MMSNPUProvider)  # bypass __init__
-        prov._session = _BoomSession()
-        prov._tokenizer = _Tok()
-        prov._lang = "uk"
-        prov._mode = "qnn-htp"
-        prov._max_samples = 16_000 * 3
-
-        import numpy as np
-        result = prov._transcribe_sync(np.zeros(16_000 * 3, dtype=np.float32), "uk")
-        assert result.text == ""
-        assert result.engine == "mms_npu"
-        assert result.engine_error is not None
-        assert "mms_npu_forward_failed" in result.engine_error
-
-
-# ── F-39 — engine Literal covers all five values ─────────────────────────────
+# ── F-39 — engine Literal covers all emitted values ──────────────────────────
 
 class TestF39EngineLiteral:
     def test_engine_literal_covers_all_emitted_values(self):
         from voice.stt_engine import STTEngineName
-        emitted = {"whisper", "vosk", "noop", "whisper_npu", "mms_npu"}
+        emitted = {"whisper", "vosk", "noop", "whisper_npu"}
         assert set(get_args(STTEngineName)) >= emitted, (
             "F-39 regression: STTEngineName Literal missing one of "
             f"the actually-emitted values {emitted}"

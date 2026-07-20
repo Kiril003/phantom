@@ -24,6 +24,10 @@ ollama==0.3.1
 # Voice / STT
 faster-whisper==1.0.3
 vosk==0.3.45
+# soundfile: audio decode/encode (libsndfile binding) used by
+# voice/stt_engine.py to normalise incoming audio to mono 16-bit PCM
+# before handing it to a provider. BSD-3, commercially fine.
+soundfile==0.14.0
 
 # Voice / TTS (Phase 07+) — Piper neural text-to-speech
 # Silero VAD (Phase 11b) is shipped as an ONNX file in voice/models/silero-vad/,

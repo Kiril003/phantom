@@ -252,18 +252,18 @@ async def setup_default_tasks(tasker: Optional[LiveTasker] = None) -> LiveTasker
         # This is a bit different as it triggers side effects directly
         # but we can return the active geofences as the "payload"
         from .geofence_engine import GeofenceEngine
-        from core.context_engine import get_context_engine
-        from db.database import SessionLocal
+        from core.context_engine import context_engine
+        from db.database import AsyncSessionLocal
         from db.models import Geofence
         from sqlalchemy import select
-        
-        ctx = get_context_engine().get_snapshot()
+
+        ctx = context_engine.get_snapshot()
         if not ctx or not ctx.get("where") or ctx["where"].get("lat") is None:
             return []
-            
+
         lat, lon = ctx["where"]["lat"], ctx["where"]["lon"]
-        
-        async with SessionLocal() as db:
+
+        async with AsyncSessionLocal() as db:
             # For simplicity, we just check ALL active geofences
             # In production this would be spatial-indexed
             result = await db.execute(
@@ -290,6 +290,24 @@ async def setup_default_tasks(tasker: Optional[LiveTasker] = None) -> LiveTasker
         fetch=fetch_proximity,
         on_diff=on_proximity_diff,
     )
+
+    # Layers whose `source.type` has no fetch adapter wired yet (e.g.
+    # `api` — Shodan/OSINT lookups are agent-verb-driven, not polled)
+    # must never be silently dropped into the live-task loop with a
+    # fetch that would raise every tick (the D-1 ImportError-forever
+    # failure mode). We simply don't register them, and log once at
+    # setup so the gap is visible without spamming the tick loop.
+    from .layer_manifest import LayerSourceType
+
+    _UNIMPLEMENTED_FETCH_SOURCE_TYPES = (LayerSourceType.api,)
+    for m in registry.all():
+        if m.source.type in _UNIMPLEMENTED_FETCH_SOURCE_TYPES and m.id not in tk.names:
+            logger.info(
+                "fetch not implemented for source type %s (layer=%s) — "
+                "not registering a live task",
+                m.source.type.value,
+                m.id,
+            )
 
     return tk
 

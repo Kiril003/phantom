@@ -60,6 +60,10 @@ class LayerSourceType(str, Enum):
     computed = "computed"
     # One-shot static GeoJSON file packaged with the build.
     geojson_static = "geojson_static"
+    # Query-on-demand REST API with no manifest-declared fetch adapter
+    # yet (e.g. Shodan lookups) — agent verbs call out directly rather
+    # than the layer being polled on an interval.
+    api = "api"
 
 
 class LayerPriority(str, Enum):

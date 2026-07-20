@@ -62,16 +62,31 @@ async def _lane_chroma_eager() -> None:
     """G2 lane: ChromaDB PersistentClient eager open + collection enumerate.
     Audit F-17: without this the FIRST /readyz hit pays a 2-3 s cold
     scan over leaked-collection dirs and K8s pulls a healthy daemon out
-    of the LB rotation."""
+    of the LB rotation.
+
+    Audit D-3: migration and eager-init are two independent concerns
+    that used to share one try/except — a broken migration import took
+    ``init_chroma_eager()`` down with it, which is the exact regression
+    this lane exists to prevent. They now run in their own try/except
+    blocks so a migration failure can never block eager init (or vice
+    versa)."""
+    # Step 1/2 — legacy collection migration. Best-effort; never blocks
+    # eager init below.
     try:
-        from memory.strategic_memory import init_chroma_eager
         from memory.migrate_chroma_v1 import migrate_old_collections
         from db.database import get_session
 
-        # Run ChromaDB migrations first
         async with get_session() as db:
             migration_stats = await migrate_old_collections(db)
-            logger.info("ChromaDB migration completed on startup: %s", migration_stats)
+        logger.info("ChromaDB migration completed on startup: %s", migration_stats)
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("ChromaDB migration skipped: %s", exc)
+        lifespan_g2_failures_total.inc(lane="chroma_eager")
+
+    # Step 2/2 — eager client open + collection enumerate. Independent
+    # of the migration step above by construction.
+    try:
+        from memory.strategic_memory import init_chroma_eager
 
         chroma_init = await init_chroma_eager()
         if chroma_init.get("ok") is False:
@@ -84,7 +99,7 @@ async def _lane_chroma_eager() -> None:
                 int(chroma_init.get("elapsed_ms", 0)),
             )
     except Exception as exc:  # noqa: BLE001
-        logger.warning("Chroma eager init/migration skipped: %s", exc)
+        logger.warning("Chroma eager init skipped: %s", exc)
         lifespan_g2_failures_total.inc(lane="chroma_eager")
 
 

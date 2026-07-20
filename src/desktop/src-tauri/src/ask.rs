@@ -45,11 +45,21 @@ struct ChatResponse {
 impl AskState {
     /// All wiring is env-overridable (§ settings-from-UI covenant); defaults
     /// target the co-located backend with the bootstrap identity.
+    ///
+    /// PIN resolution (the backend no longer ships a known default PIN —
+    /// it mints a random one-time bootstrap PIN on first boot and writes it
+    /// to `<data-dir>/identity/bootstrap_pin`):
+    ///   1. `PHANTOM_PIN` env — the operator's actual PIN once rotated.
+    ///   2. `PHANTOM_PIN_FILE` env — path to the bootstrap-PIN marker the
+    ///      backend wrote (co-located install; the launcher points this at
+    ///      `$PHANTOM_DATA_DIR/identity/bootstrap_pin`).
+    ///   3. empty — login will fail with a clear "no PIN configured" error
+    ///      rather than silently trying a dead default.
     pub fn from_env() -> Self {
         let api_base =
             std::env::var("PHANTOM_API").unwrap_or_else(|_| "http://127.0.0.1:8000".into());
         let user = std::env::var("PHANTOM_USER").unwrap_or_else(|_| "phantom".into());
-        let pin = std::env::var("PHANTOM_PIN").unwrap_or_else(|_| "000000".into());
+        let pin = Self::resolve_pin();
         Self {
             client: reqwest::Client::new(),
             api_base,
@@ -59,7 +69,31 @@ impl AskState {
         }
     }
 
+    fn resolve_pin() -> String {
+        if let Ok(p) = std::env::var("PHANTOM_PIN") {
+            if !p.is_empty() {
+                return p;
+            }
+        }
+        if let Ok(path) = std::env::var("PHANTOM_PIN_FILE") {
+            if let Ok(contents) = std::fs::read_to_string(&path) {
+                let trimmed = contents.trim();
+                if !trimmed.is_empty() {
+                    return trimmed.to_string();
+                }
+            }
+        }
+        String::new()
+    }
+
     async fn login(&self) -> Result<String, String> {
+        if self.pin.is_empty() {
+            return Err(
+                "no PIN configured — set PHANTOM_PIN or PHANTOM_PIN_FILE (the \
+                 backend prints a one-time bootstrap PIN at first boot)"
+                    .into(),
+            );
+        }
         let url = format!("{}/api/v1/auth/login/pin", self.api_base);
         let resp = self
             .client

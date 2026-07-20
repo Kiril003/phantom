@@ -18,18 +18,55 @@ static SUMMONED: AtomicBool = AtomicBool::new(false);
 
 fn main() {
     // webkitgtk's dmabuf renderer blanks the webview on software-GL stacks
-    // (Adreno/VNC on this board: "DRI3 error" → black window). Respect an
-    // operator-set value; default it off otherwise.
+    // (Adreno/VNC on this board: "DRI3 error" → black window), and the
+    // GL compositing path blanks a webview across hide→show on that same
+    // stack. Both env vars used to be set unconditionally on Linux — which
+    // meant every normal desktop GPU also had hardware webkit compositing
+    // disabled for no reason. Now: respect an operator override if either
+    // var is already set, otherwise only force the software-GL workaround
+    // when software GL actually looks likely (opt-in flag, or no DRM render
+    // node present — the honest "no GPU driver" signal).
     #[cfg(target_os = "linux")]
     {
-        if std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_none() {
+        // Same per-var "operator wins" check as before — an explicitly set
+        // value (either "1" or "0") is never overridden.
+        let dmabuf_operator_set = std::env::var_os("WEBKIT_DISABLE_DMABUF_RENDERER").is_some();
+        let compositing_operator_set =
+            std::env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE").is_some();
+
+        if dmabuf_operator_set || compositing_operator_set {
+            eprintln!("aegis: webkit render var(s) operator-set — leaving as configured");
+        }
+
+        // No render node under /dev/dri means no usable DRM/KMS GPU driver —
+        // an honest signal this is a software-GL host (this board's
+        // Radxa/Adreno-over-VNC path, historically). AEGIS_SOFTWARE_GL lets
+        // an operator force the same workaround on hardware that lies.
+        let forced = std::env::var_os("AEGIS_SOFTWARE_GL").is_some();
+        let no_render_node = std::fs::read_dir("/dev/dri")
+            .map(|entries| {
+                !entries
+                    .filter_map(Result::ok)
+                    .any(|e| e.file_name().to_string_lossy().starts_with("renderD"))
+            })
+            .unwrap_or(true);
+        let software_gl_likely = forced || no_render_node;
+
+        if !dmabuf_operator_set && software_gl_likely {
             std::env::set_var("WEBKIT_DISABLE_DMABUF_RENDERER", "1");
         }
-        // Software compositing survives window unmap/remap — the GL surface
-        // path blanks a webview across hide→show on this stack (VNC/Adreno).
-        // This lets the Breath Line's summon/dismiss use plain hide/show.
-        if std::env::var_os("WEBKIT_DISABLE_COMPOSITING_MODE").is_none() {
+        if !compositing_operator_set && software_gl_likely {
             std::env::set_var("WEBKIT_DISABLE_COMPOSITING_MODE", "1");
+        }
+
+        if !dmabuf_operator_set && !compositing_operator_set {
+            if software_gl_likely {
+                eprintln!(
+                    "aegis: software GL detected/forced — webkit dmabuf+compositing disabled"
+                );
+            } else {
+                eprintln!("aegis: hardware GL assumed — webkit compositing left enabled");
+            }
         }
     }
 

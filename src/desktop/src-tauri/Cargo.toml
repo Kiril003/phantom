@@ -4,6 +4,9 @@ version = "0.1.0"
 edition = "2021"
 description = "AEGIS Stratum 0 — the Film: PHANTOM's optical membrane over the host OS"
 license = "UNLICENSED"
+# Not published to crates.io. (The "UNLICENSED" EULA naming is an owner
+# decision, left as-is here — this flag is unrelated to that choice.)
+publish = false
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
@@ -22,22 +25,19 @@ gtk-layer-shell = { version = "0.8", features = ["v0_6"], optional = true }
 # Pure-Rust XCB — no libxcb link, the Conduit hook talks the X protocol direct.
 x11rb = { version = "0.13", features = ["xkb"] }
 
-[target.'cfg(target_os = "windows")'.dependencies]
+# Union of the two Windows dependency blocks that used to exist here (one
+# keyed on `target_os = "windows"`, one on `windows` — both matched the same
+# target and both declared `windows` with different feature sets, so only
+# one ever "won" depending on resolution order). x11rb was also erroneously
+# listed under this target; X11 doesn't exist on Windows, so it's gone —
+# the linux target above is the only place it belongs.
+[target.'cfg(windows)'.dependencies]
 windows = { version = "0.58", features = [
     "Win32_Foundation",
     "Win32_System_SystemInformation",
+    "Win32_System_LibraryLoader",
     "Win32_UI_WindowsAndMessaging",
     "Win32_UI_Input_KeyboardAndMouse",
-] }
-x11rb = { version = "0.13", features = ["xkb"] }
-
-[target.'cfg(windows)'.dependencies]
-windows = { version = "0.58", features = [
-  "Win32_Foundation",
-  "Win32_UI_WindowsAndMessaging",
-  "Win32_UI_Input_KeyboardAndMouse",
-  "Win32_System_LibraryLoader",
-  "Win32_System_SystemInformation",
 ] }
 
 [features]

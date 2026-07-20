@@ -14,6 +14,10 @@ use std::sync::mpsc::Sender;
 
 #[cfg(target_os = "linux")]
 mod linux_x11;
+#[cfg(target_os = "linux")]
+mod portal;
+#[cfg(target_os = "linux")]
+mod wayland;
 #[cfg(target_os = "macos")]
 mod macos;
 #[cfg(target_os = "windows")]
@@ -85,11 +89,34 @@ pub fn pin_breath_focus() -> bool {
     false
 }
 
+/// True when this process is talking to a Wayland display (native surfaces,
+/// compositor-owned hotkeys). Drives the summon-focus path in `toggle_breath`
+/// and gates the compositor-bind announcement. Always false off Linux.
+pub fn is_wayland() -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        return wayland::is_wayland();
+    }
+    #[cfg(not(target_os = "linux"))]
+    false
+}
+
 /// Spawn the platform keyboard hook on its own thread. Returns immediately;
 /// the hook lives for the process lifetime, emitting `ConduitEvent`s on `tx`.
 pub fn spawn(tx: Sender<ConduitEvent>) {
     #[cfg(target_os = "linux")]
-    linux_x11::spawn(tx);
+    {
+        // Wayland: no client can grab a global key — the compositor owns it.
+        // Drop a keybind snippet so a `Caps_Lock → aegis --summon` bind can
+        // toggle us over single-instance IPC (see wayland.rs + main.rs). The
+        // X11 hook still runs afterward for best-effort Xwayland coverage when
+        // no compositor bind is set; the two never collide, because a present
+        // compositor bind consumes the key before Xwayland ever sees it.
+        if wayland::is_wayland() {
+            wayland::announce();
+        }
+        linux_x11::spawn(tx);
+    }
     #[cfg(target_os = "windows")]
     windows::spawn(tx);
     #[cfg(target_os = "macos")]

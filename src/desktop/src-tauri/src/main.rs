@@ -70,7 +70,31 @@ fn main() {
         }
     }
 
-    tauri::Builder::default()
+    // `mut` is used only on Linux, where the single-instance plugin is added
+    // below; off Linux the reassignment is compiled out, so silence the mut.
+    #[cfg_attr(not(target_os = "linux"), allow(unused_mut))]
+    let mut builder = tauri::Builder::default();
+
+    // Wayland Conduit Tier 3: the compositor keybind spawns `aegis --summon`,
+    // a second process. The single-instance plugin intercepts it, forwards its
+    // argv to THIS (the running) instance, and closes the intruder — so a
+    // global hotkey works over native-Wayland windows without any client-side
+    // key grab. Must be the first plugin registered. Linux-only: the summon
+    // IPC is Wayland's need, and keeping it off Windows/macOS protects those
+    // builds. A bare relaunch (no --summon) is refused, not toggled, so an
+    // accidental double-launch never dismisses an open line.
+    #[cfg(target_os = "linux")]
+    {
+        builder = builder.plugin(tauri_plugin_single_instance::init(|app, argv, _cwd| {
+            if argv.iter().any(|a| a == "--summon") {
+                toggle_breath(app);
+            } else {
+                eprintln!("aegis: already running (ignoring bare relaunch)");
+            }
+        }));
+    }
+
+    builder
         .manage(ask::AskState::from_env())
         .invoke_handler(tauri::generate_handler![
             dismiss_breath,
@@ -145,6 +169,20 @@ fn main() {
                 });
             }
 
+            // Cold-start summon: if the compositor bind fired `aegis --summon`
+            // while nothing was running yet, THIS process is the fresh primary
+            // (single-instance had no one to forward to). Honor the intent once
+            // the pre-warm has realized the surface, so the very first tap
+            // still raises the line instead of silently just booting AEGIS.
+            if std::env::args().any(|a| a == "--summon") {
+                let handle = app.handle().clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(1300));
+                    // toggle_breath dispatches its own body to the main thread.
+                    toggle_breath(&handle);
+                });
+            }
+
             // Spawn the global Conduit hook; drive the Breath Line off its
             // gestures on a consumer thread that never blocks the hook.
             let (tx, rx) = std::sync::mpsc::channel::<ConduitEvent>();
@@ -186,22 +224,42 @@ fn toggle_breath(app: &AppHandle) {
             let _ = win.show();
             let _ = win.set_focus();
             let _ = win.eval("window.__breathFocus&&window.__breathFocus()");
-            // Tauri's set_focus is WM-mediated and mutter's focus-stealing guard
-            // can deny it. A direct XSetInputFocus is not WM-mediated — but a
-            // *fixed* retry schedule only wins the race while the board is idle;
-            // under load the line would map without the keyboard, and every
-            // keystroke would silently land in the host app. So keep re-asserting
-            // until the X server confirms we hold focus, then focus the input.
-            let win2 = win.clone();
-            std::thread::spawn(move || {
-                if !conduit::pin_breath_focus() {
-                    eprintln!("conduit: summon could not take focus — line left unsummoned");
-                }
-                let win3 = win2.clone();
-                let _ = win2.run_on_main_thread(move || {
-                    let _ = win3.eval("window.__breathFocus&&window.__breathFocus()");
+
+            if conduit::is_wayland() {
+                // Wayland: the compositor grants the keyboard to a freshly-shown
+                // xdg-toplevel that requests activation — there is no X11
+                // focus-stealing race to fight, and no X11 handle to the native
+                // surface for pin_focus to even find. set_focus() above is the
+                // job; re-assert once on the next tick to beat any activation-
+                // token latency, then re-focus the input.
+                let win2 = win.clone();
+                std::thread::spawn(move || {
+                    std::thread::sleep(std::time::Duration::from_millis(60));
+                    let win3 = win2.clone();
+                    let _ = win2.run_on_main_thread(move || {
+                        let _ = win3.set_focus();
+                        let _ = win3.eval("window.__breathFocus&&window.__breathFocus()");
+                    });
                 });
-            });
+            } else {
+                // X11: Tauri's set_focus is WM-mediated and mutter's focus-
+                // stealing guard can deny it. A direct XSetInputFocus is not
+                // WM-mediated — but a *fixed* retry schedule only wins the race
+                // while the board is idle; under load the line would map without
+                // the keyboard, and every keystroke would silently land in the
+                // host app. So keep re-asserting until the X server confirms we
+                // hold focus, then focus the input.
+                let win2 = win.clone();
+                std::thread::spawn(move || {
+                    if !conduit::pin_breath_focus() {
+                        eprintln!("conduit: summon could not take focus — line left unsummoned");
+                    }
+                    let win3 = win2.clone();
+                    let _ = win2.run_on_main_thread(move || {
+                        let _ = win3.eval("window.__breathFocus&&window.__breathFocus()");
+                    });
+                });
+            }
         }
     });
 }

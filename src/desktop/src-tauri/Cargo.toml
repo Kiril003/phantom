@@ -24,6 +24,12 @@ gdk = "0.18"
 gtk-layer-shell = { version = "0.8", features = ["v0_6"], optional = true }
 # Pure-Rust XCB — no libxcb link, the Conduit hook talks the X protocol direct.
 x11rb = { version = "0.13", features = ["xkb"] }
+# Wayland Conduit Tier 3: a compositor keybind runs `aegis --summon`, which
+# this plugin forwards to the already-running instance to toggle the Breath
+# Line (see conduit/wayland.rs). Linux-only — the summon-IPC need is Wayland's;
+# scoping it here keeps the Windows/macOS builds untouched. Tauri-org plugin,
+# MIT/Apache-2.0.
+tauri-plugin-single-instance = "2"
 
 # Union of the two Windows dependency blocks that used to exist here (one
 # keyed on `target_os = "windows"`, one on `windows` — both matched the same

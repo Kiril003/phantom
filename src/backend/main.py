@@ -446,7 +446,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as exc:
         logger.error("AIHub: initialization failed: %s", exc)
 
-    # Ensure at least one user exists (creates default ROOT 'phantom'/000000)
+    # Ensure at least one user exists (creates ROOT 'phantom' with a
+    # randomly generated one-time bootstrap PIN — see security.auth)
     from db.database import get_session
     from security.auth import ensure_default_user
     async with get_session() as db:

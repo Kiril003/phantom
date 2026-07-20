@@ -4,6 +4,7 @@ Authentication logic — RFID, PIN, auto-login, FastAPI dependencies.
 from __future__ import annotations
 
 import logging
+from pathlib import Path
 from typing import Optional
 
 import bcrypt as _bcrypt_lib
@@ -74,23 +75,69 @@ async def authenticate_pin(
     return user
 
 
-# Day-2 F-7 (audit-2026-04-29 Tier E): the seeded `ensure_default_user`
-# row ships with PIN '000000' so the operator can log in once and rotate
-# it. Auto-login MUST refuse that bootstrap PIN — otherwise a daemon left
-# at the kiosk with auto-login on grants the next person to touch it ROOT
-# without the rotation step ever happening. The user must explicitly log
-# in (PIN/RFID), be told to rotate, and only then does auto-login take
-# over for subsequent boots.
-_DEFAULT_PIN: str = "000000"
+# Rebuild P0 (master-plan §2): the seed no longer ships a KNOWN default
+# PIN. `ensure_default_user` now mints a random bootstrap PIN, persists
+# it to a 0600 marker file in the data dir (and prints it to the boot
+# log) so the console operator can perform first login. While the marker
+# exists and still matches the user's hash, the PIN is treated as
+# "bootstrap": auto-login refuses it and `/auth/login/pin` accepts it
+# from loopback only. Rotating the PIN deletes the marker.
+#
+# `_LEGACY_DEFAULT_PIN` remains recognised so installs seeded before
+# this change (rows holding bcrypt('000000')) keep BOTH protections —
+# without it, upgrading would silently un-gate the old default.
+_LEGACY_DEFAULT_PIN: str = "000000"
+
+_BOOTSTRAP_PIN_LEN: int = 6  # matches the PinPad UI default maxLength
+
+
+def bootstrap_pin_file() -> "Path":
+    """Path of the bootstrap-PIN marker file (plaintext PIN, mode 0600).
+
+    Lives under the identity data dir so packaged installs resolve via
+    platformdirs and tests can redirect with PHANTOM_DATA_DIR.
+    """
+    from paths import resolve_data_dir
+    return resolve_data_dir("identity") / "bootstrap_pin"
+
+
+def read_bootstrap_pin() -> Optional[str]:
+    """Return the persisted bootstrap PIN, or None when absent/unreadable."""
+    try:
+        pin = bootstrap_pin_file().read_text(encoding="utf-8").strip()
+        return pin or None
+    except OSError:
+        return None
+
+
+def discard_bootstrap_pin() -> None:
+    """Remove the bootstrap-PIN marker (called after rotation)."""
+    try:
+        bootstrap_pin_file().unlink(missing_ok=True)
+    except OSError as exc:
+        logger.warning("Could not remove bootstrap PIN marker: %s", exc)
+
+
+def _generate_bootstrap_pin() -> str:
+    import secrets
+    import string
+    return "".join(secrets.choice(string.digits) for _ in range(_BOOTSTRAP_PIN_LEN))
 
 
 def is_default_pin(pin_hash: Optional[str]) -> bool:
-    """True iff the stored bcrypt hash matches the bootstrap PIN
-    `'000000'`. Bcrypt is constant-time so this is safe to call per
-    auto-login attempt."""
+    """True iff the stored bcrypt hash is still a bootstrap credential:
+    either the legacy seeded `'000000'` (pre-rebuild installs) or the
+    randomly generated PIN recorded in the bootstrap marker file.
+    Bcrypt is constant-time so this is safe to call per auto-login
+    attempt."""
     if not pin_hash:
         return False
-    return verify_secret(_DEFAULT_PIN, pin_hash)
+    if verify_secret(_LEGACY_DEFAULT_PIN, pin_hash):
+        return True
+    marker = read_bootstrap_pin()
+    if marker is None:
+        return False
+    return verify_secret(marker, pin_hash)
 
 
 # Day-3 D3-A-1 (audit-2026-04-30 Tier A): F-07's Day-2 closure only
@@ -151,7 +198,8 @@ def fusion_unlocks_pin_fallback(
             or ``None`` if no PIN field was on the form.
 
     Returns:
-        ``True`` only when ``pin_supplied == "000000"`` AND
+        ``True`` only when ``pin_supplied`` is the bootstrap PIN (legacy
+        ``'000000'`` or the generated marker PIN) AND
         (``fusion_confidence is None`` OR
          ``fusion_confidence < PIN_FALLBACK_THRESHOLD``).
 
@@ -160,7 +208,9 @@ def fusion_unlocks_pin_fallback(
     knows you" guarantee. Anywhere fusion is silent, the PIN is the
     only way in and we honour it.
     """
-    if pin_supplied != _DEFAULT_PIN:
+    if pin_supplied is None:
+        return False
+    if pin_supplied != _LEGACY_DEFAULT_PIN and pin_supplied != read_bootstrap_pin():
         return False
     # PIN_FALLBACK_THRESHOLD lives in voice.identity_resolver; importing
     # locally keeps security/auth.py free of the voice module at import
@@ -202,24 +252,43 @@ async def get_auto_login_user(db: AsyncSession) -> Optional[User]:
 async def ensure_default_user(db: AsyncSession) -> None:
     """
     Create a default ROOT user on first launch if no users exist.
-    Default PIN is '000000' — user should change it in settings.
+
+    The bootstrap PIN is randomly generated (never a fixed default),
+    written to the 0600 marker file returned by `bootstrap_pin_file()`
+    and printed to the boot log. Until it is rotated, `/auth/login/pin`
+    accepts it from loopback only and auto-login stays off.
     """
     result = await db.execute(select(User))
     if result.scalars().first() is not None:
         return  # already have users
 
     import uuid
+    pin = _generate_bootstrap_pin()
+    marker = bootstrap_pin_file()
+    try:
+        marker.parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+        marker.touch(mode=0o600, exist_ok=True)
+        marker.write_text(pin, encoding="utf-8")
+    except OSError as exc:
+        # The log line below is then the operator's only copy of the PIN.
+        logger.error("Could not persist bootstrap PIN marker %s: %s", marker, exc)
+
     default_user = User(
         id=str(uuid.uuid4()),
         username="phantom",
         role="ROOT",
-        pin_hash=hash_secret("000000"),
+        pin_hash=hash_secret(pin),
         rfid_uid_hash=None,
         avatar_url=None,
     )
     db.add(default_user)
     await db.commit()
-    logger.info("Created default ROOT user 'phantom' — change PIN in settings")
+    logger.warning(
+        "Created ROOT user 'phantom' with one-time bootstrap PIN: %s "
+        "(also saved to %s). Log in from the console and rotate it in "
+        "Settings — remote login is refused until rotation.",
+        pin, marker,
+    )
 
 
 # ── FastAPI dependencies ───────────────────────────────────────────────────────

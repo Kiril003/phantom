@@ -701,7 +701,14 @@ async def update_user(
     if req.avatar_url is not None:
         user.avatar_url = req.avatar_url  # type: ignore[assignment]
     if req.pin is not None:
+        # Rotating away from the bootstrap credential retires the marker
+        # file (see security.auth) — plaintext PIN leaves the disk and the
+        # loopback-only gate lifts.
+        was_bootstrap = is_default_pin(user.pin_hash)
         user.pin_hash = hash_secret(req.pin)  # type: ignore[assignment]
+        if was_bootstrap:
+            from security.auth import discard_bootstrap_pin
+            discard_bootstrap_pin()
     if req.rfid_uid is not None:
         user.rfid_uid_hash = hash_secret(req.rfid_uid)  # type: ignore[assignment]
     if req.preferences is not None:

@@ -31,18 +31,23 @@ class PhantomConfig(BaseSettings):
     port: int = 8000
     debug: bool = False
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
+    # Rebuild P0 (master-plan §2 S-2): local origins ONLY. Never bake a
+    # public IP here — combined with allow_credentials=True that is a
+    # standing CSRF vector. Operators add extra origins via settings/env.
     cors_origins: list[str] = [
         "http://localhost:5173",
         "http://localhost:8000",
         "http://localhost",
         "https://localhost",
+        "http://127.0.0.1:5173",
+        "http://127.0.0.1:8000",
+        "http://127.0.0.1",
         "capacitor://localhost",
+        "tauri://localhost",
+        "http://tauri.localhost",
         "http://phantom.local:5173",
         "http://phantom.local:8000",
         "http://phantom.local",
-        "http://158.196.114.238:5173",
-        "http://158.196.114.238:8000",
-        "http://158.196.114.238",
     ]
     # Hostname embedded in pairing QR codes. Phones dial back to this
     # host during /pair/claim. Defaults to mDNS; operators on networks

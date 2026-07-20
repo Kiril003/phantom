@@ -1,10 +1,10 @@
 import { useEffect } from 'react';
 import { useMapInstance } from '../MapContext';
-import { getMapTokens, buildPhantomStyle } from '../mapTokens';
+import { getMapTokens, buildPhantomStyle, preserveOverlayLayers } from '../mapTokens';
 import { useSystemStore } from '../../../stores/systemStore';
 
 /**
- * BaseLayer — re-renders the dark raster tiles whenever the SystemState changes,
+ * BaseLayer — re-renders the dark base style whenever the SystemState changes,
  * so accent-driven background stays in sync with state transitions.
  */
 export function BaseLayer() {
@@ -16,8 +16,10 @@ export function BaseLayer() {
 
     try {
       const tokens = getMapTokens();
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      map.setStyle(buildPhantomStyle(tokens) as any);
+      // `transformStyle` carries ReconLayer/HeatmapLayer/GeofencesLayer's
+      // runtime-added sources/layers forward — without it they'd be torn
+      // down every time SystemState changes (see mapTokens.ts).
+      map.setStyle(buildPhantomStyle(tokens), { diff: true, transformStyle: preserveOverlayLayers });
     } catch {
       /* map not ready yet */
     }

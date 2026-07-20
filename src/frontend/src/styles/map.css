@@ -80,9 +80,12 @@
   filter: sepia(0.18) saturate(1.10) contrast(1.18) brightness(0.55);
 }
 
-/* Hide MapLibre's default chrome — we render our own glass attribution. */
-.phantom-map-frame .maplibregl-ctrl-attrib,
-.phantom-map-frame .maplibregl-ctrl-bottom-right,
+/* Hide MapLibre's default control chrome — we render our own glass UI —
+ * EXCEPT the bottom-right corner, which now hosts the compact attribution
+ * control. OpenFreeMap's tile usage requires "© OpenStreetMap contributors"
+ * to stay visible; nothing else is mounted into this corner (no
+ * NavigationControl/ScaleControl are added anywhere in this codebase), so
+ * un-hiding it only reveals the attribution chip. */
 .phantom-map-frame .maplibregl-ctrl-bottom-left,
 .phantom-map-frame .maplibregl-ctrl-top-right,
 .phantom-map-frame .maplibregl-ctrl-top-left {

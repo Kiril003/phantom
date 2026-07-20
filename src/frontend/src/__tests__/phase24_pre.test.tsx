@@ -205,18 +205,15 @@ function resetStores() {
 describe('Phase 24-PRE — Satellite style cycle', () => {
   beforeEach(resetStores);
 
-  it('cycles ui_map_style dark → satellite → streets → dark on each click', async () => {
+  it('cycles ui_map_style dark → streets → dark on each click (satellite retired)', async () => {
     const { OmniMap } = await import('../components/map/OmniMap');
     render(<OmniMap bridgeAgent={false} />);
     const btn = await screen.findByLabelText(/Style · /);
     expect(useSettingsStore.getState().values.ui_map_style).toBe('dark');
 
     fireEvent.click(btn);
-    expect(useSettingsStore.getState().values.ui_map_style).toBe('satellite');
-    expect(settingsSetSpy).toHaveBeenLastCalledWith('ui_map_style', 'satellite');
-
-    fireEvent.click(screen.getByLabelText(/Style · /));
     expect(useSettingsStore.getState().values.ui_map_style).toBe('streets');
+    expect(settingsSetSpy).toHaveBeenLastCalledWith('ui_map_style', 'streets');
 
     fireEvent.click(screen.getByLabelText(/Style · /));
     expect(useSettingsStore.getState().values.ui_map_style).toBe('dark');
@@ -229,7 +226,7 @@ describe('Phase 24-PRE — Satellite style cycle', () => {
     const btn = await screen.findByLabelText(/Style · /);
     fireEvent.click(btn);
     // Local optimistic state still flips even if backend rejects.
-    expect(useSettingsStore.getState().values.ui_map_style).toBe('satellite');
+    expect(useSettingsStore.getState().values.ui_map_style).toBe('streets');
   });
 
   it('rebuilds MapLibre style on setting change after ready', async () => {

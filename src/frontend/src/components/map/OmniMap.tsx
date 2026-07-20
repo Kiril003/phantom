@@ -78,7 +78,11 @@ export function OmniMap({
   const center = useMapStore((s) => s.center);
 
   const cycleMapStyle = () => {
-    const styles = ['dark', 'satellite', 'streets'];
+    // 'satellite' removed from the cycle — no free-for-commercial-use
+    // satellite source (see mapTokens.ts). Stale persisted 'satellite'
+    // values still resolve via buildPhantomStyle(); this only controls
+    // what the cycle button walks through.
+    const styles = ['dark', 'streets'];
     const idx = styles.indexOf(mapStyle);
     const next = styles[(idx + 1) % styles.length];
     setSettingValue('ui_map_style', next);

@@ -1,3 +1,5 @@
+import type { StyleSpecification } from 'maplibre-gl';
+
 /**
  * Resolve CSS custom properties to concrete values for non-React map primitives
  * (MapLibre DOM markers, D3, Canvas). Components must *never* hardcode colors —
@@ -108,191 +110,142 @@ export function getMapTokens(): MapTokens {
   };
 }
 
+/**
+ * 'satellite' is kept only so previously-persisted `ui_map_style` settings
+ * values keep parsing — there is no free-for-commercial-use satellite tile
+ * source, so it is no longer offered in the UI style picker/cycle. See
+ * `resolveEffectiveStyle` below for the runtime fallback.
+ */
 export type PhantomMapStyle = 'dark' | 'satellite' | 'streets';
 
 /**
- * Per-(style × theme) raster paint presets.
- *
- * The map has three "style" choices visible to the operator (`dark`,
- * `streets`, `satellite`), but the WARM theme inverts what `dark` should
- * mean. On sunrise-warm we render a luminous warm-paper print — high
- * brightness, gently boosted saturation, slight warm cast via a small
- * negative `raster-hue-rotate` toward amber. On cyberdeck-cold we keep
- * the legacy desaturated near-black look. amber-night dims tiles further
- * so amber overlays remain the focal point.
- *
- * `streets` and `satellite` stay consistent across themes (the operator
- * explicitly asked for them), but the background colour follows the
- * theme so the gutter never flashes the wrong palette.
+ * OpenFreeMap vector styles — free for unlimited commercial use, self-hosted
+ * planet-wide vector tiles, attribution required. Replaces the legacy raw
+ * OSM raster tiles (production/commercial use forbidden under the OSMF tile
+ * usage policy) and the keyless Esri World_Imagery raster source (requires
+ * a paid ArcGIS license for any real deployment).
  */
-const OSM_TILES = [
-  'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
-  'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
-  'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png',
-];
+const OPENFREEMAP_STYLES = {
+  liberty: 'https://tiles.openfreemap.org/styles/liberty',
+  bright: 'https://tiles.openfreemap.org/styles/bright',
+  positron: 'https://tiles.openfreemap.org/styles/positron',
+  dark: 'https://tiles.openfreemap.org/styles/dark',
+  fiord: 'https://tiles.openfreemap.org/styles/fiord',
+} as const;
 
-const SATELLITE_TILES = [
-  'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
-];
+let satelliteRemovedWarned = false;
 
-interface PaintPreset {
-  source: { tiles: string[]; attribution: string };
-  paint: Record<string, number>;
-}
-
-function darkPresetForTheme(theme: string): PaintPreset {
-  const source = { tiles: OSM_TILES, attribution: '© OpenStreetMap' };
-  if (theme === 'cyberdeck-cold') {
-    // Original desaturated phantom look — dark slate baseline.
-    return {
-      source,
-      paint: {
-        'raster-opacity': 0.45,
-        'raster-brightness-min': 0.0,
-        'raster-brightness-max': 0.55,
-        'raster-saturation': -0.85,
-        'raster-contrast': 0.2,
-      },
-    };
+/**
+ * 'satellite' has no free-for-commercial-use replacement source. Resolve it
+ * to 'streets' at the boundary, warning exactly once per session so callers
+ * that still hold a stale persisted value degrade gracefully instead of
+ * erroring.
+ */
+function resolveEffectiveStyle(style: PhantomMapStyle): 'dark' | 'streets' {
+  if (style !== 'satellite') return style;
+  if (!satelliteRemovedWarned) {
+    satelliteRemovedWarned = true;
+    // eslint-disable-next-line no-console
+    console.warn(
+      "[phantom-map] 'satellite' map style has been removed (no free-for-commercial-use satellite source available) — falling back to 'streets'.",
+    );
   }
-  if (theme === 'amber-night') {
-    // Espresso night — dim tiles, gentle warm tilt; amber roads/markers
-    // become the only luminous element.
-    return {
-      source,
-      paint: {
-        'raster-opacity': 0.55,
-        'raster-brightness-min': 0.0,
-        'raster-brightness-max': 0.45,
-        'raster-saturation': -0.40,
-        'raster-contrast': 0.30,
-        'raster-hue-rotate': -8,
-      },
-    };
-  }
-  // Default — sunrise-warm. Bright cream-paper feel with a touch of warm
-  // cast so OSM neutrals read amber-friendly without obscuring labels.
-  return {
-    source,
-    paint: {
-      'raster-opacity': 0.92,
-      'raster-brightness-min': 0.20,
-      'raster-brightness-max': 1.0,
-      'raster-saturation': 0.18,
-      'raster-contrast': 0.10,
-      'raster-hue-rotate': -10,
-    },
-  };
+  return 'streets';
 }
 
-function streetsPresetForTheme(theme: string): PaintPreset {
-  const source = { tiles: OSM_TILES, attribution: '© OpenStreetMap' };
-  if (theme === 'amber-night') {
-    return {
-      source,
-      paint: {
-        'raster-opacity': 0.85,
-        'raster-brightness-min': 0.0,
-        'raster-brightness-max': 0.55,
-        'raster-saturation': -0.20,
-        'raster-contrast': 0.18,
-      },
-    };
-  }
-  return {
-    source,
-    paint: {
-      'raster-opacity': 0.95,
-      'raster-saturation': 0,
-      'raster-contrast': 0,
-    },
-  };
-}
+/**
+ * Resolve the (style × theme) pair to a concrete OpenFreeMap style URL.
+ *
+ * `streets` reads the same (liberty) in every theme — the operator
+ * explicitly asked for the streets look. `dark` inverts meaning per-theme,
+ * mirroring the old raster presets: sunrise-warm wants a bright warm-paper
+ * map (positron), cyberdeck-cold wants the cold desaturated look (fiord),
+ * amber-night wants the true dark basemap (dark) so amber overlays stay the
+ * focal point; any other/unknown theme falls back to positron.
+ *
+ * GHOST always forces the `dark`-style mapping — the washed-out look
+ * itself now comes from a CSS filter TacticalMap applies to the map
+ * container (see `buildPhantomStyle` callers), not from raster paint
+ * tricks, since vector styles don't expose per-pixel opacity/brightness
+ * paint properties the way raster tiles did.
+ */
+function resolveStyleUrl(style: PhantomMapStyle, theme: string): string {
+  const effectiveStyle = theme === 'ghost' ? 'dark' : resolveEffectiveStyle(style);
 
-function satellitePresetForTheme(theme: string): PaintPreset {
-  const source = {
-    tiles: SATELLITE_TILES,
-    attribution: '© Esri, Maxar, Earthstar Geographics',
-  };
-  if (theme === 'amber-night') {
-    return {
-      source,
-      paint: {
-        'raster-opacity': 0.85,
-        'raster-brightness-min': 0.0,
-        'raster-brightness-max': 0.65,
-        'raster-saturation': -0.10,
-        'raster-contrast': 0.12,
-      },
-    };
-  }
-  return {
-    source,
-    paint: {
-      'raster-opacity': 0.95,
-      'raster-saturation': -0.1,
-      'raster-contrast': 0.0,
-    },
-  };
-}
+  if (effectiveStyle === 'streets') return OPENFREEMAP_STYLES.liberty;
 
-function ghostPreset(): PaintPreset {
-  return {
-    source: { tiles: OSM_TILES, attribution: '© OpenStreetMap [GHOST]' },
-    paint: {
-      'raster-opacity': 0.15,
-      'raster-brightness-min': 0.0,
-      'raster-brightness-max': 0.25,
-      'raster-saturation': -1.0,
-      'raster-contrast': 0.5,
-    },
-  };
-}
-
-function presetFor(style: PhantomMapStyle, theme: string): PaintPreset {
-  // Phase 24-N — GHOST mode override.
-  if (theme === 'ghost') return ghostPreset();
-  
-  switch (style) {
-    case 'satellite':
-      return satellitePresetForTheme(theme);
-    case 'streets':
-      return streetsPresetForTheme(theme);
-    case 'dark':
+  switch (theme) {
+    case 'cyberdeck-cold':
+      return OPENFREEMAP_STYLES.fiord;
+    case 'amber-night':
+      return OPENFREEMAP_STYLES.dark;
+    case 'sunrise-warm':
     default:
-      return darkPresetForTheme(theme);
+      return OPENFREEMAP_STYLES.positron;
   }
 }
 
-export function buildPhantomStyle(tokens: MapTokens, style: PhantomMapStyle = 'dark') {
-  const preset = presetFor(style, tokens.theme);
-  // Background colour matches the theme's gutter so the brief flash
-  // before tiles paint never breaks the warm-cream look.
-  const bgColor =
-    tokens.theme === 'cyberdeck-cold' ? tokens.surfaceVoid : tokens.mapBackdrop;
+/**
+ * Resolve `(tokens, style)` to a MapLibre style URL. MapLibre's `Map`
+ * constructor and `setStyle()` both accept a URL string directly, so no
+ * inline style JSON is built here anymore — OpenFreeMap styles ship their
+ * own sources/layers/sprite/glyphs and already embed the required OSM
+ * attribution.
+ *
+ * Callers that swap the style on a live map (i.e. every `setStyle()` call,
+ * as opposed to the initial `new maplibregl.Map({style: ...})`) MUST pass
+ * `preserveOverlayLayers` as the `transformStyle` option — see below.
+ */
+export function buildPhantomStyle(tokens: MapTokens, style: PhantomMapStyle = 'dark'): string {
+  return resolveStyleUrl(style, tokens.theme);
+}
+
+/** Namespace shared by every overlay layer component's runtime-added source/layer ids. */
+const OVERLAY_ID_PREFIX = 'phantom-';
+
+/**
+ * `transformStyle` callback for MapLibre's `setStyle(style, {transformStyle})`.
+ *
+ * Overlay layer components (ReconLayer, HeatmapLayer, GeofencesLayer, …)
+ * add their own sources/layers directly via `map.addSource`/`addLayer` at
+ * runtime — outside `buildPhantomStyle()`'s spec. MapLibre's `Style.setState`
+ * diffs the *live* serialized style (which reflects those runtime
+ * additions, since `Style.serialize()` walks the actual source caches, not
+ * just the originally-loaded spec) against the incoming style; anything
+ * runtime-added that's absent from the incoming style is torn down —
+ * `{diff: true}` only avoids re-fetching tiles for sources unchanged
+ * between old and new, it does NOT protect sources the new spec never
+ * mentions. So every overlay source/layer would otherwise flicker out on
+ * every base-style swap (theme change, style cycle, SystemState
+ * transition).
+ *
+ * All overlay ids in this codebase are namespaced with a `phantom-` prefix
+ * (see ReconLayer/HeatmapLayer/GeofencesLayer), so we carry those forward
+ * here rather than blindly preserving every unknown id — that keeps stale
+ * *base*-style sources (e.g. the previous OpenFreeMap style's own source,
+ * which never uses this prefix) from leaking across swaps. Every base-style
+ * `setStyle()` call in this codebase must pass this as `transformStyle` or
+ * overlays will silently disappear.
+ */
+export function preserveOverlayLayers(
+  previous: StyleSpecification | undefined,
+  next: StyleSpecification,
+): StyleSpecification {
+  if (!previous) return next;
+
+  const carriedSources = Object.fromEntries(
+    Object.entries(previous.sources ?? {}).filter(([id]) => id.startsWith(OVERLAY_ID_PREFIX)),
+  );
+  const carriedLayers = (previous.layers ?? []).filter((layer) =>
+    layer.id.startsWith(OVERLAY_ID_PREFIX),
+  );
+
+  if (Object.keys(carriedSources).length === 0 && carriedLayers.length === 0) return next;
+
   return {
-    version: 8,
-    sources: {
-      osm: {
-        type: 'raster',
-        tiles: preset.source.tiles,
-        tileSize: 256,
-        attribution: preset.source.attribution,
-      },
-    },
-    layers: [
-      {
-        id: 'bg',
-        type: 'background',
-        paint: { 'background-color': bgColor },
-      },
-      {
-        id: 'osm',
-        type: 'raster',
-        source: 'osm',
-        paint: preset.paint,
-      },
-    ],
+    ...next,
+    sources: { ...next.sources, ...carriedSources },
+    layers: [...(next.layers ?? []), ...carriedLayers],
   };
 }
 

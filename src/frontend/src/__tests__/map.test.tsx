@@ -422,4 +422,65 @@ describe('mapTokens', () => {
     const result = resolveCssVar('--definitely-not-set-xyz', '#abc');
     expect(result).toBe('#abc');
   });
+
+  it('buildPhantomStyle returns an OpenFreeMap style URL string, not a raster style object', async () => {
+    const { getMapTokens, buildPhantomStyle } = await import('../components/map/mapTokens');
+    const tokens = getMapTokens();
+    const style = buildPhantomStyle(tokens, 'dark');
+    expect(typeof style).toBe('string');
+    expect(style).toMatch(/^https:\/\/tiles\.openfreemap\.org\/styles\//);
+  });
+
+  it('buildPhantomStyle resolves the retired satellite style to streets (liberty) with a warning', async () => {
+    const { getMapTokens, buildPhantomStyle } = await import('../components/map/mapTokens');
+    const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const tokens = getMapTokens();
+    expect(buildPhantomStyle(tokens, 'satellite')).toBe('https://tiles.openfreemap.org/styles/liberty');
+    warnSpy.mockRestore();
+  });
+
+  it('buildPhantomStyle never returns tile.openstreetmap.org or arcgisonline URLs', async () => {
+    const { getMapTokens, buildPhantomStyle } = await import('../components/map/mapTokens');
+    const tokens = getMapTokens();
+    (['dark', 'streets', 'satellite'] as const).forEach((style) => {
+      const url = buildPhantomStyle(tokens, style);
+      expect(url).not.toMatch(/tile\.openstreetmap\.org/);
+      expect(url).not.toMatch(/arcgisonline/);
+    });
+  });
+
+  it('preserveOverlayLayers carries phantom-prefixed sources/layers across a base-style swap', async () => {
+    const { preserveOverlayLayers } = await import('../components/map/mapTokens');
+    const previous = {
+      version: 8,
+      sources: {
+        'openfreemap-base': { type: 'vector', url: 'https://old.example/tiles.json' },
+        'phantom-track-src': { type: 'geojson', data: { type: 'FeatureCollection', features: [] } },
+      },
+      layers: [
+        { id: 'background', type: 'background' },
+        { id: 'phantom-track-layer', type: 'line', source: 'phantom-track-src' },
+      ],
+    } as any;
+    const next = {
+      version: 8,
+      sources: { 'openfreemap-base-2': { type: 'vector', url: 'https://new.example/tiles.json' } },
+      layers: [{ id: 'background-2', type: 'background' }],
+    } as any;
+
+    const merged = preserveOverlayLayers(previous, next);
+
+    expect(merged.sources).toHaveProperty('phantom-track-src');
+    expect(merged.sources).toHaveProperty('openfreemap-base-2');
+    expect(merged.sources).not.toHaveProperty('openfreemap-base');
+    expect((merged.layers as Array<{ id: string }>).map((l) => l.id)).toEqual(
+      expect.arrayContaining(['background-2', 'phantom-track-layer']),
+    );
+  });
+
+  it('preserveOverlayLayers is a no-op when there is no previous style', async () => {
+    const { preserveOverlayLayers } = await import('../components/map/mapTokens');
+    const next = { version: 8, sources: {}, layers: [] } as any;
+    expect(preserveOverlayLayers(undefined, next)).toBe(next);
+  });
 });

@@ -12,7 +12,7 @@ import { HeatmapLayer } from './HeatmapLayer';
 import { MarkerCard } from './MarkerCard';
 import { useMapStore } from '../../stores/mapStore';
 import { useSystemStore } from '../../stores/systemStore';
-import { getMapTokens, buildPhantomStyle, type PhantomMapStyle } from './mapTokens';
+import { getMapTokens, buildPhantomStyle, preserveOverlayLayers, type PhantomMapStyle } from './mapTokens';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { settingsApi, type Bounds } from '../../services/api';
 
@@ -27,12 +27,35 @@ interface TacticalMapProps {
   onAddPoi?: (fn: () => void) => void;
 }
 
+/**
+ * Every `PhantomMapStyle` value that a persisted `ui_map_style` setting may
+ * legally hold — includes the retired 'satellite' value so old settings
+ * don't silently reset to 'dark'; `buildPhantomStyle` resolves it to the
+ * 'streets' style URL at render time (see mapTokens.ts).
+ */
 const MAP_STYLE_VALUES: readonly PhantomMapStyle[] = ['dark', 'satellite', 'streets'];
+
+/** Values the style-cycle button walks through — 'satellite' removed (no
+ * free-for-commercial-use satellite source; see mapTokens.ts). */
+const CYCLABLE_MAP_STYLES: readonly PhantomMapStyle[] = ['dark', 'streets'];
 
 function resolveMapStyle(raw: unknown): PhantomMapStyle {
   return typeof raw === 'string' && (MAP_STYLE_VALUES as readonly string[]).includes(raw)
     ? (raw as PhantomMapStyle)
     : 'dark';
+}
+
+/**
+ * Mirrors the container background/filter that OpenFreeMap's own style no
+ * longer needs a `bg` layer for (the vector styles paint their own
+ * background), but we still want the pre-tile-load flash to match the
+ * theme, and GHOST mode still wants its washed-out look — vector styles
+ * don't expose per-pixel raster-opacity/brightness paint tricks, so GHOST
+ * is now a CSS filter on the map container instead.
+ */
+function applyContainerTheming(container: HTMLDivElement, tokens: ReturnType<typeof getMapTokens>): void {
+  container.style.backgroundColor = tokens.mapBackdrop;
+  container.style.filter = tokens.theme === 'ghost' ? 'grayscale(1) brightness(0.4)' : '';
 }
 
 function computeBounds(map: MapLibreMap | null): Bounds {
@@ -77,8 +100,8 @@ export function TacticalMap({
   const setSettingValue = useSettingsStore((s) => s.setValue);
 
   const cycleMapStyle = useCallback(() => {
-    const idx = MAP_STYLE_VALUES.indexOf(mapStyle);
-    const next = MAP_STYLE_VALUES[(idx + 1) % MAP_STYLE_VALUES.length];
+    const idx = CYCLABLE_MAP_STYLES.indexOf(mapStyle);
+    const next = CYCLABLE_MAP_STYLES[(idx + 1) % CYCLABLE_MAP_STYLES.length];
     setSettingValue('ui_map_style', next);
     settingsApi.set('ui_map_style', next).catch(() => {});
   }, [mapStyle, setSettingValue]);
@@ -134,7 +157,8 @@ export function TacticalMap({
     if (!container || mapRef.current) return;
 
     const tokens = getMapTokens();
-    
+    applyContainerTheming(container, tokens);
+
     let map: MapLibreMap;
     try {
       const isSupported = typeof (maplibregl as any).supported === 'function' ? (maplibregl as any).supported() : true;
@@ -143,10 +167,13 @@ export function TacticalMap({
       }
       map = new maplibregl.Map({
         container,
-        style: buildPhantomStyle(tokens, mapStyle) as any,
+        style: buildPhantomStyle(tokens, mapStyle),
         center: resolvedInitialCenter,
         zoom: initialZoom,
-        attributionControl: false,
+        // OpenFreeMap styles require OSM attribution to stay visible;
+        // `compact` keeps it collapsed to a small "i" chip so it fits the
+        // 1024×600 layout without competing with the HUD chrome.
+        attributionControl: { compact: true },
         dragRotate: true,
         pitchWithRotate: true,
       });
@@ -233,8 +260,12 @@ export function TacticalMap({
     const map = mapRef.current;
     if (!map || !ready) return;
     const tokens = getMapTokens();
+    if (containerRef.current) applyContainerTheming(containerRef.current, tokens);
     try {
-      map.setStyle(buildPhantomStyle(tokens, mapStyle) as any, { diff: true });
+      map.setStyle(buildPhantomStyle(tokens, mapStyle), {
+        diff: true,
+        transformStyle: preserveOverlayLayers,
+      });
     } catch (err) {
       console.error('Failed to set map style:', err);
     }

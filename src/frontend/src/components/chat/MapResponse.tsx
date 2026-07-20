@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import maplibregl, { Map as MapLibreMap, Marker } from 'maplibre-gl';
+import { getMapTokens, buildPhantomStyle } from '../map/mapTokens';
 
 export interface MapMarker {
   lat: number;
@@ -16,43 +17,6 @@ export interface MapData {
 
 interface MapResponseProps {
   data: MapData;
-}
-
-function buildDarkStyle(backgroundColor: string) {
-  return {
-    version: 8,
-    sources: {
-      osm: {
-        type: 'raster',
-        tiles: [
-          'https://a.tile.openstreetmap.org/{z}/{x}/{y}.png',
-          'https://b.tile.openstreetmap.org/{z}/{x}/{y}.png',
-          'https://c.tile.openstreetmap.org/{z}/{x}/{y}.png',
-        ],
-        tileSize: 256,
-        attribution: '© OpenStreetMap',
-      },
-    },
-    layers: [
-      {
-        id: 'bg',
-        type: 'background',
-        paint: { 'background-color': backgroundColor },
-      },
-      {
-        id: 'osm',
-        type: 'raster',
-        source: 'osm',
-        paint: {
-          'raster-opacity': 0.55,
-          'raster-brightness-min': 0.0,
-          'raster-brightness-max': 0.6,
-          'raster-saturation': -0.7,
-          'raster-contrast': 0.15,
-        },
-      },
-    ],
-  };
 }
 
 function resolveCssVar(varName: string, fallback: string): string {
@@ -77,14 +41,14 @@ export function MapResponse({ data }: MapResponseProps) {
         ? [markers[0].lon, markers[0].lat]
         : [0, 0];
 
-    const surfaceDeepInit = resolveCssVar('--surface-deep', '#0a0b0d');
     const map = new maplibregl.Map({
       container,
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      style: buildDarkStyle(surfaceDeepInit) as any,
+      style: buildPhantomStyle(getMapTokens(), 'dark'),
       center,
       zoom: data.zoom ?? 13,
-      attributionControl: false,
+      // OpenFreeMap styles require OSM attribution to stay visible; compact
+      // keeps it to a small "i" chip so it doesn't crowd this 220px preview.
+      attributionControl: { compact: true },
       interactive: true,
       dragRotate: false,
       pitchWithRotate: false,

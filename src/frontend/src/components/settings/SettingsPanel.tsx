@@ -23,7 +23,7 @@ import { VaultPanel } from './VaultPanel';
 import { BackupRestoreCard } from './BackupRestoreCard';
 import { StatusBar } from '../core/StatusBar';
 import { FloatingToolbar } from '../core/FloatingToolbar';
-import { useSettingsStore } from '../../stores/settingsStore';
+import { useSettingsStore, THEME_SETTING_KEY } from '../../stores/settingsStore';
 import { useFamiliarStore } from '../../stores/familiarStore';
 import type { FamiliarRarity } from '@shared/types';
 import {
@@ -614,7 +614,7 @@ export default function SettingsPanel() {
 
             {/* Theme picker tiles in the Theme group ────────────────── */}
             {loaded && activeCategory && activeCategory.id === 'theme' && (
-              <ThemePicker values={values} onChange={setValue} />
+              <ThemePicker values={values} />
             )}
 
             {loaded && activeCategory && activeCategory.id === 'about' && (
@@ -1310,17 +1310,16 @@ function ValueEditor({
 
 interface ThemePickerProps {
   values: Record<string, unknown>;
-  onChange: (key: string, value: unknown) => void;
 }
 
-const THEME_KEY = 'theme_active';
-
-function ThemePicker({ values, onChange }: ThemePickerProps) {
-  // The active-theme key landed by THEME-NIGHT is `theme_active`. We
-  // tolerate it being absent (e.g. on a fresh install) by falling
-  // back to the root <html> attribute, then "sunrise-warm".
+function ThemePicker({ values }: ThemePickerProps) {
+  // The canonical active-theme key is `ui_theme` (THEME_SETTING_KEY) — the
+  // one config.py registers, settingsBootstrap reads at first paint, and
+  // settingsStore.setTheme persists. (A stale `theme_active` key used to
+  // live here; it was never read back, so a picked theme silently reverted
+  // on reload.) Fall back to the live <html> attribute, then sunrise-warm.
   const active: ThemeId =
-    (values[THEME_KEY] as ThemeId) ??
+    (values[THEME_SETTING_KEY] as ThemeId) ??
     ((document.documentElement.getAttribute('data-theme') as ThemeId) ||
       'sunrise-warm');
 
@@ -1354,11 +1353,12 @@ function ThemePicker({ values, onChange }: ThemePickerProps) {
   ];
 
   const handleSelect = (id: ThemeId) => {
-    // Apply optimistically so the operator sees the change instantly;
-    // THEME-NIGHT's settings setter persists it, applyUISettings (run
-    // on save) would re-apply identically.
-    document.documentElement.setAttribute('data-theme', id);
-    onChange(THEME_KEY, id);
+    // setTheme is the single source of truth: it applies to the <html>
+    // attribute instantly (operator sees it next frame), caches to
+    // localStorage for the pre-network first paint, and persists to the
+    // backend under `ui_theme` — the exact key bootstrap reads back. So the
+    // choice survives reload with no Save-click, no key drift.
+    void useSettingsStore.getState().setTheme(id);
   };
 
   // Phase 22-G — tiles 60→44, swatch 36→26, padding 8/10→4/8.

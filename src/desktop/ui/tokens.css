@@ -1,4 +1,24 @@
-/* AEGIS Film tokens — subset of docs/VISUAL_SYSTEM.md canon, desktop membrane scale. */
+/* AEGIS Film tokens — subset of docs/VISUAL_SYSTEM.md canon, desktop membrane scale.
+ *
+ * Two themes, mirroring the web app's token architecture (src/frontend/
+ * src/styles/tokens.css): the same token NAMES carry values that move with
+ * the active [data-theme], so breath.css / film.css / sigil.ts never change.
+ *
+ *   • default (:root)                — "sunrise-warm": the product's canon
+ *     default (operator directive "яскравий як життя"). On the transparent
+ *     membrane only the ACCENT family goes warm amber/coral — ink stays light
+ *     because the overlay floats over the host desktop, not a cream surface,
+ *     so legibility is unchanged from the cold build.
+ *   • [data-theme="cyberdeck-cold"]  — the legacy cold cyan/slate accents,
+ *     preserved verbatim as an opt-in. The membrane has no settings surface
+ *     of its own (it is chromeless by design); a future env/host hook can set
+ *     <html data-theme="cyberdeck-cold"> to select it. Until then the canon
+ *     default renders.
+ *
+ * State rhythm (--sigil-size / --sigil-breath / --motion-scale) is theme-
+ * independent — it lives in the bare [data-state] blocks and both themes
+ * share it. Only the accent triplet moves per theme.
+ */
 :root {
   --ink-primary: #f1f5f9;
   --ink-secondary: #94a3b8;
@@ -13,10 +33,12 @@
   --motion-scale: 1;
 }
 
+/* ── State rhythm + sunrise-warm accents (canon default) ─────────────────── */
+
 [data-state='shadow'] {
-  --accent: #64748b;
-  --accent-glow: rgba(100, 116, 139, 0.2);
-  --accent-radial: radial-gradient(circle at 30% 30%, #475569, #1e293b);
+  --accent: #8a7f72;
+  --accent-glow: rgba(244, 175, 37, 0.18);
+  --accent-radial: radial-gradient(circle at 30% 30%, #fde9b8, #f4af25, #fb923c);
   --sigil-size: 18px;
   --sigil-breath: 8s;
   --motion-scale: 0.5;
@@ -24,35 +46,37 @@
 
 [data-state='focus'],
 [data-state='operator'] {
-  --accent: #22d3ee;
-  --accent-glow: rgba(34, 211, 238, 0.4);
-  --accent-radial: radial-gradient(circle at 30% 30%, #22d3ee, #0ea5e9, #6366f1);
+  --accent: #b07a10;
+  --accent-glow: rgba(244, 175, 37, 0.40);
+  --accent-radial: radial-gradient(circle at 30% 30%, #fff8e0, #f4af25, #fb923c);
   --sigil-size: 20px;
   --sigil-breath: 8s;
   --motion-scale: 1;
 }
 
 [data-state='dialogue'] {
-  --accent: #8b5cf6;
-  --accent-glow: rgba(139, 92, 246, 0.4);
-  --accent-radial: radial-gradient(circle at 30% 30%, #a78bfa, #8b5cf6, #6366f1);
+  --accent: #b07a10;
+  --accent-glow: rgba(244, 175, 37, 0.45);
+  --accent-radial: radial-gradient(circle at 30% 30%, #fff8e0, #f4af25, #fb923c);
   --sigil-size: 28px;
   --sigil-breath: 5s;
   --motion-scale: 1.1;
 }
 
 [data-state='sentinel'] {
-  --accent: #f43f5e;
-  --accent-glow: rgba(244, 63, 94, 0.5);
-  --accent-radial: radial-gradient(circle at 30% 30%, #fb7185, #f43f5e, #be123c);
+  --accent: #b9201f;
+  --accent-glow: rgba(239, 68, 68, 0.50);
+  --accent-radial: radial-gradient(circle at 30% 30%, #fda4af, #ef4444, #7f1d1d);
   --sigil-size: 22px;
   --sigil-breath: 2.5s;
   --motion-scale: 1.3;
 }
 
 [data-state='ghost'] {
-  --accent: #10b981;
-  --accent-glow: rgba(16, 185, 129, 0.3);
+  /* Ghost keeps the emerald signal across both themes — encrypted-stealth
+     reads the same warm or cold (matches the web token layer). */
+  --accent: #16a34a;
+  --accent-glow: rgba(22, 163, 74, 0.30);
   --accent-radial: radial-gradient(circle at 30% 30%, #34d399, #10b981, #047857);
   --sigil-size: 14px;
   --sigil-breath: 10s;
@@ -60,10 +84,52 @@
 }
 
 [data-state='dream'] {
-  --accent: #f4af25;
-  --accent-glow: rgba(244, 175, 37, 0.2);
+  --accent: #b07a10;
+  --accent-glow: rgba(244, 175, 37, 0.20);
   --accent-radial: radial-gradient(circle at 30% 30%, #fbbf24, #f59e0b, #b45309);
   --sigil-size: 18px;
   --sigil-breath: 12s;
   --motion-scale: 0.4;
+}
+
+/* ── Legacy cyberdeck-cold accents (opt-in) ──────────────────────────────
+ * The pre-sunrise cold cyan/slate palette, kept verbatim. Only the accent
+ * triplet is overridden — state rhythm is inherited from the bare blocks
+ * above. Selected by <html data-theme="cyberdeck-cold">. */
+
+[data-theme='cyberdeck-cold'][data-state='shadow'] {
+  --accent: #64748b;
+  --accent-glow: rgba(100, 116, 139, 0.2);
+  --accent-radial: radial-gradient(circle at 30% 30%, #475569, #1e293b);
+}
+
+[data-theme='cyberdeck-cold'][data-state='focus'],
+[data-theme='cyberdeck-cold'][data-state='operator'] {
+  --accent: #22d3ee;
+  --accent-glow: rgba(34, 211, 238, 0.4);
+  --accent-radial: radial-gradient(circle at 30% 30%, #22d3ee, #0ea5e9, #6366f1);
+}
+
+[data-theme='cyberdeck-cold'][data-state='dialogue'] {
+  --accent: #8b5cf6;
+  --accent-glow: rgba(139, 92, 246, 0.4);
+  --accent-radial: radial-gradient(circle at 30% 30%, #a78bfa, #8b5cf6, #6366f1);
+}
+
+[data-theme='cyberdeck-cold'][data-state='sentinel'] {
+  --accent: #f43f5e;
+  --accent-glow: rgba(244, 63, 94, 0.5);
+  --accent-radial: radial-gradient(circle at 30% 30%, #fb7185, #f43f5e, #be123c);
+}
+
+[data-theme='cyberdeck-cold'][data-state='ghost'] {
+  --accent: #10b981;
+  --accent-glow: rgba(16, 185, 129, 0.3);
+  --accent-radial: radial-gradient(circle at 30% 30%, #34d399, #10b981, #047857);
+}
+
+[data-theme='cyberdeck-cold'][data-state='dream'] {
+  --accent: #f4af25;
+  --accent-glow: rgba(244, 175, 37, 0.2);
+  --accent-radial: radial-gradient(circle at 30% 30%, #fbbf24, #f59e0b, #b45309);
 }

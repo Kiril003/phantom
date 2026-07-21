@@ -17,6 +17,12 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # Loopback-only HTTP to the co-located backend; no TLS backend pulled in.
 reqwest = { version = "0.12", default-features = false, features = ["json"] }
+# Per-ask WebSocket to the backend hub so the Breath Line types the reply in as
+# the backend streams `chat/stream` deltas (ask.rs). Loopback `ws://` — the
+# `connect` feature pulls no TLS backend, matching reqwest above. MIT.
+# `futures-util` gives the `StreamExt::next` the read loop drives. MIT/Apache-2.0.
+tokio-tungstenite = { version = "0.30.0", default-features = false, features = ["connect"] }
+futures-util = "0.3.33"
 
 [target.'cfg(target_os = "linux")'.dependencies]
 gtk = "0.18"

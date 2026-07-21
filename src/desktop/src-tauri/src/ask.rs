@@ -1,16 +1,31 @@
 //! The Breath Line's answer-in-place bridge (AEGIS §4.2).
 //!
 //! A submitted line must return as an answer *beneath the line* in a breath —
-//! no chat window, no Facet, no ceremony. This module owns the thin HTTP path
-//! to the PHANTOM backend: a lazy loopback PIN login (the backend permits the
-//! bootstrap PIN only from loopback — exactly where the membrane runs), a
-//! cached JWT plus a threaded session id so follow-ups share context, and one
-//! POST per ask. Kept in Rust, never the webview, so the Breath Line's payload
-//! stays impossibly light and the token never touches transparent glass.
+//! no chat window, no Facet, no ceremony. This module owns the thin path to the
+//! PHANTOM backend: a lazy loopback PIN login (the backend permits the bootstrap
+//! PIN only from loopback — exactly where the membrane runs), a cached JWT plus
+//! a threaded session id so follow-ups share context, and one POST per ask.
+//!
+//! Day-N — live streaming: the POST that triggers a reply is the same call the
+//! backend streams token deltas under, broadcast on its user-scoped `chat`
+//! channel (`send_message` → `_send_delta`, routes_chat.py). For the duration of
+//! each ask we open a Rust-side WebSocket to `/ws?token=…`, read the `chat/stream`
+//! frames, and hand each delta to the breath webview via `window.__breathDelta`
+//! so the answer types itself in beneath the line at the model's own pace. The
+//! POST's final body stays authoritative — it replaces the streamed text once
+//! the turn completes, so a dropped socket degrades to exactly the old
+//! answer-at-once behaviour, never a truncated reply.
+//!
+//! The JWT is opened into the socket URL *in Rust and only in Rust* — it is
+//! never handed to the webview, so the token still never touches transparent
+//! glass. The glass receives rendered deltas, nothing privileged.
 
 use std::sync::Mutex;
 
+use futures_util::StreamExt;
 use serde::Deserialize;
+use tauri::WebviewWindow;
+use tokio_tungstenite::tungstenite::Message;
 
 pub struct AskState {
     client: reqwest::Client,
@@ -40,6 +55,27 @@ struct MessageBody {
 struct ChatResponse {
     message: MessageBody,
     session_id: Option<String>,
+}
+
+/// One hub envelope (`{channel,type,data,ts}`), narrowed to the fields the
+/// Breath Line acts on. Non-`chat/stream` frames (sensor, state, `_meta`, …)
+/// still deserialize — serde ignores the unknown `data` fields and the
+/// defaults leave `delta`/`done` inert — and are dropped by the channel guard.
+#[derive(Deserialize)]
+struct HubEnvelope {
+    channel: String,
+    #[serde(rename = "type")]
+    kind: String,
+    #[serde(default)]
+    data: StreamData,
+}
+
+#[derive(Deserialize, Default)]
+struct StreamData {
+    #[serde(default)]
+    delta: String,
+    #[serde(default)]
+    done: bool,
 }
 
 impl AskState {
@@ -136,18 +172,84 @@ impl AskState {
             .map_err(|e| format!("ask unreachable: {e}"))
     }
 
+    /// Map the HTTP api base onto its WebSocket origin and append the auth
+    /// query. JWTs are URL-safe base64url with `.` separators, so the raw token
+    /// is a valid query value with no escaping needed.
+    fn ws_url(&self, token: &str) -> String {
+        let origin = self
+            .api_base
+            .trim_end_matches('/')
+            .replacen("https://", "wss://", 1)
+            .replacen("http://", "ws://", 1);
+        format!("{origin}/ws?token={token}")
+    }
+
+    /// Open a per-ask WebSocket to the hub and pump this user's `chat/stream`
+    /// deltas into the breath webview until the turn's `done` frame arrives (or
+    /// the caller aborts the task once the POST resolves). Best-effort: any
+    /// failure — unreachable socket, stream disabled server-side, a tool/widget
+    /// answer that never streams — simply yields no live deltas, and the POST's
+    /// final body carries the whole reply exactly as before.
+    fn spawn_delta_stream(
+        &self,
+        window: WebviewWindow,
+        token: String,
+    ) -> tauri::async_runtime::JoinHandle<()> {
+        let url = self.ws_url(&token);
+        tauri::async_runtime::spawn(async move {
+            let Ok((mut ws, _resp)) = tokio_tungstenite::connect_async(url).await else {
+                return;
+            };
+            // Default subscription is every channel, so `chat` arrives without
+            // sending a `subscribe` control frame.
+            while let Some(Ok(msg)) = ws.next().await {
+                let Message::Text(txt) = msg else { continue };
+                let Ok(env) = serde_json::from_str::<HubEnvelope>(txt.as_str()) else {
+                    continue;
+                };
+                if env.channel != "chat" || env.kind != "stream" {
+                    continue;
+                }
+                if !env.data.delta.is_empty() {
+                    let payload = serde_json::json!({ "delta": env.data.delta });
+                    let _ = window
+                        .eval(format!("window.__breathDelta&&window.__breathDelta({payload})"));
+                }
+                if env.data.done {
+                    break;
+                }
+            }
+        })
+    }
+
+    /// Stream `text`'s deltas into the breath webview for the life of one POST.
+    /// The listener is torn down the instant the POST resolves so it never
+    /// outlives the ask, sidestepping all reconnect / token-refresh lifecycle.
+    async fn stream_and_post(
+        &self,
+        window: &WebviewWindow,
+        token: &str,
+        text: &str,
+    ) -> Result<reqwest::Response, String> {
+        let listener = self.spawn_delta_stream(window.clone(), token.to_string());
+        let resp = self.post_message(token, text).await;
+        listener.abort();
+        resp
+    }
+
     /// Submit one line, return the entity's reply text. Threads the session so
     /// consecutive asks in a single summon share memory; re-logs in once on a
-    /// stale token so a long-lived membrane never dead-ends on expiry.
-    pub async fn ask(&self, text: &str) -> Result<String, String> {
+    /// stale token so a long-lived membrane never dead-ends on expiry. Streams
+    /// deltas into `window` as the reply generates (see `spawn_delta_stream`).
+    pub async fn ask(&self, window: &WebviewWindow, text: &str) -> Result<String, String> {
         let token = match self.cached_token() {
             Some(t) => t,
             None => self.login().await?,
         };
-        let mut resp = self.post_message(&token, text).await?;
+        let mut resp = self.stream_and_post(window, &token, text).await?;
         if resp.status() == reqwest::StatusCode::UNAUTHORIZED {
             let fresh = self.login().await?;
-            resp = self.post_message(&fresh, text).await?;
+            resp = self.stream_and_post(window, &fresh, text).await?;
         }
         if !resp.status().is_success() {
             return Err(format!("ask failed ({})", resp.status()));

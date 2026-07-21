@@ -349,10 +349,13 @@ fn dismiss_breath(window: tauri::WebviewWindow) {
 async fn submit_breath(
     text: String,
     state: tauri::State<'_, ask::AskState>,
+    window: tauri::WebviewWindow,
 ) -> Result<String, String> {
     let trimmed = text.trim();
     if trimmed.is_empty() {
         return Ok(String::new());
     }
-    state.ask(trimmed).await
+    // `window` is the invoking breath webview — the same surface the delta
+    // stream types the reply into beneath the line.
+    state.ask(&window, trimmed).await
 }

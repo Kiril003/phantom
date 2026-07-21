@@ -60,19 +60,45 @@ function focusLine(): void {
 let inFlight = false;
 /** The last exchange, so `Enter` on an empty line can promote it to a Facet. */
 let lastQuestion = '';
+/** Whether the live delta stream has replaced the `…` placeholder this turn. */
+let streamStarted = false;
+
+// The Conduit (Rust) types the reply in beneath the line as the backend streams
+// it, one `chat/stream` delta at a time (ask.rs → spawn_delta_stream). The first
+// delta clears the thinking ellipsis; the rest append. The awaited `submit_breath`
+// body stays authoritative and overwrites this with the clean final text, so a
+// dropped socket degrades to answer-at-once — never a half-typed reply left behind.
+(window as unknown as { __breathDelta?: (p: { delta?: string }) => void }).__breathDelta = (
+  p,
+) => {
+  if (!inFlight) return;
+  const d = p?.delta ?? '';
+  if (!d) return;
+  if (!streamStarted) {
+    answer.textContent = '';
+    answer.hidden = false;
+    streamStarted = true;
+  }
+  answer.textContent += d;
+};
 
 async function ask(text: string): Promise<void> {
   inFlight = true;
+  streamStarted = false;
   setMode('thinking');
   answer.hidden = false;
   answer.textContent = '…';
   lastQuestion = text;
   try {
     const reply = (await invoke('submit_breath', { text })) as string;
-    answer.textContent = reply?.trim() || '—';
+    const finalText = reply?.trim();
+    // Prefer the authoritative final body; fall back to whatever streamed in if
+    // the POST returned empty but deltas did arrive; else the silence dash.
+    answer.textContent = finalText || (streamStarted ? answer.textContent : '—');
   } catch (e) {
     answer.textContent = typeof e === 'string' && e ? e : 'Мовчання. Зв’язку немає.';
   }
+  streamStarted = false;
   setMode('idle');
   line.value = '';
   line.focus();

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
+import { useVirtualizer } from '@tanstack/react-virtual';
 import {
   Send,
   Mic,
@@ -458,6 +459,59 @@ export function ChatWindow({
 
   const hasMessages = orderedMessages.length > 0 || !!streamingMessage;
 
+  // ── Transcript virtualization ──────────────────────────────────────────────
+  // Only the committed messages are windowed. The streaming bubble, the voice
+  // ghost, and the typing indicator stay as plain siblings pinned below the
+  // spacer — they're always at the tail and on-screen, so windowing them would
+  // add re-measure churn as the streamed text grows for no memory win. Row
+  // heights vary wildly (markdown, code, 3D scenes), so measureElement drives
+  // the dynamic sizing rather than a fixed estimate.
+  const virtualizer = useVirtualizer({
+    count: orderedMessages.length,
+    getScrollElement: () => listRef.current,
+    estimateSize: () => 96,
+    overscan: 8,
+    getItemKey: (index) => orderedMessages[index]?.id ?? index,
+  });
+  const virtualItems = virtualizer.getVirtualItems();
+
+  // Windowing needs a measurable viewport. Default true so a real browser
+  // windows from the first paint (no all-rows mount, no flash); an effect flips
+  // it off only where the scroll container reports zero height — jsdom/SSR or a
+  // panel mounted while hidden — and there the full transcript renders instead
+  // of an empty spacer. It's re-checked on every resize so a panel that becomes
+  // visible starts windowing.
+  const [canWindow, setCanWindow] = useState(true);
+  useEffect(() => {
+    const el = listRef.current;
+    if (!el) return;
+    const update = () => setCanWindow(el.clientHeight > 0);
+    update();
+    const ro = new ResizeObserver(update);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Enter-animation gate. A windowed row unmounts/remounts as it scrolls, so a
+  // naive `initial` would replay the enter animation every time an old message
+  // scrolls back into view. We animate a message exactly once — the first time
+  // it's seen — and render every later (re)mount at rest. The seen-set is
+  // reseeded synchronously when the session changes (and on first render), so
+  // loading a session shows its history at rest (matching the old
+  // AnimatePresence `initial={false}`) instead of a burst of 50 animations;
+  // only messages that arrive *within* the open session animate in. Reseeding
+  // during render — guarded by the session ref — is the derived-from-props
+  // pattern and is StrictMode-safe (both render passes compute the same set).
+  const seenIdsRef = useRef<Set<string>>(new Set());
+  const seenSessionRef = useRef<string | null | undefined>(undefined);
+  if (seenSessionRef.current !== currentSessionId) {
+    seenSessionRef.current = currentSessionId;
+    seenIdsRef.current = new Set(messages.map((m) => m.id));
+  }
+  useEffect(() => {
+    for (const m of messages) seenIdsRef.current.add(m.id);
+  }, [messages]);
+
   return (
     <div
       className={`flex h-full w-full min-h-0 ${className}`}
@@ -795,7 +849,11 @@ export function ChatWindow({
           ref={listRef}
           onScroll={handleScroll}
           onClick={handleWidgetAction}
-          className="flex-1 overflow-y-auto px-6 py-3 flex flex-col gap-3 min-h-0"
+          // No vertical padding: the virtualized list must start at the scroll
+          // container's top (offset 0) so the windowing math needs no
+          // scrollMargin. Top breathing room is baked into the first row; the
+          // bottom pad sits below the spacer where it can't shift offsets.
+          className="flex-1 overflow-y-auto px-6 pb-2 flex flex-col gap-3 min-h-0"
         >
           {/* Phase 27-d — empty state was a 3-stack hero (44px halo
               icon + display-lg title + serif italic blurb) eating
@@ -898,11 +956,63 @@ export function ChatWindow({
             </motion.div>
           )}
 
-          <AnimatePresence initial={false}>
-            {orderedMessages.map((msg) => (
-              <MessageBubble key={msg.id} message={msg} />
+          {orderedMessages.length > 0 &&
+            (canWindow ? (
+              <div
+                style={{
+                  height: virtualizer.getTotalSize(),
+                  width: '100%',
+                  position: 'relative',
+                  flexShrink: 0,
+                }}
+              >
+                {virtualItems.map((vi) => {
+                  const msg = orderedMessages[vi.index];
+                  if (!msg) return null;
+                  return (
+                    <div
+                      key={vi.key}
+                      data-index={vi.index}
+                      ref={virtualizer.measureElement}
+                      className="flex flex-col"
+                      style={{
+                        position: 'absolute',
+                        top: 0,
+                        left: 0,
+                        width: '100%',
+                        transform: `translateY(${vi.start}px)`,
+                        // Inter-row gap (the container's gap-3 can't reach the
+                        // absolutely-positioned rows) + top breathing room on
+                        // the first row, both measured so offsets stay exact.
+                        paddingTop: vi.index === 0 ? 12 : 0,
+                        paddingBottom: 12,
+                      }}
+                    >
+                      <MessageBubble
+                        message={msg}
+                        animateIn={!seenIdsRef.current.has(msg.id)}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            ) : (
+              // No measurable viewport (jsdom/SSR/hidden panel): render the whole
+              // transcript un-windowed so it's never blank where layout is
+              // unavailable. Same row wrapper + spacing as the windowed path.
+              orderedMessages.map((msg, i) => (
+                <div
+                  key={msg.id}
+                  className="flex flex-col"
+                  style={{ paddingTop: i === 0 ? 12 : 0, paddingBottom: 12 }}
+                >
+                  <MessageBubble
+                    message={msg}
+                    animateIn={!seenIdsRef.current.has(msg.id)}
+                  />
+                </div>
+              ))
             ))}
-          </AnimatePresence>
 
           {streamingMessage && (
             <MessageBubble

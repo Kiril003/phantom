@@ -10,6 +10,12 @@ interface MessageBubbleProps {
   message: ChatMessage;
   streaming?: boolean;
   compact?: boolean;
+  // When the transcript is virtualized, off-screen rows unmount and re-mount as
+  // they scroll back into view. Passing `animateIn={false}` renders the bubble
+  // at rest (initial={false}) so an already-seen message doesn't replay its
+  // enter animation on every scroll. Defaults to true — the enter animation for
+  // a genuinely new arrival, and every non-virtualized caller, is unchanged.
+  animateIn?: boolean;
 }
 
 function formatTime(iso: string): string {
@@ -34,7 +40,7 @@ function getHormoneGlowClass(hormones?: { cortisol: number; dopamine: number; ox
   return '';
 }
 
-export function MessageBubble({ message, streaming = false, compact = false }: MessageBubbleProps) {
+export function MessageBubble({ message, streaming = false, compact = false, animateIn = true }: MessageBubbleProps) {
   const isUser = message.role === 'user';
   const isSystem = message.role === 'system';
   const meta = message.metadata ?? {};
@@ -73,7 +79,7 @@ export function MessageBubble({ message, streaming = false, compact = false }: M
           letterSpacing: 'var(--tracking-widest)',
           textTransform: 'uppercase',
         }}
-        initial={{ opacity: 0, y: 4 }}
+        initial={animateIn ? { opacity: 0, y: 4 } : false}
         animate={{ opacity: 1, y: 0 }}
         transition={getPhantomTransition('ghostPreview')}
       >
@@ -94,7 +100,7 @@ export function MessageBubble({ message, streaming = false, compact = false }: M
         data-testid="scene-breakout"
         className="self-stretch w-full"
         style={{ maxWidth: 1024 }}
-        initial={{ opacity: 0, y: 6 }}
+        initial={animateIn ? { opacity: 0, y: 6 } : false}
         animate={{ opacity: 1, y: 0 }}
         transition={getPhantomTransition('bubbleEnter')}
       >

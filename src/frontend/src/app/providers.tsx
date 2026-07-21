@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { QueryClient, QueryClientProvider, useQuery } from '@tanstack/react-query';
 import { wsClient } from '../services/websocket';
 import type { SensorMessage, StateMessage } from '../services/websocket';
 import { useSystemStore } from '../stores/systemStore';
@@ -50,35 +50,40 @@ function SettingsBootstrap() {
   return null;
 }
 
+interface HealthPayload {
+  serial_enabled?: boolean;
+  esp32_connected?: boolean;
+}
+
+// TanStack Query owns the /health poll instead of a hand-rolled setInterval:
+// it dedups, applies the shared retry/backoff, and — with the default
+// refetchIntervalInBackground:false — parks the poll while the kiosk tab is
+// hidden, so a backgrounded panel stops hammering the board. A transient
+// failure keeps the last-good `data` (v5 preserves it across a refetch error),
+// so the ESP32 status holds steady instead of flickering — same intent as the
+// old `catch {}` that left status untouched.
 function HealthPoller() {
+  const { data } = useQuery<HealthPayload>({
+    queryKey: ['health'],
+    queryFn: async () => {
+      const res = await fetch('/health', { credentials: 'include' });
+      if (!res.ok) throw new Error(String(res.status));
+      return (await res.json()) as HealthPayload;
+    },
+    refetchInterval: 5000,
+    staleTime: 0,
+  });
+
   useEffect(() => {
-    let cancelled = false;
-    const tick = async () => {
-      try {
-        const res = await fetch('/health', { credentials: 'include' });
-        if (!res.ok) throw new Error(String(res.status));
-        const data = (await res.json()) as {
-          serial_enabled?: boolean;
-          esp32_connected?: boolean;
-        };
-        if (cancelled) return;
-        const status = data.serial_enabled === false
-          ? 'disabled'
-          : data.esp32_connected
-            ? 'online'
-            : 'offline';
-        useSystemStore.getState().setEsp32(status);
-      } catch {
-        /* leave status untouched on transient failure */
-      }
-    };
-    void tick();
-    const iv = setInterval(tick, 5000);
-    return () => {
-      cancelled = true;
-      clearInterval(iv);
-    };
-  }, []);
+    if (!data) return;
+    const status = data.serial_enabled === false
+      ? 'disabled'
+      : data.esp32_connected
+        ? 'online'
+        : 'offline';
+    useSystemStore.getState().setEsp32(status);
+  }, [data]);
+
   return null;
 }
 

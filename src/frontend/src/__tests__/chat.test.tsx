@@ -449,7 +449,14 @@ describe('ChatWindow', () => {
   it('renders empty state prompt', async () => {
     const { ChatWindow } = await import('../components/chat/ChatWindow');
     render(<ChatWindow minimalChrome />);
-    expect(screen.getByText(/New conversation|Session loaded/)).toBeDefined();
+    // The empty-state heading now comes from the i18n catalogue; the default
+    // locale is Ukrainian, so it reads "Нова розмова" / "Сесію завантажено"
+    // instead of the old hardcoded English pair. getAllByText because the
+    // header chip carries the same untitled-session phrase (it did before
+    // too — "New Conversation" vs "New conversation" only differed in case).
+    expect(
+      screen.getAllByText(/Нова розмова|Сесію завантажено/).length
+    ).toBeGreaterThan(0);
     expect(screen.getByText('План дня')).toBeDefined();
     expect(screen.getByText('Перевір ризики')).toBeDefined();
     expect(screen.getByText('Поясни налаштування')).toBeDefined();

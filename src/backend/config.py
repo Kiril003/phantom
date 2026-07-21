@@ -310,6 +310,11 @@ class PhantomConfig(BaseSettings):
         "auto",
     ] = "sunrise-warm"
     ui_density: Literal["compact", "normal", "comfortable"] = "normal"
+    # Interface language. Distinct from `ai_language` / voice language: this
+    # is the chrome the operator reads, not the language PHANTOM answers in.
+    # Ukrainian is the product's source language and stays the default; a
+    # foreign browser locale never flips it, only an explicit choice does.
+    ui_language: Literal["uk", "en"] = "uk"
     # V5 — OPERATOR screen layout mode.
     # 'conversation': conversational surface is primary center; AgentVitals +
     #   Tape demoted to collapsed peek strips.

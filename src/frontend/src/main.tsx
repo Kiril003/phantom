@@ -21,13 +21,17 @@ import '@fontsource/playfair-display/500-italic.css';
 import '@fontsource/playfair-display/600-italic.css';
 import '@fontsource/playfair-display/700-italic.css';
 import { App } from './app/App';
-import { applyBootstrapTheme } from './services/settingsBootstrap';
+import { applyBootstrapLanguage, applyBootstrapTheme } from './services/settingsBootstrap';
 import './styles/globals.css';
 
 // phase-5-R0-3-THEME-NIGHT — flip <html data-theme> to the cached or
 // time-of-day default BEFORE React renders. This kills the
 // cream → amber-night flash for night users on cold-start.
 applyBootstrapTheme();
+// Same for <html lang> — the cached locale has to be on the element before
+// the first paint, or the UI renders in Ukrainian and swaps to English once
+// `/settings` resolves.
+applyBootstrapLanguage();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

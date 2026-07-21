@@ -14,6 +14,7 @@ import {
   Moon,
   Cog,
   SlidersHorizontal as Tune,
+  Languages,
   Search,
   X as XIcon,
 } from 'lucide-react';
@@ -23,7 +24,13 @@ import { VaultPanel } from './VaultPanel';
 import { BackupRestoreCard } from './BackupRestoreCard';
 import { StatusBar } from '../core/StatusBar';
 import { FloatingToolbar } from '../core/FloatingToolbar';
-import { useSettingsStore, THEME_SETTING_KEY } from '../../stores/settingsStore';
+import {
+  useSettingsStore,
+  THEME_SETTING_KEY,
+  LANGUAGE_SETTING_KEY,
+} from '../../stores/settingsStore';
+import { LOCALES, LOCALE_LABELS, type Locale } from '../../i18n';
+import { useTranslation } from '../../i18n/useTranslation';
 import { useFamiliarStore } from '../../stores/familiarStore';
 import type { FamiliarRarity } from '@shared/types';
 import {
@@ -614,7 +621,10 @@ export default function SettingsPanel() {
 
             {/* Theme picker tiles in the Theme group ────────────────── */}
             {loaded && activeCategory && activeCategory.id === 'theme' && (
-              <ThemePicker values={values} />
+              <>
+                <ThemePicker values={values} />
+                <LanguagePicker />
+              </>
             )}
 
             {loaded && activeCategory && activeCategory.id === 'about' && (
@@ -697,6 +707,12 @@ export default function SettingsPanel() {
                   const q = query.trim().toLowerCase();
                   const visible = (activeCategory.settings || []).filter((def: any) => {
                     if (def.key === 'voice_always_on_enabled') return false;
+                    // `ui_language` is registered on the backend so it
+                    // round-trips through GET /settings and bootstrap can
+                    // apply it — but LanguagePicker owns the control, and a
+                    // generic enum row would write the key without the
+                    // instant <html lang> flip.
+                    if (def.key === LANGUAGE_SETTING_KEY) return false;
                     // Phase 22 — gate advanced rows behind the toggle. Search
                     // overrides the gate: if the operator types into the
                     // search box, surface every match regardless of tier.
@@ -1450,6 +1466,97 @@ function ThemePicker({ values }: ThemePickerProps) {
           </button>
         );
       })}
+    </div>
+  );
+}
+
+/* ─── Language picker ────────────────────────────────────────────────── */
+
+function LanguagePicker() {
+  const { t, locale } = useTranslation();
+  // Same contract as ThemePicker: the store action owns DOM + cache +
+  // backend, so the choice applies instantly and survives reload without a
+  // Save click. The generic `ui_language` row is filtered out above so
+  // there's exactly one control writing this key.
+  const handleSelect = (next: Locale) => {
+    void useSettingsStore.getState().setLanguage(next);
+  };
+
+  return (
+    <div style={{ marginTop: 16 }}>
+      <div
+        className="micro-label"
+        style={{ marginBottom: 6, color: 'var(--ink-secondary)' }}
+      >
+        {t('settings.language.label')}
+      </div>
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: `repeat(${LOCALES.length}, 1fr)`,
+          gap: 8,
+        }}
+      >
+        {LOCALES.map((id) => {
+          const selected = locale === id;
+          return (
+            <button
+              key={id}
+              type="button"
+              onClick={() => handleSelect(id)}
+              aria-pressed={selected}
+              lang={id}
+              style={{
+                minHeight: 44,
+                padding: '4px 10px',
+                borderRadius: 10,
+                background: 'rgba(255,255,255,0.55)',
+                border: selected
+                  ? '2px solid var(--accent)'
+                  : '1px solid rgba(255,255,255,0.55)',
+                boxShadow: selected
+                  ? '0 4px 14px color-mix(in srgb, var(--accent) 30%, transparent)'
+                  : 'var(--shadow-md)',
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                gap: 8,
+                textAlign: 'left',
+              }}
+            >
+              <Languages
+                size={14}
+                strokeWidth={2}
+                aria-hidden
+                style={{ color: 'var(--accent)', flexShrink: 0 }}
+              />
+              <span
+                style={{
+                  fontSize: 12,
+                  fontWeight: 700,
+                  color: 'var(--ink-primary)',
+                  letterSpacing: '0.02em',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {LOCALE_LABELS[id]}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+      <div
+        style={{
+          marginTop: 6,
+          fontFamily: 'var(--font-display)',
+          fontSize: 11,
+          color: 'var(--ink-tertiary)',
+        }}
+      >
+        {t('settings.language.hint')}
+      </div>
     </div>
   );
 }

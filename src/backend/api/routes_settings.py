@@ -135,6 +135,7 @@ CATEGORY_SPEC: list[dict[str, Any]] = [
         "icon": "◐",
         "keys": [
             "ui_theme",
+            "ui_language",
             "ui_density",
             "ui_color_cyan",
             "ui_color_warning",
@@ -382,6 +383,7 @@ LABEL_OVERRIDES: dict[str, str] = {
     "debug": "Режим налагодження",
     "serial_enabled": "ESP32 serial bridge",
     "ui_theme": "Тема",
+    "ui_language": "Мова інтерфейсу",
     "ui_density": "Щільність",
     "ui_color_cyan": "Accent (FOCUS)",
     "ui_color_warning": "Accent (DREAM)",

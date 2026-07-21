@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { SettingsCategory, isThemeId, type ThemeId } from '@shared/types';
 import { settingsApi } from '../services/api';
+import { DEFAULT_LOCALE, isLocale, type Locale } from '../i18n/locales';
 
 /* phase-5-R0-3-THEME-NIGHT — theme picker wiring.
  *
@@ -28,9 +29,22 @@ export const THEME_SETTING_KEY = 'ui_theme';
 // Persisted in localStorage so reload remembers the operator's choice.
 export const ADVANCED_TOGGLE_KEY = 'phantom_settings_advanced';
 
+/* i18n — the interface language rides the exact same rails as the theme:
+ * one canonical settings key, a localStorage mirror for pre-auth paint, an
+ * optimistic store update, and a best-effort backend PUT. The only
+ * difference is the DOM side-effect: `<html lang="…">` instead of
+ * `data-theme`, which is what screen readers and hyphenation keys off. */
+export const LANGUAGE_STORAGE_KEY = 'phantom_language';
+export const LANGUAGE_SETTING_KEY = 'ui_language';
+
 export function applyThemeToDom(id: ThemeId): void {
   if (typeof document === 'undefined') return;
   document.documentElement.setAttribute('data-theme', id);
+}
+
+export function applyLanguageToDom(locale: Locale): void {
+  if (typeof document === 'undefined') return;
+  document.documentElement.setAttribute('lang', locale);
 }
 
 interface SettingsStoreState {
@@ -50,6 +64,12 @@ interface SettingsStoreState {
   getActiveTheme: () => ThemeId;
   /** Flip theme: DOM + localStorage immediately, backend best-effort. */
   setTheme: (id: ThemeId) => Promise<void>;
+
+  /** Read the active UI locale, falling back to the localStorage
+   * cache or the source language. */
+  getActiveLanguage: () => Locale;
+  /** Flip language: DOM + localStorage immediately, backend best-effort. */
+  setLanguage: (locale: Locale) => Promise<void>;
 
   /**
    * Phase 22 — IA controls for the settings header.
@@ -157,6 +177,46 @@ export const useSettingsStore = create<SettingsStoreState>((set, get) => ({
         localStorage.getItem('phantom_token')
       ) {
         await settingsApi.set(THEME_SETTING_KEY, id);
+      }
+    } catch {
+      /* network blip — cache is durable; sync happens next save. */
+    }
+  },
+
+  getActiveLanguage: () => {
+    const fromValues = get().values[LANGUAGE_SETTING_KEY];
+    if (isLocale(fromValues)) return fromValues;
+    if (typeof localStorage !== 'undefined') {
+      const stored = localStorage.getItem(LANGUAGE_STORAGE_KEY);
+      if (isLocale(stored)) return stored;
+    }
+    return DEFAULT_LOCALE;
+  },
+
+  setLanguage: async (locale) => {
+    if (!isLocale(locale)) return;
+    applyLanguageToDom(locale);
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(LANGUAGE_STORAGE_KEY, locale);
+      }
+    } catch {
+      /* private mode / storage full — DOM still updated, skip cache */
+    }
+    set((s) => {
+      const dirty = new Set(s.dirty);
+      dirty.delete(LANGUAGE_SETTING_KEY);
+      return {
+        values: { ...s.values, [LANGUAGE_SETTING_KEY]: locale },
+        dirty,
+      };
+    });
+    try {
+      if (
+        typeof localStorage === 'undefined' ||
+        localStorage.getItem('phantom_token')
+      ) {
+        await settingsApi.set(LANGUAGE_SETTING_KEY, locale);
       }
     } catch {
       /* network blip — cache is durable; sync happens next save. */

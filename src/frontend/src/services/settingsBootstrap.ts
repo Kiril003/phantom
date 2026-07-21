@@ -8,8 +8,14 @@
  */
 import { settingsApi } from './api';
 import { wsClient } from './websocket';
-import { useSettingsStore, THEME_STORAGE_KEY } from '../stores/settingsStore';
+import {
+  useSettingsStore,
+  THEME_STORAGE_KEY,
+  LANGUAGE_STORAGE_KEY,
+  applyLanguageToDom,
+} from '../stores/settingsStore';
 import { useFaceStore } from '../stores/faceStore';
+import { DEFAULT_LOCALE, isLocale, type Locale } from '../i18n/locales';
 import { isThemeId, type ThemeId } from '@shared/types';
 
 const DEFAULT_FONT_SIZE = 14; // matches config.ui_font_size default
@@ -60,6 +66,26 @@ export function applyBootstrapTheme(): ThemeId {
     document.documentElement.setAttribute('data-theme', id);
   }
   return id;
+}
+
+/* Same idea for the interface language: the operator's cached choice has to
+ * land on `<html lang>` before React renders, otherwise the first paint is
+ * in the wrong language and swaps once `/settings` resolves. Unlike the
+ * theme there is no heuristic — we never guess from `navigator.language`,
+ * because Ukrainian is the product's language and a foreign browser locale
+ * is not a request to change it. Only an explicit choice moves it. */
+export function applyBootstrapLanguage(): Locale {
+  let locale: Locale = DEFAULT_LOCALE;
+  if (typeof localStorage !== 'undefined') {
+    try {
+      const stored = localStorage.getItem(LANGUAGE_STORAGE_KEY);
+      if (isLocale(stored)) locale = stored;
+    } catch {
+      /* private mode — keep the source language */
+    }
+  }
+  applyLanguageToDom(locale);
+  return locale;
 }
 
 let inFlight: Promise<void> | null = null;
@@ -145,6 +171,20 @@ export function applyUISettings(values: Record<string, unknown>): void {
   const theme = values.ui_theme;
   if (typeof theme === 'string' && theme) {
     root.setAttribute('data-theme', theme);
+  }
+
+  const language = values.ui_language;
+  if (isLocale(language)) {
+    applyLanguageToDom(language);
+    // Refresh the pre-paint cache so the next cold start opens in the
+    // language the backend considers canonical.
+    try {
+      if (typeof localStorage !== 'undefined') {
+        localStorage.setItem(LANGUAGE_STORAGE_KEY, language);
+      }
+    } catch {
+      /* best-effort cache */
+    }
   }
 
   const density = values.ui_density;

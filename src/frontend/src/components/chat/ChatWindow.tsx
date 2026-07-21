@@ -33,6 +33,7 @@ import {
 } from '../../hooks/useVoiceAlwaysOn';
 import type { ChatMessage } from '@shared/types';
 import { wsClient } from '../../services/websocket';
+import { useTranslation } from '../../i18n/useTranslation';
 
 interface ChatWindowProps {
   minimalChrome?: boolean;
@@ -77,6 +78,8 @@ export function ChatWindow({
   className = '',
 }: ChatWindowProps) {
   useChatStream();
+
+  const { t, locale } = useTranslation();
 
   const messages = useChatStore((s) => s.messages);
   const streaming = useChatStore((s) => s.streaming);
@@ -544,7 +547,7 @@ export function ChatWindow({
               <button
                 type="button"
                 onClick={() => setSessionsOpen(false)}
-                aria-label="Close sessions"
+                aria-label={t('chat.sessions.close')}
                 className="flex items-center justify-center transition-all active:scale-95"
                 style={{
                   width: 32,
@@ -569,7 +572,7 @@ export function ChatWindow({
                   fontWeight: 500,
                 }}
               >
-                Sessions
+                {t('chat.sessions.title')}
               </span>
               <button
                 type="button"
@@ -586,8 +589,8 @@ export function ChatWindow({
                   color: 'var(--accent)',
                   boxShadow: '0 0 12px var(--accent-glow)',
                 }}
-                aria-label="New session"
-                title="New session"
+                aria-label={t('chat.sessions.new')}
+                title={t('chat.sessions.new')}
               >
                 <Plus size={16} strokeWidth={2} />
               </button>
@@ -606,7 +609,7 @@ export function ChatWindow({
                     fontSize: 'var(--fs-xs)',
                   }}
                 >
-                  No sessions yet
+                  {t('chat.sessions.empty')}
                 </span>
                 <span
                   className="italic"
@@ -616,15 +619,18 @@ export function ChatWindow({
                     color: 'var(--ink-faint)',
                   }}
                 >
-                  PHANTOM is listening.
+                  {t('chat.sessions.listening')}
                 </span>
               </div>
             )}
             {sessions.map((sess) => {
               const active = sess.id === currentSessionId;
-              const preview = sess.summary ?? `Session · ${sess.id.slice(0, 6)}`;
+              const preview =
+                sess.summary ?? t('chat.sessions.preview', { id: sess.id.slice(0, 6) });
               const startedAt = new Date(sess.started_at);
-              const dateLabel = startedAt.toLocaleDateString('uk-UA', {
+              // 'uk' / 'en' are valid BCP-47 tags, so the active locale can be
+              // handed straight to Intl — no separate date-locale mapping.
+              const dateLabel = startedAt.toLocaleDateString(locale, {
                 month: 'short',
                 day: 'numeric',
               });
@@ -693,7 +699,7 @@ export function ChatWindow({
                           setEditSessionText(sess.summary ?? '');
                           setEditingSessionId(sess.id);
                         }}
-                        title="Double-click to rename"
+                        title={t('chat.sessions.renameHint')}
                       >
                         {preview}
                       </div>
@@ -708,7 +714,7 @@ export function ChatWindow({
                     >
                       <span>{dateLabel}</span>
                       <span>·</span>
-                      <span>{sess.message_count} msg</span>
+                      <span>{t('chat.sessions.count', { count: sess.message_count })}</span>
                     </div>
                   </div>
                   <div className="flex items-center gap-0">
@@ -734,7 +740,7 @@ export function ChatWindow({
                           setEditingSessionId(sess.id);
                         }
                       }}
-                      aria-label="Rename session"
+                      aria-label={t('chat.sessions.rename')}
                     >
                       {editingSessionId === sess.id ? (
                         <Check size={12} strokeWidth={2} style={{ color: 'var(--accent)' }} />
@@ -759,7 +765,7 @@ export function ChatWindow({
                         e.stopPropagation();
                         void deleteSession(sess.id);
                       }}
-                      aria-label="Delete session"
+                      aria-label={t('chat.sessions.delete')}
                     >
                       <Trash2 size={12} strokeWidth={1.5} />
                     </button>
@@ -802,8 +808,8 @@ export function ChatWindow({
                   border: '1px solid var(--glass-border)',
                   color: 'var(--ink-secondary)',
                 }}
-                title="Open Sessions"
-                aria-label="Open Sessions"
+                title={t('chat.sessions.open')}
+                aria-label={t('chat.sessions.open')}
               >
                 <Menu size={18} />
               </button>
@@ -820,11 +826,11 @@ export function ChatWindow({
               }}
               title={
                 sessions.find((s) => s.id === currentSessionId)?.summary ||
-                'New Conversation'
+                t('chat.header.untitled')
               }
             >
               {sessions.find((s) => s.id === currentSessionId)?.summary ||
-                'New Conversation'}
+                t('chat.header.untitled')}
             </span>
           </div>
 
@@ -838,10 +844,12 @@ export function ChatWindow({
               color: 'var(--accent)',
               minHeight: 28,
             }}
-            aria-label="New session"
+            aria-label={t('chat.sessions.new')}
           >
             <Plus size={14} strokeWidth={2} />
-            <span className="micro-label" style={{ fontWeight: 700 }}>NEW</span>
+            <span className="micro-label" style={{ fontWeight: 700 }}>
+              {t('chat.sessions.newShort')}
+            </span>
           </button>
         </header>
 
@@ -892,7 +900,7 @@ export function ChatWindow({
                   letterSpacing: 'var(--tracking-tight)',
                 }}
               >
-                {currentSessionId ? 'Session loaded' : 'New conversation'}
+                {currentSessionId ? t('chat.empty.loaded') : t('chat.empty.new')}
               </p>
               <div
                 style={{
@@ -903,32 +911,35 @@ export function ChatWindow({
                   maxWidth: 420,
                 }}
               >
-                Обери дію або напиши напряму. PHANTOM краще відповідає, коли бачить контекст, ціль і бажаний формат.
+                {t('chat.empty.body')}
               </div>
               <div
                 className="flex flex-wrap justify-center gap-2"
                 style={{ marginTop: 2 }}
-                aria-label="Quick chat actions"
+                aria-label={t('chat.quick.aria')}
               >
                 {[
                   {
+                    id: 'plan',
                     icon: <Compass size={14} strokeWidth={1.75} />,
-                    label: 'План дня',
-                    prompt: 'Допоможи зібрати короткий план дня: пріоритети, ризики, наступні 3 дії.',
+                    label: t('chat.quick.plan.label'),
+                    prompt: t('chat.quick.plan.prompt'),
                   },
                   {
+                    id: 'risks',
                     icon: <Shield size={14} strokeWidth={1.75} />,
-                    label: 'Перевір ризики',
-                    prompt: 'Подивись на поточний стан системи й скажи, що потребує уваги першим.',
+                    label: t('chat.quick.risks.label'),
+                    prompt: t('chat.quick.risks.prompt'),
                   },
                   {
+                    id: 'settings',
                     icon: <Settings size={14} strokeWidth={1.75} />,
-                    label: 'Поясни налаштування',
-                    prompt: 'Поясни ключові налаштування PHANTOM простими словами і що варто змінити спочатку.',
+                    label: t('chat.quick.settings.label'),
+                    prompt: t('chat.quick.settings.prompt'),
                   },
                 ].map((action) => (
                   <button
-                    key={action.label}
+                    key={action.id}
                     type="button"
                     onClick={() => handleQuickPrompt(action.prompt)}
                     disabled={sending}
@@ -1033,7 +1044,7 @@ export function ChatWindow({
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
               exit={{ opacity: 0 }}
-              aria-label="Розпізнавання у процесі"
+              aria-label={t('chat.transcribing')}
               style={{
                 color: 'var(--accent-cyan-soft, rgba(72, 220, 252, 0.7))',
                 background: 'rgba(72, 220, 252, 0.06)',
@@ -1059,7 +1070,7 @@ export function ChatWindow({
               className="self-start glass-panel flex items-center gap-2 px-4 py-2 rounded-full"
               initial={{ opacity: 0, y: 4 }}
               animate={{ opacity: 1, y: 0 }}
-              aria-label="PHANTOM is thinking"
+              aria-label={t('chat.thinking.aria')}
               style={{
                 color: 'var(--ink-secondary)',
                 fontFamily: 'var(--font-display)',
@@ -1068,7 +1079,7 @@ export function ChatWindow({
               }}
             >
               <Sparkles size={12} strokeWidth={1.75} style={{ color: 'var(--accent)' }} />
-              <span>Thinking</span>
+              <span>{t('chat.thinking')}</span>
               {[0, 1, 2].map((i) => (
                 <motion.span
                   key={i}
@@ -1143,10 +1154,10 @@ export function ChatWindow({
               >
                 <div className="flex items-center gap-1.5 text-[9px] text-neutral-500 uppercase tracking-widest font-bold border-b border-white/[0.04] pb-1">
                   <Sparkles size={10} className="animate-pulse" style={{ color: 'var(--accent)' }} />
-                  <span>Потік Свідомості / Thought Stream</span>
+                  <span>{t('chat.thoughtStream')}</span>
                 </div>
                 <div className="flex flex-col gap-1 text-[11px] leading-tight">
-                  {activeThoughts.map((t, idx) => {
+                  {activeThoughts.map((thought, idx) => {
                     const colors: Record<string, string> = {
                       plan: '#06b6d4',      // cyan
                       reflection: '#a3a3a3', // gray
@@ -1156,19 +1167,19 @@ export function ChatWindow({
                     const isLast = idx === activeThoughts.length - 1;
                     return (
                       <motion.div
-                        key={t.id}
+                        key={thought.id}
                         initial={{ opacity: 0, x: -4 }}
                         animate={{ opacity: isLast ? 1 : 0.45, x: 0 }}
                         className="flex items-start gap-2"
                       >
                         <span
                           className="font-bold text-[9px] uppercase shrink-0 mt-0.5"
-                          style={{ color: colors[t.kind] || 'var(--accent)' }}
+                          style={{ color: colors[thought.kind] || 'var(--accent)' }}
                         >
-                          {t.kind.slice(0, 4)}:
+                          {thought.kind.slice(0, 4)}:
                         </span>
                         <span className="text-neutral-400 font-serif italic">
-                          “{t.text}”
+                          “{thought.text}”
                         </span>
                       </motion.div>
                     );
@@ -1282,7 +1293,7 @@ export function ChatWindow({
                   color: 'var(--ink-secondary)',
                   border: '1px solid var(--glass-border)',
                 }}
-                aria-label="Toggle sessions menu"
+                aria-label={t('chat.sessions.toggle')}
               >
                 <Menu size={16} strokeWidth={1.75} />
               </button>

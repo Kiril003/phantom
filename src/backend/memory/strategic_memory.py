@@ -335,12 +335,20 @@ async def prune_orphan_dirs(*, dry_run: bool = False) -> dict[str, Any]:
 
 
 def _get_ef() -> Any:
+    """Module-level embedding-function singleton — every Chroma consumer in
+    the codebase (episodes, lessons, intelligence routes, fixtures) reaches
+    the model through here, so it is also the one place worth checking that
+    the on-disk vectors were written by the model we are about to query
+    with. Both MiniLM and e5-small are 384-dim, so Chroma itself will never
+    catch that mismatch (see memory/embedding_fn.py)."""
     global _embedding_fn
     if _embedding_fn is None:
-        from chromadb.utils import embedding_functions as _ef
-        _embedding_fn = _ef.SentenceTransformerEmbeddingFunction(
-            model_name=config.embedding_model
+        from memory.embedding_fn import (
+            assert_store_matches_model,
+            build_embedding_function,
         )
+        assert_store_matches_model(config.chroma_path, config.embedding_model)
+        _embedding_fn = build_embedding_function(config.embedding_model)
     return _embedding_fn
 
 

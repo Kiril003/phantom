@@ -64,7 +64,15 @@ class PhantomConfig(BaseSettings):
     chroma_path: str = Field(
         default_factory=lambda: str(__import__('paths').resolve_data_dir('chroma'))
     )
-    embedding_model: str = "all-MiniLM-L6-v2"
+    # all-MiniLM-L6-v2 is English-only. On Ukrainian — the language this
+    # product actually runs in — it scored 1/4 top-1 with a *negative* mean
+    # margin on a 6-fact probe, i.e. strategic recall was effectively random
+    # while looking healthy. multilingual-e5-small (MIT, also 384-dim) scored
+    # 4/4. Both being 384-dim means Chroma cannot detect a store written by
+    # the other model, so memory/embedding_fn.py fingerprints the store.
+    # Changing this back to "all-MiniLM-L6-v2" restores the old behaviour
+    # exactly (the e5 input prefixes are keyed off the model name).
+    embedding_model: str = "intfloat/multilingual-e5-small"
     memory_top_k: int = 5
     memory_importance_threshold: float = 0.3
     memory_tactical_window_h: int = 24

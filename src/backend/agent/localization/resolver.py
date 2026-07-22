@@ -139,6 +139,20 @@ class LocalizationResolver:
         if not self._history:
             return True
         last = self._history[-1]
+        # A strictly more trustworthy source supersedes the last accepted fix
+        # outright. The velocity guard exists to catch IP-lookup jumps and
+        # clock-skew replays *within* a trust tier — it must never let a
+        # lower-trust prior veto a higher-trust fix that legitimately
+        # disagrees with it. Concretely: at cold start the IP source
+        # (trust 30, ~50 km accuracy) resolves first and lands in history;
+        # the accurate browser fix (trust 70) then arrives within the 5 s
+        # window and, being the true position, sits >1.5 km from the IP
+        # centroid. Without this branch the velocity check rejected the
+        # browser fix as "implausible" and the map kept showing the coarse
+        # IP centroid. A higher-trust source is authoritative — accept it
+        # and re-baseline from it.
+        if estimate.trust_level > last.trust_level:
+            return True
         dt_s = (estimate.timestamp - last.timestamp).total_seconds()
         if dt_s <= 0:
             # Replay or clock skew with different coords — reject.

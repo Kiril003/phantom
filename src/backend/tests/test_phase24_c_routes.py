@@ -163,3 +163,68 @@ def test_routing_endpoints_require_auth(unauth_client):
         json={"waypoints": [[50.0, 30.0], [50.1, 30.1]]},
     )
     assert resp.status_code in (401, 403)
+
+
+# ── Phase 24-C — geocode endpoint ─────────────────────────────────────────
+
+
+class _StubGeocoder:
+    """Minimal stand-in for NominatimGeocoder used by /map/geocode."""
+
+    def __init__(self, results=None, raise_exc=None) -> None:
+        self._results = results or []
+        self._raise = raise_exc
+
+    async def geocode(self, query: str, *, limit: int = 5):
+        if self._raise is not None:
+            raise self._raise
+        return self._results[:limit]
+
+
+def test_post_geocode_returns_candidates(auth_root_client):
+    from agent.localization.adapters.nominatim import (
+        GeocodeResult,
+        set_default_nominatim,
+    )
+
+    hit = GeocodeResult(
+        lat=50.4501,
+        lon=30.5234,
+        display_name="Київ, Україна",
+        place_type="city",
+        importance=0.9,
+    )
+    set_default_nominatim(_StubGeocoder(results=[hit]))
+    try:
+        resp = auth_root_client.post(
+            "/api/v1/map/geocode", json={"query": "Київ", "limit": 3}
+        )
+        assert resp.status_code == 200, resp.text
+        results = resp.json()["results"]
+        assert len(results) == 1
+        assert results[0]["lat"] == pytest.approx(50.4501)
+        assert results[0]["lon"] == pytest.approx(30.5234)
+        assert results[0]["display_name"] == "Київ, Україна"
+        assert results[0]["type"] == "city"
+    finally:
+        set_default_nominatim(None)
+
+
+def test_post_geocode_empty_on_geocoder_failure(auth_root_client):
+    from agent.localization.adapters.nominatim import set_default_nominatim
+
+    set_default_nominatim(_StubGeocoder(raise_exc=RuntimeError("offline")))
+    try:
+        resp = auth_root_client.post(
+            "/api/v1/map/geocode", json={"query": "будь-що"}
+        )
+        # Best-effort: an outage returns an empty list, never a 5xx.
+        assert resp.status_code == 200, resp.text
+        assert resp.json()["results"] == []
+    finally:
+        set_default_nominatim(None)
+
+
+def test_post_geocode_requires_auth(unauth_client):
+    resp = unauth_client.post("/api/v1/map/geocode", json={"query": "Київ"})
+    assert resp.status_code in (401, 403)

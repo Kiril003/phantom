@@ -14,6 +14,15 @@ import { NearbyPanel } from '../NearbyPanel';
 import { useMapStore } from '../../../stores/mapStore';
 import { useMapAgentBridge } from '../../../hooks/useMapAgentBridge';
 import { useViewport } from '../../../hooks/useViewport';
+import type { RouteAlternative } from '../../../services/api';
+
+/** "12.4 км · 18 хв" — distance rounded, duration in whole minutes (min 1). */
+function formatRouteSummary(alt: RouteAlternative): string {
+  const km = alt.distance_m / 1000;
+  const distance = km >= 10 ? `${Math.round(km)} км` : `${km.toFixed(1)} км`;
+  const minutes = Math.max(1, Math.round(alt.duration_s / 60));
+  return `${distance} · ${minutes} хв`;
+}
 /**
  * Phase 24-D/PRE — Master HUD Shell for OmniMap.
  *
@@ -89,6 +98,14 @@ export function HudShell({
     zoom: s.zoom,
   }));
 
+  const route = useMapStore((s) => s.route);
+  const routing = useMapStore((s) => s.routing);
+  const routeError = useMapStore((s) => s.routeError);
+  const planRoute = useMapStore((s) => s.planRoute);
+  const clearRoute = useMapStore((s) => s.clearRoute);
+
+  const routeSummary = route ? formatRouteSummary(route.result.primary) : null;
+
   const lat = tactical.lat ?? viewport.center?.[0] ?? 50.45;
 
   return (
@@ -139,6 +156,11 @@ export function HudShell({
             setRoutingActive(!routingActive);
             if (!routingActive) setGeofenceActive(false);
           }}
+          onPlan={(from, to) => void planRoute(from, to)}
+          loading={routing}
+          error={routeError}
+          summary={routeSummary}
+          onClear={clearRoute}
         />
         <GeofenceDrawTool
           active={geofenceActive}

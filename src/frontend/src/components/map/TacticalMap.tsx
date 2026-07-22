@@ -3,6 +3,7 @@ import maplibregl, { Map as MapLibreMap } from 'maplibre-gl';
 import { MapContext } from './MapContext';
 import { BaseLayer } from './layers/BaseLayer';
 import { PresenceLayer } from './layers/PresenceLayer';
+import { RouteLayer } from './layers/RouteLayer';
 import { WardrivingLayer } from './layers/WardrivingLayer';
 import { IntelLayer } from './layers/IntelLayer';
 import { ReconLayer } from './layers/ReconLayer';
@@ -387,6 +388,7 @@ export function TacticalMap({
             {layers?.recon && <ReconLayer />}
             {layers?.facts && <FactMarkerLayer />}
             <GeofencesLayer />
+            <RouteLayer />
             <MarkerCard />
           </>
         )}

@@ -660,6 +660,49 @@ def _resolve_profile(raw: str):
         ) from exc
 
 
+class _GeocodeBody(BaseModel):
+    query: str = Field(..., min_length=1, max_length=256)
+    limit: int = Field(default=5, ge=1, le=10)
+
+
+@router.post("/geocode")
+async def post_geocode(
+    body: _GeocodeBody,
+    token_data: TokenPayload = Depends(require_auth),
+) -> dict[str, Any]:
+    """Forward-geocode free-form text → candidate coordinates via Nominatim.
+
+    The routing tool's "from"/"to" fields are plain text; this turns them
+    into the ``[lat, lon]`` pairs ``POST /map/route`` expects. Results are
+    cached inside the geocoder (7-day forward TTL), so repeat lookups are
+    free. On geocoder outage we return an empty list rather than raising —
+    the caller shows "нічого не знайдено" instead of a hard error.
+    """
+    from agent.localization.adapters.nominatim import get_default_nominatim
+
+    query = body.query.strip()
+    if not query:
+        return {"results": []}
+    try:
+        geocoder = get_default_nominatim()
+        results = await geocoder.geocode(query, limit=body.limit)
+    except Exception as exc:  # noqa: BLE001 — geocoder is best-effort
+        logger.info("geocode failed for %r: %s", query[:40], exc)
+        return {"results": []}
+    return {
+        "results": [
+            {
+                "lat": r.lat,
+                "lon": r.lon,
+                "display_name": r.display_name,
+                "type": r.place_type,
+                "importance": r.importance,
+            }
+            for r in results
+        ]
+    }
+
+
 @router.post("/route")
 async def post_route(
     body: _RouteRequestBody,

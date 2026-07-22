@@ -1,6 +1,20 @@
 import { create } from 'zustand';
 import type { WardrivingRecord, MapPOI, HeatmapPoint, TrackPoint } from '@shared/types';
-import { mapApi, type Bounds, type GeoTaggedFact } from '../services/api';
+import { mapApi, type Bounds, type GeoTaggedFact, type RouteResult } from '../services/api';
+
+/** One endpoint of a planned route, with a human label for the HUD. */
+export interface RoutePoint {
+  lat: number;
+  lon: number;
+  label: string;
+}
+
+/** A planned route plus the resolved origin/destination it connects. */
+export interface PlannedRoute {
+  result: RouteResult;
+  from: RoutePoint;
+  to: RoutePoint;
+}
 
 // Keep the most recent N track points client-side. Older points are
 // dropped on append; full history is re-hydrated from the backend via
@@ -37,6 +51,13 @@ interface MapStoreState {
   selection: MapSelection;
   loading: boolean;
   error: string | null;
+
+  /** Phase 24-C — the active planned route (null when none). */
+  route: PlannedRoute | null;
+  /** True while a plan request is in flight (geocode + route round-trip). */
+  routing: boolean;
+  /** Last routing failure, for the HUD to surface. Cleared on success. */
+  routeError: string | null;
   /** Phase 24-H — Time Machine date (ISO string). Defaults to 'today'. */
   temporalDate: string;
   
@@ -75,6 +96,15 @@ interface MapStoreState {
   select: (selection: MapSelection) => void;
   setError: (e: string | null) => void;
 
+  /**
+   * Plan a route from `from` to `to`. Both are free text: each is
+   * forward-geocoded to coordinates, except an empty `from`, which uses
+   * the operator's current position. Writes `route` on success and
+   * `routeError` on any failure. Never throws.
+   */
+  planRoute: (from: string, to: string) => Promise<void>;
+  clearRoute: () => void;
+
   loadWardriving: (bounds?: Bounds, since?: string) => Promise<void>;
   loadHeatmap: (bounds?: Bounds, minWeight?: number) => Promise<void>;
   loadPOIs: (category?: string) => Promise<void>;
@@ -108,6 +138,9 @@ export const useMapStore = create<MapStoreState>((set, get) => ({
   selection: null,
   loading: false,
   error: null,
+  route: null,
+  routing: false,
+  routeError: null,
   temporalDate: new Date().toISOString().split('T')[0],
   tactical: {
     lat: null,
@@ -152,6 +185,62 @@ export const useMapStore = create<MapStoreState>((set, get) => ({
     set((s) => ({ layers: { ...s.layers, [key]: visible } })),
   select: (selection) => set({ selection }),
   setError: (e) => set({ error: e }),
+
+  planRoute: async (fromRaw, toRaw) => {
+    const from = fromRaw.trim();
+    const to = toRaw.trim();
+    if (!to) {
+      set({ routeError: 'Вкажіть пункт призначення' });
+      return;
+    }
+
+    // Geocode a text field to its first candidate coordinate.
+    const geocodeFirst = async (query: string): Promise<RoutePoint | null> => {
+      const { results } = await mapApi.geocode(query, 1);
+      const hit = results[0];
+      if (!hit) return null;
+      return { lat: hit.lat, lon: hit.lon, label: hit.display_name };
+    };
+
+    set({ routing: true, routeError: null });
+    try {
+      const dest = await geocodeFirst(to);
+      if (!dest) {
+        set({ routing: false, routeError: `Не знайдено: ${to}` });
+        return;
+      }
+
+      let origin: RoutePoint | null;
+      if (from) {
+        origin = await geocodeFirst(from);
+        if (!origin) {
+          set({ routing: false, routeError: `Не знайдено: ${from}` });
+          return;
+        }
+      } else {
+        // Empty "from" means "route from where I am now".
+        const t = get().tactical;
+        if (t.lat == null || t.lon == null) {
+          set({ routing: false, routeError: 'Немає поточної позиції' });
+          return;
+        }
+        origin = { lat: t.lat, lon: t.lon, label: 'Моє місце' };
+      }
+
+      const result = await mapApi.planRoute(
+        [[origin.lat, origin.lon], [dest.lat, dest.lon]],
+        'car',
+      );
+      set({ route: { result, from: origin, to: dest }, routing: false, routeError: null });
+    } catch (err) {
+      set({
+        routing: false,
+        routeError: err instanceof Error ? err.message : 'Не вдалося прокласти маршрут',
+      });
+    }
+  },
+
+  clearRoute: () => set({ route: null, routeError: null }),
 
   loadWardriving: async (bounds, since) => {
     set({ loading: true, error: null });

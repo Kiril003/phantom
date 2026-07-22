@@ -220,6 +220,12 @@ export const mapApi = {
     params.set('radius_m', String(radiusM));
     return request<NearbyResponse>('GET', `/map/nearby?${params}`);
   },
+  // Phase 24-C — forward-geocode free text → candidate coordinates.
+  geocode: (query: string, limit = 5) =>
+    request<{ results: GeocodeCandidate[] }>('POST', '/map/geocode', { query, limit }),
+  // Phase 24-C — plan a route through ordered [lat, lon] waypoints.
+  planRoute: (waypoints: [number, number][], profile = 'car') =>
+    request<RouteResult>('POST', '/map/route', { waypoints, profile }),
   // Phase 9.4c audit Q6 — offline banner source-of-truth.
   getServicesHealth: () =>
     request<{ services: Record<string, ServiceHealth> }>('GET', '/map/services_health'),
@@ -457,6 +463,39 @@ export interface NearbyResponse {
   remembered: NearbyRememberedItem[];
   osm: NearbyOsmItem[];
   pois: NearbyPoiItem[];
+}
+
+/* ─── Routing / geocoding ───────────────────────────────────────────────── */
+
+export interface GeocodeCandidate {
+  lat: number;
+  lon: number;
+  display_name: string;
+  type: string | null;
+  importance: number | null;
+}
+
+/** GeoJSON LineString: coordinates are [lon, lat] pairs. */
+export interface RouteGeometry {
+  type: 'LineString';
+  coordinates: [number, number][];
+}
+
+export interface RouteAlternative {
+  distance_m: number;
+  duration_s: number;
+  geometry: RouteGeometry;
+  summary: string;
+  extras: Record<string, unknown>;
+}
+
+export interface RouteResult {
+  primary: RouteAlternative;
+  alternatives: RouteAlternative[];
+  profile: string;
+  engine: string;
+  cached: boolean;
+  extras: Record<string, unknown>;
 }
 
 /* ─── Linux ───────────────────────────────────────────────────────────────── */

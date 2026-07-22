@@ -139,6 +139,55 @@ class TestLocalizationResolver:
         assert bad.calls == 1
 
     @pytest.mark.asyncio
+    async def test_higher_trust_supersedes_low_trust_prior_despite_jump(self):
+        # Regression: at cold start the IP source (trust 30, city-centroid
+        # ~50 km off) resolves first and seeds history. The accurate browser
+        # fix (trust 70) then arrives within the 5 s window, sitting far from
+        # the centroid. It must NOT be rejected as an implausible jump — a
+        # more trustworthy source is authoritative and re-baselines. Before
+        # the fix, the map kept showing the coarse IP centroid.
+        t0 = datetime.now(tz=timezone.utc)
+        ip = _StubSource("ip_estimate", 30, _est(50.0, 30.0, "ip_estimate", 30, timestamp=t0))
+        r = LocalizationResolver([ip])
+        seeded = await r.resolve()
+        assert seeded is not None and seeded.source == "ip_estimate"
+
+        # Browser fix 1 s later, ~40 km away (well past the ~1.5 km the
+        # velocity guard would allow inside the window) but higher trust.
+        t1 = t0 + timedelta(seconds=1)
+        browser = _StubSource(
+            "browser_geolocation", 70,
+            _est(50.36, 30.0, "browser_geolocation", 70, timestamp=t1),
+        )
+        r.add_source(browser)
+        result = await r.resolve()
+        assert result is not None
+        assert result.source == "browser_geolocation"
+        # And history re-baselined to the browser fix, so the next same-tier
+        # reading is judged against it — not the stale centroid.
+        assert r.last_estimate() is not None
+        assert r.last_estimate().source == "browser_geolocation"
+
+    @pytest.mark.asyncio
+    async def test_lower_trust_fallback_still_policed_for_velocity(self):
+        # The supersede rule is one-directional: a *lower*-trust candidate
+        # after a higher-trust fix is still velocity-checked, so a bogus IP
+        # centroid can't teleport the operator when the browser fix drops out.
+        t0 = datetime.now(tz=timezone.utc)
+        browser = _StubSource(
+            "browser_geolocation", 70,
+            _est(50.0, 30.0, "browser_geolocation", 70, timestamp=t0),
+        )
+        r = LocalizationResolver([browser])
+        await r.resolve()
+
+        t1 = t0 + timedelta(seconds=1)
+        r.remove_source("browser_geolocation")
+        ip = _StubSource("ip_estimate", 30, _est(50.36, 30.0, "ip_estimate", 30, timestamp=t1))
+        r.add_source(ip)
+        assert await r.resolve() is None  # 40 km in 1 s from a lower-trust source → rejected
+
+    @pytest.mark.asyncio
     async def test_sanity_allows_reasonable_motion(self):
         t0 = datetime.now(tz=timezone.utc)
         first = _StubSource("first", 95, _est(50.0, 30.0, "first", 95, timestamp=t0))

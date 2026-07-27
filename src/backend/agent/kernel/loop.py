@@ -572,7 +572,6 @@ async def run_task_loop(runtime: "AgentRuntime", state: "TaskState", *, resumed:
 
 
 async def _run_task_loop_impl(runtime: "AgentRuntime", state: "TaskState", *, resumed: bool = False) -> None:
-    logger.warning("!!! LOOP ENTRY: task_id=%s goal=%r resumed=%s mission=%s", state.id, state.goal, resumed, getattr(state, "mission_id", None))
     """Actual ReAct + Reflect + Checkpoint orchestration. Extracted from
     run_task_loop so the background-track timeout can wrap it cleanly.
 
@@ -580,6 +579,10 @@ async def _run_task_loop_impl(runtime: "AgentRuntime", state: "TaskState", *, re
     When state.mission_id is set, delegate IMMEDIATELY to run_mission_loop().
     The legacy path below is entirely untouched for non-mission tasks.
     """
+    logger.debug(
+        "loop entry: task_id=%s goal=%r resumed=%s mission=%s",
+        state.id, state.goal, resumed, getattr(state, "mission_id", None),
+    )
     # ── Block C-2 mission path ─────────────────────────────────────────────────
     if getattr(state, "mission_id", None) is not None:
         await run_mission_loop(runtime, state)

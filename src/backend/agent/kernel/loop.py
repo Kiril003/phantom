@@ -455,12 +455,8 @@ async def _revise_draft(
     prev: GateDraft | None,
     crit,
 ) -> GateDraft:
-    """Rewrite the draft against the critic's blockers.
-
-    First call returns the original; later calls regenerate through the LLM
-    using the previous critique as feedback. Code artefacts need planner
-    re-entry, so they fall through to the reflection-driven retry instead.
-    """
+    """Regenerate the draft against the critic's blockers; code kinds fall
+    through to the reflection-driven retry instead."""
     if prev is None or crit is None or not getattr(crit, "has_blockers", False):
         return GateDraft(text=artefact, metadata={"step_idx": step_idx, "summary": summary})
     if artefact_kind == "code":
@@ -516,17 +512,10 @@ async def _run_completion_gate(
     *,
     check_revise_loop,
 ) -> _GateOutcome:
-    """Decide whether a DONE_TASK may actually finish the task.
+    """Decide whether a DONE_TASK may finish the task.
 
-    The gate is a checkpoint, not a judge: blockers become an observation and
-    force a reflection so the reflector can revise the strategy or ship a
-    cleaner DONE_TASK next round. `_QUALITY_GATE_MAX_FAILURES` bounds it so a
-    stubborn critic cannot wedge the loop — past the cap the artefact ships
-    with a caveat.
-
-    ACCEPT carries the summary to finalise with; REOPEN means the caller drops
-    this DONE_TASK and keeps looping; FINISHED means the task is already
-    finalised and the caller must return.
+    ACCEPT carries the summary to finalise with, REOPEN drops this DONE_TASK
+    and keeps looping, FINISHED means the task is already finalised.
     """
     summary = str(step.args.get("summary") or "task complete")
     artefact = str(step.args.get("artefact") or summary)
@@ -549,9 +538,7 @@ async def _run_completion_gate(
         )
 
     try:
-        # Up to 3 rounds: original → revised → re-revised. Each revision is
-        # bounded by the producer's own 20s timeout, so worst-case gate
-        # latency is ~60s for text artefacts.
+        # 3 rounds x the producer's 20s timeout = ~60s worst case.
         gate_result = await run_quality_gate_for(
             intent=state.goal,
             acceptance_criteria=acceptance,
@@ -562,13 +549,11 @@ async def _run_completion_gate(
             max_revisions=3,
         )
     except Exception as exc:
-        # Best-effort — never block finalisation on the gate's own bug.
+        # Never block finalisation on the gate's own bug.
         logger.debug("quality_gate errored, accepting draft: %s", exc)
         gate_result = None
 
-    # Ship what the revise loop actually produced. Without this the gate could
-    # spin three rounds polishing the draft and finalize_task would still send
-    # the original.
+    # Ship what the revise loop produced, not the original draft.
     if (
         gate_result is not None
         and gate_result.passed
@@ -585,9 +570,6 @@ async def _run_completion_gate(
                 "excerpt": new_text[:240],
             },
         )
-        # With no separate artefact arg the regenerated text IS the summary
-        # the operator will read; otherwise the short summary stands and the
-        # broadcast above carries the artefact.
         if artefact == summary:
             summary = new_text
         artefact = new_text
@@ -621,8 +603,7 @@ async def _run_completion_gate(
     )
 
     if state.quality_gate_failures >= _QUALITY_GATE_MAX_FAILURES:
-        # Cap reached — finalise with a caveat so downstream reports say the
-        # gate never passed.
+        # Cap reached — finalise with a caveat.
         await runtime._broadcast(
             "warning.issued",
             {
@@ -670,8 +651,7 @@ async def _council_note_on_critique(
     summary: str,
     artefact: str,
 ) -> str:
-    """Let a second perspective shape the revise note. Offline, the
-    deterministic personas still produce a usable consensus."""
+    """Let the Council shape the revise note."""
     revise_note = crit_msg
     try:
         with contextlib.suppress(Exception):

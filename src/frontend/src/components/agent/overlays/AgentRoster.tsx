@@ -22,6 +22,7 @@ import { useUIStore, type FocusedAgent } from '../../../stores/uiStore';
 import { useChromeCollapse } from '../../../hooks/useChromeCollapse';
 import { useStandingOrdersHeartbeat } from '../../../hooks/useStandingOrdersHeartbeat';
 import { ChromeHandle } from '../../core/ChromeHandle';
+import { Zap, Hourglass, ClipboardList, Sparkles, Scale, Layers, Users } from 'lucide-react';
 
 // ─── Active-status derivation ─────────────────────────────────────────────────
 
@@ -193,56 +194,56 @@ export function AgentRoster() {
   const chips: Array<{
     id: FocusedAgent;
     label: string;
-    icon: string;
+    icon: React.ReactNode;
     active: boolean;
     statusText: string;
   }> = [
     {
       id: 'foreground',
-      label: 'FG',
-      icon: '⚡',
+      label: 'ОСНОВНИЙ',
+      icon: <Zap size={13} className="text-amber-500" />,
       active: fgActive,
       statusText: fgStatusText(),
     },
     {
       id: 'background',
-      label: 'BG',
-      icon: '⏳',
+      label: 'ФОНОВИЙ',
+      icon: <Hourglass size={13} className="text-cyan-500" />,
       active: bgActive,
       statusText: bgStatusText(),
     },
     {
       id: 'standing_orders',
-      label: 'SO',
-      icon: '📋',
+      label: 'ДОРУЧЕННЯ',
+      icon: <ClipboardList size={13} className="text-emerald-500" />,
       active: soActive,
       statusText: soStatusText(),
     },
     {
       id: 'proactive',
-      label: 'PRO',
-      icon: '🔮',
+      label: 'АВТОНОМІЯ',
+      icon: <Sparkles size={13} className="text-purple-500" />,
       active: proactiveActive,
       statusText: proactiveStatusText(),
     },
     {
       id: 'council',
-      label: '⚖',
-      icon: '⚖',
+      label: 'РАДА',
+      icon: <Scale size={13} className="text-indigo-500" />,
       active: councilIsActive,
       statusText: councilStatusText(),
     },
     {
       id: 'horizons',
-      label: '7-HORIZON',
-      icon: '🏔️',
+      label: 'ПЛАНУВАННЯ',
+      icon: <Layers size={13} className="text-amber-600" />,
       active: true,
-      statusText: 'Планувальник',
+      statusText: 'Стратегія',
     },
     {
       id: 'org_chart',
-      label: 'TEAM',
-      icon: '👥',
+      label: 'КОМАНДА',
+      icon: <Users size={13} className="text-blue-500" />,
       active: true,
       statusText: 'Орг-схема',
     },
@@ -308,7 +309,7 @@ export function AgentRoster() {
                       whiteSpace: 'nowrap',
                     }}
                   >
-                    {isCouncilChip ? '⚖' : chip.label}
+                    {chip.label}
                   </span>
                   <span
                     style={{

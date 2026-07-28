@@ -38,9 +38,9 @@ export function AgentVault({ isOpen, onClose }: Props) {
   );
 
   const categories = [
-    { id: 'all', label: 'All Activity', icon: <Archive size={18} />, count: historyTasks.length },
-    { id: 'done', label: 'Reports', icon: <FileText size={18} />, count: historyTasks.filter(t => t.status === 'done').length },
-    { id: 'failed', label: 'Incidents', icon: <Clock size={18} />, count: historyTasks.filter(t => t.status === 'failed').length },
+    { id: 'all', label: 'Вся діяльність', icon: <Archive size={18} />, count: historyTasks.length },
+    { id: 'done', label: 'Звіти', icon: <FileText size={18} />, count: historyTasks.filter(t => t.status === 'done').length },
+    { id: 'failed', label: 'Інциденти', icon: <Clock size={18} />, count: historyTasks.filter(t => t.status === 'failed').length },
   ];
 
   return (
@@ -70,9 +70,9 @@ export function AgentVault({ isOpen, onClose }: Props) {
             <div className="w-64 border-r flex flex-col bg-white/40" style={{ borderRight: '1px solid var(--glass-border)' }}>
               <div className="p-8">
                 <h2 className="text-2xl font-serif font-bold tracking-tight text-ink-primary">
-                  Vault
+                  Сховище
                 </h2>
-                <p className="text-[10px] text-primary-shadow font-mono mt-1 uppercase tracking-[0.2em] opacity-60">Intelligence Hub</p>
+                <p className="text-[10px] text-primary-shadow font-mono mt-1 uppercase tracking-[0.2em] opacity-60">Центр Аналітики</p>
               </div>
 
               <nav className="flex-1 px-4 space-y-1">
@@ -106,7 +106,7 @@ export function AgentVault({ isOpen, onClose }: Props) {
                   <input 
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    placeholder="Search task logs..." 
+                    placeholder="Пошук журналів задач..." 
                     className="w-full bg-white/50 border border-white rounded-xl pl-11 pr-4 py-2.5 text-sm focus:outline-none focus:border-primary/40 text-ink-primary"
                   />
                 </div>
@@ -124,7 +124,7 @@ export function AgentVault({ isOpen, onClose }: Props) {
                   <>
                     {filteredTasks.length === 0 ? (
                       <div className="col-span-3 h-64 flex items-center justify-center text-ink-muted text-xs font-mono uppercase tracking-widest opacity-40">
-                        No matching records found.
+                        Записів за вашим запитом не знайдено.
                       </div>
                     ) : (
                       <div className="grid grid-cols-3 gap-4">
@@ -162,7 +162,7 @@ export function AgentVault({ isOpen, onClose }: Props) {
                                 }}
                                 className="px-2 py-1 bg-primary text-white rounded-lg text-[9px] font-bold hover:bg-primary-shadow transition-colors"
                               >
-                                RESUME
+                                ПРОДОВЖИТИ
                               </button>
                             </div>
                           </motion.div>
@@ -189,8 +189,8 @@ export function AgentVault({ isOpen, onClose }: Props) {
                 >
                   <div className="p-6 border-b flex items-center justify-between bg-white/50" style={{ borderBottom: '1px solid var(--glass-border)' }}>
                     <div>
-                      <h3 className="text-xl font-serif font-bold text-ink-primary">Task Details</h3>
-                      <p className="text-[10px] text-ink-muted font-mono mt-1 uppercase opacity-60">ID: {selectedTask.id}</p>
+                      <h3 className="text-xl font-serif font-bold text-ink-primary">Деталі задачі</h3>
+                      <p className="text-[10px] text-ink-muted font-mono mt-1 uppercase opacity-60">ІД: {selectedTask.id}</p>
                     </div>
                     <button onClick={() => setSelectedTask(null)} className="p-2 hover:bg-black/5 rounded-xl transition-colors">
                       <X size={20} className="text-ink-muted" />
@@ -198,7 +198,7 @@ export function AgentVault({ isOpen, onClose }: Props) {
                   </div>
                   <div className="flex-1 p-6 overflow-y-auto space-y-6">
                     <div>
-                      <h4 className="text-xs font-mono uppercase text-ink-muted mb-2 tracking-widest">Goal</h4>
+                      <h4 className="text-xs font-mono uppercase text-ink-muted mb-2 tracking-widest">Ціль / Задача</h4>
                       <p className="text-sm font-medium text-ink-primary bg-white/50 p-4 rounded-2xl border" style={{ borderColor: 'var(--glass-border)' }}>
                         {selectedTask.goal}
                       </p>
@@ -207,13 +207,13 @@ export function AgentVault({ isOpen, onClose }: Props) {
                     {reportLoading ? (
                       <div className="flex items-center gap-2 text-ink-muted text-xs animate-pulse">
                         <Loader2 size={14} className="animate-spin" />
-                        Composing detailed report...
+                        Формування детального звіту...
                       </div>
                     ) : reportPending && reportPending.task_id === selectedTask.id ? (
                       <div className="space-y-6">
                         {reportPending.llm_narrative && (
                           <div>
-                            <h4 className="text-xs font-mono uppercase text-ink-muted mb-2 tracking-widest">Summary</h4>
+                            <h4 className="text-xs font-mono uppercase text-ink-muted mb-2 tracking-widest">Підсумок</h4>
                             <p className="text-xs leading-relaxed text-ink-secondary bg-primary/5 p-4 rounded-2xl border border-primary/10 italic">
                               "{reportPending.llm_narrative}"
                             </p>
@@ -223,7 +223,7 @@ export function AgentVault({ isOpen, onClose }: Props) {
                         <div className="grid grid-cols-2 gap-4">
                           {reportPending.achievements.length > 0 && (
                             <div>
-                              <h4 className="text-[10px] font-mono uppercase text-green-600 mb-2 tracking-widest">Achievements</h4>
+                              <h4 className="text-[10px] font-mono uppercase text-green-600 mb-2 tracking-widest">Досягнення</h4>
                               <ul className="space-y-1.5">
                                 {reportPending.achievements.map((a, i) => (
                                   <li key={i} className="text-xs text-ink-primary flex items-start gap-2">
@@ -237,20 +237,20 @@ export function AgentVault({ isOpen, onClose }: Props) {
 
                           {reportPending.key_decisions.length > 0 && (
                             <div>
-                              <h4 className="text-[10px] font-mono uppercase text-indigo-600 mb-2 tracking-widest">Key Decisions</h4>
+                              <h4 className="text-[10px] font-mono uppercase text-indigo-600 mb-2 tracking-widest">Ключові рішення</h4>
                               <div className="space-y-2">
                                 {reportPending.key_decisions.map((d, i) => (
                                   <div key={i} className="p-3 rounded-xl bg-indigo-50/50 border border-indigo-100 flex flex-col gap-1">
                                     <div className="flex items-center justify-between">
-                                      <span className="text-[9px] font-bold text-indigo-600 uppercase tracking-tighter">Step {d.step_idx} · {d.verdict}</span>
+                                      <span className="text-[9px] font-bold text-indigo-600 uppercase tracking-tighter">Крок {d.step_idx} · {d.verdict}</span>
                                       <span className="text-[9px] text-ink-muted opacity-50">
-                                        {d.ts ? (isNaN(Number(d.ts)) ? new Date(d.ts).toLocaleTimeString() : new Date(Number(d.ts) * 1000).toLocaleTimeString()) : '—'}
+                                        {d.ts ? (isNaN(Number(d.ts)) ? new Date(d.ts).toLocaleTimeString('uk-UA') : new Date(Number(d.ts) * 1000).toLocaleTimeString('uk-UA')) : '—'}
                                       </span>
                                     </div>
                                     <p className="text-xs text-ink-primary leading-snug">{d.summary}</p>
                                     {d.objection && (
                                       <p className="text-[10px] text-red-600 italic bg-red-50 p-1.5 rounded-lg border border-red-100 mt-1">
-                                        Internal debate: {d.objection}
+                                        Внутрішня дискусія: {d.objection}
                                       </p>
                                     )}
                                   </div>
@@ -261,7 +261,7 @@ export function AgentVault({ isOpen, onClose }: Props) {
 
                           {reportPending.evidence_links.length > 0 && (
                             <div>
-                              <h4 className="text-[10px] font-mono uppercase text-emerald-600 mb-2 tracking-widest">Evidence & Sources</h4>
+                              <h4 className="text-[10px] font-mono uppercase text-emerald-600 mb-2 tracking-widest">Докази та джерела</h4>
                               <div className="flex flex-wrap gap-2">
                                 {reportPending.evidence_links.map((link, i) => (
                                   <a 
@@ -278,8 +278,9 @@ export function AgentVault({ isOpen, onClose }: Props) {
                             </div>
                           )}
 
-                          {reportPending.obstacles.length > 0 && (                            <div>
-                              <h4 className="text-[10px] font-mono uppercase text-amber-600 mb-2 tracking-widest">Obstacles</h4>
+                          {reportPending.obstacles.length > 0 && (
+                            <div>
+                              <h4 className="text-[10px] font-mono uppercase text-amber-600 mb-2 tracking-widest">Перешкоди</h4>
                               <ul className="space-y-1.5">
                                 {reportPending.obstacles.map((o, i) => (
                                   <li key={i} className="text-xs text-ink-primary flex items-start gap-2">
@@ -294,7 +295,7 @@ export function AgentVault({ isOpen, onClose }: Props) {
 
                         {reportPending.next_steps.length > 0 && (
                           <div>
-                            <h4 className="text-[10px] font-mono uppercase text-primary-shadow mb-2 tracking-widest">Recommended Next Steps</h4>
+                            <h4 className="text-[10px] font-mono uppercase text-primary-shadow mb-2 tracking-widest">Рекомендовані наступні кроки</h4>
                             <div className="flex flex-wrap gap-2">
                               {reportPending.next_steps.map((s, i) => (
                                 <span key={i} className="px-3 py-1.5 rounded-xl bg-white border border-black/5 text-[11px] text-ink-secondary shadow-sm">
@@ -307,7 +308,7 @@ export function AgentVault({ isOpen, onClose }: Props) {
 
                         {reportPending.audit_trail_compact.length > 0 && (
                           <div>
-                            <h4 className="text-[10px] font-mono uppercase text-ink-muted mb-2 tracking-widest">Execution Trace</h4>
+                            <h4 className="text-[10px] font-mono uppercase text-ink-muted mb-2 tracking-widest">Трасування виконання</h4>
                             <div className="space-y-1.5">
                               {reportPending.audit_trail_compact.slice(0, 10).map((a, i) => (
                                 <div key={i} className="flex items-center gap-3 text-[10px] font-mono p-2 rounded-lg bg-black/5">
@@ -316,12 +317,12 @@ export function AgentVault({ isOpen, onClose }: Props) {
                                     {a.action}
                                   </span>
                                   <span className="text-ink-secondary truncate flex-1">{a.intent}</span>
-                                  <span className="text-ink-muted opacity-50">{a.elapsed_ms}ms</span>
+                                  <span className="text-ink-muted opacity-50">{a.elapsed_ms}мс</span>
                                 </div>
                               ))}
                               {reportPending.audit_trail_compact.length > 10 && (
                                 <div className="text-center text-[9px] text-ink-muted opacity-50 mt-1">
-                                  + {reportPending.audit_trail_compact.length - 10} more steps in full log
+                                  + ще {reportPending.audit_trail_compact.length - 10} кроків у повному журналі
                                 </div>
                               )}
                             </div>
@@ -331,7 +332,7 @@ export function AgentVault({ isOpen, onClose }: Props) {
                     ) : (
                       <div className="flex items-center gap-4">
                         <div>
-                          <h4 className="text-xs font-mono uppercase text-ink-muted mb-1 tracking-widest">Status</h4>
+                          <h4 className="text-xs font-mono uppercase text-ink-muted mb-1 tracking-widest">Стан</h4>
                           <span className={`px-3 py-1 rounded-lg text-[10px] font-bold uppercase tracking-wider ${
                             selectedTask.status === 'done' ? 'bg-green-100 text-green-700' : 
                             selectedTask.status === 'failed' ? 'bg-red-100 text-red-700' : 'bg-black/5 text-ink-muted'
@@ -340,9 +341,9 @@ export function AgentVault({ isOpen, onClose }: Props) {
                           </span>
                         </div>
                         <div>
-                          <h4 className="text-xs font-mono uppercase text-ink-muted mb-1 tracking-widest">Created At</h4>
+                          <h4 className="text-xs font-mono uppercase text-ink-muted mb-1 tracking-widest">Створено</h4>
                           <span className="text-sm text-ink-primary font-mono">
-                            {new Date(selectedTask.created_at).toLocaleString()}
+                            {new Date(selectedTask.created_at).toLocaleString('uk-UA')}
                           </span>
                         </div>
                       </div>
@@ -350,20 +351,20 @@ export function AgentVault({ isOpen, onClose }: Props) {
 
                     {selectedTask.error && (
                       <div className="mt-4">
-                        <h4 className="text-[10px] font-mono uppercase text-red-600 mb-2 tracking-widest">Incident Analysis</h4>
+                        <h4 className="text-[10px] font-mono uppercase text-red-600 mb-2 tracking-widest">Аналіз інциденту</h4>
                         <div className="p-4 rounded-2xl bg-red-50 border border-red-100 flex flex-col gap-3">
                           <div className="flex items-start gap-3">
                             <div className="p-1.5 bg-red-100 rounded-lg text-red-600">
                               <X size={14} />
                             </div>
                             <div className="flex-1">
-                              <p className="text-[11px] font-bold text-red-700 uppercase tracking-tight">Root Cause</p>
+                              <p className="text-[11px] font-bold text-red-700 uppercase tracking-tight">Першопричина</p>
                               <p className="text-xs text-red-900 font-mono mt-0.5 break-all">{selectedTask.error}</p>
                             </div>
                           </div>
                           {reportPending && reportPending.obstacles.length > 0 && (
                             <div className="pl-9 space-y-2">
-                              <p className="text-[10px] font-medium text-red-600 opacity-60 uppercase">Contextual obstacles detected by familiar:</p>
+                              <p className="text-[10px] font-medium text-red-600 opacity-60 uppercase">Виявлені перешкоди контексту:</p>
                               <ul className="space-y-1">
                                 {reportPending.obstacles.map((o, i) => (
                                   <li key={i} className="text-[11px] text-red-800 flex items-start gap-2">
@@ -389,7 +390,7 @@ export function AgentVault({ isOpen, onClose }: Props) {
                       className="flex-1 h-11 bg-primary text-white rounded-2xl font-bold text-sm shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-95 transition-all flex items-center justify-center gap-2"
                     >
                       <MessageCircle size={18} />
-                      CONTINUE IN CHAT
+                      ПРОДОВЖИТИ В ЧАТІ
                     </button>
                     <button 
                       onClick={() => {
@@ -398,7 +399,7 @@ export function AgentVault({ isOpen, onClose }: Props) {
                       }}
                       className="px-6 h-11 bg-black/5 text-ink-primary rounded-2xl font-bold text-sm hover:bg-black/10 active:scale-95 transition-all"
                     >
-                      RE-RUN
+                      ПЕРЕЗАПУСТИТИ
                     </button>
                   </div>
                 </motion.div>

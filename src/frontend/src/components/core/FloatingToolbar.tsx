@@ -148,28 +148,28 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
     {
       id: 'home',
       icon: 'wb_sunny',
-      label: 'Home',
+      label: 'Головна',
       active: state === SystemState.SHADOW && location.pathname === '/',
       onClick: goHome,
     },
     {
       id: 'chat',
       icon: 'forum',
-      label: 'Dialogue',
+      label: 'Діалог',
       active: state === SystemState.DIALOGUE,
       onClick: goDialogue,
     },
     {
       id: 'apps',
       icon: 'apps',
-      label: 'Apps',
+      label: 'Додатки',
       active: isOverlayOpen('apps'),
       onClick: () => toggleOverlay('apps'),
     },
     {
       id: 'settings',
       icon: 'tune',
-      label: 'Settings',
+      label: 'Налаштування',
       active: location.pathname.startsWith('/settings'),
       onClick: () => navigate('/settings'),
     },
@@ -190,8 +190,8 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
     {
       id: 'will',
       icon: 'psychology',
-      label: 'Will',
-      tooltip: 'Will Engine — драйви та цілі автономії',
+      label: 'Воля',
+      tooltip: 'Двигун Волі — драйви та цілі автономності',
       active: willOpen,
       onClick: () => {
         setWillOpen(!willOpen);
@@ -201,7 +201,7 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
     {
       id: 'always-on',
       icon: 'settings_voice',
-      label: 'Voice mode',
+      label: 'Голосовий режим',
       tooltip: voiceModeTooltip,
       active: voiceModeActive,
       onClick: () => {
@@ -212,7 +212,7 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
     {
       id: 'sentinel',
       icon: 'radar',
-      label: 'Sentinel',
+      label: 'Вартовий',
       active: state === SystemState.SENTINEL,
       tone: state === SystemState.SENTINEL ? 'alert' : 'default',
       onClick: () => {
@@ -225,7 +225,7 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
     {
       id: 'ghost',
       icon: 'shield_moon',
-      label: 'Ghost',
+      label: 'Режим Привид',
       active: state === SystemState.GHOST,
       onClick: () => {
         goGhost();
@@ -235,8 +235,8 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
     {
       id: 'grid',
       icon: 'grid_view',
-      label: 'System',
-      tooltip: 'System — CPU / RAM / processes',
+      label: 'Система',
+      tooltip: 'Система — навантаження ЦП / ОЗП / ресурси',
       active: state === SystemState.FOCUS && location.pathname === '/',
       onClick: () => {
         goFocus();
@@ -246,7 +246,7 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
     {
       id: 'power',
       icon: 'power_settings_new',
-      label: 'Sign out',
+      label: 'Вийти з сеансу',
       tone: 'alert',
       onClick: () => {
         setMoreMenuOpen(false);
@@ -422,7 +422,7 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
           item={{
             id: 'more',
             icon: 'more_horiz',
-            label: 'More',
+            label: 'Більше',
             active: moreMenuOpen,
             onClick: () => setMoreMenuOpen(!moreMenuOpen),
           }}

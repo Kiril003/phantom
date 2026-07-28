@@ -31,13 +31,13 @@ import { useSettingsStore } from '../../stores/settingsStore';
  */
 
 const STATE_LABELS: Record<SystemState, string> = {
-  [SystemState.SHADOW]: 'Shadow',
-  [SystemState.FOCUS]: 'Focus',
-  [SystemState.DIALOGUE]: 'Dialogue',
-  [SystemState.SENTINEL]: 'Sentinel',
-  [SystemState.GHOST]: 'Ghost',
-  [SystemState.DREAM]: 'Dream',
-  [SystemState.OPERATOR]: 'Operator',
+  [SystemState.SHADOW]: 'Тінь',
+  [SystemState.FOCUS]: 'Фокус',
+  [SystemState.DIALOGUE]: 'Діалог',
+  [SystemState.SENTINEL]: 'Вартовий',
+  [SystemState.GHOST]: 'Привид',
+  [SystemState.DREAM]: 'Сон',
+  [SystemState.OPERATOR]: 'Оператор',
 };
 
 /** State → status-pill tone (amber default, coral for SENTINEL/GHOST, green for OPERATOR). */
@@ -107,7 +107,7 @@ export function StatusBar() {
   });
 
   const tone = stateTone(state);
-  const operatorName = user?.username ?? 'guest';
+  const operatorName = user?.username ?? 'оператор';
 
   const [collapsed, toggleCollapsed] = useChromeCollapse('statusBar');
 
@@ -131,7 +131,7 @@ export function StatusBar() {
         <span
           className={`status-pill ${tone === 'coral' ? 'coral' : tone === 'green' ? 'green' : ''} ${isPro ? 'rounded-none' : ''}`}
           style={{ height: 18, fontSize: 9, padding: '1px 6px' }}
-          title={`State: ${STATE_LABELS[state]}`}
+          title={`Стан: ${STATE_LABELS[state]}`}
         >
           <span className="dot" aria-hidden />
           {STATE_LABELS[state].toUpperCase()}
@@ -158,11 +158,11 @@ export function StatusBar() {
           ok={!!context?.system.internet_available}
           iconOn="cloud_done"
           iconOff="cloud_off"
-          label="Internet"
+          label="Інтернет"
         />
         <span
           aria-hidden
-          title={wsConnected ? 'Realtime connected' : 'Realtime offline'}
+          title={wsConnected ? 'Підключено в реальному часі' : 'Офлайн режим'}
           style={{
             width: 6,
             height: 6,
@@ -201,7 +201,7 @@ export function StatusBar() {
       <span
         className={`status-pill ${tone === 'coral' ? 'coral' : tone === 'green' ? 'green' : ''} ${isPro ? 'rounded-none border border-white/10' : ''}`}
         style={{ height: 26 }}
-        title={`State: ${STATE_LABELS[state]}`}
+        title={`Стан: ${STATE_LABELS[state]}`}
       >
         <span className="dot" aria-hidden />
         {STATE_LABELS[state].toUpperCase()}
@@ -213,7 +213,7 @@ export function StatusBar() {
         className="inline-flex items-center cursor-pointer hover:opacity-80 transition-opacity active:scale-[0.98]" 
         style={{ gap: 8 }}
         onClick={() => navigate('/settings/profile')}
-        title="Open Profile Settings"
+        title="Відкрити налаштування профілю"
       >
         <span
           aria-hidden

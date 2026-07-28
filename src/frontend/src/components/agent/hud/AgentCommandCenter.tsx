@@ -155,7 +155,7 @@ export function AgentCommandCenter({ onOpenParallelChat, onStartMission }: Props
           value={value}
           onChange={(e) => setValue(e.target.value)}
           disabled={busy || taskActive}
-          placeholder={taskActive ? `PROTOCOL_ACTIVE: ${status.toUpperCase()}...` : "DEFINE OBJECTIVE..."}
+          placeholder={taskActive ? `АКТИВНИЙ ПРОТОКОЛ: ${status.toUpperCase()}...` : "Введіть ціль або задачу..."}
           rows={1}
           className="flex-1 bg-transparent border-none outline-none py-0.5 text-[14px] font-display font-medium tracking-tight text-slate-800 placeholder:text-slate-400 placeholder:italic resize-none overflow-y-auto scrollbar-none"
           onKeyDown={onKeyDown}
@@ -167,13 +167,13 @@ export function AgentCommandCenter({ onOpenParallelChat, onStartMission }: Props
               onClick={() => setMissionModeArmed(false)}
               className={`px-2 py-0.5 text-[8px] font-bold rounded transition-all ${!missionModeArmed ? 'bg-white text-primary shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
             >
-              TASK
+              ЗАДАЧА
             </button>
             <button
               onClick={() => setMissionModeArmed(true)}
               className={`px-2 py-0.5 text-[8px] font-bold rounded transition-all ${missionModeArmed ? 'bg-red-500 text-white shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
             >
-              MISSION
+              МІСІЯ
             </button>
           </div>
         )}

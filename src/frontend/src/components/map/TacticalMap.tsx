@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import maplibregl, { Map as MapLibreMap } from 'maplibre-gl';
+import { Protocol } from 'pmtiles';
 import { MapContext } from './MapContext';
 import { BaseLayer } from './layers/BaseLayer';
 import { PresenceLayer } from './layers/PresenceLayer';
@@ -45,6 +46,13 @@ function resolveMapStyle(raw: unknown): PhantomMapStyle {
     ? (raw as PhantomMapStyle)
     : 'dark';
 }
+
+if (typeof window !== 'undefined' && !(maplibregl as any)._pmtilesRegistered) {
+  const protocol = new Protocol();
+  maplibregl.addProtocol('pmtiles', protocol.tile);
+  (maplibregl as any)._pmtilesRegistered = true;
+}
+
 
 /**
  * Mirrors the container background/filter that OpenFreeMap's own style no
@@ -262,14 +270,71 @@ export function TacticalMap({
     if (!map || !ready) return;
     const tokens = getMapTokens();
     if (containerRef.current) applyContainerTheming(containerRef.current, tokens);
-    try {
-      map.setStyle(buildPhantomStyle(tokens, mapStyle), {
-        diff: true,
-        transformStyle: preserveOverlayLayers,
-      });
-    } catch (err) {
-      console.error('Failed to set map style:', err);
-    }
+    
+    let cancelled = false;
+    const styleUrl = buildPhantomStyle(tokens, mapStyle);
+    
+    fetch(styleUrl).then(res => res.json()).then(style => {
+      if (cancelled) return;
+      
+      // Inject PMTiles offline source if there is an openfreemap source
+      if (style.sources && style.sources.openfreemap) {
+         style.sources.openfreemap = {
+            type: 'vector',
+            url: 'pmtiles:///api/v1/map/offline/tiles/vector.pmtiles'
+         };
+      }
+      
+      // Inject 3D Terrain
+      if (style.sources) {
+         style.sources['phantom-terrain'] = {
+            type: 'raster-dem',
+            url: 'pmtiles:///api/v1/map/offline/tiles/terrain.pmtiles',
+            encoding: 'mapbox'
+         };
+      }
+      style.terrain = { source: 'phantom-terrain', exaggeration: 1.5 };
+      
+      // Inject Atmospheric Sky
+      style.sky = {
+        "sky-color": tokens.theme === 'amber-night' ? '#0a0a0a' : '#88ccee',
+        "sky-horizon-blend": 0.5,
+        "horizon-color": tokens.theme === 'amber-night' ? '#1a1a1a' : '#ffffff',
+        "horizon-fog-blend": 0.5,
+        "fog-color": tokens.theme === 'amber-night' ? '#1a1a1a' : '#ffffff',
+        "fog-ground-blend": 0.5,
+      };
+
+      // Inject 3D Buildings
+      if (style.layers) {
+         style.layers.push({
+             'id': 'phantom-3d-buildings',
+             'source': 'openfreemap',
+             'source-layer': 'building',
+             'type': 'fill-extrusion',
+             'minzoom': 14,
+             'paint': {
+                 'fill-extrusion-color': tokens.surfaceRaised,
+                 'fill-extrusion-height': ['interpolate', ['linear'], ['zoom'], 14, 0, 15.05, ['get', 'render_height']],
+                 'fill-extrusion-base': ['interpolate', ['linear'], ['zoom'], 14, 0, 15.05, ['get', 'render_min_height']],
+                 'fill-extrusion-opacity': 0.8
+             }
+         });
+      }
+
+      try {
+        map.setStyle(style, {
+          diff: true,
+          transformStyle: preserveOverlayLayers,
+        });
+      } catch (err) {
+        console.error('Failed to set map style:', err);
+      }
+    }).catch(err => {
+       console.error('Failed to fetch/patch map style:', err);
+    });
+    
+    return () => { cancelled = true; };
   }, [mapStyle, ready, systemState]);
 
   useEffect(() => {

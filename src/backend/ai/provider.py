@@ -262,9 +262,10 @@ class AIRouter:
                     ):
                         gen_kwargs["model_override"] = effective_model
 
+                    timeout_to_use = config.ai_timeout_s if is_fallback else config.ai_primary_timeout_s
                     result = await asyncio.wait_for(
                         provider.generate(**gen_kwargs),
-                        timeout=config.ai_timeout_s,
+                        timeout=timeout_to_use,
                     )
                     # Success
                     result.latency_ms = int((time.monotonic() - t0) * 1000)
@@ -448,9 +449,10 @@ class AIRouter:
                     ):
                         call_kwargs["model_override"] = effective_model
 
+                    timeout_to_use = config.ai_timeout_s if is_fallback else config.ai_primary_timeout_s
                     outcome = await asyncio.wait_for(
                         provider.call_with_tools(**call_kwargs),
-                        timeout=config.ai_timeout_s,
+                        timeout=timeout_to_use,
                     )
                     elapsed = int((time.monotonic() - t0) * 1000)
 
@@ -652,7 +654,7 @@ class AIRouter:
                         model_override=effective_model,
                         on_delta=on_delta,
                     ),
-                    timeout=config.ai_timeout_s,
+                    timeout=config.ai_primary_timeout_s,
                 )
                 if isinstance(outcome, ToolCallResult):
                     outcome.provider = real_primary
@@ -792,6 +794,10 @@ class AIRouter:
 
 def _classify_provider_exception(provider_name: str, exc: Exception):
     from ai.tool_use import ToolErrorKind
+    import asyncio
+    if isinstance(exc, (TimeoutError, asyncio.TimeoutError)):
+        return ToolErrorKind.TIMEOUT, True, None
+        
     if provider_name == "anthropic":
         from ai.anthropic_provider import _classify_anthropic_error
         return _classify_anthropic_error(exc)

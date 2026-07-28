@@ -100,7 +100,8 @@ class PhantomConfig(BaseSettings):
         validation_alias=AliasChoices("AI_PRIMARY_PROVIDER", "AI_PROVIDER"),
     )
     ai_fallback_provider: Literal["anthropic", "gemini", "ollama", "none"] = "ollama"
-    ai_timeout_s: float = 180.0 # Increased for Deep Think models
+    ai_primary_timeout_s: float = 5.0 # Timeout specifically for the primary provider (e.g. Gemini)
+    ai_timeout_s: float = 180.0 # Increased for Deep Think models or fallback provider (e.g. Ollama)
     
     # Tiered Gemini models (Phase 30 upgrade — EXACT API IDs)
     # If set to "auto", they follow ai_gemini_model.

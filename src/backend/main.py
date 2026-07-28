@@ -53,6 +53,7 @@ from api.routes_intelligence import router as intelligence_router
 from api.routes_node import router as node_router
 from api.routes_chronicle import router as chronicle_router
 from api.routes_workbench import router as workbench_router
+from api.routes_tenant import router as tenant_router
 
 logging.basicConfig(
     level=getattr(logging, config.log_level),
@@ -903,6 +904,7 @@ def create_app() -> FastAPI:
 
     # API routers
     prefix = "/api/v1"
+    app.include_router(tenant_router, prefix=prefix)
     app.include_router(auth_router, prefix=prefix)
     app.include_router(users_router, prefix=prefix)
     app.include_router(chat_router, prefix=prefix)

@@ -1356,3 +1356,20 @@ class WillJournal(Base):
     task_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True)
     outcome: Mapped[str] = mapped_column(Text, default="")
     budget_delta_json: Mapped[str] = mapped_column(Text, default="{}")
+
+
+# ── Multi-Tenant SaaS Organization Model ───────────────────────────────────────
+
+class TenantOrg(Base):
+    """SaaS Organization model managing multi-tenant isolation and subscriptions."""
+    __tablename__ = "tenant_orgs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    slug: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
+    plan_tier: Mapped[str] = mapped_column(String(32), nullable=False, default="FREE")  # FREE / PRO / ENTERPRISE
+    max_users: Mapped[int] = mapped_column(Integer, nullable=False, default=5)
+    max_ai_tokens_monthly: Mapped[int] = mapped_column(Integer, nullable=False, default=100000)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now, nullable=False)
+

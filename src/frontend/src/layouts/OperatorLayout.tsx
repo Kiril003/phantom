@@ -23,6 +23,7 @@ import { MorphologyEngine, type SystemState as MorphologyState } from '../servic
 
 import { Orb } from '../components/core/Orb';
 import { ShieldCheck, ShieldAlert } from 'lucide-react';
+import { TenantBadge } from '../components/saas/TenantBadge';
 
 function VitalsHeaderStrip() {
   const substate = useAgentStore((s) => s.substate);
@@ -30,26 +31,44 @@ function VitalsHeaderStrip() {
   const unsafeMode = useAgentStore((s) => s.unsafeMode);
 
   const mood = useMemo(() => {
-    if (!emotion) return 'STABLE';
-    if (emotion.concern > 0.7) return 'ALERT';
-    if (emotion.fatigue > 0.8) return 'TIRED';
-    if (emotion.focus > 0.8) return 'FLOW';
-    return 'STABLE';
+    if (!emotion) return 'СТАБІЛЬНИЙ';
+    if (emotion.concern > 0.7) return 'УВАЖНИЙ';
+    if (emotion.fatigue > 0.8) return 'ВТОМЛЕНИЙ';
+    if (emotion.focus > 0.8) return 'ПОТІК';
+    return 'СТАБІЛЬНИЙ';
   }, [emotion]);
 
+  const formatSubstate = (state?: string) => {
+    switch (state?.toUpperCase()) {
+      case 'SHADOW':
+        return 'ТІНЬ';
+      case 'FOCUS':
+        return 'ФОКУС';
+      case 'DIALOGUE':
+        return 'ДІАЛОГ';
+      case 'IDLE':
+        return 'ОЧІКУВАННЯ';
+      case 'CREATIVE':
+        return 'ТВОРЧІСТЬ';
+      default:
+        return state || 'ОЧІКУВАННЯ';
+    }
+  };
+
   return (
-    <div className="flex items-center gap-6 px-4 py-1.5 rounded-full bg-black/10 border border-white/5 shadow-inner">
-       <div className="flex flex-col">
-          <span className="text-[7px] text-neutral-500 uppercase font-bold tracking-widest leading-none mb-0.5">Mind_State</span>
-          <span className="text-[10px] text-primary font-bold uppercase leading-none">{substate}</span>
+    <div className="flex items-center gap-4 px-4 py-1.5 rounded-full bg-black/10 border border-white/5 shadow-inner">
+       <TenantBadge />
+       <div className="flex flex-col border-l border-white/10 pl-3">
+          <span className="text-[7px] text-neutral-500 uppercase font-bold tracking-widest leading-none mb-0.5">Стан_розуму</span>
+          <span className="text-[10px] text-primary font-bold uppercase leading-none">{formatSubstate(substate)}</span>
        </div>
        <div className="flex flex-col">
-          <span className="text-[7px] text-neutral-500 uppercase font-bold tracking-widest leading-none mb-0.5">Empathy</span>
+          <span className="text-[7px] text-neutral-500 uppercase font-bold tracking-widest leading-none mb-0.5">Емпатія</span>
           <span className="text-[10px] text-ink-primary font-medium uppercase leading-none">{mood}</span>
        </div>
-       <div className="flex items-center gap-2 border-l border-white/10 pl-4">
+       <div className="flex items-center gap-2 border-l border-white/10 pl-3">
           {unsafeMode ? <ShieldAlert size={12} className="text-red-500" /> : <ShieldCheck size={12} className="text-green-500" />}
-          <span className="text-[9px] font-mono font-bold text-neutral-400">{unsafeMode ? 'UNCHAINED' : 'SAFE'}</span>
+          <span className="text-[9px] font-mono font-bold text-neutral-400">{unsafeMode ? 'БЕЗ ОБМЕЖЕНЬ' : 'ЗАХИЩЕНО'}</span>
        </div>
     </div>
   );

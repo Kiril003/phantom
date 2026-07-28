@@ -1,30 +1,16 @@
 
-## 2026-04-22 — Map sidebar buttons: scope unclear
+## 2026-04-22 — Map sidebar buttons: scope resolved
 
-Left sidebar on Map view has 10 icon buttons (top to bottom):
-1. Layers
-2. Presence target
-3. Wifi
-4. Flame (heatmap)
-5. Pin (intel/POI)
-6. Route line
-7. Sparkle — confirmed working: toggles FactMarkerLayer
-8. Compass with sparkle
-9. Compass
-10. Clock — confirmed working: toggles TimelineDrawer
+Left sidebar on Map view has 10+ icon buttons:
+1. Layers (Base)
+2. Presence target (Radar)
+3. Wifi (Wardriving)
+4. Flame (Heatmap)
+5. Pin (Intel/POI)
+6. Route line (Recon)
+7. Sparkle (Facts)
+8. Style / Bearing
+9. Timeline / Analysis / Story / Ghost / Offline
 
-Buttons 1-6, 8, 9 have unclear runtime behavior during live session on 2026-04-22.
-User did not know what they do, couldn't distinguish "empty state" from "broken handler".
+**Status:** RESOLVED. Fully mapped to mapStore layers, active states, tooltips, and overlay panels.
 
-Not blocking. Core map functionality (BROWSER · 90%, Nearby, Timeline, FactMarkers) works.
-
-**Scope decision deferred.** Requires product owner session — decide per button:
-- What should it do?
-- Is it needed?
-- Keep / modify / remove?
-
-After that session, a scoped fix or UI simplification phase can be planned.
-
-This is tracked as technical debt from the 2026-04-20 full audit — "test-count-vs-
-live-acceptance asymmetry" — shipping features without live use reveals scope gaps
-only when a user finally touches the surface.

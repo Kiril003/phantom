@@ -3,6 +3,7 @@ import { render, screen, fireEvent, waitFor, act } from '@testing-library/react'
 import type { MapPOI, WardrivingRecord } from '@shared/types';
 import { useMapStore } from '../stores/mapStore';
 import { useSystemStore } from '../stores/systemStore';
+import { mapApi } from '../services/api';
 import { SystemState } from '@shared/types';
 
 /* ─── Mocks ─────────────────────────────────────────────────────────────────── */
@@ -250,14 +251,11 @@ describe('mapStore', () => {
     const poi = makePOI({ id: 'sel' });
     useMapStore.getState().appendPOI(poi);
     useMapStore.getState().select({ kind: 'poi', poi });
-    // Monkeypatch deletePOI's API call to succeed silently
-    const fetchSpy = vi.spyOn(global, 'fetch').mockResolvedValue(
-      new Response(JSON.stringify({ ok: true }), { status: 200 })
-    );
+    const deleteSpy = vi.spyOn(mapApi, 'deletePOI').mockResolvedValue({ ok: true });
     await useMapStore.getState().deletePOI('sel');
     expect(useMapStore.getState().selection).toBeNull();
     expect(useMapStore.getState().pois).toHaveLength(0);
-    fetchSpy.mockRestore();
+    deleteSpy.mockRestore();
   });
 });
 

@@ -2,9 +2,51 @@ import '@testing-library/jest-dom';
 import { afterEach } from 'vitest';
 import { cleanup } from '@testing-library/react';
 
-// Ensure each test gets a clean DOM — vitest doesn't auto-cleanup by default.
+// Mock localStorage if missing or incomplete in Node 22 jsdom environment
+const createLocalStorageMock = () => {
+  let store: Record<string, string> = {};
+  return {
+    getItem: (key: string) => store[key] ?? null,
+    setItem: (key: string, value: string) => {
+      store[key] = String(value);
+    },
+    removeItem: (key: string) => {
+      delete store[key];
+    },
+    clear: () => {
+      store = {};
+    },
+    key: (index: number) => Object.keys(store)[index] ?? null,
+    get length() {
+      return Object.keys(store).length;
+    },
+  };
+};
+
+if (typeof globalThis.localStorage === 'undefined' || !globalThis.localStorage?.getItem) {
+  const localStorageMock = createLocalStorageMock();
+  Object.defineProperty(globalThis, 'localStorage', {
+    value: localStorageMock,
+    writable: true,
+    configurable: true,
+  });
+  if (typeof window !== 'undefined') {
+    Object.defineProperty(window, 'localStorage', {
+      value: localStorageMock,
+      writable: true,
+      configurable: true,
+    });
+  }
+}
+
+// Ensure each test gets a clean DOM and fresh localStorage — vitest doesn't auto-cleanup by default.
 afterEach(() => {
   cleanup();
+  try {
+    localStorage.clear();
+  } catch {
+    /* noop */
+  }
 });
 
 // Mock HTMLCanvasElement.getContext for jsdom (Avatar uses canvas)
@@ -52,3 +94,4 @@ if (typeof URL !== 'undefined' && typeof URL.revokeObjectURL !== 'function') {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (URL as any).revokeObjectURL = () => {};
 }
+

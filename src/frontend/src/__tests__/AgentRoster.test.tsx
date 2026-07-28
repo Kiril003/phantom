@@ -170,12 +170,12 @@ describe('AgentRoster', () => {
     expect(parseInt(fgStyle.height, 10)).toBe(28);
     expect(parseInt(bgStyle.height, 10)).toBe(28);
 
-    // No text labels ("FG", "BG", "SO", "PRO") should be visible as text nodes
+    // No text labels ("ОСНОВНИЙ", "ФОНОВИЙ", "ДОРУЧЕННЯ", "АВТОНОМІЯ") should be visible as text nodes
     // In compact mode these label spans are not rendered
-    expect(queryByText('FG')).toBeNull();
-    expect(queryByText('BG')).toBeNull();
-    expect(queryByText('SO')).toBeNull();
-    expect(queryByText('PRO')).toBeNull();
+    expect(queryByText('ОСНОВНИЙ')).toBeNull();
+    expect(queryByText('ФОНОВИЙ')).toBeNull();
+    expect(queryByText('ДОРУЧЕННЯ')).toBeNull();
+    expect(queryByText('АВТОНОМІЯ')).toBeNull();
   });
 
   // ── 7. Full mode: text labels visible ───────────────────────────────────
@@ -193,10 +193,10 @@ describe('AgentRoster', () => {
     const { queryByText } = render(<AgentRoster />);
 
     // Label spans rendered in full mode
-    expect(queryByText('FG')).not.toBeNull();
-    expect(queryByText('BG')).not.toBeNull();
-    expect(queryByText('SO')).not.toBeNull();
-    expect(queryByText('PRO')).not.toBeNull();
+    expect(queryByText('ОСНОВНИЙ')).not.toBeNull();
+    expect(queryByText('ФОНОВИЙ')).not.toBeNull();
+    expect(queryByText('ДОРУЧЕННЯ')).not.toBeNull();
+    expect(queryByText('АВТОНОМІЯ')).not.toBeNull();
   });
 
   // ── 8. Container has data-testid="agent-roster" ──────────────────────────

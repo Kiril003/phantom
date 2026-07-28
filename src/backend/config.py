@@ -99,7 +99,7 @@ class PhantomConfig(BaseSettings):
         default="gemini",
         validation_alias=AliasChoices("AI_PRIMARY_PROVIDER", "AI_PROVIDER"),
     )
-    ai_fallback_provider: Literal["anthropic", "gemini", "ollama", "none"] = "none"
+    ai_fallback_provider: Literal["anthropic", "gemini", "ollama", "none"] = "ollama"
     ai_timeout_s: float = 180.0 # Increased for Deep Think models
     
     # Tiered Gemini models (Phase 30 upgrade — EXACT API IDs)

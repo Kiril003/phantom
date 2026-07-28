@@ -166,17 +166,17 @@ describe('FocusPanel', () => {
 
     const indicator = getByTestId('proactive-enabled-indicator');
     expect(indicator).toBeTruthy();
-    expect(indicator.textContent).toContain('Active');
+    expect(indicator.textContent).toContain('Активно');
   });
 
-  // 5. Council pivot with councilActive=false → 'Council idle'
+  // 5. Council pivot with councilActive=false → 'Рада агентів в очікуванні'
   it('council: shows "Council idle" when councilActive=false', () => {
     useAgentStore.setState({ councilActive: false });
 
     const { getByTestId } = render(<FocusPanel focusedAgent="council" />);
 
     const idleLabel = getByTestId('council-idle-label');
-    expect(idleLabel.textContent).toContain('Council idle');
+    expect(idleLabel.textContent).toContain('Рада агентів в очікуванні');
   });
 
   // 6. Now-row renders STEPS / AI numbers from thoughtBudget and llmCalls
@@ -226,7 +226,7 @@ describe('FocusPanel', () => {
     });
 
     const { container } = render(<FocusPanel focusedAgent="proactive" />);
-    expect(container.textContent).toContain('triggers pending');
+    expect(container.textContent).toContain('Очікують тригери');
   });
 
   // Extra: now-row shows cf from last reflection
@@ -254,6 +254,6 @@ describe('FocusPanel', () => {
 
     const { getByTestId } = render(<FocusPanel focusedAgent="background" />);
     const progressEl = getByTestId('focus-bg-progress');
-    expect(progressEl.textContent).toContain('No background task');
+    expect(progressEl.textContent).toContain('ФОНОВІ ПРОЦЕСИ ВІДСУТНІ');
   });
 });

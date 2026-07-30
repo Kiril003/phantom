@@ -10,15 +10,17 @@
 
 import { HubEnvelope } from '../types';
 import { Figure } from './figure';
-import { DOOR, DeskSlot, Vec2, ZoneId, slotAt, zone } from './layout';
-import { CADENCE, heading, route, step, turn } from './path';
-import { Agent, OfficeState, emptyOffice, liveCount, reduce, sweep } from './reducer';
+import { DOOR, DeskSlot, Vec2, ZoneId, centre, slotAt, zone } from './layout';
+import { CADENCE, beside, heading, route, step, turn } from './path';
+import { Agent, Handover, OfficeState, emptyOffice, liveCount, reduce, sweep } from './reducer';
 import { OfficeScene } from './scene';
 
 /** How long a finished character stays visible before the floor forgets it. */
 const LINGER_MS = 7_000;
 const SWEEP_TICK_MS = 1_200;
 const GAIT_DECAY = 6.0;
+/** Seconds a character stands at the desk it delivered to. */
+const HANDOVER_HOLD_S = 2.4;
 
 interface Body {
   figure: Figure;
@@ -33,11 +35,16 @@ interface Body {
   phase: number;
   gait: number;
   departing: boolean;
+  /** Task id of the character being delivered to, while away from its desk. */
+  errand: string | null;
+  /** Seconds left standing still. */
+  hold: number;
 }
 
 export class Office {
   private readonly scene: OfficeScene;
   private readonly bodies = new Map<string, Body>();
+  private readonly delivered = new Set<string>();
   private state: OfficeState = emptyOffice();
   private sweepTimer: ReturnType<typeof setTimeout> | null = null;
 
@@ -78,6 +85,7 @@ export class Office {
     }
 
     for (const agent of this.state.agents.values()) this.reconcile(agent);
+    this.deliver();
 
     this.scene.setPopulated(liveCount(this.state) > 0);
     this.scene.setAnimating(this.moving());
@@ -104,6 +112,8 @@ export class Office {
         phase: 0,
         gait: 0,
         departing: false,
+        errand: null,
+        hold: 0,
       };
       this.bodies.set(agent.taskId, body);
       figure.place(body.x, body.z, body.facing);
@@ -113,10 +123,12 @@ export class Office {
     const gone = agent.leftAt !== null;
     if (gone && !body.departing) {
       body.departing = true;
+      body.errand = null;
+      body.hold = 0;
       this.scene.lightDesk(slotAt(body.zone, body.slot), false);
       body.path = route({ x: body.x, z: body.z }, doorSlot(), body.zone);
       body.rest = 0;
-    } else if (!gone && (body.zone !== agent.zone || body.slot !== agent.slot)) {
+    } else if (!gone && !body.errand && (body.zone !== agent.zone || body.slot !== agent.slot)) {
       this.scene.lightDesk(slotAt(body.zone, body.slot), false);
       this.walkTo(body, slot, body.zone);
       body.zone = agent.zone;
@@ -126,7 +138,7 @@ export class Office {
 
     body.figure.setOpacity(gone ? 0.45 : 1);
     body.figure.setGlow(gone ? 0.05 : 0.16);
-    if (!gone && body.path.length === 0) this.scene.lightDesk(slot, true);
+    if (!gone && !body.errand && body.path.length === 0) this.scene.lightDesk(slot, true);
   }
 
   private walkTo(body: Body, slot: DeskSlot, fromZone: ZoneId | null): void {
@@ -134,9 +146,59 @@ export class Office {
     body.rest = slot.facing;
   }
 
+  /** One walk per `team.message` the kernel broadcast, and only when both ends
+   *  of it are characters standing on this floor. */
+  private deliver(): void {
+    for (const h of this.state.handovers) {
+      if (this.delivered.has(h.id)) continue;
+      this.delivered.add(h.id);
+      this.startErrand(h);
+    }
+    if (this.delivered.size <= 64) return;
+    const live = new Set(this.state.handovers.map((h) => h.id));
+    for (const id of this.delivered) if (!live.has(id)) this.delivered.delete(id);
+  }
+
+  private startErrand(h: Handover): void {
+    if (!h.fromTaskId || !h.toTaskId || h.fromTaskId === h.toTaskId) return;
+    const from = this.bodies.get(h.fromTaskId);
+    const to = this.bodies.get(h.toTaskId);
+    const toAgent = this.state.agents.get(h.toTaskId);
+    if (!from || !to || !toAgent) return;
+    if (from.departing || to.departing || from.errand) return;
+
+    const desk = slotAt(toAgent.zone, toAgent.slot);
+    const side: 1 | -1 = desk.seat.x > centre(zone(toAgent.zone)).x ? -1 : 1;
+    const stand = beside(desk, side);
+
+    this.scene.lightDesk(slotAt(from.zone, from.slot), false);
+    from.errand = h.toTaskId;
+    from.hold = HANDOVER_HOLD_S;
+    from.path = route({ x: from.x, z: from.z }, stand, from.zone);
+    from.rest = stand.facing;
+    to.rest = heading(stand.seat.x - to.x, stand.seat.z - to.z);
+  }
+
+  private endErrand(taskId: string, body: Body): void {
+    const receiverId = body.errand;
+    const receiver = receiverId ? this.bodies.get(receiverId) : null;
+    const receiverAgent = receiverId ? this.state.agents.get(receiverId) : null;
+    if (receiver && receiverAgent) {
+      receiver.rest = slotAt(receiverAgent.zone, receiverAgent.slot).facing;
+    }
+    body.errand = null;
+    body.hold = 0;
+
+    const agent = this.state.agents.get(taskId);
+    if (!agent || agent.leftAt !== null) return;
+    const home = slotAt(agent.zone, agent.slot);
+    body.path = route({ x: body.x, z: body.z }, home, receiverAgent?.zone ?? null);
+    body.rest = home.facing;
+  }
+
   private moving(): boolean {
     for (const b of this.bodies.values()) {
-      if (b.path.length > 0 || b.gait > 0.01) return true;
+      if (b.path.length > 0 || b.gait > 0.01 || b.hold > 0) return true;
       if (Math.abs(shortest(b.rest - b.facing)) > 0.01) return true;
     }
     return false;
@@ -156,11 +218,15 @@ export class Office {
           body.phase += s.moved * CADENCE;
           body.gait = Math.min(1, body.gait + dt * GAIT_DECAY);
         }
-        if (body.path.length === 0) {
+        if (body.path.length === 0 && !body.errand) {
           const agent = this.state.agents.get(taskId);
           if (agent && agent.leftAt === null) this.scene.lightDesk(slotAt(agent.zone, agent.slot), true);
         }
       } else {
+        if (body.errand && body.hold > 0) {
+          body.hold -= dt;
+          if (body.hold <= 0) this.endErrand(taskId, body);
+        }
         body.gait = Math.max(0, body.gait - dt * GAIT_DECAY);
         body.facing = turn(body.facing, body.rest, dt);
         if (body.gait < 0.02) body.phase = 0;

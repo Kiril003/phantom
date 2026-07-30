@@ -42,6 +42,21 @@ export function heading(dx: number, dz: number): number {
   return Math.atan2(dx, dz);
 }
 
+/** Standing room next to someone else's desk, turned to face them — where a
+ *  character goes to hand something over. */
+export function beside(target: DeskSlot, side: 1 | -1): DeskSlot {
+  const gap = 0.95;
+  const x = target.seat.x + gap * side;
+  const z = target.seat.z;
+  return {
+    zone: target.zone,
+    index: -1,
+    desk: target.desk,
+    seat: { x, z },
+    facing: heading(target.seat.x - x, target.seat.z - z),
+  };
+}
+
 /** Rotate at most TURN_RATE·dt toward `target`, the short way round. */
 export function turn(current: number, target: number, dt: number): number {
   const tau = Math.PI * 2;

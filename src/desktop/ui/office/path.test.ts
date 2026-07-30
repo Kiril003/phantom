@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { AISLE_Z, DOOR, slotAt } from './layout';
-import { TURN_RATE, WALK_SPEED, heading, route, step, turn } from './path';
+import { TURN_RATE, WALK_SPEED, beside, heading, route, step, turn } from './path';
 
 describe('route', () => {
   it('walks straight to a desk in the zone the body is already in', () => {
@@ -90,5 +90,23 @@ describe('step', () => {
     expect(pts).toHaveLength(0);
     expect(x).toBeCloseTo(slot.seat.x);
     expect(z).toBeCloseTo(slot.seat.z);
+  });
+});
+
+describe('beside', () => {
+  it('stands to one side of a desk, turned to face whoever is at it', () => {
+    const desk = slotAt('product', 1);
+    const stand = beside(desk, 1);
+    expect(stand.seat.x).toBeCloseTo(desk.seat.x + 0.95);
+    expect(stand.seat.z).toBeCloseTo(desk.seat.z);
+    expect(stand.facing).toBeCloseTo(-Math.PI / 2);
+    expect(stand.zone).toBe('product');
+  });
+
+  it('can stand on the other side', () => {
+    const desk = slotAt('product', 1);
+    const stand = beside(desk, -1);
+    expect(stand.seat.x).toBeCloseTo(desk.seat.x - 0.95);
+    expect(stand.facing).toBeCloseTo(Math.PI / 2);
   });
 });

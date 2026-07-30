@@ -1,0 +1,25 @@
+/* The Office — the floor beneath every other stratum.
+ *
+ * It is the backdrop, so it sits under the Facets and the Sigil and never takes
+ * a pointer. A canvas repaints its whole area every frame, which is exactly the
+ * damage pattern this webview needs (see deep.css) — so unlike a moving DOM
+ * layer, the office composites cleanly even with compositing disabled. */
+canvas.office {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.34;
+  transition: opacity 2.4s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+/* Someone is working. The room comes up to meet them. */
+canvas.office.populated {
+  opacity: 0.86;
+}
+
+canvas.office.hidden {
+  opacity: 0;
+}

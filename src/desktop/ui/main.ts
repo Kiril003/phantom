@@ -4,8 +4,10 @@ import './tokens.css';
 import './film.css';
 import './facet.css';
 import './deep.css';
+import './office.css';
 
 import { HubClient, HubStatus } from './ws';
+import { OfficeScene } from './office/scene';
 import { MurmurLane } from './murmur';
 import { Sigil } from './sigil';
 import { FacetManager, LedgerRow, MonitorTask } from './facet/manager';
@@ -21,6 +23,8 @@ const invoke: (cmd: string, args?: unknown) => Promise<unknown> =
   tauri?.core?.invoke ?? (async () => undefined);
 
 const film = document.getElementById('film')!;
+
+const office = new OfficeScene(film);
 
 const perimeter = document.createElement('div');
 perimeter.className = 'perimeter';
@@ -120,6 +124,7 @@ function onAnimaEvent(type: string, data: Record<string, unknown>): void {
   }
   facets.weather(activeTasks.size, lastGoal, activeTasks.size === 0);
   facets.updateMonitor([...activeTasks.values()]);
+  office.setPopulated(activeTasks.size > 0);
   sigil.spark();
 }
 

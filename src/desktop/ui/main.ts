@@ -7,7 +7,7 @@ import './deep.css';
 import './office.css';
 
 import { HubClient, HubStatus } from './ws';
-import { OfficeScene } from './office/scene';
+import { Office } from './office/office';
 import { MurmurLane } from './murmur';
 import { Sigil } from './sigil';
 import { FacetManager, LedgerRow, MonitorTask } from './facet/manager';
@@ -24,7 +24,7 @@ const invoke: (cmd: string, args?: unknown) => Promise<unknown> =
 
 const film = document.getElementById('film')!;
 
-const office = new OfficeScene(film);
+const office = new Office(film);
 
 const perimeter = document.createElement('div');
 perimeter.className = 'perimeter';
@@ -124,7 +124,6 @@ function onAnimaEvent(type: string, data: Record<string, unknown>): void {
   }
   facets.weather(activeTasks.size, lastGoal, activeTasks.size === 0);
   facets.updateMonitor([...activeTasks.values()]);
-  office.setPopulated(activeTasks.size > 0);
   sigil.spark();
 }
 
@@ -201,6 +200,7 @@ function onEnvelope(env: HubEnvelope): void {
       break;
     case 'background_events':
     case 'agent.stream':
+      office.ingest(env);
       onAnimaEvent(env.type, env.data);
       break;
   }

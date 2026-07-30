@@ -31,7 +31,7 @@ import { DeskSlot, FLOOR, ZONES, Zone, allSlots } from './layout';
 
 const MIN_FRAME_MS = 1000 / 30;
 const MAX_PIXEL_RATIO = 1.5;
-const DESK_H = 0.42;
+const DESK_H = 0.7;
 
 export interface OfficeSceneHooks {
   /** Advance whatever is moving. Seconds. Called before every rendered frame. */

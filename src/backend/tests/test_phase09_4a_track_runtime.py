@@ -377,7 +377,8 @@ class TestBackgroundBudget:
 class TestBroadcastDiscipline:
     @pytest.mark.asyncio
     async def test_background_substate_not_broadcast(self, monkeypatch):
-        """set_substate on background logs only — no WS emission."""
+        """set_substate on background never reaches agent.stream — it goes to
+        `background_events` instead (see test_background_observer_events)."""
         from agent.kernel.runtime import agent_runtime as rt, current_track
 
         # Capture hub broadcasts.

@@ -74,9 +74,13 @@ _PROBE_BACKOFF_AFTER_FAILS = 3   # extend probe interval after 3 consecutive Fal
 # `track=` explicitly.
 current_track: ContextVar[Track] = ContextVar("agent_current_track", default="foreground")
 
+# Sub-agents never occupy the background slot, so slot-derived identity is
+# wrong for them.
+current_task_id: ContextVar[str | None] = ContextVar("agent_current_task_id", default=None)
 
-# Lifecycle events that must still surface to UI for background tasks. Everything
-# else (thinking/acting/observation/checkpoint spam) is silenced on background.
+
+# Lifecycle events that must still surface to UI for background tasks. Never
+# rate-limited.
 _BACKGROUND_ALLOWED_EVENTS = frozenset({
     "task.started",
     "task.completed",
@@ -85,6 +89,93 @@ _BACKGROUND_ALLOWED_EVENTS = frozenset({
     "task.timeout",
     "warning.issued",
 })
+
+_LIFECYCLE_FIELDS: dict[str, tuple[str, ...]] = {
+    "task.started": (
+        "task_id", "goal", "track", "resumed",
+        "parent_task_id", "subagent_role", "delegation_depth",
+        "mission_id", "phase_count",
+    ),
+    "task.completed": ("task_id", "track", "summary", "error"),
+    "task.failed": ("task_id", "track", "summary", "error"),
+    "task.stopped": ("task_id", "track", "summary", "error"),
+    "task.timeout": ("task_id", "track", "summary", "error"),
+    "warning.issued": ("task_id", "category", "message", "step_idx"),
+}
+
+# `background_events` is subscribed independently of `agent.stream`, so the
+# anti-spam argument for the operator's stream does not apply here. Projected
+# to identity + state and rate-limited; unbounded-content events stay out.
+_BACKGROUND_OBSERVER_EVENTS = frozenset({
+    "substate.changed",
+    "thinking.started",
+    "thinking.completed",
+    "action.started",
+    "tool.selected",
+    "sub_goal.started",
+    "sub_goal.done",
+    "sub_goal.abandoned",
+    "reflection.started",
+    "reflection.completed",
+    "task.paused",
+    "task.resumed",
+    "task.waiting_user",
+    "task.blocked_quota",
+    "task.blocked_quota_backoff",
+    "mission.started",
+    "mission.phase_started",
+    "mission.phase_completed",
+    "mission.completed",
+    "mission.failed",
+    "team.message",
+})
+
+_OBSERVER_FIELDS: dict[str, tuple[str, ...]] = {
+    "substate.changed": ("task_id", "substate"),
+    "thinking.started": ("task_id", "planner", "step_idx"),
+    "thinking.completed": ("task_id", "planner", "step_idx"),
+    "action.started": ("task_id", "step_idx", "action"),
+    "tool.selected": ("task_id", "step_idx", "action", "risk_level"),
+    "sub_goal.started": ("task_id", "sub_goal_id", "description"),
+    "sub_goal.done": ("task_id", "sub_goal_id", "summary"),
+    "sub_goal.abandoned": ("task_id", "sub_goal_id", "reason"),
+    "reflection.started": ("task_id", "reason"),
+    "reflection.completed": ("task_id", "verdict", "new_confidence"),
+    "task.paused": ("task_id", "reason"),
+    "task.resumed": ("task_id", "reason"),
+    "task.waiting_user": ("task_id", "prompt_to_user"),
+    "task.blocked_quota": ("task_id", "reason", "probe_interval_s"),
+    "task.blocked_quota_backoff": ("task_id", "consecutive_failures", "next_interval_s"),
+    "mission.started": ("task_id", "mission_id", "brief", "phase_count"),
+    "mission.phase_started": ("task_id", "mission_id", "phase_id", "phase_idx", "description"),
+    "mission.phase_completed": ("task_id", "mission_id", "phase_id", "phase_idx"),
+    "mission.completed": ("task_id", "mission_id"),
+    "mission.failed": ("task_id", "mission_id", "phase_id", "reason"),
+    "team.message": (
+        "id", "task_id", "parent_task_id", "sender", "receiver",
+        "message", "message_type", "created_at",
+    ),
+}
+
+_OBSERVER_TEXT_CAP = 200
+# Only engages on a task stuck in a tight retry cycle; a healthy loop is
+# paced by its LLM round-trips.
+_OBSERVER_RATE_PER_S = 20.0
+_OBSERVER_BURST = 40.0
+_OBSERVER_BUCKETS_MAX = 128
+_OBSERVER_BUCKET_TTL_S = 300.0
+
+
+def _project_payload(
+    payload: dict, keep: tuple[str, ...], cap: int | None,
+) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for key in keep:
+        if key not in payload:
+            continue
+        value = payload[key]
+        out[key] = value[:cap] if cap and isinstance(value, str) else value
+    return out
 
 
 @dataclass
@@ -246,6 +337,12 @@ class AgentRuntime:
         # Keys are task_ids; values: {report, outcome, to_safe}.
         self.pending_reports: dict[str, dict[str, Any]] = {}
 
+        # Per task, because sub-agents share the background track concurrently
+        # and the single `background_substate` field cannot dedupe for them.
+        self._bg_substates: dict[str, Substate] = {}
+        self._bg_observer_bucket: dict[str, tuple[float, float]] = {}
+        self._bg_observer_pending: dict[str, tuple[str, dict[str, Any]]] = {}
+
     # ── Helpers ──────────────────────────────────────────────────────────────
 
     @property
@@ -324,6 +421,7 @@ class AgentRuntime:
         # Inherit substate so the FE doesn't see a "thinking…" pulse stop
         # the moment we promote.
         self.background_substate = self.foreground_substate
+        self._bg_substates[state.id] = self.foreground_substate
         self.foreground_substate = "idle"
         self.background_runner = self.task_runner
         self.task_runner = None
@@ -361,12 +459,22 @@ class AgentRuntime:
     async def set_substate(self, sub: Substate) -> None:
         track = current_track.get()
         if track == "background":
-            if self.background_substate == sub:
+            task_id = current_task_id.get() or (
+                self.background_slot.id if self.background_slot else None
+            )
+            if task_id is not None:
+                if self._bg_substates.get(task_id) == sub:
+                    return
+                self._bg_substates[task_id] = sub
+            elif self.background_substate == sub:
                 return
             self.background_substate = sub
-            # Background substate is log-only — no FSM mutation, no WS emit.
             logger.debug("bg substate -> %s (task=%s)", sub,
-                         self.background_slot.id[:8] if self.background_slot else "-")
+                         task_id[:8] if task_id else "-")
+            await self._broadcast("substate.changed", {
+                "task_id": task_id,
+                "substate": sub,
+            })
             # Block A-1 — snapshot on pause/block transitions (background).
             if sub in ("paused", "waiting_user", "blocked_quota", "awaiting_user"):
                 slot = self.background_slot
@@ -394,23 +502,58 @@ class AgentRuntime:
                 with contextlib.suppress(Exception):
                     await snapshot_task_state(slot)
 
+    def _observer_allowance(self, task_id: str) -> bool:
+        now = time.monotonic()
+        tokens, last = self._bg_observer_bucket.get(task_id, (_OBSERVER_BURST, now))
+        tokens = min(_OBSERVER_BURST, tokens + (now - last) * _OBSERVER_RATE_PER_S)
+        if tokens < 1.0:
+            self._bg_observer_bucket[task_id] = (tokens, now)
+            return False
+        self._bg_observer_bucket[task_id] = (tokens - 1.0, now)
+        if len(self._bg_observer_bucket) > _OBSERVER_BUCKETS_MAX:
+            for stale in [
+                k for k, (_t, seen) in self._bg_observer_bucket.items()
+                if now - seen > _OBSERVER_BUCKET_TTL_S
+            ]:
+                self._bg_observer_bucket.pop(stale, None)
+                self._bg_observer_pending.pop(stale, None)
+                self._bg_substates.pop(stale, None)
+        return True
+
+    async def _emit_background(
+        self, type_: str, payload: dict[str, Any], *, task_id: str,
+    ) -> None:
+        withheld = self._bg_observer_pending.pop(task_id, None) if task_id else None
+        try:
+            from api.websocket_hub import hub
+            if withheld is not None:
+                await hub.broadcast("background_events", withheld[0], withheld[1])
+            await hub.broadcast("background_events", type_, payload)
+        except Exception as exc:
+            logger.debug("bg broadcast failed: %s", exc)
+
+    async def _broadcast_background(self, type_: str, payload: dict) -> None:
+        if type_ in _BACKGROUND_ALLOWED_EVENTS:
+            await self._emit_background(
+                type_,
+                _project_payload(payload, _LIFECYCLE_FIELDS[type_], None),
+                task_id=str(payload.get("task_id") or ""),
+            )
+            return
+        if type_ not in _BACKGROUND_OBSERVER_EVENTS:
+            logger.debug("bg event suppressed: %s", type_)
+            return
+        small = _project_payload(payload, _OBSERVER_FIELDS[type_], _OBSERVER_TEXT_CAP)
+        task_id = str(small.get("task_id") or "")
+        if task_id and not self._observer_allowance(task_id):
+            self._bg_observer_pending[task_id] = (type_, small)
+            return
+        await self._emit_background(type_, small, task_id=task_id)
+
     async def _broadcast(self, type_: str, payload: dict) -> None:
         track = current_track.get()
         if track == "background":
-            if type_ not in _BACKGROUND_ALLOWED_EVENTS:
-                # Silent — observation/thinking/action spam stays out of the
-                # main stream. Log at debug so the audit trail is still
-                # recoverable from server logs during incident analysis.
-                logger.debug("bg event suppressed: %s", type_)
-            else:
-                try:
-                    from api.websocket_hub import hub
-                    # Map task.* events to dedicated background_events channel
-                    # so the UI can subscribe independently from the main
-                    # agent.stream feed.
-                    await hub.broadcast("background_events", type_, payload)
-                except Exception as exc:
-                    logger.debug("bg broadcast failed: %s", exc)
+            await self._broadcast_background(type_, payload)
             # Emotion handler still runs for background events it cares
             # about; the handler itself ignores unrelated types.
             try:
@@ -1160,10 +1303,15 @@ class AgentRuntime:
         # the correct track even when finalize is invoked from stop() on a
         # different asyncio task that never set the ContextVar.
         token = current_track.set(state.track)
+        id_token = current_task_id.set(state.id)
         try:
             await self._finalize_task_impl(state, outcome, summary, error)
         finally:
             current_track.reset(token)
+            current_task_id.reset(id_token)
+            self._bg_substates.pop(state.id, None)
+            self._bg_observer_bucket.pop(state.id, None)
+            self._bg_observer_pending.pop(state.id, None)
 
     async def _finalize_task_impl(
         self,

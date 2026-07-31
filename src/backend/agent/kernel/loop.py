@@ -789,8 +789,9 @@ async def run_task_loop(runtime: "AgentRuntime", state: "TaskState", *, resumed:
     `config.agent_background_task_timeout_s` (default 300s).
     """
     from config import config as _cfg
-    from agent.kernel.runtime import current_track as _track_cv
+    from agent.kernel.runtime import current_task_id as _task_cv, current_track as _track_cv
     token = _track_cv.set(state.track)
+    id_token = _task_cv.set(state.id)
     try:
         if state.track == "background":
             timeout_s = int(
@@ -818,6 +819,7 @@ async def run_task_loop(runtime: "AgentRuntime", state: "TaskState", *, resumed:
             await _run_task_loop_impl(runtime, state, resumed=resumed)
     finally:
         _track_cv.reset(token)
+        _task_cv.reset(id_token)
 
 
 async def _run_task_loop_impl(runtime: "AgentRuntime", state: "TaskState", *, resumed: bool = False) -> None:
@@ -844,6 +846,9 @@ async def _run_task_loop_impl(runtime: "AgentRuntime", state: "TaskState", *, re
         "task_id": state.id, "goal": state.goal, "track": state.track,
         "self_model": state.self_model.model_dump(mode="json"),
         "resumed": resumed,
+        "parent_task_id": state.parent_task_id,
+        "subagent_role": state.subagent_role,
+        "delegation_depth": state.delegation_depth,
     })
 
     try:

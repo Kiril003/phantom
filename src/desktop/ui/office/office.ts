@@ -12,7 +12,8 @@ import { HubEnvelope } from '../types';
 import { Figure } from './figure';
 import { DOOR, DeskSlot, Vec2, ZoneId, centre, slotAt, zone } from './layout';
 import { CADENCE, beside, heading, route, step, turn } from './path';
-import { Agent, Handover, OfficeState, emptyOffice, liveCount, reduce, sweep } from './reducer';
+import { LOOKS } from './look';
+import { Agent, Handover, OfficeState, Posture, emptyOffice, liveCount, reduce, sweep } from './reducer';
 import { OfficeScene } from './scene';
 
 /** How long a finished character stays visible before the floor forgets it. */
@@ -39,6 +40,9 @@ interface Body {
   errand: string | null;
   /** Seconds left standing still. */
   hold: number;
+  posture: Posture;
+  /** Seconds accumulated into the mark's breath. */
+  pulse: number;
 }
 
 export class Office {
@@ -114,6 +118,8 @@ export class Office {
         departing: false,
         errand: null,
         hold: 0,
+        posture: agent.posture,
+        pulse: 0,
       };
       this.bodies.set(agent.taskId, body);
       figure.place(body.x, body.z, body.facing);
@@ -137,8 +143,26 @@ export class Office {
     }
 
     body.figure.setOpacity(gone ? 0.45 : 1);
-    body.figure.setGlow(gone ? 0.05 : 0.16);
+    this.wear(body, agent);
     if (!gone && !body.errand && body.path.length === 0) this.scene.lightDesk(slot, true);
+  }
+
+  /** Put the kernel's own word for what this task is doing onto the body. */
+  private wear(body: Body, agent: Agent): void {
+    const look = LOOKS[agent.posture];
+    if (body.posture !== agent.posture) {
+      body.posture = agent.posture;
+      body.pulse = 0;
+    }
+    body.figure.setAccent(look.tint ?? zone(agent.zone).accent);
+    body.figure.setGlow(look.glow);
+    body.figure.setHeadPitch(look.headPitch);
+    body.figure.setMark(look.mark);
+    if (look.mark !== null && look.pulse === 0) body.figure.setMarkPhase(0.55);
+    if (!body.errand && !body.departing) {
+      const home = slotAt(agent.zone, agent.slot);
+      body.rest = look.faceOperator ? 0 : home.facing;
+    }
   }
 
   private walkTo(body: Body, slot: DeskSlot, fromZone: ZoneId | null): void {
@@ -199,6 +223,7 @@ export class Office {
   private moving(): boolean {
     for (const b of this.bodies.values()) {
       if (b.path.length > 0 || b.gait > 0.01 || b.hold > 0) return true;
+      if (LOOKS[b.posture].pulse > 0) return true;
       if (Math.abs(shortest(b.rest - b.facing)) > 0.01) return true;
     }
     return false;
@@ -232,6 +257,12 @@ export class Office {
         if (body.gait < 0.02) body.phase = 0;
       }
 
+      const look = LOOKS[body.posture];
+      if (look.pulse > 0) {
+        body.pulse += dt * look.pulse;
+        body.figure.setMarkPhase((Math.sin(body.pulse * Math.PI * 2) + 1) / 2);
+      }
+      body.figure.setUpright(body.gait > 0.3);
       body.figure.place(body.x, body.z, body.facing);
       body.figure.stride(body.phase, body.gait);
     }

@@ -10,8 +10,10 @@ import {
   CapsuleGeometry,
   Group,
   Mesh,
+  MeshBasicMaterial,
   MeshStandardMaterial,
   Object3D,
+  OctahedronGeometry,
   SphereGeometry,
 } from 'three';
 
@@ -23,11 +25,14 @@ const TORSO_Y = 1.08;
 const HEAD_Y = 1.58;
 const SHELL = 0x0e141d;
 
+const MARK_Y = 2.02;
+
 let geo: {
   torso: BufferGeometry;
   head: BufferGeometry;
   arm: BufferGeometry;
   leg: BufferGeometry;
+  mark: BufferGeometry;
 } | null = null;
 
 function geometries(): NonNullable<typeof geo> {
@@ -37,6 +42,7 @@ function geometries(): NonNullable<typeof geo> {
       head: new SphereGeometry(0.155, 12, 9),
       arm: new CapsuleGeometry(0.055, 0.42, 2, 6),
       leg: new CapsuleGeometry(0.08, 0.56, 2, 6),
+      mark: new OctahedronGeometry(0.11, 0),
     };
   }
   return geo;
@@ -67,8 +73,14 @@ export class Figure {
   private readonly legL: Group;
   private readonly legR: Group;
 
+  /** The one thing above the head: lit only by a state that has one. */
+  private readonly mark: Mesh;
+
   private readonly accentMat: MeshStandardMaterial;
   private readonly shellMat: MeshStandardMaterial;
+  private readonly markMat: MeshBasicMaterial;
+  private restPitch = 0;
+  private upright = false;
 
   constructor(accent: number) {
     const g = geometries();
@@ -91,12 +103,35 @@ export class Figure {
     this.head = new Mesh(g.head, this.shellMat);
     this.head.position.set(0, HEAD_Y, 0);
 
-    this.root.add(this.legL, this.legR, this.torso, this.head, this.armL, this.armR);
+    this.markMat = new MeshBasicMaterial({
+      color: accent,
+      transparent: true,
+      opacity: 0.8,
+      depthWrite: false,
+    });
+    this.mark = new Mesh(g.mark, this.markMat);
+    this.mark.position.set(0, MARK_Y, 0);
+    this.mark.visible = false;
+
+    this.root.add(this.legL, this.legR, this.torso, this.head, this.armL, this.armR, this.mark);
   }
 
   setAccent(color: number): void {
     this.accentMat.color.setHex(color);
     this.accentMat.emissive.setHex(color);
+  }
+
+  setMark(color: number | null): void {
+    this.mark.visible = color !== null;
+    if (color !== null) this.markMat.color.setHex(color);
+  }
+
+  /** `amount` runs 0…1 across one breath of the mark. */
+  setMarkPhase(amount: number): void {
+    const s = 0.82 + amount * 0.5;
+    this.mark.scale.setScalar(s);
+    this.mark.rotation.y = amount * Math.PI;
+    this.markMat.opacity = 0.4 + amount * 0.55;
   }
 
   /** How hard the body reads against the floor — state, not decoration. */
@@ -110,6 +145,13 @@ export class Figure {
       m.transparent = transparent;
       m.opacity = opacity;
     }
+  }
+
+  /** Mid-walk the body straightens up; the desk pose is for the desk. */
+  setUpright(upright: boolean): void {
+    if (this.upright === upright) return;
+    this.upright = upright;
+    this.applyPitch();
   }
 
   place(x: number, z: number, facing: number): void {
@@ -131,6 +173,12 @@ export class Figure {
 
   /** Head pitch, radians. Down is a body bent to its work. */
   setHeadPitch(pitch: number): void {
+    this.restPitch = pitch;
+    this.applyPitch();
+  }
+
+  private applyPitch(): void {
+    const pitch = this.upright ? 0 : this.restPitch;
     this.head.rotation.x = pitch;
     this.torso.rotation.x = pitch * 0.35;
   }
@@ -143,5 +191,6 @@ export class Figure {
     this.root.removeFromParent();
     this.accentMat.dispose();
     this.shellMat.dispose();
+    this.markMat.dispose();
   }
 }

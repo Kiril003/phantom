@@ -72,7 +72,7 @@ export interface PendingHandover {
 
 export interface OfficeState {
   agents: ReadonlyMap<string, Agent>;
-  /** Newest last. Bounded; the renderer consumes by id. Both ends are on the floor. */
+  /** Newest last; both ends are on the floor. */
   handovers: readonly Handover[];
   /** Messages whose other end has not appeared yet. */
   pending: readonly PendingHandover[];
@@ -246,11 +246,7 @@ function resolveParty(ctx: Ctx, name: string, taskId: string | null): string | n
   return null;
 }
 
-/**
- * `spawn.py` sends `task_id` as the receiving task and `parent_task_id` as the
- * sending one, in both directions — the names read backwards for the report
- * that travels back up, so they are renamed here and nowhere else.
- */
+// spawn.py sends task_id as the receiver and parent_task_id as the sender, both directions.
 function applyTeamMessage(ctx: Ctx, data: Record<string, unknown>): void {
   const receiverTaskId = str(data.task_id);
   const senderTaskId = str(data.parent_task_id);

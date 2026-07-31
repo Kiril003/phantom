@@ -92,6 +92,7 @@ class AgentDelegate(Action):
             DelegationDepthExceeded,
             SubagentSpawnError,
             TeamConcurrencyExceeded,
+            announce_subagent_report,
             await_subagent,
             spawn_subagent,
         )
@@ -132,6 +133,7 @@ class AgentDelegate(Action):
         report = await await_subagent(
             child_id, timeout_s=float(self.timeout_s) + 5.0,
         )
+        await announce_subagent_report(parent_state=parent, report=report)
         elapsed_ms = int((time.monotonic() - started) * 1000)
 
         ok = report.outcome == "done"

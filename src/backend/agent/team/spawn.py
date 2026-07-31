@@ -121,6 +121,63 @@ def _channel(child_task_id: str) -> str:
     return f"team.subagent_completed:{child_task_id}"
 
 
+# ─── Agent-to-agent traffic ─────────────────────────────────────────────────
+#
+# Wire convention consumers rely on: `task_id` is the RECEIVING task,
+# `parent_task_id` the SENDING one — in both directions.
+
+_NAME_CAP = 64
+_MESSAGE_CAP = 2000
+
+
+def _party_name(state: "TaskState | None") -> str:
+    if state is None:
+        return "operator"
+    return (getattr(state, "subagent_role", None) or "operator")[:_NAME_CAP]
+
+
+async def _emit_team_message(
+    *,
+    to_task_id: str,
+    from_task_id: str,
+    sender: str,
+    receiver: str,
+    message: str,
+    message_type: str,
+) -> None:
+    try:
+        from agent.kernel.audit import write_team_message
+        await write_team_message(
+            task_id=to_task_id,
+            parent_task_id=from_task_id,
+            sender=sender[:_NAME_CAP],
+            receiver=receiver[:_NAME_CAP],
+            message=message[:_MESSAGE_CAP],
+            message_type=message_type,
+        )
+    except Exception as exc:
+        logger.debug("team.message emit failed (%s): %s", message_type, exc)
+
+
+async def announce_subagent_report(
+    *,
+    parent_state: "TaskState",
+    report: SubagentReport,
+) -> None:
+    # role="unknown" is the report await_subagent mints for itself on timeout;
+    # the child never sent anything, so it is not traffic.
+    if report.role == "unknown":
+        return
+    await _emit_team_message(
+        to_task_id=parent_state.id,
+        from_task_id=report.child_task_id,
+        sender=report.role,
+        receiver=_party_name(parent_state),
+        message=f"{report.outcome}: {report.summary}".strip(),
+        message_type="report",
+    )
+
+
 # ─── Public API ──────────────────────────────────────────────────────────────
 
 
@@ -189,6 +246,14 @@ async def spawn_subagent(
         )
         _inflight[child_id] = runner
         runner.add_done_callback(lambda _t: _inflight.pop(child_id, None))
+        await _emit_team_message(
+            to_task_id=child_id,
+            from_task_id=parent_state.id,
+            sender=_party_name(parent_state),
+            receiver=role,
+            message=goal,
+            message_type="delegate",
+        )
         return child_id
     except Exception:
         # If we couldn't even schedule the runner, release the slot.

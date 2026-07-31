@@ -24,6 +24,7 @@ from .spawn import (
     SubagentSpawnError,
     DelegationDepthExceeded,
     TeamConcurrencyExceeded,
+    announce_subagent_report,
     await_subagent,
     spawn_subagent,
     team_semaphore,
@@ -41,6 +42,7 @@ from .specialists import (
 __all__ = [
     "spawn_subagent",
     "await_subagent",
+    "announce_subagent_report",
     "notify_subagent_completed",
     "SubagentReport",
     "SubagentSpawnError",

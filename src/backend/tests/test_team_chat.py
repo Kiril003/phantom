@@ -104,7 +104,11 @@ async def test_write_team_message_helper(monkeypatch, db_engine):
                 await self.session.commit()
             await self.session.close()
 
+    # audit binds get_session at import time, so patching db.database alone
+    # only works when no earlier test imported audit.
+    import agent.kernel.audit as audit_mod
     monkeypatch.setattr(database, "get_session", lambda: FakeSessionContext())
+    monkeypatch.setattr(audit_mod, "get_session", lambda: FakeSessionContext())
 
     # Mock agent_runtime._broadcast so it doesn't crash on uninitialized runtime
     broadcast_events = []

@@ -213,7 +213,8 @@ class AgentAssembleTeam(Action):
         # ── Spawn + await ──
         from ..team.spawn import (
             DelegationDepthExceeded, SubagentReport,
-            SubagentSpawnError, await_subagent, spawn_subagent,
+            SubagentSpawnError, announce_subagent_report,
+            await_subagent, spawn_subagent,
         )
 
         started = time.monotonic()
@@ -248,9 +249,10 @@ class AgentAssembleTeam(Action):
             if not self.parallel and spawned:
                 # Sequential — await this one before spawning the next.
                 child_id, role_name = spawned[-1]
-                _ = await await_subagent(
+                seq_report = await await_subagent(
                     child_id, timeout_s=float(member_timeout) + 5.0,
                 )
+                await announce_subagent_report(parent_state=parent, report=seq_report)
 
         # In parallel mode, await all at once.
         reports: list[SubagentReport] = []
@@ -267,6 +269,9 @@ class AgentAssembleTeam(Action):
             for cid, role_name in spawned:
                 rep = await await_subagent(cid, timeout_s=1.0)
                 reports.append(rep)
+
+        for rep in reports:
+            await announce_subagent_report(parent_state=parent, report=rep)
 
         successes = sum(1 for r in reports if r.outcome == "done")
         failures = len(reports) - successes

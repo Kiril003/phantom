@@ -282,6 +282,15 @@ fn facet_command(
 ) -> Result<(), String> {
     const VERBS: [&str; 6] = ["approach", "recede", "pin", "feed", "cleave", "trace"];
     const KINDS: [&str; 4] = ["log", "dossier", "monitor", "answer"];
+    const CAMERA: [&str; 7] = [
+        "orbit_left",
+        "orbit_right",
+        "rise",
+        "fall",
+        "closer",
+        "wider",
+        "reset",
+    ];
 
     match action.as_str() {
         "verb" => {
@@ -305,6 +314,19 @@ fn facet_command(
             let k = kind.as_deref().ok_or("kind missing")?;
             if !KINDS.contains(&k) {
                 return Err(format!("unknown facet kind: {k}"));
+            }
+        }
+        // The Office floor: move the camera over it, and step the inspection
+        // from one working character to the next.
+        "camera" => {
+            let v = verb.as_deref().ok_or("camera verb missing")?;
+            if !CAMERA.contains(&v) {
+                return Err(format!("unknown camera verb: {v}"));
+            }
+        }
+        "inspect" => {
+            if !matches!(dir, Some(1) | Some(-1)) {
+                return Err("inspect dir must be +1 or -1".into());
             }
         }
         other => return Err(format!("unknown action: {other}")),

@@ -8,6 +8,7 @@ import './office.css';
 
 import { HubClient, HubStatus } from './ws';
 import { Office } from './office/office';
+import { CameraVerb } from './office/scene';
 import { MurmurLane } from './murmur';
 import { Sigil } from './sigil';
 import { FacetManager, LedgerRow, MonitorTask } from './facet/manager';
@@ -131,14 +132,24 @@ function onAnimaEvent(type: string, data: Record<string, unknown>): void {
 // The Film never listens to the keyboard — it only ever receives verbs that the
 // Breath Line captured locally and Rust validated against the closed allowlist.
 interface AegisCmd {
-  action: 'verb' | 'target' | 'spawn' | 'depth';
-  verb?: Verb;
+  action: 'verb' | 'target' | 'spawn' | 'depth' | 'camera' | 'inspect';
+  verb?: Verb | CameraVerb;
   dir?: 1 | -1;
   kind?: 'log' | 'dossier' | 'monitor' | 'answer';
   /** Material: the Feed payload, or the answer body when promoting. */
   text?: string;
   question?: string;
 }
+
+const CAMERA_VERBS: readonly CameraVerb[] = [
+  'orbit_left',
+  'orbit_right',
+  'rise',
+  'fall',
+  'closer',
+  'wider',
+  'reset',
+];
 
 function dossierLines(): string[] {
   return [
@@ -152,7 +163,9 @@ function dossierLines(): string[] {
 (window as unknown as { __aegisCmd?: (c: AegisCmd) => void }).__aegisCmd = (cmd) => {
   switch (cmd.action) {
     case 'verb':
-      if (cmd.verb) facets.verbOnTarget(cmd.verb, cmd.text);
+      if (cmd.verb && !(CAMERA_VERBS as readonly string[]).includes(cmd.verb)) {
+        facets.verbOnTarget(cmd.verb as Verb, cmd.text);
+      }
       break;
     case 'target':
       if (cmd.dir) facets.cycleTarget(cmd.dir);
@@ -160,6 +173,14 @@ function dossierLines(): string[] {
     case 'depth':
       if (cmd.dir === 1) deep.descend();
       else if (cmd.dir === -1) deep.ascend();
+      break;
+    case 'camera':
+      if (cmd.verb && (CAMERA_VERBS as readonly string[]).includes(cmd.verb)) {
+        office.moveCamera(cmd.verb as CameraVerb);
+      }
+      break;
+    case 'inspect':
+      if (cmd.dir) office.cycleSelection(cmd.dir);
       break;
     case 'spawn':
       if (cmd.kind === 'log') facets.spawnLog(transcript);

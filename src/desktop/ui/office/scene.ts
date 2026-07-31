@@ -21,9 +21,14 @@ import {
   Mesh,
   MeshBasicMaterial,
   MeshStandardMaterial,
+  Object3D,
   PerspectiveCamera,
   PlaneGeometry,
+  Raycaster,
+  RingGeometry,
   Scene,
+  Vector2,
+  Vector3,
   WebGLRenderer,
 } from 'three';
 
@@ -33,10 +38,29 @@ const MIN_FRAME_MS = 1000 / 30;
 const MAX_PIXEL_RATIO = 1.5;
 const DESK_H = 0.7;
 
+const CAM = { yaw: 0, pitch: 0.62, dist: 29.6 };
+const PITCH_MIN = 0.2;
+const PITCH_MAX = 1.35;
+const DIST_MIN = 11;
+const DIST_MAX = 48;
+
+export type CameraVerb =
+  | 'orbit_left'
+  | 'orbit_right'
+  | 'rise'
+  | 'fall'
+  | 'closer'
+  | 'wider'
+  | 'reset';
+
 export interface OfficeSceneHooks {
   /** Advance whatever is moving. Seconds. Called before every rendered frame. */
   tick?: (dt: number) => void;
+  /** A pointer landed on the floor. Only ever fires while inspecting. */
+  onPick?: (object: Object3D | null) => void;
 }
+
+const clamp = (v: number, lo: number, hi: number): number => Math.min(hi, Math.max(lo, v));
 
 function labelTexture(text: string): CanvasTexture {
   const c = document.createElement('canvas');
@@ -66,6 +90,14 @@ export class OfficeScene {
   private readonly renderer: WebGLRenderer | null;
   private readonly disposables: { dispose: () => void }[] = [];
   private readonly deskLights = new Map<string, Mesh>();
+
+  private readonly raycaster = new Raycaster();
+  private readonly ndc = new Vector2();
+  private readonly target = new Vector3(0, 0, -1.5);
+  private selection: Mesh | null = null;
+  private yaw = CAM.yaw;
+  private pitch = CAM.pitch;
+  private dist = CAM.dist;
 
   private raf = 0;
   private last = 0;
@@ -97,8 +129,7 @@ export class OfficeScene {
     this.available = renderer !== null;
 
     this.camera = new PerspectiveCamera(40, 16 / 9, 0.5, 200);
-    this.camera.position.set(0, 17.5, 24);
-    this.camera.lookAt(0, 0, -1.5);
+    this.applyCamera();
 
     this.scene.add(this.stage);
     if (this.available) {
@@ -106,8 +137,69 @@ export class OfficeScene {
       this.resize();
       window.addEventListener('resize', this.resize);
       document.addEventListener('visibilitychange', this.onDocVisibility);
+      this.canvas.addEventListener('click', this.onClick);
       this.request();
     }
+  }
+
+  /** Hand the pointer to the office. Off by default: the membrane is
+   *  click-through, and it gives the pointer straight back. */
+  setInspect(on: boolean): void {
+    this.canvas.classList.toggle('inspect', on);
+  }
+
+  moveCamera(verb: CameraVerb): void {
+    switch (verb) {
+      case 'orbit_left':
+        this.yaw -= 0.16;
+        break;
+      case 'orbit_right':
+        this.yaw += 0.16;
+        break;
+      case 'rise':
+        this.pitch = clamp(this.pitch + 0.09, PITCH_MIN, PITCH_MAX);
+        break;
+      case 'fall':
+        this.pitch = clamp(this.pitch - 0.09, PITCH_MIN, PITCH_MAX);
+        break;
+      case 'closer':
+        this.dist = clamp(this.dist * 0.88, DIST_MIN, DIST_MAX);
+        break;
+      case 'wider':
+        this.dist = clamp(this.dist / 0.88, DIST_MIN, DIST_MAX);
+        break;
+      case 'reset':
+        this.yaw = CAM.yaw;
+        this.pitch = CAM.pitch;
+        this.dist = CAM.dist;
+        break;
+    }
+    this.applyCamera();
+  }
+
+  /** The ring under whoever the operator is looking at. */
+  markSelection(x: number, z: number): void {
+    if (!this.selection) return;
+    this.selection.visible = true;
+    this.selection.position.set(x, 0.04, z);
+  }
+
+  clearSelection(): void {
+    if (!this.selection) return;
+    this.selection.visible = false;
+    this.markDirty();
+  }
+
+  pick(clientX: number, clientY: number): Object3D | null {
+    if (!this.renderer) return null;
+    const rect = this.canvas.getBoundingClientRect();
+    this.ndc.set(
+      ((clientX - rect.left) / rect.width) * 2 - 1,
+      -((clientY - rect.top) / rect.height) * 2 + 1,
+    );
+    this.raycaster.setFromCamera(this.ndc, this.camera);
+    const hits = this.raycaster.intersectObjects(this.stage.children, true);
+    return hits.length > 0 ? hits[0].object : null;
   }
 
   /** Populated floors are lit and present; an idle one is a low ember. */
@@ -158,6 +250,7 @@ export class OfficeScene {
     if (this.raf) cancelAnimationFrame(this.raf);
     window.removeEventListener('resize', this.resize);
     document.removeEventListener('visibilitychange', this.onDocVisibility);
+    this.canvas.removeEventListener('click', this.onClick);
     for (const d of this.disposables) d.dispose();
     this.renderer?.dispose();
     this.canvas.remove();
@@ -207,6 +300,19 @@ export class OfficeScene {
       this.deskLights.set(`${slot.zone}:${slot.index}`, glow);
       this.disposables.push(glowMat);
     }
+
+    const ringGeo = new RingGeometry(0.42, 0.55, 24);
+    const ringMat = new MeshBasicMaterial({
+      color: 0xfde9b8,
+      transparent: true,
+      opacity: 0.75,
+      depthWrite: false,
+    });
+    this.selection = new Mesh(ringGeo, ringMat);
+    this.selection.rotation.x = -Math.PI / 2;
+    this.selection.visible = false;
+    this.scene.add(this.selection);
+    this.disposables.push(ringGeo, ringMat);
 
     const hemi = new HemisphereLight(0xfde9b8, 0x0a0e14, 0.55);
     const key = new DirectionalLight(0xfff3d6, 0.75);
@@ -275,6 +381,22 @@ export class OfficeScene {
     this.renderer.render(this.scene, this.camera);
     this.dirty = false;
     if (this.animating || this.dirty) this.request();
+  };
+
+  private applyCamera(): void {
+    const cp = Math.cos(this.pitch);
+    this.camera.position.set(
+      this.target.x + this.dist * cp * Math.sin(this.yaw),
+      this.target.y + this.dist * Math.sin(this.pitch),
+      this.target.z + this.dist * cp * Math.cos(this.yaw),
+    );
+    this.camera.lookAt(this.target);
+    this.markDirty();
+  }
+
+  private readonly onClick = (ev: MouseEvent): void => {
+    if (!this.hooks.onPick) return;
+    this.hooks.onPick(this.pick(ev.clientX, ev.clientY));
   };
 
   private readonly onDocVisibility = (): void => {

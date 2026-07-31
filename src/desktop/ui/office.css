@@ -23,3 +23,75 @@ canvas.office.populated {
 canvas.office.hidden {
   opacity: 0;
 }
+
+/* The one moment the membrane takes the pointer, and only while asked. */
+canvas.office.inspect {
+  pointer-events: auto;
+}
+
+/* ── The card ──────────────────────────────────────────────────────────── */
+.office-card {
+  position: fixed;
+  left: 24px;
+  bottom: 24px;
+  z-index: 1;
+  width: 292px;
+  padding: 14px 16px 12px;
+  border-left: 2px solid var(--office-card-accent, var(--accent));
+  background: rgba(8, 12, 18, 0.82);
+  color: var(--ink-primary);
+  font-family: var(--font-display);
+  font-size: 12px;
+  line-height: 1.5;
+  pointer-events: none;
+  opacity: 0;
+  transform: translateY(6px);
+  transition:
+    opacity 0.5s ease,
+    transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.office-card.visible {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.office-card-role {
+  color: var(--office-card-accent, var(--accent));
+  font-size: 11px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+.office-card-goal {
+  margin: 4px 0 10px;
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 14px;
+  color: var(--ink-primary);
+}
+
+.office-card dl {
+  display: grid;
+  grid-template-columns: 84px 1fr;
+  gap: 2px 10px;
+  margin: 0;
+}
+
+.office-card dt {
+  color: var(--ink-muted);
+  font-size: 11px;
+}
+
+.office-card dd {
+  margin: 0;
+  color: var(--ink-secondary);
+  overflow-wrap: anywhere;
+}
+
+.office-card-id {
+  margin-top: 10px;
+  color: var(--ink-faint);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+}

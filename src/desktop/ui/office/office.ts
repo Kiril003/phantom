@@ -8,13 +8,16 @@
  *  crosses to the desk the reducer gave it, and crosses back to the door when
  *  its terminal event lands. Nothing paces. */
 
+import { Object3D } from 'three';
+
 import { HubEnvelope } from '../types';
+import { AgentCard } from './card';
 import { Figure } from './figure';
 import { DOOR, DeskSlot, Vec2, ZoneId, centre, slotAt, zone } from './layout';
 import { CADENCE, beside, heading, route, step, turn } from './path';
 import { LOOKS } from './look';
 import { Agent, Handover, OfficeState, Posture, emptyOffice, liveCount, reduce, sweep } from './reducer';
-import { OfficeScene } from './scene';
+import { CameraVerb, OfficeScene } from './scene';
 
 /** How long a finished character stays visible before the floor forgets it. */
 const LINGER_MS = 7_000;
@@ -49,15 +52,53 @@ export class Office {
   private readonly scene: OfficeScene;
   private readonly bodies = new Map<string, Body>();
   private readonly delivered = new Set<string>();
+  private readonly card: AgentCard;
   private state: OfficeState = emptyOffice();
   private sweepTimer: ReturnType<typeof setTimeout> | null = null;
+  private selected: string | null = null;
 
   constructor(root: HTMLElement) {
-    this.scene = new OfficeScene(root, { tick: (dt) => this.tick(dt) });
+    this.scene = new OfficeScene(root, {
+      tick: (dt) => this.tick(dt),
+      onPick: (object) => this.select(taskIdOf(object)),
+    });
+    this.card = new AgentCard(root);
   }
 
   get available(): boolean {
     return this.scene.available;
+  }
+
+  moveCamera(verb: CameraVerb): void {
+    this.scene.moveCamera(verb);
+  }
+
+  /** Step the inspection along the floor; past the last character it clears,
+   *  so the operator can always get the office back to just the office. */
+  cycleSelection(dir: 1 | -1): void {
+    const ids = [...this.state.agents.keys()];
+    if (ids.length === 0) {
+      this.select(null);
+      return;
+    }
+    const at = this.selected === null ? -1 : ids.indexOf(this.selected);
+    const next = at + dir;
+    this.select(next < 0 || next >= ids.length ? null : ids[next]);
+  }
+
+  select(taskId: string | null): void {
+    this.selected = taskId !== null && this.state.agents.has(taskId) ? taskId : null;
+    this.scene.setInspect(this.selected !== null);
+    if (this.selected === null) {
+      this.card.hide();
+      this.scene.clearSelection();
+      return;
+    }
+    const agent = this.state.agents.get(this.selected)!;
+    this.card.show(agent);
+    const body = this.bodies.get(this.selected);
+    if (body) this.scene.markSelection(body.x, body.z);
+    this.scene.markDirty();
   }
 
   ingest(env: HubEnvelope): void {
@@ -75,6 +116,7 @@ export class Office {
     if (this.sweepTimer) clearTimeout(this.sweepTimer);
     for (const b of this.bodies.values()) b.figure.dispose();
     this.bodies.clear();
+    this.card.dispose();
     this.scene.dispose();
   }
 
@@ -90,6 +132,12 @@ export class Office {
 
     for (const agent of this.state.agents.values()) this.reconcile(agent);
     this.deliver();
+
+    if (this.selected !== null) {
+      const agent = this.state.agents.get(this.selected);
+      if (agent) this.card.show(agent);
+      else this.select(null);
+    }
 
     this.scene.setPopulated(liveCount(this.state) > 0);
     this.scene.setAnimating(this.moving());
@@ -121,6 +169,7 @@ export class Office {
         posture: agent.posture,
         pulse: 0,
       };
+      figure.root.userData.taskId = agent.taskId;
       this.bodies.set(agent.taskId, body);
       figure.place(body.x, body.z, body.facing);
       this.walkTo(body, slot, 'lobby');
@@ -265,6 +314,7 @@ export class Office {
       body.figure.setUpright(body.gait > 0.3);
       body.figure.place(body.x, body.z, body.facing);
       body.figure.stride(body.phase, body.gait);
+      if (taskId === this.selected) this.scene.markSelection(body.x, body.z);
     }
 
     if (!this.moving()) this.scene.setAnimating(false);
@@ -296,6 +346,16 @@ export class Office {
 function shortest(delta: number): number {
   const tau = Math.PI * 2;
   return (((delta + Math.PI) % tau) + tau) % tau - Math.PI;
+}
+
+function taskIdOf(object: Object3D | null): string | null {
+  let node: Object3D | null = object;
+  while (node) {
+    const id = node.userData.taskId;
+    if (typeof id === 'string') return id;
+    node = node.parent;
+  }
+  return null;
 }
 
 function doorSlot(): DeskSlot {

@@ -237,7 +237,7 @@ export class Office {
     const to = this.bodies.get(h.toTaskId);
     const toAgent = this.state.agents.get(h.toTaskId);
     if (!from || !to || !toAgent) return;
-    if (from.departing || to.departing || from.errand) return;
+    if (to.departing || from.errand) return;
 
     const desk = slotAt(toAgent.zone, toAgent.slot);
     const side: 1 | -1 = desk.seat.x > centre(zone(toAgent.zone)).x ? -1 : 1;
@@ -261,10 +261,16 @@ export class Office {
     body.errand = null;
     body.hold = 0;
 
+    const here = { x: body.x, z: body.z };
+    const from = receiverAgent?.zone ?? null;
     const agent = this.state.agents.get(taskId);
-    if (!agent || agent.leftAt !== null) return;
+    if (!agent || agent.leftAt !== null) {
+      body.path = route(here, doorSlot(), from);
+      body.rest = 0;
+      return;
+    }
     const home = slotAt(agent.zone, agent.slot);
-    body.path = route({ x: body.x, z: body.z }, home, receiverAgent?.zone ?? null);
+    body.path = route(here, home, from);
     body.rest = home.facing;
   }
 
@@ -331,7 +337,7 @@ export class Office {
     if (!pending) return;
     this.sweepTimer = setTimeout(() => {
       this.sweepTimer = null;
-      const next = sweep(this.state, Date.now(), LINGER_MS);
+      const next = this.errandInFlight() ? this.state : sweep(this.state, Date.now(), LINGER_MS);
       if (next !== this.state) {
         this.state = next;
         this.sync();
@@ -339,6 +345,11 @@ export class Office {
         this.scheduleSweep();
       }
     }, SWEEP_TICK_MS);
+  }
+
+  private errandInFlight(): boolean {
+    for (const b of this.bodies.values()) if (b.errand) return true;
+    return false;
   }
 }
 

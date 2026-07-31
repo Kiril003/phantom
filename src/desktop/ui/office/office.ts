@@ -233,7 +233,6 @@ export class Office {
   }
 
   private startErrand(h: Handover): void {
-    if (!h.fromTaskId || !h.toTaskId || h.fromTaskId === h.toTaskId) return;
     const from = this.bodies.get(h.fromTaskId);
     const to = this.bodies.get(h.toTaskId);
     const toAgent = this.state.agents.get(h.toTaskId);

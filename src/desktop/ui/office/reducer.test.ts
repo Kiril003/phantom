@@ -341,7 +341,7 @@ describe('reducer — handovers', () => {
     expect(s.handovers[0]).toMatchObject({ fromTaskId: 'pm', toTaskId: 'qa' });
   });
 
-  it('leaves an end null when it names nobody on the floor', () => {
+  it('draws nothing while an end names nobody on the floor', () => {
     const s = run(
       ...twoAgents,
       env('team.message', {
@@ -352,7 +352,8 @@ describe('reducer — handovers', () => {
         message: 'hello',
       }),
     );
-    expect(s.handovers[0]).toMatchObject({ fromTaskId: null, toTaskId: null });
+    expect(s.handovers).toHaveLength(0);
+    expect(s.pending).toHaveLength(1);
   });
 
   it('records no handover from a character to itself', () => {
@@ -386,5 +387,211 @@ describe('reducer — handovers', () => {
     }
     expect(s.handovers.length).toBeLessThanOrEqual(24);
     expect(s.handovers[s.handovers.length - 1].id).toBe('m39');
+  });
+});
+
+describe('reducer — delegation, which hands the goal down before the child exists', () => {
+  const parent = (): HubEnvelope =>
+    env('task.started', { task_id: 'lead', goal: 'збери команду', track: 'foreground' });
+
+  const delegate = (): HubEnvelope =>
+    env('team.message', {
+      id: 'd1',
+      task_id: 'child',
+      parent_task_id: 'lead',
+      sender: 'operator',
+      receiver: 'senior_backend',
+      message: '[role=senior_backend] полагодь міграцію',
+      message_type: 'delegate',
+    });
+
+  it('holds the message until the spawned child reports for work, then draws the walk', () => {
+    let s = run(parent(), delegate());
+    expect(s.handovers).toHaveLength(0);
+    expect(s.pending).toHaveLength(1);
+
+    s = reduce(
+      s,
+      bg('task.started', {
+        task_id: 'child',
+        goal: '[role=senior_backend] полагодь міграцію',
+        track: 'background',
+        parent_task_id: 'lead',
+        subagent_role: 'senior_backend',
+        delegation_depth: 1,
+      }),
+    );
+    expect(s.pending).toHaveLength(0);
+    expect(s.handovers).toHaveLength(1);
+    expect(s.handovers[0]).toMatchObject({
+      id: 'd1',
+      fromTaskId: 'lead',
+      toTaskId: 'child',
+      kind: 'delegate',
+    });
+  });
+
+  it('drops a message to a child that never starts', () => {
+    let s = run(parent(), delegate());
+    expect(s.pending).toHaveLength(1);
+
+    clock += 31_000;
+    s = reduce(s, env('action.started', { task_id: 'lead', step_idx: 2, action: 'fs.read' }));
+    expect(s.pending).toHaveLength(0);
+    expect(s.handovers).toHaveLength(0);
+  });
+
+  it('keeps holding a message that is still inside its lifetime', () => {
+    let s = run(parent(), delegate());
+    clock += 5_000;
+    s = reduce(s, env('action.started', { task_id: 'lead', step_idx: 2, action: 'fs.read' }));
+    expect(s.pending).toHaveLength(1);
+  });
+
+  it('binds the report the specialist hands back up', () => {
+    const s = run(
+      parent(),
+      bg('task.started', {
+        task_id: 'child',
+        goal: '[role=senior_backend] x',
+        track: 'background',
+        parent_task_id: 'lead',
+        subagent_role: 'senior_backend',
+      }),
+      bg('task.completed', { task_id: 'child', track: 'background', summary: 'готово' }),
+      bg('team.message', {
+        id: 'r1',
+        task_id: 'lead',
+        parent_task_id: 'child',
+        sender: 'senior_backend',
+        receiver: 'operator',
+        message: 'done: готово',
+        message_type: 'report',
+      }),
+    );
+    expect(s.handovers).toHaveLength(1);
+    expect(s.handovers[0]).toMatchObject({
+      fromTaskId: 'child',
+      toTaskId: 'lead',
+      kind: 'report',
+    });
+  });
+
+  it('takes the parent task id straight off task.started', () => {
+    const s = run(
+      bg('task.started', {
+        task_id: 'child',
+        goal: '[role=osint] шукай',
+        track: 'background',
+        parent_task_id: 'lead',
+        subagent_role: 'osint',
+        delegation_depth: 2,
+      }),
+    );
+    expect(who(s, 'child')).toMatchObject({
+      parentTaskId: 'lead',
+      role: 'osint',
+      zone: 'research',
+    });
+  });
+});
+
+describe('reducer — two of the same specialist', () => {
+  const twins = [
+    bg('task.started', {
+      task_id: 'b1',
+      goal: '[role=senior_backend] перша',
+      track: 'background',
+      subagent_role: 'senior_backend',
+    }),
+    bg('task.started', {
+      task_id: 'b2',
+      goal: '[role=senior_backend] друга',
+      track: 'background',
+      subagent_role: 'senior_backend',
+    }),
+    env('task.started', { task_id: 'lead', goal: 'веди', track: 'foreground' }),
+  ];
+
+  it('walks to the twin the task id names, not the first one matching the role', () => {
+    const s = run(
+      ...twins,
+      env('team.message', {
+        id: 'x1',
+        task_id: 'b2',
+        parent_task_id: 'lead',
+        sender: 'operator',
+        receiver: 'senior_backend',
+        message: 'візьми це',
+        message_type: 'delegate',
+      }),
+    );
+    expect(s.handovers).toHaveLength(1);
+    expect(s.handovers[0].toTaskId).toBe('b2');
+  });
+
+  it('refuses to guess when only an ambiguous role is offered', () => {
+    const s = run(
+      ...twins,
+      env('team.message', {
+        id: 'x2',
+        parent_task_id: 'lead',
+        sender: 'operator',
+        receiver: 'senior_backend',
+        message: 'хтось із вас',
+      }),
+    );
+    expect(s.handovers).toHaveLength(0);
+    expect(s.pending).toHaveLength(1);
+  });
+});
+
+describe('reducer — a spawned specialist on the widened background channel', () => {
+  const born = bg('task.started', {
+    task_id: 'sp',
+    goal: '[role=senior_backend] полагодь міграцію',
+    track: 'background',
+    parent_task_id: 'lead',
+    subagent_role: 'senior_backend',
+    delegation_depth: 1,
+  });
+
+  it('carries every body state the office can draw', () => {
+    let s = run(born);
+    expect(who(s, 'sp').zone).toBe('engineering');
+
+    const postures: [ReturnType<typeof bg>, string][] = [
+      [bg('substate.changed', { task_id: 'sp', substate: 'thinking' }), 'thinking'],
+      [bg('thinking.completed', { task_id: 'sp', planner: 'tactical', step_idx: 1 }), 'working'],
+      [bg('substate.changed', { task_id: 'sp', substate: 'reflecting' }), 'reflecting'],
+      [bg('substate.changed', { task_id: 'sp', substate: 'acting' }), 'working'],
+      [bg('task.blocked_quota', { task_id: 'sp', probe_interval_s: 30 }), 'blocked'],
+      [bg('task.resumed', { task_id: 'sp', reason: 'quota_recovered' }), 'working'],
+      [bg('substate.changed', { task_id: 'sp', substate: 'waiting_user' }), 'waiting_user'],
+      [bg('task.paused', { task_id: 'sp', reason: 'auto_reflect_loop' }), 'blocked'],
+    ];
+    for (const [envelope, posture] of postures) {
+      s = reduce(s, envelope);
+      expect(who(s, 'sp').posture).toBe(posture);
+    }
+
+    s = reduce(s, bg('task.failed', { task_id: 'sp', track: 'background', error: 'boom' }));
+    expect(who(s, 'sp').posture).toBe('failed');
+  });
+
+  it('names what it is doing from the projected payloads', () => {
+    let s = run(born);
+    s = reduce(s, bg('sub_goal.started', { task_id: 'sp', sub_goal_id: 'g1', description: 'зібрати схему' }));
+    expect(who(s, 'sp').subGoal).toBe('зібрати схему');
+    s = reduce(s, bg('action.started', { task_id: 'sp', step_idx: 4, action: 'fs.read' }));
+    expect(who(s, 'sp')).toMatchObject({ detail: 'fs.read', step: 4, posture: 'working' });
+    s = reduce(s, bg('reflection.completed', { task_id: 'sp', verdict: 'continue', new_confidence: 0.7 }));
+    expect(who(s, 'sp').detail).toBe('continue');
+  });
+
+  it('stays put when the kernel sends the idle substate at teardown', () => {
+    const s1 = run(born, bg('substate.changed', { task_id: 'sp', substate: 'thinking' }));
+    const s2 = reduce(s1, bg('substate.changed', { task_id: 'sp', substate: 'idle' }));
+    expect(who(s2, 'sp').posture).toBe('thinking');
   });
 });

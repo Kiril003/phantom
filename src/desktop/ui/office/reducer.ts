@@ -50,8 +50,19 @@ export interface Agent {
 
 export interface Handover {
   id: string;
-  fromTaskId: string | null;
-  toTaskId: string | null;
+  fromTaskId: string;
+  toTaskId: string;
+  sender: string;
+  receiver: string;
+  message: string;
+  kind: string;
+  at: number;
+}
+
+export interface PendingHandover {
+  id: string;
+  senderTaskId: string | null;
+  receiverTaskId: string | null;
   sender: string;
   receiver: string;
   message: string;
@@ -61,8 +72,10 @@ export interface Handover {
 
 export interface OfficeState {
   agents: ReadonlyMap<string, Agent>;
-  /** Newest last. Bounded; the renderer consumes by id. */
+  /** Newest last. Bounded; the renderer consumes by id. Both ends are on the floor. */
   handovers: readonly Handover[];
+  /** Messages whose other end has not appeared yet. */
+  pending: readonly PendingHandover[];
   /** Task ids that already reached a terminal event — never resurrected. */
   retired: ReadonlySet<string>;
   /** Bumps whenever anything at all changed. */
@@ -71,11 +84,14 @@ export interface OfficeState {
 
 const HANDOVER_LIMIT = 24;
 const RETIRED_LIMIT = 256;
+const PENDING_LIMIT = 16;
+/** A delegate message beats its child's task.started; a child that never runs must not queue forever. */
+const PENDING_TTL_MS = 30_000;
 
 const OFFICE_CHANNELS = new Set(['agent.stream', 'background_events']);
 
 export function emptyOffice(): OfficeState {
-  return { agents: new Map(), handovers: [], retired: new Set(), revision: 0 };
+  return { agents: new Map(), handovers: [], pending: [], retired: new Set(), revision: 0 };
 }
 
 interface ParsedGoal {
@@ -122,6 +138,7 @@ function freeSlot(agents: ReadonlyMap<string, Agent>, zone: ZoneId): number {
 interface Ctx {
   agents: Map<string, Agent>;
   handovers: Handover[];
+  pending: PendingHandover[];
   retired: Set<string>;
   changed: boolean;
   at: number;
@@ -208,49 +225,87 @@ function retire(ctx: Ctx, taskId: string, outcome: Agent['outcome']): void {
   ctx.changed = true;
 }
 
-/** Resolve one end of a `team.message` to a character actually on the floor.
- *  A name we cannot tie to a live agent resolves to null and the renderer
- *  draws no walk — a handover with an imaginary end never animates. */
-function resolveParty(ctx: Ctx, name: string | null, fallback: string | null): string | null {
-  if (name) {
-    const key = normaliseRole(name);
-    for (const a of ctx.agents.values()) {
-      if (a.role && normaliseRole(a.role) === key) return a.taskId;
-    }
-    if (isDepartment(key)) {
-      const inZone = [...ctx.agents.values()].filter((a) => a.zone === key);
-      if (inZone.length === 1) return inZone[0].taskId;
-    }
+function uniqueBy(ctx: Ctx, match: (a: Agent) => boolean): string | null {
+  let found: string | null = null;
+  for (const a of ctx.agents.values()) {
+    if (!match(a)) continue;
+    if (found !== null) return null;
+    found = a.taskId;
   }
-  if (fallback && ctx.agents.has(fallback)) return fallback;
+  return found;
+}
+
+/** The task id is exact; a role name is a guess that two twins can both answer to. */
+function resolveParty(ctx: Ctx, name: string, taskId: string | null): string | null {
+  if (taskId !== null && ctx.agents.has(taskId)) return taskId;
+  if (!name) return null;
+  const key = normaliseRole(name);
+  const byRole = uniqueBy(ctx, (a) => a.role !== null && normaliseRole(a.role) === key);
+  if (byRole !== null) return byRole;
+  if (isDepartment(key)) return uniqueBy(ctx, (a) => a.zone === key);
   return null;
 }
 
+/**
+ * `spawn.py` sends `task_id` as the receiving task and `parent_task_id` as the
+ * sending one, in both directions — the names read backwards for the report
+ * that travels back up, so they are renamed here and nowhere else.
+ */
 function applyTeamMessage(ctx: Ctx, data: Record<string, unknown>): void {
-  const taskId = str(data.task_id);
-  const parentId = str(data.parent_task_id);
-  const sender = str(data.sender) ?? '';
-  const receiver = str(data.receiver) ?? '';
-  const from = resolveParty(ctx, sender, parentId);
-  const to = resolveParty(ctx, receiver, taskId);
-  if (from !== null && from === to) return;
-  const id = str(data.id) ?? `${taskId ?? 'team'}:${ctx.at}:${ctx.handovers.length}`;
-  ctx.handovers.push({
-    id,
-    fromTaskId: from,
-    toTaskId: to,
-    sender,
-    receiver,
+  const receiverTaskId = str(data.task_id);
+  const senderTaskId = str(data.parent_task_id);
+  if (senderTaskId !== null && senderTaskId === receiverTaskId) return;
+  ctx.pending.push({
+    id: str(data.id) ?? `${senderTaskId ?? '?'}>${receiverTaskId ?? '?'}@${ctx.at}`,
+    senderTaskId,
+    receiverTaskId,
+    sender: str(data.sender) ?? '',
+    receiver: str(data.receiver) ?? '',
     message: str(data.message) ?? '',
     kind: str(data.message_type) ?? 'text',
     at: ctx.at,
   });
-  while (ctx.handovers.length > HANDOVER_LIMIT) ctx.handovers.shift();
+  while (ctx.pending.length > PENDING_LIMIT) ctx.pending.shift();
   ctx.changed = true;
+}
+
+function bind(ctx: Ctx, p: PendingHandover): Handover | null {
+  const from = resolveParty(ctx, p.sender, p.senderTaskId);
+  const to = resolveParty(ctx, p.receiver, p.receiverTaskId);
+  if (from === null || to === null || from === to) return null;
+  return {
+    id: p.id,
+    fromTaskId: from,
+    toTaskId: to,
+    sender: p.sender,
+    receiver: p.receiver,
+    message: p.message,
+    kind: p.kind,
+    at: p.at,
+  };
+}
+
+function settle(ctx: Ctx): void {
+  if (ctx.pending.length === 0) return;
+  const held: PendingHandover[] = [];
+  for (const p of ctx.pending) {
+    const bound = bind(ctx, p);
+    if (bound) {
+      ctx.handovers.push(bound);
+      while (ctx.handovers.length > HANDOVER_LIMIT) ctx.handovers.shift();
+      ctx.changed = true;
+    } else if (ctx.at - p.at < PENDING_TTL_MS) {
+      held.push(p);
+    } else {
+      ctx.changed = true;
+    }
+  }
+  if (held.length !== ctx.pending.length) ctx.pending = held;
 }
 
 const SUBSTATE_POSTURE: Readonly<Record<string, Posture>> = {
   thinking: 'thinking',
+  reflecting: 'reflecting',
   paused: 'blocked',
   blocked_quota: 'blocked',
   waiting_user: 'waiting_user',
@@ -267,9 +322,10 @@ function apply(ctx: Ctx, type: string, data: Record<string, unknown>): void {
       if (!taskId) return;
       const parsed = parseGoal(data.goal);
       const born = ensure(ctx, taskId, {
-        role: parsed.role,
+        role: str(data.subagent_role) ?? parsed.role,
         goal: parsed.text,
         track: trackOf(data.track),
+        parentTaskId: str(data.parent_task_id),
       });
       if (!born) return;
       patch(ctx, taskId, {
@@ -452,15 +508,18 @@ export function reduce(state: OfficeState, env: HubEnvelope): OfficeState {
   const ctx: Ctx = {
     agents: new Map(state.agents),
     handovers: [...state.handovers],
+    pending: [...state.pending],
     retired: new Set(state.retired),
     changed: false,
     at: typeof env.ts === 'number' && env.ts > 0 ? env.ts : Date.now(),
   };
   apply(ctx, env.type, env.data ?? {});
+  settle(ctx);
   if (!ctx.changed) return state;
   return {
     agents: ctx.agents,
     handovers: ctx.handovers,
+    pending: ctx.pending,
     retired: ctx.retired,
     revision: state.revision + 1,
   };

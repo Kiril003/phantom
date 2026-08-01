@@ -142,7 +142,7 @@ export default function ShadowLayout() {
 
   return (
     <motion.div
-      className="w-[1024px] h-[600px] relative"
+      className="w-full h-full relative"
       style={{ background: 'var(--surface-base)' }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}

@@ -33,7 +33,7 @@ export default function MapLayout() {
   if (!authenticated) {
     return (
       <div
-        className="w-[1024px] h-[600px] flex flex-col items-center justify-center"
+        className="w-full h-full flex flex-col items-center justify-center"
         style={{ background: 'var(--surface-void)' }}
       >
         <div className="flex flex-col items-center gap-3">
@@ -53,7 +53,7 @@ export default function MapLayout() {
 
   return (
     <motion.div
-      className="w-[1024px] h-[600px] flex flex-col relative overflow-hidden"
+      className="w-full h-full flex flex-col relative overflow-hidden"
       style={{ background: 'var(--surface-base)' }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}

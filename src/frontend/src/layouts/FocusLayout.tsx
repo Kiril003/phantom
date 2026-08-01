@@ -49,7 +49,7 @@ export default function FocusLayout() {
 
   return (
     <motion.div
-      className="w-[1024px] h-[600px] flex flex-col relative"
+      className="w-full h-full min-w-[1024px] min-h-[600px] flex flex-col relative"
       style={{ background: 'var(--surface-base)' }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}

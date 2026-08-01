@@ -74,7 +74,7 @@ export default function SentinelLayout() {
 
   return (
     <motion.div
-      className="w-[1024px] h-[600px] sunrise-frame coral-tint relative overflow-hidden"
+      className="w-full h-full min-w-[1024px] min-h-[600px] sunrise-frame coral-tint relative overflow-hidden"
       style={{ background: 'var(--surface-coral)' }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}

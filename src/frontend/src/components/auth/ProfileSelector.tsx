@@ -142,7 +142,7 @@ export function ProfileSelector({ onSelect, disabled = false }: ProfileSelectorP
   if (tiles === null) {
     return (
       <div
-        className="w-[1024px] h-[600px] relative overflow-hidden"
+        className="w-full h-full min-w-[1024px] min-h-[600px] relative overflow-hidden"
         style={{ background: 'var(--surface-base)' }}
         data-state="DIALOGUE"
         data-testid="profile-selector"
@@ -168,7 +168,7 @@ export function ProfileSelector({ onSelect, disabled = false }: ProfileSelectorP
 
   return (
     <div
-      className="w-[1024px] h-[600px] relative overflow-hidden"
+      className="w-full h-full min-w-[1024px] min-h-[600px] relative overflow-hidden"
       style={{ background: 'var(--surface-base)' }}
       data-state="DIALOGUE"
       data-testid="profile-selector"

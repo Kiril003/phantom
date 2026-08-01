@@ -129,7 +129,7 @@ export default function OperatorLayout() {
 
   return (
     <motion.div
-      className={`w-[1024px] h-[600px] flex flex-col relative overflow-hidden ${isPro ? 'bg-black font-mono' : 'bg-surface-sunrise'}`}
+      className={`w-full h-full min-w-[1024px] min-h-[600px] flex flex-col relative overflow-hidden ${isPro ? 'bg-black font-mono' : 'bg-surface-sunrise'}`}
       style={{ opacity: morphology.opacity }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}

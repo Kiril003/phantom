@@ -1,10 +1,8 @@
-import { useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import {} from 'react';
 import { motion } from 'framer-motion';
 import { OmniMap } from '../components/map/OmniMap';
 import { EASE_PHANTOM } from '../styles/motion';
 import { useSettingsStore } from '../stores/settingsStore';
-import { useAuthStore } from '../stores/authStore';
 import { useSystemStore } from '../stores/systemStore';
 import '../styles/map.css';
 
@@ -12,14 +10,8 @@ const DEFAULT_ZOOM = 15;
 
 export default function MapLayout() {
   const authenticated = useSystemStore((s) => s.authenticated);
-  const token = useAuthStore((s) => s.token);
-  const navigate = useNavigate();
-
-  useEffect(() => {
-    if (!authenticated && !token) {
-      navigate('/login', { replace: true });
-    }
-  }, [authenticated, token, navigate]);
+  // Маршруту /login не існує — MainRouter сам показує вхід, поки немає
+  // сесії. Редирект сюди лишав мапу порожньою назавжди.
 
   // Pull the user's preferred default zoom from the persisted settings store.
   // bootstrapSettings seeds this at startup; falls back to 15 when the store

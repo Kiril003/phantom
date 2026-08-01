@@ -61,6 +61,8 @@ async def client(monkeypatch, tmp_path):
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
 
+    app.dependency_overrides.clear()
+
     # Await any in-flight runner so DB handles don't leak into the next test
     if agent_runtime.task_runner and not agent_runtime.task_runner.done():
         agent_runtime.controls.emergency_stop.set()

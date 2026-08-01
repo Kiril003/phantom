@@ -54,11 +54,25 @@ async def test_drive_tick_hormonal_modulation():
 @pytest.fixture
 async def isolated_db(monkeypatch):
     from db.database import Base, engine, get_session
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    from db.models import User
+    from sqlalchemy import delete
+    
+    # We rely on the session DB being initialized by conftest.
+    async with get_session() as s:
+        try:
+            # Need to provide non-null fields
+            s.add(User(id="test", username="test_drives", role="Member", tenant_role="Member", pin_hash="x", preferences_json="{}"))
+            await s.commit()
+        except Exception:
+            await s.rollback()
+            
     yield get_session
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+    
+    async with get_session() as s:
+        from db.models import DriveState
+        await s.execute(delete(DriveState).where(DriveState.user_id == "test"))
+        await s.execute(delete(User).where(User.id == "test"))
+        await s.commit()
 
 @pytest.mark.asyncio
 async def test_drive_persistence(isolated_db):

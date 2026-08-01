@@ -20,8 +20,9 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from config import config
 from db.database import get_db, get_session
-from db.models import ChatMessage, ChatSession
+from db.models import ChatMessage, ChatSession, User, Tenant
 from security.auth import get_current_user, require_auth
+from api.dependencies import get_current_tenant
 from security.device_auth import get_user_or_device_user
 from security.jwt_manager import TokenPayload
 from ai.hub import ai_hub
@@ -1271,7 +1272,8 @@ def register_ws_handlers() -> None:
 async def list_sessions(
     limit: int = 20,
     offset: int = 0,
-    token_data: TokenPayload = Depends(require_auth),
+    tenant: Any = Depends(get_current_tenant),
+    user: Any = Depends(get_user_or_device_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     # Auto-clean empty/failed sessions (message_count == 0 or contains fallback error)
@@ -1279,14 +1281,14 @@ async def list_sessions(
         from sqlalchemy import delete
         # Find empty sessions (message_count == 0)
         empty_stmt = select(ChatSession.id).where(
-            ChatSession.user_id == token_data.user_id,
+            ChatSession.user_id == user.id,
             ChatSession.message_count == 0
         )
         empty_ids = set((await db.execute(empty_stmt)).scalars().all())
 
         # Find sessions with message_count <= 2 where assistant message is fallback error
         failed_msg_stmt = select(ChatMessage.session_id).where(
-            ChatMessage.user_id == token_data.user_id,
+            ChatMessage.user_id == user.id,
             ChatMessage.role == "assistant",
             ChatMessage.content == "Не встиг сформулювати — перепитай?"
         )
@@ -1314,9 +1316,12 @@ async def list_sessions(
         logger.warning("Failed to auto-clean empty/failed sessions: %s", exc)
 
 
+    base_stmt = select(ChatSession).join(ChatSession.user).where(User.tenant_id == tenant.id)
+    if user.role != "API":
+        base_stmt = base_stmt.where(ChatSession.user_id == user.id)
+
     stmt = (
-        select(ChatSession)
-        .where(ChatSession.user_id == token_data.user_id)
+        base_stmt
         .order_by(ChatSession.started_at.desc())
         .limit(limit)
         .offset(offset)
@@ -1324,9 +1329,12 @@ async def list_sessions(
     result = await db.execute(stmt)
     sessions = result.scalars().all()
 
-    total_result = await db.execute(
-        select(func.count(ChatSession.id)).where(ChatSession.user_id == token_data.user_id)
-    )
+    count_base_stmt = select(func.count(ChatSession.id)).join(ChatSession.user).where(User.tenant_id == tenant.id)
+    if user.role != "API":
+        count_base_stmt = count_base_stmt.where(ChatSession.user_id == user.id)
+
+    total_result = await db.execute(count_base_stmt)
+
     total = total_result.scalar_one() or 0
 
     return {
@@ -1338,14 +1346,18 @@ async def list_sessions(
 @router.get("/sessions/{session_id}/messages")
 async def get_messages(
     session_id: str,
-    token_data: TokenPayload = Depends(require_auth),
+    tenant: Any = Depends(get_current_tenant),
+    user: Any = Depends(get_user_or_device_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    # Verify session belongs to user
+    # Verify session belongs to user and tenant
     result = await db.execute(
-        select(ChatSession).where(
+        select(ChatSession)
+        .join(ChatSession.user)
+        .where(
             ChatSession.id == session_id,
-            ChatSession.user_id == token_data.user_id,
+            ChatSession.user_id == user.id,
+            User.tenant_id == tenant.id,
         )
     )
     if not result.scalar_one_or_none():
@@ -1363,13 +1375,17 @@ async def get_messages(
 @router.delete("/sessions/{session_id}")
 async def delete_session(
     session_id: str,
-    token_data: TokenPayload = Depends(require_auth),
+    tenant: Any = Depends(get_current_tenant),
+    user: Any = Depends(get_user_or_device_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     result = await db.execute(
-        select(ChatSession).where(
+        select(ChatSession)
+        .join(ChatSession.user)
+        .where(
             ChatSession.id == session_id,
-            ChatSession.user_id == token_data.user_id,
+            ChatSession.user_id == user.id,
+            User.tenant_id == tenant.id,
         )
     )
     session = result.scalar_one_or_none()

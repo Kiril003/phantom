@@ -59,6 +59,8 @@ async def client(monkeypatch, tmp_path):
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
 
+    app.dependency_overrides.clear()
+
     agent_runtime.foreground_slot = None
     agent_runtime.background_slot = None
     await engine.dispose()

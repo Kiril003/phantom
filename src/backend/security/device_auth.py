@@ -107,6 +107,16 @@ async def get_user_or_device_user(
     user_id: Optional[str] = None
     try:
         from security.jwt_manager import verify_token as _verify_user
+        import hashlib
+        if creds.credentials.startswith("pk_live_"):
+            key_hash = hashlib.sha256(creds.credentials.encode()).hexdigest()
+            from db.models import ApiKey
+            result = await db.execute(select(ApiKey).where(ApiKey.key_hash == key_hash))
+            api_key = result.scalar_one_or_none()
+            if not api_key:
+                raise HTTPException(status_code=401, detail={"code": "invalid_api_key"})
+            return User(id=f"api_{api_key.id}", username=f"api_{api_key.name}", role="API", tenant_id=api_key.tenant_id)
+
 
         user_payload = _verify_user(creds.credentials)
         user_id = user_payload.user_id

@@ -10,15 +10,25 @@ from agent.cognition.will.goal_stack import PersistentGoalStack, Goal
 async def isolated_db(monkeypatch):
     from db.database import Base, engine, get_session
     from db.models import User
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
+    from sqlalchemy import delete
+    
+    # We rely on the session DB being initialized by conftest.
     # goals_persistent.user_id is a FK to users.id — seed the test owner.
     async with get_session() as s:
-        s.add(User(id="test", username="test"))
-        await s.commit()
+        try:
+            # Need to provide non-null fields
+            s.add(User(id="test", username="test_goal_stack", role="Member", tenant_role="Member", pin_hash="x", preferences_json="{}"))
+            await s.commit()
+        except Exception:
+            await s.rollback()
+    
     yield get_session
-    async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.drop_all)
+    
+    async with get_session() as s:
+        from db.models import PersistentGoal
+        await s.execute(delete(PersistentGoal).where(PersistentGoal.user_id == "test"))
+        await s.execute(delete(User).where(User.id == "test"))
+        await s.commit()
 
 @pytest.mark.asyncio
 async def test_goal_priority():

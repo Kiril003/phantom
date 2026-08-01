@@ -191,6 +191,7 @@ async def client(monkeypatch, tmp_path):
     transport = ASGITransport(app=app)
     async with AsyncClient(transport=transport, base_url="http://test") as ac:
         yield ac
+    app.dependency_overrides.clear()
     await engine.dispose()
     try:
         os.unlink(tmp_file)

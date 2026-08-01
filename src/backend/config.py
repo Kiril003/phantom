@@ -420,7 +420,7 @@ class PhantomConfig(BaseSettings):
     # by default; operator must explicitly raise the slider in Settings
     # to authorise MEDIUM actions. Mitigates blast radius until the full
     # linux/dangerous_patterns.py blocklist + UI confirm pipeline lands.
-    agent_risk_tolerance: int = 7            # caps executable actions: 1/3/5/7
+    agent_risk_tolerance: int = 3            # caps executable actions: 1/3/5/7
     # Phase 23-D — when True (default), the risk gate consults the Council
     # BEFORE asking the operator (phone or desktop). A "abort"/"revise"
     # verdict short-circuits the prompt, so the operator never even sees a
@@ -547,7 +547,7 @@ class PhantomConfig(BaseSettings):
     ambient_late_hour_end: int = 5
 
     # ── Will Engine (sub-project A) ───────────────────────────────────────────
-    will_enabled: bool = False                 # master kill switch
+    will_enabled: bool = True                  # master kill switch
     will_tick_interval_s: int = 300            # 5-min deliberation cadence
     will_daily_llm_calls: int = 200            # daily budget — LLM calls
     will_daily_token_cap: int = 300_000        # daily budget — tokens

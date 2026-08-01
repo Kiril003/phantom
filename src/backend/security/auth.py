@@ -332,10 +332,40 @@ async def require_auth(
 
 
 async def get_current_user(
-    token_data: TokenPayload = Depends(require_auth),
+    token_str: Optional[str] = Depends(_extract_token),
     db: AsyncSession = Depends(get_db),
 ) -> User:
-    """Resolve TokenPayload → User ORM object. Raises 404 if user deleted."""
+    if not token_str:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Not authenticated",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    if token_str.startswith("pk_live_"):
+        import hashlib
+        from db.models import ApiKey
+        key_hash = hashlib.sha256(token_str.encode()).hexdigest()
+        result = await db.execute(select(ApiKey).where(ApiKey.key_hash == key_hash))
+        api_key = result.scalar_one_or_none()
+        if not api_key:
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid API Key")
+        return User(
+            id=f"api_{api_key.id}",
+            username=f"api_client_{api_key.name}",
+            role="API",
+            tenant_id=api_key.tenant_id
+        )
+
+    try:
+        token_data = verify_token(token_str)
+    except JWTError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail=f"Invalid or expired token: {exc}",
+            headers={"WWW-Authenticate": "Bearer"},
+        ) from exc
+
     result = await db.execute(select(User).where(User.id == token_data.user_id))
     user = result.scalar_one_or_none()
     if user is None:

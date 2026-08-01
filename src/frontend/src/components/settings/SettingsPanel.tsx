@@ -127,7 +127,7 @@ export default function SettingsPanel() {
   const allCategories = useMemo(() => {
     const virtual: any = {
       id: 'desktop',
-      label: 'Desktop Shell',
+      label: 'Оболонка',
       icon: <Monitor size={14} />,
       settings: [],
     };
@@ -145,19 +145,19 @@ export default function SettingsPanel() {
     };
     const billing: any = {
       id: 'billing',
-      label: 'Billing',
+      label: 'Оплата',
       icon: <CreditCard size={14} />,
       settings: [],
     };
     const apiKeys: any = {
       id: 'api_keys',
-      label: 'API Keys',
+      label: 'Ключі доступу',
       icon: <Key size={14} />,
       settings: [],
     };
     const members: any = {
       id: 'members',
-      label: 'Team Members',
+      label: 'Учасники',
       icon: <Users size={14} />,
       settings: [],
     };
@@ -2518,10 +2518,10 @@ function FamiliarControlSection() {
   }, []);
 
   const options: Array<{ id: FamiliarRarity; label: string; blurb: string }> = [
-    { id: 'off', label: 'Off', blurb: 'Familiar dormant.' },
-    { id: 'rare', label: 'Rare', blurb: '~1 in 8 attempts.' },
-    { id: 'normal', label: 'Normal', blurb: '~1 in 3 attempts.' },
-    { id: 'often', label: 'Often', blurb: '~2 in 3 attempts.' },
+    { id: 'off', label: 'Вимк.', blurb: 'Familiar dormant.' },
+    { id: 'rare', label: 'Рідко', blurb: '~1 in 8 attempts.' },
+    { id: 'normal', label: 'Звичайно', blurb: '~1 in 3 attempts.' },
+    { id: 'often', label: 'Часто', blurb: '~2 in 3 attempts.' },
   ];
 
   const handleSelect = (r: FamiliarRarity) => {

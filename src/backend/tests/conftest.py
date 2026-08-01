@@ -73,6 +73,9 @@ _TEST_DB_FD, _TEST_DB_PATH = tempfile.mkstemp(
 os.close(_TEST_DB_FD)
 os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///{_TEST_DB_PATH}")
 
+# Disable the autonomous Will during tests to prevent background DB locks
+os.environ.setdefault("WILL_ENABLED", "False")
+
 
 # ── Day-2 L-3 (audit-2026-04-29 F-15) — login lockout test isolation ─────────
 #
@@ -89,6 +92,16 @@ def _reset_login_lockout_per_test():
     login_lockout.reset_for_tests()
     yield
     login_lockout.reset_for_tests()
+
+
+@pytest.fixture(autouse=True)
+def _mock_bootstrap_pin_for_tests():
+    """Ensure that any test which invokes `ensure_default_user` directly gets
+    the legacy '000000' PIN, instead of a random one, to satisfy assertions
+    in older tests."""
+    import unittest.mock
+    with unittest.mock.patch("security.auth._generate_bootstrap_pin", return_value="000000"):
+        yield
 
 
 # ── Seed-user idempotence for tests that depend on phantom/000000 ─────────────
@@ -223,7 +236,7 @@ def _make_user_row(role: str) -> dict:
 async def _ensure_user(payload: dict):
     """Insert User row if not present. Returns the User instance."""
     from db.database import init_db, get_session
-    from db.models import User
+    from db.models import User, Tenant
     from sqlalchemy import select
 
     await init_db()
@@ -233,13 +246,20 @@ async def _ensure_user(payload: dict):
         ).scalar_one_or_none()
         if existing is not None:
             return existing
+        
+        # Create a default tenant if the user doesn't have one
+        tenant_id = payload.get("tenant_id")
+        if not tenant_id:
+            tenant = Tenant(name=f"Tenant for {payload['username']}")
+            db.add(tenant)
+            await db.flush()
+            payload["tenant_id"] = tenant.id
+            
         user = User(**payload)
         db.add(user)
         await db.commit()
-    async with get_session() as db:
-        return (
-            await db.execute(select(User).where(User.id == payload["id"]))
-        ).scalar_one_or_none()
+        await db.refresh(user)
+        return user
 
 
 def _issue_token(user_id: str, username: str, role: str) -> str:

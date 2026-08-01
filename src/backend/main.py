@@ -54,6 +54,13 @@ from api.routes_node import router as node_router
 from api.routes_chronicle import router as chronicle_router
 from api.routes_workbench import router as workbench_router
 from api.routes_tenant import router as tenant_router
+from api.routes_billing import router as billing_router
+from api.routes_api_keys import router as api_keys_router
+from api.routes_analytics import router as analytics_router
+from api.routes_stripe import router as stripe_router
+from api.routes_members import router as members_router
+from api.routes_marketplace import router as marketplace_router
+from api.stream import router as stream_router
 
 logging.basicConfig(
     level=getattr(logging, config.log_level),
@@ -903,8 +910,15 @@ def create_app() -> FastAPI:
     install_enforcement(app)
 
     # API routers
+    app.include_router(stream_router)
+    
     prefix = "/api/v1"
     app.include_router(tenant_router, prefix=prefix)
+    app.include_router(members_router, prefix=prefix)
+    app.include_router(billing_router, prefix=prefix)
+    app.include_router(api_keys_router, prefix=prefix)
+    app.include_router(analytics_router, prefix=prefix)
+    app.include_router(stripe_router, prefix=prefix)
     app.include_router(auth_router, prefix=prefix)
     app.include_router(users_router, prefix=prefix)
     app.include_router(chat_router, prefix=prefix)
@@ -924,6 +938,7 @@ def create_app() -> FastAPI:
     app.include_router(ai_router, prefix=prefix)
     app.include_router(face_router, prefix=prefix)
     app.include_router(agent_router, prefix=prefix)
+    app.include_router(marketplace_router, prefix=prefix)
     # Phase 17b — Agent Studio (CustomAgent CRUD + run + clone + cards catalog).
     app.include_router(studio_router, prefix=prefix)
     # Day-4 W-4 (ADR-XC-007): /api/v1/dynamic_source/{source} for the

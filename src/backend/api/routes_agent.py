@@ -22,8 +22,13 @@ from agent.missions.reports import compose_task_report
 from agent.kernel.runtime import agent_runtime
 from agent.schemas import CouncilSituation, InfoNeedResponse, InnerMonologue
 from agent.cognition.org_chart import get_org_chart, update_role_orders, OrgChartSchema
-from security.auth import require_auth
+from security.auth import require_auth, get_current_user
 from security.jwt_manager import TokenPayload
+from api.dependencies import get_current_tenant
+from db.database import get_db
+from db.models import AgentTask, AgentAuditEntry, User
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logger = logging.getLogger(__name__)
 
@@ -330,25 +335,60 @@ async def resume_from_checkpoint(
 async def list_tasks(
     status: str | None = Query(default=None),
     limit: int = Query(default=50, ge=1, le=500),
-    token: TokenPayload = Depends(require_auth),
+    tenant: Any = Depends(get_current_tenant),
+    user: Any = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
 ) -> dict:
-    rows = await audit_list_tasks(user_id=token.user_id, status=status, limit=limit)
-    return {"tasks": [_serialize_task(r) for r in rows]}
-
+    stmt = select(AgentTask).join(AgentTask.user).where(User.tenant_id == tenant.id)
+    if user.role != "API":
+        stmt = stmt.where(AgentTask.user_id == user.id)
+    if status:
+        stmt = stmt.where(AgentTask.status == status)
+    stmt = stmt.order_by(AgentTask.created_at.desc()).limit(limit)
+    result = await db.execute(stmt)
+    rows = list(result.scalars().all())
+    from agent.kernel.audit import _serialize_task_row
+    return {"tasks": [_serialize_task(_serialize_task_row(r)) for r in rows]}
 
 
 @router.get("/task/{task_id}")
-async def get_task(task_id: str, _: TokenPayload = Depends(require_auth)) -> dict:
-    row = await fetch_task_row(_.user_id, task_id)
+async def get_task(
+    task_id: str,
+    tenant: Any = Depends(get_current_tenant),
+    user: Any = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    stmt = select(AgentTask).join(AgentTask.user).where(
+        AgentTask.id == task_id,
+        User.tenant_id == tenant.id
+    )
+    if user.role != "API":
+        stmt = stmt.where(AgentTask.user_id == user.id)
+    result = await db.execute(stmt)
+    row = result.scalar_one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail="task not found")
-    last_audit = await fetch_audit(_.user_id, task_id, limit=50)
+    
+    last_audit_stmt = select(AgentAuditEntry).where(
+        AgentAuditEntry.user_id == user.id,
+        AgentAuditEntry.task_id == task_id
+    ).order_by(AgentAuditEntry.id.desc()).limit(50)
+    last_audit_result = await db.execute(last_audit_stmt)
+    last_audit_rows = list(reversed(last_audit_result.scalars().all()))
+    
+    from agent.kernel.audit import _serialize_task_row, fetch_audit
+    
+    # We use fetch_audit to properly parse JSON strings into Pydantic models
+    last_audit = await fetch_audit(user.id, task_id, limit=50)
+
+    # We need to manually construct the response dict to match original format
+    row_dict = _serialize_task_row(row)
     return {
-        "task": _serialize_task(row),
-        "sub_goals": row.get("sub_goals") or [],
-        "self_model": row.get("self_model"),
-        "observations": row.get("observations") or [],
-        "thought_budget": row.get("thought_budget"),
+        "task": _serialize_task(row_dict),
+        "sub_goals": row_dict.get("sub_goals") or [],
+        "self_model": row_dict.get("self_model"),
+        "observations": row_dict.get("observations") or [],
+        "thought_budget": row_dict.get("thought_budget"),
         "last_audit": [a.model_dump(mode="json") for a in reversed(last_audit)],
     }
 

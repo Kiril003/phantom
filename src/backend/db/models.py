@@ -33,14 +33,33 @@ def _now() -> datetime:
     return datetime.now(tz=timezone.utc)
 
 
+# ── Tenants (SaaS Multi-tenancy) ───────────────────────────────────────────────
+
+class Tenant(Base):
+    __tablename__ = "tenants"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    slug: Mapped[Optional[str]] = mapped_column(String(64), unique=True, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True)
+
+    users: Mapped[list["User"]] = relationship(
+        "User", back_populates="tenant", cascade="all, delete-orphan"
+    )
+
 # ── Users ──────────────────────────────────────────────────────────────────────
 
 class User(Base):
     __tablename__ = "users"
 
     id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    tenant_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=True, index=True
+    )
     username: Mapped[str] = mapped_column(String(64), unique=True, nullable=False)
     role: Mapped[str] = mapped_column(String(16), nullable=False, default="GUEST")
+    tenant_role: Mapped[str] = mapped_column(String(32), default="Member")
     rfid_uid_hash: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     pin_hash: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     avatar_url: Mapped[Optional[str]] = mapped_column(String(512), nullable=True)
@@ -52,6 +71,7 @@ class User(Base):
     behavioral_model_json: Mapped[str] = mapped_column(Text, default="{}")
 
     # Relations
+    tenant: Mapped[Optional["Tenant"]] = relationship("Tenant", back_populates="users")
     chat_sessions: Mapped[list["ChatSession"]] = relationship(
         "ChatSession", back_populates="user", cascade="all, delete-orphan"
     )
@@ -1373,3 +1393,33 @@ class TenantOrg(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, onupdate=_now, nullable=False)
 
+
+# ── API Keys & Billing (Phase C SaaS Monetization) ─────────────────────────────
+
+class Subscription(Base):
+    __tablename__ = "subscriptions"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    tenant_id: Mapped[str] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, unique=True
+    )
+    tier: Mapped[str] = mapped_column(String(32), default="Free")
+    tokens_used: Mapped[int] = mapped_column(Integer, default=0)
+    max_tokens: Mapped[int] = mapped_column(Integer, default=1000)
+    stripe_customer_id: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+
+    tenant: Mapped["Tenant"] = relationship("Tenant", foreign_keys=[tenant_id])
+
+
+class ApiKey(Base):
+    __tablename__ = "api_keys"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    tenant_id: Mapped[str] = mapped_column(
+        ForeignKey("tenants.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    key_hash: Mapped[str] = mapped_column(String(128), nullable=False)
+    name: Mapped[str] = mapped_column(String(128), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
+
+    tenant: Mapped["Tenant"] = relationship("Tenant", foreign_keys=[tenant_id])

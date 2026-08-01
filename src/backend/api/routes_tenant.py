@@ -14,7 +14,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from core.tenant import get_current_tenant_id, set_current_tenant_id
 from db.database import get_db
-from db.models import TenantOrg, User
+from db.models import Tenant, User
 from security.auth import require_auth
 from security.permissions import require_root
 
@@ -23,81 +23,111 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/tenant", tags=["tenant"])
 
 
-class CreateTenantOrgRequest(BaseModel):
+class CreateTenantRequest(BaseModel):
     name: str = Field(..., min_length=2, max_length=128)
     slug: str = Field(..., min_length=2, max_length=64, pattern="^[a-z0-9-]+$")
-    plan_tier: str = Field("FREE", pattern="^(FREE|PRO|ENTERPRISE)$")
-    max_users: int = Field(5, ge=1, le=1000)
-    max_ai_tokens_monthly: int = Field(100000, ge=1000)
 
 
-class TenantOrgResponse(BaseModel):
+class TenantResponse(BaseModel):
     id: str
     name: str
-    slug: str
-    plan_tier: str
-    max_users: int
-    max_ai_tokens_monthly: int
+    slug: Optional[str]
     created_at: str
+    is_active: bool
 
 
-def _tenant_to_dict(org: TenantOrg) -> dict[str, Any]:
+def _tenant_to_dict(org: Tenant) -> dict[str, Any]:
     return {
         "id": org.id,
         "name": org.name,
         "slug": org.slug,
-        "plan_tier": org.plan_tier,
-        "max_users": org.max_users,
-        "max_ai_tokens_monthly": org.max_ai_tokens_monthly,
         "created_at": org.created_at.isoformat(),
+        "is_active": org.is_active,
     }
 
 
-@router.post("/orgs", response_model=TenantOrgResponse, status_code=status.HTTP_201_CREATED)
-async def create_tenant_org(
-    req: CreateTenantOrgRequest,
-    current_user: User = Depends(require_root),
+@router.post("/create", response_model=TenantResponse, status_code=status.HTTP_201_CREATED)
+async def create_tenant(
+    req: CreateTenantRequest,
+    current_user: User = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
-    """Create a new SaaS organization (ROOT tier only)."""
-    existing = await db.execute(select(TenantOrg).where(TenantOrg.slug == req.slug))
+    """Create a new SaaS organization and set caller as Owner."""
+    existing = await db.execute(select(Tenant).where(Tenant.slug == req.slug))
     if existing.scalar_one_or_none() is not None:
         raise HTTPException(
             status_code=status.HTTP_409_CONFLICT,
             detail=f"Organization slug '{req.slug}' already exists",
         )
 
-    org = TenantOrg(
+    org = Tenant(
         id=str(uuid.uuid4()),
         name=req.name,
         slug=req.slug,
-        plan_tier=req.plan_tier,
-        max_users=req.max_users,
-        max_ai_tokens_monthly=req.max_ai_tokens_monthly,
     )
     db.add(org)
+    
+    current_user.tenant_id = org.id
+    current_user.tenant_role = "Owner"
+    db.add(current_user)
+
     await db.commit()
     await db.refresh(org)
     return _tenant_to_dict(org)
 
 
-@router.get("/orgs", response_model=list[TenantOrgResponse])
-async def list_tenant_orgs(
-    current_user: User = Depends(require_root),
-    db: AsyncSession = Depends(get_db),
-) -> list[dict]:
-    """List all registered SaaS organizations (ROOT tier only)."""
-    res = await db.execute(select(TenantOrg).order_by(TenantOrg.created_at.desc()))
-    orgs = res.scalars().all()
-    return [_tenant_to_dict(o) for o in orgs]
-
-
 @router.get("/current", response_model=dict)
 async def get_current_tenant(current_user: User = Depends(require_auth)) -> dict:
     """Return the active tenant context for the current request."""
+    # require_auth віддає TokenPayload, а не User — анотація нижче бреше,
+    # і .id валив цей роут п'ятисоткою на кожному відкритті штабу.
     return {
         "tenant_id": get_current_tenant_id(),
-        "user_id": current_user.id,
+        "user_id": getattr(current_user, "user_id", None) or getattr(current_user, "id", None),
         "username": current_user.username,
         "role": current_user.role,
+        "tenant_role": getattr(current_user, "tenant_role", "Member"),
     }
+
+class OnboardingRequest(BaseModel):
+    name: str = Field(..., min_length=2, max_length=128)
+    slug: str = Field(..., min_length=2, max_length=64, pattern="^[a-z0-9-]+$")
+
+@router.post("/create")
+async def onboarding_create_workspace(
+    req: OnboardingRequest,
+    current_user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+):
+    """Create a workspace during onboarding."""
+    # Check if slug exists
+    existing = await db.execute(select(TenantOrg).where(TenantOrg.slug == req.slug))
+    if existing.scalar_one_or_none() is not None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Workspace slug '{req.slug}' is already taken",
+        )
+
+    # Create new workspace
+    new_org_id = str(uuid.uuid4())
+    org = TenantOrg(
+        id=new_org_id,
+        name=req.name,
+        slug=req.slug,
+        plan_tier="FREE",
+        max_users=5,
+        max_ai_tokens_monthly=100000,
+    )
+    db.add(org)
+
+    # Assign current user to this workspace as Owner
+    current_user.tenant_id = new_org_id
+    current_user.tenant_role = "Owner"
+    db.add(current_user)
+
+    await db.commit()
+    
+    # Update current execution context
+    set_current_tenant_id(new_org_id)
+    
+    return {"status": "success", "workspace": _tenant_to_dict(org)}

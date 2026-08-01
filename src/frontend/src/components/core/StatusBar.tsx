@@ -116,7 +116,7 @@ export function StatusBar() {
       <div
         data-testid="status-bar"
         data-compact="true"
-        className={`${isPro ? 'bg-black border-b border-white/5' : 'glass'} w-[1024px] flex items-center shrink-0 relative`}
+        className={`${isPro ? 'bg-black border-b border-white/5' : 'glass'} w-full min-w-[1024px] flex items-center shrink-0 relative`}
         style={{
           height: 24,
           padding: '0 10px',

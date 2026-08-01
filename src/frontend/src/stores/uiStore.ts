@@ -40,15 +40,15 @@ export interface ChromeState {
 // Bumped to v2 so first-run after the discoverability fix lands the new
 // default (HUD expanded so Stop/Side-Channel/Vault are visible without
 // hunting). Existing v1 localStorage rows are ignored.
-const CHROME_KEY = 'phantom.chrome.v2';
+const CHROME_KEY = 'phantom.chrome.v3';
 const CHROME_DEFAULT: ChromeState = {
-  statusBar: true,
+  statusBar: false,
   roster: true,
-  // HUD expanded by default — it owns the Stop button and the
-  // Side-Channel / Vault / Parallel-chat icons. Collapsing it hides
-  // those, which made operators think the controls were broken.
+  // Розгорнуті: тулбар — це головна навігація продукту, а HUD тримає
+  // Stop і доступ до сховища. Згорнуті за замовчуванням, вони читались
+  // як «кнопки зникли».
   hud: false,
-  toolbar: true,
+  toolbar: false,
 };
 
 function loadChromePersisted(): ChromeState {

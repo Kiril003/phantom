@@ -12,13 +12,6 @@ import {
 import { Bot, Zap, Activity, Users, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { request } from '../../services/api';
 
-interface OverviewDay {
-  name: string;
-  tokens: number;
-  agents: number;
-  sessions: number;
-}
-
 interface OverviewOperator {
   name: string;
   role: string;
@@ -26,13 +19,11 @@ interface OverviewOperator {
 }
 
 interface Overview {
-  total_tokens?: number | null;
+  tokens_used_this_month?: number | null;
+  max_tokens?: number | null;
   active_agents?: number | null;
-  daily_sessions?: number | null;
-  tokens_trend?: string | null;
-  agents_trend?: string | null;
-  sessions_trend?: string | null;
-  series?: OverviewDay[] | null;
+  total_sessions?: number | null;
+  daily_usage?: { date: string; tokens: number }[] | null;
   operators?: OverviewOperator[] | null;
 }
 
@@ -66,11 +57,10 @@ function useOverview(): Load {
       .then((data) => {
         if (!alive) return;
         const empty =
-          data.total_tokens == null &&
+          data.tokens_used_this_month == null &&
           data.active_agents == null &&
-          data.daily_sessions == null &&
-          !data.series?.length &&
-          !data.operators?.length;
+          data.total_sessions == null &&
+          !data.daily_usage?.length;
         setState(empty ? { s: 'empty' } : { s: 'ok', data });
       })
       .catch((err: unknown) => {
@@ -101,7 +91,10 @@ function num(v: number | null | undefined): string | null {
 export default function AnalyticsOverview() {
   const load = useOverview();
   const data = load.s === 'ok' ? load.data : null;
-  const series = data?.series ?? [];
+  const series = (data?.daily_usage ?? []).map((d) => ({
+    name: new Date(d.date).toLocaleDateString('uk-UA', { weekday: 'short' }),
+    tokens: d.tokens,
+  }));
   const operators = data?.operators ?? [];
 
   return (
@@ -131,23 +124,23 @@ export default function AnalyticsOverview() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <MetricCard
-            title="Оброблено токенів"
-            value={num(data?.total_tokens)}
-            trend={data?.tokens_trend ?? null}
+            title="Токенів за місяць"
+            value={num(data?.tokens_used_this_month)}
+            trend={data?.max_tokens ? `з ${nf.format(data.max_tokens)}` : null}
             load={load}
             icon={<Zap className="text-amber-500" size={24} />}
           />
           <MetricCard
             title="Активних агентів"
             value={num(data?.active_agents)}
-            trend={data?.agents_trend ?? null}
+            trend={null}
             load={load}
             icon={<Bot className="text-emerald-500" size={24} />}
           />
           <MetricCard
-            title="Сеансів за добу"
-            value={num(data?.daily_sessions)}
-            trend={data?.sessions_trend ?? null}
+            title="Усього сеансів"
+            value={num(data?.total_sessions)}
+            trend={null}
             load={load}
             icon={<Activity className="text-blue-500" size={24} />}
           />

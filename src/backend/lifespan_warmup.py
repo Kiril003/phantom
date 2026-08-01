@@ -174,12 +174,53 @@ async def _lane_voice_preload() -> None:
 # ─────────────────────────────────────────────────────────────── orchestrator ──
 
 
+
+async def _lane_home_tenant() -> None:
+    """Кожен користувач мусить мати свій простір.
+
+    SaaS-шар зробив tenant обов'язковим для аналітики, чату й решти
+    роутів, але жодного простору ніхто не створює — свіже ядро віддавало
+    403 «User does not belong to any tenant» на власний перший екран.
+    Питати такого в оператора не можна: простір — це не конфігурація.
+    """
+    try:
+        import uuid
+        from db.database import get_session
+        from db.models import Tenant, User
+        from sqlalchemy import select as _select
+
+        async with get_session() as db:
+            orphans = (await db.execute(
+                _select(User).where(User.tenant_id.is_(None))
+            )).scalars().all()
+            if not orphans:
+                return
+            tenant = (await db.execute(_select(Tenant).limit(1))).scalar_one_or_none()
+            if tenant is None:
+                tenant = Tenant(
+                    id=str(uuid.uuid4()),
+                    name="Особистий простір",
+                    slug="home",
+                    is_active=True,
+                )
+                db.add(tenant)
+                await db.flush()
+            for user in orphans:
+                user.tenant_id = tenant.id
+            await db.commit()
+            logger.info("home tenant: %d користувач(ів) прив'язано", len(orphans))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("home tenant lane skipped: %s", exc)
+        lifespan_g2_failures_total.inc(lane="home_tenant")
+
+
 _G2_LANES = (
     ("minilm", _lane_minilm),
     ("chroma_eager", _lane_chroma_eager),
     ("chroma_janitor", _lane_chroma_janitor),
     ("cpu_sampler", _lane_cpu_sampler),
     ("voice_preload", _lane_voice_preload),
+    ("home_tenant", _lane_home_tenant),
 )
 
 

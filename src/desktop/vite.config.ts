@@ -9,6 +9,12 @@ export default defineConfig({
   server: {
     port: 1420,
     strictPort: true,
+    // The backend's CORS allow-list has no entry for a Vite dev port, so REST
+    // goes same-origin through here. The packaged build talks to 8000 direct
+    // from tauri://localhost, which the allow-list does cover.
+    proxy: {
+      '/api': { target: 'http://127.0.0.1:8000', changeOrigin: false },
+    },
   },
   envPrefix: ['VITE_', 'AEGIS_'],
   build: {

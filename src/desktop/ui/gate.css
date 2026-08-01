@@ -1,0 +1,255 @@
+/* The two surfaces the operator touches. Everything else on the Film is
+   pointer-transparent (film.css); these two must claim the cursor back, or the
+   PIN can never be typed. */
+
+.gate {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(2, 6, 23, 0.86);
+  pointer-events: auto;
+  animation: gate-arrive 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.gate[hidden] {
+  display: none;
+}
+
+@keyframes gate-arrive {
+  from {
+    opacity: 0;
+    filter: blur(8px);
+  }
+  to {
+    opacity: 1;
+    filter: blur(0);
+  }
+}
+
+.gate-panel {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 18px;
+  width: min(560px, 84vw);
+  padding: 40px 44px 36px;
+  box-sizing: border-box;
+  border: 1px solid var(--accent);
+  border-radius: 22px;
+  background: rgba(15, 23, 42, 0.95);
+  box-shadow:
+    0 30px 80px -20px rgba(2, 6, 23, 0.9),
+    0 0 60px var(--accent-glow);
+}
+
+.gate-mark {
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0.42em;
+  text-transform: uppercase;
+  color: var(--accent);
+  opacity: 0.9;
+}
+
+.gate-ask {
+  font-family: var(--font-serif);
+  font-style: italic;
+  font-size: 26px;
+  color: var(--ink-primary);
+}
+
+.gate-tiles {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 14px;
+}
+
+.gate-tile {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  min-width: 92px;
+  min-height: 92px;
+  padding: 12px 14px;
+  border: 1px solid rgba(148, 163, 184, 0.28);
+  border-radius: 16px;
+  background: rgba(2, 6, 23, 0.5);
+  color: var(--ink-secondary);
+  font-family: var(--font-display);
+  font-size: 14px;
+  cursor: pointer;
+  transition:
+    border-color 0.25s ease,
+    color 0.25s ease,
+    box-shadow 0.25s ease;
+}
+
+.gate-tile:hover,
+.gate-tile.chosen {
+  border-color: var(--accent);
+  color: var(--ink-primary);
+  box-shadow: 0 0 26px var(--accent-glow);
+}
+
+.gate-face {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--accent-radial);
+  color: #0b1120;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.gate-form {
+  width: 100%;
+}
+
+.gate-form[hidden] {
+  display: none;
+}
+
+.gate-pin {
+  width: 100%;
+  padding: 16px 22px;
+  box-sizing: border-box;
+  border: 1px solid var(--accent);
+  border-radius: 16px;
+  outline: none;
+  background: rgba(2, 6, 23, 0.75);
+  color: var(--ink-primary);
+  font-family: var(--font-display);
+  font-size: 22px;
+  letter-spacing: 0.5em;
+  text-align: center;
+  caret-color: var(--accent);
+}
+
+.gate-pin::placeholder {
+  letter-spacing: 0.2em;
+  color: var(--ink-muted);
+}
+
+.gate[data-busy='yes'] .gate-pin,
+.gate[data-busy='yes'] .gate-tile {
+  opacity: 0.55;
+  pointer-events: none;
+}
+
+.gate-note {
+  min-height: 20px;
+  max-width: 440px;
+  text-align: center;
+  font-family: var(--font-display);
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--ink-secondary);
+}
+
+.gate-note[data-tone='warn'] {
+  color: #fca5a5;
+}
+
+.gate-retry {
+  padding: 10px 22px;
+  border: 1px solid rgba(148, 163, 184, 0.35);
+  border-radius: 12px;
+  background: transparent;
+  color: var(--ink-secondary);
+  font-family: var(--font-display);
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.gate-retry[hidden] {
+  display: none;
+}
+
+.gate-retry:hover {
+  border-color: var(--accent);
+  color: var(--ink-primary);
+}
+
+/* ── The composer ───────────────────────────────────────────────────────── */
+
+.composer {
+  position: fixed;
+  left: 50%;
+  bottom: 34px;
+  transform: translateX(-50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  width: min(720px, 76vw);
+  pointer-events: auto;
+}
+
+.composer[hidden] {
+  display: none;
+}
+
+.composer-line {
+  width: 100%;
+  padding: 15px 24px;
+  box-sizing: border-box;
+  border: 1px solid var(--accent);
+  border-radius: 18px;
+  outline: none;
+  background: rgba(15, 23, 42, 0.95);
+  box-shadow:
+    0 24px 60px -12px rgba(2, 6, 23, 0.8),
+    0 0 40px var(--accent-glow);
+  color: var(--ink-primary);
+  font-family: var(--font-display);
+  font-size: 18px;
+  caret-color: var(--accent);
+  transition: opacity 0.18s ease;
+}
+
+.composer-line::placeholder {
+  font-family: var(--font-serif);
+  font-style: italic;
+  color: var(--ink-muted);
+}
+
+.composer[data-waiting='yes'] .composer-line {
+  opacity: 0.6;
+}
+
+.composer-note {
+  min-height: 16px;
+  font-family: var(--font-display);
+  font-size: 12px;
+  letter-spacing: 0.02em;
+  color: var(--ink-muted);
+  text-shadow: 0 1px 8px rgba(2, 6, 23, 0.9);
+}
+
+.composer[data-waiting='yes'] .composer-note {
+  animation: composer-wait 1.6s ease-in-out infinite;
+}
+
+@keyframes composer-wait {
+  0%,
+  100% {
+    opacity: 0.45;
+  }
+  50% {
+    opacity: 0.9;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gate,
+  .composer-note {
+    animation: none;
+  }
+}

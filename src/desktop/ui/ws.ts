@@ -5,6 +5,8 @@ export type HubStatus = 'connecting' | 'open' | 'absent';
 export interface HubClientOptions {
   url: string;
   channels: string[];
+  /** Read at every (re)connect so a refreshed JWT lands on the next socket. */
+  token?: () => string | null;
   onEnvelope: (env: HubEnvelope) => void;
   onStatus: (status: HubStatus) => void;
 }
@@ -16,10 +18,14 @@ export function nextDelayMs(attempt: number, random: () => number = Math.random)
   return Math.round(base + jitter);
 }
 
+export function socketUrl(base: string, token: string | null): string {
+  return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+}
+
 /**
  * One WS connection to the PHANTOM hub, narrowed to the Film's channels via
- * the `{"control":"subscribe"}` message (websocket_hub.py, Phase 19-6).
- * Anonymous — the Film renders presence, it holds no privileges.
+ * the `{"control":"subscribe"}` message (websocket_hub.py, Phase 19-6). Without
+ * that narrowing the hub fans out its 30 fps `oled` preview to every client.
  */
 export class HubClient {
   private ws: WebSocket | null = null;
@@ -37,12 +43,29 @@ export class HubClient {
   stop(): void {
     this.stopped = true;
     if (this.timer) clearTimeout(this.timer);
-    this.ws?.close();
+    this.timer = null;
+    const ws = this.ws;
+    this.ws = null;
+    if (ws) {
+      ws.onclose = null;
+      ws.onerror = null;
+      ws.close();
+    }
+  }
+
+  get live(): boolean {
+    return this.ws?.readyState === WebSocket.OPEN;
+  }
+
+  send(channel: string, type: string, data: Record<string, unknown>): boolean {
+    if (!this.live) return false;
+    this.ws!.send(JSON.stringify({ channel, type, data }));
+    return true;
   }
 
   private open(): void {
     this.opts.onStatus(this.attempt === 0 ? 'connecting' : 'absent');
-    const ws = new WebSocket(this.opts.url);
+    const ws = new WebSocket(socketUrl(this.opts.url, this.opts.token?.() ?? null));
     this.ws = ws;
 
     ws.onopen = () => {

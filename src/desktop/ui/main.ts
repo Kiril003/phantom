@@ -5,6 +5,7 @@ import './film.css';
 import './facet.css';
 import './deep.css';
 import './office.css';
+import './gate.css';
 
 import { HubClient, HubStatus } from './ws';
 import { Office } from './office/office';
@@ -14,9 +15,12 @@ import { Sigil } from './sigil';
 import { FacetManager, LedgerRow, MonitorTask } from './facet/manager';
 import { Verb } from './facet/types';
 import { Deep } from './deep/deep';
+import { Gate } from './gate';
+import { Composer } from './composer';
+import { WS_BASE, forgetSession, refreshToken, storedToken } from './session';
 import { HubEnvelope, StateTransitionPayload, extractText, parseSystemState, toMurmurLine } from './types';
 
-const BACKEND = import.meta.env.AEGIS_BACKEND ?? 'ws://127.0.0.1:8000';
+const BACKEND = WS_BASE;
 const CHANNELS = ['state', 'chat', 'alert', 'familiar', 'background_events', 'agent.stream'];
 
 const tauri = (window as { __TAURI__?: any }).__TAURI__;
@@ -51,11 +55,25 @@ const deep = new Deep(film, {
   resurface: () => facets.surfaceReturn(),
 });
 
+const gate = new Gate(film);
+const composer = new Composer(film, (text) =>
+  hub.send('chat', 'message', { content: text, input_method: 'text', session_id: sessionId }),
+);
+
+let sessionId: string | null = null;
+
 let wasAbsent = false;
 
 function onStatus(status: HubStatus): void {
   const absent = status !== 'open';
   sigil.setAbsent(absent);
+  composer.setLink(
+    status === 'open'
+      ? ''
+      : status === 'connecting'
+        ? 'Зʼєднуюсь із ядром…'
+        : 'Звʼязок обірвано — вертаюсь…',
+  );
   if (status === 'absent' && !wasAbsent) {
     lane.murmur('Звʼязок із ядром втрачено — я поруч, але глухий.', 'entity');
     wasAbsent = true;
@@ -191,6 +209,26 @@ function dossierLines(): string[] {
   }
 };
 
+function onChatMessage(data: Record<string, unknown>): void {
+  const sid = data.session_id;
+  if (typeof sid === 'string') sessionId = sid;
+  const message = data.message as Record<string, unknown> | undefined;
+  if (!message || message.role !== 'assistant') return;
+  const text = extractText(message);
+  if (text) lane.murmur(toMurmurLine(text), 'entity');
+  composer.answered();
+  sigil.pulse();
+}
+
+function onChatError(data: Record<string, unknown>): void {
+  const detail = typeof data.detail === 'string' ? data.detail : '';
+  if (/not authenticated/i.test(detail)) {
+    void reauthenticate();
+    return;
+  }
+  composer.failed(detail ? toMurmurLine(detail) : 'Ядро не змогло відповісти.');
+}
+
 function onEnvelope(env: HubEnvelope): void {
   switch (env.channel) {
     case 'state': {
@@ -205,6 +243,10 @@ function onEnvelope(env: HubEnvelope): void {
         const text = extractText(env.data);
         if (text) lane.murmur(toMurmurLine(text), 'entity');
         sigil.pulse();
+      } else if (env.type === 'message') {
+        onChatMessage(env.data);
+      } else if (env.type === 'error') {
+        onChatError(env.data);
       } else if (env.type.startsWith('workbench.')) {
         sigil.spark();
       }
@@ -227,9 +269,51 @@ function onEnvelope(env: HubEnvelope): void {
   }
 }
 
-new HubClient({
+let token: string | null = null;
+
+const hub = new HubClient({
   url: `${BACKEND}/ws`,
   channels: CHANNELS,
+  token: () => token,
   onEnvelope,
   onStatus,
-}).connect();
+});
+
+/** The JWT died mid-session: spend the refresh grace once, then ask again. */
+async function reauthenticate(): Promise<void> {
+  hub.stop();
+  composer.hide();
+  const fresh = token ? await refreshToken(token) : null;
+  if (fresh) {
+    token = fresh;
+    composer.show();
+    hub.connect();
+    lane.murmur('Перепідписався. Продовжуй.', 'system');
+    return;
+  }
+  token = null;
+  sessionId = null;
+  forgetSession();
+  lane.murmur('Сесія скінчилась. Назвись іще раз.', 'system');
+  await signIn();
+}
+
+async function signIn(): Promise<void> {
+  const signed = await gate.open();
+  token = signed.token;
+  composer.show();
+  hub.connect();
+  lane.murmur(`Слухаю тебе, ${signed.username}.`, 'entity');
+}
+
+async function boot(): Promise<void> {
+  token = storedToken();
+  if (!token) {
+    await signIn();
+    return;
+  }
+  composer.show();
+  hub.connect();
+}
+
+void boot();

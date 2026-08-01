@@ -28,7 +28,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import workletUrl from '../workers/voice-capture.worklet.js?url';
 import { useMicStream } from './useMicStream';
 import { useInputMode } from '../stores/inputModeStore';
-import { MicVAD } from '@ricky0123/vad-web';
+// Лише тип: статичний імпорт значення клав увесь застосунок білим екраном.
+import type { MicVAD as MicVADType } from '@ricky0123/vad-web';
 
 export type AlwaysOnStatus =
   | 'disabled'          // settings toggle is off; hook inert
@@ -350,7 +351,7 @@ export function useVoiceAlwaysOn(config: AlwaysOnConfig = {}) {
   // it onto the wire. ``clientSpeakingRef.current === true`` is the gate
   // that decides whether worklet-emitted PCM frames are forwarded to the
   // backend or accumulated as preroll for the next speech_start.
-  const micVadRef = useRef<MicVAD | null>(null);
+  const micVadRef = useRef<MicVADType | null>(null);
   const clientSpeakingRef = useRef<boolean>(false);
   const prerollRef = useRef<ArrayBuffer[]>([]);
 
@@ -671,6 +672,7 @@ export function useVoiceAlwaysOn(config: AlwaysOnConfig = {}) {
       if (clientVadEnabled) {
         try {
           const sharedStream = stream;
+          const { MicVAD } = await import('@ricky0123/vad-web');
           const vad = await MicVAD.new({
             model: 'v5',
             // Local Silero ONNX + worklet bundle (in public/vad/). The

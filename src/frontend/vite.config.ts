@@ -42,15 +42,9 @@ export default defineConfig({
       },
     },
   },
-  // Day-5 fix: onnxruntime-web ships ESM modules that reference
-  // sibling .wasm/.mjs artifacts via dynamic import (e.g.
-  // ort-wasm-simd-threaded.mjs). Vite's dep-optimizer rewrites the
-  // .mjs path during esbuild prebundle and the threaded WASM
-  // file ends up missing from .vite/deps, blowing the dev server.
-  // The runtime is consumed only by useVoiceAlwaysOn (MicVAD); we
-  // exclude it from prebundle so Vite serves the package as-is.
+  // onnxruntime-web тягне сусідні .wasm динамічним імпортом — оптимізатор їх губить.
   optimizeDeps: {
-    exclude: ['onnxruntime-web', '@ricky0123/vad-web'],
+    exclude: ['onnxruntime-web'],
   },
   build: {
     outDir: 'dist',

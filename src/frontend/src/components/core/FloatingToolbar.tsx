@@ -302,7 +302,10 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
     return () => document.removeEventListener('pointerdown', onDown);
   }, [moreMenuOpen, setMoreMenuOpen]);
 
-  const list = items ?? primary;
+  // Другорядні дії жили в меню «Більше», тож Поліс, Воля, Голос, Вартовий,
+  // Привид і Система були невидимі — саме це читалось як «розділи не
+  // відкриваються». У доку є місце: показуємо все.
+  const list = items ?? [...primary, ...secondary];
 
   // OperatorLayout v3 chrome-collapse: when `collapsed=true` the toolbar
   // hides into a small handle at the bottom centre, freeing ~60px of

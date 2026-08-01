@@ -86,6 +86,7 @@ export function StatusBar() {
   const currentTheme = useSettingsStore((s) => s.getActiveTheme());
   const isPro = currentTheme === 'pro-console';
 
+  const [collapsed, toggleCollapsed] = useChromeCollapse('statusBar');
   if (state === SystemState.GHOST || state === SystemState.DREAM) return null;
 
   const bpm = context?.body.breathing_bpm;
@@ -109,7 +110,6 @@ export function StatusBar() {
   const tone = stateTone(state);
   const operatorName = user?.username ?? 'оператор';
 
-  const [collapsed, toggleCollapsed] = useChromeCollapse('statusBar');
 
   if (collapsed) {
     return (

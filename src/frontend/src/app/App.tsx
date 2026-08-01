@@ -129,7 +129,7 @@ function PhantomLoader() {
   return (
     <div
       className="w-full h-full flex items-center justify-center"
-      style={{ background: 'var(--surface-void)' }}
+      style={{ background: 'var(--surface-base)' }}
     >
       <div className="flex flex-col items-center gap-3">
         <div
@@ -181,7 +181,7 @@ export function App() {
           <ErrorBoundary>
           <div
             className="w-full h-full min-h-screen overflow-hidden relative flex"
-            style={{ background: 'var(--surface-void)' }}
+            style={{ background: 'var(--surface-base)' }}
           >
             <MainRouter />
             <Overlays />

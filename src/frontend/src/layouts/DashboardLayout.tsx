@@ -23,7 +23,7 @@ export default function DashboardLayout() {
   return (
     <div
       className="flex h-screen w-screen overflow-hidden font-sans"
-      style={{ background: 'var(--surface-void)', color: 'var(--ink-primary)' }}
+      style={{ background: 'var(--surface-base)', color: 'var(--ink-primary)' }}
     >
       <motion.aside
         initial={{ x: -240, opacity: 0 }}
@@ -46,7 +46,7 @@ export default function DashboardLayout() {
               className="w-7 h-7 rounded-lg flex items-center justify-center"
               style={{ background: 'var(--accent)', boxShadow: '0 0 16px var(--accent-glow)' }}
             >
-              <Hexagon size={16} style={{ color: 'var(--surface-void)' }} />
+              <Hexagon size={16} style={{ color: 'var(--surface-base)' }} />
             </div>
             <span
               className="tracking-widest text-xs font-bold"
@@ -101,7 +101,7 @@ export default function DashboardLayout() {
 
       <main
         className="flex-1 relative flex flex-col overflow-hidden"
-        style={{ background: 'var(--surface-void)' }}
+        style={{ background: 'var(--surface-deep)' }}
       >
         <motion.div
           initial={{ opacity: 0, y: 20 }}

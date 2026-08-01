@@ -72,11 +72,11 @@ export default function FocusLayout() {
           </Card>
 
           <Card>
-            <CardHead icon={<HardDrive size={14} strokeWidth={1.75} />} label="DISK" />
+            <CardHead icon={<HardDrive size={14} strokeWidth={1.75} />} label="ДИСК" />
             <Gauge1 value={disk} unit="%" />
           </Card>
 
-          <SectionLabel>ENVIRONMENT</SectionLabel>
+          <SectionLabel>СЕРЕДОВИЩЕ</SectionLabel>
           <Card>
             <CardRow
               icon={<Thermometer size={14} strokeWidth={1.75} />}
@@ -177,11 +177,11 @@ export default function FocusLayout() {
 
         {/* ─── Right — spatial + log ───────────────────────────────────── */}
         <section className="col-span-3 flex flex-col gap-3 min-h-0">
-          <SectionLabel>SPATIAL</SectionLabel>
+          <SectionLabel>ПРОСТІР</SectionLabel>
           <Card>
             <CardRow
               icon={<Radar size={14} strokeWidth={1.75} />}
-              label="Presence"
+              label="Присутність"
               value={context?.presence.user_detected ? 'Operator' : 'None'}
             />
             <CardRow
@@ -192,7 +192,7 @@ export default function FocusLayout() {
             />
             <CardRow
               icon={<Gauge size={14} strokeWidth={1.75} />}
-              label="Static"
+              label="Шум"
               value={context?.body.static_energy != null ? String(context.body.static_energy) : '—'}
               muted={context?.body.static_energy == null}
             />

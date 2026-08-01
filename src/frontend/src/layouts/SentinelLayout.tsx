@@ -428,7 +428,7 @@ export default function SentinelLayout() {
         {/* Live stats — DISTANCE + MOTION */}
         <div className="grid grid-cols-2 gap-2">
           <CoralStatCard
-            label="DISTANCE"
+            label="ВІДСТАНЬ"
             value={otherDistance != null ? otherDistance.toString() : '—'}
             unit="cm"
             trailingIcon={<TrendingDown size={11} />}
@@ -442,7 +442,7 @@ export default function SentinelLayout() {
             }
           />
           <CoralStatCard
-            label="MOTION"
+            label="РУХ"
             value={motionEnergy != null ? Math.round(motionEnergy).toString() : '—'}
             trailingIcon={<Activity size={11} />}
             bars={[3, 6, 8, 5, 9, 12, 10, 8, 11, 13, 12, 10]}
@@ -453,7 +453,7 @@ export default function SentinelLayout() {
         <div className="flex flex-col gap-1.5">
           <ThreatRow
             icon={<Eye size={14} />}
-            label="PRESENCE"
+            label="ПРИСУТНІСТЬ"
             value={
               otherDetected ? 'Detected · human-shape' : 'Clear · area empty'
             }
@@ -461,7 +461,7 @@ export default function SentinelLayout() {
           />
           <ThreatRow
             icon={<Volume2 size={14} />}
-            label="AUDIO"
+            label="ЗВУК"
             value={
               motionEnergy != null && motionEnergy > 30
                 ? `${Math.min(99, Math.round(40 + motionEnergy / 4))} dB · footsteps`
@@ -477,7 +477,7 @@ export default function SentinelLayout() {
           />
           <ThreatRow
             icon={<Activity size={14} />}
-            label="STATIC NOISE"
+            label="СТАТИЧНИЙ ШУМ"
             value={
               staticEnergy != null
                 ? `${Math.round(staticEnergy)} (${staticEnergy > 70 ? 'high' : 'low'})`
@@ -545,11 +545,11 @@ export default function SentinelLayout() {
         <div className="flex gap-1.5">
           <ActionButton
             icon={<Megaphone size={14} />}
-            label="ALARM"
+            label="ТРИВОГА"
             primary
           />
-          <ActionButton icon={<Video size={14} />} label="RECORD" />
-          <ActionButton icon={<Check size={14} />} label="DISMISS" />
+          <ActionButton icon={<Video size={14} />} label="ЗАПИС" />
+          <ActionButton icon={<Check size={14} />} label="ЗАКРИТИ" />
         </div>
 
             {/* Footer — last-scan timestamp */}

@@ -349,7 +349,7 @@ export default function ShadowLayout() {
         {/* Breath bars */}
         <div style={{ marginTop: 10 }}>
           <div className="micro-label">
-            BREATH · {bpm != null ? `${bpm}/MIN` : '—'}
+            ДИХАННЯ · {bpm != null ? `${bpm}/хв` : '—'}
           </div>
           <div
             style={{

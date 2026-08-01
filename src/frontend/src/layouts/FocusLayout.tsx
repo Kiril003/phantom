@@ -59,7 +59,7 @@ export default function FocusLayout() {
       <main className="flex-1 grid grid-cols-12 gap-2 px-2 py-2 min-h-0 z-10">
         {/* ─── Left — system + environment ─────────────────────────────── */}
         <section className="col-span-3 flex flex-col gap-3 min-h-0">
-          <SectionLabel>SYSTEM_CORE</SectionLabel>
+          <SectionLabel>ЯДРО СИСТЕМИ</SectionLabel>
 
           <Card>
             <CardHead icon={<Cpu size={14} strokeWidth={1.75} />} label="CPU" />
@@ -169,8 +169,8 @@ export default function FocusLayout() {
               }}
             >
               {pending > 0
-                ? `${pending} thing${pending > 1 ? 's' : ''} queued · stay sharp`
-                : 'no interrupts · breath in'}
+                ? `у черзі ${pending} · тримай темп`
+                : 'ніщо не відволікає · вдихни'}
             </p>
           </motion.div>
         </section>
@@ -198,49 +198,49 @@ export default function FocusLayout() {
             />
           </Card>
 
-          <SectionLabel>SYS_LOG</SectionLabel>
+          <SectionLabel>ЖУРНАЛ</SectionLabel>
           <Card className="flex-1 min-h-0">
             <div className="flex-1 overflow-y-auto min-h-0 pr-1">
               <LogLine
                 tone={wsConnected ? 'ok' : 'warn'}
-                message={wsConnected ? 'WebSocket hub: online' : 'WebSocket hub: offline'}
+                message={wsConnected ? 'Вузол зв\'язку: на лінії' : 'Вузол зв\'язку: немає'}
                 sub="realtime"
               />
               <LogLine
                 tone={context ? 'ok' : 'muted'}
-                message={context ? 'Context engine: tick 500ms' : 'Context engine: awaiting data'}
-                sub={context ? 'live' : '—'}
+                message={context ? 'Рушій контексту: такт 500 мс' : 'Рушій контексту: чекає даних'}
+                sub={context ? 'наживо' : '—'}
               />
               <LogLine
                 tone={esp32 === 'online' ? 'ok' : esp32 === 'disabled' ? 'muted' : 'warn'}
                 message={
                   esp32 === 'online'
-                    ? 'ESP32 serial bridge: connected'
+                    ? 'Міст ESP32: під\'єднано'
                     : esp32 === 'disabled'
-                      ? 'ESP32 serial bridge: disabled'
-                      : 'ESP32 serial bridge: offline'
+                      ? 'Міст ESP32: вимкнено'
+                      : 'Міст ESP32: немає'
                 }
                 sub={
                   esp32 === 'online'
                     ? 'batched'
                     : esp32 === 'disabled'
-                      ? 'dev mode'
+                      ? 'режим розробки'
                       : 'no batch'
                 }
               />
               <LogLine
                 tone={context?.system.ai_provider === 'gemini' ? 'info' : 'muted'}
-                message={`AI provider: ${context?.system.ai_provider ?? '—'}`}
-                sub={context?.system.internet_available ? 'internet' : 'local'}
+                message={`Розум: ${context?.system.ai_provider ?? '—'}`}
+                sub={context?.system.internet_available ? 'через мережу' : 'локально'}
               />
               <LogLine
                 tone="info"
-                message={`STT engine: ${context?.system.stt_engine ?? '—'}`}
+                message={`Слух: ${context?.system.stt_engine ?? '—'}`}
                 sub="voice"
               />
               <LogLine
                 tone="muted"
-                message={`Uptime: ${formatUptime(context?.system.uptime_s ?? 0)}`}
+                message={`У роботі: ${formatUptime(context?.system.uptime_s ?? 0)}`}
                 sub="now"
               />
             </div>

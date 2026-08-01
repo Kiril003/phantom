@@ -58,7 +58,7 @@ describe('Tape', () => {
   it('renders empty state when store is empty', () => {
     render(<Tape />);
     expect(screen.getByTestId('tape')).toBeTruthy();
-    expect(screen.getByText('Tape idle')).toBeTruthy();
+    expect(screen.getByText(/Idle/i)).toBeTruthy();
   });
 
   // ── 2. Ten identical reflections collapse to 1 row with ↻10 ──────────

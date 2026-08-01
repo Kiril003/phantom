@@ -1,4 +1,4 @@
-import { Layers, Radar, Wifi, Flame, MapPin, Route, Sparkles, Satellite, Compass, Clock, HardDrive, Activity, BookOpen, Shield } from 'lucide-react';
+import { Layers, Radar, Wifi, Flame, MapPin, Route, Sparkles, Satellite, Compass } from 'lucide-react';
 import { useMapStore, type MapLayerKey } from '../../../stores/mapStore';
 
 const LATERAL_ITEMS: Array<{ key: MapLayerKey; icon: React.ReactNode; label: string }> = [
@@ -16,15 +16,25 @@ export function LayerControlZone({
   mapStyle,
   onCycleStyle,
   onResetBearing,
+  // @ts-ignore
   timelineOpen,
+  // @ts-ignore
   onToggleTimeline,
+  // @ts-ignore
   offlineOpen,
+  // @ts-ignore
   onToggleOffline,
+  // @ts-ignore
   analysisOpen,
+  // @ts-ignore
   onToggleAnalysis,
+  // @ts-ignore
   storyOpen,
+  // @ts-ignore
   onToggleStory,
+  // @ts-ignore
   ghostOpen,
+  // @ts-ignore
   onToggleGhost,
 }: {
   bearing: number;
@@ -71,6 +81,8 @@ export function LayerControlZone({
         active={Math.abs(bearing) > 0.5}
         onClick={onResetBearing}
       />
+      {/* 
+      // DEAD BUTTONS (Unimplemented)
       <LateralButton
         icon={<Clock size={18} strokeWidth={1.75} />}
         label="Timeline"
@@ -101,6 +113,7 @@ export function LayerControlZone({
         active={offlineOpen}
         onClick={onToggleOffline}
       />
+      */}
     </div>
   );
 }

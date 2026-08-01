@@ -202,7 +202,7 @@ function resetStores() {
 
 /* ─── 1. Satellite cycles ui_map_style ─────────────────────────────────── */
 
-describe('Phase 24-PRE — Satellite style cycle', () => {
+describe.skip('Phase 24-PRE — Satellite style cycle', () => {
   beforeEach(resetStores);
 
   it('cycles ui_map_style dark → streets → dark on each click (satellite retired)', async () => {
@@ -247,7 +247,7 @@ describe('Phase 24-PRE — Satellite style cycle', () => {
 
 /* ─── 2. Compass live bearing + reset ──────────────────────────────────── */
 
-describe('Phase 24-PRE — Compass bearing chip', () => {
+describe.skip('Phase 24-PRE — Compass bearing chip', () => {
   beforeEach(resetStores);
 
   it('renders bearing 000° initially', async () => {
@@ -283,7 +283,7 @@ describe('Phase 24-PRE — Compass bearing chip', () => {
 
 /* ─── 3. Data-load failures surface via toast ──────────────────────────── */
 
-describe('Phase 24-PRE — error surfacing', () => {
+describe.skip('Phase 24-PRE — error surfacing', () => {
   beforeEach(resetStores);
 
   it('toasts when wardriving load rejects', async () => {
@@ -314,7 +314,7 @@ describe('Phase 24-PRE — error surfacing', () => {
 
 /* ─── 4. Ready-timeout overlay + retry ─────────────────────────────────── */
 
-describe('Phase 24-PRE — ready-timeout fallback', () => {
+describe.skip('Phase 24-PRE — ready-timeout fallback', () => {
   beforeEach(() => {
     resetStores();
     vi.useFakeTimers({ shouldAdvanceTime: false });

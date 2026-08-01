@@ -44,6 +44,10 @@ export const en: Partial<Record<MessageKey, string>> = {
   'chat.quick.settings.prompt':
     'Explain the key PHANTOM settings in plain words, and what is worth changing first.',
 
+  // ── Chat: input ───────────────────────────────────────────────────────────
+  'chat.input.placeholder': 'Message PHANTOM…',
+  'chat.input.sending': 'PHANTOM is typing…',
+
   // ── Chat: live indicators ─────────────────────────────────────────────────
   'chat.thinking': 'Thinking',
   'chat.thinking.aria': 'PHANTOM is thinking',

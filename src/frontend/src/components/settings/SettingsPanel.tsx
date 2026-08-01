@@ -51,9 +51,12 @@ import {
 import { AgentLimitsGroup } from './AgentLimitsGroup';
 import { AgentLayoutGroup } from './AgentLayoutGroup';
 import { DesktopShellGroup } from './DesktopShellGroup';
-import { Monitor, KeyRound, ShieldCheck } from 'lucide-react';
+import { Monitor, KeyRound, ShieldCheck, CreditCard, Key, Users } from 'lucide-react';
 import { KeyVaultPanel } from './KeyVaultPanel';
 import { LicenseGroup } from './LicenseGroup';
+import { BillingTab } from './BillingTab';
+import { ApiKeysTab } from './ApiKeysTab';
+import { MembersTab } from './MembersTab';
 
 type ThemeId = 'sunrise-warm' | 'amber-night' | 'cyberdeck-cold';
 
@@ -140,7 +143,25 @@ export default function SettingsPanel() {
       icon: <ShieldCheck size={14} />,
       settings: [],
     };
-    return [...categories, polisKeys, license, virtual];
+    const billing: any = {
+      id: 'billing',
+      label: 'Billing',
+      icon: <CreditCard size={14} />,
+      settings: [],
+    };
+    const apiKeys: any = {
+      id: 'api_keys',
+      label: 'API Keys',
+      icon: <Key size={14} />,
+      settings: [],
+    };
+    const members: any = {
+      id: 'members',
+      label: 'Team Members',
+      icon: <Users size={14} />,
+      settings: [],
+    };
+    return [...categories, polisKeys, license, virtual, billing, apiKeys, members];
   }, [categories]);
 
   const activeCategory = useMemo(
@@ -247,8 +268,8 @@ export default function SettingsPanel() {
     <div
       className="sunrise-frame relative"
       style={{
-        width: 1024,
-        height: 600,
+        width: '100%',
+        height: '100%',
         background: 'var(--surface-base)',
         overflow: 'hidden',
       }}
@@ -667,6 +688,18 @@ export default function SettingsPanel() {
               <LicenseGroup />
             )}
 
+            {loaded && activeCategory && activeCategory.id === 'billing' && (
+              <BillingTab />
+            )}
+
+            {loaded && activeCategory && activeCategory.id === 'api_keys' && (
+              <ApiKeysTab />
+            )}
+
+            {loaded && activeCategory && activeCategory.id === 'members' && (
+              <MembersTab />
+            )}
+
             {loaded &&
               activeCategory &&
               activeCategory.id !== 'about' &&
@@ -674,7 +707,10 @@ export default function SettingsPanel() {
               activeCategory.id !== 'vault' &&
               activeCategory.id !== 'desktop' &&
               activeCategory.id !== 'polis_keys' &&
-              activeCategory.id !== 'license' && (
+              activeCategory.id !== 'license' &&
+              activeCategory.id !== 'billing' &&
+              activeCategory.id !== 'api_keys' &&
+              activeCategory.id !== 'members' && (
               <>
                 {activeCategory.id === 'ai' && <AIProviderDiagnostics />}
                 {activeCategory.id === 'voice' && <NPUDiagnostics />}

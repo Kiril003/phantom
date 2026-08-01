@@ -35,7 +35,7 @@ interface SubgroupRule {
 
 const FALLBACK: SubgroupBucket = {
   id: 'general',
-  label: 'General',
+  label: 'Загальні',
   order: 999,
 };
 
@@ -45,19 +45,19 @@ const _KNOWN_SUBGROUPS: ReadonlyArray<SubgroupRule> = [
   // ── voice ───────────────────────────────────────────────────────────
   {
     match: /^voice_stt_/,
-    bucket: { id: 'voice.stt', label: 'Speech to text', order: 1 },
+    bucket: { id: 'voice.stt', label: 'Мова в текст', order: 1 },
   },
   {
     match: /^voice_tts_/,
-    bucket: { id: 'voice.tts', label: 'Text to speech', order: 2 },
+    bucket: { id: 'voice.tts', label: 'Текст у мову', order: 2 },
   },
   {
     match: /^voice_(always_on|wake_word|vad|barge|duck|amp)/,
-    bucket: { id: 'voice.always_on', label: 'Always-on listening', order: 3 },
+    bucket: { id: 'voice.always_on', label: 'Постійне слухання', order: 3 },
   },
   {
     match: /^voice_(mode|response_form|streaming|legacy|pipeline)/,
-    bucket: { id: 'voice.pipeline', label: 'Pipeline & routing', order: 4 },
+    bucket: { id: 'voice.pipeline', label: 'Конвеєр і маршрути', order: 4 },
   },
 
   // ── agent ───────────────────────────────────────────────────────────
@@ -67,35 +67,35 @@ const _KNOWN_SUBGROUPS: ReadonlyArray<SubgroupRule> = [
   },
   {
     match: /^agent_emotion_/,
-    bucket: { id: 'agent.emotion', label: 'Emotion model', order: 1 },
+    bucket: { id: 'agent.emotion', label: 'Модель емоцій', order: 1 },
   },
   {
     match: /^agent_proactive_/,
-    bucket: { id: 'agent.proactive', label: 'Proactive loop', order: 2 },
+    bucket: { id: 'agent.proactive', label: 'Проактивний цикл', order: 2 },
   },
   {
     match: /^agent_standing_orders_/,
     bucket: {
       id: 'agent.standing_orders',
-      label: 'Standing orders',
+      label: 'Постійні накази',
       order: 3,
     },
   },
   {
     match: /^agent_episodic_/,
-    bucket: { id: 'agent.episodic', label: 'Episodic memory', order: 4 },
+    bucket: { id: 'agent.episodic', label: 'Епізодична пам\'ять', order: 4 },
   },
   {
     match: /^agent_mcp_/,
-    bucket: { id: 'agent.mcp', label: 'MCP integrations', order: 5 },
+    bucket: { id: 'agent.mcp', label: 'Інтеграції MCP', order: 5 },
   },
   {
     match: /^agent_localization_|^agent_location_history_/,
-    bucket: { id: 'agent.localization', label: 'Localization & history', order: 6 },
+    bucket: { id: 'agent.localization', label: 'Мова та історія', order: 6 },
   },
   {
     match: /^agent_/,
-    bucket: { id: 'agent.core', label: 'Agent core', order: 7 },
+    bucket: { id: 'agent.core', label: 'Ядро агента', order: 7 },
   },
 
   // ── ai ──────────────────────────────────────────────────────────────
@@ -105,35 +105,35 @@ const _KNOWN_SUBGROUPS: ReadonlyArray<SubgroupRule> = [
   },
   {
     match: /^ai_ollama_/,
-    bucket: { id: 'ai.ollama', label: 'Ollama (local)', order: 2 },
+    bucket: { id: 'ai.ollama', label: 'Ollama (локально)', order: 2 },
   },
   {
     match: /^ai_(primary_provider|fallback_|router|hub|locality)/,
-    bucket: { id: 'ai.routing', label: 'Routing & fallback', order: 3 },
+    bucket: { id: 'ai.routing', label: 'Маршрути й запасний шлях', order: 3 },
   },
 
   // ── chat ────────────────────────────────────────────────────────────
   {
     match: /^chat_(tools_|response_widgets_|artifacts?_)/,
-    bucket: { id: 'chat.tools', label: 'Chat tool-use', order: 1 },
+    bucket: { id: 'chat.tools', label: 'Інструменти в чаті', order: 1 },
   },
   {
     match: /^chat_/,
-    bucket: { id: 'chat.core', label: 'Chat core', order: 2 },
+    bucket: { id: 'chat.core', label: 'Ядро чату', order: 2 },
   },
 
   // ── security ───────────────────────────────────────────────────────
   {
     match: /^security_(jwt|session|refresh|rate_limit|lockout)/,
-    bucket: { id: 'security.auth', label: 'Authentication', order: 1 },
+    bucket: { id: 'security.auth', label: 'Автентифікація', order: 1 },
   },
   {
     match: /^security_(trust_xff|trusted_proxies|deployment_mode|allow_)/,
-    bucket: { id: 'security.network', label: 'Network & deploy', order: 2 },
+    bucket: { id: 'security.network', label: 'Мережа й розгортання', order: 2 },
   },
   {
     match: /^security_/,
-    bucket: { id: 'security.core', label: 'Security core', order: 3 },
+    bucket: { id: 'security.core', label: 'Ядро безпеки', order: 3 },
   },
 ];
 

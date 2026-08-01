@@ -185,6 +185,8 @@ export function TacticalMap({
         attributionControl: { compact: true },
         dragRotate: true,
         pitchWithRotate: true,
+        maxPitch: 85,
+        fadeDuration: 100, // Optimize transitions
       });
       mapRef.current = map;
       setWebglSupported(true);
@@ -293,16 +295,24 @@ export function TacticalMap({
             encoding: 'mapbox'
          };
       }
-      style.terrain = { source: 'phantom-terrain', exaggeration: 1.5 };
+      style.terrain = { source: 'phantom-terrain', exaggeration: 2.5 };
       
+      // Inject Dramatic 3D Lighting
+      style.light = {
+         anchor: 'map',
+         color: tokens.theme === 'amber-night' ? '#ffaa55' : '#ffffff',
+         intensity: tokens.theme === 'amber-night' ? 0.2 : 0.6,
+         position: [1.5, 210, 30] // [radial, azimuthal, polar]
+      };
+
       // Inject Atmospheric Sky
       style.sky = {
         "sky-color": tokens.theme === 'amber-night' ? '#0a0a0a' : '#88ccee',
-        "sky-horizon-blend": 0.5,
+        "sky-horizon-blend": 0.8,
         "horizon-color": tokens.theme === 'amber-night' ? '#1a1a1a' : '#ffffff',
-        "horizon-fog-blend": 0.5,
+        "horizon-fog-blend": 0.8,
         "fog-color": tokens.theme === 'amber-night' ? '#1a1a1a' : '#ffffff',
-        "fog-ground-blend": 0.5,
+        "fog-ground-blend": 0.8,
       };
 
       // Inject 3D Buildings
@@ -317,7 +327,8 @@ export function TacticalMap({
                  'fill-extrusion-color': tokens.surfaceRaised,
                  'fill-extrusion-height': ['interpolate', ['linear'], ['zoom'], 14, 0, 15.05, ['get', 'render_height']],
                  'fill-extrusion-base': ['interpolate', ['linear'], ['zoom'], 14, 0, 15.05, ['get', 'render_min_height']],
-                 'fill-extrusion-opacity': 0.8
+                 'fill-extrusion-opacity': 0.95,
+                 'fill-extrusion-vertical-gradient': true
              }
          });
       }

@@ -1,10 +1,39 @@
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 /// <reference types="vitest" />
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import path from 'path';
 
+
+// Локальний вхід для розробки: PIN читається з диска на боці dev-сервера,
+// тож у бандл не потрапляє і в прод-збірці цього маршруту не існує.
+const devLogin = {
+  name: 'phantom-dev-login',
+  apply: 'serve' as const,
+  configureServer(server: { middlewares: { use: (p: string, h: unknown) => void } }) {
+    server.middlewares.use('/__dev/login', (_req: unknown, res: {
+      setHeader: (k: string, v: string) => void;
+      statusCode: number;
+      end: (b?: string) => void;
+    }) => {
+      res.setHeader('Content-Type', 'application/json');
+      try {
+        const pin = readFileSync(
+          resolve(__dirname, '../../.phantom-data/identity/bootstrap_pin'),
+          'utf8',
+        ).trim();
+        res.end(JSON.stringify({ username: 'phantom', pin }));
+      } catch {
+        res.statusCode = 404;
+        res.end('{}');
+      }
+    });
+  },
+};
+
 export default defineConfig({
-  plugins: [react()],
+  plugins: [devLogin, react()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

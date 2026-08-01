@@ -570,7 +570,7 @@ describe('ChatWindow', () => {
     useChatStore.setState({ sendMessage: spy });
     const { ChatWindow } = await import('../components/chat/ChatWindow');
     render(<ChatWindow minimalChrome />);
-    const textarea = screen.getByPlaceholderText('Message PHANTOM…') as HTMLTextAreaElement;
+    const textarea = screen.getByLabelText('Chat input') as HTMLTextAreaElement;
     fireEvent.change(textarea, { target: { value: 'hello' } });
     await waitFor(() => {
       const btn = screen.getByLabelText('Send message');
@@ -587,7 +587,7 @@ describe('ChatWindow', () => {
     useChatStore.setState({ sendMessage: spy });
     const { ChatWindow } = await import('../components/chat/ChatWindow');
     render(<ChatWindow minimalChrome />);
-    const textarea = screen.getByPlaceholderText('Message PHANTOM…') as HTMLTextAreaElement;
+    const textarea = screen.getByLabelText('Chat input') as HTMLTextAreaElement;
     fireEvent.change(textarea, { target: { value: 'enter-send' } });
     fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
     await waitFor(() => expect(spy).toHaveBeenCalledWith('enter-send', 'text', SystemState.DIALOGUE));

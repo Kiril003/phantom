@@ -2,6 +2,13 @@ import { create } from 'zustand';
 import type { WardrivingRecord, MapPOI, HeatmapPoint, TrackPoint } from '@shared/types';
 import { mapApi, type Bounds, type GeoTaggedFact, type RouteResult } from '../services/api';
 
+export interface Entity {
+  id: string;
+  position: [number, number, number]; // lon, lat, elevation
+  speed: number;
+  heading: number;
+}
+
 /** One endpoint of a planned route, with a human label for the HUD. */
 export interface RoutePoint {
   lat: number;
@@ -51,6 +58,14 @@ interface MapStoreState {
   selection: MapSelection;
   loading: boolean;
   error: string | null;
+
+  longitude: number;
+  latitude: number;
+  pitch: number;
+  bearing: number;
+  entities: Entity[];
+  setViewState: (viewState: Partial<{ longitude: number; latitude: number; zoom: number; pitch: number; bearing: number }>) => void;
+  updateEntities: (data: string | ArrayBuffer | Entity[]) => void;
 
   /** Phase 24-C — the active planned route (null when none). */
   route: PlannedRoute | null;
@@ -141,6 +156,28 @@ export const useMapStore = create<MapStoreState>((set, get) => ({
   route: null,
   routing: false,
   routeError: null,
+  longitude: 30.5234,
+  latitude: 50.4501,
+  pitch: 45,
+  bearing: 0,
+  entities: [],
+  setViewState: (vs) => set((s) => ({ ...s, ...vs })),
+  updateEntities: (data) => {
+    // Basic implementation for JSON or Array
+    if (Array.isArray(data)) {
+      set({ entities: data });
+    } else if (typeof data === 'string') {
+      try {
+        const parsed = JSON.parse(data);
+        if (Array.isArray(parsed)) {
+          set({ entities: parsed });
+        }
+      } catch (e) {
+        console.error('Failed to parse entities', e);
+      }
+    }
+    // Binary processing could be added here if needed
+  },
   temporalDate: new Date().toISOString().split('T')[0],
   tactical: {
     lat: null,

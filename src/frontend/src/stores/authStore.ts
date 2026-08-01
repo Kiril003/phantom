@@ -67,6 +67,22 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
    */
   autoLogin: async () => {
     const { token, expiresAt } = get();
+    // Тільки в dev: сервер розробки віддає локальні дані входу з диска,
+    // тож у бандлі їх немає й у прод-збірці ця гілка згортається геть.
+    if (!token && import.meta.env.DEV) {
+      try {
+        const r = await fetch('/__dev/login');
+        if (r.ok) {
+          const c = await r.json();
+          const res = await authApi.loginPin(c.username, c.pin);
+          get().setUser(res.user, res.token, res.expires_at);
+          useSystemStore.getState().setAuthenticated(true);
+          return true;
+        }
+      } catch {
+        // тиша: без ядра просто покажемо екран входу
+      }
+    }
     if (!token) return false;
 
     // Check expiry client-side first

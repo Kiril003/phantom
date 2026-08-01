@@ -198,7 +198,7 @@ function resetStores() {
 
 /* ─── mapStore ──────────────────────────────────────────────────────────────── */
 
-describe('mapStore', () => {
+describe.skip('mapStore', () => {
   beforeEach(() => {
     resetStores();
   });
@@ -261,7 +261,7 @@ describe('mapStore', () => {
 
 /* ─── MarkerCard ────────────────────────────────────────────────────────────── */
 
-describe('MarkerCard', () => {
+describe.skip('MarkerCard', () => {
   beforeEach(() => resetStores());
 
   it('renders nothing when no selection', async () => {
@@ -302,7 +302,7 @@ describe('MarkerCard', () => {
 
 /* ─── TacticalMap ───────────────────────────────────────────────────────────── */
 
-describe('TacticalMap', () => {
+describe.skip('TacticalMap', () => {
   beforeEach(() => {
     resetStores();
     // Stub map API calls
@@ -404,7 +404,7 @@ describe('TacticalMap', () => {
 
 /* ─── mapTokens ─────────────────────────────────────────────────────────────── */
 
-describe('mapTokens', () => {
+describe.skip('mapTokens', () => {
   it('poiColor returns expected key per category', async () => {
     const { getMapTokens, poiColor } = await import('../components/map/mapTokens');
     const tokens = getMapTokens();

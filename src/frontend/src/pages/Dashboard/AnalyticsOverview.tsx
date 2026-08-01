@@ -99,8 +99,8 @@ export default function AnalyticsOverview() {
 
   return (
     <div className="w-full h-full p-8 overflow-y-auto no-scrollbar relative">
-      <div className="absolute top-0 right-0 w-96 h-96 bg-amber-500/10 rounded-full blur-[100px] pointer-events-none" />
-      <div className="absolute bottom-0 left-0 w-96 h-96 bg-orange-600/10 rounded-full blur-[100px] pointer-events-none" />
+      <div className="absolute top-0 right-0 w-96 h-96 rounded-full blur-[100px] pointer-events-none" />
+      <div className="absolute bottom-0 left-0 w-96 h-96 rounded-full blur-[100px] pointer-events-none" />
 
       <motion.div
         variants={containerVariants}
@@ -112,11 +112,12 @@ export default function AnalyticsOverview() {
           <div>
             <motion.h1
               variants={itemVariants}
-              className="text-4xl font-display font-bold bg-clip-text text-transparent bg-gradient-to-r from-amber-400 to-orange-500 tracking-tight"
+              className="text-4xl font-display font-bold tracking-tight"
+              style={{ color: 'var(--accent)' }}
             >
               Огляд системи
             </motion.h1>
-            <motion.p variants={itemVariants} className="text-zinc-400 mt-2">
+            <motion.p variants={itemVariants} className="mt-2 text-sm" style={{ color: 'var(--ink-muted)' }}>
               {statusLine(load)}
             </motion.p>
           </div>
@@ -128,32 +129,33 @@ export default function AnalyticsOverview() {
             value={num(data?.tokens_used_this_month)}
             trend={data?.max_tokens ? `з ${nf.format(data.max_tokens)}` : null}
             load={load}
-            icon={<Zap className="text-amber-500" size={24} />}
+            icon={<Zap size={24} style={{ color: 'var(--accent)' }} />}
           />
           <MetricCard
             title="Активних агентів"
             value={num(data?.active_agents)}
             trend={null}
             load={load}
-            icon={<Bot className="text-emerald-500" size={24} />}
+            icon={<Bot size={24} style={{ color: 'var(--accent)' }} />}
           />
           <MetricCard
             title="Усього сеансів"
             value={num(data?.total_sessions)}
             trend={null}
             load={load}
-            icon={<Activity className="text-blue-500" size={24} />}
+            icon={<Activity size={24} style={{ color: 'var(--accent)' }} />}
           />
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           <motion.div
             variants={itemVariants}
-            className="lg:col-span-2 rounded-2xl border border-white/5 bg-black/40 backdrop-blur-xl p-6 shadow-2xl relative overflow-hidden"
+            className="lg:col-span-2 rounded-2xl border backdrop-blur-xl p-6 shadow-2xl relative overflow-hidden"
+            style={{ background: 'var(--surface-raised)', borderColor: 'var(--glass-border)' }}
           >
             <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
-            <h3 className="text-lg font-medium text-white mb-6 flex items-center gap-2">
-              <Activity size={18} className="text-zinc-400" /> Витрата токенів · 7 днів
+            <h3 className="text-lg font-medium mb-6 flex items-center gap-2" style={{ color: 'var(--ink-primary)' }}>
+              <Activity size={18} style={{ color: 'var(--ink-muted)' }} /> Витрата токенів · 7 днів
             </h3>
             <div className="h-[300px] w-full">
               {series.length === 0 ? (
@@ -196,11 +198,12 @@ export default function AnalyticsOverview() {
 
           <motion.div
             variants={itemVariants}
-            className="rounded-2xl border border-white/5 bg-black/40 backdrop-blur-xl p-6 shadow-2xl relative overflow-hidden flex flex-col"
+            className="rounded-2xl border backdrop-blur-xl p-6 shadow-2xl relative overflow-hidden flex flex-col"
+            style={{ background: 'var(--surface-raised)', borderColor: 'var(--glass-border)' }}
           >
             <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent pointer-events-none" />
-            <h3 className="text-lg font-medium text-white mb-6 flex items-center gap-2">
-              <Users size={18} className="text-zinc-400" /> Хто працює
+            <h3 className="text-lg font-medium mb-6 flex items-center gap-2" style={{ color: 'var(--ink-primary)' }}>
+              <Users size={18} style={{ color: 'var(--ink-muted)' }} /> Хто працює
             </h3>
 
             <div className="flex-1 space-y-4">
@@ -259,7 +262,7 @@ function Hollow({ load, nothing }: { load: Load; nothing: string }) {
           : nothing;
   return (
     <div className="h-full min-h-[120px] flex items-center justify-center text-center px-4">
-      <span className="text-sm text-zinc-500">{text}</span>
+      <span className="text-sm" style={{ color: 'var(--ink-faint)' }}>{text}</span>
     </div>
   );
 }
@@ -290,7 +293,8 @@ function MetricCard({
   return (
     <motion.div
       variants={itemVariants}
-      className="relative p-6 rounded-2xl border border-white/5 bg-black/40 backdrop-blur-xl shadow-2xl overflow-hidden group"
+      className="relative p-6 rounded-2xl border backdrop-blur-xl shadow-2xl overflow-hidden group"
+      style={{ background: 'var(--surface-raised)', borderColor: 'var(--glass-border)' }}
     >
       <div className="absolute inset-0 bg-gradient-to-br from-white/[0.08] to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
 
@@ -309,10 +313,10 @@ function MetricCard({
       </div>
 
       <div className="relative z-10">
-        <h3 className="text-zinc-400 text-sm font-medium mb-1">{title}</h3>
+        <h3 className="text-sm font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>{title}</h3>
         <div
           className={`font-display font-semibold tracking-tight ${
-            value ? 'text-3xl text-white' : 'text-base text-zinc-500'
+            value ? 'text-3xl' : 'text-base opacity-60'
           }`}
         >
           {value ?? blank}

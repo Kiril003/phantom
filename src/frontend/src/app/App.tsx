@@ -194,7 +194,7 @@ export function App() {
             <ToolsOverlayMount />
             <WillPanelMount />
             <IntelligenceHubMount />
-            <div className="absolute top-4 left-4 z-[200]">
+            <div className="fixed bottom-4 right-4 z-[200] pointer-events-none">
               <EndocrineVisualizer />
             </div>
           </div>

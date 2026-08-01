@@ -38,7 +38,7 @@ export default function DashboardLayout() {
         }}
       >
         <div
-          className="h-16 flex items-center px-5 border-b shrink-0"
+          className="h-14 flex items-center px-5 border-b shrink-0"
           style={{ borderColor: 'var(--glass-border)' }}
         >
           <div className="flex items-center gap-3">
@@ -57,7 +57,7 @@ export default function DashboardLayout() {
           </div>
         </div>
 
-        <nav className="flex-1 px-2 py-3 space-y-0.5 overflow-y-auto no-scrollbar">
+        <nav className="flex-1 px-2 py-2 space-y-px overflow-y-auto no-scrollbar">
           <Group>розмова</Group>
           <NavItem to="/chat" icon={<MessageSquare size={17} />} label="Чат" />
           <NavItem to="/operator" icon={<Users size={17} />} label="Штаб агентів" />
@@ -74,7 +74,7 @@ export default function DashboardLayout() {
           <Group>налаштування</Group>
           <button
             onClick={() => setIntelligenceHubOpen(true)}
-            className="w-full flex items-center gap-3 px-3 py-2.5 rounded-xl min-h-[44px] transition-colors"
+            className="w-full flex items-center gap-3 px-3 py-2 rounded-xl min-h-[40px] transition-colors"
             style={{ color: 'var(--ink-muted)' }}
           >
             <BrainCircuit size={17} />
@@ -119,7 +119,7 @@ export default function DashboardLayout() {
 function Group({ children }: { children: React.ReactNode }) {
   return (
     <div
-      className="px-3 pt-4 pb-1 text-[10px] font-bold tracking-widest uppercase"
+      className="px-3 pt-3 pb-1 text-[9px] font-bold tracking-widest uppercase"
       style={{ color: 'var(--ink-faint)' }}
     >
       {children}
@@ -142,7 +142,7 @@ function NavItem({
     <NavLink
       to={to}
       end={end}
-      className="flex items-center gap-3 px-3 py-2.5 rounded-xl min-h-[44px] transition-colors"
+      className="flex items-center gap-3 px-3 py-2 rounded-xl min-h-[40px] transition-colors"
       style={({ isActive }) => ({
         background: isActive ? 'var(--accent-glow)' : 'transparent',
         color: isActive ? 'var(--accent)' : 'var(--ink-muted)',

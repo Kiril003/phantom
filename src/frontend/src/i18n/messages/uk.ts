@@ -42,6 +42,10 @@ export const uk = {
   'chat.quick.settings.prompt':
     'Поясни ключові налаштування PHANTOM простими словами і що варто змінити спочатку.',
 
+  // ── Chat: input ───────────────────────────────────────────────────────────
+  'chat.input.placeholder': 'Напишіть PHANTOM…',
+  'chat.input.sending': 'PHANTOM відповідає…',
+
   // ── Chat: live indicators ─────────────────────────────────────────────────
   'chat.thinking': 'Мислю',
   'chat.thinking.aria': 'PHANTOM мислить',

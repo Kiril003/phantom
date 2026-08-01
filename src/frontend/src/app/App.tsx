@@ -8,7 +8,6 @@ import { ErrorBoundary } from '../components/core/ErrorBoundary';
 import { Overlays } from '../components/core/Overlays';
 import { VoiceAlwaysOnGate } from '../components/chat/VoiceAlwaysOnGate';
 import { useSystemStore } from '../stores/systemStore';
-import { SystemState } from '@shared/types';
 import { geolocationService, BrowserGeolocationService } from '../services/geolocation';
 import { ToolsOverlay } from '../components/tools/ToolsOverlay';
 // Lazy: WillPanel statically pulls recharts (~170 kB gz). It's mounted at
@@ -29,6 +28,36 @@ import { FamiliarReactor } from '../components/familiar/FamiliarReactor';
 const PhantomFamiliar = React.lazy(() => import('../components/familiar/PhantomFamiliar'));
 import { ToastRail } from '../components/core/ToastRail';
 import { PhantomIcon } from '../components/core/PhantomIcon';
+import { EndocrineVisualizer } from '../components/EndocrineVisualizer';
+import { useEndocrineStore } from '../stores/endocrineStore';
+
+function GlobalEndocrineTheme() {
+  const { cortisol, oxytocin } = useEndocrineStore();
+  
+  useEffect(() => {
+    // Modify CSS custom properties based on Endocrine levels
+    // High Cortisol: Increases contrast, lowers saturation, turns accent red
+    // High Oxytocin: Warms the accent color, increases bloom/glow
+    
+    // Example map: 
+    // Default Accent is an Amber or Blue. Let's shift hue and saturation.
+    const root = document.documentElement;
+    
+    // Cortisol shifts to alert red (0deg) and reduces rounding (harsh)
+    // Oxytocin shifts to gold/warm (40deg) and adds soft glow
+    
+    if (cortisol > 0.3) {
+      root.style.setProperty('--accent', `hsl(0, 80%, ${50 + cortisol * 20}%)`);
+      root.style.setProperty('--surface-raised', `rgba(255, 0, 0, ${cortisol * 0.1})`);
+    } else {
+      // Normal / Oxytocin state
+      root.style.setProperty('--accent', `hsl(35, ${70 + oxytocin * 30}%, ${50 + oxytocin * 10}%)`);
+      root.style.setProperty('--surface-raised', `rgba(255, 200, 100, ${oxytocin * 0.05})`);
+    }
+  }, [cortisol, oxytocin]);
+
+  return null;
+}
 
 function GlobalGeolocationManager() {
   const authenticated = useSystemStore((s) => s.authenticated);
@@ -48,35 +77,22 @@ function GlobalGeolocationManager() {
 /* ─── Lazy layouts ────────────────────────────────────────────────────────── */
 
 const ShadowLayout = React.lazy(() => import('../layouts/ShadowLayout'));
-const FocusLayout = React.lazy(() => import('../layouts/FocusLayout'));
-const DialogueLayout = React.lazy(() => import('../layouts/DialogueLayout'));
-const SentinelLayout = React.lazy(() => import('../layouts/SentinelLayout'));
-const GhostLayout = React.lazy(() => import('../layouts/GhostLayout'));
-const DreamLayout = React.lazy(() => import('../layouts/DreamLayout'));
-const OperatorLayout = React.lazy(() => import('../layouts/OperatorLayout'));
+const AnalyticsOverview = React.lazy(() => import('../pages/Dashboard/AnalyticsOverview'));
 const LoginScreen = React.lazy(() => import('../components/auth/LoginScreen'));
 const SettingsPanel = React.lazy(() => import('../components/settings/SettingsPanel'));
 const MapLayout = React.lazy(() => import('../layouts/MapLayout'));
 const PolisLayout = React.lazy(() => import('../layouts/PolisLayout'));
+const AgentMarketplace = React.lazy(() => import('../pages/Dashboard/AgentMarketplace'));
+const CreateWorkspace = React.lazy(() => import('../pages/Onboarding/CreateWorkspace'));
 
-/* ─── State → Layout routing ─────────────────────────────────────────────── */
+const DashboardLayout = React.lazy(() => import('../layouts/DashboardLayout'));
+const DialogueLayout = React.lazy(() => import('../layouts/DialogueLayout'));
+const OperatorLayout = React.lazy(() => import('../layouts/OperatorLayout'));
+const FocusLayout = React.lazy(() => import('../layouts/FocusLayout'));
+const SentinelLayout = React.lazy(() => import('../layouts/SentinelLayout'));
 
-const LAYOUT_MAP: Record<SystemState, React.LazyExoticComponent<() => React.JSX.Element>> = {
-  [SystemState.SHADOW]: ShadowLayout,
-  [SystemState.FOCUS]: FocusLayout,
-  [SystemState.DIALOGUE]: DialogueLayout,
-  [SystemState.SENTINEL]: SentinelLayout,
-  [SystemState.GHOST]: GhostLayout,
-  [SystemState.DREAM]: DreamLayout,
-  [SystemState.OPERATOR]: OperatorLayout,
-};
-
-function StateRouter() {
-  const { state, authenticated } = useSystemStore();
-
-  useEffect(() => {
-    document.body.setAttribute('data-state', state);
-  }, [state]);
+function MainRouter() {
+  const { authenticated } = useSystemStore();
 
   if (!authenticated) {
     return (
@@ -86,12 +102,24 @@ function StateRouter() {
     );
   }
 
-  const Layout = LAYOUT_MAP[state];
-
   return (
     <React.Suspense fallback={<PhantomLoader />}>
       <AnimatePresence mode="wait">
-        <Layout key={state} />
+        <Routes>
+          <Route path="/onboarding" element={<CreateWorkspace />} />
+          <Route path="/" element={<DashboardLayout />}>
+            <Route index element={<AnalyticsOverview />} />
+            <Route path="map" element={<MapLayout />} />
+            <Route path="polis" element={<PolisLayout />} />
+            <Route path="chat" element={<DialogueLayout />} />
+            <Route path="operator" element={<OperatorLayout />} />
+            <Route path="system" element={<FocusLayout />} />
+            <Route path="sentinel" element={<SentinelLayout />} />
+            <Route path="marketplace" element={<AgentMarketplace />} />
+            <Route path="settings/:categoryId?" element={<SettingsPanel />} />
+            <Route path="*" element={<ShadowLayout />} />
+          </Route>
+        </Routes>
       </AnimatePresence>
     </React.Suspense>
   );
@@ -148,39 +176,14 @@ export function App() {
         <StateTransitionController />
         <GlobalAlwaysOnGate />
         <GlobalGeolocationManager />
+        <GlobalEndocrineTheme />
         <ViewportFrame>
           <ErrorBoundary>
           <div
-            className="w-[1024px] h-[600px] overflow-hidden relative"
+            className="w-full h-full min-h-screen overflow-hidden relative flex"
             style={{ background: 'var(--surface-void)' }}
           >
-            <Routes>
-              <Route
-                path="/settings/:categoryId?"
-                element={
-                  <React.Suspense fallback={<PhantomLoader />}>
-                    <SettingsPanel />
-                  </React.Suspense>
-                }
-              />
-              <Route
-                path="/map"
-                element={
-                  <React.Suspense fallback={<PhantomLoader />}>
-                    <MapLayout />
-                  </React.Suspense>
-                }
-              />
-              <Route
-                path="/polis"
-                element={
-                  <React.Suspense fallback={<PhantomLoader />}>
-                    <PolisLayout />
-                  </React.Suspense>
-                }
-              />
-              <Route path="/*" element={<StateRouter />} />
-            </Routes>
+            <MainRouter />
             <Overlays />
             <ToastRail />
             <FamiliarTriggers />
@@ -191,6 +194,9 @@ export function App() {
             <ToolsOverlayMount />
             <WillPanelMount />
             <IntelligenceHubMount />
+            <div className="absolute top-4 left-4 z-[200]">
+              <EndocrineVisualizer />
+            </div>
           </div>
           </ErrorBoundary>
         </ViewportFrame>

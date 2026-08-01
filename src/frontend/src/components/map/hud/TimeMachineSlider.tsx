@@ -32,7 +32,7 @@ export function TimeMachineSlider({ className = '', onDateChange }: TimeMachineS
       <div className="flex items-center gap-2 px-2 border-r border-white/10">
         <History size={14} className="text-violet-400" />
         <span className="text-[10px] font-semibold uppercase tracking-widest text-violet-200">
-          Time Machine
+          Машина часу
         </span>
       </div>
 

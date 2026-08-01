@@ -1,5 +1,13 @@
 import { Compass, Satellite, Eye, EyeOff } from 'lucide-react';
 
+const SOURCE_LABELS: Record<string, string> = {
+  ip_estimate: 'ОЦІНКА ЗА IP',
+  gps: 'GPS',
+  network: 'МЕРЕЖА',
+  fused: 'ЗВЕДЕНА',
+  manual: 'ВРУЧНУ',
+};
+
 export function CoordinateReadout({ lat, lon, source }: {
   lat: number | null;
   lon: number | null;
@@ -19,7 +27,7 @@ export function CoordinateReadout({ lat, lon, source }: {
       <div className="flex items-center gap-2">
         <span className="block w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_#10b981]" />
         <span className="text-[9px] font-bold uppercase tracking-widest text-ink-muted">
-          {source?.replace('_', ' ') || 'NO LOCATION'}
+          {SOURCE_LABELS[source ?? ''] ?? source?.replace('_', ' ') ?? 'МІСЦЕ НЕВІДОМЕ'}
         </span>
       </div>
       <div className="flex items-center gap-3">

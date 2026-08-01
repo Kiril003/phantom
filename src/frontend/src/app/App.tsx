@@ -7,6 +7,7 @@ import { ViewportFrame } from './ViewportFrame';
 import { ErrorBoundary } from '../components/core/ErrorBoundary';
 import { Overlays } from '../components/core/Overlays';
 import { VoiceAlwaysOnGate } from '../components/chat/VoiceAlwaysOnGate';
+import { SystemState } from '@shared/types';
 import { useSystemStore } from '../stores/systemStore';
 import { geolocationService, BrowserGeolocationService } from '../services/geolocation';
 import { ToolsOverlay } from '../components/tools/ToolsOverlay';
@@ -86,10 +87,35 @@ const AgentMarketplace = React.lazy(() => import('../pages/Dashboard/AgentMarket
 const CreateWorkspace = React.lazy(() => import('../pages/Onboarding/CreateWorkspace'));
 
 const DashboardLayout = React.lazy(() => import('../layouts/DashboardLayout'));
+const GhostLayout = React.lazy(() => import('../layouts/GhostLayout'));
+const DreamLayout = React.lazy(() => import('../layouts/DreamLayout'));
 const DialogueLayout = React.lazy(() => import('../layouts/DialogueLayout'));
 const OperatorLayout = React.lazy(() => import('../layouts/OperatorLayout'));
 const FocusLayout = React.lazy(() => import('../layouts/FocusLayout'));
 const SentinelLayout = React.lazy(() => import('../layouts/SentinelLayout'));
+
+
+// «/» належить станові, а не одному екрану. Кнопки дока (Головна, Діалог,
+// Фокус, Вартовий, Привид) міняють SystemState і йдуть сюди — поки тут
+// висів дашборд, стан мінявся, а екран лишався той самий, і кнопки
+// виглядали мертвими.
+function StateSurface() {
+  const state = useSystemStore((s) => s.state);
+  switch (state) {
+    case SystemState.DIALOGUE:
+      return <DialogueLayout />;
+    case SystemState.FOCUS:
+      return <FocusLayout />;
+    case SystemState.SENTINEL:
+      return <SentinelLayout />;
+    case SystemState.GHOST:
+      return <GhostLayout />;
+    case SystemState.DREAM:
+      return <DreamLayout />;
+    default:
+      return <ShadowLayout />;
+  }
+}
 
 function MainRouter() {
   const { authenticated } = useSystemStore();
@@ -108,7 +134,8 @@ function MainRouter() {
         <Routes>
           <Route path="/onboarding" element={<CreateWorkspace />} />
           <Route path="/" element={<DashboardLayout />}>
-            <Route index element={<AnalyticsOverview />} />
+            <Route index element={<StateSurface />} />
+            <Route path="analytics" element={<AnalyticsOverview />} />
             <Route path="map" element={<MapLayout />} />
             <Route path="polis" element={<PolisLayout />} />
             <Route path="chat" element={<DialogueLayout />} />

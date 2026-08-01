@@ -77,13 +77,28 @@ async def create_tenant(
 
 
 @router.get("/current", response_model=dict)
-async def get_current_tenant(current_user: User = Depends(require_auth)) -> dict:
+async def get_current_tenant(
+    current_user: User = Depends(require_auth),
+    db: AsyncSession = Depends(get_db),
+) -> dict:
     """Return the active tenant context for the current request."""
     # require_auth віддає TokenPayload, а не User — анотація нижче бреше,
     # і .id валив цей роут п'ятисоткою на кожному відкритті штабу.
+    uid = getattr(current_user, "user_id", None) or getattr(current_user, "id", None)
+    name = None
+    tid = get_current_tenant_id()
+    row = await db.execute(select(User).where(User.id == uid))
+    user_row = row.scalar_one_or_none()
+    if user_row is not None and user_row.tenant_id:
+        tid = user_row.tenant_id
+        t = await db.execute(select(Tenant).where(Tenant.id == tid))
+        tenant = t.scalar_one_or_none()
+        if tenant is not None:
+            name = tenant.name
     return {
-        "tenant_id": get_current_tenant_id(),
-        "user_id": getattr(current_user, "user_id", None) or getattr(current_user, "id", None),
+        "tenant_id": tid,
+        "tenant_name": name,
+        "user_id": uid,
         "username": current_user.username,
         "role": current_user.role,
         "tenant_role": getattr(current_user, "tenant_role", "Member"),

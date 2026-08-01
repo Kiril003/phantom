@@ -122,7 +122,7 @@ export function SafetyShieldToggle() {
       ) : (
         <Shield size={12} strokeWidth={2.5} />
       )}
-      <span>{isUnsafe ? 'NO LEASH' : 'GUARDED'}</span>
+      <span>{isUnsafe ? 'БЕЗ ПОВІДКА' : 'ПІД ЗАХИСТОМ'}</span>
       <style>{`
         @keyframes phantom-shield-pulse {
           0%, 100% { box-shadow: 0 6px 18px rgba(239,68,68,0.35), inset 0 0 0 1px rgba(239,68,68,0.25); }

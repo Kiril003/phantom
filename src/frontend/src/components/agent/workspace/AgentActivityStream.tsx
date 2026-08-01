@@ -229,7 +229,7 @@ export function AgentActivityStream() {
           <div className="w-12 h-12 rounded-full border-2 border-primary/20 flex items-center justify-center mb-3">
              <Activity size={20} className="text-primary/60" />
           </div>
-          <span className="font-mono text-[9px] tracking-[0.3em] text-primary/80 uppercase">Awaiting Protocol</span>
+          <span className="font-mono text-[9px] tracking-[0.3em] text-primary/80 uppercase">Чекаю на завдання</span>
         </div>
       )}
 

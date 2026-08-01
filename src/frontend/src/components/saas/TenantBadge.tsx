@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
+import { request } from '../../services/api';
 import { Building2, ChevronDown, ShieldCheck, Zap } from 'lucide-react';
 
 export interface TenantInfo {
   tenant_id: string;
+  tenant_name?: string | null;
   user_id: string;
   username: string;
   role: string;
@@ -13,23 +15,12 @@ export function TenantBadge(): JSX.Element {
   const [tenant, setTenant] = useState<TenantInfo | null>(null);
   const [open, setOpen] = useState(false);
 
+  // Запит ішов без токена, тож завжди падав, а на екран виходила заглушка
+  // з вигаданою назвою «Phantom Enterprise» — простір, якого не існує.
   useEffect(() => {
-    fetch('/api/v1/tenant/current')
-      .then((res) => {
-        if (!res.ok) throw new Error('Помилка отримання даних орендаря');
-        return res.json();
-      })
+    request<TenantInfo>('GET', '/tenant/current')
       .then((data) => setTenant(data))
-      .catch(() => {
-        // Fallback default
-        setTenant({
-          tenant_id: 'default_tenant',
-          user_id: 'local',
-          username: 'Оператор',
-          role: 'ROOT',
-          plan_tier: 'PRO',
-        });
-      });
+      .catch(() => setTenant(null));
   }, []);
 
   const planTier = tenant?.plan_tier || 'PRO';
@@ -56,7 +47,7 @@ export function TenantBadge(): JSX.Element {
       >
         <Building2 size={14} className="text-amber-400" />
         <span className="font-medium tracking-wide">
-          {tenant?.tenant_id === 'default_tenant' ? 'Phantom Enterprise' : tenant?.tenant_id}
+          {tenant?.tenant_name ?? tenant?.username ?? 'простір не визначено'}
         </span>
         <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30">
           <Zap size={10} />

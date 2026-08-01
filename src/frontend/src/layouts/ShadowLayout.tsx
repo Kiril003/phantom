@@ -8,9 +8,7 @@ import {
   Sparkles,
   CalendarClock,
 } from 'lucide-react';
-import { StatusBar } from '../components/core/StatusBar';
 import { AmbientGlows } from '../components/core/AmbientGlows';
-import { FloatingToolbar } from '../components/core/FloatingToolbar';
 import { useSystemStore } from '../stores/systemStore';
 import { EASE_PHANTOM } from '../styles/motion';
 import { formatRelativeClock } from '../utils/format';
@@ -150,7 +148,6 @@ export default function ShadowLayout() {
       transition={{ duration: 0.6, ease: EASE_PHANTOM as unknown as number[] }}
     >
       <AmbientGlows />
-      <StatusBar />
 
       {/* === AURORA ORB CENTERPIECE ============================================ */}
       <svg
@@ -721,8 +718,6 @@ export default function ShadowLayout() {
           </>
         )}
       </motion.div>
-
-      <FloatingToolbar />
     </motion.div>
   );
 }

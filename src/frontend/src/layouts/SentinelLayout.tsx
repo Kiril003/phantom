@@ -13,8 +13,6 @@ import {
   AlertTriangle,
   MapPin,
 } from 'lucide-react';
-import { StatusBar } from '../components/core/StatusBar';
-import { FloatingToolbar } from '../components/core/FloatingToolbar';
 import { useSystemStore } from '../stores/systemStore';
 import { EASE_PHANTOM } from '../styles/motion';
 
@@ -91,8 +89,6 @@ export default function SentinelLayout() {
           zIndex: 'var(--z-overlay)',
         }}
       />
-
-      <StatusBar />
 
       {/* === LEFT — RADAR === */}
       <div
@@ -571,7 +567,6 @@ export default function SentinelLayout() {
       {/* Audit H-MM-2 — keep the FloatingToolbar so the operator can
           escape SENTINEL without long-press chord. flash-coral overlay
           above is pointer-events:none, so taps reach the toolbar. */}
-      <FloatingToolbar />
     </motion.div>
   );
 }

@@ -116,7 +116,7 @@ export function StatusBar() {
       <div
         data-testid="status-bar"
         data-compact="true"
-        className={`${isPro ? 'bg-black border-b border-white/5' : 'glass'} w-full min-w-[1024px] flex items-center shrink-0 relative`}
+        className={`${isPro ? 'bg-black border-b border-white/5' : 'glass'} w-full flex items-center shrink-0 relative overflow-x-auto no-scrollbar`}
         style={{
           height: 24,
           padding: '0 10px',
@@ -186,7 +186,7 @@ export function StatusBar() {
   return (
     <div
       data-testid="status-bar"
-      className={`${isPro ? 'bg-black border-b border-white/5' : 'glass'} w-[1024px] flex items-center shrink-0 relative`}
+      className={`${isPro ? 'bg-black border-b border-white/5' : 'glass'} w-full flex items-center shrink-0 relative`}
       style={{
         height: 'var(--status-bar-h)',
         padding: '0 14px',

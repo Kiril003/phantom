@@ -182,16 +182,20 @@ export function PhantomIcon({
 }: PhantomIconProps) {
   const Cmp = ICONS[name];
   const resolvedStroke = strokeWidth ?? weightToStroke(weight);
-  const resolvedFill = fill ?? (filled ? 'currentColor' : undefined);
+  // Material Symbols тримали FILL як варіацію шрифту — заливка була частиною
+  // гліфа. Lucide контурний, тож суцільний currentColor перетворював іконку на
+  // чорну пляму. Легка заливка лишає силует читабельним.
+  const resolvedFill = fill ?? (filled ? 'currentColor' : 'none');
+  const resolvedFillOpacity = resolvedFill === 'currentColor' ? 0.18 : undefined;
 
   if (!Cmp) {
     if (import.meta.env.DEV) {
       // eslint-disable-next-line no-console
       console.warn(`[PhantomIcon] unmapped icon name: "${name}"`);
     }
-    return <HelpCircle size={size} strokeWidth={resolvedStroke} fill={resolvedFill} {...rest} />;
+    return <HelpCircle size={size} strokeWidth={resolvedStroke} fill={resolvedFill} fillOpacity={resolvedFillOpacity} {...rest} />;
   }
-  return <Cmp size={size} strokeWidth={resolvedStroke} fill={resolvedFill} {...rest} />;
+  return <Cmp size={size} strokeWidth={resolvedStroke} fill={resolvedFill} fillOpacity={resolvedFillOpacity} {...rest} />;
 }
 
 export default PhantomIcon;

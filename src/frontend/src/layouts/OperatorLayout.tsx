@@ -1,8 +1,6 @@
 import { motion } from 'framer-motion';
 import { useEffect, useMemo, useState } from 'react';
-import { StatusBar } from '../components/core/StatusBar';
 import { AmbientGlows } from '../components/core/AmbientGlows';
-import { FloatingToolbar } from '../components/core/FloatingToolbar';
 import { MissionMounts } from '../components/mission/MissionMounts';
 import { SafetyShieldToggle } from '../components/agent/hud/SafetyShieldToggle';
 import { AgentCommandCenter } from '../components/agent/hud/AgentCommandCenter';
@@ -142,7 +140,6 @@ export default function OperatorLayout() {
       {/* ─── HEADER (44px + 52px = 96px total) ──────────────────────────────── */}
       <header className="shrink-0 z-30 flex flex-col">
         <div className="flex items-center justify-between pr-4 bg-black/5 backdrop-blur-md border-b border-white/5">
-           <StatusBar />
            {!isPro && <VitalsHeaderStrip />}
         </div>
         
@@ -189,7 +186,6 @@ export default function OperatorLayout() {
         {/* Safe Right: Global Toolbar — Anchored on the right to avoid edge issues */}
         {!isPro && (
           <div className="absolute right-6 bottom-4 pointer-events-auto z-50">
-            <FloatingToolbar />
           </div>
         )}
       </footer>

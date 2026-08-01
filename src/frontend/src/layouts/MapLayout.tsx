@@ -2,8 +2,6 @@ import { useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { OmniMap } from '../components/map/OmniMap';
-import { StatusBar } from '../components/core/StatusBar';
-import { FloatingToolbar } from '../components/core/FloatingToolbar';
 import { EASE_PHANTOM } from '../styles/motion';
 import { useSettingsStore } from '../stores/settingsStore';
 import { useAuthStore } from '../stores/authStore';
@@ -111,11 +109,9 @@ export default function MapLayout() {
       />
 
       <div className="relative z-10 flex flex-col w-full h-full">
-        <StatusBar />
         <main className="flex-1 min-h-0 relative">
           <OmniMap initialZoom={initialZoom} />
         </main>
-        <FloatingToolbar />
       </div>
     </motion.div>
   );

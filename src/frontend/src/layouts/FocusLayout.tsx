@@ -9,9 +9,7 @@ import {
   HardDrive,
   Gauge,
 } from 'lucide-react';
-import { StatusBar } from '../components/core/StatusBar';
 import { AmbientGlows } from '../components/core/AmbientGlows';
-import { FloatingToolbar } from '../components/core/FloatingToolbar';
 import { Orb } from '../components/core/Orb';
 import { useSystemStore } from '../stores/systemStore';
 import { EASE_PHANTOM } from '../styles/motion';
@@ -57,7 +55,6 @@ export default function FocusLayout() {
       transition={{ duration: 0.4, ease: EASE_PHANTOM as unknown as number[] }}
     >
       <AmbientGlows />
-      <StatusBar />
 
       <main className="flex-1 grid grid-cols-12 gap-2 px-2 py-2 min-h-0 z-10">
         {/* ─── Left — system + environment ─────────────────────────────── */}
@@ -250,8 +247,6 @@ export default function FocusLayout() {
           </Card>
         </section>
       </main>
-
-      <FloatingToolbar />
     </motion.div>
   );
 }

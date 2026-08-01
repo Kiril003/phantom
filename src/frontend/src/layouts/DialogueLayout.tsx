@@ -1,9 +1,7 @@
 import { useCallback, useMemo, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Wind, TrendingDown, Route } from 'lucide-react';
-import { StatusBar } from '../components/core/StatusBar';
 import { AmbientGlows } from '../components/core/AmbientGlows';
-import { FloatingToolbar } from '../components/core/FloatingToolbar';
 import { ChatWindow } from '../components/chat/ChatWindow';
 import { useSystemStore } from '../stores/systemStore';
 import { useChatStore } from '../stores/chatStore';
@@ -83,7 +81,6 @@ export default function DialogueLayout() {
       transition={{ duration: 0.4, ease: EASE_PHANTOM as unknown as number[] }}
     >
       <AmbientGlows />
-      <StatusBar />
 
       <main className="absolute inset-0 z-10" style={{ top: 44, bottom: 0 }}>
         {/* === PRESENCE STRIP ============================================= */}
@@ -191,8 +188,6 @@ export default function DialogueLayout() {
           </div>
         </motion.div>
       </main>
-
-      <FloatingToolbar />
     </motion.div>
   );
 }

@@ -279,8 +279,12 @@ const hub = new HubClient({
   onStatus,
 });
 
+let reauthing = false;
+
 /** The JWT died mid-session: spend the refresh grace once, then ask again. */
 async function reauthenticate(): Promise<void> {
+  if (reauthing) return;
+  reauthing = true;
   hub.stop();
   composer.hide();
   const fresh = token ? await refreshToken(token) : null;
@@ -289,6 +293,7 @@ async function reauthenticate(): Promise<void> {
     composer.show();
     hub.connect();
     lane.murmur('Перепідписався. Продовжуй.', 'system');
+    reauthing = false;
     return;
   }
   token = null;
@@ -296,6 +301,7 @@ async function reauthenticate(): Promise<void> {
   forgetSession();
   lane.murmur('Сесія скінчилась. Назвись іще раз.', 'system');
   await signIn();
+  reauthing = false;
 }
 
 async function signIn(): Promise<void> {

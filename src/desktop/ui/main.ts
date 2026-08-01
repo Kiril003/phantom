@@ -215,7 +215,7 @@ function onChatMessage(data: Record<string, unknown>): void {
   const message = data.message as Record<string, unknown> | undefined;
   if (!message || message.role !== 'assistant') return;
   const text = extractText(message);
-  if (text) lane.murmur(toMurmurLine(text), 'entity');
+  lane.murmur(text ? toMurmurLine(text) : 'Ядро відповіло порожнечею.', text ? 'entity' : 'system');
   composer.answered();
   sigil.pulse();
 }

@@ -83,7 +83,6 @@ const LoginScreen = React.lazy(() => import('../components/auth/LoginScreen'));
 const SettingsPanel = React.lazy(() => import('../components/settings/SettingsPanel'));
 const MapLayout = React.lazy(() => import('../layouts/MapLayout'));
 const PolisLayout = React.lazy(() => import('../layouts/PolisLayout'));
-const AgentMarketplace = React.lazy(() => import('../pages/Dashboard/AgentMarketplace'));
 const CreateWorkspace = React.lazy(() => import('../pages/Onboarding/CreateWorkspace'));
 
 const DashboardLayout = React.lazy(() => import('../layouts/DashboardLayout'));
@@ -142,7 +141,6 @@ function MainRouter() {
             <Route path="operator" element={<OperatorLayout />} />
             <Route path="system" element={<FocusLayout />} />
             <Route path="sentinel" element={<SentinelLayout />} />
-            <Route path="marketplace" element={<AgentMarketplace />} />
             <Route path="settings/:categoryId?" element={<SettingsPanel />} />
             <Route path="*" element={<ShadowLayout />} />
           </Route>

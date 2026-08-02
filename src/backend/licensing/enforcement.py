@@ -1,63 +1,78 @@
-"""License gate middleware — active only when PHANTOM_LICENSE_ENFORCE=1.
+"""Ворота прав — вмикаються лише за PHANTOM_LICENSE_ENFORCE=1.
 
-Dev boards and source checkouts run unrestricted; the flag is baked into the
-paid distribution (image/installer), so the gate never surprises a developer.
-Unlicensed requests get 403 {"detail": "license_required"} so the frontend
-can route to the activation screen; auth and license routes stay open so the
-user can actually activate.
+Тут була груба заслінка: без ліцензії кожен /api/ повертав 403. Під чинною
+моделлю це неправильно. Вільний рівень — повноцінний продукт, а не демо: чат,
+мапа, навігація, тривоги, сховище і голос працюють завжди. Тому ворота стоять
+лише на кількох гілках, що належать платним рівням, і повертають 402 з назвою
+права — щоб інтерфейс пояснив людині, ЩО саме закрито, а не викидав її на
+екран активації посеред роботи.
+
+Розробницькі складання і збірки з коду не гатяться: прапорець зашивається в
+платний дистрибутив.
 """
+from __future__ import annotations
 
 import os
-import time
 
-from fastapi import FastAPI, Request
+from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from licensing.verifier import LicenseStatus, license_status
+from licensing import entitlements
 
-ALLOWED_PREFIXES = (
-    "/api/v1/auth",
-    "/api/v1/license",
-    "/health",
-    "/docs",
-    "/openapi.json",
-    "/redoc",
+#: Гілка API → право, без якого вона закрита. Усе, чого тут немає, вільне.
+GATED_PREFIXES: tuple[tuple[str, str], ...] = (
+    ("/api/v1/pair", "bridge.pair"),
+    ("/api/v1/map/offline/terrain", "map.terrain3d"),
+    ("/api/v1/analytics", "export.reports"),
 )
-_CACHE_TTL_S = 10.0
-_cache: tuple[float, LicenseStatus] | None = None
 
 
 def enforcement_enabled() -> bool:
     return os.environ.get("PHANTOM_LICENSE_ENFORCE") == "1"
 
 
-def _cached_status() -> LicenseStatus:
-    global _cache
-    now = time.monotonic()
-    if _cache is not None and now - _cache[0] < _CACHE_TTL_S:
-        return _cache[1]
-    status = license_status()
-    _cache = (now, status)
-    return status
-
-
 def invalidate_cache() -> None:
-    global _cache
-    _cache = None
+    entitlements.invalidate()
+
+
+def _gate_for(path: str) -> str | None:
+    for prefix, feature in GATED_PREFIXES:
+        if path.startswith(prefix):
+            return feature
+    return None
+
+
+def _payload(feature: str, ent: entitlements.Entitlement) -> dict:
+    return {
+        "detail": "upgrade_required",
+        "feature": feature,
+        "needs_tier": entitlements.next_tier_for(feature),
+        "tier": ent.tier,
+        "reason": ent.reason,
+    }
+
+
+def require_feature(feature: str):
+    """Залежність для окремого маршруту, коли гілки замало."""
+
+    async def _dep() -> entitlements.Entitlement:
+        ent = entitlements.cached()
+        if not enforcement_enabled() or ent.has(feature):
+            return ent
+        raise HTTPException(status_code=402, detail=_payload(feature, ent))
+
+    return Depends(_dep)
 
 
 def install_enforcement(app: FastAPI) -> None:
     @app.middleware("http")
-    async def _phantom_license_gate(request: Request, call_next):
+    async def _phantom_feature_gate(request: Request, call_next):
         if not enforcement_enabled() or request.method == "OPTIONS":
             return await call_next(request)
-        path = request.url.path
-        if not path.startswith("/api/") or path.startswith(ALLOWED_PREFIXES):
+        feature = _gate_for(request.url.path)
+        if feature is None:
             return await call_next(request)
-        status = _cached_status()
-        if status.valid:
+        ent = entitlements.cached()
+        if ent.has(feature):
             return await call_next(request)
-        return JSONResponse(
-            status_code=403,
-            content={"detail": "license_required", "reason": status.reason},
-        )
+        return JSONResponse(status_code=402, content=_payload(feature, ent))

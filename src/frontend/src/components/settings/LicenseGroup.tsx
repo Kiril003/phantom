@@ -5,18 +5,24 @@ import {
   ShieldQuestion,
   KeyRound,
   Loader2,
+  Lock,
   RefreshCw,
   Power,
   AlertTriangle,
 } from 'lucide-react';
-import { licenseApi, type LicenseStatus, type LicenseReason } from '../../services/licenseApi';
+import {
+  licenseApi,
+  type Entitlement,
+  type LicenseStatus,
+  type LicenseReason,
+} from '../../services/licenseApi';
 import { ApiError } from '../../services/api';
 
 const TIER_LABELS: Record<string, string> = {
-  desktop: 'Desktop',
-  image: 'Образ',
-  device: 'Пристрій',
-  atelier: 'Ательє',
+  free: 'Вільний',
+  personal: 'Особистий',
+  crew: 'Екіпаж',
+  unit: 'Підрозділ',
 };
 
 const REASON_MESSAGES: Record<LicenseReason, string> = {
@@ -27,9 +33,54 @@ const REASON_MESSAGES: Record<LicenseReason, string> = {
   ok: 'Активовано.',
 };
 
+/** Права словами. Ключі — ті самі, що у licensing/entitlements.py. */
+const FEATURE_LABELS: Record<string, string> = {
+  'core.chat': 'Розмова з ядром',
+  'core.map': 'Мапа й офлайн-пакети',
+  'core.nav': 'Навігація',
+  'core.alerts': 'Тривоги',
+  'core.vault': 'Сховище',
+  'core.voice': 'Голос',
+  'bridge.pair': 'Міст із телефоном',
+  'memory.longterm': 'Довга пам’ять',
+  'map.terrain3d': 'Рельєф і об’ємне місто',
+  'voice.premium': 'Точніша модель слуху',
+  'gnss.blackbox': 'Чорна скринька GNSS',
+  'export.reports': 'Вивантаження і звіти',
+  'crew.sync': 'Синхронізація екіпажу',
+  'fleet.onprem': 'Власний сервер ліцензій',
+};
+
 function tierLabel(tier: string | null): string {
   if (!tier) return '—';
   return TIER_LABELS[tier] ?? tier;
+}
+
+/** Один рядок правди про те, ЧОМУ діє цей рівень. Без цього людина бачить
+ *  «Вільний» і не розуміє, ключ зіпсувався чи проба скінчилась. */
+function entitlementLine(ent: Entitlement): string {
+  switch (ent.reason) {
+    case 'trial':
+      return ent.trial_days_left === 1
+        ? 'Ознайомчий період — лишився останній день.'
+        : `Ознайомчий період — лишилось ${ent.trial_days_left} дн.`;
+    case 'offline_too_long':
+      return 'Ключ не вдалося підтвердити надто довго. Під’єднайся до мережі — рівень повернеться сам.';
+    case 'updates_expired':
+      return `Ця збірка вийшла після ${ent.updates_until}. Куплена версія працює далі, ця — на вільному рівні.`;
+    case 'not_activated':
+      return 'Ключа немає. Безпека, мапа й розмова працюють без нього — назавжди.';
+    case 'device_mismatch':
+      return 'Сертифікат виданий іншому пристрою.';
+    case 'bad_signature':
+      return 'Підпис сертифіката недійсний.';
+    case 'corrupt_license_file':
+      return 'Файл ліцензії пошкоджено.';
+    default:
+      return ent.grace_days_left === null
+        ? 'Ключ дійсний.'
+        : `Ключ дійсний. Без мережі протримається ще ${ent.grace_days_left} дн.`;
+  }
 }
 
 function fingerprintShort(fp: string | null): string {
@@ -120,10 +171,15 @@ export function LicenseGroup() {
     }
   }, [deactivateKey, deactivating]);
 
+  const ent = status?.entitlement ?? null;
+
   const badge = (() => {
     if (loading) return { label: 'Перевірка…', color: 'var(--ink-muted)', bg: 'rgba(0,0,0,0.05)' };
     if (!status) return { label: 'Невідомо', color: 'var(--ink-muted)', bg: 'rgba(0,0,0,0.05)' };
     if (status.valid) return { label: 'Активовано', color: '#16a34a', bg: 'rgba(22,163,74,0.12)' };
+    if (ent?.reason === 'trial') {
+      return { label: 'Ознайомчий', color: '#2563eb', bg: 'rgba(37,99,235,0.12)' };
+    }
     if (status.reason === 'not_activated') {
       return { label: 'Не активовано', color: '#b07a10', bg: 'rgba(244,175,37,0.14)' };
     }
@@ -161,10 +217,10 @@ export function LicenseGroup() {
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="micro-label" style={{ fontSize: 9 }}>
-              ЛІЦЕНЗІЯ
+              РІВЕНЬ
             </div>
             <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--ink-primary)', lineHeight: 1.2 }}>
-              {tierLabel(status?.tier ?? null)}
+              {tierLabel(ent?.tier ?? null)}
             </div>
           </div>
           <span
@@ -229,6 +285,12 @@ export function LicenseGroup() {
           </div>
         )}
 
+        {ent && (
+          <div style={{ marginTop: 8, fontSize: 11.5, color: 'var(--ink-secondary)', lineHeight: 1.45 }}>
+            {entitlementLine(ent)}
+          </div>
+        )}
+
         {status?.valid && (
           <div
             style={{
@@ -244,6 +306,8 @@ export function LicenseGroup() {
           </div>
         )}
       </div>
+
+      {ent && <FeatureBoard ent={ent} />}
 
       {!status?.valid && (
         <div className="glass" style={{ padding: 12 }} data-testid="license-activate-form">
@@ -479,6 +543,54 @@ export function LicenseGroup() {
               )}
             </div>
           )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Що відкрито, а що ні — списком, без «оновись і дізнаєшся». */
+function FeatureBoard({ ent }: { ent: Entitlement }) {
+  const open = new Set(ent.features);
+  const rows = Object.entries(FEATURE_LABELS);
+  const locked = rows.filter(([key]) => !open.has(key));
+
+  return (
+    <div className="glass" style={{ padding: 12 }} data-testid="license-features">
+      <div className="micro-label" style={{ fontSize: 9, marginBottom: 8 }}>
+        ЩО ВІДКРИТО
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 6 }}>
+        {rows.map(([key, label]) => {
+          const on = open.has(key);
+          return (
+            <div
+              key={key}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 7,
+                fontSize: 11.5,
+                color: on ? 'var(--ink-primary)' : 'var(--ink-muted)',
+                minWidth: 0,
+              }}
+            >
+              {on ? (
+                <ShieldCheck size={12} strokeWidth={2} style={{ color: '#16a34a', flexShrink: 0 }} />
+              ) : (
+                <Lock size={12} strokeWidth={2} style={{ color: 'var(--ink-faint)', flexShrink: 0 }} />
+              )}
+              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {label}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+      {locked.length > 0 && (
+        <div style={{ marginTop: 9, fontSize: 11, color: 'var(--ink-muted)', lineHeight: 1.45 }}>
+          Замкнене — це масштаб і зручність. Навігація, тривоги, мапа й сховище лишаються
+          відкритими на будь-якому рівні.
         </div>
       )}
     </div>

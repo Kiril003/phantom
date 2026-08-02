@@ -54,10 +54,8 @@ from api.routes_node import router as node_router
 from api.routes_chronicle import router as chronicle_router
 from api.routes_workbench import router as workbench_router
 from api.routes_tenant import router as tenant_router
-from api.routes_billing import router as billing_router
 from api.routes_api_keys import router as api_keys_router
 from api.routes_analytics import router as analytics_router
-from api.routes_stripe import router as stripe_router
 from api.routes_members import router as members_router
 from api.routes_marketplace import router as marketplace_router
 from api.stream import router as stream_router
@@ -915,10 +913,12 @@ def create_app() -> FastAPI:
     prefix = "/api/v1"
     app.include_router(tenant_router, prefix=prefix)
     app.include_router(members_router, prefix=prefix)
-    app.include_router(billing_router, prefix=prefix)
     app.include_router(api_keys_router, prefix=prefix)
     app.include_router(analytics_router, prefix=prefix)
-    app.include_router(stripe_router, prefix=prefix)
+    # Оплата НЕ живе на пристрої. Тут стояли /billing і /stripe: перший давав
+    # будь-якому простору підняти собі рівень до Enterprise одним POST, другий
+    # не перевіряв підпис вебхука і віддавав вигадане посилання на оплату.
+    # Продає ліцензійний сервер, пристрій лише перевіряє підпис сертифіката.
     app.include_router(auth_router, prefix=prefix)
     app.include_router(users_router, prefix=prefix)
     app.include_router(chat_router, prefix=prefix)

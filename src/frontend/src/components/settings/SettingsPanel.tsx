@@ -49,10 +49,9 @@ import {
 import { AgentLimitsGroup } from './AgentLimitsGroup';
 import { AgentLayoutGroup } from './AgentLayoutGroup';
 import { DesktopShellGroup } from './DesktopShellGroup';
-import { Monitor, KeyRound, ShieldCheck, CreditCard, Key, Users } from 'lucide-react';
+import { Monitor, KeyRound, ShieldCheck, Key, Users } from 'lucide-react';
 import { KeyVaultPanel } from './KeyVaultPanel';
 import { LicenseGroup } from './LicenseGroup';
-import { BillingTab } from './BillingTab';
 import { ApiKeysTab } from './ApiKeysTab';
 import { MembersTab } from './MembersTab';
 
@@ -141,12 +140,10 @@ export default function SettingsPanel() {
       icon: <ShieldCheck size={14} />,
       settings: [],
     };
-    const billing: any = {
-      id: 'billing',
-      label: 'Оплата',
-      icon: <CreditCard size={14} />,
-      settings: [],
-    };
+    // Вкладки «Оплата» більше немає. Вона показувала зашитий рівень «Pro» і
+    // 45 000 витрачених токенів — обидва числа вигадані просто в компоненті,
+    // і жоден лічильник у системі їх не рахував. Правда про ліцензію одна і
+    // живе у вкладці «Ліцензія»; продаж — на сайті, не в пристрої.
     const apiKeys: any = {
       id: 'api_keys',
       label: 'Ключі доступу',
@@ -159,7 +156,7 @@ export default function SettingsPanel() {
       icon: <Users size={14} />,
       settings: [],
     };
-    return [...categories, polisKeys, license, virtual, billing, apiKeys, members];
+    return [...categories, polisKeys, license, virtual, apiKeys, members];
   }, [categories]);
 
   const activeCategory = useMemo(
@@ -684,10 +681,6 @@ export default function SettingsPanel() {
               <LicenseGroup />
             )}
 
-            {loaded && activeCategory && activeCategory.id === 'billing' && (
-              <BillingTab />
-            )}
-
             {loaded && activeCategory && activeCategory.id === 'api_keys' && (
               <ApiKeysTab />
             )}
@@ -704,7 +697,6 @@ export default function SettingsPanel() {
               activeCategory.id !== 'desktop' &&
               activeCategory.id !== 'polis_keys' &&
               activeCategory.id !== 'license' &&
-              activeCategory.id !== 'billing' &&
               activeCategory.id !== 'api_keys' &&
               activeCategory.id !== 'members' && (
               <>

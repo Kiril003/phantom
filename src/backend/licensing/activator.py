@@ -5,6 +5,7 @@ import os
 
 import httpx
 
+from licensing import entitlements
 from licensing.fingerprint import device_fingerprint
 from licensing.verifier import (
     LicenseStatus,
@@ -44,6 +45,8 @@ async def activate(license_key: str, device_name: str = "phantom-os") -> License
     if not verify_certificate(cert):
         raise ActivationError("server returned certificate with untrusted signature")
     store_certificate(cert)
+    entitlements.mark_server_seen()
+    entitlements.invalidate()
     return license_status()
 
 
@@ -78,8 +81,13 @@ async def revalidate() -> dict:
             )
             data = resp.json()
         except (httpx.HTTPError, ValueError):
+            # Мережі немає — це не привід гасити ліцензію. Живемо на пільговому
+            # строку, який рахується від ОСТАННЬОГО вдалого дотику до сервера.
             return {"checked": False, "status": status.as_dict()}
+    entitlements.invalidate()
     if data.get("revoked"):
         remove_certificate()
         return {"checked": True, "status": license_status().as_dict()}
+    if data.get("valid"):
+        entitlements.mark_server_seen()
     return {"checked": True, "status": status.as_dict()}

@@ -30,27 +30,65 @@ vi.mock('../services/api', () => {
   return { ApiError };
 });
 
-import { licenseApi } from '../services/licenseApi';
+import { licenseApi, type Entitlement, type LicenseStatus } from '../services/licenseApi';
 import { LicenseGroup } from '../components/settings/LicenseGroup';
 
-const NOT_ACTIVATED = {
+function ent(over: Partial<Entitlement> = {}): Entitlement {
+  return {
+    tier: 'free',
+    reason: 'not_activated',
+    license_tier: null,
+    trial_days_left: 0,
+    grace_days_left: null,
+    updates_until: null,
+    build_date: '2026-08-03',
+    features: ['core.chat', 'core.map', 'core.nav', 'core.alerts', 'core.vault', 'core.voice'],
+    ...over,
+  };
+}
+
+const NOT_ACTIVATED: LicenseStatus = {
   valid: false,
-  reason: 'not_activated' as const,
+  reason: 'not_activated',
   tier: null,
   license_id: null,
   serial: null,
   updates_until: null,
   fingerprint: 'abc123def456fingerprint',
+  entitlement: ent(),
+  enforced: true,
 };
 
-const ACTIVATED = {
+const ACTIVATED: LicenseStatus = {
   valid: true,
-  reason: 'ok' as const,
-  tier: 'device',
+  reason: 'ok',
+  tier: 'personal',
   license_id: 'lic-001',
   serial: 'SN-42',
   updates_until: '2027-01-01',
   fingerprint: 'abc123def456fingerprint',
+  entitlement: ent({
+    tier: 'personal',
+    reason: 'ok',
+    license_tier: 'personal',
+    grace_days_left: 30,
+    updates_until: '2027-01-01',
+    features: [
+      'core.chat',
+      'core.map',
+      'core.nav',
+      'core.alerts',
+      'core.vault',
+      'core.voice',
+      'bridge.pair',
+      'memory.longterm',
+      'map.terrain3d',
+      'voice.premium',
+      'gnss.blackbox',
+      'export.reports',
+    ],
+  }),
+  enforced: true,
 };
 
 beforeEach(() => {
@@ -132,5 +170,46 @@ describe('LicenseGroup — active license', () => {
     expect(screen.getByText('Деактивувати')).toBeTruthy();
     expect(screen.getByText('lic-001')).toBeTruthy();
     expect(screen.queryByTestId('license-activate-form')).toBeNull();
+  });
+});
+
+describe('LicenseGroup — рівень і права', () => {
+  it('без ключа показує «Вільний» і не ховає безпеку', async () => {
+    vi.mocked(licenseApi.status).mockResolvedValue(NOT_ACTIVATED);
+    render(<LicenseGroup />);
+
+    expect(await screen.findByText('Вільний')).toBeTruthy();
+    const board = screen.getByTestId('license-features');
+    // Обіцянка продукту: навігація й тривоги ніколи не за грошима.
+    for (const label of ['Навігація', 'Тривоги', 'Мапа й офлайн-пакети', 'Сховище']) {
+      expect(board.textContent).toContain(label);
+    }
+    expect(screen.getByText(/працюють без нього/)).toBeTruthy();
+  });
+
+  it('ознайомчий період названий своїм ім’ям, а не «активовано»', async () => {
+    vi.mocked(licenseApi.status).mockResolvedValue({
+      ...NOT_ACTIVATED,
+      entitlement: ent({ tier: 'personal', reason: 'trial', trial_days_left: 9 }),
+    });
+    render(<LicenseGroup />);
+
+    expect(await screen.findByText('Ознайомчий')).toBeTruthy();
+    expect(screen.getByText(/лишилось 9 дн/)).toBeTruthy();
+  });
+
+  it('прострочене вікно оновлень пояснює себе, а не вдає поломку', async () => {
+    vi.mocked(licenseApi.status).mockResolvedValue({
+      ...ACTIVATED,
+      entitlement: ent({
+        tier: 'free',
+        reason: 'updates_expired',
+        license_tier: 'personal',
+        updates_until: '2026-01-01',
+      }),
+    });
+    render(<LicenseGroup />);
+
+    expect(await screen.findByText(/Куплена версія працює далі/)).toBeTruthy();
   });
 });

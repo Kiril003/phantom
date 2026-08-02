@@ -19,11 +19,10 @@ interface OverviewOperator {
 }
 
 interface Overview {
-  tokens_used_this_month?: number | null;
-  max_tokens?: number | null;
+  messages_this_week?: number | null;
   active_agents?: number | null;
   total_sessions?: number | null;
-  daily_usage?: { date: string; tokens: number }[] | null;
+  daily_activity?: { date: string; messages: number }[] | null;
   operators?: OverviewOperator[] | null;
 }
 
@@ -57,10 +56,10 @@ function useOverview(): Load {
       .then((data) => {
         if (!alive) return;
         const empty =
-          data.tokens_used_this_month == null &&
+          data.messages_this_week == null &&
           data.active_agents == null &&
           data.total_sessions == null &&
-          !data.daily_usage?.length;
+          !data.daily_activity?.length;
         setState(empty ? { s: 'empty' } : { s: 'ok', data });
       })
       .catch((err: unknown) => {
@@ -91,9 +90,11 @@ function num(v: number | null | undefined): string | null {
 export default function AnalyticsOverview() {
   const load = useOverview();
   const data = load.s === 'ok' ? load.data : null;
-  const series = (data?.daily_usage ?? []).map((d) => ({
+  // Токенів тут більше немає: висновок іде на пристрої, ми його не рахуємо.
+  // Замість вигаданої кривої — справжня активність по днях.
+  const series = (data?.daily_activity ?? []).map((d) => ({
     name: new Date(d.date).toLocaleDateString('uk-UA', { weekday: 'short' }),
-    tokens: d.tokens,
+    messages: d.messages,
   }));
   const operators = data?.operators ?? [];
 
@@ -125,9 +126,9 @@ export default function AnalyticsOverview() {
 
         <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
           <MetricCard
-            title="Токенів за місяць"
-            value={num(data?.tokens_used_this_month)}
-            trend={data?.max_tokens ? `з ${nf.format(data.max_tokens)}` : null}
+            title="Повідомлень за тиждень"
+            value={num(data?.messages_this_week)}
+            trend={null}
             load={load}
             icon={<Zap size={24} style={{ color: 'var(--accent)' }} />}
           />
@@ -155,7 +156,7 @@ export default function AnalyticsOverview() {
           >
             <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
             <h3 className="text-lg font-medium mb-6 flex items-center gap-2" style={{ color: 'var(--ink-primary)' }}>
-              <Activity size={18} style={{ color: 'var(--ink-muted)' }} /> Витрата токенів · 7 днів
+              <Activity size={18} style={{ color: 'var(--ink-muted)' }} /> Активність · 7 днів
             </h3>
             <div className="h-[300px] w-full">
               {series.length === 0 ? (
@@ -164,7 +165,7 @@ export default function AnalyticsOverview() {
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={series} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
                     <defs>
-                      <linearGradient id="colorTokens" x1="0" y1="0" x2="0" y2="1">
+                      <linearGradient id="colorActivity" x1="0" y1="0" x2="0" y2="1">
                         <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3} />
                         <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
                       </linearGradient>
@@ -184,11 +185,11 @@ export default function AnalyticsOverview() {
                     />
                     <Area
                       type="monotone"
-                      dataKey="tokens"
+                      dataKey="messages"
                       stroke="#f59e0b"
                       strokeWidth={2}
                       fillOpacity={1}
-                      fill="url(#colorTokens)"
+                      fill="url(#colorActivity)"
                     />
                   </AreaChart>
                 </ResponsiveContainer>

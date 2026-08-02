@@ -7,6 +7,27 @@ export type LicenseReason =
   | 'device_mismatch'
   | 'ok';
 
+/** Чому діє саме цей рівень — окремо від того, чи цілий сертифікат. */
+export type EntitlementReason =
+  | 'trial'
+  | 'offline_too_long'
+  | 'updates_expired'
+  | LicenseReason;
+
+export type Tier = 'free' | 'personal' | 'crew' | 'unit';
+
+export interface Entitlement {
+  tier: Tier;
+  reason: EntitlementReason;
+  license_tier: string | null;
+  trial_days_left: number;
+  /** null — сервер не бачили жодного разу, пільговий строк ще не рахується. */
+  grace_days_left: number | null;
+  updates_until: string | null;
+  build_date: string;
+  features: string[];
+}
+
 export interface LicenseStatus {
   valid: boolean;
   reason: LicenseReason;
@@ -15,6 +36,9 @@ export interface LicenseStatus {
   serial: string | null;
   updates_until: string | null;
   fingerprint: string | null;
+  entitlement: Entitlement;
+  /** Ворота ввімкнені лише у платному дистрибутиві. */
+  enforced: boolean;
 }
 
 export const licenseApi = {

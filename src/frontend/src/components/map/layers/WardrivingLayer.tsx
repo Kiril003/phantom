@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import maplibregl, { Marker } from 'maplibre-gl';
 import { useMapInstance } from '../MapContext';
-import { getMapTokens } from '../mapTokens';
+import { getMapTokens, nameMarker } from '../mapTokens';
 import { useMapStore } from '../../../stores/mapStore';
 import type { WardrivingRecord } from '@shared/types';
 
@@ -53,6 +53,7 @@ export function WardrivingLayer() {
       const marker = new maplibregl.Marker({ element: el })
         .setLngLat([r.lon, r.lat])
         .addTo(map);
+      nameMarker(marker, 'Точка доступу Wi-Fi');
       markersRef.current.push(marker);
     });
 

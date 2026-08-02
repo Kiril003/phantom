@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import maplibregl, { Marker } from 'maplibre-gl';
 import { useMapInstance } from '../MapContext';
-import { getMapTokens } from '../mapTokens';
+import { getMapTokens, nameMarker } from '../mapTokens';
 import { useSystemStore } from '../../../stores/systemStore';
 
 /**
@@ -99,6 +99,7 @@ export function PresenceLayer() {
       markerRef.current = new maplibregl.Marker({ element: el })
         .setLngLat([lon, lat])
         .addTo(map);
+      nameMarker(markerRef.current, 'Ти тут');
     } else {
       markerRef.current.setLngLat([lon, lat]);
       if (haloRef.current) {
@@ -125,6 +126,7 @@ export function PresenceLayer() {
         accuracyMarkerRef.current = new maplibregl.Marker({ element: el })
           .setLngLat([lon, lat])
           .addTo(map);
+        nameMarker(accuracyMarkerRef.current, 'Похибка визначення місця');
       } else {
         accuracyMarkerRef.current.setLngLat([lon, lat]);
       }

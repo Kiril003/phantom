@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import maplibregl, { Marker } from 'maplibre-gl';
 import { useMapInstance } from '../MapContext';
-import { getMapTokens, poiColor } from '../mapTokens';
+import { getMapTokens, poiColor, nameMarker } from '../mapTokens';
 import { useMapStore } from '../../../stores/mapStore';
 import type { MapPOI } from '@shared/types';
 
@@ -69,6 +69,7 @@ export function IntelLayer() {
       const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
         .setLngLat([poi.lon, poi.lat])
         .addTo(map);
+      nameMarker(marker, `Місце: ${poi.category}`);
       markersRef.current.push(marker);
     });
 

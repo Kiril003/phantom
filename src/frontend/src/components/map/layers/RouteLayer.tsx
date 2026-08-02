@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import maplibregl, { type GeoJSONSource, type Marker } from 'maplibre-gl';
 import { useMapInstance } from '../MapContext';
-import { getMapTokens } from '../mapTokens';
+import { getMapTokens, nameMarker } from '../mapTokens';
 import { useMapStore } from '../../../stores/mapStore';
 
 /**
@@ -102,6 +102,7 @@ export function RouteLayer() {
         })
           .setLngLat([from.lon, from.lat])
           .addTo(map);
+        nameMarker(fromMarkerRef.current, 'Початок маршруту');
       } else {
         fromMarkerRef.current.setLngLat([from.lon, from.lat]);
       }
@@ -111,6 +112,7 @@ export function RouteLayer() {
         })
           .setLngLat([to.lon, to.lat])
           .addTo(map);
+        nameMarker(toMarkerRef.current, 'Кінець маршруту');
       } else {
         toMarkerRef.current.setLngLat([to.lon, to.lat]);
       }

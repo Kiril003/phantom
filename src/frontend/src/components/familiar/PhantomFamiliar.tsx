@@ -94,43 +94,58 @@ function resolveTargetRect(
   return null;
 }
 
-/** Compute the anchor point for a manifestation. */
-function getSafeAnchor(preferredX: number, desiredY: number): { x: number, y: number } {
-  // Check if we overlap with any major UI panels. We keep it light:
-  // query for [role="dialog"], .glass-panel.
-  // The familiar bounds are FAMILIAR_W x FAMILIAR_H.
-  const myW = 130;
-  const myH = 182;
-  let cx = preferredX;
-  let cy = desiredY;
-  
-  if (typeof document === 'undefined') return { x: cx, y: cy };
+/**
+ * Куди поставити привида, щоб він нікого не накрив.
+ *
+ * Тут було два недогляди. Обхід перешкод питав `.glass-panel` — класу, якого
+ * в макеті немає (картки звуться `.glass`), тож не бачив узагалі нічого. А
+ * домашня поза до нього й не заходила: `default` повертав кут навпростець, і
+ * привид ставав просто на картку, закриваючи кнопку «Пізніше».
+ *
+ * На 1024×600 порожнього місця немає ніде, тож вибираємо не «вільне», а
+ * НАЙМЕНШ зайняте: кілька кутів, оцінка за площею перекриття, і кнопки з
+ * полями важать удесятеро — накрити текст прикро, накрити кнопку не можна.
+ */
+function getSafeAnchor(preferredX: number, desiredY: number): { x: number; y: number } {
+  const myW = FAMILIAR_W;
+  const myH = FAMILIAR_H;
+  if (typeof document === 'undefined') return { x: preferredX, y: desiredY };
 
-  const obstacles = Array.from(document.querySelectorAll('[role="dialog"], .glass-panel, .shadow-panel'));
-  
-  for (const el of obstacles) {
-    const rect = el.getBoundingClientRect();
-    // basic AABB intersection check
-    if (
-      cx < rect.right &&
-      cx + myW > rect.left &&
-      cy < rect.bottom &&
-      cy + myH > rect.top
-    ) {
-      // Collision detected. Push the familiar up or left
-      if (rect.top > myH + 20) {
-        cy = rect.top - myH - 20; // push up
-      } else {
-        cx = rect.left - myW - 20; // push left
-      }
+  const candidates: Array<[number, number]> = [
+    [preferredX, desiredY],
+    [24, FRAME_H - myH - 24],
+    [FRAME_W - myW - 24, 56],
+    [24, 56],
+    [(FRAME_W - myW) / 2, FRAME_H - myH - 12],
+  ];
+
+  const panels = Array.from(
+    document.querySelectorAll('[role="dialog"], .glass, .glass-elevated, .sub-glass'),
+  );
+  const controls = Array.from(
+    document.querySelectorAll('button, a, input, textarea, [role="button"]'),
+  );
+
+  const overlap = (x: number, y: number, r: DOMRect): number => {
+    const w = Math.min(x + myW, r.right) - Math.max(x, r.left);
+    const h = Math.min(y + myH, r.bottom) - Math.max(y, r.top);
+    return w > 0 && h > 0 ? w * h : 0;
+  };
+
+  let best = candidates[0];
+  let bestCost = Number.POSITIVE_INFINITY;
+  for (const [x0, y0] of candidates) {
+    const x = Math.max(0, Math.min(FRAME_W - myW, x0));
+    const y = Math.max(0, Math.min(FRAME_H - myH, y0));
+    let cost = 0;
+    for (const el of panels) cost += overlap(x, y, el.getBoundingClientRect());
+    for (const el of controls) cost += overlap(x, y, el.getBoundingClientRect()) * 10;
+    if (cost < bestCost) {
+      bestCost = cost;
+      best = [x, y];
     }
   }
-
-  // Ensure still within screen
-  cx = Math.max(0, Math.min(1024 - myW, cx));
-  cy = Math.max(0, Math.min(600 - myH, cy));
-  
-  return { x: cx, y: cy };
+  return { x: best[0], y: best[1] };
 }
 
 function anchorFor(m: FamiliarManifestation | null): AnchorPoint {
@@ -206,8 +221,12 @@ function anchorFor(m: FamiliarManifestation | null): AnchorPoint {
       };
     }
 
-    default:
-      return HOME_ANCHOR;
+    default: {
+      // Домашня поза теж шукає вільне місце. Раніше вона одна йшла в кут
+      // навпростець — і саме вона видима найчастіше.
+      const safe = getSafeAnchor(HOME_X, HOME_Y);
+      return { ...HOME_ANCHOR, x: safe.x, y: safe.y };
+    }
   }
 }
 

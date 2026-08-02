@@ -605,14 +605,22 @@ export default function ShadowLayout() {
             </div>
           ) : (
             <>
-              <div className="flex items-baseline" style={{ gap: 6, marginTop: 6 }}>
-                <span className="tabular" style={{ fontSize: 32, fontWeight: 300 }}>
-                  {tempC != null ? `${tempC.toFixed(0)}°` : '—'}
-                </span>
-                <span style={{ fontSize: 11, color: 'var(--ink-muted)' }}>
-                  {tempC != null ? 'датчик у кімнаті' : 'датчик мовчить'}
-                </span>
-              </div>
+              {/* Прочерк у 32 пікселі — не показник, а діра. Головне число
+                  ставимо лише коли воно є; решта картки живе своїм життям. */}
+              {tempC != null ? (
+                <div className="flex items-baseline" style={{ gap: 6, marginTop: 6 }}>
+                  <span className="tabular" style={{ fontSize: 32, fontWeight: 300 }}>
+                    {`${tempC.toFixed(0)}°`}
+                  </span>
+                  <span style={{ fontSize: 11, color: 'var(--ink-muted)' }}>
+                    датчик у кімнаті
+                  </span>
+                </div>
+              ) : (
+                <div style={{ marginTop: 6, fontSize: 11, color: 'var(--ink-muted)' }}>
+                  Термометр мовчить
+                </div>
+              )}
               <div
                 style={{
                   display: 'grid',

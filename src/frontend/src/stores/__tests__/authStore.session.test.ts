@@ -74,7 +74,7 @@ describe('autoLogin — ядро мовчить проти ядро відмов
 
   it('401 від ядра стирає токен', async () => {
     seedSession();
-    me.mockRejectedValue(new FakeApiError(401));
+    me.mockRejectedValue(new FakeApiError(401, "UNAUTHORIZED", "no"));
 
     const ok = await useAuthStore.getState().autoLogin();
 
@@ -86,7 +86,7 @@ describe('autoLogin — ядро мовчить проти ядро відмов
 
   it('500 від ядра — теж не привід стирати ключ', async () => {
     seedSession();
-    me.mockRejectedValue(new FakeApiError(500));
+    me.mockRejectedValue(new FakeApiError(500, "SERVER", "boom"));
 
     await useAuthStore.getState().autoLogin();
 

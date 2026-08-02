@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import maplibregl, { Map as MapLibreMap, Marker } from 'maplibre-gl';
-import { getMapTokens, buildPhantomStyle } from '../map/mapTokens';
+import { getMapTokens, buildPhantomStyle, nameMarker } from '../map/mapTokens';
 import { pluralUa } from '../../utils/format';
 
 export interface MapMarker {
@@ -77,6 +77,7 @@ export function MapResponse({ data }: MapResponseProps) {
         const marker = new maplibregl.Marker({ element: el })
           .setLngLat([m.lon, m.lat])
           .addTo(map);
+        nameMarker(marker, m.label ? `Мітка: ${m.label}` : 'Мітка на мапі');
 
         if (m.label) {
           const popup = new maplibregl.Popup({

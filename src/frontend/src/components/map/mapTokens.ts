@@ -262,3 +262,15 @@ export function poiColor(tokens: MapTokens, category: string): string {
   const key = POI_COLORS[category] ?? 'inkSecondary';
   return tokens[key];
 }
+
+/**
+ * MapLibre штампує на кожній мітці власний `aria-label="Map marker"` — і
+ * робить це ПІСЛЯ того, як забирає наш елемент, тобто затирає підпис, який
+ * ми поставили до створення. Своєї локалізації бібліотека не має, тож
+ * називаємо мітку самі, вже після `addTo`.
+ */
+export function nameMarker(marker: { getElement(): HTMLElement }, label: string): void {
+  const el = marker.getElement();
+  el.setAttribute('aria-label', label);
+  el.setAttribute('title', label);
+}

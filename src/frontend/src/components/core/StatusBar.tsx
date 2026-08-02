@@ -398,8 +398,10 @@ function Esp32Pill({ status }: { status: 'disabled' | 'offline' | 'online' }) {
       : status === 'offline'
         ? 'amber'
         : 'amber';
+  // Крапка проти тире — шифр, який ніхто не прочитає, а на тачскріні
+  // підказки не буває. Стан називаємо словом.
   const label =
-    status === 'online' ? 'ESP32' : status === 'offline' ? 'ESP32 —' : 'ESP32 ·';
+    status === 'online' ? 'ESP32' : status === 'offline' ? 'ESP32 нема' : 'ESP32 вимк.';
   const title =
     status === 'online'
       ? 'Плата підключена, дані з датчиків надходять'

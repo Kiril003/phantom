@@ -10,7 +10,7 @@
 import { useEffect, useRef } from 'react';
 import maplibregl, { Marker } from 'maplibre-gl';
 import { useMapInstance } from '../MapContext';
-import { getMapTokens } from '../mapTokens';
+import { getMapTokens, nameMarker } from '../mapTokens';
 import { useMapStore } from '../../../stores/mapStore';
 
 const CATEGORY_COLORS: Record<string, string> = {
@@ -81,6 +81,7 @@ export function FactMarkerLayer() {
       const marker = new maplibregl.Marker({ element: el, anchor: 'center' })
         .setLngLat([fact.place_lon, fact.place_lat])
         .addTo(map);
+      nameMarker(marker, `Спогад: ${fact.category}`);
       markersRef.current.push(marker);
     });
 

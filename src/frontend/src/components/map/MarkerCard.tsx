@@ -53,7 +53,7 @@ export function MarkerCard() {
           className="glass-elevated absolute top-3 right-3 bottom-3 w-[300px] flex flex-col z-[50] shadow-2xl"
           style={{ borderRadius: 18, border: '1px solid var(--glass-border)' }}
           role="dialog"
-          aria-label="Marker details"
+          aria-label="Про мітку"
         >
           <header
             className="flex items-center gap-2 px-3 shrink-0"

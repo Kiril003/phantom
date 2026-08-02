@@ -131,14 +131,15 @@ export default function DialogueLayout() {
 
           <span aria-hidden style={{ flex: 1 }} />
 
-          {/* Bio + route chips — live wiring, dashes on null, no theater */}
-          <span className="flex items-center" style={{ gap: 5, fontSize: 11 }}>
-            <Wind size={12} strokeWidth={1.75} style={{ color: 'var(--primary-deep)' }} />
-            <span className="tabular" style={{ fontWeight: 600 }}>
-              {bpm != null ? `${bpm}/хв` : '—'}
+          {/* Живий датчик показуємо, мертвий ховаємо: ряд прочерків
+              створював враження зламаного приладу. */}
+          {bpm != null && (
+            <span className="flex items-center" style={{ gap: 5, fontSize: 11 }}>
+              <Wind size={12} strokeWidth={1.75} style={{ color: 'var(--primary-deep)' }} />
+              <span className="tabular" style={{ fontWeight: 600 }}>{bpm}/хв</span>
             </span>
-          </span>
-          <StressChip stress={stress} />
+          )}
+          {stress != null && <StressChip stress={stress} />}
           <span className="flex items-center" style={{ gap: 5, fontSize: 11 }}>
             <Route size={12} strokeWidth={1.75} style={{ color: 'var(--primary-deep)' }} />
             <span style={{ fontWeight: 600, textTransform: 'capitalize' }}>
@@ -164,7 +165,7 @@ export default function DialogueLayout() {
         {/* === TRANSCRIPT — full-bleed chat =============================== */}
         <motion.div
           className="absolute"
-          style={{ left: 12, right: 12, top: 60, bottom: 48, zIndex: 2 }}
+          style={{ left: 12, right: 12, top: 60, bottom: 84, zIndex: 2 }}
           initial={{ y: 12, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ duration: 0.5, ease: EASE_PHANTOM as unknown as number[] }}
@@ -200,10 +201,10 @@ function StressChip({ stress }: { stress: number | null | undefined }) {
       return { pct: 0, bar: 'var(--ink-muted)', label: '—', labelColor: 'var(--ink-muted)' };
     const pct = Math.max(0, Math.min(100, stress * 100));
     if (stress >= 0.7)
-      return { pct, bar: 'var(--signal-alert)', label: 'high', labelColor: 'var(--coral-deep)' };
+      return { pct, bar: 'var(--signal-alert)', label: 'високий', labelColor: 'var(--coral-deep)' };
     if (stress >= 0.4)
-      return { pct, bar: 'var(--signal-warn)', label: 'mid', labelColor: '#8a5e0a' };
-    return { pct, bar: 'var(--signal-ok)', label: 'low', labelColor: '#16a34a' };
+      return { pct, bar: 'var(--signal-warn)', label: 'середній', labelColor: '#8a5e0a' };
+    return { pct, bar: 'var(--signal-ok)', label: 'низький', labelColor: '#16a34a' };
   })();
 
   return (

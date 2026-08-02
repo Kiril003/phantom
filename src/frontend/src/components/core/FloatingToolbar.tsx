@@ -1,6 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { AnimatePresence, motion } from 'framer-motion';
+import { motion } from 'framer-motion';
 import { useSystemStore } from '../../stores/systemStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useUIStore, type OverlayName } from '../../stores/uiStore';
@@ -46,8 +45,6 @@ interface FloatingToolbarProps {
   items?: ToolbarAction[];
 }
 
-const LONG_PRESS_MS = 500;
-
 export function FloatingToolbar({ items }: FloatingToolbarProps) {
   const navigate = useNavigate();
   const location = useLocation();
@@ -62,8 +59,6 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
 
   const windows = useUIStore((s) => s.windows);
   const toggleOverlay = useUIStore((s) => s.toggleOverlay);
-  const moreMenuOpen = useUIStore((s) => s.moreMenuOpen);
-  const setMoreMenuOpen = useUIStore((s) => s.setMoreMenuOpen);
   // Phase 28 — Will Engine.
   const willOpen = useUIStore((s) => s.willOpen);
   const setWillOpen = useUIStore((s) => s.setWillOpen);
@@ -90,9 +85,9 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
   const voiceModeActive = voiceMode === 'continuous' || voiceMode === 'wake_word';
   const voiceModeTooltip =
     voiceMode === 'continuous'
-      ? 'Голос: постійний (тап → wake-фраза)'
+      ? 'Голос: постійний (тап → на слово)'
       : voiceMode === 'wake_word'
-        ? 'Голос: wake-фраза (тап → вимкнути)'
+        ? 'Голос: на слово (тап → вимкнути)'
         : 'Голос: вимкнено (тап → постійний)';
 
   const isOverlayOpen = (name: OverlayName) => windows[name].open && !windows[name].minimized;
@@ -135,14 +130,6 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
   // compete with the threat-mode UI (audit fix Phase-21 follow-up).
   const dockRecede = state === SystemState.SENTINEL || state === SystemState.GHOST;
 
-  // First-run discovery hint for the long-press-on-Home → More gesture.
-  // Cleared the first time long-press fires; persisted in localStorage so
-  // returning sessions don't re-pulse.
-  const [showMoreHint, setShowMoreHint] = useState(
-    () =>
-      typeof window !== 'undefined' &&
-      window.localStorage.getItem('phantom_more_hint_seen') !== '1',
-  );
 
   const primary: ToolbarAction[] = [
     {
@@ -184,7 +171,6 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
       active: location.pathname === '/polis',
       onClick: () => {
         navigate('/polis');
-        setMoreMenuOpen(false);
       },
     },
     {
@@ -195,7 +181,6 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
       active: willOpen,
       onClick: () => {
         setWillOpen(!willOpen);
-        setMoreMenuOpen(false);
       },
     },
     {
@@ -206,7 +191,6 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
       active: voiceModeActive,
       onClick: () => {
         cycleVoiceMode();
-        setMoreMenuOpen(false);
       },
     },
     {
@@ -217,7 +201,6 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
       tone: state === SystemState.SENTINEL ? 'alert' : 'default',
       onClick: () => {
         goSentinel();
-        setMoreMenuOpen(false);
       },
     },
     // Phase 9.5 — Ghost is ROOT-only and filtered out for non-ROOT below
@@ -229,7 +212,6 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
       active: state === SystemState.GHOST,
       onClick: () => {
         goGhost();
-        setMoreMenuOpen(false);
       },
     },
     {
@@ -240,7 +222,6 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
       active: state === SystemState.FOCUS && location.pathname === '/',
       onClick: () => {
         goFocus();
-        setMoreMenuOpen(false);
       },
     },
     {
@@ -249,7 +230,6 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
       label: 'Вийти з сеансу',
       tone: 'alert',
       onClick: () => {
-        setMoreMenuOpen(false);
         signOut();
       },
     },
@@ -257,50 +237,6 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
   const secondary: ToolbarAction[] = secondaryAll.filter(
     (item) => item.id !== 'ghost' || isRoot,
   );
-
-  /* Long-press on Home opens secondary menu too. */
-  const homePressTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const didLongPress = useRef(false);
-  const onHomePointerDown = () => {
-    didLongPress.current = false;
-    homePressTimer.current = setTimeout(() => {
-      didLongPress.current = true;
-      setMoreMenuOpen(true);
-      if (showMoreHint) {
-        try {
-          window.localStorage.setItem('phantom_more_hint_seen', '1');
-        } catch {
-          /* private mode / storage disabled — best-effort */
-        }
-        setShowMoreHint(false);
-      }
-    }, LONG_PRESS_MS);
-  };
-  const onHomePointerUp = () => {
-    if (homePressTimer.current) {
-      clearTimeout(homePressTimer.current);
-      homePressTimer.current = null;
-    }
-  };
-  const onHomeClick = () => {
-    if (didLongPress.current) {
-      didLongPress.current = false;
-      return;
-    }
-    goHome();
-  };
-
-  /* Close More on outside click */
-  const moreRef = useRef<HTMLDivElement>(null);
-  useEffect(() => {
-    if (!moreMenuOpen) return;
-    const onDown = (e: PointerEvent) => {
-      if (!moreRef.current) return;
-      if (!moreRef.current.contains(e.target as Node)) setMoreMenuOpen(false);
-    };
-    document.addEventListener('pointerdown', onDown);
-    return () => document.removeEventListener('pointerdown', onDown);
-  }, [moreMenuOpen, setMoreMenuOpen]);
 
   // Другорядні дії жили в меню «Більше», тож Поліс, Воля, Голос, Вартовий,
   // Привид і Система були невидимі — саме це читалось як «розділи не
@@ -339,40 +275,7 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
     <div
       className="absolute bottom-3 left-1/2 -translate-x-1/2 pointer-events-auto"
       style={{ zIndex: 30 }}
-      ref={moreRef}
     >
-      <AnimatePresence>
-        {moreMenuOpen && (
-          <motion.div
-            initial={{ opacity: 0, y: 12, scale: 0.96 }}
-            animate={{ opacity: 1, y: 0, scale: 1 }}
-            exit={{ opacity: 0, y: 8, scale: 0.96 }}
-            transition={{ duration: 0.2, ease: EASE_PHANTOM as unknown as number[] }}
-            className="absolute left-1/2 -translate-x-1/2"
-            style={{ bottom: 64, zIndex: 40 }}
-          >
-            <div
-              className="glass-strong"
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(2, minmax(150px, 1fr))',
-                gap: 4,
-                padding: 8,
-                minWidth: 320,
-                maxHeight: 480,
-                overflowY: 'auto',
-                overscrollBehavior: 'contain',
-                borderRadius: 18,
-              }}
-            >
-              {secondary.map((it) => (
-                <MoreMenuItem key={it.id} action={it} />
-              ))}
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-
       <motion.div
         className="glass-strong flex items-center"
         animate={{
@@ -388,48 +291,9 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
             '0 6px 18px rgba(0,0,0,0.25), 0 0 0 1px var(--glass-border), inset 0 1px 0 var(--glass-highlight)',
         }}
       >
-        {list.map((item) => {
-          if (item.id === 'home') {
-            return (
-              <div key={item.id} className="relative inline-flex">
-                <ToolbarIcon
-                  item={item}
-                  onPointerDown={onHomePointerDown}
-                  onPointerUp={onHomePointerUp}
-                  onPointerLeave={onHomePointerUp}
-                  onClick={onHomeClick}
-                />
-                {showMoreHint && !moreMenuOpen && (
-                  <span
-                    aria-hidden
-                    className="animate-pulse"
-                    style={{
-                      position: 'absolute',
-                      right: 4,
-                      bottom: 4,
-                      width: 6,
-                      height: 6,
-                      borderRadius: 999,
-                      background: 'rgba(244,175,37,0.95)',
-                      boxShadow: '0 0 6px rgba(244,175,37,0.85)',
-                      pointerEvents: 'none',
-                    }}
-                  />
-                )}
-              </div>
-            );
-          }
-          return <ToolbarIcon key={item.id} item={item} />;
-        })}
-        <ToolbarIcon
-          item={{
-            id: 'more',
-            icon: 'more_horiz',
-            label: 'Більше',
-            active: moreMenuOpen,
-            onClick: () => setMoreMenuOpen(!moreMenuOpen),
-          }}
-        />
+        {list.map((item) => (
+          <ToolbarIcon key={item.id} item={item} />
+        ))}
         <ChromeHandle
           position="bottom"
           collapsed={false}
@@ -501,74 +365,3 @@ function ToolbarIcon({
   );
 }
 
-/* ─── More-menu row ───────────────────────────────────────────────── */
-
-function MoreMenuItem({ action }: { action: ToolbarAction }) {
-  return (
-    <button
-      type="button"
-      disabled={action.disabled}
-      onClick={action.disabled ? undefined : action.onClick}
-      className="flex items-center"
-      style={{
-        gap: 12,
-        minHeight: 44,
-        padding: '0 12px',
-        borderRadius: 12,
-        background: action.active
-          ? 'linear-gradient(135deg, rgba(244,175,37,0.22), rgba(251,146,60,0.18))'
-          : 'transparent',
-        border: action.active
-          ? '1px solid rgba(244,175,37,0.45)'
-          : '1px solid transparent',
-        color:
-          action.tone === 'alert'
-            ? 'var(--coral-deep)'
-            : action.active
-              ? '#8a5e0a'
-              : 'var(--ink-primary)',
-        opacity: action.disabled ? 0.35 : 1,
-        cursor: action.disabled ? 'not-allowed' : 'pointer',
-        fontFamily: 'var(--font-display)',
-        fontSize: 12,
-        fontWeight: 600,
-        letterSpacing: '0.04em',
-        textAlign: 'left',
-        transition: 'background 200ms ease, color 200ms ease',
-      }}
-      onMouseEnter={(e) => {
-        if (action.disabled || action.active) return;
-        (e.currentTarget as HTMLElement).style.background = 'rgba(255,255,255,0.55)';
-      }}
-      onMouseLeave={(e) => {
-        if (action.disabled || action.active) return;
-        (e.currentTarget as HTMLElement).style.background = 'transparent';
-      }}
-      aria-label={action.label}
-      aria-pressed={action.active}
-      title={action.tooltip ?? action.label}
-    >
-      <PhantomIcon
-        name={action.icon}
-        size={18}
-        color="inherit"
-        weight={action.active ? 500 : 400}
-        filled={action.active}
-        aria-hidden
-      />
-      <span className="flex-1">{action.label}</span>
-      {action.active && (
-        <span
-          aria-hidden
-          style={{
-            width: 6,
-            height: 6,
-            borderRadius: 999,
-            background: 'currentColor',
-            boxShadow: '0 0 6px currentColor',
-          }}
-        />
-      )}
-    </button>
-  );
-}

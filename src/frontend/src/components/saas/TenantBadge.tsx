@@ -23,7 +23,9 @@ export function TenantBadge(): JSX.Element {
       .catch(() => setTenant(null));
   }, []);
 
-  const planTier = tenant?.plan_tier || 'PRO';
+  // Без відповіді сервера тариф невідомий. «PRO» за замовчуванням був
+  // обіцянкою, якої ніхто не давав.
+  const planTier = tenant?.plan_tier ?? null;
 
   const formatRole = (role?: string) => {
     switch (role?.toUpperCase()) {
@@ -49,10 +51,12 @@ export function TenantBadge(): JSX.Element {
         <span className="font-medium tracking-wide">
           {tenant?.tenant_name ?? tenant?.username ?? 'простір не визначено'}
         </span>
-        <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30">
-          <Zap size={10} />
-          {planTier}
-        </span>
+        {planTier && (
+          <span className="flex items-center gap-1 px-1.5 py-0.5 rounded-full text-[10px] font-semibold bg-amber-500/20 text-amber-300 border border-amber-500/30">
+            <Zap size={10} />
+            {planTier}
+          </span>
+        )}
         <ChevronDown size={12} className={`transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
 

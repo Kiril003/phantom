@@ -107,12 +107,29 @@ for (const [path, name] of ROUTES) {
       const r = el.getBoundingClientRect();
       return r.width > 0 && r.height > 0 && (r.width < 44 || r.height < 44);
     }).length;
+    // Що ховається під нижнім доком. Композер чату вже двічі опинявся
+    // під ним — на око це видно лише на скріншоті, тож міряємо.
+    const dock = [...document.querySelectorAll('button')]
+      .map((el) => el.getBoundingClientRect())
+      .filter((r) => r.height > 20 && r.top > window.innerHeight - 120)
+      .reduce((acc, r) => Math.min(acc, r.top), Infinity);
+    let buried = 0;
+    if (dock !== Infinity) {
+      buried = [...document.querySelectorAll('input, textarea, button, a')].filter((el) => {
+        const r = el.getBoundingClientRect();
+        if (r.width < 8 || r.height < 8) return false;
+        if (r.top > window.innerHeight - 120) return false;
+        return r.bottom > dock + 4;
+      }).length;
+    }
+
     return {
       chars: text.length,
       overflowY: doc.scrollHeight - doc.clientHeight,
       overflowX: doc.scrollWidth - doc.clientWidth,
       latin: latin.slice(0, 5),
       tiny,
+      buried,
     };
   });
 
@@ -123,6 +140,7 @@ for (const [path, name] of ROUTES) {
   if (m.overflowY > 0) flags.push(`вниз +${m.overflowY}px`);
   if (m.overflowX > 0) flags.push(`вбік +${m.overflowX}px`);
   if (m.tiny) flags.push(`дрібні цілі: ${m.tiny}`);
+  if (m.buried) { flags.push(`ПІД ДОКОМ: ${m.buried}`); bad += m.buried; }
   if (m.latin.length) flags.push(`англ: ${m.latin.join(' ')}`);
   if (bag.length) { flags.push(`ПОМИЛОК ${bag.length}`); bad += bag.length; }
 

@@ -308,12 +308,12 @@ export function ChatInputRail({
                     ? '0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent), 0 0 22px var(--accent-glow)'
                     : 'none',
                 opacity: input.trim() && !sending ? 1 : 0.6,
-                transform:
-                  input.trim() && !sending ? 'scale(1)' : 'scale(0.94)',
+                /* Без зменшення: scale(0.94) робив кнопку 41px і рвав
+                   правило 44×44 у неактивному стані. */
                 transition:
                   'background 200ms, color 200ms, box-shadow 220ms, border-color 200ms, opacity 200ms, transform 180ms cubic-bezier(0.16, 1, 0.3, 1)',
               }}
-              aria-label="Send message"
+              aria-label="Надіслати"
               data-active={input.trim() && !sending ? '1' : '0'}
             >
               <Send size={16} strokeWidth={2} />

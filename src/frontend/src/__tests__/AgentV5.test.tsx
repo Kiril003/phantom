@@ -102,6 +102,7 @@ vi.mock('framer-motion', async () => {
 });
 
 vi.mock('../services/api', () => ({
+  request: vi.fn().mockRejectedValue(new Error('offline')),
   settingsApi: {
     getAll: vi.fn().mockResolvedValue({ categories: [] }),
     get: vi.fn(),
@@ -206,31 +207,28 @@ describe('T3 — OperatorLayout conversation vs telemetry', () => {
     });
   });
 
-  // The V5 conversation "peek" crush (col-span-1 + 36px/48px wrappers)
-  // was an unreadable regression on the 1024×600 device — operator:
-  // "не бачу їх як треба". Layout is now fixed 9/3 split.
+  // Колонковий поділ 9/3 знято разом із OperatorLayout v4: робоча зона
+  // тепер на всю ширину. Перевіряємо, що вона є і що жоден режим її не
+  // «підтискає» назад у вузьку смугу.
   for (const mode of ['conversation', 'telemetry'] as const) {
-    it(`${mode} mode: main column readable (col-span-9), no peek crush`, () => {
+    it(`${mode}: робоча зона на всю ширину, без стиснених peek-панелей`, () => {
       useSettingsStore.setState({ values: { ui_agent_layout: mode }, loaded: true });
       render(wrap(<OperatorLayout />));
-      expect(screen.getByTestId('main-stream-column').className).toContain('col-span-9');
+      expect(screen.getByTestId('operator-layout')).toBeTruthy();
+      expect(screen.getByTestId('focus-panel-stub')).toBeTruthy();
+      expect(screen.getByTestId('agent-roster-stub')).toBeTruthy();
       expect(screen.queryByTestId('vitals-peek')).toBeNull();
-    });
-
-    it(`${mode} mode: tape-column readable (col-span-3), no peek crush`, () => {
-      useSettingsStore.setState({ values: { ui_agent_layout: mode }, loaded: true });
-      render(wrap(<OperatorLayout />));
-      expect(screen.getByTestId('tape-column').className).toContain('col-span-3');
       expect(screen.queryByTestId('tape-peek')).toBeNull();
     });
   }
 
-  it('default (ui_agent_layout unset): panels readable, never crushed', () => {
+  it('за замовчуванням робоча зона теж повна', () => {
     useSettingsStore.setState({ values: {}, loaded: true });
     render(wrap(<OperatorLayout />));
-    expect(screen.getByTestId('main-stream-column').className).toContain('col-span-9');
-    expect(screen.getByTestId('tape-column').className).toContain('col-span-3');
+    expect(screen.getByTestId('focus-panel-stub')).toBeTruthy();
+    expect(screen.queryByTestId('vitals-peek')).toBeNull();
   });
+
 });
 
 // ── T4: AgentLayoutGroup settings component ────────────────────────────────

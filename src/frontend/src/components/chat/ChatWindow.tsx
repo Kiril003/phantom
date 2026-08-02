@@ -587,12 +587,12 @@ export function ChatWindow({
           <button
             type="button"
             onClick={() => startNewSession()}
-            className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg transition-all active:scale-95 hover:bg-accent/10 shrink-0"
+            className="flex items-center gap-1.5 px-3 rounded-xl transition-all active:scale-95 hover:bg-accent/10 shrink-0"
             style={{
               border:
                 '1px solid color-mix(in srgb, var(--accent) 30%, transparent)',
               color: 'var(--accent)',
-              minHeight: 28,
+              minHeight: 44,
             }}
             aria-label={t('chat.sessions.new')}
           >
@@ -695,8 +695,8 @@ export function ChatWindow({
                     disabled={sending}
                     className="inline-flex items-center gap-2 active:scale-95 transition-all"
                     style={{
-                      minHeight: 40,
-                      padding: '8px 12px',
+                      minHeight: 44,
+                      padding: '10px 14px',
                       borderRadius: 12,
                       background: 'var(--glass-subtle)',
                       border: '1px solid var(--glass-border)',

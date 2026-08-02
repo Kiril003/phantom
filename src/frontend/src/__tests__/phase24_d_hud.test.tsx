@@ -68,7 +68,7 @@ describe('MapStateBadge', () => {
     render(<MapStateBadge />);
     const badge = screen.getByTestId('map-state-badge');
     expect(badge).toHaveAttribute('data-state', SystemState.GHOST);
-    expect(badge).toHaveTextContent(/ghost/i);
+    expect(badge).toHaveTextContent(/привид/i);
   });
 
   it('prefers an explicit prop override', () => {
@@ -108,15 +108,22 @@ describe('ScaleBar', () => {
 
 
 describe('LayerPalette', () => {
-  it('renders one chip per known layer', () => {
+  it('renders one chip per known layer once expanded', () => {
     render(<LayerPalette />);
+    fireEvent.click(screen.getByTestId('layer-palette-toggle'));
     ['base', 'presence', 'wardriving', 'heatmap', 'intel', 'recon', 'facts'].forEach((key) => {
       expect(screen.getByTestId(`layer-palette-${key}`)).toBeInTheDocument();
     });
   });
 
+  it('keeps the chip row collapsed until the toggle is pressed', () => {
+    render(<LayerPalette />);
+    expect(screen.queryByTestId('layer-palette-heatmap')).not.toBeInTheDocument();
+  });
+
   it('toggles the corresponding mapStore layer when clicked', () => {
     render(<LayerPalette />);
+    fireEvent.click(screen.getByTestId('layer-palette-toggle'));
     const before = useMapStore.getState().layers.heatmap;
     fireEvent.click(screen.getByTestId('layer-palette-heatmap'));
     expect(useMapStore.getState().layers.heatmap).toBe(!before);
@@ -125,6 +132,7 @@ describe('LayerPalette', () => {
   it('emits onOpenLibrary when the trailing button is clicked', () => {
     const cb = vi.fn();
     render(<LayerPalette onOpenLibrary={cb} />);
+    fireEvent.click(screen.getByTestId('layer-palette-toggle'));
     fireEvent.click(screen.getByTestId('layer-palette-library'));
     expect(cb).toHaveBeenCalledOnce();
   });
@@ -240,12 +248,12 @@ describe('ElevationProfileSheet', () => {
 describe('StatusChip', () => {
   it('shows Syncing when loading=true', () => {
     render(<StatusChip loading={true} zoom={12} />);
-    expect(screen.getByText('Syncing')).toBeInTheDocument();
+    expect(screen.getByText('Синхронізація')).toBeInTheDocument();
   });
 
   it('shows Live when loading=false', () => {
     render(<StatusChip loading={false} zoom={14} />);
-    expect(screen.getByText('Live')).toBeInTheDocument();
+    expect(screen.getByText('Наживо')).toBeInTheDocument();
   });
 
   it('renders zoom level', () => {

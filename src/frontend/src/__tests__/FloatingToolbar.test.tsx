@@ -84,7 +84,7 @@ describe('FloatingToolbar — Voice mode cycle (Phase 12.0)', () => {
 
   it('renders the voice-mode button as enabled, off-state by default', () => {
     renderToolbar();
-    const btn = screen.getByLabelText('Voice mode') as HTMLButtonElement;
+    const btn = screen.getByLabelText('Голосовий режим') as HTMLButtonElement;
     expect(btn).toBeTruthy();
     expect(btn.disabled).toBe(false);
     // off-state → not active
@@ -93,7 +93,7 @@ describe('FloatingToolbar — Voice mode cycle (Phase 12.0)', () => {
 
   it('cycles off → continuous on first click', async () => {
     renderToolbar();
-    const btn = screen.getByLabelText('Voice mode');
+    const btn = screen.getByLabelText('Голосовий режим');
     await act(async () => {
       fireEvent.click(btn);
     });
@@ -109,7 +109,7 @@ describe('FloatingToolbar — Voice mode cycle (Phase 12.0)', () => {
       loaded: true,
     });
     renderToolbar();
-    const btn = screen.getByLabelText('Voice mode');
+    const btn = screen.getByLabelText('Голосовий режим');
     await act(async () => {
       fireEvent.click(btn);
     });
@@ -125,7 +125,7 @@ describe('FloatingToolbar — Voice mode cycle (Phase 12.0)', () => {
       loaded: true,
     });
     renderToolbar();
-    const btn = screen.getByLabelText('Voice mode');
+    const btn = screen.getByLabelText('Голосовий режим');
     await act(async () => {
       fireEvent.click(btn);
     });
@@ -141,7 +141,7 @@ describe('FloatingToolbar — Voice mode cycle (Phase 12.0)', () => {
       loaded: true,
     });
     renderToolbar();
-    const btn = screen.getByLabelText('Voice mode');
+    const btn = screen.getByLabelText('Голосовий режим');
     expect(btn.getAttribute('aria-pressed')).toBe('true');
   });
 
@@ -153,7 +153,7 @@ describe('FloatingToolbar — Voice mode cycle (Phase 12.0)', () => {
       loaded: true,
     });
     renderToolbar();
-    const btn = screen.getByLabelText('Voice mode');
+    const btn = screen.getByLabelText('Голосовий режим');
     expect(btn.getAttribute('aria-pressed')).toBe('true');
   });
 
@@ -161,7 +161,7 @@ describe('FloatingToolbar — Voice mode cycle (Phase 12.0)', () => {
     setMock.mockReset();
     setMock.mockRejectedValue(new Error('500'));
     renderToolbar();
-    const btn = screen.getByLabelText('Voice mode');
+    const btn = screen.getByLabelText('Голосовий режим');
     await act(async () => {
       fireEvent.click(btn);
       // give the rejection a tick to land
@@ -216,55 +216,20 @@ describe('FloatingToolbar — Section A dock redesign', () => {
     useUIStore.setState({ moreMenuOpen: false } as never);
   });
 
-  it('renders only Home, Chat (Dialogue), Apps, Settings + More in primary row', () => {
+  it('показує кожен розділ прямо в доку, без меню «Більше»', () => {
     renderToolbar();
-    expect(screen.getByLabelText('Home')).toBeTruthy();
-    expect(screen.getByLabelText('Dialogue')).toBeTruthy();
-    expect(screen.getByLabelText('Apps')).toBeTruthy();
-    expect(screen.getByLabelText('Settings')).toBeTruthy();
-    expect(screen.getByLabelText('More')).toBeTruthy();
-    // Terminal and Map have moved to the Apps grid; closed More menu
-    // means they must NOT be reachable in the primary row.
-    expect(screen.queryByLabelText('Terminal')).toBeNull();
-    expect(screen.queryByLabelText('Map')).toBeNull();
+    ['Головна', 'Діалог', 'Додатки', 'Налаштування', 'Поліс', 'Воля',
+     'Голосовий режим', 'Вартовий', 'Система'].forEach((label) => {
+      expect(screen.getByLabelText(label)).toBeTruthy();
+    });
+    // Меню «Більше» знято: воно лише дублювало те, що вже видно в доку.
+    expect(screen.queryByLabelText('Більше')).toBeNull();
   });
 
-  it('More menu renders as a 2-column scroll-safe grid', () => {
-    useUIStore.setState({ moreMenuOpen: true } as never);
+  it('не рендерить жодну дію двічі', () => {
     renderToolbar();
-    // Grab the More menu button to find its sibling popover.
-    const moreBtn = screen.getByLabelText('More');
-    // Climb to the toolbar container then find the grid via the secondary
-    // action's parent (e.g. the Sentinel button's grandparent).
-    const sentinel = screen.getByLabelText('Sentinel');
-    const grid = sentinel.parentElement!;
-    expect(grid.style.display).toBe('grid');
-    expect(grid.style.gridTemplateColumns).toContain('repeat(2,');
-    expect(grid.style.overflowY).toBe('auto');
-    expect(parseInt(grid.style.maxHeight, 10)).toBeGreaterThan(0);
-    expect(moreBtn.getAttribute('aria-pressed')).toBe('true');
-  });
-
-  it('shows the long-press hint dot on first run and dismisses after long-press', async () => {
-    vi.useFakeTimers();
-    try {
-      renderToolbar();
-      // Hint dot is rendered as a sibling motion.span inside the Home wrapper.
-      const homeBtn = screen.getByLabelText('Home');
-      const homeWrapper = homeBtn.parentElement!;
-      // span with aria-hidden marks the hint dot.
-      expect(homeWrapper.querySelector('span[aria-hidden="true"]')).toBeTruthy();
-
-      // Trigger long-press: pointerDown then advance 500ms.
-      await act(async () => {
-        fireEvent.pointerDown(homeBtn);
-        vi.advanceTimersByTime(600);
-      });
-      expect(window.localStorage.getItem('phantom_more_hint_seen')).toBe('1');
-      // After long-press fires, the hint dot is gone.
-      expect(homeWrapper.querySelector('span[aria-hidden="true"]')).toBeNull();
-    } finally {
-      vi.useRealTimers();
-    }
+    ['Поліс', 'Вартовий', 'Голосовий режим', 'Система'].forEach((label) => {
+      expect(screen.getAllByLabelText(label)).toHaveLength(1);
+    });
   });
 });

@@ -55,7 +55,7 @@ describe('AttributionDrawer', () => {
     render(<AttributionDrawer pollMs={0} />);
     const toggle = await screen.findByTestId('attribution-drawer-toggle');
     expect(toggle).toHaveTextContent('© OpenStreetMap');
-    expect(toggle).toHaveTextContent('2 sources');
+    expect(toggle).toHaveTextContent('джерел: 2');
   });
 
   it('expands to show every attribution line on toggle click', async () => {

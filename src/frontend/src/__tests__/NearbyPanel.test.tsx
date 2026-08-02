@@ -106,7 +106,7 @@ describe('NearbyPanel', () => {
     vi.mocked(mapApi.getNearby).mockResolvedValue(populatedResponse);
     render(<NearbyPanel lat={50.45} lon={30.52} zoom={16} />);
     await waitFor(() => screen.getByText(/3 поруч/));
-    fireEvent.click(screen.getByRole('button', { name: /3 places nearby/i }));
+    fireEvent.click(screen.getByRole('button', { name: /3 місць поруч/i }));
     expect(screen.getByText("Пам'ять")).toBeInTheDocument();
     expect(screen.getByText("Об'єкти")).toBeInTheDocument();
     expect(screen.getByText("Збережене")).toBeInTheDocument();
@@ -119,7 +119,7 @@ describe('NearbyPanel', () => {
       <NearbyPanel lat={50.45} lon={30.52} zoom={16} onSelect={onSelect} />
     );
     await waitFor(() => screen.getByText(/3 поруч/));
-    fireEvent.click(screen.getByRole('button', { name: /3 places nearby/i }));
+    fireEvent.click(screen.getByRole('button', { name: /3 місць поруч/i }));
     fireEvent.click(screen.getByText('Home'));
     expect(onSelect).toHaveBeenCalledWith(
       expect.objectContaining({ kind: 'poi' })

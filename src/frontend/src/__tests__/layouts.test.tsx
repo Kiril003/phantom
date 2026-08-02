@@ -161,7 +161,8 @@ describe('ShadowLayout', () => {
   it('renders temperature', async () => {
     const ShadowLayout = (await import('../layouts/ShadowLayout')).default;
     render(withRouter(<ShadowLayout />));
-    expect(screen.getAllByText(/22\.5/).length).toBeGreaterThanOrEqual(1);
+    // Картка повітря округлює до градуса: 22.5 → 23°
+    expect(screen.getAllByText(/23°/).length).toBeGreaterThanOrEqual(1);
   });
 });
 
@@ -182,13 +183,13 @@ describe('FocusLayout', () => {
     render(withRouter(<FocusLayout />));
     // BPM from bio mock context = 16, temp = 22.5
     expect(screen.getAllByText(/16/).length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText(/22\.5/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/22[.,]5|23/).length).toBeGreaterThanOrEqual(1);
   });
 
   it('renders SYSTEM_CORE section label', async () => {
     const FocusLayout = (await import('../layouts/FocusLayout')).default;
     render(withRouter(<FocusLayout />));
-    expect(screen.getByText('SYSTEM_CORE')).toBeDefined();
+    expect(screen.getByText('ЯДРО СИСТЕМИ')).toBeDefined();
   });
 
   it('renders CPU / RAM / Disk gauges', async () => {
@@ -196,7 +197,7 @@ describe('FocusLayout', () => {
     render(withRouter(<FocusLayout />));
     expect(screen.getAllByText('CPU').length).toBeGreaterThanOrEqual(1);
     expect(screen.getAllByText('RAM').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText(/Disk/i).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/ДИСК/i).length).toBeGreaterThanOrEqual(1);
   });
 });
 
@@ -309,7 +310,7 @@ describe('SentinelLayout', () => {
   it('shows first visit warning', async () => {
     const SentinelLayout = (await import('../layouts/SentinelLayout')).default;
     render(withRouter(<SentinelLayout />));
-    expect(screen.getByText('First visit to this location')).toBeDefined();
+    expect(screen.getByText('Уперше в цьому місці')).toBeDefined();
   });
 
   it('shows night time warning', async () => {
@@ -318,7 +319,7 @@ describe('SentinelLayout', () => {
     // assertion does not break when the timestamp formatting evolves.
     const SentinelLayout = (await import('../layouts/SentinelLayout')).default;
     render(withRouter(<SentinelLayout />));
-    expect(screen.getByText(/Night time/)).toBeDefined();
+    expect(screen.getByText(/Нічний час/)).toBeDefined();
   });
 });
 

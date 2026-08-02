@@ -561,7 +561,7 @@ describe('ChatWindow', () => {
   it('disables send button when input is empty', async () => {
     const { ChatWindow } = await import('../components/chat/ChatWindow');
     render(<ChatWindow minimalChrome />);
-    const btn = screen.getByLabelText('Send message');
+    const btn = screen.getByLabelText('Надіслати');
     expect((btn as HTMLButtonElement).disabled).toBe(true);
   });
 
@@ -573,10 +573,10 @@ describe('ChatWindow', () => {
     const textarea = screen.getByLabelText('Chat input') as HTMLTextAreaElement;
     fireEvent.change(textarea, { target: { value: 'hello' } });
     await waitFor(() => {
-      const btn = screen.getByLabelText('Send message');
+      const btn = screen.getByLabelText('Надіслати');
       expect((btn as HTMLButtonElement).disabled).toBe(false);
     });
-    fireEvent.click(screen.getByLabelText('Send message'));
+    fireEvent.click(screen.getByLabelText('Надіслати'));
     await waitFor(() => expect(spy).toHaveBeenCalled());
     const firstCall = spy.mock.calls[0] as unknown as [string, string, string];
     expect(firstCall[0]).toBe('hello');

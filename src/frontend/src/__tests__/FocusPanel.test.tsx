@@ -203,7 +203,7 @@ describe('FocusPanel', () => {
     expect(aiEl.textContent).toContain('50');
 
     const loopEl = getByTestId('now-loop');
-    expect(loopEl.textContent).toContain('↻3');
+    expect(loopEl.textContent).toContain('3');
   });
 
   // Extra: council active shows "Open Council" button

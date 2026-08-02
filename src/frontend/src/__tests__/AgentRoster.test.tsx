@@ -7,7 +7,7 @@
  *  3. aria-pressed=true only on the focused chip
  *  4. Foreground chip becomes active when currentTask set + status='running'
  *  5. Council chip becomes active when councilActive=true
- *  6. Compact mode (chrome.roster=true) renders shorter chips without text labels
+ *  6. Compact mode (chrome.roster=true) renders shorter chips that keep their labels
  */
 import { describe, it, expect, beforeEach } from 'vitest';
 import { render, fireEvent } from '@testing-library/react';
@@ -145,7 +145,7 @@ describe('AgentRoster', () => {
 
   // ── 6. Compact mode: shorter chips, no text labels ───────────────────────
 
-  it('compact mode (chrome.roster=true) renders shorter chips without text labels', () => {
+  it('compact mode (chrome.roster=true) renders shorter chips that keep their labels', () => {
     // Set roster chrome to collapsed (compact)
     useUIStore.setState({
       chrome: {
@@ -170,12 +170,12 @@ describe('AgentRoster', () => {
     expect(parseInt(fgStyle.height, 10)).toBe(28);
     expect(parseInt(bgStyle.height, 10)).toBe(28);
 
-    // No text labels ("ОСНОВНИЙ", "ФОНОВИЙ", "ДОРУЧЕННЯ", "АВТОНОМІЯ") should be visible as text nodes
-    // In compact mode these label spans are not rendered
-    expect(queryByText('ОСНОВНИЙ')).toBeNull();
-    expect(queryByText('ФОНОВИЙ')).toBeNull();
-    expect(queryByText('ДОРУЧЕННЯ')).toBeNull();
-    expect(queryByText('АВТОНОМІЯ')).toBeNull();
+    // Підписи лишаються і в компактному режимі — без них ряд читався як
+    // безіменні вкладки. Ховається лише текст статусу.
+    expect(queryByText('ОСНОВНИЙ')).not.toBeNull();
+    expect(queryByText('ФОНОВИЙ')).not.toBeNull();
+    expect(queryByText('Немає задачі')).toBeNull();
+    expect(queryByText('Немає фону')).toBeNull();
   });
 
   // ── 7. Full mode: text labels visible ───────────────────────────────────

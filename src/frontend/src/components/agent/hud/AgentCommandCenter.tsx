@@ -1,7 +1,7 @@
 import { useState, useRef, useEffect } from 'react';
 import {
   Mic, Loader2,
-  Pause, Play, OctagonX,
+  Pause, Play, OctagonX, PencilLine,
   History, MessageCircle, Send,
 } from 'lucide-react';
 import { useAgentStore } from '../../../stores/agentStore';
@@ -17,7 +17,7 @@ interface Props {
   onOpenPlanEditor?: () => void;
 }
 
-export function AgentCommandCenter({ onOpenParallelChat, onStartMission }: Props) {
+export function AgentCommandCenter({ onOpenParallelChat, onStartMission, onOpenPlanEditor }: Props) {
   const status = useAgentStore((s) => s.status);
   const currentTask = useAgentStore((s) => s.currentTask);
   const startTask = useAgentStore((s) => s.startTask);
@@ -190,8 +190,20 @@ export function AgentCommandCenter({ onOpenParallelChat, onStartMission }: Props
           </button>
         ) : (
           <>
-             <HUDButton icon={isPaused ? <Play size={16} fill="currentColor" /> : <Pause size={16} fill="currentColor" />} onClick={isPaused ? resumeTask : pauseTask} color="var(--primary)" small />
-             <HUDButton icon={<OctagonX size={16} />} onClick={stopTask} color="var(--signal-alert)" small />
+             {/* Редактор плану був під'єднаний в OperatorLayout, але жодна
+                 кнопка його не відкривала — фіча була недосяжна. */}
+             {onOpenPlanEditor && (
+               <HUDButton
+                 testId="plan-editor-trigger"
+                 label="Редагувати план"
+                 icon={<PencilLine size={16} />}
+                 onClick={onOpenPlanEditor}
+                 color="var(--primary)"
+                 small
+               />
+             )}
+             <HUDButton label={isPaused ? 'Продовжити' : 'Пауза'} icon={isPaused ? <Play size={16} fill="currentColor" /> : <Pause size={16} fill="currentColor" />} onClick={isPaused ? resumeTask : pauseTask} color="var(--primary)" small />
+             <HUDButton label="Зупинити" icon={<OctagonX size={16} />} onClick={stopTask} color="var(--signal-alert)" small />
           </>
         )}
       </div>
@@ -199,15 +211,19 @@ export function AgentCommandCenter({ onOpenParallelChat, onStartMission }: Props
   );
 }
 
-function HUDButton({ icon, onClick, color, small = false }: { icon: React.ReactNode, onClick: () => void, color: string, small?: boolean }) {
+function HUDButton({ icon, onClick, color, small = false, testId, label }: { icon: React.ReactNode, onClick: () => void, color: string, small?: boolean, testId?: string, label?: string }) {
   return (
-    <button 
+    <button
+      type="button"
+      data-testid={testId}
+      aria-label={label}
+      title={label}
       onClick={onClick}
       className="flex items-center justify-center transition-all hover:bg-black/5 active:scale-90"
       style={{
-        width: small ? 30 : 40,
-        height: small ? 30 : 40,
-        borderRadius: small ? 10 : 12,
+        width: 44,
+        height: 44,
+        borderRadius: small ? 12 : 14,
         color: color,
         border: `1px solid color-mix(in srgb, ${color} 20%, transparent)`,
         background: `color-mix(in srgb, ${color} 5%, transparent)`,

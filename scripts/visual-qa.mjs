@@ -55,7 +55,13 @@ page.on('console', (m) => {
 page.on('response', (r) => {
   if (r.status() >= 400) bag.push(`NET ${r.status()} ${r.url().replace(BASE, '')}`);
 });
-page.on('requestfailed', (r) => bag.push(`REQ ${r.url().replace(BASE, '').slice(0, 80)}`));
+// Скасований на розмонтуванні запит — не поломка. Показуємо причину, щоб
+// не полювати на привидів: ERR_ABORTED відсіюємо.
+page.on('requestfailed', (r) => {
+  const why = r.failure()?.errorText ?? '';
+  if (why.includes('ABORTED')) return;
+  bag.push(`REQ ${why} ${r.url().replace(BASE, '').slice(0, 70)}`);
+});
 
 await page.goto(`${BASE}/`, { waitUntil: 'networkidle', timeout: 60000 });
 await page.waitForTimeout(6000);
@@ -74,7 +80,18 @@ let bad = 0;
 for (const [path, name] of ROUTES) {
   bag.length = 0;
   await page.goto(BASE + path, { waitUntil: 'networkidle', timeout: 60000 });
-  await page.waitForTimeout(3000);
+  // Чекаємо, поки зникне заставка. Фіксована пауза давала фальшиві
+  // «ПОРОЖНІЙ» на важких чанках (мапа), які vite щойно перезібрав.
+  await page
+    .waitForFunction(
+      () => {
+        const t = (document.body.innerText || '').trim();
+        return t.length > 40 && !/^PHANTOM OS$/i.test(t);
+      },
+      { timeout: 25000 },
+    )
+    .catch(() => {});
+  await page.waitForTimeout(2000);
 
   const m = await page.evaluate(() => {
     const doc = document.documentElement;

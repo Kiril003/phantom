@@ -234,7 +234,7 @@ export default function SettingsPanel() {
     } catch (err) {
       setStatus({
         kind: 'error',
-        msg: err instanceof Error ? err.message : 'Reset failed',
+        msg: err instanceof Error ? err.message : 'Скинути не вдалося',
       });
     }
   }, [activeCategory, setCategories]);
@@ -401,7 +401,7 @@ export default function SettingsPanel() {
           }}
         >
           <ArrowLeft size={12} strokeWidth={1.75} />
-          Назад до Shadow
+          Назад на головну
         </button>
       </aside>
 
@@ -499,10 +499,10 @@ export default function SettingsPanel() {
               alignItems: 'center',
               gap: 6,
             }}
-            title="Reset category to defaults"
+            title="Повернути розділ до типових значень"
           >
             <RotateCcw size={12} strokeWidth={1.75} />
-            Reset
+            Скинути
           </button>
           <button
             type="button"
@@ -547,7 +547,7 @@ export default function SettingsPanel() {
             ) : (
               <Save size={14} strokeWidth={1.75} />
             )}
-            SAVE
+            ЗБЕРЕГТИ
             {dirtyInCategory.length > 0 && (
               <span
                 style={{

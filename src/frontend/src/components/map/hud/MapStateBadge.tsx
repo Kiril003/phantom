@@ -10,13 +10,13 @@ import { SystemState } from '@shared/types';
  */
 
 const STATE_TINT: Record<SystemState, { fill: string; label: string }> = {
-  [SystemState.SHADOW]: { fill: '#5b6172', label: 'Shadow' },
-  [SystemState.FOCUS]: { fill: '#7dd3fc', label: 'Focus' },
-  [SystemState.DIALOGUE]: { fill: '#facc15', label: 'Dialogue' },
-  [SystemState.SENTINEL]: { fill: '#f87171', label: 'Sentinel' },
-  [SystemState.GHOST]: { fill: '#ef4444', label: 'Ghost' },
-  [SystemState.DREAM]: { fill: '#a78bfa', label: 'Dream' },
-  [SystemState.OPERATOR]: { fill: '#34d399', label: 'Operator' },
+  [SystemState.SHADOW]: { fill: '#5b6172', label: 'Тінь' },
+  [SystemState.FOCUS]: { fill: '#7dd3fc', label: 'Фокус' },
+  [SystemState.DIALOGUE]: { fill: '#facc15', label: 'Діалог' },
+  [SystemState.SENTINEL]: { fill: '#f87171', label: 'Варта' },
+  [SystemState.GHOST]: { fill: '#ef4444', label: 'Привид' },
+  [SystemState.DREAM]: { fill: '#a78bfa', label: 'Сон' },
+  [SystemState.OPERATOR]: { fill: '#34d399', label: 'Штаб' },
 };
 
 export interface MapStateBadgeProps {
@@ -34,7 +34,7 @@ export function MapStateBadge({ className = '', state }: MapStateBadgeProps): JS
       data-testid="map-state-badge"
       data-state={current}
       className={`flex items-center gap-1.5 px-2 py-1 rounded-md bg-black/55 backdrop-blur-md text-[10px] text-white/85 border border-white/5 ${className}`}
-      title={`SystemState: ${tint.label}`}
+      title={`Стан системи: ${tint.label}`}
     >
       <span
         aria-hidden

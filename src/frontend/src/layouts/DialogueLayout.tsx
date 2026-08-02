@@ -155,7 +155,7 @@ export default function DialogueLayout() {
                   letterSpacing: '0.1em',
                 }}
               >
-                {voiceMode === 'wake_word' ? 'wake' : 'live'}
+                {voiceMode === 'wake_word' ? 'на слово' : 'наживо'}
               </span>
             )}
           </span>

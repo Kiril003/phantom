@@ -35,7 +35,7 @@ describe('StatusBar — deriveProviderSummary', () => {
     };
     const out = deriveProviderSummary('gemini', snap);
     expect(out.color).toBe('var(--signal-alert)');
-    expect(out.label).toContain('quota');
+    expect(out.label).toContain('ліміт');
     expect(out.tooltip).toContain('2026-04-19');
     expect(out.fallbackArrow).toBe(true);
   });
@@ -53,7 +53,7 @@ describe('StatusBar — deriveProviderSummary', () => {
     };
     const out = deriveProviderSummary('gemini', snap, futureMs);
     expect(out.color).toBe('var(--signal-warn)');
-    expect(out.label).toMatch(/cooling 42s/);
+    expect(out.label).toMatch(/пауза 42с/);
     expect(out.tooltip).toContain('rate_limit');
     expect(out.fallbackArrow).toBe(true);
   });
@@ -61,7 +61,8 @@ describe('StatusBar — deriveProviderSummary', () => {
   it('marks fallback as active when active != primary and fallback is configured', () => {
     const snap: RouterStateSnapshot = { ...baseSnap, active: 'ollama' };
     const out = deriveProviderSummary('gemini', snap);
-    expect(out.label).toMatch(/ollama ←/);
+    expect(out.label).toBe('ollama');
+    expect(out.fallbackArrow).toBe(true);
     expect(out.color).toBe('var(--chart-2)');
   });
 

@@ -36,6 +36,13 @@ import { EASE_PHANTOM } from '../styles/motion';
  * Hook-order (audit H-MM-1) preserved: every `useSystemStore` selector
  * runs unconditionally before any render branch.
  */
+const RADAR_RINGS = [
+  { r: 60, label: '0,3 м' },
+  { r: 120, label: '1,1 м' },
+  { r: 180, label: '2 м' },
+  { r: 220, label: '2,5 м' },
+];
+
 export default function SentinelLayout() {
   const [panelCollapsed, setPanelCollapsed] = useState(false);
   const context = useSystemStore((s) => s.context);
@@ -115,8 +122,10 @@ export default function SentinelLayout() {
 
             <circle cx="240" cy="240" r="220" fill="url(#sentinel-radar-bg)" />
 
-            {/* 4 concentric distance rings + labels at 50/100/150/200m */}
-            {[60, 120, 180, 220].map((r, i) => (
+            {/* Підписи кілець беруться з тієї ж шкали, що й мітка порушника
+                (30…250 см ⇒ 60…220 px). Раніше стояло 50–200 м — радар
+                обіцяв дальність у сто разів більшу за сенсор. */}
+            {RADAR_RINGS.map(({ r, label }, i) => (
               <g key={`ring-${r}`}>
                 <circle
                   cx="240"
@@ -136,7 +145,7 @@ export default function SentinelLayout() {
                   fontWeight="600"
                   letterSpacing="1"
                 >
-                  {(i + 1) * 50}m
+                  {label}
                 </text>
               </g>
             ))}
@@ -480,8 +489,8 @@ export default function SentinelLayout() {
             label="СТАТИЧНИЙ ШУМ"
             value={
               staticEnergy != null
-                ? `${Math.round(staticEnergy)} (${staticEnergy > 70 ? 'high' : 'low'})`
-                : '— (idle)'
+                ? `${Math.round(staticEnergy)} · ${staticEnergy > 70 ? 'високий' : 'низький'}`
+                : '— · тиша'
             }
             coral={staticEnergy != null && staticEnergy > 70}
           />
@@ -500,13 +509,13 @@ export default function SentinelLayout() {
             className="micro-label"
             style={{ color: '#b9201f', marginBottom: 4 }}
           >
-            ANOMALIES
+            ВІДХИЛЕННЯ
           </div>
           {[
-            firstVisit ? 'First visit to this location' : null,
-            isNight ? `Night time · ${lastScan} local` : null,
+            firstVisit ? 'Уперше в цьому місці' : null,
+            isNight ? `Нічний час · ${lastScan}` : null,
             otherDetected && staticEnergy != null && staticEnergy < 20
-              ? 'No registered device nearby'
+              ? 'Поряд немає жодного відомого пристрою'
               : null,
           ]
             .filter((s): s is string => s !== null)
@@ -557,7 +566,7 @@ export default function SentinelLayout() {
               className="flex items-center justify-between"
               style={{ fontSize: 9, color: 'var(--ink-muted)' }}
             >
-              <span>LAST SCAN · {lastScan}</span>
+              <span>ОСТАННІЙ ОБХІД · {lastScan}</span>
               <span className="mono">sentinel.v0.4</span>
             </div>
           </>

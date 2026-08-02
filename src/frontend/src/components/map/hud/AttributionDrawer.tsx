@@ -51,15 +51,15 @@ export function AttributionDrawer({
         data-testid="attribution-drawer-empty"
         className={`pointer-events-none select-none text-[10px] text-white/30 ${className}`}
       >
-        no active sources
+        джерел немає
       </div>
     );
   }
 
   const summary =
     error !== null
-      ? 'attribution unavailable'
-      : `${lines.length} ${lines.length === 1 ? 'source' : 'sources'}`;
+      ? 'джерела недоступні'
+      : `джерел: ${lines.length}`;
 
   return (
     <div

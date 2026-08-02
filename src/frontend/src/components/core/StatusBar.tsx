@@ -240,18 +240,23 @@ export function StatusBar() {
 
       <Divider />
 
-      <SensorChip
-        icon="favorite"
-        value={bpm != null ? `${bpm}` : '—'}
-        unit="bpm"
-        accent={isPro ? 'var(--primary)' : "#b07a10"}
-      />
-      <SensorChip
-        icon="device_thermostat"
-        value={tempC != null ? tempC.toFixed(1) : '—'}
-        unit="°C"
-        accent={isPro ? 'var(--primary)' : "#b07a10"}
-      />
+      {/* Мертвий датчик — не «—» на 80 пікселів, а порожнє місце. */}
+      {bpm != null && (
+        <SensorChip
+          icon="favorite"
+          value={`${bpm}`}
+          unit="вд/хв"
+          accent={isPro ? 'var(--primary)' : '#b07a10'}
+        />
+      )}
+      {tempC != null && (
+        <SensorChip
+          icon="device_thermostat"
+          value={tempC.toFixed(1)}
+          unit="°C"
+          accent={isPro ? 'var(--primary)' : '#b07a10'}
+        />
+      )}
       <SensorChip
         icon="memory"
         value={ram != null ? `${Math.round(ram)}` : '—'}
@@ -481,6 +486,7 @@ function ProviderBadge({
           color: 'var(--ink-primary)',
           textTransform: 'capitalize',
           fontWeight: 600,
+          whiteSpace: 'nowrap',
         }}
       >
         {summary.label}

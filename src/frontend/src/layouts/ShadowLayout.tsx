@@ -7,11 +7,41 @@ import {
   Sun,
   Sparkles,
   CalendarClock,
+  ChevronRight,
 } from 'lucide-react';
 import { AmbientGlows } from '../components/core/AmbientGlows';
 import { useSystemStore } from '../stores/systemStore';
+import { useVoiceAlwaysOnStatusStore } from '../stores/voiceAlwaysOnStatusStore';
 import { EASE_PHANTOM } from '../styles/motion';
 import { formatRelativeClock } from '../utils/format';
+
+const STATE_UA: Record<string, string> = {
+  shadow: 'тінь',
+  focus: 'фокус',
+  dialogue: 'діалог',
+  sentinel: 'варту',
+  ghost: 'привид',
+  dream: 'сон',
+};
+
+const BREATH_UA: Record<string, string> = {
+  sleep: 'сон',
+  calm: 'спокій',
+  normal: 'норма',
+  elevated: 'підвищене',
+  stressed: 'напружене',
+};
+
+const HEARING_UA: Record<string, string> = {
+  disabled: 'слух вимкнено',
+  disconnected: 'слух відключений',
+  connecting: 'під’єднуюсь до слуху',
+  ready: 'чекаю на «Фантом»',
+  listening: 'чекаю на «Фантом»',
+  armed: 'слухаю тебе',
+  cooldown: 'пауза після відповіді',
+  error: 'слух не піднявся',
+};
 
 /**
  * SHADOW — passive observation, sunrise dawn surface (R1 redesign).
@@ -51,12 +81,16 @@ export default function ShadowLayout() {
   const breathingState = context?.body.breathing_state;
   const stress = context?.body.stress_level;
   const tempC = context?.env.temp_c;
+  const pressure = context?.env.pressure_hpa;
+  const aqi = context?.env.aqi;
   const placeName = context?.where.place_name;
   const username = context?.who.username;
   const pendingEvents = context?.history.pending_events_1h ?? 0;
   const memoryHint = context?.memory_hints?.[0];
   const timeStr = context?.when.time ?? '';
   const lastInteractionAgo = context?.history.last_interaction_ago_s;
+  const hearing = useVoiceAlwaysOnStatusStore((s) => s.status);
+  const hearingLine = HEARING_UA[hearing] ?? 'слух вимкнено';
 
   // Local clock for the small relative-time line beneath the activity log.
   const [, force] = useState(0);
@@ -86,15 +120,23 @@ export default function ShadowLayout() {
     }
   }, [breathingState]);
 
+
   // Stress level → coloured pip + label. ≥0.7 = red, ≥0.4 = amber, else green.
   const stressView = useMemo(() => {
     if (stress == null) return { dot: 'var(--ink-muted)', label: '—' };
     if (stress >= 0.7)
-      return { dot: 'var(--signal-alert)', label: 'high' };
+      return { dot: 'var(--signal-alert)', label: 'високий' };
     if (stress >= 0.4)
-      return { dot: 'var(--signal-warn)', label: 'mid' };
-    return { dot: 'var(--signal-ok)', label: 'low' };
+      return { dot: 'var(--signal-warn)', label: 'середній' };
+    return { dot: 'var(--signal-ok)', label: 'низький' };
   }, [stress]);
+
+  const aqiView = useMemo(() => {
+    if (aqi == null) return { dot: 'var(--ink-muted)', label: '—' };
+    if (aqi > 100) return { dot: 'var(--signal-alert)', label: 'брудне' };
+    if (aqi > 50) return { dot: 'var(--signal-warn)', label: 'помірне' };
+    return { dot: 'var(--signal-ok)', label: 'чисте' };
+  }, [aqi]);
 
   // Recent activity feed. We assemble it from real signals so the panel
   // never lies: state-change → "state shift", auth → "operator", first
@@ -107,24 +149,24 @@ export default function ShadowLayout() {
       out.push({
         time: formatRelativeClock(stateChange),
         icon: <Sunrise size={12} strokeWidth={1.75} />,
-        label: 'state shift',
-        sub: `into ${context?.system.state ?? 'shadow'}`.toLowerCase(),
+        label: 'зміна стану',
+        sub: `перейшов у ${STATE_UA[context?.system.state ?? 'shadow'] ?? 'тінь'}`,
       });
     }
     if (lastInteractionAgo != null && lastInteractionAgo < 24 * 3600) {
       out.push({
         time: formatRelativeClock(lastInteractionAgo),
         icon: <Coffee size={12} strokeWidth={1.75} />,
-        label: 'last exchange',
-        sub: username ? `with ${username.toLowerCase()}` : 'operator',
+        label: 'остання розмова',
+        sub: username ? `з ${username.toLowerCase()}` : 'оператор',
       });
     }
     if (context?.system.wifi_connected) {
       out.push({
         time: timeStr || '—',
         icon: <Lock size={12} strokeWidth={1.75} />,
-        label: 'link armed',
-        sub: context.system.internet_available ? 'wifi · cloud ok' : 'wifi only',
+        label: 'канал піднято',
+        sub: context.system.internet_available ? 'wi-fi · хмара є' : 'лише wi-fi',
       });
     }
     return out.slice(0, 3);
@@ -231,16 +273,16 @@ export default function ShadowLayout() {
         <circle cx="512" cy="240" r="36" fill="url(#shadow-aurora-core)" />
       </svg>
 
-      {/* ATTENDING label above the orb */}
+      {/* Присутність — підпис над орбом */}
       <motion.div
         className="absolute text-center"
-        style={{ top: 80, left: '50%', transform: 'translateX(-50%)', zIndex: 4 }}
+        style={{ top: 80, left: 244, right: 264, zIndex: 4 }}
         initial={{ opacity: 0, y: -4 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.25, duration: 0.6 }}
       >
         <div className="micro-label" style={{ color: 'var(--primary-deep)' }}>
-          ATTENDING
+          ПОРУЧ
         </div>
         <div
           aria-hidden
@@ -255,10 +297,12 @@ export default function ShadowLayout() {
         />
       </motion.div>
 
-      {/* Poetry below the orb */}
+      {/* Рядок присутності під орбом. Смуга між колонками, а не 50% екрана:
+          Framer Motion переписує inline-transform, тож translateX(-50%) тут
+          не тримався і текст наїжджав на праву панель. */}
       <motion.div
         className="absolute text-center"
-        style={{ top: 338, left: '50%', transform: 'translateX(-50%)', zIndex: 4 }}
+        style={{ top: 338, left: 244, right: 264, zIndex: 4 }}
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.4, duration: 0.7 }}
@@ -274,7 +318,7 @@ export default function ShadowLayout() {
         >
           {memoryHint
             ? `“${memoryHint}”`
-            : 'Quiet. Watching. Yours.'}
+            : 'Тиша. Пильную. Твій.'}
         </div>
         <div
           style={{
@@ -285,7 +329,7 @@ export default function ShadowLayout() {
             textTransform: 'uppercase',
           }}
         >
-          listening for "Phantom" · whisper mode
+          {hearingLine}
         </div>
       </motion.div>
 
@@ -298,7 +342,7 @@ export default function ShadowLayout() {
         transition={{ delay: 0.18, duration: 0.5, ease: EASE_PHANTOM as unknown as number[] }}
       >
         <div className="flex items-center justify-between">
-          <div className="micro-label">VITALS</div>
+          <div className="micro-label">ЖИТТЄВІ ПОКАЗНИКИ</div>
           <span
             aria-hidden
             style={{
@@ -313,19 +357,20 @@ export default function ShadowLayout() {
           />
         </div>
 
-        {/* EKG — amplitude scales with breathing_state. */}
         <svg
           viewBox="0 0 200 50"
           aria-hidden
-          style={{ width: '100%', height: 44, marginTop: 8 }}
+          preserveAspectRatio="none"
+          style={{ width: '100%', height: 48, marginTop: 8 }}
         >
           <path
-            d={ekgPath(ekgAmplitude)}
-            stroke="var(--coral)"
+            d={breathPath(bpm, ekgAmplitude)}
+            stroke={bpm != null ? 'var(--coral)' : 'var(--line-subtle)'}
             strokeWidth="1.6"
             fill="none"
             strokeLinejoin="round"
             strokeLinecap="round"
+            vectorEffect="non-scaling-stroke"
           />
         </svg>
 
@@ -337,7 +382,7 @@ export default function ShadowLayout() {
             {bpm ?? '—'}
           </span>
           <span style={{ fontSize: 11, color: 'var(--ink-muted)' }}>
-            bpm · {breathingState ?? 'resting'}
+            вд/хв · {BREATH_UA[breathingState ?? ''] ?? 'сенсор мовчить'}
           </span>
         </div>
 
@@ -346,38 +391,6 @@ export default function ShadowLayout() {
           style={{ marginTop: 10, height: 1, background: 'var(--line-subtle)' }}
         />
 
-        {/* Breath bars */}
-        <div style={{ marginTop: 10 }}>
-          <div className="micro-label">
-            ДИХАННЯ · {bpm != null ? `${bpm}/хв` : '—'}
-          </div>
-          <div
-            style={{
-              display: 'flex',
-              gap: 2,
-              alignItems: 'flex-end',
-              height: 24,
-              marginTop: 6,
-            }}
-          >
-            {[8, 12, 16, 20, 18, 12, 8, 4, 8, 12, 16, 20, 18, 12, 8, 4, 8, 12, 16, 22].map(
-              (h, i) => (
-                <span
-                  key={i}
-                  style={{
-                    flex: 1,
-                    height: h,
-                    borderRadius: 1,
-                    background: 'var(--primary)',
-                    opacity: 0.3 + i / 30,
-                  }}
-                />
-              ),
-            )}
-          </div>
-        </div>
-
-        {/* HRV / Stress sub-glass cards */}
         <div
           style={{
             marginTop: 10,
@@ -388,10 +401,10 @@ export default function ShadowLayout() {
         >
           <div className="sub-glass" style={{ padding: '6px 8px' }}>
             <div className="micro-label" style={{ fontSize: 8 }}>
-              HRV
+              ЦИКЛ
             </div>
             <div className="tabular" style={{ fontSize: 14, fontWeight: 600 }}>
-              {bpm != null ? Math.round(900 / bpm) : '—'}
+              {bpm != null && bpm > 0 ? (60 / bpm).toFixed(1) : '—'}
               <span
                 style={{
                   fontSize: 10,
@@ -400,13 +413,13 @@ export default function ShadowLayout() {
                   marginLeft: 2,
                 }}
               >
-                ms
+                с
               </span>
             </div>
           </div>
           <div className="sub-glass" style={{ padding: '6px 8px' }}>
             <div className="micro-label" style={{ fontSize: 8 }}>
-              STRESS
+              СТРЕС
             </div>
             <div className="flex items-center" style={{ gap: 4, marginTop: 2 }}>
               <span
@@ -429,14 +442,12 @@ export default function ShadowLayout() {
       {/* === LEFT — TODAY · 3 MOMENTS ========================================== */}
       <motion.div
         className="glass absolute"
-        style={{ left: 12, top: 336, width: 220, bottom: 76, padding: 14, zIndex: 4 }}
+        style={{ left: 12, top: 274, width: 220, padding: 14, zIndex: 4 }}
         initial={{ opacity: 0, x: -16 }}
         animate={{ opacity: 1, x: 0 }}
         transition={{ delay: 0.32, duration: 0.5, ease: EASE_PHANTOM as unknown as number[] }}
       >
-        <div className="micro-label">
-          TODAY · {moments.length} MOMENT{moments.length === 1 ? '' : 'S'}
-        </div>
+        <div className="micro-label">СЬОГОДНІ · {moments.length}</div>
         {moments.length === 0 ? (
           <div
             style={{
@@ -446,7 +457,7 @@ export default function ShadowLayout() {
               fontStyle: 'italic',
             }}
           >
-            Nothing yet. The day is quiet.
+            Поки нічого. День тихий.
           </div>
         ) : (
           moments.map((it, i) => (
@@ -507,11 +518,19 @@ export default function ShadowLayout() {
         {/* Toggle Collapse Button */}
         <button
           onClick={() => setPanelCollapsed(!panelCollapsed)}
-          className="absolute -left-3 top-1/2 -translate-y-1/2 w-6 h-12 rounded-full flex items-center justify-center border border-amber-500/30 bg-amber-100 hover:bg-amber-200 dark:bg-amber-950 dark:hover:bg-amber-900 text-amber-700 dark:text-amber-300 hover:scale-105 active:scale-95 transition-all shadow-md"
-          style={{ zIndex: 10 }}
-          title={panelCollapsed ? "Розгорнути панель" : "Згорнути панель"}
+          className="absolute top-1/2 -translate-y-1/2 rounded-full flex items-center justify-center border border-amber-500/25 bg-white/70 hover:bg-amber-100 text-amber-700 active:scale-95 transition-all backdrop-blur-sm"
+          style={{ left: -52, width: 44, height: 44, zIndex: 10 }}
+          aria-label={panelCollapsed ? 'Розгорнути панель' : 'Згорнути панель'}
+          title={panelCollapsed ? 'Розгорнути панель' : 'Згорнути панель'}
         >
-          <span style={{ fontSize: 10, transform: panelCollapsed ? 'rotate(180deg)' : 'none', transition: 'transform 0.2s' }}>▶</span>
+          <ChevronRight
+            size={16}
+            strokeWidth={2}
+            style={{
+              transform: panelCollapsed ? 'rotate(180deg)' : 'none',
+              transition: 'transform 0.2s',
+            }}
+          />
         </button>
 
         {panelCollapsed ? (
@@ -530,7 +549,7 @@ export default function ShadowLayout() {
               <Sun size={18} />
             </motion.div>
             <div className="vertical-text font-mono text-[8px] tracking-widest text-[#b07a10] font-bold uppercase select-none opacity-60" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
-              AMBIENT PANEL
+              ОТОЧЕННЯ
             </div>
           </div>
         ) : (
@@ -539,7 +558,7 @@ export default function ShadowLayout() {
         <div className="glass" style={{ padding: 14 }}>
           <div className="flex items-center justify-between">
             <div className="micro-label">
-              WEATHER · {placeName ? placeName.toUpperCase() : 'LOCAL'}
+              ПОВІТРЯ · {placeName ? placeName.toUpperCase() : 'ПОРУЧ'}
             </div>
             <Sun size={14} strokeWidth={1.75} style={{ color: 'var(--primary-deep)' }} />
           </div>
@@ -548,55 +567,42 @@ export default function ShadowLayout() {
               {tempC != null ? `${tempC.toFixed(0)}°` : '—'}
             </span>
             <span style={{ fontSize: 11, color: 'var(--ink-muted)' }}>
-              {tempC != null
-                ? `feels ${tempC.toFixed(0)}° · ambient`
-                : 'sensor offline'}
+              {tempC != null ? 'датчик у кімнаті' : 'датчик мовчить'}
             </span>
           </div>
-          {/* Mini hourly bars — derived from current temp; flat when offline. */}
           <div
             style={{
-              display: 'flex',
-              gap: 4,
-              marginTop: 8,
-              height: 30,
-              alignItems: 'flex-end',
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: 6,
+              marginTop: 10,
             }}
           >
-            {[0, 1, 2, 3, 4, 5, 6, 7, 8].map((i) => {
-              const base = tempC ?? 16;
-              const t = Math.max(8, base + Math.sin(i * 0.6) * 4 + (i - 4) * 0.4);
-              const hour = (((context?.when.hour ?? 8) + i) % 24).toString().padStart(2, '0');
-              return (
-                <div
-                  key={i}
-                  style={{
-                    flex: 1,
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
-                    gap: 2,
-                  }}
-                >
-                  <div
-                    style={{
-                      height: Math.min(22, Math.max(4, t - 8)),
-                      width: '70%',
-                      background: 'linear-gradient(180deg,#f4af25,#fb923c)',
-                      opacity: 0.5,
-                      borderRadius: '2px 2px 0 0',
-                    }}
-                  />
-                  <div style={{ fontSize: 7, color: 'var(--ink-muted)' }}>{hour}</div>
-                </div>
-              );
-            })}
+            <div className="sub-glass" style={{ padding: '6px 8px' }}>
+              <div className="micro-label" style={{ fontSize: 8 }}>ТИСК</div>
+              <div className="tabular" style={{ fontSize: 13, fontWeight: 600 }}>
+                {pressure != null ? pressure.toFixed(0) : '—'}
+                <span style={{ fontSize: 9, color: 'var(--ink-muted)', fontWeight: 400, marginLeft: 2 }}>
+                  гПа
+                </span>
+              </div>
+            </div>
+            <div className="sub-glass" style={{ padding: '6px 8px' }}>
+              <div className="micro-label" style={{ fontSize: 8 }}>ПОВІТРЯ</div>
+              <div className="flex items-center" style={{ gap: 4, marginTop: 2 }}>
+                <span
+                  aria-hidden
+                  style={{ width: 6, height: 6, borderRadius: 999, background: aqiView.dot }}
+                />
+                <span style={{ fontSize: 12, fontWeight: 600 }}>{aqiView.label}</span>
+              </div>
+            </div>
           </div>
         </div>
 
         {/* NEXT — pending event progress */}
         <div className="glass" style={{ padding: 14 }}>
-          <div className="micro-label">NEXT</div>
+          <div className="micro-label">ДАЛІ</div>
           <div className="flex items-center" style={{ gap: 10, marginTop: 6 }}>
             <CalendarClock
               size={18}
@@ -606,11 +612,11 @@ export default function ShadowLayout() {
             <div className="flex-1 min-w-0">
               <div style={{ fontSize: 12, fontWeight: 600 }}>
                 {pendingEvents > 0
-                  ? `${pendingEvents} item${pendingEvents > 1 ? 's' : ''} queued`
-                  : 'Calendar clear'}
+                  ? `${pendingEvents} ${pluralUa(pendingEvents, 'подія', 'події', 'подій')}`
+                  : 'Календар вільний'}
               </div>
               <div style={{ fontSize: 10, color: 'var(--ink-muted)' }}>
-                {pendingEvents > 0 ? 'within the next hour' : 'next hour open'}
+                {pendingEvents > 0 ? 'протягом години' : 'найближча година вільна'}
               </div>
             </div>
           </div>
@@ -640,8 +646,8 @@ export default function ShadowLayout() {
             className="flex justify-between"
             style={{ marginTop: 4, fontSize: 9, color: 'var(--ink-muted)' }}
           >
-            <span>now</span>
-            <span>+1 h</span>
+            <span>зараз</span>
+            <span>+1 год</span>
           </div>
         </div>
 
@@ -665,7 +671,7 @@ export default function ShadowLayout() {
               className="micro-label"
               style={{ color: 'var(--primary-deep)' }}
             >
-              NEXUS SUGGESTS
+              NEXUS РАДИТЬ
             </span>
           </div>
           <div
@@ -725,32 +731,20 @@ export default function ShadowLayout() {
 /* ─── Helpers ──────────────────────────────────────────────────────────── */
 
 /**
- * Build an EKG path whose spikes scale with `amplitude` (0.35 sleep …
- * 1.7 stressed). Three QRS complexes spread across a 200-unit viewBox.
+ * Дихальна хвиля за 30 секунд: період — з виміряної частоти, висота — зі
+ * стану дихання. Без сигналу лінія рівна: радар міряє дихання, а не серце,
+ * тож QRS-комплекс тут був би вигадкою про природу даних.
  */
-function ekgPath(amplitude: number): string {
+function breathPath(bpm: number | null | undefined, amplitude: number): string {
+  if (bpm == null || bpm <= 0) return 'M0 25 L200 25';
   const a = Math.max(0.2, Math.min(2.5, amplitude));
-  const peakUp = (25 - 15 * a).toFixed(1);
-  const peakDown = (25 + 13 * a).toFixed(1);
-  return [
-    'M0 25',
-    'L40 25',
-    'L48 25',
-    `L52 ${peakUp}`,
-    `L58 ${peakDown}`,
-    'L66 25',
-    'L100 25',
-    'L108 25',
-    `L112 ${peakUp}`,
-    `L118 ${peakDown}`,
-    'L126 25',
-    'L160 25',
-    'L168 25',
-    `L172 ${peakUp}`,
-    `L178 ${peakDown}`,
-    'L186 25',
-    'L200 25',
-  ].join(' ');
+  const cycles = Math.max(0.5, (bpm / 60) * 30);
+  const pts: string[] = [];
+  for (let x = 0; x <= 200; x += 2) {
+    const y = 25 - Math.sin((x / 200) * cycles * Math.PI * 2) * 16 * a * 0.6;
+    pts.push(`${x === 0 ? 'M' : 'L'}${x} ${y.toFixed(1)}`);
+  }
+  return pts.join(' ');
 }
 
 /** Pick the NEXUS suggestion line based on actual context signals. */
@@ -759,10 +753,20 @@ function nexusSuggestion(
   pending: number,
   breath: string | undefined,
 ): string {
-  if (isNight) return '"Тихо. Якщо хочеш — приглушу світло і запущу Sleep."';
+  if (isNight) return '«Тихо. Якщо хочеш — приглушу світло і переведу в сон.»';
   if (pending > 0)
-    return `"У тебе ${pending} пункт${pending > 1 ? 'и' : ''} в годині. Підняти бриф?"`;
+    return `«У тебе ${pending} ${pluralUa(pending, 'пункт', 'пункти', 'пунктів')} в найближчій годині. Підняти бриф?»`;
   if (breath === 'stressed' || breath === 'elevated')
-    return '"Дихання підняте. Зробимо хвилину спокою?"';
-  return '"Sun\'s up. Want me to start the kettle and queue your morning brief?"';
+    return '«Дихання підняте. Зробимо хвилину спокою?»';
+  return '«Ранок. Зібрати тобі короткий бриф на день?»';
+}
+
+/** Українське відмінювання числівників: 1 подія, 2 події, 5 подій. */
+function pluralUa(n: number, one: string, few: string, many: string): string {
+  const mod100 = n % 100;
+  if (mod100 >= 11 && mod100 <= 14) return many;
+  const mod10 = n % 10;
+  if (mod10 === 1) return one;
+  if (mod10 >= 2 && mod10 <= 4) return few;
+  return many;
 }

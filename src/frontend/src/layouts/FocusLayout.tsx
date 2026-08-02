@@ -105,7 +105,7 @@ export default function FocusLayout() {
                   fontSize: 'var(--fs-micro)',
                   letterSpacing: 'var(--tracking-wider)',
                 }}
-                title={esp32Disabled ? 'Serial bridge disabled' : 'Serial bridge enabled, no device'}
+                title={esp32Disabled ? 'Послідовний міст вимкнено' : 'Міст увімкнено, пристрою немає'}
               >
                 <span
                   className="rounded-full"
@@ -117,7 +117,7 @@ export default function FocusLayout() {
                     display: 'inline-block',
                   }}
                 />
-                {esp32Disabled ? 'ESP32 disabled' : 'ESP32 offline'}
+                {esp32Disabled ? 'ESP32 вимкнено' : 'ESP32 не на зв\'язку'}
               </div>
             )}
           </Card>
@@ -157,7 +157,7 @@ export default function FocusLayout() {
                 textShadow: '0 1px 0 rgba(255,255,255,0.5)',
               }}
             >
-              {placeName ?? 'Deep work window'}
+              {placeName ?? 'Вікно глибокої роботи'}
             </p>
             <p
               style={{
@@ -204,7 +204,7 @@ export default function FocusLayout() {
               <LogLine
                 tone={wsConnected ? 'ok' : 'warn'}
                 message={wsConnected ? 'Вузол зв\'язку: на лінії' : 'Вузол зв\'язку: немає'}
-                sub="realtime"
+                sub="наживо"
               />
               <LogLine
                 tone={context ? 'ok' : 'muted'}
@@ -236,12 +236,12 @@ export default function FocusLayout() {
               <LogLine
                 tone="info"
                 message={`Слух: ${context?.system.stt_engine ?? '—'}`}
-                sub="voice"
+                sub="розпізнавання"
               />
               <LogLine
                 tone="muted"
                 message={`У роботі: ${formatUptime(context?.system.uptime_s ?? 0)}`}
-                sub="now"
+                sub="зараз"
               />
             </div>
           </Card>

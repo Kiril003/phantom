@@ -10,9 +10,10 @@ export function formatUptime(seconds: number): string {
 }
 
 export function formatRelativeClock(secondsAgo: number): string {
-  if (secondsAgo < 60) return 'Just now';
-  if (secondsAgo < 3600) return `${Math.floor(secondsAgo / 60)}m ago`;
-  return `${Math.floor(secondsAgo / 3600)}h ago`;
+  if (secondsAgo < 60) return 'щойно';
+  if (secondsAgo < 3600) return `${Math.floor(secondsAgo / 60)} хв`;
+  if (secondsAgo < 86400) return `${Math.floor(secondsAgo / 3600)} год`;
+  return `${Math.floor(secondsAgo / 86400)} дн`;
 }
 
 export function sanitizeInput(text: string): string {

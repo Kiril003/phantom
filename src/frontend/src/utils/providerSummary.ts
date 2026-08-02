@@ -43,8 +43,8 @@ export function deriveProviderSummary(
   if (primary in quotaExhausted) {
     return {
       color: 'var(--signal-alert)',
-      label: `${primary} · quota`,
-      tooltip: `${primary} quota exhausted until ${quotaExhausted[primary]?.until_utc}`,
+      label: 'ліміт',
+      tooltip: `${primary}: ліміт вичерпано до ${quotaExhausted[primary]?.until_utc}`,
       fallbackArrow: true,
     };
   }
@@ -54,23 +54,23 @@ export function deriveProviderSummary(
     const remaining = until ? Math.max(0, Math.round((Date.parse(until) - nowMs) / 1000)) : 0;
     return {
       color: 'var(--signal-warn)',
-      label: `${primary} · cooling ${remaining}s`,
-      tooltip: `${primary} cooling ${remaining}s (${reason})`,
+      label: `пауза ${remaining}с`,
+      tooltip: `${primary}: пауза ${remaining}с (${reason})`,
       fallbackArrow: true,
     };
   }
   if (rs.active && rs.active !== primary && fallback !== 'none') {
     return {
       color: 'var(--chart-2)',
-      label: `${rs.active} ←`,
-      tooltip: `Fallback ${rs.active} active; ${primary} primary will be retried.`,
-      fallbackArrow: false,
+      label: rs.active,
+      tooltip: `Працює запасний ${rs.active}; повернуся до ${primary}.`,
+      fallbackArrow: true,
     };
   }
   return {
     color: 'var(--signal-ok)',
     label: provider,
-    tooltip: `${provider} (primary)`,
+    tooltip: `${provider} — основний`,
     fallbackArrow: false,
   };
 }

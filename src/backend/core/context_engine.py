@@ -115,7 +115,9 @@ def _empty_snapshot() -> dict:
         },
         "body": {
             "breathing_bpm": None,
-            "breathing_state": "normal",
+            # Без сенсора стан дихання невідомий. Тут стояло "normal", і
+            # порожній знімок стверджував, що з людиною все гаразд.
+            "breathing_state": None,
             "stress_level": None,
             "motion_energy": None,
             "static_energy": None,

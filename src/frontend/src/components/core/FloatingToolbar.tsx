@@ -12,20 +12,11 @@ import { useChromeCollapse } from '../../hooks/useChromeCollapse';
 import { PhantomIcon } from './PhantomIcon';
 
 /**
- * FloatingToolbar (sunrise build).
+ * Нижній док — єдина навігація застосунку.
  *
- * Bottom-center .glass-strong rounded pill with 7 primary buttons:
- *   home (wb_sunny) · chat (forum) · apps · terminal · map · settings (tune) · more (more_horiz)
- *
- * Each button is 44×44 (.toolbar-btn shape), Material Symbols Outlined glyph,
- * amber tint when active. Long-press on Home opens the More-menu (a glass-strong
- * column with secondary actions: Agent / Agent History / Studio / Eyes / Sentinel / 
- * Ghost (ROOT) / System / Sign out).
- *
- * Audit fix H-MM-2 — SentinelLayout *does* render this component, so secondary
- * routing (Sentinel ↔ previous state) keeps working from any layout.
- *
- * Every existing onclick handler, Zustand selector, and store flow is preserved.
+ * Усі дії лежать пласко й підписані. Меню «Більше» прибрано: воно ховало
+ * половину розділів, і це читалось як «розділи не відкриваються». Привид
+ * бачить лише ROOT (CLAUDE.md §6).
  */
 
 export interface ToolbarAction {
@@ -33,6 +24,8 @@ export interface ToolbarAction {
   /** Material Symbols Outlined name. */
   icon: string;
   label: string;
+  /** Видимий підпис у доку, коли `label` задовгий. Доступна назва лишається `label`. */
+  short?: string;
   /** Optional hover/long-press tooltip; falls back to `label` when absent. */
   tooltip?: string;
   active?: boolean;
@@ -187,6 +180,7 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
       id: 'always-on',
       icon: 'settings_voice',
       label: 'Голосовий режим',
+      short: 'Голос',
       tooltip: voiceModeTooltip,
       active: voiceModeActive,
       onClick: () => {
@@ -209,6 +203,7 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
       id: 'ghost',
       icon: 'shield_moon',
       label: 'Режим Привид',
+      short: 'Привид',
       active: state === SystemState.GHOST,
       onClick: () => {
         goGhost();
@@ -228,6 +223,7 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
       id: 'power',
       icon: 'power_settings_new',
       label: 'Вийти з сеансу',
+      short: 'Вихід',
       tone: 'alert',
       onClick: () => {
         signOut();
@@ -259,7 +255,7 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
           position="bottom"
           collapsed={true}
           onToggle={toggleToolbar}
-          label="Toolbar"
+          label="панель"
           style={{
             background: 'rgba(255,255,255,0.55)',
             border: '1px solid var(--glass-border, rgba(255,255,255,0.55))',
@@ -299,7 +295,7 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
           position="bottom"
           collapsed={false}
           onToggle={toggleToolbar}
-          label="Toolbar"
+          label="панель"
           style={{ marginLeft: 4 }}
         />
       </motion.div>
@@ -333,12 +329,12 @@ function ToolbarIcon({
       onPointerUp={onPointerUp}
       onPointerLeave={onPointerLeave}
       onClick={item.disabled ? undefined : handle}
-      className="relative inline-flex items-center justify-center active:scale-95"
+      className="relative inline-flex flex-col items-center justify-center gap-[2px] active:scale-95"
       style={{
-        width: 44,
-        height: 44,
         minWidth: 44,
+        height: 48,
         minHeight: 44,
+        padding: '0 8px',
         borderRadius: 10,
         border: 'none',
         opacity: item.disabled ? 0.35 : 1,
@@ -362,6 +358,21 @@ function ToolbarIcon({
       title={item.tooltip ?? item.label}
     >
       <PhantomIcon name={item.icon} size={18} weight={wghtIcon} filled={fillIcon === 1} />
+      {/* Пристрій тач — hover не існує, тож title ніколи не з'явиться.
+          Без підпису док читався як ряд загадок. */}
+      <span
+        style={{
+          fontSize: 8,
+          lineHeight: '9px',
+          fontWeight: item.active ? 700 : 600,
+          letterSpacing: '0.03em',
+          textTransform: 'uppercase',
+          whiteSpace: 'nowrap',
+          opacity: item.active ? 1 : 0.8,
+        }}
+      >
+        {item.short ?? item.label}
+      </span>
     </button>
   );
 }

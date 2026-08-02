@@ -29,36 +29,6 @@ import { FamiliarReactor } from '../components/familiar/FamiliarReactor';
 const PhantomFamiliar = React.lazy(() => import('../components/familiar/PhantomFamiliar'));
 import { ToastRail } from '../components/core/ToastRail';
 import { PhantomIcon } from '../components/core/PhantomIcon';
-import { EndocrineVisualizer } from '../components/EndocrineVisualizer';
-import { useEndocrineStore } from '../stores/endocrineStore';
-
-function GlobalEndocrineTheme() {
-  const { cortisol, oxytocin } = useEndocrineStore();
-  
-  useEffect(() => {
-    // Modify CSS custom properties based on Endocrine levels
-    // High Cortisol: Increases contrast, lowers saturation, turns accent red
-    // High Oxytocin: Warms the accent color, increases bloom/glow
-    
-    // Example map: 
-    // Default Accent is an Amber or Blue. Let's shift hue and saturation.
-    const root = document.documentElement;
-    
-    // Cortisol shifts to alert red (0deg) and reduces rounding (harsh)
-    // Oxytocin shifts to gold/warm (40deg) and adds soft glow
-    
-    if (cortisol > 0.3) {
-      root.style.setProperty('--accent', `hsl(0, 80%, ${50 + cortisol * 20}%)`);
-      root.style.setProperty('--surface-raised', `rgba(255, 0, 0, ${cortisol * 0.1})`);
-    } else {
-      // Normal / Oxytocin state
-      root.style.setProperty('--accent', `hsl(35, ${70 + oxytocin * 30}%, ${50 + oxytocin * 10}%)`);
-      root.style.setProperty('--surface-raised', `rgba(255, 200, 100, ${oxytocin * 0.05})`);
-    }
-  }, [cortisol, oxytocin]);
-
-  return null;
-}
 
 function GlobalGeolocationManager() {
   const authenticated = useSystemStore((s) => s.authenticated);
@@ -201,7 +171,6 @@ export function App() {
         <StateTransitionController />
         <GlobalAlwaysOnGate />
         <GlobalGeolocationManager />
-        <GlobalEndocrineTheme />
         <ViewportFrame>
           <ErrorBoundary>
           <div
@@ -219,9 +188,6 @@ export function App() {
             <ToolsOverlayMount />
             <WillPanelMount />
             <IntelligenceHubMount />
-            <div className="fixed bottom-4 right-4 z-[200] pointer-events-none">
-              <EndocrineVisualizer />
-            </div>
           </div>
           </ErrorBoundary>
         </ViewportFrame>

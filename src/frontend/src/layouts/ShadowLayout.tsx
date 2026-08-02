@@ -746,7 +746,7 @@ function breathPath(bpm: number | null | undefined, amplitude: number): string {
 function nexusSuggestion(
   isNight: boolean | undefined,
   pending: number,
-  breath: string | undefined,
+  breath: string | null | undefined,
 ): string {
   if (isNight) return '«Тихо. Якщо хочеш — приглушу світло і переведу в сон.»';
   if (pending > 0)

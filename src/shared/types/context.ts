@@ -41,7 +41,7 @@ export interface ContextSnapshot {
 
   body: {
     breathing_bpm: number | null;
-    breathing_state: 'sleep' | 'calm' | 'normal' | 'elevated' | 'stressed';
+    breathing_state: 'sleep' | 'calm' | 'normal' | 'elevated' | 'stressed' | null;
     stress_level: number | null;
     motion_energy: number | null;
     static_energy: number | null;

@@ -324,7 +324,7 @@ export function StatusBar() {
 
 /* ─── Helpers ──────────────────────────────────────────────────────── */
 
-function pctTone(v: number | undefined): string {
+function pctTone(v: number | null | undefined): string {
   if (v == null || !Number.isFinite(v)) return 'var(--ink-muted)';
   if (v > 85) return 'var(--signal-alert)';
   if (v > 60) return 'var(--signal-warn)';

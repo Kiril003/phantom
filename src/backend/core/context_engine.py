@@ -155,9 +155,10 @@ def _empty_snapshot() -> dict:
         "system": {
             "state": "SHADOW",
             "uptime_s": 0,
-            "cpu_percent": 0.0,
-            "ram_percent": 0.0,
-            "disk_percent": 0.0,
+            # До першого виміру показників немає — і так і кажемо.
+            "cpu_percent": None,
+            "ram_percent": None,
+            "disk_percent": None,
             "wifi_connected": False,
             "internet_available": False,
             "ai_provider": config.ai_primary_provider,
@@ -563,7 +564,9 @@ class ContextEngine:
             ram = psutil.virtual_memory().percent
             disk = psutil.disk_usage("/").percent
         except (psutil.Error, OSError):
-            cpu, ram, disk = 0.0, 0.0, 0.0
+            # Не нулі: нуль відсотків — це вимір, якого не було. Хай екран
+            # покаже прочерк, а не бездоганно спокійну машину.
+            cpu, ram, disk = None, None, None
 
         uptime = time.monotonic() - self._start_time
         

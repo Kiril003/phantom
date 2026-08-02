@@ -47,9 +47,15 @@ _PROMPT = """\
   "required_capabilities": ["list", "of", "required", "tools", "or", "packages"]
 }}
 
+ДОСТУПНІ КАТЕГОРІЇ ДІЙ — `required_capabilities` бери САМЕ цими іменами:
+memory (пам'ять), system (система), web (веб), calendar (календар),
+timers (таймери), filesystem (файли), terminal (термінал), studio (студія),
+vault (сховище), facts (факти), wardriving (радіоефір).
+
 ПРАВИЛА:
 1. Тільки технічні кроки.
 2. Кожна під-ціль повинна мати чіткі критерії приймання (acceptance_criteria).
+3. Не плануй того, чого немає серед категорій вище — скажи про брак прямо.
 
 Без прози. Без markdown.
 """

@@ -301,9 +301,16 @@ def build_system_prompt(
 
     # 7. System status
     sys = snapshot.get("system", {})
+    # `.get(key, 0)` не рятує: ключ ІСНУЄ зі значенням None, тож стандартне
+    # значення не спрацьовує і формат числа падає. А головне — казати моделі
+    # «cpu=0%», коли вимір не вдався, означає вчити її вигадувати.
+    def _pct(key: str) -> str:
+        v = sys.get(key)
+        return f"{v:.0f}%" if isinstance(v, (int, float)) else "невідомо"
+
     parts.append(
-        f"\nSYSTEM: cpu={sys.get('cpu_percent', 0):.0f}%, "
-        f"ram={sys.get('ram_percent', 0):.0f}%, "
+        f"\nSYSTEM: cpu={_pct('cpu_percent')}, "
+        f"ram={_pct('ram_percent')}, "
         f"ai={sys.get('ai_provider', 'unknown')}"
     )
 

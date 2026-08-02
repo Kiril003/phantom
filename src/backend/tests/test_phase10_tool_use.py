@@ -112,8 +112,11 @@ class TestChatToolsCatalog:
             params = tool["parameters"]
             assert params["type"] == "object"
             assert "properties" in params
-            assert "required" in params
-            for req in params["required"]:
+            # Інструмент без аргументів законно не має `required` — порожній
+            # список там був би шумом. Вимагаємо ключ лише коли є що вимагати.
+            if params["properties"]:
+                assert "required" in params, f"{tool['name']} має поля, але не має required"
+            for req in params.get("required", []):
                 assert req in params["properties"], (
                     f"required field {req!r} missing from properties in {tool['name']}"
                 )
@@ -163,10 +166,20 @@ class TestGeminiToolsBuilder:
 
 class TestPromptGuidance:
     def test_data_tools_guidance_exists(self):
-        from ai.personality import DATA_TOOLS_GUIDANCE
+        """Підказка вчить ПРАВИЛА, а не перелічує імена.
 
-        assert "ДАНІ СИСТЕМИ" in DATA_TOOLS_GUIDANCE
-        # Every data tool should be named in the guidance for discoverability.
+        Перелік інструментів у прозі був дублем: Gemini і так отримує їх
+        нативними деклараціями зі схемами (`chat_tools.CHAT_DATA_TOOLS`).
+        Тест перевіряв саме той дубль і застарів, коли підказку стиснули.
+        Тепер тримаємо обидві половини на своїх місцях.
+        """
+        from ai.personality import DATA_TOOLS_GUIDANCE
+        from ai.chat_tools import CHAT_DATA_TOOLS
+
+        assert "ДАНІ ТА ДІЇ" in DATA_TOOLS_GUIDANCE
+        assert "виклич інструмент" in DATA_TOOLS_GUIDANCE
+
+        declared = {t["name"] for t in CHAT_DATA_TOOLS}
         for name in [
             "search_locationhistory",
             "query_temporal_anchors",
@@ -177,7 +190,7 @@ class TestPromptGuidance:
             "get_calendar_events",
             "create_calendar_event",
         ]:
-            assert name in DATA_TOOLS_GUIDANCE, f"{name!r} missing from guidance"
+            assert name in declared, f"{name!r} не оголошений моделі"
 
     def test_build_system_prompt_appends_data_tools_block(self, monkeypatch):
         # Data-tool guidance is controlled separately from response-form
@@ -185,6 +198,10 @@ class TestPromptGuidance:
         from ai.prompt_builder import build_system_prompt
         from config import config
         monkeypatch.setattr(config, "chat_tools_enabled", True)
+        # Розділення двох контролів і є предметом тесту, тож другий прапорець
+        # треба ПРИБИТИ явно. Без цього тест успадковував живий конфіг, де
+        # віджети ввімкнені, і падав на власному ж припущенні.
+        monkeypatch.setattr(config, "chat_response_widgets_enabled", False)
 
         prompt = build_system_prompt(
             snapshot={"where": {}, "when": {"hour": 12}, "body": {},
@@ -195,12 +212,12 @@ class TestPromptGuidance:
             memory_hints=[],
             recent_places=[],
         )
-        assert "ДАНІ СИСТЕМИ" in prompt
+        assert "ДАНІ ТА ДІЇ" in prompt
         assert "ФОРМИ ВІДПОВІДІ" not in prompt
         # Phase 10.3 — register guidance is appended LAST so it's the
         # freshest instruction in Gemini's context.
-        assert "РЕГІСТР І ТОН" in prompt
-        assert prompt.index("РЕГІСТР І ТОН") > prompt.index("ДАНІ СИСТЕМИ")
+        assert "РЕГІСТР:" in prompt
+        assert prompt.index("РЕГІСТР:") > prompt.index("ДАНІ ТА ДІЇ")
 
 
 # ── Date parser ───────────────────────────────────────────────────────────────
@@ -617,7 +634,10 @@ class TestGenerateToolLoop:
 
         provider = gp.GeminiProvider()
         result = await provider.generate("news?", "system", [], user_id="u1")
-        assert result.content.startswith("sorry")
+        # Відповідь оператору українською — англійське «sorry» лишилось у
+        # тесті з часів, коли фолбек був англійським.
+        assert result.content
+        assert not result.content.lower().startswith("sorry")
         assert result.response_form == "text"
 
 

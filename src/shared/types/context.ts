@@ -74,9 +74,12 @@ export interface ContextSnapshot {
   system: {
     state: SystemState;
     uptime_s: number;
-    cpu_percent: number;
-    ram_percent: number;
-    disk_percent: number;
+    // Нуль — теж твердження. Коли psutil не відповів, машина не «на 0%
+    // завантажена»: ми просто не знаємо. Порожнеча має бути видима як
+    // порожнеча, а не як бездоганно спокійна система.
+    cpu_percent: number | null;
+    ram_percent: number | null;
+    disk_percent: number | null;
     wifi_connected: boolean;
     internet_available: boolean;
     ai_provider: 'gemini' | 'ollama';

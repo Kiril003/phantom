@@ -334,7 +334,7 @@ function CardRow({
   );
 }
 
-function Gauge1({ value, unit }: { value: number | undefined; unit?: string }) {
+function Gauge1({ value, unit }: { value: number | null | undefined; unit?: string }) {
   const hasValue = typeof value === 'number' && Number.isFinite(value);
   const v = hasValue ? (value as number) : 0;
   const color = !hasValue

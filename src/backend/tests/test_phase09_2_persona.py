@@ -58,7 +58,7 @@ class TestPlannerPromptsUkrainian:
         assert captured
         prompt = captured[0]
         # Must have UA section labels.
-        assert "стратегічний планувальник" in prompt
+        assert "стратегічний архітектор" in prompt
         assert "ДОСТУПНІ КАТЕГОРІЇ ДІЙ" in prompt
         # English technical terms preserved naturally.
         assert "filesystem" in prompt

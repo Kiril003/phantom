@@ -80,19 +80,19 @@ export default function FocusLayout() {
           <Card>
             <CardRow
               icon={<Thermometer size={14} strokeWidth={1.75} />}
-              label="Temp"
+              label="Температура"
               value={tempC != null ? `${tempC.toFixed(1)}°C` : '—'}
               muted={tempC == null}
             />
             <CardRow
               icon={<Wind size={14} strokeWidth={1.75} />}
-              label="AQI"
+              label="Повітря"
               value={aqi != null ? String(aqi) : '—'}
               muted={aqi == null}
             />
             <CardRow
               icon={<Activity size={14} strokeWidth={1.75} />}
-              label="BPM"
+              label="Пульс"
               value={bpm != null ? `${bpm}` : '—'}
               muted={bpm == null}
             />
@@ -182,11 +182,11 @@ export default function FocusLayout() {
             <CardRow
               icon={<Radar size={14} strokeWidth={1.75} />}
               label="Присутність"
-              value={context?.presence.user_detected ? 'Operator' : 'None'}
+              value={context?.presence.user_detected ? 'Оператор' : 'нікого'}
             />
             <CardRow
               icon={<Gauge size={14} strokeWidth={1.75} />}
-              label="Motion"
+              label="Рух"
               value={context?.body.motion_energy != null ? String(context.body.motion_energy) : '—'}
               muted={context?.body.motion_energy == null}
             />
@@ -222,10 +222,10 @@ export default function FocusLayout() {
                 }
                 sub={
                   esp32 === 'online'
-                    ? 'batched'
+                    ? 'пакетами'
                     : esp32 === 'disabled'
                       ? 'режим розробки'
-                      : 'no batch'
+                      : 'без пакетів'
                 }
               />
               <LogLine

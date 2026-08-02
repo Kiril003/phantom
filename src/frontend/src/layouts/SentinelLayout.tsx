@@ -455,7 +455,7 @@ export default function SentinelLayout() {
             icon={<Eye size={14} />}
             label="ПРИСУТНІСТЬ"
             value={
-              otherDetected ? 'Detected · human-shape' : 'Clear · area empty'
+              otherDetected ? 'Виявлено · силует людини' : 'Чисто · нікого поруч'
             }
             coral={otherDetected}
           />
@@ -465,14 +465,14 @@ export default function SentinelLayout() {
             value={
               motionEnergy != null && motionEnergy > 30
                 ? `${Math.min(99, Math.round(40 + motionEnergy / 4))} dB · footsteps`
-                : '— dB · ambient'
+                : '— дБ · фон'
             }
             coral={motionEnergy != null && motionEnergy > 30}
           />
           <ThreatRow
             icon={<Thermometer size={14} />}
             label="IR"
-            value={otherDetected ? '36.4° body temp' : 'No thermal source'}
+            value={otherDetected ? 'тепле тіло' : 'джерела тепла немає'}
             coral={otherDetected}
           />
           <ThreatRow

@@ -165,7 +165,7 @@ export function AgentCommandCenter({ onOpenParallelChat, onStartMission, onOpenP
           <div className="flex bg-white/40 p-0.5 rounded-lg border border-black/5 gap-0.5 shrink-0 mb-0.5">
             <button
               onClick={() => setMissionModeArmed(false)}
-              className={`px-2 py-0.5 text-[8px] font-bold rounded transition-all ${!missionModeArmed ? 'bg-white text-primary shadow-sm' : 'text-slate-400 hover:text-slate-600'}`}
+              className={`px-2 py-0.5 text-[8px] font-bold rounded transition-all ${!missionModeArmed ? 'bg-white text-[color:var(--primary-shadow)] shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}
             >
               ЗАДАЧА
             </button>

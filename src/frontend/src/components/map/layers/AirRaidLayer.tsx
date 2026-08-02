@@ -32,7 +32,7 @@ export function AirRaidLayer({ className = '' }: AirRaidLayerProps): JSX.Element
     return (
       <div
         data-testid="air-raid-quiet"
-        className={`px-2 py-1 rounded-md bg-emerald-900/35 backdrop-blur-md text-[10px] text-emerald-200 border border-emerald-500/20 ${className}`}
+        className={`px-2 py-1 rounded-md bg-emerald-50/90 backdrop-blur-md text-[10px] text-emerald-800 border border-emerald-600/30 ${className}`}
       >
         тиша по Україні
       </div>

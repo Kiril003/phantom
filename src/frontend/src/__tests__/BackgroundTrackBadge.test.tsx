@@ -52,8 +52,8 @@ describe('deriveBackgroundTrackView', () => {
     };
     const v = deriveBackgroundTrackView(snap);
     expect(v.total).toBe(4);
-    expect(v.title).toContain('1 active');
-    expect(v.title).toContain('3 queued');
+    expect(v.title).toContain('1 в роботі');
+    expect(v.title).toContain('3 у черзі');
   });
 
   it('shows muted color when only queued and no active', () => {
@@ -68,6 +68,6 @@ describe('deriveBackgroundTrackView', () => {
     expect(v.visible).toBe(true);
     expect(v.total).toBe(2);
     expect(v.color).toBe('var(--ink-muted)');
-    expect(v.title).toContain('2 queued');
+    expect(v.title).toContain('2 у черзі');
   });
 });

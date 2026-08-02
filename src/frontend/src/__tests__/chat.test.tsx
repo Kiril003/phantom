@@ -571,7 +571,7 @@ describe('ChatWindow', () => {
     useChatStore.setState({ sendMessage: spy });
     const { ChatWindow } = await import('../components/chat/ChatWindow');
     render(<ChatWindow minimalChrome />);
-    const textarea = screen.getByLabelText('Chat input') as HTMLTextAreaElement;
+    const textarea = screen.getByLabelText('Поле повідомлення') as HTMLTextAreaElement;
     fireEvent.change(textarea, { target: { value: 'hello' } });
     await waitFor(() => {
       const btn = screen.getByLabelText('Надіслати');
@@ -588,7 +588,7 @@ describe('ChatWindow', () => {
     useChatStore.setState({ sendMessage: spy });
     const { ChatWindow } = await import('../components/chat/ChatWindow');
     render(<ChatWindow minimalChrome />);
-    const textarea = screen.getByLabelText('Chat input') as HTMLTextAreaElement;
+    const textarea = screen.getByLabelText('Поле повідомлення') as HTMLTextAreaElement;
     fireEvent.change(textarea, { target: { value: 'enter-send' } });
     fireEvent.keyDown(textarea, { key: 'Enter', shiftKey: false });
     await waitFor(() => expect(spy).toHaveBeenCalledWith('enter-send', 'text', SystemState.DIALOGUE));
@@ -614,7 +614,7 @@ describe('ChatWindow', () => {
     const spy = vi.fn();
     const { ChatWindow } = await import('../components/chat/ChatWindow');
     render(<ChatWindow minimalChrome onVoiceToggle={spy} />);
-    const btn = screen.getByLabelText('Start listening');
+    const btn = screen.getByLabelText('Говорити');
     act(() => {
       fireEvent.click(btn);
     });

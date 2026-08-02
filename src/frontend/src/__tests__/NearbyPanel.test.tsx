@@ -89,7 +89,7 @@ describe('NearbyPanel', () => {
     render(<NearbyPanel lat={50.45} lon={30.52} zoom={16} />);
     await waitFor(() => {
       expect(
-        screen.getByRole('button', { name: /Nearby lookup failed — retry/i })
+        screen.getByRole('button', { name: /Не вдалося знайти поруч — повторити/i })
       ).toBeInTheDocument();
     });
   });

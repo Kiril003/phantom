@@ -69,7 +69,8 @@ export function SafetyShieldToggle() {
   };
 
   // Visual tokens.
-  const tint = isUnsafe ? '#ef4444' : 'var(--primary, #f4af25)';
+  // Бурштин — колір заливки, не чорнила: на майже білому тлі підпис зникав.
+  const tint = isUnsafe ? '#ef4444' : 'var(--primary-shadow, #8a5e0a)';
   const surface = isUnsafe
     ? 'rgba(239, 68, 68, 0.12)'
     : 'rgba(255, 255, 255, 0.92)';

@@ -1,14 +1,16 @@
 import { Layers, Radar, Wifi, Flame, MapPin, Route, Sparkles, Satellite, Compass } from 'lucide-react';
 import { useMapStore, type MapLayerKey } from '../../../stores/mapStore';
 
+// Підписи шарів були англійськими — на боковій рейці мапи це єдиний
+// текст, який пояснює, що вмикає кнопка.
 const LATERAL_ITEMS: Array<{ key: MapLayerKey; icon: React.ReactNode; label: string }> = [
-  { key: 'base', icon: <Layers size={18} strokeWidth={1.75} />, label: 'Base' },
-  { key: 'presence', icon: <Radar size={18} strokeWidth={1.75} />, label: 'Presence' },
-  { key: 'wardriving', icon: <Wifi size={18} strokeWidth={1.75} />, label: 'Wardriving' },
-  { key: 'heatmap', icon: <Flame size={18} strokeWidth={1.75} />, label: 'Heatmap' },
-  { key: 'intel', icon: <MapPin size={18} strokeWidth={1.75} />, label: 'Intel' },
-  { key: 'recon', icon: <Route size={18} strokeWidth={1.75} />, label: 'Recon' },
-  { key: 'facts', icon: <Sparkles size={18} strokeWidth={1.75} />, label: 'Facts' },
+  { key: 'base', icon: <Layers size={18} strokeWidth={1.75} />, label: 'Основа' },
+  { key: 'presence', icon: <Radar size={18} strokeWidth={1.75} />, label: 'Присутність' },
+  { key: 'wardriving', icon: <Wifi size={18} strokeWidth={1.75} />, label: 'Мережі' },
+  { key: 'heatmap', icon: <Flame size={18} strokeWidth={1.75} />, label: 'Теплокарта' },
+  { key: 'intel', icon: <MapPin size={18} strokeWidth={1.75} />, label: 'Місця' },
+  { key: 'recon', icon: <Route size={18} strokeWidth={1.75} />, label: 'Розвідка' },
+  { key: 'facts', icon: <Sparkles size={18} strokeWidth={1.75} />, label: 'Спогади' },
 ];
 
 export function LayerControlZone({

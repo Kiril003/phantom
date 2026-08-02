@@ -177,7 +177,7 @@ export function StatusBar() {
           position="top"
           collapsed={true}
           onToggle={toggleCollapsed}
-          label="StatusBar"
+          label="верхній рядок"
         />
       </div>
     );
@@ -287,7 +287,7 @@ export function StatusBar() {
       <span style={{ flex: 1 }} />
 
       <ConnectivityIcon ok={!!context?.system.wifi_connected} iconOn="wifi" iconOff="wifi_off" label="WiFi" />
-      <ConnectivityIcon ok={!!context?.system.internet_available} iconOn="cloud_done" iconOff="cloud_off" label="Internet" />
+      <ConnectivityIcon ok={!!context?.system.internet_available} iconOn="cloud_done" iconOff="cloud_off" label="Інтернет" />
       <span
         aria-hidden
         style={{
@@ -315,7 +315,7 @@ export function StatusBar() {
         position="top"
         collapsed={false}
         onToggle={toggleCollapsed}
-        label="StatusBar"
+        label="верхній рядок"
         style={{ marginLeft: 4 }}
       />
     </div>
@@ -522,7 +522,7 @@ function ConnectivityIcon({
   return (
     <span
       className="inline-flex items-center"
-      title={ok ? `${label} online` : `${label} offline`}
+      title={ok ? `${label}: є звʼязок` : `${label}: звʼязку немає`}
       style={{ color: ok ? 'var(--signal-ok)' : 'var(--ink-muted)' }}
     >
       <MSym name={ok ? iconOn : iconOff} size={14} color="currentColor" />
@@ -577,15 +577,17 @@ export function deriveBackgroundTrackView(
   const color = active > 0 ? 'var(--signal-ok)' : 'var(--ink-muted)';
   const origin = snap.background.origin ?? '—';
   const substate = snap.background.substate ?? '—';
+  // Підказка була англійською — і саме тому лишалась непоміченою: сито
+  // англіцизмів читало innerText, а не title.
   let title: string;
   if (active > 0 && queued > 0) {
-    title = `Background: 1 active + ${queued} queued (${origin})`;
+    title = `У фоні: 1 в роботі + ${queued} у черзі (${origin})`;
   } else if (active > 0) {
-    title = `Background: ${origin} — ${substate}`;
+    title = `У фоні: ${origin} — ${substate}`;
   } else if (queued > 0) {
-    title = `Background: ${queued} queued`;
+    title = `У фоні: ${queued} у черзі`;
   } else {
-    title = 'Background: idle';
+    title = 'У фоні: тиша';
   }
   return { total, active, queued, color, title, visible: total > 0 };
 }
@@ -617,7 +619,7 @@ function BackgroundTrackSection() {
         title={view.title}
       >
         <MSym name="bedtime" size={11} color="currentColor" />
-        <span className="tabular">BG: {view.total}</span>
+        <span className="tabular">Фон: {view.total}</span>
       </span>
     </>
   );
@@ -649,10 +651,10 @@ function ProactiveIndicator() {
   const pulse = status === 'active' && proactive.hasTriggers;
   const title =
     status === 'active'
-      ? `Proactive: active${proactive.hasTriggers ? ' (triggers pending)' : ''}`
+      ? `Ініціатива: активна${proactive.hasTriggers ? ' (є привід озватись)' : ''}`
       : status === 'cooling'
-        ? 'Proactive: cooling'
-        : 'Proactive: idle';
+        ? 'Ініціатива: перепочинок'
+        : 'Ініціатива: спокій';
   return (
     <span
       data-testid="proactive-indicator"

@@ -74,7 +74,9 @@ function chipStyle(focused: boolean, compact: boolean): React.CSSProperties {
       : 'rgba(255,255,255,0.4)',
     backdropFilter: 'blur(12px)',
     WebkitBackdropFilter: 'blur(12px)',
-    color: focused ? '#fff' : 'var(--ink, rgba(0,0,0,0.8))',
+    // Білий на бурштиновій заливці давав контраст 1.9 — темне чорнило
+    // на тому ж бурштині читається.
+    color: focused ? 'var(--primary-shadow, #5c3d05)' : 'var(--ink, rgba(0,0,0,0.8))',
     cursor: 'pointer',
     flexShrink: 0,
     // Extend touch target via padding when compact (44px effective via minHeight trick)

@@ -26,7 +26,7 @@ export function IntelLayer() {
     pois.forEach((poi: MapPOI) => {
       const el = document.createElement('div');
       el.className = 'phantom-poi';
-      el.setAttribute('aria-label', `poi-${poi.category}`);
+      el.setAttribute('aria-label', `Місце: ${poi.category}`);
       el.style.minWidth = '44px';
       el.style.minHeight = '44px';
       el.style.display = 'flex';

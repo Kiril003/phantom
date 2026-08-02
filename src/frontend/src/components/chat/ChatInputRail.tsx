@@ -238,7 +238,7 @@ export function ChatInputRail({
                     ? '0 0 16px var(--accent-glow)'
                     : 'none',
                 }}
-                aria-label={voiceActive ? 'Stop listening' : 'Start listening'}
+                aria-label={voiceActive ? 'Зупинити запис' : 'Говорити'}
                 aria-pressed={voiceActive}
               >
                 {voiceActive ? <MicOff size={16} strokeWidth={1.75} /> : <Mic size={16} strokeWidth={1.75} />}
@@ -265,7 +265,7 @@ export function ChatInputRail({
                   : '1px solid var(--glass-border)',
                 opacity: sending ? 0.5 : 1,
               }}
-              aria-label="Open attach drawer"
+              aria-label="Долучити файл"
               aria-expanded={attachOpen}
               data-testid="chat-attach-button"
             >
@@ -281,7 +281,7 @@ export function ChatInputRail({
               onBlur={() => setInputFocused(false)}
               placeholder={sending ? t('chat.input.sending') : (placeholder || t('chat.input.placeholder'))}
               rows={1}
-              aria-label="Chat input"
+              aria-label="Поле повідомлення"
               className="flex-1 resize-none outline-none bg-transparent"
               style={{
                 minHeight: 36,

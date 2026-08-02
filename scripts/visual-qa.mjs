@@ -134,7 +134,7 @@ for (const [path, name] of ROUTES) {
     // Англійська в підказках. innerText її не бачить, тож «Open Settings»
     // і «Згорнути Toolbar» жили на екрані непоміченими не одну перевірку.
     const ATTR_OK =
-      /^(PHANTOM|Gemini|Flash|NEXUS|ESP32|OpenFreeMap|OpenMapTiles|OpenStreetMap|Protomaps|MapLibre|Ollama|Radxa|Whisper|Vosk|Stripe|Tauri|Json|JSON|DEBUG|INFO|WARNING|ERROR|CRITICAL|CPU|RAM|GPS|API|PIN|HRV|AQI)$/i;
+      /^(PHANTOM|Gemini|Flash|NEXUS|ESP32|OpenFreeMap|OpenMapTiles|OpenStreetMap|Protomaps|MapLibre|Ollama|Radxa|Whisper|Vosk|Stripe|Tauri|Wi-Fi|WiFi|Json|JSON|DEBUG|INFO|WARNING|ERROR|CRITICAL|CPU|RAM|GPS|API|PIN|HRV|AQI)$/i;
     const attrLatin = [
       ...new Set(
         [...document.querySelectorAll('[aria-label], [title], [placeholder]')]
@@ -169,13 +169,44 @@ for (const [path, name] of ROUTES) {
       if (r.width < 4 || r.height < 4 || r.bottom <= 0 || r.top >= window.innerHeight) continue;
       const cs = getComputedStyle(el);
       if (cs.visibility === 'hidden' || Number(cs.opacity) < 0.15) continue;
-      let bg = 'rgba(0, 0, 0, 0)';
+      // Градієнт — сліпа пляма backgroundColor: кнопка з linear-gradient
+      // звітує прозоре тло, обхід дістає колір сторінки, і білий текст на
+      // бурштиновій кнопці читається як «білий на кремовому». Судити про
+      // такий фон ми не можемо, тож не судимо взагалі.
+      const parse = (s) => {
+        const m = (s.match(/[\d.]+/g) || []).map(Number);
+        if (m.length < 3) return null;
+        return { r: m[0], g: m[1], b: m[2], a: m.length > 3 ? m[3] : 1 };
+      };
+      // Напівпрозоре тло — ще не тло: rgba(0,0,0,0.1) над кремовим лишається
+      // кремовим, а «темний на 10% чорного» виглядало як провал контрасту.
+      // Збираємо шари до першого непрозорого і змішуємо їх.
+      const layers = [];
+      let painted = false;
+      let opaque = null;
       for (let n = el; n && n !== document.documentElement; n = n.parentElement) {
-        const c = getComputedStyle(n).backgroundColor;
-        if (c && c !== 'transparent' && !/,\s*0\)$/.test(c)) { bg = c; break; }
+        const ns = getComputedStyle(n);
+        if (ns.backgroundImage && ns.backgroundImage !== 'none') { painted = true; break; }
+        const c = parse(ns.backgroundColor);
+        if (!c || c.a === 0) continue;
+        if (c.a >= 0.999) { opaque = c; break; }
+        layers.push(c);
       }
-      const a = lum(cs.color);
-      const b = lum(bg);
+      if (painted || opaque == null) continue;
+      let bg = opaque;
+      for (let i = layers.length - 1; i >= 0; i--) {
+        const t = layers[i];
+        bg = {
+          r: t.r * t.a + bg.r * (1 - t.a),
+          g: t.g * t.a + bg.g * (1 - t.a),
+          b: t.b * t.a + bg.b * (1 - t.a),
+          a: 1,
+        };
+      }
+      const fg = parse(cs.color);
+      if (!fg) continue;
+      const a = lum(`${fg.r} ${fg.g} ${fg.b}`);
+      const b = lum(`${bg.r} ${bg.g} ${bg.b}`);
       if ((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) < 2.2) faint += 1;
     }
 

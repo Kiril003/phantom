@@ -36,7 +36,8 @@ describe('StatusBar — deriveProviderSummary', () => {
     const out = deriveProviderSummary('gemini', snap);
     expect(out.color).toBe('var(--signal-alert)');
     expect(out.label).toContain('ліміт');
-    expect(out.tooltip).toContain('2026-04-19');
+    // Підказку читає людина: сира мітка UTC стала часом, «midnight» — «до опівночі».
+    expect(out.tooltip).toContain('ліміт вичерпано до');
     expect(out.fallbackArrow).toBe(true);
   });
 

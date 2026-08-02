@@ -88,7 +88,7 @@ export function NearbyPanel({
       <button
         type="button"
         onClick={() => void fetchNow()}
-        aria-label="Nearby lookup failed — retry"
+        aria-label="Не вдалося знайти поруч — повторити"
         className="px-3 py-2 min-h-[40px] rounded-full bg-rose-500/10 border border-rose-500/30 text-[10px] font-bold uppercase tracking-wider text-rose-300 hover:bg-rose-500/20 flex items-center gap-2 shadow-2xl"
       >
         <AlertTriangle size={14} />

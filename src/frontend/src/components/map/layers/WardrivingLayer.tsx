@@ -35,7 +35,7 @@ export function WardrivingLayer() {
     records.forEach((r: WardrivingRecord) => {
       const el = document.createElement('div');
       el.className = 'phantom-wardriving';
-      el.setAttribute('aria-label', 'wifi-ap');
+      el.setAttribute('aria-label', 'Точка доступу Wi-Fi');
       el.style.width = '9px';
       el.style.height = '9px';
       el.style.borderRadius = '50%';

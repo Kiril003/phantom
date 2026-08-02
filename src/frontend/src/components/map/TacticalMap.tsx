@@ -227,6 +227,17 @@ export function TacticalMap({
     };
     const onClick = () => select(null);
 
+    // MapLibre малює власну кнопку атрибуції з англійським aria-label
+    // («Toggle attribution») — своєї локалізації бібліотека не має, тож
+    // підписуємо після монтування. Сам текст ліцензії лишається як є:
+    // його вимагає OSM.
+    map.on('load', () => {
+      const toggle = container.querySelector<HTMLElement>('.maplibregl-ctrl-attrib-button');
+      if (toggle) {
+        toggle.setAttribute('aria-label', 'Джерела карти');
+        toggle.setAttribute('title', 'Джерела карти');
+      }
+    });
     map.on('load', onLoad);
     map.on('moveend', onMove);
     map.on('rotate' as any, onRotate);
@@ -430,7 +441,7 @@ export function TacticalMap({
   }, [ready, layers?.wardriving, layers?.heatmap, layers?.intel, layers?.recon, layers?.facts, loadWardriving, loadHeatmap, loadPOIs, loadTrack, loadGeoTaggedFacts]);
 
   return (
-    <div aria-label="Tactical map" className={`phantom-map-frame relative w-full h-full overflow-hidden ${className}`}>
+    <div aria-label="Тактична мапа" className={`phantom-map-frame relative w-full h-full overflow-hidden ${className}`}>
       <div ref={containerRef} className="absolute inset-0" />
       <MapContext.Provider value={{ map: mapRef.current, ready: ready && !!mapRef.current }}>
         {ready && mapRef.current && (

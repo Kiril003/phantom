@@ -68,7 +68,7 @@ export function PresenceLayer() {
     if (!markerRef.current) {
       const el = document.createElement('div');
       el.className = 'phantom-presence';
-      el.setAttribute('aria-label', 'presence');
+      el.setAttribute('aria-label', 'Ти тут');
       el.style.position = 'relative';
       el.style.width = '20px';
       el.style.height = '20px';
@@ -115,7 +115,7 @@ export function PresenceLayer() {
       if (!accuracyMarkerRef.current) {
         const el = document.createElement('div');
         el.className = 'phantom-presence-accuracy';
-        el.setAttribute('aria-label', 'presence-accuracy');
+        el.setAttribute('aria-label', 'Похибка визначення місця');
         el.style.pointerEvents = 'none';
         el.style.borderRadius = '50%';
         el.style.border = `1px dashed ${tokens.accent}`;

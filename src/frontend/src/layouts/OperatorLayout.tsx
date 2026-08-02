@@ -58,7 +58,7 @@ function VitalsHeaderStrip() {
        <TenantBadge />
        <div className="flex flex-col border-l border-white/10 pl-3">
           <span className="text-[7px] text-neutral-500 uppercase font-bold tracking-widest leading-none mb-0.5">Стан розуму</span>
-          <span className="text-[10px] text-primary font-bold uppercase leading-none">{formatSubstate(substate)}</span>
+          <span className="text-[10px] font-bold uppercase leading-none" style={{ color: 'var(--primary-shadow)' }}>{formatSubstate(substate)}</span>
        </div>
        <div className="flex flex-col">
           <span className="text-[7px] text-neutral-500 uppercase font-bold tracking-widest leading-none mb-0.5">Емпатія</span>
@@ -66,7 +66,7 @@ function VitalsHeaderStrip() {
        </div>
        <div className="flex items-center gap-2 border-l border-white/10 pl-3">
           {unsafeMode ? <ShieldAlert size={12} className="text-red-500" /> : <ShieldCheck size={12} className="text-green-500" />}
-          <span className="text-[9px] font-mono font-bold text-neutral-400">{unsafeMode ? 'БЕЗ ОБМЕЖЕНЬ' : 'ЗАХИЩЕНО'}</span>
+          <span className="text-[9px] font-mono font-bold" style={{ color: 'var(--ink-secondary)' }}>{unsafeMode ? 'БЕЗ ОБМЕЖЕНЬ' : 'ЗАХИЩЕНО'}</span>
        </div>
     </div>
   );

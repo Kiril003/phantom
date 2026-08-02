@@ -463,7 +463,7 @@ export default function SettingsPanel() {
           </span>
           <span
             className="tabular"
-            title={`${overallProgress.configured} of ${overallProgress.total} keys non-default`}
+            title={`Змінено ${overallProgress.configured} з ${overallProgress.total} налаштувань`}
             style={{
               fontSize: 9,
               fontWeight: 700,

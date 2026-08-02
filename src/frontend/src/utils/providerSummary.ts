@@ -27,6 +27,18 @@ function asRecord<T>(v: unknown): Record<string, T> {
     : {};
 }
 
+/**
+ * Бекенд шле для добового ліміту рядок "midnight" — і він доходив до
+ * підказки як є: «ліміт вичерпано до midnight». Все інше — час ISO.
+ */
+function untilPhrase(until: string | undefined): string {
+  if (!until) return 'на невизначений час';
+  if (until === 'midnight') return 'до опівночі';
+  const ts = Date.parse(until);
+  if (Number.isNaN(ts)) return `до ${until}`;
+  return `до ${new Date(ts).toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' })}`;
+}
+
 export function deriveProviderSummary(
   provider: string,
   rs: RouterStateSnapshot | null,
@@ -44,7 +56,7 @@ export function deriveProviderSummary(
     return {
       color: 'var(--signal-alert)',
       label: 'ліміт',
-      tooltip: `${primary}: ліміт вичерпано до ${quotaExhausted[primary]?.until_utc}`,
+      tooltip: `${primary}: ліміт вичерпано ${untilPhrase(quotaExhausted[primary]?.until_utc)}`,
       fallbackArrow: true,
     };
   }

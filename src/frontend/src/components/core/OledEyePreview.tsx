@@ -2,6 +2,18 @@ import { useOledStore } from '../../stores/oledStore';
 import { useSystemStore } from '../../stores/systemStore';
 import { SystemState } from '@shared/types';
 
+/** Стан очей приходить службовим ключем; у підказці має бути слово. */
+const EYE_UA: Record<string, string> = {
+  idle: 'спокій',
+  sleepy: 'дрімота',
+  alert: 'насторожені',
+  happy: 'радість',
+  blink: 'кліпає',
+  scan: 'роздивляється',
+  focus: 'зосереджені',
+  neutral: 'спокій',
+};
+
 /**
  * Tiny SVG mirror of the ESP32-side SH1106 OLED animator output.
  * Drives eye_l / eye_r from the `oled` WS channel. Rendered in the
@@ -35,10 +47,10 @@ export function OledEyePreview() {
       width="42"
       height="20"
       viewBox="0 0 100 56"
-      aria-label={`OLED eyes: ${f.eye_state}`}
+      aria-label={`Очі на екрані: ${EYE_UA[f.eye_state] ?? f.eye_state}`}
       style={{ display: 'block' }}
     >
-      <title>{`OLED ${f.mood} (${f.eye_state})`}</title>
+      <title>{`Очі на екрані: ${EYE_UA[f.eye_state] ?? f.eye_state}`}</title>
       <rect
         x="0"
         y="0"

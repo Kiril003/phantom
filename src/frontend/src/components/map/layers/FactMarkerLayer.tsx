@@ -55,7 +55,7 @@ export function FactMarkerLayer() {
 
       const el = document.createElement('div');
       el.className = 'phantom-fact-marker';
-      el.setAttribute('aria-label', `memory-${fact.category}`);
+      el.setAttribute('aria-label', `Спогад: ${fact.category}`);
       el.style.minWidth = '44px';
       el.style.minHeight = '44px';
       el.style.display = 'flex';

@@ -77,6 +77,23 @@ os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///{_TEST_DB_PATH}")
 os.environ.setdefault("WILL_ENABLED", "False")
 
 
+# ── 2026-08-02 — ізоляція теки даних ─────────────────────────────────────────
+#
+# Той самий клас витоку, що й вище з DATABASE_URL, але дорожчий. Базу тести
+# вже брали тимчасову — а `paths.resolve_data_dir()` і далі вказував на живу
+# `.phantom-data/`. Тож `ensure_default_user()`, який спрацьовує на порожній
+# таблиці (тобто в КОЖНОМУ прогоні), генерував новий PIN і писав його в
+# СПРАВЖНІЙ `.phantom-data/identity/bootstrap_pin`, затираючи єдину копію
+# облікових даних оператора. База лишалась зі старим хешем — і власник
+# опинявся замкненим у власному застосунку, а кожне завантаження сторінки в
+# режимі розробки спалювало спробу входу до блокування на 15 хвилин.
+#
+# Виявлено 2 серпня 2026: файл змінився рівно під час прогону тестів, і PIN
+# у ньому перестав підходити до бази.
+_TEST_DATA_DIR = tempfile.mkdtemp(prefix="phantom_pytest_data_")
+os.environ.setdefault("PHANTOM_DATA_DIR", _TEST_DATA_DIR)
+
+
 # ── Day-2 L-3 (audit-2026-04-29 F-15) — login lockout test isolation ─────────
 #
 # `security.login_lockout` is a process-local in-memory module. Tests

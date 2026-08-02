@@ -1,63 +1,104 @@
-import { Compass, Satellite, Eye, EyeOff } from 'lucide-react';
+import { useState } from 'react';
+import { Compass, Satellite, Eye, EyeOff, Gauge } from 'lucide-react';
+import { useSystemStore } from '../../../stores/systemStore';
+
+/**
+ * Чипси стану мапи.
+ *
+ * Тут стояв інженерний вивід: широта й довгота з п'ятьма знаками в окремій
+ * панелі, «Пн · 000°», «06 | 0 км/год» і «z15». Людина від мапи хоче знати
+ * не координати, а ДЕ вона і НАСКІЛЬКИ точно це відомо. Координати нікуди
+ * не зникли — вони під тапом, коли справді потрібні.
+ */
 
 const SOURCE_LABELS: Record<string, string> = {
-  ip_estimate: 'ОЦІНКА ЗА IP',
-  gps: 'GPS',
-  network: 'МЕРЕЖА',
-  fused: 'ЗВЕДЕНА',
-  manual: 'ВРУЧНУ',
-  browser_geolocation: 'ГЕОЛОКАЦІЯ БРАУЗЕРА',
+  ip_estimate: 'приблизно, за IP',
+  gps: 'супутники',
+  gps_hardware: 'супутники',
+  network: 'за мережею',
+  fused: 'зведено',
+  manual: 'вказано вручну',
+  browser_geolocation: 'за браузером',
+  user_stated: 'з твоїх слів',
 };
+
+/** Точність словом: метри самі по собі мало кому щось кажуть. */
+function accuracyWord(m: number | null | undefined): { text: string; dot: string } {
+  if (m == null) return { text: 'точність невідома', dot: 'var(--ink-muted)' };
+  if (m <= 15) return { text: `до ${Math.round(m)} м`, dot: 'var(--signal-ok)' };
+  if (m <= 100) return { text: `близько ${Math.round(m)} м`, dot: 'var(--signal-warn)' };
+  if (m < 1000) return { text: `розкид ${Math.round(m)} м`, dot: 'var(--signal-alert)' };
+  return { text: `розкид ${(m / 1000).toFixed(1)} км`, dot: 'var(--signal-alert)' };
+}
 
 export function CoordinateReadout({ lat, lon, source }: {
   lat: number | null;
   lon: number | null;
   source: string;
 }) {
+  const where = useSystemStore((s) => s.context?.where);
+  const [showRaw, setShowRaw] = useState(false);
+
   if (lat == null || lon == null || source === 'none') {
     return (
-      <div className="glass-card flex items-center gap-2 px-3 py-2 rounded-full opacity-50">
-        <EyeOff size={10} className="text-white/40" />
-        <span className="text-[9px] font-bold uppercase tracking-widest text-ink-muted">НЕМАЄ ФІКСАЦІЇ</span>
+      <div className="glass-card flex items-center gap-2 px-3 py-2 rounded-full opacity-70">
+        <EyeOff size={11} className="text-ink-muted" />
+        <span className="text-[10px] font-semibold text-ink-secondary">Місце невідоме</span>
       </div>
     );
   }
 
+  const acc = accuracyWord(where?.accuracy_m);
+  const place = where?.place_name?.trim();
+  const how = SOURCE_LABELS[source] ?? source.replace(/_/g, ' ');
+
   return (
-    <div className="glass-card flex flex-col gap-1 px-3 py-2 rounded-2xl min-w-[190px]">
+    <button
+      type="button"
+      onClick={() => setShowRaw((v) => !v)}
+      className="glass-card flex flex-col items-start gap-0.5 px-3 py-2 rounded-2xl min-h-[44px] text-left"
+      aria-label={showRaw ? 'Сховати координати' : 'Показати координати'}
+      title={showRaw ? 'Сховати координати' : 'Показати координати'}
+    >
       <div className="flex items-center gap-2">
-        <span className="block w-1.5 h-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_#10b981]" />
-        <span className="text-[9px] font-bold uppercase tracking-widest text-ink-muted">
-          {SOURCE_LABELS[source ?? ''] ?? source?.replace('_', ' ') ?? 'МІСЦЕ НЕВІДОМЕ'}
+        <span
+          className="block w-1.5 h-1.5 rounded-full shrink-0"
+          style={{ background: acc.dot }}
+          aria-hidden
+        />
+        <span className="text-[12px] font-semibold text-ink-primary truncate max-w-[190px]">
+          {place || 'Десь тут'}
         </span>
       </div>
-      <div className="flex items-center gap-3">
-        <span className="text-[9px] font-bold text-ink-muted">ШИР</span>
-        <span className="font-mono text-xs text-ink-primary tabular-nums">
-          {lat != null ? lat.toFixed(5) : '—'}
+      <span className="text-[10px] text-ink-muted">
+        {acc.text} · {how}
+      </span>
+      {showRaw && (
+        <span className="font-mono text-[10px] text-ink-secondary tabular-nums pt-0.5">
+          {lat.toFixed(5)}, {lon.toFixed(5)}
         </span>
-      </div>
-      <div className="flex items-center gap-3">
-        <span className="text-[9px] font-bold text-ink-muted">ДОВ</span>
-        <span className="font-mono text-xs text-ink-primary tabular-nums">
-          {lon != null ? lon.toFixed(5) : '—'}
-        </span>
-      </div>
-    </div>
+      )}
+    </button>
   );
 }
 
+/** Румб словом — «Пн · 000°» вимагало читати число, щоб зрозуміти напрямок. */
+const RHUMB = ['Пн', 'Пн-Сх', 'Сх', 'Пд-Сх', 'Пд', 'Пд-Зх', 'Зх', 'Пн-Зх'];
+
 export function CompassChip({ bearing }: { bearing: number }) {
+  const deg = ((Math.round(bearing) % 360) + 360) % 360;
+  const word = RHUMB[Math.round(deg / 45) % 8];
   return (
     <div className="glass-card flex items-center gap-2 px-3 h-[30px] rounded-full">
       <Compass
         size={14}
         strokeWidth={1.75}
-        className="text-amber-500"
+        className="text-amber-600"
         style={{ transform: `rotate(${bearing}deg)` }}
+        aria-hidden
       />
-      <span className="font-display text-[9px] font-bold uppercase tracking-widest text-ink-primary tabular-nums">
-        Пн · {String(Math.round(bearing)).padStart(3, '0')}°
+      <span className="text-[10px] font-semibold text-ink-primary tabular-nums">
+        {word} · {deg}°
       </span>
     </div>
   );
@@ -68,37 +109,55 @@ export function GpsQualityChip({ satellites, fix, speed }: {
   fix: boolean;
   speed: number;
 }) {
+  // Рухається — показуємо швидкість; стоїть — вона тільки шумить нулем.
+  const moving = fix && speed >= 1;
+  const satTone =
+    satellites >= 6 ? 'text-emerald-600' : satellites >= 4 ? 'text-amber-600' : 'text-rose-600';
   return (
-    <div className="glass-card flex items-center gap-3 px-3 h-[30px] rounded-full">
-      <span className="flex items-center gap-1">
-        <Satellite size={12} strokeWidth={1.75} className="text-ink-muted" />
-        <span className={`font-mono text-[9px] tabular-nums ${satellites >= 6 ? 'text-emerald-500' : satellites >= 4 ? 'text-amber-500' : 'text-rose-500'
-          }`}>
-          {String(satellites).padStart(2, '0')}
+    <div className="glass-card flex items-center gap-2.5 px-3 h-[30px] rounded-full">
+      <span className="flex items-center gap-1.5">
+        <Satellite size={12} strokeWidth={1.75} className="text-ink-muted" aria-hidden />
+        <span className={`text-[10px] font-semibold tabular-nums ${satTone}`}>
+          {satellites}
+        </span>
+        <span className="text-[10px] text-ink-muted">
+          {satellites === 1 ? 'супутник' : satellites >= 2 && satellites <= 4 ? 'супутники' : 'супутників'}
         </span>
       </span>
-      <span className="text-white/10">|</span>
-      <span className={`font-mono text-[9px] tabular-nums ${fix ? 'text-ink-primary' : 'text-ink-muted'}`}>
-        {speed.toFixed(0)} км/год
-      </span>
+      {moving && (
+        <>
+          <span className="text-ink-muted/40">·</span>
+          <span className="flex items-center gap-1">
+            <Gauge size={12} strokeWidth={1.75} className="text-ink-muted" aria-hidden />
+            <span className="text-[10px] font-semibold text-ink-primary tabular-nums">
+              {speed.toFixed(0)} км/год
+            </span>
+          </span>
+        </>
+      )}
     </div>
   );
 }
 
 export function StatusChip({ loading, zoom }: { loading: boolean; zoom: number }) {
+  // z15 — жаргон рендерера. Людині корисніше знати, наскільки близько вона
+  // дивиться: місто, район чи вулиця.
+  const scale =
+    zoom < 6 ? 'країна' : zoom < 9 ? 'область' : zoom < 12 ? 'місто' :
+    zoom < 15 ? 'район' : zoom < 17 ? 'вулиці' : 'будинки';
   return (
     <div className="glass-card flex items-center gap-2 px-3 h-[30px] rounded-full">
       {loading ? (
-        <EyeOff size={12} strokeWidth={1.75} className="text-amber-500" />
+        <EyeOff size={12} strokeWidth={1.75} className="text-amber-600" aria-hidden />
       ) : (
-        <Eye size={12} strokeWidth={1.75} className="text-emerald-500" />
+        <Eye size={12} strokeWidth={1.75} className="text-emerald-600" aria-hidden />
       )}
-      <span className={`text-[9px] font-bold uppercase tracking-widest ${loading ? 'text-amber-500' : 'text-emerald-500'}`}>
-        {loading ? 'Синхронізація' : 'Наживо'}
+      <span
+        className={`text-[10px] font-semibold ${loading ? 'text-amber-700' : 'text-emerald-700'}`}
+      >
+        {loading ? 'Синхронізую' : 'Наживо'}
       </span>
-      <span className="font-mono text-[9px] text-ink-muted tabular-nums">
-        z{zoom.toFixed(0)}
-      </span>
+      <span className="text-[10px] text-ink-muted">· {scale}</span>
     </div>
   );
 }

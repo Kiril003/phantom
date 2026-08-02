@@ -248,7 +248,7 @@ describe('ElevationProfileSheet', () => {
 describe('StatusChip', () => {
   it('shows Syncing when loading=true', () => {
     render(<StatusChip loading={true} zoom={12} />);
-    expect(screen.getByText('Синхронізація')).toBeInTheDocument();
+    expect(screen.getByText('Синхронізую')).toBeInTheDocument();
   });
 
   it('shows Live when loading=false', () => {
@@ -256,9 +256,16 @@ describe('StatusChip', () => {
     expect(screen.getByText('Наживо')).toBeInTheDocument();
   });
 
-  it('renders zoom level', () => {
+  // «z15» — жаргон рендерера. Людині корисніше знати, наскільки близько
+  // вона дивиться, тож чип показує масштаб словом.
+  it('масштаб називає словом, а не рівнем зуму', () => {
     render(<StatusChip loading={false} zoom={15} />);
-    expect(screen.getByText('z15')).toBeInTheDocument();
+    expect(screen.getByText('· вулиці')).toBeInTheDocument();
+  });
+
+  it('на малому зумі це вже місто, а не вулиці', () => {
+    render(<StatusChip loading={false} zoom={10} />);
+    expect(screen.getByText('· місто')).toBeInTheDocument();
   });
 });
 

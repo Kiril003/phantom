@@ -14,7 +14,8 @@ import { HeatmapLayer } from './HeatmapLayer';
 import { MarkerCard } from './MarkerCard';
 import { useMapStore } from '../../stores/mapStore';
 import { useSystemStore } from '../../stores/systemStore';
-import { getMapTokens, buildPhantomStyle, type PhantomMapStyle } from './mapTokens';
+import { getMapTokens, preserveOverlayLayers, type PhantomMapStyle } from './mapTokens';
+import { buildPhantomMapStyle, DEM_SOURCE_ID } from './phantomStyle';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { settingsApi, type Bounds } from '../../services/api';
 
@@ -27,6 +28,9 @@ interface TacticalMapProps {
   onZoomOut?: (fn: () => void) => void;
   onCenterToMe?: (fn: () => void) => void;
   onAddPoi?: (fn: () => void) => void;
+  /** Перемикач об'єму: нахил камери + рельєф. */
+  onToggleTilt?: (fn: () => void) => void;
+  onTiltChange?: (pitch: number) => void;
 }
 
 /**
@@ -95,6 +99,8 @@ export function TacticalMap({
   onZoomOut,
   onCenterToMe,
   onAddPoi,
+  onToggleTilt,
+  onTiltChange,
 }: TacticalMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
@@ -176,7 +182,9 @@ export function TacticalMap({
       }
       map = new maplibregl.Map({
         container,
-        style: buildPhantomStyle(tokens, mapStyle),
+        // Свій стиль, не чужий URL: звідси об'єм, рельєф, небо й одна мова
+        // підписів. `mapStyle` лишається перемикачем теми всередині нього.
+        style: buildPhantomMapStyle(tokens),
         center: resolvedInitialCenter,
         zoom: initialZoom,
         // OpenFreeMap styles require OSM attribution to stay visible;
@@ -246,6 +254,20 @@ export function TacticalMap({
     // спостерігач її не побачить. Коли стиль не вантажиться, `idle` теж не
     // настає, і англійський підпис лишався на екрані саме в цьому стані.
     nameAttribution();
+    // Рельєф прив'язаний до стилю, і КОЖНА його перебудова (зміна теми,
+    // стану системи, вигляду) мовчки скидає terrain у null. Тому вмикаємо
+    // не один раз, а щоразу, коли стиль осів.
+    const keepTerrain = () => {
+      try {
+        if (map.getSource(DEM_SOURCE_ID) && !map.getTerrain()) {
+          map.setTerrain({ source: DEM_SOURCE_ID, exaggeration: 1.25 });
+        }
+      } catch {
+        // Немає рельєфу — мапа лишається пласкою, але живою.
+      }
+    };
+    map.on('styledata', keepTerrain);
+    map.on('idle', keepTerrain);
     map.on('load', onLoad);
     map.on('moveend', onMove);
     map.on('rotate' as any, onRotate);
@@ -259,6 +281,8 @@ export function TacticalMap({
       map.off('error' as any, onError);
       map.off('click', onClick);
       map.off('idle', nameAttribution);
+      map.off('styledata', keepTerrain);
+      map.off('idle', keepTerrain);
       map.off('styledata', nameAttribution);
       attribWatch.disconnect();
       map.remove();
@@ -295,11 +319,10 @@ export function TacticalMap({
     const tokens = getMapTokens();
     if (containerRef.current) applyContainerTheming(containerRef.current, tokens);
     
-    // MapLibre вже завантажив стиль у конструкторі. Повторний fetch() тієї
-    // самої адреси гинув з ERR_ABORTED і лишав мапу сірою, тож дописуємо
-    // рельєф, світло й будівлі просто в живий стиль.
-    const night = tokens.theme === 'amber-night';
-
+    // Небо, світло й об'ємні будинки тепер живуть у власному стилі
+    // (`phantomStyle.ts`), а не дописуються поверх чужого. Тут лишається
+    // тільки світло: воно залежить від теми, а не від геометрії стилю.
+    const night = tokens.theme === 'amber-night' || tokens.theme === 'ghost';
     try {
       map.setLight({
         anchor: 'map',
@@ -307,45 +330,25 @@ export function TacticalMap({
         intensity: night ? 0.2 : 0.6,
         position: [1.5, 210, 30],
       });
-      map.setSky({
-        'sky-color': night ? '#0a0a0a' : '#88ccee',
-        'sky-horizon-blend': 0.8,
-        'horizon-color': night ? '#1a1a1a' : '#ffffff',
-        'horizon-fog-blend': 0.8,
-        'fog-color': night ? '#1a1a1a' : '#ffffff',
-        'fog-ground-blend': 0.8,
-      });
     } catch (err) {
-      console.warn('Атмосферу застосувати не вдалося:', err);
+      console.warn('Світло застосувати не вдалося:', err);
     }
 
-    // Об'ємні будинки чіпляються до векторного джерела стилю, хай як воно
-    // зветься — назви джерел у різних стилях OpenFreeMap не збігаються.
+    // Кнопка «Вигляд» писала налаштування і на цьому все: стиль ставився
+    // ЛИШЕ в конструкторі, тож до перезавантаження сторінки нічого не
+    // мінялось. Тепер перебудовуємо стиль на місці, зберігаючи накладені
+    // шари (маркери, маршрути, теплокарту).
     try {
-      if (!map.getLayer('phantom-3d-buildings')) {
-        const sources = map.getStyle()?.sources ?? {};
-        const vectorSource = Object.keys(sources).find(
-          (id) => (sources as Record<string, { type?: string }>)[id]?.type === 'vector',
-        );
-        if (vectorSource) {
-          map.addLayer({
-            id: 'phantom-3d-buildings',
-            source: vectorSource,
-            'source-layer': 'building',
-            type: 'fill-extrusion',
-            minzoom: 14,
-            paint: {
-              'fill-extrusion-color': tokens.surfaceRaised,
-              'fill-extrusion-height': ['interpolate', ['linear'], ['zoom'], 14, 0, 15.05, ['get', 'render_height']],
-              'fill-extrusion-base': ['interpolate', ['linear'], ['zoom'], 14, 0, 15.05, ['get', 'render_min_height']],
-              'fill-extrusion-opacity': 0.95,
-              'fill-extrusion-vertical-gradient': true,
-            },
-          });
-        }
+      const next = buildPhantomMapStyle(tokens);
+      map.setStyle(next, {
+        diff: true,
+        transformStyle: (prev, incoming) => preserveOverlayLayers(prev, incoming),
+      });
+      if (map.getSource(DEM_SOURCE_ID) && !map.getTerrain()) {
+        map.setTerrain({ source: DEM_SOURCE_ID, exaggeration: 1.25 });
       }
     } catch (err) {
-      console.warn('Об’ємні будинки не додалися:', err);
+      console.warn('Стиль не перебудувався:', err);
     }
   }, [mapStyle, ready, systemState]);
 
@@ -365,6 +368,20 @@ export function TacticalMap({
     setStyleLoadFailed(false);
     setReady(false);
     setRetryNonce((n) => n + 1);
+  }, []);
+
+  // Об'ємний режим — головне, заради чого з'явились рельєф і будівлі.
+  // Без кнопки людина про них не дізнається: мишею нахил тягнеться лише
+  // правою кнопкою з Ctrl, а на тачскріні — двома пальцями.
+  const handleToggleTilt = useCallback(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const flat = map.getPitch() < 10;
+    map.easeTo({
+      pitch: flat ? 60 : 0,
+      zoom: flat ? Math.max(map.getZoom(), 15.5) : map.getZoom(),
+      duration: 900,
+    });
   }, []);
 
   const handleResetBearing = useCallback(() => {
@@ -438,7 +455,18 @@ export function TacticalMap({
     onCenterToMe?.(handleCenterToMe);
     onAddPoi?.(handleAddPoi);
     onResetBearing?.(handleResetBearing);
-  }, [onZoomIn, onZoomOut, onCenterToMe, onAddPoi, onResetBearing, handleCenterToMe, handleAddPoi, handleResetBearing, ready]);
+    onToggleTilt?.(handleToggleTilt);
+  }, [onZoomIn, onZoomOut, onCenterToMe, onAddPoi, onResetBearing, onToggleTilt, handleCenterToMe, handleAddPoi, handleResetBearing, handleToggleTilt, ready]);
+
+  // Нахил віддаємо нагору, щоб кнопка об'єму світилась, коли він увімкнений.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready || !onTiltChange) return;
+    const emit = () => onTiltChange(map.getPitch());
+    emit();
+    map.on('pitchend', emit);
+    return () => { map.off('pitchend', emit); };
+  }, [ready, onTiltChange]);
 
   useEffect(() => {
     if (!ready || !mapRef.current) return;

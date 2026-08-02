@@ -42,6 +42,8 @@ export interface HudShellProps {
   mapStyle: string;
   onCycleStyle: () => void;
   onResetBearing: () => void;
+  onToggleTilt: () => void;
+  tilted: boolean;
   timelineOpen: boolean;
   onToggleTimeline: () => void;
   offlineOpen: boolean;
@@ -69,6 +71,8 @@ export function HudShell({
   mapStyle,
   onCycleStyle,
   onResetBearing,
+  onToggleTilt,
+  tilted,
   timelineOpen,
   onToggleTimeline,
   offlineOpen,
@@ -135,6 +139,8 @@ export function HudShell({
           mapStyle={mapStyle}
           onCycleStyle={onCycleStyle}
           onResetBearing={onResetBearing}
+          onToggleTilt={onToggleTilt}
+          tilted={tilted}
           timelineOpen={timelineOpen}
           onToggleTimeline={onToggleTimeline}
           offlineOpen={offlineOpen}

@@ -1,4 +1,7 @@
-import { Layers, Radar, Wifi, Flame, MapPin, Route, Sparkles, Satellite, Compass } from 'lucide-react';
+import {
+  Layers, Radar, Wifi, Flame, MapPin, Route, Sparkles, Satellite, Compass,
+  Clock, Activity, BookOpen, Shield, HardDrive, Box,
+} from 'lucide-react';
 import { useMapStore, type MapLayerKey } from '../../../stores/mapStore';
 
 /** Назви стилів мапи приходять службовими ключами. */
@@ -10,11 +13,13 @@ const STYLE_UA: Record<string, string> = {
 
 // Підписи шарів були англійськими — на боковій рейці мапи це єдиний
 // текст, який пояснює, що вмикає кнопка.
-const LATERAL_ITEMS: Array<{ key: MapLayerKey; icon: React.ReactNode; label: string }> = [
+const LATERAL_ITEMS: Array<{
+  key: MapLayerKey; icon: React.ReactNode; label: string; short?: string;
+}> = [
   { key: 'base', icon: <Layers size={18} strokeWidth={1.75} />, label: 'Основа' },
-  { key: 'presence', icon: <Radar size={18} strokeWidth={1.75} />, label: 'Присутність' },
+  { key: 'presence', icon: <Radar size={18} strokeWidth={1.75} />, label: 'Присутність', short: 'Поруч' },
   { key: 'wardriving', icon: <Wifi size={18} strokeWidth={1.75} />, label: 'Мережі' },
-  { key: 'heatmap', icon: <Flame size={18} strokeWidth={1.75} />, label: 'Теплокарта' },
+  { key: 'heatmap', icon: <Flame size={18} strokeWidth={1.75} />, label: 'Теплокарта', short: 'Тепло' },
   { key: 'intel', icon: <MapPin size={18} strokeWidth={1.75} />, label: 'Місця' },
   { key: 'recon', icon: <Route size={18} strokeWidth={1.75} />, label: 'Розвідка' },
   { key: 'facts', icon: <Sparkles size={18} strokeWidth={1.75} />, label: 'Спогади' },
@@ -25,6 +30,8 @@ export function LayerControlZone({
   mapStyle,
   onCycleStyle,
   onResetBearing,
+  onToggleTilt,
+  tilted,
   // @ts-ignore
   timelineOpen,
   // @ts-ignore
@@ -50,6 +57,8 @@ export function LayerControlZone({
   mapStyle: string;
   onCycleStyle: () => void;
   onResetBearing: () => void;
+  onToggleTilt: () => void;
+  tilted: boolean;
   timelineOpen: boolean;
   onToggleTimeline: () => void;
   offlineOpen: boolean;
@@ -73,6 +82,7 @@ export function LayerControlZone({
           key={item.key}
           icon={item.icon}
           label={item.label}
+          short={item.short}
           active={layers[item.key]}
           onClick={() => toggleLayer(item.key)}
         />
@@ -81,48 +91,58 @@ export function LayerControlZone({
       <LateralButton
         icon={<Satellite size={18} strokeWidth={1.75} />}
         label={`Вигляд · ${STYLE_UA[mapStyle] ?? mapStyle}`}
+        short="Вигляд"
         active={mapStyle !== 'dark'}
         onClick={onCycleStyle}
       />
       <LateralButton
+        icon={<Box size={18} strokeWidth={1.75} />}
+        label={tilted ? 'Об’єм · увімкнено' : 'Об’єм · вимкнено'}
+        short="Об’єм"
+        active={tilted}
+        onClick={onToggleTilt}
+      />
+      <LateralButton
         icon={<Compass size={18} strokeWidth={1.75} />}
-        label={`Напрямок · ${String(Math.round(bearing)).padStart(3, '0')}°`}
+        label={`Напрямок · ${Math.round(bearing)}°`}
+        short="Північ"
         active={Math.abs(bearing) > 0.5}
         onClick={onResetBearing}
       />
-      {/* 
-      // DEAD BUTTONS (Unimplemented)
+      <span className="block w-6 h-px bg-white/10 my-1 shrink-0" />
+      {/* Ці п'ять панелей давно написані й вкручені в OmniMap — бракувало
+          лише кнопок, і вони стояли тут закоментовані як «мертві». Зовні це
+          читалось як «половини мапи немає». */}
       <LateralButton
         icon={<Clock size={18} strokeWidth={1.75} />}
-        label="Timeline"
+        label="Час"
         active={timelineOpen}
         onClick={onToggleTimeline}
       />
       <LateralButton
         icon={<Activity size={18} strokeWidth={1.75} />}
-        label="Analysis"
+        label="Аналіз"
         active={analysisOpen}
         onClick={onToggleAnalysis}
       />
       <LateralButton
         icon={<BookOpen size={18} strokeWidth={1.75} />}
-        label="Story"
+        label="Історія"
         active={storyOpen}
         onClick={onToggleStory}
       />
       <LateralButton
         icon={<Shield size={18} strokeWidth={1.75} />}
-        label="Ghost"
+        label="Привид"
         active={ghostOpen}
         onClick={onToggleGhost}
       />
       <LateralButton
         icon={<HardDrive size={18} strokeWidth={1.75} />}
-        label="Offline"
+        label="Офлайн"
         active={offlineOpen}
         onClick={onToggleOffline}
       />
-      */}
     </div>
   );
 }
@@ -130,11 +150,14 @@ export function LayerControlZone({
 function LateralButton({
   icon,
   label,
+  short,
   active = false,
   onClick,
 }: {
   icon: React.ReactNode;
   label: string;
+  /** Видимий підпис, коли `label` задовгий; доступна назва лишається `label`. */
+  short?: string;
   active?: boolean;
   onClick?: () => void;
 }) {
@@ -142,15 +165,29 @@ function LateralButton({
     <button
       type="button"
       onClick={onClick}
-      className={`flex items-center justify-center w-11 h-11 rounded-[14px] transition-all active:scale-90 ${active
-          ? 'bg-amber-500/20 text-amber-500 border border-amber-500/40 shadow-[0_0_14px_rgba(244,175,37,0.2)]'
-          : 'text-ink-secondary hover:bg-white/5'
+      className={`flex flex-col items-center justify-center gap-[1px] w-12 min-h-[44px] py-1 rounded-[14px] transition-all active:scale-90 ${active
+          // Бурштин — колір ЗАЛИВКИ, не чорнила: `text-amber-500` по
+          // бурштиновій підкладці давав контраст 1.8, тобто підпис
+          // активного шару читався гірше за неактивний.
+          ? 'bg-amber-500/20 text-[color:var(--primary-shadow,#5c3d05)] border border-amber-500/40 shadow-[0_0_14px_rgba(244,175,37,0.2)]'
+          : 'text-[color:var(--ink-primary)] hover:bg-white/5'
         }`}
       aria-label={label}
       aria-pressed={active}
       title={label}
     >
       {icon}
+      {/* Пристрій тач — hover не існує, тож `title` не з'явиться ніколи, і
+          рейка читалась як стовпчик загадок. */}
+      <span
+        style={{
+          fontSize: 7.5, lineHeight: '8px', fontWeight: active ? 700 : 600,
+          letterSpacing: '0.02em', textTransform: 'uppercase',
+          maxWidth: 46, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+        }}
+      >
+        {short ?? label}
+      </span>
     </button>
   );
 }

@@ -94,6 +94,16 @@ export default function LoginScreen() {
         setError('Ядро не відповідає. PIN нема кому перевірити.');
         return;
       }
+      // 429 — ядро тимчасово не приймає спроб. Казати «не той PIN» тут
+      // означає брехати: PIN міг бути правильний, просто його не перевіряли.
+      if (err.status === 429) {
+        const secs = Number(/(\d+)\s*s/.exec(err.message)?.[1]);
+        const until = Date.now() + (Number.isFinite(secs) ? secs * 1000 : 60_000);
+        setLockout(until);
+        setNow(Date.now());
+        setError('Ядро поставило паузу на вхід. PIN не перевірявся.');
+        return;
+      }
       const attempts = useAuthStore.getState().loginAttempts + 1;
       incrementAttempts();
       if (attempts >= 5) {

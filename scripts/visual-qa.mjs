@@ -155,7 +155,7 @@ for (const [path, name] of ROUTES) {
           // Дозволено: власні назви, ідентифікатори моделей, рівні логів
           // і атрибуція OSM — її вимагає ліцензія, перекладати не можна.
           (w) =>
-            !/^(PHANTOM|Gemini|Flash|gemini-flash|Quota|NEXUS|ESP32|OpenFreeMap|OpenMapTiles|OpenStreetMap|Protomaps|MapLibre|Ollama|Radxa|Whisper|Vosk|Stripe|Tauri|sentinel|wi-fi|Wi-Fi|Json|JSON|DEBUG|INFO|WARNING|ERROR|CRITICAL|Data|from|contributors|CPU|RAM|GPS|API|PIN|HRV|AQI)$/i.test(w),
+            !/^(PHANTOM|Gemini|Flash|gemini-flash|Quota|NEXUS|ESP32|OpenFreeMap|OpenMapTiles|OpenStreetMap|Protomaps|MapLibre|Mapzen|AWS|Ollama|Radxa|Whisper|Vosk|Stripe|Tauri|sentinel|wi-fi|Wi-Fi|Json|JSON|DEBUG|INFO|WARNING|ERROR|CRITICAL|Data|from|contributors|CPU|RAM|GPS|API|PIN|HRV|AQI)$/i.test(w),
         ),
       ),
     ];
@@ -187,7 +187,7 @@ for (const [path, name] of ROUTES) {
     // Англійська в підказках. innerText її не бачить, тож «Open Settings»
     // і «Згорнути Toolbar» жили на екрані непоміченими не одну перевірку.
     const ATTR_OK =
-      /^(PHANTOM|Gemini|Flash|NEXUS|ESP32|OpenFreeMap|OpenMapTiles|OpenStreetMap|Protomaps|MapLibre|Ollama|Radxa|Whisper|Vosk|Stripe|Tauri|Wi-Fi|WiFi|Json|JSON|DEBUG|INFO|WARNING|ERROR|CRITICAL|CPU|RAM|GPS|API|PIN|HRV|AQI|contributors|Data|from|Improve|this|map)$/i;
+      /^(PHANTOM|Gemini|Flash|NEXUS|ESP32|OpenFreeMap|OpenMapTiles|OpenStreetMap|Protomaps|MapLibre|Mapzen|AWS|Ollama|Radxa|Whisper|Vosk|Stripe|Tauri|Wi-Fi|WiFi|Json|JSON|DEBUG|INFO|WARNING|ERROR|CRITICAL|CPU|RAM|GPS|API|PIN|HRV|AQI|contributors|Data|from|Improve|this|map)$/i;
     const attrLatin = [
       ...new Set(
         [...document.querySelectorAll('[aria-label], [title], [placeholder]')]

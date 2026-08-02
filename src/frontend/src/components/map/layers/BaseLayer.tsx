@@ -1,25 +1,46 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { useMapInstance } from '../MapContext';
-import { getMapTokens, buildPhantomStyle, preserveOverlayLayers } from '../mapTokens';
+import { getMapTokens, preserveOverlayLayers } from '../mapTokens';
+import { buildPhantomMapStyle } from '../phantomStyle';
 import { useSystemStore } from '../../../stores/systemStore';
 
 /**
- * BaseLayer — re-renders the dark base style whenever the SystemState changes,
- * so accent-driven background stays in sync with state transitions.
+ * Базовий шар — перебудовує стиль, коли змінюється стан системи, щоб мапа
+ * жила в тій самій палітрі, що й решта інтерфейсу.
+ *
+ * Тут ховалась причина, чому власний стиль не з'являвся на екрані: цей
+ * компонент монтується ПІСЛЯ конструктора мапи і ставив чужий URL
+ * (`buildPhantomStyle`) поверх нашого. Тобто рельєф і об'ємні будівлі
+ * будувались і за мить затирались, і мапа лишалась чужою.
  */
 export function BaseLayer() {
   const { map, ready } = useMapInstance();
   const systemState = useSystemStore((s) => s.state);
+  const seenState = useRef<string | null>(null);
 
   useEffect(() => {
     if (!map || !ready) return;
+    // Конструктор уже поставив наш стиль. Перший прогін тут ставив його
+    // вдруге — MapLibre обривав щойно запущені запити тайлів і сипав
+    // AbortError у консоль. Реагуємо лише на СПРАВЖНЮ зміну стану.
+    if (seenState.current === null) {
+      seenState.current = systemState;
+      return;
+    }
+    if (seenState.current === systemState) return;
+    seenState.current = systemState;
 
     try {
       const tokens = getMapTokens();
       // `transformStyle` carries ReconLayer/HeatmapLayer/GeofencesLayer's
       // runtime-added sources/layers forward — without it they'd be torn
       // down every time SystemState changes (see mapTokens.ts).
-      map.setStyle(buildPhantomStyle(tokens), { diff: true, transformStyle: preserveOverlayLayers });
+      map.setStyle(buildPhantomMapStyle(tokens), {
+        diff: true,
+        transformStyle: preserveOverlayLayers,
+      });
+      // Рельєф повертає утримувач у TacticalMap на події `styledata` —
+      // тут його вмикати марно, стиль ще не осів.
     } catch {
       /* map not ready yet */
     }

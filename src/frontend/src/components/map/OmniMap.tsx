@@ -48,6 +48,8 @@ export function OmniMap({
   // when the dev `__phantom` debug glob is on; otherwise we just live
   // without the bearing chip until the operator rotates the map.
   const [bearing, setBearing] = useState<number | null>(null);
+  const [pitch, setPitch] = useState(0);
+  const [toggleTilt, setToggleTilt] = useState<() => void>(() => () => {});
   // Phase 24-E — LayerLibrary slide-in panel state.
   const [libraryOpen, setLibraryOpen] = useState(false);
   // Phase 24-G — Offline region manager state.
@@ -127,6 +129,8 @@ export function OmniMap({
         onCenterToMe={(fn) => setCenterToMe(() => fn)}
         onAddPoi={(fn) => setAddPoi(() => fn)}
         onResetBearing={(fn) => setResetBearing(() => fn)}
+        onToggleTilt={(fn) => setToggleTilt(() => fn)}
+        onTiltChange={setPitch}
       />
       <HudShell
         bearing={bearing}
@@ -134,6 +138,8 @@ export function OmniMap({
         mapStyle={mapStyle}
         onCycleStyle={cycleMapStyle}
         onResetBearing={resetBearing}
+        onToggleTilt={toggleTilt}
+        tilted={pitch > 10}
         timelineOpen={timelineOpen}
         onToggleTimeline={() => setTimelineOpen(!timelineOpen)}
         offlineOpen={offlineOpen}

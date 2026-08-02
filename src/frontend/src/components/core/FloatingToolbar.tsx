@@ -277,6 +277,7 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
       style={{ zIndex: 30 }}
     >
       <motion.div
+        data-testid="phantom-dock"
         className="glass-strong flex items-center"
         animate={{
           opacity: dockRecede ? 0.62 : 1,

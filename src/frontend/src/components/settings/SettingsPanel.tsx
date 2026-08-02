@@ -22,8 +22,6 @@ import { ProfileManagementSection } from './ProfileManagement';
 import { MobilePairing } from './MobilePairing';
 import { VaultPanel } from './VaultPanel';
 import { BackupRestoreCard } from './BackupRestoreCard';
-import { StatusBar } from '../core/StatusBar';
-import { FloatingToolbar } from '../core/FloatingToolbar';
 import {
   useSettingsStore,
   THEME_SETTING_KEY,
@@ -274,15 +272,13 @@ export default function SettingsPanel() {
         overflow: 'hidden',
       }}
     >
-      <StatusBar />
-
       {/* === SIDEBAR === */}
       <aside
         className="glass"
         style={{
           position: 'absolute',
           left: 12,
-          top: 68,
+          top: 12,
           bottom: 76,
           width: 260,
           padding: 10,
@@ -411,7 +407,7 @@ export default function SettingsPanel() {
           position: 'absolute',
           left: 284,
           right: 12,
-          top: 68,
+          top: 12,
           bottom: 76,
           display: 'flex',
           flexDirection: 'column',
@@ -873,8 +869,6 @@ export default function SettingsPanel() {
           )}
         </div>
       </div>
-
-      <FloatingToolbar />
     </div>
   );
 }
@@ -1130,25 +1124,29 @@ function SettingRow({
               flexShrink: 0,
             }}
           >
-            EDITED
+            ЗМІНЕНО
           </span>
         )}
-        <span
-          className="mono"
-          style={{
-            fontSize: 9,
-            color: 'var(--ink-muted)',
-            marginLeft: 'auto',
-            paddingLeft: 8,
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            flexShrink: 1,
-            minWidth: 0,
-          }}
-        >
-          {def.key}
-        </span>
+        {/* Показуємо пояснення, а не системний ключ: system_hostname
+            нічого не каже тому, хто просто налаштовує пристрій. Ключ
+            лишається в title і в пошуку. */}
+        {def.description && (
+          <span
+            style={{
+              fontSize: 10,
+              color: 'var(--ink-muted)',
+              marginLeft: 'auto',
+              paddingLeft: 12,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+              flexShrink: 1,
+              minWidth: 0,
+            }}
+          >
+            {def.description}
+          </span>
+        )}
       </div>
       <div style={{ flexShrink: 0, minWidth: 180 }}>
         <ValueEditor def={def} value={value} onChange={onChange} />

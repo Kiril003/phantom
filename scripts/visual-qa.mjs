@@ -109,17 +109,22 @@ for (const [path, name] of ROUTES) {
     }).length;
     // Що ховається під нижнім доком. Композер чату вже двічі опинявся
     // під ним — на око це видно лише на скріншоті, тож міряємо.
-    const dock = [...document.querySelectorAll('button')]
-      .map((el) => el.getBoundingClientRect())
-      .filter((r) => r.height > 20 && r.top > window.innerHeight - 120)
-      .reduce((acc, r) => Math.min(acc, r.top), Infinity);
+    // Замість геометрії — прямий hit-test: чи повертає браузер саме цей
+    // елемент у його центрі. Ловить і накриття доком, і будь-яке інше
+    // перекриття, і не бреше на прокручених списках.
+    const dockEl = document.querySelector('[data-testid="phantom-dock"]');
     let buried = 0;
-    if (dock !== Infinity) {
+    if (dockEl) {
       buried = [...document.querySelectorAll('input, textarea, button, a')].filter((el) => {
+        if (dockEl.contains(el)) return false;
         const r = el.getBoundingClientRect();
         if (r.width < 8 || r.height < 8) return false;
-        if (r.top > window.innerHeight - 120) return false;
-        return r.bottom > dock + 4;
+        if (r.bottom <= 0 || r.top >= window.innerHeight) return false;
+        const hit = document.elementFromPoint(
+          Math.round(r.left + r.width / 2),
+          Math.round(r.top + r.height / 2),
+        );
+        return !!hit && dockEl.contains(hit);
       }).length;
     }
 

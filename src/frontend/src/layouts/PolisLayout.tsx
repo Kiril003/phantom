@@ -136,7 +136,7 @@ export default function PolisLayout() {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="w-full h-full relative overflow-hidden flex gap-3 p-3"
+      className="w-full h-full relative overflow-hidden flex gap-3 p-3 pb-[92px]"
       data-testid="polis-layout"
       style={{ background: 'var(--surface-base)' }}
     >

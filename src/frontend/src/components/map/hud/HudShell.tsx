@@ -173,7 +173,7 @@ export function HudShell({
 
       {/* [F] Ліворуч знизу: координати, масштаб, шари. Відступ 76px — щоб
           не лягало на вертикальну рейку інструментів зони [D]. */}
-      <div className="absolute bottom-3 left-[76px] flex flex-col items-start gap-2 pointer-events-auto">
+      <div className="absolute bottom-[92px] left-[76px] flex flex-col items-start gap-2 pointer-events-auto">
         <CoordinateReadout
           lat={tactical.lat}
           lon={tactical.lon}
@@ -184,7 +184,7 @@ export function HudShell({
       </div>
 
       {/* [G] Bottom-Center: Navigation Zone */}
-      <div className="absolute bottom-3 left-1/2 -translate-x-1/2 pointer-events-auto">
+      <div className="absolute bottom-[92px] left-1/2 -translate-x-1/2 pointer-events-auto">
         <NavigationZone
           onZoomIn={onZoomIn}
           onZoomOut={onZoomOut}
@@ -195,7 +195,7 @@ export function HudShell({
       </div>
 
       {/* [H] Bottom-Right: Context Panels (Nearby) */}
-      <div className="absolute bottom-3 right-3 pointer-events-auto">
+      <div className="absolute bottom-[92px] right-3 pointer-events-auto">
         <NearbyPanel
           lat={tactical.lat}
           lon={tactical.lon}

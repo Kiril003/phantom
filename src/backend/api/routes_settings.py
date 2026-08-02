@@ -380,6 +380,8 @@ CATEGORY_SPEC: list[dict[str, Any]] = [
 LABEL_OVERRIDES: dict[str, str] = {
     "system_hostname": "Ім'я вузла",
     "log_level": "Рівень логування",
+    "log_json_enabled": "Логи у форматі JSON",
+    "deployment_mode": "Режим розгортання",
     "debug": "Режим налагодження",
     "serial_enabled": "Послідовний міст ESP32",
     "ui_theme": "Тема",

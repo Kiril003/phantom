@@ -289,13 +289,27 @@ describe('SentinelLayout', () => {
     });
   });
 
-  it('renders THREAT DETECTED header', async () => {
-    // phase-5 R1 — SentinelLayout was localised to Ukrainian primary
-    // (per CLAUDE.md voice-first language rule). The header reads
-    // 'ЗАГРОЗА ВИЯВЛЕНА' on the threat banner.
+  it('заголовок іде від датчиків, а не з розмітки', async () => {
+    // Раніше в JSX було вписано «ЗАГРОЗА ВИЯВЛЕНА · конфіденс 0.91» —
+    // панель кричала про загрозу навіть коли радар нікого не бачив.
     const SentinelLayout = (await import('../layouts/SentinelLayout')).default;
     render(withRouter(<SentinelLayout />));
-    expect(screen.getByText('ЗАГРОЗА ВИЯВЛЕНА')).toBeDefined();
+    // У цьому моку other_detected=true, тож панель мусить сказати про це.
+    expect(screen.getByText('ХТОСЬ ПОРУЧ')).toBeDefined();
+    expect(screen.queryByText(/конфіденс/)).toBeNull();
+  });
+
+  it('без виявлення каже ЧИСТО, а не про загрозу', async () => {
+    const base = useSystemStore.getState().context!;
+    useSystemStore.setState({
+      context: {
+        ...base,
+        presence: { ...base.presence, other_detected: false, other_distance_cm: null },
+      },
+    });
+    const SentinelLayout = (await import('../layouts/SentinelLayout')).default;
+    render(withRouter(<SentinelLayout />));
+    expect(screen.getByText('ЧИСТО')).toBeDefined();
   });
 
   it('shows other presence distance', async () => {

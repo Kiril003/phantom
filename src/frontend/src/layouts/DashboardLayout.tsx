@@ -9,8 +9,11 @@ export default function DashboardLayout() {
       style={{ background: 'var(--surface-base)', color: 'var(--ink-primary)' }}
     >
       <StatusBar />
+      {/* Без pb-24: екрани на h-full і так тримають власний відступ під док
+          (bottom: 76). Подвійний резерв забирав ~96px висоти і обрізав
+          налаштування на 600-піксельному дисплеї. */}
       <main className="flex-1 relative overflow-hidden">
-        <div className="absolute inset-0 overflow-y-auto no-scrollbar pb-24">
+        <div className="absolute inset-0 overflow-y-auto no-scrollbar">
           <Outlet />
         </div>
       </main>

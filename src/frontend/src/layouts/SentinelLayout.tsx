@@ -2,6 +2,7 @@ import { motion } from 'framer-motion';
 import { useMemo, useState } from 'react';
 import {
   ShieldAlert,
+  ShieldCheck,
   Eye,
   Volume2,
   Thermometer,
@@ -59,6 +60,26 @@ export default function SentinelLayout() {
       ? `${context.where.lat.toFixed(4)}, ${context.where.lon.toFixed(4)}`
       : 'Невідома локація');
   const lastScan = context?.when.time ?? '—';
+
+  // Раніше в розмітці стояло «ЗАГРОЗА ВИЯВЛЕНА · конфіденс 0.91» — панель
+  // кричала про загрозу навіть коли всі датчики мовчали.
+  const alert = useMemo(() => {
+    if (!otherDetected) {
+      return {
+        title: 'ЧИСТО',
+        detail: motionEnergy != null || staticEnergy != null
+          ? 'Радар пильнує · нікого поруч'
+          : 'Радар без сигналу · дані не надходять',
+      };
+    }
+    const seen = [
+      'радар',
+      motionEnergy != null && motionEnergy > 0 ? 'рух' : null,
+      staticEnergy != null && staticEnergy > 70 ? 'шум' : null,
+    ].filter(Boolean);
+    const near = otherDistance != null ? ` · ${(otherDistance / 100).toFixed(1)} м` : '';
+    return { title: 'ХТОСЬ ПОРУЧ', detail: `${seen.join(' + ')}${near}` };
+  }, [otherDetected, otherDistance, motionEnergy, staticEnergy]);
 
   // Drive the detected-presence radar marker from real distance telemetry.
   // Distance compresses logarithmically so a 5 m / 50 cm spread reads on the
@@ -255,7 +276,7 @@ export default function SentinelLayout() {
               textAnchor="middle"
               letterSpacing="1"
             >
-              YOU
+              ТИ
             </text>
 
             {/* Detected presence — only when sensors actually report it */}
@@ -349,7 +370,7 @@ export default function SentinelLayout() {
           background: 'rgba(255,255,255,0.78)',
           boxShadow: 'var(--shadow-glow-coral)',
           zIndex: 4,
-          overflow: 'visible',
+          overflow: 'hidden',
         }}
         initial={{ x: 24, opacity: 0 }}
         animate={{ 
@@ -388,7 +409,7 @@ export default function SentinelLayout() {
               <ShieldAlert size={18} strokeWidth={2} />
             </motion.div>
             <div className="vertical-text font-mono text-[8px] tracking-widest text-[#b9201f] font-bold uppercase select-none opacity-60" style={{ writingMode: 'vertical-rl', transform: 'rotate(180deg)' }}>
-              SENTINEL PANEL
+              ВАРТА
             </div>
           </div>
         ) : (
@@ -408,7 +429,7 @@ export default function SentinelLayout() {
             animate={{ scale: [1, 1.08, 1] }}
             transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
           >
-            <ShieldAlert size={28} strokeWidth={2} />
+            {otherDetected ? <ShieldAlert size={28} strokeWidth={2} /> : <ShieldCheck size={28} strokeWidth={2} />}
           </motion.div>
           <div className="flex-1 min-w-0">
             <div
@@ -419,7 +440,7 @@ export default function SentinelLayout() {
                 color: '#b9201f',
               }}
             >
-              ЗАГРОЗА ВИЯВЛЕНА
+              {alert.title}
             </div>
             <div
               className="playfair"
@@ -429,32 +450,24 @@ export default function SentinelLayout() {
                 marginTop: 1,
               }}
             >
-              Радар + IR + аудіо · конфіденс 0.91
+              {alert.detail}
             </div>
           </div>
         </div>
 
-        {/* Live stats — DISTANCE + MOTION */}
+        <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2 pr-0.5">
         <div className="grid grid-cols-2 gap-2">
           <CoralStatCard
             label="ВІДСТАНЬ"
             value={otherDistance != null ? otherDistance.toString() : '—'}
-            unit="cm"
+            unit="см"
             trailingIcon={<TrendingDown size={11} />}
-            sparkline={
-              <polyline
-                points="0,2 12,4 24,3 36,5 48,7 60,9 72,11 80,12"
-                fill="none"
-                stroke="#ef4444"
-                strokeWidth="1"
-              />
-            }
+
           />
           <CoralStatCard
             label="РУХ"
             value={motionEnergy != null ? Math.round(motionEnergy).toString() : '—'}
             trailingIcon={<Activity size={11} />}
-            bars={[3, 6, 8, 5, 9, 12, 10, 8, 11, 13, 12, 10]}
           />
         </div>
 
@@ -548,10 +561,10 @@ export default function SentinelLayout() {
           )}
         </div>
 
-        <span style={{ flex: 1 }} />
+        </div>
 
-        {/* Action triplet */}
-        <div className="flex gap-1.5">
+        {/* Action triplet — закріплений унизу панелі */}
+        <div className="flex gap-1.5 shrink-0">
           <ActionButton
             icon={<Megaphone size={14} />}
             label="ТРИВОГА"

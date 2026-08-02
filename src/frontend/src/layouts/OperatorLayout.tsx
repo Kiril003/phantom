@@ -171,7 +171,7 @@ export default function OperatorLayout() {
 
       {/* ─── FOOTER & OVERLAYS (UNIFIED) ────────────────────────────────────── */}
       {/* mb — щоб командний центр не ліз під глобальний док знизу */}
-      <footer className="shrink-0 h-[64px] mb-[72px] relative z-40 px-6 flex items-center justify-center">
+      <footer className="shrink-0 h-[64px] mb-[96px] relative z-40 px-6 flex items-center justify-center">
         {/* Center: Floating Command Center — Balanced width */}
         <div className="pointer-events-auto">
            <AgentCommandCenter

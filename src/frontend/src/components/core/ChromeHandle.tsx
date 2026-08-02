@@ -56,7 +56,7 @@ export function ChromeHandle({
       style={{
         minWidth: 44,
         minHeight: 24,
-        height: 24,
+        height: 44,
         borderRadius: 12,
         color: 'var(--ink-muted, rgba(0,0,0,0.55))',
         background: 'transparent',

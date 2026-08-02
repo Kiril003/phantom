@@ -470,11 +470,11 @@ function ToolbarIcon({
       onClick={item.disabled ? undefined : handle}
       className="relative inline-flex items-center justify-center active:scale-95"
       style={{
-        width: 32,
-        height: 32,
-        minWidth: 32,
-        minHeight: 32,
-        borderRadius: 8,
+        width: 44,
+        height: 44,
+        minWidth: 44,
+        minHeight: 44,
+        borderRadius: 10,
         border: 'none',
         opacity: item.disabled ? 0.35 : 1,
         cursor: item.disabled ? 'not-allowed' : 'pointer',

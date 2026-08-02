@@ -123,7 +123,7 @@ export function NearbyPanel({
       <button
         type="button"
         onClick={() => setExpanded(true)}
-        aria-label={`${total} places nearby`}
+        aria-label={`${total} місць поруч`}
         className="px-3 py-2 min-h-[40px] rounded-full bg-black/65 backdrop-blur-xl border border-white/10 text-[10px] font-bold uppercase tracking-wider text-amber-400 hover:bg-white/5 flex items-center gap-2 shadow-2xl active:scale-95 transition-all"
       >
         <MapPin size={14} className="text-amber-500" />

@@ -6,6 +6,7 @@ const SOURCE_LABELS: Record<string, string> = {
   network: 'МЕРЕЖА',
   fused: 'ЗВЕДЕНА',
   manual: 'ВРУЧНУ',
+  browser_geolocation: 'ГЕОЛОКАЦІЯ БРАУЗЕРА',
 };
 
 export function CoordinateReadout({ lat, lon, source }: {
@@ -17,7 +18,7 @@ export function CoordinateReadout({ lat, lon, source }: {
     return (
       <div className="glass-card flex items-center gap-2 px-3 py-2 rounded-full opacity-50">
         <EyeOff size={10} className="text-white/40" />
-        <span className="text-[9px] font-bold uppercase tracking-widest text-ink-muted">No Fix</span>
+        <span className="text-[9px] font-bold uppercase tracking-widest text-ink-muted">НЕМАЄ ФІКСАЦІЇ</span>
       </div>
     );
   }
@@ -31,13 +32,13 @@ export function CoordinateReadout({ lat, lon, source }: {
         </span>
       </div>
       <div className="flex items-center gap-3">
-        <span className="text-[9px] font-bold text-ink-muted">LAT</span>
+        <span className="text-[9px] font-bold text-ink-muted">ШИР</span>
         <span className="font-mono text-xs text-ink-primary tabular-nums">
           {lat != null ? lat.toFixed(5) : '—'}
         </span>
       </div>
       <div className="flex items-center gap-3">
-        <span className="text-[9px] font-bold text-ink-muted">LON</span>
+        <span className="text-[9px] font-bold text-ink-muted">ДОВ</span>
         <span className="font-mono text-xs text-ink-primary tabular-nums">
           {lon != null ? lon.toFixed(5) : '—'}
         </span>
@@ -56,7 +57,7 @@ export function CompassChip({ bearing }: { bearing: number }) {
         style={{ transform: `rotate(${bearing}deg)` }}
       />
       <span className="font-display text-[9px] font-bold uppercase tracking-widest text-ink-primary tabular-nums">
-        N · {String(Math.round(bearing)).padStart(3, '0')}°
+        Пн · {String(Math.round(bearing)).padStart(3, '0')}°
       </span>
     </div>
   );
@@ -78,7 +79,7 @@ export function GpsQualityChip({ satellites, fix, speed }: {
       </span>
       <span className="text-white/10">|</span>
       <span className={`font-mono text-[9px] tabular-nums ${fix ? 'text-ink-primary' : 'text-ink-muted'}`}>
-        {speed.toFixed(0)} km/h
+        {speed.toFixed(0)} км/год
       </span>
     </div>
   );
@@ -93,7 +94,7 @@ export function StatusChip({ loading, zoom }: { loading: boolean; zoom: number }
         <Eye size={12} strokeWidth={1.75} className="text-emerald-500" />
       )}
       <span className={`text-[9px] font-bold uppercase tracking-widest ${loading ? 'text-amber-500' : 'text-emerald-500'}`}>
-        {loading ? 'Syncing' : 'Live'}
+        {loading ? 'Синхронізація' : 'Наживо'}
       </span>
       <span className="font-mono text-[9px] text-ink-muted tabular-nums">
         z{zoom.toFixed(0)}

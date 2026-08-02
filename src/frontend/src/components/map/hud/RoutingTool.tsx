@@ -52,7 +52,7 @@ export function RoutingTool({
     >
       <button
         onClick={onToggle}
-        className={`min-h-[28px] min-w-[28px] flex items-center gap-2 rounded-lg transition-all ${
+        className={`min-h-[44px] min-w-[44px] flex items-center justify-center gap-2 rounded-lg transition-all ${
           active ? 'text-cyan-400' : 'text-white/60 hover:text-white'
         }`}
       >

@@ -171,17 +171,16 @@ export function HudShell({
         />
       </div>
 
-      {/* [F] Bottom-Left: Scale & Coordinates */}
-      <div className="absolute bottom-3 left-3 flex flex-col items-start gap-2 pointer-events-auto">
+      {/* [F] Ліворуч знизу: координати, масштаб, шари. Відступ 76px — щоб
+          не лягало на вертикальну рейку інструментів зони [D]. */}
+      <div className="absolute bottom-3 left-[76px] flex flex-col items-start gap-2 pointer-events-auto">
         <CoordinateReadout
           lat={tactical.lat}
           lon={tactical.lon}
           source={tactical.source}
         />
-        <div className="flex items-center gap-2">
-          <ScaleBar zoom={zoom} lat={lat} />
-          <LayerPalette onOpenLibrary={onOpenLibrary} />
-        </div>
+        <ScaleBar zoom={zoom} lat={lat} />
+        <LayerPalette onOpenLibrary={onOpenLibrary} />
       </div>
 
       {/* [G] Bottom-Center: Navigation Zone */}

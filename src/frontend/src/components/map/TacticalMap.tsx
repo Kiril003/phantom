@@ -14,7 +14,7 @@ import { HeatmapLayer } from './HeatmapLayer';
 import { MarkerCard } from './MarkerCard';
 import { useMapStore } from '../../stores/mapStore';
 import { useSystemStore } from '../../stores/systemStore';
-import { getMapTokens, buildPhantomStyle, preserveOverlayLayers, type PhantomMapStyle } from './mapTokens';
+import { getMapTokens, buildPhantomStyle, type PhantomMapStyle } from './mapTokens';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { settingsApi, type Bounds } from '../../services/api';
 
@@ -273,79 +273,58 @@ export function TacticalMap({
     const tokens = getMapTokens();
     if (containerRef.current) applyContainerTheming(containerRef.current, tokens);
     
-    let cancelled = false;
-    const styleUrl = buildPhantomStyle(tokens, mapStyle);
-    
-    fetch(styleUrl).then(res => res.json()).then(style => {
-      if (cancelled) return;
-      
-      // Inject PMTiles offline source if there is an openfreemap source
-      if (style.sources && style.sources.openfreemap) {
-         style.sources.openfreemap = {
-            type: 'vector',
-            url: 'pmtiles:///api/v1/map/offline/tiles/vector.pmtiles'
-         };
-      }
-      
-      // Inject 3D Terrain
-      if (style.sources) {
-         style.sources['phantom-terrain'] = {
-            type: 'raster-dem',
-            url: 'pmtiles:///api/v1/map/offline/tiles/terrain.pmtiles',
-            encoding: 'mapbox'
-         };
-      }
-      style.terrain = { source: 'phantom-terrain', exaggeration: 2.5 };
-      
-      // Inject Dramatic 3D Lighting
-      style.light = {
-         anchor: 'map',
-         color: tokens.theme === 'amber-night' ? '#ffaa55' : '#ffffff',
-         intensity: tokens.theme === 'amber-night' ? 0.2 : 0.6,
-         position: [1.5, 210, 30] // [radial, azimuthal, polar]
-      };
+    // MapLibre вже завантажив стиль у конструкторі. Повторний fetch() тієї
+    // самої адреси гинув з ERR_ABORTED і лишав мапу сірою, тож дописуємо
+    // рельєф, світло й будівлі просто в живий стиль.
+    const night = tokens.theme === 'amber-night';
 
-      // Inject Atmospheric Sky
-      style.sky = {
-        "sky-color": tokens.theme === 'amber-night' ? '#0a0a0a' : '#88ccee',
-        "sky-horizon-blend": 0.8,
-        "horizon-color": tokens.theme === 'amber-night' ? '#1a1a1a' : '#ffffff',
-        "horizon-fog-blend": 0.8,
-        "fog-color": tokens.theme === 'amber-night' ? '#1a1a1a' : '#ffffff',
-        "fog-ground-blend": 0.8,
-      };
+    try {
+      map.setLight({
+        anchor: 'map',
+        color: night ? '#ffaa55' : '#ffffff',
+        intensity: night ? 0.2 : 0.6,
+        position: [1.5, 210, 30],
+      });
+      map.setSky({
+        'sky-color': night ? '#0a0a0a' : '#88ccee',
+        'sky-horizon-blend': 0.8,
+        'horizon-color': night ? '#1a1a1a' : '#ffffff',
+        'horizon-fog-blend': 0.8,
+        'fog-color': night ? '#1a1a1a' : '#ffffff',
+        'fog-ground-blend': 0.8,
+      });
+    } catch (err) {
+      console.warn('Атмосферу застосувати не вдалося:', err);
+    }
 
-      // Inject 3D Buildings
-      if (style.layers) {
-         style.layers.push({
-             'id': 'phantom-3d-buildings',
-             'source': 'openfreemap',
-             'source-layer': 'building',
-             'type': 'fill-extrusion',
-             'minzoom': 14,
-             'paint': {
-                 'fill-extrusion-color': tokens.surfaceRaised,
-                 'fill-extrusion-height': ['interpolate', ['linear'], ['zoom'], 14, 0, 15.05, ['get', 'render_height']],
-                 'fill-extrusion-base': ['interpolate', ['linear'], ['zoom'], 14, 0, 15.05, ['get', 'render_min_height']],
-                 'fill-extrusion-opacity': 0.95,
-                 'fill-extrusion-vertical-gradient': true
-             }
-         });
+    // Об'ємні будинки чіпляються до векторного джерела стилю, хай як воно
+    // зветься — назви джерел у різних стилях OpenFreeMap не збігаються.
+    try {
+      if (!map.getLayer('phantom-3d-buildings')) {
+        const sources = map.getStyle()?.sources ?? {};
+        const vectorSource = Object.keys(sources).find(
+          (id) => (sources as Record<string, { type?: string }>)[id]?.type === 'vector',
+        );
+        if (vectorSource) {
+          map.addLayer({
+            id: 'phantom-3d-buildings',
+            source: vectorSource,
+            'source-layer': 'building',
+            type: 'fill-extrusion',
+            minzoom: 14,
+            paint: {
+              'fill-extrusion-color': tokens.surfaceRaised,
+              'fill-extrusion-height': ['interpolate', ['linear'], ['zoom'], 14, 0, 15.05, ['get', 'render_height']],
+              'fill-extrusion-base': ['interpolate', ['linear'], ['zoom'], 14, 0, 15.05, ['get', 'render_min_height']],
+              'fill-extrusion-opacity': 0.95,
+              'fill-extrusion-vertical-gradient': true,
+            },
+          });
+        }
       }
-
-      try {
-        map.setStyle(style, {
-          diff: true,
-          transformStyle: preserveOverlayLayers,
-        });
-      } catch (err) {
-        console.error('Failed to set map style:', err);
-      }
-    }).catch(err => {
-       console.error('Failed to fetch/patch map style:', err);
-    });
-    
-    return () => { cancelled = true; };
+    } catch (err) {
+      console.warn('Об’ємні будинки не додалися:', err);
+    }
   }, [mapStyle, ready, systemState]);
 
   useEffect(() => {

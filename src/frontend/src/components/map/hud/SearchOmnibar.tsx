@@ -68,7 +68,7 @@ export function SearchOmnibar({ className = '' }: SearchOmnibarProps): JSX.Eleme
         onClick={() => {
           window.dispatchEvent(new CustomEvent('phantom:omnibar-mic'));
         }}
-        className="min-h-[28px] min-w-[28px] flex items-center justify-center text-white/55 hover:text-white"
+        className="min-h-[44px] min-w-[44px] flex items-center justify-center text-white/55 hover:text-white"
       >
         <Mic size={12} strokeWidth={1.75} />
       </button>

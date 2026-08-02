@@ -72,7 +72,7 @@ export function AttributionDrawer({
         aria-expanded={open}
         aria-label={open ? 'Згорнути джерела карти' : 'Розгорнути джерела карти'}
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 px-2.5 py-1.5 min-h-[28px] hover:bg-white/5 transition-colors w-full"
+        className="flex items-center gap-1.5 px-2.5 py-1.5 min-h-[44px] hover:bg-white/5 transition-colors w-full"
       >
         <Info size={12} strokeWidth={1.75} className="opacity-70" />
         <span className="truncate max-w-[160px]" title={lines[0]?.text ?? summary}>

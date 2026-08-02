@@ -63,7 +63,7 @@ export function BearingTool({
       data-bearing={bearing ?? ''}
       aria-pressed={active}
       onClick={onToggle}
-      className={`min-h-[28px] flex items-center gap-1.5 px-2 py-1 rounded-md bg-black/55 backdrop-blur-md border border-white/5 text-[10px] ${
+      className={`min-h-[44px] flex items-center gap-1.5 px-3 py-1 rounded-md bg-black/55 backdrop-blur-md border border-white/5 text-[10px] ${
         active ? 'text-cyan-200' : 'text-white/85'
       } ${className}`}
     >

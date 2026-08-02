@@ -125,7 +125,8 @@ describe('MessageBubble', () => {
     const { MessageBubble } = await import('../components/chat/MessageBubble');
     render(<MessageBubble message={baseMessage()} />);
     expect(screen.getAllByText('gemini').length).toBeGreaterThanOrEqual(1);
-    expect(screen.getAllByText('120ms').length).toBeGreaterThanOrEqual(1);
+    // Затримку показуємо людині, а не машині: «120 мс», не «120ms».
+    expect(screen.getAllByText('120 мс').length).toBeGreaterThanOrEqual(1);
   });
 
   it('aligns user role differently than assistant', async () => {

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useVirtualizer } from '@tanstack/react-virtual';
 import {
@@ -35,6 +35,8 @@ interface ChatWindowProps {
   onVoiceToggle?: (active: boolean) => void;
   placeholder?: string;
   className?: string;
+  /** Слот присутності в заголовку: стан PHANTOM і живі показники. */
+  presence?: ReactNode;
 }
 
 function streamingMessageShape(
@@ -70,6 +72,7 @@ export function ChatWindow({
   onVoiceToggle,
   placeholder,
   className = '',
+  presence,
 }: ChatWindowProps) {
   useChatStream();
 
@@ -584,6 +587,15 @@ export function ChatWindow({
             </span>
           </div>
 
+          {/* Присутність жила окремою 44-піксельною смугою над карткою і
+              дублювала провайдера з верхнього рядка. На 600 px це задорого
+              за два слова, тож вона переїхала в цей заголовок. */}
+          {presence && (
+            <div className="flex items-center min-w-0 mx-3" data-testid="presence-strip">
+              {presence}
+            </div>
+          )}
+
           <button
             type="button"
             onClick={() => startNewSession()}
@@ -916,8 +928,14 @@ export function ChatWindow({
   );
 }
 
+/**
+ * Тут висіло посилання «Open Settings» — англійське, та ще й у продукті,
+ * де власник нічого не налаштовує. Тепер банер пропонує єдину дію, яка
+ * справді допомагає: повторити надсилання.
+ */
 function ChatErrorBanner({ message }: { message: string }) {
-  const isProviderError = message.includes('AI провайдер недоступний');
+  const retryLastSend = useChatStore((s) => s.retryLastSend);
+  const canRetry = useChatStore((s) => s.lastFailedSend != null);
   return (
     <div
       className="mx-6 mb-3 px-3 py-2 rounded-xl flex items-center gap-2"
@@ -931,21 +949,25 @@ function ChatErrorBanner({ message }: { message: string }) {
     >
       <Sparkles size={12} strokeWidth={1.75} />
       <span className="flex-1">{message}</span>
-      {isProviderError && (
-        <a
-          href="/settings"
-          className="underline underline-offset-2"
+      {canRetry && (
+        <button
+          type="button"
+          onClick={() => void retryLastSend()}
+          className="underline underline-offset-2 active:scale-95"
           style={{
             color: 'var(--signal-alert)',
             minHeight: 44,
             padding: '10px 8px',
             display: 'inline-flex',
             alignItems: 'center',
-            fontWeight: 500,
+            fontWeight: 600,
+            background: 'transparent',
+            border: 'none',
+            cursor: 'pointer',
           }}
         >
-          Open Settings
-        </a>
+          Повторити
+        </button>
       )}
     </div>
   );

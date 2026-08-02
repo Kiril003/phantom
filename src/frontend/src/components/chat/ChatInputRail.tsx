@@ -5,6 +5,14 @@ import { useTranslation } from '../../i18n/useTranslation';
 import { AttachDrawer, type AttachSelection } from './AttachDrawer';
 import { ModelCard } from './ModelCard';
 
+/** Види думок приходять службовими ключами; у стрічці має бути слово. */
+const THOUGHT_UA: Record<string, string> = {
+  plan: 'план',
+  reflection: 'роздум',
+  proactive: 'ініціатива',
+  emotion_shift: 'настрій',
+};
+
 interface ChatInputRailProps {
   input: string;
   setInput: (v: string) => void;
@@ -63,13 +71,16 @@ export function ChatInputRail({
               initial={{ opacity: 0, height: 0 }}
               animate={{ opacity: 1, height: 'auto' }}
               exit={{ opacity: 0, height: 0 }}
-              className="px-4 py-2 mb-2 rounded-xl border border-white/[0.04] bg-white/[0.02] backdrop-blur font-mono flex flex-col gap-1.5 overflow-hidden"
-              style={{
-                boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.02)',
-                borderColor: 'rgba(255,255,255,0.04)',
-              }}
+              /* Тло bg-white/[0.02] і текст neutral-400 писались під темну
+                 тему: на кремовому лишався сам заголовок, а думки під ним
+                 не читались. */
+              className="px-4 py-2 mb-2 rounded-xl glass-subtle flex flex-col gap-1.5 overflow-hidden"
+              style={{ border: '1px solid var(--line-subtle)' }}
             >
-              <div className="flex items-center gap-1.5 text-[9px] text-neutral-500 uppercase tracking-widest font-bold border-b border-white/[0.04] pb-1">
+              <div
+                className="flex items-center gap-1.5 text-[9px] uppercase tracking-widest font-bold pb-1"
+                style={{ color: 'var(--ink-muted)', borderBottom: '1px solid var(--line-subtle)' }}
+              >
                 <Sparkles size={10} className="animate-pulse" style={{ color: 'var(--accent)' }} />
                 <span>{t('chat.thoughtStream')}</span>
               </div>
@@ -93,9 +104,12 @@ export function ChatInputRail({
                         className="font-bold text-[9px] uppercase shrink-0 mt-0.5"
                         style={{ color: colors[thought.kind] || 'var(--accent)' }}
                       >
-                        {thought.kind.slice(0, 4)}:
+                        {THOUGHT_UA[thought.kind] ?? thought.kind}:
                       </span>
-                      <span className="text-neutral-400 font-serif italic">
+                      <span
+                        className="font-serif italic"
+                        style={{ color: 'var(--ink-secondary)' }}
+                      >
                         “{thought.text}”
                       </span>
                     </motion.div>

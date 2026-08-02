@@ -16,6 +16,11 @@
 
 :root,
 [data-theme="sunrise-warm"] {
+  /* Тепло — похідний тон між кораловим і бурштиновим. Оголошений один раз:
+     var() всередині кастомної властивості розкривається в місці вжитку, тож
+     значення саме йде за активною темою. */
+  --warmth: color-mix(in srgb, var(--coral) 45%, var(--primary));
+
   /* ── Sunrise primary ramp (from phantom-dna.css) ──────────────────── */
   --primary:           #f4af25;
   --primary-soft:      #fbc66a;

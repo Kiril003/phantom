@@ -114,7 +114,8 @@ describe('ModelCard (W-3)', () => {
     expect(card.getAttribute('data-provider')).toBe('gemini');
     expect(card.getAttribute('data-stt')).toBe('whisper');
     expect(card).toHaveTextContent(/gemini/i);
-    expect(card).toHaveTextContent(/whisper/i);
+    // Рушій показуємо словами: власникові важлива якість слуху, а не назва.
+    expect(card).toHaveTextContent(/точний слух/i);
   });
 
   it('renders dash placeholder when provider is null', () => {

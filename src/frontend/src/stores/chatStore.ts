@@ -24,6 +24,8 @@ interface ChatStoreState {
   // cleared once the message is committed via sendMessage.
   userPreview: string | null;
   sendingSessionIds: Record<string, boolean>;
+  /** Останній невдалий надсил — щоб «Повторити» не вимагав передруковувати. */
+  lastFailedSend: { content: string; inputMethod: InputMethod; stateAtTime?: SystemState } | null;
 
 
   // Setters
@@ -53,6 +55,7 @@ interface ChatStoreState {
     inputMethod?: InputMethod,
     stateAtTime?: SystemState
   ) => Promise<void>;
+  retryLastSend: () => Promise<void>;
   consumeAgentSeed: (seed: import('../services/agentApi').AgentResumeAsConversationResponse) => void;
 }
 
@@ -92,6 +95,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   loading: false,
   sending: false,
   error: null,
+  lastFailedSend: null,
   userPreview: null,
   sendingSessionIds: {},
 
@@ -157,7 +161,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     } catch (err) {
       set({
         loading: false,
-        error: err instanceof Error ? err.message : 'Failed to load sessions',
+        error: err instanceof Error ? err.message : 'Не вдалося завантажити розмови.',
       });
     }
   },
@@ -170,7 +174,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     } catch (err) {
       set({
         loading: false,
-        error: err instanceof Error ? err.message : 'Failed to load messages',
+        error: err instanceof Error ? err.message : 'Не вдалося завантажити повідомлення.',
       });
     }
   },
@@ -240,7 +244,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
     try {
       await chatApi.updateSession(sessionId, { summary });
     } catch (err) {
-      set({ error: 'Failed to update session summary.' });
+      set({ error: 'Не вдалося перейменувати розмову.' });
       void get().loadSessions(); // rollback
     }
   },
@@ -336,17 +340,20 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
         void get().loadSessions();
       }
     } catch (err) {
-      // Surface AI-provider outages as actionable copy pointing to Settings.
+      // 503 приходить, коли впав увесь ланцюг провайдерів. Тут раніше
+      // стояло «Перевір Settings → AI → Головний провайдер»: англійський
+      // шлях у українському рядку, та ще й вимога налаштувати провайдера —
+      // прямо проти правила нуль-конфігу. Пропонуємо повтор.
       const maybeStatus =
         err && typeof err === 'object' && 'status' in err
           ? (err as { status: number }).status
           : 0;
       const friendly =
         maybeStatus === 503
-          ? 'AI провайдер недоступний. Перевір Settings → AI → Головний провайдер'
+          ? 'Модель не відповіла. Зв’язок або сама модель зараз недоступні.'
           : err instanceof Error
             ? err.message
-            : 'Failed to send message';
+            : 'Не вдалося надіслати повідомлення.';
       set((s) => {
         const nextSendingSessionIds = { ...s.sendingSessionIds };
         delete nextSendingSessionIds[sessionId];
@@ -356,11 +363,31 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
           sending: activeSending,
           isTyping: activeSending,
           error: friendly,
+          lastFailedSend: { content: trimmed, inputMethod, stateAtTime },
           // Keep optimistic message so user sees it; no rollback.
           messages: s.messages,
         };
       });
     }
+  },
+
+  retryLastSend: async () => {
+    const failed = get().lastFailedSend;
+    if (!failed) return;
+    // Оптимістична бульбашка з невдалої спроби вже висить у стрічці —
+    // прибираємо її, щоб повтор не подвоїв те саме питання.
+    set((s) => {
+      const idx = [...s.messages]
+        .map((m, i) => ({ m, i }))
+        .reverse()
+        .find(({ m }) => m.role === 'user' && m.content === failed.content)?.i;
+      return {
+        error: null,
+        lastFailedSend: null,
+        messages: idx == null ? s.messages : s.messages.filter((_, i) => i !== idx),
+      };
+    });
+    await get().sendMessage(failed.content, failed.inputMethod, failed.stateAtTime);
   },
 
   consumeAgentSeed: (seed) => {

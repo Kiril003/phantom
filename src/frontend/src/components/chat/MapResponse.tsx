@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import maplibregl, { Map as MapLibreMap, Marker } from 'maplibre-gl';
 import { getMapTokens, buildPhantomStyle } from '../map/mapTokens';
+import { pluralUa } from '../../utils/format';
 
 export interface MapMarker {
   lat: number;
@@ -41,9 +42,13 @@ export function MapResponse({ data }: MapResponseProps) {
         ? [markers[0].lon, markers[0].lat]
         : [0, 0];
 
+    // Чорна мапа в кремовій стрічці читалась як діра. Стиль іде за темою.
+    const tokens = getMapTokens();
+    const darkTheme = tokens.theme === 'amber-night' || tokens.theme === 'ghost';
+
     const map = new maplibregl.Map({
       container,
-      style: buildPhantomStyle(getMapTokens(), 'dark'),
+      style: buildPhantomStyle(tokens, darkTheme ? 'dark' : 'streets'),
       center,
       zoom: data.zoom ?? 13,
       // OpenFreeMap styles require OSM attribution to stay visible; compact
@@ -112,11 +117,11 @@ export function MapResponse({ data }: MapResponseProps) {
         ref={containerRef}
         style={{ width: '100%', height: 220 }}
         role="region"
-        aria-label="map"
+        aria-label="Мапа з позначками"
       />
       {data.markers && data.markers.length > 0 && (
         <div
-          className="px-3 py-1.5 font-mono tracking-wider flex items-center gap-2"
+          className="px-3 py-1.5 tracking-wider flex items-center gap-2"
           style={{
             borderTop: '1px solid var(--line-subtle)',
             color: 'var(--ink-muted)',
@@ -124,7 +129,10 @@ export function MapResponse({ data }: MapResponseProps) {
           }}
         >
           <span style={{ color: 'var(--accent)' }}>◉</span>
-          <span>{data.markers.length} MARKER{data.markers.length === 1 ? '' : 'S'}</span>
+          <span>
+            {data.markers.length}{' '}
+            {pluralUa(data.markers.length, 'позначка', 'позначки', 'позначок')}
+          </span>
         </div>
       )}
     </div>

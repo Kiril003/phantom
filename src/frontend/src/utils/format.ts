@@ -2,11 +2,14 @@
  * Shared UI formatting utilities.
  */
 
-export function formatUptime(seconds: number): string {
-  const h = Math.floor(seconds / 3600);
-  const m = Math.floor((seconds % 3600) / 60);
-  const s = Math.floor(seconds % 60);
-  return `${h}h ${m}m ${s}s`;
+/** Українське відмінювання числівників: 1 місце, 2 місця, 5 місць. */
+export function pluralUa(n: number, one: string, few: string, many: string): string {
+  const mod100 = Math.abs(n) % 100;
+  if (mod100 >= 11 && mod100 <= 14) return many;
+  const mod10 = mod100 % 10;
+  if (mod10 === 1) return one;
+  if (mod10 >= 2 && mod10 <= 4) return few;
+  return many;
 }
 
 export function formatRelativeClock(secondsAgo: number): string {

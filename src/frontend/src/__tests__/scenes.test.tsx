@@ -21,7 +21,7 @@
  *     verbally rather than just colour.
  *  7. Identity-card panel renders `sensitive: true` facts as a `•••`
  *     placeholder, NOT the actual value (privacy default).
- *  8. Empty markers in map-pin panel render the explicit "no markers"
+ *  8. Empty markers in map-pin panel render an explicit Ukrainian
  *     placeholder rather than nothing at all.
  *  9. Plan-step panel ETA formatter buckets sub-second / sub-minute /
  *     sub-hour ranges correctly.
@@ -278,7 +278,7 @@ describe('SceneMapPinPanel empty-state', () => {
     render(<ChatScene scene={scene} />);
     expect(
       screen.getByTestId('scene-map-pin-panel-empty')
-    ).toHaveTextContent('no markers');
+    ).toHaveTextContent('Нічого поруч не знайшов');
   });
 });
 

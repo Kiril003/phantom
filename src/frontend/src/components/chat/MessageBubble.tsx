@@ -303,9 +303,9 @@ export function MessageBubble({ message, streaming = false, compact = false, ani
                   <span
                     className="block w-1 h-3 rounded-full"
                     style={{
-                      background: '#ec4899',
+                      background: 'var(--warmth)',
                       opacity: 0.3 + ((meta as any).hormones.oxytocin ?? 0) * 0.7,
-                      boxShadow: ((meta as any).hormones.oxytocin ?? 0) > 0.5 ? '0 0 4px #ec4899' : 'none',
+                      boxShadow: ((meta as any).hormones.oxytocin ?? 0) > 0.5 ? '0 0 4px var(--warmth)' : 'none',
                     }}
                   />
                 </button>
@@ -323,15 +323,15 @@ export function MessageBubble({ message, streaming = false, compact = false, ani
                       </div>
                       <div className="flex justify-between items-center">
                         <span>Кортизол (стрес):</span>
-                        <span className="font-bold text-red-400">{Math.round(((meta as any).hormones.cortisol ?? 0) * 100)}%</span>
+                        <span className="font-bold" style={{ color: 'var(--coral-soft)' }}>{Math.round(((meta as any).hormones.cortisol ?? 0) * 100)}%</span>
                       </div>
                       <div className="flex justify-between items-center">
                         <span>Дофамін (драйв):</span>
-                        <span className="font-bold text-amber-400">{Math.round(((meta as any).hormones.dopamine ?? 0) * 100)}%</span>
+                        <span className="font-bold" style={{ color: 'var(--primary)' }}>{Math.round(((meta as any).hormones.dopamine ?? 0) * 100)}%</span>
                       </div>
                       <div className="flex justify-between items-center">
                         <span>Окситоцин (довіра):</span>
-                        <span className="font-bold text-pink-400">{Math.round(((meta as any).hormones.oxytocin ?? 0) * 100)}%</span>
+                        <span className="font-bold" style={{ color: 'var(--warmth)' }}>{Math.round(((meta as any).hormones.oxytocin ?? 0) * 100)}%</span>
                       </div>
                     </motion.div>
                   )}
@@ -341,7 +341,14 @@ export function MessageBubble({ message, streaming = false, compact = false, ani
             {/* Phase 27-e — only surface latency when it's actually
                 noteworthy (>100ms). Green-path responses run sub-100
                 and the chip was just chrome on every assistant row. */}
-            {!isUser && latency != null && latency > 100 && <span>{latency}ms</span>}
+            {/* «4322ms» — машинний формат. Секунди читаються з першого разу. */}
+            {!isUser && latency != null && latency > 100 && (
+              <span>
+                {latency < 1000
+                  ? `${latency} мс`
+                  : `${(latency / 1000).toFixed(1).replace('.', ',')} с`}
+              </span>
+            )}
             {!isUser && tokens != null && tokens > 0 && (
               <span className="inline-flex items-center gap-0.5">
                 <Hash size={9} strokeWidth={1.75} />

@@ -83,18 +83,66 @@ export default function DialogueLayout() {
       <AmbientGlows />
 
       <main className="absolute inset-0 z-10" style={{ top: 44, bottom: 0 }}>
-        {/* === PRESENCE STRIP ============================================= */}
+        {/* === TRANSCRIPT — full-bleed chat =============================== */}
         <motion.div
-          className="absolute flex items-center glass"
-          style={{
-            left: 12, right: 12, top: 8, height: 44,
-            padding: '0 12px', gap: 10, zIndex: 3,
-          }}
-          initial={{ y: -12, opacity: 0 }}
+          className="absolute"
+          style={{ left: 12, right: 12, top: 8, bottom: 84, zIndex: 2 }}
+          initial={{ y: 12, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.4, ease: EASE_PHANTOM as unknown as number[] }}
-          data-testid="presence-strip"
+          transition={{ duration: 0.5, ease: EASE_PHANTOM as unknown as number[] }}
         >
+          <div
+            aria-hidden
+            className="absolute inset-0 rounded-[24px]"
+            style={{
+              background: 'rgba(255, 255, 255, 0.8)',
+              backdropFilter: 'blur(30px)',
+              border: '1px solid rgba(255, 255, 255, 0.5)',
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+            }}
+          />
+          <div className="relative h-full overflow-hidden rounded-[24px]">
+            <ChatWindow
+              onVoiceToggle={handleVoiceToggle}
+              placeholder="Напиши PHANTOM…"
+              className="pb-2"
+              presence={
+                <Presence
+                  pulsing={pulsing}
+                  label={sphereLabel}
+                  bpm={bpm}
+                  stress={stress}
+                  provider={provider}
+                  voiceMode={voiceMode}
+                />
+              }
+            />
+          </div>
+        </motion.div>
+      </main>
+    </motion.div>
+  );
+}
+
+/* ─── Присутність у заголовку чату ────────────────────────────────────── */
+
+function Presence({
+  pulsing,
+  label,
+  bpm,
+  stress,
+  provider,
+  voiceMode,
+}: {
+  pulsing: boolean;
+  label: string;
+  bpm: number | null | undefined;
+  stress: number | null | undefined;
+  provider: string | null | undefined;
+  voiceMode: 'off' | 'continuous' | 'wake_word';
+}) {
+  return (
+    <div className="flex items-center min-w-0" style={{ gap: 10 }}>
           {/* Mini orb — same soul, 26px */}
           <svg viewBox="0 0 32 32" width={26} height={26} aria-hidden>
             <defs>
@@ -122,74 +170,43 @@ export default function DialogueLayout() {
               }}
             />
           </svg>
+      <span
+        className="playfair truncate"
+        style={{ fontSize: 14, color: 'var(--ink-secondary)' }}
+      >
+        {label}
+      </span>
+
+      {/* Живий датчик показуємо, мертвий ховаємо: ряд прочерків
+          створював враження зламаного приладу. */}
+      {bpm != null && (
+        <span className="flex items-center" style={{ gap: 5, fontSize: 11 }}>
+          <Wind size={12} strokeWidth={1.75} style={{ color: 'var(--primary-deep)' }} />
+          <span className="tabular" style={{ fontWeight: 600 }}>{bpm}/хв</span>
+        </span>
+      )}
+      {stress != null && <StressChip stress={stress} />}
+      <span className="flex items-center" style={{ gap: 5, fontSize: 11 }}>
+        <Route size={12} strokeWidth={1.75} style={{ color: 'var(--primary-deep)' }} />
+        <span style={{ fontWeight: 600, textTransform: 'capitalize' }}>
+          {provider ?? '—'}
+        </span>
+        {voiceMode !== 'off' && (
           <span
-            className="playfair"
-            style={{ fontSize: 14, color: 'var(--ink-secondary)', minWidth: 92 }}
-          >
-            {sphereLabel}
-          </span>
-
-          <span aria-hidden style={{ flex: 1 }} />
-
-          {/* Живий датчик показуємо, мертвий ховаємо: ряд прочерків
-              створював враження зламаного приладу. */}
-          {bpm != null && (
-            <span className="flex items-center" style={{ gap: 5, fontSize: 11 }}>
-              <Wind size={12} strokeWidth={1.75} style={{ color: 'var(--primary-deep)' }} />
-              <span className="tabular" style={{ fontWeight: 600 }}>{bpm}/хв</span>
-            </span>
-          )}
-          {stress != null && <StressChip stress={stress} />}
-          <span className="flex items-center" style={{ gap: 5, fontSize: 11 }}>
-            <Route size={12} strokeWidth={1.75} style={{ color: 'var(--primary-deep)' }} />
-            <span style={{ fontWeight: 600, textTransform: 'capitalize' }}>
-              {provider ?? '—'}
-            </span>
-            {voiceMode !== 'off' && (
-              <span
-                style={{
-                  fontSize: 9,
-                  color: 'var(--primary-deep)',
-                  padding: '1px 5px',
-                  borderRadius: 999,
-                  background: 'rgba(244,175,37,0.15)',
-                  letterSpacing: '0.1em',
-                }}
-              >
-                {voiceMode === 'wake_word' ? 'на слово' : 'наживо'}
-              </span>
-            )}
-          </span>
-        </motion.div>
-
-        {/* === TRANSCRIPT — full-bleed chat =============================== */}
-        <motion.div
-          className="absolute"
-          style={{ left: 12, right: 12, top: 60, bottom: 84, zIndex: 2 }}
-          initial={{ y: 12, opacity: 0 }}
-          animate={{ y: 0, opacity: 1 }}
-          transition={{ duration: 0.5, ease: EASE_PHANTOM as unknown as number[] }}
-        >
-          <div
-            aria-hidden
-            className="absolute inset-0 rounded-[24px]"
             style={{
-              background: 'rgba(255, 255, 255, 0.8)',
-              backdropFilter: 'blur(30px)',
-              border: '1px solid rgba(255, 255, 255, 0.5)',
-              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.1)',
+              fontSize: 9,
+              color: 'var(--primary-deep)',
+              padding: '1px 5px',
+              borderRadius: 999,
+              background: 'rgba(244,175,37,0.15)',
+              letterSpacing: '0.1em',
             }}
-          />
-          <div className="relative h-full overflow-hidden rounded-[24px]">
-            <ChatWindow
-              onVoiceToggle={handleVoiceToggle}
-              placeholder="Напиши PHANTOM…"
-              className="pb-2"
-            />
-          </div>
-        </motion.div>
-      </main>
-    </motion.div>
+          >
+            {voiceMode === 'wake_word' ? 'на слово' : 'наживо'}
+          </span>
+        )}
+      </span>
+    </div>
   );
 }
 

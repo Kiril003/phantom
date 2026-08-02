@@ -13,7 +13,7 @@ import { AmbientGlows } from '../components/core/AmbientGlows';
 import { useSystemStore } from '../stores/systemStore';
 import { useVoiceAlwaysOnStatusStore } from '../stores/voiceAlwaysOnStatusStore';
 import { EASE_PHANTOM } from '../styles/motion';
-import { formatRelativeClock } from '../utils/format';
+import { formatRelativeClock, pluralUa } from '../utils/format';
 
 const STATE_UA: Record<string, string> = {
   shadow: 'тінь',
@@ -754,14 +754,4 @@ function nexusSuggestion(
   if (breath === 'stressed' || breath === 'elevated')
     return '«Дихання підняте. Зробимо хвилину спокою?»';
   return '«Ранок. Зібрати тобі короткий бриф на день?»';
-}
-
-/** Українське відмінювання числівників: 1 подія, 2 події, 5 подій. */
-function pluralUa(n: number, one: string, few: string, many: string): string {
-  const mod100 = n % 100;
-  if (mod100 >= 11 && mod100 <= 14) return many;
-  const mod10 = n % 10;
-  if (mod10 === 1) return one;
-  if (mod10 >= 2 && mod10 <= 4) return few;
-  return many;
 }

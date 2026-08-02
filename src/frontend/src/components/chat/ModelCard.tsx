@@ -34,6 +34,17 @@ const PROVIDER_DOT = (provider: string | null | undefined): string => {
   }
 };
 
+/**
+ * Назва рушія розпізнавання нічого не каже власникові пристрою — важливо,
+ * чи слух точний, чи швидкий. Тут стояло сире «whisper».
+ */
+function sttLabel(engine: string): string {
+  const key = engine.toLowerCase();
+  if (key.includes('whisper')) return 'точний слух';
+  if (key.includes('vosk')) return 'швидкий слух';
+  return engine;
+}
+
 export function ModelCard({ provider, sttEngine, overlay }: ModelCardProps) {
   return (
     <div
@@ -44,7 +55,7 @@ export function ModelCard({ provider, sttEngine, overlay }: ModelCardProps) {
         color: 'var(--ink-muted)',
         letterSpacing: 'var(--tracking-wide)',
       }}
-      aria-label="Active model card"
+      aria-label="Активна модель"
       data-testid="model-card"
       data-provider={provider ?? 'unknown'}
       data-stt={sttEngine ?? 'none'}
@@ -67,9 +78,7 @@ export function ModelCard({ provider, sttEngine, overlay }: ModelCardProps) {
       {sttEngine && (
         <span className="inline-flex items-center gap-1">
           <Mic size={10} strokeWidth={1.75} aria-hidden />
-          <span style={{ color: 'var(--ink-secondary)' }} className="lowercase">
-            {sttEngine}
-          </span>
+          <span style={{ color: 'var(--ink-secondary)' }}>{sttLabel(sttEngine)}</span>
         </span>
       )}
       {overlay && (

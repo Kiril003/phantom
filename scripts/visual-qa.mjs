@@ -131,11 +131,61 @@ for (const [path, name] of ROUTES) {
       }).length;
     }
 
+    // Англійська в підказках. innerText її не бачить, тож «Open Settings»
+    // і «Згорнути Toolbar» жили на екрані непоміченими не одну перевірку.
+    const ATTR_OK =
+      /^(PHANTOM|Gemini|Flash|NEXUS|ESP32|OpenFreeMap|OpenMapTiles|OpenStreetMap|Protomaps|MapLibre|Ollama|Radxa|Whisper|Vosk|Stripe|Tauri|Json|JSON|DEBUG|INFO|WARNING|ERROR|CRITICAL|CPU|RAM|GPS|API|PIN|HRV|AQI)$/i;
+    const attrLatin = [
+      ...new Set(
+        [...document.querySelectorAll('[aria-label], [title], [placeholder]')]
+          .flatMap((el) =>
+            ['aria-label', 'title', 'placeholder']
+              .map((a) => el.getAttribute(a) || '')
+              .join(' ')
+              .match(/\b[A-Za-z][A-Za-z-]{3,}\b/g) || [],
+          )
+          .filter((w) => !ATTR_OK.test(w)),
+      ),
+    ];
+
+    // Контраст тексту проти найближчого непрозорого тла. Білі числа на
+    // кремовому й neutral-400 на світлому інакше видно лише на скріншоті.
+    const lum = (s) => {
+      const m = (s.match(/[\d.]+/g) || ['0', '0', '0']).map(Number);
+      const f = (v) => {
+        v /= 255;
+        return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4);
+      };
+      return 0.2126 * f(m[0]) + 0.7152 * f(m[1]) + 0.0722 * f(m[2]);
+    };
+    let faint = 0;
+    for (const el of document.querySelectorAll('*')) {
+      const own = [...el.childNodes]
+        .filter((n) => n.nodeType === 3)
+        .map((n) => n.textContent.trim())
+        .join('');
+      if (own.length < 3) continue;
+      const r = el.getBoundingClientRect();
+      if (r.width < 4 || r.height < 4 || r.bottom <= 0 || r.top >= window.innerHeight) continue;
+      const cs = getComputedStyle(el);
+      if (cs.visibility === 'hidden' || Number(cs.opacity) < 0.15) continue;
+      let bg = 'rgba(0, 0, 0, 0)';
+      for (let n = el; n && n !== document.documentElement; n = n.parentElement) {
+        const c = getComputedStyle(n).backgroundColor;
+        if (c && c !== 'transparent' && !/,\s*0\)$/.test(c)) { bg = c; break; }
+      }
+      const a = lum(cs.color);
+      const b = lum(bg);
+      if ((Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) < 2.2) faint += 1;
+    }
+
     return {
       chars: text.length,
       overflowY: doc.scrollHeight - doc.clientHeight,
       overflowX: doc.scrollWidth - doc.clientWidth,
       latin: latin.slice(0, 5),
+      attrLatin: attrLatin.slice(0, 5),
+      faint,
       tiny,
       buried,
     };
@@ -149,7 +199,9 @@ for (const [path, name] of ROUTES) {
   if (m.overflowX > 0) flags.push(`вбік +${m.overflowX}px`);
   if (m.tiny) flags.push(`дрібні цілі: ${m.tiny}`);
   if (m.buried) { flags.push(`ПІД ДОКОМ: ${m.buried}`); bad += m.buried; }
+  if (m.faint) { flags.push(`НЕ ВИДНО ТЕКСТ: ${m.faint}`); bad += m.faint; }
   if (m.latin.length) flags.push(`англ: ${m.latin.join(' ')}`);
+  if (m.attrLatin.length) flags.push(`англ у підказках: ${m.attrLatin.join(' ')}`);
   if (bag.length) { flags.push(`ПОМИЛОК ${bag.length}`); bad += bag.length; }
 
   console.log(`${path.padEnd(12)} ${String(m.chars).padStart(5)}зн  ${flags.join(' · ') || 'чисто'}`);

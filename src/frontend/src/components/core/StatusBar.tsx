@@ -399,13 +399,13 @@ function Esp32Pill({ status }: { status: 'disabled' | 'offline' | 'online' }) {
         ? 'amber'
         : 'amber';
   const label =
-    status === 'online' ? 'ESP32' : status === 'offline' ? 'ESP32 off' : 'ESP32 ·';
+    status === 'online' ? 'ESP32' : status === 'offline' ? 'ESP32 —' : 'ESP32 ·';
   const title =
     status === 'online'
-      ? 'Serial bridge connected; sensor batches incoming'
+      ? 'Плата підключена, дані з датчиків надходять'
       : status === 'offline'
-        ? 'Serial bridge enabled but no ESP32 device connected'
-        : 'Serial bridge disabled (dev mode or no hardware)';
+        ? 'Канал увімкнено, але плату ESP32 не знайдено'
+        : 'Канал до плати вимкнено — заліза немає';
   const muted = status === 'disabled';
   return (
     <span

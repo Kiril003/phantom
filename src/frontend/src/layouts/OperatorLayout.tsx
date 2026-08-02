@@ -144,9 +144,9 @@ export default function OperatorLayout() {
         </div>
         
         <div className="h-[52px] flex items-center justify-center bg-white/5 backdrop-blur-sm border-b border-black/5">
-           <div className="scale-90 origin-center">
-              <AgentRoster />
-           </div>
+           {/* scale-90 стискав 44-піксельні чипи до 40 — тач-ціль ламалась
+               саме через обгортку, а не через самі кнопки. */}
+           <AgentRoster />
         </div>
       </header>
 
@@ -193,7 +193,7 @@ export default function OperatorLayout() {
 
       {/* Safety Shield — Top Right Overlay */}
       {!isPro && (
-        <div className="absolute top-[52px] right-4 z-[60] scale-75 origin-top-right">
+        <div className="absolute top-[52px] right-4 z-[60]">
            <SafetyShieldToggle />
         </div>
       )}

@@ -94,9 +94,27 @@ class ImportRequest(BaseModel):
 
 # ─── Schema ──────────────────────────────────────────────────────────────
 
+# Людські підписи для значень enum-налаштувань. Ключ технічний, підпис —
+# той, що читає користувач.
+OPTION_LABELS: dict[str, str] = {
+    "single": "один вузол",
+    "multi": "кілька вузлів",
+    "off": "вимкнено",
+    "on": "увімкнено",
+    "auto": "автоматично",
+    "continuous": "постійний",
+    "wake_word": "на слово",
+    "light": "світла",
+    "dark": "темна",
+}
+
+
 def _select_options_from_literal(field_type: Any) -> list[dict[str, str]] | None:
     if get_origin(field_type) is Literal:
-        return [{"value": str(v), "label": str(v)} for v in get_args(field_type)]
+        return [
+            {"value": str(v), "label": OPTION_LABELS.get(str(v), str(v))}
+            for v in get_args(field_type)
+        ]
     return None
 
 

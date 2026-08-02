@@ -556,7 +556,7 @@ export default function SentinelLayout() {
                 marginTop: 2,
               }}
             >
-              No anomalies — environment nominal.
+              Відхилень немає — довкола спокійно.
             </div>
           )}
         </div>

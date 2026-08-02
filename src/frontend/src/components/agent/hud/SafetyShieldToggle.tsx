@@ -81,13 +81,13 @@ export function SafetyShieldToggle() {
       onClick={flip}
       disabled={busy}
       aria-pressed={isUnsafe}
-      aria-label={isUnsafe ? 'Re-engage auto-safety' : 'Disable auto-safety (no leash)'}
+      aria-label={isUnsafe ? 'Повернути автозахист' : 'Зняти автозахист'}
       title={
         isUnsafe
-          ? 'NO LEASH ACTIVE — tap to re-engage auto-safety'
+          ? 'Автозахист знято — тап, щоб повернути'
           : taskActive
-          ? 'Tap to disable auto-safety for THIS running task'
-          : 'Tap to pre-stage NO LEASH for the next task'
+            ? 'Тап зніме автозахист для цієї задачі'
+            : 'Тап зніме автозахист для наступної задачі'
       }
       data-testid="safety-shield-toggle"
       className="flex items-center gap-2 transition-all"
@@ -96,9 +96,9 @@ export function SafetyShieldToggle() {
         top: 12,
         right: 12,
         zIndex: 60,
-        padding: '2px 8px',
-        minHeight: 24,
-        borderRadius: 6,
+        padding: '2px 10px',
+        minHeight: 44,
+        borderRadius: 10,
         background: surface,
         border: `1px solid ${border}`,
         boxShadow: isUnsafe

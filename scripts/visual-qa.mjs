@@ -99,7 +99,10 @@ for (const [path, name] of ROUTES) {
     const latin = [
       ...new Set(
         (text.match(/\b[A-Za-z][A-Za-z-]{3,}\b/g) || []).filter(
-          (w) => !/^(PHANTOM|Gemini|Flash|Quota|ESP32|OpenFreeMap|OpenMapTiles|MapLibre|Ollama|Radxa|Whisper|whisper|Vosk)$/i.test(w),
+          // Дозволено: власні назви, ідентифікатори моделей, рівні логів
+          // і атрибуція OSM — її вимагає ліцензія, перекладати не можна.
+          (w) =>
+            !/^(PHANTOM|Gemini|Flash|gemini-flash|Quota|NEXUS|ESP32|OpenFreeMap|OpenMapTiles|OpenStreetMap|Protomaps|MapLibre|Ollama|Radxa|Whisper|Vosk|Stripe|Tauri|sentinel|wi-fi|Wi-Fi|Json|JSON|DEBUG|INFO|WARNING|ERROR|CRITICAL|Data|from|contributors|CPU|RAM|GPS|API|PIN|HRV|AQI)$/i.test(w),
         ),
       ),
     ];

@@ -45,7 +45,7 @@ export function Orb({ size = 'md', pulsing = false, className = '' }: OrbProps) 
         className={`absolute inset-0 rounded-full ${pulsing ? 'animate-pulse-music' : 'animate-pulse-slow'}`}
         style={{
           background: 'var(--accent-glow)',
-          filter: `blur(36px) brightness(${voiceGlow})`,
+          filter: `blur(48px) brightness(${voiceGlow})`,
           transform: `scale(${voicePulse})`,
           transition: 'transform 80ms linear, filter 80ms linear',
         }}
@@ -58,7 +58,7 @@ export function Orb({ size = 'md', pulsing = false, className = '' }: OrbProps) 
           width: s.ringOuter,
           height: s.ringOuter,
           border: '1px solid var(--glass-border-hover)',
-          opacity: 0.4,
+          opacity: 0.55,
           animation: `phantom-radar calc(20s / var(--motion-scale, 1)) linear infinite`,
         }}
       />
@@ -69,8 +69,8 @@ export function Orb({ size = 'md', pulsing = false, className = '' }: OrbProps) 
         style={{
           width: s.ringInner,
           height: s.ringInner,
-          border: '1px dashed var(--accent-glow)',
-          opacity: 0.5,
+          border: '1px dashed color-mix(in srgb, var(--accent) 55%, transparent)',
+          opacity: 0.6,
           transform: 'rotate(45deg)',
           animation: `phantom-radar calc(15s / var(--motion-scale, 1)) linear infinite reverse`,
         }}
@@ -87,17 +87,31 @@ export function Orb({ size = 'md', pulsing = false, className = '' }: OrbProps) 
         }}
       />
 
-      {/* Morphing core */}
+      {/* Ядро. mixBlendMode: screen тут гасив сферу на кремовому тлі —
+          лишалась безформна пляма, тому форму тримають градієнт із бліком
+          і чіткий край, а розмиття пішло у зовнішнє сяйво. */}
       <div
-        className="absolute animate-morph animate-breathe"
+        className="absolute rounded-full animate-breathe"
         style={{
           width: s.core,
           height: s.core,
           background: 'var(--accent-radial)',
-          filter: 'blur(18px)',
-          boxShadow: '0 0 100px var(--accent-glow)',
-          mixBlendMode: 'screen',
-          opacity: 0.95,
+          boxShadow:
+            '0 0 60px var(--accent-glow), inset -8% -12% 40px rgba(176,122,16,0.30), inset 12% 14% 30px rgba(255,255,255,0.45)',
+          opacity: 0.96,
+        }}
+      />
+
+      {/* Специфічний блік — читається як об'єм, а не як плоске коло. */}
+      <div
+        className="absolute rounded-full pointer-events-none"
+        style={{
+          width: s.core * 0.32,
+          height: s.core * 0.24,
+          transform: `translate(-${s.core * 0.18}px, -${s.core * 0.24}px) rotate(-18deg)`,
+          background:
+            'radial-gradient(ellipse at 50% 50%, rgba(255,255,255,0.85), rgba(255,255,255,0) 70%)',
+          filter: 'blur(4px)',
         }}
       />
 

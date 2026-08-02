@@ -8,6 +8,7 @@ import {
   MemoryStick,
   HardDrive,
   Gauge,
+  MapPin,
 } from 'lucide-react';
 import { AmbientGlows } from '../components/core/AmbientGlows';
 import { Orb } from '../components/core/Orb';
@@ -157,8 +158,26 @@ export default function FocusLayout() {
                 textShadow: '0 1px 0 rgba(255,255,255,0.5)',
               }}
             >
-              {placeName ?? 'Вікно глибокої роботи'}
+              Вікно глибокої роботи
             </p>
+            {placeName && (
+              <span
+                className="flex items-center"
+                style={{
+                  gap: 5,
+                  marginTop: 2,
+                  padding: '3px 10px',
+                  borderRadius: 999,
+                  fontSize: 11,
+                  color: 'var(--ink-secondary)',
+                  background: 'rgba(255,255,255,0.55)',
+                  border: '1px solid var(--line-subtle)',
+                }}
+              >
+                <MapPin size={11} strokeWidth={1.75} style={{ color: 'var(--primary-deep)' }} />
+                {placeName}
+              </span>
+            )}
             <p
               style={{
                 fontFamily: 'var(--font-display)',

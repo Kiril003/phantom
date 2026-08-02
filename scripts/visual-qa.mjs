@@ -134,7 +134,7 @@ for (const [path, name] of ROUTES) {
     // Англійська в підказках. innerText її не бачить, тож «Open Settings»
     // і «Згорнути Toolbar» жили на екрані непоміченими не одну перевірку.
     const ATTR_OK =
-      /^(PHANTOM|Gemini|Flash|NEXUS|ESP32|OpenFreeMap|OpenMapTiles|OpenStreetMap|Protomaps|MapLibre|Ollama|Radxa|Whisper|Vosk|Stripe|Tauri|Wi-Fi|WiFi|Json|JSON|DEBUG|INFO|WARNING|ERROR|CRITICAL|CPU|RAM|GPS|API|PIN|HRV|AQI)$/i;
+      /^(PHANTOM|Gemini|Flash|NEXUS|ESP32|OpenFreeMap|OpenMapTiles|OpenStreetMap|Protomaps|MapLibre|Ollama|Radxa|Whisper|Vosk|Stripe|Tauri|Wi-Fi|WiFi|Json|JSON|DEBUG|INFO|WARNING|ERROR|CRITICAL|CPU|RAM|GPS|API|PIN|HRV|AQI|contributors|Data|from|Improve|this|map)$/i;
     const attrLatin = [
       ...new Set(
         [...document.querySelectorAll('[aria-label], [title], [placeholder]')]

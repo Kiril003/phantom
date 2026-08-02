@@ -1,6 +1,13 @@
 import { Layers, Radar, Wifi, Flame, MapPin, Route, Sparkles, Satellite, Compass } from 'lucide-react';
 import { useMapStore, type MapLayerKey } from '../../../stores/mapStore';
 
+/** Назви стилів мапи приходять службовими ключами. */
+const STYLE_UA: Record<string, string> = {
+  dark: 'темний',
+  streets: 'вулиці',
+  satellite: 'супутник',
+};
+
 // Підписи шарів були англійськими — на боковій рейці мапи це єдиний
 // текст, який пояснює, що вмикає кнопка.
 const LATERAL_ITEMS: Array<{ key: MapLayerKey; icon: React.ReactNode; label: string }> = [
@@ -73,13 +80,13 @@ export function LayerControlZone({
       <span className="block w-6 h-px bg-white/10 my-1 shrink-0" />
       <LateralButton
         icon={<Satellite size={18} strokeWidth={1.75} />}
-        label={`Style · ${mapStyle}`}
+        label={`Вигляд · ${STYLE_UA[mapStyle] ?? mapStyle}`}
         active={mapStyle !== 'dark'}
         onClick={onCycleStyle}
       />
       <LateralButton
         icon={<Compass size={18} strokeWidth={1.75} />}
-        label={`Bearing · ${String(Math.round(bearing)).padStart(3, '0')}°`}
+        label={`Напрямок · ${String(Math.round(bearing)).padStart(3, '0')}°`}
         active={Math.abs(bearing) > 0.5}
         onClick={onResetBearing}
       />

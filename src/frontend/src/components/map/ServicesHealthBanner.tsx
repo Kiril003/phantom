@@ -166,8 +166,8 @@ export function ServicesHealthBanner() {
           border: '1px solid transparent',
           opacity: refreshing ? 0.5 : 1,
         }}
-        aria-label="Retry services health"
-        title="Retry"
+        aria-label="Перевірити служби ще раз"
+        title="Спробувати ще раз"
       >
         <RefreshCw
           size={12}

@@ -231,13 +231,20 @@ export function TacticalMap({
     // («Toggle attribution») — своєї локалізації бібліотека не має, тож
     // підписуємо після монтування. Сам текст ліцензії лишається як є:
     // його вимагає OSM.
-    map.on('load', () => {
-      const toggle = container.querySelector<HTMLElement>('.maplibregl-ctrl-attrib-button');
-      if (toggle) {
-        toggle.setAttribute('aria-label', 'Джерела карти');
-        toggle.setAttribute('title', 'Джерела карти');
-      }
-    });
+    // Кнопка атрибуції MapLibre — англійська («Toggle attribution»), своєї
+    // локалізації бібліотека не має. Одного присвоєння замало: контрол
+    // перемальовує себе при кожній зміні джерел і затирає атрибути, тож
+    // тримаємо підпис спостерігачем. Сам текст ліцензії OSM не чіпаємо.
+    const ATTRIB_UA = 'Джерела карти';
+    const nameAttribution = () => {
+      const toggle = map.getContainer().querySelector<HTMLElement>('.maplibregl-ctrl-attrib-button');
+      if (!toggle || toggle.getAttribute('aria-label') === ATTRIB_UA) return;
+      toggle.setAttribute('aria-label', ATTRIB_UA);
+      toggle.setAttribute('title', ATTRIB_UA);
+    };
+    map.on('idle', nameAttribution);
+    const attribWatch = new MutationObserver(nameAttribution);
+    attribWatch.observe(container, { childList: true, subtree: true, attributes: true });
     map.on('load', onLoad);
     map.on('moveend', onMove);
     map.on('rotate' as any, onRotate);
@@ -250,6 +257,8 @@ export function TacticalMap({
       map.off('rotate' as any, onRotate);
       map.off('error' as any, onError);
       map.off('click', onClick);
+      map.off('idle', nameAttribution);
+      attribWatch.disconnect();
       map.remove();
       mapRef.current = null;
       setReady(false);
@@ -491,9 +500,9 @@ export function TacticalMap({
             )}
             <div className="flex gap-2 justify-center mt-2">
               {webglSupported && (
-                <button onClick={handleStyleRetry} aria-label="Retry" className="min-h-[44px] px-6 rounded-full bg-amber-500 text-ink-inverse text-xs font-bold uppercase">Повторити</button>
+                <button onClick={handleStyleRetry} aria-label="Спробувати ще раз" className="min-h-[44px] px-6 rounded-full bg-amber-500 text-[color:var(--primary-shadow)] text-xs font-bold uppercase">Повторити</button>
               )}
-              <button onClick={cycleMapStyle} aria-label="Style" className="min-h-[44px] px-4 rounded-full border border-white/10 text-ink-secondary text-xs font-bold uppercase">Стиль</button>
+              <button onClick={cycleMapStyle} aria-label="Змінити вигляд мапи" className="min-h-[44px] px-4 rounded-full border border-white/10 text-ink-secondary text-xs font-bold uppercase">Стиль</button>
             </div>
           </div>
         </div>

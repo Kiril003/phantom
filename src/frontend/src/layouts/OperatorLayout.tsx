@@ -57,7 +57,7 @@ function VitalsHeaderStrip() {
     <div className="flex items-center gap-4 px-4 py-1.5 rounded-full bg-black/10 border border-white/5 shadow-inner">
        <TenantBadge />
        <div className="flex flex-col border-l border-white/10 pl-3">
-          <span className="text-[7px] text-neutral-500 uppercase font-bold tracking-widest leading-none mb-0.5">Стан_розуму</span>
+          <span className="text-[7px] text-neutral-500 uppercase font-bold tracking-widest leading-none mb-0.5">Стан розуму</span>
           <span className="text-[10px] text-primary font-bold uppercase leading-none">{formatSubstate(substate)}</span>
        </div>
        <div className="flex flex-col">
@@ -170,7 +170,8 @@ export default function OperatorLayout() {
       </main>
 
       {/* ─── FOOTER & OVERLAYS (UNIFIED) ────────────────────────────────────── */}
-      <footer className="shrink-0 h-[64px] relative z-40 px-6 flex items-center justify-center">
+      {/* mb — щоб командний центр не ліз під глобальний док знизу */}
+      <footer className="shrink-0 h-[64px] mb-[72px] relative z-40 px-6 flex items-center justify-center">
         {/* Center: Floating Command Center — Balanced width */}
         <div className="pointer-events-auto">
            <AgentCommandCenter

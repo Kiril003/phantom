@@ -85,7 +85,7 @@ export function Tape() {
                   <span className={`uppercase font-bold shrink-0 ${row.kind === 'reflection' ? 'text-amber-500/80' : row.kind === 'observation' ? 'text-blue-500/80' : 'text-neutral-500'}`}>
                      [{row.kind.slice(0,3)}]
                   </span>
-                  <span className="text-neutral-300 truncate group-hover:text-white transition-colors">
+                  <span className="text-neutral-600 truncate group-hover:text-neutral-900 transition-colors">
                     {row.verdict ?? row.action ?? row.label ?? '—'}
                   </span>
                   {row.repeats != null && row.repeats > 1 && (

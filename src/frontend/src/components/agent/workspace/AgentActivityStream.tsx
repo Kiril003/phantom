@@ -1,7 +1,8 @@
 import { useMemo, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Zap, User, Terminal, Activity } from 'lucide-react';
+import { Zap, User, Terminal, Activity, Search, ListChecks } from 'lucide-react';
 import { useAgentStore } from '../../../stores/agentStore';
+import { useUIStore } from '../../../stores/uiStore';
 import { ResponseRenderer } from '../../chat/ResponseRenderer';
 import { localizedTime } from '../../../utils/format';
 import type { ChatMessage, AgentObservation } from '@shared/types';
@@ -224,20 +225,77 @@ export function AgentActivityStream() {
         WebkitOverflowScrolling: 'touch'
       }}
     >
-      {stream.length === 0 && (
-        <div className="flex-1 flex flex-col items-center justify-center py-12 opacity-30">
-          <div className="w-12 h-12 rounded-full border-2 border-primary/20 flex items-center justify-center mb-3">
-             <Activity size={20} className="text-primary/60" />
-          </div>
-          <span className="font-mono text-[9px] tracking-[0.3em] text-primary/80 uppercase">Чекаю на завдання</span>
-        </div>
-      )}
+      {stream.length === 0 && <EmptyWorkspace />}
 
       <AnimatePresence initial={false}>
         {stream.map((entry) => (
           <ActivityBubble key={entry.id} entry={entry} />
         ))}
       </AnimatePresence>
+    </div>
+  );
+}
+
+const STARTERS = [
+  { icon: <Search size={13} />, text: 'Знайди, що поруч відкрито зараз' },
+  { icon: <ListChecks size={13} />, text: 'Збери мені план на завтра' },
+  { icon: <Terminal size={13} />, text: 'Перевір, що з місцем на диску' },
+];
+
+/** Порожній штаб пояснює, чим він є, і дає з чого почати. */
+function EmptyWorkspace() {
+  const setObjective = useUIStore((s) => s.setMissionBriefObjective);
+  const openBrief = useUIStore((s) => s.setMissionBriefOpen);
+
+  const start = (text: string) => {
+    setObjective(text);
+    openBrief(true);
+  };
+
+  return (
+    <div className="flex-1 flex flex-col items-center justify-center gap-5 px-8 text-center">
+      <div
+        className="w-14 h-14 rounded-2xl flex items-center justify-center"
+        style={{
+          background: 'linear-gradient(135deg, rgba(244,175,37,0.18), rgba(251,146,60,0.08))',
+          border: '1px solid rgba(244,175,37,0.32)',
+        }}
+      >
+        <Activity size={22} style={{ color: 'var(--primary-deep)' }} />
+      </div>
+
+      <div className="max-w-[420px]">
+        <div className="playfair" style={{ fontSize: 20, color: 'var(--ink-secondary)' }}>
+          Штаб порожній
+        </div>
+        <p style={{ marginTop: 6, fontSize: 12, lineHeight: 1.5, color: 'var(--ink-muted)' }}>
+          Тут PHANTOM працює над довгими задачами: розкладає мету на кроки,
+          сам звертається до інструментів і показує кожен свій хід. Дай йому
+          ціль — і стежинка думок піде сюди.
+        </p>
+      </div>
+
+      <div className="flex flex-wrap justify-center gap-2">
+        {STARTERS.map((s) => (
+          <button
+            key={s.text}
+            type="button"
+            onClick={() => start(s.text)}
+            className="flex items-center gap-2 rounded-xl transition-colors"
+            style={{
+              minHeight: 44,
+              padding: '0 14px',
+              fontSize: 12,
+              color: 'var(--ink-secondary)',
+              background: 'rgba(255,255,255,0.55)',
+              border: '1px solid var(--line-subtle)',
+            }}
+          >
+            <span style={{ color: 'var(--primary-deep)', display: 'flex' }}>{s.icon}</span>
+            {s.text}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

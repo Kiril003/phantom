@@ -60,9 +60,9 @@ function chipStyle(focused: boolean, compact: boolean): React.CSSProperties {
     alignItems: 'center',
     gap: compact ? 4 : 6,
     height: compact ? 28 : 36,
-    minWidth: compact ? 120 : 168,
-    paddingLeft: compact ? 8 : 10,
-    paddingRight: compact ? 8 : 10,
+    minWidth: 0,
+    paddingLeft: compact ? 9 : 10,
+    paddingRight: compact ? 9 : 10,
     paddingTop: 0,
     paddingBottom: 0,
     borderRadius: 12,
@@ -166,7 +166,7 @@ export function AgentRoster() {
 
   function soStatusText(): string {
     if (soData.enabled === 0) return 'Неактивно';
-    return `${soData.enabled} активних · ${soData.totalFired} fires`;
+    return `${soData.enabled} активних · ${soData.totalFired} спрацювань`;
   }
 
   function proactiveStatusText(): string {
@@ -289,41 +289,37 @@ export function AgentRoster() {
               style={chipStyle(focused, compact)}
             >
               <Dot active={chip.active} focused={focused} />
-
-              {compact ? (
-                /* Compact: icon only, no text */
+              <span
+                style={{ fontSize: isCouncilChip ? 14 : 12, lineHeight: 1, display: 'flex' }}
+                aria-hidden="true"
+              >
+                {chip.icon}
+              </span>
+              {/* Підпис лишається завжди: згорнутий реєстр із самих іконок
+                  читався як ряд безіменних вкладок. Ховаємо лише статус. */}
+              <span
+                style={{
+                  fontSize: compact ? 10 : 11,
+                  fontWeight: 700,
+                  letterSpacing: '0.04em',
+                  whiteSpace: 'nowrap',
+                }}
+              >
+                {chip.label}
+              </span>
+              {!compact && (
                 <span
-                  style={{ fontSize: isCouncilChip ? 14 : 12, lineHeight: 1 }}
-                  aria-hidden="true"
+                  style={{
+                    fontSize: 10,
+                    opacity: 0.75,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    maxWidth: 120,
+                  }}
                 >
-                  {chip.icon}
+                  {chip.statusText}
                 </span>
-              ) : (
-                /* Full: name + status text */
-                <>
-                  <span
-                    style={{
-                      fontSize: 11,
-                      fontWeight: 700,
-                      letterSpacing: '0.04em',
-                      whiteSpace: 'nowrap',
-                    }}
-                  >
-                    {chip.label}
-                  </span>
-                  <span
-                    style={{
-                      fontSize: 10,
-                      opacity: 0.75,
-                      whiteSpace: 'nowrap',
-                      overflow: 'hidden',
-                      textOverflow: 'ellipsis',
-                      maxWidth: 120,
-                    }}
-                  >
-                    {chip.statusText}
-                  </span>
-                </>
               )}
             </button>
           );
@@ -334,7 +330,7 @@ export function AgentRoster() {
           position="top"
           collapsed={compact}
           onToggle={toggleRoster}
-          label="Roster"
+          label="Реєстр"
           style={{ marginLeft: 'auto', flexShrink: 0 }}
         />
       </div>

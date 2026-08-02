@@ -62,9 +62,9 @@ export function AgentVitals() {
 
           <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-neutral-400">
              <span>STATE:</span>
-             <span className="text-white text-right">{substate.toUpperCase()}</span>
+             <span className="text-right" style={{ color: 'var(--ink-primary)' }}>{substate.toUpperCase()}</span>
              <span>MOOD:</span>
-             <span className="text-white text-right">{getEmotionSummary(emotion)}</span>
+             <span className="text-right" style={{ color: 'var(--ink-primary)' }}>{getEmotionSummary(emotion)}</span>
              <span>UNCHAINED:</span>
              <span className={unsafeMode ? 'text-red-500 text-right' : 'text-green-500 text-right'}>{unsafeMode ? 'TRUE' : 'FALSE'}</span>
           </div>
@@ -74,7 +74,7 @@ export function AgentVitals() {
           <div className="flex flex-col gap-1.5">
             <div className="flex justify-between items-center text-[9px]">
                <span className="text-neutral-500">THOUGHT_CAP:</span>
-               <span className="text-white font-bold">{thoughtBudget.actions_used}/{thoughtBudget.estimated_actions}</span>
+               <span className="font-bold" style={{ color: 'var(--ink-primary)' }}>{thoughtBudget.actions_used}/{thoughtBudget.estimated_actions}</span>
             </div>
             <div className="h-1 w-full bg-white/5 overflow-hidden">
                <div className="h-full bg-cyan-500" style={{ width: `${Math.min(100, (thoughtBudget.actions_used/thoughtBudget.estimated_actions)*100)}%` }} />
@@ -82,7 +82,7 @@ export function AgentVitals() {
 
             <div className="flex justify-between items-center text-[9px]">
                <span className="text-neutral-500">LLM_COMPUTE:</span>
-               <span className="text-white font-bold">{llmCallsUsed}/{llmCallsCap}</span>
+               <span className="font-bold" style={{ color: 'var(--ink-primary)' }}>{llmCallsUsed}/{llmCallsCap}</span>
             </div>
             <div className="h-1 w-full bg-white/5 overflow-hidden">
                <div className="h-full bg-purple-500" style={{ width: `${Math.min(100, (llmCallsUsed/llmCallsCap)*100)}%` }} />

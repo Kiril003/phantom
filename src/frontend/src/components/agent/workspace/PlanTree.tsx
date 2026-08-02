@@ -116,7 +116,7 @@ function SubGoalNode({ index, subGoal, actions, isActive }: { index: number, sub
                 <div key={a.step_idx} className="flex items-center gap-2 group">
                    <div className="w-1 h-1 rounded-full bg-neutral-800" />
                    <span className="text-[9px] text-cyan-600 font-bold shrink-0">{a.action}</span>
-                   <span className="text-[10px] text-neutral-500 truncate group-hover:text-white transition-colors">{a.intent}</span>
+                   <span className="text-[10px] text-neutral-500 truncate group-hover:text-neutral-900 transition-colors">{a.intent}</span>
                    {a.result?.elapsed_ms && <span className="ml-auto text-[8px] text-neutral-800">{a.result.elapsed_ms}ms</span>}
                 </div>
              ))}

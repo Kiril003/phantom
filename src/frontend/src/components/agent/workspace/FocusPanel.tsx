@@ -5,7 +5,7 @@
  */
 
 import { useState } from 'react';
-import { Cpu, Database, ChevronDown, ChevronUp, Zap, Brain, Loader2 } from 'lucide-react';
+import { Cpu, Database, ChevronDown, ChevronUp, Zap, Brain, Loader2, RefreshCw } from 'lucide-react';
 import { useAgentStore } from '../../../stores/agentStore';
 import { useUIStore } from '../../../stores/uiStore';
 import type { FocusedAgent } from '../../../stores/uiStore';
@@ -65,16 +65,17 @@ function ForegroundPivot() {
           <div data-testid="now-steps" className="flex items-center gap-1.5 font-mono text-[10px]">
             <Zap size={10} className="text-primary" />
             <span className="text-neutral-500">КРОКИ</span>
-            <span className="text-neutral-200 font-bold">{thoughtBudget.actions_used}/{thoughtBudget.estimated_actions}</span>
+            <span className="font-bold" style={{ color: 'var(--ink-primary)' }}>{thoughtBudget.actions_used}/{thoughtBudget.estimated_actions}</span>
           </div>
           <div data-testid="now-ai" className="flex items-center gap-1.5 font-mono text-[10px]">
             <Cpu size={10} className="text-cyan-500" />
             <span className="text-neutral-500">ШІ</span>
-            <span className="text-neutral-200 font-bold">{llmCallsUsed}/{llmCallsCap}</span>
+            <span className="font-bold" style={{ color: 'var(--ink-primary)' }}>{llmCallsUsed}/{llmCallsCap}</span>
           </div>
           <div data-testid="now-loop" className="flex items-center gap-1.5 font-mono text-[10px]">
+            <RefreshCw size={10} className="text-amber-600" />
             <span className="text-neutral-500">ЦИКЛ</span>
-            <span className="text-neutral-200 font-bold">↻{thoughtBudget.reflections_done}</span>
+            <span className="font-bold" style={{ color: 'var(--ink-primary)' }}>{thoughtBudget.reflections_done}</span>
           </div>
           {substate !== 'idle' && (
             <div className="flex items-center gap-2 px-2 py-0.5 rounded-full bg-primary/10 border border-primary/20 animate-pulse">

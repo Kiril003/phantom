@@ -50,6 +50,9 @@ function GlobalGeolocationManager() {
 const ShadowLayout = React.lazy(() => import('../layouts/ShadowLayout'));
 const AnalyticsOverview = React.lazy(() => import('../pages/Dashboard/AnalyticsOverview'));
 const LoginScreen = React.lazy(() => import('../components/auth/LoginScreen'));
+const CoreDownWall = React.lazy(() =>
+  import('../components/auth/LoginScreen').then((m) => ({ default: m.CoreDownWall })),
+);
 const SettingsPanel = React.lazy(() => import('../components/settings/SettingsPanel'));
 const MapLayout = React.lazy(() => import('../layouts/MapLayout'));
 const PolisLayout = React.lazy(() => import('../layouts/PolisLayout'));
@@ -88,11 +91,15 @@ function StateSurface() {
 
 function MainRouter() {
   const { authenticated } = useSystemStore();
+  const sessionPhase = useAuthStore((s) => s.sessionPhase);
 
   if (!authenticated) {
+    // Поки токен перевіряється, екран входу показувати не можна: власник
+    // нікуди не виходив, а форма блимала йому в обличчя щоразу на старті.
+    if (sessionPhase === 'checking') return <PhantomLoader />;
     return (
       <React.Suspense fallback={<PhantomLoader />}>
-        <LoginScreen />
+        {sessionPhase === 'unreachable' ? <CoreDownWall /> : <LoginScreen />}
       </React.Suspense>
     );
   }
@@ -120,23 +127,61 @@ function MainRouter() {
   );
 }
 
+/**
+ * Заставка на час, поки ядро не озвалось. Тут крутився сірий обідок і напис
+ * «PHANTOM OS» — і висів так само і півсекунди, і півхвилини, ніяк не
+ * зізнаючись, що щось не так. Тепер підпис іде за прожитим часом: це не
+ * вигаданий поступ, а чесна відповідь на питання «скільки вже?».
+ */
 function PhantomLoader() {
+  const [elapsed, setElapsed] = React.useState(0);
+  React.useEffect(() => {
+    const t = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const line =
+    elapsed < 3 ? 'Прокидаюсь…' : elapsed < 8 ? 'Піднімаю ядро…' : 'Ядро відповідає поволі';
+
   return (
     <div
       className="w-full h-full flex items-center justify-center"
       style={{ background: 'var(--surface-base)' }}
     >
-      <div className="flex flex-col items-center gap-3">
+      <div className="flex flex-col items-center">
         <div
-          className="w-8 h-8 border-2 rounded-full animate-spin"
-          style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }}
+          style={{
+            width: 52,
+            height: 52,
+            borderRadius: 999,
+            background:
+              'radial-gradient(circle at 34% 30%, #fff8dc 0%, #fde9b8 22%, #f4af25 62%, #e08a1a 94%)',
+            boxShadow: '0 0 34px rgba(244,175,37,0.42)',
+            animation: 'orb-breathe 2.6s ease-in-out infinite',
+          }}
         />
         <span
-          className="tracking-widest font-mono"
-          style={{ color: 'var(--ink-muted)', fontSize: 'var(--fs-xs)' }}
+          className="micro-label"
+          style={{ marginTop: 20, color: 'var(--primary-deep)', letterSpacing: '0.28em' }}
         >
-          PHANTOM OS
+          PHANTOM
         </span>
+        <span style={{ marginTop: 10, fontSize: 12, color: 'var(--ink-muted)' }}>{line}</span>
+        {elapsed >= 8 && (
+          <span
+            style={{
+              marginTop: 6,
+              fontSize: 11,
+              lineHeight: 1.5,
+              color: 'var(--ink-muted)',
+              maxWidth: 300,
+              textAlign: 'center',
+            }}
+          >
+            Це буває на першому старті після ввімкнення. Якщо триватиме довго —
+            служба на пристрої не піднялась.
+          </span>
+        )}
       </div>
     </div>
   );

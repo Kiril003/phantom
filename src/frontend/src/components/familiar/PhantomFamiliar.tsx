@@ -27,7 +27,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { useFamiliarStore } from '../../stores/familiarStore';
 import type { FamiliarManifestation } from '@shared/types';
-import { Familiar3D } from './Familiar3D';
+import { FamiliarSVG } from './FamiliarSVG';
 
 // Phase-5 R2 3D Character integration.
 // 130×182 px to fit the 3D Canvas aspect ratio and character rig.
@@ -261,6 +261,15 @@ export function PhantomFamiliar() {
   const [tick, setTick] = useState(0);
   const lastIdRef = useRef<string | null>(null);
 
+  // Годинник життя з'яви раніше запускала 3D-модель зі свого onLoaded.
+  // Силует малюється одразу, тож заводимо його на появі — інакше привид
+  // лишався на екрані назавжди.
+  const manifestationId = manifestation?.id ?? null;
+  useEffect(() => {
+    if (!manifestationId) return;
+    useFamiliarStore.getState().startTimer(manifestationId);
+  }, [manifestationId]);
+
   // Recompute target rect on resize so a `pointing` manifestation
   // follows DOM-layout shifts (orientation change, panel toggle).
   useEffect(() => {
@@ -382,13 +391,27 @@ export function PhantomFamiliar() {
               willChange: 'transform, opacity',
             }}
           >
-            <Familiar3D
-              pose={manifestation.pose}
-              emotion={manifestation.emotion}
-              pointAngle={anchor.pointAngle}
-              pointLength={anchor.pointLength}
-              onLoaded={() => useFamiliarStore.getState().startTimer(manifestation.id)}
-            />
+            {/* Тут стояла 3D-модель темного чоловіка в плащі: непрозора,
+                обрізана прямим краєм полотна і поставлена просто на картку.
+                На 1024×600 вільного місця немає, тож привид завжди на чомусь
+                стоїть — і мусить бути прозорим. Скляний силует із тієї ж
+                бурштинової палітри, що й орб: одна присутність, не дві. */}
+            <div
+              style={{
+                width: '100%',
+                height: '100%',
+                maskImage: 'linear-gradient(to bottom, #000 66%, transparent 98%)',
+                WebkitMaskImage: 'linear-gradient(to bottom, #000 66%, transparent 98%)',
+              }}
+            >
+              <FamiliarSVG
+                pose={manifestation.pose}
+                emotion={manifestation.emotion}
+                pointAngle={anchor.pointAngle}
+                pointLength={anchor.pointLength}
+                reduceMotion={reduceMotion}
+              />
+            </div>
             {manifestation.message && (
               <div
                 style={{

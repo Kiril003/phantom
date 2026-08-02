@@ -46,7 +46,7 @@ export default function PinPad({
   return (
     <div className="flex flex-col items-center gap-6 select-none">
       {/* Glow-pulse dots */}
-      <div className="flex gap-3" role="status" aria-label={`PIN ${pin.length} of ${maxLength}`}>
+      <div className="flex gap-3" role="status" aria-label={`Набрано ${pin.length} з ${maxLength}`}>
         {Array.from({ length: maxLength }).map((_, i) => {
           const filled = i < pin.length;
           const active = i === pin.length;
@@ -106,7 +106,7 @@ export default function PinPad({
           onClick={() => handleKey('CLEAR')}
           disabled={disabled}
           variant="ghost"
-          ariaLabel="Clear"
+          ariaLabel="Стерти все"
         >
           <RotateCcw size={18} strokeWidth={1.75} />
         </PadButton>
@@ -119,7 +119,7 @@ export default function PinPad({
           onClick={() => handleKey('DEL')}
           disabled={disabled}
           variant="ghost"
-          ariaLabel="Backspace"
+          ariaLabel="Стерти цифру"
         >
           <Delete size={18} strokeWidth={1.75} />
         </PadButton>

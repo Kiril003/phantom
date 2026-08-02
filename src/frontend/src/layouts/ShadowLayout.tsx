@@ -92,6 +92,10 @@ export default function ShadowLayout() {
   const hearing = useVoiceAlwaysOnStatusStore((s) => s.status);
   const hearingLine = HEARING_UA[hearing] ?? 'слух вимкнено';
 
+  // Жодного показника — окремий стан, а не «усі значення дорівнюють прочерку».
+  const bodySilent = bpm == null && stress == null && breathingState == null;
+  const envSilent = tempC == null && pressure == null && aqi == null;
+
   // Local clock for the small relative-time line beneath the activity log.
   const [, force] = useState(0);
   const [panelCollapsed, setPanelCollapsed] = useState(false);
@@ -352,86 +356,118 @@ export default function ShadowLayout() {
           />
         </div>
 
-        <svg
-          viewBox="0 0 200 50"
-          aria-hidden
-          preserveAspectRatio="none"
-          style={{ width: '100%', height: 48, marginTop: 8 }}
-        >
-          <path
-            d={breathPath(bpm, ekgAmplitude)}
-            stroke={bpm != null ? 'var(--coral)' : 'var(--line-subtle)'}
-            strokeWidth="1.6"
-            fill="none"
-            strokeLinejoin="round"
-            strokeLinecap="round"
-            vectorEffect="non-scaling-stroke"
-          />
-        </svg>
-
-        <div className="flex items-baseline" style={{ gap: 6 }}>
-          <span
-            className="tabular"
-            style={{ fontSize: 28, fontWeight: 600, color: 'var(--ink-primary)' }}
-          >
-            {bpm ?? '—'}
-          </span>
-          <span style={{ fontSize: 11, color: 'var(--ink-muted)' }}>
-            вд/хв · {BREATH_UA[breathingState ?? ''] ?? 'сенсор мовчить'}
-          </span>
-        </div>
-
-        <div
-          aria-hidden
-          style={{ marginTop: 10, height: 1, background: 'var(--line-subtle)' }}
-        />
-
-        <div
-          style={{
-            marginTop: 10,
-            display: 'grid',
-            gridTemplateColumns: '1fr 1fr',
-            gap: 6,
-          }}
-        >
-          <div className="sub-glass" style={{ padding: '6px 8px' }}>
-            <div className="micro-label" style={{ fontSize: 8 }}>
-              ЦИКЛ
-            </div>
-            <div className="tabular" style={{ fontSize: 14, fontWeight: 600 }}>
-              {bpm != null && bpm > 0 ? (60 / bpm).toFixed(1) : '—'}
-              <span
-                style={{
-                  fontSize: 10,
-                  color: 'var(--ink-muted)',
-                  fontWeight: 400,
-                  marginLeft: 2,
-                }}
-              >
-                с
-              </span>
-            </div>
-          </div>
-          <div className="sub-glass" style={{ padding: '6px 8px' }}>
-            <div className="micro-label" style={{ fontSize: 8 }}>
-              СТРЕС
-            </div>
-            <div className="flex items-center" style={{ gap: 4, marginTop: 2 }}>
-              <span
-                aria-hidden
-                style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: 999,
-                  background: stressView.dot,
-                }}
+        {bodySilent ? (
+          // Ряд прочерків — не порожній стан, а зіпсований. Коли з тіла не
+          // прийшло нічого, панель має сказати, чого саме бракує і що буде,
+          // коли воно з'явиться, а не малювати «— с» і «● —».
+          <>
+            <svg
+              viewBox="0 0 200 24"
+              aria-hidden
+              preserveAspectRatio="none"
+              style={{ width: '100%', height: 22, marginTop: 10, opacity: 0.55 }}
+            >
+              <path
+                d="M0 12 L200 12"
+                stroke="var(--line-subtle)"
+                strokeWidth="1.4"
+                fill="none"
+                strokeDasharray="3 5"
+                vectorEffect="non-scaling-stroke"
               />
-              <span style={{ fontSize: 12, fontWeight: 600 }}>
-                {stressView.label}
+            </svg>
+            <div style={{ marginTop: 10, fontSize: 12, fontWeight: 600, color: 'var(--ink-secondary)' }}>
+              Тіло не на зв'язку
+            </div>
+            <div style={{ marginTop: 4, fontSize: 10.5, lineHeight: 1.5, color: 'var(--ink-muted)' }}>
+              Дихання і напруження читає плата з радаром. Щойно вона озветься —
+              тут піде хвиля.
+            </div>
+          </>
+        ) : (
+          <>
+            <svg
+              viewBox="0 0 200 50"
+              aria-hidden
+              preserveAspectRatio="none"
+              style={{ width: '100%', height: 48, marginTop: 8 }}
+            >
+              <path
+                d={breathPath(bpm, ekgAmplitude)}
+                stroke={bpm != null ? 'var(--coral)' : 'var(--line-subtle)'}
+                strokeWidth="1.6"
+                fill="none"
+                strokeLinejoin="round"
+                strokeLinecap="round"
+                vectorEffect="non-scaling-stroke"
+              />
+            </svg>
+
+            <div className="flex items-baseline" style={{ gap: 6 }}>
+              <span
+                className="tabular"
+                style={{ fontSize: 28, fontWeight: 600, color: 'var(--ink-primary)' }}
+              >
+                {bpm ?? '—'}
+              </span>
+              <span style={{ fontSize: 11, color: 'var(--ink-muted)' }}>
+                вд/хв · {BREATH_UA[breathingState ?? ''] ?? 'сенсор мовчить'}
               </span>
             </div>
-          </div>
-        </div>
+
+            <div
+              aria-hidden
+              style={{ marginTop: 10, height: 1, background: 'var(--line-subtle)' }}
+            />
+
+            <div
+              style={{
+                marginTop: 10,
+                display: 'grid',
+                gridTemplateColumns: '1fr 1fr',
+                gap: 6,
+              }}
+            >
+              <div className="sub-glass" style={{ padding: '6px 8px' }}>
+                <div className="micro-label" style={{ fontSize: 8 }}>
+                  ЦИКЛ
+                </div>
+                <div className="tabular" style={{ fontSize: 14, fontWeight: 600 }}>
+                  {bpm != null && bpm > 0 ? (60 / bpm).toFixed(1) : '—'}
+                  <span
+                    style={{
+                      fontSize: 10,
+                      color: 'var(--ink-muted)',
+                      fontWeight: 400,
+                      marginLeft: 2,
+                    }}
+                  >
+                    с
+                  </span>
+                </div>
+              </div>
+              <div className="sub-glass" style={{ padding: '6px 8px' }}>
+                <div className="micro-label" style={{ fontSize: 8 }}>
+                  СТРЕС
+                </div>
+                <div className="flex items-center" style={{ gap: 4, marginTop: 2 }}>
+                  <span
+                    aria-hidden
+                    style={{
+                      width: 6,
+                      height: 6,
+                      borderRadius: 999,
+                      background: stressView.dot,
+                    }}
+                  />
+                  <span style={{ fontSize: 12, fontWeight: 600 }}>
+                    {stressView.label}
+                  </span>
+                </div>
+              </div>
+            </div>
+          </>
+        )}
       </motion.div>
 
       {/* === LEFT — TODAY · 3 MOMENTS ========================================== */}
@@ -557,42 +593,56 @@ export default function ShadowLayout() {
             </div>
             <Sun size={14} strokeWidth={1.75} style={{ color: 'var(--primary-deep)' }} />
           </div>
-          <div className="flex items-baseline" style={{ gap: 6, marginTop: 6 }}>
-            <span className="tabular" style={{ fontSize: 32, fontWeight: 300 }}>
-              {tempC != null ? `${tempC.toFixed(0)}°` : '—'}
-            </span>
-            <span style={{ fontSize: 11, color: 'var(--ink-muted)' }}>
-              {tempC != null ? 'датчик у кімнаті' : 'датчик мовчить'}
-            </span>
-          </div>
-          <div
-            style={{
-              display: 'grid',
-              gridTemplateColumns: '1fr 1fr',
-              gap: 6,
-              marginTop: 10,
-            }}
-          >
-            <div className="sub-glass" style={{ padding: '6px 8px' }}>
-              <div className="micro-label" style={{ fontSize: 8 }}>ТИСК</div>
-              <div className="tabular" style={{ fontSize: 13, fontWeight: 600 }}>
-                {pressure != null ? pressure.toFixed(0) : '—'}
-                <span style={{ fontSize: 9, color: 'var(--ink-muted)', fontWeight: 400, marginLeft: 2 }}>
-                  гПа
+          {envSilent ? (
+            <div style={{ marginTop: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 600, color: 'var(--ink-secondary)' }}>
+                Метеосенсор мовчить
+              </div>
+              <div style={{ marginTop: 4, fontSize: 10.5, lineHeight: 1.5, color: 'var(--ink-muted)' }}>
+                Ні температури, ні тиску, ні якості повітря. Погоду з інтернету
+                PHANTOM сюди не підставляє — це показники твоєї кімнати.
+              </div>
+            </div>
+          ) : (
+            <>
+              <div className="flex items-baseline" style={{ gap: 6, marginTop: 6 }}>
+                <span className="tabular" style={{ fontSize: 32, fontWeight: 300 }}>
+                  {tempC != null ? `${tempC.toFixed(0)}°` : '—'}
+                </span>
+                <span style={{ fontSize: 11, color: 'var(--ink-muted)' }}>
+                  {tempC != null ? 'датчик у кімнаті' : 'датчик мовчить'}
                 </span>
               </div>
-            </div>
-            <div className="sub-glass" style={{ padding: '6px 8px' }}>
-              <div className="micro-label" style={{ fontSize: 8 }}>ПОВІТРЯ</div>
-              <div className="flex items-center" style={{ gap: 4, marginTop: 2 }}>
-                <span
-                  aria-hidden
-                  style={{ width: 6, height: 6, borderRadius: 999, background: aqiView.dot }}
-                />
-                <span style={{ fontSize: 12, fontWeight: 600 }}>{aqiView.label}</span>
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: '1fr 1fr',
+                  gap: 6,
+                  marginTop: 10,
+                }}
+              >
+                <div className="sub-glass" style={{ padding: '6px 8px' }}>
+                  <div className="micro-label" style={{ fontSize: 8 }}>ТИСК</div>
+                  <div className="tabular" style={{ fontSize: 13, fontWeight: 600 }}>
+                    {pressure != null ? pressure.toFixed(0) : '—'}
+                    <span style={{ fontSize: 9, color: 'var(--ink-muted)', fontWeight: 400, marginLeft: 2 }}>
+                      гПа
+                    </span>
+                  </div>
+                </div>
+                <div className="sub-glass" style={{ padding: '6px 8px' }}>
+                  <div className="micro-label" style={{ fontSize: 8 }}>ПОВІТРЯ</div>
+                  <div className="flex items-center" style={{ gap: 4, marginTop: 2 }}>
+                    <span
+                      aria-hidden
+                      style={{ width: 6, height: 6, borderRadius: 999, background: aqiView.dot }}
+                    />
+                    <span style={{ fontSize: 12, fontWeight: 600 }}>{aqiView.label}</span>
+                  </div>
+                </div>
               </div>
-            </div>
-          </div>
+            </>
+          )}
         </div>
 
         {/* NEXT — pending event progress */}

@@ -21,6 +21,11 @@ const arg = (f, d) => {
 };
 const OUT = arg('--out', '/tmp/phantom-qa');
 const [VW, VH] = arg('--view', '1440x900').split('x').map(Number);
+// Щасливий шлях — не весь застосунок. --degrade ламає бекенд навмисне:
+//   offline — мережі немає взагалі
+//   slow    — відповідь іде 12 с (ловить стани завантаження)
+//   empty   — відповідь є, але порожня (ловить стани «нічого немає»)
+const DEGRADE = arg('--degrade', 'none');
 const CHROME = '/home/kyrylo/.cache/ms-playwright/chromium-1228/chrome-linux64/chrome';
 
 const ROUTES = [
@@ -74,12 +79,59 @@ if (pin && (await page.getByRole('button', { name: /Увійти/i }).count())) 
   await page.waitForTimeout(5000);
 }
 
-console.log(`PHANTOM OS · ${VW}×${VH} · ${BASE}\n`);
+// Ламаємо бекенд ПІСЛЯ входу: інакше застосунок не пустить далі логіна і
+// перевіряти буде нічого. Токен лежить у localStorage і переживає перезавантаження.
+if (DEGRADE !== 'none') {
+  await page.routeWebSocket('**/ws*', (ws) => ws.close());
+  await page.route('**/api/**', async (route) => {
+    if (DEGRADE === 'offline') return route.abort('internetdisconnected');
+    if (DEGRADE === 'slow') {
+      await new Promise((r) => setTimeout(r, 12000));
+      return route.continue();
+    }
+    // empty — форму відповіді беремо справжню, а вміст вичищаємо: списки
+    // порожні, числа зникають. Вигадувати форму наосліп не можна.
+    const res = await route.fetch().catch(() => null);
+    if (!res) return route.abort();
+    const body = await res.text().catch(() => '');
+    let out = body;
+    try {
+      out = JSON.stringify(hollow(JSON.parse(body)));
+    } catch {
+      /* не JSON — лишаємо як є */
+    }
+    return route.fulfill({ response: res, body: out });
+  });
+}
+
+function hollow(v) {
+  if (Array.isArray(v)) return [];
+  if (v && typeof v === 'object') {
+    const o = {};
+    for (const [k, val] of Object.entries(v)) o[k] = hollow(val);
+    return o;
+  }
+  if (typeof v === 'number') return null;
+  if (typeof v === 'string' && v.length > 24) return '';
+  return v;
+}
+
+const MODE_UA = { none: 'щасливий шлях', offline: 'без мережі', slow: 'повільно', empty: 'порожньо' };
+console.log(`PHANTOM OS · ${VW}×${VH} · ${BASE} · ${MODE_UA[DEGRADE] ?? DEGRADE}\n`);
 let bad = 0;
 
 for (const [path, name] of ROUTES) {
   bag.length = 0;
-  await page.goto(BASE + path, { waitUntil: 'networkidle', timeout: 60000 });
+  // networkidle ніколи не настане, коли запити навмисне висять або падають.
+  await page.goto(BASE + path, {
+    waitUntil: DEGRADE === 'none' ? 'networkidle' : 'domcontentloaded',
+    timeout: 60000,
+  });
+  // Повільний режим міряє саме проміжок очікування: якщо дочекатися даних,
+  // побачимо готовий екран і не дізнаємось, що людина бачила ці секунди.
+  if (DEGRADE === 'slow') {
+    await page.waitForTimeout(3500);
+  } else {
   // Чекаємо, поки зникне заставка. Фіксована пауза давала фальшиві
   // «ПОРОЖНІЙ» на важких чанках (мапа), які vite щойно перезібрав.
   await page
@@ -92,6 +144,7 @@ for (const [path, name] of ROUTES) {
     )
     .catch(() => {});
   await page.waitForTimeout(2000);
+  }
 
   const m = await page.evaluate(() => {
     const doc = document.documentElement;
@@ -233,10 +286,13 @@ for (const [path, name] of ROUTES) {
   if (m.faint) { flags.push(`НЕ ВИДНО ТЕКСТ: ${m.faint}`); bad += m.faint; }
   if (m.latin.length) flags.push(`англ: ${m.latin.join(' ')}`);
   if (m.attrLatin.length) flags.push(`англ у підказках: ${m.attrLatin.join(' ')}`);
-  if (bag.length) { flags.push(`ПОМИЛОК ${bag.length}`); bad += bag.length; }
+  // У зламаному режимі мережеві збої — це і є умова досліду, а не знахідка.
+  // Лишається те, що бачить людина: падіння коду й порожній екран.
+  const seen = DEGRADE === 'none' ? bag : bag.filter((e) => e.startsWith('JS '));
+  if (seen.length) { flags.push(`ПОМИЛОК ${seen.length}`); bad += seen.length; }
 
   console.log(`${path.padEnd(12)} ${String(m.chars).padStart(5)}зн  ${flags.join(' · ') || 'чисто'}`);
-  bag.slice(0, 4).forEach((e) => console.log(`             ${e}`));
+  seen.slice(0, 4).forEach((e) => console.log(`             ${e}`));
 }
 
 console.log(`\nзнімки: ${OUT}`);

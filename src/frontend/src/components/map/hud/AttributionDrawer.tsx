@@ -45,11 +45,13 @@ export function AttributionDrawer({
     return out;
   }, [rawLines]);
 
+  // Білий на 30% висів голим текстом просто над мапою: на світлому стилі
+  // його не було видно взагалі. Плашка та сама, що й у повного варіанта.
   if (lines.length === 0 && !error) {
     return (
       <div
         data-testid="attribution-drawer-empty"
-        className={`pointer-events-none select-none text-[10px] text-white/30 ${className}`}
+        className={`pointer-events-none select-none rounded-md bg-black/55 backdrop-blur-md px-2.5 py-1 text-[10px] text-white/70 border border-white/5 ${className}`}
       >
         джерел немає
       </div>

@@ -227,10 +227,6 @@ export function TacticalMap({
     };
     const onClick = () => select(null);
 
-    // MapLibre малює власну кнопку атрибуції з англійським aria-label
-    // («Toggle attribution») — своєї локалізації бібліотека не має, тож
-    // підписуємо після монтування. Сам текст ліцензії лишається як є:
-    // його вимагає OSM.
     // Кнопка атрибуції MapLibre — англійська («Toggle attribution»), своєї
     // локалізації бібліотека не має. Одного присвоєння замало: контрол
     // перемальовує себе при кожній зміні джерел і затирає атрибути, тож
@@ -243,8 +239,13 @@ export function TacticalMap({
       toggle.setAttribute('title', ATTRIB_UA);
     };
     map.on('idle', nameAttribution);
+    map.on('styledata', nameAttribution);
     const attribWatch = new MutationObserver(nameAttribution);
     attribWatch.observe(container, { childList: true, subtree: true, attributes: true });
+    // Кнопку створює конструктор мапи — тобто вона вже стоїть на місці, і
+    // спостерігач її не побачить. Коли стиль не вантажиться, `idle` теж не
+    // настає, і англійський підпис лишався на екрані саме в цьому стані.
+    nameAttribution();
     map.on('load', onLoad);
     map.on('moveend', onMove);
     map.on('rotate' as any, onRotate);
@@ -258,6 +259,7 @@ export function TacticalMap({
       map.off('error' as any, onError);
       map.off('click', onClick);
       map.off('idle', nameAttribution);
+      map.off('styledata', nameAttribution);
       attribWatch.disconnect();
       map.remove();
       mapRef.current = null;
@@ -490,19 +492,21 @@ export function TacticalMap({
       {styleLoadFailed && (
         <div data-testid="map-style-failed" className="absolute inset-0 z-40 flex items-center justify-center bg-black/60 backdrop-blur-[2px]">
           <div className="glass-elevated max-w-[360px] p-6 flex flex-col gap-4 rounded-2xl text-center shadow-2xl">
-            <div className="text-[10px] font-bold uppercase tracking-widest text-rose-500">
-              {!webglSupported ? 'WebGL не підтримується' : 'Помилка завантаження'}
+            <div className="text-sm font-semibold text-[color:var(--ink-primary)]">
+              {!webglSupported ? 'Мапу нема на чому малювати' : 'Мапа не завантажилась'}
             </div>
-            {!webglSupported && (
-              <div className="text-xs text-ink-secondary">
-                Ваша система або браузер не підтримують апаратне прискорення WebGL, необхідне для роботи тактичної карти.
-              </div>
-            )}
+            {/* Раніше тут світився самий заголовок «Помилка завантаження» —
+                людина бачила збій і не знала ні причини, ні що робити далі. */}
+            <div className="text-xs leading-relaxed text-[color:var(--ink-secondary)]">
+              {!webglSupported
+                ? 'Система не дає апаратного прискорення WebGL, без якого мапа не малюється. Решта PHANTOM працює як завжди.'
+                : 'Не вдалося дістати стиль карти. Якщо мережі немає — це очікувано: перемкни вигляд на той, що лежить у пам’яті пристрою.'}
+            </div>
             <div className="flex gap-2 justify-center mt-2">
               {webglSupported && (
-                <button onClick={handleStyleRetry} aria-label="Спробувати ще раз" className="min-h-[44px] px-6 rounded-full bg-amber-500 text-[color:var(--primary-shadow)] text-xs font-bold uppercase">Повторити</button>
+                <button onClick={handleStyleRetry} aria-label="Спробувати ще раз" className="min-h-[44px] px-6 rounded-full bg-amber-500 text-[color:var(--primary-shadow)] text-xs font-bold">Спробувати ще</button>
               )}
-              <button onClick={cycleMapStyle} aria-label="Змінити вигляд мапи" className="min-h-[44px] px-4 rounded-full border border-white/10 text-ink-secondary text-xs font-bold uppercase">Стиль</button>
+              <button onClick={cycleMapStyle} aria-label="Змінити вигляд мапи" className="min-h-[44px] px-4 rounded-full border border-white/10 text-[color:var(--ink-secondary)] text-xs font-bold">Інший вигляд</button>
             </div>
           </div>
         </div>

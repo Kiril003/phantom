@@ -1,8 +1,24 @@
 import { create } from 'zustand';
 import type { User } from '@shared/types';
-import { authApi } from '../services/api';
+import { ApiError, authApi } from '../services/api';
 import { bootstrapSettings } from '../services/settingsBootstrap';
 import { useSystemStore } from './systemStore';
+
+/**
+ * Стан сесії на старті. Раніше його не було: поки перевірка токена летіла,
+ * `authenticated` стояв false, і застосунок встигав блимнути екраном входу
+ * власникові, який нікуди не виходив.
+ *
+ * `unreachable` — окремо від `out` навмисне. Ядро недоступне ≠ сесія
+ * недійсна: токен цілий, просто нема кому його підтвердити. Питати PIN у
+ * такій ситуації безглуздо — перевірити його однаково нічим.
+ */
+export type SessionPhase = 'checking' | 'in' | 'out' | 'unreachable';
+
+/** Відмова ядра чи мовчання дроту. 401/403 — ядро сказало «ні». */
+function coreRefused(err: unknown): boolean {
+  return err instanceof ApiError && (err.status === 401 || err.status === 403);
+}
 
 interface AuthStoreState {
   user: User | null;
@@ -10,6 +26,7 @@ interface AuthStoreState {
   expiresAt: string | null;
   loginAttempts: number;
   lockedUntil: number | null;
+  sessionPhase: SessionPhase;
 
   // Setters
   setUser: (user: User, token: string, expiresAt: string) => void;
@@ -31,11 +48,12 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
   expiresAt: localStorage.getItem('phantom_token_expires'),
   loginAttempts: 0,
   lockedUntil: null,
+  sessionPhase: 'checking',
 
   setUser: (user, token, expiresAt) => {
     localStorage.setItem('phantom_token', token);
     localStorage.setItem('phantom_token_expires', expiresAt);
-    set({ user, token, expiresAt, loginAttempts: 0, lockedUntil: null });
+    set({ user, token, expiresAt, loginAttempts: 0, lockedUntil: null, sessionPhase: 'in' });
     // Audit D-H6 — bootstrap is gated on a token, so it has to retrigger
     // here once auth succeeds. settingsBootstrap dedupes a rapid-fire
     // second call, so this is safe even if providers also triggered it.
@@ -45,7 +63,7 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
   clearAuth: () => {
     localStorage.removeItem('phantom_token');
     localStorage.removeItem('phantom_token_expires');
-    set({ user: null, token: null, expiresAt: null });
+    set({ user: null, token: null, expiresAt: null, sessionPhase: 'out' });
   },
 
   incrementAttempts: () =>
@@ -83,7 +101,10 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
         // тиша: без ядра просто покажемо екран входу
       }
     }
-    if (!token) return false;
+    if (!token) {
+      set({ sessionPhase: 'out' });
+      return false;
+    }
 
     // Check expiry client-side first
     if (expiresAt) {
@@ -95,7 +116,11 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
           localStorage.setItem('phantom_token', res.token);
           localStorage.setItem('phantom_token_expires', res.expires_at);
           set({ token: res.token, expiresAt: res.expires_at });
-        } catch {
+        } catch (err) {
+          if (!coreRefused(err)) {
+            set({ sessionPhase: 'unreachable' });
+            return false;
+          }
           get().clearAuth();
           return false;
         }
@@ -105,14 +130,21 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
     // Validate by fetching current user
     try {
       const user = await authApi.me();
-      set({ user });
+      set({ user, sessionPhase: 'in' });
       useSystemStore.getState().setAuthenticated(true);
       // Audit D-H6 — first chance to load /settings now that the token
       // has been validated. The pre-auth mount call no-ops, so if we
       // skip this nothing else will fire it on the auto-login path.
       void bootstrapSettings().catch(() => undefined);
       return true;
-    } catch {
+    } catch (err) {
+      // Обрив дроту — не привід стирати ключ. Раніше будь-яка мережева
+      // помилка тут викидала власника на екран входу, де PIN однаково
+      // нема кому перевірити: одна мить без ядра = замкнений застосунок.
+      if (!coreRefused(err)) {
+        set({ sessionPhase: 'unreachable' });
+        return false;
+      }
       get().clearAuth();
       return false;
     }

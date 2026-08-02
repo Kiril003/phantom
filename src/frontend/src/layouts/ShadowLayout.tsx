@@ -207,20 +207,23 @@ export default function ShadowLayout() {
         }}
       >
         <defs>
-          <radialGradient id="shadow-aurora-core" cx="50%" cy="50%">
+          {/* fx/fy зсувають лише блік. Зсув cx/cy тягнув за собою межу
+              градієнта, і сфера обрізалася збоку — виходило яйце. */}
+          <radialGradient id="shadow-aurora-core" cx="50%" cy="50%" r="50%" fx="33%" fy="30%">
             <stop offset="0%" stopColor="#fff8dc" stopOpacity="1" />
             <stop offset="20%" stopColor="#fde9b8" stopOpacity="0.95" />
-            <stop offset="55%" stopColor="#f4af25" stopOpacity="0.85" />
-            <stop offset="85%" stopColor="#fb923c" stopOpacity="0.4" />
-            <stop offset="100%" stopColor="#fb923c" stopOpacity="0" />
+            <stop offset="58%" stopColor="#f4af25" stopOpacity="0.95" />
+            <stop offset="92%" stopColor="#e08a1a" stopOpacity="0.92" />
+            <stop offset="99%" stopColor="#b07a10" stopOpacity="0.85" />
+            <stop offset="100%" stopColor="#b07a10" stopOpacity="0" />
           </radialGradient>
           <filter id="shadow-aurora-blur">
-            <feGaussianBlur stdDeviation="2" />
+            <feGaussianBlur stdDeviation="6" />
           </filter>
         </defs>
 
         {/* Halo rings — three concentric breaths at staggered durations. */}
-        {[280, 220, 170].map((r, i) => (
+        {[250, 200, 156].map((r, i) => (
           <circle
             key={r}
             cx="512"
@@ -237,7 +240,7 @@ export default function ShadowLayout() {
         {/* Particle constellation — 28 dots orbit the orb on staggered pulses. */}
         {Array.from({ length: 28 }).map((_, i) => {
           const angle = (i / 28) * Math.PI * 2;
-          const r = 130 + (i % 3) * 30;
+          const r = 150 + (i % 3) * 26;
           const x = 512 + Math.cos(angle) * r;
           const y = 240 + Math.sin(angle) * r * 0.6;
           return (
@@ -258,19 +261,11 @@ export default function ShadowLayout() {
         <circle
           cx="512"
           cy="240"
-          r="160"
+          r="104"
           fill="url(#shadow-aurora-core)"
           style={{ animation: 'orb-breathe 6s ease-in-out infinite' }}
         />
-        <circle
-          cx="500"
-          cy="225"
-          r="48"
-          fill="#fff"
-          opacity="0.85"
-          filter="url(#shadow-aurora-blur)"
-        />
-        <circle cx="512" cy="240" r="36" fill="url(#shadow-aurora-core)" />
+
       </svg>
 
       {/* Присутність — підпис над орбом */}
@@ -302,7 +297,7 @@ export default function ShadowLayout() {
           не тримався і текст наїжджав на праву панель. */}
       <motion.div
         className="absolute text-center"
-        style={{ top: 338, left: 244, right: 264, zIndex: 4 }}
+        style={{ top: 418, left: 244, right: 264, zIndex: 4 }}
         initial={{ opacity: 0, y: 6 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.4, duration: 0.7 }}

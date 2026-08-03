@@ -100,28 +100,46 @@ export default function SentinelLayout() {
 
   return (
     <motion.div
-      className="w-full h-full min-w-[1024px] min-h-[600px] sunrise-frame coral-tint relative overflow-hidden"
-      style={{ background: 'var(--surface-coral)' }}
+      // Панель уже казала «ЧИСТО», а екран при цьому лишався залитим
+      // тривожним червоним — колір кричав небезпеку, поки текст казав, що
+      // все спокійно. Тепер тон іде за станом, а не стоїть намертво.
+      className={`w-full h-full min-w-[1024px] min-h-full sunrise-frame relative overflow-hidden ${
+        otherDetected ? 'coral-tint' : ''
+      }`}
+      style={{ background: otherDetected ? 'var(--surface-coral)' : 'var(--surface-base)' }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.3, ease: EASE_PHANTOM as unknown as number[] }}
     >
-      {/* Coral flash overlay — 1.2s pulse like the design DNA. Pointer
-          events disabled so radar/alert-panel stay tappable. */}
-      <div
-        aria-hidden
-        className="absolute inset-0 pointer-events-none animate-flash-coral"
-        style={{
-          background: 'rgba(239,68,68,0.12)',
-          zIndex: 'var(--z-overlay)',
-        }}
-      />
+      {/* Пульсуючий червоний спалах доречний лише коли справді хтось поруч.
+          Він блимав завжди — і привчав не вірити тривозі. */}
+      {otherDetected && (
+        <div
+          aria-hidden
+          className="absolute inset-0 pointer-events-none animate-flash-coral"
+          style={{
+            background: 'rgba(239,68,68,0.12)',
+            zIndex: 'var(--z-overlay)',
+          }}
+        />
+      )}
 
       {/* === LEFT — RADAR === */}
       <div
         className="absolute flex items-center justify-center"
-        style={{ left: 0, top: 68, bottom: 76, width: 640, zIndex: 3 }}
+        style={{
+          left: 0,
+          top: 68,
+          bottom: 76,
+          width: 640,
+          zIndex: 3,
+          // Каркас радара намальовано тривожним червоним у 49 місцях. Поки
+          // нікого немає, знебарвлюємо його цілком — це чесний вигляд стану
+          // спокою і не потребує правити кожен літерал окремо.
+          filter: otherDetected ? undefined : 'saturate(0.28) opacity(0.82)',
+          transition: 'filter 600ms ease',
+        }}
       >
         <div className="relative" style={{ width: 480, height: 480 }}>
           <svg
@@ -157,12 +175,15 @@ export default function SentinelLayout() {
                   strokeWidth="1"
                   strokeDasharray={i === 1 ? '4 6' : ''}
                 />
+                {/* Підписи кілець стояли по центру, тобто просто НА вертикальній
+                    осі, а найвищий ще й точно під міткою «0°». Зсуваємо їх
+                    ліворуч від осі й вирівнюємо по правому краю. */}
                 <text
-                  x="240"
-                  y={240 - r - 4}
+                  x="228"
+                  y={240 - r - 5}
                   fontSize="9"
                   fill="rgba(185,32,31,0.7)"
-                  textAnchor="middle"
+                  textAnchor="end"
                   fontWeight="600"
                   letterSpacing="1"
                 >
@@ -337,14 +358,17 @@ export default function SentinelLayout() {
           )}
         </div>
 
-        {/* Location chip — bottom-left of radar column */}
+        {/* Чип місця стояв на bottom:20 — рівно під плавучим доком, який його
+            і накривав. Док сидить на 76, тож піднімаємо чип над ним. */}
         <div
           className="sub-glass absolute inline-flex items-center gap-2"
           style={{
-            bottom: 20,
+            bottom: 96,
             left: 20,
             padding: '8px 12px',
-            border: '1px solid rgba(239,68,68,0.25)',
+            border: otherDetected
+              ? '1px solid rgba(239,68,68,0.25)'
+              : '1px solid rgba(0,0,0,0.08)',
           }}
         >
           <MapPin size={14} style={{ color: '#b9201f' }} />
@@ -414,7 +438,8 @@ export default function SentinelLayout() {
           </div>
         ) : (
           <>
-            {/* Header — pulsing shield */}
+            {/* Щит пульсував тривожним червоним і тоді, коли писав «ЧИСТО».
+                Тон і пульс тепер ідуть за станом: спокій не блимає. */}
         <div className="flex items-start gap-3">
           <motion.div
             className="flex items-center justify-center"
@@ -422,12 +447,14 @@ export default function SentinelLayout() {
               width: 48,
               height: 48,
               borderRadius: 14,
-              background: 'rgba(239,68,68,0.15)',
-              border: '1px solid rgba(239,68,68,0.3)',
-              color: '#b9201f',
+              background: otherDetected ? 'rgba(239,68,68,0.15)' : 'rgba(22,163,74,0.12)',
+              border: otherDetected
+                ? '1px solid rgba(239,68,68,0.3)'
+                : '1px solid rgba(22,163,74,0.28)',
+              color: otherDetected ? '#b9201f' : '#15803d',
             }}
-            animate={{ scale: [1, 1.08, 1] }}
-            transition={{ duration: 1.4, repeat: Infinity, ease: 'easeInOut' }}
+            animate={otherDetected ? { scale: [1, 1.08, 1] } : { scale: 1 }}
+            transition={{ duration: 1.4, repeat: otherDetected ? Infinity : 0, ease: 'easeInOut' }}
           >
             {otherDetected ? <ShieldAlert size={28} strokeWidth={2} /> : <ShieldCheck size={28} strokeWidth={2} />}
           </motion.div>
@@ -437,7 +464,8 @@ export default function SentinelLayout() {
                 fontSize: 11,
                 fontWeight: 800,
                 letterSpacing: '0.22em',
-                color: '#b9201f',
+                // «ЧИСТО», написане кольором тривоги, читається як тривога.
+                color: otherDetected ? '#b9201f' : '#15803d',
               }}
             >
               {alert.title}
@@ -458,6 +486,7 @@ export default function SentinelLayout() {
         <div className="flex-1 min-h-0 overflow-y-auto flex flex-col gap-2 pr-0.5">
         <div className="grid grid-cols-2 gap-2">
           <CoralStatCard
+            alarming={otherDetected}
             label="ВІДСТАНЬ"
             value={otherDistance != null ? otherDistance.toString() : '—'}
             unit="см"
@@ -465,6 +494,7 @@ export default function SentinelLayout() {
 
           />
           <CoralStatCard
+            alarming={otherDetected}
             label="РУХ"
             value={motionEnergy != null ? Math.round(motionEnergy).toString() : '—'}
             trailingIcon={<Activity size={11} />}
@@ -595,6 +625,8 @@ export default function SentinelLayout() {
 
 /* ─── Sub-components ──────────────────────────────────────────────────── */
 
+/** `alarming` — чи справді є кого тривожитись. Картка була рожевою завжди,
+ *  тож два порожні прочерки виглядали як два зафіксовані інциденти. */
 function CoralStatCard({
   label,
   value,
@@ -602,6 +634,7 @@ function CoralStatCard({
   trailingIcon,
   sparkline,
   bars,
+  alarming = true,
 }: {
   label: string;
   value: string;
@@ -609,17 +642,18 @@ function CoralStatCard({
   trailingIcon?: React.ReactNode;
   sparkline?: React.ReactNode;
   bars?: number[];
+  alarming?: boolean;
 }) {
   return (
     <div
       style={{
         padding: '10px 12px',
         borderRadius: 10,
-        background: 'rgba(239,68,68,0.10)',
-        border: '1px solid rgba(239,68,68,0.25)',
+        background: alarming ? 'rgba(239,68,68,0.10)' : 'rgba(0,0,0,0.035)',
+        border: alarming ? '1px solid rgba(239,68,68,0.25)' : '1px solid rgba(0,0,0,0.07)',
       }}
     >
-      <div className="micro-label" style={{ color: '#b9201f' }}>
+      <div className="micro-label" style={{ color: alarming ? '#b9201f' : 'var(--ink-muted)' }}>
         {label}
       </div>
       <div className="flex items-baseline gap-1">

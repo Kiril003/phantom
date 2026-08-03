@@ -18,7 +18,7 @@ export default function GhostLayout() {
 
   return (
     <motion.div
-      className="w-full h-full min-w-[1024px] min-h-[600px] relative"
+      className="w-full h-full min-w-[1024px] min-h-full relative"
       style={{ background: 'var(--surface-void)' }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}

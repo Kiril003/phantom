@@ -27,7 +27,7 @@ export default function DreamLayout() {
 
   return (
     <motion.div
-      className="w-full h-full min-w-[1024px] min-h-[600px] relative overflow-hidden"
+      className="w-full h-full min-w-[1024px] min-h-full relative overflow-hidden"
       style={{ background: 'var(--surface-void)' }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}

@@ -22,26 +22,64 @@ function buildingColor(p: Palette) {
   ]);
 }
 
+/**
+ * Смуги висот для тіні.
+ *
+ * `fill-translate` — величина на шар, не на об'єкт: одним шаром усі тіні
+ * вийдуть однакової довжини, і дев'ятиповерхівка кине таку саму, як кіоск.
+ * Тому шарів три, кожен зі своїм множником довжини. Це не трасування
+ * променів, але висота нарешті читається з тіні.
+ */
+const BANDS: Array<{ key: string; min: number; max: number; reach: number }> = [
+  { key: 'low', min: 0, max: 12, reach: 0.5 },
+  { key: 'mid', min: 12, max: 32, reach: 1 },
+  { key: 'high', min: 32, max: 1e6, reach: 1.9 },
+];
+
 export function buildingLayers(p: Palette, sun: SunPosition): LayerSpecification[] {
   const layers: LayerSpecification[] = [];
-  const shadow = shadowOpacity(sun);
+  const opacity = shadowOpacity(sun);
+  const [dx, dy] = shadowOffset(sun);
 
-  if (shadow > 0) {
-    layers.push({
-      id: 'building-shadow',
-      type: 'fill',
-      source: SRC,
-      'source-layer': LAYER,
-      minzoom: 15,
-      filter: VISIBLE,
-      paint: {
-        'fill-color': p.buildingShadow,
-        'fill-translate': shadowOffset(sun),
-        'fill-translate-anchor': 'map',
-        'fill-opacity': byZoom([[15, 0], [16, shadow]]),
-      },
-    });
+  if (opacity > 0) {
+    for (const band of BANDS) {
+      layers.push({
+        id: `building-shadow-${band.key}`,
+        type: 'fill',
+        source: SRC,
+        'source-layer': LAYER,
+        minzoom: 15,
+        filter: expr(['all', VISIBLE, ['>=', HEIGHT, band.min], ['<', HEIGHT, band.max]]),
+        paint: {
+          'fill-color': p.buildingShadow,
+          'fill-translate': [dx * band.reach, dy * band.reach],
+          'fill-translate-anchor': 'map',
+          'fill-opacity': byZoom([
+            [15, 0],
+            [16, Math.min(0.55, opacity * (0.8 + band.reach * 0.15))],
+          ]),
+        },
+      });
+    }
   }
+
+  // Притінення біля підмурівка. Без нього будинок не стоїть на землі, а
+  // лежить на ній наліпкою — це те, що першим впадає в око поруч із
+  // рушіями, які рахують затінення чесно.
+  layers.push({
+    id: 'building-contact',
+    type: 'line',
+    source: SRC,
+    'source-layer': LAYER,
+    minzoom: 15.2,
+    filter: VISIBLE,
+    paint: {
+      'line-color': p.buildingShadow,
+      'line-width': byZoom([[15.2, 1], [17, 3], [19, 6]]),
+      'line-blur': byZoom([[15.2, 1], [19, 4]]),
+      'line-opacity': byZoom([[15.2, 0], [16, p.dark ? 0.5 : 0.3]]),
+    },
+  });
 
   layers.push({
     id: 'building-flat',

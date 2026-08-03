@@ -375,26 +375,31 @@ export function TacticalMap({
     // порожньою. Тому тільки `style.load` і рух камери, і тільки коли
     // світло справді змінилось.
     let last = '';
-    const applyLight = () => {
+    const applyLight = (force = false) => {
       try {
         const c = map.getCenter();
         const light = sunLight(sunFor({ center: [c.lng, c.lat] }));
         const key = JSON.stringify(light);
-        if (key === last) return;
+        if (!force && key === last) return;
         last = key;
         map.setLight(light);
       } catch {
         // Стиль саме перебудовується — світло приїде наступним тактом.
       }
     };
-    applyLight();
-    map.on('moveend', applyLight);
-    map.on('style.load', applyLight);
+    // Новий стиль приходить БЕЗ світла. Порівняння з попереднім значенням
+    // тоді працює проти нас: воно однакове, ми виходимо, і мапа лишається
+    // без сонця до наступного руху камери.
+    const onStyle = () => applyLight(true);
+    const onMove = () => applyLight();
+    applyLight(true);
+    map.on('moveend', onMove);
+    map.on('style.load', onStyle);
     // Сонце їде далі, поки людина дивиться на мапу.
-    const tick = window.setInterval(applyLight, 5 * 60 * 1000);
+    const tick = window.setInterval(onMove, 5 * 60 * 1000);
     return () => {
-      map.off('moveend', applyLight);
-      map.off('style.load', applyLight);
+      map.off('moveend', onMove);
+      map.off('style.load', onStyle);
       window.clearInterval(tick);
     };
   }, [ready]);

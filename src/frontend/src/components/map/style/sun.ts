@@ -56,10 +56,12 @@ function sunColor(elevation: number): string {
 export function sunLight(sun: SunPosition): LightSpecification {
   const belowHorizon = sun.elevation <= 0;
   const polar = belowHorizon ? 22 : Math.max(6, 90 - sun.elevation);
-  // Контраст найбільший на світанку: довгі тіні, різкі грані.
+  // Вище 0.55 MapLibre висвітлює освітлені грані так, що власний колір
+  // будинку зникає — місто стає білим. Контраст дають градієнт по стіні й
+  // тінь на землі, а не сила лампи.
   const intensity = belowHorizon
-    ? 0.16
-    : Math.min(0.78, 0.42 + (1 - Math.min(sun.elevation, 60) / 60) * 0.36);
+    ? 0.14
+    : Math.min(0.55, 0.3 + (1 - Math.min(sun.elevation, 60) / 60) * 0.25);
 
   return {
     anchor: 'map',
@@ -92,8 +94,10 @@ export function skyFor(p: Palette, sun: SunPosition): Record<string, unknown> {
     'sky-color': p.skyHigh,
     'horizon-color': dusk ? '#e8a05a' : p.skyLow,
     'fog-color': p.fog,
-    'fog-ground-blend': 0.62,
-    'horizon-fog-blend': 0.5,
+    // Було 0.62 — серединний план вибілювало вщент, місто тануло вже за
+    // два квартали. Глибина має читатись як відстань, а не як туман.
+    'fog-ground-blend': 0.4,
+    'horizon-fog-blend': 0.34,
     'sky-horizon-blend': dusk ? 0.75 : 0.6,
     'atmosphere-blend': ['interpolate', ['linear'], ['zoom'], 0, 0.9, 12, 0.24, 16, 0],
   };

@@ -115,14 +115,14 @@ export function palette(tokens: MapTokens): Palette {
     };
   }
   return {
-    land: '#f8f4ea', water: '#bcd7e8', waterDeep: '#9fc4da', waterLine: '#7ea8c0',
+    land: '#faf7ee', water: '#bcd7e8', waterDeep: '#9fc4da', waterLine: '#7ea8c0',
     shore: '#dceaf1',
     green: '#e0e9cf', greenDeep: '#d0deb9', sand: '#f0e6cf', wetland: '#dde6d9',
     builtup: '#f1e8d8', industrial: '#eae1d1',
     roadHi: '#f5c65e', roadMid: '#ffffff', roadLow: '#fdfaf4', roadPath: '#e5d8bf',
     roadCasing: '#cfbfa2', roadCasingSoft: '#e0d4bd', tunnel: '#efe7d9',
     rail: '#bfb29a', railTies: '#a3947a',
-    building: '#dccdb4', buildingTop: '#efe4cf', buildingFlat: '#e4d9c2',
+    building: '#d6c5a6', buildingTop: '#eee2cb', buildingFlat: '#ded2b8',
     buildingShadow: '#6b5330', roofEdge: '#fdf8ee',
     boundary: '#c2a86f', ink: '#241c13', inkSoft: '#6b6050', inkFaint: '#948875',
     halo: 'rgba(255,252,246,0.94)',

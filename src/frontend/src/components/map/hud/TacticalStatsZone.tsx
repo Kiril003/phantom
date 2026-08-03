@@ -18,7 +18,7 @@ export function TacticalStatsZone() {
         speed={tactical.speed} 
       />
       <StatusChip loading={loading} zoom={zoom} />
-      <div className="pointer-events-auto mt-1">
+      <div className="pointer-events-auto">
         <AttributionDrawer />
       </div>
     </div>

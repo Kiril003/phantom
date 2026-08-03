@@ -109,6 +109,11 @@ export function buildPhantomMapStyle(
 
   if (relief) {
     (style as StyleSpecification & { sky?: unknown }).sky = skyFor(p, sun);
+    // Рельєф належить самому стилю, а не дописується збоку. Поки його тут
+    // не було, MapLibre зводив старий стиль (з рельєфом) із новим (без) і
+    // падав на `_checkLoaded` — після чого будував усе з нуля, а разом із
+    // тим гасив світло й починав тайли наново.
+    style.terrain = { source: DEM_TERRAIN_ID, exaggeration: 1.25 };
   }
 
   return style;

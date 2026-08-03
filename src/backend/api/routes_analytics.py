@@ -9,7 +9,7 @@
 `operators` фронтенд читав завжди, а бекенд не віддавав ніколи — тому «хто
 працює» був вічно порожній. Тепер там реальні люди простору.
 """
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, Dict
 
 from fastapi import APIRouter, Depends
@@ -49,7 +49,7 @@ async def get_analytics_overview(
         )
     ).scalar() or 0
 
-    today = datetime.utcnow().date()
+    today = datetime.now(timezone.utc).date()
     since = datetime.combine(today - timedelta(days=WINDOW_DAYS - 1), datetime.min.time())
 
     rows = (

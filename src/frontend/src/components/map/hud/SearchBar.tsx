@@ -51,7 +51,7 @@ export function SearchBar({ value, onChange, onResults, className = '' }: Search
   };
 
   return (
-    <div className={`relative flex flex-col items-center ${className}`}>
+    <div className={`relative flex w-full flex-col items-center ${className}`}>
       {localResults && (
         <div 
           className="glass-elevated absolute bottom-full mb-3 w-[440px] p-2 rounded-2xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-2 fade-in duration-200"
@@ -107,9 +107,12 @@ export function SearchBar({ value, onChange, onResults, className = '' }: Search
         </div>
       )}
 
+      {/* Ширина була зашита в 440 px. Поруч у тому ж рядку стоять керування
+          й «поруч», і на 1024 вони переставали вміщатись — поле тепер
+          віддає зайве сусідам. */}
       <div
-        className="glass-card flex items-center gap-2 px-3 shadow-2xl"
-        style={{ height: 44, borderRadius: 9999, width: 440 }}
+        className="glass-card flex w-full items-center gap-2 px-3 shadow-2xl"
+        style={{ height: 44, borderRadius: 9999, minWidth: 200 }}
       >
         <Search size={16} strokeWidth={1.75} className="text-amber-500/70" />
         <input

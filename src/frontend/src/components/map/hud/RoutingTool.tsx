@@ -46,14 +46,14 @@ export function RoutingTool({
   return (
     <div
       data-testid="routing-tool"
-      className={`flex flex-col gap-2 p-2 rounded-2xl bg-black/65 backdrop-blur-xl border border-white/10 text-white shadow-2xl transition-all ${
+      className={`glass-elevated flex flex-col gap-2 rounded-2xl p-2 text-[color:var(--ink-primary)] shadow-2xl transition-all ${
         active ? 'w-[240px]' : 'w-[44px] overflow-hidden'
       }`}
     >
       <button
         onClick={onToggle}
         className={`min-h-[44px] min-w-[44px] flex items-center justify-center gap-2 rounded-lg transition-all ${
-          active ? 'text-cyan-400' : 'text-white/60 hover:text-white'
+          active ? 'text-[color:var(--primary-shadow,#5c3d05)]' : 'text-[color:var(--ink-secondary)]'
         }`}
       >
         <Route size={18} strokeWidth={2} className="ml-1" />
@@ -63,18 +63,18 @@ export function RoutingTool({
       {active && (
         <div className="flex flex-col gap-3 p-1 animate-in fade-in slide-in-from-top-1">
           <div className="space-y-1">
-            <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-white/5 border border-white/5">
-              <MapPin size={12} className="text-emerald-400" />
+            <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg border border-black/5 bg-black/[0.04]">
+              <MapPin size={12} className="text-emerald-600" />
               <input
                 type="text"
                 value={from}
                 onChange={(e) => setFrom(e.target.value)}
                 placeholder="Звідки (порожньо = моє місце)"
-                className="flex-1 bg-transparent text-[10px] outline-none"
+                className="flex-1 bg-transparent text-xs outline-none"
               />
             </div>
-            <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg bg-white/5 border border-white/5">
-              <Navigation size={12} className="text-cyan-400" />
+            <div className="flex items-center gap-2 px-2 py-1.5 rounded-lg border border-black/5 bg-black/[0.04]">
+              <Navigation size={12} className="text-amber-600" />
               <input
                 type="text"
                 value={to}
@@ -83,7 +83,7 @@ export function RoutingTool({
                   if (e.key === 'Enter' && to.trim() && !loading) onPlan?.(from, to);
                 }}
                 placeholder="Куди..."
-                className="flex-1 bg-transparent text-[10px] outline-none"
+                className="flex-1 bg-transparent text-xs outline-none"
               />
             </div>
           </div>
@@ -91,7 +91,7 @@ export function RoutingTool({
           <button
             onClick={() => onPlan?.(from, to)}
             disabled={!to.trim() || loading}
-            className="w-full flex items-center justify-center gap-2 py-2.5 rounded-xl bg-cyan-500/20 hover:bg-cyan-500/30 border border-cyan-500/30 text-cyan-300 text-[10px] font-bold uppercase tracking-widest disabled:opacity-30 transition-all"
+            className="flex min-h-[44px] w-full items-center justify-center gap-2 rounded-xl border border-amber-500/40 bg-amber-500/20 text-[10px] font-bold uppercase tracking-widest text-[color:var(--primary-shadow,#5c3d05)] transition-all hover:bg-amber-500/30 disabled:opacity-30"
           >
             {loading ? (
               <>
@@ -107,18 +107,18 @@ export function RoutingTool({
           </button>
 
           {error && (
-            <div className="px-2 text-[10px] leading-tight text-rose-300/90" role="alert">
+            <div className="px-2 text-[11px] leading-tight text-rose-600" role="alert">
               {error}
             </div>
           )}
 
           {summary && !loading && (
-            <div className="flex items-center justify-between gap-2 px-2 py-1.5 rounded-lg bg-cyan-500/10 border border-cyan-500/20">
-              <span className="text-[10px] font-semibold text-cyan-200">{summary}</span>
+            <div className="flex items-center justify-between gap-2 rounded-lg border border-amber-500/30 bg-amber-500/10 px-2 py-1.5">
+              <span className="text-[11px] font-semibold text-[color:var(--ink-primary)]">{summary}</span>
               <button
                 onClick={clear}
                 aria-label="Очистити маршрут"
-                className="min-h-[24px] min-w-[24px] flex items-center justify-center rounded-md text-white/50 hover:text-white hover:bg-white/10 transition-all"
+                className="flex min-h-[32px] min-w-[32px] items-center justify-center rounded-md text-[color:var(--ink-muted)] transition-all hover:bg-black/5"
               >
                 <X size={12} />
               </button>

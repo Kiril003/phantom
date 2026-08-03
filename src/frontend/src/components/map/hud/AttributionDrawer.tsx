@@ -51,7 +51,7 @@ export function AttributionDrawer({
     return (
       <div
         data-testid="attribution-drawer-empty"
-        className={`pointer-events-none select-none rounded-md bg-black/55 backdrop-blur-md px-2.5 py-1 text-[10px] text-white/70 border border-white/5 ${className}`}
+        className={`glass-card pointer-events-none select-none rounded-full px-2.5 py-1 text-[10px] text-[color:var(--ink-muted)] ${className}`}
       >
         джерел немає
       </div>
@@ -66,7 +66,10 @@ export function AttributionDrawer({
   return (
     <div
       data-testid="attribution-drawer"
-      className={`select-none rounded-md bg-black/55 backdrop-blur-md text-[10px] text-white/85 shadow-lg shadow-black/40 border border-white/5 ${className}`}
+      /* Темна плашка з білим текстом лишалась від старого «тактичного»
+         вигляду. На світлій мапі вона була найконтрастнішим об'єктом на
+         екрані — тобто найважливішим. Ліцензія важлива, але не настільки. */
+      className={`glass-card select-none rounded-full text-[10px] text-[color:var(--ink-secondary)] ${className}`}
     >
       <button
         type="button"
@@ -74,13 +77,17 @@ export function AttributionDrawer({
         aria-expanded={open}
         aria-label={open ? 'Згорнути джерела карти' : 'Розгорнути джерела карти'}
         onClick={() => setOpen((v) => !v)}
-        className="flex items-center gap-1.5 px-2.5 py-1.5 min-h-[44px] hover:bg-white/5 transition-colors w-full"
+        /* Згорнутий вигляд був плашкою на 280 px і 44 px заввишки — вона
+           накривала правий верх мапи щоразу. Ліцензія лишається на екрані
+           завжди, але як чипс у ряд із рештою, а не як банер. Область
+           дотику домальована псевдоелементом, щоб палець не схибив. */
+        className="relative flex h-[26px] items-center gap-1.5 px-2.5 transition-colors hover:bg-white/5 after:absolute after:inset-x-0 after:-inset-y-[9px] after:content-['']"
       >
         <Info size={12} strokeWidth={1.75} className="opacity-70" />
-        <span className="truncate max-w-[160px]" title={lines[0]?.text ?? summary}>
+        <span className="truncate max-w-[128px]" title={lines[0]?.text ?? summary}>
           {lines[0] ? lines[0].text : summary}
         </span>
-        <span className="ml-auto text-white/45">{summary}</span>
+        <span className="text-[color:var(--ink-muted)]">{summary}</span>
         {open ? (
           <ChevronUp size={12} strokeWidth={1.75} className="opacity-70" />
         ) : (
@@ -90,12 +97,12 @@ export function AttributionDrawer({
       {open && (
         <ul
           data-testid="attribution-drawer-list"
-          className="border-t border-white/5 px-2.5 py-1.5 space-y-1 max-w-[280px]"
+          className="max-w-[280px] space-y-1 border-t border-black/5 px-2.5 py-1.5"
         >
           {lines.map((line) => (
             <li key={line.text} className="flex items-baseline gap-1.5">
               <span className="flex-1 leading-snug">{line.text}</span>
-              <span className="text-[9px] text-white/40 whitespace-nowrap">
+              <span className="whitespace-nowrap text-[9px] text-[color:var(--ink-muted)]">
                 {line.license}
               </span>
             </li>

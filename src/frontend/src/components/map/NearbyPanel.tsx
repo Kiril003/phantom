@@ -101,7 +101,7 @@ export function NearbyPanel({
   if (loading && total === 0) {
     return (
       <div
-        className="px-3 py-2 min-h-[40px] rounded-full bg-black/65 backdrop-blur-xl border border-white/10 text-[10px] font-bold uppercase tracking-wider text-amber-200/80 flex items-center gap-2 shadow-2xl"
+        className="glass-card flex min-h-[44px] items-center gap-2 rounded-full px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[color:var(--ink-secondary)] shadow-2xl"
       >
         <RefreshCw size={14} className="animate-spin text-amber-500" />
         <span>Сканування околиць…</span>
@@ -111,7 +111,7 @@ export function NearbyPanel({
 
   if (total === 0) {
     return (
-      <div className="px-3 py-2 min-h-[40px] rounded-full bg-black/50 backdrop-blur-xl border border-white/5 text-[10px] font-bold uppercase tracking-wider text-white/30 flex items-center gap-2">
+      <div className="glass-card flex min-h-[44px] items-center gap-2 rounded-full px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[color:var(--ink-muted)]">
         <MapPin size={12} />
         <span>Околиці пусті</span>
       </div>
@@ -124,7 +124,7 @@ export function NearbyPanel({
         type="button"
         onClick={() => setExpanded(true)}
         aria-label={`${total} місць поруч`}
-        className="px-3 py-2 min-h-[40px] rounded-full bg-black/65 backdrop-blur-xl border border-white/10 text-[10px] font-bold uppercase tracking-wider text-amber-400 hover:bg-white/5 flex items-center gap-2 shadow-2xl active:scale-95 transition-all"
+        className="glass-card flex min-h-[44px] items-center gap-2 rounded-full px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[color:var(--primary-shadow,#5c3d05)] shadow-2xl transition-all hover:bg-white/5 active:scale-95"
       >
         <MapPin size={14} className="text-amber-500" />
         <span>{total} поруч</span>
@@ -136,7 +136,7 @@ export function NearbyPanel({
   return (
     <div
       role="dialog"
-      className="w-[320px] max-h-[400px] bg-black/75 backdrop-blur-2xl border border-white/10 rounded-2xl flex flex-col shadow-2xl overflow-hidden animate-in zoom-in-95 duration-200"
+      className="glass-elevated flex max-h-[400px] w-[320px] flex-col overflow-hidden rounded-2xl shadow-2xl animate-in zoom-in-95 duration-200"
     >
       <header className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
         <span className="text-amber-400 font-bold uppercase tracking-widest text-[10px]">

@@ -15,7 +15,8 @@ import { MarkerCard } from './MarkerCard';
 import { useMapStore } from '../../stores/mapStore';
 import { useSystemStore } from '../../stores/systemStore';
 import { getMapTokens, preserveOverlayLayers, type PhantomMapStyle } from './mapTokens';
-import { buildPhantomMapStyle, DEM_SOURCE_ID } from './phantomStyle';
+import { buildPhantomMapStyle, sunFor, DEM_TERRAIN_ID } from './phantomStyle';
+import { sunLight } from './style/sun';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { settingsApi, type Bounds } from '../../services/api';
 
@@ -104,9 +105,12 @@ export function TacticalMap({
 }: TacticalMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
+  const seenTheme = useRef<string | null>(null);
+  const styleReady = useRef(false);
   const [ready, setReady] = useState(false);
   const [bearing, setBearing] = useState(0);
   const [styleLoadFailed, setStyleLoadFailed] = useState(false);
+  const [slowLoad, setSlowLoad] = useState(false);
   const [webglSupported, setWebglSupported] = useState(true);
   const [retryNonce, setRetryNonce] = useState(0);
 
@@ -184,7 +188,7 @@ export function TacticalMap({
         container,
         // Свій стиль, не чужий URL: звідси об'єм, рельєф, небо й одна мова
         // підписів. `mapStyle` лишається перемикачем теми всередині нього.
-        style: buildPhantomMapStyle(tokens),
+        style: buildPhantomMapStyle(tokens, { center: resolvedInitialCenter }),
         center: resolvedInitialCenter,
         zoom: initialZoom,
         // OpenFreeMap styles require OSM attribution to stay visible;
@@ -193,7 +197,10 @@ export function TacticalMap({
         attributionControl: { compact: true },
         dragRotate: true,
         pitchWithRotate: true,
-        maxPitch: 85,
+        // Понад ~72° видно вже не місто, а лінію обрію, всипану точками з
+        // сусідніх районів. Об'єм від цього не додається, читабельність
+        // зникає.
+        maxPitch: 72,
         fadeDuration: 100, // Optimize transitions
       });
       mapRef.current = map;
@@ -214,6 +221,11 @@ export function TacticalMap({
       setReady(true);
       setStyleLoadFailed(false);
     };
+    // Єдиний чесний сигнал «стиль живий». `loaded()` і `isStyleLoaded()`
+    // обидва падають у false, щойно полетів бодай один тайл — на нахиленій
+    // камері це майже завжди.
+    const onStyleLoad = () => { styleReady.current = true; };
+    map.on('style.load', onStyleLoad);
     const onRotate = () => setBearing(map.getBearing());
     const onError = (e: any) => {
       const msg = e?.error?.message ?? 'Map source error';
@@ -259,8 +271,8 @@ export function TacticalMap({
     // не один раз, а щоразу, коли стиль осів.
     const keepTerrain = () => {
       try {
-        if (map.getSource(DEM_SOURCE_ID) && !map.getTerrain()) {
-          map.setTerrain({ source: DEM_SOURCE_ID, exaggeration: 1.25 });
+        if (map.getSource(DEM_TERRAIN_ID) && !map.getTerrain()) {
+          map.setTerrain({ source: DEM_TERRAIN_ID, exaggeration: 1.25 });
         }
       } catch {
         // Немає рельєфу — мапа лишається пласкою, але живою.
@@ -276,6 +288,8 @@ export function TacticalMap({
 
     return () => {
       map.off('load', onLoad);
+      map.off('style.load', onStyleLoad);
+      styleReady.current = false;
       map.off('moveend', onMove);
       map.off('rotate' as any, onRotate);
       map.off('error' as any, onError);
@@ -319,49 +333,90 @@ export function TacticalMap({
     const tokens = getMapTokens();
     if (containerRef.current) applyContainerTheming(containerRef.current, tokens);
     
-    // Небо, світло й об'ємні будинки тепер живуть у власному стилі
-    // (`phantomStyle.ts`), а не дописуються поверх чужого. Тут лишається
-    // тільки світло: воно залежить від теми, а не від геометрії стилю.
-    const night = tokens.theme === 'amber-night' || tokens.theme === 'ghost';
-    try {
-      map.setLight({
-        anchor: 'map',
-        color: night ? '#ffaa55' : '#ffffff',
-        intensity: night ? 0.2 : 0.6,
-        position: [1.5, 210, 30],
-      });
-    } catch (err) {
-      console.warn('Світло застосувати не вдалося:', err);
+    // Конструктор уже поставив рівно цей стиль. Перший прогін ставив його
+    // вдруге, MapLibre не міг звести діф («Cannot read properties of
+    // undefined (reading '_checkLoaded')») і перебудовував усе з нуля —
+    // тайли починались наново, а світло, яке ми щойно поставили, гасло.
+    const themeKey = `${mapStyle}|${systemState}`;
+    if (seenTheme.current === null) {
+      seenTheme.current = themeKey;
+      return;
     }
+    if (seenTheme.current === themeKey) return;
+    seenTheme.current = themeKey;
 
     // Кнопка «Вигляд» писала налаштування і на цьому все: стиль ставився
     // ЛИШЕ в конструкторі, тож до перезавантаження сторінки нічого не
     // мінялось. Тепер перебудовуємо стиль на місці, зберігаючи накладені
     // шари (маркери, маршрути, теплокарту).
     try {
-      const next = buildPhantomMapStyle(tokens);
+      const c = map.getCenter();
+      const next = buildPhantomMapStyle(tokens, { center: [c.lng, c.lat] });
       map.setStyle(next, {
         diff: true,
         transformStyle: (prev, incoming) => preserveOverlayLayers(prev, incoming),
       });
-      if (map.getSource(DEM_SOURCE_ID) && !map.getTerrain()) {
-        map.setTerrain({ source: DEM_SOURCE_ID, exaggeration: 1.25 });
+      if (map.getSource(DEM_TERRAIN_ID) && !map.getTerrain()) {
+        map.setTerrain({ source: DEM_TERRAIN_ID, exaggeration: 1.25 });
       }
     } catch (err) {
       console.warn('Стиль не перебудувався:', err);
     }
   }, [mapStyle, ready, systemState]);
 
+  // Світло — це справжнє сонце для цього місця й цієї години, а не зашита
+  // позиція [1.5, 210, 30], яка стояла тут раніше. Тінь на будинку мусить
+  // падати туди, куди вона падає за вікном; інакше об'єм — декорація.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !ready) return;
+    // `setLight` сам піднімає `styledata`. Слухати `styledata` тут — це
+    // нескінченна петля, у якій стиль ніколи не осідає і мапа лишається
+    // порожньою. Тому тільки `style.load` і рух камери, і тільки коли
+    // світло справді змінилось.
+    let last = '';
+    const applyLight = () => {
+      try {
+        const c = map.getCenter();
+        const light = sunLight(sunFor({ center: [c.lng, c.lat] }));
+        const key = JSON.stringify(light);
+        if (key === last) return;
+        last = key;
+        map.setLight(light);
+      } catch {
+        // Стиль саме перебудовується — світло приїде наступним тактом.
+      }
+    };
+    applyLight();
+    map.on('moveend', applyLight);
+    map.on('style.load', applyLight);
+    // Сонце їде далі, поки людина дивиться на мапу.
+    const tick = window.setInterval(applyLight, 5 * 60 * 1000);
+    return () => {
+      map.off('moveend', applyLight);
+      map.off('style.load', applyLight);
+      window.clearInterval(tick);
+    };
+  }, [ready]);
+
+  // Збій — це збій СТИЛЮ, а не повільні тайли. Раніше тут стояло
+  // `!map.loaded()` через 5 секунд, а `loaded()` лишається false, доки
+  // летить бодай один тайл: люди бачили «Мапа не завантажилась» над мапою,
+  // яка нормально вантажилась, просто по слабкій мережі.
   useEffect(() => {
     if (ready) {
       setStyleLoadFailed(false);
+      setSlowLoad(false);
       return;
     }
-    const timer = window.setTimeout(() => {
-      if (!mapRef.current) return;
-      if (!mapRef.current.loaded()) setStyleLoadFailed(true);
-    }, 5000);
-    return () => window.clearTimeout(timer);
+    const slowTimer = window.setTimeout(() => setSlowLoad(true), 1200);
+    const failTimer = window.setTimeout(() => {
+      if (mapRef.current && !styleReady.current) setStyleLoadFailed(true);
+    }, 20000);
+    return () => {
+      window.clearTimeout(slowTimer);
+      window.clearTimeout(failTimer);
+    };
   }, [ready, retryNonce]);
 
   const handleStyleRetry = useCallback(() => {
@@ -514,6 +569,12 @@ export function TacticalMap({
               <button onClick={confirmPendingPoi} className="min-h-[40px] px-5 rounded-full bg-amber-500 text-ink-inverse text-xs font-bold uppercase shadow-xl">Зберегти</button>
             </div>
           </div>
+        </div>
+      )}
+
+      {slowLoad && !ready && !styleLoadFailed && (
+        <div className="pointer-events-none absolute bottom-4 left-1/2 z-40 -translate-x-1/2 rounded-full bg-black/55 px-4 py-2 text-[11px] font-semibold text-white/90 backdrop-blur">
+          Вантажимо мапу…
         </div>
       )}
 

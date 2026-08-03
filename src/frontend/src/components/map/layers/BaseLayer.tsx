@@ -32,10 +32,11 @@ export function BaseLayer() {
 
     try {
       const tokens = getMapTokens();
+      const c = map.getCenter();
       // `transformStyle` carries ReconLayer/HeatmapLayer/GeofencesLayer's
       // runtime-added sources/layers forward — without it they'd be torn
       // down every time SystemState changes (see mapTokens.ts).
-      map.setStyle(buildPhantomMapStyle(tokens), {
+      map.setStyle(buildPhantomMapStyle(tokens, { center: [c.lng, c.lat] }), {
         diff: true,
         transformStyle: preserveOverlayLayers,
       });

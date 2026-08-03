@@ -62,10 +62,10 @@ export function ScaleBar({
     <div
       data-testid="scale-bar"
       data-meters={spec.meters}
-      className={`select-none flex items-end gap-1.5 px-2 py-1 rounded-full bg-black/55 backdrop-blur-md border border-white/5 text-[10px] text-white/90 ${className}`}
+      className={`glass-card flex select-none items-end gap-1.5 rounded-full px-2 py-1 text-[10px] text-[color:var(--ink-secondary)] ${className}`}
     >
       <div
-        className="border-2 border-white/85 border-t-0"
+        className="border-2 border-t-0 border-[color:var(--ink-secondary)]"
         style={{ width: `${spec.pixels}px`, height: 8 }}
       />
       <span className="font-mono leading-none translate-y-[2px]">{spec.label}</span>

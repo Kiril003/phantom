@@ -15,7 +15,10 @@ from licensing.verifier import (
     verify_certificate,
 )
 
-DEFAULT_SERVER = os.environ.get("PHANTOM_LICENSE_SERVER", "https://license.phantom-os.io")
+#: Сайт живе на phantom-os.dev. Тут стояв .io — тобто зашитий у КОЖНУ
+#: збірку типовий сервер вів на чужий домен, і жоден покупець не зміг би
+#: активувати ключ, поки не вписав би змінну середовища вручну.
+DEFAULT_SERVER = os.environ.get("PHANTOM_LICENSE_SERVER", "https://license.phantom-os.dev")
 
 
 class ActivationError(Exception):

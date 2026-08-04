@@ -119,6 +119,12 @@ export function HudShell({
   const toggleLayer = useMapStore((s) => s.toggleLayer);
   const searchQuery = useMapStore((s) => s.searchQuery);
   const setSearchQuery = useMapStore((s) => s.setSearchQuery);
+  const setToast = useMapStore((s) => s.setToast);
+  const pois = useMapStore((s) => s.pois);
+  const wardrivingRecords = useMapStore((s) => s.wardrivingRecords);
+  const heatmap = useMapStore((s) => s.heatmap);
+  const track = useMapStore((s) => s.track);
+  const geoTaggedFacts = useMapStore((s) => s.geoTaggedFacts);
   const route = useMapStore((s) => s.route);
   const routing = useMapStore((s) => s.routing);
   const routeError = useMapStore((s) => s.routeError);
@@ -127,13 +133,35 @@ export function HudShell({
 
   const lat = tactical.lat ?? 50.45;
 
+  /**
+   * Скільки записів справді стоїть за кожним шаром. П'ять із семи кнопок
+   * вмикали порожнечу — світились бурштином і не малювали нічого, бо
+   * малювати не було чого. Кнопка мусить казати правду про свій шар.
+   */
+  const counts: Partial<Record<MapLayerKey, number>> = {
+    presence: null as unknown as number,
+    wardriving: wardrivingRecords.length,
+    heatmap: heatmap.length,
+    intel: pois.length,
+    recon: track.length,
+    facts: geoTaggedFacts.length,
+  };
+
   const layerItems: RailItem[] = LAYERS.map((item) => ({
     key: item.key,
     icon: item.icon,
     label: item.label,
     short: item.short,
     active: layers[item.key],
-    onClick: () => toggleLayer(item.key),
+    count: item.key === 'base' || item.key === 'presence' ? null : counts[item.key] ?? 0,
+    onClick: () => {
+      const n = counts[item.key];
+      if (typeof n === 'number' && n === 0) {
+        setToast(`${item.label}: записів ще немає`);
+        return;
+      }
+      toggleLayer(item.key);
+    },
   }));
 
   const toolItems: RailItem[] = [

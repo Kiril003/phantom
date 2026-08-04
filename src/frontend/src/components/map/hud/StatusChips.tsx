@@ -104,15 +104,35 @@ export function CompassChip({ bearing }: { bearing: number }) {
   );
 }
 
-export function GpsQualityChip({ satellites, fix, speed }: {
+/** Джерела, які супутників не бачать узагалі — це не «слабкий сигнал». */
+const NO_RECEIVER = new Set(['browser_geolocation', 'ip_estimate', 'network', 'manual', 'user_stated', 'none']);
+
+export function GpsQualityChip({ satellites, fix, speed, source = 'none' }: {
   satellites: number;
   fix: boolean;
   speed: number;
+  source?: string;
 }) {
   // Рухається — показуємо швидкість; стоїть — вона тільки шумить нулем.
   const moving = fix && speed >= 1;
   const satTone =
     satellites >= 6 ? 'text-emerald-600' : satellites >= 4 ? 'text-amber-600' : 'text-rose-600';
+
+  // «0 супутників» читалось як несправний приймач. Приймача тут немає
+  // взагалі: ESP32 з GNSS не підключений, місце приходить від браузера.
+  // Це різні речі, і людина має бачити, яка саме.
+  if (!fix && NO_RECEIVER.has(source)) {
+    return (
+      <div className="glass-card flex h-[30px] items-center gap-2 rounded-full px-3">
+        <Satellite size={12} strokeWidth={1.75} className="text-ink-muted" aria-hidden />
+        <span className="text-[10px] font-semibold text-ink-secondary">Приймача немає</span>
+        <span className="text-[10px] text-ink-muted">
+          · {source === 'none' ? 'місце невідоме' : 'місце за мережею'}
+        </span>
+      </div>
+    );
+  }
+
   return (
     <div className="glass-card flex items-center gap-2.5 px-3 h-[30px] rounded-full">
       <span className="flex items-center gap-1.5">

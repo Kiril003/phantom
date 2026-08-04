@@ -34,16 +34,16 @@ export function SearchResultsPanel({ open, onClose, results, onSelect }: SearchR
   const total = results.remembered.length + results.osm.length + results.pois.length;
 
   return (
-    <div className="absolute top-20 left-4 w-80 max-h-[70vh] flex flex-col bg-ink-primary/95 backdrop-blur-md border border-white/10 rounded-2xl shadow-2xl overflow-hidden z-20 transition-all animate-in slide-in-from-left-8">
+    <div className="absolute top-20 left-[84px] w-80 max-h-[calc(100vh-230px)] flex flex-col bg-ink-primary/95 backdrop-blur-md border border-black/10 rounded-2xl shadow-2xl overflow-hidden z-20 transition-all animate-in slide-in-from-left-8">
       {/* Header */}
-      <div className="p-4 border-b border-white/5 flex items-center justify-between bg-white/5">
+      <div className="p-4 border-b border-black/5 flex items-center justify-between bg-black/[0.04]">
         <div className="flex items-center gap-2">
           <Search size={14} className="text-amber-500" />
-          <span className="text-xs font-bold uppercase tracking-widest text-white/90">Результати ({total})</span>
+          <span className="text-xs font-bold uppercase tracking-widest text-[color:var(--ink-primary)]">Результати ({total})</span>
         </div>
         <button
           onClick={onClose}
-          className="p-1 rounded-full hover:bg-white/10 text-white/40 transition-colors"
+          className="p-1 rounded-full hover:bg-black/10 text-[color:var(--ink-muted)] transition-colors"
         >
           <X size={16} />
         </button>
@@ -111,15 +111,15 @@ function ResultSection({ title, icon, items, onSelect, color }: {
           <button
             key={item.id}
             onClick={() => onSelect(item)}
-            className="w-full text-left p-2.5 rounded-xl hover:bg-white/5 group transition-all flex items-center gap-3 active:scale-[0.98]"
+            className="w-full text-left p-2.5 rounded-xl hover:bg-black/5 group transition-all flex items-center gap-3 active:scale-[0.98]"
           >
-            <div className="w-8 h-8 rounded-lg bg-white/5 flex items-center justify-center text-white/20 group-hover:text-white/40 transition-colors shrink-0">
+            <div className="w-8 h-8 rounded-lg bg-black/[0.04] flex items-center justify-center text-[color:var(--ink-muted)] group-hover:text-[color:var(--ink-muted)] transition-colors shrink-0">
               <Navigation size={14} />
             </div>
             <div className="flex-1 min-w-0">
-              <div className="text-[13px] text-white/90 font-display truncate group-hover:text-white transition-colors">{item.name}</div>
+              <div className="text-[13px] text-[color:var(--ink-primary)] font-display truncate group-hover:text-[color:var(--ink-primary)] transition-colors">{item.name}</div>
               <div className="flex items-center gap-2 mt-0.5">
-                <span className="text-[9px] text-white/30 uppercase font-bold tracking-wider truncate">{item.type || item.category}</span>
+                <span className="text-[9px] text-[color:var(--ink-muted)] uppercase font-bold tracking-wider truncate">{item.type || item.category}</span>
                 {item.distance_m && (
                   <span className="text-[9px] text-amber-500/50 font-bold tracking-tighter shrink-0">
                     {item.distance_m > 1000 ? `${(item.distance_m/1000).toFixed(1)} км` : `${item.distance_m} м`}
@@ -127,7 +127,7 @@ function ResultSection({ title, icon, items, onSelect, color }: {
                 )}
               </div>
             </div>
-            <ChevronRight size={12} className="text-white/10 group-hover:text-white/30 transition-colors shrink-0" />
+            <ChevronRight size={12} className="text-[color:var(--ink-primary)]/10 group-hover:text-[color:var(--ink-muted)] transition-colors shrink-0" />
           </button>
         ))}
       </div>

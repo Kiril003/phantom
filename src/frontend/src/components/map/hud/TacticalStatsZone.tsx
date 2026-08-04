@@ -1,5 +1,4 @@
 import { CompassChip, GpsQualityChip, StatusChip } from './StatusChips';
-import { AttributionDrawer } from './AttributionDrawer';
 import { useMapStore } from '../../../stores/mapStore';
 
 export function TacticalStatsZone() {
@@ -18,9 +17,6 @@ export function TacticalStatsZone() {
         speed={tactical.speed} 
       />
       <StatusChip loading={loading} zoom={zoom} />
-      <div className="pointer-events-auto">
-        <AttributionDrawer />
-      </div>
     </div>
   );
 }

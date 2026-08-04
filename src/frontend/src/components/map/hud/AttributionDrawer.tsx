@@ -81,13 +81,16 @@ export function AttributionDrawer({
            накривала правий верх мапи щоразу. Ліцензія лишається на екрані
            завжди, але як чипс у ряд із рештою, а не як банер. Область
            дотику домальована псевдоелементом, щоб палець не схибив. */
-        className="relative flex h-[26px] items-center gap-1.5 px-2.5 transition-colors hover:bg-white/5 after:absolute after:inset-x-0 after:-inset-y-[9px] after:content-['']"
+        className="relative flex h-[26px] w-full max-w-[168px] items-center gap-1.5 px-2.5 transition-colors hover:bg-white/5 after:absolute after:inset-x-0 after:-inset-y-[9px] after:content-['']"
       >
-        <Info size={12} strokeWidth={1.75} className="opacity-70" />
-        <span className="truncate max-w-[128px]" title={lines[0]?.text ?? summary}>
+        <Info size={12} strokeWidth={1.75} className="shrink-0 opacity-70" />
+        {/* Лічильник джерел жив тут другим написом і розтягував чипс до
+            190 px — той наповзав на поле пошуку. Він нікуди не подівся,
+            просто чекає у розгорнутому списку. */}
+        <span className="min-w-0 flex-1 truncate text-left" title={lines[0]?.text ?? summary}>
           {lines[0] ? lines[0].text : summary}
         </span>
-        <span className="text-[color:var(--ink-muted)]">{summary}</span>
+        <span className="sr-only">{summary}</span>
         {open ? (
           <ChevronUp size={12} strokeWidth={1.75} className="opacity-70" />
         ) : (

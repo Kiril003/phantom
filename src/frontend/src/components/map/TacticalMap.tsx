@@ -12,6 +12,7 @@ import { FactMarkerLayer } from './layers/FactMarkerLayer';
 import { GeofencesLayer } from './layers/GeofencesLayer';
 import { HeatmapLayer } from './HeatmapLayer';
 import { MarkerCard } from './MarkerCard';
+import { PlaceCard, type TappedPlace } from './PlaceCard';
 import { useMapStore } from '../../stores/mapStore';
 import { useSystemStore } from '../../stores/systemStore';
 import { getMapTokens, preserveOverlayLayers, type PhantomMapStyle } from './mapTokens';
@@ -72,6 +73,15 @@ function applyContainerTheming(container: HTMLDivElement, tokens: ReturnType<typ
   container.style.filter = tokens.theme === 'ghost' ? 'grayscale(1) brightness(0.4)' : '';
 }
 
+/** Відстань по поверхні, метри. Потрібна лише щоб підписати «звідси». */
+function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  const R = 6371000;
+  const p = Math.PI / 180;
+  const a = Math.sin(((lat2 - lat1) * p) / 2) ** 2
+    + Math.cos(lat1 * p) * Math.cos(lat2 * p) * Math.sin(((lon2 - lon1) * p) / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(a));
+}
+
 function computeBounds(map: MapLibreMap | null): Bounds {
   if (!map || typeof map.getBounds !== 'function') {
     return { lat1: 0, lon1: 0, lat2: 0, lon2: 0 };
@@ -107,6 +117,7 @@ export function TacticalMap({
   const mapRef = useRef<MapLibreMap | null>(null);
   const seenTheme = useRef<string | null>(null);
   const styleReady = useRef(false);
+  const [place, setPlace] = useState<TappedPlace | null>(null);
   const [ready, setReady] = useState(false);
   const [bearing, setBearing] = useState(0);
   const [styleLoadFailed, setStyleLoadFailed] = useState(false);
@@ -245,7 +256,44 @@ export function TacticalMap({
         console.error('Error in onMove handler:', err);
       }
     };
-    const onClick = () => select(null);
+    // Тап по точці міста. Мапа малювала тисячі POI і жодна не відповідала
+    // на дотик — саме це читалось як «кнопки нічого не роблять».
+    const onClick = (e: maplibregl.MapMouseEvent) => {
+      select(null);
+      let hits: maplibregl.MapGeoJSONFeature[] = [];
+      try {
+        hits = map.queryRenderedFeatures(
+          [[e.point.x - 8, e.point.y - 8], [e.point.x + 8, e.point.y + 8]],
+          { layers: ['poi-mark', 'poi-disc'] },
+        );
+      } catch {
+        // Шарів ще немає — стиль не осів.
+      }
+      const hit = hits[0];
+      if (!hit || hit.geometry.type !== 'Point') {
+        setPlace(null);
+        return;
+      }
+      const [lon, lat] = hit.geometry.coordinates as [number, number];
+      const props = hit.properties ?? {};
+      const where = useSystemStore.getState().context?.where;
+      const distanceM =
+        where?.fix && typeof where.lat === 'number' && typeof where.lon === 'number'
+          ? haversineM(where.lat, where.lon, lat, lon)
+          : null;
+      setPlace({
+        name: String(props['name:uk'] ?? props['name:en'] ?? props.name ?? ''),
+        cls: String(props.class ?? ''),
+        lon,
+        lat,
+        distanceM,
+      });
+    };
+
+    const onEnterPoi = () => { map.getCanvas().style.cursor = 'pointer'; };
+    const onLeavePoi = () => { map.getCanvas().style.cursor = ''; };
+    map.on('mouseenter', 'poi-disc', onEnterPoi);
+    map.on('mouseleave', 'poi-disc', onLeavePoi);
 
     // Кнопка атрибуції MapLibre — англійська («Toggle attribution»), своєї
     // локалізації бібліотека не має. Одного присвоєння замало: контрол
@@ -294,6 +342,8 @@ export function TacticalMap({
       map.off('rotate' as any, onRotate);
       map.off('error' as any, onError);
       map.off('click', onClick);
+      map.off('mouseenter', 'poi-disc', onEnterPoi);
+      map.off('mouseleave', 'poi-disc', onLeavePoi);
       map.off('idle', nameAttribution);
       map.off('styledata', keepTerrain);
       map.off('idle', keepTerrain);
@@ -558,6 +608,20 @@ export function TacticalMap({
           </>
         )}
       </MapContext.Provider>
+
+      <PlaceCard
+        place={place}
+        onClose={() => setPlace(null)}
+        origin={
+          mapRef.current
+            ? {
+                lat: mapRef.current.getCenter().lat,
+                lon: mapRef.current.getCenter().lng,
+                label: 'Центр екрана',
+              }
+            : null
+        }
+      />
 
       <div className="absolute top-1/2 left-1/2 pointer-events-none -translate-x-1/2 -translate-y-1/2 w-10 h-10">
         <span className="absolute top-1/2 left-0 right-0 h-px bg-amber-500/50" />

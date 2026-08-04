@@ -60,9 +60,9 @@ export function TimelineDrawer({ open, onClose, onSelect }: TimelineDrawerProps)
   return (
     <div
       role="dialog"
-      className="h-full w-[360px] bg-black/75 backdrop-blur-2xl border-l border-white/10 flex flex-col shadow-2xl animate-in slide-in-from-right duration-300"
+      className="h-full w-[360px] glass-elevated border-l border-black/10 flex flex-col shadow-2xl animate-in slide-in-from-right duration-300"
     >
-      <header className="flex items-center justify-between px-5 py-4 border-b border-white/5">
+      <header className="flex items-center justify-between px-5 py-4 border-b border-black/5">
         <div className="flex items-center gap-3">
           <div className="p-2 rounded-xl bg-amber-500/10 text-amber-500">
             <Clock size={18} />
@@ -76,7 +76,7 @@ export function TimelineDrawer({ open, onClose, onSelect }: TimelineDrawerProps)
             type="button"
             onClick={() => void load()}
             disabled={loading}
-            className="p-2 rounded-full hover:bg-white/5 disabled:opacity-20 transition-colors"
+            className="p-2 rounded-full hover:bg-black/5 disabled:opacity-20 transition-colors"
           >
             <RefreshCw size={16} className={loading ? 'animate-spin' : ''} />
           </button>
@@ -84,7 +84,7 @@ export function TimelineDrawer({ open, onClose, onSelect }: TimelineDrawerProps)
             type="button"
             onClick={onClose}
             aria-label="Close timeline"
-            className="p-2 rounded-full hover:bg-white/5 transition-colors"
+            className="p-2 rounded-full hover:bg-black/5 transition-colors"
           >
             <X size={18} />
           </button>
@@ -95,21 +95,21 @@ export function TimelineDrawer({ open, onClose, onSelect }: TimelineDrawerProps)
         {error ? (
           <div className="px-6 py-10 text-center">
             <AlertTriangle size={32} className="mx-auto text-rose-500 mb-3 opacity-50" />
-            <div className="text-sm text-rose-400">{error}</div>
+            <div className="text-sm text-rose-600">{error}</div>
           </div>
         ) : entries.length === 0 && !loading ? (
           <div className="px-8 py-20 text-center space-y-3">
-            <Clock size={48} className="mx-auto text-white/5" />
-            <div className="text-xs text-white/30 italic font-serif leading-relaxed">
+            <Clock size={48} className="mx-auto text-[color:var(--ink-primary)]/5" />
+            <div className="text-xs text-[color:var(--ink-muted)] italic font-serif leading-relaxed">
               Історія порожня. Записи з'являться автоматично при переміщенні або кожні 5 хвилин.
             </div>
           </div>
         ) : (
           grouped.map(([day, items]) => (
             <div key={day} className="mb-6 px-3">
-              <div className="px-3 text-[10px] font-bold uppercase tracking-[0.2em] text-white/30 mb-3 flex items-center gap-4">
+              <div className="px-3 text-[10px] font-bold uppercase tracking-[0.2em] text-[color:var(--ink-muted)] mb-3 flex items-center gap-4">
                 <span className="shrink-0">{day}</span>
-                <span className="h-px bg-white/5 flex-1" />
+                <span className="h-px bg-black/[0.04] flex-1" />
               </div>
               <div className="space-y-1">
                 {items.map((e) => (
@@ -117,20 +117,20 @@ export function TimelineDrawer({ open, onClose, onSelect }: TimelineDrawerProps)
                     key={e.id}
                     type="button"
                     onClick={() => onSelect?.(e)}
-                    className="w-full text-left px-3 py-3 rounded-2xl hover:bg-white/5 flex items-start justify-between gap-4 transition-all group active:scale-[0.98]"
+                    className="w-full text-left px-3 py-3 rounded-2xl hover:bg-black/5 flex items-start justify-between gap-4 transition-all group active:scale-[0.98]"
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="text-[13px] text-white/80 group-hover:text-white truncate font-display mb-0.5">
+                      <div className="text-[13px] text-[color:var(--ink-primary)] group-hover:text-[color:var(--ink-primary)] truncate font-display mb-0.5">
                         {e.place_name || e.city || `${e.lat.toFixed(5)}, ${e.lon.toFixed(5)}`}
                       </div>
-                      <div className="flex items-center gap-2 text-[10px] font-mono text-white/30 uppercase tracking-tighter">
+                      <div className="flex items-center gap-2 text-[10px] font-mono text-[color:var(--ink-muted)] uppercase tracking-tighter">
                         <span className="text-amber-500/50">
                           {new Date(e.timestamp).toLocaleTimeString([], {
                             hour: '2-digit',
                             minute: '2-digit',
                           })}
                         </span>
-                        <span className="px-1.5 py-0.5 rounded bg-white/5 border border-white/5">
+                        <span className="px-1.5 py-0.5 rounded bg-black/[0.04] border border-black/5">
                           {sourceLabel[e.source] ?? e.source}
                         </span>
                         {e.country_code && <span className="opacity-60">{e.country_code}</span>}

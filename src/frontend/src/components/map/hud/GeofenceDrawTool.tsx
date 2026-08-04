@@ -25,14 +25,14 @@ export function GeofenceDrawTool({
   return (
     <div
       data-testid="geofence-draw-tool"
-      className={`flex flex-col gap-2 p-2 rounded-2xl bg-black/65 backdrop-blur-xl border border-white/10 text-white shadow-2xl transition-all ${
+      className={`flex flex-col gap-2 p-2 rounded-2xl glass-elevated text-[color:var(--ink-primary)] shadow-2xl transition-all ${
         active ? 'w-[200px]' : 'w-[44px] overflow-hidden'
       }`}
     >
       <button
         onClick={onToggle}
         className={`min-h-[44px] min-w-[44px] flex items-center justify-center gap-2 rounded-lg transition-all ${
-          active ? 'text-rose-400' : 'text-white/60 hover:text-white'
+          active ? 'text-rose-600' : 'text-[color:var(--ink-secondary)] hover:text-[color:var(--ink-primary)]'
         }`}
       >
         <Target size={18} strokeWidth={2} className="ml-1" />
@@ -41,11 +41,11 @@ export function GeofenceDrawTool({
 
       {active && (
         <div className="flex flex-col gap-3 p-1 animate-in fade-in slide-in-from-top-1">
-          <div className="flex gap-1 p-0.5 rounded-lg bg-white/5">
+          <div className="flex gap-1 p-0.5 rounded-lg bg-black/[0.04]">
             <button
               onClick={() => setKind('circle')}
               className={`flex-1 flex flex-col items-center gap-1 py-2 rounded-md transition-all ${
-                kind === 'circle' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white/60'
+                kind === 'circle' ? 'bg-black/10 text-[color:var(--ink-primary)]' : 'text-[color:var(--ink-muted)] hover:text-[color:var(--ink-secondary)]'
               }`}
             >
               <Circle size={14} />
@@ -54,7 +54,7 @@ export function GeofenceDrawTool({
             <button
               onClick={() => setKind('polygon')}
               className={`flex-1 flex flex-col items-center gap-1 py-2 rounded-md transition-all ${
-                kind === 'polygon' ? 'bg-white/10 text-white' : 'text-white/40 hover:text-white/60'
+                kind === 'polygon' ? 'bg-black/10 text-[color:var(--ink-primary)]' : 'text-[color:var(--ink-muted)] hover:text-[color:var(--ink-secondary)]'
               }`}
             >
               <Square size={14} />
@@ -67,13 +67,13 @@ export function GeofenceDrawTool({
             value={name}
             onChange={(e) => setName(e.target.value)}
             placeholder="Назва зони..."
-            className="w-full bg-white/5 border border-white/10 rounded-md px-2 py-1.5 text-[10px] outline-none focus:border-rose-400/50"
+            className="w-full bg-black/[0.04] border border-black/10 rounded-md px-2 py-1.5 text-[10px] outline-none focus:border-rose-400/50"
           />
 
           <button
             onClick={() => onSave?.(name, kind, {})}
             disabled={!name}
-            className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 text-rose-300 text-[10px] font-bold uppercase tracking-widest disabled:opacity-30 transition-all"
+            className="w-full flex items-center justify-center gap-2 py-2 rounded-lg bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/30 text-rose-600 text-[10px] font-bold uppercase tracking-widest disabled:opacity-30 transition-all"
           >
             <Save size={12} />
             Зберегти

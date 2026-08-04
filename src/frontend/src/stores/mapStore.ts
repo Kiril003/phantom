@@ -118,6 +118,12 @@ interface MapStoreState {
    * `routeError` on any failure. Never throws.
    */
   planRoute: (from: string, to: string) => Promise<void>;
+  /**
+   * Маршрут до точки, яку вже показали на екрані. Геокодувати її нема
+   * чого — координати відомі. `fallbackOrigin` потрібен там, де немає
+   * супутників: тоді відлік іде від того, на що людина дивиться.
+   */
+  routeToPoint: (dest: RoutePoint, fallbackOrigin?: RoutePoint) => Promise<void>;
   clearRoute: () => void;
 
   loadWardriving: (bounds?: Bounds, since?: string) => Promise<void>;
@@ -264,6 +270,38 @@ export const useMapStore = create<MapStoreState>((set, get) => ({
         origin = { lat: t.lat, lon: t.lon, label: 'Моє місце' };
       }
 
+      const result = await mapApi.planRoute(
+        [[origin.lat, origin.lon], [dest.lat, dest.lon]],
+        'car',
+      );
+      set({ route: { result, from: origin, to: dest }, routing: false, routeError: null });
+    } catch (err) {
+      set({
+        routing: false,
+        routeError: err instanceof Error ? err.message : 'Не вдалося прокласти маршрут',
+      });
+    }
+  },
+
+  routeToPoint: async (dest, fallbackOrigin) => {
+    set({ routing: true, routeError: null });
+    try {
+      // Без фіксу «моє місце» — це здогад браузера по мережі, і він тут
+      // за вісім кілометрів від того, що на екрані. Маршрут від такої
+      // точки виглядає як несправність, хоч дані чесні. Тоді рахуємо від
+      // того, на що людина дивиться, і кажемо це прямо в підписі.
+      const t = get().tactical;
+      const origin: RoutePoint | null =
+        t.fix && t.lat != null && t.lon != null
+          ? { lat: t.lat, lon: t.lon, label: 'Моє місце' }
+          : fallbackOrigin
+            ?? (t.lat != null && t.lon != null
+              ? { lat: t.lat, lon: t.lon, label: 'Приблизне місце' }
+              : null);
+      if (!origin) {
+        set({ routing: false, routeError: 'Немає звідки рахувати: місце невідоме' });
+        return;
+      }
       const result = await mapApi.planRoute(
         [[origin.lat, origin.lon], [dest.lat, dest.lon]],
         'car',

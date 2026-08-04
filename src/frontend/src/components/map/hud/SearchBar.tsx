@@ -12,13 +12,12 @@ export interface SearchBarProps {
 }
 
 export function SearchBar({ value, onChange, onResults, className = '' }: SearchBarProps) {
-  const { pois, wardrivingRecords, setCenter, setZoom, setSearchQuery, tactical } = useMapStore((s) => ({
+  const { pois, wardrivingRecords, setCenter, setZoom, setSearchQuery } = useMapStore((s) => ({
     pois: s.pois,
     wardrivingRecords: s.wardrivingRecords,
     setCenter: s.setCenter,
     setZoom: s.setZoom,
     setSearchQuery: s.setSearchQuery,
-    tactical: s.tactical,
   }));
 
   const localResults = useMemo(() => {
@@ -39,14 +38,30 @@ export function SearchBar({ value, onChange, onResults, className = '' }: Search
     return { intel, nets, total: intel.length + nets.length };
   }, [value, pois, wardrivingRecords]);
 
+  /**
+   * Enter у полі пошуку не шукав нічого: він тягнув «що поруч» біля старої
+   * позиції і мовчки викидав сам запит. Тобто набране слово не впливало на
+   * результат узагалі. Тепер це справжній пошук місця за назвою.
+   */
   const handleFullSearch = async () => {
-    if (!value || !onResults) return;
+    const query = value.trim();
+    if (!query || !onResults) return;
     try {
-      const res = await mapApi.get(`/nearby?lat=${tactical.lat ?? 50.45}&lon=${tactical.lon ?? 30.52}&radius_m=5000`);
-      onResults(res);
+      const { results } = await mapApi.geocode(query, 8);
+      onResults({
+        remembered: [],
+        pois: [],
+        osm: results.map((r, i) => ({
+          id: `osm-${i}-${r.lat.toFixed(5)}-${r.lon.toFixed(5)}`,
+          name: r.display_name,
+          category: r.type ?? 'місце',
+          lat: r.lat,
+          lon: r.lon,
+        })),
+      });
       setSearchQuery('');
     } catch (err) {
-      console.error('Full search failed:', err);
+      console.error('Пошук не вдався:', err);
     }
   };
 
@@ -65,7 +80,7 @@ export function SearchBar({ value, onChange, onResults, className = '' }: Search
             <div className="space-y-2">
               {localResults.intel.length > 0 && (
                 <div className="space-y-1">
-                  <div className="px-3 py-1 text-[9px] font-bold uppercase tracking-widest text-ink-muted">Intel</div>
+                  <div className="px-3 py-1 text-[9px] font-bold uppercase tracking-widest text-ink-muted">Мої місця</div>
                   {localResults.intel.map(poi => (
                     <button
                       key={poi.id}
@@ -84,7 +99,7 @@ export function SearchBar({ value, onChange, onResults, className = '' }: Search
               )}
               {localResults.nets.length > 0 && (
                 <div className="space-y-1">
-                  <div className="px-3 py-1 text-[9px] font-bold uppercase tracking-widest text-ink-muted">Networks</div>
+                  <div className="px-3 py-1 text-[9px] font-bold uppercase tracking-widest text-ink-muted">Мережі</div>
                   {localResults.nets.map(rec => (
                     <button
                       key={rec.mac}

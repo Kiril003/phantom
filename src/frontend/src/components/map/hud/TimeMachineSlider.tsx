@@ -27,10 +27,10 @@ export function TimeMachineSlider({ className = '', onDateChange }: TimeMachineS
   return (
     <div
       data-testid="time-machine-slider"
-      className={`flex items-center gap-2 p-1.5 rounded-full bg-black/65 backdrop-blur-xl border border-white/10 text-white shadow-2xl ${className}`}
+      className={`flex items-center gap-2 p-1.5 rounded-full glass-elevated text-[color:var(--ink-primary)] shadow-2xl ${className}`}
     >
-      <div className="flex items-center gap-2 px-2 border-r border-white/10">
-        <History size={14} className="text-violet-400" />
+      <div className="flex items-center gap-2 px-2 border-r border-black/10">
+        <History size={14} className="text-violet-700" />
         <span className="text-[10px] font-semibold uppercase tracking-widest text-violet-200">
           Машина часу
         </span>
@@ -39,19 +39,19 @@ export function TimeMachineSlider({ className = '', onDateChange }: TimeMachineS
       <div className="flex items-center gap-1">
         <button
           onClick={() => shiftDate(-1)}
-          className="p-1.5 rounded-full hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+          className="p-1.5 rounded-full hover:bg-black/10 text-[color:var(--ink-secondary)] hover:text-[color:var(--ink-primary)] transition-colors"
         >
           <ChevronLeft size={14} />
         </button>
         
-        <div className="flex items-center gap-2 px-1 text-[11px] font-mono font-medium text-white/90">
-          <Calendar size={12} className="text-white/40" />
+        <div className="flex items-center gap-2 px-1 text-[11px] font-mono font-medium text-[color:var(--ink-primary)]">
+          <Calendar size={12} className="text-[color:var(--ink-muted)]" />
           {date}
         </div>
 
         <button
           onClick={() => shiftDate(1)}
-          className="p-1.5 rounded-full hover:bg-white/10 text-white/60 hover:text-white transition-colors"
+          className="p-1.5 rounded-full hover:bg-black/10 text-[color:var(--ink-secondary)] hover:text-[color:var(--ink-primary)] transition-colors"
         >
           <ChevronRight size={14} />
         </button>

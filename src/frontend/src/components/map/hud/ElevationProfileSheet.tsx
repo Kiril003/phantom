@@ -53,7 +53,7 @@ export function ElevationProfileSheet({
     return (
       <div
         data-testid="elevation-profile-empty"
-        className={`flex items-center gap-1.5 px-2 py-1 rounded-md bg-black/55 backdrop-blur-md border border-white/5 text-[10px] text-white/35 ${className}`}
+        className={`flex items-center gap-1.5 px-2 py-1 rounded-md glass-card text-[10px] text-[color:var(--ink-muted)] ${className}`}
       >
         <Mountain size={11} strokeWidth={1.75} />
         <span>профіль порожній</span>
@@ -64,7 +64,7 @@ export function ElevationProfileSheet({
   return (
     <div
       data-testid="elevation-profile-sheet"
-      className={`flex flex-col gap-1 px-2 py-1.5 rounded-md bg-black/55 backdrop-blur-md border border-white/5 text-[10px] text-white/85 ${className}`}
+      className={`flex flex-col gap-1 px-2 py-1.5 rounded-md glass-card text-[10px] text-[color:var(--ink-primary)] ${className}`}
     >
       <div className="flex items-center gap-1.5">
         <Mountain size={11} strokeWidth={1.75} className="opacity-70" />

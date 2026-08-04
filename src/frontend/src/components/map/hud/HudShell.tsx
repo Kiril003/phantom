@@ -11,6 +11,7 @@ import { SearchBar } from './SearchBar';
 import { NavigationToolbar } from './NavigationToolbar';
 import { TimeMachineSlider } from './TimeMachineSlider';
 import { CoordinateReadout } from './StatusChips';
+import { AttributionDrawer } from './AttributionDrawer';
 import { RoutingTool } from './RoutingTool';
 import { GeofenceDrawTool } from './GeofenceDrawTool';
 import { AirRaidLayer } from '../layers/AirRaidLayer';
@@ -113,6 +114,7 @@ export function HudShell({
 
   const tactical = useMapStore((s) => s.tactical);
   const zoom = useMapStore((s) => s.zoom);
+  const center = useMapStore((s) => s.center);
   const layers = useMapStore((s) => s.layers);
   const toggleLayer = useMapStore((s) => s.toggleLayer);
   const searchQuery = useMapStore((s) => s.searchQuery);
@@ -226,9 +228,13 @@ export function HudShell({
           Бічні колонки однакової ширини — інакше `justify-between` ставить
           «центр» будь-де, тільки не по центру. */}
       <div className="absolute bottom-[84px] left-[76px] right-[76px] flex items-end gap-3">
+        {/* Атрибуція переїхала сюди з правого верху: там вона лягала на
+            рейку інструментів на 54×38 px. Місце ліворуч унизу — те саме,
+            де її тримає кожна мапа світу. */}
         <div className="pointer-events-auto flex w-[168px] shrink-0 flex-col items-start gap-1.5">
           <CoordinateReadout lat={tactical.lat} lon={tactical.lon} source={tactical.source} />
           <ScaleBar zoom={zoom} lat={lat} />
+          <AttributionDrawer />
         </div>
 
         <div className="pointer-events-auto flex min-w-0 flex-1 items-center justify-center gap-2">
@@ -242,8 +248,11 @@ export function HudShell({
           />
         </div>
 
+        {/* «Поруч» шукало біля позиції з браузера — а вона на цій машині
+            за 8 км від того, що на екрані. Поруч — це поруч із тим, на що
+            людина дивиться. */}
         <div className="pointer-events-auto flex w-[168px] shrink-0 justify-end">
-          <NearbyPanel lat={tactical.lat} lon={tactical.lon} zoom={zoom} onSelect={() => {}} />
+          <NearbyPanel lat={center?.[1] ?? tactical.lat} lon={center?.[0] ?? tactical.lon} zoom={zoom} onSelect={() => {}} />
         </div>
       </div>
     </div>

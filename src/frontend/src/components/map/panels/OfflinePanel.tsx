@@ -20,11 +20,11 @@ export function OfflinePanel({ open, onClose }: OfflinePanelProps): JSX.Element 
       >
         <button
           onClick={onClose}
-          className="absolute -top-3 -right-3 z-10 p-2 rounded-full bg-black/60 border border-white/10 text-white/50 hover:text-white backdrop-blur-md shadow-xl transition-all active:scale-90"
+          className="absolute -top-3 -right-3 z-10 p-2 rounded-full glass-elevated border border-black/10 text-[color:var(--ink-muted)] hover:text-[color:var(--ink-primary)] backdrop-blur-md shadow-xl transition-all active:scale-90"
         >
           <X size={14} />
         </button>
-        <OfflineRegionManager className="shadow-2xl border border-white/10" />
+        <OfflineRegionManager className="shadow-2xl border border-black/10" />
       </div>
     </div>
   );

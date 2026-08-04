@@ -49,7 +49,7 @@ import {
 import { AgentLimitsGroup } from './AgentLimitsGroup';
 import { AgentLayoutGroup } from './AgentLayoutGroup';
 import { DesktopShellGroup } from './DesktopShellGroup';
-import { Monitor, KeyRound, ShieldCheck, Key, Users } from 'lucide-react';
+import { Monitor, KeyRound, ShieldCheck, Key, Users, Smartphone } from 'lucide-react';
 import { KeyVaultPanel } from './KeyVaultPanel';
 import { LicenseGroup } from './LicenseGroup';
 import { ApiKeysTab } from './ApiKeysTab';
@@ -156,7 +156,24 @@ export default function SettingsPanel() {
       icon: <Users size={14} />,
       settings: [],
     };
-    return [...categories, polisKeys, license, virtual, apiKeys, members];
+    // Панель пари з телефоном була написана й НЕДОСЯЖНА: рендер чекав на
+    // категорію `mobile`, а в списку її не було взагалі. Тобто єдиний шлях
+    // дати ПК точне місце існував лише в коді.
+    const mobile: any = {
+      id: 'mobile',
+      label: 'Телефон',
+      icon: <Smartphone size={14} />,
+      settings: [],
+    };
+    // Бекенд теж віддає `mobile`, тому зводимо за id: дубль давав React
+    // попередження про однакові ключі, а користувачу — дві однакові вкладки.
+    const merged = [...categories, mobile, polisKeys, license, virtual, apiKeys, members];
+    const seen = new Set<string>();
+    return merged.filter((c: any) => {
+      if (seen.has(c.id)) return false;
+      seen.add(c.id);
+      return true;
+    });
   }, [categories]);
 
   const activeCategory = useMemo(

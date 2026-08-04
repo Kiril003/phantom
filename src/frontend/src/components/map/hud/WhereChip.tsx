@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Link } from 'react-router-dom';
 import { AlertTriangle, ChevronDown, ChevronUp, Info, MapPinOff, ShieldAlert, Smartphone } from 'lucide-react';
 import { formatDistance } from '../../../services/positioning/fuse';
 import { SOURCE_LABEL } from '../../../services/positioning/types';
@@ -99,14 +100,19 @@ export function WhereChip({ position, pairedDevices = 0 }: {
               </div>
             ))
           )}
+          {/* Порада, якою не можна скористатись, — це не порада. Пара вже
+              написана й живе в налаштуваннях; ведемо прямо туди. */}
           {pairedDevices === 0 && (
-            <div className="flex items-start gap-1.5 rounded-lg bg-amber-500/10 px-2 py-1.5">
-              <Smartphone size={11} className="mt-[1px] shrink-0 text-amber-700" />
+            <Link
+              to="/settings/mobile"
+              className="flex min-h-[44px] items-start gap-1.5 rounded-lg bg-amber-500/10 px-2 py-1.5 transition-colors hover:bg-amber-500/20"
+            >
+              <Smartphone size={11} className="mt-[3px] shrink-0 text-amber-700" />
               <div className="text-[10px] leading-snug text-ink-secondary">
                 У цього ПК немає супутникового приймача.
-                <span className="text-ink-muted"> Підключи телефон — і місце стане точним до метрів.</span>
+                <span className="text-ink-muted"> Підключити телефон — місце стане точним до метрів.</span>
               </div>
-            </div>
+            </Link>
           )}
           <div className="pt-0.5 font-mono text-[10px] tabular-nums text-ink-muted">
             {position.lat.toFixed(5)}, {position.lon.toFixed(5)}

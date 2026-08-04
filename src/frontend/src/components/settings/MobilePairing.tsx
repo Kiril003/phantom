@@ -446,7 +446,7 @@ export function MobilePairing(): JSX.Element {
               lineHeight: 1.4,
             }}
           >
-            Згенеруй одноразовий QR (60 с) — Companion видобуде device-JWT.
+            Наведи камеру телефона на код. Живе 60 секунд, потім згенеруй новий.
           </div>
         </div>
         <button
@@ -564,7 +564,7 @@ export function MobilePairing(): JSX.Element {
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div className="eyebrow-amber" style={{ fontSize: 9 }}>
-                SCAN ME
+                НАВЕДИ КАМЕРУ
               </div>
               <div
                 style={{
@@ -577,7 +577,7 @@ export function MobilePairing(): JSX.Element {
                   textOverflow: 'ellipsis',
                 }}
               >
-                {qr.qr.host}
+                {qr.qr.host}{' '}
                 <span
                   className="tabular"
                   style={{
@@ -598,7 +598,7 @@ export function MobilePairing(): JSX.Element {
                   lineHeight: 1.4,
                 }}
               >
-                Companion → камера → QR. Або кнопка{' '}
+                PHANTOM на телефоні → камера → код. Або кнопка{' '}
                 <strong style={{ color: 'var(--ink-secondary)' }}>JSON</strong>{' '}
                 нижче, якщо камера недоступна.
               </div>
@@ -644,8 +644,8 @@ export function MobilePairing(): JSX.Element {
                   title={qr.qr.server_cert_sha256}
                 >
                   {qr.qr.server_cert_sha256 === 'dev-no-pin'
-                    ? 'dev · no cert pin'
-                    : 'cert pinned'}
+                    ? 'локальна мережа · без сертифіката'
+                    : 'сертифікат закріплено'}
                 </span>
               </div>
 

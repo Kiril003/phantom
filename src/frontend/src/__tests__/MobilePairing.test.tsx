@@ -141,7 +141,7 @@ describe('MobilePairing — generate QR', () => {
     expect(img.src).toBe(QR_FIXTURE.qr_svg_data_url);
   });
 
-  it('shows host, ip:port, truncated pair_id, and dev-no-pin chip', async () => {
+  it('shows host, ip:port, truncated pair_id, and підпис про сертифікат', async () => {
     render(<MobilePairing />);
     const btn = await screen.findByText(/Згенерувати QR/i);
     await act(async () => {
@@ -157,7 +157,7 @@ describe('MobilePairing — generate QR', () => {
     expect(
       screen.getByText((t) => t.includes('pair_id ·') && t.includes('abcdef12')),
     ).toBeTruthy();
-    expect(screen.getByText(/dev · no cert pin/i)).toBeTruthy();
+    expect(screen.getByText(/локальна мережа · без сертифіката/i)).toBeTruthy();
   });
 
   it('shows "ROOT trust required" banner on ApiError 403', async () => {

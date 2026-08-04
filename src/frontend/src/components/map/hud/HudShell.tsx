@@ -116,7 +116,7 @@ export function HudShell({
   const tactical = useMapStore((s) => s.tactical);
   const zoom = useMapStore((s) => s.zoom);
   const center = useMapStore((s) => s.center);
-  const position = usePosition();
+  const { position, pairedDevices } = usePosition();
   const layers = useMapStore((s) => s.layers);
   const toggleLayer = useMapStore((s) => s.toggleLayer);
   const searchQuery = useMapStore((s) => s.searchQuery);
@@ -262,7 +262,7 @@ export function HudShell({
             рейку інструментів на 54×38 px. Місце ліворуч унизу — те саме,
             де її тримає кожна мапа світу. */}
         <div className="pointer-events-auto flex w-[168px] shrink-0 flex-col items-start gap-1.5">
-          <WhereChip position={position} />
+          <WhereChip position={position} pairedDevices={pairedDevices} />
           <ScaleBar zoom={zoom} lat={lat} />
           <AttributionDrawer />
         </div>

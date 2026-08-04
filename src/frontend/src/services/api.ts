@@ -263,6 +263,14 @@ export const mapApi = {
     ),
   getAttribution: () =>
     request<AttributionPayload>('GET', '/map/attribution'),
+
+  /**
+   * Що ПК може використати, щоб дізнатись своє місце: останній фікс із
+   * спареного телефона і точки доступу, які він бачив. Рішення, кому
+   * вірити, ухвалює клієнт — тут лише сировина.
+   */
+  positionSources: () =>
+    request<PositionSources>('GET', '/map/position_sources'),
   // Phase 24-G — Offline region manager.
   getOfflineRegions: () =>
     request<OfflineRegionsResponse>('GET', '/map/offline/regions'),
@@ -466,6 +474,30 @@ export interface NearbyResponse {
 }
 
 /* ─── Routing / geocoding ───────────────────────────────────────────────── */
+
+export interface PositionSourceAp {
+  mac: string;
+  ssid: string;
+  rssi: number;
+  lat: number | null;
+  lon: number | null;
+}
+
+export interface PositionSourcePhone {
+  device_id: string;
+  device_name: string;
+  lat: number;
+  lon: number;
+  accuracy_m: number | null;
+  motion_class: string | null;
+  age_s: number;
+}
+
+export interface PositionSources {
+  phone: PositionSourcePhone | null;
+  aps: PositionSourceAp[];
+  paired_devices: number;
+}
 
 export interface GeocodeCandidate {
   lat: number;

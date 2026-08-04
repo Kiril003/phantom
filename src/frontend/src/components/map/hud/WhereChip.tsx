@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AlertTriangle, ChevronDown, ChevronUp, Info, MapPinOff, ShieldAlert } from 'lucide-react';
+import { AlertTriangle, ChevronDown, ChevronUp, Info, MapPinOff, ShieldAlert, Smartphone } from 'lucide-react';
 import { formatDistance } from '../../../services/positioning/fuse';
 import { SOURCE_LABEL } from '../../../services/positioning/types';
 import type { FusedPosition } from '../../../services/positioning/types';
@@ -18,7 +18,11 @@ function confidenceWord(c: number): { text: string; dot: string } {
  * кілька і вони не згодні між собою, одна точка — це вже твердження, а не
  * факт. Чипс показує рішення, а тап розкриває, ЧОМУ саме таке.
  */
-export function WhereChip({ position }: { position: FusedPosition | null }) {
+export function WhereChip({ position, pairedDevices = 0 }: {
+  position: FusedPosition | null;
+  /** 0 — телефона немає, і це найкорисніша підказка на цьому екрані. */
+  pairedDevices?: number;
+}) {
   const [open, setOpen] = useState(false);
 
   if (!position) {
@@ -94,6 +98,15 @@ export function WhereChip({ position }: { position: FusedPosition | null }) {
                 </div>
               </div>
             ))
+          )}
+          {pairedDevices === 0 && (
+            <div className="flex items-start gap-1.5 rounded-lg bg-amber-500/10 px-2 py-1.5">
+              <Smartphone size={11} className="mt-[1px] shrink-0 text-amber-700" />
+              <div className="text-[10px] leading-snug text-ink-secondary">
+                У цього ПК немає супутникового приймача.
+                <span className="text-ink-muted"> Підключи телефон — і місце стане точним до метрів.</span>
+              </div>
+            </div>
           )}
           <div className="pt-0.5 font-mono text-[10px] tabular-nums text-ink-muted">
             {position.lat.toFixed(5)}, {position.lon.toFixed(5)}

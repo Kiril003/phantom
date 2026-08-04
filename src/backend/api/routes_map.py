@@ -13,6 +13,7 @@ Endpoints:
 """
 from __future__ import annotations
 
+import json
 import logging
 from datetime import datetime, timezone
 from typing import Any, Optional
@@ -822,3 +823,125 @@ async def post_elevation_profile(
     points = [(p[0], p[1]) for p in body.points]
     profile = await get_elevation_service().get_profile(points)
     return {"profile": [s.model_dump() for s in profile]}
+
+
+# ── Джерела місця для ПК ─────────────────────────────────────────────────────
+#
+# У ПК немає супутникового приймача, і не мусить бути. Місце складається з
+# того, що є під рукою: остання позиція спареного телефона і точки доступу,
+# які він щойно бачив. Тут ми лише ЧЕСНО віддаємо сировину — рішення, кому
+# вірити, ухвалює клієнт (`services/positioning/fuse.ts`), бо саме він знає,
+# що ще бачить браузер.
+
+
+class PositionApOut(BaseModel):
+    mac: str
+    ssid: str = ""
+    rssi: int
+    #: Координати відомі лише для точок, які ми колись записали з фіксом.
+    lat: Optional[float] = None
+    lon: Optional[float] = None
+
+
+class PhonePositionOut(BaseModel):
+    device_id: str
+    device_name: str
+    lat: float
+    lon: float
+    accuracy_m: Optional[float] = None
+    motion_class: Optional[str] = None
+    #: Скільки секунд тому телефон це заміряв. Свіжість тут важить не менше
+    #: за саму точність: хвилинної давності місце вже не описує дійсність.
+    age_s: float
+
+
+class PositionSourcesOut(BaseModel):
+    phone: Optional[PhonePositionOut] = None
+    aps: list[PositionApOut] = Field(default_factory=list)
+    #: Скільки пристроїв спарено взагалі — щоб UI міг сказати «телефон не
+    #: підключено», а не мовчати.
+    paired_devices: int = 0
+
+
+@router.get("/position_sources", response_model=PositionSourcesOut)
+async def get_position_sources(
+    max_age_s: int = Query(600, ge=10, le=86_400),
+    db: AsyncSession = Depends(get_db),
+    token_data: TokenPayload = Depends(require_auth),
+) -> PositionSourcesOut:
+    """Останнє місце з телефона + точки доступу, які він бачив."""
+    from db.models import MobileSensorBatch, PairedDevice
+
+    user_id = getattr(token_data, "user_id", None) or getattr(token_data, "sub", None)
+
+    paired_q = select(PairedDevice).where(
+        PairedDevice.user_id == user_id,
+        PairedDevice.revoked_at.is_(None),
+    )
+    paired = list((await db.execute(paired_q)).scalars().all())
+
+    batch_q = (
+        select(MobileSensorBatch)
+        .where(MobileSensorBatch.user_id == user_id)
+        .order_by(MobileSensorBatch.received_at.desc())
+        .limit(1)
+    )
+    batch = (await db.execute(batch_q)).scalars().first()
+    if batch is None:
+        return PositionSourcesOut(paired_devices=len(paired))
+
+    now = datetime.now(tz=timezone.utc)
+    received = batch.received_at
+    if received.tzinfo is None:
+        received = received.replace(tzinfo=timezone.utc)
+    age_s = max(0.0, (now - received).total_seconds())
+    if age_s > max_age_s:
+        return PositionSourcesOut(paired_devices=len(paired))
+
+    phone = None
+    if batch.gps_lat is not None and batch.gps_lon is not None:
+        device = next((d for d in paired if d.id == batch.device_id), None)
+        phone = PhonePositionOut(
+            device_id=batch.device_id,
+            device_name=getattr(device, "device_name", None) or "телефон",
+            lat=float(batch.gps_lat),
+            lon=float(batch.gps_lon),
+            accuracy_m=batch.gps_accuracy_m,
+            motion_class=batch.motion_class,
+            age_s=age_s,
+        )
+
+    # Точки доступу з останнього пакета, збагачені координатами з тих
+    # записів, які ми вже маємо. Без координат точка не допомагає визначити
+    # місце — але ми її однаково віддаємо, бо вона доводить, ЩО саме видно.
+    aps: list[PositionApOut] = []
+    try:
+        seen = json.loads(batch.wifi_json or "[]")
+    except (ValueError, TypeError):
+        seen = []
+    macs = [str(w.get("mac")) for w in seen if w.get("mac")]
+    known: dict[str, WardrivingRecord] = {}
+    if macs:
+        rows = (
+            await db.execute(select(WardrivingRecord).where(WardrivingRecord.mac.in_(macs[:200])))
+        ).scalars().all()
+        for r in rows:
+            prev = known.get(r.mac)
+            if prev is None or r.last_seen > prev.last_seen:
+                known[r.mac] = r
+    for w in seen[:200]:
+        mac = str(w.get("mac") or "")
+        if not mac:
+            continue
+        rec = known.get(mac)
+        aps.append(
+            PositionApOut(
+                mac=mac,
+                ssid=str(w.get("ssid") or ""),
+                rssi=int(w.get("rssi") or -100),
+                lat=(float(rec.lat) if rec else None),
+                lon=(float(rec.lon) if rec else None),
+            )
+        )
+
+    return PositionSourcesOut(phone=phone, aps=aps, paired_devices=len(paired))

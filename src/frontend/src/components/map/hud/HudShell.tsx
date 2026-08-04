@@ -10,7 +10,8 @@ import { TacticalStatsZone } from './TacticalStatsZone';
 import { SearchBar } from './SearchBar';
 import { NavigationToolbar } from './NavigationToolbar';
 import { TimeMachineSlider } from './TimeMachineSlider';
-import { CoordinateReadout } from './StatusChips';
+import { WhereChip } from './WhereChip';
+import { usePosition } from '../../../hooks/usePosition';
 import { AttributionDrawer } from './AttributionDrawer';
 import { RoutingTool } from './RoutingTool';
 import { GeofenceDrawTool } from './GeofenceDrawTool';
@@ -115,6 +116,7 @@ export function HudShell({
   const tactical = useMapStore((s) => s.tactical);
   const zoom = useMapStore((s) => s.zoom);
   const center = useMapStore((s) => s.center);
+  const position = usePosition();
   const layers = useMapStore((s) => s.layers);
   const toggleLayer = useMapStore((s) => s.toggleLayer);
   const searchQuery = useMapStore((s) => s.searchQuery);
@@ -260,7 +262,7 @@ export function HudShell({
             рейку інструментів на 54×38 px. Місце ліворуч унизу — те саме,
             де її тримає кожна мапа світу. */}
         <div className="pointer-events-auto flex w-[168px] shrink-0 flex-col items-start gap-1.5">
-          <CoordinateReadout lat={tactical.lat} lon={tactical.lon} source={tactical.source} />
+          <WhereChip position={position} />
           <ScaleBar zoom={zoom} lat={lat} />
           <AttributionDrawer />
         </div>

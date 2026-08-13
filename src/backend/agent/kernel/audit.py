@@ -176,6 +176,47 @@ async def write_audit_entry(
         return int(entry.id)
 
 
+async def write_auto_approval(
+    *,
+    user_id: str,
+    task_id: str,
+    step: PlanStep,
+    risk_level: int,
+    reason: str,
+) -> int:
+    """Record a consent decision no human made, so the trail can show it."""
+    async with get_session() as db:
+        entry = AgentAuditEntry(
+            user_id=user_id,
+            task_id=task_id,
+            step_idx=step.step_idx,
+            sub_goal_id=step.sub_goal_id,
+            action_name="consent.auto_approved",
+            args_json=json.dumps(
+                {"action": step.action, "args": step.args, "reason": reason},
+                ensure_ascii=False,
+                default=str,
+            ),
+            intent=step.intent or None,
+            monologue_json=None,
+            result_json=json.dumps(
+                {
+                    "ok": True,
+                    "approver": "none",
+                    "approved_by_human": False,
+                    "reason": reason,
+                },
+                ensure_ascii=False,
+            ),
+            risk_level=risk_level,
+            elapsed_ms=0,
+            retried_from=None,
+        )
+        db.add(entry)
+        await db.flush()
+        return int(entry.id)
+
+
 async def fetch_audit(
     user_id: str, task_id: str | None, limit: int = 50
 ) -> list[AuditEntry]:

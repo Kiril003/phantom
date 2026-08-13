@@ -37,6 +37,13 @@ ROLE_LABELS: Dict[str, str] = {
 
 DEFAULT_ROLE = "Member"
 
+# Фільтр стояв ["RUNNING","SCHEDULED","PENDING"]: усі письменники пишуть
+# малими, колонка без COLLATE NOCASE, а SCHEDULED/PENDING у словнику
+# TaskStatus не існує взагалі — плитка показувала нуль завжди.
+# `paused` не рахуємо: це єдиний статус, що означає «людина спинила» —
+# і його ж масово ставить mark_orphans_paused після кожного рестарту.
+ACTIVE_AGENT_STATUSES = ("planning", "running", "awaiting_user", "blocked_quota")
+
 
 def role_label(code: str | None) -> str:
     return ROLE_LABELS.get(code or DEFAULT_ROLE, code or DEFAULT_ROLE)
@@ -53,7 +60,7 @@ async def get_analytics_overview(
             .join(User, AgentTask.user_id == User.id)
             .where(
                 User.tenant_id == tenant.id,
-                AgentTask.status.in_(["RUNNING", "SCHEDULED", "PENDING"]),
+                AgentTask.status.in_(ACTIVE_AGENT_STATUSES),
             )
         )
     ).scalar() or 0

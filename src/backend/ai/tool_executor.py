@@ -26,6 +26,7 @@ from sqlalchemy import and_, select
 from config import config
 from db import database as _db
 from db.models import CalendarEvent, LocationHistory, TemporalAnchor
+from tools.audit_service import record_tool_invocation
 
 
 def _session_factory():
@@ -2713,6 +2714,28 @@ def _args_snippet(args: dict[str, Any], *, max_len: int = 200) -> str:
     return snippet
 
 
+async def _audit_invocation(
+    tool_name: str,
+    user_id: str,
+    snippet: str,
+    t0: float,
+    outcome: str,
+    error: str | None = None,
+) -> None:
+    try:
+        await record_tool_invocation(
+            actor_user_id=user_id,
+            tool_name=tool_name,
+            args_snippet=snippet,
+            intent=None,
+            duration_ms=int((time.monotonic() - t0) * 1000),
+            outcome=outcome,
+            error=error,
+        )
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("tool audit failed for %s: %s", tool_name, exc)
+
+
 async def execute_tool(
     tool_name: str,
     args: dict[str, Any] | None,
@@ -2750,6 +2773,9 @@ async def execute_tool(
         else PER_TOOL_TIMEOUT_S.get(tool_name, TOOL_TIMEOUT_S)
     )
     t0 = time.monotonic()
+    # Both chat entry points funnel through here — `chat_tool_dispatcher`
+    # delegates and `gemini_provider.call_with_tools` calls directly — so this
+    # is the only place a chat-tool audit row covers all of them.
     try:
         result = await asyncio.wait_for(
             handler(safe_args, user_id),
@@ -2759,13 +2785,14 @@ async def execute_tool(
         logger.warning(
             "tool_executor: %s timed out after %.1fs", tool_name, effective_timeout
         )
-        return _err(
-            "timeout",
-            f"tool '{tool_name}' exceeded {effective_timeout:.1f}s",
-        )
+        message = f"tool '{tool_name}' exceeded {effective_timeout:.1f}s"
+        await _audit_invocation(tool_name, user_id, snippet, t0, "fail", message)
+        return _err("timeout", message)
     except Exception as exc:
         logger.exception("tool_executor: %s raised", tool_name)
-        return _err("exception", f"{type(exc).__name__}: {exc}")
+        message = f"{type(exc).__name__}: {exc}"
+        await _audit_invocation(tool_name, user_id, snippet, t0, "fail", message)
+        return _err("exception", message)
 
     elapsed_ms = int((time.monotonic() - t0) * 1000)
     if isinstance(result, dict):
@@ -2776,8 +2803,16 @@ async def execute_tool(
             "ok" if result.get("ok") else f"error={result.get('error_kind')}",
             elapsed_ms,
         )
+        ok = result.get("ok") is True
+        await _audit_invocation(
+            tool_name, user_id, snippet, t0,
+            "ok" if ok else "fail",
+            None if ok else str(result.get("error") or result.get("error_kind") or ""),
+        )
         return result
-    return _err("exception", f"tool '{tool_name}' returned non-dict: {type(result).__name__}")
+    message = f"tool '{tool_name}' returned non-dict: {type(result).__name__}"
+    await _audit_invocation(tool_name, user_id, snippet, t0, "fail", message)
+    return _err("exception", message)
 
 
 __all__ = [

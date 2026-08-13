@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 
 from config import config
 
-from agent.kernel.audit import persist_task_state, save_checkpoint, snapshot_task_state, update_task_status
+from agent.kernel.audit import persist_task_state, save_checkpoint, snapshot_task_state, update_task_status, write_auto_approval
 from agent.kernel.checkpoints import build as build_checkpoint
 from agent.kernel.errors import BackgroundTimeoutError
 from agent.kernel.executor import StepCancelled, TaskStopped, execute as execute_action
@@ -1471,6 +1471,7 @@ async def _run_task_loop_impl(runtime: "AgentRuntime", state: "TaskState", *, re
                 # 'timeout' / 'no_device' lets execution continue to the
                 # desktop loop below as if the phone never existed.
                 phone_verdict = "no_device"
+                phone_error: str | None = None
                 try:
                     from agent.operations.approve_on_phone import request_phone_approval
 
@@ -1495,6 +1496,9 @@ async def _run_task_loop_impl(runtime: "AgentRuntime", state: "TaskState", *, re
                     # MUST NOT prevent the existing desktop intervene flow.
                     logger.debug("approve_on_phone errored, falling back: %s", exc)
                     phone_verdict = "no_device"
+                    # Distinct from "nobody is paired": the trail must not
+                    # report a crashed lookup as an absent companion.
+                    phone_error = f"{type(exc).__name__}: {exc}"[:200]
                 if phone_verdict == "approved":
                     state.observations.append(build_user(
                         state.step_idx, "approve (phone)"
@@ -1530,17 +1534,37 @@ async def _run_task_loop_impl(runtime: "AgentRuntime", state: "TaskState", *, re
                             False,
                         ))
                     ):
-                        state.observations.append(build_user(
-                            state.step_idx,
-                            "approve (auto: no companion paired)",
+                        auto_reason = phone_error or (
+                            "no paired companion carries the approvals "
+                            "capability"
+                        )
+                        # build_system, not build_user: the loop approved this,
+                        # not the operator, and the task's own memory is read
+                        # back by the reflector and the audit UI.
+                        state.observations.append(build_system(
+                            state.step_idx, "consent_auto",
+                            f"auto-approved {step.action}: no human was asked "
+                            f"({auto_reason})",
                         ))
+                        try:
+                            await write_auto_approval(
+                                user_id=state.user_id,
+                                task_id=state.id,
+                                step=step,
+                                risk_level=int(cls.risk_level),
+                                reason=auto_reason,
+                            )
+                        except Exception as exc:
+                            logger.warning(
+                                "auto-approval audit row failed for %s: %s",
+                                step.action, exc,
+                            )
                         await runtime._broadcast("warning.issued", {
                             "task_id": state.id,
                             "category": "auto_approve_no_companion",
                             "message": (
                                 f"auto-approved risky action {step.action} "
-                                f"(risk {int(cls.risk_level)}): no paired "
-                                f"companion to ask"
+                                f"(risk {int(cls.risk_level)}): {auto_reason}"
                             ),
                         })
                         state.status = "running"

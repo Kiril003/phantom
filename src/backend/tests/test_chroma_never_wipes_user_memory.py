@@ -168,8 +168,15 @@ def test_no_client_is_constructed_without_settings():
     root = pathlib.Path(__file__).resolve().parent.parent
     offenders: list[str] = []
 
+    # `.claude` holds agent worktrees — checkouts of OTHER commits that happen
+    # to live under the tree. Without it this sweep reads a stale copy of a
+    # file that was fixed here and fails on it, so the verdict depends on
+    # whatever anyone left lying around rather than on the product.
     for path in root.rglob("*.py"):
-        if any(part in {".venv", "tests", "__pycache__"} for part in path.parts):
+        if any(
+            part in {".venv", "tests", "__pycache__", ".claude"}
+            for part in path.parts
+        ):
             continue
         try:
             tree = ast.parse(path.read_text(encoding="utf-8"))

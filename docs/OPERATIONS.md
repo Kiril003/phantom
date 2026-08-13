@@ -228,14 +228,20 @@ automatically at 90 days, audit log retention is in your hands.
 
 `.github/workflows/ci.yml` (E-3 commit) gates every push:
 
-* backend pytest (1091+ tests, ~3 min on GitHub-hosted ubuntu-22.04)
+* backend pytest — **~60 min**, measured 2026-08-06 on a 12-core box with the
+  G2 warmup already skipped. The CI job allows 90 min because hosted runners
+  are slower. The "~3 min" this line used to claim was wrong by twenty-fold,
+  and understating a gate that badly teaches people it has hung and to kill
+  it — which is how the gate ends up skipped instead of run.
 * frontend typecheck + vite build
 * docker buildx (linux/amd64 smoke build with GHA cache)
 
 PR merge requires all three. To run the same gates locally:
 
 ```bash
-# Backend
+# Backend — expect ~60 min. `tests/conftest.py` already sets
+# PHANTOM_SKIP_G2_WARMUP=1; without it the suite is ~3.2x slower and looks
+# hung during startup rather than failing.
 cd src/backend && .venv/bin/python -m pytest -q
 
 # Frontend
@@ -320,7 +326,7 @@ When enabled, `routes_chat._build_ai_response` routes through
    `search_web` are NEVER advertised to the chat model (D2-E2 +
    TM-17B-E2 invariants).
 2. Dispatch via `chat_tool_dispatcher.dispatch` with the per-call
-   timeout cap (`chat_tool_call_timeout_s`, default 10 s).
+   timeout cap (`chat_tool_call_timeout_s`, default 30 s).
 3. Result wrapped in a nonced envelope `{_phantom_tool_<nonce>: name,
    ok, name, content}` (TM-17B-S1 — the 8-byte process nonce
    prevents an LLM from forging a tool-result marker in plain text).
@@ -328,7 +334,7 @@ When enabled, `routes_chat._build_ai_response` routes through
 5. LLM produces final answer with envelope appended to history.
 6. `output_safety.sanitize` runs before the WS broadcast (TM-17B-I1).
 
-Wall-clock budget: `chat_tool_max_total_ms` (default 12 s). Counter:
+Wall-clock budget: `chat_tool_max_total_ms` (default 30 s). Counter:
 `phantom_chat_tool_calls_total{tool=...,ok=...}`.
 
 ### Multi-tenant runtime guard
@@ -351,6 +357,23 @@ via `PHANTOM_ALLOW_MULTI_TENANT_PREVIEW=1`.
 | `security_trusted_proxies` | `["127.0.0.1", "::1", "localhost"]` | Allowlist of immediate-peer hosts whose XFF the daemon parses. |
 | `deployment_mode` | `single` | Multi-tenant runtime guard. `multi` refused unless `PHANTOM_ALLOW_MULTI_TENANT_PREVIEW=1`. |
 | `chroma_janitor_at_startup` | `true` | Run `prune_orphan_collections` + `prune_orphan_dirs` at lifespan startup. |
+
+### Startup warmup budget
+
+The G2 warmup lanes (MiniLM encoder, Chroma eager open, voice preload) are a
+first-request latency optimisation, not a correctness requirement — the daemon
+serves correctly without them, just colder.
+
+| Env var | Default | Purpose |
+|---|---|---|
+| `PHANTOM_G2_LANE_TIMEOUT_S` | `30` | Wall-clock ceiling per warmup lane. A lane that exceeds it logs a WARN, bumps `phantom_lifespan_g2_failures_total{lane=...}`, and startup continues. Raise for genuinely slow flash media. |
+| `PHANTOM_SKIP_G2_WARMUP` | unset | Set to `1` to skip warmup entirely. The test suite sets this; it saves ~31 s per app construction. |
+
+The ceiling exists because a lane is not required to *fail* in order to be
+broken. `_lane_minilm` fetches the encoder over the network on a cold cache, so
+a device with no route out — the normal state for a local-first install — used
+to park in startup indefinitely: never ready, and invisible to `/readyz`
+because the probe endpoint was never reached.
 
 ### Strict JWT cap (Day-3 D3-C-2)
 

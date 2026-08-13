@@ -12,6 +12,7 @@ interface Member {
 export function MembersTab() {
   const [members, setMembers] = useState<Member[]>([]);
   const [loading, setLoading] = useState(true);
+  const [failed, setFailed] = useState<string | null>(null);
 
   const [showInviteModal, setShowInviteModal] = useState(false);
   const [inviteEmail, setInviteEmail] = useState('');
@@ -26,25 +27,18 @@ export function MembersTab() {
     try {
       setLoading(true);
       
+      setFailed(null);
       const res = await fetch('/api/v1/tenant/members');
       if (res.ok) {
         const data = await res.json();
         setMembers(data.members || []);
       } else {
-        // Fallback to mock data if endpoint is not implemented
-        setMembers([
-          { id: '1', name: 'Alice', email: 'alice@phantom.os', role: 'Owner' },
-          { id: '2', name: 'Bob', email: 'bob@phantom.os', role: 'Admin' },
-          { id: '3', name: 'Charlie', email: 'charlie@phantom.os', role: 'Member' },
-        ]);
+        setMembers([]);
+        setFailed('ядро не віддало список');
       }
     } catch (err) {
-      // Mock data on fetch error
-      setMembers([
-        { id: '1', name: 'Alice', email: 'alice@phantom.os', role: 'Owner' },
-        { id: '2', name: 'Bob', email: 'bob@phantom.os', role: 'Admin' },
-        { id: '3', name: 'Charlie', email: 'charlie@phantom.os', role: 'Member' },
-      ]);
+      setMembers([]);
+      setFailed('ядро не відповідає');
     } finally {
       setLoading(false);
     }
@@ -111,6 +105,11 @@ export function MembersTab() {
       </div>
 
       <div className="flex flex-col gap-3">
+        {members.length === 0 && (
+          <div className="p-4 bg-black/20 border border-white/5 rounded-2xl backdrop-blur-md text-sm text-muted">
+            {failed ?? 'у цьому просторі поки лише ти'}
+          </div>
+        )}
         {members.map(member => (
           <div key={member.id} className="flex items-center justify-between p-4 bg-black/20 border border-white/5 rounded-2xl backdrop-blur-md">
             <div className="flex items-center gap-4">

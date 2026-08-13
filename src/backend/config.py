@@ -54,6 +54,21 @@ class PhantomConfig(BaseSettings):
     # without mDNS (university WiFi, cellular hotspot, anything where
     # `phantom.local` doesn't resolve) MUST override via env PAIR_HOST.
     pair_host: str = "phantom.local"
+    # Порт TLS-слухача для телефонів. Слухач живе в тому самому процесі, що й
+    # uvicorn, і сідає на LAN-адреси під час lifespan — тобто раніше, ніж
+    # uvicorn займе свій порт. Збіг із `port` означає, що застосунок краде порт
+    # сам у себе: uvicorn --host 0.0.0.0 отримує EADDRINUSE і не піднімається.
+    # Звідси окремий 8443 — той самий, що в scripts/run-node.sh.
+    pair_tls_port: int = 8443
+    # Точка зустрічі для зовнішньої мережі. Вузол дзвонить туди сам, тож ані
+    # прокидання портів, ані білої адреси не потрібно. Возить вона байти вже
+    # зашифрованого TLS — ключів у неї немає й бути не може.
+    #
+    # Типового значення тут немає навмисно. Адреса, вписана «про запас»,
+    # означає, що вузол сам піде стукати до чужого сервера й покаже йому свою
+    # IP-адресу. Поки свого не розгорнуто — зовнішнього шляху просто немає.
+    relay_enabled: bool = True
+    relay_url: str = ""
 
     # ── Database ──────────────────────────────────────────────────────────────
     database_url: str = Field(
@@ -64,6 +79,13 @@ class PhantomConfig(BaseSettings):
     chroma_path: str = Field(
         default_factory=lambda: str(__import__('paths').resolve_data_dir('chroma'))
     )
+    #: What to do when the Chroma store will not open. Default False: log and
+    #: raise, touching nothing. The previous behaviour was to `rmtree` the whole
+    #: store on ANY exception — a locked SQLite or a permissions blip silently
+    #: destroyed every long-term memory the user had. When enabled, recovery
+    #: moves the damaged directory to `<chroma_path>.corrupt-<timestamp>` and
+    #: starts a fresh one; it never deletes.
+    chroma_auto_recover: bool = False
     # all-MiniLM-L6-v2 is English-only. On Ukrainian — the language this
     # product actually runs in — it scored 1/4 top-1 with a *negative* mean
     # margin on a 6-fact probe, i.e. strategic recall was effectively random
@@ -133,7 +155,8 @@ class PhantomConfig(BaseSettings):
     #   - 8b was configured but never installed, so the fallback could not load
     #     at all (a chat that fell back simply hung). 3b is installed and fits.
     #   - 32768 ctx was the ballooning case: the KV cache grows with the window.
-    ai_ollama_model: str = "llama3.2:3b"
+    # Запас мусить говорити українською не гірше за хмару — 3B цього не вміє.
+    ai_ollama_model: str = "qwen2.5:7b"
     ai_ollama_host: str = "http://127.0.0.1:11435"
     ai_ollama_num_ctx: int = 4096
     
@@ -198,6 +221,12 @@ class PhantomConfig(BaseSettings):
 
     # ── Voice / TTS ───────────────────────────────────────────────────────────
     voice_tts_enabled: bool = True
+    # Supertonic-3: той самий рушій, пресет (M1) і 8 кроків, що й на телефоні.
+    voice_tts_engine: Literal["auto", "supertonic", "piper", "silent"] = "auto"
+    voice_tts_supertonic_voice: str = "M1"
+    voice_tts_supertonic_steps: int = 8
+    voice_tts_supertonic_model_dir: str = ""  # порожньо → ~/.cache/supertonic3
+    voice_tts_supertonic_threads: int = 4  # 12 потоків ORT удвічі повільніші
     voice_tts_voice: str = "uk_UA-ukrainian_tts-medium"
     voice_tts_speed: float = 1.0
     voice_tts_alpha: float = 0.3
@@ -336,7 +365,7 @@ class PhantomConfig(BaseSettings):
     # Default "mid" matches the Q6A baseline; operators on a fully
     # capable desktop can flip to "high"; CI / VM deploys flip to
     # "low".
-    ui_hardware_tier: Literal["low", "mid", "high"] = "low"
+    ui_hardware_tier: Literal["low", "mid", "high"] = "mid"
     ui_color_cyan: str = "#00D4FF"
     ui_color_warning: str = "#FF6B35"
     ui_color_success: str = "#39FF14"
@@ -590,7 +619,11 @@ class PhantomConfig(BaseSettings):
     # ── Agent (Phase 9.2 Grounded Mind) ──────────────────────────────────────
     # Episodic memory — uses Phase 3 ChromaDB (chroma_path) with extra collection.
     agent_episodic_memory_enabled: bool = True
-    agent_episodic_collection: str = "agent_episodes"
+    # Prefix for the per-user episodic collections (`<prefix>_<user_id>`).
+    # The default matches the name the code hardcoded before this knob was
+    # wired up, so existing Chroma collections keep working — changing it
+    # points the daemon at a fresh, empty set of collections.
+    agent_episodic_collection: str = "phantom_v1_episodes"
     agent_episodic_top_k: int = 3
     # Visual grounding (OmniParser V2 wrapper)
     agent_grounding_enabled: bool = True
@@ -694,7 +727,7 @@ class PhantomConfig(BaseSettings):
     # Keeping them off by default prevents normal conversation from
     # turning into half-built UI cards while preserving the catalog for
     # labs/demo deployments that explicitly enable it.
-    chat_response_widgets_enabled: bool = True
+    chat_response_widgets_enabled: bool = False
     # Day-4 Wave-2 X-1 (ADR-ORC-001): orchestrator scaffold flag. When
     # OFF (default), routes_chat calls chat_pipeline.run unchanged —
     # back-compat invariant preserved. When ON AND the active provider
@@ -723,10 +756,12 @@ class PhantomConfig(BaseSettings):
     # iterations × Gemini ~2.1 s p50 = 8.4 s typical; p99 reaches 25 s
     # without a cap. Phase 17b's call_with_tools loop must abort and
     # surface the last-good response when this is exceeded — Tier D's
-    # chat_pipeline.py reads this before each iteration. 60 s leaves
-    # headroom over the typical case while keeping p99 within the
-    # tolerable chat-turn budget.
-    chat_tool_max_total_ms: int = 60_000
+    # chat_pipeline.py reads this before each iteration. 30 s is the
+    # ceiling the audit calls a tolerable chat-turn wait, and it is the
+    # smallest value that still lets one full `chat_tool_call_timeout_s`
+    # window (30 s, mirroring TOOL_TIMEOUT_S) complete inside the turn.
+    # Raising the per-call cap means raising this in lockstep.
+    chat_tool_max_total_ms: int = 30_000
     chat_artifacts_enabled: bool = True
     chat_artifact_html_cap_bytes: int = 262144
     ai_artifact_model: str = "auto"  # "auto" → ai_gemini_model; cloud-only, never Ollama

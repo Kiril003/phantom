@@ -580,7 +580,11 @@ class MissionReportComposer:
         *,
         prefer_llm: bool = True,
     ) -> "MissionReport | None":
-        from .missions.store import get_mission, list_phases
+        # `.store`, not `.missions.store`: this module already lives inside
+        # `agent.missions`, so the old path resolved to
+        # `agent.missions.missions.store` and every compose() call died on
+        # ModuleNotFoundError — mission reports could never be produced.
+        from .store import get_mission, list_phases
         from ..schemas import MissionReport, MissionReportPhase
 
         # Per-user isolation — raises PermissionError on cross-user access.

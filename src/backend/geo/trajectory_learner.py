@@ -8,7 +8,9 @@ from datetime import datetime, timedelta
 from typing import List, Dict, Any, Tuple
 from sqlalchemy import select
 from db.models import TrajectoryPattern
-from db.database import SessionLocal
+# `AsyncSessionLocal` is the name db.database actually exports; the old
+# `SessionLocal` made this whole module unimportable at runtime.
+from db.database import AsyncSessionLocal
 
 logger = logging.getLogger(__name__)
 
@@ -25,7 +27,7 @@ class TrajectoryLearner:
         # Simple heuristic: if we find a cluster of points with high dwell time
         # during the night, it's 'Home'. During day, it's 'Work' or 'Frequent'.
         
-        async with SessionLocal() as db:
+        async with AsyncSessionLocal() as db:
             # Check if we already have Home/Work
             result = await db.execute(
                 select(TrajectoryPattern).where(TrajectoryPattern.user_id == self.user_id)

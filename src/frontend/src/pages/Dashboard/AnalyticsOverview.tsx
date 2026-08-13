@@ -214,7 +214,8 @@ export default function AnalyticsOverview() {
                 operators.map((user) => (
                   <div
                     key={user.name}
-                    className="flex items-center justify-between p-3 rounded-xl bg-white/5 hover:bg-white/10 transition-colors"
+                    className="flex items-center justify-between p-3 rounded-xl"
+                    style={{ background: 'var(--line-subtle)', border: '1px solid var(--line-default)' }}
                   >
                     <div className="flex items-center gap-3">
                       <div className="w-8 h-8 rounded-full bg-gradient-to-tr from-amber-500 to-orange-500 flex items-center justify-center text-sm font-bold shadow-lg text-white">
@@ -269,7 +270,7 @@ function Hollow({ load, nothing }: { load: Load; nothing: string }) {
           : nothing;
   return (
     <div className="h-full min-h-[120px] flex items-center justify-center text-center px-4">
-      <span className="text-sm" style={{ color: 'var(--ink-faint)' }}>{text}</span>
+      <span className="text-sm" style={{ color: 'var(--ink-secondary)' }}>{text}</span>
     </div>
   );
 }

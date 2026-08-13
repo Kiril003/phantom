@@ -221,11 +221,17 @@ export default function AnalyticsOverview() {
                         {user.name.charAt(0)}
                       </div>
                       <div>
-                        <div className="text-sm font-medium text-zinc-100">{user.name}</div>
-                        <div className="text-xs text-zinc-500">{user.role}</div>
+                        <div className="text-sm font-medium" style={{ color: 'var(--ink-primary)' }}>
+                          {user.name}
+                        </div>
+                        <div className="text-xs" style={{ color: 'var(--ink-muted)' }}>
+                          {user.role}
+                        </div>
                       </div>
                     </div>
-                    <div className="text-sm font-mono text-zinc-300">{nf.format(user.ops)}</div>
+                    <div className="text-sm font-mono" style={{ color: 'var(--ink-primary)' }}>
+                      {nf.format(user.ops)}
+                    </div>
                   </div>
                 ))
               )}

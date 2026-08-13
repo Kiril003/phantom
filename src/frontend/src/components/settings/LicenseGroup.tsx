@@ -33,22 +33,38 @@ const REASON_MESSAGES: Record<LicenseReason, string> = {
   ok: 'Активовано.',
 };
 
-/** Права словами. Ключі — ті самі, що у licensing/entitlements.py. */
-const FEATURE_LABELS: Record<string, string> = {
-  'core.chat': 'Розмова з ядром',
-  'core.map': 'Мапа й офлайн-пакети',
-  'core.nav': 'Навігація',
-  'core.alerts': 'Тривоги',
-  'core.vault': 'Сховище',
-  'core.voice': 'Голос',
-  'bridge.pair': 'Міст із телефоном',
-  'memory.longterm': 'Довга пам’ять',
-  'map.terrain3d': 'Рельєф і об’ємне місто',
-  'voice.premium': 'Точніша модель слуху',
-  'gnss.blackbox': 'Чорна скринька GNSS',
-  'export.reports': 'Вивантаження і звіти',
-  'crew.sync': 'Синхронізація екіпажу',
-  'fleet.onprem': 'Власний сервер ліцензій',
+/** Права словами. Ключі — ті самі, що у licensing/entitlements.py.
+ *
+ *  `note` — застереження про те, ЧОГО ключ не дасть саме тут. Ключ активує
+ *  пару (ядро на столі + симбіот у кишені), тож право, що живе лише в
+ *  телефоні, з переліку не викидаємо — інакше екран применшив би куплене.
+ *  Але й мовчати не можна: «Точніша модель слуху» на цьому комп'ютері лежить
+ *  над звичайним вибором моделі Whisper у налаштуваннях, який має кожен і без
+ *  ключа. Дзеркало на сайті — FEATURE_SURFACE у platform-site/src/lib/plans.ts.
+ */
+interface FeatureRow {
+  label: string;
+  note?: string;
+}
+
+const PHONE_ONLY = 'лише в телефоні';
+const IN_PROGRESS = 'ще в роботі';
+
+const FEATURE_LABELS: Record<string, FeatureRow> = {
+  'core.chat': { label: 'Розмова з ядром' },
+  'core.map': { label: 'Мапа й офлайн-пакети' },
+  'core.nav': { label: 'Навігація' },
+  'core.alerts': { label: 'Тривоги' },
+  'core.vault': { label: 'Сховище' },
+  'core.voice': { label: 'Голос' },
+  'bridge.pair': { label: 'Міст із телефоном' },
+  'memory.longterm': { label: 'Довга пам’ять' },
+  'map.terrain3d': { label: 'Рельєф і об’ємне місто' },
+  'voice.premium': { label: 'Точніша модель слуху', note: PHONE_ONLY },
+  'gnss.blackbox': { label: 'Чорна скринька GNSS', note: `${PHONE_ONLY} · ${IN_PROGRESS}` },
+  'export.reports': { label: 'Вивантаження і звіти' },
+  'crew.sync': { label: 'Синхронізація екіпажу', note: IN_PROGRESS },
+  'fleet.onprem': { label: 'Власний сервер ліцензій', note: IN_PROGRESS },
 };
 
 function tierLabel(tier: string | null): string {
@@ -554,6 +570,7 @@ function FeatureBoard({ ent }: { ent: Entitlement }) {
   const open = new Set(ent.features);
   const rows = Object.entries(FEATURE_LABELS);
   const locked = rows.filter(([key]) => !open.has(key));
+  const noted = rows.filter(([, row]) => row.note);
 
   return (
     <div className="glass" style={{ padding: 12 }} data-testid="license-features">
@@ -561,14 +578,14 @@ function FeatureBoard({ ent }: { ent: Entitlement }) {
         ЩО ВІДКРИТО
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0,1fr))', gap: 6 }}>
-        {rows.map(([key, label]) => {
+        {rows.map(([key, row]) => {
           const on = open.has(key);
           return (
             <div
               key={key}
               style={{
                 display: 'flex',
-                alignItems: 'center',
+                alignItems: 'baseline',
                 gap: 7,
                 fontSize: 11.5,
                 color: on ? 'var(--ink-primary)' : 'var(--ink-muted)',
@@ -576,19 +593,49 @@ function FeatureBoard({ ent }: { ent: Entitlement }) {
               }}
             >
               {on ? (
-                <ShieldCheck size={12} strokeWidth={2} style={{ color: '#16a34a', flexShrink: 0 }} />
+                <ShieldCheck
+                  size={12}
+                  strokeWidth={2}
+                  style={{ color: '#16a34a', flexShrink: 0, alignSelf: 'center' }}
+                />
               ) : (
-                <Lock size={12} strokeWidth={2} style={{ color: 'var(--ink-faint)', flexShrink: 0 }} />
+                <Lock
+                  size={12}
+                  strokeWidth={2}
+                  style={{ color: 'var(--ink-faint)', flexShrink: 0, alignSelf: 'center' }}
+                />
               )}
-              <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {label}
+              <span style={{ minWidth: 0 }}>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis' }}>{row.label}</span>
+                {row.note && (
+                  <span
+                    style={{
+                      marginLeft: 5,
+                      padding: '1px 6px',
+                      borderRadius: 999,
+                      border: '1px solid var(--line-default)',
+                      background: 'rgba(0,0,0,0.04)',
+                      color: 'var(--ink-muted)',
+                      fontSize: 9.5,
+                      whiteSpace: 'nowrap',
+                    }}
+                  >
+                    {row.note}
+                  </span>
+                )}
               </span>
             </div>
           );
         })}
       </div>
+      {noted.length > 0 && (
+        <div style={{ marginTop: 9, fontSize: 11, color: 'var(--ink-muted)', lineHeight: 1.5 }}>
+          <div>«{PHONE_ONLY}» — діє на симбіоті, не тут. Ключ активує пару.</div>
+          <div>«{IN_PROGRESS}» — не працює ніде, і ми цього не продаємо.</div>
+        </div>
+      )}
       {locked.length > 0 && (
-        <div style={{ marginTop: 9, fontSize: 11, color: 'var(--ink-muted)', lineHeight: 1.45 }}>
+        <div style={{ marginTop: 6, fontSize: 11, color: 'var(--ink-muted)', lineHeight: 1.45 }}>
           Замкнене — це масштаб і зручність. Навігація, тривоги, мапа й сховище лишаються
           відкритими на будь-якому рівні.
         </div>

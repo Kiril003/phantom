@@ -24,6 +24,23 @@ router = APIRouter(prefix="/analytics", tags=["analytics"])
 
 WINDOW_DAYS = 7
 
+# `users.tenant_role` тримає КОД ролі («Owner»/«Admin»/«Member»), а не текст
+# для людини — на ньому тримається логіка й /tenant/members, тож у базі він
+# лишається як є. Але це поле фронтенд друкує дослівно, тому підпис береться
+# тут, на межі. Раніше код ішов у вікно як є, і українець читав «Member».
+ROLE_LABELS: Dict[str, str] = {
+    "Owner": "власник",
+    "Admin": "адміністратор",
+    "Member": "учасник",
+    "Guest": "гість",
+}
+
+DEFAULT_ROLE = "Member"
+
+
+def role_label(code: str | None) -> str:
+    return ROLE_LABELS.get(code or DEFAULT_ROLE, code or DEFAULT_ROLE)
+
 
 @router.get("/overview", response_model=Dict[str, Any])
 async def get_analytics_overview(
@@ -86,7 +103,7 @@ async def get_analytics_overview(
         "messages_this_week": sum(d["messages"] for d in daily_activity),
         "daily_activity": daily_activity,
         "operators": [
-            {"name": name, "role": role or "Member", "ops": int(ops)}
+            {"name": name, "role": role_label(role), "ops": int(ops)}
             for name, role, ops in operator_rows
         ],
     }

@@ -176,12 +176,13 @@ async def write_audit_entry(
         return int(entry.id)
 
 
-async def write_auto_approval(
+async def write_consent_decision(
     *,
     user_id: str,
     task_id: str,
     step: PlanStep,
     risk_level: int,
+    approved: bool,
     reason: str,
 ) -> int:
     """Record a consent decision no human made, so the trail can show it."""
@@ -191,7 +192,9 @@ async def write_auto_approval(
             task_id=task_id,
             step_idx=step.step_idx,
             sub_goal_id=step.sub_goal_id,
-            action_name="consent.auto_approved",
+            action_name=(
+                "consent.auto_approved" if approved else "consent.auto_declined"
+            ),
             args_json=json.dumps(
                 {"action": step.action, "args": step.args, "reason": reason},
                 ensure_ascii=False,
@@ -204,6 +207,7 @@ async def write_auto_approval(
                     "ok": True,
                     "approver": "none",
                     "approved_by_human": False,
+                    "approved": approved,
                     "reason": reason,
                 },
                 ensure_ascii=False,

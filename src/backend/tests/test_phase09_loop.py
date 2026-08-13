@@ -88,6 +88,20 @@ def mock_llm(monkeypatch):
     monkeypatch.setattr(_seeds, "write_episode", _stub_write_episode)
     monkeypatch.setattr(_lessons, "distill_lesson", _stub_distill)
     monkeypatch.setattr(_lessons, "recall_lessons", _stub_recall_lessons)
+
+    # Same class of leak, one layer down: `strategic.plan` calls
+    # `memory_brain.recall_for_prompt` whenever `user_id` is set — and it
+    # always is here ("u-test"). That reaches Chroma -> `strategic_memory.
+    # _get_ef` -> the SentenceTransformer embedding function, i.e. a real
+    # `intfloat/multilingual-e5-small` load. Measured cost of leaving it in:
+    # 11.9s on the first test (12 of the file's ~16s), and on any machine
+    # whose HF cache is cold — CI — it is a network fetch inside a worker
+    # thread, which is how this file ends up wedged rather than merely slow.
+    # Mirrors the stub in test_phase09_4a_track_runtime.py.
+    from memory.brain import memory_brain as _brain
+    async def _stub_recall_for_prompt(**kw):
+        return []
+    monkeypatch.setattr(_brain, "recall_for_prompt", _stub_recall_for_prompt)
     return queue
 
 
@@ -98,7 +112,12 @@ def isolate_runtime(monkeypatch, tmp_path):
     monkeypatch.setattr(config, "agent_workspace_dir", str(tmp_path))
     monkeypatch.setattr(config, "agent_reflection_every_n_actions", 5)
     monkeypatch.setattr(config, "agent_max_actions_per_task", 20)
-    monkeypatch.setattr(config, "agent_auto_approve_when_no_companion", True)
+    # The consent gate stays ARMED here. It used to be disarmed for the whole
+    # file, which meant the shipping default had no coverage in the one suite
+    # that drives this loop — three defects sat in that path undisturbed.
+    # Measured 2026-08-14: no test in this file needs it off. A test that does
+    # must set it itself, as
+    # test_consent_auto_approve_is_auditable.py does.
 
     # Mock Quality Gate to avoid real LLM calls during finalisation in ALL tests
     import agent.kernel.loop as loop_mod
@@ -113,6 +132,19 @@ def isolate_runtime(monkeypatch, tmp_path):
             rounds_used=1,
         )
     monkeypatch.setattr(loop_mod, "run_quality_gate_for", _fake_gate)
+
+    # Same reason, second leak: `finalize_task` -> `_finalize_broadcast` ->
+    # `compose_task_report` asks the router for a narrative. The gate stub
+    # above never covered it, so every finalisation in this file opened a real
+    # HTTPS connection to generativelanguage.googleapis.com with the fake key,
+    # ate the 400, fell through to Ollama, and cost ~11s of wall clock before
+    # landing on the deterministic skeleton it should have used immediately.
+    # Stub the narrative half only — the skeleton, merge and broadcast stay
+    # under test.
+    from agent.missions import reports as _reports
+    async def _no_llm_narrative(self, *a, **kw):
+        return None
+    monkeypatch.setattr(_reports.ReportComposer, "_compose_llm", _no_llm_narrative)
 
     from agent.kernel.runtime import agent_runtime
     agent_runtime.foreground_slot = None
@@ -183,7 +215,10 @@ class TestLoop:
         assert started
 
         # Wait for task to finish (with safety timeout)
-        for _ in range(100):
+        # Safety timeout, not a performance budget: generous enough that a
+        # slow-but-working loop passes, short enough that a wedged one fails
+        # instead of hanging the suite.
+        for _ in range(600):
             if agent_runtime.task_runner is None or agent_runtime.task_runner.done():
                 break
             await asyncio.sleep(0.05)
@@ -193,6 +228,105 @@ class TestLoop:
         # Audit row for fs.write should exist
         rows = await fetch_audit("u-test", task_id)
         assert any(r.action_name == "fs.write" for r in rows)
+
+    @pytest.mark.asyncio
+    async def test_missing_tests_hint_is_injected_once_not_forever(
+        self, isolated_db, mock_llm, tmp_path,
+    ):
+        """The "you changed code but ran no tests" nudge must not be a trap.
+
+        It is worded as advice ("Рекомендується") but was implemented as an
+        unconditional `continue`: every DONE_TASK after an fs.write got the
+        identical rejection re-appended, and terminal markers are deliberately
+        exempt from the repeat guard, so nothing bounded it. An agent that
+        answered DONE_TASK again — the honest reply to advice it has decided
+        not to take — span until the 600s wall-clock breaker, burning a full
+        tactical-planner call per turn.
+
+        Say it once, then let the agent finish.
+        """
+        from agent.kernel.runtime import agent_runtime
+        from agent.kernel.audit import get_task
+
+        target = tmp_path / "out.txt"
+        mock_llm.append(_strategic(1, 1))
+        mock_llm.append(_tactical_action("fs.write", {"path": str(target), "content": "hi"}))
+        # Queue then runs dry: the fixture answers DONE_TASK forever, which is
+        # exactly the agent behaviour that used to wedge the loop.
+
+        task_id, started = await agent_runtime.start_task("u-test", "write a file")
+        assert started
+
+        for _ in range(600):
+            if agent_runtime.task_runner is None or agent_runtime.task_runner.done():
+                break
+            await asyncio.sleep(0.05)
+        assert agent_runtime.task_runner is None, "loop never terminated"
+
+        row = await get_task("u-test", task_id)
+        assert row["status"] == "done", (
+            f"a persistent DONE_TASK must still complete, got {row['status']!r}"
+        )
+        hints = [
+            o for o in (row.get("observations") or [])
+            if "не запустив тести" in (o.get("content") or "")
+        ]
+        assert len(hints) == 1, f"hint must fire exactly once, fired {len(hints)}x"
+
+    @pytest.mark.asyncio
+    async def test_lsp_block_is_charged_to_the_circuit_breaker(
+        self, isolated_db, mock_llm, monkeypatch, tmp_path,
+    ):
+        """An unfixable LSP blocker must end the task, not spin on it.
+
+        The LSP gate is a legitimate hard block — but it `continue`d without
+        calling `budget.record_action()` / `record_result()`, so neither
+        `actions_exceeded` nor `errors_repeating` could ever see it. Combined
+        with the repeat guard's terminal-marker exemption, an agent that could
+        not clear the diagnostics looped until `max_elapsed_s_per_task` (600s).
+
+        Charging the block to the budget puts it back under the ceilings the
+        breaker already implements.
+        """
+        from agent.kernel.runtime import agent_runtime
+        from agent.kernel.audit import get_task
+        from agent.actions import fs as fs_mod
+        from agent.schemas import ActionResult
+        from config import config
+
+        # Keep the ceiling low so the test measures the bound, not patience.
+        monkeypatch.setattr(config, "agent_max_actions_per_task", 6)
+
+        async def _lsp_failure(self, ctx):
+            return ActionResult(
+                ok=False,
+                error="lsp_validation_failed: undefined name 'x' at line 1",
+                error_class="lsp_blocker",
+            )
+
+        monkeypatch.setattr(fs_mod.FsWrite, "execute", _lsp_failure)
+
+        mock_llm.append(_strategic(1, 1))
+        mock_llm.append(_tactical_action("fs.write", {"path": str(tmp_path / "a.py"), "content": "x"}))
+        # Then DONE_TASK forever — the agent insists it is finished while the
+        # diagnostics are still dirty.
+
+        task_id, started = await agent_runtime.start_task("u-test", "write code")
+        assert started
+
+        for _ in range(600):
+            if agent_runtime.task_runner is None or agent_runtime.task_runner.done():
+                break
+            await asyncio.sleep(0.05)
+        assert agent_runtime.task_runner is None, (
+            "LSP block spun forever — it is not charged to the breaker"
+        )
+
+        row = await get_task("u-test", task_id)
+        assert row["status"] == "failed"
+        # The specific ceiling matters: it proves the block was counted as an
+        # action, not that the task failed for some unrelated reason.
+        assert row.get("error") == "max_actions_per_task", row
 
     @pytest.mark.asyncio
     async def test_reflection_triggers_after_n_actions(self, isolated_db, mock_llm, monkeypatch, tmp_path):

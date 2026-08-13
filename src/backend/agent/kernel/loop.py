@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 
 from config import config
 
-from agent.kernel.audit import persist_task_state, save_checkpoint, snapshot_task_state, update_task_status, write_auto_approval
+from agent.kernel.audit import persist_task_state, save_checkpoint, snapshot_task_state, update_task_status, write_consent_decision
 from agent.kernel.checkpoints import build as build_checkpoint
 from agent.kernel.errors import BackgroundTimeoutError
 from agent.kernel.executor import StepCancelled, TaskStopped, execute as execute_action
@@ -39,6 +39,7 @@ from agent.schemas import (
     Observation,
     PlanStep,
     ReflectionResult,
+    RiskLevel,
     StrategicPlan,
     SubGoal,
     SubGoalStatus,
@@ -1526,14 +1527,20 @@ async def _run_task_loop_impl(runtime: "AgentRuntime", state: "TaskState", *, re
                     # that silence carries meaning and we still fall through
                     # to the desktop queue so a sitting-at-the-desk operator
                     # can intervene.
-                    if (
+                    auto_armed = (
                         phone_verdict == "no_device"
                         and bool(getattr(
                             config,
                             "agent_auto_approve_when_no_companion",
                             False,
                         ))
-                    ):
+                    )
+                    # The case for auto-approve is availability — an unattended
+                    # run must not die on its first MEDIUM action. That case
+                    # does not extend to the actions that destroy work, so HIGH
+                    # is never covered, however the switch is set.
+                    risk_capped = auto_armed and int(cls.risk_level) >= int(RiskLevel.HIGH)
+                    if auto_armed and not risk_capped:
                         auto_reason = phone_error or (
                             "no paired companion carries the approvals "
                             "capability"
@@ -1547,11 +1554,12 @@ async def _run_task_loop_impl(runtime: "AgentRuntime", state: "TaskState", *, re
                             f"({auto_reason})",
                         ))
                         try:
-                            await write_auto_approval(
+                            await write_consent_decision(
                                 user_id=state.user_id,
                                 task_id=state.id,
                                 step=step,
                                 risk_level=int(cls.risk_level),
+                                approved=True,
                                 reason=auto_reason,
                             )
                         except Exception as exc:
@@ -1571,6 +1579,42 @@ async def _run_task_loop_impl(runtime: "AgentRuntime", state: "TaskState", *, re
                         await update_task_status(state.id, "running")
                         # Fall through to execution.
                     else:
+                        if risk_capped:
+                            # Without this the run dies at the consent timeout
+                            # and the trail blames the absent operator for a
+                            # refusal the cap made.
+                            capped_reason = (
+                                f"risk {int(cls.risk_level)} is at or above "
+                                f"HIGH ({int(RiskLevel.HIGH)}); auto-approve "
+                                f"never covers destructive actions"
+                            )
+                            state.observations.append(build_system(
+                                state.step_idx, "consent_auto_declined",
+                                f"refused to auto-approve {step.action}: "
+                                f"{capped_reason}",
+                            ))
+                            try:
+                                await write_consent_decision(
+                                    user_id=state.user_id,
+                                    task_id=state.id,
+                                    step=step,
+                                    risk_level=int(cls.risk_level),
+                                    approved=False,
+                                    reason=capped_reason,
+                                )
+                            except Exception as exc:
+                                logger.warning(
+                                    "auto-decline audit row failed for %s: %s",
+                                    step.action, exc,
+                                )
+                            await runtime._broadcast("warning.issued", {
+                                "task_id": state.id,
+                                "category": "auto_approve_risk_capped",
+                                "message": (
+                                    f"{step.action} needs a human: "
+                                    f"{capped_reason}"
+                                ),
+                            })
                         # No paired device or phone timed out → fall back to the
                         # desktop intervene queue. Phase 9.2.3 (F-17) bounded so
                         # the task doesn't hang forever if the operator walks

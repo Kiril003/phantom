@@ -26,7 +26,8 @@ os.environ.setdefault("JWT_SECRET_KEY", "test-secret-consent-audit")
 os.environ.setdefault("AI_GEMINI_API_KEY", "fake-api-key-for-tests")
 os.environ.setdefault("PHANTOM_SERIAL_ENABLED", "false")
 
-RISKY_ACTION = "bash.run"  # registry risk_level 5 > default tolerance 3
+RISKY_ACTION = "bash.run"        # RiskLevel.MEDIUM (5) > default tolerance 3
+DESTRUCTIVE_ACTION = "git.rollback"  # RiskLevel.HIGH (7) — `reset --hard HEAD~1`
 
 
 @pytest_asyncio.fixture
@@ -184,11 +185,15 @@ def _done_task(summary: str) -> str:
     })
 
 
-async def _run_risky_task(mock_llm) -> str:
+async def _run_risky_task(
+    mock_llm, action: str = RISKY_ACTION, args: dict | None = None
+) -> str:
     from agent.kernel.runtime import agent_runtime
 
+    if args is None:
+        args = {"command": "echo consent-probe"} if action == RISKY_ACTION else {}
     mock_llm.append(_strategic())
-    mock_llm.append(_tactical(RISKY_ACTION, {"command": "echo consent-probe"}))
+    mock_llm.append(_tactical(action, args))
     mock_llm.append(_done_task("finished"))
 
     task_id, started = await agent_runtime.start_task("u-consent", "risky goal")
@@ -246,6 +251,73 @@ async def test_auto_approval_is_recorded_as_a_machine_decision(
     assert result["reason"], "the row must carry WHY no human was asked"
     assert json.loads(row.args_json)["action"] == RISKY_ACTION
     assert row.user_id == "u-consent", "the row must still name the task's owner"
+
+
+@pytest.mark.asyncio
+async def test_high_risk_is_never_auto_approved(
+    isolated_db, mock_llm, monkeypatch
+):
+    """The case for auto-approve is availability — an unattended run should not
+    die on its first MEDIUM action. That case does not reach the actions that
+    destroy work, so HIGH is capped out regardless of the switch."""
+    from config import config
+
+    monkeypatch.setattr(config, "agent_auto_approve_when_no_companion", True)
+    monkeypatch.setattr(config, "agent_user_consent_timeout_s", 1)
+
+    task_id = await _run_risky_task(mock_llm, DESTRUCTIVE_ACTION)
+    rows = await _audit_rows(task_id)
+
+    approved = [r for r in rows if r.action_name == "consent.auto_approved"]
+    assert not approved, (
+        f"{DESTRUCTIVE_ACTION} (RiskLevel.HIGH) was auto-approved with no human "
+        "asked — the cap does not hold"
+    )
+    assert not [r for r in rows if r.action_name == DESTRUCTIVE_ACTION], (
+        "the destructive action executed anyway"
+    )
+
+
+@pytest.mark.asyncio
+async def test_capped_decline_says_why(isolated_db, mock_llm, monkeypatch):
+    """Otherwise an unattended run dies at the consent timeout and the trail
+    blames the absent operator for a refusal the cap actually made."""
+    from config import config
+
+    monkeypatch.setattr(config, "agent_auto_approve_when_no_companion", True)
+    monkeypatch.setattr(config, "agent_user_consent_timeout_s", 1)
+
+    task_id = await _run_risky_task(mock_llm, DESTRUCTIVE_ACTION)
+    rows = await _audit_rows(task_id)
+
+    declined = [r for r in rows if r.action_name == "consent.auto_declined"]
+    assert declined, (
+        "the risk cap refused an auto-approval and left no trace of having "
+        f"done so. Rows present: {[r.action_name for r in rows]}"
+    )
+    result = json.loads(declined[0].result_json)
+    assert result["approved_by_human"] is False
+    assert result["approved"] is False
+    assert "risk" in result["reason"].lower()
+    assert declined[0].risk_level == 7
+
+
+@pytest.mark.asyncio
+async def test_medium_risk_auto_approval_still_works(
+    isolated_db, mock_llm, monkeypatch
+):
+    """The cap must not quietly become a total ban — that would take the
+    availability benefit away without saying so."""
+    from config import config
+
+    monkeypatch.setattr(config, "agent_auto_approve_when_no_companion", True)
+
+    task_id = await _run_risky_task(mock_llm, RISKY_ACTION)
+    rows = await _audit_rows(task_id)
+
+    assert [r for r in rows if r.action_name == "consent.auto_approved"], (
+        "MEDIUM is no longer auto-approved — the cap over-corrected"
+    )
 
 
 @pytest.mark.asyncio

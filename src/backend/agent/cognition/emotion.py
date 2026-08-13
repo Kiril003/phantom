@@ -160,7 +160,9 @@ async def update_emotion_on_event(
     # Phase 9.3b — push HIGH_FATIGUE trigger when crossing 0.8. Deduped
     # to at most one per 10 min by the proactive loop itself.
     try:
-        from .proactive import get_loop
+        # `.proactive` is a namespace package with no __init__, so `get_loop`
+        # was never importable from it — this hook silently never fired.
+        from .proactive.loop import get_loop
         loop = get_loop()
         if loop is not None:
             loop.record_fatigue_spike(new_emotion.fatigue)

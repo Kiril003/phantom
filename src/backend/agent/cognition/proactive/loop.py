@@ -90,17 +90,6 @@ class PendingAction:
         return (now - self.created_at).total_seconds() > PENDING_ACTION_TIMEOUT_S
 
 
-@dataclass
-class StashedProactive:
-    """Proactive intent held back while user is busy."""
-    kind: str
-    message: str
-    reason: str
-    causality: str
-    priority: int
-    scene_brief: str | None = None
-
-
 # ── Decide prompt (Ukrainian) ────────────────────────────────────────────────
 
 _DECIDE_SYSTEM = (
@@ -191,8 +180,6 @@ class ProactiveLoop:
         self._cycle_n: int = 0
         # Phase 9.4a — at most one pending action awaiting user confirmation.
         self._pending_action: PendingAction | None = None
-        # Phase 9.4b — interruptibility stash
-        self._stashed: list[StashedProactive] = []
         self._unsubscribe_signal = None
 
     # ── Lifecycle ────────────────────────────────────────────────────────────
@@ -422,8 +409,17 @@ class ProactiveLoop:
         mins_since = ctx.get("minutes_since_user")
         is_focused = mins_since is not None and mins_since < 1.5
 
-        # If not focused anymore, flush any stashed items first
-        if not is_focused and self._stashed:
+        # If not focused anymore, flush any deferred items first.
+        #
+        # This used to be gated on `self._stashed`, a leftover from the
+        # in-memory design. Deferral moved to `session_memory.defer_thought`
+        # (see the focus branch below) and `_flush_stash` was migrated with it,
+        # but the guard was not — so `_stashed` stayed permanently empty and
+        # `_flush_stash` was never called. Thoughts were parked, the operator
+        # heard the `thought_parked` earcon, and nothing ever surfaced them.
+        # `_flush_stash` already returns early when there is no session or
+        # nothing deferred, so it is safe to call unconditionally.
+        if not is_focused:
             await self._flush_stash(ctx)
 
         if not self._should_consider_speaking(ctx):
@@ -806,7 +802,10 @@ class ProactiveLoop:
         # Emit inner monologue — captures "I thought about saying X" even
         # when we decide NOT to speak. Best-effort.
         with contextlib.suppress(Exception):
-            from .monologue_emitter import MonologueEvent, emit_monologue
+            # monologue_emitter lives in agent.cognition, not in this
+            # sub-package; the suppress() above hid the ModuleNotFoundError
+            # and no proactive monologue was ever emitted.
+            from ..monologue_emitter import MonologueEvent, emit_monologue
             await emit_monologue(MonologueEvent(
                 kind="proactive",
                 source="proactive",

@@ -78,8 +78,12 @@ def add_concern(self_model: SelfModel, concern: str) -> None:
         self_model.active_concerns = self_model.active_concerns[-_MAX_ACTIVE_CONCERNS:]
     if is_new:
         try:
-            from .proactive import get_loop
-            from .proactive_triggers import ProactiveTrigger, ProactiveTriggerKind
+            # `.proactive` has no __init__ and `.proactive_triggers` does not
+            # exist; both symbols live one level deeper. The enclosing
+            # try/except swallowed the ImportError, so the CONCERN_ADDED
+            # trigger was never pushed.
+            from .proactive.loop import get_loop
+            from .proactive.triggers import ProactiveTrigger, ProactiveTriggerKind
             loop = get_loop()
             if loop is not None:
                 loop.push_trigger(ProactiveTrigger(

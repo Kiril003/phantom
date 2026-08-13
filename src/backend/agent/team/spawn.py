@@ -375,7 +375,8 @@ async def _run_subagent(
     from ..kernel.audit import create_task_row, update_task_status
     from agent.kernel.loop import run_task_loop
     from agent.kernel.runtime import TaskState
-    from ..self_model import build_self_model
+    # self_model lives under agent.cognition, not agent.
+    from ..cognition.self_model import build_self_model
     from ..actions.registry import registry as default_registry
 
     sem = team_semaphore()

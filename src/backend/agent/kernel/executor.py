@@ -38,7 +38,7 @@ async def execute(
     runtime,
     workspace_dir: str,
     registry_: ActionRegistry | None = None,
-    unsafe_mode: bool = True,
+    unsafe_mode: bool = False,
 ) -> tuple[ActionResult, int]:
     """
     Run a planned step and return (result, audit_entry_id).
@@ -122,6 +122,11 @@ async def execute(
                 error=f"resource_unavailable: {verdict.reason}",
                 error_class="resource_unavailable",
                 output={
+                    # `gate` is the operator's grep handle. The resource gate
+                    # itself writes no audit row (see resource_gate._log_defer)
+                    # — THIS is the persisted record of a resource deferral,
+                    # and it carries the real actor/task/step.
+                    "gate": "resource_gate",
                     "pressure": verdict.pressure,
                     "advice": verdict.advice,
                     "snapshot_summary": verdict.snapshot_summary,

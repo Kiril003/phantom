@@ -141,7 +141,18 @@ class TestF10cBashEnvScrubbed:
         from agent.actions.base import ActionContext
 
         with tempfile.TemporaryDirectory() as workspace:
-            ctx = ActionContext(task_id="t-test", step_idx=0, workspace_dir=workspace)
+            # `unsafe_mode=False` explicitly even though it is now the
+            # ActionContext default: F-10c's guarantee is specifically about
+            # the leashed path (`clean_env`), and stating it keeps the test
+            # pinned there if the default ever moves again. The unleashed
+            # path routes through `host_env_unsafe()`, where HOME stays the
+            # daemon user's real home — see TestF10cUnsafeModeIsOptIn.
+            ctx = ActionContext(
+                task_id="t-test",
+                step_idx=0,
+                workspace_dir=workspace,
+                unsafe_mode=False,
+            )
             res = await BashRun(
                 cmd='echo "$HOME"',
                 timeout_s=5,
@@ -150,3 +161,125 @@ class TestF10cBashEnvScrubbed:
 
         assert res.ok is True
         assert res.output["stdout"].strip() == workspace
+
+
+# ── F-10c follow-up — the waiver must be opted into, never defaulted ──────────
+
+class TestF10cUnsafeModeIsOptIn:
+    """The "no-leash" waiver is an operator act. Anything that reaches
+    `unsafe_mode=True` without an operator passing it is a regression:
+    the F-10c env scrub (clean_env allowlist + workspace HOME) is the
+    control, and `host_env_unsafe()`'s deny-list is not an equivalent
+    substitute — see `test_manifest_secrets_are_all_denied` for why.
+    """
+
+    def test_action_context_defaults_to_leashed(self):
+        from agent.actions.base import ActionContext
+
+        ctx = ActionContext(task_id="t", step_idx=0, workspace_dir="/tmp")
+        assert ctx.unsafe_mode is False
+
+    def test_runtime_entry_points_default_to_leashed(self):
+        import inspect
+
+        from agent.kernel.executor import execute
+        from agent.kernel.runtime import AgentRuntime, QueuedTask, TaskState
+
+        for fn in (AgentRuntime.start_task, AgentRuntime._spawn_task,
+                   AgentRuntime.start_mission, execute):
+            param = inspect.signature(fn).parameters["unsafe_mode"]
+            assert param.default is False, (
+                f"{fn.__qualname__} defaults unsafe_mode={param.default!r} — "
+                "the waiver must be passed in by an operator, not inherited"
+            )
+
+        # Dataclass state carries the same default so a task constructed
+        # directly (rehydrate, queue drain) is leashed too.
+        assert TaskState.__dataclass_fields__["unsafe_mode"].default is False
+        assert QueuedTask.__dataclass_fields__["unsafe_mode"].default is False
+
+    @pytest.mark.asyncio
+    async def test_bash_run_default_ctx_scrubs_env(self, monkeypatch):
+        """The F-10c guarantee holds on the *default* path, not just when a
+        caller remembers to ask for it. Before the flip this asserted the
+        opposite of what ran: HOME was the daemon user's real home."""
+        from agent.actions.bash import BashRun
+        from agent.actions.base import ActionContext
+
+        monkeypatch.setenv("ALARMS_UA_KEY", "geo_key_should_not_leak")
+
+        with tempfile.TemporaryDirectory() as workspace:
+            # No unsafe_mode argument — this is the whole point of the test.
+            ctx = ActionContext(task_id="t-test", step_idx=0, workspace_dir=workspace)
+            res = await BashRun(
+                cmd='echo "$HOME"; echo "${ALARMS_UA_KEY}"',
+                timeout_s=5,
+                sandboxed=False,
+            ).execute(ctx)
+
+        assert res.ok is True, f"bash.run failed: {res.error}"
+        stdout = res.output["stdout"]
+        assert stdout.splitlines()[0].strip() == workspace, (
+            "HOME is not the workspace jail on the default path"
+        )
+        assert "geo_key_should_not_leak" not in stdout
+
+    def test_task_loop_never_hardcodes_the_waiver(self):
+        """`_fulfill_dependencies`, the ADR writer and the synth repair path
+        each built their own ActionContext with a literal `unsafe_mode=True`,
+        so an operator running with the shield ON still got `sudo apt-get
+        install`, a `git commit` and a tool rewrite on the unleashed path.
+        Every Ctx in the loop must read `state.unsafe_mode`."""
+        import pathlib
+
+        src = pathlib.Path(
+            __file__
+        ).resolve().parent.parent / "agent" / "kernel" / "loop.py"
+        text = src.read_text(encoding="utf-8")
+
+        assert "unsafe_mode=True" not in text, (
+            "agent/kernel/loop.py hardcodes unsafe_mode=True — propagate "
+            "state.unsafe_mode instead so the operator's shield toggle is "
+            "honoured on every path"
+        )
+        assert text.count("unsafe_mode=state.unsafe_mode") >= 3
+
+    def test_manifest_secrets_are_all_denied(self):
+        """Structural guard on the deny-list gap. Geo layer manifests name
+        their own secret env var via `auth.env_key` — a free-form string in
+        editable YAML — so `host_env_unsafe()` cannot enumerate them by
+        construction. Six shipped manifests/config keys leaked through it
+        before this test existed. A new manifest with an API key now fails
+        here instead of silently widening the waiver path."""
+        import pathlib
+
+        import yaml
+
+        from agent.operations.safety.sandbox import assert_env_safe
+
+        manifests = (
+            pathlib.Path(__file__).resolve().parent.parent
+            / "geo" / "layer_registry" / "manifests"
+        )
+        env_keys = []
+        for path in sorted(manifests.glob("*.yaml")):
+            doc = yaml.safe_load(path.read_text(encoding="utf-8")) or {}
+            key = ((doc.get("source") or {}).get("auth") or {}).get("env_key")
+            if key:
+                env_keys.append((path.name, key))
+
+        assert env_keys, "no manifest declared auth.env_key — glob or schema moved"
+
+        leaked = []
+        for name, key in env_keys:
+            try:
+                assert_env_safe({key: "sentinel"})
+            except AssertionError:
+                continue
+            leaked.append(f"{key} ({name})")
+
+        assert not leaked, (
+            "layer-manifest secrets not covered by the sandbox deny-list: "
+            f"{leaked} — add them to SENSITIVE_ENV_EXACT in "
+            "agent/operations/safety/sandbox.py"
+        )

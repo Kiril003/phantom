@@ -149,8 +149,12 @@ class TestGeminiToolsBuilder:
         decls = out[0]["function_declarations"]
         names = [d["name"] for d in decls]
         assert len(names) == len(RESPONSE_FORM_TOOLS) + len(CHAT_DATA_TOOLS)
+        # Gemini rejects dots in function names, so the builder coerces them to
+        # `__`. Compare against the sanitised form — `map.plan_route` ships as
+        # `map__plan_route` and `_restore_name` maps it back on the way in.
+        from ai.gemini_provider import _sanitize_name
         for t in CHAT_DATA_TOOLS:
-            assert t["name"] in names
+            assert _sanitize_name(t["name"]) in names
 
     def test_builder_default_is_response_forms_only(self):
         from ai.gemini_provider import _build_gemini_tools
@@ -501,7 +505,13 @@ class _ScriptedModels:
         self.captured_tool_counts: list[int] = []
 
     async def generate_content(self, *, model, contents, config):
-        self.captured_contents.append([dict(c) for c in contents])
+        # After a data-tool round-trip the provider appends genai Content /
+        # Part objects alongside the plain dicts, and `dict()` on those raises
+        # "object is not iterable" — which surfaced as a stub failure rather
+        # than as the provider behaviour under test. Record them as-is.
+        self.captured_contents.append([
+            dict(c) if isinstance(c, dict) else c for c in contents
+        ])
         try:
             tools = config.get("tools") if isinstance(config, dict) else None
             if tools:
@@ -518,6 +528,25 @@ class _ScriptedModels:
 class _FakeClient:
     def __init__(self, models):
         self.aio = SimpleNamespace(models=models)
+
+
+def _has_function_response(contents) -> bool:
+    """True when any part in `contents` carries a function_response.
+
+    Contents mix plain dicts (the history the provider builds) with genai
+    Content/Part objects (the tool-result turn it appends), so both shapes have
+    to be understood. Reading only the dict shape made this assertion blow up
+    on the object shape instead of testing the provider.
+    """
+    for c in contents:
+        parts = c.get("parts", []) if isinstance(c, dict) else (getattr(c, "parts", None) or [])
+        for p in parts:
+            if isinstance(p, dict):
+                if "function_response" in p:
+                    return True
+            elif getattr(p, "function_response", None) is not None:
+                return True
+    return False
 
 
 class TestGenerateToolLoop:
@@ -554,28 +583,41 @@ class TestGenerateToolLoop:
         assert len(models.captured_contents) == 2
         # Second call's contents must include the function_response part.
         second_contents = models.captured_contents[1]
-        assert any(
-            "function_response" in p
-            for c in second_contents for p in c.get("parts", [])
+        assert _has_function_response(second_contents), (
+            "second call must carry the tool result back to the model"
         )
 
     @pytest.mark.asyncio
-    async def test_max_three_tool_calls_enforced(self, monkeypatch):
-        """Force 4 data-tool calls; the 4th response should come WITHOUT data tools."""
+    async def test_data_tool_cap_forces_a_final_call_without_data_tools(self, monkeypatch):
+        """At the cap the provider must re-ask WITHOUT data tools.
+
+        Derived from `MAX_TOOL_CALLS_PER_TURN` rather than hardcoded: the cap
+        moved from 3 to 5 and this test kept scripting three calls, so it was
+        exercising the pre-cap path and asserting the post-cap outcome.
+        """
         from ai import gemini_provider as gp
         from ai.response_formatter import RESPONSE_FORM_TOOLS
+        from ai.tool_executor import MAX_TOOL_CALLS_PER_TURN
 
+        data_tool_names = ["search_locationhistory", "get_system_metrics", "get_sensor_status"]
         responses = [
-            _make_response(parts=[_make_part(fn_name="search_locationhistory", fn_args={})]),
-            _make_response(parts=[_make_part(fn_name="get_system_metrics", fn_args={})]),
-            _make_response(parts=[_make_part(fn_name="get_sensor_status", fn_args={})]),
-            # After 3 data calls we should force no-data-tools and the model
-            # must emit either a response form or text. Return plain text.
-            _make_response(parts=[_make_part(text="fallback text after cap")]),
+            _make_response(parts=[_make_part(
+                fn_name=data_tool_names[i % len(data_tool_names)], fn_args={},
+            )])
+            for i in range(MAX_TOOL_CALLS_PER_TURN)
         ]
+        # At the cap the provider re-asks with data tools removed; the model
+        # then has to answer with a response form or plain text.
+        responses.append(_make_response(parts=[_make_part(text="fallback text after cap")]))
         models = _ScriptedModels(responses)
         monkeypatch.setattr(gp, "_get_client", lambda: _FakeClient(models))
         from config import config
+        # Both halves of the catalog must be pinned ON. This test is about the
+        # cap, not about the deploy defaults — and with `chat_tools_enabled`
+        # left at its (now False) default, `with_data_tools` is off, the tool
+        # loop never runs, and the scripted turns fall through to the empty-text
+        # fallback instead of exercising the cap at all.
+        monkeypatch.setattr(config, "chat_tools_enabled", True)
         monkeypatch.setattr(config, "chat_response_widgets_enabled", True)
 
         async def _fake_exec(name, args, user_id, timeout_s=5.0):
@@ -587,33 +629,61 @@ class TestGenerateToolLoop:
         result = await provider.generate("run many tools", "system", [], user_id="u1")
 
         assert "fallback text after cap" in result.content
-        # 4 total calls (3 data tool calls + 1 final forced without data tools)
-        assert len(models.captured_contents) == 4
-        # First three calls use the full catalog (response forms + data
-        # tools, exactly what gemini_provider.generate merges); the
-        # fourth must use the reduced catalog (response forms only).
+        # MAX_TOOL_CALLS_PER_TURN data calls + 1 final forced call.
+        assert len(models.captured_contents) == MAX_TOOL_CALLS_PER_TURN + 1
+        # Calls up to the cap use the full catalog (response forms + data
+        # tools, exactly what gemini_provider.generate merges); the final one
+        # must use the reduced catalog (response forms only).
         from ai.chat_tools import CHAT_DATA_TOOLS
 
         expected_full = len(RESPONSE_FORM_TOOLS) + len(CHAT_DATA_TOOLS)
         expected_reduced = len(RESPONSE_FORM_TOOLS)
         assert models.captured_tool_counts[0] == expected_full
-        assert models.captured_tool_counts[3] == expected_reduced
+        assert models.captured_tool_counts[MAX_TOOL_CALLS_PER_TURN] == expected_reduced
 
     @pytest.mark.asyncio
-    async def test_no_data_tools_when_user_id_absent(self, monkeypatch):
+    async def test_no_tools_at_all_when_user_id_absent(self, monkeypatch):
+        """An anonymous turn gets no function catalog whatsoever.
+
+        `gemini_provider.generate` gates BOTH halves on the caller being
+        identified:
+
+            data_tools_enabled = config.chat_tools_enabled and user_id is not None
+            widgets_enabled    = config.chat_response_widgets_enabled and user_id is not None
+
+        so with no `user_id` neither the data tools nor the response-form tools
+        are offered. This test used to assert response forms were still present
+        — written before widgets were gated on identity — which could not hold:
+        the provider never sets a `tools` key, so nothing was captured and the
+        assertion died on IndexError rather than on its actual claim.
+
+        The claim worth pinning is the security one the name promises: an
+        unidentified caller is never handed data tools.
+        """
         from ai import gemini_provider as gp
-        from ai.response_formatter import RESPONSE_FORM_TOOLS
+        from ai.chat_tools import DATA_TOOL_NAMES
 
         responses = [
-            _make_response(parts=[_make_part(fn_name="respond_text", fn_args={"content": "ok"})]),
+            _make_response(parts=[_make_part(text="ok")]),
         ]
         models = _ScriptedModels(responses)
         monkeypatch.setattr(gp, "_get_client", lambda: _FakeClient(models))
+        # Both flags ON, so the assertion rests on the user_id gate alone
+        # rather than on whatever the ambient defaults happen to be.
+        from config import config
+        monkeypatch.setattr(config, "chat_tools_enabled", True)
+        monkeypatch.setattr(config, "chat_response_widgets_enabled", True)
 
         provider = gp.GeminiProvider()
         await provider.generate("hi", "system", [])
-        # Only response-form tools should have been offered.
-        assert models.captured_tool_counts[0] == len(RESPONSE_FORM_TOOLS)
+
+        assert models.captured_tool_counts == [], (
+            "an anonymous turn must be offered no function catalog at all"
+        )
+        # Belt and braces: no data tool name reached the wire.
+        flat = repr(models.captured_contents)
+        for name in DATA_TOOL_NAMES:
+            assert name not in flat, f"data tool {name!r} leaked to an anonymous turn"
 
     @pytest.mark.asyncio
     async def test_tool_error_does_not_crash_chat(self, monkeypatch):

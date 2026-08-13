@@ -14,6 +14,7 @@ import tempfile
 import uuid
 
 import pytest
+
 import pytest_asyncio
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -132,7 +133,7 @@ async def test_enter_blocked_quota_persists_to_db(isolated_db, monkeypatch):
     verify the DB row transitioned. Mocks probe to return True on first
     call so the loop exits quickly.
     """
-    from agent import audit
+    from agent.kernel import audit
     from agent.kernel.audit import create_task_row
     from agent.kernel.runtime import AgentRuntime, TaskState
     from agent.schemas import SelfModel
@@ -141,10 +142,11 @@ async def test_enter_blocked_quota_persists_to_db(isolated_db, monkeypatch):
     from config import config
 
     task_id = str(uuid.uuid4())
-    await create_task_row(task_id, "end-to-end", "foreground")
+    await create_task_row("u-test", task_id, "end-to-end", "foreground")
 
     runtime = AgentRuntime()
     state = TaskState(
+        user_id="u-test",
         id=task_id, goal="end-to-end",
         track="foreground", status="running",
         self_model=SelfModel(),

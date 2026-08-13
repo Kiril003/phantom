@@ -70,7 +70,11 @@ async def isolated_db(monkeypatch):
     
     async with get_session() as s:
         from db.models import DriveState
-        await s.execute(delete(DriveState).where(DriveState.user_id == "test"))
+        # `DriveState` is global state keyed by drive name — it has no
+        # `user_id` column, so this filter raised AttributeError in teardown
+        # and neither table was ever cleaned up. Drive rows leaked into every
+        # later test that read them.
+        await s.execute(delete(DriveState))
         await s.execute(delete(User).where(User.id == "test"))
         await s.commit()
 

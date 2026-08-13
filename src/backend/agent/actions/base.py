@@ -24,7 +24,15 @@ class ActionContext(BaseModel):
     # fs.write, etc.) consult this flag to skip bwrap when True so the
     # agent gets full host access — the operator has explicitly waived
     # the safety net for this task.
-    unsafe_mode: bool = True
+    #
+    # Defaults False so "explicitly" is true: the waiver has to be opted
+    # into, never inherited from a default. This is also what makes the
+    # F-10c env scrub (clean_env allowlist + workspace HOME) the default
+    # path — `host_env_unsafe`'s deny-list cannot be complete, because
+    # geo layer manifests name their own secret env vars (see
+    # LayerAuth.env_key), so new secrets appear without sandbox.py
+    # ever learning about them.
+    unsafe_mode: bool = False
     user_id: str = "default"
 
 

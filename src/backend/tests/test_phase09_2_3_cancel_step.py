@@ -36,7 +36,9 @@ def slow_registry() -> ActionRegistry:
 
 
 @pytest.mark.asyncio
-async def test_cancel_step_cancels_in_flight_action(slow_registry: ActionRegistry) -> None:
+async def test_cancel_step_cancels_in_flight_action(
+    slow_registry: ActionRegistry, auth_root_user
+) -> None:
     runtime = AgentRuntime()
     # Seed a foreground slot so cancel_step's task_id check passes.
     from agent.kernel.runtime import TaskState
@@ -45,6 +47,7 @@ async def test_cancel_step_cancels_in_flight_action(slow_registry: ActionRegistr
     sm = SelfModel()
     task_id = "t-cancel"
     runtime.foreground_slot = TaskState(
+        user_id=auth_root_user.id,
         id=task_id, goal="x", track="foreground", status="running", self_model=sm,
     )
     step = PlanStep(step_idx=0, sub_goal_id=None, action="test.slow", args={})
@@ -58,7 +61,7 @@ async def test_cancel_step_cancels_in_flight_action(slow_registry: ActionRegistr
     t0 = time.monotonic()
     with pytest.raises(StepCancelled):
         await execute_action(
-            user_id="u-test",
+            user_id=auth_root_user.id,
             task_id=task_id,
             step=step,
             runtime=runtime,
@@ -71,7 +74,9 @@ async def test_cancel_step_cancels_in_flight_action(slow_registry: ActionRegistr
 
 
 @pytest.mark.asyncio
-async def test_current_action_task_cleared_after_completion(slow_registry: ActionRegistry) -> None:
+async def test_current_action_task_cleared_after_completion(
+    slow_registry: ActionRegistry, auth_root_user
+) -> None:
     """Invariant — the runtime handle must be None after execute returns,
     regardless of success / failure / cancellation.
     """
@@ -90,12 +95,13 @@ async def test_current_action_task_cleared_after_completion(slow_registry: Actio
     reg._by_name["test.quick"] = _QuickAction  # type: ignore[attr-defined]
 
     runtime.foreground_slot = TaskState(
+        user_id=auth_root_user.id,
         id="t-quick", goal="x", track="foreground", status="running",
         self_model=SelfModel(),
     )
     step = PlanStep(step_idx=0, sub_goal_id=None, action="test.quick", args={})
     result, _audit_id = await execute_action(
-        user_id="u-test", task_id="t-quick", step=step, runtime=runtime,
+        user_id=auth_root_user.id, task_id="t-quick", step=step, runtime=runtime,
         workspace_dir="/tmp", registry_=reg,
     )
     assert result.ok is True

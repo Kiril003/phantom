@@ -11,6 +11,21 @@ from ..schemas import ActionResult, Precondition, RiskLevel
 from .base import Action, ActionContext
 
 
+def _contained(path_real: str, workspace_real: str) -> bool:
+    """True when an already-realpath'd path sits inside the workspace.
+
+    `commonpath` rather than `startswith`: the prefix test accepts
+    `/ws-evil` for a workspace of `/ws`. Both arguments must already be
+    realpath'd by the caller — comparing unresolved paths is what let the
+    symlink escape through in the first place.
+    """
+    try:
+        return os.path.commonpath([workspace_real, path_real]) == workspace_real
+    except ValueError:
+        # Different drives / mixed absolute-relative — treat as outside.
+        return False
+
+
 class FsRead(Action):
     name: ClassVar[str] = "fs.read"
     risk_level: ClassVar[RiskLevel] = RiskLevel.SAFE
@@ -121,6 +136,22 @@ class FsWrite(Action):
         workspace_real = os.path.realpath(workspace)
         path_real = os.path.realpath(path)
 
+        # The comparison above was computed and then never used: both realpaths
+        # were resolved and discarded, and the write proceeded unconditionally.
+        # That left the exact F-40 attack this block documents wide open —
+        # `<workspace>/escape -> /etc` resolved outside the workspace and the
+        # write followed the symlink out of the sandbox.
+        if not _contained(path_real, workspace_real):
+            return ActionResult(
+                ok=False,
+                error=(
+                    f"symlink_escape: {path} resolves to {path_real}, "
+                    f"outside workspace {workspace_real}"
+                ),
+                error_class="symlink_escape",
+                elapsed_ms=int((time.monotonic() - t0) * 1000),
+            )
+
         try:
             parent = os.path.dirname(path) or "."
             os.makedirs(parent, exist_ok=True)
@@ -166,6 +197,22 @@ class FsBackup(Action):
             )
             
         bak_path = f"{path}.bak"
+        # Same containment as fs.write: this action is SAFE-rated but still
+        # creates a file, and without the check it could do so anywhere the
+        # process can write — including through a symlink out of the workspace.
+        workspace_real = os.path.realpath(
+            os.path.abspath(os.path.expanduser(ctx.workspace_dir))
+        )
+        if not _contained(os.path.realpath(bak_path), workspace_real):
+            return ActionResult(
+                ok=False,
+                error=(
+                    f"symlink_escape: {bak_path} resolves outside workspace "
+                    f"{workspace_real}"
+                ),
+                error_class="symlink_escape",
+                elapsed_ms=int((time.monotonic() - t0) * 1000),
+            )
         try:
             shutil.copy2(path, bak_path)
         except Exception as exc:

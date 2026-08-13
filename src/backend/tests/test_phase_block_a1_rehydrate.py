@@ -103,7 +103,8 @@ def _make_task_state(
         capabilities=["fs.read", "bash.run"],
         active_caveats=[],
         recent_task_summary="",
-        confidence=0.7,
+        # `confidence` is not a SelfModel field; it was silently dropped, so
+        # the snapshot round-trip below never actually carried it.
     )
     state = TaskState(
         id=task_id or _uid(),
@@ -248,12 +249,31 @@ async def test_rehydrate_in_flight_action_marked_cancelled_by_crash(isolated_db)
     runtime = MagicMock()
     from agent.kernel.rehydrate import rehydrate_task
     # Patch write_audit_entry so we can verify it's called.
-    with patch("agent.rehydrate._write_audit_entry_for_crash") as mock_write:
+    with patch("agent.kernel.rehydrate._write_audit_entry_for_crash") as mock_write:
         result = await rehydrate_task(runtime, user_id, task_id)
 
     assert result is not None
     # The step_idx should have been advanced past the cancelled step.
     assert result.step_idx >= 5
+
+    # The mock was created and never inspected, which let the synthetic row's
+    # contents rot unnoticed: its `InnerMonologue` was built with
+    # `thought=`/`plan=`/`criticism=`, none of which are fields on the model,
+    # so Pydantic dropped all three and the recovery step reached the planner
+    # and the UI with a completely blank monologue.
+    assert mock_write.call_count == 1
+    step = mock_write.call_args.kwargs["step"]
+    assert step.action == "__crash_recovery__"
+    mono = step.monologue
+    assert "crashed" in mono.what_i_see.lower(), mono
+    # The half-applied-side-effects warning is the one thing the agent most
+    # needs after a crash — it must actually be carried, not defaulted away.
+    assert "side" in mono.what_could_fail.lower(), mono
+    assert mono.confidence == 0.0
+
+    result_arg = mock_write.call_args.kwargs["result"]
+    assert result_arg.ok is False
+    assert result_arg.error_class == "cancelled_by_crash"
 
 
 @pytest.mark.asyncio
@@ -340,7 +360,7 @@ async def test_resume_live_tasks_on_boot_mounts_foreground_slot(isolated_db):
 
     runtime._broadcast = _fake_broadcast
 
-    with patch("agent.loop.run_task_loop", new_callable=AsyncMock) as mock_loop:
+    with patch("agent.kernel.loop.run_task_loop", new_callable=AsyncMock) as mock_loop:
         mock_loop.return_value = None
         counts = await runtime.resume_live_tasks_on_boot()
 
@@ -373,7 +393,7 @@ async def test_resume_live_tasks_on_boot_only_one_per_track(isolated_db):
     runtime = AgentRuntime()
     runtime._broadcast = AsyncMock()
 
-    with patch("agent.loop.run_task_loop", new_callable=AsyncMock):
+    with patch("agent.kernel.loop.run_task_loop", new_callable=AsyncMock):
         counts = await runtime.resume_live_tasks_on_boot()
 
     # Exactly one foreground task mounted.
@@ -411,7 +431,7 @@ async def test_resume_emits_resumed_from_crash_ws_event(isolated_db):
 
     runtime._broadcast = _capture_broadcast
 
-    with patch("agent.loop.run_task_loop", new_callable=AsyncMock):
+    with patch("agent.kernel.loop.run_task_loop", new_callable=AsyncMock):
         await runtime.resume_live_tasks_on_boot()
 
     assert "task.resumed_from_crash" in emitted
@@ -477,7 +497,14 @@ async def test_mission_resume_continues_from_current_phase_id(isolated_db):
 
     phases_executed = []
 
-    async def _fake_plan_phase(user_id, mission, phase, self_model, task_id):
+    # Mirrors `agent.cognition.planner.phase.plan_phase` exactly — keyword-only,
+    # including `revise_note`, which production added for revise/retry rounds.
+    # The old positional signature raised "unexpected keyword argument
+    # 'revise_note'" inside the loop's own try/except, which logged it and
+    # marked the phase failed, so the resume path never ran.
+    async def _fake_plan_phase(
+        *, user_id, mission, phase, self_model, revise_note="", task_id=None,
+    ):
         phases_executed.append(phase.id)
         from agent.schemas import StrategicPlan, SubGoal
         sg = SubGoal(description="sg", rationale="", expected_actions=1, acceptance_criteria="")
@@ -487,14 +514,14 @@ async def test_mission_resume_continues_from_current_phase_id(isolated_db):
         # Simulate phase success.
         state.status = "done"
 
-    with patch("agent.loop.plan_phase", side_effect=_fake_plan_phase), \
-         patch("agent.loop._run_phase_subgoals", side_effect=_fake_run_phase_subgoals), \
+    with patch("agent.kernel.loop.plan_phase", side_effect=_fake_plan_phase), \
+         patch("agent.kernel.loop._run_phase_subgoals", side_effect=_fake_run_phase_subgoals), \
          patch("agent.missions.store.update_phase_status", new_callable=AsyncMock), \
          patch("agent.missions.store.update_mission_status", new_callable=AsyncMock), \
          patch("agent.missions.ledger.LedgerWriter.append_phase_start", new_callable=AsyncMock), \
          patch("agent.missions.ledger.LedgerWriter.mark_phase_done", new_callable=AsyncMock), \
          patch("agent.missions.ledger.LedgerWriter.append_phase_lesson", new_callable=AsyncMock), \
-         patch("agent.runtime.AgentRuntime.finalize_task", new_callable=AsyncMock):
+         patch("agent.kernel.runtime.AgentRuntime.finalize_task", new_callable=AsyncMock):
         from agent.kernel.loop import run_mission_loop
         await run_mission_loop(runtime, state)
 

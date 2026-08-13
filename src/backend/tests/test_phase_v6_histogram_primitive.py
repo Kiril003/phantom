@@ -204,9 +204,15 @@ class TestSttObservationPoint:
                 )
 
         monkeypatch.setattr(vp, "get_stt_provider", lambda: _StubProvider())
-        monkeypatch.setattr(
-            vp, "decode_to_mono16k", lambda raw: b"_audio_bytes_"
-        )
+        # `transcribe_blob` calls `decode_to_mono16k_async` — audit A-1 moved
+        # the decode off the event loop because ffmpeg can take ~10 s. Patching
+        # the sync `decode_to_mono16k` left the real decoder in the path, which
+        # then failed on this fake blob ("Invalid data found when processing
+        # input") instead of exercising the histogram under test.
+        async def _fake_decode(raw):
+            return b"_audio_bytes_"
+
+        monkeypatch.setattr(vp, "decode_to_mono16k_async", _fake_decode)
 
         result = await vp.transcribe_blob(b"raw-pcm-bytes", "uk")
         assert result.text == "hello"

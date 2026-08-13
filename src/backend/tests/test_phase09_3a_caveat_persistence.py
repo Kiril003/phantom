@@ -14,6 +14,7 @@ import tempfile
 import uuid
 
 import pytest
+
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -133,7 +134,7 @@ async def test_resume_from_checkpoint_populates_caveat(isolated_db, monkeypatch)
     """End-to-end: resume path adds the caveat when a browser.navigate
     exists in the audit trail."""
     import json
-    from agent import audit as audit_mod
+    from agent.kernel import audit as audit_mod
     from agent.kernel.audit import create_task_row, save_checkpoint
     from agent.kernel.runtime import AgentRuntime
     from agent.schemas import (
@@ -143,12 +144,15 @@ async def test_resume_from_checkpoint_populates_caveat(isolated_db, monkeypatch)
     from db.models import AgentAuditEntry
 
     task_id = str(uuid.uuid4())
-    await create_task_row(task_id, "resume test", "foreground")
+    await create_task_row("u-test", task_id, "resume test", "foreground")
 
     # Seed an audit row for a prior browser.navigate so the resume scan
     # picks up a last_browser_url.
     async with get_session() as db:
         db.add(AgentAuditEntry(
+            # `agent_audit.user_id` is NOT NULL since the multi-user migration;
+            # match the task row seeded above.
+            user_id="u-test",
             task_id=task_id,
             step_idx=0,
             action_name="browser.navigate",
@@ -175,7 +179,9 @@ async def test_resume_from_checkpoint_populates_caveat(isolated_db, monkeypatch)
         thought_budget=ThoughtBudget(),
         step_idx=0,
     )
-    cp_id = await save_checkpoint(cp)
+    # `save_checkpoint(user_id, checkpoint)` — user_id went first in the
+    # multi-user migration; this caller was left behind.
+    cp_id = await save_checkpoint("u-test", cp)
 
     runtime = AgentRuntime()
     # Stub loop runner so resume doesn't actually spawn the agent loop.
@@ -184,7 +190,9 @@ async def test_resume_from_checkpoint_populates_caveat(isolated_db, monkeypatch)
     import agent.kernel.loop as _loop_mod
     monkeypatch.setattr(_loop_mod, "run_task_loop", _fake_loop)
 
-    ok = await runtime.resume_from_checkpoint(task_id, cp_id)
+    # `resume_from_checkpoint(user_id, task_id, checkpoint_id)` — same
+    # user_id-first migration as save_checkpoint.
+    ok = await runtime.resume_from_checkpoint("u-test", task_id, cp_id)
     assert ok is True
     assert runtime.foreground_slot is not None
     caveats = runtime.foreground_slot.self_model.active_caveats
@@ -211,6 +219,7 @@ def test_caveat_cleared_by_successful_browser_navigate():
         "some_other_caveat — unrelated",
     ])
     state = TaskState(
+        user_id="u-test",
         id="t1", goal="g", track="foreground", status="running",
         self_model=sm,
     )

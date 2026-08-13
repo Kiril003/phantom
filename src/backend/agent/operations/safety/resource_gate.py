@@ -11,8 +11,12 @@ Design principles (from the Block B brief):
   with ``pressure='unknown'``. Missing telemetry MUST NOT block the agent.
 - ``unsafe_mode=True`` tasks still run the gate (resource constraints are
   physical, not policy) but are more permissive on the *network* check.
-- Deferred actions write an audit entry with action name ``"resource_gate"``
-  so the operator can grep why the agent paused.
+- Deferred actions ARE audited — but by the caller, not here. ``executor``
+  turns a ``proceed=False`` verdict into a normal ``resource_unavailable``
+  ActionResult and writes it through ``write_audit_entry`` under the real
+  actor / task / step. The row carries ``output.gate == "resource_gate"``
+  plus the pressure and snapshot summary, so the operator's grep handle
+  survives. The gate itself only logs — see ``_log_defer``.
 
 Usage::
 
@@ -203,40 +207,33 @@ def _action_name(action: object) -> str:
 
 
 def _log_defer(action: object, reason: str, snap: object) -> None:
+    """Log the deferral. Deliberately does NOT touch the database.
+
+    This used to fire-and-forget a synthetic ``AgentAuditEntry`` under
+    ``user_id="__system__"`` / ``task_id="__resource_gate__"``. It never once
+    reached the table: the kwargs didn't match the model (``action``/``ok``
+    instead of ``action_name``, and NOT NULL ``step_idx`` was never passed),
+    and even after fixing those the row would have been rejected by the
+    ``agent_audit.user_id`` FK — no ``__system__`` user exists, and SQLite FK
+    enforcement is ON (``db/database.py``). A broad ``except`` logged all of
+    that at debug, so the write looked healthy for an entire schema migration.
+
+    It is not being repaired, because it was always a *duplicate*. The caller
+    (``agent/kernel/executor.py``) already persists this exact deferral via
+    ``write_audit_entry`` with the real ``user_id``, ``task_id`` and
+    ``step_idx``, and a richer result payload (pressure, advice, snapshot
+    summary, ``gate="resource_gate"``). Auditing it a second time here would
+    require inventing a non-loginable ``__system__`` user and a migration to
+    seed it on every existing install — real authentication surface, bought
+    for a strictly poorer copy of a row we already write correctly.
+
+    Keep this function free of DB access: the gate runs on the hot path in
+    front of every action and must stay fail-open and side-effect-free.
+    """
     logger.warning(
         "resource_gate: DEFERRED action=%s reason=%s %s",
         _action_name(action), reason, _short_summary(snap),
     )
-    # Write a synthetic audit entry so the operator can grep "resource_gate".
-    try:
-        import asyncio as _asyncio
-
-        async def _write() -> None:
-            try:
-                from db.database import get_session
-                from db.models import AgentAuditEntry
-                import json as _json
-                async with get_session() as db:
-                    row = AgentAuditEntry(
-                        task_id="__resource_gate__",
-                        user_id="__system__",
-                        action=f"resource_gate:{_action_name(action)}",
-                        args_json=_json.dumps({"reason": reason}),
-                        result_json=_json.dumps({"ok": False, "summary": _short_summary(snap)}),
-                        risk_level=0,
-                        ok=False,
-                    )
-                    db.add(row)
-            except Exception as exc:
-                logger.debug("resource_gate: audit write failed: %s", exc)
-
-        try:
-            loop = _asyncio.get_running_loop()
-            loop.create_task(_write())
-        except RuntimeError:
-            pass
-    except Exception:
-        pass
 
 
 def _log_warn(action: object, reason: str, snap: object) -> None:

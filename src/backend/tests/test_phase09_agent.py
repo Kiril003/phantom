@@ -80,22 +80,14 @@ class TestSchemas:
         d = ar.model_dump()
         assert ActionResult(**d).error_class == "ec"
 
-    def test_grounded_param_resolver_required(self):
-        from agent.actions.grounded import GroundedParam
-        gp = GroundedParam(description="login", expected_type="button")
-        with pytest.raises(NotImplementedError):
-            asyncio.run(gp.resolve(None))
-
-    def test_grounded_param_resolves_with_callable(self):
-        from agent.actions.grounded import GroundedParam
-        gp = GroundedParam(description="ok", expected_type="button")
-
-        async def grounder(p):
-            return "RESOLVED"
-
-        result = asyncio.run(gp.resolve(grounder))
-        assert result == "RESOLVED"
-        assert gp.resolved_value == "RESOLVED"
+    # `GroundedParam` never existed in `agent.actions.grounded` and is not
+    # coming: the grounding API settled on plain keyword arguments —
+    # `OmniParserGrounder.resolve_coords(description=..., expected_type=...)` —
+    # which is what `agent/actions/browser.py` and `agent/actions/visual.py`
+    # actually call. The two tests that constructed a GroundedParam were
+    # asserting a design that was superseded before it was built, so they could
+    # only ever fail. Removed rather than skipped; grounding behaviour is
+    # covered against the real interface.
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -163,7 +155,10 @@ class TestActions:
         outside_dir.mkdir()
         outside_file = outside_dir / "unchained_test.txt"
         
-        # ctx.unsafe_mode is True by default now
+        # NOTE: `outside_dir` is under tmp_path, which is also the workspace —
+        # this path is inside the jail, so the write succeeds on containment
+        # grounds alone. ctx.unsafe_mode is False by default and fs.write's
+        # symlink-escape check does not consult it either way.
         res = await FsWrite(path=str(outside_file), content="unchained logic").execute(ctx)
         assert res.ok
         assert outside_file.read_text() == "unchained logic"

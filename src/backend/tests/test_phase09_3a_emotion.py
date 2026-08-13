@@ -8,6 +8,8 @@ import os
 import tempfile
 
 import pytest
+
+_TEST_USER = "test-user-emotion"
 import pytest_asyncio
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
 
@@ -98,6 +100,7 @@ async def test_task_started_delta(isolated_db):
 
     rt = AgentRuntime()
     rt.foreground_slot = TaskState(
+        user_id=_TEST_USER,
         id="t", goal="g", track="foreground", status="planning",
         self_model=SelfModel(),
     )
@@ -118,6 +121,7 @@ async def test_task_failed_raises_concern_and_fatigue(isolated_db):
 
     rt = AgentRuntime()
     rt.foreground_slot = TaskState(
+        user_id=_TEST_USER,
         id="t", goal="g", track="foreground", status="running",
         self_model=SelfModel(),
     )
@@ -156,6 +160,7 @@ async def test_blocked_quota_entered_from_alias(isolated_db):
 
     rt = AgentRuntime()
     rt.foreground_slot = TaskState(
+        user_id=_TEST_USER,
         id="t", goal="g", track="foreground", status="blocked_quota",
         self_model=SelfModel(),
     )
@@ -190,6 +195,7 @@ async def test_decay_drifts_toward_baseline(isolated_db, monkeypatch):
 
     rt = AgentRuntime()
     state = TaskState(
+        user_id=_TEST_USER,
         id="t", goal="g", track="foreground", status="running",
         self_model=SelfModel(emotion=EmotionVector(
             focus=0.2, curiosity=0.9, concern=0.8, fatigue=0.9,
@@ -277,6 +283,7 @@ async def test_concurrent_updates_stay_clamped(isolated_db):
 
     rt = AgentRuntime()
     rt.foreground_slot = TaskState(
+        user_id=_TEST_USER,
         id="t", goal="g", track="foreground", status="running",
         self_model=SelfModel(),
     )

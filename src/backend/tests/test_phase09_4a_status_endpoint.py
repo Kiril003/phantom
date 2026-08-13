@@ -7,6 +7,8 @@ import os
 import tempfile
 
 import pytest
+
+_TEST_USER = "test-user-phase09-4a-status-endpoint"
 import pytest_asyncio
 from httpx import ASGITransport, AsyncClient
 from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
@@ -90,6 +92,7 @@ async def test_status_reflects_active_background_slot(client):
     from agent.schemas import SelfModel
 
     agent_runtime.background_slot = TaskState(
+        user_id=_TEST_USER,
         id="bg-abc", goal="check disk space", track="background",
         status="running", self_model=SelfModel(),
         origin="standing_order",

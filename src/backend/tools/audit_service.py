@@ -156,6 +156,13 @@ async def record_tool_invocation(
     entry = AgentAuditEntry(
         task_id="chat-tool",
         step_idx=0,
+        # `user_id` became a NOT NULL FK when agent_audit went multi-user, and
+        # this writer was not updated with it — the actor was only ever stashed
+        # in `sub_goal_id`. Every insert therefore violated the constraint and
+        # the `except` below swallowed it at debug level, so the chat-tool audit
+        # log was silently empty. `sub_goal_id` stays for backwards compatibility
+        # with rows already written that way.
+        user_id=actor_user_id,
         sub_goal_id=actor_user_id,
         action_name=tool_name[:64],
         args_json=args_snippet[:4000],
@@ -172,9 +179,11 @@ async def record_tool_invocation(
             await db.flush()
             return int(entry.id)
     except Exception as exc:  # noqa: BLE001
-        # Audit must NEVER block the tool call — surface a debug log and
-        # return -1 so callers know the entry didn't persist.
-        logger.debug("record_tool_invocation failed: %s", exc)
+        # Audit must NEVER block the tool call — return -1 so callers know the
+        # entry didn't persist. WARNING, not debug: this path stayed broken for
+        # an entire schema migration precisely because nobody saw it at debug.
+        # A gap in the audit trail is an operator-visible event.
+        logger.warning("record_tool_invocation failed: %s", exc)
         return -1
 
 

@@ -12,6 +12,8 @@ from unittest.mock import AsyncMock
 
 import pytest
 
+_TEST_USER = "test-user-phase09-2-3-medium-fixes"
+
 from agent.kernel.runtime import AgentRuntime, TaskState
 from agent.schemas import SelfModel
 
@@ -24,6 +26,7 @@ from agent.schemas import SelfModel
 async def test_enter_blocked_quota_sets_distinct_substate(monkeypatch: pytest.MonkeyPatch) -> None:
     runtime = AgentRuntime()
     state = TaskState(
+        user_id=_TEST_USER,
         id="t1", goal="x", track="foreground", status="running",
         self_model=SelfModel(),
     )

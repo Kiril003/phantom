@@ -379,7 +379,10 @@ async def _fulfill_dependencies(runtime: "AgentRuntime", state: "TaskState", cap
     for cap in caps:
         logger.info("agent-kernel: fulfilling capability: %s", cap)
         # 1. Check if it's a binary
-        ctx = Ctx(task_id=state.id, step_idx=state.step_idx, workspace_dir=config.agent_workspace_dir, runtime=runtime, unsafe_mode=True)
+        # `unsafe_mode` reads from the task, never a literal: this path runs
+        # `sudo apt-get install` below, so hardcoding True here silently
+        # ignored an operator who had the shield ON for this very task.
+        ctx = Ctx(task_id=state.id, step_idx=state.step_idx, workspace_dir=config.agent_workspace_dir, runtime=runtime, unsafe_mode=state.unsafe_mode)
         res = await BashRun(cmd=f"which {cap} || pip show {cap}").execute(ctx)
         
         if res.output and res.output.get("command_success"):
@@ -419,8 +422,8 @@ async def _commit_architectural_decision(runtime: "AgentRuntime", state: "TaskSt
     for cap in plan.required_capabilities:
         content += f"- {cap}\n"
         
-    ctx = Ctx(task_id=state.id, step_idx=state.step_idx, workspace_dir=config.agent_workspace_dir, runtime=runtime, unsafe_mode=True)
-    
+    ctx = Ctx(task_id=state.id, step_idx=state.step_idx, workspace_dir=config.agent_workspace_dir, runtime=runtime, unsafe_mode=state.unsafe_mode)
+
     # 1. Create dir and write file
     await BashRun(cmd=f"mkdir -p {adr_dir}").execute(ctx)
     await FsWrite(path=adr_path, content=content).execute(ctx)
@@ -818,8 +821,18 @@ async def run_task_loop(runtime: "AgentRuntime", state: "TaskState", *, resumed:
         else:
             await _run_task_loop_impl(runtime, state, resumed=resumed)
     finally:
-        _track_cv.reset(token)
-        _task_cv.reset(id_token)
+        # `reset()` raises ValueError when the token came from a different
+        # Context. That happens here because the background branch wraps the
+        # body in `asyncio.wait_for`, which runs it in a child Task with a
+        # *copy* of the context. The raise escaped this `finally`, so
+        # `run_task_loop` never returned normally and the task sat pending
+        # forever — the runtime's `task_runner` was never cleared.
+        # These vars are context-local; an unreset value dies with its context.
+        for _var, _tok in ((_track_cv, token), (_task_cv, id_token)):
+            try:
+                _var.reset(_tok)
+            except ValueError:
+                pass
 
 
 async def _run_task_loop_impl(runtime: "AgentRuntime", state: "TaskState", *, resumed: bool = False) -> None:
@@ -858,6 +871,9 @@ async def _run_task_loop_impl(runtime: "AgentRuntime", state: "TaskState", *, re
                 return
 
         actions_in_subgoal = 0
+        # Phase 32-TEST — the "you changed code but ran no tests" nudge fires
+        # at most once per task; see the terminal-marker block below.
+        test_hint_injected = False
         # Phase v3 — auto-pause guard for runaway revise_strategy loops
         # (e.g. provider 400 INVALID_ARGUMENT burning quota).
         revise_guard = RevisionLoopGuard(threshold=3)
@@ -1141,6 +1157,15 @@ async def _run_task_loop_impl(runtime: "AgentRuntime", state: "TaskState", *, re
                         error_class="lsp_blocker"
                     ))
                     state.observations.append(rej_obs)
+                    # The repeat guard below deliberately exempts terminal
+                    # markers, so a model that keeps answering DONE_TASK is
+                    # bounded by NOTHING here unless the block is charged to
+                    # the breaker: `errors_repeating` escalates to a forced
+                    # reflection after 3 identical rejections, and
+                    # `actions_exceeded` ends the task instead of letting it
+                    # burn planner calls until the 600s wall clock.
+                    budget.record_action()
+                    budget.record_result(False, "lsp_blocker")
                     state.step_idx += 1
                     continue
 
@@ -1148,7 +1173,13 @@ async def _run_task_loop_impl(runtime: "AgentRuntime", state: "TaskState", *, re
                 if step.action == _TERMINAL_DONE_TASK:
                     has_mod = any(obs.source in {"fs.write", "fs.patch_hash"} for obs in state.observations)
                     has_test = any(obs.source == "test.run" for obs in state.observations)
-                    if has_mod and not has_test:
+                    # Once per task. This is a *hint* ("Рекомендується"), not a
+                    # gate — but it was implemented as an unconditional
+                    # `continue`, so an agent that answered DONE_TASK again
+                    # (the honest response to advice it has chosen not to take)
+                    # got the identical hint re-injected forever. Say it once,
+                    # then respect the agent's decision.
+                    if has_mod and not has_test and not test_hint_injected:
                          logger.warning("Agent tried to finish without running tests. Injecting hint.")
                          rej_obs = build_from_action_result(step, ActionResult(
                             ok=False,
@@ -1156,6 +1187,8 @@ async def _run_task_loop_impl(runtime: "AgentRuntime", state: "TaskState", *, re
                             error_class="test_missing_hint"
                          ))
                          state.observations.append(rej_obs)
+                         test_hint_injected = True
+                         budget.record_action()
                          state.step_idx += 1
                          continue
 
@@ -1641,7 +1674,7 @@ async def _run_task_loop_impl(runtime: "AgentRuntime", state: "TaskState", *, re
                             optimization_goal=f"Fix crash: {type(exc).__name__}: {exc}"
                         )
                         await fix_act.execute(
-                            Ctx(task_id=state.id, step_idx=state.step_idx, workspace_dir=config.agent_workspace_dir, runtime=runtime, unsafe_mode=True)
+                            Ctx(task_id=state.id, step_idx=state.step_idx, workspace_dir=config.agent_workspace_dir, runtime=runtime, unsafe_mode=state.unsafe_mode)
                         )
                         # Re-try the main loop iteration to pick a new step (or retry the fixed tool)
                         state.step_idx += 1

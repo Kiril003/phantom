@@ -14,6 +14,8 @@ import os
 
 import pytest
 
+_TEST_USER = "test-user-phase09-2-2-probe"
+
 
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-phase09-2-2-probe")
 os.environ.setdefault("AI_GEMINI_API_KEY", "fake-api-key-for-tests")
@@ -119,6 +121,7 @@ class TestProbeAdaptiveBackoff:
 
         rt = AgentRuntime()
         rt.foreground_slot = TaskState(
+            user_id=_TEST_USER,
             id="t-probe-backoff", goal="g", track="foreground", status="running",
             self_model=SelfModel(),
         )
@@ -171,6 +174,7 @@ class TestProbeAdaptiveBackoff:
 
         rt = AgentRuntime()
         rt.foreground_slot = TaskState(
+            user_id=_TEST_USER,
             id="t-probe-cap", goal="g", track="foreground", status="running",
             self_model=SelfModel(),
         )

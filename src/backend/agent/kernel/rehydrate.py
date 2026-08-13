@@ -127,11 +127,13 @@ def _snapshot_to_state(blob: dict[str, Any]) -> "TaskState":
     try:
         self_model = SelfModel(**self_model_raw)
     except Exception:
+        # `confidence` is not a field on SelfModel — it was silently dropped.
+        # Every other keyword here is already the model's own default, so this
+        # fallback is exactly an empty SelfModel; keep it explicit for intent.
         self_model = SelfModel(
             capabilities=[],
             active_caveats=[],
             recent_task_summary="",
-            confidence=0.5,
         )
 
     # Convert wall-clock ISO string back to a monotonic approximation.
@@ -168,7 +170,10 @@ def _snapshot_to_state(blob: dict[str, Any]) -> "TaskState":
         paused_reason=blob.get("paused_reason"),
         mission_id=blob.get("mission_id"),
         current_phase_id=blob.get("current_phase_id"),
-        unsafe_mode=bool(blob.get("unsafe_mode", True)),
+        # Missing key in an old checkpoint blob must rehydrate leashed —
+        # a resumed task should never acquire a waiver it was not started
+        # with just because the field predates the checkpoint.
+        unsafe_mode=bool(blob.get("unsafe_mode", False)),
         parent_task_id=blob.get("parent_task_id"),
         subagent_role=blob.get("subagent_role"),
         delegation_depth=int(blob.get("delegation_depth", 0)),
@@ -181,7 +186,6 @@ def _snapshot_to_state(blob: dict[str, Any]) -> "TaskState":
         progress_checkpoints=list(blob.get("progress_checkpoints") or []),
         quality_gate_failures=int(blob.get("quality_gate_failures", 0)),
     )
-    return state
 
 
 # ── DB persistence helpers ────────────────────────────────────────────────────
@@ -318,11 +322,13 @@ async def _rehydrate_from_columns(row: AgentTask) -> "TaskState":
     try:
         self_model = SelfModel(**self_model_raw)
     except Exception:
+        # `confidence` is not a field on SelfModel — it was silently dropped.
+        # Every other keyword here is already the model's own default, so this
+        # fallback is exactly an empty SelfModel; keep it explicit for intent.
         self_model = SelfModel(
             capabilities=[],
             active_caveats=[],
             recent_task_summary="",
-            confidence=0.5,
         )
 
     try:
@@ -439,9 +445,19 @@ async def _mark_inflight_cancelled(
                 intent="auto-cancelled by crash recovery",
                 sub_goal_id=state.active_sub_goal_id,
                 monologue=InnerMonologue(
-                    thought="Process crashed while this step was in flight.",
-                    plan="",
-                    criticism="",
+                    # `thought`/`plan`/`criticism` are not fields on this model
+                    # — Pydantic dropped all three, so the recovery step
+                    # carried a completely blank monologue into both the
+                    # planner context and the UI. The one thing the agent most
+                    # needs to know after a crash (a step may have half-applied)
+                    # was the thing that never arrived.
+                    what_i_see="Process crashed while this step was in flight.",
+                    what_i_plan="Step auto-cancelled by crash recovery.",
+                    what_could_fail=(
+                        "The interrupted step may have applied some of its side "
+                        "effects before the crash — verify before retrying."
+                    ),
+                    confidence=0.0,
                 ),
             )
             synthetic_result = ActionResult(

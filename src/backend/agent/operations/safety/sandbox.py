@@ -93,9 +93,28 @@ SENSITIVE_ENV_PREFIXES: tuple[str, ...] = (
     "GEMINI_",
     "HF_",
     "HUGGINGFACE_",
+    # Geo layer + routing provider keys. `ROUTING_` covers
+    # ROUTING_ORS_API_KEY (config.py) and any sibling a future router
+    # backend adds.
+    "ROUTING_",
 )
 SENSITIVE_ENV_EXACT: frozenset[str] = frozenset(
-    {"LD_PRELOAD", "LD_LIBRARY_PATH"}
+    {
+        "LD_PRELOAD",
+        "LD_LIBRARY_PATH",
+        # Geo layer-manifest secrets. Each is named by `auth.env_key` in
+        # geo/layer_registry/manifests/*.yaml — see the deny-list caveat
+        # on host_env_unsafe() below: this set is a snapshot of the
+        # manifests that ship today, NOT a complete enumeration, because
+        # env_key is free-form operator-editable data.
+        "ALARMS_UA_KEY",        # air_raid_ua.yaml
+        "MAPILLARY_TOKEN",      # mapillary.yaml
+        "NASA_FIRMS_KEY",       # fires.yaml
+        "OPENSKY_BASIC_AUTH",   # ads_b.yaml
+        "SENTINEL_HUB_KEY",     # no2_plume.yaml
+        # Carries credentials on any non-sqlite backend.
+        "DATABASE_URL",
+    }
 )
 
 
@@ -139,7 +158,21 @@ def host_env_unsafe() -> dict[str, str]:
     XDG_*, SSH_AUTH_SOCK, GPG_TTY, DBUS_SESSION_BUS_ADDRESS, locale,
     etc. — but NOT JWT_SECRET_KEY, AI_GEMINI_API_KEY, ANTHROPIC_API_KEY,
     OPENAI_API_KEY, HUGGINGFACE_TOKEN, LD_PRELOAD, or any other secret
-    the daemon carries.
+    named in the deny-lists above.
+
+    LIMITATION — the deny-list is not, and cannot be, complete. Geo layer
+    manifests name their own secret env var via ``LayerAuth.env_key``
+    (geo/layer_manifest.py), a free-form string in operator-editable
+    YAML: adding a layer that needs an API key introduces a secret this
+    module has no way to learn about, and ``assert_env_safe`` shares
+    these same lists so it will not catch the gap either. That asymmetry
+    is why ``ActionContext.unsafe_mode`` defaults False — ``clean_env``'s
+    start-from-empty allowlist has no such blind spot. Treat this
+    function as a mitigation for a waiver the operator granted knowingly,
+    never as an equivalent control.
+
+    When adding a manifest with ``auth.env_key``, add the var to
+    ``SENSITIVE_ENV_EXACT``.
     """
     env: dict[str, str] = {}
     for key, value in os.environ.items():

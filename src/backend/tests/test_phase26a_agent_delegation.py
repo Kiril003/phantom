@@ -28,6 +28,8 @@ import uuid
 
 import pytest
 
+_TEST_USER = "test-user-delegation"
+
 os.environ.setdefault("JWT_SECRET_KEY", "test-secret-phase26a")
 os.environ.setdefault("AI_GEMINI_API_KEY", "fake-api-key-for-tests")
 os.environ.setdefault("PHANTOM_SERIAL_ENABLED", "false")
@@ -103,6 +105,7 @@ class TestTaskStateDelegationFields:
         from agent.kernel.runtime import TaskState
         from agent.schemas import SelfModel
         state = TaskState(
+            user_id=_TEST_USER,
             id="t-1",
             goal="x",
             track="foreground",
@@ -123,6 +126,7 @@ def _make_parent_state(*, depth: int = 0):
     from agent.kernel.runtime import TaskState
     from agent.schemas import SelfModel
     return TaskState(
+        user_id=_TEST_USER,
         id=str(uuid.uuid4()),
         goal="parent goal",
         track="foreground",
@@ -181,6 +185,7 @@ class TestNotifyAwaitRoundTrip:
         )
         child_id = str(uuid.uuid4())
         child = TaskState(
+            user_id=_TEST_USER,
             id=child_id,
             goal="[role=reviewer] check the diff",
             track="background",
@@ -222,6 +227,7 @@ class TestNotifyAwaitRoundTrip:
         from agent.team.spawn import notify_subagent_completed
         from core.event_bus import event_bus as bus
         child = TaskState(
+            user_id=_TEST_USER,
             id=str(uuid.uuid4()),
             goal="root task",
             track="foreground",

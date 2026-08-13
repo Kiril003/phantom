@@ -270,7 +270,11 @@ async def latest_checkpoint(user_id: str, task_id: str) -> Checkpoint | None:
 
 async def write_memory_seed(
     *,
-    user_id: str = "__system__",
+    # No default. `agent_memory_seeds.user_id` is a NOT NULL FK to users.id and
+    # there is no `__system__` user row — the old `= "__system__"` default was a
+    # loaded gun that only ever fired in tests, whose throwaway engines skip the
+    # foreign_keys pragma. Every caller owns a real user; make them say so.
+    user_id: str,
     task_id: str,
     goal: str,
     outcome: str,

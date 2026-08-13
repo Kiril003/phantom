@@ -252,11 +252,11 @@ class TestKillEndpoint:
 
 class TestAuditAndCheckpoint:
     @pytest.mark.asyncio
-    async def test_audit_entries_written(self, fresh_executor):
+    async def test_audit_entries_written(self, fresh_executor, auth_root_user):
         executor, _captured = fresh_executor
         session = await executor.create_session(
             "echo audit-probe",
-            user_id="test-root",
+            user_id=auth_root_user.id,
             timeout_s=5,
             is_root=True,
         )
@@ -276,11 +276,11 @@ class TestAuditAndCheckpoint:
         assert "sandbox.session.completed" in action_names
 
     @pytest.mark.asyncio
-    async def test_checkpoint_after_complete(self, fresh_executor):
+    async def test_checkpoint_after_complete(self, fresh_executor, auth_root_user):
         executor, _captured = fresh_executor
         session = await executor.create_session(
             "echo checkpoint-me",
-            user_id="test-root",
+            user_id=auth_root_user.id,
             timeout_s=5,
             is_root=True,
         )
@@ -289,11 +289,11 @@ class TestAuditAndCheckpoint:
         assert isinstance(cp_id, int) and cp_id > 0
 
     @pytest.mark.asyncio
-    async def test_blocked_command_audit_entry(self, fresh_executor):
+    async def test_blocked_command_audit_entry(self, fresh_executor, auth_root_user):
         executor, _captured = fresh_executor
         session = await executor.create_session(
             "rm -rf /",
-            user_id="test-root",
+            user_id=auth_root_user.id,
             timeout_s=5,
             is_root=True,
         )

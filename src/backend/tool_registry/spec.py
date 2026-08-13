@@ -47,8 +47,13 @@ class ToolSpec(BaseModel):
 
 
 # ── Policy tables ─────────────────────────────────────────────────────────────
-# The chat-safe allowlist — moved verbatim from ai/chat_tool_dispatcher.py
-# (TM-17B-S2). One place; the dispatcher and the pipeline both read it here.
+# The chat-safe allowlist — mirrors ai/chat_tool_dispatcher._CHAT_SAFE_TOOL_NAMES
+# (TM-17B-S2). The dispatcher remains the enforcement point and is still the
+# authoritative copy; this one drives the registry's "chat" view. They are
+# pinned identical by test_tool_registry_parity.py — the first copy of this
+# list had already drifted 4 names behind (the Atelier workbench trio and
+# show_image) before that test existed. Collapsing the two into one read is
+# the next G1.1 step, once the dispatcher's own tests stop pinning its tuple.
 CHAT_SAFE_TOOL_NAMES: frozenset[str] = frozenset({
     "search_nearby_places",
     "search_locationhistory",
@@ -93,6 +98,12 @@ CHAT_SAFE_TOOL_NAMES: frozenset[str] = frozenset({
     "run_terminal_command",
     "map.plan_route",
     "agent.delegate",
+    # Atelier Chat W1-W2 — multi-file living creations with the seeing loop.
+    "create_workbench",
+    "refine_workbench",
+    "list_workbenches",
+    # Images inline in chat.
+    "show_image",
 })
 
 # Gate tiers. Reads default to SAFE; state writes are LOW; irreversible /
@@ -132,13 +143,24 @@ GATES: dict[str, RiskLevel] = {
     "set_alarm_active": RiskLevel.LOW,
 }
 
-# Per-tool wall-clock overrides. The old PER_TOOL_TIMEOUT_S was keyed by
-# names ("web_search"/"web_fetch") that never matched any handler, so the
-# Day-5 "give network IO more room" fix silently never fired and search
-# died at the 10s… 30s default guard. Keyed correctly now.
-TIMEOUTS: dict[str, float] = {
-    "search_web": 25.0,
-}
+# Per-tool wall-clock overrides — empty on purpose.
+#
+# The old PER_TOOL_TIMEOUT_S is keyed by names ("web_search"/"web_fetch"/
+# "transcribe") that match no handler — the real tool is `search_web` — so the
+# Day-5 "give network IO more room" bump has never once fired. That much the
+# first draft of this table got right.
+#
+# What it got wrong: it re-keyed the bump as `search_web: 25.0` while the
+# surrounding default had since risen from 10s to TOOL_TIMEOUT_S = 30s. A 25s
+# "bump" under a 30s default is a 5s *cut* — so the correctly-keyed override
+# would have quietly tightened the one tool it meant to loosen, and only once
+# the registry became the live dispatch path.
+#
+# Every tool therefore resolves to the 30s default, exactly as today. Pinned by
+# test_tool_registry_parity.test_effective_timeouts_match_legacy. If network IO
+# genuinely needs more than 30s, raise it here deliberately — above the default,
+# and with the parity test updated in the same commit.
+TIMEOUTS: dict[str, float] = {}
 
 
 def build_specs(
@@ -170,6 +192,48 @@ def build_specs(
     return specs
 
 
+def family_specs(names: list[str]) -> list[ToolSpec]:
+    """Build one family's ToolSpecs from the live handler table.
+
+    G1.1 stages the split: the *index* moves here now, the handler bodies
+    stay in ``ai/tool_executor.py`` until a family is migrated wholesale.
+    The specs therefore wrap the very same function objects the legacy
+    dispatcher calls — one arsenal with a typed index, never two.
+
+    Imports are lazy so importing ``tool_registry`` never forces the chat
+    stack (and its provider imports) at module-import time.
+
+    Raises KeyError if a name has no handler or no declaration — a family
+    listing a tool that does not exist is a build error, not a silent gap.
+    """
+    from ai.chat_tools import CHAT_DATA_TOOLS
+    from ai.tool_executor import _HANDLERS as _LEGACY_HANDLERS
+
+    decl_by_name = {d["name"]: d for d in CHAT_DATA_TOOLS}
+
+    handlers: dict[str, Handler] = {}
+    unknown: list[str] = []
+    undeclared: list[str] = []
+    for name in names:
+        fn = _LEGACY_HANDLERS.get(name)
+        if fn is None:
+            unknown.append(name)
+            continue
+        if name not in decl_by_name:
+            undeclared.append(name)
+            continue
+        handlers[name] = fn
+    if unknown or undeclared:
+        raise KeyError(
+            f"family_specs: no handler for {unknown}; no declaration for {undeclared}"
+        )
+
+    return build_specs(
+        handlers=handlers,
+        declarations=[decl_by_name[n] for n in handlers],
+    )
+
+
 __all__ = [
     "Handler",
     "ToolSpec",
@@ -177,4 +241,5 @@ __all__ = [
     "GATES",
     "TIMEOUTS",
     "build_specs",
+    "family_specs",
 ]

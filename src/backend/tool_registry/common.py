@@ -15,18 +15,6 @@ def _session_factory():
     """Resolve the current AsyncSessionLocal — dynamic so tests can swap it."""
     return _db.AsyncSessionLocal
 
-TOOL_TIMEOUT_S: float = 30.0
-
-MAX_TOOL_CALLS_PER_TURN: int = 5
-
-PER_TOOL_TIMEOUT_S: dict[str, float] = {
-    "web_search": 25.0,
-    "web_fetch":  20.0,
-    # Voice/STT path occasionally re-warms a faster-whisper instance
-    # off the request thread; give it room before the outer guard cuts.
-    "transcribe": 25.0,
-}
-
 def _err(kind: str, message: str) -> dict[str, Any]:
     return {"error": message, "error_kind": kind}
 

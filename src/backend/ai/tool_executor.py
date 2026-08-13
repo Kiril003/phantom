@@ -2252,14 +2252,18 @@ async def _tool_agent_delegate(args: dict[str, Any], user_id: str) -> dict[str, 
 
 async def _tool_search_nearby_places(args: dict[str, Any], user_id: str) -> dict[str, Any]:
     from agent.actions.map.query_nearby import MapQueryNearby
-    from agent.base import ActionContext
-    
+    # `agent.base` does not exist — the real module is `agent.actions.base`,
+    # and its ActionContext takes task_id/step_idx/workspace_dir, none of
+    # which were being passed. Leaving lat/lon unset is deliberate:
+    # MapQueryNearby resolves the device's own position when they are None.
+    from agent.actions.base import ActionContext
+
     query = args.get("query")
     try:
         radius_m = int(args.get("radius_m", 1000))
     except (ValueError, TypeError):
         radius_m = 1000
-        
+
     action = MapQueryNearby(
         query=query,
         radius_m=radius_m,
@@ -2267,13 +2271,22 @@ async def _tool_search_nearby_places(args: dict[str, Any], user_id: str) -> dict
         lon=None,
         user_id=user_id
     )
-    ctx = ActionContext(session_id="chat", message_id="chat", step=1, extras={"user_id": user_id})
+    ctx = ActionContext(
+        task_id="chat",
+        step_idx=0,
+        workspace_dir=config.agent_workspace_dir,
+        user_id=user_id,
+    )
     res = await action.execute(ctx)
-    
+
+    output = res.output if isinstance(res.output, dict) else {}
     if res.ok:
-        return _ok(res.output)
-    else:
-        return _err(res.output.get("reason", "unknown"), str(res.output.get("error", "Unknown error")))
+        # `_ok` is keyword-only; `_ok(res.output)` raised TypeError.
+        return _ok(nearby=output)
+    return _err(
+        str(output.get("reason", "unknown")),
+        str(output.get("error") or output.get("narrative") or "Unknown error"),
+    )
 
 # ── Dispatcher ────────────────────────────────────────────────────────────────
 
@@ -2304,31 +2317,87 @@ async def _tool_agent_delegate(args: dict[str, Any], user_id: str) -> dict[str, 
         return _err("delegation_failed", str(exc))
 
 
-async def _tool_map_plan_route(args: dict[str, Any], user_id: str) -> dict[str, Any]:
-    """Phase 30 — plan a route using the map engine."""
-    from agent.actions.map.plan_route import MapPlanRoute
-    from agent.base import ActionContext
+# The chat schema offers the modes a person says; the routing engine names
+# them differently. `walk` reached MapPlanRoute verbatim and came back
+# `bad_profile` — the one mode a handheld assistant is asked for most.
+_ROUTE_MODE_TO_PROFILE = {"car": "car", "walk": "foot", "bike": "bike"}
 
-    destination = args.get("destination")
+
+async def _tool_map_plan_route(args: dict[str, Any], user_id: str) -> dict[str, Any]:
+    """Phase 30 — plan a route using the map engine.
+
+    This wrapper was written against an imagined MapPlanRoute API and could
+    never have run: it imported `agent.base` (no such module), passed
+    `destination`/`origin`/`mode`/`user_id` to an action whose fields are
+    `waypoints`/`profile`/`alternatives`/`language`, built ActionContext from
+    three keywords it does not have while omitting all three it requires, and
+    finished by calling `_ok()` — a keyword-only helper — positionally.
+
+    The gap it papered over is real work: the model supplies place *names*,
+    the action needs coordinates, so the names have to be geocoded and a
+    missing origin resolved from the device's own location.
+    """
+    from agent.actions.base import ActionContext
+    from agent.actions.map.plan_route import MapPlanRoute
+    from agent.localization.adapters.nominatim import get_default_nominatim
+
+    destination = str(args.get("destination") or "").strip()
     if not destination:
         return _err("invalid_args", "missing 'destination'")
 
-    origin = args.get("origin")
-    mode = args.get("mode", "car")
+    mode = str(args.get("mode") or "car")
+    profile = _ROUTE_MODE_TO_PROFILE.get(mode)
+    if profile is None:
+        return _err("invalid_args", f"mode must be one of {sorted(_ROUTE_MODE_TO_PROFILE)}")
 
-    action = MapPlanRoute(
-        destination=destination,
-        origin=origin,
-        mode=mode,
-        user_id=user_id
+    geocoder = get_default_nominatim()
+
+    dest_hits = await geocoder.geocode(destination, limit=1)
+    if not dest_hits:
+        return _err("geocode_failed", f"Не знайшов «{destination}» на карті.")
+    dest_pt = [dest_hits[0].lat, dest_hits[0].lon]
+
+    origin = str(args.get("origin") or "").strip()
+    if origin:
+        origin_hits = await geocoder.geocode(origin, limit=1)
+        if not origin_hits:
+            return _err("geocode_failed", f"Не знайшов «{origin}» на карті.")
+        origin_pt = [origin_hits[0].lat, origin_hits[0].lon]
+        origin_label = origin_hits[0].display_name
+    else:
+        # Schema promises "порожньо → поточна локація".
+        from agent.localization.resolver import get_resolver
+
+        estimate = await get_resolver().resolve()
+        if estimate is None:
+            return _err(
+                "no_origin",
+                "Не знаю, де ти зараз — вкажи пункт відправлення явно.",
+            )
+        origin_pt = [estimate.lat, estimate.lon]
+        origin_label = "поточна локація"
+
+    action = MapPlanRoute(waypoints=[origin_pt, dest_pt], profile=profile)
+    ctx = ActionContext(
+        task_id="chat",
+        step_idx=0,
+        workspace_dir=config.agent_workspace_dir,
+        user_id=user_id,
     )
-    ctx = ActionContext(session_id="chat", message_id="chat", step=1, extras={"user_id": user_id})
     res = await action.execute(ctx)
 
+    output = res.output if isinstance(res.output, dict) else {}
     if res.ok:
-        return _ok(res.output)
-    else:
-        return _err(res.output.get("reason", "unknown"), str(res.output.get("error", "Unknown error")))
+        return _ok(
+            route=output,
+            origin=origin_label,
+            destination=dest_hits[0].display_name,
+            profile=profile,
+        )
+    return _err(
+        str(output.get("reason", "unknown")),
+        str(output.get("error") or output.get("narrative") or "Unknown error"),
+    )
 
 
 async def _tool_list_user_facts(args: dict[str, Any], user_id: str) -> dict[str, Any]:

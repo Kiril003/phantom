@@ -482,6 +482,24 @@ class TestExcludedFactOmittedFromPlannerRecall:
         # We need an actual async DB session for this integration path
         async def _run():
             from db.database import get_session
+            from db.models import User
+
+            # `user_facts.user_id` is a NOT NULL FK and this path uses the real
+            # engine, where `PRAGMA foreign_keys=ON` is active — unlike the
+            # per-test `isolated_db` fixtures, which build their own engine and
+            # skip the pragma. A synthetic id therefore fails here even though
+            # the same id works elsewhere in the suite.
+            async with get_session() as db:
+                exists = (await db.execute(
+                    sa_select(User).where(User.id == user_id)
+                )).scalar_one_or_none()
+                if exists is None:
+                    db.add(User(
+                        id=user_id,
+                        username=f"planner-test-{uuid.uuid4().hex[:8]}",
+                        role="OPERATOR",
+                    ))
+
             async with get_session() as db:
                 fact = UserFact(
                     id=fact_id,

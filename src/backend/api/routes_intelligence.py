@@ -365,14 +365,25 @@ async def get_intelligence_hub(
     user_id = token.user_id
 
     import asyncio
-    vault_cards, user_facts, decisions, lessons, memory_facts, bmodel = await asyncio.gather(
-        _load_vault_cards(db, user_id),
-        _load_user_facts(db, user_id),
-        _load_recent_decisions(db, user_id, limit=20),
-        _load_lessons(user_id, top_k=20),
-        _load_memory_facts(user_id, top_k=30),
-        _load_behavioural_model(db, user_id),
-    )
+
+    # A single AsyncSession must not be driven by concurrent tasks — SQLAlchemy
+    # raises IllegalStateChangeError ("_connection_for_bind() is already in
+    # progress") when two coroutines touch it at once. All six loaders used to
+    # sit in one `gather`, four of them sharing `db`, which made this endpoint
+    # racy: it happened to survive when the queries returned fast enough to
+    # interleave cleanly, and failed under any real timing.
+    #
+    # The two Chroma-backed loaders take no session, so they still run
+    # concurrently with each other; the session-bound ones run in sequence.
+    lessons_task = asyncio.create_task(_load_lessons(user_id, top_k=20))
+    memory_facts_task = asyncio.create_task(_load_memory_facts(user_id, top_k=30))
+
+    vault_cards = await _load_vault_cards(db, user_id)
+    user_facts = await _load_user_facts(db, user_id)
+    decisions = await _load_recent_decisions(db, user_id, limit=20)
+    bmodel = await _load_behavioural_model(db, user_id)
+
+    lessons, memory_facts = await asyncio.gather(lessons_task, memory_facts_task)
 
     counts = {
         "vault_cards": len(vault_cards),

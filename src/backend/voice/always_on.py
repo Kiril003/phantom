@@ -469,12 +469,6 @@ class AlwaysOnOrchestrator:
             await self._send({"type": "rejected"})
             return
 
-        try:
-            from core.context_engine import context_engine
-            context_engine.record_heard_speech(text)
-        except Exception as exc:
-            logger.warning("orchestrator: failed to record heard speech: %s", exc)
-
         if self._mode == MODE_WAKE_WORD:
             if not self._wake_phrase:
                 # Defensive — config validator forbids empty, but if we
@@ -492,6 +486,7 @@ class AlwaysOnOrchestrator:
                 return
             text = stripped
 
+        self._record_dispatched(text)
         await self._send(
             {
                 "type": "final",
@@ -521,12 +516,6 @@ class AlwaysOnOrchestrator:
             await self._send({"type": "rejected"})
             return
 
-        try:
-            from core.context_engine import context_engine
-            context_engine.record_heard_speech(text)
-        except Exception as exc:
-            logger.warning("orchestrator: failed to record heard speech: %s", exc)
-
         # Wake-word gating. Identical to the non-streaming Whisper path
         # so behaviour stays consistent regardless of voice_streaming_partials.
         if self._mode == MODE_WAKE_WORD:
@@ -539,6 +528,7 @@ class AlwaysOnOrchestrator:
                 return
             text = stripped
 
+        self._record_dispatched(text)
         await self._send(
             {
                 "type": "final",
@@ -614,6 +604,16 @@ class AlwaysOnOrchestrator:
         provider = get_stt_provider()
         result = await provider.transcribe(wave, config.voice_stt_language)
         return (result.text or "").strip(), float(result.confidence)
+
+    def _record_dispatched(self, text: str) -> None:
+        # Пам'ять тримає те, що сказали ЙОМУ, а не те, що він підслухав.
+        # Кімната, яку машина мовчки записувала тижнями, — це документ, і
+        # відкинуті репліки в ньому належать людям, які PHANTOM не обирали.
+        try:
+            from core.context_engine import context_engine
+            context_engine.record_heard_speech(text)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("orchestrator: failed to record heard speech: %s", exc)
 
     def _strip_wake_phrase(self, text: str) -> str:
         """Remove the first occurrence of the wake phrase (case-insensitive)

@@ -115,11 +115,24 @@ async def _emit_audit_row(
 ) -> None:
     """Best-effort audit emission. Never crashes the route — a missing
     AgentAuditEntry table (e.g. a fresh test DB) just no-ops with a
-    DEBUG log."""
+    DEBUG log.
+
+    This writer carried the same silent-audit-gap regression as
+    ``tools.audit_service`` and ``linux.executor``: it passed ``ok=True``
+    (not a column) and omitted the NOT NULL ``user_id`` FK, ``task_id``
+    and ``step_idx``, so construction raised TypeError on every call and
+    the ``except`` below buried it at DEBUG. Facts audit was empty from
+    the day the tables went multi-user. ``task_id="user-facts"`` mirrors
+    the synthetic ``"chat-tool"`` id used by ``record_tool_invocation``,
+    keeping route mutations out of the agent cognitive task index.
+    """
     try:
         from db.models import AgentAuditEntry  # noqa: PLC0415
 
         entry = AgentAuditEntry(
+            user_id=actor_user_id,
+            task_id="user-facts",
+            step_idx=0,
             action_name="user_fact",
             args_json=json.dumps(
                 {
@@ -130,13 +143,16 @@ async def _emit_audit_row(
                     "category": category,
                 }
             ),
-            ok=True,
+            result_json=json.dumps({"ok": True}),
+            risk_level=1,
         )
         db.add(entry)
         await db.flush()
     except Exception as exc:  # noqa: BLE001
-        logger.debug(
-            "FACTS-1 audit emission skipped (%s): %s", action, exc
+        # WARNING, not DEBUG: an audit gap is an operator-visible event, and
+        # DEBUG is precisely what hid this for an entire schema migration.
+        logger.warning(
+            "FACTS-1 audit emission FAILED (%s): %s", action, exc
         )
 
 

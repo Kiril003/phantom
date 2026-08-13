@@ -281,7 +281,7 @@ class SandboxExecutor:
                 "by": "operator",
                 "reason": f"blocked:{violation}",
                 "cmd": cmd,
-            })
+            }, user_id=user_id)
             return session
 
         await _audit_write(sid, "sandbox.session.started", {
@@ -289,7 +289,7 @@ class SandboxExecutor:
             "user_id": user_id,
             "timeout_s": session.timeout_s,
             "cwd": str(cwd),
-        })
+        }, user_id=user_id)
 
         # Build jail + child env.
         SANDBOX_ROOT.mkdir(parents=True, exist_ok=True)
@@ -337,7 +337,7 @@ class SandboxExecutor:
                 "by": "operator",
                 "reason": f"spawn_failed:{type(exc).__name__}",
                 "error": str(exc),
-            })
+            }, user_id=user_id)
             _purge_dir(cwd)
             return session
 
@@ -394,9 +394,21 @@ class SandboxExecutor:
                     await asyncio.wait_for(r, timeout=2.0)
 
         session.exit_code = int(exit_code)
-        session.completed.set()
         duration_ms = int((time.time() - session.started_at) * 1000)
 
+        # `completed` is set in the `finally` below, not here. Signalling before
+        # the terminal event and its audit row are written let every waiter —
+        # including `kill()`, which routes await — resume while the trail was
+        # still being written, so a caller could observe a finished session with
+        # no audit entry. The `finally` keeps waiters from being stranded if the
+        # emit/audit path raises.
+        try:
+            await self._finalise_events(session, duration_ms)
+        finally:
+            session.completed.set()
+
+    async def _finalise_events(self, session: SandboxSession, duration_ms: int) -> None:
+        """Emit the terminal WS event and write its audit row."""
         if session.killed_by == "timeout":
             await self._emit(session.channel, EVENT_SESSION_KILLED, {
                 "session_id": session.session_id,
@@ -406,7 +418,7 @@ class SandboxExecutor:
                 "by": "timeout",
                 "exit": session.exit_code,
                 "duration_ms": duration_ms,
-            })
+            }, user_id=session.user_id)
         elif session.killed_by == "operator":
             await self._emit(session.channel, EVENT_SESSION_KILLED, {
                 "session_id": session.session_id,
@@ -416,7 +428,7 @@ class SandboxExecutor:
                 "by": "operator",
                 "exit": session.exit_code,
                 "duration_ms": duration_ms,
-            })
+            }, user_id=session.user_id)
         else:
             await self._emit(session.channel, EVENT_PROCESS_COMPLETED, {
                 "session_id": session.session_id,
@@ -428,7 +440,7 @@ class SandboxExecutor:
                 "duration_ms": duration_ms,
                 "stdout_lines": len(session.stdout_buf),
                 "stderr_lines": len(session.stderr_buf),
-            })
+            }, user_id=session.user_id)
 
     async def kill(self, session_id: str, *, by: str = "operator") -> bool:
         async with self._lock:
@@ -518,8 +530,18 @@ class SandboxExecutor:
             ),
             step_idx=0,
         )
+        # `save_checkpoint(user_id, checkpoint)` — user_id went first when
+        # `agent_checkpoints` became multi-user, and this caller was never
+        # updated. It passed the Checkpoint as `user_id`, so every sandbox
+        # checkpoint raised TypeError and the except below buried it in a WARN.
+        if not session.user_id:
+            logger.warning(
+                "linux.executor: checkpoint skipped for %s — no user_id on session",
+                session.session_id,
+            )
+            return None
         try:
-            return await save_checkpoint(payload)
+            return await save_checkpoint(session.user_id, payload)
         except Exception as exc:  # noqa: BLE001
             logger.warning("linux.executor: save_checkpoint failed: %s", exc)
             return None
@@ -552,13 +574,28 @@ def _purge_dir(path: Path) -> None:
         logger.debug("linux.executor: purge %s failed: %s", path, exc)
 
 
-async def _audit_write(session_id: str, event: str, data: dict[str, Any]) -> None:
+async def _audit_write(
+    session_id: str, event: str, data: dict[str, Any], user_id: str | None = None
+) -> None:
     """Write a sandbox event to the existing `agent_audit` table.
 
     `task_id` is namespaced `sandbox:<sid>` so the row never collides
     with real agent runs and the existing /agent/audit route surfaces
     them automatically.
+
+    ``user_id`` is required: `agent_audit.user_id` became a NOT NULL FK when
+    the tables went multi-user, and this writer was not updated with them.
+    Every sandbox audit row therefore failed its INSERT, and the broad
+    `except` below downgraded it to a WARN — so the sandbox ran completely
+    unaudited while looking healthy.
     """
+    if not user_id:
+        # Better a loud gap in the trail than a silently unaudited execution.
+        logger.warning(
+            "linux.executor: audit skipped for %s (%s) — no user_id on session",
+            session_id, event,
+        )
+        return
     try:
         from db.database import get_session
         from db.models import AgentAuditEntry
@@ -568,6 +605,7 @@ async def _audit_write(session_id: str, event: str, data: dict[str, Any]) -> Non
     try:
         async with get_session() as db:
             entry = AgentAuditEntry(
+                user_id=user_id,
                 task_id=f"sandbox:{session_id}",
                 step_idx=0,
                 sub_goal_id=None,

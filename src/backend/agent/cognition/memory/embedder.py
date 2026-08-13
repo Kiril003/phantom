@@ -19,24 +19,61 @@ import re
 logger = logging.getLogger(__name__)
 
 
+#: Fallback prefix, used when the configured one sanitises to nothing. Matches
+#: the historical hardcoded value so existing collections keep their names.
+_DEFAULT_PREFIX = "phantom_v1_episodes"
+
+#: Longest configured prefix accepted before truncation, chosen so the 63-char
+#: Chroma ceiling still leaves room for a body and the 8-char digest.
+_MAX_PREFIX_LEN = 40
+
+
+def _collection_prefix() -> str:
+    """Collection-name prefix, from ``config.agent_episodic_collection``.
+
+    The per-user naming below replaced a single global collection, and the
+    config knob was left behind reading nothing — an operator could set it and
+    silently get no effect, and the test fixture that monkeypatches it got no
+    isolation at all, so "isolated" tests quietly shared one collection.
+    """
+    from config import config
+
+    raw = getattr(config, "agent_episodic_collection", "") or ""
+    safe = re.sub(r"[^a-zA-Z0-9_-]", "", raw).strip("_-")
+    # Cap the prefix too, not just the body: Chroma's limit is on the whole
+    # name, so a long configured prefix would otherwise overflow it no matter
+    # how far the body was trimmed. 40 leaves room for a body plus the digest.
+    safe = safe[:_MAX_PREFIX_LEN].rstrip("_-")
+    return safe or _DEFAULT_PREFIX
+
+
 def _collection_name(user_id: str | None = None) -> str:
     """Per-user collection name for hard cross-user isolation."""
     uid = user_id or "default"
+    prefix = _collection_prefix()
     # Keep the chroma constraint of 3..63 chars + ``[a-zA-Z0-9_-]``.
     safe_id = re.sub(r"[^a-zA-Z0-9_-]", "", uid)
-    # Chroma's max collection name is 63 chars; "phantom_v1_episodes_" prefix = 20,
-    # "_" + 8-char hash = 9, leaves 34 for the body.
-    body_budget = 34
+    # Budget derived from the prefix rather than assumed: 63 cap, minus the
+    # prefix, minus "_" separators, minus the 8-char digest.
+    body_budget = max(1, 63 - len(prefix) - 2 - 8)
     needs_disambiguation = (
         safe_id != uid  # stripping changed something
         or len(safe_id) > body_budget  # over the chroma length budget
         or not safe_id  # empty after sanitisation
+        # Chroma also requires the name to START and END with an alphanumeric
+        # character. The `phantom_v1_episodes_` prefix covers the start, but an
+        # id ending in `_` or `-` did not: `__system__` produced
+        # `phantom_v1_episodes___system__`, which Chroma rejects. Every episodic
+        # write for that actor then failed as a "non-fatal" warning, so system
+        # memory was silently never recorded. Routing through the digest branch
+        # fixes it — the hash suffix always ends alphanumeric.
+        or not safe_id[-1].isalnum()
     )
     if needs_disambiguation:
         digest = hashlib.sha256(uid.encode("utf-8")).hexdigest()[:8]
         body = safe_id[:body_budget] if safe_id else "x"
-        return f"phantom_v1_episodes_{body}_{digest}"
-    return f"phantom_v1_episodes_{safe_id}"
+        return f"{prefix}_{body}_{digest}"
+    return f"{prefix}_{safe_id}"
 
 
 def _get_collection_sync(user_id: str | None = None) -> Any:

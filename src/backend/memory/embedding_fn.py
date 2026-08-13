@@ -89,9 +89,30 @@ def build_embedding_function(model_name: str, *, device: str = "cpu") -> Any:
     """
     from chromadb.utils import embedding_functions as _ef
 
-    base = _ef.SentenceTransformerEmbeddingFunction(
-        model_name=model_name, device=device
-    )
+    # Prefer the on-disk cache. `SentenceTransformer` otherwise asks
+    # huggingface.co for the model's ETag on *every* cold build, even when
+    # every file is already cached — and when the device has no uplink that
+    # call does not fail fast, it goes through `huggingface_hub.http_backoff`,
+    # which retries with growing sleeps. PHANTOM runs on hardware that is
+    # routinely offline, and this sits under `strategic_memory._get_ef()`, so
+    # the stall lands on ordinary memory writes.
+    #
+    # Chroma forwards **kwargs straight to SentenceTransformer, so
+    # `local_files_only` reaches the loader. First run still needs the network
+    # to fetch the model, hence the fallback.
+    try:
+        base = _ef.SentenceTransformerEmbeddingFunction(
+            model_name=model_name, device=device, local_files_only=True
+        )
+    except Exception as exc:  # not cached yet — let it download
+        logger.info(
+            "embedding model %r not in the local cache (%s) — fetching it; "
+            "subsequent loads stay offline.",
+            model_name, type(exc).__name__,
+        )
+        base = _ef.SentenceTransformerEmbeddingFunction(
+            model_name=model_name, device=device
+        )
     if is_e5_model(model_name):
         return PrefixedEmbeddingFunction(base, E5_SYMMETRIC_PREFIX)
     return base

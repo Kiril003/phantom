@@ -28,31 +28,92 @@ _chroma_client: Any | None = None
 _embedding_fn: Any | None = None
 
 
+def _chroma_settings() -> Any:
+    """Chroma settings for every client we open.
+
+    `chromadb.config.Settings` ships `anonymized_telemetry=True` with a PostHog
+    backend, so a bare `PersistentClient(path=...)` starts a thread that POSTs
+    usage events off the device. PHANTOM is a personal assistant that runs on
+    the user's own hardware and keeps encrypted GHOST records and a sealed
+    archive — nothing about it should be reporting to a third party, and the
+    user is never asked. Opt out at construction, which is the only place the
+    flag is read.
+    """
+    from chromadb.config import Settings
+
+    return Settings(anonymized_telemetry=False)
+
+
 def _get_client() -> Any:
+    """Open the persistent Chroma client, or fail loudly.
+
+    This used to treat ANY exception as "corrupted DB" and `shutil.rmtree` the
+    whole store before recreating it. A locked SQLite file, a permissions blip,
+    a transient I/O error or simple concurrent access was therefore enough to
+    silently destroy every long-term memory the user had — irrecoverably, for a
+    product whose entire premise is that it remembers. It also cascaded through
+    the test suite: one wipe left later tests with a client pointed at a deleted
+    path ("Could not connect to tenant default_tenant").
+
+    Recovery is now opt-in and non-destructive: the damaged directory is moved
+    aside so an operator can inspect or restore it, never deleted.
+    """
     global _chroma_client
     if _chroma_client is None:
         import chromadb as _chromadb
         import os
-        import shutil
         try:
-            client = _chromadb.PersistentClient(path=config.chroma_path)
+            client = _chromadb.PersistentClient(
+                path=config.chroma_path, settings=_chroma_settings(),
+            )
             # Try to list collections to see if the DB metadata is corrupted
             client.list_collections()
             _chroma_client = client
-        except (KeyError, Exception) as exc:
-            logger.warning("ChromaDB initialization failed (corrupted DB?): %s. Recreating...", exc)
-            if os.path.exists(config.chroma_path):
-                try:
-                    shutil.rmtree(config.chroma_path)
-                except Exception as wipe_exc:
-                    logger.error("Failed to clean chroma path %s: %s", config.chroma_path, wipe_exc)
+        except Exception as exc:
+            if not getattr(config, "chroma_auto_recover", False):
+                logger.error(
+                    "ChromaDB failed to open at %s: %s. Refusing to touch the "
+                    "store — set `chroma_auto_recover=true` to quarantine it "
+                    "and start fresh, or restore it from backup.",
+                    config.chroma_path, exc,
+                )
+                raise
+            quarantine = _quarantine_store(config.chroma_path)
+            logger.error(
+                "ChromaDB failed to open at %s: %s. Moved the damaged store to "
+                "%s and started a fresh one — long-term memory is EMPTY until "
+                "that directory is restored.",
+                config.chroma_path, exc, quarantine,
+            )
             os.makedirs(config.chroma_path, exist_ok=True)
             try:
-                _chroma_client = _chromadb.PersistentClient(path=config.chroma_path)
+                _chroma_client = _chromadb.PersistentClient(
+                    path=config.chroma_path, settings=_chroma_settings(),
+                )
             except Exception as retry_exc:
                 logger.error("ChromaDB initialization failed again: %s", retry_exc)
                 raise retry_exc
     return _chroma_client
+
+
+def _quarantine_store(path: str) -> str:
+    """Move a damaged store aside and return the new location.
+
+    Renaming rather than deleting keeps the vectors recoverable; a wipe here is
+    unrecoverable user data loss.
+    """
+    import os
+    import time
+
+    if not os.path.exists(path):
+        return ""
+    target = f"{path}.corrupt-{time.strftime('%Y%m%d-%H%M%S')}"
+    suffix = 0
+    while os.path.exists(target):
+        suffix += 1
+        target = f"{path}.corrupt-{time.strftime('%Y%m%d-%H%M%S')}-{suffix}"
+    os.rename(path, target)
+    return target
 
 
 def client_initialized() -> bool:

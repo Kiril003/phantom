@@ -57,7 +57,12 @@ def main() -> int:
         print("Store already matches the configured model. Nothing to do.")
         return 0
 
-    client = chromadb.PersistentClient(path=config.chroma_path)
+    # Same opt-out as the runtime client — see memory.strategic_memory.
+    from memory.strategic_memory import _chroma_settings
+
+    client = chromadb.PersistentClient(
+        path=config.chroma_path, settings=_chroma_settings(),
+    )
     ef = build_embedding_function(model_name)
 
     total_docs = 0

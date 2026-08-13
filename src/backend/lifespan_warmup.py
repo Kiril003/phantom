@@ -30,12 +30,25 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 from pathlib import Path
 
 from config import config
 from observability import lifespan_g2_failures_total
 
 logger = logging.getLogger(__name__)
+
+#: Wall-clock ceiling per warmup lane. Generous next to the ≤ 2000 ms p95
+#: budget so a genuinely cold flash still completes its warmup, while a lane
+#: that has wedged (typically a network model fetch with no route out) can no
+#: longer hold startup open indefinitely. Override for slow media via
+#: ``PHANTOM_G2_LANE_TIMEOUT_S``.
+G2_LANE_TIMEOUT_S = float(os.environ.get("PHANTOM_G2_LANE_TIMEOUT_S", "30"))
+
+#: Lanes that only populate caches — no observable effect beyond first-request
+#: latency, so `PHANTOM_SKIP_G2_WARMUP=1` may drop them. Every other lane has a
+#: side effect the daemon (and the test suite) depends on, and must always run.
+_PURE_WARMUP_LANES = frozenset({"minilm", "voice_preload"})
 
 
 # ──────────────────────────────────────────────────────────────────── lanes ──
@@ -160,7 +173,12 @@ async def _lane_voice_preload() -> None:
     try:
         from voice.pipeline import preload_voice_models
         from paths import resolve_data_dir
+        from api.routes_voice_stream import SILERO_MODEL_PATH
+        # Смуга дивилась у .phantom-data, а ONNX лежить у voice/models — тож
+        # VAD не грівся ніколи, і перший конект платив завантаження сесії.
         silero_path = resolve_data_dir("voice_models") / "silero-vad" / "silero_vad.onnx"
+        if not silero_path.is_file():
+            silero_path = SILERO_MODEL_PATH
         statuses = await asyncio.to_thread(
             preload_voice_models,
             str(silero_path) if silero_path.is_file() else None,
@@ -169,6 +187,17 @@ async def _lane_voice_preload() -> None:
     except Exception as exc:  # noqa: BLE001
         logger.warning("voice model preload skipped: %s", exc)
         lifespan_g2_failures_total.inc(lane="voice_preload")
+
+
+async def _lane_tts_preload() -> None:
+    """G2 lane: озвучка. Окремо від `_lane_voice_preload` — разом (Vosk +
+    Whisper + ~400 МБ Supertonic) вони не влазили в бюджет однієї смуги."""
+    try:
+        from voice.pipeline import preload_tts
+        logger.info("TTS preload: %s", await asyncio.to_thread(preload_tts))
+    except Exception as exc:  # noqa: BLE001
+        logger.warning("TTS preload skipped: %s", exc)
+        lifespan_g2_failures_total.inc(lane="tts_preload")
 
 
 # ─────────────────────────────────────────────────────────────── orchestrator ──
@@ -220,32 +249,68 @@ _G2_LANES = (
     ("chroma_janitor", _lane_chroma_janitor),
     ("cpu_sampler", _lane_cpu_sampler),
     ("voice_preload", _lane_voice_preload),
+    ("tts_preload", _lane_tts_preload),
     ("home_tenant", _lane_home_tenant),
 )
 
 
+async def _run_lane_with_budget(name: str, lane_fn) -> None:
+    """Run one lane under a wall-clock ceiling.
+
+    A lane's own ``try/except`` catches *failures*, but a lane that never
+    returns is neither a success nor an exception — it is an unbounded wait,
+    and it silently defeats both invariants this module documents ("no G2
+    failure ever aborts the lifespan" and the ≤ 2000 ms p95 budget).
+
+    The concrete case: ``_lane_minilm`` pulls sentence-transformers, which
+    fetches the encoder over the network on a cold cache. On a box with no
+    route out — the normal state for a local-first device — that fetch parks
+    forever and startup never completes, so the daemon never becomes ready and
+    the process cannot even be diagnosed from /readyz.
+
+    Note that a lane blocked inside ``asyncio.to_thread`` cannot actually be
+    cancelled; the worker thread keeps running. The timeout still does its job,
+    which is to let *startup* proceed rather than to reclaim the thread.
+    """
+    try:
+        await asyncio.wait_for(lane_fn(), timeout=G2_LANE_TIMEOUT_S)
+    except asyncio.TimeoutError:
+        logger.warning(
+            "lifespan G2 lane %s exceeded its %.0fs budget — continuing without it",
+            name,
+            G2_LANE_TIMEOUT_S,
+        )
+        lifespan_g2_failures_total.inc(lane=name)
+    except Exception as exc:  # noqa: BLE001
+        # Should not normally happen — each lane wraps its own except block.
+        # Belt-and-braces for an audit-class refactor.
+        logger.warning("lifespan G2 lane %s escaped its own except guard: %s", name, exc)
+        lifespan_g2_failures_total.inc(lane=name)
+
+
 async def run_g2_parallel() -> None:
-    """Run the five G2 warmup lanes concurrently.
+    """Run the G2 warmup lanes concurrently.
 
     Per-lane failure is contained inside each lane (WARN + counter bump
-    at observation point). ``return_exceptions=True`` is a defence-in-
-    depth — if a future refactor lets an exception escape a lane the
-    gather returns the exception object instead of raising; we still
-    log + bump the counter.
+    at observation point), and each lane additionally runs under a
+    wall-clock ceiling so a wedged lane degrades into a counted failure
+    instead of parking the whole lifespan.
 
-    The wall-clock returned is whichever lane took longest. Operators
-    monitoring /metrics see lane health via
+    The wall-clock returned is whichever lane took longest, bounded by
+    ``G2_LANE_TIMEOUT_S``. Operators monitoring /metrics see lane health via
     ``phantom_lifespan_g2_failures_total{lane=...}``.
     """
-    coros = [lane_fn() for _name, lane_fn in _G2_LANES]
-    results = await asyncio.gather(*coros, return_exceptions=True)
-    for (name, _fn), result in zip(_G2_LANES, results):
-        if isinstance(result, BaseException):
-            # Should not normally happen — each lane wraps its own
-            # except block. Belt-and-braces for an audit-class refactor.
-            logger.warning(
-                "lifespan G2 lane %s escaped its own except guard: %s",
-                name,
-                result,
-            )
-            lifespan_g2_failures_total.inc(lane=name)
+    lanes = _G2_LANES
+    if os.environ.get("PHANTOM_SKIP_G2_WARMUP") == "1":
+        # Only the model-loading lanes are skippable. The rest carry real side
+        # effects — cpu_sampler starts a background sampler, home_tenant
+        # provisions a row, chroma_eager runs a collection migration, janitor
+        # prunes orphans — and dropping those changes behaviour, not just
+        # latency. An earlier blanket skip did exactly that and broke
+        # `test_lifespan_starts_sampler`.
+        lanes = tuple((n, fn) for n, fn in lanes if n not in _PURE_WARMUP_LANES)
+        logger.info("G2 model-preload lanes skipped (PHANTOM_SKIP_G2_WARMUP=1)")
+
+    await asyncio.gather(
+        *(_run_lane_with_budget(name, lane_fn) for name, lane_fn in lanes)
+    )

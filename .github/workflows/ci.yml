@@ -24,7 +24,12 @@ jobs:
   backend:
     name: backend / pytest
     runs-on: ubuntu-22.04
-    timeout-minutes: 25
+    # Measured 2026-08-06: the full suite is ~60 min on a 12-core box, with the
+    # G2 warmup already skipped in tests (conftest sets PHANTOM_SKIP_G2_WARMUP).
+    # The old 25 min could never have completed a green run — `--maxfail=1` hid
+    # that by failing fast instead. Hosted runners are slower than the dev box,
+    # hence the headroom.
+    timeout-minutes: 90
     defaults:
       run:
         working-directory: src/backend

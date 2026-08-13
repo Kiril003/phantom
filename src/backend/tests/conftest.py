@@ -76,6 +76,18 @@ os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///{_TEST_DB_PATH}")
 # Disable the autonomous Will during tests to prevent background DB locks
 os.environ.setdefault("WILL_ENABLED", "False")
 
+# ── 2026-08-05 — G2 warmup off in tests ──────────────────────────────────────
+#
+# Лейни G2 (MiniLM, Chroma, голос) — це суто прогрів кешу заради латентності
+# першого запиту. Заміряний холодний старт lifespan — 43 с, а клієнтські
+# фікстури нижче піднімають НОВИЙ застосунок на КОЖЕН тест (126 таких тестів).
+# Тобто прогін платив ~90 хвилин чистого простою, не перевіряючи цим нічого:
+# жоден тест не спирається на прогрітий кеш, лише на поведінку.
+#
+# Сам `run_g2_parallel()` лишається повністю тестованим — вимикач стоїть на
+# місці виклику в `main.lifespan`, а не всередині функції.
+os.environ.setdefault("PHANTOM_SKIP_G2_WARMUP", "1")
+
 
 # ── 2026-08-02 — ізоляція теки даних ─────────────────────────────────────────
 #
@@ -363,3 +375,4 @@ def unauth_client():
     app = create_app()
     with TestClient(app) as c:
         yield c
+

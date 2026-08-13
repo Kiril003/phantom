@@ -484,9 +484,24 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # discover this backend as `_phantom._tcp.local.` without needing
     # to scan a fresh QR every time the LAN moves. Failure is
     # non-fatal (no zeroconf installed, multicast firewalled, etc.).
+    #
+    # Announced off the startup path: `Zeroconf.register_service` blocks on
+    # name-conflict probing, and when multicast is unavailable — Docker's
+    # default bridge, CI, the test suite — that wait is ~11 s. Called inline it
+    # stalled the event loop for that whole time, so the daemon was not ready
+    # and every app construction in the suite paid it (measured 10.8 s of a
+    # 13.7 s startup). Nothing depends on the announcement, so let it land
+    # whenever it can.
     try:
         from discovery.mdns_publisher import start_mdns
-        start_mdns(port=int(config.port), instance_name="PHANTOM")
+
+        _mdns_task = asyncio.create_task(
+            asyncio.to_thread(
+                start_mdns, port=int(config.port), instance_name="PHANTOM"
+            )
+        )
+        # Hold a reference so the task is not garbage-collected mid-flight.
+        app.state.mdns_task = _mdns_task
     except Exception as exc:
         logger.warning("mdns advertise skipped: %s", exc)
 
@@ -729,6 +744,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     # remaining lifespan tasks — zeroconf has its own thread and
     # blocks for ~1 s while it sends a goodbye packet.
     try:
+        # The announcement now runs in the background, so it may still be
+        # probing. Settle it first — otherwise `stop_mdns` sees no publisher,
+        # returns, and the thread registers a service nobody will ever
+        # unregister. Bounded: a stuck probe must not hold up shutdown.
+        _mdns_task = getattr(app.state, "mdns_task", None)
+        if _mdns_task is not None and not _mdns_task.done():
+            try:
+                await asyncio.wait_for(asyncio.shield(_mdns_task), timeout=2.0)
+            except (asyncio.TimeoutError, Exception):
+                pass
+
         from discovery.mdns_publisher import stop_mdns
         stop_mdns()
     except Exception:

@@ -246,18 +246,66 @@ def _write_pdf_weasyprint(html: str, out_path: str) -> None:
 
 # ── reportlab fallback ────────────────────────────────────────────────────────
 
-_RL_MONO = None  # lazy-loaded
+#: Родини, у яких є кирилиця. Vera, що йде в комплекті з reportlab, її НЕ має:
+#: український звіт вийшов би з порожнім тілом, бо Helvetica/Vera мовчки
+#: пропускають гліфи, яких не знають, замість помилки.
+_FONT_DIRS = (
+    "/usr/share/fonts/TTF",                  # Arch
+    "/usr/share/fonts/truetype/dejavu",      # Debian, Ubuntu
+    "/usr/share/fonts/dejavu",               # Fedora, RHEL
+    "/usr/local/share/fonts",
+    os.path.expanduser("~/.local/share/fonts"),
+    os.path.expanduser("~/.fonts"),
+)
+
+_FONT_FILES = (
+    ("DejaVuSans.ttf", "DejaVuSans-Bold.ttf", "DejaVuSans-Oblique.ttf", "DejaVuSans-BoldOblique.ttf"),
+)
+
+_RL_FAMILY: str | None | Literal[False] = None  # None — ще не шукали, False — немає
 
 
-def _reportlab_font() -> str:
-    global _RL_MONO
-    if _RL_MONO is None:
-        try:
-            from reportlab.pdfbase import pdfmetrics
-            _RL_MONO = "Courier"
-        except Exception:
-            _RL_MONO = "Courier"
-    return _RL_MONO
+def _reportlab_font() -> str | None:
+    """Ім'я зареєстрованої родини з кирилицею, або None."""
+    global _RL_FAMILY
+    if _RL_FAMILY is not None:
+        return _RL_FAMILY or None
+
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    from reportlab.lib.fonts import addMapping
+
+    for regular, bold, italic, bold_italic in _FONT_FILES:
+        for directory in _FONT_DIRS:
+            base = os.path.join(directory, regular)
+            if not os.path.isfile(base):
+                continue
+            family = os.path.splitext(regular)[0]
+            faces = {
+                family: base,
+                f"{family}-Bold": os.path.join(directory, bold),
+                f"{family}-Italic": os.path.join(directory, italic),
+                f"{family}-BoldItalic": os.path.join(directory, bold_italic),
+            }
+            try:
+                for name, path in faces.items():
+                    pdfmetrics.registerFont(TTFont(name, path if os.path.isfile(path) else base))
+                addMapping(family, 0, 0, family)
+                addMapping(family, 1, 0, f"{family}-Bold")
+                addMapping(family, 0, 1, f"{family}-Italic")
+                addMapping(family, 1, 1, f"{family}-BoldItalic")
+            except Exception as exc:
+                logger.warning("pdf_export: font %s unusable (%s)", base, exc)
+                continue
+            _RL_FAMILY = family
+            return family
+
+    _RL_FAMILY = False
+    return None
+
+
+def _needs_unicode(text: str) -> bool:
+    return any(ord(ch) > 0xFF for ch in text)
 
 
 def _write_pdf_reportlab(report: Any, ledger_md: str, style: str, out_path: str) -> None:
@@ -275,6 +323,24 @@ def _write_pdf_reportlab(report: Any, ledger_md: str, style: str, out_path: str)
     h3 = styles["Heading3"]
     normal = styles["Normal"]
 
+    family = _reportlab_font()
+    if family:
+        for st in (h1, h2, h3, normal):
+            st.fontName = family if st is normal else f"{family}-Bold"
+    else:
+        # Вбудовані шрифти reportlab не мають кирилиці й не скаржаться — вони
+        # просто нічого не малюють. Порожній звіт гірший за чесну помилку.
+        probe = " ".join(
+            [report.brief, report.overall_summary, report.success_criteria]
+            + [p.description for p in report.phases]
+        )
+        if _needs_unicode(probe):
+            raise _FontMissing(
+                "No Unicode font found, and this report contains non-Latin text. "
+                "Install DejaVu (Debian/Ubuntu: fonts-dejavu-core, Arch: ttf-dejavu, "
+                "Fedora: dejavu-sans-fonts), or install weasyprint for the HTML path."
+            )
+
     header_text = "PHANTOM OS" if style == "branded" else ""
 
     def _para(text: str, style=normal) -> Paragraph:
@@ -283,7 +349,10 @@ def _write_pdf_reportlab(report: Any, ledger_md: str, style: str, out_path: str)
 
     story = []
     if header_text:
-        story.append(_para(f"<b>{header_text}</b>", h1))
+        # _esc екранує кутові дужки, тож розмітка Paragraph тут не працює —
+        # раніше сторінка починалася рядком "<b>PHANTOM OS</b>". Heading1 і так
+        # жирний.
+        story.append(_para(header_text, h1))
         story.append(HRFlowable(width="100%"))
         story.append(Spacer(1, 0.3 * cm))
 
@@ -404,6 +473,10 @@ class _PdfBackendMissing(RuntimeError):
     pass
 
 
+class _FontMissing(RuntimeError):
+    """Бекенд є, але намалювати цей текст нічим. Не привід казати «встанови reportlab»."""
+
+
 def _write_pdf(report: Any, ledger_md: str, style: str, out_path: str) -> None:
     """Try weasyprint, then reportlab, then raise _PdfBackendMissing."""
     # weasyprint path
@@ -426,6 +499,8 @@ def _write_pdf(report: Any, ledger_md: str, style: str, out_path: str) -> None:
         return
     except ImportError:
         logger.debug("pdf_export: reportlab not installed either")
+    except _FontMissing:
+        raise
     except Exception as exc:
         logger.warning("pdf_export: reportlab render failed: %s", exc)
 

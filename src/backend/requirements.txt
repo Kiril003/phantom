@@ -29,9 +29,11 @@ vosk==0.3.45
 # before handing it to a provider. BSD-3, commercially fine.
 soundfile==0.14.0
 
-# Voice / TTS (Phase 07+) — Piper neural text-to-speech
+# Voice / TTS — Supertonic-3 (MIT-пакет, ваги OpenRAIL-M ~400 МБ у
+# ~/.cache/supertonic3) — той самий голос, що на телефоні. Piper — запасний.
 # Silero VAD (Phase 11b) is shipped as an ONNX file in voice/models/silero-vad/,
 # not a pip package; it runs via the already-installed onnxruntime.
+supertonic==1.3.1
 piper-tts==1.4.2
 
 # Serial
@@ -83,12 +85,19 @@ shapely==2.0.5
 # Vertical V10 — Mission reporting / PDF / HTML dashboard
 # markdown: converts ledger.md to HTML for weasyprint and dashboard.
 markdown==3.7
-# weasyprint: HTML→PDF renderer (optional — production code gracefully degrades
-# to reportlab or plain-text if not installed). NOT installed by default in CI.
+# reportlab: the PDF backend that ships. Pure Python, no system libraries, so
+# "Export PDF" works on a default install instead of returning 422.
+reportlab==4.2.5
+# weasyprint: higher-fidelity HTML→PDF path — real CSS, page headers, embedded
+# images. Left out of the default install because it needs cairo/pango/gdk-pixbuf
+# from the system package manager; pdf_export.py picks it up automatically when
+# present and falls back to reportlab when not.
 # weasyprint==62.3
-# reportlab: plain-PDF fallback when weasyprint unavailable (optional).
-# reportlab==4.2.5
 
 # Testing
 pytest==8.3.2
 pytest-asyncio==0.23.8
+# A deadlocked test used to park the whole suite indefinitely — CI would burn
+# its budget with no output rather than fail. The default timeout in pytest.ini
+# turns that into a named failure with a stack dump.
+pytest-timeout==2.4.0

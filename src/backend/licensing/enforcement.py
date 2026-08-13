@@ -13,6 +13,7 @@
 from __future__ import annotations
 
 import os
+import re
 
 from fastapi import Depends, FastAPI, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -20,10 +21,27 @@ from fastapi.responses import JSONResponse
 from licensing import entitlements
 
 #: Гілка API → право, без якого вона закрита. Усе, чого тут немає, вільне.
+#:
+#: Кожен рядок мусить збігатися з маршрутом, який СПРАВДІ змонтовано. Тут
+#: раніше стояли два, що не збігалися ні з чим, і ворота на неіснуючій адресі
+#: виглядають як захист, не будучи ним:
+#:
+#:   /api/v1/map/offline/terrain — такого маршруту немає. `routes_geo_offline`
+#:   тримає /map/offline лише з /regions, /regions/{id} і /tiles/{id}.pmtiles.
+#:   Рельєф на комп'ютері малює MapLibre у браузері, тягнучи плитки terrarium
+#:   просто з AWS, — запит не проходить через наш процес узагалі. Тому
+#:   `map.terrain3d` СЕРВЕРНО НЕ ЗАКРИВАЄТЬСЯ, і вдавати протилежне не варто:
+#:   ворота на нього мають стояти в клієнті або ніде.
+#:
+#:   /api/v1/analytics — це панель орендаря з єдиним /overview; вивантаження в
+#:   ній немає. Справжнє живе нижче, серед маршрутів місії.
 GATED_PREFIXES: tuple[tuple[str, str], ...] = (
     ("/api/v1/pair", "bridge.pair"),
-    ("/api/v1/map/offline/terrain", "map.terrain3d"),
-    ("/api/v1/analytics", "export.reports"),
+)
+
+#: Те саме, але для маршрутів зі змінним сегментом — префікс їх не ловить.
+GATED_PATTERNS: tuple[tuple[re.Pattern[str], str], ...] = (
+    (re.compile(r"^/api/v1/agent/mission/[^/]+/export/?$"), "export.reports"),
 )
 
 
@@ -38,6 +56,9 @@ def invalidate_cache() -> None:
 def _gate_for(path: str) -> str | None:
     for prefix, feature in GATED_PREFIXES:
         if path.startswith(prefix):
+            return feature
+    for pattern, feature in GATED_PATTERNS:
+        if pattern.match(path):
             return feature
     return None
 

@@ -1,7 +1,6 @@
 /**
  * MissionReportScreen — engineering postmortem for a completed mission.
  *
- * Mirrors the visual quality of AgentReportScreen but at mission scale.
  * No markdown rendering — ledger.md and report text are plain postmortem
  * prose; the operator opens the .md file for formatted reading.
  * No confetti, no superlative copy. Engineering voice throughout.

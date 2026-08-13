@@ -49,7 +49,7 @@ afterEach(() => {
   }
 });
 
-// Mock HTMLCanvasElement.getContext for jsdom (Avatar uses canvas)
+// Mock HTMLCanvasElement.getContext for jsdom (canvas-based components)
 HTMLCanvasElement.prototype.getContext = (() => null) as typeof HTMLCanvasElement.prototype.getContext;
 
 // jsdom doesn't implement scrollIntoView

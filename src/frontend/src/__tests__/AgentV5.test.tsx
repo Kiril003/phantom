@@ -19,9 +19,6 @@ import { AgentLayoutGroup } from '../components/settings/AgentLayoutGroup';
 // ── shared mocks ────────────────────────────────────────────────────────────
 
 // Stub heavy workspace components that need QueryClient / real services.
-vi.mock('../components/agent/workspace/AgentVitals', () => ({
-  AgentVitals: () => <div data-testid="agent-vitals-stub" />,
-}));
 vi.mock('../components/agent/workspace/Tape', () => ({
   Tape: () => <div data-testid="tape-stub" />,
 }));
@@ -49,14 +46,8 @@ vi.mock('../components/agent/overlays/AgentVault', () => ({
 vi.mock('../components/agent/overlays/ParallelChatDrawer', () => ({
   ParallelChatDrawer: () => null,
 }));
-vi.mock('../components/agent/overlays/InterventionDialog', () => ({
-  InterventionDialog: () => null,
-}));
 vi.mock('../components/agent/overlays/AgentRoster', () => ({
   AgentRoster: () => <div data-testid="agent-roster-stub" />,
-}));
-vi.mock('../components/agent/overlays/AgentReportScreen', () => ({
-  AgentReportScreen: () => null,
 }));
 vi.mock('../components/agent/overlays/CouncilStage', () => ({
   CouncilStage: () => null,

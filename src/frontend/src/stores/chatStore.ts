@@ -391,7 +391,7 @@ export const useChatStore = create<ChatStoreState>((set, get) => ({
   },
 
   consumeAgentSeed: (seed) => {
-    // Phase 16 — landed from an AgentReportScreen 'Continue as Conversation' click.
+    // Phase 16 — landed from a 'Continue as Conversation' click.
     // We create a "virtual" session (or target a new one) and seed the messages.
     // Note: the backend actually creates the session on /resume-as-conversation,
     // so we just need to switch to it and load its summary/messages.

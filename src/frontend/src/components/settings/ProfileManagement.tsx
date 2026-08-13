@@ -363,8 +363,7 @@ function Avatar({ username, avatarUrl }: { username: string; avatarUrl: string |
       />
     );
   }
-  // Deterministic mandala stub from first letter — same hue family as
-  // ProfileSelector so the avatar reads consistently across the app.
+  // Deterministic mandala stub from first letter.
   const seed = username.charCodeAt(0) || 65;
   const hue = (seed * 37) % 60; // 0..60 — sunrise palette band
   return (

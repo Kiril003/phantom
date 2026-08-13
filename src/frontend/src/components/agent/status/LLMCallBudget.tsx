@@ -1,6 +1,6 @@
 /**
  * Phase 9.2.1 — per-task LLM-call budget strip.
- * Sits beside ThoughtBudget on the AgentPanel header.
+ * Sits on the AgentPanel header.
  *
  * Colors track free-tier reality: green under 20 (≤ 1 day's worth on the
  * Gemini 2.5-flash 20-call free quota), amber 20-35, red 35+.

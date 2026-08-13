@@ -180,9 +180,8 @@ interface UIStoreState {
   setPendingVoiceActivation: (v: boolean) => void;
 
   /**
-   * Phase 16 — AgentSessionHistory overlay visibility. Toggled from
-   * FloatingToolbar's "Історія агента" entry and from AgentReportScreen's
-   * "Історія" CTA. Mounted at App level so it overlays any layout.
+   * Phase 16 — agent history (AgentVault) overlay visibility. Toggled from
+   * AgentCommandCenter; mounted by OperatorLayout and SunriseWorkspace.
    */
   agentHistoryOpen: boolean;
   setAgentHistoryOpen: (v: boolean) => void;

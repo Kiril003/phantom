@@ -2,8 +2,7 @@
  * Vertical V11 — Intelligence Hub Zustand store.
  *
  * Holds the hub snapshot and search state for the IntelligenceHub overlay.
- * Polling (5-minute interval) is handled in KnowsAboutMeCard via TanStack
- * Query — this store is the shared write surface for the overlay UI.
+ * This store is the shared write surface for the overlay UI.
  */
 import { create } from 'zustand';
 import {

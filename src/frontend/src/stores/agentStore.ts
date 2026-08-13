@@ -106,9 +106,9 @@ interface AgentState {
   councilSituationSummary: string | null;
   councilStatements: AgentRoleStatement[];
   councilDecision: AgentCouncilDecision | null;
-  // Phase 17a.6 — Quality Gate live state. Surfaced in AgentPulseLane so
-  // the operator can watch the agent revising a draft instead of
-  // staring at a frozen "thinking…" pill. Lifecycle:
+  // Phase 17a.6 — Quality Gate live state, so the operator can watch the
+  // agent revising a draft instead of staring at a frozen "thinking…"
+  // pill. Lifecycle:
   //   revision_started → revision_completed (× n) →
   //     either: regenerated (passed with rewrite) OR blocked (strike).
   // Cleared on the next task termination event.
@@ -129,7 +129,7 @@ interface AgentState {
   // Phase 16 — chat seed payload returned by /resume-as-conversation. Cleared
   // by the chat layer after consuming it (see chatStore.consumeAgentSeed).
   conversationSeed: AgentResumeAsConversationResponse | null;
-  // Phase 16 — past-task index for AgentSessionHistory.
+  // Phase 16 — past-task index.
   historyTasks: AgentTaskSummary[];
   historyLoading: boolean;
   historyError: string | null;
@@ -478,7 +478,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
   clearHistory: () => set({ historyTasks: [], historyError: null }),
 
   // Phase 18-COMPLETE — pull the in-memory progress snapshot for a long-
-  // running task. Used by LongRunningTaskCard to hydrate after WS reconnect.
+  // running task, to hydrate after WS reconnect.
   loadProgress: async (taskId) => {
     set({
       progressLoading: { ...get().progressLoading, [taskId]: true },
@@ -813,8 +813,7 @@ export const useAgentStore = create<AgentState>((set, get) => ({
         patch.status = 'done';
         patch.substate = 'idle';
         patch.connectionStatus = 'idle';
-        // Phase 18-COMPLETE — drop the long-running mirror for this task
-        // so the LongRunningTaskCard auto-dismisses.
+        // Phase 18-COMPLETE — drop the long-running mirror for this task.
         const tid = String(e.payload.task_id ?? '');
         if (tid) setTimeout(() => get().clearProgress(tid), 0);
         break;
@@ -865,8 +864,8 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       case 'task.promoted_to_background': {
         // Phase 18-COMPLETE — runtime flipped this task fg→bg because its
         // current action declared a long_running_spec. Mirror the timestamp
-        // so the LongRunningTaskCard can show "moved at HH:MM, freed
-        // foreground" without polling /status.
+        // so the UI can show "moved at HH:MM, freed foreground" without
+        // polling /status.
         const taskId = String(e.payload.task_id ?? '');
         const at = Number(e.payload.promoted_at ?? Date.now() / 1000);
         if (taskId) {
@@ -890,9 +889,9 @@ export const useAgentStore = create<AgentState>((set, get) => ({
       }
       case 'task.report_ready': {
         // Phase 16 — backend just composed a TaskReport for the finished
-        // task. Surface it through reportPending so OperatorLayout shows
-        // <AgentReportScreen>; do NOT exit OPERATOR — that waits for the
-        // operator's explicit acknowledge / continue-as-conversation.
+        // task. Surface it through reportPending; do NOT exit OPERATOR —
+        // that waits for the operator's explicit acknowledge /
+        // continue-as-conversation.
         const report = e.payload.report as AgentTaskReport | undefined;
         if (report) patch.reportPending = report;
         break;

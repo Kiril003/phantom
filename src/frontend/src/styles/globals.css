@@ -645,7 +645,7 @@ body.state-transitioning::after {
   100% { transform: translateX(0);    opacity: 1; }
 }
 
-/* Typewriter caret — used in DecisionCard monologue. */
+/* Typewriter caret. */
 @keyframes caret-blink {
   0%, 49%   { opacity: 1; }
   50%, 100% { opacity: 0; }

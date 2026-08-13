@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
-import { ArrowLeft, PlugZap, RotateCw, UserPlus } from 'lucide-react';
+import { ArrowLeft, PlugZap, RotateCw, ShieldAlert } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { useSystemStore } from '../../stores/systemStore';
 import { ApiError, authApi } from '../../services/api';
@@ -62,7 +62,11 @@ export default function LoginScreen() {
       setPhase({ kind: 'pick', profiles });
     } catch (err) {
       // 404 на старому ядрі — не обрив: список просто не віддається.
-      setPhase(err instanceof ApiError ? { kind: 'nobody' } : { kind: 'unreachable' });
+      if (err instanceof ApiError && err.status === 404) {
+        setPhase({ kind: 'nobody' });
+      } else {
+        setPhase({ kind: 'unreachable' });
+      }
     }
   }, []);
 
@@ -142,7 +146,7 @@ export default function LoginScreen() {
 
         {phase.kind === 'loading' && <Waiting />}
         {phase.kind === 'unreachable' && <Unreachable onRetry={() => void load()} />}
-        {phase.kind === 'nobody' && <Nobody />}
+        {phase.kind === 'nobody' && <Nobody onRetry={() => void load()} />}
 
         {phase.kind === 'pick' && (
           <>
@@ -322,34 +326,55 @@ function Unreachable({ onRetry }: { onRetry: () => void }) {
   );
 }
 
-function Nobody() {
+/**
+ * Тут була кнопка «Створити профіль» на /onboarding. Вона вела в нікуди:
+ * маршрут лежав під перевіркою автентифікації, а бачить цей екран лише
+ * той, хто ще не увійшов, — тобто клік повертав на цей самий екран. Та
+ * сторінка й профілю не створювала, вона створювала tenant.
+ *
+ * Насправді власника заводить саме ядро: ensure_default_user
+ * (security/auth.py) на кожному старті створює ROOT «phantom», якщо
+ * користувачів нема. Тож порожній список — це збій, а не новий пристрій,
+ * і чесна відповідь тут — сказати, звідки взяти PIN.
+ */
+function Nobody({ onRetry }: { onRetry: () => void }) {
   return (
     <div className="glass flex flex-col items-center" style={{ marginTop: 22, padding: 22, borderRadius: 18, width: '100%' }}>
-      <UserPlus size={22} strokeWidth={1.75} style={{ color: 'var(--primary-deep)' }} />
+      <ShieldAlert size={22} strokeWidth={1.75} style={{ color: 'var(--signal-warn)' }} />
       <div style={{ marginTop: 10, fontSize: 15, fontWeight: 600, color: 'var(--ink-primary)' }}>
-        Пристрій ще нічий
+        Жодного профілю не видно
       </div>
       <div style={{ marginTop: 6, fontSize: 12, color: 'var(--ink-secondary)', textAlign: 'center', lineHeight: 1.5 }}>
-        Тут немає жодного профілю. Створи перший — PHANTOM запам'ятає тебе
-        і більше не питатиме, хто ти.
+        Власника ядро заводить саме, коли стартує вперше. Порожній список —
+        ознака збою, а не нового пристрою.
       </div>
-      <a
-        href="/onboarding"
+      <div style={{ marginTop: 10, fontSize: 11, color: 'var(--ink-muted)', textAlign: 'center', lineHeight: 1.5 }}>
+        Перезапусти пристрій: ядро знову створить власника «phantom» і надрукує
+        разовий PIN у журнал запуску та у файл identity/bootstrap_pin. Той PIN
+        приймається лише з екрана самого пристрою, доки не заміниш його
+        в Налаштуваннях.
+      </div>
+      <button
+        type="button"
+        onClick={onRetry}
         className="flex items-center justify-center"
         style={{
           marginTop: 16,
+          gap: 8,
           minHeight: 44,
           padding: '0 20px',
           borderRadius: 12,
           background: 'linear-gradient(135deg,#f4af25,#fb923c)',
+          border: 'none',
           color: 'var(--primary-shadow, #5c3d05)',
           fontSize: 13,
           fontWeight: 700,
-          textDecoration: 'none',
+          cursor: 'pointer',
         }}
       >
-        Створити профіль
-      </a>
+        <RotateCw size={14} strokeWidth={2.25} />
+        Перевірити ще раз
+      </button>
     </div>
   );
 }

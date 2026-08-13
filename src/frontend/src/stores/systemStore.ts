@@ -37,18 +37,14 @@ interface SystemStoreState {
   setVoiceAmplitude: (amp: number) => void;
   setSentience: (s: { cortisol: number; dopamine: number; oxytocin: number }) => void;
 
-  // Audit walkthrough fix — shorthand transitions consumed by Overlays
-  // (AppsOverlay) and DreamLayout / GhostLayout. Each routes through
-  // `setState` so transition history + previousState bookkeeping is
-  // preserved. The `trigger` slug names the caller so post-mortem can
-  // tell a programmatic state change from a toolbar tap.
+  // Лишились тільки ті два, що мають виклики. Решта (goFocus, goDialogue,
+  // goGhost, goDream, goOperator) не мала жодного — і була пасткою: вони
+  // міняють стан, але не ведуть на «/», тож із будь-якого маршруту дали б
+  // рівно те, чим хворів goOperator — плашка нова, екран старий.
+  // FloatingToolbar через це має власні версії з navigate('/').
+  // DREAM і OPERATOR ставить ядро саме, вручну їх вмикати нема чого.
   goShadow: () => void;
-  goFocus: () => void;
-  goDialogue: () => void;
   goSentinel: () => void;
-  goGhost: () => void;
-  goDream: () => void;
-  goOperator: () => void;
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -108,18 +104,8 @@ export const useSystemStore = create<SystemStoreState>((set, get) => ({
 
   goShadow: () =>
     get().setState(SystemState.SHADOW, { trigger: 'go-shorthand', timestamp: Date.now(), auto: false }),
-  goFocus: () =>
-    get().setState(SystemState.FOCUS, { trigger: 'go-shorthand', timestamp: Date.now(), auto: false }),
-  goDialogue: () =>
-    get().setState(SystemState.DIALOGUE, { trigger: 'go-shorthand', timestamp: Date.now(), auto: false }),
   goSentinel: () =>
     get().setState(SystemState.SENTINEL, { trigger: 'go-shorthand', timestamp: Date.now(), auto: false }),
-  goGhost: () =>
-    get().setState(SystemState.GHOST, { trigger: 'go-shorthand', timestamp: Date.now(), auto: false }),
-  goDream: () =>
-    get().setState(SystemState.DREAM, { trigger: 'go-shorthand', timestamp: Date.now(), auto: false }),
-  goOperator: () =>
-    get().setState(SystemState.OPERATOR, { trigger: 'go-shorthand', timestamp: Date.now(), auto: false }),
 }));
 
 if (import.meta.env.DEV) {

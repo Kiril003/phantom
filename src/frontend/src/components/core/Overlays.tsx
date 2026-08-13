@@ -19,6 +19,7 @@ import {
   Bell,
   CalendarDays,
   Folder,
+  BarChart3,
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { FloatingWindow } from './FloatingWindow';
@@ -808,7 +809,6 @@ function AppsOverlay() {
   const navigate = useNavigate();
   const toggleOverlay = useUIStore((s) => s.toggleOverlay);
   const openToolsTab = useUIStore((s) => s.openToolsTab);
-  const goOperator = useSystemStore((s) => s.goOperator);
   const goSentinel = useSystemStore((s) => s.goSentinel);
   const lastUsed = useAppsStore((s) => s.lastUsed);
   const markUsed = useAppsStore((s) => s.markUsed);
@@ -902,16 +902,29 @@ function AppsOverlay() {
         {
           id: 'agent',
           label: 'Агент',
-          description: 'Operator state · автономія',
+          description: 'Майстерня агента · задачі',
           icon: <Cpu size={22} strokeWidth={1.6} />,
-          onClick: () => launch('agent', () => goOperator()),
+          onClick: () => launch('agent', () => navigate('/foundry')),
+        },
+        {
+          id: 'analytics',
+          label: 'Аналітика',
+          description: 'Сесії · листування · оператори',
+          icon: <BarChart3 size={22} strokeWidth={1.6} />,
+          onClick: () => launch('analytics', () => navigate('/analytics')),
         },
         {
           id: 'sentinel',
           label: 'Sentinel',
           description: 'Threat watch · radar',
           icon: <Radar size={22} strokeWidth={1.6} />,
-          onClick: () => launch('sentinel', () => goSentinel()),
+          // Стан малює StateSurface, а він живе на «/». Без переходу тап із
+          // /map чи /settings міняв лише плашку.
+          onClick: () =>
+            launch('sentinel', () => {
+              navigate('/');
+              goSentinel();
+            }),
         },
         {
           id: 'settings',

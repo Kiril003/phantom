@@ -55,14 +55,13 @@ const CoreDownWall = React.lazy(() =>
 );
 const SettingsPanel = React.lazy(() => import('../components/settings/SettingsPanel'));
 const MapLayout = React.lazy(() => import('../layouts/MapLayout'));
-const PolisLayout = React.lazy(() => import('../layouts/PolisLayout'));
-const CreateWorkspace = React.lazy(() => import('../pages/Onboarding/CreateWorkspace'));
+const SunriseWorkspace = React.lazy(() => import('../layouts/SunriseWorkspace'));
+const AgentFoundryLayout = React.lazy(() => import('../layouts/AgentFoundryLayout'));
 
 const DashboardLayout = React.lazy(() => import('../layouts/DashboardLayout'));
 const GhostLayout = React.lazy(() => import('../layouts/GhostLayout'));
 const DreamLayout = React.lazy(() => import('../layouts/DreamLayout'));
 const DialogueLayout = React.lazy(() => import('../layouts/DialogueLayout'));
-const OperatorLayout = React.lazy(() => import('../layouts/OperatorLayout'));
 const FocusLayout = React.lazy(() => import('../layouts/FocusLayout'));
 const SentinelLayout = React.lazy(() => import('../layouts/SentinelLayout'));
 
@@ -71,7 +70,11 @@ const SentinelLayout = React.lazy(() => import('../layouts/SentinelLayout'));
 // Фокус, Вартовий, Привид) міняють SystemState і йдуть сюди — поки тут
 // висів дашборд, стан мінявся, а екран лишався той самий, і кнопки
 // виглядали мертвими.
-function StateSurface() {
+// OPERATOR — не кнопка, а стан: ядро саме входить у нього, коли стартує
+// передній план агента (agent/kernel/runtime.py:738 і :878 шлють transition
+// у WS). Кейса тут не було, тож стан приходив, плашка ставала «Оператор», а
+// під нею лишалась головна. Веде на ту саму майстерню, що й /operator.
+export function StateSurface() {
   const state = useSystemStore((s) => s.state);
   switch (state) {
     case SystemState.DIALOGUE:
@@ -84,6 +87,8 @@ function StateSurface() {
       return <GhostLayout />;
     case SystemState.DREAM:
       return <DreamLayout />;
+    case SystemState.OPERATOR:
+      return <AgentFoundryLayout />;
     default:
       return <ShadowLayout />;
   }
@@ -108,14 +113,14 @@ function MainRouter() {
     <React.Suspense fallback={<PhantomLoader />}>
       <AnimatePresence mode="wait">
         <Routes>
-          <Route path="/onboarding" element={<CreateWorkspace />} />
           <Route path="/" element={<DashboardLayout />}>
             <Route index element={<StateSurface />} />
             <Route path="analytics" element={<AnalyticsOverview />} />
             <Route path="map" element={<MapLayout />} />
-            <Route path="polis" element={<PolisLayout />} />
+            <Route path="polis" element={<SunriseWorkspace />} />
             <Route path="chat" element={<DialogueLayout />} />
-            <Route path="operator" element={<OperatorLayout />} />
+            <Route path="operator" element={<AgentFoundryLayout />} />
+            <Route path="foundry" element={<AgentFoundryLayout />} />
             <Route path="system" element={<FocusLayout />} />
             <Route path="sentinel" element={<SentinelLayout />} />
             <Route path="settings/:categoryId?" element={<SettingsPanel />} />

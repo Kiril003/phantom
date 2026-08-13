@@ -1,0 +1,35 @@
+{
+  "source": "phantom-companion/docs/live-dialogue-contract.md",
+  "locale": "uk",
+  "note": "Спільна таблиця двох поверхонь. Копія цього файлу живе в phantom-companion; копіювання — свідомий, переглянутий акт. commit_ms/provisional_ms = null означає «не настає ніколи».",
+  "policy_ms": {
+    "provisional_after_question": 250,
+    "provisional": 350,
+    "commit_after_question": 450,
+    "commit": 700,
+    "commit_incomplete": 1200,
+    "patience": 2500,
+    "endpoint_max": 8000,
+    "tick": 50,
+    "stable_ticks_for_provisional": 2
+  },
+  "vectors": [
+    {"partial": "подзвони мамі", "after_question": false, "tail": "complete", "commit_ms": 700, "provisional_ms": 350},
+    {"partial": "так", "after_question": true, "tail": "complete", "commit_ms": 450, "provisional_ms": 250},
+    {"partial": "так", "after_question": false, "tail": "complete", "commit_ms": 700, "provisional_ms": 350},
+    {"partial": "постав таймер на десять хвилин", "after_question": false, "tail": "complete", "commit_ms": 700, "provisional_ms": 350},
+    {"partial": "скільки зараз годин?", "after_question": false, "tail": "complete", "commit_ms": 700, "provisional_ms": 350},
+    {"partial": "подзвони мамі але", "after_question": false, "tail": "incomplete", "commit_ms": 1200, "provisional_ms": null},
+    {"partial": "я думаю що", "after_question": false, "tail": "incomplete", "commit_ms": 1200, "provisional_ms": null},
+    {"partial": "нагадай мені про", "after_question": false, "tail": "incomplete", "commit_ms": 1200, "provisional_ms": null},
+    {"partial": "подзвони мамі,", "after_question": false, "tail": "incomplete", "commit_ms": 1200, "provisional_ms": null},
+    {"partial": "подзвони мамі якщо", "after_question": true, "tail": "incomplete", "commit_ms": 1200, "provisional_ms": null},
+    {"partial": "зроби це щоб", "after_question": false, "tail": "incomplete", "commit_ms": 1200, "provisional_ms": null},
+    {"partial": "поїдемо до", "after_question": false, "tail": "incomplete", "commit_ms": 1200, "provisional_ms": null},
+    {"partial": "ну", "after_question": false, "tail": "incomplete", "commit_ms": 1200, "provisional_ms": null},
+    {"partial": "по-перше —", "after_question": false, "tail": "incomplete", "commit_ms": 1200, "provisional_ms": null},
+    {"partial": "ееее", "after_question": false, "tail": "filler", "commit_ms": null, "provisional_ms": null},
+    {"partial": "хм мм", "after_question": false, "tail": "filler", "commit_ms": null, "provisional_ms": null},
+    {"partial": "   ", "after_question": false, "tail": "empty", "commit_ms": null, "provisional_ms": null}
+  ]
+}

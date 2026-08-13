@@ -132,10 +132,14 @@ class TestPhase12VoiceModeSettings:
         assert len(default.strip()) > 0
 
     def test_voice_silence_timeout_default(self) -> None:
-        # Phase 12.4 — default lowered 1500 → 800 ms for conversational
-        # responsiveness. Range is [300, 5000] since live dialogue.
+        # Жива розмова (2026-08-14) — ключ став СТЕЛЕЮ обірваного хвоста, а
+        # не єдиним порогом, тож 800 → 1200 і збігається з телефоном.
         from config import PhantomConfig
-        assert PhantomConfig.model_fields["voice_silence_timeout_ms"].default == 800
+        from voice.dialogue_constants import COMMIT_INCOMPLETE_MS
+        assert (
+            PhantomConfig.model_fields["voice_silence_timeout_ms"].default
+            == COMMIT_INCOMPLETE_MS
+        )
 
 
 class TestPhase12VoiceModeValidation:

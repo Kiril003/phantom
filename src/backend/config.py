@@ -245,9 +245,15 @@ class PhantomConfig(BaseSettings):
     # After PHANTOM replies, how long we keep the mic "armed" so the user can
     # continue without re-saying the wake word.
     voice_continuation_window_s: int = 10
-    # Drop incoming mic frames while PHANTOM is speaking, to avoid self-wakes
-    # when TTS audio leaks through the ReSpeaker near-field.
-    voice_mic_duck_on_tts: bool = True
+    # Щабель деградації, а не звичайний режим: True = глухнути повністю,
+    # поки PHANTOM говорить (поведінка до живої розмови).
+    # Живий діалог (2026-08-14) — типово False. Перехоплення у два кроки
+    # (voice/always_on.py) стишує голос на першому звуці й убиває його на
+    # першому НЕ-ехо слові, а текстовий фільтр (voice/self_echo.py) знає,
+    # що саме зараз лунає, і не дає машині перебити саму себе.
+    # Витік ехо на динаміку Radxa НЕ ВИМІРЯНО — коли він виявиться завеликим
+    # для текстового фільтра, True повертає стару глухоту одним ключем.
+    voice_mic_duck_on_tts: bool = False
     # ── Voice / Modes (Phase 12.0 — VAD-driven voice + optional wake) ────────
     # Replaces voice_always_on_enabled. The old key stays in the schema as a
     # deprecated alias — it is still settable / readable so existing rows
@@ -274,11 +280,14 @@ class PhantomConfig(BaseSettings):
     # threshold cannot be right for every sentence: an answer to a question
     # closes at 450 ms while a sentence dangling on «але» must not close for
     # 1200 ms. Both numbers are cross-surface (voice/dialogue_constants.py),
-    # and 450 was rejected by this very validator. The default stays 800
-    # until voice/turn_taking.py owns the ceiling — until then this value is
-    # still the single acoustic endpoint and lowering it would only make the
-    # PC interrupt people faster.
-    voice_silence_timeout_ms: int = 800
+    # and 450 was rejected by this very validator.
+    # 2026-08-14 — voice/turn_taking.py owns the ceiling now, so the key
+    # changed meaning: це СТЕЛЯ для обірваного хвоста, а не єдиний поріг.
+    # VAD у режимі партіалів каже «стало тихо» на 450 мс, далі черга тримає
+    # репліку до 700 (завершений хвіст) або до цього числа (обірваний).
+    # З вимкненими партіалами класифікувати хвіст нічим — тоді це знову
+    # єдиний плаский поріг, і 1200 — його безпечний кінець.
+    voice_silence_timeout_ms: int = 1200
 
     # Phase 13a.3 — backend energy fast-path skip. When the orchestrator is
     # idle (not inside an utterance) AND the incoming PCM frame's peak

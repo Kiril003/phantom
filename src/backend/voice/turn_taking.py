@@ -157,6 +157,12 @@ class TurnTaker:
         self._provisional_fired = False
         self._closed = False
 
+    def prime(self, partial: str, stable_ticks: int) -> None:
+        """Партіал устоявся ще поки людина говорила — рахувати це вдруге
+        означало б віддати здогаду смугу, якої вже немає."""
+        self._last_partial = (partial or "").strip()
+        self._stable_ticks = max(0, int(stable_ticks))
+
     @property
     def speculated(self) -> bool:
         return self._provisional_fired

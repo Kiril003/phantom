@@ -413,11 +413,14 @@ class TestSentenceSpeaker:
         await asyncio.wait_for(speaker._worker, timeout=5)
 
         assert speaker.accepted_any
+        # Хід закінчується власним сигналом: UI глушить мікрофон на весь
+        # потік, тож мусить знати, коли він скінчився.
         kinds = [k for k, _ in events]
-        assert kinds == ["tts.sentence"] * 3
-        seqs = [p["seq"] for _, p in events]
+        assert kinds == ["tts.sentence"] * 3 + ["tts.end"]
+        sentences = [(k, p) for k, p in events if k == "tts.sentence"]
+        seqs = [p["seq"] for _, p in sentences]
         assert seqs == [1, 2, 3]
-        texts = [p["text"] for _, p in events]
+        texts = [p["text"] for _, p in sentences]
         assert texts == ["Перше речення.", "Друге речення!", "Хвіст без крап"]
         assert all(p["message_id"] == "msg1" for _, p in events)
         import base64 as _b64
@@ -444,7 +447,7 @@ class TestSentenceSpeaker:
         await speaker.feed("Тихе речення.")
         await speaker.finish()
         await asyncio.wait_for(speaker._worker, timeout=5)
-        assert events == []
+        assert [k for k, _ in events] == ["tts.end"], "жодного звуку не пішло"
 
     @pytest.mark.asyncio
     async def test_new_speaker_interrupts_previous(self, monkeypatch):

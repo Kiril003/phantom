@@ -122,6 +122,12 @@ async def test_partial_emitted_during_speech(monkeypatch) -> None:
     vad.queue(["speech_end"])
     await orch.process_frame(b"\x10" * 64)
 
+    # Жива розмова: VAD більше не закриває репліку сам — «привіт» має
+    # завершений хвіст, тож черга тримає її до 700 мс тиші й аж тоді закриває.
+    hold = orch._hold_task
+    assert hold is not None, "черга мала взяти кермо після паузи"
+    await hold
+
     types = [e["type"] for e in events]
     assert "speech_start" in types
     partials = [e for e in events if e["type"] == "partial"]

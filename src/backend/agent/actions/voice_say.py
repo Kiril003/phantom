@@ -18,16 +18,23 @@ Design notes:
   ``voice_tts_voice`` (per-call ``voice`` arg overrides) and the cyrillic
   auto-voice picker for empty ``voice``.
 
-* **Delivery.** Audio is streamed to the frontend via the existing
-  ``agent.stream`` WS channel as base64 WAV — the existing voice queue
-  client (used for /voice/tts replies) plays it. We don't try to dump
-  audio to the local sound card from inside the action: the operator
-  surface is the browser tab on the Radxa display, and that already
-  has working audio output.
+* **Доставка.** Через `voice/incremental_tts.py`, тим самим шляхом, що й
+  відповідь у чаті. Раніше тут був власний шлях: ціла репліка синтезувалась
+  однією брилою і йшла в канал ``agent.stream`` подією ``voice_say``. Її не
+  грав НІХТО — у фронтенді немає жодного споживача цієї події, — а дія при
+  цьому поверталась ok=True зі словами «spoke: …». Разом із тим брилу не
+  можна було ані спинити (жодної точки між реченнями), ані показати фільтру
+  самопрослуховування — тож власний голос PHANTOM міг повернутись із
+  мікрофона й лягти в чат як слова оператора.
+
+  Канал ``chat``/``tts.sentence`` — єдиний, у якого є програвач
+  (`services/ttsPlayer.ts`), єдиний, що реєструється в `voice/speaking_floor.py`
+  (отже, спиняється перехопленням), і єдиний, що називає реєстрові свій
+  текст. Голосовий WS для цього не годиться: ``voice_mode`` типово ``off``,
+  тож на типовій машині проактивна мова просто зникла б.
 """
 from __future__ import annotations
 
-import base64
 import logging
 import time
 from typing import ClassVar
@@ -125,23 +132,40 @@ class VoiceSay(Action):
                     elapsed_ms=int((time.monotonic() - t0) * 1000),
                 )
 
-        # --- voice + speed resolution ------------------------------------------
-        if self.voice.strip():
-            voice = self.voice.strip()
-        else:
-            try:
-                from voice.tts_engine import select_voice_for_text
-                voice = select_voice_for_text(self.text)
-            except Exception:
-                voice = cfg.voice_tts_voice
-        speed = self.speed if self.speed > 0 else cfg.voice_tts_speed
+        # --- чи вільна підлога --------------------------------------------------
+        # Нагадування не ріже відповідь оператора на півслові: планувальник
+        # перепитає наступним тиком, точно як на тихих станах.
+        from voice.speaking_floor import speaking_floor
 
-        # --- synthesize --------------------------------------------------------
+        if speaking_floor.is_speaking(ctx.user_id):
+            return ActionResult(
+                ok=False,
+                output={
+                    "reason": "voice_busy",
+                    "hint": "PHANTOM говорить — спробувати наступним тиком",
+                },
+                side_effects=[],
+                elapsed_ms=int((time.monotonic() - t0) * 1000),
+            )
+
+        # --- сказати вголос -----------------------------------------------------
+        from voice import incremental_tts
+
+        message_id = f"say-{ctx.task_id}-{ctx.step_idx}"
+        speaker = None
         try:
-            from voice.pipeline import synthesize_text
-            result = await synthesize_text(self.text, voice, speed)
+            speaker = await incremental_tts.start_speaker(
+                ctx.user_id, message_id, ctx.task_id,
+                voice=self.voice.strip(),
+                speed=self.speed if self.speed > 0 else 0.0,
+            )
+            await speaker.feed(self.text)
+            await speaker.finish()
+            finished = await speaker.wait_done()
         except Exception as exc:
-            logger.warning("voice.say synthesis failed: %s", exc)
+            logger.warning("voice.say delivery failed: %s", exc)
+            if speaker is not None:
+                await speaker.cancel(notify=False)
             return ActionResult(
                 ok=False,
                 output={"reason": "tts_failed", "error": str(exc)},
@@ -149,56 +173,31 @@ class VoiceSay(Action):
                 elapsed_ms=int((time.monotonic() - t0) * 1000),
             )
 
-        # --- deliver to operator surface ---------------------------------------
-        # Push audio over WS so the active browser tab plays it. We don't
-        # await playback — the action is "spoken into the room" the moment
-        # the WS frame leaves the server; downstream playback latency is
-        # the operator's audio device, not ours.
-        delivered = False
-        try:
-            from api.websocket_hub import hub
-            audio_b64 = base64.b64encode(result.audio_wav).decode("ascii")
-            await hub.broadcast(
-                "agent.stream",
-                "voice_say",
-                {
-                    "task_id": ctx.task_id,
-                    "step_idx": ctx.step_idx,
-                    "audio_b64": audio_b64,
-                    "media_type": "audio/wav",
-                    "engine": result.engine,
-                    "voice": result.voice,
-                    "sample_rate": result.sample_rate,
-                    "text": self.text,
-                },
-            )
-            delivered = True
-        except Exception as exc:
-            # Non-fatal: synthesis succeeded, only delivery failed. Caller
-            # can read the side_effect to know we tried.
-            logger.warning("voice.say delivery failed: %s", exc)
+        # Заявляти «сказав» можна лише за тим, що справді пішло в ефір.
+        spoken = speaker.spoken_sentences
 
         # Phase 18 E-5 sibling — count proactive utterances separately so the
         # /metrics endpoint can distinguish "agent spoke" from "user asked
         # for TTS". Counter is created on demand to keep this action
         # importable in environments without prometheus.
-        try:
-            from observability import voice_tts_total
-            voice_tts_total.inc()
-        except Exception:
-            pass
+        # Лічильник рахує сказане, а не спробуване: тиша не є реплікою.
+        if spoken > 0:
+            try:
+                from observability import voice_tts_total
+                voice_tts_total.inc()
+            except Exception:
+                pass
 
+        said = f"{self.text[:80]}{'…' if len(self.text) > 80 else ''}"
         return ActionResult(
-            ok=delivered,
+            ok=spoken > 0,
             output={
-                "engine": result.engine,
-                "voice": result.voice,
-                "sample_rate": result.sample_rate,
-                "wav_bytes": len(result.audio_wav),
-                "delivered_via": "ws" if delivered else "none",
+                "sentences_spoken": spoken,
+                "interrupted": not finished,
+                "voice": self.voice.strip() or "auto",
+                "delivered_via": "chat_tts" if spoken else "none",
+                **({} if spoken else {"reason": "nothing_spoken"}),
             },
-            side_effects=[
-                f"spoke: {self.text[:80]}{'…' if len(self.text) > 80 else ''}"
-            ],
+            side_effects=[f"spoke: {said}"] if spoken else [],
             elapsed_ms=int((time.monotonic() - t0) * 1000),
         )

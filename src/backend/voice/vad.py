@@ -209,6 +209,9 @@ class SileroVAD:
 
         window_ms = 1000 * self._window_samples / sample_rate
         silence_windows = max(1, int(silence_ms // window_ms))
+        # Замовлені мілісекунди й досяжні — різні числа: тиша міряється цілими
+        # вікнами. Черга рахує паузу від межі, яку VAD справді вживає.
+        self._silence_floor_ms = int(silence_windows * window_ms)
 
         self._hysteresis = _Hysteresis(
             speech_threshold=speech_threshold,
@@ -253,6 +256,11 @@ class SileroVAD:
     @property
     def window_samples(self) -> int:
         return self._window_samples
+
+    @property
+    def silence_floor_ms(self) -> int:
+        """Скільки тиші вже минуло, коли VAD каже SPEECH_END."""
+        return self._silence_floor_ms
 
     def process(self, pcm_bytes: bytes) -> list[str]:
         """Feed raw mono s16le PCM bytes. Returns 0+ transitions that

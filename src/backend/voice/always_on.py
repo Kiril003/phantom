@@ -36,6 +36,15 @@ Emitted event types (via ``event_callback``)::
     {"type": "cooldown_end"}
     {"type": "error", "message": str}
 
+Жива розмова додає ще шість (continuous / wake_word)::
+
+    {"type": "barge_in_duck", "confirm_ms": int, "gain": float}
+    {"type": "barge_in_commit", "transcript": str}
+    {"type": "barge_in_release", "reason": str}
+    {"type": "provisional", "transcript": str}
+    {"type": "patience", "transcript": str}
+    {"type": "rejected", "reason": "self_echo"|"abandoned"}
+
 No ``partial`` events are emitted in 11b — the MVP returns the full
 transcript once VAD reports ``speech_end``. Streaming partials are an
 11c enhancement.
@@ -47,6 +56,15 @@ import json
 import logging
 from typing import Awaitable, Callable, Optional
 
+from voice.dialogue_constants import (
+    BARGE_IN_CONFIRM_MS,
+    BARGE_IN_DUCK_GAIN,
+    COMMIT_MS,
+    ENDPOINT_TICK_MS,
+    PROVISIONAL_AFTER_QUESTION_MS,
+)
+from voice.self_echo import is_probable_echo, normalize_tokens
+from voice.turn_taking import TurnDecision, TurnTaker
 from voice.vad import SPEECH_END, SPEECH_START, SileroVAD
 from voice.wake_spotter import WakeResult, WakeSpotter
 
@@ -157,6 +175,15 @@ class AlwaysOnOrchestrator:
         # ``final_revised`` event with the Whisper text.
         refine_with_whisper: bool = False,
         refine_diff_threshold: float = 0.85,
+        # ── Жива розмова ──────────────────────────────────────────────────
+        # Реєстр голосів (voice/speaking_floor.py), звужений до користувача
+        # цього зʼєднання: хто говорить, що саме, і як його спинити. None —
+        # оркестратор без озвучки; перехоплювати нічого.
+        speaking=None,
+        # Скільки тиші вже минуло, коли VAD каже SPEECH_END. Черга рахує
+        # паузу далі від цієї межі, тож межа мусить бути НИЖЧОЮ за найшвидшу
+        # опубліковану — інакше швидка смуга недосяжна вже за побудовою.
+        endpoint_floor_ms: int = PROVISIONAL_AFTER_QUESTION_MS,
     ) -> None:
         self._vad = vad
         self._wake = wake_spotter
@@ -190,6 +217,32 @@ class AlwaysOnOrchestrator:
         # Pending Whisper background refinement task. Cancelled on reset.
         self._refine_task: Optional[asyncio.Task] = None
 
+        # ── Жива розмова: перехоплення + адаптивна черга ───────────────────
+        self._speaking = speaking
+        self._endpoint_floor_ms = int(endpoint_floor_ms)
+        # Клієнт сказав «граю відповідь». Реєстр голосів знає те саме про
+        # внутрішні шляхи озвучки; істина — будь-який із двох.
+        self._tts_client_active = False
+        # Що лунало з динаміка, коли людина заговорила. Знімок беремо ДО
+        # знищення доріжки — питати після обриву означає дістати порожньо.
+        self._echo_window: list[str] = []
+        self._barge_open = False
+        self._barge_committed = False
+        self._barge_task: Optional[asyncio.Task] = None
+        self._utterance_over_tts = False
+        self._last_partial = ""
+        # Лічильник із StreamingVoskRecognizer: скільки кадрів поспіль текст
+        # не мінявся. Чекав на споживача з Phase 14 — ось він.
+        self._last_partial_stability = 0
+        self._hold_task: Optional[asyncio.Task] = None
+        # Без партіалів хвіст класифікувати нічим — тоді черги немає, і
+        # плаский поріг VAD лишається єдиним, яким він і був.
+        self._turn_taker: Optional[TurnTaker] = (
+            TurnTaker(commit_incomplete_ms=max(self._silence_timeout_ms, COMMIT_MS))
+            if self._streaming_partials and mode in (MODE_CONTINUOUS, MODE_WAKE_WORD)
+            else None
+        )
+
     # ───────────────────── public contract ─────────────────────
 
     @property
@@ -203,6 +256,17 @@ class AlwaysOnOrchestrator:
     @property
     def mode(self) -> str:
         return self._mode
+
+    @property
+    def tts_active(self) -> bool:
+        """Чи лунає зараз голос PHANTOM."""
+        if self._tts_client_active:
+            return True
+        return self._speaking is not None and self._speaking.is_speaking()
+
+    @property
+    def barge_in_open(self) -> bool:
+        return self._barge_open
 
     async def process_frame(self, pcm_bytes: bytes) -> None:
         """Drive the state machine with one PCM frame. Frames are
@@ -266,25 +330,43 @@ class AlwaysOnOrchestrator:
                     break
 
     async def mic_duck(self) -> None:
-        """Drop all further frames until ``mic_unduck``. Cancels any
-        pending cooldown. Called when TTS playback begins so the TTS
-        audio bleeding into the mic can't trigger a self-wake."""
+        """Запасний режим: глухнути цілком, поки не буде ``mic_unduck``.
+
+        Це поведінка до живої розмови — вона лишається як щабель деградації
+        для машин, де ехо пробиває текстовий фільтр (``voice_mic_duck_on_tts``).
+        """
         if self._ducked:
             return
         self._ducked = True
+        await self._release_barge_in("ducked")
         self._reset_internal()
 
     async def mic_unduck(self) -> None:
         """Resume processing frames from a clean state."""
         self._ducked = False
 
+    async def set_tts_active(self, active: bool) -> None:
+        """Клієнт повідомляє, що почав / скінчив грати відповідь."""
+        self._tts_client_active = bool(active)
+        if not self.tts_active:
+            await self._release_barge_in("tts_ended")
+
     async def reset(self) -> None:
         """Operator / WS ``reset`` command — back to IDLE, drop any
         in-flight utterance, cancel cooldown. Does *not* toggle
         ducking."""
         was_ducked = self._ducked
+        await self._release_barge_in("reset")
         self._reset_internal()
         self._ducked = was_ducked
+
+    async def shutdown(self) -> None:
+        """Зʼєднання скінчилось: жодне вікно й жодне утримання не мають
+        добігати у порожнечу."""
+        self._cancel_hold()
+        self._cancel_barge_task()
+        self._cancel_refine_task()
+        self._barge_open = False
 
     # ───────────────────── state transitions ─────────────────────
 
@@ -393,30 +475,26 @@ class AlwaysOnOrchestrator:
             await self._emit_error(f"vad: {exc}")
             return
 
+        speaking = self.tts_active
+        if speaking:
+            # Поки голос лунає, вікно ехо оновлюється щокадру; коли змовкне —
+            # застигає на тому, що було в повітрі.
+            self._echo_window = (
+                self._speaking.recent() if self._speaking is not None else []
+            )
+        elif self._barge_open:
+            await self._release_barge_in("tts_ended")
+
         if SPEECH_START in vad_events:
-            self._in_utterance = True
-            self._utterance_pcm = bytearray()
-            self._utterance_pcm.extend(pcm_bytes)
-            # Phase 13b — fresh streaming recognizer per utterance. The
-            # underlying vosk.Model is shared (singleton); only the
-            # KaldiRecognizer instance is per-utterance.
-            if self._streaming_partials and self._vosk_model is not None:
-                try:
-                    from voice.streaming_recognizer import StreamingVoskRecognizer
-                    self._streaming_rec = await asyncio.to_thread(
-                        StreamingVoskRecognizer,
-                        self._vosk_model,
-                        sample_rate=self._sample_rate,
-                        debounce_ms=self._partial_debounce_ms,
-                    )
-                except Exception as exc:  # noqa: BLE001
-                    logger.warning(
-                        "orchestrator(p12): streaming recognizer build "
-                        "failed (%s); falling back to non-streaming",
-                        exc,
-                    )
-                    self._streaming_rec = None
-            await self._send({"type": "speech_start"})
+            # Перший крок поступки — попереду будь-якої роботи зі STT:
+            # побудова розпізнавача коштує десятки мілісекунд, а людина має
+            # почути, що її почули, за десятки мілісекунд.
+            if speaking and not self._barge_committed:
+                await self._open_barge_in()
+            if self._hold_task is not None:
+                await self._resume_utterance(pcm_bytes)
+            else:
+                await self._begin_utterance(pcm_bytes, over_tts=speaking)
         elif self._in_utterance:
             self._utterance_pcm.extend(pcm_bytes)
 
@@ -433,27 +511,230 @@ class AlwaysOnOrchestrator:
                 )
                 partial_event = None
             if partial_event is not None and partial_event.text:
+                self._last_partial = partial_event.text
+                self._last_partial_stability = int(partial_event.stability)
                 await self._send({
                     "type": "partial",
                     "transcript": partial_event.text,
                     "is_committed": partial_event.is_committed,
                     "stability": partial_event.stability,
                 })
+                if self._barge_open:
+                    await self._judge_barge_in(partial_event.text)
 
-        if SPEECH_END in vad_events and self._in_utterance:
-            self._in_utterance = False
-            await self._send({"type": "speech_end"})
-            audio = bytes(self._utterance_pcm)
-            self._utterance_pcm = bytearray()
-            # Phase 13b — fast-path final from Vosk if streaming is on.
-            if self._streaming_rec is not None:
-                rec = self._streaming_rec
+        if SPEECH_END in vad_events and self._in_utterance and self._hold_task is None:
+            await self._on_speech_end()
+
+    # ─────────────── Жива розмова — межі репліки ────────────────────────
+
+    async def _begin_utterance(self, pcm_bytes: bytes, *, over_tts: bool) -> None:
+        self._in_utterance = True
+        self._utterance_over_tts = over_tts
+        self._barge_committed = False
+        self._last_partial = ""
+        self._last_partial_stability = 0
+        self._utterance_pcm = bytearray()
+        self._utterance_pcm.extend(pcm_bytes)
+        if self._turn_taker is not None:
+            self._turn_taker.reset()
+        # Phase 13b — fresh streaming recognizer per utterance. The
+        # underlying vosk.Model is shared (singleton); only the
+        # KaldiRecognizer instance is per-utterance.
+        if self._streaming_partials and self._vosk_model is not None:
+            try:
+                from voice.streaming_recognizer import StreamingVoskRecognizer
+                self._streaming_rec = await asyncio.to_thread(
+                    StreamingVoskRecognizer,
+                    self._vosk_model,
+                    sample_rate=self._sample_rate,
+                    debounce_ms=self._partial_debounce_ms,
+                )
+            except Exception as exc:  # noqa: BLE001
+                logger.warning(
+                    "orchestrator(p12): streaming recognizer build "
+                    "failed (%s); falling back to non-streaming",
+                    exc,
+                )
                 self._streaming_rec = None
-                await self._finalise_streaming(rec, audio)
-            else:
-                await self._finalise_phase12_utterance(audio)
+        await self._send({"type": "speech_start"})
 
-    async def _finalise_phase12_utterance(self, audio: bytes) -> None:
+    async def _resume_utterance(self, pcm_bytes: bytes) -> None:
+        """«Подзвони… [пауза] …мамі ввечері» — одна репліка, не дві."""
+        self._cancel_hold()
+        if self._turn_taker is not None:
+            self._turn_taker.on_speech_resumed()
+        self._utterance_pcm.extend(pcm_bytes)
+
+    async def _on_speech_end(self) -> None:
+        if self._barge_open and not self._barge_committed:
+            # Кашель скінчився: не чекати вікна, повернути гучність зараз.
+            await self._release_barge_in("silence")
+        if (
+            self._turn_taker is None
+            or self._streaming_rec is None
+            or not self._last_partial
+        ):
+            # Класифікувати нічого — закриваємось на межі VAD, як і раніше.
+            await self._close_utterance()
+            return
+        self._hold_task = asyncio.create_task(
+            self._hold_endpoint(), name="voice-endpoint-hold",
+        )
+
+    async def _hold_endpoint(self) -> None:
+        """Тиша після паузи: черга закривається за словами, не за секундоміром.
+
+        Виходи, кожен досяжний: COMMIT (репліка закінчена), ABANDON (стеля
+        ENDPOINT_MAX_MS), відновлена мова і reset/duck/розрив — обидва через
+        скасування завдання.
+        """
+        after_question = (
+            self._speaking.last_was_question()
+            if self._speaking is not None
+            else False
+        )
+        silence_ms = self._endpoint_floor_ms
+        self._turn_taker.prime(self._last_partial, self._last_partial_stability)
+        patient = False
+        try:
+            while True:
+                decision = self._turn_taker.on_tick(
+                    silence_ms, self._last_partial, after_question,
+                )
+                if decision is TurnDecision.COMMIT:
+                    await self._close_utterance()
+                    return
+                if decision is TurnDecision.ABANDON:
+                    await self._abandon_utterance()
+                    return
+                if decision is TurnDecision.PROVISIONAL:
+                    await self._send({
+                        "type": "provisional", "transcript": self._last_partial,
+                    })
+                elif decision is TurnDecision.PATIENCE and not patient:
+                    # Невпевненість озвучується мовчанням: видимий сигнал, нуль звуку.
+                    patient = True
+                    await self._send({
+                        "type": "patience", "transcript": self._last_partial,
+                    })
+                # Тики лягають на ту саму сітку, що й на телефоні: межа VAD —
+                # довільне число, а 450/700/1200 мають збігатися точно.
+                next_ms = (
+                    silence_ms // ENDPOINT_TICK_MS + 1
+                ) * ENDPOINT_TICK_MS
+                await asyncio.sleep((next_ms - silence_ms) / 1000.0)
+                silence_ms = next_ms
+        finally:
+            self._hold_task = None
+
+    def _cancel_hold(self) -> None:
+        task, self._hold_task = self._hold_task, None
+        if task is not None and not task.done():
+            task.cancel()
+
+    async def _close_utterance(self) -> None:
+        self._in_utterance = False
+        audio = bytes(self._utterance_pcm)
+        self._utterance_pcm = bytearray()
+        rec, self._streaming_rec = self._streaming_rec, None
+        # Репліка, що почалась під голос PHANTOM і не виграла підлогу, ще має
+        # довести, що вона не наше ж ехо. Та, що виграла, вже довела.
+        echo = (
+            list(self._echo_window)
+            if self._utterance_over_tts and not self._barge_committed
+            else None
+        )
+        self._utterance_over_tts = False
+        self._barge_committed = False
+        try:
+            await self._send({"type": "speech_end"})
+            if rec is not None:
+                await self._finalise_streaming(rec, audio, echo)
+            else:
+                await self._finalise_phase12_utterance(audio, echo)
+        finally:
+            self._last_partial = ""
+            self._last_partial_stability = 0
+            self._echo_window = []
+            if self._turn_taker is not None:
+                self._turn_taker.reset()
+
+    async def _abandon_utterance(self) -> None:
+        """Уламок помирає тихо — без відповіді й без помилки."""
+        self._in_utterance = False
+        self._utterance_pcm = bytearray()
+        self._streaming_rec = None
+        self._utterance_over_tts = False
+        self._barge_committed = False
+        try:
+            await self._send({"type": "speech_end"})
+            await self._send({"type": "rejected", "reason": "abandoned"})
+        finally:
+            self._last_partial = ""
+            self._last_partial_stability = 0
+            self._echo_window = []
+            if self._turn_taker is not None:
+                self._turn_taker.reset()
+
+    # ─────────────── Жива розмова — перехоплення у два кроки ────────────
+
+    async def _open_barge_in(self) -> None:
+        if self._barge_open:
+            return
+        self._barge_open = True
+        self._cancel_barge_task()
+        self._barge_task = asyncio.create_task(
+            self._barge_timeout(), name="voice-barge-confirm",
+        )
+        await self._send({
+            "type": "barge_in_duck",
+            "confirm_ms": BARGE_IN_CONFIRM_MS,
+            "gain": BARGE_IN_DUCK_GAIN,
+        })
+
+    async def _barge_timeout(self) -> None:
+        """Кадри йдуть лише поки клієнтський VAD чує мову: після кашлю вони
+        просто уриваються. Без цього годинника гучність лишилась би просіла
+        до кінця відповіді."""
+        try:
+            await asyncio.sleep(BARGE_IN_CONFIRM_MS / 1000.0)
+        finally:
+            self._barge_task = None
+        await self._release_barge_in("timeout")
+
+    def _cancel_barge_task(self) -> None:
+        task, self._barge_task = self._barge_task, None
+        if task is not None and not task.done():
+            task.cancel()
+
+    async def _judge_barge_in(self, text: str) -> None:
+        if not normalize_tokens(text):
+            return
+        if is_probable_echo(text, self._echo_window):
+            return
+        await self._commit_barge_in(text)
+
+    async def _commit_barge_in(self, text: str) -> None:
+        self._barge_open = False
+        self._barge_committed = True
+        self._cancel_barge_task()
+        # Мову спиняємо ми самі, тож заявка клієнта про озвучку вичерпана —
+        # інакше глушіння дожило б до наступного ходу.
+        self._tts_client_active = False
+        await self._send({"type": "barge_in_commit", "transcript": text})
+        if self._speaking is not None:
+            await self._speaking.stop("barge_in")
+
+    async def _release_barge_in(self, reason: str) -> None:
+        if not self._barge_open:
+            return
+        self._barge_open = False
+        self._cancel_barge_task()
+        await self._send({"type": "barge_in_release", "reason": reason})
+
+    async def _finalise_phase12_utterance(
+        self, audio: bytes, echo_guard: Optional[list[str]] = None,
+    ) -> None:
         if not audio:
             return
         try:
@@ -467,6 +748,9 @@ class AlwaysOnOrchestrator:
         text = (text or "").strip()
         if not text:
             await self._send({"type": "rejected"})
+            return
+
+        if await self._reject_own_voice(text, echo_guard):
             return
 
         if self._mode == MODE_WAKE_WORD:
@@ -498,7 +782,9 @@ class AlwaysOnOrchestrator:
 
     # ─────────────── Phase 13b — streaming finalise ─────────────────────
 
-    async def _finalise_streaming(self, rec, audio: bytes) -> None:
+    async def _finalise_streaming(
+        self, rec, audio: bytes, echo_guard: Optional[list[str]] = None,
+    ) -> None:
         """Drain the streaming recognizer to produce a fast-path Vosk
         ``final`` event. Optionally schedule a background Whisper pass
         whose result may emit ``final_revised`` when it disagrees enough.
@@ -514,6 +800,9 @@ class AlwaysOnOrchestrator:
         text = (final_event.text or "").strip()
         if not text:
             await self._send({"type": "rejected"})
+            return
+
+        if await self._reject_own_voice(text, echo_guard):
             return
 
         # Wake-word gating. Identical to the non-streaming Whisper path
@@ -574,6 +863,16 @@ class AlwaysOnOrchestrator:
                 "diff_ratio": ratio,
             }
         )
+
+    async def _reject_own_voice(
+        self, text: str, echo_guard: Optional[list[str]]
+    ) -> bool:
+        """Витік із власного динаміка не має ставати повідомленням у чаті."""
+        if not echo_guard or not is_probable_echo(text, echo_guard):
+            return False
+        logger.debug("orchestrator: dropped own echo: %r", text)
+        await self._send({"type": "rejected", "reason": "self_echo"})
+        return True
 
     def _cancel_refine_task(self) -> None:
         if self._refine_task is not None and not self._refine_task.done():
@@ -678,6 +977,22 @@ class AlwaysOnOrchestrator:
         # not leak background work into the next session.
         self._streaming_rec = None
         self._cancel_refine_task()
+        # Жива розмова: жодна засувка не переживає reset. `_closed` у черзі —
+        # теж засувка, і саме вона зробила б наступну репліку невидимою.
+        self._cancel_hold()
+        self._cancel_barge_task()
+        self._barge_open = False
+        self._barge_committed = False
+        # Заявку клієнта «граю відповідь» знімає сам клієнт — а якщо вкладку
+        # закрили посеред неї, зняти її не буде кому. Реєстр голосів усе одно
+        # скаже правду про внутрішню озвучку.
+        self._tts_client_active = False
+        self._utterance_over_tts = False
+        self._last_partial = ""
+        self._last_partial_stability = 0
+        self._echo_window = []
+        if self._turn_taker is not None:
+            self._turn_taker.reset()
 
     async def _send(self, event: dict) -> None:
         if self._emit is None:

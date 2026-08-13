@@ -43,12 +43,15 @@ def fake_orchestrator(monkeypatch):
 
     orch = AsyncMock(name="orchestrator")
     orch.is_ducked = False
+    orch.tts_active = False
     orch.state = "idle"
-    # is_ducked / state are attributes — keep as non-async properties.
+    # is_ducked / tts_active / state are attributes — keep as non-async properties.
     orch._emit = None
     orch.process_frame = AsyncMock()
     orch.mic_duck = AsyncMock()
     orch.mic_unduck = AsyncMock()
+    orch.set_tts_active = AsyncMock()
+    orch.shutdown = AsyncMock()
     orch.reset = AsyncMock()
     # WakeSpotter stub for set_confidence rebuild path.
     wake = MagicMock()
@@ -56,7 +59,7 @@ def fake_orchestrator(monkeypatch):
     wake.wake_tokens = ("фантом",)
     orch._wake = wake
 
-    def _builder():
+    def _builder(user_id: str = ""):
         return orch
 
     monkeypatch.setattr(routes_voice_stream, "_build_orchestrator", _builder)
@@ -195,11 +198,37 @@ class TestCommands:
             ws.send_text('{"cmd": "mic_duck"}')
             m1 = ws.receive_json()
             assert m1["type"] == "mic_duck_ack"
+            assert m1["ducked"] is False
             ws.send_text('{"cmd": "mic_unduck"}')
             m2 = ws.receive_json()
             assert m2["type"] == "mic_duck_ack"
-        fake_orchestrator.mic_duck.assert_awaited()
+        # Типово ПК не глухне: озвучка лише позначається, кадри йдуть далі.
+        # Що саме він при цьому чує — у tests/test_live_dialogue_barge_in.py.
+        fake_orchestrator.mic_duck.assert_not_awaited()
         fake_orchestrator.mic_unduck.assert_awaited()
+
+    def test_fallback_regime_still_deafens(
+        self, voice_ws_app, valid_token, always_on_enabled, fake_orchestrator,
+        monkeypatch,
+    ) -> None:
+        """Щабель деградації лишається досяжним одним ключем."""
+        from config import config
+        monkeypatch.setattr(config, "voice_mic_duck_on_tts", True)
+        with self._connect(voice_ws_app, valid_token) as ws:
+            ws.receive_json()
+            ws.send_text('{"cmd": "mic_duck"}')
+            assert ws.receive_json()["type"] == "mic_duck_ack"
+        fake_orchestrator.mic_duck.assert_awaited()
+
+    def test_tts_state_is_accepted(
+        self, voice_ws_app, valid_token, always_on_enabled, fake_orchestrator
+    ) -> None:
+        with self._connect(voice_ws_app, valid_token) as ws:
+            ws.receive_json()
+            ws.send_text('{"cmd": "tts_state", "active": true}')
+            ack = ws.receive_json()
+            assert ack["type"] == "tts_state_ack"
+        fake_orchestrator.set_tts_active.assert_awaited_with(True)
 
     def test_reset_ack(
         self, voice_ws_app, valid_token, always_on_enabled, fake_orchestrator

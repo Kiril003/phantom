@@ -383,4 +383,5 @@ class TestConfigNewFields:
         assert config.voice_always_on_enabled is False
         assert config.voice_wake_confidence_min == pytest.approx(0.6)
         assert config.voice_continuation_window_s == 10
-        assert config.voice_mic_duck_on_tts is True
+        # Жива розмова (2026-08-14): глухота стала запасним щаблем, не типовим.
+        assert config.voice_mic_duck_on_tts is False

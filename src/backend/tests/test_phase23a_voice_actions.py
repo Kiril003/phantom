@@ -39,6 +39,26 @@ def _ctx() -> ActionContext:
     )
 
 
+def _capture_speech(monkeypatch, *, boom: bool = False) -> list[dict]:
+    """Проактивна мова їде тим самим шляхом, що й відповідь у чаті —
+    `voice/incremental_tts.py`. Ловимо саме те, що йде в ефір."""
+    captured: list[dict] = []
+
+    async def fake_synth(text: str, voice: str, speed: float):
+        if boom:
+            raise RuntimeError("piper model missing")
+        return _FakeTTSResult()
+
+    async def fake_broadcast(user_id, type_, payload):
+        captured.append({"channel": "chat", "type": type_, "data": payload})
+
+    from voice import incremental_tts, pipeline
+    monkeypatch.setattr(pipeline, "synthesize_text", fake_synth)
+    monkeypatch.setattr(pipeline, "voice_for_text", lambda _t: "uk_UA")
+    monkeypatch.setattr(incremental_tts, "_broadcast", fake_broadcast)
+    return captured
+
+
 # -----------------------------------------------------------------------------
 # voice.say — config + state gates
 # -----------------------------------------------------------------------------
@@ -78,26 +98,18 @@ async def test_voice_say_force_overrides_silent_state(monkeypatch: pytest.Monkey
     monkeypatch.setattr(cfg, "voice_tts_enabled", True)
     monkeypatch.setattr(state_machine, "_current", "GHOST", raising=False)
 
-    # Stub TTS so we don't actually load a model.
-    from voice import pipeline
-    async def fake_synth(text: str, voice: str, speed: float):
-        return _FakeTTSResult()
-    monkeypatch.setattr(pipeline, "synthesize_text", fake_synth)
-
-    # Capture broadcast.
-    captured: list[dict] = []
-    from api import websocket_hub
-    async def fake_broadcast(channel, type_, data, user_id=None):
-        captured.append({"channel": channel, "type": type_, "data": data})
-    monkeypatch.setattr(websocket_hub.hub, "broadcast", fake_broadcast)
+    captured = _capture_speech(monkeypatch)
 
     result = await VoiceSay(text="urgent", force=True).execute(_ctx())
 
     assert result.ok is True
-    assert len(captured) == 1
-    assert captured[0]["type"] == "voice_say"
-    assert captured[0]["data"]["text"] == "urgent"
-    assert captured[0]["data"]["audio_b64"]  # base64 wav present
+    # Канал `chat` — єдиний, у якого є програвач (services/ttsPlayer.ts).
+    # Стара подія `agent.stream`/`voice_say` не мала жодного споживача.
+    assert [c["channel"] for c in captured] == ["chat"] * 3
+    sentences = [c for c in captured if c["type"] == "tts.sentence"]
+    assert len(sentences) == 1
+    assert sentences[0]["data"]["text"] == "urgent"
+    assert sentences[0]["data"]["audio_b64"]  # base64 wav present
 
 
 @pytest.mark.asyncio
@@ -108,23 +120,16 @@ async def test_voice_say_emits_in_focus_state(monkeypatch: pytest.MonkeyPatch) -
     monkeypatch.setattr(cfg, "voice_tts_enabled", True)
     monkeypatch.setattr(state_machine, "_current", "FOCUS", raising=False)
 
-    from voice import pipeline
-    async def fake_synth(text: str, voice: str, speed: float):
-        return _FakeTTSResult()
-    monkeypatch.setattr(pipeline, "synthesize_text", fake_synth)
-
-    from api import websocket_hub
-    captured: list[dict] = []
-    async def fake_broadcast(channel, type_, data, user_id=None):
-        captured.append(data)
-    monkeypatch.setattr(websocket_hub.hub, "broadcast", fake_broadcast)
+    captured = _capture_speech(monkeypatch)
 
     result = await VoiceSay(text="готово").execute(_ctx())
 
     assert result.ok is True
     assert result.output is not None
-    assert result.output["delivered_via"] == "ws"
-    assert captured and captured[0]["text"] == "готово"
+    assert result.output["delivered_via"] == "chat_tts"
+    assert result.output["sentences_spoken"] == 1
+    sentences = [c for c in captured if c["type"] == "tts.sentence"]
+    assert sentences and sentences[0]["data"]["text"] == "готово"
 
 
 @pytest.mark.asyncio
@@ -134,16 +139,16 @@ async def test_voice_say_synthesis_failure_returns_not_ok(monkeypatch: pytest.Mo
     monkeypatch.setattr(cfg, "voice_tts_enabled", True)
     monkeypatch.setattr(state_machine, "_current", "FOCUS", raising=False)
 
-    from voice import pipeline
-    async def boom(text: str, voice: str, speed: float):
-        raise RuntimeError("piper model missing")
-    monkeypatch.setattr(pipeline, "synthesize_text", boom)
+    captured = _capture_speech(monkeypatch, boom=True)
 
     result = await VoiceSay(text="тест").execute(_ctx())
 
+    # Заявити «сказав» можна лише за тим, що пішло в ефір, — а не пішло нічого.
     assert result.ok is False
     assert result.output is not None
-    assert result.output.get("reason") == "tts_failed"
+    assert result.output["sentences_spoken"] == 0
+    assert result.side_effects == []
+    assert [c for c in captured if c["type"] == "tts.sentence"] == []
 
 
 # -----------------------------------------------------------------------------

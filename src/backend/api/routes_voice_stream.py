@@ -13,6 +13,7 @@ Client → server (two kinds of messages):
       {"cmd": "reset"}                       — orchestrator reset
       {"cmd": "mic_duck"}                    — frontend starts TTS
       {"cmd": "mic_unduck"}                  — frontend finished TTS
+      {"cmd": "tts_state", "active": bool}   — той самий сигнал, сказаний прямо
       {"cmd": "set_confidence", "value": x}  — live-tune wake threshold
       {"cmd": "stop"}                        — tear the session down
 
@@ -45,7 +46,9 @@ from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 
 from config import config
 from voice.always_on import AlwaysOnOrchestrator
+from voice.dialogue_constants import PROVISIONAL_AFTER_QUESTION_MS
 from voice.pipeline import get_vosk_model
+from voice.speaking_floor import UserFloor, speaking_floor
 from voice.vad import SileroVAD
 from voice.wake_spotter import WakeSpotter
 
@@ -90,7 +93,22 @@ async def _accept_authenticated(
     return payload.user_id
 
 
-def _build_orchestrator() -> AlwaysOnOrchestrator:
+def vad_silence_request_ms(mode: str, streaming_partials: bool) -> int:
+    """Скільки тиші VAD чекає, перш ніж сказати «стало тихо».
+
+    Це вже не рішення про кінець репліки — його ухвалює `voice/turn_taking.py`
+    за словами. Тому межа мусить бути НИЖЧОЮ за найшвидший опублікований
+    ярус: черга рахує паузу від неї й вище, а не нижче. Без партіалів
+    класифікувати хвіст нічим — тоді старий плаский поріг лишається єдиним.
+    """
+    if mode not in ("continuous", "wake_word"):
+        return config.voice_vad_silence_ms
+    if streaming_partials:
+        return PROVISIONAL_AFTER_QUESTION_MS
+    return config.voice_silence_timeout_ms
+
+
+def _build_orchestrator(user_id: str = "") -> AlwaysOnOrchestrator:
     """Construct a per-connection orchestrator. Raises RuntimeError when
     a required resource (Silero ONNX, Vosk model) is missing so the WS
     handler can close the connection with a helpful reason.
@@ -111,14 +129,10 @@ def _build_orchestrator() -> AlwaysOnOrchestrator:
     # fires after the operator-configured pause length. The 11b default
     # (voice_vad_silence_ms = 500) only kicks in for the legacy FSM.
     mode = config.voice_mode
-    if mode in ("continuous", "wake_word"):
-        silence_ms = config.voice_silence_timeout_ms
-    else:
-        silence_ms = config.voice_vad_silence_ms
     vad = SileroVAD(
         _safe_path(),
         sample_rate=16_000,
-        silence_ms=silence_ms,
+        silence_ms=vad_silence_request_ms(mode, config.voice_streaming_partials),
     )
     spotter = WakeSpotter(
         vosk_model,
@@ -143,6 +157,9 @@ def _build_orchestrator() -> AlwaysOnOrchestrator:
         partial_debounce_ms=config.voice_partial_debounce_ms,
         refine_with_whisper=config.voice_refine_with_whisper,
         refine_diff_threshold=config.voice_refine_diff_threshold,
+        # Жива розмова — ПК чує, поки говорить.
+        speaking=UserFloor(speaking_floor, user_id),
+        endpoint_floor_ms=vad.silence_floor_ms,
     )
 
 
@@ -216,12 +233,30 @@ class _VoiceSession:
             await orch.reset()
             await self.send({"type": "reset_ack"})
         elif cmd == "mic_duck":
+            # Запасний режим глухне цілком; звичайний — лише позначає, що
+            # PHANTOM говорить, і слухає далі заради перехоплення.
             if config.voice_mic_duck_on_tts:
                 await orch.mic_duck()
-            await self.send({"type": "mic_duck_ack", "ducked": orch.is_ducked})
+            else:
+                await orch.set_tts_active(True)
+            await self.send({
+                "type": "mic_duck_ack",
+                "ducked": orch.is_ducked,
+                "tts_active": orch.tts_active,
+            })
         elif cmd == "mic_unduck":
             await orch.mic_unduck()
-            await self.send({"type": "mic_duck_ack", "ducked": orch.is_ducked})
+            await orch.set_tts_active(False)
+            await self.send({
+                "type": "mic_duck_ack",
+                "ducked": orch.is_ducked,
+                "tts_active": orch.tts_active,
+            })
+        elif cmd == "tts_state":
+            await orch.set_tts_active(bool(msg.get("active")))
+            await self.send({
+                "type": "tts_state_ack", "tts_active": orch.tts_active,
+            })
         elif cmd == "set_confidence":
             value = msg.get("value")
             try:
@@ -280,50 +315,6 @@ class _VoiceSession:
             logger.exception("voice WS frame processing failed: %s", exc)
             await self.send({"type": "error", "message": f"frame: {exc}"})
 
-    async def say(self, text: str) -> None:
-        """Phase 13 — outgoing TTS stream. Split text into sentences and
-        stream synthesized audio chunks back to the client immediately.
-        """
-        if not text or self.closed:
-            return
-
-        import base64
-        import re
-        from voice.pipeline import synthesize_text, select_voice_for_text
-
-        # Split by sentences (simple regex)
-        sentences = re.split(r'(?<=[.!?])\s+', text)
-        sentences = [s.strip() for s in sentences if s.strip()]
-
-        if not sentences:
-            return
-
-        voice = select_voice_for_text(text)
-        speed = config.voice_tts_speed
-
-        await self.send({"type": "tts_start", "text": text})
-
-        for idx, part in enumerate(sentences):
-            if self.closed:
-                break
-            try:
-                # Synthesize in thread pool to not block WS loop
-                result = await synthesize_text(part, voice, speed)
-                b64_audio = base64.b64encode(result.audio_wav).decode("utf-8")
-
-                await self.send({
-                    "type": "tts_chunk",
-                    "index": idx,
-                    "is_final": idx == len(sentences) - 1,
-                    "audio": b64_audio,
-                    "text": part,
-                    "sample_rate": result.sample_rate
-                })
-            except Exception as exc:
-                logger.warning("TTS stream chunk failed: %s", exc)
-
-        await self.send({"type": "tts_end"})
-
 
 async def voice_ws_handler(ws: WebSocket, token: Optional[str] = None) -> None:
     """Entry point registered in main.py's ``_register_ws``."""
@@ -333,16 +324,6 @@ async def voice_ws_handler(ws: WebSocket, token: Optional[str] = None) -> None:
 
     client_id = str(uuid.uuid4())
     session = _VoiceSession(ws, user_id, client_id)
-
-    # Phase 13 — Subscribe to global voice events
-    from core.event_bus import event_bus
-
-    async def on_voice_say(payload: dict):
-        if payload.get("user_id") == user_id:
-            # Run in background so we don't block the event bus delivery
-            asyncio.create_task(session.say(payload.get("text", "")))
-
-    event_bus.on("voice.say", on_voice_say)
 
     logger.info(
         "voice WS connected: client=%s user=%s voice_mode=%s",
@@ -354,7 +335,7 @@ async def voice_ws_handler(ws: WebSocket, token: Optional[str] = None) -> None:
         # (ort.InferenceSession is synchronous, ~1-3s per connection on
         # Radxa ARM64) and may load the 300MB Vosk model on first call.
         # Off-load both to keep the event loop responsive during connect.
-        orch = await asyncio.to_thread(_build_orchestrator)
+        orch = await asyncio.to_thread(_build_orchestrator, user_id)
     except RuntimeError as exc:
         logger.warning("voice WS unavailable: %s", exc)
         await session.send(
@@ -409,7 +390,9 @@ async def voice_ws_handler(ws: WebSocket, token: Optional[str] = None) -> None:
         logger.error("voice WS loop failed: %s", exc)
     finally:
         session.closed = True
-        event_bus.off("voice.say", on_voice_say)
+        # Вікно перехоплення й утримання черги живуть у власних завданнях;
+        # обірваний сокет мусить їх погасити, інакше вони добігають у порожнечу.
+        await orch.shutdown()
         logger.info("voice WS closed: client=%s", client_id)
 
 

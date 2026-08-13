@@ -133,14 +133,14 @@ class TestPhase12VoiceModeSettings:
 
     def test_voice_silence_timeout_default(self) -> None:
         # Phase 12.4 — default lowered 1500 → 800 ms for conversational
-        # responsiveness. Range stays [500, 5000].
+        # responsiveness. Range is [300, 5000] since live dialogue.
         from config import PhantomConfig
         assert PhantomConfig.model_fields["voice_silence_timeout_ms"].default == 800
 
 
 class TestPhase12VoiceModeValidation:
     """voice_mode is a Literal — Pydantic must reject anything else.
-    voice_silence_timeout_ms is bounded [500, 5000] by the model validator.
+    voice_silence_timeout_ms is bounded [300, 5000] by the model validator.
     voice_wake_phrase must be non-empty and ≤ 50 chars."""
 
     def test_voice_mode_rejects_invalid_value(self) -> None:
@@ -157,18 +157,30 @@ class TestPhase12VoiceModeValidation:
     def test_silence_timeout_below_min_rejected(self) -> None:
         from config import PhantomConfig
         with pytest.raises(Exception):
-            PhantomConfig(voice_silence_timeout_ms=400)
+            PhantomConfig(voice_silence_timeout_ms=250)
 
     def test_silence_timeout_above_max_rejected(self) -> None:
         from config import PhantomConfig
         with pytest.raises(Exception):
             PhantomConfig(voice_silence_timeout_ms=6000)
 
-    @pytest.mark.parametrize("ms", [500, 1500, 3000, 5000])
+    @pytest.mark.parametrize("ms", [300, 500, 1500, 3000, 5000])
     def test_silence_timeout_in_range_accepted(self, ms: int) -> None:
         from config import PhantomConfig
         cfg = PhantomConfig(voice_silence_timeout_ms=ms)
         assert cfg.voice_silence_timeout_ms == ms
+
+    def test_settled_dialogue_tiers_are_all_expressible(self) -> None:
+        # Кожен поріг живої розмови мусить проходити валідатор — інакше
+        # ухвалене рішення не можна навіть записати в налаштування.
+        from config import PhantomConfig
+        from voice.dialogue_constants import (
+            COMMIT_AFTER_QUESTION_MS,
+            COMMIT_INCOMPLETE_MS,
+            COMMIT_MS,
+        )
+        for ms in (COMMIT_AFTER_QUESTION_MS, COMMIT_MS, COMMIT_INCOMPLETE_MS):
+            assert PhantomConfig(voice_silence_timeout_ms=ms).voice_silence_timeout_ms == ms
 
     def test_wake_phrase_empty_rejected(self) -> None:
         from config import PhantomConfig

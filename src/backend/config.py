@@ -269,8 +269,15 @@ class PhantomConfig(BaseSettings):
     # Phase 12.4 — lowered 1500 → 800. The 1500 default felt unresponsive
     # in conversational use ("speak, then wait two seconds for the reply"),
     # 800 keeps brief intra-sentence pauses safe while turning around fast
-    # enough that a back-and-forth chat is workable. Operator can still
-    # tune via Settings (allowed range stays [500, 5000]).
+    # enough that a back-and-forth chat is workable.
+    # Live dialogue (2026-08-13) — the floor moved 500 → 300 because one
+    # threshold cannot be right for every sentence: an answer to a question
+    # closes at 450 ms while a sentence dangling on «але» must not close for
+    # 1200 ms. Both numbers are cross-surface (voice/dialogue_constants.py),
+    # and 450 was rejected by this very validator. The default stays 800
+    # until voice/turn_taking.py owns the ceiling — until then this value is
+    # still the single acoustic endpoint and lowering it would only make the
+    # PC interrupt people faster.
     voice_silence_timeout_ms: int = 800
 
     # Phase 13a.3 — backend energy fast-path skip. When the orchestrator is
@@ -861,16 +868,18 @@ class PhantomConfig(BaseSettings):
     def _validate_voice_mode_keys(self) -> "PhantomConfig":
         """Phase 12.0 — keep the three new mode-related keys self-consistent.
         voice_wake_phrase must be non-empty + ≤ 50 chars, and the silence
-        timeout must lie in 500..5000 ms so the orchestrator never waits
-        forever (or fires after a single inter-word pause)."""
+        timeout must lie in 300..5000 ms so the orchestrator never waits
+        forever (or fires after a single inter-word pause). The floor was
+        500 until live dialogue needed the 450 ms after-a-question tier —
+        see the key's comment."""
         phrase = (self.voice_wake_phrase or "").strip()
         if not phrase:
             raise ValueError("voice_wake_phrase must be non-empty")
         if len(phrase) > 50:
             raise ValueError("voice_wake_phrase must be ≤ 50 characters")
-        if not (500 <= self.voice_silence_timeout_ms <= 5000):
+        if not (300 <= self.voice_silence_timeout_ms <= 5000):
             raise ValueError(
-                "voice_silence_timeout_ms must be in [500, 5000] (got "
+                "voice_silence_timeout_ms must be in [300, 5000] (got "
                 f"{self.voice_silence_timeout_ms})"
             )
         # Phase 13b — partial debounce + refine threshold bounds.

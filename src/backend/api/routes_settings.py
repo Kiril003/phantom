@@ -462,7 +462,7 @@ LABEL_OVERRIDES: dict[str, str] = {
     "voice_mic_duck_on_tts": "Заглушити мікрофон під час TTS",
     "voice_mode": "Голосовий режим",
     "voice_wake_phrase": "Wake-фраза",
-    "voice_silence_timeout_ms": "Тиша до кінця фрази (мс)",
+    "voice_silence_timeout_ms": "Скільки чекати, поки ти договориш",
     "voice_streaming_partials": "Streaming partials (живий текст)",
     "voice_partial_debounce_ms": "Дебаунс partials (мс)",
     "voice_refine_with_whisper": "Whisper refine (advanced)",

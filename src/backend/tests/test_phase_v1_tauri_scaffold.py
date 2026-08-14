@@ -43,7 +43,13 @@ TAURI_DIR = REPO_ROOT / "src" / "frontend" / "src-tauri"
 CARGO_TOML = TAURI_DIR / "Cargo.toml"
 TAURI_CONF = TAURI_DIR / "tauri.conf.json"
 MAIN_RS = TAURI_DIR / "src" / "main.rs"
-SPLASH_HTML = TAURI_DIR / "splash.html"
+# The splash moved out of src-tauri/ into the Vite public/ root in 5107435:
+# from src-tauri/ it resolved `../dist/index.html`, which is a 404 in the
+# packaged bundle, and its poll loop was inline against a `script-src 'self'`
+# CSP. Served from public/ it lands beside index.html in dist/.
+SPLASH_DIR = REPO_ROOT / "src" / "frontend" / "public"
+SPLASH_HTML = SPLASH_DIR / "splash.html"
+SPLASH_JS = SPLASH_DIR / "splash.js"
 BUILD_RS = TAURI_DIR / "build.rs"
 SIDECAR_BUILD = REPO_ROOT / "scripts" / "build_sidecar.sh"
 
@@ -73,6 +79,12 @@ class TestScaffoldFilesExist:
         assert SPLASH_HTML.is_file(), (
             f"V-1 regression: missing splash gate {SPLASH_HTML.relative_to(REPO_ROOT)} — "
             "the /readyz poll lives there; without it the WebView opens before G2 done."
+        )
+
+    def test_splash_js_present(self):
+        assert SPLASH_JS.is_file(), (
+            f"V-1 regression: missing {SPLASH_JS.relative_to(REPO_ROOT)} — the poll "
+            "loop cannot go back inline: the shipped CSP is script-src 'self'."
         )
 
     def test_build_rs_present(self):
@@ -206,8 +218,13 @@ class TestTauriConf:
             "V-1: shell.open must be False — keep the WebView from launching "
             "external programs."
         )
-        assert shell_plugin["scope"] == [], (
-            f"V-1: shell.scope must be empty — got {shell_plugin['scope']!r}"
+        # `scope` was removed in 5107435: tauri-plugin-shell v2 panics at
+        # startup on the key, and with `open: false` there is no command
+        # surface for a scope to constrain. Absent is the safe state; an
+        # empty list is a crash.
+        assert "scope" not in shell_plugin, (
+            f"V-1: shell.scope must be absent, not empty — got "
+            f"{shell_plugin.get('scope')!r}; the key panics the shell on start."
         )
 
 
@@ -268,33 +285,50 @@ class TestMainRs:
 
 class TestSplashHtml:
     def _body(self) -> str:
-        return SPLASH_HTML.read_text(encoding="utf-8")
+        """The gate is two files since 5107435 — the page and its poll loop."""
+        return (
+            SPLASH_HTML.read_text(encoding="utf-8")
+            + "\n"
+            + SPLASH_JS.read_text(encoding="utf-8")
+        )
+
+    def test_splash_loads_its_poll_loop_as_a_file(self):
+        assert 'src="./splash.js"' in SPLASH_HTML.read_text(encoding="utf-8"), (
+            "V-1: splash.html must load the poll loop from splash.js — an "
+            "inline script is silently dropped by script-src 'self', which "
+            "leaves the splash showing forever with nothing polling."
+        )
 
     def test_splash_polls_readyz_loopback_only(self):
         body = self._body()
         assert "http://127.0.0.1:8000/readyz" in body, (
-            "V-1: splash.html must poll /readyz on 127.0.0.1:8000 — that's "
+            "V-1: the splash must poll /readyz on 127.0.0.1:8000 — that's "
             "the gate ADR-DSH-001 binds to."
         )
         # Belt-and-braces: nobody points the splash at a public URL.
         assert "http://localhost" not in body, (
-            "V-1: splash.html must use 127.0.0.1, not localhost — "
+            "V-1: the splash must use 127.0.0.1, not localhost — "
             "Windows IPv6 may resolve localhost to ::1 and the backend "
             "binds 127.0.0.1 only."
         )
 
-    def test_splash_navigates_to_dist_bundle_on_ok(self):
+    def test_splash_navigates_to_the_bundle_on_ok(self):
         body = self._body()
-        # The splash sits at src-tauri/splash.html, dist sits at frontend/dist/.
-        # Relative target from splash → ../dist/index.html.
-        assert "../dist/index.html" in body, (
-            "V-1: splash.html must navigate to ../dist/index.html on /readyz 200"
+        # Served out of public/, the splash lands in dist/ beside index.html,
+        # so the target is a sibling. The old `../dist/index.html` was written
+        # for src-tauri/ and 404s in a packaged bundle.
+        assert "'index.html'" in body, (
+            "V-1: the splash must navigate to index.html on /readyz 200"
+        )
+        assert "../dist/" not in body, (
+            "V-1: `../dist/` escapes the asset root in a packaged build — "
+            "that path 404s and the user never leaves the splash."
         )
 
     def test_splash_has_timeout_guard(self):
         body = self._body()
         assert "MAX_WAIT_MS" in body and "30000" in body, (
-            "V-1: splash.html must give up after 30s — otherwise a stuck "
+            "V-1: the splash must give up after 30s — otherwise a stuck "
             "sidecar leaves the user staring at a black screen forever."
         )
 

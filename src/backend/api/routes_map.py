@@ -10,6 +10,7 @@ Endpoints:
   POST /map/pois              — create a POI (authenticated user)
   GET  /map/track             — recent GPS track from ContextEngine history
   DELETE /map/pois/{id}       — delete a POI (owner only)
+  GET  /map/hazards/cliff_scree — baked cliff/scree/bare_rock features in bounds
 """
 from __future__ import annotations
 
@@ -32,6 +33,7 @@ from geo import (
     get_layer_registry,
 )
 from geo.layer_registry import LayerNotFoundError
+from geo.sources.terrain_hazards import HAZARD_KINDS, get_terrain_hazard_store
 from security.auth import require_auth
 from security.jwt_manager import TokenPayload
 from wardriving.collector import query_records_in_bounds
@@ -207,6 +209,51 @@ async def get_heatmap(
             min_weight=min_weight,
         )
     return {"points": [p.to_dict() for p in points]}
+
+
+@router.get("/hazards/cliff_scree")
+async def get_cliff_scree(
+    bounds: str = Query(..., description="lat1,lon1,lat2,lon2"),
+    kinds: str | None = Query(
+        default=None,
+        description="Comma-separated subset of cliff,scree,bare_rock (default: all)",
+    ),
+    limit: int = Query(default=5000, ge=1, le=20000),
+    token_data: TokenPayload = Depends(require_auth),
+) -> dict:
+    """Baked `natural=cliff|scree|bare_rock` features in a viewport.
+
+    Served entirely from the local `TerrainHazardStore` — no live upstream
+    call happens on this path (see `scripts/bake_terrain_hazards.py`), so
+    this stays fast and available offline once baked, unlike the
+    Overpass-backed `bunkers`/`substations` layers.
+    """
+    b = _parse_bounds(bounds)
+    if b is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="bounds is required — expected 'lat1,lon1,lat2,lon2'",
+        )
+    kind_list: Optional[list[str]] = None
+    if kinds:
+        kind_list = [k.strip() for k in kinds.split(",") if k.strip()]
+        unknown = set(kind_list) - set(HAZARD_KINDS)
+        if unknown:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"unknown kinds {sorted(unknown)} — expected subset of {list(HAZARD_KINDS)}",
+            )
+
+    store = get_terrain_hazard_store()
+    features = store.query_bbox(
+        lat_min=b[0], lon_min=b[1], lat_max=b[2], lon_max=b[3],
+        kinds=kind_list, limit=limit,
+    )
+    return {
+        "type": "FeatureCollection",
+        "features": features,
+        "total": len(features),
+    }
 
 
 @router.get("/pois")

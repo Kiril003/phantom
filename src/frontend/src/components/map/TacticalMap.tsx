@@ -10,6 +10,7 @@ import { IntelLayer } from './layers/IntelLayer';
 import { ReconLayer } from './layers/ReconLayer';
 import { FactMarkerLayer } from './layers/FactMarkerLayer';
 import { GeofencesLayer } from './layers/GeofencesLayer';
+import { CliffScreeLayer } from './layers/CliffScreeLayer';
 import { HeatmapLayer } from './HeatmapLayer';
 import { MarkerCard } from './MarkerCard';
 import { PlaceCard, type TappedPlace } from './PlaceCard';
@@ -171,6 +172,7 @@ export function TacticalMap({
   const loadPOIs = useMapStore((s) => s.loadPOIs);
   const loadTrack = useMapStore((s) => s.loadTrack);
   const loadGeoTaggedFacts = useMapStore((s) => s.loadGeoTaggedFacts);
+  const loadCliffScree = useMapStore((s) => s.loadCliffScree);
   const savePOI = useMapStore((s) => s.savePOI);
   const toast = useMapStore((s) => s.toast);
   const setToast = useMapStore((s) => s.setToast);
@@ -645,7 +647,8 @@ export function TacticalMap({
     if (layers?.intel) loadPOIs().catch((err) => useMapStore.getState().setToast(`Intel: ${err.message}`));
     if (layers?.recon) loadTrack(2).catch((err) => useMapStore.getState().setToast(`Recon: ${err.message}`));
     if (layers?.facts) loadGeoTaggedFacts().catch((err) => useMapStore.getState().setToast(`Facts: ${err.message}`));
-  }, [ready, layers?.wardriving, layers?.heatmap, layers?.intel, layers?.recon, layers?.facts, loadWardriving, loadHeatmap, loadPOIs, loadTrack, loadGeoTaggedFacts]);
+    if (layers?.cliff_scree) loadCliffScree(bounds).catch((err) => useMapStore.getState().setToast(`Скелі/осипи: ${err.message}`));
+  }, [ready, layers?.wardriving, layers?.heatmap, layers?.intel, layers?.recon, layers?.facts, layers?.cliff_scree, loadWardriving, loadHeatmap, loadPOIs, loadTrack, loadGeoTaggedFacts, loadCliffScree]);
 
   return (
     <div aria-label="Тактична мапа" className={`phantom-map-frame relative w-full h-full overflow-hidden ${className}`}>
@@ -660,6 +663,7 @@ export function TacticalMap({
             {layers?.intel && <IntelLayer />}
             {layers?.recon && <ReconLayer />}
             {layers?.facts && <FactMarkerLayer />}
+            {layers?.cliff_scree && <CliffScreeLayer />}
             <GeofencesLayer />
             <RouteLayer />
             <MarkerCard />

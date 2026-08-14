@@ -10,6 +10,8 @@ import type {
   MapPOI,
   HeatmapPoint,
   TrackPoint,
+  CliffScreeFeature,
+  CliffScreeKind,
 } from '@shared/types';
 
 export const BASE = '/api/v1';
@@ -192,6 +194,15 @@ export const mapApi = {
     if (bounds) params.set('bounds', `${bounds.lat1},${bounds.lon1},${bounds.lat2},${bounds.lon2}`);
     if (minWeight > 0) params.set('min_weight', String(minWeight));
     return request<{ points: HeatmapPoint[] }>('GET', `/map/heatmap?${params}`);
+  },
+  getCliffScree: (bounds: Bounds, kinds?: CliffScreeKind[]) => {
+    const params = new URLSearchParams();
+    params.set('bounds', `${bounds.lat1},${bounds.lon1},${bounds.lat2},${bounds.lon2}`);
+    if (kinds?.length) params.set('kinds', kinds.join(','));
+    return request<{ type: 'FeatureCollection'; features: CliffScreeFeature[]; total: number }>(
+      'GET',
+      `/map/hazards/cliff_scree?${params}`
+    );
   },
   getPOIs: (category?: string) => {
     const params = category ? `?category=${category}` : '';

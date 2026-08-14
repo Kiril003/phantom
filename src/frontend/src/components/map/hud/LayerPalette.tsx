@@ -18,6 +18,7 @@ const LAYER_LABELS: Record<MapLayerKey, string> = {
   intel: 'Розвідка',
   recon: 'Огляд',
   facts: 'Памʼять',
+  cliff_scree: 'Скелі/осипи',
 };
 
 const LAYER_ORDER: ReadonlyArray<MapLayerKey> = [
@@ -28,6 +29,7 @@ const LAYER_ORDER: ReadonlyArray<MapLayerKey> = [
   'intel',
   'recon',
   'facts',
+  'cliff_scree',
 ];
 
 export interface LayerPaletteProps {

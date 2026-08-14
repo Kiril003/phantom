@@ -181,6 +181,7 @@ function resetStores() {
       intel: true,
       recon: false,
       facts: true,
+      cliff_scree: false,
     },
     selection: null,
     loading: false,

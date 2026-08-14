@@ -1,5 +1,5 @@
 import { create } from 'zustand';
-import type { WardrivingRecord, MapPOI, HeatmapPoint, TrackPoint } from '@shared/types';
+import type { WardrivingRecord, MapPOI, HeatmapPoint, TrackPoint, CliffScreeFeature } from '@shared/types';
 import { mapApi, type Bounds, type GeoTaggedFact, type RouteResult } from '../services/api';
 
 export interface Entity {
@@ -36,7 +36,9 @@ export type MapLayerKey =
   | 'intel'
   | 'recon'
   // Phase 9.4c audit G6 — geo-tagged memory facts rendered as subtle markers.
-  | 'facts';
+  | 'facts'
+  // Baked OSM natural=cliff|scree|bare_rock — a hazard/obstacle layer, not decorative.
+  | 'cliff_scree';
 
 export type MapSelection =
   | { kind: 'poi'; poi: MapPOI }
@@ -52,6 +54,8 @@ interface MapStoreState {
   track: TrackPoint[];
   geoTaggedFacts: GeoTaggedFact[];
   geofences: any[];
+  /** Baked cliff/scree/bare_rock hazard features in the last-loaded viewport. */
+  cliffScree: CliffScreeFeature[];
   center: [number, number] | null;
   zoom: number;
   layers: Record<MapLayerKey, boolean>;
@@ -96,6 +100,7 @@ interface MapStoreState {
   setTrack: (points: TrackPoint[]) => void;
   appendTrackPoint: (point: TrackPoint) => void;
   setGeofences: (gfs: any[]) => void;
+  setCliffScree: (features: CliffScreeFeature[]) => void;
   setCenter: (center: [number, number]) => void;
   setZoom: (zoom: number) => void;
   setTemporalDate: (date: string) => void;
@@ -128,6 +133,7 @@ interface MapStoreState {
 
   loadWardriving: (bounds?: Bounds, since?: string) => Promise<void>;
   loadHeatmap: (bounds?: Bounds, minWeight?: number) => Promise<void>;
+  loadCliffScree: (bounds: Bounds) => Promise<void>;
   loadPOIs: (category?: string) => Promise<void>;
   loadTrack: (hours?: number) => Promise<void>;
   loadGeoTaggedFacts: () => Promise<void>;
@@ -144,6 +150,7 @@ const DEFAULT_LAYERS: Record<MapLayerKey, boolean> = {
   intel: true,
   recon: false,
   facts: true,
+  cliff_scree: false,
 };
 
 export const useMapStore = create<MapStoreState>((set, get) => ({
@@ -153,6 +160,7 @@ export const useMapStore = create<MapStoreState>((set, get) => ({
   track: [],
   geoTaggedFacts: [],
   geofences: [],
+  cliffScree: [],
   center: null,
   zoom: 15,
   layers: DEFAULT_LAYERS,
@@ -212,6 +220,7 @@ export const useMapStore = create<MapStoreState>((set, get) => ({
   appendTrackPoint: (point) =>
     set((s) => ({ track: [...s.track.slice(-(MAX_TRACK_HISTORY - 1)), point] })),
   setGeofences: (gfs) => set({ geofences: gfs }),
+  setCliffScree: (features) => set({ cliffScree: features }),
   setCenter: (center) => set({ center }),
   setZoom: (zoom) => set({ zoom }),
   setTemporalDate: (date) => set({ temporalDate: date }),
@@ -340,6 +349,16 @@ export const useMapStore = create<MapStoreState>((set, get) => ({
         loading: false,
         error: err instanceof Error ? err.message : 'Failed to load heatmap',
       });
+    }
+  },
+
+  loadCliffScree: async (bounds) => {
+    try {
+      const resp = await mapApi.getCliffScree(bounds);
+      set({ cliffScree: resp.features });
+    } catch (err) {
+      // Non-critical — a hazard overlay failing to refresh should not block the map.
+      console.warn('Failed to load cliff/scree hazards:', err);
     }
   },
 

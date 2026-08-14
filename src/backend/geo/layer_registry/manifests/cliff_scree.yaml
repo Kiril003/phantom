@@ -1,0 +1,36 @@
+id: cliff_scree
+name_ua: Скелі та осипи (OSM)
+name_en: Cliffs & scree (OSM)
+category: terrain
+license: ODbL (OpenStreetMap)
+attribution: "© OpenStreetMap contributors"
+source:
+  type: local_db
+  ttl_s: 2592000
+  bbox_required: true
+geometry: mixed
+style:
+  fill: signal/warn
+  fill_opacity: 0.35
+  stroke: signal/warn
+  stroke_width: 2
+  point_radius: 3
+  icon: triangle-alert
+  legend:
+    - label: "Скеля (natural=cliff)"
+      color: signal/warn
+    - label: "Осип / голий камінь (scree, bare_rock)"
+      color: signal/warn
+agent_verbs:
+  - map.nearby_cliffs
+require_internet: false
+require_setting: layers.cliff_scree.enabled
+require_root: false
+private: false
+priority: normal
+default_active: false
+available_offline: true
+tags:
+  - terrain
+  - hazard
+  - safety

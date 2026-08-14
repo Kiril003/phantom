@@ -48,7 +48,7 @@ beforeEach(() => {
   useMapStore.setState({
     center: null,
     zoom: 14,
-    layers: { base: true, presence: true, wardriving: true, heatmap: false, intel: true, recon: false, facts: true },
+    layers: { base: true, presence: true, wardriving: true, heatmap: false, intel: true, recon: false, facts: true, cliff_scree: false },
     searchQuery: '',
     toast: null,
   });

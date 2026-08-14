@@ -25,6 +25,7 @@ import '@fontsource/playfair-display/600-italic.css';
 import '@fontsource/playfair-display/700-italic.css';
 import { App } from './app/App';
 import { applyBootstrapLanguage, applyBootstrapTheme } from './services/settingsBootstrap';
+import { ensureCapabilityProbed } from './stores/capabilityStore';
 import './styles/globals.css';
 
 // phase-5-R0-3-THEME-NIGHT — flip <html data-theme> to the cached or
@@ -35,6 +36,14 @@ applyBootstrapTheme();
 // the first paint, or the UI renders in Ukrainian and swaps to English once
 // `/settings` resolves.
 applyBootstrapLanguage();
+
+// Kicks off the GPU capability probe (T0/T1/T2) as early as possible so a
+// verdict is usually ready before TacticalMap first constructs its map.
+// Bounded to ~1.5s worst case (see capabilityProbe.ts), never blocks
+// render — fire-and-forget. TacticalMap also calls this (idempotent) so
+// it still gets a verdict if this module ever loads without main.tsx
+// (tests, alternate entry points).
+void ensureCapabilityProbed();
 
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>

@@ -20,6 +20,11 @@ import { buildPhantomMapStyle, sunFor, DEM_TERRAIN_ID } from './phantomStyle';
 import { sunLight } from './style/sun';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { settingsApi, type Bounds } from '../../services/api';
+import {
+  useCapabilityStore,
+  ensureCapabilityProbed,
+  type RenderTier,
+} from '../../stores/capabilityStore';
 
 interface TacticalMapProps {
   initialCenter?: [number, number];
@@ -82,6 +87,20 @@ function haversineM(lat1: number, lon1: number, lat2: number, lon2: number): num
   return 2 * R * Math.asin(Math.sqrt(a));
 }
 
+/**
+ * DPR cap from the capability probe (render-paths.md §1d): T0 keeps the
+ * device's real pixel ratio (full quality); T1/T2 cap at 1 — the one
+ * probe-driven behaviour wired end-to-end in this pass. Render-on-demand,
+ * extrusion toggling, style pruning and the true T2 Canvas2D fallback are
+ * Phase 4 work (map-plan.md) and are not implemented here.
+ */
+function effectiveDprFor(tier: RenderTier): number {
+  if (tier === 'T0') {
+    return typeof window !== 'undefined' && window.devicePixelRatio ? window.devicePixelRatio : 1;
+  }
+  return 1;
+}
+
 function computeBounds(map: MapLibreMap | null): Bounds {
   if (!map || typeof map.getBounds !== 'function') {
     return { lat1: 0, lon1: 0, lat2: 0, lon2: 0 };
@@ -115,6 +134,10 @@ export function TacticalMap({
 }: TacticalMapProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<MapLibreMap | null>(null);
+  /** Which tier's DPR was last applied to the live map — guards against
+   * re-applying on every render and against flapping mid-session (the
+   * probe only ever resolves once per session; see capabilityStore.ts). */
+  const appliedRenderTier = useRef<RenderTier | null>(null);
   const seenTheme = useRef<string | null>(null);
   const styleReady = useRef(false);
   const [place, setPlace] = useState<TappedPlace | null>(null);
@@ -152,6 +175,15 @@ export function TacticalMap({
   const toast = useMapStore((s) => s.toast);
   const setToast = useMapStore((s) => s.setToast);
   const setTactical = useMapStore((s) => s.setTactical);
+
+  // GPU capability tier (T0/T1/T2) — main.tsx already kicks this off at
+  // boot; calling it again here is a cheap no-op once resolved (in-memory
+  // guard) and a safety net if this component ever mounts without
+  // main.tsx having run (tests, alternate entry points).
+  const renderTier = useCapabilityStore((s) => s.result?.tier ?? null);
+  useEffect(() => {
+    void ensureCapabilityProbed();
+  }, []);
 
   useEffect(() => {
     if (!toast) return;
@@ -195,6 +227,10 @@ export function TacticalMap({
       if (!isSupported) {
         throw new Error('WebGL not supported');
       }
+      // Capability-probe verdict, if it already resolved (e.g. from this
+      // tab's sessionStorage cache) before the map was constructed.
+      const probedTier = useCapabilityStore.getState().result?.tier ?? null;
+      if (probedTier) appliedRenderTier.current = probedTier;
       map = new maplibregl.Map({
         container,
         // Свій стиль, не чужий URL: звідси об'єм, рельєф, небо й одна мова
@@ -213,6 +249,11 @@ export function TacticalMap({
         // зникає.
         maxPitch: 72,
         fadeDuration: 100, // Optimize transitions
+        // If the verdict hasn't resolved yet, omit the option — MapLibre
+        // defaults to window.devicePixelRatio, and the effect below
+        // applies the cap retroactively via setPixelRatio() the moment
+        // the verdict lands.
+        ...(probedTier ? { pixelRatio: effectiveDprFor(probedTier) } : {}),
       });
       mapRef.current = map;
       setWebglSupported(true);
@@ -514,6 +555,23 @@ export function TacticalMap({
       }
     }
   }, [context]);
+
+  // Applies the capability-probe DPR cap once a verdict lands, for the
+  // (common) case where the map was constructed before the probe
+  // resolved. Guarded to run at most once per resolved tier — the probe
+  // itself only ever settles once per session (capabilityStore.ts), so
+  // this is initial application, never a live mid-session demotion (an
+  // in-session watchdog is out of scope for this pass — see Phase 4).
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !renderTier || appliedRenderTier.current === renderTier) return;
+    appliedRenderTier.current = renderTier;
+    try {
+      map.setPixelRatio(effectiveDprFor(renderTier));
+    } catch (err) {
+      console.error('Failed to apply capability-probe pixel ratio:', err);
+    }
+  }, [renderTier]);
 
   const [pendingPoi, setPendingPoi] = useState<{ lng: number; lat: number } | null>(null);
   const [pendingName, setPendingName] = useState('');

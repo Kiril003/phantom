@@ -1,6 +1,7 @@
 import { useState } from 'react';
-import { Compass, Satellite, Eye, EyeOff, Gauge } from 'lucide-react';
+import { Compass, Satellite, Eye, EyeOff, Gauge, MonitorDown } from 'lucide-react';
 import { useSystemStore } from '../../../stores/systemStore';
+import type { RenderTier } from '../../../stores/capabilityStore';
 
 /**
  * Чипси стану мапи.
@@ -155,6 +156,31 @@ export function GpsQualityChip({ satellites, fix, speed, source = 'none' }: {
           </span>
         </>
       )}
+    </div>
+  );
+}
+
+/**
+ * GPU capability-probe verdict (T0/T1/T2 — capabilityProbe.ts), rendered
+ * as a state chip, never a dialog (render-paths.md §1d / map-plan.md R6:
+ * "a small «спрощена графіка» state chip — state visibility, never an
+ * apology dialog"). Silent for T0 (full quality, the common case).
+ */
+export function RenderTierChip({ tier }: { tier: RenderTier | null }) {
+  if (tier === null || tier === 'T0') return null;
+  const hint =
+    tier === 'T1'
+      ? 'Слабка відеокарта: мапа малює менше деталей, щоб лишатись швидкою.'
+      : 'Апаратне прискорення недоступне: мапа працює у спрощеному режимі.';
+  return (
+    <div
+      className="glass-card flex items-center gap-2 px-3 h-[30px] rounded-full"
+      title={hint}
+      data-testid="render-tier-chip"
+      data-tier={tier}
+    >
+      <MonitorDown size={12} strokeWidth={1.75} className="text-amber-600" aria-hidden />
+      <span className="text-[10px] font-semibold text-amber-700">Спрощена графіка</span>
     </div>
   );
 }

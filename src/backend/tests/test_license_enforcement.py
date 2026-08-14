@@ -71,10 +71,6 @@ def client():
     async def pair():
         return {"ok": True}
 
-    @app.get("/api/v1/map/offline/terrain/kyiv")
-    async def terrain():
-        return {"ok": True}
-
     @app.get("/api/v1/license/status")
     async def lic():
         return {"ok": True}
@@ -144,11 +140,25 @@ class TestPaidGates:
         assert body["needs_tier"] == "personal"
         assert body["tier"] == "free"
 
-    def test_terrain_is_gated_but_the_rest_of_the_map_is_not(
+    def test_terrain_cannot_be_gated_here_and_the_map_stays_open(
         self, client, keypair, license_file, monkeypatch
     ):
+        """`map.terrain3d` is sold as a Personal right, and this process cannot
+        enforce it: the PC draws terrain from terrarium tiles fetched by
+        MapLibre straight from AWS, so the request never reaches us. There is
+        no `/map/offline/terrain` route to gate — `enforcement.py` says so and
+        removed the entry rather than leave a gate on an address nobody visits.
+
+        This test used to mount a fake terrain route and assert 402 on it,
+        which proved a protection that has never existed anywhere.
+
+        What it guards now: nobody re-adds a server gate here and calls the
+        feature closed. **The gate belongs in the client, and today there is
+        none** — `map.terrain3d` appears in the frontend only as a label in the
+        licence list. Closing that is a product decision, not a test fix.
+        """
         monkeypatch.setenv("PHANTOM_LICENSE_ENFORCE", "1")
-        assert client.get("/api/v1/map/offline/terrain/kyiv").status_code == 402
+        assert enforcement._gate_for("/api/v1/map/offline/terrain/kyiv") is None
         assert client.get("/api/v1/map/offline/packs").status_code == 200
 
     def test_valid_licence_opens_the_paid_branch(

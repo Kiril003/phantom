@@ -61,10 +61,10 @@ class MapAddMarker(Action):
             )
 
         try:
-            from db.database import async_session
+            from db.database import AsyncSessionLocal
             from db.models import MapPOI
 
-            async with async_session() as db:
+            async with AsyncSessionLocal() as db:
                 record = MapPOI(
                     user_id=owner,
                     lat=self.lat,

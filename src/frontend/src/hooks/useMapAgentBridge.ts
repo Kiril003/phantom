@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { wsClient, type WSMessage } from '../services/websocket';
 import { useMapStore, type MapLayerKey } from '../stores/mapStore';
+import type { MapPOI } from '@shared/types';
 
 /**
  * Phase 24-D — desktop ↔ agent bridge over the `"map"` WebSocket
@@ -15,8 +16,12 @@ import { useMapStore, type MapLayerKey } from '../stores/mapStore';
  *   - `fly_to {center, zoom}`               → same
  *   - `enable_layer {layer_id}`             → mapStore.setLayer(true)
  *   - `disable_layer {layer_id}`            → mapStore.setLayer(false)
- *   - `narrate / open_map / route / snapshot / add_marker`
- *     → toast with the narrative (short, transient)
+ *   - `add_marker {id, lat, lon, name, ...}` → mapStore.appendPOI (renders
+ *     immediately via IntelLayer, same as a marker the operator drew by hand)
+ *   - `narrate / open_map / route / snapshot`
+ *     → toast with the narrative (short, transient) — `open_map` is also
+ *     handled, separately, by `useMapOpenNavigator` so it works even when
+ *     this hook (mounted only inside the map screen's HudShell) isn't.
  */
 
 interface MapWSPayload {
@@ -57,6 +62,45 @@ function asZoom(payload: Record<string, unknown> | undefined): number | null {
   return Number.isFinite(z) ? z : null;
 }
 
+const VALID_POI_CATEGORIES: ReadonlySet<string> = new Set([
+  'intel', 'threat', 'saved', 'home', 'work', 'custom',
+]);
+
+/**
+ * `map.add_marker`'s mutation payload (`agent/actions/map/add_marker.py`)
+ * is already exactly the fields `MapPOI` needs — this just validates and
+ * narrows it. Returns null (marker dropped, nothing rendered) rather than
+ * throwing on a malformed payload; the caller decides whether that's worth
+ * a toast.
+ */
+function asMarkerPoi(payload: Record<string, unknown>): MapPOI | null {
+  const { id, lat, lon, name } = payload;
+  if (typeof id !== 'string' && typeof id !== 'number') return null;
+  const latN = Number(lat);
+  const lonN = Number(lon);
+  if (!Number.isFinite(latN) || !Number.isFinite(lonN)) return null;
+  if (typeof name !== 'string' || !name) return null;
+  const category = typeof payload.category === 'string' && VALID_POI_CATEGORIES.has(payload.category)
+    ? (payload.category as MapPOI['category'])
+    : 'custom';
+  return {
+    id: String(id),
+    // Not carried on the WS payload — the hub already scoped this broadcast
+    // to the owning user's own connections (`broadcast_map_mutation(...,
+    // user_id=owner)` in add_marker.py), so whoever receives this message
+    // is that owner. IntelLayer never reads user_id for rendering.
+    user_id: 'agent',
+    lat: latN,
+    lon: lonN,
+    name,
+    category,
+    notes: '',
+    icon: typeof payload.icon === 'string' && payload.icon ? payload.icon : '📍',
+    is_secret: payload.is_secret === true,
+    created_at: typeof payload.created_at === 'string' ? payload.created_at : new Date().toISOString(),
+  };
+}
+
 export interface UseMapAgentBridgeOptions {
   /** Skip the WS subscription (used by tests + SSR). */
   skip?: boolean;
@@ -93,6 +137,9 @@ export function useMapAgentBridge(options: UseMapAgentBridgeOptions = {}): void 
         if (typeof iso === 'string') {
           store.setTemporalDate(iso);
         }
+      } else if (op === 'add_marker') {
+        const poi = asMarkerPoi(payload);
+        if (poi) store.appendPOI(poi);
       }
 
       if (narrative) {

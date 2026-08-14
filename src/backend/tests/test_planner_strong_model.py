@@ -12,7 +12,19 @@ from config import config
 
 
 def test_planner_model_config_default():
-    assert config.ai_planner_model == "gemini-2.5-pro"
+    """Asserts the SHIPPED default, not the resolved value.
+
+    `src/backend/.env` legitimately overrides the model for local work, so a
+    test that read `config.ai_planner_model` failed on every developer machine
+    and passed in CI — which is exactly how a guard stops being read. What must
+    hold is that the value we ship is the strong one.
+    """
+    field = type(config).model_fields["ai_planner_model"]
+    assert field.default == "gemini-2.5-pro", (
+        f"shipped planner default is {field.default!r} — a weak model here "
+        "returned prose instead of JSON and aborted every mission; see this "
+        "file's own docstring."
+    )
     assert config.ai_planner_max_tokens >= 4096
 
 

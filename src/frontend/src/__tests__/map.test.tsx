@@ -35,8 +35,20 @@ vi.mock('maplibre-gl', () => {
     private listeners: Record<string, Listener[]> = {};
     private center = { lat: 50.45, lng: 30.52 };
     private _zoom = 15;
+    private _bearing = 0;
+    private _pitch = 0;
+    private _terrain: unknown = null;
+    private _container: HTMLElement | null = null;
+    private _canvas = { style: {} as Record<string, string> };
     private sources: Record<string, { data: unknown }> = {};
     private mapLayers: Record<string, unknown> = {};
+
+    // TacticalMap reads `opts.container` back out via getContainer() (Ukrainian
+    // attribution-button relabelling, commit b220fc4) — capture it so that
+    // lookup no-ops instead of throwing.
+    constructor(opts: { container?: HTMLElement } = {}) {
+      this._container = opts.container ?? null;
+    }
 
     on(evt: string, cb: Listener) {
       (this.listeners[evt] ||= []).push(cb);
@@ -49,6 +61,12 @@ vi.mock('maplibre-gl', () => {
     }
     remove() {
       this.listeners = {};
+    }
+    loaded() {
+      return true;
+    }
+    isMoving() {
+      return false;
     }
     getBounds() {
       return {
@@ -64,12 +82,52 @@ vi.mock('maplibre-gl', () => {
     getZoom() {
       return this._zoom;
     }
+    getBearing() {
+      return this._bearing;
+    }
+    getPitch() {
+      return this._pitch;
+    }
+    getCanvas() {
+      return this._canvas;
+    }
+    getContainer() {
+      return this._container;
+    }
+    getTerrain() {
+      return this._terrain;
+    }
+    setTerrain(opts: unknown) {
+      this._terrain = opts ?? null;
+    }
+    setLight() {
+      /* noop */
+    }
+    setPixelRatio() {
+      /* noop */
+    }
+    queryRenderedFeatures() {
+      return [];
+    }
+    zoomIn() {
+      this._zoom += 1;
+    }
+    zoomOut() {
+      this._zoom -= 1;
+    }
     setStyle() {
       /* noop */
     }
     flyTo({ center, zoom }: { center: [number, number]; zoom?: number }) {
       this.center = { lng: center[0], lat: center[1] };
       if (zoom != null) this._zoom = zoom;
+    }
+    easeTo(opts: { pitch?: number; zoom?: number }) {
+      if (opts.pitch != null) this._pitch = opts.pitch;
+      if (opts.zoom != null) this._zoom = opts.zoom;
+    }
+    rotateTo(bearing: number) {
+      this._bearing = bearing;
     }
     fitBounds() {
       /* noop */
@@ -118,17 +176,27 @@ vi.mock('maplibre-gl', () => {
       /* noop */
     }
   }
+  // TacticalMap registers the pmtiles protocol on the maplibre-gl default
+  // export at module load (offline 3D terrain, commit c0d6977). The mock
+  // predates that and didn't stub it, so mounting threw
+  // "default.addProtocol is not a function" — no-op stubs restore parity.
+  const addProtocol = () => { /* noop */ };
+  const removeProtocol = () => { /* noop */ };
   return {
     default: {
       Map: FakeMap,
       Marker: FakeMarker,
       Popup: FakePopup,
       LngLatBounds: FakeLngLatBounds,
+      addProtocol,
+      removeProtocol,
     },
     Map: FakeMap,
     Marker: FakeMarker,
     Popup: FakePopup,
     LngLatBounds: FakeLngLatBounds,
+    addProtocol,
+    removeProtocol,
   };
 });
 
@@ -303,7 +371,7 @@ describe('MarkerCard', () => {
 
 /* ─── TacticalMap ───────────────────────────────────────────────────────────── */
 
-describe.skip('TacticalMap', () => {
+describe('TacticalMap', () => {
   beforeEach(() => {
     resetStores();
     // Stub map API calls
@@ -316,22 +384,45 @@ describe.skip('TacticalMap', () => {
     });
   });
 
+  // The Phase 24-D/E HudShell rewrite (df27a42, b220fc4) replaced the plain
+  // English layer-panel buttons ('Base'/'Wardriving'/'Heatmap') and the
+  // 'Tactical map' aria-label with a Ukrainian-first LayerPalette rail
+  // whose labels carry live record counts (e.g. "Мережі — записів немає").
+  // These assertions were never updated to match, which is why un-skipping
+  // this block originally failed on missing elements rather than the
+  // stale UI itself — the underlying toggle/store wiring is unchanged.
   it('mounts and renders layer panel', async () => {
     const { OmniMap } = await import('../components/map/OmniMap');
     render(<OmniMap bridgeAgent={false} />);
-    expect(screen.getByLabelText('Tactical map')).toBeDefined();
-    expect(screen.getByLabelText('Base')).toBeDefined();
-    expect(screen.getByLabelText('Wardriving')).toBeDefined();
-    expect(screen.getByLabelText('Heatmap')).toBeDefined();
+    expect(screen.getByLabelText('Тактична мапа')).toBeDefined();
+    expect(screen.getByLabelText('Основа')).toBeDefined();
+    expect(screen.getByLabelText(/^Мережі/)).toBeDefined();
+    expect(screen.getByLabelText(/^Теплокарта/)).toBeDefined();
   });
 
   it('layer toggle updates store', async () => {
     const { OmniMap } = await import('../components/map/OmniMap');
     render(<OmniMap bridgeAgent={false} />);
-    const heatBtn = screen.getByLabelText('Heatmap');
+    // HudShell's rail deliberately guards the five record-backed layers:
+    // clicking one with zero records shows a "записів ще немає" toast
+    // instead of toggling it on to draw nothing (see the comment above
+    // `layerItems` in HudShell.tsx — this replaced five buttons that used
+    // to light up amber over an empty map). Heatmap starts with zero
+    // records in this suite, so it no longer exercises "toggle flips the
+    // store" — 'presence' has no record count gate (`count: null`) and
+    // still does, so it's the one that keeps this test's original intent.
+    const presenceBtn = screen.getByLabelText('Присутність');
+    expect(useMapStore.getState().layers.presence).toBe(true);
+    fireEvent.click(presenceBtn);
+    expect(useMapStore.getState().layers.presence).toBe(false);
+
+    // The guarded path: an empty-count layer's click does NOT flip the
+    // store — it only surfaces the "no records yet" toast.
+    const heatBtn = screen.getByLabelText(/^Теплокарта/);
     expect(useMapStore.getState().layers.heatmap).toBe(false);
     fireEvent.click(heatBtn);
-    expect(useMapStore.getState().layers.heatmap).toBe(true);
+    expect(useMapStore.getState().layers.heatmap).toBe(false);
+    expect(useMapStore.getState().toast ?? '').toMatch(/записів ще немає/);
   });
 
   it('centre-on-me button disabled when no GPS fix', async () => {
@@ -356,7 +447,10 @@ describe.skip('TacticalMap', () => {
     });
     const { OmniMap } = await import('../components/map/OmniMap');
     render(<OmniMap bridgeAgent={false} />);
-    const btn = screen.getByLabelText('Centre on operator') as HTMLButtonElement;
+    // NavigationToolbar's centre-to-me button only carries a `title`
+    // (b220fc4 dropped the English aria-label along with the rest of the
+    // panel's English strings) — `getByTitle` is the query that survives.
+    const btn = screen.getByTitle('Місце ще невідоме') as HTMLButtonElement;
     expect(btn.disabled).toBe(true);
   });
 
@@ -365,14 +459,16 @@ describe.skip('TacticalMap', () => {
     useMapStore.setState({ savePOI: saveSpy });
     const { OmniMap } = await import('../components/map/OmniMap');
     render(<OmniMap bridgeAgent={false} />);
-    await waitFor(() => screen.getByLabelText('Drop POI'));
+    // "Drop POI" button became NavigationToolbar's map-pin button, titled
+    // "Поставити мітку"; the confirm dialog's actions are the Ukrainian
+    // "Скасувати"/"Зберегти" pair, not a labelled "Confirm POI" button.
+    await waitFor(() => screen.getByTitle('Поставити мітку'));
     act(() => {
-      fireEvent.click(screen.getByLabelText('Drop POI'));
+      fireEvent.click(screen.getByTitle('Поставити мітку'));
     });
-    // Confirm dialog appears with a dedicated "Confirm POI" button.
-    await waitFor(() => screen.getByLabelText('Confirm POI'));
+    await waitFor(() => screen.getByText('Зберегти'));
     act(() => {
-      fireEvent.click(screen.getByLabelText('Confirm POI'));
+      fireEvent.click(screen.getByText('Зберегти'));
     });
     await waitFor(() => expect(saveSpy).toHaveBeenCalled());
     const call = saveSpy.mock.calls[0] as unknown as [{
@@ -384,14 +480,15 @@ describe.skip('TacticalMap', () => {
   it('shows Live status chip when not loading', async () => {
     const { OmniMap } = await import('../components/map/OmniMap');
     render(<OmniMap bridgeAgent={false} />);
-    expect(screen.getByText('Live')).toBeDefined();
+    // StatusChip localised 'Live' → 'Наживо' (see phase24_d_hud.test.tsx).
+    expect(screen.getByText('Наживо')).toBeDefined();
   });
 
   it('shows Syncing status chip when loading', async () => {
     useMapStore.setState({ loading: true });
     const { OmniMap } = await import('../components/map/OmniMap');
     render(<OmniMap bridgeAgent={false} />);
-    expect(screen.getByText('Syncing')).toBeDefined();
+    expect(screen.getByText('Синхронізую')).toBeDefined();
   });
 
   it('renders marker card when selection is set', async () => {
@@ -399,13 +496,16 @@ describe.skip('TacticalMap', () => {
     useMapStore.setState({ selection: { kind: 'poi', poi } });
     const { OmniMap } = await import('../components/map/OmniMap');
     render(<OmniMap bridgeAgent={false} />);
-    expect(screen.getByText('OpsCenter')).toBeDefined();
+    // MarkerCard only mounts once TacticalMap's `ready` flips true (the
+    // MapLibre 'load' event fires on a macrotask in the fake map), so this
+    // needs to wait rather than assert synchronously right after render.
+    expect(await screen.findByText('OpsCenter')).toBeDefined();
   });
 });
 
 /* ─── mapTokens ─────────────────────────────────────────────────────────────── */
 
-describe.skip('mapTokens', () => {
+describe('mapTokens', () => {
   it('poiColor returns expected key per category', async () => {
     const { getMapTokens, poiColor } = await import('../components/map/mapTokens');
     const tokens = getMapTokens();

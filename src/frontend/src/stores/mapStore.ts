@@ -130,6 +130,14 @@ interface MapStoreState {
    */
   routeToPoint: (dest: RoutePoint, fallbackOrigin?: RoutePoint) => Promise<void>;
   clearRoute: () => void;
+  /**
+   * Apply an already-computed route directly — the agent-driven path
+   * (`useMapAgentBridge` on `map.plan_route`'s `"route"` mutation) has no
+   * text fields to geocode, it already has the geometry. Reuses the same
+   * `route` field `planRoute`/`routeToPoint` write, so `RouteLayer` draws
+   * it exactly the same way regardless of who planned it.
+   */
+  setRoute: (route: PlannedRoute | null) => void;
 
   loadWardriving: (bounds?: Bounds, since?: string) => Promise<void>;
   loadHeatmap: (bounds?: Bounds, minWeight?: number) => Promise<void>;
@@ -325,6 +333,8 @@ export const useMapStore = create<MapStoreState>((set, get) => ({
   },
 
   clearRoute: () => set({ route: null, routeError: null }),
+
+  setRoute: (route) => set({ route, routing: false, routeError: null }),
 
   loadWardriving: async (bounds, since) => {
     set({ loading: true, error: null });

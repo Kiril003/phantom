@@ -277,9 +277,7 @@ class TestVisualAssetStore:
         from agent.missions.visual_assets import VisualAssetStore
         store = VisualAssetStore("m-test", str(tmp_path))
         png = b"\x89PNG\r\n\x1a\n" + b"\x00" * 100
-        rel_path = asyncio.get_event_loop().run_until_complete(
-            store.store_png(png, "phase-1-preview")
-        )
+        rel_path = asyncio.run(store.store_png(png, "phase-1-preview"))
         assert rel_path == "./assets/phase-1-preview.png"
         abs_path = tmp_path / "assets" / "phase-1-preview.png"
         assert abs_path.exists()
@@ -289,7 +287,7 @@ class TestVisualAssetStore:
         from agent.missions.visual_assets import VisualAssetStore
         store = VisualAssetStore("m-test", str(tmp_path))
         png = b"\x89PNG\r\n\x1a\n" + b"x" * 50
-        asyncio.get_event_loop().run_until_complete(store.store_png(png, "snap1"))
+        asyncio.run(store.store_png(png, "snap1"))
 
         assets = store.list_assets()
         assert len(assets) == 1

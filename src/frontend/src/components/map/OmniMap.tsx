@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import maplibregl from 'maplibre-gl';
 import { TacticalMap } from './TacticalMap';
 import { HudShell } from './hud/HudShell';
@@ -75,6 +75,27 @@ export function OmniMap({
   const [addPoi, setAddPoi] = useState<() => void>(() => { });
   const [resetBearing, setResetBearing] = useState<() => void>(() => { });
 
+  // TacticalMap re-registers its zoom/center/add-poi/reset-bearing/tilt
+  // callbacks in a single effect keyed on these six props (see the
+  // `onZoomIn?.(...)` block near its bottom). Passing fresh inline arrows
+  // here on every render made that dependency array change every render,
+  // so the effect re-ran, called setZoomIn/setCenterToMe/etc with new
+  // closures, which changed OmniMap's state, which re-rendered OmniMap,
+  // which produced fresh inline arrows again — an unbounded render loop
+  // that pegged the CPU the moment OmniMap mounted (confirmed via
+  // `node --prof`: the hot path was TacticalMap's effect commit cycle,
+  // never a single synchronous re-entrant render, so React's built-in
+  // "Maximum update depth exceeded" guard never caught it). Memoizing
+  // these with an empty dep array keeps their identity stable across
+  // renders, so the effect only re-runs when the map's own callbacks
+  // actually change.
+  const registerZoomIn = useCallback((fn: () => void) => setZoomIn(() => fn), []);
+  const registerZoomOut = useCallback((fn: () => void) => setZoomOut(() => fn), []);
+  const registerCenterToMe = useCallback((fn: () => void) => setCenterToMe(() => fn), []);
+  const registerAddPoi = useCallback((fn: () => void) => setAddPoi(() => fn), []);
+  const registerResetBearing = useCallback((fn: () => void) => setResetBearing(() => fn), []);
+  const registerToggleTilt = useCallback((fn: () => void) => setToggleTilt(() => fn), []);
+
   const mapStyle = useSettingsStore((s) => s.values.ui_map_style as string) || 'dark';
   const setSettingValue = useSettingsStore((s) => s.setValue);
   const center = useMapStore((s) => s.center);
@@ -124,12 +145,12 @@ export function OmniMap({
       <TacticalMap
         initialCenter={initialCenter}
         initialZoom={initialZoom}
-        onZoomIn={(fn) => setZoomIn(() => fn)}
-        onZoomOut={(fn) => setZoomOut(() => fn)}
-        onCenterToMe={(fn) => setCenterToMe(() => fn)}
-        onAddPoi={(fn) => setAddPoi(() => fn)}
-        onResetBearing={(fn) => setResetBearing(() => fn)}
-        onToggleTilt={(fn) => setToggleTilt(() => fn)}
+        onZoomIn={registerZoomIn}
+        onZoomOut={registerZoomOut}
+        onCenterToMe={registerCenterToMe}
+        onAddPoi={registerAddPoi}
+        onResetBearing={registerResetBearing}
+        onToggleTilt={registerToggleTilt}
         onTiltChange={setPitch}
       />
       <HudShell

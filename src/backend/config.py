@@ -789,8 +789,12 @@ class PhantomConfig(BaseSettings):
     ai_artifact_model: str = "auto"  # "auto" → ai_gemini_model; cloud-only, never Ollama
     ai_artifact_max_tokens: int = 32768
     ai_artifact_max_revisions: int = 2
-    # Strategic/reflector planner needs reliable strict-JSON.
-    ai_planner_model: str = "gemini-2.0-flash"
+    # Strategic/reflector planner needs reliable strict-JSON. A weak model here
+    # returned prose instead of JSON twice in a row and aborted every mission
+    # with «критична помилка виконання» — see tests/test_planner_strong_model.py
+    # for the incident. The value was lost to `dfe4f77 Emergency restore`, and
+    # the guarding test has been red and unseen ever since.
+    ai_planner_model: str = "gemini-2.5-pro"
     ai_planner_max_tokens: int = 8192
 
     # Day-2 (audit-2026-04-29 Tier E): structured JSON log output.

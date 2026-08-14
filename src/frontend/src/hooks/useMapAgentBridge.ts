@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { wsClient, type WSMessage } from '../services/websocket';
-import { useMapStore, type MapLayerKey } from '../stores/mapStore';
+import { useMapStore, type MapLayerKey, type PlannedRoute, type RoutePoint } from '../stores/mapStore';
+import type { RouteAlternative, RouteResult } from '../services/api';
 import type { MapPOI } from '@shared/types';
 
 /**
@@ -18,7 +19,14 @@ import type { MapPOI } from '@shared/types';
  *   - `disable_layer {layer_id}`            → mapStore.setLayer(false)
  *   - `add_marker {id, lat, lon, name, ...}` → mapStore.appendPOI (renders
  *     immediately via IntelLayer, same as a marker the operator drew by hand)
- *   - `narrate / open_map / route / snapshot`
+ *   - `route {primary: RouteAlternative, ...}` (from `map.plan_route`)
+ *     → mapStore.setRoute, drawn by the always-mounted `RouteLayer`. The
+ *     other three actions that also emit `op: "route"`
+ *     (`map.isochrone` / `map.snap_track` / `map.optimize_visit` — an area,
+ *     a matched line, and a stop ordering, none shaped like a two-point
+ *     route) are not yet handled here and still fall through to the toast;
+ *     tracked separately, not silently claimed as done.
+ *   - `narrate / open_map / snapshot`
  *     → toast with the narrative (short, transient) — `open_map` is also
  *     handled, separately, by `useMapOpenNavigator` so it works even when
  *     this hook (mounted only inside the map screen's HudShell) isn't.
@@ -101,6 +109,45 @@ function asMarkerPoi(payload: Record<string, unknown>): MapPOI | null {
   };
 }
 
+/**
+ * `map.plan_route`'s mutation payload (`agent/actions/map/plan_route.py`)
+ * is `{engine, profile, primary: RouteAlternative, alternatives_count}` —
+ * a `RouteAlternative` is exactly what `PlannedRoute.result.primary` needs.
+ * The three other `"route"`-emitting actions (isochrone/snap_track/
+ * optimize_visit) don't have a `primary` field, so this correctly returns
+ * null for them rather than misreading their payload as a route.
+ *
+ * `from`/`to` labels aren't on the wire (the backend never resolved place
+ * names, just coordinates) — derive them from the geometry's own
+ * endpoints rather than inventing text. `RouteLayer` only reads
+ * `from.lat/lon` and `to.lat/lon` to place its two dot markers; the label
+ * is HUD-only.
+ */
+function asPlannedRoute(payload: Record<string, unknown>): PlannedRoute | null {
+  const primary = payload.primary as Partial<RouteAlternative> | undefined;
+  const geometry = primary?.geometry as { coordinates?: unknown } | undefined;
+  const coords = geometry?.coordinates;
+  if (!primary || !Array.isArray(coords) || coords.length < 2) return null;
+
+  const first = coords[0];
+  const last = coords[coords.length - 1];
+  if (!Array.isArray(first) || !Array.isArray(last)) return null;
+  const from: RoutePoint = { lat: Number(first[1]), lon: Number(first[0]), label: 'Початок (агент)' };
+  const to: RoutePoint = { lat: Number(last[1]), lon: Number(last[0]), label: 'Кінець (агент)' };
+  if (![from.lat, from.lon, to.lat, to.lon].every(Number.isFinite)) return null;
+  if (typeof primary.distance_m !== 'number' || typeof primary.duration_s !== 'number') return null;
+
+  const result: RouteResult = {
+    primary: primary as RouteAlternative,
+    alternatives: [],
+    profile: typeof payload.profile === 'string' ? payload.profile : 'car',
+    engine: typeof payload.engine === 'string' ? payload.engine : '',
+    cached: false,
+    extras: {},
+  };
+  return { result, from, to };
+}
+
 export interface UseMapAgentBridgeOptions {
   /** Skip the WS subscription (used by tests + SSR). */
   skip?: boolean;
@@ -140,6 +187,9 @@ export function useMapAgentBridge(options: UseMapAgentBridgeOptions = {}): void 
       } else if (op === 'add_marker') {
         const poi = asMarkerPoi(payload);
         if (poi) store.appendPOI(poi);
+      } else if (op === 'route') {
+        const route = asPlannedRoute(payload);
+        if (route) store.setRoute(route);
       }
 
       if (narrative) {

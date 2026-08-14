@@ -69,6 +69,9 @@ beforeEach(() => {
     zoom: 14,
     layers: { ...DEFAULT_LAYERS },
     toast: null,
+    route: null,
+    routing: false,
+    routeError: null,
   });
 });
 
@@ -123,5 +126,61 @@ describe('useMapAgentBridge — map.add_marker lands on the map', () => {
     render(<BridgeHarness />);
     dispatch('add_marker', { id: 'poi-3', lat: 50.0, lon: 30.0, name: 'y', category: 'bogus' });
     expect(useMapStore.getState().pois[0]?.category).toBe('custom');
+  });
+});
+
+describe('useMapAgentBridge — map.plan_route lands on the map', () => {
+  const PRIMARY = {
+    distance_m: 12400,
+    duration_s: 1080,
+    geometry: {
+      type: 'LineString',
+      coordinates: [
+        [30.5234, 50.4501],
+        [30.55, 50.46],
+        [30.60, 50.47],
+      ],
+    },
+    summary: '',
+    extras: {},
+  };
+
+  it('turns a plan_route mutation into mapStore.route (drawn by RouteLayer)', () => {
+    render(<BridgeHarness />);
+    expect(useMapStore.getState().route).toBeNull();
+
+    dispatch(
+      'route',
+      { engine: 'osrm', profile: 'car', primary: PRIMARY, alternatives_count: 0 },
+      'Маршрут 12.4 км / 18 хв через osrm.',
+    );
+
+    const { route, toast } = useMapStore.getState();
+    expect(route).not.toBeNull();
+    expect(route?.result.primary.geometry.coordinates).toEqual(PRIMARY.geometry.coordinates);
+    expect(route?.result.engine).toBe('osrm');
+    // Endpoints RouteLayer places its two dot markers at — taken from the
+    // geometry's own first/last point, since the backend never resolved
+    // place-name labels for an agent-planned route.
+    expect(route?.from).toMatchObject({ lat: 50.4501, lon: 30.5234 });
+    expect(route?.to).toMatchObject({ lat: 50.47, lon: 30.60 });
+    expect(toast).toContain('12.4 км');
+  });
+
+  it('ignores a route mutation from isochrone/snap_track/optimize_visit (no primary field) without throwing', () => {
+    render(<BridgeHarness />);
+    expect(() =>
+      dispatch('route', { engine: 'osrm', target: 'isochrone', geometry: { type: 'Polygon', coordinates: [] } }),
+    ).not.toThrow();
+    expect(useMapStore.getState().route).toBeNull();
+  });
+
+  it('ignores a route payload with fewer than two coordinates', () => {
+    render(<BridgeHarness />);
+    dispatch('route', {
+      engine: 'osrm',
+      primary: { ...PRIMARY, geometry: { type: 'LineString', coordinates: [[30.5, 50.45]] } },
+    });
+    expect(useMapStore.getState().route).toBeNull();
   });
 });

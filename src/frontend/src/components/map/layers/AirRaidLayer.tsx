@@ -70,7 +70,7 @@ export function AirRaidLayer({ className = '' }: AirRaidLayerProps): JSX.Element
       data-testid="air-raid-overlay"
       data-alert-count={count}
       data-alert-state={state}
-      className={`flex items-center gap-1.5 px-2 py-1 rounded-md backdrop-blur-md text-[11px] border shadow-lg ${
+      className={`flex min-w-0 items-center gap-1.5 px-2 py-1 rounded-md backdrop-blur-md text-[11px] border shadow-lg ${
         stale
           ? 'bg-red-950/40 text-red-200/80 border-red-500/25 border-dashed shadow-red-950/30'
           : 'bg-red-900/55 text-red-100 border-red-500/40 shadow-red-900/40'
@@ -83,7 +83,10 @@ export function AirRaidLayer({ className = '' }: AirRaidLayerProps): JSX.Element
       />
       <span className="font-mono">{count}</span>
       <span className="opacity-90">тривога:</span>
-      <span className="truncate max-w-[280px]">
+      {/* Мітка часу не стискається: перелік областей можна вкоротити, а
+          «станом на» — ні, інакше на 1024 px зникає саме те, заради чого
+          цей чіп переписаний. */}
+      <span className="truncate min-w-0 max-w-[220px]">
         {snap.featureCollection.features
           .slice(0, 4)
           .map((feature) => {
@@ -93,7 +96,7 @@ export function AirRaidLayer({ className = '' }: AirRaidLayerProps): JSX.Element
           .join(', ')}
         {count > 4 ? ` +${count - 4}` : ''}
       </span>
-      <span className="opacity-70 font-mono">{stamp}</span>
+      <span className="opacity-70 font-mono shrink-0">{stamp}</span>
     </div>
   );
 }

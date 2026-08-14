@@ -22,6 +22,16 @@ from voice.speaking_floor import SpeakingFloor, UserFloor  # noqa: E402
 USER = "user-floor"
 
 
+def _spoken_metric() -> float:
+    """Те саме число, що бачить оператор на /metrics."""
+    from observability import voice_tts_total
+
+    for line in voice_tts_total.render():
+        if line.startswith("phantom_voice_tts_total") and not line.startswith("#"):
+            return float(line.rsplit(" ", 1)[1])
+    return 0.0
+
+
 def _capture(
     monkeypatch,
     *,
@@ -316,6 +326,33 @@ async def test_the_agent_never_claims_a_silence_it_produced(
     assert result.output["sentences_spoken"] == 0
     assert result.side_effects == []
     assert [t for t, _ in broadcasts if t == "tts.sentence"] == []
+
+
+@pytest.mark.asyncio
+async def test_the_spoken_metric_counts_sound_not_attempts(monkeypatch) -> None:
+    """«Скільки разів PHANTOM заговорив сам» має рахувати ефір, а не спроби —
+    інакше на панелі оператора стоїть число подій, яких не було."""
+    from agent.actions.base import ActionContext
+    from agent.actions.voice_say import VoiceSay
+
+    _capture(monkeypatch, engine="silent")
+    before = _spoken_metric()
+    silent = await VoiceSay(text="Тихо.", force=True).execute(
+        ActionContext(
+            task_id="t-6", step_idx=0, workspace_dir="/tmp", user_id="u8",
+        )
+    )
+    assert silent.ok is False
+    assert _spoken_metric() == before, "лічильник порахував тишу"
+
+    _capture(monkeypatch)
+    said = await VoiceSay(text="Готово.", force=True).execute(
+        ActionContext(
+            task_id="t-7", step_idx=0, workspace_dir="/tmp", user_id="u8",
+        )
+    )
+    assert said.ok is True
+    assert _spoken_metric() == before + 1
 
 
 @pytest.mark.asyncio

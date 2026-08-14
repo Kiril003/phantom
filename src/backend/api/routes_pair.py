@@ -292,6 +292,18 @@ def _local_ip_guess() -> str:
     return ip
 
 
+def _plain_http_port() -> int:
+    """Порт, на який телефону справді є куди прийти.
+
+    Тут стояло `getattr(config, "pair_port", 8000)`, а поля `pair_port` в
+    конфізі немає й ніколи не було: значення за замовчуванням у getattr
+    перетворило зниклу назву на зашиту вісімку під виглядом налаштування.
+    Оператор із `PORT=8080` діставав у QR 8000 і бачив «не вдалось
+    підключитись» — помилку, яка ніколи не називає справжню причину.
+    """
+    return int(getattr(config, "port", 8000) or 8000)
+
+
 # ── Routes ───────────────────────────────────────────────────────────────────
 
 
@@ -308,13 +320,13 @@ async def pair_init(
         session,
         host=getattr(config, "pair_host", "phantom.local"),
         ip=_local_ip_guess(),
-        port=getattr(config, "pair_port", 8000),
+        port=_plain_http_port(),
         # Cert pin is filled in by Caddy/mkcert in deploy. For dev we use a
         # well-known sentinel ("dev-no-pin") so the phone can opt out of
         # cert pinning when the server runs cleartext on the LAN. Production
         # MUST set `PAIR_CERT_SHA256` in config so this turns into a real
         # SHA-256 fingerprint.
-        cert_sha256_hex=getattr(config, "pair_cert_sha256", "dev-no-pin"),
+        cert_sha256_hex=getattr(config, "pair_cert_sha256", "") or "dev-no-pin",
     )
     logger.info(
         "pair/init: user=%s pair_id=%s ttl=%ds",

@@ -199,7 +199,7 @@ function resetStores() {
 
 /* ─── mapStore ──────────────────────────────────────────────────────────────── */
 
-describe.skip('mapStore', () => {
+describe('mapStore', () => {
   beforeEach(() => {
     resetStores();
   });
@@ -262,7 +262,7 @@ describe.skip('mapStore', () => {
 
 /* ─── MarkerCard ────────────────────────────────────────────────────────────── */
 
-describe.skip('MarkerCard', () => {
+describe('MarkerCard', () => {
   beforeEach(() => resetStores());
 
   it('renders nothing when no selection', async () => {

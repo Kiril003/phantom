@@ -1,4 +1,10 @@
-"""Phase 24-F — alarms.in.ua adapter + LiveTasker tests."""
+"""Phase 24-F — alarms.in.ua adapter + LiveTasker tests.
+
+Два тести тут звались `..._returns_empty` і закріплювали саме ту ваду, яку
+вони мали б ловити: обрив мережі й 503 поверталися як порожній список, тобто
+невідрізнимо від «тривог немає». Тепер вони перевіряють, що невдача не вміє
+прикидатись спокоєм.
+"""
 from __future__ import annotations
 
 import asyncio
@@ -11,6 +17,7 @@ from geo.live_tasker import LiveTasker, default_on_diff
 from geo.sources.alarms_ua import (
     AlarmsUAAdapter,
     AlarmsUAAlert,
+    AlarmsUnavailable,
     _normalize_oblast_id,
 )
 
@@ -90,7 +97,7 @@ def test_adapter_handles_malformed_payload():
     assert adapter._parse({"alerts": [42, "hi", {"oblast": "lviv"}]}) != []
 
 
-def test_adapter_http_error_returns_empty(monkeypatch):
+def test_adapter_http_error_is_not_reported_as_calm(monkeypatch):
     adapter = AlarmsUAAdapter("k")
 
     class _BoomClient:
@@ -104,10 +111,11 @@ def test_adapter_http_error_returns_empty(monkeypatch):
 
     async def run(): return await adapter.fetch()
 
-    assert asyncio.run(run()) == []
+    with pytest.raises(AlarmsUnavailable):
+        asyncio.run(run())
 
 
-def test_adapter_http_non_200_returns_empty(monkeypatch):
+def test_adapter_non_200_is_not_reported_as_calm(monkeypatch):
     adapter = AlarmsUAAdapter("k")
 
     class _Resp:
@@ -125,7 +133,8 @@ def test_adapter_http_non_200_returns_empty(monkeypatch):
 
     async def run(): return await adapter.fetch()
 
-    assert asyncio.run(run()) == []
+    with pytest.raises(AlarmsUnavailable, match="503"):
+        asyncio.run(run())
 
 
 # ── LiveTasker ────────────────────────────────────────────────────────────

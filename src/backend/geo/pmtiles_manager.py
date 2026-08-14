@@ -77,9 +77,26 @@ class PMTilesManager:
                     logger.warning(f"Failed to inspect region {f}: {err}")
         return regions
 
+    def _region_path(self, region_id: str) -> Optional[str]:
+        """Шлях до регіону — лише якщо він справді лежить у теці сховища.
+
+        `region_id` приходить із URL і йшов просто у `os.path.join`. Поки
+        видалення нічого не робило, це було нешкідливо; з живим `os.remove`
+        це вже стирання чужих файлів.
+        """
+        if not region_id or region_id in (".", ".."):
+            return None
+        if os.sep in region_id or (os.altsep and os.altsep in region_id):
+            return None
+        base = os.path.realpath(self.data_dir)
+        path = os.path.realpath(os.path.join(base, f"{region_id}.pmtiles"))
+        if os.path.dirname(path) != base:
+            return None
+        return path
+
     def get_region(self, region_id: str) -> Optional[OfflineRegion]:
-        path = os.path.join(self.data_dir, f"{region_id}.pmtiles")
-        if os.path.exists(path):
+        path = self._region_path(region_id)
+        if path and os.path.exists(path):
             stat = os.stat(path)
             meta = self.parse_header_metadata(path)
             vector_layers = meta.get("vector_layers", [])
@@ -99,8 +116,8 @@ class PMTilesManager:
 
     def delete_region(self, region_id: str) -> bool:
         """Permanently delete a local PMTiles region file."""
-        path = os.path.join(self.data_dir, f"{region_id}.pmtiles")
-        if os.path.exists(path):
+        path = self._region_path(region_id)
+        if path and os.path.exists(path):
             try:
                 os.remove(path)
                 logger.info(f"Deleted offline PMTiles region: {region_id}")

@@ -280,10 +280,23 @@ export const mapApi = {
   getGeofences: () =>
     request<GeofenceResponse[]>('GET', '/map/geofences/'),
 
-  // Generic helpers for new analytics endpoints
-  get: (url: string) => request<any>('GET', url),
-  post: (url: string, body: any) => request<any>('POST', url, body),
+  /**
+   * Профіль висот уздовж шляху; точки — `[lat, lon]`.
+   *
+   * Тут стояли сирі `get`/`post`, які додавали лише `/api/v1` без `/map`.
+   * Єдиний виклик, який ними скористався, промазав повз маршрут із першого
+   * разу і 404-ив мовчки. Префікс не має бути справою того, хто викликає.
+   */
+  elevationProfile: (points: [number, number][]) =>
+    request<{ profile: ElevationProfilePoint[] }>(
+      'POST', '/map/elevation/profile', { points },
+    ),
 };
+
+export interface ElevationProfilePoint {
+  distance_m: number;
+  elevation_m: number;
+}
 
 // ── Phase 24-I — Geofence types ──────────────────────────────────────────
 

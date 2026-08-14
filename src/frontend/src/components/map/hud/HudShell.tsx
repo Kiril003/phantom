@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  Activity, BookOpen, Clock, Flame, HardDrive, Layers, MapPin, Pentagon,
+  Activity, BookOpen, Clock, Flame, HardDrive, Layers, Library, MapPin, Pentagon,
   Radar, Route, Shield, Sparkles, Wifi,
 } from 'lucide-react';
 import { ScaleBar } from './ScaleBar';
@@ -69,7 +69,12 @@ export interface HudShellProps {
   onAddPoi: () => void;
 
   bridgeAgent?: boolean;
-  onOpenLibrary?: () => void;
+  /**
+   * Обовʼязковий навмисно. Поки він був необовʼязковим, його загубила
+   * деструктуризація — і TypeScript мовчав, бо мовчати йому дозволяв
+   * саме знак питання.
+   */
+  onOpenLibrary: () => void;
   onSearchResults?: (results: unknown) => void;
   className?: string;
 }
@@ -106,6 +111,7 @@ export function HudShell({
   onCenter,
   onAddPoi,
   bridgeAgent = true,
+  onOpenLibrary,
   onSearchResults,
   className = '',
 }: HudShellProps): JSX.Element {
@@ -149,22 +155,38 @@ export function HudShell({
     facts: geoTaggedFacts.length,
   };
 
-  const layerItems: RailItem[] = LAYERS.map((item) => ({
-    key: item.key,
-    icon: item.icon,
-    label: item.label,
-    short: item.short,
-    active: layers[item.key],
-    count: item.key === 'base' || item.key === 'presence' ? null : counts[item.key] ?? 0,
-    onClick: () => {
-      const n = counts[item.key];
-      if (typeof n === 'number' && n === 0) {
-        setToast(`${item.label}: записів ще немає`);
-        return;
-      }
-      toggleLayer(item.key);
+  const layerItems: RailItem[] = [
+    ...LAYERS.map((item) => ({
+      key: item.key,
+      icon: item.icon,
+      label: item.label,
+      short: item.short,
+      active: layers[item.key],
+      count: item.key === 'base' || item.key === 'presence' ? null : counts[item.key] ?? 0,
+      onClick: () => {
+        const n = counts[item.key];
+        if (typeof n === 'number' && n === 0) {
+          setToast(`${item.label}: записів ще немає`);
+          return;
+        }
+        toggleLayer(item.key);
+      },
+    })),
+    /**
+     * Сім кнопок вище — улюблені шари. Реєстр знає ще двадцять шість, і
+     * доти вони не мали жодних дверей: панель була змонтована, але
+     * відкрити її не міг ніхто. Питання те саме — що на мапі, — тому
+     * вхід стоїть на цій рейці, а не серед інструментів.
+     */
+    {
+      key: 'library',
+      icon: <Library size={18} strokeWidth={1.75} />,
+      label: 'Бібліотека шарів',
+      short: 'Реєстр',
+      count: null,
+      onClick: onOpenLibrary,
     },
-  }));
+  ];
 
   const toolItems: RailItem[] = [
     {

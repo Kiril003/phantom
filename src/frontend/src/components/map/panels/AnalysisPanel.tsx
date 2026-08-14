@@ -34,7 +34,7 @@ export function AnalysisPanel({ open, onClose, selectedPath = [] }: AnalysisPane
   const fetchProfile = async () => {
     setLoading(true);
     try {
-      const res = await mapApi.post('/elevation/profile', { points: selectedPath });
+      const res = await mapApi.elevationProfile(selectedPath);
       setProfile(res.profile);
     } catch (err) {
       console.error('Failed to fetch elevation profile:', err);

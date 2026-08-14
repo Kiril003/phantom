@@ -61,8 +61,14 @@ async def delete_offline_region(
     auth: TokenPayload = Depends(require_auth)
 ):
     """Delete a local PMTiles region."""
-    # TODO: implement actual deletion in PMTilesManager
-    return {"ok": True, "message": f"Region {region_id} deletion requested"}
+    if _mgr.get_region(region_id) is None:
+        raise HTTPException(status_code=404, detail="Регіон не знайдено / Region not found")
+    if not _mgr.delete_region(region_id):
+        raise HTTPException(
+            status_code=500,
+            detail="Не вдалося видалити регіон / Failed to delete region",
+        )
+    return {"ok": True, "message": f"Регіон {region_id} видалено / Region {region_id} deleted"}
 
 from fastapi import Request, Response
 from fastapi.responses import StreamingResponse

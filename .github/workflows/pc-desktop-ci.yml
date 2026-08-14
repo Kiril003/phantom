@@ -1,0 +1,123 @@
+name: pc-desktop-ci
+
+# The PHANTOM OS desktop shell (src/frontend + src/frontend/src-tauri).
+#
+# `desktop-ci.yml` covers src/desktop (AEGIS) and never touched this app, so the
+# packaged artefact had no CI at all — and could not in fact be built from a
+# clean clone: missing icons, missing sidecar, a startup panic on a dead
+# `plugins.shell.scope` key, and a splash page that resolved to a 404. Every one
+# of those is invisible to `tsc`, `vitest` and `vite build`; only compiling and
+# packaging the shell catches them. That is what this workflow exists to do.
+
+on:
+  push:
+    paths:
+      - "src/frontend/**"
+      - "src/backend/**"
+      - "scripts/build_sidecar.sh"
+      - "scripts/build-icons.sh"
+      - ".github/workflows/pc-desktop-ci.yml"
+  pull_request:
+    paths:
+      - "src/frontend/**"
+      - "src/backend/**"
+      - "scripts/build_sidecar.sh"
+      - "scripts/build-icons.sh"
+      - ".github/workflows/pc-desktop-ci.yml"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  package:
+    name: package the desktop shell
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: src/frontend/package-lock.json
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src/frontend/src-tauri
+
+      - name: System packages (Tauri Linux build deps)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev \
+            libgtk-3-dev \
+            libayatana-appindicator3-dev \
+            librsvg2-dev
+
+      - name: Frontend bundle
+        working-directory: src/frontend
+        run: |
+          npm ci
+          npx vite build
+
+      # tauri-build resolves bundle.externalBin at compile time and fails if the
+      # sidecar is absent. Building it here also proves the sidecar is
+      # reproducible off one laptop — an unreproducible sidecar makes the
+      # shipped binary unbuildable by anyone else.
+      - name: Backend sidecar
+        run: scripts/build_sidecar.sh
+
+      - name: Assert the frontend dist has no data: fonts
+        working-directory: src/frontend
+        run: |
+          if grep -rq "url(data:font" dist/assets/*.css; then
+            echo "::error::data: fonts in the bundle — the packaged CSP has no font-src," \
+                 "so they fall back to default-src 'self' and every one is blocked." \
+                 "See build.assetsInlineLimit in vite.config.ts."
+            exit 1
+          fi
+
+      # The packaged app starts MapLibre's workers from this asset. If the alias
+      # in vite.config.ts is lost, maplibre reverts to a blob: worker, which the
+      # packaged CSP refuses — and it fails silently: the Map constructor still
+      # returns, so nothing throws and no test notices.
+      - name: Assert the MapLibre CSP worker is emitted
+        working-directory: src/frontend
+        run: |
+          ls dist/assets/maplibre-gl-csp-worker-*.js >/dev/null
+          if grep -rq "createObjectURL(new Blob(\[workerBundleString" dist/assets/*.js; then
+            echo "::error::the stock (blob-worker) maplibre build is in the bundle"
+            exit 1
+          fi
+
+      - name: Compile the shell
+        working-directory: src/frontend/src-tauri
+        run: cargo build --release
+
+      - name: Assert the shell starts without panicking
+        working-directory: src/frontend/src-tauri
+        env:
+          # No display on the runner: this only has to get past config
+          # deserialisation and plugin init, which is where the shipped
+          # `plugins.shell.scope` panic lived.
+          RUST_LOG: info
+        run: |
+          set +e
+          out="$(timeout 25 ./target/release/phantom-os-shell 2>&1)"
+          set -e
+          echo "$out"
+          if echo "$out" | grep -q "panicked at"; then
+            echo "::error::the shell panicked during startup"
+            exit 1
+          fi

@@ -1,3 +1,6 @@
+// Must precede anything that can construct a map — the CSP build refuses to
+// start its workers until it is told where the worker lives.
+import './lib/maplibreWorker';
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 // Self-hosted fonts (OFL-1.1). Replaces the Google Fonts CDN <link>s that

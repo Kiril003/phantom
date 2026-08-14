@@ -35,10 +35,20 @@ const devLogin = {
 export default defineConfig({
   plugins: [devLogin, react()],
   resolve: {
-    alias: {
-      '@': path.resolve(__dirname, './src'),
-      '@shared': path.resolve(__dirname, '../shared'),
-    },
+    alias: [
+      { find: '@', replacement: path.resolve(__dirname, './src') },
+      { find: '@shared', replacement: path.resolve(__dirname, '../shared') },
+      // The default maplibre-gl build starts its workers from a blob: URL.
+      // The packaged Tauri CSP declares no worker-src, so workers fall back to
+      // `default-src 'self'` and a blob: worker is refused — the map dies in the
+      // shipped app while `npm run dev` (a plain browser, no CSP) looks fine.
+      // maplibre ships this build for exactly that case; the worker is then a
+      // same-origin asset. See src/lib/maplibreWorker.ts for the URL wiring.
+      {
+        find: /^maplibre-gl$/,
+        replacement: 'maplibre-gl/dist/maplibre-gl-csp.js',
+      },
+    ],
   },
   server: {
     host: '0.0.0.0',
@@ -78,6 +88,13 @@ export default defineConfig({
   build: {
     outDir: 'dist',
     sourcemap: true,
+    // Vite inlines assets under 4 kB as data: URIs. For the tiny @fontsource
+    // unicode-range subsets that turns 21 self-hosted fonts into `data:` fonts,
+    // which the packaged CSP refuses (no font-src, so `default-src 'self'`).
+    // Emitting them as files keeps every font same-origin and keeps `data:` out
+    // of the policy. Other asset types keep the default behaviour.
+    assetsInlineLimit: (filePath) =>
+      /\.(woff2?|ttf|otf|eot)$/i.test(filePath) ? false : undefined,
     // Weak-device-first: three.js (~600 kB) and recharts/d3 (~170 kB) sit
     // behind lazy boundaries (PhantomFamiliar summon, chart/diagram render),
     // but Vite hoists the static deps of App.tsx's entry-level React.lazy

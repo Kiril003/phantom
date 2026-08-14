@@ -41,7 +41,8 @@
       }
     ],
     "security": {
-      "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:8000 ws://127.0.0.1:8000; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'"
+      "csp": "default-src 'self'; connect-src 'self' http://127.0.0.1:8000 ws://127.0.0.1:8000; img-src 'self' data: blob:; style-src 'self' 'unsafe-inline'; script-src 'self'",
+      "dangerousDisableAssetCspModification": ["style-src"]
     }
   },
   "bundle": {
@@ -60,7 +61,7 @@
       "icons/icon.icns"
     ],
     "externalBin": ["binaries/phantom-backend"],
-    "resources": ["splash.html"],
+    "resources": [],
     "linux": {
       "appimage": {
         "bundleMediaFramework": false
@@ -84,8 +85,7 @@
   },
   "plugins": {
     "shell": {
-      "open": false,
-      "scope": []
+      "open": false
     }
   }
 }

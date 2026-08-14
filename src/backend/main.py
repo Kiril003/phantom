@@ -20,6 +20,7 @@ from api.routes_auth import router as auth_router, users_router
 from api.routes_chat import router as chat_router, register_ws_handlers as register_chat_ws_handlers
 from api.routes_context import router as context_router
 from api.routes_settings import router as settings_router
+from api.routes_bake import router as bake_router
 from api.routes_map import router as map_router
 from api.routes_geo_offline import router as geo_offline_router
 from api.routes_geo_geofences import router as geo_geofences_router
@@ -951,6 +952,7 @@ def create_app() -> FastAPI:
     app.include_router(context_router, prefix=prefix)
     app.include_router(settings_router, prefix=prefix)
     app.include_router(map_router, prefix=prefix)
+    app.include_router(bake_router, prefix=prefix)
     app.include_router(geo_offline_router, prefix=prefix)
     app.include_router(geo_geofences_router, prefix=prefix)
     app.include_router(linux_router, prefix=prefix)

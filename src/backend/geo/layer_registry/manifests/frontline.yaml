@@ -24,6 +24,12 @@ require_internet: true
 require_setting: alerts.frontline.enabled
 private: false
 priority: critical
+tier: deferred
+tier_note: >-
+  DeepStateMap — CC-BY-NC-SA: некомерційна ліцензія з вимогою поширювати
+  похідне так само. Поза платним рівнем, доки не буде письмового дозволу
+  DeepState або перевірених умов ISW. Це лист, який треба написати, а не
+  стрічка, яку треба закодити.
 default_active: false
 available_offline: false
 tags:

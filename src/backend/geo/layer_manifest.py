@@ -15,7 +15,7 @@ from __future__ import annotations
 from enum import Enum
 from typing import Optional
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 
 # ── Enums ──────────────────────────────────────────────────────────────────
@@ -73,6 +73,89 @@ class LayerPriority(str, Enum):
     normal = "normal"
     elevated = "elevated"
     critical = "critical"
+
+
+class StaleRender(str, Enum):
+    """Що мапа малює, коли шар пережив свій період напіврозпаду.
+
+    `ttl_s` каже лише, коли перезапитати. Скільки живе сам *факт* — інше
+    число, і без нього дволітній «відбій» малюється зеленим спокоєм.
+    """
+
+    #: Стан більше не відомий. Сіре, датоване, ніколи не зелене.
+    unknown = "unknown"
+    #: Показуємо далі, але видимо старим (тривога — консервативна в бік безпеки).
+    keep_aged = "keep_aged"
+    #: Падаємо до сезонної норми, явно підписаної як норма, а не «зараз».
+    climatology = "climatology"
+
+
+class LayerTier(str, Enum):
+    """Чи можна цей шар продавати сьогодні."""
+
+    sellable = "sellable"
+    #: Ліцензія не дозволяє продавати, або джерело треба перескладати.
+    #: Шар лишається в дереві, але поза платним рівнем — і причина написана
+    #: в маніфесті, а не в чиїйсь памʼяті.
+    deferred = "deferred"
+
+
+class LayerStalenessAsymmetry(BaseModel):
+    """Тиша і тривога старіють з різною швидкістю.
+
+    Двогодинний «відбій», намальований зеленим, — це «тиша ≠ безпека» в
+    найбуквальнішій формі. Двогодинна «тривога» помиляється в безпечний бік.
+    Тому одне число тут не працює: спокій має коротший строк за тривогу.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    clear_s: int = Field(..., ge=1, description="Скільки живе стан «спокійно».")
+    active_s: int = Field(..., ge=1, description="Скільки живе стан «активно».")
+
+    @model_validator(mode="after")
+    def _clear_expires_first(self) -> "LayerStalenessAsymmetry":
+        if self.clear_s > self.active_s:
+            raise ValueError(
+                "clear_s must not outlive active_s — тиша не може бути "
+                "надійнішою за тривогу"
+            )
+        return self
+
+
+class LayerStaleness(BaseModel):
+    """Скільки живе факт і що малюється після того.
+
+    Без цього блоку маніфест описує лише кеш (`ttl_s`) — і шар, який не
+    оновився, мовчки показує старе як поточне.
+    """
+
+    model_config = ConfigDict(extra="forbid")
+
+    half_life_s: Optional[int] = Field(
+        default=None,
+        ge=1,
+        description="Після цього часу шар змінює те, ЯК малює, а не лише коли фетчить.",
+    )
+    stale_render: StaleRender = StaleRender.unknown
+    asymmetric: Optional[LayerStalenessAsymmetry] = None
+    resync_budget_bytes: Optional[int] = Field(
+        default=None,
+        ge=0,
+        description=(
+            "Скільки байтів треба, щоб наздогнати після тижня без мережі. "
+            "Шар, який не може назвати це число, не їде як живий."
+        ),
+    )
+
+    @model_validator(mode="after")
+    def _must_name_a_lifetime(self) -> "LayerStaleness":
+        if self.half_life_s is None and self.asymmetric is None:
+            raise ValueError(
+                "staleness must declare half_life_s or asymmetric — "
+                "інакше блок нічого не обмежує"
+            )
+        return self
 
 
 # ── Sub-models ─────────────────────────────────────────────────────────────
@@ -212,6 +295,13 @@ class LayerManifest(BaseModel):
 
     # ── Data plumbing ────────────────────────────────────────────────
     source: LayerSource
+    staleness: Optional[LayerStaleness] = Field(
+        default=None,
+        description=(
+            "Коли факт перестає бути фактом і що малюється замість нього. "
+            "Обовʼязково для шарів, які щось стверджують про «зараз»."
+        ),
+    )
     geometry: str = Field(
         default="generic",
         description=(
@@ -242,6 +332,15 @@ class LayerManifest(BaseModel):
         description="GHOST/sealed layer — never shown unless trust matches.",
     )
     priority: LayerPriority = LayerPriority.normal
+    tier: LayerTier = Field(
+        default=LayerTier.sellable,
+        description="sellable — можна продавати; deferred — поза платним рівнем.",
+    )
+    tier_note: str = Field(
+        default="",
+        max_length=512,
+        description="Чому шар відкладено і що саме зніме заборону. Українською.",
+    )
     default_active: bool = Field(
         default=False,
         description="Active out-of-the-box (subject to require_setting).",
@@ -272,6 +371,25 @@ class LayerManifest(BaseModel):
     @classmethod
     def _validate_tags(cls, v: list[str]) -> list[str]:
         return [t.strip().lower() for t in v if t and t.strip()]
+
+    @model_validator(mode="after")
+    def _deferred_layers_state_their_reason(self) -> "LayerManifest":
+        """Відкладений шар мусить сказати, чим саме він відкладений.
+
+        Інакше «поза платним рівнем» живе в чиїйсь памʼяті, а маніфест
+        виглядає як у решти — і через місяць шар тихо повертається в продаж.
+        """
+        if self.tier is LayerTier.deferred:
+            if not self.tier_note.strip():
+                raise ValueError(
+                    f"layer {self.id!r} is deferred but names no reason "
+                    "(tier_note)"
+                )
+            if self.default_active:
+                raise ValueError(
+                    f"layer {self.id!r} is deferred and cannot be default_active"
+                )
+        return self
 
     def public_dict(self) -> dict:
         """Frontend-safe projection — strips auth/extras secrets."""

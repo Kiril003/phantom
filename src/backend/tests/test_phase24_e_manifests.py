@@ -14,7 +14,6 @@ def _registry():
 
 PHASE_E_NEW = {
     "earthquakes",
-    "lightning",
     "weather_radar",
     "aqi",
     "no2_plume",
@@ -30,8 +29,10 @@ PHASE_E_NEW = {
 }
 
 
-def test_registry_now_carries_at_least_26_layers(_registry):
-    assert len(_registry.all()) >= 26
+def test_registry_now_carries_at_least_25_layers(_registry):
+    # Було 26+; `ads_b` і `lightning` знято за ліцензіями (див.
+    # test_killed_layers_stay_dead), тож підлога опустилась на два.
+    assert len(_registry.all()) >= 25
 
 
 def test_every_phase_e_manifest_loads(_registry):

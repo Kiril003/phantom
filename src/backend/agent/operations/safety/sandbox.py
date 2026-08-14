@@ -110,7 +110,10 @@ SENSITIVE_ENV_EXACT: frozenset[str] = frozenset(
         "ALARMS_UA_KEY",        # air_raid_ua.yaml
         "MAPILLARY_TOKEN",      # mapillary.yaml
         "NASA_FIRMS_KEY",       # fires.yaml
-        "OPENSKY_BASIC_AUTH",   # ads_b.yaml
+        # ads_b.yaml знято за ліцензією, а назва лишається: у когось ця
+        # змінна вже стоїть в оточенні, і викреслити її звідси означає
+        # пустити чужий секрет у пісочницю заради косметики.
+        "OPENSKY_BASIC_AUTH",
         "SENTINEL_HUB_KEY",     # no2_plume.yaml
         # Carries credentials on any non-sqlite backend.
         "DATABASE_URL",

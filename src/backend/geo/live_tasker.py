@@ -37,6 +37,10 @@ class LiveTask:
     on_diff: Callable[[str, list[Any]], Awaitable[None]]
     error_count: int = 0
     last_run_at: float = 0.0
+    # Момент останнього *вдалого* спостереження. `last_run_at` ставиться до
+    # запиту й росте навіть коли джерело лежить — на ньому не можна будувати
+    # вік факту, бо тоді бан по частоті виглядає як підтверджений спокій.
+    last_ok_at: float = 0.0
     last_count: int = 0
     last_payload_repr: str = ""
     _task: Optional[asyncio.Task] = field(default=None, repr=False)
@@ -124,6 +128,11 @@ class LiveTasker:
             logger.info("live task %s fetch failed: %s", task.name, exc)
             return False
         task.error_count = 0
+        task.last_ok_at = time.time()
+        # Тасковик віщає лише зміни, тож у мирний час шар мовчить годинами і
+        # клієнт не може відрізнити «спокійно й підтверджено» від «не чули
+        # нічого». Це — підтвердження без геометрії, раз на такт.
+        await broadcast_observation(task.name, task.last_ok_at, len(payload))
         # Diff fingerprint — sorted repr keeps adapter-side ordering
         # changes from being treated as a real diff.
         signature = repr(sorted(repr(item) for item in payload))
@@ -149,6 +158,7 @@ class LiveTasker:
                 "interval_s": t.interval_s,
                 "error_count": t.error_count,
                 "last_run_at": t.last_run_at,
+                "last_ok_at": t.last_ok_at,
                 "last_count": t.last_count,
                 "running": t._task is not None and not t._task.done(),
             }
@@ -157,6 +167,32 @@ class LiveTasker:
 
 
 # ── Default broadcaster + setup ──────────────────────────────────────────
+
+
+async def broadcast_observation(layer_id: str, observed_at: float, count: int) -> None:
+    """«Шар підтверджено о такій-то» — без геометрії, кожен вдалий такт.
+
+    Мапа старіє стан від цього моменту: спокій живе дві хвилини, тривога —
+    десять. Поки підтвердження приходять, спокій лишається спокоєм; щойно
+    вони припинились — байдуже, мережа це, сон ноутбука чи бан по частоті —
+    шар сам падає в «стан невідомий» і більше нічого не стверджує.
+    """
+    try:
+        from agent.actions.map._common import MapMutation, broadcast_map_mutation
+
+        await broadcast_map_mutation(
+            MapMutation(
+                op="layer_observed",
+                target=layer_id,
+                payload={
+                    "layer_id": layer_id,
+                    "observed_at": observed_at,
+                    "count": count,
+                },
+            ),
+        )
+    except Exception as exc:
+        logger.debug("live observation broadcast skipped: %s", exc)
 
 
 async def default_on_diff(layer_id: str, payload: list[Any]) -> None:

@@ -120,7 +120,6 @@ def test_registry_loads_default_manifests_without_errors():
         "air_raid_ua",
         "frontline",
         "fires",
-        "ads_b",
         "substations",
     }
     missing = expected - ids
@@ -135,7 +134,6 @@ def test_registry_default_active_subset_matches_manifests():
     assert "presence" in defaults
     assert "facts" in defaults
     assert "frontline" not in defaults
-    assert "ads_b" not in defaults
 
 
 def test_registry_filters_by_category_and_offline(tmp_path):
@@ -144,7 +142,7 @@ def test_registry_filters_by_category_and_offline(tmp_path):
     assert {m.id for m in ukraine} == {"air_raid_ua", "frontline"}
     offline = registry.filter(available_offline=True)
     assert "base" in {m.id for m in offline}
-    assert "ads_b" not in {m.id for m in offline}
+    assert "air_raid_ua" not in {m.id for m in offline}
 
 
 def test_registry_get_raises_for_missing_id():

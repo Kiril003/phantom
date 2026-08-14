@@ -21,7 +21,7 @@ def test_layers_index_returns_full_set(auth_root_client):
     body = resp.json()
     assert body["total"] >= 12
     ids = {layer["id"] for layer in body["layers"]}
-    assert {"base", "presence", "frontline", "ads_b"} <= ids
+    assert {"base", "presence", "frontline", "fires"} <= ids
     # Default-active flag mirrors registry seed.
     base = next(layer for layer in body["layers"] if layer["id"] == "base")
     assert base["active"] is True

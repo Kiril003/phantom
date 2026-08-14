@@ -6,9 +6,11 @@ on a schedule the live tasker controls. Returns a typed list of
 enriched with the oblast centroid (lat/lon + name) so the renderer
 can drop a marker without a second round-trip.
 
-The adapter NEVER raises into the tasker — failure modes (no key,
-HTTP error, malformed JSON) all return an empty list and log a
-warning. This keeps the live loop quiet during outages.
+Невдача піднімає :class:`AlarmsUnavailable`. Раніше адаптер не піднімав
+нічого й повертав `[]` на будь-яку помилку — «тихо під час аварії» на ділі
+означало «неможливо відрізнити аварію від спокою», і мапа малювала зелену
+тишу, поки джерело мовчало. Порожній список тепер означає одне: дивились і
+не побачили.
 
 Manifest: `src/backend/geo/layer_registry/manifests/air_raid_ua.yaml`.
 """
@@ -29,6 +31,10 @@ logger = logging.getLogger(__name__)
 
 _DEFAULT_URL = "https://api.alarms.in.ua/v3/alerts/active.json"
 _DEFAULT_TIMEOUT = 4.0
+
+
+class AlarmsUnavailable(RuntimeError):
+    """Джерело не відповіло. Це не те саме, що «тривог немає»."""
 
 
 @dataclass(frozen=True)
@@ -100,7 +106,14 @@ class AlarmsUAAdapter:
         return bool(self._api_key)
 
     async def fetch(self) -> list[AlarmsUAAlert]:
-        """Hit the upstream once. Failures return an empty list."""
+        """Один запит нагору. Невдача — це виняток, а не порожній список.
+
+        Раніше кожна невдача поверталась як `[]`, і далі по трубі це було
+        невідрізнимо від «тривог немає»: мережа впала — на мапі зелена тиша,
+        джерело віддало 429 за перевищення частоти — знову зелена тиша, і
+        саме тоді, коли всі опитують частіше, тобто під час тривоги.
+        Порожньо може означати тільки «дивились і не побачили».
+        """
         if not self._api_key:
             return []
         headers = {
@@ -112,20 +125,15 @@ class AlarmsUAAdapter:
             async with httpx.AsyncClient(timeout=self._timeout_s) as client:
                 resp = await client.get(self._url, headers=headers)
         except Exception as exc:
-            logger.info("alarms.in.ua request failed: %s", exc)
-            return []
+            raise AlarmsUnavailable(f"alarms.in.ua request failed: {exc}") from exc
         if resp.status_code != 200:
-            logger.info(
-                "alarms.in.ua returned %s: %s",
-                resp.status_code,
-                resp.text[:120],
+            raise AlarmsUnavailable(
+                f"alarms.in.ua returned {resp.status_code}: {resp.text[:120]}"
             )
-            return []
         try:
             payload = resp.json()
         except ValueError as exc:
-            logger.warning("alarms.in.ua non-JSON response: %s", exc)
-            return []
+            raise AlarmsUnavailable(f"alarms.in.ua non-JSON response: {exc}") from exc
         return self._parse(payload)
 
     def _parse(self, payload: Any) -> list[AlarmsUAAlert]:

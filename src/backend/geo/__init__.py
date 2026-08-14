@@ -22,7 +22,11 @@ from .layer_manifest import (
     LayerManifest,
     LayerSource,
     LayerSourceType,
+    LayerStaleness,
+    LayerStalenessAsymmetry,
     LayerStyle,
+    LayerTier,
+    StaleRender,
 )
 from .layer_registry import LayerRegistry, get_layer_registry, reload_layer_registry
 from .map_cache import MapCache, get_map_cache
@@ -35,8 +39,12 @@ __all__ = [
     "LayerRegistry",
     "LayerSource",
     "LayerSourceType",
+    "LayerStaleness",
+    "LayerStalenessAsymmetry",
     "LayerStyle",
+    "LayerTier",
     "MapCache",
+    "StaleRender",
     "get_attribution_store",
     "get_layer_registry",
     "get_map_cache",

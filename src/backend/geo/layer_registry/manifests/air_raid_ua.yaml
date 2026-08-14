@@ -13,7 +13,21 @@ source:
     header_name: Authorization
   poll_interval_s: 30
   ttl_s: 30
-  rate_limit_per_minute: 120
+  # Задокументована жорстка межа alerts.in.ua — 12 запитів за хвилину на IP
+  # (історія — 2/хв), перевірено на devs.alerts.in.ua 14.08.2026. Тут стояло
+  # 120: удесятеро більше за те, що дозволено. Заробити бан цим числом можна
+  # рівно тоді, коли шар потрібен — під час тривоги.
+  rate_limit_per_minute: 12
+staleness:
+  # Тиша живе дві хвилини, тривога — десять. Несиметрично навмисно:
+  # застаріла тривога помиляється в бік безпеки, застаріла тиша — ні.
+  stale_render: unknown
+  asymmetric:
+    clear_s: 120
+    active_s: 600
+  # Один запит на active.json. Ноутбук, що прокинувся через тиждень,
+  # наздоганяє однією відповіддю — минулого стану він не показує взагалі.
+  resync_budget_bytes: 10240
 geometry: oblast_polygons
 style:
   fill: signal/alert

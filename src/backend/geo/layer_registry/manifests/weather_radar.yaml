@@ -25,6 +25,11 @@ require_internet: true
 require_setting: layers.weather_radar.enabled
 private: false
 priority: normal
+tier: deferred
+tier_note: >-
+  Безкоштовний рівень RainViewer — некомерційний, а комерційний API вони
+  продають окремо. Поза платним рівнем, доки не буде оплаченого ключа або
+  заміни джерела (поля опадів ICON). Знімає заборону договір, а не час.
 default_active: false
 available_offline: false
 tags:

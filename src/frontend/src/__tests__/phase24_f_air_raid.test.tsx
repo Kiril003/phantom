@@ -1,5 +1,11 @@
 /**
  * Phase 24-F — AirRaidLayer + useLiveAlerts tests.
+ *
+ * Перший тест тут раніше звався «renders quiet pill when no alerts received»
+ * і закріплював саме ту ваду, заради якої писався шар: доки не прийшло
+ * жодного повідомлення, екран показував зелену тишу. Відсутність новин — не
+ * спокій; вона тепер «стан невідомий», і решта файлу лишилась як була.
+ * Старіння перевіряє `airRaidStaleness.test.tsx`.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render, screen } from '@testing-library/react';
@@ -65,14 +71,15 @@ afterEach(() => {
 
 
 describe('AirRaidLayer', () => {
-  it('renders quiet pill when no alerts received', () => {
+  it('renders the unknown pill before anything has been heard', () => {
     render(<AirRaidLayer />);
-    expect(screen.getByTestId('air-raid-quiet')).toBeInTheDocument();
+    expect(screen.getByTestId('air-raid-unknown')).toBeInTheDocument();
+    expect(screen.queryByTestId('air-raid-quiet')).toBeNull();
   });
 
   it('switches to red overlay after a count>0 alert', () => {
     render(<AirRaidLayer />);
-    expect(screen.getByTestId('air-raid-quiet')).toBeInTheDocument();
+    expect(screen.getByTestId('air-raid-unknown')).toBeInTheDocument();
     act(() => {
       dispatchAlert(2, ['lviv', 'kyiv']);
     });
@@ -120,6 +127,6 @@ describe('AirRaidLayer', () => {
         },
       });
     });
-    expect(screen.getByTestId('air-raid-quiet')).toBeInTheDocument();
+    expect(screen.getByTestId('air-raid-unknown')).toBeInTheDocument();
   });
 });

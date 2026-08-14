@@ -1,0 +1,62 @@
+import { useEffect, useState } from 'react';
+import { motion } from 'framer-motion';
+import { Activity, AlertTriangle, CheckCircle2, CirclePause, FileText, Flag, ListTree, Loader2, MessageSquarePlus, RotateCcw, Save, Square, X } from 'lucide-react';
+import type { AgentAuditEntry, AgentTaskDetail, AgentTaskReport, AgentTaskSummary } from '@shared/types';
+import { agentApi, type AgentTeamMessage } from '../../services/agentApi';
+
+type Tab = 'brief' | 'plan' | 'evidence' | 'team';
+
+export function ExecutionInspector({ task, onClose, onChanged }: { task: AgentTaskSummary; onClose: () => void; onChanged: () => void }) {
+  const [tab, setTab] = useState<Tab>('brief');
+  const [detail, setDetail] = useState<AgentTaskDetail | null>(null);
+  const [report, setReport] = useState<AgentTaskReport | null>(null);
+  const [audit, setAudit] = useState<AgentAuditEntry[]>([]);
+  const [team, setTeam] = useState<AgentTeamMessage[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [actionBusy, setActionBusy] = useState<string | null>(null);
+  const [instruction, setInstruction] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const hydrate = async () => {
+    setLoading(true); setError(null);
+    try {
+      const [taskResponse, reportResponse, auditResponse] = await Promise.all([
+        agentApi.getTask(task.id), agentApi.getReport(task.id, true), agentApi.audit(task.id, 200),
+      ]);
+      setDetail(taskResponse); setReport(reportResponse.report); setAudit(auditResponse.audit);
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not load execution evidence.'); }
+    finally { setLoading(false); }
+  };
+  useEffect(() => { void hydrate(); }, [task.id]);
+  useEffect(() => { if (tab !== 'team') return; void agentApi.teamMessages(task.id).then((response) => setTeam(response.messages)).catch(() => setTeam([])); }, [tab, task.id]);
+  const action = async (kind: 'pause' | 'resume' | 'stop' | 'checkpoint' | 'intervene') => {
+    setActionBusy(kind); setError(null);
+    try {
+      if (kind === 'pause') await agentApi.pause(task.id);
+      if (kind === 'resume') await agentApi.resume(task.id);
+      if (kind === 'stop') await agentApi.stop(task.id);
+      if (kind === 'checkpoint') await agentApi.checkpoint(task.id);
+      if (kind === 'intervene') { if (!instruction.trim()) return; await agentApi.intervene(task.id, instruction.trim()); setInstruction(''); }
+      await hydrate(); onChanged();
+    } catch (reason) { setError(reason instanceof Error ? reason.message : 'Runtime action failed.'); }
+    finally { setActionBusy(null); }
+  };
+  const canControl = ['planning', 'running', 'paused', 'awaiting_user', 'blocked_quota'].includes(task.status);
+  return <motion.aside initial={{ opacity: 0, x: 32 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: 32 }} transition={{ type: 'spring', stiffness: 290, damping: 29 }} className="absolute inset-y-0 right-0 z-40 flex w-[min(560px,58%)] flex-col overflow-hidden border-l border-white/[.11] bg-[#141619]/[.92] shadow-[-28px_0_80px_rgba(0,0,0,.42)] backdrop-blur-[42px]">
+    <header className="border-b border-white/[.09] px-6 py-5"><div className="flex items-start justify-between gap-4"><div className="min-w-0"><div className="flex items-center gap-2"><StatusDot status={task.status}/><span className="font-mono text-[9px] tracking-[.13em] text-white/35">EXECUTION INSPECTOR</span></div><h2 className="mt-3 truncate text-lg font-semibold tracking-[-.035em] text-white/90">{task.goal}</h2><p className="mt-1 font-mono text-[9px] text-white/30">{task.id} · {task.track}</p></div><button onClick={onClose} className="grid h-9 w-9 shrink-0 place-items-center rounded-xl text-white/45 hover:bg-white/[.08] hover:text-white" aria-label="Close inspector"><X size={18}/></button></div><div className="mt-5 flex gap-2">{(['brief', 'plan', 'evidence', 'team'] as Tab[]).map((item) => <button key={item} onClick={() => setTab(item)} className={`rounded-lg px-3 py-2 font-mono text-[10px] uppercase tracking-wider ${tab === item ? 'bg-[#f4af25]/14 text-[#f7c85d]' : 'text-white/38 hover:bg-white/[.06] hover:text-white/70'}`}>{item}</button>)}</div></header>
+    <div className="min-h-0 flex-1 overflow-y-auto p-6">{loading ? <Loading/> : error ? <ErrorState text={error}/> : <>{tab === 'brief' && <Brief task={task} detail={detail} report={report}/>} {tab === 'plan' && <Plan detail={detail}/>} {tab === 'evidence' && <Evidence audit={audit} report={report}/>} {tab === 'team' && <Team messages={team}/>}</>}</div>
+    <footer className="border-t border-white/[.09] bg-black/10 p-4">{error && <p className="mb-3 text-xs text-[#ff9c9c]">{error}</p>}{canControl && <><div className="flex gap-2"><Action icon={<CirclePause size={14}/>} label="Pause" busy={actionBusy === 'pause'} onClick={() => void action('pause')}/><Action icon={<RotateCcw size={14}/>} label="Resume" busy={actionBusy === 'resume'} onClick={() => void action('resume')}/><Action icon={<Save size={14}/>} label="Checkpoint" busy={actionBusy === 'checkpoint'} onClick={() => void action('checkpoint')}/><Action danger icon={<Square size={14}/>} label="Stop" busy={actionBusy === 'stop'} onClick={() => void action('stop')}/></div><div className="mt-3 flex gap-2 rounded-xl border border-white/[.1] bg-white/[.045] p-1.5"><input value={instruction} onChange={(event) => setInstruction(event.target.value)} onKeyDown={(event) => { if (event.key === 'Enter') void action('intervene'); }} className="min-w-0 flex-1 bg-transparent px-2 text-xs text-white outline-none placeholder:text-white/30" placeholder="Intervene: redirect the agent with new context…"/><button onClick={() => void action('intervene')} disabled={!instruction.trim() || actionBusy === 'intervene'} className="grid h-8 w-8 place-items-center rounded-lg bg-[#f4af25] text-[#201407] disabled:opacity-35"><MessageSquarePlus size={14}/></button></div></>}</footer>
+  </motion.aside>;
+}
+
+function Brief({ task, detail, report }: { task: AgentTaskSummary; detail: AgentTaskDetail | null; report: AgentTaskReport | null }) { return <div className="space-y-6"><Section title="Mission brief" icon={<Flag size={15}/>}>{report?.llm_narrative ? <p className="text-sm leading-6 text-white/68">{report.llm_narrative}</p> : <p className="text-sm leading-6 text-white/48">{task.error || 'This execution is still collecting its operational narrative.'}</p>}</Section><div className="grid grid-cols-3 gap-3"><Stat value={String(detail?.sub_goals.length ?? 0)} label="subgoals"/><Stat value={String(detail?.thought_budget?.actions_used ?? 0)} label="actions"/><Stat value={String(detail?.observations.length ?? 0)} label="observations"/></div><Section title="Outcomes" icon={<CheckCircle2 size={15}/>}>{report?.achievements?.length ? <Bullets items={report.achievements} good/> : <Empty text="No verified outcomes have been written yet."/>}</Section><Section title="Constraints & risks" icon={<AlertTriangle size={15}/>}>{report?.obstacles?.length ? <Bullets items={report.obstacles}/> : <Empty text="No runtime constraint is currently recorded."/>}</Section></div> }
+function Plan({ detail }: { detail: AgentTaskDetail | null }) { const goals = detail?.sub_goals ?? []; return <div><Section title="Live plan" icon={<ListTree size={15}/>}>{goals.length ? <div className="space-y-2">{goals.map((goal, index) => <div key={goal.id} className="rounded-xl border border-white/[.08] bg-white/[.035] p-3"><div className="flex gap-3"><span className="grid h-6 w-6 shrink-0 place-items-center rounded-lg bg-[#f4af25]/12 font-mono text-[10px] text-[#f7c85d]">{index + 1}</span><div><p className="text-xs font-medium leading-5 text-white/78">{goal.description}</p><p className="mt-1 text-[11px] leading-4 text-white/38">{goal.rationale}</p><div className="mt-2 flex gap-2"><StatusDot status={goal.status}/><span className="font-mono text-[9px] text-white/30">{goal.actions_used}/{goal.expected_actions} actions</span></div></div></div></div>)}</div> : <Empty text="The planner has not published subgoals for this run."/>}</Section></div> }
+function Evidence({ audit, report }: { audit: AgentAuditEntry[]; report: AgentTaskReport | null }) { return <div className="space-y-6"><Section title={`Runtime audit · ${audit.length}`} icon={<Activity size={15}/>}>{audit.length ? <div className="space-y-2">{audit.map((item) => <div key={item.id} className="grid grid-cols-[30px_minmax(0,1fr)_auto] gap-3 rounded-xl border border-white/[.07] bg-black/15 p-3 font-mono text-[10px]"><span className="text-white/32">#{item.step_idx}</span><span className={`truncate ${item.result.ok ? 'text-white/65' : 'text-[#ff9c9c]'}`}>{item.action_name}{item.intent ? ` · ${item.intent}` : ''}</span><span className="text-white/30">{item.elapsed_ms}ms</span></div>)}</div> : <Empty text="No audit rows have been persisted yet."/>}</Section><Section title="Evidence links" icon={<FileText size={15}/>}>{report?.evidence_links?.length ? <div className="flex flex-wrap gap-2">{report.evidence_links.map((link, index) => <a key={`${link.ref}-${index}`} href={link.kind === 'url' ? link.ref : undefined} target="_blank" rel="noreferrer" className="rounded-lg border border-white/[.1] bg-white/[.04] px-3 py-2 text-xs text-[#f7c85d]">{link.label || link.ref}</a>)}</div> : <Empty text="No evidence artifact has been attached to this execution."/>}</Section></div> }
+function Team({ messages }: { messages: AgentTeamMessage[] }) { return <Section title={`Team traffic · ${messages.length}`} icon={<MessageSquarePlus size={15}/>}>{messages.length ? <div className="space-y-2">{messages.map((item) => <div key={item.id} className="rounded-xl border border-white/[.08] bg-white/[.035] p-3"><div className="flex justify-between gap-3 font-mono text-[9px] text-[#f7c85d]"><span>{item.sender} → {item.receiver}</span><span className="text-white/28">{item.message_type}</span></div><p className="mt-2 text-xs leading-5 text-white/64">{item.message}</p></div>)}</div> : <Empty text="No delegation or report traffic has been persisted for this execution."/>}</Section> }
+function Action({ icon, label, onClick, busy, danger }: { icon: React.ReactNode; label: string; onClick: () => void; busy: boolean; danger?: boolean }) { return <button onClick={onClick} disabled={busy} className={`flex h-9 flex-1 items-center justify-center gap-1 rounded-lg border text-[10px] font-semibold ${danger ? 'border-[#ff8b8b]/20 bg-[#ff8b8b]/[.07] text-[#ff9c9c]' : 'border-white/[.1] bg-white/[.045] text-white/65 hover:bg-white/[.08]'}`}>{busy ? <Loader2 className="animate-spin" size={13}/> : icon}{label}</button> }
+function StatusDot({ status }: { status: string }) { const good = ['done', 'active'].includes(status); const bad = ['failed', 'stopped'].includes(status); return <span className={`rounded-md px-2 py-1 font-mono text-[9px] uppercase tracking-wider ${good ? 'bg-[#87d8b1]/10 text-[#87d8b1]' : bad ? 'bg-[#ff8b8b]/10 text-[#ff9c9c]' : 'bg-[#f4af25]/10 text-[#f7c85d]'}`}>{status.replace('_', ' ')}</span> }
+function Section({ title, icon, children }: { title: string; icon: React.ReactNode; children: React.ReactNode }) { return <section><h3 className="mb-3 flex items-center gap-2 font-mono text-[10px] uppercase tracking-[.14em] text-white/42">{icon}{title}</h3>{children}</section> }
+function Stat({ value, label }: { value: string; label: string }) { return <div className="rounded-xl border border-white/[.08] bg-white/[.035] p-3"><b className="text-xl tracking-[-.04em] text-white/85">{value}</b><span className="mt-1 block font-mono text-[9px] uppercase text-white/35">{label}</span></div> }
+function Bullets({ items, good }: { items: string[]; good?: boolean }) { return <ul className="space-y-2">{items.map((item, index) => <li key={`${item}-${index}`} className="flex gap-2 text-xs leading-5 text-white/62"><span className={good ? 'text-[#87d8b1]' : 'text-[#f7c85d]'}>{good ? '✓' : '•'}</span>{item}</li>)}</ul> }
+function Empty({ text }: { text: string }) { return <p className="rounded-xl border border-dashed border-white/[.1] bg-white/[.025] px-3 py-4 text-xs leading-5 text-white/35">{text}</p> }
+function Loading() { return <div className="grid h-48 place-items-center"><Loader2 className="animate-spin text-[#f4af25]"/></div> }
+function ErrorState({ text }: { text: string }) { return <div className="rounded-xl border border-[#ff8b8b]/20 bg-[#ff8b8b]/[.06] p-4 text-xs leading-5 text-[#ffb1b1]">{text}</div> }

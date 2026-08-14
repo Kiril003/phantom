@@ -13,8 +13,10 @@ import { request as req } from './api';
 export interface StartTaskResponse {
   task_id: string;
   started: boolean;
+  queued?: boolean;
   detail?: string;
   unsafe_mode?: boolean;
+  track?: 'foreground' | 'background';
 }
 
 export interface RouterStateSnapshot {
@@ -42,6 +44,20 @@ export interface AgentStatusSnapshot {
   background: AgentTrackSlotView;
 }
 
+export interface McpRuntimeServer {
+  name: string;
+  enabled: boolean;
+  online: boolean;
+  transport: string;
+  sandboxed: boolean;
+  risk_level: number;
+  tools: string[];
+}
+export interface AgentTeamMessage {
+  id: string; task_id: string; parent_task_id: string | null; sender: string;
+  receiver: string; message: string; message_type: string; created_at: string;
+}
+
 /** Phase 16 — POST /task/{id}/resume-as-conversation response shape. */
 export interface AgentResumeAsConversationResponse {
   task_id: string;
@@ -51,10 +67,12 @@ export interface AgentResumeAsConversationResponse {
 }
 
 export const agentApi = {
-  startTask: (goal: string, opts?: { unsafe_mode?: boolean }) =>
+  mcpRuntime: () => req<{ servers: McpRuntimeServer[] }>('GET', '/agent/mcp'),
+  startTask: (goal: string, opts?: { unsafe_mode?: boolean; track?: 'foreground' | 'background' }) =>
     req<StartTaskResponse>('POST', '/agent/task', {
       goal,
       unsafe_mode: !!opts?.unsafe_mode,
+      track: opts?.track ?? 'foreground',
     }),
   setSafety: (id: string, enabled: boolean) =>
     req<{ task_id: string; unsafe_mode: boolean }>(
@@ -76,6 +94,7 @@ export const agentApi = {
     return req<{ tasks: AgentTaskSummary[] }>('GET', `/agent/tasks?${qs.toString()}`);
   },
   getTask: (id: string) => req<AgentTaskDetail>('GET', `/agent/task/${id}`),
+  teamMessages: (id: string) => req<{ messages: AgentTeamMessage[] }>('GET', `/agent/task/${id}/team`),
   audit: (taskId?: string, limit = 50) => {
     const qs = new URLSearchParams();
     if (taskId) qs.set('task_id', taskId);

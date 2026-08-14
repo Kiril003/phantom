@@ -63,6 +63,10 @@ export const studioApi = {
     const qs = new URLSearchParams({ limit: String(limit) });
     return req<{ runs: CustomAgentRun[] }>('GET', `/studio/agents/${id}/runs?${qs.toString()}`);
   },
+  runsIndex: (limit = 200) => {
+    const qs = new URLSearchParams({ limit: String(limit) });
+    return req<{ runs: CustomAgentRun[] }>('GET', `/studio/runs?${qs.toString()}`);
+  },
   // Conversational builder.
   builderStart: (initial_intent = '') =>
     req<BuilderTurnResp>('POST', '/studio/builder/start', { initial_intent }),

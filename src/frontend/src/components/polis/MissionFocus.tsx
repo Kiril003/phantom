@@ -54,7 +54,7 @@ export function MissionFocus() {
         <button
           onClick={() => {
             focusMission(null);
-            setRoomTab('talk');
+            setRoomTab('work');
           }}
           className="min-w-[44px] min-h-[44px] rounded-xl flex items-center justify-center active:scale-[0.95]"
           style={{ background: 'var(--glass-subtle)', color: 'var(--ink-secondary)' }}

@@ -58,7 +58,7 @@ beforeEach(() => {
     loaded: true, view: 'world', focusMissionId: null,
     missions: [baseMission()], citizens: [], keys: [], gates: [],
     governor: { wave_size: 1, max_wave: 4, running_nodes: 1, queued_nodes: 2, night_mode: false },
-    budgetAlerts: {}, selectedMissionId: 'm1', roomTab: 'talk',
+    budgetAlerts: {}, selectedMissionId: 'm1', roomTab: 'work',
     chats: {}, transcripts: {}, artifacts: {}, openDoc: null,
     inspectorNodeId: null, chatBusy: false,
   });

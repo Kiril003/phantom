@@ -13,7 +13,19 @@ import type {
 import { polisApi } from '../services/polisApi';
 
 export type PolisView = 'world' | 'staff' | 'focus';
-export type RoomTab = 'talk' | 'docs' | 'graph' | 'plan' | 'citizens' | 'world';
+
+/** Розділи верхнього рівня. «Робота» — це вся місія одразу (наказ, хід, план);
+ * решта не належить місії й тому винесена з її ряду. */
+export type RoomTab = 'work' | 'citizens' | 'keys' | 'world';
+
+/** Старі назви вкладок ще живуть у посиланнях і тестах — усі вони вели у
+ * межах місії, тож ведуть у «роботу». */
+const LEGACY_TAB: Record<string, RoomTab> = {
+  talk: 'work', docs: 'work', graph: 'work', plan: 'work',
+};
+
+export const normalizeTab = (t: string): RoomTab =>
+  (LEGACY_TAB[t] ?? (['work', 'citizens', 'keys', 'world'].includes(t) ? t : 'work')) as RoomTab;
 
 interface PolisState {
   loaded: boolean;
@@ -86,7 +98,7 @@ export const usePolisStore = create<PolisState>((set, get) => ({
   budgetAlerts: {},
 
   selectedMissionId: null,
-  roomTab: 'talk',
+  roomTab: 'work',
   chats: {},
   transcripts: {},
   artifacts: {},
@@ -167,7 +179,7 @@ export const usePolisStore = create<PolisState>((set, get) => ({
     void get().loadArtifacts(id);
   },
 
-  setRoomTab: (t) => set({ roomTab: t }),
+  setRoomTab: (t) => set({ roomTab: normalizeTab(t) }),
 
   appendChat: (missionId, msg) =>
     set((st) => {
@@ -218,7 +230,8 @@ export const usePolisStore = create<PolisState>((set, get) => ({
   openArtifact: async (missionId, name) => {
     try {
       const doc = await polisApi.artifact(missionId, name);
-      set({ openDoc: doc, roomTab: 'docs' });
+      // читалка — накладка над роботою; розділ від цього не міняється
+      set({ openDoc: doc });
     } catch {
       /* ignore */
     }

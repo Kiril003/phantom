@@ -262,7 +262,7 @@ async def setup_default_tasks(tasker: Optional[LiveTasker] = None) -> LiveTasker
     if "alarms_ua" in tk.names:
         return tk
     from .layer_registry import get_layer_registry
-    from .sources.alarms_ua import get_default_alarms_ua
+    from .sources.alarms_ua import AlarmsUnavailable, get_default_alarms_ua
 
     registry = get_layer_registry()
     if not registry.has("air_raid_ua"):
@@ -273,7 +273,10 @@ async def setup_default_tasks(tasker: Optional[LiveTasker] = None) -> LiveTasker
 
     async def fetch_alarms_ua() -> list[Any]:
         if not adapter.configured():
-            return []
+            # Джерело без ключа не дивиться нікуди. Порожній список тут читався
+            # б як «тривог немає» — тобто типове розгортання, де ключа немає,
+            # малювало зелену тишу вічно, жодного разу нічого не спитавши.
+            raise AlarmsUnavailable("ALARMS_UA_KEY не задано — тривоги не опитуються")
         return await adapter.fetch()
 
     tk.register(

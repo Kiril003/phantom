@@ -134,6 +134,40 @@ async def test_an_empty_but_successful_answer_is_still_an_observation(monkeypatc
     assert await adapter.fetch() == []
 
 
+async def test_an_unconfigured_source_never_reports_calm():
+    """Типове розгортання — без ключа. Воно не має права казати «тиша».
+
+    `fetch_alarms_ua` повертав `[]`, коли адаптер не налаштований, і шар
+    підтверджував спокій кожні 30 секунд, нічого жодного разу не спитавши.
+    """
+    from geo.layer_registry import reload_layer_registry
+    from geo.sources.alarms_ua import AlarmsUAAdapter, reset_alarms_ua_for_tests
+    from geo.live_tasker import setup_default_tasks
+
+    reload_layer_registry()
+    reset_alarms_ua_for_tests(AlarmsUAAdapter(""))
+    tasker = LiveTasker()
+    await setup_default_tasks(tasker)
+    assert "alarms_ua" in tasker.names
+
+    seen: list = []
+
+    async def _capture(*args) -> None:
+        seen.append(args)
+
+    import geo.live_tasker as mod
+
+    original = mod.broadcast_observation
+    mod.broadcast_observation = _capture
+    try:
+        await tasker.tick_once("alarms_ua")
+    finally:
+        mod.broadcast_observation = original
+    assert seen == [], "шар без ключа підтвердив спокій"
+    stats = {s["name"]: s for s in tasker.stats()}["alarms_ua"]
+    assert stats["last_ok_at"] == 0.0
+
+
 async def _empty() -> list:
     return []
 

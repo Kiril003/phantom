@@ -1,11 +1,14 @@
 # PHANTOM OS — Інженерний Контекст
 
 ## Що це
-Живий AI-асистент на кастомному залізі. Не дашборд, не чат-бот — автономна система з характером,
-що спостерігає, адаптується, передбачає і діє. Працює на Radxa Dragon Q6A + ESP32-S3, дисплей 7" 1024×600.
+Живий AI-асистент. Не дашборд, не чат-бот — автономна система з характером,
+що спостерігає, адаптується, передбачає і діє. Працює на будь-якому десктопі з
+мінімально-необхідними характеристиками (пакується через Tauri: AppImage/deb/msi/nsis).
+Мінімальний екран: 1024×600 — це підлога, не полотно. Radxa Dragon Q6A — колишня
+перша ціль, тепер лише один із можливих хостів; ESP32-S3 — опційний аксесуар.
 
-## Архітектура (Dual-Node)
-- **Node 1 — Мозок**: Radxa Dragon Q6A / Linux ARM64
+## Архітектура (Мозок + Тіла)
+- **Мозок**: десктоп-застосунок / Linux x86-64 · ARM64, Windows (Tauri shell + FastAPI sidecar)
   - Frontend: React 18 + Vite 5 + TypeScript (strict) + Tailwind CSS + Framer Motion
   - Backend: Python 3.11 + FastAPI + asyncio + uvicorn
   - DB: SQLite (structured) + ChromaDB (vector memory)
@@ -13,9 +16,12 @@
   - STT: faster-whisper (primary, GPU) → Vosk (instant streaming fallback, CPU)
   - TTS: StyleTTS2 Ukrainian (patriotyk/styletts2-ukrainian checkpoint)
   - CV: OpenCV (face tracking → servo delta)
-- **Node 2 — Нерви**: ESP32-S3 / FreeRTOS + PlatformIO
-  - Sensors → JSON batch 500ms → Serial 921600 baud → Radxa
-  - Actuators ← event-driven JSON commands ← Radxa
+- **Тіла** (через symbiote — permission-gated команди, store-and-forward):
+  - Телефон-компаньйон — канонічне сенсорне тіло: phone.locate, phone.wifi_scan,
+    phone.ring/notify/speak (див. `src/backend/symbiote/commands.py`)
+  - ESP32-S3 — ОПЦІЙНИЙ аксесуар / FreeRTOS + PlatformIO (serial_enabled, за замовчуванням може бути відсутній)
+    - Sensors → JSON batch 500ms → Serial 921600 baud → ПК
+    - Actuators ← event-driven JSON commands ← ПК
 
 ## Стек версій
 React 18, Vite 5, TypeScript 5.4+ strict, Tailwind 3.4, Framer Motion 11,
@@ -29,8 +35,10 @@ ContextEngine — центральний для ВСІХ рішень. Коже�
 
 ## Правила Кодування (НЕПОРУШНІ)
 1. **Ніяких моків, TODO, заглушок, скорочень** — кожен файл повна реалізація
-2. **Touch targets: min 44×44px** — пристрій тач
-3. **UI: строго 1024×600** — без overflow, без скролу на головних екранах
+2. **Touch targets: min 44×44px** — тач-екрани підтримуються, точність миші не припускається
+3. **UI: 1024×600 — мінімум, не полотно** — на мінімумі без overflow і без скролу на головних
+   екранах; на більших екранах інтерфейс ДОБИРАЄ контент (док-панелі, більше рядків), а не
+   розтягується і не зумиться. Жодного `transform: scale()`, жодного min-width > 1024
 4. **Gemini завжди має fallback на Ollama** — timeout 5s → fallback
 5. **faster-whisper завжди має fallback на Vosk** — для стрімінгу
 6. **Секретні фічі — нативна поведінка** — без коментарів 'secret', без документації в UI
@@ -109,10 +117,10 @@ phantom-os/
 │   │   │   ├── tts_engine.py          # StyleTTS2 Ukrainian wrapper
 │   │   │   ├── wake_word.py           # Hotword detection
 │   │   │   └── voice_pipeline.py      # Full duplex voice loop
-│   │   ├── sensors/
-│   │   │   ├── serial_bridge.py       # pyserial-asyncio ESP32 ↔ Radxa
+│   │   ├── sensors/                   # драйвер ОПЦІЙНОГО аксесуара ESP32
+│   │   │   ├── serial_bridge.py       # pyserial-asyncio ESP32 ↔ ПК
 │   │   │   ├── sensor_parser.py       # JSON batch → typed SensorSnapshot
-│   │   │   └── command_sender.py      # Radxa → ESP32 commands
+│   │   │   └── command_sender.py      # ПК → ESP32 commands
 │   │   ├── vision/
 │   │   │   ├── face_tracker.py        # OpenCV face detection → servo delta
 │   │   │   └── camera_manager.py      # Camera lifecycle, frame pipeline
@@ -149,7 +157,7 @@ phantom-os/
 │   │   │   └── migrations/
 │   │   ├── tests/
 │   │   └── requirements.txt
-│   └── firmware/                      # ESP32-S3 PlatformIO
+│   └── firmware/                      # ESP32-S3 PlatformIO (опційний аксесуар)
 │       ├── platformio.ini
 │       ├── src/
 │       │   ├── main.cpp
@@ -165,7 +173,7 @@ phantom-os/
 ├── scripts/
 │   ├── setup.sh                       # Full environment setup
 │   ├── dev.sh                         # Start dev (frontend + backend)
-│   └── deploy.sh                      # Production deploy on Radxa
+│   └── deploy.sh                      # Production deploy
 ├── .claudeignore
 ├── .gitignore
 └── README.md
@@ -186,7 +194,7 @@ cd src/frontend && npx vitest           # Tests
 cd src/backend && uvicorn main:app --reload --host 0.0.0.0 --port 8000
 cd src/backend && pytest               # Tests
 
-# ESP32
+# ESP32 (лише якщо аксесуар присутній)
 cd src/firmware && pio run             # Build
 cd src/firmware && pio run -t upload   # Flash
 ```

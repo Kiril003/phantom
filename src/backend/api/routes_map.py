@@ -808,8 +808,11 @@ async def get_elevation(
     token_data: TokenPayload = Depends(require_auth),
 ) -> dict[str, Any]:
     """Fetch elevation for a single point."""
-    from geo.elevation import get_elevation_service
-    elev = await get_elevation_service().get_elevation(lat, lon)
+    from geo.elevation import ElevationUnavailable, get_elevation_service
+    try:
+        elev = await get_elevation_service().get_elevation(lat, lon)
+    except ElevationUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     return {"lat": lat, "lon": lon, "elevation_m": elev}
 
 
@@ -819,9 +822,12 @@ async def post_elevation_profile(
     token_data: TokenPayload = Depends(require_auth),
 ) -> dict[str, Any]:
     """Compute elevation profile along a path."""
-    from geo.elevation import get_elevation_service
+    from geo.elevation import ElevationUnavailable, get_elevation_service
     points = [(p[0], p[1]) for p in body.points]
-    profile = await get_elevation_service().get_profile(points)
+    try:
+        profile = await get_elevation_service().get_profile(points)
+    except ElevationUnavailable as exc:
+        raise HTTPException(status_code=503, detail=str(exc)) from exc
     return {"profile": [s.model_dump() for s in profile]}
 
 

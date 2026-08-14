@@ -23,6 +23,7 @@ export interface AnalysisPanelProps {
 export function AnalysisPanel({ open, onClose, selectedPath = [] }: AnalysisPanelProps) {
   const [profile, setProfile] = useState<{ distance_m: number; elevation_m: number }[]>([]);
   const [loading, setLoading] = useState(false);
+  const [refusal, setRefusal] = useState<string | null>(null);
   const [activeTool, setActiveTool] = useState<'none' | 'measure' | 'elevation'>('none');
 
   useEffect(() => {
@@ -33,11 +34,19 @@ export function AnalysisPanel({ open, onClose, selectedPath = [] }: AnalysisPane
 
   const fetchProfile = async () => {
     setLoading(true);
+    setRefusal(null);
     try {
       const res = await mapApi.elevationProfile(selectedPath);
       setProfile(res.profile);
     } catch (err) {
-      console.error('Failed to fetch elevation profile:', err);
+      // Бекенд відмовляє 503-ю, коли DEM не встановлено. Порожній графік без
+      // пояснення — та сама неправда, лише тихіша, тож несемо причину в панель.
+      setProfile([]);
+      setRefusal(
+        (err as { status?: number })?.status === 503
+          ? 'DEM не встановлено — рельєф нема з чого читати.'
+          : `Не вдалося отримати профіль: ${(err as Error)?.message ?? 'причина невідома'}`,
+      );
     } finally {
       setLoading(false);
     }
@@ -48,8 +57,16 @@ export function AnalysisPanel({ open, onClose, selectedPath = [] }: AnalysisPane
     return profile[profile.length - 1].distance_m;
   }, [profile]);
 
-  const minElev = useMemo(() => Math.min(...profile.map(p => p.elevation_m), 0), [profile]);
-  const maxElev = useMemo(() => Math.max(...profile.map(p => p.elevation_m), 0), [profile]);
+  // Порожній профіль повертаємо нулем окремо: сіяти нулем сам Math.min/max означало б,
+  // що мінімум ніколи не підніметься вище рівня моря, а вся Україна лежить вище.
+  const minElev = useMemo(
+    () => (profile.length === 0 ? 0 : Math.min(...profile.map(p => p.elevation_m))),
+    [profile],
+  );
+  const maxElev = useMemo(
+    () => (profile.length === 0 ? 0 : Math.max(...profile.map(p => p.elevation_m))),
+    [profile],
+  );
 
   const tactical = useMapStore((s) => s.tactical);
   const hasFix = tactical.fix;
@@ -130,6 +147,24 @@ export function AnalysisPanel({ open, onClose, selectedPath = [] }: AnalysisPane
                 <Mountain size={32} className="mx-auto" />
                 <div className="text-[10px] uppercase font-bold tracking-tighter">Побудуйте лінію для профілю висот</div>
               </div>
+            ) : loading ? (
+              <div className="py-10 text-center space-y-2 opacity-40 animate-pulse">
+                <Mountain size={32} className="mx-auto" />
+                <div className="text-[10px] uppercase font-bold tracking-tighter">Обчислення...</div>
+              </div>
+            ) : refusal ? (
+              <div className="py-8 text-center space-y-2" role="status">
+                <Mountain size={32} className="mx-auto opacity-40" />
+                <div className="text-[10px] uppercase font-bold tracking-tighter text-[color:var(--ink-secondary)]">
+                  Даних про висоту немає
+                </div>
+                <div className="px-2 text-[10px] leading-relaxed text-[color:var(--ink-muted)]">{refusal}</div>
+              </div>
+            ) : profile.length === 0 ? (
+              <div className="py-10 text-center space-y-2 opacity-40">
+                <Mountain size={32} className="mx-auto" />
+                <div className="text-[10px] uppercase font-bold tracking-tighter">Профілю ще немає</div>
+              </div>
             ) : (
               <>
                 <div className="grid grid-cols-2 gap-2">
@@ -144,54 +179,42 @@ export function AnalysisPanel({ open, onClose, selectedPath = [] }: AnalysisPane
                 </div>
 
                 <div className="h-48 w-full mt-4 bg-black/[0.04] rounded-xl border border-black/5 p-2 overflow-hidden">
-                  {loading ? (
-                    <div className="w-full h-full flex items-center justify-center animate-pulse text-[10px] text-[color:var(--ink-muted)] uppercase font-bold">
-                      Обчислення...
-                    </div>
-                  ) : profile.length > 0 ? (
-                    <ResponsiveContainer width="100%" height="100%">
-                      <AreaChart data={profile}>
-                        <defs>
-                          <linearGradient id="colorElev" x1="0" y1="0" x2="0" y2="1">
-                            <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3}/>
-                            <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
-                          </linearGradient>
-                        </defs>
-                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
-                        <XAxis 
-                          dataKey="distance_m" 
-                          hide 
-                        />
-                        <YAxis 
-                          domain={[minElev - 10, maxElev + 10]} 
-                          hide
-                        />
-                        <Tooltip 
-                          content={({ active, payload }) => {
-                            if (active && payload && payload.length) {
-                              const d = payload[0].payload;
-                              return (
-                                <div className="bg-ink-primary/95 border border-black/10 p-2 rounded text-[10px] font-bold">
-                                  <div>{d.distance_m.toFixed(0)} м</div>
-                                  <div className="text-amber-500">{d.elevation_m.toFixed(1)} м</div>
-                                </div>
-                              );
-                            }
-                            return null;
-                          }}
-                        />
-                        <Area 
-                          type="monotone" 
-                          dataKey="elevation_m" 
-                          stroke="#f59e0b" 
-                          fillOpacity={1} 
-                          fill="url(#colorElev)" 
-                          strokeWidth={2}
-                          isAnimationActive={false}
-                        />
-                      </AreaChart>
-                    </ResponsiveContainer>
-                  ) : null}
+                  <ResponsiveContainer width="100%" height="100%">
+                    <AreaChart data={profile}>
+                      <defs>
+                        <linearGradient id="colorElev" x1="0" y1="0" x2="0" y2="1">
+                          <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.3}/>
+                          <stop offset="95%" stopColor="#f59e0b" stopOpacity={0}/>
+                        </linearGradient>
+                      </defs>
+                      <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                      <XAxis dataKey="distance_m" hide />
+                      <YAxis domain={[minElev - 10, maxElev + 10]} hide />
+                      <Tooltip
+                        content={({ active, payload }) => {
+                          if (active && payload && payload.length) {
+                            const d = payload[0].payload;
+                            return (
+                              <div className="bg-ink-primary/95 border border-black/10 p-2 rounded text-[10px] font-bold">
+                                <div>{d.distance_m.toFixed(0)} м</div>
+                                <div className="text-amber-500">{d.elevation_m.toFixed(1)} м</div>
+                              </div>
+                            );
+                          }
+                          return null;
+                        }}
+                      />
+                      <Area
+                        type="monotone"
+                        dataKey="elevation_m"
+                        stroke="#f59e0b"
+                        fillOpacity={1}
+                        fill="url(#colorElev)"
+                        strokeWidth={2}
+                        isAnimationActive={false}
+                      />
+                    </AreaChart>
+                  </ResponsiveContainer>
                 </div>
               </>
             )}

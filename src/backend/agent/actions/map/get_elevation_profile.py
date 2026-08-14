@@ -8,8 +8,8 @@ from pydantic import Field
 
 from ...schemas import ActionResult, RiskLevel
 from ..base import Action, ActionContext
-from ._common import build_map_output
-from geo.elevation import ElevationService
+from ._common import MapMutation, build_map_output
+from geo.elevation import ElevationUnavailable, get_elevation_service
 
 
 class MapGetElevationProfile(Action):
@@ -26,17 +26,30 @@ class MapGetElevationProfile(Action):
 
     async def execute(self, ctx: ActionContext) -> ActionResult:
         t0 = time.monotonic()
-        
-        svc = ElevationService()
+
         coords = [(p[0], p[1]) for p in self.points]
-        profile = await svc.get_profile(coords)
-        
+        try:
+            profile = await get_elevation_service().get_profile(coords)
+        except ElevationUnavailable as exc:
+            # ok=False — щоб асистент переказав відмову, а не переспівав її своїм
+            # упевненим голосом як число.
+            return ActionResult(
+                ok=False,
+                error=str(exc),
+                error_class="ElevationUnavailable",
+                elapsed_ms=int((time.monotonic() - t0) * 1000),
+            )
+
         samples = [s.model_dump() for s in profile]
-        
+
         narrative = f"Розрахував профіль висоти для {len(self.points)} точок."
-        
+
         return ActionResult(
             ok=True,
-            output=build_map_output(narrative=narrative, extras={"samples": samples}),
+            output=build_map_output(
+                narrative=narrative,
+                mutation=MapMutation(op="narrate", payload={"samples": samples}),
+                extras={"samples": samples},
+            ),
             elapsed_ms=int((time.monotonic() - t0) * 1000),
         )

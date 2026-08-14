@@ -75,7 +75,11 @@ from fastapi.responses import StreamingResponse
 import os
 
 @router.get("/tiles/{region_id}.pmtiles")
-async def serve_pmtiles_file(region_id: str, request: Request):
+async def serve_pmtiles_file(
+    region_id: str,
+    request: Request,
+    auth: TokenPayload = Depends(require_auth),
+):
     """Serve a local PMTiles file with HTTP Range request support."""
     region = _mgr.get_region(region_id)
     if not region:

@@ -22,6 +22,28 @@ os.environ.setdefault("AI_GEMINI_API_KEY", "fake-api-key-for-tests")
 os.environ.setdefault("PHANTOM_SERIAL_ENABLED", "false")
 
 
+@pytest.fixture(autouse=True)
+def _restore_ai_router_providers():
+    """These tests inject `_RaisingProvider`/`_OkProvider` directly into
+    the process-wide `ai.provider.ai_router` singleton's `_providers`
+    dict — required, since `_probe_provider_recovered()` reads the
+    primary via `ai_router.get_provider()`. Left unrestored, a leftover
+    double becomes 'gemini' for every OTHER test in the same pytest
+    session that resolves the singleton afterward (observed: it made an
+    unrelated chat_pipeline test in
+    test_phase_audit_2026_08_15_chat_pipeline_tool_gate.py flake on
+    whichever double this file ran last)."""
+    from ai.provider import ai_router
+
+    saved_providers = dict(ai_router._providers)
+    saved_cooling = dict(ai_router._cooling)
+    yield
+    ai_router._providers.clear()
+    ai_router._providers.update(saved_providers)
+    ai_router._cooling.clear()
+    ai_router._cooling.update(saved_cooling)
+
+
 class _RaisingProvider:
     def __init__(self, exc):
         self.exc = exc
@@ -30,6 +52,15 @@ class _RaisingProvider:
     async def generate(self, *a, **kw):
         self.calls += 1
         raise self.exc
+
+    async def generate_no_tools(self, *a, **kw):
+        # These tests assign the double directly into the process-wide
+        # `ai_router._providers` singleton (not a fresh AIRouter()), so it
+        # can outlive this test file and be resolved by an unrelated
+        # later test's `ai_router.generate_no_tools(...)` call. Delegating
+        # to `generate()` mirrors AIProvider's own concrete default and
+        # keeps `.calls` accounting correct either way.
+        return await self.generate(*a, **kw)
 
 
 class _OkProvider:
@@ -40,6 +71,9 @@ class _OkProvider:
         from ai.provider import AIResponse
         self.calls += 1
         return AIResponse(content="OK", provider="gemini")
+
+    async def generate_no_tools(self, *a, **kw):
+        return await self.generate(*a, **kw)
 
 
 # ═════════════════════════════════════════════════════════════════════════════

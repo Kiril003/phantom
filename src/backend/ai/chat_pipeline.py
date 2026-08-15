@@ -14,7 +14,15 @@ tool-use turn:
    per-process nonce + 4000-char content cap so a malicious LLM
    cannot fake a tool-result marker in plain text).
 5. Ask the LLM for a final answer with the envelope appended to
-   history (no tools advertised this round).
+   history (no tools advertised this round) via
+   `ai_router.generate_no_tools(...)` — NOT `ai_router.generate(...)`.
+   `generate()` merges the full CHAT_DATA_TOOLS catalog whenever
+   `user_id is not None`, which used to make this "no tools" call
+   silently re-offer and execute any of the 59 chat tools directly
+   through `tool_executor.execute_tool`, bypassing point 1's allowlist
+   entirely (docs/design/tools-audit.md §3a). `generate_no_tools` has no
+   code path to a tool catalog at all, so this step is tool-free by
+   construction, not by convention.
 6. Sanitize the final answer through `output_safety.sanitize` before
    broadcast (TM-17B-I1 mitigation).
 
@@ -458,12 +466,14 @@ async def run(
         )
 
     try:
-        # Final LLM call with complete tool trace in history.
-        final_ans = await ai_router.generate(
+        # Final LLM call with complete tool trace in history. Uses
+        # generate_no_tools (not generate) so this turn is structurally
+        # incapable of executing a tool — see docs/design/tools-audit.md
+        # §3a and ai/provider.py:AIRouter.generate_no_tools.
+        final_ans = await ai_router.generate_no_tools(
             user_message=user_message,
             system_prompt=sentient_prompt,
             history=current_history,
-            user_id=user_id,
             provider_hint=provider_hint,
             model_override=model_override,
         )
@@ -529,11 +539,14 @@ async def _plain_generate(
                 tokens_used=0,
             )
 
-    ans = await ai_router.generate(
+    # generate_no_tools (not generate): this function's own contract is
+    # "without tools" (fast-track greetings + Step-5-failure fallback) —
+    # calling plain `generate()` with a real user_id re-opened the same
+    # TM-17B-E2 gate leak as Step 5 (docs/design/tools-audit.md §3a).
+    ans = await ai_router.generate_no_tools(
         user_message=user_message,
         system_prompt=system_prompt,
         history=history,
-        user_id=user_id,
         provider_hint=provider_hint,
         model_override=model_override,
     )

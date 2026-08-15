@@ -96,6 +96,42 @@ class AIProvider(ABC):
     ) -> AIResponse:
         """Return a complete AIResponse (non-streaming)."""
 
+    async def generate_no_tools(
+        self,
+        user_message: str,
+        system_prompt: str,
+        history: list[dict],
+        *,
+        model_override: str | None = None,
+    ) -> AIResponse:
+        """Tool-free generation — the ONLY method a caller that wants a
+        genuinely tool-free turn (e.g. chat_pipeline's 'final answer, no
+        tools advertised' step) may call.
+
+        Default implementation: delegate to `generate()` with `user_id`
+        omitted. Every provider's `generate()` merge logic for the chat
+        data-tool catalog is gated on `user_id is not None`
+        (see gemini_provider.py), so dropping it here keeps this base
+        path tool-free by construction — without a caller-supplied flag
+        that could be forgotten.
+
+        `GeminiProvider` overrides this with a stronger guarantee: a
+        method body that has zero references to CHAT_DATA_TOOLS or
+        `execute_tool` at all, so it cannot regress even if a future
+        change loosens the user_id gate inside `generate()`
+        (docs/design/tools-audit.md §3a — the TM-17B-E2 gate leak this
+        closes).
+        """
+        kwargs: dict[str, object] = {"user_id": None}
+        generate_code = getattr(self.generate, "__code__", None)
+        if (
+            model_override
+            and generate_code is not None
+            and "model_override" in generate_code.co_varnames
+        ):
+            kwargs["model_override"] = model_override
+        return await self.generate(user_message, system_prompt, history, **kwargs)
+
     @abstractmethod
     async def generate_stream(
         self,
@@ -207,9 +243,65 @@ class AIRouter:
         provider_hint: str | None = None,
         model_override: str | None = None,
     ) -> AIResponse:
-        """Generate response with primary-fallback resilience."""
+        """Generate response with primary-fallback resilience. May offer
+        (and execute) chat data tools when the resolved provider supports
+        it — see `generate_no_tools` for the call that structurally
+        cannot."""
+        return await self._generate_impl(
+            user_message, system_prompt, history,
+            task_id=task_id, user_id=user_id, provider_hint=provider_hint,
+            model_override=model_override, method_name="generate",
+        )
+
+    async def generate_no_tools(
+        self,
+        user_message: str,
+        system_prompt: str,
+        history: list[dict],
+        *,
+        task_id: str | None = None,
+        provider_hint: str | None = None,
+        model_override: str | None = None,
+    ) -> AIResponse:
+        """Tool-free generation with the same primary/fallback resilience
+        as `generate()`. This is the ONLY router entry point a caller that
+        needs a genuinely tool-free turn may use — e.g. chat_pipeline's
+        Step 5 ('final answer, no tools advertised this round').
+
+        Deliberately takes no `user_id`: every provider's tool-merge gate
+        keys off `user_id is not None`, and dropping the parameter here
+        means there is no argument a caller could pass that would
+        re-enable it. Dispatches to `provider.generate_no_tools(...)`,
+        which `GeminiProvider` overrides with a method that has zero code
+        path to `CHAT_DATA_TOOLS` / `execute_tool` at all — closing
+        docs/design/tools-audit.md §3a's TM-17B-E2 gate leak by removing
+        the capability, not by asking the call not to use it.
+        """
+        return await self._generate_impl(
+            user_message, system_prompt, history,
+            task_id=task_id, user_id=None, provider_hint=provider_hint,
+            model_override=model_override, method_name="generate_no_tools",
+        )
+
+    async def _generate_impl(
+        self,
+        user_message: str,
+        system_prompt: str,
+        history: list[dict],
+        *,
+        task_id: str | None,
+        user_id: str | None,
+        provider_hint: str | None,
+        model_override: str | None,
+        method_name: str,
+    ) -> AIResponse:
+        """Shared primary/fallback resilience loop behind `generate()` and
+        `generate_no_tools()`. `method_name` selects which bound method is
+        actually awaited on the provider — the two public wrappers exist
+        so the CALL SITE states its intent unambiguously; this helper only
+        avoids duplicating the retry/cooldown machinery between them."""
         if not await _runtime_note_llm_call(task_id):
-            await _write_budget_exhausted_audit(task_id, caller="generate")
+            await _write_budget_exhausted_audit(task_id, caller=method_name)
             raise RuntimeError(f"call_budget_exhausted: cap reached")
 
         from ai.tool_use import ToolErrorKind
@@ -225,7 +317,9 @@ class AIRouter:
         for prov_idx, prov_name in enumerate(sequence):
             provider = self.get_provider(prov_name)
             if provider is None: continue
-            
+
+            bound_method = getattr(provider, method_name)
+
             # Phase 30 — Model selection logic
             effective_model = model_override
             if not effective_model:
@@ -241,7 +335,7 @@ class AIRouter:
             is_fallback = prov_idx > 0
             extra_retries = 0 if is_fallback else _RATE_LIMIT_RETRIES
             tries = 0
-            
+
             while True:
                 tries += 1
                 await self._respect_min_interval(prov_name)
@@ -252,19 +346,20 @@ class AIRouter:
                         "user_message": user_message,
                         "system_prompt": system_prompt,
                         "history": history,
-                        "user_id": user_id,
                     }
-                    generate_code = getattr(provider.generate, "__code__", None)
+                    if method_name == "generate":
+                        gen_kwargs["user_id"] = user_id
+                    bound_code = getattr(bound_method, "__code__", None)
                     if (
                         effective_model
-                        and generate_code is not None
-                        and "model_override" in generate_code.co_varnames
+                        and bound_code is not None
+                        and "model_override" in bound_code.co_varnames
                     ):
                         gen_kwargs["model_override"] = effective_model
 
                     timeout_to_use = config.ai_timeout_s if is_fallback else config.ai_primary_timeout_s
                     result = await asyncio.wait_for(
-                        provider.generate(**gen_kwargs),
+                        bound_method(**gen_kwargs),
                         timeout=timeout_to_use,
                     )
                     # Success
@@ -272,29 +367,38 @@ class AIRouter:
                     # Phase 30: Map technical name back to canonical for the UI
                     ui_name = "gemini" if prov_name == "gemini-flash" else prov_name
                     result.provider = ui_name
-                    
+
                     self._active = prov_name
                     self._sync_context(prov_name)
                     self._last_call_at[prov_name] = time.monotonic()
                     self._last_call_summary[prov_name] = {
                         "at": _utc_now_iso(), "success": True, "tool": None,
                     }
+                    if is_fallback:
+                        # D3-E-6: `phantom_ai_router_fallthrough_total` was
+                        # registered in observability.py but never incremented
+                        # anywhere, so it read zero forever — operators had no
+                        # signal for how often the primary provider was failing
+                        # over (quota exhaustion, outages), which is exactly what
+                        # the metric exists to surface.
+                        from observability import ai_router_fallthrough_total
+                        ai_router_fallthrough_total.inc()
                     return result
                 except Exception as exc:
                     last_exc = exc
                     kind, _, _ = _classify_provider_exception(prov_name, exc)
-                    logger.warning("AIRouter.generate: %s failed (%s): %s", prov_name, kind, exc)
-                    
+                    logger.warning("AIRouter.%s: %s failed (%s): %s", method_name, prov_name, kind, exc)
+
                     if kind == ToolErrorKind.QUOTA_EXHAUSTED:
                         self._mark_quota_exhausted(prov_name)
                         break
-                    
+
                     if kind == ToolErrorKind.INVALID_ARGS:
                         # Technical error (like Gemini 400) — don't retry same provider,
                         # fall through to NEXT provider immediately.
-                        logger.warning("AIRouter.generate: %s rejected arguments, falling through to next", prov_name)
+                        logger.warning("AIRouter.%s: %s rejected arguments, falling through to next", method_name, prov_name)
                         break
-                    
+
                     # Handle your specific memory error
                     if prov_name == "ollama" and "memory" in str(exc).lower():
                         self._mark_cooling(prov_name, 300, "out_of_memory")
@@ -303,19 +407,19 @@ class AIRouter:
                     if kind == ToolErrorKind.RATE_LIMIT and tries <= extra_retries:
                         await asyncio.sleep(self._compute_backoff(None, tries))
                         continue
-                    
+
                     if kind == ToolErrorKind.RATE_LIMIT:
                         self._mark_cooling(prov_name, _COOLING_RATE_LIMIT_S, "rate_limit")
                         break
-                    
+
                     if kind in {ToolErrorKind.PROVIDER_UNAVAILABLE, ToolErrorKind.NETWORK, ToolErrorKind.TIMEOUT} and tries <= _TRANSIENT_RETRIES:
                         await asyncio.sleep(0.5)
                         continue
-                    
+
                     if kind == ToolErrorKind.PROVIDER_UNAVAILABLE:
                         self._mark_cooling(prov_name, _COOLING_PROVIDER_5XX_S, "provider_unavailable")
                     break
-        
+
         # If we got here, every provider in the sequence failed.
         # If any of them were quota-exhausted, raise the specific error
         # so the loop can park.

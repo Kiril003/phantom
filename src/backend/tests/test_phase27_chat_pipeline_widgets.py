@@ -269,8 +269,10 @@ class TestSideEffectStillDispatches:
         monkeypatch.setattr(
             "ai.chat_tool_dispatcher.dispatch", _stub_dispatch
         )
+        # Step 5 now calls generate_no_tools, not generate (2026-08-15,
+        # docs/design/tools-audit.md §3a — closes the TM-17B-E2 gate leak).
         monkeypatch.setattr(
-            chat_pipeline.ai_router, "generate", _stub_generate
+            chat_pipeline.ai_router, "generate_no_tools", _stub_generate
         )
 
         result = await chat_pipeline.run(

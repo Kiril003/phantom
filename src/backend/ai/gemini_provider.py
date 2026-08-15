@@ -351,6 +351,90 @@ class GeminiProvider(AIProvider):
                 tokens_used=tokens_total,
             )
 
+    async def generate_no_tools(
+        self,
+        user_message: str,
+        system_prompt: str,
+        history: list[dict],
+        *,
+        model_override: str | None = None,
+    ) -> AIResponse:
+        """Tool-free generation. Structurally cannot execute a tool: this
+        method never imports/references CHAT_DATA_TOOLS, RESPONSE_FORM_TOOLS,
+        DATA_TOOL_NAMES or `execute_tool`, never builds a `tools=` catalog,
+        and never sets `tool_config` on the request — there is no branch in
+        this function body that could dispatch a tool call, regardless of
+        `config.chat_tools_enabled` or any argument a caller passes.
+
+        docs/design/tools-audit.md §3a: `generate()` above merges the full,
+        unfiltered 59-tool CHAT_DATA_TOOLS catalog whenever
+        `config.chat_tools_enabled` is True and `user_id is not None` — a
+        condition every `chat_pipeline.py` caller satisfied, including the
+        turn documented as 'final answer, no tools advertised'
+        (chat_pipeline.py Step 5) and the 'no tools' fast-track/fallback
+        path (`_plain_generate`). That let the model pick, and this
+        provider execute, any of the 59 chat tools directly via
+        `ai.tool_executor.execute_tool` — bypassing `chat_tool_dispatcher`'s
+        allowlist entirely. This method is the fix: chat_pipeline's
+        tool-free calls now route through `ai_router.generate_no_tools()`
+        (see `AIRouter.generate_no_tools`), which calls this method instead
+        of `generate()`, so those turns are tool-free by construction, not
+        by a caller remembering to pass a flag.
+        """
+        from google.genai import types
+
+        client = _get_client()
+        contents = _build_contents(user_message, history)
+        model_name = model_override or config.ai_gemini_model
+
+        gen_kwargs: dict[str, Any] = dict(
+            system_instruction=system_prompt,
+            temperature=config.ai_temperature,
+            top_p=config.ai_top_p,
+            top_k=40,
+            max_output_tokens=config.ai_max_tokens,
+            safety_settings=[types.SafetySetting(**s) for s in _SAFETY_OFF],
+        )
+        if "json" in system_prompt.lower():
+            gen_kwargs["response_mime_type"] = "application/json"
+
+        gen_config = types.GenerateContentConfig(**gen_kwargs)
+        response = await client.aio.models.generate_content(
+            model=model_name,
+            contents=contents,
+            config=gen_config,
+        )
+
+        tokens_total = 0
+        if hasattr(response, "usage_metadata") and response.usage_metadata:
+            tokens_total = getattr(response.usage_metadata, "total_token_count", 0) or 0
+
+        text_parts: list[str] = []
+        candidate = response.candidates[0] if response.candidates else None
+        finish_reason = getattr(candidate, "finish_reason", None) if candidate else None
+        if candidate and candidate.content and candidate.content.parts:
+            for part in candidate.content.parts:
+                if hasattr(part, "text") and part.text:
+                    text_parts.append(part.text)
+
+        full_text = " ".join(text_parts).strip() or (response.text or "")
+        form, content, attachments = parse_plain_text(full_text)
+        if not content and not attachments:
+            logger.warning(
+                "Gemini (no-tools) returned empty plain-text response; "
+                "model=%s tokens=%d finish_reason=%s",
+                model_name, tokens_total, finish_reason,
+            )
+            content = "Не встиг сформулювати — перепитай?"
+
+        return AIResponse(
+            content=content,
+            response_form=form,
+            attachments=attachments,
+            provider="gemini",
+            tokens_used=tokens_total,
+        )
+
     async def generate_raw(
         self,
         *,

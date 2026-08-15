@@ -195,8 +195,11 @@ class TestDegradePaths:
         monkeypatch.setattr(
             chat_pipeline.ai_router, "call_with_tools", _stub_cwt
         )
+        # "hi" fast-tracks straight to _plain_generate, which (2026-08-15,
+        # docs/design/tools-audit.md §3a) now calls generate_no_tools —
+        # NOT generate — so this turn is structurally tool-free.
         monkeypatch.setattr(
-            chat_pipeline.ai_router, "generate", _stub_generate
+            chat_pipeline.ai_router, "generate_no_tools", _stub_generate
         )
         result = await chat_pipeline.run(
             user_message="hi", system_prompt="sys", history=[],
@@ -223,8 +226,10 @@ class TestDegradePaths:
         monkeypatch.setattr(
             chat_pipeline.ai_router, "call_with_tools", _broken_cwt
         )
+        # "hi" fast-tracks straight to _plain_generate, which now calls
+        # generate_no_tools (docs/design/tools-audit.md §3a).
         monkeypatch.setattr(
-            chat_pipeline.ai_router, "generate", _stub_generate
+            chat_pipeline.ai_router, "generate_no_tools", _stub_generate
         )
         result = await chat_pipeline.run(
             user_message="hi", system_prompt="sys", history=[],
@@ -264,8 +269,10 @@ class TestDegradePaths:
         monkeypatch.setattr(
             "ai.chat_tool_dispatcher.dispatch", _stub_dispatch
         )
+        # "hi" fast-tracks straight to _plain_generate, which now calls
+        # generate_no_tools (docs/design/tools-audit.md §3a).
         monkeypatch.setattr(
-            chat_pipeline.ai_router, "generate", _stub_generate
+            chat_pipeline.ai_router, "generate_no_tools", _stub_generate
         )
         # Ensure we don't hit the wall-clock deadline in the test
         monkeypatch.setattr("time.monotonic", lambda: 0.0)

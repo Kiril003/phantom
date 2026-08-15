@@ -26,6 +26,9 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PublicKey,
 )
 
+from node.identity import key_path as _identity_key_path
+from node.identity import load_or_create_key as _load_identity_key
+from node.identity import public_hex as _identity_public_hex
 from paths import REPO_ROOT, resolve_data_dir
 
 _TOML_PATH = REPO_ROOT / "phantom_node.toml"
@@ -33,33 +36,15 @@ _KEY_NAME = "node_ed25519.key"
 
 
 def _key_path() -> Path:
-    d = resolve_data_dir("identity")
-    d.mkdir(parents=True, exist_ok=True)
-    return d / _KEY_NAME
+    return _identity_key_path()
 
 
 def _load_or_create_key() -> Ed25519PrivateKey:
-    p = _key_path()
-    if p.exists():
-        key = serialization.load_pem_private_key(p.read_bytes(), password=None)
-        if isinstance(key, Ed25519PrivateKey):
-            return key
-    key = Ed25519PrivateKey.generate()
-    p.write_bytes(
-        key.private_bytes(
-            serialization.Encoding.PEM,
-            serialization.PrivateFormat.PKCS8,
-            serialization.NoEncryption(),
-        )
-    )
-    p.chmod(0o600)
-    return key
+    return _load_identity_key()
 
 
 def _public_hex(pub: Ed25519PublicKey) -> str:
-    return pub.public_bytes(
-        serialization.Encoding.Raw, serialization.PublicFormat.Raw
-    ).hex()
+    return _identity_public_hex(pub)
 
 
 def _canonical(body: dict[str, Any]) -> bytes:

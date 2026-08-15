@@ -1,8 +1,14 @@
 import { Outlet } from 'react-router-dom';
 import { StatusBar } from '../components/core/StatusBar';
 import { FloatingToolbar } from '../components/core/FloatingToolbar';
+import { useMapOpenNavigator } from '../hooks/useMapOpenNavigator';
 
 export default function DashboardLayout() {
+  // Every in-app route (/, /map, /chat, /settings, ...) is a child route
+  // rendered inside this layout, so this is alive no matter which screen
+  // is showing — the one place `map.open_map` can actually be received
+  // outside of the map screen itself. See useMapOpenNavigator.ts.
+  useMapOpenNavigator();
   return (
     <div
       className="flex flex-col h-screen w-screen overflow-hidden font-sans"

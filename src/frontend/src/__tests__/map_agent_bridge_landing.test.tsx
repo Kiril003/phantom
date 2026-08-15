@@ -16,6 +16,14 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, render } from '@testing-library/react';
 
+const navigateSpy = vi.fn();
+const locationState = { pathname: '/chat' };
+
+vi.mock('react-router-dom', async () => {
+  const actual = await vi.importActual<object>('react-router-dom');
+  return { ...actual, useNavigate: () => navigateSpy, useLocation: () => locationState };
+});
+
 vi.mock('../services/websocket', () => {
   const handlers: Record<string, ((msg: unknown) => void)[]> = {};
   return {
@@ -39,6 +47,7 @@ vi.mock('../services/websocket', () => {
 
 import { wsClient } from '../services/websocket';
 import { useMapAgentBridge } from '../hooks/useMapAgentBridge';
+import { useMapOpenNavigator } from '../hooks/useMapOpenNavigator';
 import { useMapStore } from '../stores/mapStore';
 
 function dispatch(op: string, payload: Record<string, unknown>, narrative = ''): void {
@@ -57,6 +66,11 @@ function BridgeHarness(): JSX.Element {
   return <div data-testid="bridge-harness" />;
 }
 
+function OpenNavigatorHarness(): JSX.Element {
+  useMapOpenNavigator();
+  return <div data-testid="open-navigator-harness" />;
+}
+
 const DEFAULT_LAYERS = {
   base: true, presence: true, wardriving: true, heatmap: false,
   intel: true, recon: false, facts: true, cliff_scree: false,
@@ -73,6 +87,8 @@ beforeEach(() => {
     routing: false,
     routeError: null,
   });
+  navigateSpy.mockClear();
+  locationState.pathname = '/chat';
 });
 
 afterEach(() => {
@@ -182,5 +198,38 @@ describe('useMapAgentBridge — map.plan_route lands on the map', () => {
       primary: { ...PRIMARY, geometry: { type: 'LineString', coordinates: [[30.5, 50.45]] } },
     });
     expect(useMapStore.getState().route).toBeNull();
+  });
+});
+
+describe('useMapOpenNavigator — map.open_map actually opens the map', () => {
+  it('navigates to /map on an open_map mutation received while on another screen', () => {
+    locationState.pathname = '/chat';
+    render(<OpenNavigatorHarness />);
+
+    dispatch('open_map', { reason: 'show frontline' }, 'Відкриваю мапу — show frontline.');
+
+    expect(navigateSpy).toHaveBeenCalledWith('/map');
+    expect(useMapStore.getState().toast).toContain('Відкриваю мапу');
+  });
+
+  it('does not navigate again when already on /map (no-op, not a loop)', () => {
+    locationState.pathname = '/map';
+    render(<OpenNavigatorHarness />);
+
+    dispatch('open_map', { reason: '' }, 'Відкриваю мапу.');
+
+    expect(navigateSpy).not.toHaveBeenCalled();
+    // The toast still fires — the operator gets the "why" even if the
+    // screen doesn't change, same as useMapAgentBridge's own toast path.
+    expect(useMapStore.getState().toast).toContain('Відкриваю мапу');
+  });
+
+  it('ignores non-open_map ops on the same channel', () => {
+    locationState.pathname = '/chat';
+    render(<OpenNavigatorHarness />);
+
+    dispatch('set_view', { center: [30.5, 50.45], zoom: 12 }, 'jumped');
+
+    expect(navigateSpy).not.toHaveBeenCalled();
   });
 });

@@ -12,7 +12,11 @@ def test_artifact_config_defaults():
 
 def test_respond_artifact_in_catalog():
     assert any(t["name"] == "respond_artifact" for t in RESPONSE_FORM_TOOLS)
-    assert _FORM_MAP["respond_artifact"] == "react_artifact"
+    # chat-teardown §2.2 — must be a legal `ResponseForm` member
+    # (chat.ts:4-18), NOT the `react_artifact` SceneKind/ChatToolScene
+    # discriminator (chat.ts:613). Those are two different names on
+    # purpose; see `_FORM_TO_SCENE_KIND` in response_formatter.py.
+    assert _FORM_MAP["respond_artifact"] == "artifact"
 
 
 def test_parse_artifact_builds_panel(monkeypatch):
@@ -21,10 +25,36 @@ def test_parse_artifact_builds_panel(monkeypatch):
         "respond_artifact",
         {"title": "Pulse", "code": "export default function App() {}"},
     )
-    assert form == "react_artifact"
+    assert form == "artifact"
     art = next(a for a in atts if a["type"] == "artifact_data")
     assert art["data"]["title"] == "Pulse"
     assert art["data"]["code"] == "export default function App() {}"
+
+
+# ── chat-teardown §2.2 — wire-contract guard ────────────────────────────────
+#
+# `response_form` is typed `ResponseForm` on the frontend (a closed
+# 14-member union in src/shared/types/chat.ts) but travels as a bare
+# `str` on the backend with no schema enforcement. Nothing stopped
+# `_FORM_MAP` from mapping a tool name to an illegal value — it happened
+# for real ("react_artifact", fixed above) and went unnoticed because
+# the offending messages always also carried a `scene` envelope, so
+# `ResponseRenderer`'s default branch (which would have silently
+# rendered it as plain markdown) never actually ran in practice.
+#
+# This test does not depend on that specific historical string — it
+# proves the general guard: ANY illegal value reaching the end of
+# `parse_function_call` must raise, not travel. Before the guard
+# existed, this failed with "DID NOT RAISE" (illegal_form ==
+# "not_a_real_response_form" — trivially not a valid form under any
+# circumstance — sailed straight through). Injecting the entry via
+# monkeypatch rather than hardcoding today's real bug means this test
+# still means something even after "react_artifact" itself is a
+# distant memory.
+def test_parse_function_call_rejects_illegal_response_form(monkeypatch):
+    monkeypatch.setitem(_FORM_MAP, "respond_bogus_widget", "not_a_real_response_form")
+    with pytest.raises(ValueError, match="not_a_real_response_form"):
+        parse_function_call("respond_bogus_widget", {})
 
 
 def test_parse_artifact_no_code_degrades_to_text(monkeypatch):
@@ -218,9 +248,15 @@ async def test_widget_response_studio_failure_react_code_falls_to_legacy(monkeyp
         choice, "u", None,  # type: ignore[arg-type]
         user_message="візуалізуй",
     )
-    assert resp.response_form == "react_artifact"
+    # chat-teardown §2.2 — response_form must stay a legal ResponseForm
+    # member ("artifact"); the raw-code Sandpack renderer is still
+    # reached, but via message.scene.kind == "react_artifact", not via
+    # this field. See _FORM_TO_SCENE_KIND in response_formatter.py.
+    assert resp.response_form == "artifact"
     art = next(a for a in resp.attachments if a["type"] == "artifact_data")
     assert art["data"]["code"] == "export default function App() {}"
+    scene = next(a for a in resp.attachments if a["type"] == "scene")
+    assert scene["data"]["kind"] == "react_artifact"
 
 
 @pytest.mark.asyncio

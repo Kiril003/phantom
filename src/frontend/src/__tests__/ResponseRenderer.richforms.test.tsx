@@ -83,4 +83,27 @@ describe('rich response forms', () => {
     );
     expect(container.textContent).toContain('просто текст');
   });
+
+  // chat-teardown §2.2 — `response_form` is typed `ResponseForm` (a
+  // closed union in @shared/types/chat.ts) but arrives over the wire as
+  // an untyped string with no runtime enforcement on either side. This
+  // shipped for real: the backend's `_FORM_MAP` mapped `respond_artifact`
+  // to `'react_artifact'`, which is a SceneKind/ChatToolScene
+  // discriminator (chat.ts:613), never a member of ResponseForm
+  // (chat.ts:4-18). It went unnoticed because such messages always also
+  // carried a `scene` envelope, which MessageBubble renders instead of
+  // ever calling ResponseRenderer — so this exact illegal value never
+  // hit the switch below in production. If it ever does (this message
+  // has no scene, forcing MessageBubble to fall through to
+  // ResponseRenderer), it must be surfaced loudly, not quietly rendered
+  // as if it were ordinary markdown.
+  it('surfaces an unknown response_form instead of silently degrading to plain markdown', () => {
+    const illegalForm = 'react_artifact' as unknown as ResponseForm;
+    const { getByRole } = render(
+      <ResponseRenderer message={msg(illegalForm, [], 'секретний вміст артефакту')} />
+    );
+    const alert = getByRole('alert');
+    expect(alert.textContent).toContain('react_artifact');
+    expect(alert.textContent).toContain('секретний вміст артефакту');
+  });
 });

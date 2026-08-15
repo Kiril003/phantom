@@ -379,7 +379,16 @@ _FORM_MAP: dict[str, str] = {
     "respond_alarm":    "text",
     "respond_timer":    "text",
     "respond_calendar": "text",
-    "respond_artifact": "react_artifact",
+    # chat-teardown §2.2 — was "react_artifact", which is a `SceneKind` /
+    # `ChatToolScene` discriminator (chat.ts:613), NOT a member of the
+    # `ResponseForm` union (chat.ts:4-18). Putting it on `response_form`
+    # violated CLAUDE.md rule #7 (shared types) on every legacy-fallback
+    # artifact reply; it went unnoticed because the message always also
+    # carries a `scene` envelope, and MessageBubble renders that instead
+    # of ever reading `response_form` for actual display. "artifact" is
+    # the existing legal `ResponseForm` member (chat.ts:17); the scene
+    # kind itself is unaffected — see `_FORM_TO_SCENE_KIND` below.
+    "respond_artifact": "artifact",
 }
 
 
@@ -402,6 +411,13 @@ _FORM_MAP: dict[str, str] = {
 # (Recharts wrapper + d3 force/tree/flow wrapper). `mixed` still has
 # no preset coverage (would need a multi-payload composer beyond the
 # current single-attachment lookup) — left on the legacy renderer.
+#
+# `artifact` (the `ResponseForm` member) maps to the `react_artifact`
+# `SceneKind`/`ChatToolScene` discriminator — the two names differ on
+# purpose: `artifact` is the wire-legal response form (chat-teardown
+# §2.2), `react_artifact` is the ChatScene tool-scene kind that renders
+# it via Sandpack. Do not "fix" this back to a matching pair — that's
+# what caused the violation.
 _FORM_TO_SCENE_KIND: dict[str, str] = {
     "text": "text",
     "markdown": "text",
@@ -411,7 +427,7 @@ _FORM_TO_SCENE_KIND: dict[str, str] = {
     "metric_cards": "list",
     "chart": "chart",
     "diagram": "diagram",
-    "react_artifact": "react_artifact",
+    "artifact": "react_artifact",
 }
 
 _ARTIFACT_CAPS = frozenset(
@@ -466,6 +482,40 @@ def scene_kind_for_form(response_form: str) -> str | None:
     """Return the SceneKind matching the given ResponseForm, or None
     when no preset coverage applies on Day-4 (chart/diagram/mixed)."""
     return _FORM_TO_SCENE_KIND.get(response_form)
+
+
+# ── Wire-contract guard (chat-teardown §2.2) ───────────────────────────────
+#
+# `ChatMessage.response_form` is typed `ResponseForm` in
+# `src/shared/types/chat.ts` — a closed 14-member string union — but on
+# this side of the wire it is plain `str` with no schema enforcement
+# (Pydantic model, DB column, and every `AIResponse.response_form` field
+# are all bare `str`). Nothing stopped `_FORM_MAP` (or any future
+# producer) from emitting a value outside that union; it happened once
+# already ("react_artifact", fixed above) and stayed invisible because
+# the offending messages always also carried a `scene` envelope, so the
+# frontend never actually rendered `response_form` for them. Keep this
+# set in lockstep with the `ResponseForm` union in chat.ts:4-18.
+_KNOWN_RESPONSE_FORMS = frozenset({
+    "text", "markdown", "chart", "diagram", "map", "terminal", "code",
+    "metric_cards", "comparison", "timeline", "definition",
+    "stat_highlight", "artifact", "mixed",
+})
+
+
+def _validate_response_form(form: str) -> str:
+    """Raise loudly if `form` is not a legal `ResponseForm` member,
+    instead of letting it quietly reach the wire (CLAUDE.md rule #7:
+    shared types). Call this at every point a `response_form` value is
+    finalized before being returned/persisted."""
+    if form not in _KNOWN_RESPONSE_FORMS:
+        raise ValueError(
+            f"response_form {form!r} is not a member of the shared "
+            "ResponseForm union (src/shared/types/chat.ts) — refusing "
+            "to put an illegal value on the wire. See "
+            "docs/design/chat-teardown.md §2.2."
+        )
+    return form
 
 
 def _scene_text_panel(idx: int, markdown: str) -> dict[str, Any]:
@@ -978,6 +1028,13 @@ def parse_function_call(
                 "source": fn_args.get("source", ""),
             },
         })
+
+    # chat-teardown §2.2 — `response_form` is finalized above this point
+    # (no branch below reassigns it); validate once, here, so every
+    # return path below carries a value that is actually legal on the
+    # `ResponseForm` wire, never just whatever `_FORM_MAP` happened to
+    # contain.
+    response_form = _validate_response_form(response_form)
 
     # Day-4 W-2c — promote to a typed scene envelope when the form has
     # preset coverage. The W-1 _serialize_message in routes_chat lifts

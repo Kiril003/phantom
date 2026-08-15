@@ -209,7 +209,55 @@ function renderForm(
       );
     }
 
-    default:
+    case 'artifact': {
+      // Legal ResponseForm member (companion-v2-phase-0) with no
+      // payload shape of its own on this path: real artifact rendering
+      // always happens through the `scene` envelope (MessageBubble
+      // prefers `<ChatScene>` over `<ResponseRenderer>` whenever
+      // `message.scene` is set — see MessageBubble.tsx). This arm only
+      // fires for the hypothetical case of an `artifact` message with
+      // no scene attached; fall back to plain text rather than treating
+      // it as unknown.
       return text;
+    }
+
+    default: {
+      // chat-teardown §2.2 — every literal in the `ResponseForm` union
+      // (src/shared/types/chat.ts) has an explicit case above, so
+      // TypeScript narrows `form` to `never` here. If a future member
+      // is added to the union without a matching case, this line stops
+      // compiling — CLAUDE.md rule #7 (shared types) enforced at build
+      // time.
+      //
+      // That guarantee only holds for values TypeScript's static types
+      // actually see. `message.response_form` is JSON off the wire —
+      // the backend has no runtime enum enforcement on its side either
+      // (see response_formatter.py's `_validate_response_form`, added
+      // for exactly this reason) — so an illegal string CAN still land
+      // here at runtime despite the type promising otherwise. That
+      // already happened for real: `response_form: 'react_artifact'`
+      // shipped for a while, and this branch's old `return text;`
+      // silently rendered it as if it were valid markdown, discarding
+      // the actual payload with no visible sign anything was wrong.
+      // Never do that again — surface it.
+      const _exhaustiveCheck: never = form;
+      const illegalForm = String(_exhaustiveCheck);
+      return (
+        <div
+          role="alert"
+          className="flex flex-col gap-1 rounded-lg border px-3 py-2 text-sm"
+          style={{
+            borderColor: 'var(--signal-warn, #f59e0b)',
+            color: 'var(--signal-warn, #f59e0b)',
+            background: 'color-mix(in srgb, var(--signal-warn, #f59e0b) 12%, transparent)',
+          }}
+        >
+          <span className="font-medium">
+            Невідома форма відповіді: «{illegalForm}»
+          </span>
+          {content && <MarkdownResponse content={content} />}
+        </div>
+      );
+    }
   }
 }

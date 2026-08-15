@@ -77,11 +77,11 @@ class MapQueryNearby(Action):
         if owner:
             try:
                 from agent.localization.base import haversine_km
-                from db.database import async_session
+                from db.database import AsyncSessionLocal
                 from db.models import MapPOI
                 from sqlalchemy import select
 
-                async with async_session() as db:
+                async with AsyncSessionLocal() as db:
                     res = await db.execute(select(MapPOI).where(MapPOI.user_id == owner))
                     for p in res.scalars().all():
                         d_km = haversine_km(lat, lon, p.lat, p.lon)

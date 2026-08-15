@@ -21,6 +21,8 @@ import { useUIStore } from '../../stores/uiStore';
 import { useVoiceRecorder } from '../../hooks/useVoiceRecorder';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { voiceApi } from '../../services/voiceApi';
+import { ttsPlayer } from '../../services/ttsPlayer';
+import { useTtsPlaying } from '../../hooks/useTtsPlaying';
 import {
   voiceAlwaysOnDuck,
   voiceAlwaysOnUnduck,
@@ -65,6 +67,9 @@ function streamingMessageShape(
     created_at: new Date().toISOString(),
   };
 }
+
+/** Колонка читання: на 1440 рядок через увесь екран читати неможливо. */
+const TRANSCRIPT_MAX_W = 900;
 
 export function ChatWindow({
   minimalChrome = false,
@@ -172,6 +177,28 @@ export function ChatWindow({
   const ttsSpeed = useSettingsStore((s) =>
     typeof s.values.voice_tts_speed === 'number' ? (s.values.voice_tts_speed as number) : 1.0
   );
+
+  // Operator stop control — reachable ONLY while PHANTOM is audibly
+  // speaking (design-critic finding: no explicit interrupt existed
+  // anywhere, only "send a new message" as a side effect). Covers both
+  // backend call sites through the same lever, since both register with
+  // `voice/speaking_floor.py` identically — see routes_voice.py's
+  // `/voice/stop`. `ttsPlayer` is also the single frontend source of
+  // truth for "is PHANTOM's voice audible right now", spanning the
+  // sentence-stream queue and the whole-reply fallback below.
+  const phantomSpeaking = useTtsPlaying();
+  const stopSpeaking = useCallback(() => {
+    // Client-side first for zero perceived latency (pauses whatever WAV
+    // clip is playing right now, mid-sentence), backend second so the
+    // synthesis worker actually stops producing more of them — without
+    // this the queue would refill a moment later from sentences still
+    // in flight.
+    ttsPlayer.stop();
+    void voiceApi.stop().catch((err) => {
+      // eslint-disable-next-line no-console
+      console.warn('[voice] stop request failed:', err);
+    });
+  }, []);
 
   // Route the mic amplitude into the system store so the Orb component
   // (and anything else) can pulse in sync without threading props.
@@ -368,6 +395,8 @@ export function ChatWindow({
     if (!last || last.role !== 'assistant') return;
     if (!last.content.trim()) return;
     if (last.id === lastSpokenMessageIdRef.current) return;
+    // Потік речень уже сказав це — інакше відповідь прозвучить двічі.
+    if (ttsPlayer.hasClaimed(last.id)) return;
 
     // Gate: assistant must be replying to a voice user turn. Tap-to-talk
     // updates `lastUserInputMethodRef` synchronously; always-on flows
@@ -396,8 +425,20 @@ export function ChatWindow({
       ducked = false;
       voiceAlwaysOnUnduck();
     };
-    const onEnded = () => releaseDuck();
-    const onError = () => releaseDuck();
+    // This clip isn't sentence-chunked — ttsPlayer only knows about it
+    // once we hand it the element, which is also what makes the operator
+    // stop control (and its visibility) reach this fallback path too.
+    const releaseExternalAudio = () => {
+      if (audioEl) ttsPlayer.setExternalAudio(null);
+    };
+    const onEnded = () => {
+      releaseDuck();
+      releaseExternalAudio();
+    };
+    const onError = () => {
+      releaseDuck();
+      releaseExternalAudio();
+    };
     (async () => {
       try {
         const { blob } = await voiceApi.synthesize(last.content, {
@@ -409,6 +450,7 @@ export function ChatWindow({
         audioEl = new Audio(objectUrl);
         audioEl.addEventListener('ended', onEnded);
         audioEl.addEventListener('error', onError);
+        ttsPlayer.setExternalAudio(audioEl);
         // Mute backend before audio.play() — the goal is that no PCM
         // captured during the playback window reaches the orchestrator.
         voiceAlwaysOnDuck();
@@ -416,6 +458,7 @@ export function ChatWindow({
         await audioEl.play();
       } catch (err) {
         releaseDuck();
+        releaseExternalAudio();
         // Non-fatal — TTS failures shouldn't block the chat flow.
         // eslint-disable-next-line no-console
         console.warn('[voice] TTS playback failed:', err);
@@ -429,6 +472,7 @@ export function ChatWindow({
         audioEl.pause();
         audioEl.src = '';
       }
+      releaseExternalAudio();
       if (objectUrl) URL.revokeObjectURL(objectUrl);
       releaseDuck();
     };
@@ -735,6 +779,13 @@ export function ChatWindow({
                 style={{
                   height: virtualizer.getTotalSize(),
                   width: '100%',
+                  maxWidth: TRANSCRIPT_MAX_W,
+                  marginInline: 'auto',
+                  // Розмова росте вгору від поля вводу. Без цього одне
+                  // повідомлення висіло під шапкою, а між ним і композером
+                  // лишалось пів екрана порожнечі. Коли текст переповнює
+                  // вікно, auto-відступ сам стає нулем.
+                  marginTop: 'auto',
                   position: 'relative',
                   flexShrink: 0,
                 }}
@@ -777,7 +828,14 @@ export function ChatWindow({
                 <div
                   key={msg.id}
                   className="flex flex-col"
-                  style={{ paddingTop: i === 0 ? 12 : 0, paddingBottom: 12 }}
+                  style={{
+                    paddingTop: i === 0 ? 12 : 0,
+                    paddingBottom: 12,
+                    width: '100%',
+                    maxWidth: TRANSCRIPT_MAX_W,
+                    marginInline: 'auto',
+                    marginTop: i === 0 ? 'auto' : undefined,
+                  }}
                 >
                   <MessageBubble
                     message={msg}
@@ -788,12 +846,17 @@ export function ChatWindow({
             ))}
 
           {streamingMessage && (
-            <MessageBubble
-              key={streamingMessage.id}
-              message={streamingMessage}
-              streaming
-              compact
-            />
+            <div
+              className="flex flex-col w-full"
+              style={{ maxWidth: TRANSCRIPT_MAX_W, marginInline: 'auto' }}
+            >
+              <MessageBubble
+                key={streamingMessage.id}
+                message={streamingMessage}
+                streaming
+                compact
+              />
+            </div>
           )}
 
           {userPreview && !sending && (
@@ -918,6 +981,8 @@ export function ChatWindow({
           showVoice={showVoice}
           voiceActive={voiceActive}
           toggleVoice={toggleVoice}
+          phantomSpeaking={phantomSpeaking}
+          onStopSpeaking={stopSpeaking}
           minimalChrome={minimalChrome}
           activeThoughts={activeThoughts}
           activeProvider={activeProvider}

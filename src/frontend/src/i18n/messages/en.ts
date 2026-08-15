@@ -47,6 +47,7 @@ export const en: Partial<Record<MessageKey, string>> = {
   // ── Chat: input ───────────────────────────────────────────────────────────
   'chat.input.placeholder': 'Message PHANTOM…',
   'chat.input.sending': 'PHANTOM is typing…',
+  'chat.voice.stopSpeaking': 'Stop PHANTOM speaking',
 
   // ── Chat: live indicators ─────────────────────────────────────────────────
   'chat.thinking': 'Thinking',

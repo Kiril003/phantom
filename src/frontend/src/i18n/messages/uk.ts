@@ -45,6 +45,7 @@ export const uk = {
   // ── Chat: input ───────────────────────────────────────────────────────────
   'chat.input.placeholder': 'Напишіть PHANTOM…',
   'chat.input.sending': 'PHANTOM відповідає…',
+  'chat.voice.stopSpeaking': 'Спинити PHANTOM',
 
   // ── Chat: live indicators ─────────────────────────────────────────────────
   'chat.thinking': 'Мислю',

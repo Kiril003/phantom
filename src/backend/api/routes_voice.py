@@ -8,6 +8,11 @@ Push-to-talk contract (Phase 07):
        Returns audio/wav binary.
   GET  /api/v1/voice/status   config + active engine names — used by the
        Settings screen to tell operators which provider is running.
+  POST /api/v1/voice/stop   no body. The operator's explicit interrupt —
+       cancels whichever `SentenceSpeaker` is currently on air for this
+       user, mid-sentence, regardless of whether it was started by a
+       voice-mode chat reply or the agent's proactive voice.say. See
+       `stop_speech` below for why one route covers both.
 
 Wake-word always-on and true streaming STT during speech are deferred;
 the front-end drives a tap-to-record loop against these HTTP endpoints.
@@ -27,7 +32,9 @@ from voice.pipeline import (
     get_tts_provider,
     synthesize_text,
     transcribe_blob,
+    voice_for_text,
 )
+from voice.speaking_floor import speaking_floor
 from voice.stt_engine import contains_wake_word
 
 logger = logging.getLogger(__name__)
@@ -57,6 +64,13 @@ class STTResponse(BaseModel):
     engine_error: str | None = None
     language: str
     wake_word_matched: bool
+
+
+class StopResponse(BaseModel):
+    # False just means nothing was on air when the request landed — a
+    # race the UI hits routinely (operator clicks stop as the last
+    # sentence finishes on its own). Not an error either way.
+    stopped: bool
 
 
 class StatusResponse(BaseModel):
@@ -154,8 +168,7 @@ async def synthesize_speech(
     if req.voice.strip():
         voice = req.voice.strip()
     else:
-        from voice.tts_engine import select_voice_for_text
-        voice = select_voice_for_text(req.text)
+        voice = voice_for_text(req.text)
     speed = req.speed if req.speed > 0 else config.voice_tts_speed
     try:
         result = await synthesize_text(req.text, voice, speed)
@@ -243,3 +256,40 @@ async def voice_status(
         npu_compute=npu_compute,
         npu_providers=npu_providers,
     )
+
+
+@router.post("/stop", response_model=StopResponse)
+async def stop_speech(
+    _token: TokenPayload = Depends(require_auth),  # Day-2 D2-A1 (audit F-08)
+) -> StopResponse:
+    """The operator's explicit "stop talking" — the only way to interrupt
+    PHANTOM's speech that doesn't require saying or typing something
+    else. Design-critic finding: `incremental_tts.stop_for_user()` used
+    to be reachable from exactly one place — as a side effect of the
+    user sending a new message — and only one of the two paths that
+    start a `SentenceSpeaker` (agent/actions/voice_say.py's proactive
+    announcements) had ever been given a cancel contract at all. The
+    other — every voice-mode conversational reply, `routes_chat.py:768`
+    — had none, and it is the far more common source of PHANTOM's
+    speech.
+
+    This route does not choose between them. It goes through
+    `voice/speaking_floor.py`, the one registry both call sites join
+    the moment `SentenceSpeaker.start()` runs — chat replies and
+    voice.say alike — so cancelling here stops whichever of the two is
+    actually talking, without needing to know which one it was.
+
+    Cancels the in-flight synthesis task and broadcasts `chat`/
+    `tts.stop` so the browser drops its queue and pauses whatever WAV
+    clip is currently playing — mid-sentence, not at the end of the
+    utterance. Honesty note: a sentence whose audio had already left
+    over the WebSocket in the same instant can still land and play
+    once more; this route cancels the *source*, it cannot reach into
+    an already-open audio buffer on the client. That race pre-dates
+    this endpoint — it's the same one "a new message interrupts
+    playback" has always had — not something introduced here.
+    """
+    user_id = _token.user_id
+    was_speaking = speaking_floor.is_speaking(user_id)
+    await speaking_floor.stop(user_id, "operator_stop")
+    return StopResponse(stopped=was_speaking)

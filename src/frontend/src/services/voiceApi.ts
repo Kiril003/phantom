@@ -93,4 +93,12 @@ export const voiceApi = {
   },
 
   status: () => request<VoiceStatusResponse>('GET', '/voice/status'),
+
+  /**
+   * The operator's explicit "stop talking" — the only interrupt that
+   * doesn't require saying or typing something else. `stopped: false`
+   * just means nothing was on air when the request landed (not an
+   * error — the caller races the last sentence ending on its own).
+   */
+  stop: () => request<{ stopped: boolean }>('POST', '/voice/stop'),
 };

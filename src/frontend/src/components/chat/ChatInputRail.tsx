@@ -1,6 +1,6 @@
 import { RefObject } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import { Plus, Mic, MicOff, Send, X, Menu, Sparkles } from 'lucide-react';
+import { Plus, Mic, MicOff, Send, X, Menu, Sparkles, Square } from 'lucide-react';
 import { useTranslation } from '../../i18n/useTranslation';
 import { AttachDrawer, type AttachSelection } from './AttachDrawer';
 import { ModelCard } from './ModelCard';
@@ -31,6 +31,12 @@ interface ChatInputRailProps {
   showVoice: boolean;
   voiceActive: boolean;
   toggleVoice: () => void;
+  /** PHANTOM's own voice is audibly playing right now — the ONLY moment
+   * the stop-speaking control is reachable at all (design-critic
+   * finding: there was no way to interrupt it without saying or typing
+   * something else). */
+  phantomSpeaking: boolean;
+  onStopSpeaking: () => void;
   minimalChrome: boolean;
   activeThoughts: Array<{ text: string; kind: string; id: string }>;
   activeProvider: string | null;
@@ -55,6 +61,8 @@ export function ChatInputRail({
   showVoice,
   voiceActive,
   toggleVoice,
+  phantomSpeaking,
+  onStopSpeaking,
   minimalChrome,
   activeThoughts,
   activeProvider,
@@ -215,6 +223,42 @@ export function ChatInputRail({
             >
               <Menu size={16} strokeWidth={1.75} />
             </button>
+
+            <AnimatePresence>
+              {phantomSpeaking && (
+                <motion.button
+                  key="stop-speaking"
+                  type="button"
+                  onClick={onStopSpeaking}
+                  initial={{ opacity: 0, scale: 0.7 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  exit={{ opacity: 0, scale: 0.7 }}
+                  transition={{ duration: 0.15 }}
+                  className="flex items-center justify-center shrink-0 transition-all active:scale-95 self-end"
+                  style={{
+                    width: 40,
+                    height: 40,
+                    minWidth: 44,
+                    minHeight: 44,
+                    borderRadius: 9999,
+                    background: 'var(--signal-warn)',
+                    color: 'var(--ink-inverse)',
+                    border: '1px solid var(--signal-warn)',
+                    boxShadow: '0 0 16px color-mix(in srgb, var(--signal-warn) 55%, transparent)',
+                  }}
+                  aria-label={t('chat.voice.stopSpeaking')}
+                  data-testid="chat-stop-speaking-button"
+                >
+                  <motion.span
+                    animate={{ opacity: [1, 0.55, 1] }}
+                    transition={{ duration: 1.4, repeat: Infinity }}
+                    className="flex items-center justify-center"
+                  >
+                    <Square size={14} strokeWidth={1.75} fill="currentColor" />
+                  </motion.span>
+                </motion.button>
+              )}
+            </AnimatePresence>
 
             {showVoice && (
               <button

@@ -107,3 +107,70 @@ describe('TtsSentencePlayer', () => {
     expect(player.playing).toBe(false);
   });
 });
+
+describe('TtsSentencePlayer — operator stop control', () => {
+  let player: TtsSentencePlayer;
+
+  beforeEach(() => {
+    FakeAudio.instances = [];
+    vi.stubGlobal('Audio', FakeAudio as unknown as typeof Audio);
+    vi.stubGlobal('URL', {
+      createObjectURL: vi.fn(() => `blob:${Math.random()}`),
+      revokeObjectURL: vi.fn(),
+    });
+    player = new TtsSentencePlayer();
+  });
+
+  it('notifies subscribers when playback starts and stops', () => {
+    let calls = 0;
+    player.subscribe(() => calls++);
+
+    player.enqueue(evt(1));
+    expect(player.playing).toBe(true);
+    expect(calls).toBeGreaterThan(0);
+
+    const callsBeforeStop = calls;
+    player.stop();
+    expect(player.playing).toBe(false);
+    expect(calls).toBeGreaterThan(callsBeforeStop);
+  });
+
+  it('unsubscribe stops further notifications', () => {
+    let count = 0;
+    const unsubscribe = player.subscribe(() => count++);
+    unsubscribe();
+    player.enqueue(evt(1));
+    expect(count).toBe(0);
+  });
+
+  it('setExternalAudio makes playing() true even with an empty queue', () => {
+    const fallback = new FakeAudio('blob:fallback') as unknown as HTMLAudioElement;
+    expect(player.playing).toBe(false);
+    player.setExternalAudio(fallback);
+    expect(player.playing).toBe(true);
+  });
+
+  it('stop() pauses and clears the registered external audio too', () => {
+    const fallback = new FakeAudio('blob:fallback') as unknown as HTMLAudioElement;
+    player.setExternalAudio(fallback);
+
+    player.stop();
+
+    expect((fallback as unknown as FakeAudio).paused).toBe(true);
+    expect(player.playing).toBe(false);
+  });
+
+  it('stop() silences the sentence queue AND a concurrent external fallback in one call', () => {
+    player.enqueue(evt(1));
+    const fallback = new FakeAudio('blob:fallback') as unknown as HTMLAudioElement;
+    player.setExternalAudio(fallback);
+    expect(player.playing).toBe(true);
+
+    player.stop();
+
+    expect(FakeAudio.instances[0].paused).toBe(true);
+    expect((fallback as unknown as FakeAudio).paused).toBe(true);
+    expect(player.playing).toBe(false);
+    expect(player.pending).toBe(0);
+  });
+});

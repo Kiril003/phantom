@@ -671,12 +671,15 @@ describe('ChatWindow TTS playback ducks the always-on mic', () => {
         const arr = (this.listeners.get(name) ?? []).filter((c) => c !== cb);
         this.listeners.set(name, arr);
       }
+      paused = false;
       async play() {
         timeline.push('play');
+        this.paused = false;
         return Promise.resolve();
       }
       pause() {
-        /* noop */
+        this.paused = true;
+        timeline.push('pause');
       }
     }
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -874,6 +877,64 @@ describe('ChatWindow TTS playback ducks the always-on mic', () => {
     expect(synthSpy).not.toHaveBeenCalled();
     expect(duckSpy).not.toHaveBeenCalled();
     expect(audioInstances.length).toBe(0);
+  });
+
+  it('shows the stop-speaking control while the whole-reply fallback plays, and clicking it silences the audio and calls /voice/stop', async () => {
+    const voiceApiMod = await import('../services/voiceApi');
+    vi.spyOn(voiceApiMod.voiceApi, 'synthesize').mockResolvedValue({
+      blob: new Blob(['x'], { type: 'audio/wav' }),
+      engine: 'fake',
+      sampleRate: 22050,
+    });
+    const stopSpy = vi
+      .spyOn(voiceApiMod.voiceApi, 'stop')
+      .mockResolvedValue({ stopped: true });
+
+    useChatStore.setState({
+      messages: [
+        baseMessage({
+          id: 'u-stop',
+          role: 'user',
+          content: 'привіт',
+          metadata: { input_method: 'voice' },
+        }),
+        baseMessage({
+          id: 'a-stop',
+          role: 'assistant',
+          content: 'Довга відповідь, яку можна перервати.',
+        }),
+      ],
+    });
+
+    const { ChatWindow } = await import('../components/chat/ChatWindow');
+    render(<ChatWindow minimalChrome />);
+
+    // Nothing playing yet — the control must not be reachable before
+    // PHANTOM is actually speaking.
+    expect(
+      screen.queryByTestId('chat-stop-speaking-button')
+    ).not.toBeInTheDocument();
+
+    await waitFor(() => {
+      expect(audioInstances.length).toBe(1);
+      expect(timeline).toContain('play');
+    });
+
+    const stopButton = await screen.findByTestId('chat-stop-speaking-button');
+    expect(stopButton).toBeInTheDocument();
+
+    fireEvent.click(stopButton);
+
+    // Ground truth: the fallback <audio> was actually paused, not just
+    // "some handler ran".
+    expect(timeline).toContain('pause');
+    expect(stopSpy).toHaveBeenCalledTimes(1);
+
+    await waitFor(() => {
+      expect(
+        screen.queryByTestId('chat-stop-speaking-button')
+      ).not.toBeInTheDocument();
+    });
   });
 });
 

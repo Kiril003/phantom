@@ -144,7 +144,16 @@ def test_refresh_preserves_orig_iat(paired_with_keys, unauth_client):
     new_payload = verify_device_token(resp.json()["device_jwt"])
     assert new_payload.orig_iat == old_payload.orig_iat
     assert new_payload.iat >= old_payload.iat
-    assert new_payload.exp > old_payload.exp  # fresh 30d window
+    # "Fresh 30d window" expressed without depending on sub-second timing:
+    # `exp` is derived as `iat + window`, and both claims have 1-second
+    # resolution, so a refresh completing inside the same second as the
+    # original issuance produces an identical `exp`. `exp > exp` therefore
+    # failed purely on speed. What actually matters is that the window is
+    # re-based on the new issuance and never moves backwards.
+    assert new_payload.exp >= old_payload.exp
+    assert (new_payload.exp - new_payload.iat) == (old_payload.exp - old_payload.iat), (
+        "refresh must re-base the same 30-day window, not extend or shrink it"
+    )
 
 
 @pytest.mark.asyncio

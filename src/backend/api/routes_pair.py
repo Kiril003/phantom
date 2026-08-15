@@ -19,6 +19,7 @@ the resulting device row (per design §4 "TOFU through QR").
 """
 from __future__ import annotations
 
+import asyncio
 import io
 import json
 import logging
@@ -69,6 +70,14 @@ class PairInitResponse(BaseModel):
     # so the React panel can show <img src=qr_svg_data_url /> without
     # bundling a JS QR encoder. SVG is inlined as a `data:` URL.
     qr_svg_data_url: str
+    # Порожньо — телефону є куди прийти. Непорожньо — QR марний, поки це
+    # не полагодять, і оператор мусить це бачити, а не гадати.
+    blockers: list[str] = []
+    # Той самий паринг без камери: продиктувати вісім цифр. Телефон знайде
+    # вузол по mDNS і забере ту саму сесію.
+    pin: str = ""
+    # Стан зовнішнього шляху: чи дістане телефон із мобільного інтернету.
+    relay: dict = {}
 
 
 class PairClaimRequest(BaseModel):
@@ -138,6 +147,8 @@ class PairedDeviceRow(BaseModel):
     last_seen_at: str
     revoked_at: Optional[str]
     capabilities: list[str]
+    # Чи тримає цей пристрій з'єднання просто зараз.
+    online: bool = False
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
@@ -244,6 +255,7 @@ def _row_to_pydantic(row: PairedDevice) -> PairedDeviceRow:
             else (row.revoked_at.isoformat() if row.revoked_at else None)
         ),
         capabilities=caps,
+        online=row.id in hub.online_device_ids(),
     )
 
 
@@ -259,9 +271,13 @@ def _qr_to_svg_data_url(payload: dict) -> str:
     and crisp rendering at any zoom.
     """
     encoded = json.dumps(payload, separators=(",", ":"), ensure_ascii=False)
-    qr = segno.make(encoded, error="m")
+    # Оператор скаржився, що код читається важко. Рівень «m» на цьому обсязі
+    # дає матрицю, у якій модуль на 180-піксельній картці менший за піксель
+    # камери. «l» тримає ту саму корекцію, якої вистачає для екрана (кода
+    # ніхто не друкує й не мне), але робить модулі помітно більшими.
+    qr = segno.make(encoded, error="l")
     buf = io.BytesIO()
-    qr.save(buf, kind="svg", scale=8, border=2, dark="#1a1a1a", light="#ffffff")
+    qr.save(buf, kind="svg", scale=10, border=3, dark="#000000", light="#ffffff")
     svg_bytes = buf.getvalue()
     # `segno` writes XML with a declaration; strip it for inline data: URL
     # cleanliness — the browser reads SVG fine without it.
@@ -271,6 +287,221 @@ def _qr_to_svg_data_url(payload: dict) -> str:
     import urllib.parse
 
     return "data:image/svg+xml;utf8," + urllib.parse.quote(svg_text)
+
+
+_blockers_cache: tuple[float, list[str], Optional[int]] = (0.0, [], None)
+_BLOCKERS_TTL_S = 60.0
+
+
+def _lan_blockers_cached(port: Optional[int] = None) -> list[str]:
+    """Перепони змінюються раз на місяць, а опитування фаєрвола коштує
+    секунди — і саме на них чекав оператор, дивлячись на крутилку."""
+    import time as _time
+
+    global _blockers_cache
+    age = _time.monotonic() - _blockers_cache[0]
+    if age < _BLOCKERS_TTL_S and _blockers_cache[2] == port:
+        return _blockers_cache[1]
+    found = _lan_blockers(port)
+    _blockers_cache = (_time.monotonic(), found, port)
+    return found
+
+
+def _listening_on_lan(port: int) -> bool:
+    """Чи слухає щось цей порт на адресі, з якої дістане телефон."""
+    try:
+        with open("/proc/net/tcp", "r", encoding="ascii") as fh:
+            rows = fh.read().splitlines()[1:]
+    except OSError:
+        return True
+    for line in rows:
+        parts = line.split()
+        if len(parts) < 4 or parts[3] != "0A":
+            continue
+        addr, _, raw_port = parts[1].partition(":")
+        if int(raw_port, 16) != port:
+            continue
+        if addr == "00000000":
+            return True
+        try:
+            packed = bytes.fromhex(addr)[::-1]
+            ip = ".".join(str(b) for b in packed)
+        except ValueError:
+            continue
+        if not ip.startswith("127."):
+            return True
+    return False
+
+
+def _lan_blockers(port: Optional[int] = None) -> list[str]:
+    """Чому телефон не дійде до цього QR. Порт — той, що поїхав у QR."""
+    problems: list[str] = []
+    port = int(port or getattr(config, "port", 8000))
+
+    if not _listening_on_lan(port):
+        problems.append(
+            f"Сервер слухає лише цей комп'ютер. Запусти його з --host 0.0.0.0, "
+            f"інакше телефону нікуди прийти на порт {port}."
+        )
+
+    if _firewall_closes(port):
+        problems.append(
+            f"Фаєрвол закриває порт {port}. "
+            f"Відкрий: sudo firewall-cmd --permanent --add-port={port}/tcp "
+            f"&& sudo firewall-cmd --reload"
+        )
+
+    return problems
+
+
+_FIREWALLD_ZONES = "/etc/firewalld/zones/*.xml"
+
+
+def _firewall_closes(port: int, zones_glob: Optional[str] = None) -> bool:
+    """Чи ріже фаєрвол цей порт — за файлами зон, бо firewall-cmd
+    із фонового процесу висне на polkit."""
+    import glob
+    import re
+
+    zones = glob.glob(zones_glob or _FIREWALLD_ZONES)
+    if not zones:
+        return False
+
+    for path in zones:
+        try:
+            with open(path, "r", encoding="utf-8") as fh:
+                body = fh.read()
+        except OSError:
+            return False
+        for raw_port, protocol in re.findall(
+            r'<port\s+port="([^"]+)"\s+protocol="([^"]+)"', body
+        ):
+            if protocol != "tcp":
+                continue
+            lo, _, hi = raw_port.partition("-")
+            try:
+                if int(lo) <= port <= int(hi or lo):
+                    return False
+            except ValueError:
+                continue
+    return True
+
+
+_NAME_CACHE: tuple[float, bool] = (0.0, False)
+_NAME_TTL_S = 120.0
+
+
+_NAME_PROBE_RUNNING = False
+
+
+def _probe_name(name: str) -> None:
+    import time as _time
+
+    global _NAME_CACHE, _NAME_PROBE_RUNNING
+    try:
+        socket.getaddrinfo(name, None)
+        ok = True
+    except OSError:
+        ok = False
+    _NAME_CACHE = (_time.monotonic(), ok)
+    _NAME_PROBE_RUNNING = False
+    logger.info("pair: %s %s", name, "резолвиться" if ok else "не резолвиться")
+
+
+def _name_resolves() -> bool:
+    """Ніколи не чекає на mDNS: віддає відоме, а свіже питає у фоні.
+
+    Ім'я, якого немає, розпізнається 15 секунд — саме стільки чекав би
+    оператор на перший QR.
+    """
+    import threading
+    import time as _time
+
+    global _NAME_PROBE_RUNNING
+    name = (getattr(config, "pair_host", "") or "").strip()
+    if not name:
+        return False
+    known_at, known = _NAME_CACHE
+    if _time.monotonic() - known_at >= _NAME_TTL_S and not _NAME_PROBE_RUNNING:
+        _NAME_PROBE_RUNNING = True
+        threading.Thread(
+            target=_probe_name, args=(name,), name="pair-name-probe", daemon=True,
+        ).start()
+    return known
+
+
+def _relay_status() -> dict:
+    try:
+        from node.relay_client import current
+    except Exception:
+        return {"connected": False, "reason": "модуль недоступний"}
+    client = current()
+    if client is None:
+        return {"connected": False, "reason": "вимкнено"}
+    return client.status()
+
+
+def _relay_endpoint() -> Optional[dict]:
+    """Адреса зовнішнього шляху — лише коли вузол справді висить на точці зустрічі."""
+    try:
+        from node.relay_client import current, public_base
+    except Exception:
+        return None
+    client = current()
+    if client is None or not client.connected:
+        return None
+    return {
+        "type": "relay",
+        "url": public_base(client.relay_url),
+        "node_id": client.node_id,
+    }
+
+
+def _plain_http_port() -> int:
+    """Порт, куди телефону йти, коли TLS-слухача немає.
+
+    `PAIR_TLS_PORT=0` — задокументований спосіб вимкнути слухач
+    (`security/tls_listener.py`: `if not port: return None`). Тоді єдиний
+    відкритий вхід — той, на якому стоїть uvicorn. Раніше тут стояло
+    `getattr(config, "pair_port", 8000)`, а поля `pair_port` в конфізі немає
+    й ніколи не було: у QR завжди їхала літеральна 8000, і оператор із
+    `PORT=8080` бачив «не вдалось підключитись» замість «порт не той».
+    """
+    return int(getattr(config, "port", 8000) or 8000)
+
+
+def _addressing(port: int, lan_ip: str) -> tuple[str, list[dict]]:
+    from security.tls_listener import lan_addresses
+
+    name = (getattr(config, "pair_host", "") or "").strip()
+    named = _name_resolves()
+    urls = [f"https://{ip}:{port}" for ip in lan_addresses()]
+    if named:
+        urls.insert(0, f"https://{name}:{port}")
+    endpoints: list[dict] = [{"type": "lan", "url": u} for u in urls]
+    relay = _relay_endpoint()
+    if relay is not None:
+        endpoints.append(relay)
+    return (name if named else lan_ip), endpoints
+
+
+def _reachable_host(ip: str) -> str:
+    """Ім'я для QR — тільки якщо воно справді резолвиться.
+
+    Телефон пробує кандидатів по черзі й починає з `host`. Поки там стояла
+    `phantom.local`, якої в мережі немає, апарат витрачав спробу на DNS
+    (у логу — NODATA) і до IP уже не доходив. Ім'я, за яким нікого немає,
+    гірше за його відсутність.
+    """
+    name = (getattr(config, "pair_host", "") or "").strip()
+    if not name:
+        return ip
+    try:
+        socket.getaddrinfo(name, None)
+        return name
+    except OSError:
+        logger.info("pair: %s не резолвиться — у QR піде %s", name, ip)
+        return ip
 
 
 def _local_ip_guess() -> str:
@@ -292,18 +523,6 @@ def _local_ip_guess() -> str:
     return ip
 
 
-def _plain_http_port() -> int:
-    """Порт, на який телефону справді є куди прийти.
-
-    Тут стояло `getattr(config, "pair_port", 8000)`, а поля `pair_port` в
-    конфізі немає й ніколи не було: значення за замовчуванням у getattr
-    перетворило зниклу назву на зашиту вісімку під виглядом налаштування.
-    Оператор із `PORT=8080` діставав у QR 8000 і бачив «не вдалось
-    підключитись» — помилку, яка ніколи не називає справжню причину.
-    """
-    return int(getattr(config, "port", 8000) or 8000)
-
-
 # ── Routes ───────────────────────────────────────────────────────────────────
 
 
@@ -316,17 +535,36 @@ async def pair_init(
     QR payload. The phone scans, runs ECDH, posts to /pair/claim.
     """
     session = session_store.create(created_by_user_id=current_user.id)
+    lan_ip = _local_ip_guess()
+    fingerprint = ""
+    tls_port = int(getattr(config, "pair_tls_port", 0) or 0)
+    if tls_port:
+        try:
+            from security.tls_identity import cert_fingerprint_sha256, ensure_node_cert
+
+            await asyncio.to_thread(ensure_node_cert, [lan_ip])
+            fingerprint = await asyncio.to_thread(cert_fingerprint_sha256)
+        except Exception as exc:  # noqa: BLE001 — без TLS паринг усе одно можливий
+            logger.warning("TLS: відбиток недоступний (%s)", exc)
+    host, endpoints = await asyncio.to_thread(_addressing, tls_port, lan_ip)
+    if not fingerprint:
+        endpoints = []
     qr = build_qr_payload(
         session,
-        host=getattr(config, "pair_host", "phantom.local"),
-        ip=_local_ip_guess(),
-        port=_plain_http_port(),
+        host=host,
+        ip=lan_ip,
+        port=tls_port or _plain_http_port(),
+        endpoints=endpoints,
         # Cert pin is filled in by Caddy/mkcert in deploy. For dev we use a
         # well-known sentinel ("dev-no-pin") so the phone can opt out of
         # cert pinning when the server runs cleartext on the LAN. Production
         # MUST set `PAIR_CERT_SHA256` in config so this turns into a real
         # SHA-256 fingerprint.
-        cert_sha256_hex=getattr(config, "pair_cert_sha256", "") or "dev-no-pin",
+        cert_sha256_hex=(
+            fingerprint
+            or getattr(config, "pair_cert_sha256", "")
+            or "dev-no-pin"
+        ),
     )
     logger.info(
         "pair/init: user=%s pair_id=%s ttl=%ds",
@@ -334,10 +572,64 @@ async def pair_init(
         session.pair_id,
         PAIR_TTL_SECONDS,
     )
+    blockers = await asyncio.to_thread(_lan_blockers_cached, qr["port"])
+    relay = _relay_status()
+    if blockers and relay.get("connected"):
+        # Мережа поруч закрита, але зовнішній шлях живий — це вже не глухий кут.
+        blockers = [f"{b} Поки що телефон піде в обхід, через точку зустрічі." for b in blockers]
+    if blockers:
+        logger.warning("pair/init: телефон не дійде — %s", "; ".join(blockers))
     return PairInitResponse(
         pair_id=session.pair_id,
         qr=qr,
         qr_svg_data_url=_qr_to_svg_data_url(qr),
+        blockers=blockers,
+        pin=session.pin,
+        relay=relay,
+    )
+
+
+@router.get("/pair/resolve/{pin}")
+async def pair_resolve(pin: str) -> dict:
+    """Вхід за коротким кодом — без камери й без QR.
+
+    Телефон уже вміє це (PairDiscoveryClient: знайти вузол по mDNS, потім
+    спитати код), а сервер такого маршруту не мав узагалі. Код живе рівно
+    стільки ж, скільки сесія паринга, і згоряє при першому claim.
+    """
+    if not pin.isdigit() or not (4 <= len(pin) <= 10):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "bad_pin"},
+        )
+    session = session_store.get_by_pin(pin) if hasattr(session_store, "get_by_pin") else None
+    if session is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "pin_unknown"},
+        )
+    lan_ip = _local_ip_guess()
+    tls_port = int(getattr(config, "pair_tls_port", 0) or 0)
+    fingerprint = ""
+    if tls_port:
+        try:
+            from security.tls_identity import cert_fingerprint_sha256
+
+            fingerprint = await asyncio.to_thread(cert_fingerprint_sha256)
+        except Exception as exc:  # noqa: BLE001
+            logger.warning("TLS: відбиток недоступний (%s)", exc)
+    host, endpoints = await asyncio.to_thread(_addressing, tls_port, lan_ip)
+    if not fingerprint:
+        endpoints = []
+    return build_qr_payload(
+        session,
+        host=host,
+        ip=lan_ip,
+        port=tls_port or _plain_http_port(),
+        endpoints=endpoints,
+        cert_sha256_hex=(
+            fingerprint or getattr(config, "pair_cert_sha256", "") or "dev-no-pin"
+        ),
     )
 
 
@@ -585,6 +877,50 @@ async def list_devices(
     stmt = stmt.order_by(PairedDevice.paired_at.desc())
     result = await db.execute(stmt)
     return [_row_to_pydantic(row) for row in result.scalars().all()]
+
+
+class CapabilitiesIn(BaseModel):
+    capabilities: list[str] = Field(default_factory=list)
+
+
+@router.put("/pair/devices/{device_id}/capabilities", response_model=PairedDeviceRow)
+async def set_device_capabilities(
+    device_id: str,
+    body: CapabilitiesIn,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(require_root),
+) -> PairedDeviceRow:
+    """Що саме дозволено цьому телефону.
+
+    Керування ПК і сховище не їдуть причепом до паринга — їх вмикає
+    людина за клавіатурою, окремою дією.
+    """
+    from security.device_auth import KNOWN_DEVICE_CAPABILITIES
+
+    row = await db.get(PairedDevice, device_id)
+    if row is None or row.user_id != current_user.id:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"code": "device_not_found"},
+        )
+    unknown = [c for c in body.capabilities if c not in KNOWN_DEVICE_CAPABILITIES]
+    if unknown:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"code": "unknown_capability", "unknown": unknown},
+        )
+    granted = sorted(set(body.capabilities))
+    row.capabilities_json = json.dumps(granted)
+    await db.commit()
+    await db.refresh(row)
+    logger.info("pair/capabilities: device_id=%s → %s", device_id, granted)
+    await hub.broadcast(
+        "pair",
+        "capabilities",
+        {"device_id": device_id, "capabilities": granted},
+        user_id=current_user.id,
+    )
+    return _row_to_pydantic(row)
 
 
 @router.delete("/pair/devices/{device_id}")

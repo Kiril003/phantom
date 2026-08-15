@@ -41,6 +41,10 @@ class WSClient:
         self.ws = ws
         self.client_id = client_id
         self.user_id = user_id
+        # Хто саме на дроті. Панель паринга показує «на зв'язку» лише тоді,
+        # коли з'єднання справді тримає цей пристрій, а не будь-хто з
+        # користувачів. None — це робочий стіл.
+        self.device_id: str | None = None
         # Phase 1-B (companion-v2) — companion phones subscribe under a
         # specific Profile. Desktop clients leave this None and fall
         # through the legacy user-scope filter unchanged. See
@@ -297,6 +301,9 @@ class WebSocketHub:
     @property
     def client_count(self) -> int:
         return len(self._clients)
+
+    def online_device_ids(self) -> set[str]:
+        return {c.device_id for c in self._clients.values() if c.device_id}
 
 
 # Singleton hub

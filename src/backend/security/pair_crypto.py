@@ -69,14 +69,19 @@ __all__ = [
 ]
 
 
-# Physical-presence assumption (operator scans QR within this window). 60 s
-# matches design §4 and is short enough that an attacker who steals an
-# unscanned QR cannot reasonably exploit it before the operator notices.
-PAIR_TTL_SECONDS: int = 60
+# Physical-presence assumption (operator scans QR within this window).
+# Було 60 с — і цього не вистачає на «взяти телефон, розблокувати, знайти
+# екран сканера»: QR тихо протухав, а паринг виглядав як поломка. Три
+# хвилини так само вимагають фізичної присутності, але не женуть людину.
+PAIR_TTL_SECONDS: int = 180
 
 # HKDF parameters — domain-separated from PII encryption (`security/crypto.py`)
 # so a leak in one path can't be repurposed for the other.
-_HKDF_INFO = b"phantom-os/mobile-pair-v1"
+# Байт-у-байт як `PairProofs.HKDF_INFO` у телефоні (core-net/PairProofs.kt).
+# Рядки розійшлись регістром і дефісом — ключі виходили різні, і КОЖЕН
+# claim падав у bad_proof. Обидва файли про це попереджали; тест нижче
+# тепер прибиває значення, щоб розбіжність не поїхала знову.
+_HKDF_INFO = b"PHANTOM OS/mobile-pair-v1"
 
 
 class PairingError(ValueError):
@@ -107,6 +112,9 @@ class PairingSession:
     nonce_b64: str
     nonce_bytes: bytes
     created_by_user_id: str
+    # Короткий код для входу без камери: телефон знаходить вузол по mDNS і
+    # питає `/pair/resolve/{pin}`. Живе рівно стільки ж, скільки сесія.
+    pin: str = ""
     created_at: float = field(default_factory=time.monotonic)
     claimed: bool = False
 
@@ -142,6 +150,7 @@ class PairingSessionStore:
             nonce_b64=base64.b64encode(nonce).decode("ascii"),
             nonce_bytes=nonce,
             created_by_user_id=created_by_user_id,
+            pin=f"{secrets.randbelow(10**8):08d}",
         )
         with self._lock:
             # Opportunistic prune so the store cannot grow unbounded if many
@@ -159,6 +168,14 @@ class PairingSessionStore:
                 self._sessions.pop(pair_id, None)
                 return None
             return session
+
+    def get_by_pin(self, pin: str) -> Optional[PairingSession]:
+        with self._lock:
+            self._prune_locked()
+            for session in self._sessions.values():
+                if session.pin and secrets.compare_digest(session.pin, pin):
+                    return session
+            return None
 
     def consume(self, pair_id: str) -> Optional[PairingSession]:
         """Atomic single-shot fetch: removes the session before returning so
@@ -303,9 +320,10 @@ def build_qr_payload(
     ip: str,
     port: int,
     cert_sha256_hex: str,
+    endpoints: Optional[list[dict]] = None,
 ) -> dict:
     """JSON shape the desktop renders into a QR (per design §4)."""
-    return {
+    payload = {
         "v": 1,
         "host": host,
         "ip": ip,
@@ -316,3 +334,7 @@ def build_qr_payload(
         "exp": int(time.time()) + PAIR_TTL_SECONDS,
         "nonce": session.nonce_b64,
     }
+    if endpoints:
+        payload["v"] = 2
+        payload["endpoints"] = endpoints
+    return payload

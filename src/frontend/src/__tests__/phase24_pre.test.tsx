@@ -53,16 +53,23 @@ const hoisted = vi.hoisted(() => {
     public lastSetStyleArg: unknown = null;
     public lastRotateTo: { bearing: number; opts?: unknown } | null = null;
     public lastEaseTo: unknown = null;
+    private _pitch = 0;
+    private _terrain: unknown = null;
+    private _container: HTMLElement | null = null;
+    private _canvas = { style: {} as Record<string, string> };
 
     static suppressNextLoad = false;
     static recordedMaps: FakeMap[] = [];
     static lastFakeMap: FakeMap | null = null;
 
-    constructor() {
+    // TacticalMap reads `opts.container` back out via getContainer()
+    // (Ukrainian attribution-button relabelling, commit b220fc4).
+    constructor(opts: { container?: HTMLElement } = {}) {
       this.autoFireLoad = !FakeMap.suppressNextLoad;
       FakeMap.suppressNextLoad = false;
       FakeMap.recordedMaps.push(this);
       FakeMap.lastFakeMap = this;
+      this._container = opts.container ?? null;
     }
     on(evt: string, cb: (...a: unknown[]) => void) {
       this.listeners.push({ evt, cb });
@@ -97,6 +104,7 @@ const hoisted = vi.hoisted(() => {
     }
     easeTo(opts: { pitch?: number; duration?: number }) {
       this.lastEaseTo = opts;
+      if (opts.pitch != null) this._pitch = opts.pitch;
     }
     setStyle(style: unknown, opts?: unknown) { this.lastSetStyleArg = { style, opts }; }
     flyTo({ center, zoom }: { center: [number, number]; zoom?: number }) {
@@ -112,6 +120,15 @@ const hoisted = vi.hoisted(() => {
     removeLayer() { /* noop */ }
     removeSource() { /* noop */ }
     getLayer() { return undefined; }
+    isMoving() { return false; }
+    getPitch() { return this._pitch; }
+    getCanvas() { return this._canvas; }
+    getContainer() { return this._container; }
+    getTerrain() { return this._terrain; }
+    setTerrain(opts: unknown) { this._terrain = opts ?? null; }
+    setLight() { /* noop */ }
+    setPixelRatio() { /* noop */ }
+    queryRenderedFeatures() { return []; }
   }
   class FakeMarker {
     setLngLat() { return this; }
@@ -129,12 +146,20 @@ const hoisted = vi.hoisted(() => {
 
 const { FakeMap, settingsSetSpy } = hoisted;
 
+// TacticalMap registers the pmtiles protocol on the maplibre-gl default
+// export at module load (offline 3D terrain, commit c0d6977) — no-op
+// stubs, same fix as map.test.tsx's mock.
+const addProtocol = () => { /* noop */ };
+const removeProtocol = () => { /* noop */ };
+
 vi.mock('maplibre-gl', () => ({
-  default: { Map: hoisted.FakeMap, Marker: hoisted.FakeMarker, Popup: hoisted.FakePopup, LngLatBounds: hoisted.FakeLngLatBounds },
+  default: { Map: hoisted.FakeMap, Marker: hoisted.FakeMarker, Popup: hoisted.FakePopup, LngLatBounds: hoisted.FakeLngLatBounds, addProtocol, removeProtocol },
   Map: hoisted.FakeMap,
   Marker: hoisted.FakeMarker,
   Popup: hoisted.FakePopup,
   LngLatBounds: hoisted.FakeLngLatBounds,
+  addProtocol,
+  removeProtocol,
 }));
 
 vi.mock('../services/api', async () => {
@@ -203,20 +228,24 @@ function resetStores() {
 
 /* ─── 1. Satellite cycles ui_map_style ─────────────────────────────────── */
 
-describe.skip('Phase 24-PRE — Satellite style cycle', () => {
+// ViewControls (Phase 24-D/E HudShell rewrite, df27a42) relabelled the
+// style-cycle button from English "Style · <name>" to Ukrainian
+// "Вигляд · <назва>" (see ViewControls.tsx's STYLE_UA map) — the button
+// and the underlying dark/streets cycle behaviour are unchanged.
+describe('Phase 24-PRE — Satellite style cycle', () => {
   beforeEach(resetStores);
 
   it('cycles ui_map_style dark → streets → dark on each click (satellite retired)', async () => {
     const { OmniMap } = await import('../components/map/OmniMap');
     render(<OmniMap bridgeAgent={false} />);
-    const btn = await screen.findByLabelText(/Style · /);
+    const btn = await screen.findByLabelText(/Вигляд · /);
     expect(useSettingsStore.getState().values.ui_map_style).toBe('dark');
 
     fireEvent.click(btn);
     expect(useSettingsStore.getState().values.ui_map_style).toBe('streets');
     expect(settingsSetSpy).toHaveBeenLastCalledWith('ui_map_style', 'streets');
 
-    fireEvent.click(screen.getByLabelText(/Style · /));
+    fireEvent.click(screen.getByLabelText(/Вигляд · /));
     expect(useSettingsStore.getState().values.ui_map_style).toBe('dark');
   });
 
@@ -224,7 +253,7 @@ describe.skip('Phase 24-PRE — Satellite style cycle', () => {
     settingsSetSpy.mockRejectedValueOnce(new Error('network'));
     const { OmniMap } = await import('../components/map/OmniMap');
     render(<OmniMap bridgeAgent={false} />);
-    const btn = await screen.findByLabelText(/Style · /);
+    const btn = await screen.findByLabelText(/Вигляд · /);
     fireEvent.click(btn);
     // Local optimistic state still flips even if backend rejects.
     expect(useSettingsStore.getState().values.ui_map_style).toBe('streets');
@@ -237,7 +266,7 @@ describe.skip('Phase 24-PRE — Satellite style cycle', () => {
     await waitFor(() => {
       expect(FakeMap.lastFakeMap?.listeners.some((l) => l.evt === 'load')).toBe(true);
     });
-    fireEvent.click(await screen.findByLabelText(/Style · /));
+    fireEvent.click(await screen.findByLabelText(/Вигляд · /));
     await waitFor(() => {
       expect(FakeMap.lastFakeMap?.lastSetStyleArg).not.toBeNull();
     });

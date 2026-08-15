@@ -228,6 +228,14 @@ class PolisService:
                 await db.commit()
             return True
         if m.task:
+            # mark the stop as deliberate *before* cancelling, same as
+            # kill_mission() — _run()'s except CancelledError only treats
+            # a cancellation as unexpected (and logs/marks it "failed")
+            # when status isn't already "killed". m is already popped from
+            # self.missions above, so _run()'s finally won't persist or
+            # broadcast this anyway; this is purely to keep that log
+            # accurate for what is, here, an entirely intentional stop.
+            m.status = "killed"
             m.task.cancel()
         for g in [g for g in self.gates.values() if g.mission_id == mission_id]:
             g.approved = False
@@ -543,14 +551,70 @@ class PolisService:
                     "size": min(len(frontier), MAX_WAVE),
                     "queued": max(0, len(frontier) - MAX_WAVE),
                 })
-                await asyncio.gather(
-                    *(self._run_node(m, n) for n in frontier[:MAX_WAVE])
+                # return_exceptions=True: _run_node() no longer swallows a
+                # CancelledError that leaks from inside one node's own work
+                # (see its docstring-comment) — it settles that node's
+                # status in a finally and lets the exception keep
+                # propagating, as cancellation must. Without
+                # return_exceptions here, asyncio.gather() would react to
+                # that one escaping exception by cancelling every OTHER
+                # node still running in this same wave — turning one
+                # node's isolated hiccup into a wave-wide wipeout. This
+                # does NOT hide a genuine kill_mission()/delete_mission():
+                # those cancel m.task itself (this coroutine's own task),
+                # and per asyncio semantics a gather() whose *awaiting*
+                # task is cancelled from outside still propagates that
+                # cancellation regardless of return_exceptions — only an
+                # individual child raising/getting cancelled on its own is
+                # captured as a result instead of re-raised.
+                results = await asyncio.gather(
+                    *(self._run_node(m, n) for n in frontier[:MAX_WAVE]),
+                    return_exceptions=True,
                 )
+                for exc in results:
+                    if isinstance(exc, BaseException) and not isinstance(exc, Exception):
+                        logger.warning(
+                            "polis mission %s: node task ended via %s "
+                            "(absorbed by its own finally; wave continues)",
+                            m.id, type(exc).__name__,
+                        )
                 await self._persist(m)
             if m.status not in ("failed", "killed"):
                 m.status = "done"
         except asyncio.CancelledError:
-            return
+            # kill_mission()/delete_mission() are the only intentional
+            # callers of m.task.cancel(), and both set status to "killed"
+            # (or pop the mission entirely) *before* cancelling — so if we
+            # land here with anything else still in m.status, cancellation
+            # arrived for a different reason: any other caller that ever
+            # bounds/cancels this task (a wait_for() timeout, a future
+            # health-check, process shutdown cancelling outstanding
+            # tasks, …). Whatever the reason, "running" must never be the
+            # last word — settle an honest terminal status before we go.
+            # "done" would be a lie (it did not finish); "failed" is the
+            # closest the current status vocabulary has to "was cut off
+            # before completing" and is what makes this visible to an
+            # operator instead of frozen forever.
+            #
+            # Then RE-RAISE. Swallowing CancelledError and returning
+            # normally — what this branch used to do — makes the whole
+            # engine uncancellable: m.task always "completes successfully"
+            # no matter who calls .cancel() on it, so a real caller like
+            # asyncio.wait_for(m.task, timeout=T) cancels the task on its
+            # own deadline, sees it finish "normally" anyway, and silently
+            # returns instead of raising TimeoutError — hiding the very
+            # timeout it exists to report. Re-raising restores standard
+            # cancellation semantics (m.task.cancelled() becomes true, as
+            # it should) without changing kill_mission()/delete_mission()
+            # at all: neither of them awaits m.task afterwards.
+            if m.status != "killed":
+                logger.error(
+                    "polis mission %s: cancelled with no kill requested "
+                    "(status was %r) — marking failed",
+                    m.id, m.status,
+                )
+                m.status = "failed"
+            raise
         except Exception:
             logger.exception("polis mission %s crashed", m.id)
             m.status = "failed"
@@ -563,29 +627,55 @@ class PolisService:
     async def _run_node(self, m: ActiveMission, node: PlanNode) -> None:
         async with self.sem:
             m.graph.mark_running(node.id)
-            await self._node_event(m, node)
             try:
-                if node.kind == "gate" and node.gate_kind == "operator":
-                    await self._operator_gate(m, node)
-                else:
-                    await self._execute(m, node)
-            except Exception as exc:
-                m.graph.mark_failed(node.id, str(exc))
-            await self._node_event(m, node)
-            if node.status in ("done", "failed") and node.crew and node.crew.roles:
-                await self._credit_citizens(m, node)
-            if node.status == "done":
-                await self._chat_system(
-                    m, f"✓ «{node.title}» виконано" +
-                    (f" — {node.output_summary[:120]}" if node.output_summary else ""),
-                    node_id=node.id,
-                )
-            elif node.status == "failed":
-                await self._chat_system(
-                    m, f"✗ «{node.title}» зірвано: {node.error or 'невідома причина'}",
-                    node_id=node.id,
-                )
-            await self._budget_watch(m)
+                try:
+                    await self._node_event(m, node)
+                    if node.kind == "gate" and node.gate_kind == "operator":
+                        await self._operator_gate(m, node)
+                    else:
+                        await self._execute(m, node)
+                except Exception as exc:
+                    m.graph.mark_failed(node.id, str(exc))
+                await self._node_event(m, node)
+                if node.status in ("done", "failed") and node.crew and node.crew.roles:
+                    await self._credit_citizens(m, node)
+                if node.status == "done":
+                    await self._chat_system(
+                        m, f"✓ «{node.title}» виконано" +
+                        (f" — {node.output_summary[:120]}" if node.output_summary else ""),
+                        node_id=node.id,
+                    )
+                elif node.status == "failed":
+                    await self._chat_system(
+                        m, f"✗ «{node.title}» зірвано: {node.error or 'невідома причина'}",
+                        node_id=node.id,
+                    )
+                await self._budget_watch(m)
+            finally:
+                # CancelledError is BaseException, not Exception — the
+                # except Exception above deliberately leaves it alone, and
+                # it is never caught-and-swallowed here either: it keeps
+                # propagating after this block, so a genuine
+                # kill_mission()/delete_mission() still stops this task the
+                # same way it always did. What a bare except couldn't do
+                # safely, this finally does instead: if we are leaving —
+                # by return OR by an exception of any kind, cancellation
+                # included — while node.status is STILL "running" (nothing
+                # since mark_running() above ever advanced it), the node
+                # never reached a resting state. That is exactly how a
+                # mission gets stuck reporting "running" forever with no
+                # failure ever surfaced: some await (an HTTP client's own
+                # timeout machinery, a subprocess, …) leaked a bare
+                # CancelledError that nothing downstream was built to
+                # catch. Settle it here — status must never be the last
+                # word "running" left it at. Anything else (a node already
+                # "done"/"failed", or "pending" from a mid-flight
+                # decompose in attach_children()) is a legitimate resting
+                # state and is left untouched.
+                if node.status == "running":
+                    m.graph.mark_failed(
+                        node.id, "перервано під час виконання (внутрішнє скасування)"
+                    )
 
     async def _credit_citizens(self, m: ActiveMission, node: PlanNode) -> None:
         try:

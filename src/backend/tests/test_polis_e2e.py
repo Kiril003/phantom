@@ -54,6 +54,27 @@ async def test_full_mission_lifecycle(tmp_path, monkeypatch):
     import ai.provider_mesh as mesh_mod
     monkeypatch.setattr(mesh_mod, "get_mesh", lambda: mesh)
 
+    # research_library nodes are domain="research": _execute() calls
+    # agent.fabric.harvest.harvest() for every one of them — a real,
+    # unmocked DDG search + concurrent page-fetch over the live network.
+    # That is not what this test means by "only the LLM is fake" (line 2):
+    # it is real non-determinism this test never intended to depend on,
+    # and under real network latency the whole mission can legitimately
+    # take longer than any fixed wait_for() ceiling — that is not a bug,
+    # it is what an offline-degrading network call is allowed to do
+    # (harvest.py's own docstring: "Failures degrade to fewer sources,
+    # never to a crash — a research node still runs offline, just
+    # ungrounded"). Stub it exactly the same way the LLM is stubbed, so
+    # every node takes that documented no-live-sources path and the test
+    # verifies the governor/graph/persistence machinery deterministically,
+    # not DuckDuckGo's response time.
+    import agent.fabric.harvest as harvest_mod
+
+    async def _offline_harvest(query, **kw):
+        return []
+
+    monkeypatch.setattr(harvest_mod, "harvest", _offline_harvest)
+
     events: list[tuple[str, dict]] = []
     svc = PolisService()
 
@@ -66,6 +87,13 @@ async def test_full_mission_lifecycle(tmp_path, monkeypatch):
         user_id, "Дослідити ринок дронів і скласти звіт", "research_library"
     )
     assert m.task is not None
+    # 30s is a hang safety net, not a race against a real dependency: with
+    # the LLM and harvest() both stubbed, this mission is fully in-memory
+    # and should settle in well under a second. If this ever times out
+    # again, something is genuinely stuck — see agent/fabric/service.py's
+    # _run()/_run_node(), whose finally/except blocks exist precisely so
+    # a stuck mission surfaces as an honest TimeoutError + status="failed"
+    # instead of silently freezing at "running" forever.
     await asyncio.wait_for(m.task, timeout=30)
 
     assert m.status == "done"

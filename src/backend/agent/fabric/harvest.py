@@ -72,12 +72,31 @@ async def harvest(
             resp.raise_for_status()
             rows = parse_results(resp.text, max_sources * 2)
             picked = rows[: max_sources]
-            extracts = await asyncio.gather(
-                *(_fetch_extract(client, r["url"], per_page_chars) for r in picked)
+            # return_exceptions=True: a slow URL racing its own connect/read
+            # deadline can surface as a bare asyncio.CancelledError instead
+            # of httpx's TimeoutException (an httpcore/anyio edge case seen
+            # under concurrent per-URL fetches). Without return_exceptions,
+            # gather() would react to that one straggler by cancelling the
+            # OTHER still-in-flight fetches too — turning "one slow source"
+            # into "zero sources", the opposite of "degrade to fewer
+            # sources, never crash" this module promises. A genuine
+            # cancellation of harvest() itself (the mission being killed)
+            # still propagates normally: that cancels the gather() future
+            # from outside, which raises through here regardless.
+            raw = await asyncio.gather(
+                *(_fetch_extract(client, r["url"], per_page_chars) for r in picked),
+                return_exceptions=True,
             )
     except Exception as exc:
         logger.warning("harvest search failed for %r: %s", query, exc)
         return []
+    extracts = []
+    for r, ex in zip(picked, raw):
+        if isinstance(ex, BaseException):
+            logger.debug("harvest fetch failed %s: %s", r.get("url"), ex)
+            extracts.append("")
+        else:
+            extracts.append(ex)
     out = []
     for row, extract in zip(picked, extracts):
         out.append({

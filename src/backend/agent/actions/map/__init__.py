@@ -31,6 +31,7 @@ from .reverse_geocode import MapReverseGeocode
 from .set_view import MapSetView
 from .snap_track import MapSnapTrack
 from .snapshot import MapSnapshot
+from .time_travel import MapTimeTravel
 
 # Importable as a tuple so registry.py can splat it into _REGISTERED.
 MAP_ACTIONS = (
@@ -52,6 +53,12 @@ MAP_ACTIONS = (
     MapOptimizeVisit,
     MapIsochrone,
     MapSnapTrack,
+    # 24-H — written, then never imported here, so the agent could never
+    # time-travel a layer despite `useMapAgentBridge.ts` already having a
+    # working `op: "time_travel"` case since Phase 24-D. Unfinished
+    # wiring, not an abandoned idea: closing the gap is exactly importing
+    # it, nothing about the action itself needed to change.
+    MapTimeTravel,
 )
 
 __all__ = [
@@ -75,6 +82,7 @@ __all__ = [
     "MapSetView",
     "MapSnapTrack",
     "MapSnapshot",
+    "MapTimeTravel",
     "broadcast_map_mutation",
     "build_map_output",
 ]

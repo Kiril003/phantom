@@ -21,6 +21,7 @@ from .enable_layer import MapEnableLayer
 from .explain_view import MapExplainView
 from .flyto import MapFlyTo
 from .geocode import MapGeocode
+from .get_elevation_profile import MapGetElevationProfile
 from .isochrone import MapIsochrone
 from .list_layers import MapListLayers
 from .open_map import MapOpenMap
@@ -59,6 +60,15 @@ MAP_ACTIONS = (
     # wiring, not an abandoned idea: closing the gap is exactly importing
     # it, nothing about the action itself needed to change.
     MapTimeTravel,
+    # 24-O — a read-only report action (no `map_mutation`, nothing to
+    # render), same shape as the already-reachable `MapQueryNearby`. No
+    # DEM source is registered anywhere in this codebase today, so it
+    # honestly returns `ok=False, error_class="ElevationUnavailable"`
+    # rather than fabricated numbers (see the removed sin/cos placeholder
+    # noted in `geo/elevation.py`'s own comment) — same behaviour the
+    # `/map/elevation/profile` HTTP route already ships. Wiring it in
+    # doesn't change what it does, only that the agent can reach it.
+    MapGetElevationProfile,
 )
 
 __all__ = [
@@ -71,6 +81,7 @@ __all__ = [
     "MapExplainView",
     "MapFlyTo",
     "MapGeocode",
+    "MapGetElevationProfile",
     "MapIsochrone",
     "MapListLayers",
     "MapMutation",

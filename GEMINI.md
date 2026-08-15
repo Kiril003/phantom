@@ -42,7 +42,7 @@ cd src/frontend && npx vitest run       # Запуск тестів (не інт
 cd src/frontend && npm run build        # Збірка React
 
 # Backend
-cd src/backend && uvicorn main:app --host 0.0.0.0 --port 8000
+cd src/backend && uvicorn main:app --host 127.0.0.1 --port 8000
 cd src/backend && pytest -v             # Запуск тестів бекенду
 
 # Desktop Shell (Tauri)

@@ -191,8 +191,8 @@ cd src/frontend && npm run build        # Production build
 cd src/frontend && npx vitest           # Tests
 
 # Backend
-cd src/backend && uvicorn main:app --reload --host 0.0.0.0 --port 8000
-cd src/backend && pytest               # Tests
+cd src/backend && uvicorn main:app --reload --host 127.0.0.1 --port 8000
+./scripts/test.sh                       # Tests (створює venv, ставить env)
 
 # ESP32 (лише якщо аксесуар присутній)
 cd src/firmware && pio run             # Build

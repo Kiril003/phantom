@@ -244,7 +244,7 @@ After=network-online.target
 Type=simple
 WorkingDirectory=$PHANTOM_SRC/src/backend
 EnvironmentFile=$ENV_FILE
-ExecStart=$VENV_DIR/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+ExecStart=$VENV_DIR/bin/uvicorn main:app --host 127.0.0.1 --port 8000
 Restart=on-failure
 RestartSec=3
 
@@ -268,7 +268,7 @@ else
     echo "    source $VENV_DIR/bin/activate"
     echo "    cd $PHANTOM_SRC/src/backend"
     echo "    set -a; source $ENV_FILE; set +a"
-    echo "    uvicorn main:app --host 0.0.0.0 --port 8000"
+    echo "    uvicorn main:app --host 127.0.0.1 --port 8000"
 fi
 
 # ── Фінал ──────────────────────────────────────────────────────────────────────

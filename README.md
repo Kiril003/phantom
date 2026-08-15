@@ -36,7 +36,7 @@ The container exposes the FastAPI backend AND the built React bundle on port 800
 # Backend
 cd src/backend
 python3.11 -m venv .venv && .venv/bin/pip install -r requirements.txt
-.venv/bin/uvicorn main:app --reload --host 0.0.0.0 --port 8000
+.venv/bin/uvicorn main:app --reload --host 127.0.0.1 --port 8000
 
 # Frontend (in another shell)
 cd src/frontend

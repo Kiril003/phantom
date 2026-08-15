@@ -75,7 +75,7 @@ Type=simple
 User=radxa
 Group=radxa
 WorkingDirectory=$REPO_ROOT/src/backend
-ExecStart=$REPO_ROOT/src/backend/.venv/bin/uvicorn main:app --host 0.0.0.0 --port 8000
+ExecStart=$REPO_ROOT/src/backend/.venv/bin/uvicorn main:app --host 127.0.0.1 --port 8000
 Restart=on-failure
 RestartSec=5
 

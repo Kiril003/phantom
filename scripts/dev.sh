@@ -10,7 +10,7 @@ echo "=== PHANTOM OS Dev ==="
 if command -v tmux &>/dev/null && [ -z "${TMUX:-}" ]; then
     echo "Starting in tmux session 'phantom-dev'..."
     tmux new-session -d -s phantom-dev -n backend \
-        "cd $ROOT/src/backend && source .venv/bin/activate && uvicorn main:app --reload --host 0.0.0.0 --port 8000 2>&1 | tee $ROOT/backend.log"
+        "cd $ROOT/src/backend && source .venv/bin/activate && uvicorn main:app --reload --host 127.0.0.1 --port 8000 2>&1 | tee $ROOT/backend.log"
     tmux new-window -t phantom-dev -n frontend \
         "cd $ROOT/src/frontend && npm run dev 2>&1 | tee $ROOT/frontend.log"
     tmux attach -t phantom-dev
@@ -21,7 +21,7 @@ else
     if [ -d ".venv" ]; then
         source .venv/bin/activate
     fi
-    uvicorn main:app --reload --host 0.0.0.0 --port 8000 &
+    uvicorn main:app --reload --host 127.0.0.1 --port 8000 &
     BACKEND_PID=$!
     echo "Backend PID: $BACKEND_PID"
 

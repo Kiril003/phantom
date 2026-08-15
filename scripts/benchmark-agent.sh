@@ -66,7 +66,7 @@ ERROR: PHANTOM OS backend is not reachable at ${BASE_URL}
 No response from ${BASE_URL}/health within 3 seconds. Start the backend first:
 
     cd ${ROOT}/src/backend && source .venv/bin/activate && \\
-      uvicorn main:app --host 0.0.0.0 --port 8000
+      uvicorn main:app --host 127.0.0.1 --port 8000
 
 Or set PHANTOM_API to point at a running instance, e.g.:
 

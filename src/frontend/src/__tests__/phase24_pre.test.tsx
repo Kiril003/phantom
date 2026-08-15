@@ -277,34 +277,38 @@ describe('Phase 24-PRE — Satellite style cycle', () => {
 
 /* ─── 2. Compass live bearing + reset ──────────────────────────────────── */
 
-describe.skip('Phase 24-PRE — Compass bearing chip', () => {
+// ViewControls (df27a42) relabelled the bearing chip from English
+// "Bearing · 000°" (zero-padded) to Ukrainian "Напрямок · 0°. Повернути
+// на північ" — plain, unpadded degrees (see `deg` in ViewControls.tsx).
+// The live-bearing tracking and reset-to-0 behaviour are unchanged.
+describe('Phase 24-PRE — Compass bearing chip', () => {
   beforeEach(resetStores);
 
-  it('renders bearing 000° initially', async () => {
+  it('renders bearing 0° initially', async () => {
     const { OmniMap } = await import('../components/map/OmniMap');
     render(<OmniMap bridgeAgent={false} />);
-    expect(await screen.findByLabelText(/Bearing · 000°/)).toBeDefined();
+    expect(await screen.findByLabelText(/Напрямок · 0°/)).toBeDefined();
   });
 
   it('updates label when map.rotate fires with a new bearing', async () => {
     const { OmniMap } = await import('../components/map/OmniMap');
     render(<OmniMap bridgeAgent={false} />);
-    await screen.findByLabelText(/Bearing · 000°/);
+    await screen.findByLabelText(/Напрямок · 0°/);
     expect(FakeMap.lastFakeMap).not.toBeNull();
     act(() => {
       FakeMap.lastFakeMap!.setBearing(45);
     });
-    await waitFor(() => screen.getByLabelText(/Bearing · 045°/));
+    await waitFor(() => screen.getByLabelText(/Напрямок · 45°/));
   });
 
   it('resets bearing and pitch to 0 on click', async () => {
     const { OmniMap } = await import('../components/map/OmniMap');
     render(<OmniMap bridgeAgent={false} />);
-    await screen.findByLabelText(/Bearing · 000°/);
+    await screen.findByLabelText(/Напрямок · 0°/);
     act(() => {
       FakeMap.lastFakeMap!.setBearing(120);
     });
-    const btn = await screen.findByLabelText(/Bearing · 120°/);
+    const btn = await screen.findByLabelText(/Напрямок · 120°/);
     fireEvent.click(btn);
     expect(FakeMap.lastFakeMap!.lastRotateTo?.bearing).toBe(0);
     expect((FakeMap.lastFakeMap!.lastEaseTo as { pitch?: number })?.pitch).toBe(0);

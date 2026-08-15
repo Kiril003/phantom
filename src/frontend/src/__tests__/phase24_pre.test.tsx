@@ -317,7 +317,7 @@ describe('Phase 24-PRE — Compass bearing chip', () => {
 
 /* ─── 3. Data-load failures surface via toast ──────────────────────────── */
 
-describe.skip('Phase 24-PRE — error surfacing', () => {
+describe('Phase 24-PRE — error surfacing', () => {
   beforeEach(resetStores);
 
   it('toasts when wardriving load rejects', async () => {

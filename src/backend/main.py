@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -41,6 +42,7 @@ from api.routes_user_facts import router as user_facts_router
 from api.routes_familiar import router as familiar_router
 from api.routes_pair import router as pair_router
 from api.routes_mobile_sensors import router as mobile_sensors_router
+from api.routes_symbiote import router as symbiote_router
 from api.routes_approve import router as approve_router
 from api.routes_will import router as will_router
 from api.routes_vault import router as vault_router
@@ -739,7 +741,37 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as exc:
         logger.warning("Live tasker setup skipped: %s", exc)
 
+    try:
+        from security.tls_listener import start_tls_listener
+
+        app.state.tls_listener = await start_tls_listener(app)
+    except BaseException as exc:  # noqa: BLE001
+        logger.warning("TLS: слухач не піднявся (%s) — лишається відкритий HTTP", exc)
+        app.state.tls_listener = None
+
+    try:
+        from node.relay_client import start_relay_client
+
+        app.state.relay_client = await start_relay_client(app)
+    except BaseException as exc:  # noqa: BLE001
+        logger.warning("Ретранслятор не піднявся (%s) — лишається лише мережа поруч", exc)
+        app.state.relay_client = None
+
     yield
+
+    try:
+        from node.relay_client import stop_relay_client
+
+        await stop_relay_client()
+    except Exception as exc:
+        logger.debug("Ретранслятор не спинився чисто: %s", exc)
+
+    listener = getattr(app.state, "tls_listener", None)
+    if listener is not None:
+        try:
+            await listener.stop()
+        except Exception as exc:
+            logger.debug("TLS: слухач не спинився чисто: %s", exc)
 
     # Stop the mDNS publisher BEFORE we let asyncio cancel the
     # remaining lifespan tasks — zeroconf has its own thread and
@@ -996,6 +1028,7 @@ def create_app() -> FastAPI:
     # out `sensor/mobile_batch` WS, opportunistically forwards WiFi
     # entries through the existing wardriving.collector pipeline.
     app.include_router(mobile_sensors_router, prefix=prefix)
+    app.include_router(symbiote_router, prefix=prefix)
     # Phase 19 — approve-on-phone gate. /approve/pending returns the
     # phone's outstanding queue (in case it missed the WS push); the
     # phone signs `{request_id}|{verdict}|{nonce}` with its long-term
@@ -1176,6 +1209,7 @@ def _register_ws(app: FastAPI) -> None:
                     logger.debug("device token WS verify failed: %s", exc)
 
         client = await hub.connect(ws, client_id, user_id)
+        client.device_id = device_id
         # Phase 19-7 — phones get a narrower default channel filter so
         # they don't pay for `agent.stream` / `inner_monologue.stream`
         # raw step logs they didn't ask for.

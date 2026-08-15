@@ -26,6 +26,7 @@ from security.auth import (
     is_loopback_host,
     require_auth,
 )
+from security.client_ip import resolve_client_ip
 from security.device_auth import get_user_or_device_user
 from security.jwt_manager import TokenPayload, create_token, refresh_token as jwt_refresh
 from security.permissions import require_operator, require_root
@@ -128,45 +129,10 @@ async def _touch_last_seen(db: AsyncSession, user: User) -> None:
 # the right value lands here.
 
 
-def _resolve_client_ip(request: Request) -> str:
-    """Day-3 D3-A-2: XFF-aware client-IP resolution.
-
-    When ``security_trust_xff`` is False (default), the immediate TCP
-    peer is the only thing we trust — same behaviour as the F-15 Day-2
-    landing. When enabled AND the immediate peer is in
-    ``security_trusted_proxies``, we walk ``X-Forwarded-For`` from
-    right-to-left and return the first IP that is NOT itself a trusted
-    proxy. That's the standard reverse-proxy resolution: a chain
-    ``client, edge_proxy, internal_proxy`` lands as ``client`` once
-    every hop on the right is trusted.
-
-    The function returns ``"unknown"`` only when there's no usable peer
-    info at all — testing seam, never reached in production.
-    """
-    client = request.client
-    direct = client.host if (client and client.host) else None
-    if not direct:
-        return "unknown"
-
-    from config import config
-    if not config.security_trust_xff:
-        return direct
-    trusted = set(config.security_trusted_proxies or [])
-    if direct not in trusted:
-        # Immediate peer isn't a configured proxy — XFF is therefore
-        # unreliable (could be spoofed by the peer). Fall through to
-        # the direct peer; lockout still keys on what we observed.
-        return direct
-    xff = request.headers.get("x-forwarded-for")
-    if not xff:
-        return direct
-    # XFF: "client, proxy1, proxy2"  (left = original, right = closest)
-    candidates = [c.strip() for c in xff.split(",") if c.strip()]
-    for ip in reversed(candidates):
-        if ip not in trusted:
-            return ip
-    # All hops are trusted — degenerate chain; treat as direct.
-    return direct
+# Day-3 D3-A-2 XFF-aware resolution now lives in ``security/client_ip.py`` so
+# the SaaS rate limiter keys callers exactly the same way this gate does. The
+# module-local alias keeps the historical import path working.
+_resolve_client_ip = resolve_client_ip
 
 
 def _ip_key(request: Request) -> str:

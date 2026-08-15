@@ -15,7 +15,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from core.tenant import get_current_tenant_id, set_current_tenant_id
 from db.database import get_db
 from db.models import Tenant, User
-from security.auth import require_auth
+from security.auth import get_current_user, require_auth
+from security.jwt_manager import TokenPayload
 from security.permissions import require_root
 
 logger = logging.getLogger(__name__)
@@ -49,7 +50,11 @@ def _tenant_to_dict(org: Tenant) -> dict[str, Any]:
 @router.post("/create", response_model=TenantResponse, status_code=status.HTTP_201_CREATED)
 async def create_tenant(
     req: CreateTenantRequest,
-    current_user: User = Depends(require_auth),
+    # `get_current_user`, а не `require_auth`: останній віддає TokenPayload,
+    # тож анотація `User` брехала — `db.add(current_user)` падав з
+    # UnmappedInstanceError, і створення організації віддавало 500 щоразу.
+    # Присвоєння tenant_id перед тим мовчки міняло поле на Pydantic-обʼєкті.
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Create a new SaaS organization and set caller as Owner."""
@@ -78,12 +83,14 @@ async def create_tenant(
 
 @router.get("/current", response_model=dict)
 async def get_current_tenant(
-    current_user: User = Depends(require_auth),
+    # Анотація тепер правдива: `require_auth` віддає саме TokenPayload.
+    # Раніше тут стояло `User`, і `.id` валив роут п'ятисоткою на кожному
+    # відкритті штабу. Роут читає користувача сам (нижче), тому лишаємо
+    # `require_auth` — міняємо тільки брехливий тип.
+    current_user: TokenPayload = Depends(require_auth),
     db: AsyncSession = Depends(get_db),
 ) -> dict:
     """Return the active tenant context for the current request."""
-    # require_auth віддає TokenPayload, а не User — анотація нижче бреше,
-    # і .id валив цей роут п'ятисоткою на кожному відкритті штабу.
     uid = getattr(current_user, "user_id", None) or getattr(current_user, "id", None)
     name = None
     tid = get_current_tenant_id()
@@ -111,7 +118,8 @@ class OnboardingRequest(BaseModel):
 @router.post("/create")
 async def onboarding_create_workspace(
     req: OnboardingRequest,
-    current_user: User = Depends(require_auth),
+    # Той самий дефект, що і в `create_tenant` вище — онбординг падав так само.
+    current_user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
     """Create a workspace during onboarding."""

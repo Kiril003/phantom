@@ -12,6 +12,7 @@ Endpoints:
   DELETE /map/pois/{id}       — delete a POI (owner only)
   GET  /map/hazards/cliff_scree — baked cliff/scree/bare_rock features in bounds
   GET  /map/hazards/power_towers — baked power=tower landmark nodes in bounds
+  GET  /map/hazards/drain_ditch — baked waterway=drain|ditch obstacle lines in bounds
 """
 from __future__ import annotations
 
@@ -35,6 +36,7 @@ from geo import (
     get_layer_registry,
 )
 from geo.layer_registry import LayerNotFoundError
+from geo.sources.drain_ditch import DITCH_KINDS, get_drain_ditch_store
 from geo.sources.power_towers import get_power_tower_store
 from geo.sources.terrain_hazards import HAZARD_KINDS, get_terrain_hazard_store
 from security.auth import require_auth
@@ -285,6 +287,50 @@ async def get_power_towers(
     store = get_power_tower_store()
     features = store.query_bbox(
         lat_min=b[0], lon_min=b[1], lat_max=b[2], lon_max=b[3], limit=limit,
+    )
+    return {
+        "type": "FeatureCollection",
+        "features": features,
+        "total": len(features),
+    }
+
+
+@router.get("/hazards/drain_ditch")
+async def get_drain_ditch(
+    bounds: str = Query(..., description="lat1,lon1,lat2,lon2"),
+    kinds: str | None = Query(
+        default=None,
+        description="Comma-separated subset of drain,ditch (default: all)",
+    ),
+    limit: int = Query(default=5000, ge=1, le=20000),
+    token_data: TokenPayload = Depends(require_auth),
+) -> dict:
+    """Baked `waterway=drain|ditch` obstacle lines in a viewport.
+
+    Served entirely from the local `DrainDitchStore` — no live upstream
+    call happens on this path (see `scripts/bake_drain_ditch.py`), same
+    shape as `/map/hazards/cliff_scree` and `/map/hazards/power_towers`.
+    """
+    b = _parse_bounds(bounds)
+    if b is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="bounds is required — expected 'lat1,lon1,lat2,lon2'",
+        )
+    kind_list: Optional[list[str]] = None
+    if kinds:
+        kind_list = [k.strip() for k in kinds.split(",") if k.strip()]
+        unknown = set(kind_list) - set(DITCH_KINDS)
+        if unknown:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"unknown kinds {sorted(unknown)} — expected subset of {list(DITCH_KINDS)}",
+            )
+
+    store = get_drain_ditch_store()
+    features = store.query_bbox(
+        lat_min=b[0], lon_min=b[1], lat_max=b[2], lon_max=b[3],
+        kinds=kind_list, limit=limit,
     )
     return {
         "type": "FeatureCollection",

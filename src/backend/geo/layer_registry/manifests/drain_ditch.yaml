@@ -1,0 +1,34 @@
+id: drain_ditch
+name_ua: Канави та дренажі (OSM)
+name_en: Drains & ditches (OSM)
+category: terrain
+license: ODbL (OpenStreetMap)
+attribution: "© OpenStreetMap contributors"
+source:
+  type: local_db
+  ttl_s: 2592000
+  bbox_required: true
+geometry: line
+style:
+  stroke: signal/warn
+  stroke_width: 2
+  fill_opacity: 0.0
+  icon: triangle-alert
+  legend:
+    - label: "Дренаж (waterway=drain)"
+      color: signal/warn
+    - label: "Канава (waterway=ditch)"
+      color: signal/warn
+agent_verbs:
+  - map.nearby_drain_ditch
+require_internet: false
+require_setting: layers.drain_ditch.enabled
+require_root: false
+private: false
+priority: normal
+default_active: false
+available_offline: true
+tags:
+  - hazard
+  - terrain
+  - safety

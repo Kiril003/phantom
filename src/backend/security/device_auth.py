@@ -77,6 +77,119 @@ async def get_current_device(
     return row, payload
 
 
+#: Дозволи, які пристрій отримує при паринзі. Керування ПК сюди НЕ входить:
+#: телефон, що вміє натискати клавіші на комп'ютері, — це окреме рішення
+#: людини, а не побічний ефект того, що вона показала QR.
+DEFAULT_DEVICE_CAPABILITIES = ("sensors", "approvals")
+
+#: Усі відомі дозволи. `control` — введення й буфер обміну, `vault` —
+#: доступ до сховища, `files` — заливання файлів.
+KNOWN_DEVICE_CAPABILITIES = (
+    "sensors", "approvals", "control", "vault", "files",
+)
+
+
+def device_capabilities(row: PairedDevice) -> set[str]:
+    import json as _json
+
+    try:
+        raw = _json.loads(row.capabilities_json or "[]")
+    except (ValueError, TypeError):
+        return set()
+    return {str(c) for c in raw} if isinstance(raw, list) else set()
+
+
+def require_device_capability(capability: str):
+    """Залежність: пристрій мусить мати саме цей дозвіл.
+
+    Досі токен пристрою відмикав усе, до чого дотягувався — включно з
+    `/drive`, тобто клавіатурою й буфером ПК. Права були записані в базі
+    й не перевірялись жодного разу.
+    """
+
+    async def _guard(
+        bundle: Tuple[PairedDevice, DeviceTokenPayload] = Depends(get_current_device),
+    ) -> Tuple[PairedDevice, DeviceTokenPayload]:
+        row, _payload = bundle
+        if capability not in device_capabilities(row):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": "capability_denied",
+                    "capability": capability,
+                    "message": (
+                        f"Пристрою не надано дозвіл «{capability}». "
+                        "Увімкни його на ПК: Налаштування → Телефон."
+                    ),
+                },
+            )
+        return row, _payload
+
+    return _guard
+
+
+def require_capability_if_device(capability: str):
+    """Пропускає оператора за ПК і питає дозвіл у телефона.
+
+    Маршрути керування приймають обидва види токенів. Людина за
+    клавіатурою вже має повне право; телефон — лише те, що йому дали.
+    """
+
+    async def _guard(
+        creds: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
+        db: AsyncSession = Depends(get_db),
+    ) -> None:
+        if creds is None:
+            return  # решту вирішить основна залежність маршруту
+        try:
+            payload = verify_device_token(creds.credentials)
+        except JWTError:
+            return  # не пристрій — це користувацький токен
+        row = await db.get(PairedDevice, payload.device_id)
+        if row is None or row.revoked_at is not None:
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail={"code": "device_revoked"},
+            )
+        if capability not in device_capabilities(row):
+            logger.warning(
+                "пристрій %s спробував %s без дозволу", row.id, capability,
+            )
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={
+                    "code": "capability_denied",
+                    "capability": capability,
+                    "message": (
+                        f"Пристрою не надано дозвіл «{capability}». "
+                        "Увімкни його на ПК: Налаштування → Телефон."
+                    ),
+                },
+            )
+
+    return _guard
+
+
+async def caller_device(
+    creds: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
+    db: AsyncSession = Depends(get_db),
+) -> Optional[PairedDevice]:
+    """Хто просить: пристрій чи людина за ПК (None — людина)."""
+    if creds is None:
+        return None
+    try:
+        payload = verify_device_token(creds.credentials)
+    except JWTError:
+        return None
+    row = await db.get(PairedDevice, payload.device_id)
+    if row is None or row.revoked_at is not None:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"code": "device_revoked"},
+        )
+    return row
+
+
 async def get_user_or_device_user(
     creds: Optional[HTTPAuthorizationCredentials] = Depends(_bearer),
     db: AsyncSession = Depends(get_db),

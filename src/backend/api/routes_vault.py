@@ -45,7 +45,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from db.database import get_db
 from db.models import User, VaultAuditEntry, VaultCard
 from security.auth import get_current_user
-from security.device_auth import get_user_or_device_user
+from security.device_auth import get_user_or_device_user, require_capability_if_device
 from security.vault_crypto import (
     InvalidVaultToken, decrypt_field, encrypt_field,
 )
@@ -241,6 +241,7 @@ async def list_cards(
     tag: Optional[str] = Query(default=None, max_length=64),
     include_deleted: bool = Query(default=False),
     me: User = Depends(get_user_or_device_user),
+    _cap: None = Depends(require_capability_if_device('vault')),
     db: AsyncSession = Depends(get_db),
 ) -> CardsListResponse:
     stmt = select(VaultCard).where(VaultCard.owner_user_id == me.id)
@@ -262,6 +263,7 @@ async def list_cards(
 async def get_card(
     card_id: str,
     me: User = Depends(get_user_or_device_user),
+    _cap: None = Depends(require_capability_if_device('vault')),
     db: AsyncSession = Depends(get_db),
 ) -> CardOut:
     card = await _load_owned_card(db, card_id=card_id, user_id=me.id)
@@ -272,6 +274,7 @@ async def get_card(
 async def create_card(
     payload: CardCreate,
     me: User = Depends(get_user_or_device_user),
+    _cap: None = Depends(require_capability_if_device('vault')),
     db: AsyncSession = Depends(get_db),
 ) -> CardOut:
     _validate_kind(payload.kind)
@@ -302,6 +305,7 @@ async def patch_card(
     card_id: str,
     payload: CardPatch,
     me: User = Depends(get_user_or_device_user),
+    _cap: None = Depends(require_capability_if_device('vault')),
     db: AsyncSession = Depends(get_db),
 ) -> CardOut:
     card = await _load_owned_card(db, card_id=card_id, user_id=me.id)
@@ -347,6 +351,7 @@ async def patch_card(
 async def delete_card(
     card_id: str,
     me: User = Depends(get_user_or_device_user),
+    _cap: None = Depends(require_capability_if_device('vault')),
     db: AsyncSession = Depends(get_db),
 ) -> Response:
     card = await _load_owned_card(db, card_id=card_id, user_id=me.id)
@@ -362,6 +367,7 @@ async def delete_card(
 async def restore_card(
     card_id: str,
     me: User = Depends(get_user_or_device_user),
+    _cap: None = Depends(require_capability_if_device('vault')),
     db: AsyncSession = Depends(get_db),
 ) -> CardOut:
     card = await _load_owned_card(
@@ -410,6 +416,7 @@ async def reveal_field(
     card_id: str,
     payload: RevealRequest,
     me: User = Depends(get_user_or_device_user),
+    _cap: None = Depends(require_capability_if_device('vault')),
     db: AsyncSession = Depends(get_db),
 ) -> RevealResponse:
     """Decrypt and return the plaintext for ONE secret field on ONE card.
@@ -558,6 +565,7 @@ async def ask_card(
     card_id: str,
     body: CardAskIn,
     me: User = Depends(get_user_or_device_user),
+    _cap: None = Depends(require_capability_if_device('vault')),
     db: AsyncSession = Depends(get_db),
 ) -> CardAskOut:
     """AI thread anchored to one Vault card. Companion surfaces this
@@ -604,6 +612,7 @@ async def list_audit(
     card_id: Optional[str] = Query(default=None),
     limit: int = Query(default=100, ge=1, le=500),
     me: User = Depends(get_user_or_device_user),
+    _cap: None = Depends(require_capability_if_device('vault')),
     db: AsyncSession = Depends(get_db),
 ) -> AuditResponse:
     stmt = select(VaultAuditEntry).where(VaultAuditEntry.user_id == me.id)

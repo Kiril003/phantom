@@ -1,0 +1,21 @@
+[Unit]
+Description=PHANTOM Relay
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=phantom
+WorkingDirectory=/opt/phantom-relay
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/phantom-relay/.venv/bin/uvicorn main:app --host 127.0.0.1 --port 8787 --ws websockets
+Restart=always
+RestartSec=3
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=yes
+ReadWritePaths=/opt/phantom-relay
+
+[Install]
+WantedBy=multi-user.target

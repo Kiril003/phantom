@@ -1,0 +1,14 @@
+relay.phantom-os.dev {
+	encode zstd gzip
+
+	@ws {
+		path /relay/node /relay/node/session /relay/client
+	}
+	reverse_proxy @ws 127.0.0.1:8787 {
+		flush_interval -1
+	}
+
+	reverse_proxy /relay/health 127.0.0.1:8787
+
+	respond 404
+}

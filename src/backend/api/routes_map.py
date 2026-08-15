@@ -11,11 +11,13 @@ Endpoints:
   GET  /map/track             — recent GPS track from ContextEngine history
   DELETE /map/pois/{id}       — delete a POI (owner only)
   GET  /map/hazards/cliff_scree — baked cliff/scree/bare_rock features in bounds
+  GET  /map/hazards/power_towers — baked power=tower landmark nodes in bounds
 """
 from __future__ import annotations
 
 import json
 import logging
+import time
 from datetime import datetime, timezone
 from typing import Any, Optional
 
@@ -33,6 +35,7 @@ from geo import (
     get_layer_registry,
 )
 from geo.layer_registry import LayerNotFoundError
+from geo.sources.power_towers import get_power_tower_store
 from geo.sources.terrain_hazards import HAZARD_KINDS, get_terrain_hazard_store
 from security.auth import require_auth
 from security.jwt_manager import TokenPayload
@@ -44,6 +47,9 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/map", tags=["map"])
 
 VALID_POI_CATEGORIES = {"intel", "threat", "saved", "home", "work", "custom"}
+
+# Ім'я живої задачі не завжди дорівнює id шару.
+_LIVE_TASK_BY_LAYER = {"air_raid_ua": "alarms_ua"}
 
 
 # ── Schemas ────────────────────────────────────────────────────────────────────
@@ -248,6 +254,37 @@ async def get_cliff_scree(
     features = store.query_bbox(
         lat_min=b[0], lon_min=b[1], lat_max=b[2], lon_max=b[3],
         kinds=kind_list, limit=limit,
+    )
+    return {
+        "type": "FeatureCollection",
+        "features": features,
+        "total": len(features),
+    }
+
+
+@router.get("/hazards/power_towers")
+async def get_power_towers(
+    bounds: str = Query(..., description="lat1,lon1,lat2,lon2"),
+    limit: int = Query(default=5000, ge=1, le=20000),
+    token_data: TokenPayload = Depends(require_auth),
+) -> dict:
+    """Baked `power=tower` landmark nodes in a viewport.
+
+    Served entirely from the local `PowerTowerStore` — no live upstream
+    call happens on this path (see `scripts/bake_power_towers.py`), so this
+    stays fast and available offline once baked, same shape as
+    `/map/hazards/cliff_scree`.
+    """
+    b = _parse_bounds(bounds)
+    if b is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="bounds is required — expected 'lat1,lon1,lat2,lon2'",
+        )
+
+    store = get_power_tower_store()
+    features = store.query_bbox(
+        lat_min=b[0], lon_min=b[1], lat_max=b[2], lon_max=b[3], limit=limit,
     )
     return {
         "type": "FeatureCollection",
@@ -595,10 +632,20 @@ async def list_layers(
     session = _session_id_for(token_data)
     active_ids = set(store.active_ids(session_id=session))
 
+    # Маніфестів 27, а живих джерел одиниці. Мовчазний порожній шар читається
+    # як «мапа зламана», тож кажемо прямо, за яким шаром стоять дані.
+    from geo.live_tasker import get_live_tasker
+
+    tasker = get_live_tasker()
+    live_ids = {
+        (t.get("layer_id") or t.get("name")) for t in tasker.stats()
+    }
+
     payload: list[dict[str, Any]] = []
     for manifest in layers:
         item = manifest.public_dict()
         item["active"] = manifest.id in active_ids
+        item["has_live_source"] = manifest.id in live_ids
         payload.append(item)
 
     return {
@@ -609,6 +656,172 @@ async def list_layers(
             {"file": name, "error": err} for name, err in registry.load_errors()
         ],
     }
+
+
+@router.get("/wifi_scan")
+async def wifi_scan(
+    db: AsyncSession = Depends(get_db),
+    _token: TokenPayload = Depends(require_auth),
+) -> dict[str, Any]:
+    """Точки доступу, які бачить радіо самого ПК, з координатами звідти,
+    де ми їх уже колись зустрічали.
+
+    Досі місце ПК падало до IP з похибкою в десятки кілометрів, хоча
+    Wi-Fi-модуль бачить ті самі точки, що телефон уже прив'язав до
+    координат.
+    """
+    from db.models import WardrivingRecord
+    from geo.wifi_scan import scan
+
+    seen = await scan()
+    if not seen:
+        return {"aps": [], "known": 0}
+
+    macs = [a.bssid for a in seen]
+    rows = (
+        await db.execute(
+            select(WardrivingRecord).where(WardrivingRecord.mac.in_(macs))
+        )
+    ).scalars().all()
+    by_mac: dict[str, Any] = {}
+    for row in rows:
+        prev = by_mac.get(row.mac.upper())
+        if prev is None or row.seen_count > prev.seen_count:
+            by_mac[row.mac.upper()] = row
+
+    aps: list[dict[str, Any]] = []
+    known = 0
+    for ap in seen:
+        item = ap.to_dict()
+        row = by_mac.get(ap.bssid)
+        if row is not None:
+            item["lat"] = row.lat
+            item["lon"] = row.lon
+            item["seen_count"] = row.seen_count
+            known += 1
+        aps.append(item)
+    return {"aps": aps, "known": known}
+
+
+class HereIn(BaseModel):
+    lat: float = Field(..., ge=-90, le=90)
+    lon: float = Field(..., ge=-180, le=180)
+    accuracy_m: float = Field(default=15.0, gt=0, le=1000)
+
+
+@router.post("/here")
+async def set_here(
+    body: HereIn,
+    db: AsyncSession = Depends(get_db),
+    token_data: TokenPayload = Depends(require_auth),
+) -> dict[str, Any]:
+    """Оператор показав пальцем, де він.
+
+    Без приймача й без телефона ПК не має з чого почати: IP дає десятки
+    кілометрів, а вчити радіо з такої похибки не можна. Одна точка від
+    людини розриває це коло — далі місце тримає Wi-Fi, і питати більше
+    не доведеться.
+    """
+    from agent.localization.sources.user_stated import set_user_stated
+    from db.models import LocationHistory, WardrivingRecord
+    from geo.wifi_scan import scan
+
+    set_user_stated(
+        lat=body.lat,
+        lon=body.lon,
+        confidence=0.9,
+        accuracy_m=body.accuracy_m,
+    )
+
+    user_id = getattr(token_data, "user_id", None) or getattr(token_data, "sub", None)
+    db.add(
+        LocationHistory(
+            user_id=user_id,
+            lat=body.lat,
+            lon=body.lon,
+            source="user_stated",
+            confidence=0.9,
+            accuracy_m=body.accuracy_m,
+        )
+    )
+
+    seen = await scan()
+    lat_r, lon_r = round(body.lat, 4), round(body.lon, 4)
+    learned = 0
+    for ap in seen:
+        exists = (
+            await db.execute(
+                select(WardrivingRecord).where(
+                    WardrivingRecord.mac == ap.bssid,
+                    WardrivingRecord.lat_rounded == lat_r,
+                    WardrivingRecord.lon_rounded == lon_r,
+                )
+            )
+        ).scalars().first()
+        if exists is not None:
+            exists.seen_count += 1
+            continue
+        db.add(
+            WardrivingRecord(
+                mac=ap.bssid,
+                ssid=ap.ssid[:256],
+                rssi=ap.rssi_dbm,
+                encryption="",
+                channel=0,
+                lat=body.lat,
+                lon=body.lon,
+                lat_rounded=lat_r,
+                lon_rounded=lon_r,
+            )
+        )
+        learned += 1
+    await db.commit()
+    return {"ok": True, "learned_aps": learned, "seen_aps": len(seen)}
+
+
+class WifiObserveIn(BaseModel):
+    lat: float = Field(..., ge=-90, le=90)
+    lon: float = Field(..., ge=-180, le=180)
+    accuracy_m: float = Field(..., gt=0)
+
+
+@router.post("/wifi_observe")
+async def wifi_observe(
+    body: WifiObserveIn,
+    db: AsyncSession = Depends(get_db),
+    _token: TokenPayload = Depends(require_auth),
+) -> dict[str, Any]:
+    """Прив'язати видимі точки доступу до надійного місця.
+
+    Одна добра засічка — і сусідські точки назавжди стають орієнтирами:
+    далі ПК знаходить себе сам, без телефона й без мережі.
+    """
+    from geo.wifi_scan import learn, scan
+
+    return await learn(db, body.lat, body.lon, body.accuracy_m, await scan())
+
+
+@router.get("/layers/{layer_id}/live")
+async def layer_live_snapshot(
+    layer_id: str,
+    _token: TokenPayload = Depends(require_auth),
+) -> dict[str, Any]:
+    """Поточний стан живого шару.
+
+    Тасковик віщає лише зміни, тож мапа, відкрита після початку тривоги,
+    про неї не дізнавалась. Тут вона бере стан як він є зараз.
+    """
+    from geo.live_tasker import get_live_tasker
+
+    snap = get_live_tasker().snapshot(_LIVE_TASK_BY_LAYER.get(layer_id, layer_id))
+    if snap is None:
+        return {
+            "layer_id": layer_id,
+            "fetched_at": 0.0,
+            "feature_collection": {"type": "FeatureCollection", "features": []},
+        }
+    snap["layer_id"] = layer_id
+    return snap
 
 
 @router.post("/layers/{layer_id}/enable")
@@ -676,6 +889,12 @@ class _RouteRequestBody(BaseModel):
     profile: str = Field(default="car", max_length=24)
     alternatives: int = Field(default=0, ge=0, le=3)
     language: str = Field(default="uk", max_length=5)
+
+
+class _SnapRequestBody(BaseModel):
+    points: list[list[float]] = Field(..., min_length=2, max_length=500)
+    profile: str = Field(default="car", max_length=24)
+    timestamps_ms: list[int] | None = None
 
 
 class _IsochroneRequestBody(BaseModel):
@@ -774,6 +993,47 @@ async def post_route(
         result = await get_router().route(req)
     except RoutingError as exc:
         raise HTTPException(status_code=502, detail=f"no router answered: {exc}") from exc
+    return result.model_dump(mode="json")
+
+
+@router.post("/snap")
+async def post_snap_track(
+    body: _SnapRequestBody,
+    token_data: TokenPayload = Depends(require_auth),
+) -> dict[str, Any]:
+    """Snap a noisy GPS trace to roads via the routing facade.
+
+    `RouterFacade.snap_match` has been implemented all along but was never
+    exposed — the four sibling routing endpoints (/route, /geocode, /isochrone,
+    /route/optimize) all exist, so this was a missing wire rather than missing
+    capability.
+    """
+    from geo.routing import SnapMatchRequest, get_router
+    from geo.routing.adapters import RoutingError
+
+    profile = _resolve_profile(body.profile)
+    if body.timestamps_ms is not None and len(body.timestamps_ms) != len(body.points):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=(
+                f"timestamps_ms has {len(body.timestamps_ms)} entries for "
+                f"{len(body.points)} points — they must correspond one-to-one"
+            ),
+        )
+    try:
+        req = SnapMatchRequest(
+            points=[{"lat": p[0], "lon": p[1]} for p in body.points],
+            profile=profile,
+            timestamps_ms=body.timestamps_ms,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"bad points: {exc}") from exc
+    try:
+        result = await get_router().snap_match(req)
+    except RoutingError as exc:
+        raise HTTPException(
+            status_code=502, detail=f"no snap provider answered: {exc}"
+        ) from exc
     return result.model_dump(mode="json")
 
 
@@ -916,6 +1176,25 @@ class PositionSourcesOut(BaseModel):
     paired_devices: int = 0
 
 
+def _phone_from_presence(user_id: str) -> Optional["PhonePositionOut"]:
+    """Місце телефона з присутності симбіота."""
+    from symbiote.presence import presence_store
+
+    for body in presence_store.bodies(user_id):
+        if body.kind != "phone" or body.lat is None or body.lon is None:
+            continue
+        return PhonePositionOut(
+            device_id=body.body_id,
+            device_name=body.name or "телефон",
+            lat=float(body.lat),
+            lon=float(body.lon),
+            accuracy_m=body.accuracy_m,
+            motion_class=body.motion or None,
+            age_s=max(0.0, time.time() - body.updated_at),
+        )
+    return None
+
+
 @router.get("/position_sources", response_model=PositionSourcesOut)
 async def get_position_sources(
     max_age_s: int = Query(600, ge=10, le=86_400),
@@ -941,7 +1220,9 @@ async def get_position_sources(
     )
     batch = (await db.execute(batch_q)).scalars().first()
     if batch is None:
-        return PositionSourcesOut(paired_devices=len(paired))
+        return PositionSourcesOut(
+            paired_devices=len(paired), phone=_phone_from_presence(user_id),
+        )
 
     now = datetime.now(tz=timezone.utc)
     received = batch.received_at
@@ -949,10 +1230,12 @@ async def get_position_sources(
         received = received.replace(tzinfo=timezone.utc)
     age_s = max(0.0, (now - received).total_seconds())
     if age_s > max_age_s:
-        return PositionSourcesOut(paired_devices=len(paired))
+        return PositionSourcesOut(
+            paired_devices=len(paired), phone=_phone_from_presence(user_id),
+        )
 
-    phone = None
-    if batch.gps_lat is not None and batch.gps_lon is not None:
+    phone = _phone_from_presence(user_id)
+    if phone is None and batch.gps_lat is not None and batch.gps_lon is not None:
         device = next((d for d in paired if d.id == batch.device_id), None)
         phone = PhonePositionOut(
             device_id=batch.device_id,

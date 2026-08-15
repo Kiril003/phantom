@@ -1,0 +1,32 @@
+id: power_towers
+name_ua: Опори ЛЕП (OSM)
+name_en: Power transmission towers (OSM)
+category: infra
+license: ODbL (OpenStreetMap)
+attribution: "© OpenStreetMap contributors"
+source:
+  type: local_db
+  ttl_s: 2592000
+  bbox_required: true
+geometry: point
+style:
+  fill: signal/electric
+  fill_opacity: 0.6
+  point_radius: 2
+  icon: zap
+  legend:
+    - label: "Опора ЛЕП (power=tower)"
+      color: signal/electric
+agent_verbs:
+  - map.nearby_power_towers
+require_internet: false
+require_setting: layers.power_towers.enabled
+require_root: false
+private: false
+priority: normal
+default_active: false
+available_offline: true
+tags:
+  - infra
+  - terrain
+  - navigation

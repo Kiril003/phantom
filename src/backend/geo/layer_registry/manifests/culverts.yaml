@@ -1,0 +1,32 @@
+id: culverts
+name_ua: Труби-переїзди (culvert, OSM)
+name_en: Culverts (OSM)
+category: terrain
+license: ODbL (OpenStreetMap)
+attribution: "© OpenStreetMap contributors"
+source:
+  type: local_db
+  ttl_s: 2592000
+  bbox_required: true
+geometry: line
+style:
+  stroke: signal/warn
+  stroke_width: 2
+  fill_opacity: 0.0
+  icon: triangle-alert
+  legend:
+    - label: "Труба-переїзд (tunnel=culvert)"
+      color: signal/warn
+agent_verbs:
+  - map.nearby_culverts
+require_internet: false
+require_setting: layers.culverts.enabled
+require_root: false
+private: false
+priority: normal
+default_active: false
+available_offline: true
+tags:
+  - hazard
+  - terrain
+  - safety

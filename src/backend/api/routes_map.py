@@ -13,6 +13,7 @@ Endpoints:
   GET  /map/hazards/cliff_scree — baked cliff/scree/bare_rock features in bounds
   GET  /map/hazards/power_towers — baked power=tower landmark nodes in bounds
   GET  /map/hazards/drain_ditch — baked waterway=drain|ditch obstacle lines in bounds
+  GET  /map/hazards/culverts   — baked tunnel=culvert crossing lines in bounds
 """
 from __future__ import annotations
 
@@ -36,6 +37,7 @@ from geo import (
     get_layer_registry,
 )
 from geo.layer_registry import LayerNotFoundError
+from geo.sources.culverts import get_culvert_store
 from geo.sources.drain_ditch import DITCH_KINDS, get_drain_ditch_store
 from geo.sources.power_towers import get_power_tower_store
 from geo.sources.terrain_hazards import HAZARD_KINDS, get_terrain_hazard_store
@@ -331,6 +333,37 @@ async def get_drain_ditch(
     features = store.query_bbox(
         lat_min=b[0], lon_min=b[1], lat_max=b[2], lon_max=b[3],
         kinds=kind_list, limit=limit,
+    )
+    return {
+        "type": "FeatureCollection",
+        "features": features,
+        "total": len(features),
+    }
+
+
+@router.get("/hazards/culverts")
+async def get_culverts(
+    bounds: str = Query(..., description="lat1,lon1,lat2,lon2"),
+    limit: int = Query(default=5000, ge=1, le=20000),
+    token_data: TokenPayload = Depends(require_auth),
+) -> dict:
+    """Baked `tunnel=culvert` crossing lines in a viewport.
+
+    Served entirely from the local `CulvertStore` — no live upstream call
+    happens on this path (see `scripts/bake_culverts.py`), same shape as
+    `/map/hazards/cliff_scree`, `/map/hazards/power_towers` and
+    `/map/hazards/drain_ditch`.
+    """
+    b = _parse_bounds(bounds)
+    if b is None:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="bounds is required — expected 'lat1,lon1,lat2,lon2'",
+        )
+
+    store = get_culvert_store()
+    features = store.query_bbox(
+        lat_min=b[0], lon_min=b[1], lat_max=b[2], lon_max=b[3], limit=limit,
     )
     return {
         "type": "FeatureCollection",

@@ -348,7 +348,16 @@ describe('Phase 24-PRE — error surfacing', () => {
 
 /* ─── 4. Ready-timeout overlay + retry ─────────────────────────────────── */
 
-describe.skip('Phase 24-PRE — ready-timeout fallback', () => {
+// TacticalMap's own comment above this effect explains a deliberate change
+// (unrelated to the HUD relabelling in the earlier three blocks): the
+// failure check used to be `!map.loaded()` after 5s, but `loaded()` stays
+// false while even a single tile is in flight, so people saw "map failed"
+// over a map that was loading fine on a slow connection. It now watches
+// `styleReady` (set by the 'style.load' event) with a 20s budget instead —
+// see the "Збій — це збій СТИЛЮ, а не повільні тайли" comment in
+// TacticalMap.tsx. The Retry button also lost its English aria-label
+// ("Retry" → "Спробувати ще раз", HudShell Ukrainianisation).
+describe('Phase 24-PRE — ready-timeout fallback', () => {
   beforeEach(() => {
     resetStores();
     vi.useFakeTimers({ shouldAdvanceTime: false });
@@ -357,16 +366,16 @@ describe.skip('Phase 24-PRE — ready-timeout fallback', () => {
     vi.useRealTimers();
   });
 
-  it('renders style-failed overlay if load never fires within 5s', async () => {
+  it('renders style-failed overlay if style.load never fires within 20s', async () => {
     FakeMap.suppressNextLoad = true;
     const { OmniMap } = await import('../components/map/OmniMap');
     render(<OmniMap bridgeAgent={false} />);
-    // Advance the 5s ready-timeout — nothing else should be running.
+    // Advance the 20s ready-timeout — nothing else should be running.
     await act(async () => {
-      vi.advanceTimersByTime(5100);
+      vi.advanceTimersByTime(20100);
     });
     expect(screen.getByTestId('map-style-failed')).toBeDefined();
-    expect(screen.getByRole('button', { name: 'Retry' })).toBeDefined();
+    expect(screen.getByRole('button', { name: 'Спробувати ще раз' })).toBeDefined();
   });
 
   it('Retry button re-mounts the MapLibre instance', async () => {
@@ -374,10 +383,10 @@ describe.skip('Phase 24-PRE — ready-timeout fallback', () => {
     const { OmniMap } = await import('../components/map/OmniMap');
     render(<OmniMap bridgeAgent={false} />);
     await act(async () => {
-      vi.advanceTimersByTime(5100);
+      vi.advanceTimersByTime(20100);
     });
     expect(FakeMap.recordedMaps).toHaveLength(1);
-    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Спробувати ще раз' }));
     // New instance is created on retry-nonce bump.
     expect(FakeMap.recordedMaps.length).toBeGreaterThanOrEqual(2);
   });

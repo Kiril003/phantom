@@ -1,6 +1,12 @@
 import { useEffect } from 'react';
 import { wsClient, type WSMessage } from '../services/websocket';
-import { useMapStore, type MapLayerKey, type PlannedRoute, type RoutePoint } from '../stores/mapStore';
+import {
+  useMapStore,
+  type MapLayerKey,
+  type MapSnapshotRecord,
+  type PlannedRoute,
+  type RoutePoint,
+} from '../stores/mapStore';
 import type { RouteAlternative, RouteResult } from '../services/api';
 import type { MapPOI } from '@shared/types';
 
@@ -26,7 +32,15 @@ import type { MapPOI } from '@shared/types';
  *     a matched line, and a stop ordering, none shaped like a two-point
  *     route) are not yet handled here and still fall through to the toast;
  *     tracked separately, not silently claimed as done.
- *   - `narrate / open_map / snapshot`
+ *   - `snapshot {snapshot_id, label, active_layer_ids, ...}` (from
+ *     `map.snapshot`) → mapStore.setLastSnapshot. There is no PNG capture
+ *     anywhere in this codebase (`agent/actions/map/snapshot.py`'s own
+ *     docstring says so) and the backend has no way to know the live
+ *     camera position — so this bookmark takes the layers the backend
+ *     reports and pairs them with THIS browser's own `center`/`zoom` at
+ *     the moment of receipt (the one piece only the client can supply),
+ *     tagged `hasImage: false`. Not a photo; a referenceable state.
+ *   - `narrate / open_map`
  *     → toast with the narrative (short, transient) — `open_map` is also
  *     handled, separately, by `useMapOpenNavigator` so it works even when
  *     this hook (mounted only inside the map screen's HudShell) isn't.
@@ -148,6 +162,35 @@ function asPlannedRoute(payload: Record<string, unknown>): PlannedRoute | null {
   return { result, from, to };
 }
 
+/**
+ * `map.snapshot`'s mutation payload is `{snapshot_id, label,
+ * active_layer_ids, task_id, step_idx}` — server-known state only. The
+ * live camera (`center`/`zoom`) is passed in separately by the caller,
+ * read from THIS tab's own store at the moment the message arrives,
+ * because the backend has no channel to learn it.
+ */
+function asSnapshotRecord(
+  payload: Record<string, unknown>,
+  center: [number, number] | null,
+  zoom: number,
+): MapSnapshotRecord | null {
+  const id = payload.snapshot_id;
+  if (typeof id !== 'string' || !id) return null;
+  const activeLayerIds = Array.isArray(payload.active_layer_ids)
+    ? (payload.active_layer_ids as unknown[]).filter((x): x is string => typeof x === 'string')
+    : [];
+  const label = typeof payload.label === 'string' ? payload.label : null;
+  return {
+    id,
+    label,
+    activeLayerIds,
+    center,
+    zoom,
+    capturedAt: new Date().toISOString(),
+    hasImage: false,
+  };
+}
+
 export interface UseMapAgentBridgeOptions {
   /** Skip the WS subscription (used by tests + SSR). */
   skip?: boolean;
@@ -190,6 +233,9 @@ export function useMapAgentBridge(options: UseMapAgentBridgeOptions = {}): void 
       } else if (op === 'route') {
         const route = asPlannedRoute(payload);
         if (route) store.setRoute(route);
+      } else if (op === 'snapshot') {
+        const snapshot = asSnapshotRecord(payload, store.center, store.zoom);
+        if (snapshot) store.setLastSnapshot(snapshot);
       }
 
       if (narrative) {

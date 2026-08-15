@@ -86,6 +86,7 @@ beforeEach(() => {
     route: null,
     routing: false,
     routeError: null,
+    lastSnapshot: null,
   });
   navigateSpy.mockClear();
   locationState.pathname = '/chat';
@@ -231,5 +232,55 @@ describe('useMapOpenNavigator — map.open_map actually opens the map', () => {
     dispatch('set_view', { center: [30.5, 50.45], zoom: 12 }, 'jumped');
 
     expect(navigateSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe('useMapAgentBridge — map.snapshot lands as an honest bookmark, not a fake photo', () => {
+  it('records active layers + this tab\'s own live camera, tagged hasImage: false', () => {
+    useMapStore.setState({ center: [30.55, 50.46], zoom: 13.5 });
+    render(<BridgeHarness />);
+    expect(useMapStore.getState().lastSnapshot).toBeNull();
+
+    dispatch(
+      'snapshot',
+      {
+        snapshot_id: 'snap-123',
+        label: 'зимовий рейд',
+        active_layer_ids: ['frontline', 'wardriving'],
+        task_id: 't1',
+        step_idx: 0,
+      },
+      'Зберіг стан мапи «зимовий рейд» (#snap-123): 2 активних шарів. '
+        + 'Зображення не знімається — цю можливість ще не підключено.',
+    );
+
+    const { lastSnapshot, toast } = useMapStore.getState();
+    expect(lastSnapshot).not.toBeNull();
+    expect(lastSnapshot).toMatchObject({
+      id: 'snap-123',
+      label: 'зимовий рейд',
+      activeLayerIds: ['frontline', 'wardriving'],
+      // The camera comes from THIS tab's own store — the backend never
+      // sent it, because it never had it.
+      center: [30.55, 50.46],
+      zoom: 13.5,
+      hasImage: false,
+    });
+    // The honesty check: the toast must say there is no image, not
+    // merely stay silent about it — a snapshot verb that lets the
+    // operator assume a picture exists is the defect this fixes.
+    expect(toast).toContain('Зображення не знімається');
+  });
+
+  it('drops a snapshot payload with no snapshot_id instead of writing a bookmark with no identity', () => {
+    render(<BridgeHarness />);
+    dispatch('snapshot', { label: 'x', active_layer_ids: [] });
+    expect(useMapStore.getState().lastSnapshot).toBeNull();
+  });
+
+  it('defaults active_layer_ids to empty rather than throwing on a malformed list', () => {
+    render(<BridgeHarness />);
+    dispatch('snapshot', { snapshot_id: 'snap-1', active_layer_ids: 'not-an-array' });
+    expect(useMapStore.getState().lastSnapshot?.activeLayerIds).toEqual([]);
   });
 });

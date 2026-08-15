@@ -23,6 +23,24 @@ export interface PlannedRoute {
   to: RoutePoint;
 }
 
+/**
+ * `map.snapshot`'s result. No PNG capture exists anywhere in this
+ * codebase — `hasImage` is always `false` until that's built. What IS
+ * real: the layers the agent had active server-side, plus whatever
+ * camera state this browser tab happens to hold at the moment the
+ * mutation arrives (the backend has no way to know that; it only
+ * exists client-side). A bookmark, not a photo.
+ */
+export interface MapSnapshotRecord {
+  id: string;
+  label: string | null;
+  activeLayerIds: string[];
+  center: [number, number] | null;
+  zoom: number;
+  capturedAt: string;
+  hasImage: false;
+}
+
 // Keep the most recent N track points client-side. Older points are
 // dropped on append; full history is re-hydrated from the backend via
 // `loadTrack(hours)` when the user widens the time window.
@@ -138,6 +156,10 @@ interface MapStoreState {
    * it exactly the same way regardless of who planned it.
    */
   setRoute: (route: PlannedRoute | null) => void;
+
+  /** Most recent `map.snapshot` bookmark (null when none taken yet). */
+  lastSnapshot: MapSnapshotRecord | null;
+  setLastSnapshot: (snapshot: MapSnapshotRecord | null) => void;
 
   loadWardriving: (bounds?: Bounds, since?: string) => Promise<void>;
   loadHeatmap: (bounds?: Bounds, minWeight?: number) => Promise<void>;
@@ -335,6 +357,9 @@ export const useMapStore = create<MapStoreState>((set, get) => ({
   clearRoute: () => set({ route: null, routeError: null }),
 
   setRoute: (route) => set({ route, routing: false, routeError: null }),
+
+  lastSnapshot: null,
+  setLastSnapshot: (snapshot) => set({ lastSnapshot: snapshot }),
 
   loadWardriving: async (bounds, since) => {
     set({ loading: true, error: null });

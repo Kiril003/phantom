@@ -1,10 +1,16 @@
 """map.snapshot — record the current viewport / layer state.
 
-Phase 24-B ships the agent-visible contract; the actual PNG capture
-of the MapLibre canvas lives on the frontend (24-D will wire it up).
-For now the action records the request as a mutation and returns a
-deterministic artifact descriptor so chat can refer to "this view"
-later.
+PNG capture of the MapLibre canvas has never been wired end-to-end:
+no frontend code renders `map.getCanvas().toDataURL()`, and this
+action has no way to know the live camera position (center/zoom),
+which only exists client-side. What it CAN honestly do — and what it
+does — is record the layers the agent itself has enabled server-side
+and hand that off as a mutation; the frontend bridge (
+``useMapAgentBridge.ts``) attaches the browser's own live camera
+state to it and keeps the pair as a referenceable bookmark
+(``mapStore.lastSnapshot``, ``hasImage: false``). The narrative below
+says exactly that — no image, a state bookmark — instead of implying
+a picture now exists.
 """
 from __future__ import annotations
 
@@ -59,10 +65,17 @@ class MapSnapshot(Action):
                 "step_idx": ctx.step_idx,
             },
         )
+        # Honest, not "requested a photo that never arrives": this saves a
+        # bookmark (active layers + whatever camera state the browser adds
+        # on receipt), not an image. Say so — a snapshot verb that implies
+        # a picture and never produces one is the exact silent-success
+        # defect this action used to be.
         narrative = (
-            f"Запросив знімок мапи (#{snapshot_id})."
+            f"Зберіг стан мапи (#{snapshot_id}): {len(active_ids)} активних шарів. "
+            "Зображення не знімається — цю можливість ще не підключено."
             if self.label is None else
-            f"Запросив знімок мапи: {self.label}."
+            f"Зберіг стан мапи «{self.label}» (#{snapshot_id}): {len(active_ids)} активних шарів. "
+            "Зображення не знімається — цю можливість ще не підключено."
         )
         await broadcast_map_mutation(mutation, narrative=narrative)
         return ActionResult(

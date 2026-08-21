@@ -524,7 +524,8 @@ export interface P2PPeerSession {
 export interface NetworkDiagnostics {
   transportMode: TransportProtocol;
   activeStatus: ActiveTransportStatus;
-  latencyMs: number;
+  /** null, доки не було жодного заміру. */
+  latencyMs: number | null;
   connectedClientsCount: number;
   p2pPeersCount: number;
   isWebRTCSupported: boolean;

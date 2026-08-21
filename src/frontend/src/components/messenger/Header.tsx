@@ -11,8 +11,9 @@ import {
   MessageSquare,
   MoreVertical,
   Radio,
-  Lock,
   Globe,
+  Shield,
+  WifiOff,
   ChevronLeft
 } from 'lucide-react';
 import { Chat, UserProfile, ActiveTransportStatus, TransportProtocol } from '../../types/messenger';
@@ -39,7 +40,7 @@ interface HeaderProps {
   onBack?: () => void;
   activeTransportStatus?: ActiveTransportStatus;
   transportMode?: TransportProtocol;
-  networkLatencyMs?: number;
+  networkLatencyMs?: number | null;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -61,9 +62,9 @@ export const Header: React.FC<HeaderProps> = ({
   onScrollToPinned,
   onOpenP2PNetworkModal,
   onBack,
-  activeTransportStatus = 'p2p-direct',
+  activeTransportStatus = 'offline',
   transportMode: _transportMode = 'auto',
-  networkLatencyMs = 14,
+  networkLatencyMs = null,
 }) => {
   const [showMoreMenu, setShowMoreMenu] = useState(false);
 
@@ -125,7 +126,8 @@ export const Header: React.FC<HeaderProps> = ({
       {/* 2. Right Action Controls */}
       <div className="flex items-center gap-1 sm:gap-1.5 shrink-0 relative">
         
-        {/* Live E2EE / P2P Status Badge */}
+        {/* Стан каналу. Показуємо тільки те, що виміряно: жодного замка,
+            поки наскрізного шифрування немає, і жодних мілісекунд без пінга. */}
         {onOpenP2PNetworkModal && (
           <button
             onClick={() => {
@@ -135,29 +137,42 @@ export const Header: React.FC<HeaderProps> = ({
             className={`hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold border transition-all active:scale-95 shadow-sm ${
               activeTransportStatus === 'p2p-direct'
                 ? 'bg-[#18261D] hover:bg-[#203327] text-[#55C778] border-[#294231]'
-                : activeTransportStatus === 'server-ws'
+                : activeTransportStatus === 'server-ws' || activeTransportStatus === 'relay-node'
                 ? 'bg-[#152332] hover:bg-[#1C2F44] text-[#60A5FA] border-[#243E5E]'
-                : 'bg-[#2A2013] hover:bg-[#382B1A] text-[#FBBF24] border-[#4D3A1F]'
+                : activeTransportStatus === 'connecting'
+                ? 'bg-[#2A2013] hover:bg-[#382B1A] text-[#FBBF24] border-[#4D3A1F]'
+                : 'bg-[#2A1A1A] hover:bg-[#3A2323] text-[#F87171] border-[#4D2727]'
             }`}
-            title="Натисніть для налаштування E2EE каналу зв'язку"
+            title="Стан каналу — натисніть для діагностики мережі"
           >
             {activeTransportStatus === 'p2p-direct' ? (
               <>
-                <Lock className="w-3 h-3 text-[#55C778]" />
-                <span className="truncate max-w-[100px]">P2P Direct</span>
-                <span className="text-[10px] opacity-75 font-mono">{networkLatencyMs}ms</span>
+                <Shield className="w-3 h-3 text-[#55C778]" />
+                <span className="truncate max-w-[110px]">Прямий канал · DTLS</span>
               </>
             ) : activeTransportStatus === 'server-ws' ? (
               <>
                 <Globe className="w-3 h-3 text-[#60A5FA]" />
-                <span className="truncate max-w-[100px]">Server WS</span>
-                <span className="text-[10px] opacity-75 font-mono">{networkLatencyMs}ms</span>
+                <span className="truncate max-w-[110px]">Вузол</span>
+              </>
+            ) : activeTransportStatus === 'relay-node' ? (
+              <>
+                <Radio className="w-3 h-3 text-[#60A5FA]" />
+                <span className="truncate max-w-[110px]">Ретранслятор</span>
+              </>
+            ) : activeTransportStatus === 'connecting' || activeTransportStatus === 'fallback-server' ? (
+              <>
+                <Radio className="w-3 h-3 text-[#F4AF25] animate-pulse" />
+                <span>З'єднання…</span>
               </>
             ) : (
               <>
-                <Radio className="w-3 h-3 text-[#F4AF25] animate-pulse" />
-                <span>Auto Hybrid</span>
+                <WifiOff className="w-3 h-3 text-[#F87171]" />
+                <span>Каналу немає</span>
               </>
+            )}
+            {typeof networkLatencyMs === 'number' && (
+              <span className="text-[10px] opacity-75 font-mono">{networkLatencyMs}ms</span>
             )}
           </button>
         )}

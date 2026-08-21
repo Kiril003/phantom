@@ -1,6 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import { useMessengerStore } from '../../stores/messengerStore';
 import { phantomRelayService } from '../../services/phantomRelayService';
+import { messengerNetworkEngine } from '../../services/messengerNetworkEngine';
+import type { NetworkDiagnostics } from '../../types/messenger';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
 import { ChatArea } from './ChatArea';
@@ -54,6 +56,15 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
     return () => phantomRelayService.stop();
   }, []);
 
+  // Заголовок малює канал із живої діагностики рушія, а не з дефолтних пропів.
+  const [diagnostics, setDiagnostics] = useState<NetworkDiagnostics | null>(null);
+  useEffect(() => {
+    const off = messengerNetworkEngine.onDiagnostics(setDiagnostics);
+    return () => {
+      off();
+    };
+  }, []);
+
   const meParticipant = store.huddleState.participants.find((p) => p.id === store.currentUser.id);
 
   return (
@@ -92,6 +103,9 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
         <div className="flex-1 flex flex-col h-full min-w-0 bg-[#0C110D] relative overflow-hidden">
           {/* Header */}
           <Header
+            activeTransportStatus={diagnostics?.activeStatus}
+            transportMode={diagnostics?.transportMode}
+            networkLatencyMs={diagnostics?.latencyMs ?? null}
             currentChat={activeChat}
             currentUser={store.currentUser}
             onOpenDigest={() => store.setDigestModalOpen(true)}

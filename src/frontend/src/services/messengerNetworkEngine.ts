@@ -47,7 +47,8 @@ class MessengerNetworkEngine {
 
   private transportMode: TransportProtocol = 'auto';
   private activeStatus: ActiveTransportStatus = 'offline';
-  private latencyMs: number = 18;
+  // Немає заміру — немає числа. 18 «за замовчуванням» — це вигадка.
+  private latencyMs: number | null = null;
   private lastPingSentTime: number = 0;
 
   // WebRTC Peer Connections map by targetPeerId
@@ -708,10 +709,9 @@ class MessengerNetworkEngine {
         ...message,
         transport: 'p2p',
         p2pMeta: {
-          latencyMs: this.latencyMs,
-          encryptedE2E: true,
+          latencyMs: this.latencyMs ?? undefined,
           directHops: 1,
-          peerFingerprint: 'SHA256:7e:94:b1:cf:18:2d',
+          peerFingerprint: this.fingerprintFor(chatId),
         },
       },
     });
@@ -745,6 +745,14 @@ class MessengerNetworkEngine {
         }
       }
     });
+  }
+
+  /** Віддає узгоджений фінгерпринт, якщо канал уже стоїть. Інакше — нічого. */
+  private fingerprintFor(_chatId: string): string | undefined {
+    for (const session of this.peerSessions.values()) {
+      if (session.dataChannelState === 'open' && session.fingerprint) return session.fingerprint;
+    }
+    return undefined;
   }
 
   /** Фінгерпринт співрозмовника беремо з його SDP — це те, що реально узгодив DTLS. */

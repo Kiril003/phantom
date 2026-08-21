@@ -1,7 +1,21 @@
 import React from 'react';
-import { X, Info, CheckCheck, Clock, ShieldCheck } from 'lucide-react';
+import { X, Info, CheckCheck, Clock, Radio } from 'lucide-react';
 import { Message, ChatMember } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
+
+const deliveryStatusLabel: Record<NonNullable<Message['status']>, string> = {
+  sending: 'Надсилається',
+  sent: 'Надіслано',
+  delivered: 'Доставлено',
+  read: 'Прочитано',
+  failed: 'Не надіслано',
+};
+
+const transportLabel: Record<NonNullable<Message['transport']>, string> = {
+  p2p: 'WebRTC DataChannel (DTLS)',
+  server: 'Через вузол (WebSocket)',
+  relay: 'Через релей-вузол',
+};
 
 interface MessageDetailsModalProps {
   message: Message | null;
@@ -82,20 +96,28 @@ export const MessageDetailsModal: React.FC<MessageDetailsModalProps> = ({
               <span className="font-mono font-medium text-white">{message.timestamp}</span>
             </div>
 
-            <div className="flex items-center justify-between pb-2 border-b border-[#1F2B22]">
-              <span className="text-[#8EA093] flex items-center gap-1.5">
-                <CheckCheck className="w-3.5 h-3.5 text-[#55C778]" />
-                <span>Статус доставки</span>
-              </span>
-              <span className="font-semibold text-[#55C778]">Прочитано всіма учасниками</span>
-            </div>
+            {message.status && (
+              <div className="flex items-center justify-between pb-2 border-b border-[#1F2B22]">
+                <span className="text-[#8EA093] flex items-center gap-1.5">
+                  <CheckCheck className="w-3.5 h-3.5 text-[#8EA093]" />
+                  <span>Статус доставки</span>
+                </span>
+                <span className={`font-semibold ${
+                  message.status === 'failed' ? 'text-[#F87171]' : 'text-white'
+                }`}>
+                  {deliveryStatusLabel[message.status]}
+                </span>
+              </div>
+            )}
 
             <div className="flex items-center justify-between">
               <span className="text-[#8EA093] flex items-center gap-1.5">
-                <ShieldCheck className="w-3.5 h-3.5 text-[#55C778]" />
-                <span>Шифрування</span>
+                <Radio className="w-3.5 h-3.5 text-[#8EA093]" />
+                <span>Транспорт</span>
               </span>
-              <span className="font-mono text-[11px] text-[#55C778]">End-to-End Encrypted</span>
+              <span className="font-mono text-[11px] text-white">
+                {message.transport ? transportLabel[message.transport] : '—'}
+              </span>
             </div>
           </div>
 

@@ -12,7 +12,7 @@ import {
   MoreVertical,
   Radio,
   Globe,
-  Shield,
+  ArrowDownUp,
   WifiOff,
   ChevronLeft
 } from 'lucide-react';
@@ -147,7 +147,7 @@ export const Header: React.FC<HeaderProps> = ({
           >
             {activeTransportStatus === 'p2p-direct' ? (
               <>
-                <Shield className="w-3 h-3 text-[#55C778]" />
+                <ArrowDownUp className="w-3 h-3 text-[#55C778]" />
                 <span className="truncate max-w-[110px]">Прямий канал · DTLS</span>
               </>
             ) : activeTransportStatus === 'server-ws' ? (
@@ -283,8 +283,8 @@ export const Header: React.FC<HeaderProps> = ({
                 >
                   <Radio className="w-4 h-4 text-[#55C778]" />
                   <div className="flex-1">
-                    <span>E2EE / Мережевий зв'язок</span>
-                    <span className="block text-[10px] text-[#8EA093] font-normal">Параметри шифрування та WebRTC</span>
+                    <span>Мережевий зв'язок</span>
+                    <span className="block text-[10px] text-[#8EA093] font-normal">Транспорт: WebRTC та вузол</span>
                   </div>
                 </button>
               )}

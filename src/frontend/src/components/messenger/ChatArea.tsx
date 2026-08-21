@@ -35,7 +35,9 @@ import {
   Info,
   CheckCircle2,
   Globe,
-  Lock
+  Radio,
+  Check,
+  AlertCircle
 } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { Message, LocationData, TableData, TaskListData, Chat } from '../../types/messenger';
@@ -1674,15 +1676,15 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         className={`flex items-center gap-0.5 px-1 py-0.2 rounded text-[9px] font-bold ${
                           isSelf ? 'bg-emerald-500/25 text-emerald-200' : 'bg-emerald-100 text-emerald-800'
                         }`}
-                        title="Доставлено напряму через WebRTC P2P DataChannel (E2E Encrypted)"
+                        title="Доставлено напряму через WebRTC P2P DataChannel (транспорт DTLS)"
                       >
-                        <Lock className="w-2.5 h-2.5" />
+                        <Radio className="w-2.5 h-2.5" />
                         <span>P2P</span>
                       </span>
                     ) : msg.transport === 'server' ? (
                       <span
                         className="opacity-70 text-[9px]"
-                        title="Доставлено через захищений серверний WebSocket"
+                        title="Доставлено через вузол (WebSocket)"
                       >
                         <Globe className="w-2.5 h-2.5" />
                       </span>
@@ -1693,10 +1695,30 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       {msg.timestamp}
                     </span>
 
-                    {/* Delivery & Read ticks for outgoing messages */}
-                    {isSelf && (
-                      <span title="Доставлено та прочитано">
+                    {/* Галочки лише за фактичним msg.status — без статусу нічого не малюємо. */}
+                    {isSelf && msg.status === 'sending' && (
+                      <span title="Надсилається">
+                        <Clock className="w-3 h-3 text-white/50" />
+                      </span>
+                    )}
+                    {isSelf && msg.status === 'sent' && (
+                      <span title="Надіслано">
+                        <Check className="w-3 h-3 text-white/60" />
+                      </span>
+                    )}
+                    {isSelf && msg.status === 'delivered' && (
+                      <span title="Доставлено">
+                        <CheckCheck className="w-3 h-3 text-white/60" />
+                      </span>
+                    )}
+                    {isSelf && msg.status === 'read' && (
+                      <span title="Прочитано">
                         <CheckCheck className="w-3 h-3 text-[#E87A42] glow-terracotta" />
+                      </span>
+                    )}
+                    {isSelf && msg.status === 'failed' && (
+                      <span title="Не надіслано">
+                        <AlertCircle className="w-3 h-3 text-[#F87171]" />
                       </span>
                     )}
                   </div>

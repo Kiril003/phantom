@@ -8,10 +8,9 @@ import {
   Trash2,
   Check,
   Radio,
-  Lock,
   Globe,
   Zap,
-  KeyRound
+  AlertTriangle
 } from 'lucide-react';
 import { soundFx } from '../../utils/messengerSound';
 import { networkEngine } from '../../services/messengerNetworkEngine';
@@ -220,7 +219,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     {
                       id: 'auto' as TransportProtocol,
                       title: 'Автоматичний (Hybrid Smart Route)',
-                      desc: 'Прямий WebRTC тунель за наявності пірів, з безпечним підстрахуванням через WebSocket сервер.',
+                      desc: 'Прямий WebRTC тунель за наявності пірів, з підстрахуванням через WebSocket сервер.',
                       icon: Zap,
                       badge: 'Рекомендовано',
                       color: 'text-[#E87A42]',
@@ -228,9 +227,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     {
                       id: 'p2p' as TransportProtocol,
                       title: 'Тільки прямий P2P (WebRTC DataChannel)',
-                      desc: 'Шифрований прямий зв\'язок між браузерами. Жодне повідомлення не передається на сервер.',
-                      icon: Lock,
-                      badge: 'Strict E2E',
+                      desc: 'Прямий зв\'язок між браузерами. Жодне повідомлення не проходить через сервер.',
+                      icon: Radio,
+                      badge: 'Прямий канал (DTLS)',
                       color: 'text-[#10B981]',
                     },
                     {
@@ -279,13 +278,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
 
-              <div className="p-3 bg-white rounded-2xl border border-[#DFD6C5] space-y-1.5">
-                <span className="text-[11px] font-bold text-[#1F2521] flex items-center gap-1.5">
-                  <KeyRound className="w-3.5 h-3.5 text-[#10B981]" />
-                  <span>Відбиток шифрування E2E вузла:</span>
+              <div className="p-3 bg-[#FDF6EC] rounded-2xl border border-[#EBD9BE] space-y-1.5">
+                <span className="text-[11px] font-bold text-[#8C5A1A] flex items-center gap-1.5">
+                  <AlertTriangle className="w-3.5 h-3.5 text-[#B45309]" />
+                  <span>Наскрізного шифрування вмісту немає</span>
                 </span>
-                <span className="font-mono text-[10.5px] text-[#69796F] block bg-[#FAF7F2] p-1.5 rounded-lg border border-[#E3D9C7] select-all">
-                  AURA:P2P:SHA256:7B:4E:91:FA:33:C9:88:E2
+                <span className="text-[10.5px] text-[#7A6A55] block leading-relaxed">
+                  Захищений лише транспорт: DTLS у прямому WebRTC-каналі. Ключів вузла ще немає, тому відбиток не показуємо.
                 </span>
               </div>
             </div>

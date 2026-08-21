@@ -11,7 +11,6 @@ import {
   Sparkles,
   Maximize2,
   Minimize2,
-  ShieldCheck,
   Zap,
   Volume2
 } from 'lucide-react';
@@ -90,10 +89,6 @@ export const VideoCallModal: React.FC<VideoCallModalProps> = ({
             <div>
               <div className="flex items-center gap-2">
                 <h3 className="font-bold text-white text-base sm:text-lg">{huddleState.title || 'Studio HD Room'}</h3>
-                <span className="px-2 py-0.5 rounded-full text-[11px] font-semibold bg-[#26372B] text-[#55C778] border border-[#3E5C46] flex items-center gap-1">
-                  <ShieldCheck className="w-3 h-3" />
-                  E2EE Захищено
-                </span>
                 {isRecording && (
                   <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-red-950/80 text-red-400 border border-red-800 flex items-center gap-1.5 animate-pulse">
                     <span className="w-2 h-2 rounded-full bg-red-500" />

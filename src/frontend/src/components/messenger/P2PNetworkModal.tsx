@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import {
   X,
   Radio,
-  Lock,
   Globe,
   Zap,
   Activity,
@@ -14,7 +13,7 @@ import {
   FileUp,
   KeyRound,
   RefreshCw,
-  ShieldCheck,
+  AlertTriangle,
   ArrowDownUp
 } from 'lucide-react';
 import {
@@ -49,10 +48,6 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
   // File Transfer State
   const [fileProgress, setFileProgress] = useState<{ fileName: string; percentage: number; isReceiving: boolean; senderName: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
-
-  // Ping Echo test state
-  const [isPinging, setIsPinging] = useState(false);
-  const [lastPingResult, setLastPingResult] = useState<number | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -99,13 +94,14 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
     if (!manualAnswerInput.trim()) return;
     soundFx.playSend();
     setHandshakeStatus('Синхронізація віддаленого SDP Answer...');
-    const success = await networkEngine.acceptManualAnswer(manualAnswerInput);
-    if (success) {
-      setHandshakeStatus('Успішно встановлено прямий WebRTC DataChannel тунель! ⚡');
-      soundFx.playConfetti();
-    } else {
-      setHandshakeStatus('Помилка валідації SDP Answer. Перевірте цілісність коду.');
-    }
+    // acceptManualAnswer лише валідує формат — remote description не застосовується,
+    // тому про встановлений тунель тут говорити не можна.
+    const isValid = await networkEngine.acceptManualAnswer(manualAnswerInput);
+    setHandshakeStatus(
+      isValid
+        ? 'SDP Answer має коректний формат. Канал ще не встановлено.'
+        : 'Помилка валідації SDP Answer. Перевірте цілісність коду.'
+    );
   };
 
   const handleCopyOffer = () => {
@@ -125,17 +121,6 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
       alert('Немає активних P2P каналів. Перейдіть у режим Auto або підключіть хоча б один вузол.');
     }
     if (fileInputRef.current) fileInputRef.current.value = '';
-  };
-
-  const handleRunPingTest = () => {
-    setIsPinging(true);
-    soundFx.playTap();
-    setTimeout(() => {
-      const simulatedRtt = Math.floor(Math.random() * 8) + (diagnostics.activeStatus === 'p2p-direct' ? 10 : 26);
-      setLastPingResult(simulatedRtt);
-      setIsPinging(false);
-      soundFx.playChime();
-    }, 600);
   };
 
   return (
@@ -175,7 +160,7 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
                 </span>
               </div>
               <p className="text-xs text-[#8EA093]">
-                Пряма передача між клієнтами або захищений хмарний релей для бесіди <span className="font-bold text-white">«{currentChatTitle}»</span>
+                Пряма передача між клієнтами або хмарний релей для бесіди <span className="font-bold text-white">«{currentChatTitle}»</span>
               </p>
             </div>
           </div>
@@ -256,7 +241,7 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
                       Миттєвий прямий P2P тунель за наявності зв'язку, з непомітним підстрахуванням через WebSocket сервер.
                     </p>
                     <div className="mt-3 pt-2 border-t border-[#F2ECE0] flex items-center gap-1.5 text-[10.5px] font-semibold text-[#E87A42]">
-                      <ShieldCheck className="w-3.5 h-3.5" />
+                      <Check className="w-3.5 h-3.5" />
                       <span>Рекомендовано</span>
                     </div>
                   </div>
@@ -272,7 +257,7 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
                   >
                     <div className="flex items-center justify-between mb-2">
                       <div className="w-8 h-8 rounded-xl bg-[#10B981]/15 text-[#10B981] flex items-center justify-center">
-                        <Lock className="w-4 h-4" />
+                        <ArrowDownUp className="w-4 h-4" />
                       </div>
                       {diagnostics.transportMode === 'p2p' && (
                         <span className="w-2.5 h-2.5 rounded-full bg-[#10B981]" />
@@ -280,11 +265,11 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
                     </div>
                     <h4 className="font-extrabold text-sm text-[#1E2721] mb-1">Чистий P2P (WebRTC)</h4>
                     <p className="text-[11.5px] text-[#637268] leading-relaxed">
-                      Прямий шифрований DataChannel між браузерами. Текст і файли не проходять і не зберігаються на сервері.
+                      Прямий DataChannel між браузерами. Текст і файли не проходять через сервер.
                     </p>
                     <div className="mt-3 pt-2 border-t border-[#F2ECE0] flex items-center gap-1.5 text-[10.5px] font-semibold text-[#10B981]">
-                      <KeyRound className="w-3.5 h-3.5" />
-                      <span>E2E Direct Link</span>
+                      <Radio className="w-3.5 h-3.5" />
+                      <span>Прямий канал (DTLS)</span>
                     </div>
                   </div>
 
@@ -323,11 +308,15 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
                 <div className="p-3 bg-white rounded-2xl border border-[#E2D8C6] shadow-2xs">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-[#79887D] block">Затримка (RTT)</span>
                   <div className="flex items-baseline gap-1.5 mt-0.5">
-                    <span className="text-xl font-black text-[#1E2721]">{diagnostics.latencyMs}</span>
-                    <span className="text-xs font-semibold text-[#79887D]">мс</span>
+                    <span className="text-xl font-black text-[#1E2721]">
+                      {diagnostics.latencyMs !== null ? diagnostics.latencyMs : '—'}
+                    </span>
+                    {diagnostics.latencyMs !== null && (
+                      <span className="text-xs font-semibold text-[#79887D]">мс</span>
+                    )}
                   </div>
-                  <span className="text-[10px] text-[#10B981] font-semibold flex items-center gap-1 mt-1">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#10B981]" /> Відмінний пінг
+                  <span className="text-[10px] text-[#79887D] font-semibold block mt-1">
+                    {diagnostics.latencyMs !== null ? 'Останній замір ехо-пакета' : 'Заміру ще не було'}
                   </span>
                 </div>
 
@@ -338,7 +327,7 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
                     <span className="text-xs font-semibold text-[#79887D]">пірів</span>
                   </div>
                   <span className="text-[10px] text-[#637268] font-semibold block mt-1">
-                    DataChannel Active
+                    Відкритих каналів: {peers.filter((p) => p.dataChannelState === 'open').length}
                   </span>
                 </div>
 
@@ -362,32 +351,6 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
                   <span className="text-[10px] text-[#79887D] font-semibold block mt-1">
                     WebSocket sync
                   </span>
-                </div>
-              </div>
-
-              {/* Quick Ping Test Bar */}
-              <div className="p-3.5 bg-[#F4ECE0] rounded-2xl border border-[#DFD5C2] flex items-center justify-between gap-3">
-                <div className="flex items-center gap-2.5">
-                  <Activity className="w-4 h-4 text-[#E87A42]" />
-                  <div>
-                    <h5 className="font-bold text-xs text-[#1E2721]">Миттєвий зонд каналу зв'язку (Echo Probe)</h5>
-                    <p className="text-[11px] text-[#68766D]">Перевірити реальний час відгуку між вузлами</p>
-                  </div>
-                </div>
-                <div className="flex items-center gap-2">
-                  {lastPingResult !== null && (
-                    <span className="text-xs font-bold px-2 py-0.5 rounded-lg bg-white border border-[#DDD3BF] text-[#1E2721]">
-                      {lastPingResult} мс
-                    </span>
-                  )}
-                  <button
-                    onClick={handleRunPingTest}
-                    disabled={isPinging}
-                    className="px-3 py-1.5 bg-[#1E2721] hover:bg-[#344037] text-white rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-95 disabled:opacity-50 flex items-center gap-1.5"
-                  >
-                    <RefreshCw className={`w-3.5 h-3.5 ${isPinging ? 'animate-spin' : ''}`} />
-                    <span>{isPinging ? 'Тест...' : 'Запустити тест'}</span>
-                  </button>
                 </div>
               </div>
 
@@ -434,23 +397,29 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
                             <h5 className="font-extrabold text-xs sm:text-sm text-[#1E2721] truncate">{peer.peerName}</h5>
-                            <span className="px-1.5 py-0.2 rounded text-[9.5px] font-bold bg-[#E8F5E9] text-[#2E7D32] border border-[#C8E6C9]">
-                              WebRTC Direct
-                            </span>
+                            {peer.isDirectP2P && (
+                              <span className="px-1.5 py-0.2 rounded text-[9.5px] font-bold bg-[#E8F5E9] text-[#2E7D32] border border-[#C8E6C9]">
+                                WebRTC Direct
+                              </span>
+                            )}
                           </div>
-                          <p className="text-[11px] text-[#69796F] truncate font-mono mt-0.5">
-                            Відбиток: {peer.fingerprint || 'AURA:P2P:SHA256:7B:4E:91:FA:33:C9'}
-                          </p>
+                          {/* Відбиток є лише після розбору SDP — вигаданого показувати не можна. */}
+                          {peer.fingerprint && (
+                            <p className="text-[11px] text-[#69796F] truncate font-mono mt-0.5">
+                              Відбиток DTLS: {peer.fingerprint}
+                            </p>
+                          )}
                         </div>
                       </div>
 
                       <div className="text-right shrink-0">
-                        <div className="flex items-center gap-1.5 justify-end">
-                          <span className="w-2 h-2 rounded-full bg-[#10B981]" />
-                          <span className="text-xs font-bold text-[#1E2721]">{peer.rttMs || 14} мс</span>
-                        </div>
+                        {peer.rttMs !== undefined && (
+                          <span className="text-xs font-bold text-[#1E2721] block">{peer.rttMs} мс</span>
+                        )}
                         <span className="text-[10px] text-[#7A8A80] block mt-0.5">
-                          {peer.bytesReceived ? `${(peer.bytesReceived / 1024).toFixed(1)} KB` : 'Канал відкритий'}
+                          {peer.bytesReceived
+                            ? `${(peer.bytesReceived / 1024).toFixed(1)} KB`
+                            : `Канал: ${peer.dataChannelState}`}
                         </span>
                       </div>
                     </div>
@@ -469,7 +438,7 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
                   <span>Ручний обмін ключами (SDP Handshake без сервера)</span>
                 </h4>
                 <p className="text-[11px] text-[#637268] mt-1 leading-relaxed">
-                  Дозволяє встановити 100% прямий P2P зв'язок навіть в ізольованих або локальних мережах без використання центрального сигнального сервера.
+                  Обмін SDP вручну, без центрального сигнального сервера. Зараз доступний лише крок генерації та перевірки коду — канал по ньому ще не піднімається.
                 </p>
               </div>
 
@@ -519,8 +488,8 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
                   disabled={!manualAnswerInput.trim()}
                   className="w-full py-2 bg-[#1E2721] hover:bg-[#323E35] disabled:opacity-40 text-white rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-98 flex items-center justify-center gap-2"
                 >
-                  <Lock className="w-3.5 h-3.5 text-[#10B981]" />
-                  <span>Замкнути прямий P2P тунель</span>
+                  <Check className="w-3.5 h-3.5 text-[#10B981]" />
+                  <span>Перевірити SDP Answer</span>
                 </button>
               </div>
 
@@ -542,7 +511,7 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
                 <div>
                   <h4 className="font-extrabold text-sm text-[#1E2721]">Пряма передача файлів через WebRTC</h4>
                   <p className="text-xs text-[#6A7B71] max-w-md mx-auto mt-1 leading-relaxed">
-                    Файли нарізаються на бінарні фрагменти (16KB) та передаються безпосередньо у браузер одержувача без збереження на хмарних серверах та без ліміту об'єму.
+                    Файли нарізаються на бінарні фрагменти (16KB) та передаються безпосередньо у браузер одержувача, не проходячи через сервер.
                   </p>
                 </div>
 
@@ -597,8 +566,8 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
                   </div>
 
                   <div className="flex items-center justify-between p-2.5 bg-[#FAF7F1] rounded-xl border border-[#E5DC source-serif]">
-                    <span className="font-bold text-[#1E2721]">Шифрування транспортного шару</span>
-                    <span className="text-[11px] font-bold text-[#10B981]">DTLS / SRTP (AES-GCM 128)</span>
+                    <span className="font-bold text-[#1E2721]">Транспорт DataChannel</span>
+                    <span className="font-mono text-[11px] text-[#6A7B71]">DTLS / SCTP (WebRTC)</span>
                   </div>
 
                   <div className="flex items-center justify-between p-2.5 bg-[#FAF7F1] rounded-xl border border-[#E5DC source-serif]">
@@ -607,8 +576,8 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
                   </div>
 
                   <div className="flex items-center justify-between p-2.5 bg-[#FAF7F1] rounded-xl border border-[#E5DC source-serif]">
-                    <span className="font-bold text-[#1E2721]">Криптографічний протокол</span>
-                    <span className="font-mono text-[11px] text-[#E87A42]">AURA-P2P-v2.8-HYBRID</span>
+                    <span className="font-bold text-[#1E2721]">Наскрізне шифрування вмісту</span>
+                    <span className="font-mono text-[11px] text-[#B45309]">не увімкнено</span>
                   </div>
                 </div>
               </div>
@@ -619,9 +588,9 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
 
         {/* Footer */}
         <div className="px-5 py-3.5 bg-[#F4EDE2] border-t border-[#E3D9C9] flex items-center justify-between shrink-0">
-          <span className="text-[11px] text-[#718177] flex items-center gap-1.5">
-            <ShieldCheck className="w-3.5 h-3.5 text-[#10B981]" />
-            <span>End-to-End захист каналів Aura Protocol</span>
+          <span className="text-[11px] text-[#8C5A1A] flex items-center gap-1.5">
+            <AlertTriangle className="w-3.5 h-3.5 text-[#B45309]" />
+            <span>Наскрізного шифрування вмісту немає</span>
           </span>
 
           <button

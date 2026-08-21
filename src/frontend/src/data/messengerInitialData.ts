@@ -15,42 +15,14 @@ export const currentUser: UserProfile = {
   circleRole: 'Creator & Core Lead',
   personalNotes: 'Головний робочий профіль.',
   activePersonaSphere: 'work',
-  twoFactorEnabled: true,
   storageUsageMb: {
     media: 640,
     files: 310,
     voice: 145,
     cache: 85,
   },
-  activeDevices: [
-    {
-      id: 'dev_1',
-      name: 'MacBook Pro 16" (M3 Max)',
-      type: 'desktop',
-      location: 'Київ, Україна',
-      ipAddress: '178.62.204.12',
-      lastActive: 'Зараз у мережі (Поточний)',
-      isCurrent: true,
-    },
-    {
-      id: 'dev_2',
-      name: 'iPhone 15 Pro',
-      type: 'mobile',
-      location: 'Київ, Україна',
-      ipAddress: '91.214.85.10',
-      lastActive: '12 хв тому',
-      isCurrent: false,
-    },
-    {
-      id: 'dev_3',
-      name: 'Chrome Web Client (Linux Workspace)',
-      type: 'web',
-      location: 'Франкфурт, Німеччина',
-      ipAddress: '194.44.112.5',
-      lastActive: 'Вчора о 18:30',
-      isCurrent: false,
-    },
-  ],
+  // Реєстру сеансів немає — вигадані підключення до акаунта показувати не можна.
+  activeDevices: [],
   personas: {
     work: {
       id: 'work',
@@ -770,7 +742,7 @@ export const initialChats: Chat[] = [
     badge: 'Хмара',
     unreadCount: 0,
     customVibe: 'Твої ідеї, збережені таблиці, код, посилання та аудіо-замітки',
-    description: 'Особистий зашифрований простір для збереження важливих думок та файлів.',
+    description: 'Особистий простір для збереження важливих думок та файлів.',
     sharedMediaCount: {
       photos: 14,
       files: 9,

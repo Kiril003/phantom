@@ -192,7 +192,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
                       id: 'dm',
                       forum: false,
                       title: 'Приватне коло',
-                      desc: 'Особистий простір для двох або вузького кола з окремим шифруванням.',
+                      desc: 'Особистий простір для двох або вузького кола.',
                       icon: Lock,
                       badge: 'Приватно',
                     },

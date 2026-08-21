@@ -18,8 +18,7 @@ import {
   Smartphone,
   Globe,
   Trash2,
-  HardDrive,
-  Lock
+  HardDrive
 } from 'lucide-react';
 import { ChatMember, PersonaSphere, UserProfile, UserProfilePersona } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
@@ -164,7 +163,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             {[
               { id: 'profile', label: 'Сфери та Профіль', icon: Briefcase },
               { id: 'privacy', label: 'Конфіденційність', icon: Shield },
-              { id: 'devices', label: 'Пристрої (3)', icon: Laptop },
+              { id: 'devices', label: `Пристрої (${currentUser.activeDevices?.length ?? 0})`, icon: Laptop },
               { id: 'storage', label: 'Сховище & Дані', icon: HardDrive },
             ].map((tab) => {
               const Icon = tab.icon;
@@ -666,21 +665,6 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   </div>
                 </div>
 
-                {/* Two Factor Authentication */}
-                <div className="p-3.5 bg-[#F6F3EB] rounded-2xl border border-[#E7DECة] flex items-center justify-between">
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 bg-[#528A4B] text-white rounded-xl">
-                      <Lock className="w-4 h-4" />
-                    </div>
-                    <div>
-                      <h5 className="font-bold text-xs text-[#1F2521]">Двоетапна автентифікація (2FA)</h5>
-                      <p className="text-[11px] text-[#717E75]">Захист паролем та Passkey для входу</p>
-                    </div>
-                  </div>
-                  <span className="px-2.5 py-1 bg-[#E3EFE1] text-[#2E6B27] rounded-lg text-xs font-bold border border-[#C5DEC1]">
-                    Увімкнено
-                  </span>
-                </div>
               </div>
             </div>
           )}
@@ -688,9 +672,15 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           {/* D. TAB: DEVICES */}
           {isEditingSelf && activeTab === 'devices' && (
             <div className="space-y-3">
-              <div className="p-3 bg-[#FAF3E8] border border-[#EADBCC] rounded-2xl text-xs text-[#8C461A] font-medium">
-                Ви можете керувати активними сеансами на ноутбуках, смартфонах та веб-клієнтах.
-              </div>
+              {!currentUser.activeDevices?.length && (
+                <div className="p-4 bg-white border border-[#DFD6C5] rounded-2xl text-center">
+                  <Laptop className="w-7 h-7 text-[#A8B6AB] mx-auto mb-2 opacity-50" />
+                  <p className="text-xs font-bold text-[#1F2521]">Немає даних про активні сеанси</p>
+                  <p className="text-[11px] text-[#717E75] mt-1">
+                    Реєстр сеансів ще не ведеться, тому список порожній.
+                  </p>
+                </div>
+              )}
 
               {currentUser.activeDevices?.map((device) => (
                 <div
@@ -725,13 +715,12 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                     </div>
                   </div>
 
+                  {/* Завершення сеансу не реалізоване — кнопка вимкнена, щоб не рапортувати про неіснуючу дію. */}
                   {!device.isCurrent && (
                     <button
-                      onClick={() => {
-                        soundFx.playTap();
-                        alert(`Сеанс на ${device.name} успішно завершено.`);
-                      }}
-                      className="px-2.5 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-xl font-bold transition-colors"
+                      disabled
+                      title="Завершення сеансу ще не реалізоване"
+                      className="px-2.5 py-1.5 text-xs text-[#A8B0A9] rounded-xl font-bold cursor-not-allowed"
                     >
                       Завершити
                     </button>

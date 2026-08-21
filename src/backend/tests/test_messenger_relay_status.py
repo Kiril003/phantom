@@ -214,3 +214,41 @@ async def test_history_is_not_stored_as_plain_text(auth_root_client):
     ).json()
     assert back[0]["body"] == secret
     assert back[0]["ciphertext"] is None
+
+
+@pytest.mark.anyio
+async def test_new_message_is_announced_to_the_owner_devices(auth_root_client):
+    """Телефон і ПК мають побачити повідомлення без опитування."""
+    from api.websocket_hub import hub
+
+    seen: list[tuple] = []
+    original = hub.broadcast
+
+    async def _spy(channel, type_, data, user_id=None, profile_id=None):
+        seen.append((channel, type_, data, user_id))
+        return await original(channel, type_, data, user_id=user_id, profile_id=profile_id)
+
+    hub.broadcast = _spy  # type: ignore[method-assign]
+    try:
+        chat = auth_root_client.post(
+            "/api/v1/messenger/conversations", json={"title": "Сімʼя"}
+        ).json()
+        auth_root_client.post(
+            f"/api/v1/messenger/conversations/{chat['id']}/messages",
+            json={
+                "client_id": "live-1",
+                "author_id": "me",
+                "author_name": "Кирило",
+                "body": "виїжджаю",
+            },
+        )
+    finally:
+        hub.broadcast = original  # type: ignore[method-assign]
+
+    announced = [s for s in seen if s[0] == "messenger" and s[1] == "message:new"]
+    assert len(announced) == 1
+    _, _, data, user_id = announced[0]
+    assert data["body"] == "виїжджаю"
+    assert data["client_id"] == "live-1"
+    # Розсилка адресна: чуже листування не летить іншим користувачам.
+    assert user_id is not None

@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { messengerNetworkEngine } from '../services/messengerNetworkEngine';
 import { chatApi } from '../services/api';
 import { messengerApi, chatFromNode, messageFromNode } from '../services/messengerApi';
+import type { NodeMessage } from '../services/messengerApi';
 import { soundFx } from '../utils/messengerSound';
 import type {
   Chat,
@@ -171,6 +172,7 @@ export interface MessengerState {
   /** Стрічку ще не забрано з вузла — показувати як «завантаження», не як «порожньо». */
   hydrated: boolean;
   hydrateFromNode: () => Promise<void>;
+  applyNodeMessage: (row: NodeMessage) => void;
   loadMessagesForChat: (chatId: string) => Promise<void>;
 }
 
@@ -303,6 +305,31 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
       }
       })();
       return hydrationInFlight;
+    },
+
+    /** Повідомлення, записане вузлом (зокрема з іншого пристрою власника). */
+    applyNodeMessage: (row) => {
+      const selfId = get().currentUser.id;
+      set((s2) => ({
+        chats: s2.chats.map((c) => {
+          if (c.id !== row.conversation_id) return c;
+          // Своє ж повідомлення вже лежить у стрічці під client_id — не дублюємо.
+          if (c.messages.some((m) => m.id === row.client_id || m.id === row.id)) {
+            return {
+              ...c,
+              messages: c.messages.map((m) =>
+                m.id === row.client_id ? { ...m, id: row.id, status: 'sent' as const } : m,
+              ),
+            };
+          }
+          soundFx.playReceive();
+          return {
+            ...c,
+            unreadCount: c.id === s2.activeChatId ? 0 : c.unreadCount + 1,
+            messages: [...c.messages, messageFromNode(row, selfId)],
+          };
+        }),
+      }));
     },
 
     loadMessagesForChat: async (chatId) => {

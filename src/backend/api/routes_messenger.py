@@ -21,6 +21,7 @@ from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
+from api.websocket_hub import hub
 from db.database import get_db
 from db.models import MessengerConversation, MessengerMessage, User
 from messenger.crypto.at_rest import AtRestError, seal, unseal
@@ -353,4 +354,11 @@ async def append_message(
     session.add(row)
     await session.commit()
     await session.refresh(row)
-    return _message_out(row)
+    out = _message_out(row)
+
+    # Інші пристрої власника мають побачити повідомлення без опитування —
+    # телефон і ПК уже висять на цьому ж хабі, іншого каналу вигадувати не треба.
+    await hub.broadcast(
+        "messenger", "message:new", out.model_dump(mode="json"), user_id=user.id
+    )
+    return out

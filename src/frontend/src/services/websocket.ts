@@ -36,6 +36,9 @@ export type WSChannel =
   | 'vision'
   // ПОЛІС — mission fabric deltas: node/mission status, gates, keys, waves.
   | 'polis'
+  // Месенджер — нове повідомлення, записане вузлом. Сюди приходить те, що
+  // надіслав інший пристрій власника, тож телефон і ПК бачать одну стрічку.
+  | 'messenger'
   | '_meta';
 
 export interface WSMessage {

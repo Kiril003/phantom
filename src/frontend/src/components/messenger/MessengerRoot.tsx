@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useMessengerStore } from '../../stores/messengerStore';
 import { phantomRelayService } from '../../services/phantomRelayService';
+import { wsClient } from '../../services/websocket';
 import { messengerNetworkEngine } from '../../services/messengerNetworkEngine';
 import type { NetworkDiagnostics } from '../../types/messenger';
 import { Sidebar } from './Sidebar';
@@ -53,6 +54,18 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
   // Стрічку забираємо з вузла на вході — до цього показувати нічого.
   useEffect(() => {
     void store.hydrateFromNode();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Живі повідомлення з вузла: те, що надіслали з телефона, приходить сюди.
+  useEffect(() => {
+    wsClient.send({ control: 'subscribe', channels: ['messenger'] });
+    const off = wsClient.on('messenger', (msg: any) => {
+      if (msg?.type === 'message:new' && msg?.data) store.applyNodeMessage(msg.data);
+    });
+    return () => {
+      off();
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -244,7 +257,7 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
           </div>
           <h2 className="font-extrabold text-xl text-white mb-2 tracking-tight">Оберіть бесіду</h2>
           <p className="text-sm text-[#8EA093] max-w-sm leading-relaxed">
-            Виберіть чат зі списку ліворуч або створіть новий простір для співпраці та E2EE-спілкування
+            Виберіть чат зі списку ліворуч або створіть новий простір для співпраці та спілкування
           </p>
         </div>
       )}

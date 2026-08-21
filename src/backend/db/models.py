@@ -1423,3 +1423,64 @@ class ApiKey(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now)
 
     tenant: Mapped["Tenant"] = relationship("Tenant", foreign_keys=[tenant_id])
+
+
+# ── Месенджер ────────────────────────────────────────────────────────────────
+
+
+class MessengerConversation(Base):
+    """Розмова з людьми. Живе на вузлі власника, а не в чужій хмарі."""
+
+    __tablename__ = "messenger_conversations"
+    __table_args__ = (
+        Index("ix_messenger_conversations_owner_updated", "owner_user_id", "updated_at"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    owner_user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    title: Mapped[str] = mapped_column(String(200), nullable=False)
+    kind: Mapped[str] = mapped_column(String(16), default="dm", nullable=False)
+    circle: Mapped[str] = mapped_column(String(32), default="all", nullable=False)
+    handle: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    avatar: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    #: Наступний номер у стрічці. Порядок повідомлень тримається на ньому, а не
+    #: на годиннику: у двох пристроїв час розходиться, лічильник — ні.
+    next_seq: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    pinned: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    archived: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, nullable=False)
+
+
+class MessengerMessage(Base):
+    """Одне повідомлення. Переживає рестарт застосунку, вузла й браузера."""
+
+    __tablename__ = "messenger_messages"
+    __table_args__ = (
+        #: Клієнт може надіслати те саме повідомлення двічі — після обриву
+        #: звʼязку він не знає, чи дійшло. Унікальність по client_id робить
+        #: повторну доставку безпечною: у стрічці все одно один запис.
+        UniqueConstraint("conversation_id", "client_id", name="uq_messenger_client_id"),
+        Index("ix_messenger_messages_conversation_seq", "conversation_id", "seq"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    conversation_id: Mapped[str] = mapped_column(
+        ForeignKey("messenger_conversations.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    #: Ідентифікатор, який згенерував клієнт ще до відправки.
+    client_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    seq: Mapped[int] = mapped_column(Integer, nullable=False)
+    author_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    author_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    kind: Mapped[str] = mapped_column(String(24), default="text", nullable=False)
+    #: Відкритий текст або JSON складного типу — для розмов, які ще не шифруємо.
+    body: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    #: Шифротекст для наскрізно захищених розмов. Вузол його не розуміє.
+    ciphertext: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    transport: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    sent_at: Mapped[datetime] = mapped_column(DateTime, default=_now, nullable=False)
+    edited_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)

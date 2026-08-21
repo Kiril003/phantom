@@ -34,7 +34,33 @@ export interface NodeMessage {
   deleted_at: string | null;
 }
 
+export interface NodeIdentity {
+  node_id: string;
+  bundle: Record<string, unknown>;
+}
+
+export interface NodeContact {
+  id: string;
+  peer_node_id: string;
+  display_name: string;
+  safety_number: string;
+  safety_number_pretty: string;
+  verified: boolean;
+  session_ready: boolean;
+  created_at: string;
+}
+
 export const messengerApi = {
+  identity: () => request<NodeIdentity>('GET', '/messenger/identity'),
+
+  listContacts: () => request<NodeContact[]>('GET', '/messenger/contacts'),
+
+  addContact: (display_name: string, bundle: Record<string, unknown>) =>
+    request<NodeContact>('POST', '/messenger/contacts', { display_name, bundle }),
+
+  verifyContact: (id: string) =>
+    request<NodeContact>('POST', `/messenger/contacts/${id}/verify`),
+
   listConversations: () => request<NodeConversation[]>('GET', '/messenger/conversations'),
 
   /** Первинний список. Вузол сам вирішує, створювати чи віддати наявне. */

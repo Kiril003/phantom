@@ -13,6 +13,7 @@ import {
   AlertTriangle
 } from 'lucide-react';
 import { soundFx } from '../../utils/messengerSound';
+import { IdentityPanel } from './IdentityPanel';
 import { networkEngine } from '../../services/messengerNetworkEngine';
 import { TransportProtocol } from '../../types/messenger';
 
@@ -281,12 +282,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="p-3 bg-[#FDF6EC] rounded-2xl border border-[#EBD9BE] space-y-1.5">
                 <span className="text-[11px] font-bold text-[#8C5A1A] flex items-center gap-1.5">
                   <AlertTriangle className="w-3.5 h-3.5 text-[#B45309]" />
-                  <span>Наскрізного шифрування вмісту немає</span>
+                  <span>Листування ще не шифрується наскрізно</span>
                 </span>
                 <span className="text-[10.5px] text-[#7A6A55] block leading-relaxed">
-                  Захищений лише транспорт: DTLS у прямому WebRTC-каналі. Ключів вузла ще немає, тому відбиток не показуємо.
+                  Ключі вузла вже є, сесія зі співрозмовником зводиться — але сам транспорт
+                  повідомлень поки не переведено на неї. Захищений тільки канал: DTLS у
+                  прямому WebRTC і TLS до вузла. Історія на диску лежить запечатаною.
                 </span>
               </div>
+
+              <IdentityPanel />
             </div>
           )}
 

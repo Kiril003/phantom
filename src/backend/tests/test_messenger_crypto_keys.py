@@ -13,6 +13,7 @@ from messenger.crypto.keys import (
     BUNDLE_VERSION,
     IDENTITY_DH_CONTEXT,
     KeyStore,
+    MessengerKeyError,
     PreKeyUnavailable,
     PublicBundle,
     UntrustedBundle,
@@ -245,10 +246,55 @@ class TestPreKeyLifecycle:
         assert len(publics) == 16
 
 
-class TestUnimplementedSurface:
-    def test_prekey_persistence_is_explicitly_absent(self, tmp_path) -> None:
-        store = KeyStore.generate(one_time_count=1)
-        with pytest.raises(NotImplementedError):
-            store.persist_prekeys(tmp_path / "prekeys.bin")
-        with pytest.raises(NotImplementedError):
-            store.restore_prekeys(tmp_path / "prekeys.bin")
+# ── Prekey-набір мусить пережити рестарт ─────────────────────────────────────
+
+
+def test_prekeys_survive_a_restart(tmp_path):
+    """Після рестарту вузол мусить уміти прочитати того, хто пише йому вперше."""
+    from messenger.crypto.session import Session
+
+    bob = KeyStore.generate(one_time_count=4)
+    bundle = bob.publish_bundle()
+    path = tmp_path / "prekeys.bin"
+    bob.persist_prekeys(path)
+
+    alice = KeyStore.generate()
+    wire = Session.initiate(alice, bundle).encrypt(b"first contact")
+
+    # Новий процес: ті самі identity-ключі, але prekey-набір ще порожній.
+    revived = KeyStore(bob._ed, identity_dh=bob._identity_dh, one_time_count=0)
+    revived.restore_prekeys(path)
+
+    _, plaintext = Session.accept(revived, wire)
+    assert plaintext == b"first contact"
+
+
+def test_issued_one_time_prekeys_are_not_reused_after_restart(tmp_path):
+    bob = KeyStore.generate(one_time_count=2)
+    first = bob.publish_bundle()
+    path = tmp_path / "prekeys.bin"
+    bob.persist_prekeys(path)
+
+    revived = KeyStore(bob._ed, identity_dh=bob._identity_dh, one_time_count=0)
+    revived.restore_prekeys(path)
+
+    # Той самий одноразовий ключ не має піти двом різним співрозмовникам.
+    assert revived.publish_bundle().one_time_prekey_id != first.one_time_prekey_id
+
+
+def test_prekey_file_is_unreadable_without_the_node_key(tmp_path):
+    bob = KeyStore.generate(one_time_count=2)
+    path = tmp_path / "prekeys.bin"
+    bob.persist_prekeys(path)
+
+    with pytest.raises(MessengerKeyError):
+        KeyStore.generate().restore_prekeys(path)
+
+
+def test_prekey_file_does_not_hold_private_keys_in_the_clear(tmp_path):
+    bob = KeyStore.generate(one_time_count=2)
+    secret = bob.signed_prekey_private(bob.publish_bundle().signed_prekey_id)
+    path = tmp_path / "prekeys.bin"
+    bob.persist_prekeys(path)
+
+    assert secret.private_bytes_raw() not in path.read_bytes()

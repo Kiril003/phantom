@@ -10,14 +10,17 @@ from __future__ import annotations
 import base64
 import hashlib
 import json
+import os
 import struct
 import time
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Optional
 
-from cryptography.exceptions import InvalidSignature
-from cryptography.hazmat.primitives import serialization
+from cryptography.exceptions import InvalidSignature, InvalidTag
+from cryptography.hazmat.primitives import hashes, serialization
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 from cryptography.hazmat.primitives.asymmetric.ed25519 import (
     Ed25519PrivateKey,
     Ed25519PublicKey,
@@ -126,6 +129,12 @@ class SignedPreKey:
     @property
     def public(self) -> bytes:
         return x25519_public_raw(self.private)
+
+
+_PREKEY_MAGIC = b"PHK1"
+_PREKEY_VERSION = 1
+_PREKEY_NONCE_LEN = 12
+_AT_REST_INFO = b"phantom-messenger/prekeys-at-rest/v1"
 
 
 @dataclass(frozen=True)
@@ -372,15 +381,79 @@ class KeyStore:
         )
 
     def persist_prekeys(self, path: Path) -> None:
-        raise NotImplementedError(
-            "збереження prekey-набору між рестартами не реалізовано; "
-            "після перезапуску вузол мусить опублікувати новий bundle"
-        )
+        """Prekey-набір мусить пережити рестарт.
+
+        Інакше після перезапуску вузол не має приватних частин ключів, які вже
+        роздав у своєму bundle, — і кожен, хто саме зараз пише йому вперше,
+        отримує нечитабельну сесію. Файл шифруємо тим самим ключем, що й стан
+        сесій: він виводиться з X25519 вузла і на диску окремо не лежить.
+
+        `_issued` теж їде на диск: інакше після рестарту той самий одноразовий
+        prekey міг би піти двом різним співрозмовникам.
+        """
+        payload = {
+            "v": _PREKEY_VERSION,
+            "next_signed_id": self._next_signed_id,
+            "current_signed_id": self._current_signed_id,
+            "signed": [
+                {
+                    "key_id": spk.key_id,
+                    "private": spk.private.private_bytes_raw().hex(),
+                    "signature": spk.signature.hex(),
+                    "created_at": spk.created_at,
+                }
+                for spk in self._signed.values()
+            ],
+            "next_one_time_id": self._next_one_time_id,
+            "one_time": {
+                str(key_id): priv.private_bytes_raw().hex()
+                for key_id, priv in self._one_time.items()
+            },
+            "issued": sorted(self._issued),
+        }
+        raw = json.dumps(payload, separators=(",", ":")).encode()
+        nonce = os.urandom(_PREKEY_NONCE_LEN)
+        sealed = AESGCM(self._at_rest_key()).encrypt(nonce, raw, _PREKEY_MAGIC)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_bytes(_PREKEY_MAGIC + nonce + sealed)
+        path.chmod(0o600)
 
     def restore_prekeys(self, path: Path) -> None:
-        raise NotImplementedError(
-            "відновлення prekey-набору між рестартами не реалізовано"
-        )
+        blob = path.read_bytes()
+        if not blob.startswith(_PREKEY_MAGIC):
+            raise MessengerKeyError(f"{path} — це не prekey-набір")
+        nonce = blob[len(_PREKEY_MAGIC) : len(_PREKEY_MAGIC) + _PREKEY_NONCE_LEN]
+        body = blob[len(_PREKEY_MAGIC) + _PREKEY_NONCE_LEN :]
+        try:
+            raw = AESGCM(self._at_rest_key()).decrypt(nonce, body, _PREKEY_MAGIC)
+        except InvalidTag as exc:
+            raise MessengerKeyError("prekey-набір не розшифровується цим вузлом") from exc
+        payload = json.loads(raw)
+        if payload.get("v") != _PREKEY_VERSION:
+            raise MessengerKeyError("невідома версія prekey-набору")
+
+        self._signed = {
+            int(item["key_id"]): SignedPreKey(
+                key_id=int(item["key_id"]),
+                private=X25519PrivateKey.from_private_bytes(bytes.fromhex(item["private"])),
+                signature=bytes.fromhex(item["signature"]),
+                created_at=float(item["created_at"]),
+            )
+            for item in payload["signed"]
+        }
+        self._current_signed_id = int(payload["current_signed_id"])
+        self._next_signed_id = int(payload["next_signed_id"])
+        self._one_time = {
+            int(key_id): X25519PrivateKey.from_private_bytes(bytes.fromhex(priv))
+            for key_id, priv in payload["one_time"].items()
+        }
+        self._next_one_time_id = int(payload["next_one_time_id"])
+        self._issued = {int(i) for i in payload.get("issued", [])}
+
+    def _at_rest_key(self) -> bytes:
+        return HKDF(
+            algorithm=hashes.SHA256(), length=32, salt=None, info=_AT_REST_INFO
+        ).derive(self._identity_dh.private_bytes_raw())
 
 
 def _load_or_create_identity_dh(path: Path) -> X25519PrivateKey:

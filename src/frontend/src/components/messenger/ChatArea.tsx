@@ -573,12 +573,22 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     }
   };
 
-  // Group messages by date
-  const getDateLabel = (timestampStr: string) => {
-    if (timestampStr.includes('11:') || timestampStr.includes('12:') || timestampStr.includes('10:')) {
-      return 'Сьогодні, 20 серпня';
-    }
-    return '19 серпня 2026';
+  // Роздільник дня. Раніше тут вгадували: якщо в рядку часу є «10:», «11:» або
+  // «12:» — то «Сьогодні, 20 серпня», інакше «19 серпня 2026». Тепер рахуємо з
+  // дати відправки, а коли її немає — не малюємо дату взагалі.
+  const getDateLabel = (msg: Message): string => {
+    if (!msg.sentAt) return '';
+    const raw = msg.sentAt.endsWith('Z') ? msg.sentAt : `${msg.sentAt}Z`;
+    const d = new Date(raw);
+    if (Number.isNaN(d.getTime())) return '';
+    const today = new Date();
+    const sameDay = (a: Date, b: Date) =>
+      a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth() && a.getDate() === b.getDate();
+    const yesterday = new Date(today);
+    yesterday.setDate(today.getDate() - 1);
+    if (sameDay(d, today)) return 'Сьогодні';
+    if (sameDay(d, yesterday)) return 'Вчора';
+    return d.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' });
   };
 
   let lastDateLabel = '';
@@ -739,9 +749,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           const isHighlighted = highlightedMessageId === msg.id;
           const isSearchMatch = isSearching && (searchMatchingIds || []).includes(msg.id);
           const isActiveSearchMatch = isSearching && (searchMatchingIds || [])[searchMatchIndex] === msg.id;
-          const dateLabel = getDateLabel(msg.timestamp || '');
-          const showDateDivider = dateLabel !== lastDateLabel;
-          lastDateLabel = dateLabel;
+          const dateLabel = getDateLabel(msg);
+          const showDateDivider = dateLabel !== '' && dateLabel !== lastDateLabel;
+          if (dateLabel) lastDateLabel = dateLabel;
 
           // Message sequence grouping for harmonious organic contours
           const prevMsg = index > 0 ? messages[index - 1] : undefined;

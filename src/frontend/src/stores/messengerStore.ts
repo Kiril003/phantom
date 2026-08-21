@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { messengerNetworkEngine } from '../services/messengerNetworkEngine';
 import { chatApi } from '../services/api';
+import { messengerApi, chatFromNode, messageFromNode } from '../services/messengerApi';
 import { soundFx } from '../utils/messengerSound';
 import type {
   Chat,
@@ -166,7 +167,14 @@ export interface MessengerState {
   closeDeleteModal: () => void;
   openReactionPicker: (messageId: string) => void;
   closeReactionPicker: () => void;
+
+  /** Стрічку ще не забрано з вузла — показувати як «завантаження», не як «порожньо». */
+  hydrated: boolean;
+  hydrateFromNode: () => Promise<void>;
+  loadMessagesForChat: (chatId: string) => Promise<void>;
 }
+
+let hydrationInFlight: Promise<void> | null = null;
 
 export const useMessengerStore = create<MessengerState>((set, get) => {
   // Connect network engine listeners
@@ -257,6 +265,59 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
 
     drafts: {},
     typingUsers: {},
+    hydrated: false,
+
+    // Джерело правди — вузол. Мок-розмови лишаються тільки як перший засів
+    // списку: їх історія була вигадана, тож у базу вона не їде.
+    hydrateFromNode: async () => {
+      // Подвійний монтаж у dev смикав це двічі, обидва виклики бачили порожній
+      // список і засівали розмови по другому колу. Тепер рішення ухвалює вузол.
+      if (hydrationInFlight) return hydrationInFlight;
+      hydrationInFlight = (async () => {
+      try {
+        const rows = await messengerApi.bootstrap(
+          initialChats.map((c) => ({
+            title: c.title,
+            kind: c.type,
+            circle: c.circle,
+            handle: c.handle ?? null,
+            avatar: c.avatar ?? null,
+          })),
+        );
+        const chats = rows.map(chatFromNode);
+        set((s2) => ({
+          chats,
+          hydrated: true,
+          activeChatId: chats.some((c) => c.id === s2.activeChatId)
+            ? s2.activeChatId
+            : chats[0]?.id ?? '',
+        }));
+        const active = get().activeChatId;
+        if (active) await get().loadMessagesForChat(active);
+      } catch (err) {
+        // Вузол недоступний — кажемо про це станом, а не підсовуємо мок як живу стрічку.
+        console.warn('[messenger] стрічку з вузла не отримано:', err);
+        set({ hydrated: false });
+      } finally {
+        hydrationInFlight = null;
+      }
+      })();
+      return hydrationInFlight;
+    },
+
+    loadMessagesForChat: async (chatId) => {
+      try {
+        const rows = await messengerApi.listMessages(chatId);
+        const selfId = get().currentUser.id;
+        set((s2) => ({
+          chats: s2.chats.map((c) =>
+            c.id === chatId ? { ...c, messages: rows.map((r) => messageFromNode(r, selfId)) } : c,
+          ),
+        }));
+      } catch (err) {
+        console.warn('[messenger] історію розмови не отримано:', err);
+      }
+    },
 
     // Selectors
     getActiveChat: () => {
@@ -271,6 +332,7 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
     // Chat navigation & circle setters
     setActiveChat: (id) => {
       soundFx.playTap();
+      void get().loadMessagesForChat(id);
       set((state) => ({
         activeChatId: id,
         chats: state.chats.map((c) => (c.id === id ? { ...c, unreadCount: 0 } : c)),
@@ -385,8 +447,11 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
       const now = new Date();
       const timeFormatted = now.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
 
+      // client_id живе довше за спробу відправки: якщо звʼязок обірветься і
+      // клієнт повторить запит, вузол упізнає його і не роздвоїть стрічку.
+      const clientId = `c_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
       const newMsg: Message = {
-        id: `msg_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
+        id: clientId,
         senderId: state.currentUser.id,
         senderName: state.currentUser.name,
         senderAvatar: state.currentUser.avatar,
@@ -394,7 +459,7 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
         type: 'text',
         text: text.trim(),
         isSelf: true,
-        status: 'sent',
+        status: 'sending',
       };
 
       soundFx.playSend();
@@ -414,6 +479,34 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
         }),
         drafts: { ...s.drafts, [chatId]: '' },
       }));
+
+      // Галочка ставиться тільки після того, як вузол підтвердив запис.
+      const markStatus = (status: Message['status']) =>
+        set((s) => ({
+          chats: s.chats.map((c) =>
+            c.id === chatId
+              ? {
+                  ...c,
+                  messages: c.messages.map((m) => (m.id === clientId ? { ...m, status } : m)),
+                }
+              : c,
+          ),
+        }));
+
+      void messengerApi
+        .appendMessage(chatId, {
+          client_id: clientId,
+          author_id: state.currentUser.id,
+          author_name: state.currentUser.name,
+          kind: 'text',
+          body: text.trim(),
+          transport: transport ?? null,
+        })
+        .then(() => markStatus('sent'))
+        .catch((err) => {
+          console.warn('[messenger] вузол не прийняв повідомлення:', err);
+          markStatus('failed');
+        });
 
       // If chatting with PHANTOM / AI, trigger living mind thinking & backend pipeline
       if (isAiChat) {

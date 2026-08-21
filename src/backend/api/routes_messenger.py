@@ -112,10 +112,64 @@ async def list_conversations(
         await session.execute(
             select(MessengerConversation)
             .where(MessengerConversation.owner_user_id == user.id)
-            .order_by(MessengerConversation.updated_at.desc())
+            .order_by(MessengerConversation.updated_at.desc(), MessengerConversation.id)
         )
     ).scalars().all()
     return [_conversation_out(r) for r in rows]
+
+
+class BootstrapIn(BaseModel):
+    conversations: list[ConversationIn]
+
+
+@router.post("/bootstrap", response_model=list[ConversationOut])
+async def bootstrap_conversations(
+    payload: BootstrapIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> list[ConversationOut]:
+    """Первинний список розмов. Ідемпотентний за побудовою.
+
+    Клієнт може смикнути це двічі — на подвійному монтажі в dev, після
+    перезапуску, з двох вкладок. Якщо в користувача вже є хоч одна розмова,
+    ми нічого не створюємо і віддаємо те, що є: інакше список роздвоюється,
+    і це видно тільки живцем у браузері, а не в тестах.
+    """
+    existing = (
+        await session.execute(
+            select(MessengerConversation)
+            .where(MessengerConversation.owner_user_id == user.id)
+            .order_by(MessengerConversation.updated_at.desc(), MessengerConversation.id)
+        )
+    ).scalars().all()
+    if existing:
+        return [_conversation_out(r) for r in existing]
+
+    rows = [
+        MessengerConversation(
+            owner_user_id=user.id,
+            title=c.title,
+            kind=c.kind,
+            circle=c.circle,
+            handle=c.handle,
+            avatar=c.avatar,
+            created_at=_now(),
+            updated_at=_now(),
+        )
+        for c in payload.conversations
+    ]
+    session.add_all(rows)
+    await session.commit()
+    # Віддаємо тим самим порядком, що й /conversations: інакше повторний виклик
+    # поверне ті самі розмови інакше перемішаними, і клієнт вирішить, що щось змінилось.
+    created = (
+        await session.execute(
+            select(MessengerConversation)
+            .where(MessengerConversation.owner_user_id == user.id)
+            .order_by(MessengerConversation.updated_at.desc(), MessengerConversation.id)
+        )
+    ).scalars().all()
+    return [_conversation_out(r) for r in created]
 
 
 @router.post(

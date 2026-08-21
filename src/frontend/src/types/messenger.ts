@@ -248,6 +248,8 @@ export interface Message {
   senderName: string;
   senderAvatar: string;
   timestamp: string;
+  /** Момент відправки з вузла, ISO. Без нього дату групування вигадувати не можна. */
+  sentAt?: string;
   type: MessageType;
   text?: string;
   thinking?: ThinkingStage;
@@ -278,7 +280,8 @@ export interface Message {
   isPinned?: boolean;
   isEdited?: boolean;
   isSelf?: boolean;
-  status?: 'sent' | 'delivered' | 'read';
+  /** sending — ще не підтверджено вузлом; failed — не збереглося. */
+  status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
   scheduledTime?: string;
   transport?: 'server' | 'p2p' | 'relay';
   p2pMeta?: {

@@ -147,3 +147,26 @@ async def test_foreign_conversation_is_not_readable(auth_root_client, auth_opera
     )
 
     assert resp.status_code == 404
+
+
+@pytest.mark.anyio
+async def test_bootstrap_twice_does_not_duplicate(auth_root_client):
+    payload = {
+        "conversations": [
+            {"title": "Рідний Дім"},
+            {"title": "Робота"},
+        ]
+    }
+
+    before = auth_root_client.get("/api/v1/messenger/conversations").json()
+
+    first = auth_root_client.post("/api/v1/messenger/bootstrap", json=payload).json()
+    second = auth_root_client.post("/api/v1/messenger/bootstrap", json=payload).json()
+
+    # Той самий склад і той самий порядок: клієнт не має вирішити, що список змінився.
+    assert [c["id"] for c in first] == [c["id"] for c in second]
+
+    after = auth_root_client.get("/api/v1/messenger/conversations").json()
+    assert len(after) == len(first)
+    if not before:
+        assert len(first) == 2

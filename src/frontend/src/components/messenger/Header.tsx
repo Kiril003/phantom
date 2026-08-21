@@ -117,7 +117,7 @@ export const Header: React.FC<HeaderProps> = ({
             </div>
 
             <p className="text-[11px] sm:text-xs text-[#8EA093] truncate">
-              {currentChat.topic || currentChat.customVibe || 'Синхронізація релізу v2.4 та впровадження інтерактивних модулів'}
+              {currentChat.topic || currentChat.customVibe || currentChat.description || ''}
             </p>
           </div>
         </div>

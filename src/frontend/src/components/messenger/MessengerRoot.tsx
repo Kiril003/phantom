@@ -50,6 +50,12 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
   // Scheduled message temporary date
   const [pendingScheduledTime, setPendingScheduledTime] = useState<string | undefined>(undefined);
 
+  // Стрічку забираємо з вузла на вході — до цього показувати нічого.
+  useEffect(() => {
+    void store.hydrateFromNode();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   // Стан ретранслятора опитуємо, лише поки месенджер відкритий.
   useEffect(() => {
     phantomRelayService.start();

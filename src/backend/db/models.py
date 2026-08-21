@@ -1445,6 +1445,11 @@ class MessengerConversation(Base):
     circle: Mapped[str] = mapped_column(String(32), default="all", nullable=False)
     handle: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     avatar: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    #: Розмова з конкретною людиною. Є контакт — є крипто-сесія, і повідомлення
+    #: їде до неї шифротекстом, а не просто лягає в локальну стрічку.
+    contact_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("messenger_contacts.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     #: Наступний номер у стрічці. Порядок повідомлень тримається на ньому, а не
     #: на годиннику: у двох пристроїв час розходиться, лічильник — ні.
     next_seq: Mapped[int] = mapped_column(Integer, default=1, nullable=False)

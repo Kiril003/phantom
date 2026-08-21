@@ -33,6 +33,7 @@ from messenger.crypto.at_rest import AtRestError, seal, unseal
 from messenger.crypto.keys import KeyStore, PublicBundle, UntrustedBundle
 from messenger.crypto.safety import format_safety_number, safety_number
 from messenger.crypto.session import Session
+from messenger.inbox import InboxError, accept_frame
 from node.identity import node_id
 from security.auth import get_current_user
 
@@ -510,3 +511,44 @@ async def verify_contact(
     await session.commit()
     await session.refresh(row)
     return _contact_out(row)
+
+
+# ── Приймальня для чужих вузлів ──────────────────────────────────────────────
+
+
+class InboundFrame(BaseModel):
+    frame: str
+    peer_node_id: Optional[str] = None
+
+
+@router.post("/inbox", response_model=MessageOut)
+async def receive_frame(
+    payload: InboundFrame,
+    session: AsyncSession = Depends(get_db),
+) -> MessageOut:
+    """Приймає зашифрований кадр від чужого вузла.
+
+    Свідомо без JWT: відправник — інша людина, у неї немає і не може бути
+    токена цього вузла. Автентичність дає сама криптографія — кадр або
+    розшифровується сесією, або летить у 400. Токен тут був би слабшою
+    перевіркою, ніж тег AEAD, і створював би ілюзію контролю.
+    """
+    owner = (await session.execute(select(User.id).order_by(User.id))).scalars().first()
+    if owner is None:
+        raise HTTPException(status_code=503, detail="вузол ще не має власника")
+
+    try:
+        raw = bytes.fromhex(payload.frame)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail="кадр не є шістнадцятковим") from exc
+
+    try:
+        row = await accept_frame(session, _keys(), owner, raw, payload.peer_node_id)
+    except InboxError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+
+    out = _message_out(row)
+    await hub.broadcast(
+        "messenger", "message:new", out.model_dump(mode="json"), user_id=owner
+    )
+    return out

@@ -139,6 +139,10 @@ class Session:
         return self._peer_identity_ed
 
     @property
+    def peer_identity_dh(self) -> bytes:
+        return self._peer_identity_dh
+
+    @property
     def peer_node_id(self) -> str:
         from messenger.crypto.keys import node_id_of
 

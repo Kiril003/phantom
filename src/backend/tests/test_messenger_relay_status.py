@@ -170,3 +170,47 @@ async def test_bootstrap_twice_does_not_duplicate(auth_root_client):
     assert len(after) == len(first)
     if not before:
         assert len(first) == 2
+
+
+@pytest.mark.anyio
+async def test_history_is_not_stored_as_plain_text(auth_root_client):
+    """Файл бази сам по собі не має видавати листування."""
+    from db.models import MessengerMessage
+    from sqlalchemy import select
+
+    from db.database import AsyncSessionLocal
+
+    chat = auth_root_client.post(
+        "/api/v1/messenger/conversations", json={"title": "Приватне"}
+    ).json()
+    secret = "код від сейфа 4417"
+    auth_root_client.post(
+        f"/api/v1/messenger/conversations/{chat['id']}/messages",
+        json={
+            "client_id": "sealed-1",
+            "author_id": "me",
+            "author_name": "Кирило",
+            "body": secret,
+        },
+    )
+
+    async with AsyncSessionLocal() as session:
+        rows = (
+            await session.execute(
+                select(MessengerMessage).where(
+                    MessengerMessage.conversation_id == chat["id"]
+                )
+            )
+        ).scalars().all()
+
+    assert len(rows) == 1
+    stored = rows[0]
+    assert stored.body is None
+    assert stored.ciphertext and secret not in stored.ciphertext
+
+    # Але власнику воно читається так само, як раніше.
+    back = auth_root_client.get(
+        f"/api/v1/messenger/conversations/{chat['id']}/messages"
+    ).json()
+    assert back[0]["body"] == secret
+    assert back[0]["ciphertext"] is None

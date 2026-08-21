@@ -12,6 +12,7 @@
 """
 from __future__ import annotations
 
+import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
@@ -22,8 +23,20 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.database import get_db
 from db.models import MessengerConversation, MessengerMessage, User
+from messenger.crypto.at_rest import AtRestError, seal, unseal
+from messenger.crypto.keys import KeyStore
 from node.identity import node_id
 from security.auth import get_current_user
+
+_node_keys: KeyStore | None = None
+
+
+def _keys() -> KeyStore:
+    """Ключі вузла читаємо з диска один раз на процес."""
+    global _node_keys
+    if _node_keys is None:
+        _node_keys = KeyStore.from_node()
+    return _node_keys
 
 router = APIRouter(prefix="/messenger", tags=["messenger"])
 
@@ -242,6 +255,17 @@ class MessageOut(BaseModel):
     deleted_at: Optional[datetime]
 
 
+def _body_of(row: MessengerMessage) -> Optional[str]:
+    """Тіло повідомлення лежить запечатаним; відкритий body лишився в старих рядках."""
+    if not row.ciphertext:
+        return row.body
+    try:
+        return unseal(_keys(), bytes.fromhex(row.ciphertext), aad=row.id.encode())
+    except (AtRestError, ValueError):
+        # Ключі вузла змінилися або рядок зіпсовано — краще порожньо, ніж вигадка.
+        return None
+
+
 def _message_out(row: MessengerMessage) -> MessageOut:
     return MessageOut(
         id=row.id,
@@ -251,8 +275,9 @@ def _message_out(row: MessengerMessage) -> MessageOut:
         author_id=row.author_id,
         author_name=row.author_name,
         kind=row.kind,
-        body=row.body,
-        ciphertext=row.ciphertext,
+        body=_body_of(row),
+        # Назовні шифротекст не віддаємо: клієнту він ні до чого, а в логах зайвий.
+        ciphertext=None,
         transport=row.transport,
         sent_at=row.sent_at,
         edited_at=row.edited_at,
@@ -304,18 +329,25 @@ async def append_message(
     if existing is not None:
         return _message_out(existing)
 
+    # Історія лягає в базу запечатаною: файл бази сам по собі не має видавати
+    # листування. Прив'язка до id рядка не дає переставити тіло в інше повідомлення.
+    # id потрібен до запису: він входить в AAD запечатаного тіла, а дефолт
+    # моделі спрацював би лише на flush, коли пломбувати вже пізно.
     row = MessengerMessage(
+        id=str(uuid.uuid4()),
         conversation_id=conversation_id,
         client_id=payload.client_id,
         seq=conversation.next_seq,
         author_id=payload.author_id,
         author_name=payload.author_name,
         kind=payload.kind,
-        body=payload.body,
-        ciphertext=payload.ciphertext,
+        body=None,
+        ciphertext=None,
         transport=payload.transport,
         sent_at=_now(),
     )
+    if payload.body is not None:
+        row.ciphertext = seal(_keys(), payload.body, aad=row.id.encode()).hex()
     conversation.next_seq += 1
     conversation.updated_at = _now()
     session.add(row)

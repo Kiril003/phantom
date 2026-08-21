@@ -23,9 +23,16 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.websocket_hub import hub
 from db.database import get_db
-from db.models import MessengerConversation, MessengerMessage, User
+from db.models import (
+    MessengerContact,
+    MessengerConversation,
+    MessengerMessage,
+    User,
+)
 from messenger.crypto.at_rest import AtRestError, seal, unseal
-from messenger.crypto.keys import KeyStore
+from messenger.crypto.keys import KeyStore, PublicBundle, UntrustedBundle
+from messenger.crypto.safety import format_safety_number, safety_number
+from messenger.crypto.session import Session
 from node.identity import node_id
 from security.auth import get_current_user
 
@@ -362,3 +369,144 @@ async def append_message(
         "messenger", "message:new", out.model_dump(mode="json"), user_id=user.id
     )
     return out
+
+
+# ── Ідентичність і контакти ──────────────────────────────────────────────────
+
+
+class IdentityOut(BaseModel):
+    node_id: str
+    bundle: dict
+
+
+@router.get("/identity", response_model=IdentityOut)
+async def get_identity(_user: User = Depends(get_current_user)) -> IdentityOut:
+    """Те, що вузол дає співрозмовнику, аби той міг почати розмову.
+
+    Публічні частини — ділитися ними безпечно. Одноразовий prekey кожен виклик
+    віддає новий, тому смикати це «про запас» не варто: запас скінченний.
+    """
+    keys = _keys()
+    return IdentityOut(node_id=keys.node_id, bundle=keys.publish_bundle().to_dict())
+
+
+class ContactIn(BaseModel):
+    display_name: str = Field(min_length=1, max_length=120)
+    bundle: dict
+
+
+class ContactOut(BaseModel):
+    id: str
+    peer_node_id: str
+    display_name: str
+    safety_number: str
+    safety_number_pretty: str
+    verified: bool
+    session_ready: bool
+    created_at: datetime
+
+
+def _contact_out(row: MessengerContact) -> ContactOut:
+    return ContactOut(
+        id=row.id,
+        peer_node_id=row.peer_node_id,
+        display_name=row.display_name,
+        safety_number=row.safety_number,
+        safety_number_pretty=format_safety_number(row.safety_number),
+        verified=row.verified_at is not None,
+        session_ready=bool(row.session_blob),
+        created_at=row.created_at,
+    )
+
+
+@router.get("/contacts", response_model=list[ContactOut])
+async def list_contacts(
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> list[ContactOut]:
+    rows = (
+        await session.execute(
+            select(MessengerContact)
+            .where(MessengerContact.owner_user_id == user.id)
+            .order_by(MessengerContact.created_at, MessengerContact.id)
+        )
+    ).scalars().all()
+    return [_contact_out(r) for r in rows]
+
+
+@router.post("/contacts", response_model=ContactOut, status_code=status.HTTP_201_CREATED)
+async def add_contact(
+    payload: ContactIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> ContactOut:
+    """Приймає bundle співрозмовника і одразу зводить крипто-сесію.
+
+    Підписи в bundle перевіряються; але сам собою підпис не доводить, що це
+    саме та людина — довіру дає лише звірене число, тому verified_at тут не
+    ставиться нізащо.
+    """
+    keys = _keys()
+    try:
+        bundle = PublicBundle.from_dict(payload.bundle)
+        bundle.verify()
+    except (UntrustedBundle, KeyError, ValueError, TypeError) as exc:
+        raise HTTPException(status_code=400, detail=f"неприйнятний bundle: {exc}") from exc
+
+    if bundle.node_id == keys.node_id:
+        raise HTTPException(status_code=400, detail="це власний вузол")
+
+    existing = (
+        await session.execute(
+            select(MessengerContact).where(
+                MessengerContact.owner_user_id == user.id,
+                MessengerContact.peer_node_id == bundle.node_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is not None:
+        return _contact_out(existing)
+
+    number = safety_number(
+        keys.identity_ed_public, keys.identity_dh_public,
+        bundle.identity_ed, bundle.identity_dh,
+    )
+    peer_session = Session.initiate(keys, bundle, expected_node_id=bundle.node_id)
+    row = MessengerContact(
+        owner_user_id=user.id,
+        peer_node_id=bundle.node_id,
+        display_name=payload.display_name,
+        bundle_json=bundle.to_json(),
+        session_blob=peer_session.serialize(keys).hex(),
+        safety_number=number,
+        created_at=_now(),
+        updated_at=_now(),
+    )
+    session.add(row)
+    await session.commit()
+    await session.refresh(row)
+    return _contact_out(row)
+
+
+@router.post("/contacts/{contact_id}/verify", response_model=ContactOut)
+async def verify_contact(
+    contact_id: str,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> ContactOut:
+    """Ставиться рукою власника після того, як число звірили голосом."""
+    row = (
+        await session.execute(
+            select(MessengerContact).where(
+                MessengerContact.id == contact_id,
+                MessengerContact.owner_user_id == user.id,
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="contact not found")
+    row.verified_at = _now()
+    row.updated_at = _now()
+    await session.commit()
+    await session.refresh(row)
+    return _contact_out(row)

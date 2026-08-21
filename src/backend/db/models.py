@@ -1484,3 +1484,31 @@ class MessengerMessage(Base):
     sent_at: Mapped[datetime] = mapped_column(DateTime, default=_now, nullable=False)
     edited_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+
+
+class MessengerContact(Base):
+    """Співрозмовник і крипто-сесія з ним.
+
+    Тут же живе число для звірки: доки його не прочитали одне одному вголос,
+    контакт лишається непідтвердженим, і UI не має права малювати замок.
+    """
+
+    __tablename__ = "messenger_contacts"
+    __table_args__ = (
+        UniqueConstraint("owner_user_id", "peer_node_id", name="uq_messenger_contact_peer"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    owner_user_id: Mapped[str] = mapped_column(
+        ForeignKey("users.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    peer_node_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    bundle_json: Mapped[str] = mapped_column(Text, nullable=False)
+    #: Стан храповика, запечатаний ключем вузла. Вузол-сусід його не прочитає.
+    session_blob: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    safety_number: Mapped[str] = mapped_column(String(64), nullable=False)
+    #: Проставляється лише після того, як люди звірили число голосом.
+    verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, nullable=False)

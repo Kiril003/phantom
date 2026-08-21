@@ -382,12 +382,52 @@ class TestForwardSecrecy:
 
 
 class TestUnimplementedSurface:
-    def test_session_persistence_is_explicitly_absent(self) -> None:
-        _, _, alice, _ = _connect()
-        with pytest.raises(NotImplementedError):
-            alice.serialize()
-        with pytest.raises(NotImplementedError):
-            Session.restore(b"")
+    def test_session_survives_a_process_restart(self) -> None:
+        """Рестарт вузла не має обривати розмову на півслові."""
+        alice_store, bob_store, alice, bob = _connect()
+        alice.encrypt(b"1")  # храповик уже зрушив
+        blob = alice.serialize(alice_store)
+
+        revived = Session.restore(alice_store, blob)
+
+        note = "після рестарту".encode()
+        assert bob.decrypt(revived.encrypt(note)) == note
+
+    def test_saved_state_is_unreadable_without_the_node_key(self) -> None:
+        """Викрадена база без ключів вузла не дає читати листування."""
+        alice_store, _, alice, _ = _connect()
+        blob = alice.serialize(alice_store)
+
+        assert b"PHS1" == blob[:4]
+        with pytest.raises(SessionError):
+            Session.restore(KeyStore.generate(), blob)
+
+    def test_saved_state_does_not_leak_key_material_in_the_clear(self) -> None:
+        alice_store, _, alice, _ = _connect()
+        raw_state = alice._ratchet.export_state()["state"]["root_key"]
+        blob = alice.serialize(alice_store)
+
+        assert bytes.fromhex(raw_state) not in blob
+
+    def test_skipped_keys_survive_the_restart(self) -> None:
+        """Повідомлення, що летіло поза порядком, має прочитатися і після рестарту."""
+        alice_store, bob_store, alice, bob = _connect()
+        one, two = "перше".encode(), "друге".encode()
+        first = alice.encrypt(one)
+        second = alice.encrypt(two)
+
+        assert bob.decrypt(second) == two  # породжує пропущений ключ
+        revived_bob = Session.restore(bob_store, bob.serialize(bob_store))
+
+        assert revived_bob.decrypt(first) == one
+
+    def test_tampered_state_blob_is_rejected(self) -> None:
+        alice_store, _, alice, _ = _connect()
+        blob = bytearray(alice.serialize(alice_store))
+        blob[-1] ^= 0x01
+
+        with pytest.raises(SessionError):
+            Session.restore(alice_store, bytes(blob))
 
     def test_responder_without_a_received_frame_cannot_encrypt(self) -> None:
         from cryptography.hazmat.primitives.asymmetric.x25519 import X25519PrivateKey

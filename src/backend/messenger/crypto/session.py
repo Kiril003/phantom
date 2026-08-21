@@ -10,8 +10,15 @@
 """
 from __future__ import annotations
 
+import json
+import os
 import struct
 from typing import Optional
+
+from cryptography.exceptions import InvalidTag
+from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 from messenger.crypto.keys import KEY_LEN, KeyStore, PublicBundle, SIG_LEN
 from messenger.crypto.ratchet import DoubleRatchet
@@ -29,6 +36,19 @@ __all__ = [
 MAGIC = b"PHM1"
 TYPE_PREKEY = 0x01
 TYPE_MESSAGE = 0x02
+
+_STATE_MAGIC = b"PHS1"
+_STATE_VERSION = 1
+_STATE_NONCE_LEN = 12
+_STATE_INFO = b"phantom-messenger/session-state/v1"
+
+
+def _state_key(store: KeyStore) -> bytes:
+    """Ключ шифрування стану виводимо з X25519 вузла, а не тримаємо окремо."""
+    return HKDF(
+        algorithm=hashes.SHA256(), length=32, salt=None, info=_STATE_INFO
+    ).derive(store.identity_dh_private.private_bytes_raw())
+
 
 _TAIL = struct.Struct(">IBI")  # signed_prekey_id, є одноразовий, one_time_prekey_id
 PREAMBLE_LEN = KEY_LEN * 3 + SIG_LEN + _TAIL.size
@@ -187,15 +207,44 @@ class Session:
         self._preamble = None
         return plaintext
 
-    def serialize(self) -> bytes:
-        raise NotImplementedError(
-            "збереження стану храповика між рестартами не реалізовано"
-        )
+    def serialize(self, store: KeyStore) -> bytes:
+        """Стан сесії у вигляді, який можна покласти в базу вузла.
+
+        Блоб шифрується ключем, виведеним з довготривалого X25519 вузла. База
+        сама по собі лежить на диску відкритою, тож викрадений файл бази без
+        ключів вузла не дає читати листування.
+        """
+        payload = {
+            "v": _STATE_VERSION,
+            "peer_ed": self._peer_identity_ed.hex(),
+            "peer_dh": self._peer_identity_dh.hex(),
+            "preamble": self._preamble.hex() if self._preamble else None,
+            "ratchet": self._ratchet.export_state(),
+        }
+        raw = json.dumps(payload, separators=(",", ":")).encode()
+        nonce = os.urandom(_STATE_NONCE_LEN)
+        sealed = AESGCM(_state_key(store)).encrypt(nonce, raw, _STATE_MAGIC)
+        return _STATE_MAGIC + nonce + sealed
 
     @classmethod
-    def restore(cls, blob: bytes) -> "Session":
-        raise NotImplementedError(
-            "відновлення стану храповика між рестартами не реалізовано"
+    def restore(cls, store: KeyStore, blob: bytes) -> "Session":
+        if not blob.startswith(_STATE_MAGIC):
+            raise SessionError("це не збережений стан сесії")
+        nonce = blob[len(_STATE_MAGIC) : len(_STATE_MAGIC) + _STATE_NONCE_LEN]
+        body = blob[len(_STATE_MAGIC) + _STATE_NONCE_LEN :]
+        try:
+            raw = AESGCM(_state_key(store)).decrypt(nonce, body, _STATE_MAGIC)
+        except InvalidTag as exc:
+            # Або блоб зіпсовано, або він від іншого вузла — читати не можна.
+            raise SessionError("стан сесії не розшифровується цим вузлом") from exc
+        payload = json.loads(raw)
+        if payload.get("v") != _STATE_VERSION:
+            raise SessionError("невідома версія збереженого стану сесії")
+        return cls(
+            DoubleRatchet.from_state(payload["ratchet"]),
+            bytes.fromhex(payload["peer_ed"]),
+            bytes.fromhex(payload["peer_dh"]),
+            preamble=bytes.fromhex(payload["preamble"]) if payload["preamble"] else None,
         )
 
 

@@ -90,6 +90,38 @@ class _State:
     n_prev: int
     skipped: dict[tuple[bytes, int], bytes]
 
+    def export(self) -> dict:
+        return {
+            "dh_self": self.dh_self.private_bytes_raw().hex(),
+            "dh_remote": self.dh_remote.hex() if self.dh_remote else None,
+            "root_key": self.root_key.hex(),
+            "ck_send": self.ck_send.hex() if self.ck_send else None,
+            "ck_recv": self.ck_recv.hex() if self.ck_recv else None,
+            "n_send": self.n_send,
+            "n_recv": self.n_recv,
+            "n_prev": self.n_prev,
+            # Пропущені ключі несуть можливість прочитати повідомлення, які ще
+            # летять поза порядком. Загубимо їх — і після рестарту вони мертві.
+            "skipped": [[dh.hex(), n, mk.hex()] for (dh, n), mk in self.skipped.items()],
+        }
+
+    @classmethod
+    def restore(cls, raw: dict) -> "_State":
+        return cls(
+            dh_self=X25519PrivateKey.from_private_bytes(bytes.fromhex(raw["dh_self"])),
+            dh_remote=bytes.fromhex(raw["dh_remote"]) if raw["dh_remote"] else None,
+            root_key=bytes.fromhex(raw["root_key"]),
+            ck_send=bytes.fromhex(raw["ck_send"]) if raw["ck_send"] else None,
+            ck_recv=bytes.fromhex(raw["ck_recv"]) if raw["ck_recv"] else None,
+            n_send=int(raw["n_send"]),
+            n_recv=int(raw["n_recv"]),
+            n_prev=int(raw["n_prev"]),
+            skipped={
+                (bytes.fromhex(dh), int(n)): bytes.fromhex(mk)
+                for dh, n, mk in raw.get("skipped", [])
+            },
+        )
+
     def clone(self) -> "_State":
         return _State(
             dh_self=self.dh_self,
@@ -143,6 +175,18 @@ class DoubleRatchet:
     def __init__(self, state: _State, associated_data: bytes) -> None:
         self._state = state
         self._ad = bytes(associated_data)
+
+    def export_state(self) -> dict:
+        """Стан храповика у вигляді, придатному для запису на диск.
+
+        Це найчутливіше, що є в месенджері: маючи цей словник, можна читати
+        подальше листування. Назовні він має їхати тільки зашифрованим.
+        """
+        return {"ad": self._ad.hex(), "state": self._state.export()}
+
+    @classmethod
+    def from_state(cls, raw: dict) -> "DoubleRatchet":
+        return cls(_State.restore(raw["state"]), bytes.fromhex(raw["ad"]))
 
     @classmethod
     def for_initiator(

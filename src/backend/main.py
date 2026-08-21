@@ -53,6 +53,7 @@ from api.routes_handoff import router as handoff_router
 from api.routes_companion_control import router as companion_control_router
 from api.routes_backup import router as backup_router
 from api.routes_intelligence import router as intelligence_router
+from api.routes_messenger import router as messenger_router
 from api.routes_node import router as node_router
 from api.routes_chronicle import router as chronicle_router
 from api.routes_workbench import router as workbench_router
@@ -1008,6 +1009,7 @@ def create_app() -> FastAPI:
     # Day-4 Z-2 (ADR-HUB-005): /api/v1/hub/{providers,route_state}
     # operator diagnostics for the AIHub registry + decision ring.
     app.include_router(hub_router, prefix=prefix)
+    app.include_router(messenger_router, prefix=prefix)
     # Day-4 FACTS-1 (ADR-FCT-001..004): /api/v1/users/{id}/facts CRUD.
     # ROOT-only writes; self-or-ROOT reads. Plaintext NEVER persisted —
     # values pass through security.crypto.encrypt_pii (Fernet).

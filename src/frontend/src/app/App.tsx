@@ -62,6 +62,7 @@ const DashboardLayout = React.lazy(() => import('../layouts/DashboardLayout'));
 const GhostLayout = React.lazy(() => import('../layouts/GhostLayout'));
 const DreamLayout = React.lazy(() => import('../layouts/DreamLayout'));
 const DialogueLayout = React.lazy(() => import('../layouts/DialogueLayout'));
+const MessengerLayout = React.lazy(() => import('../layouts/MessengerLayout'));
 const FocusLayout = React.lazy(() => import('../layouts/FocusLayout'));
 const SentinelLayout = React.lazy(() => import('../layouts/SentinelLayout'));
 
@@ -119,6 +120,7 @@ function MainRouter() {
             <Route path="map" element={<MapLayout />} />
             <Route path="polis" element={<SunriseWorkspace />} />
             <Route path="chat" element={<DialogueLayout />} />
+            <Route path="messenger" element={<MessengerLayout />} />
             <Route path="operator" element={<AgentFoundryLayout />} />
             <Route path="foundry" element={<AgentFoundryLayout />} />
             <Route path="system" element={<FocusLayout />} />

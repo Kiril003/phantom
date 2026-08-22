@@ -51,8 +51,10 @@ import {
   Vote,
   Calendar,
   Code,
-  Receipt
+  Receipt,
+  LayoutGrid
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { Chat, ChatCircle, PersonaSphere, SmartFolder, UserProfile } from '../../types/messenger';
 import { Avatar } from './Avatar';
 import { soundFx } from '../../utils/messengerSound';
@@ -227,6 +229,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenP2PNetworkModal,
   onSwitchPersonaSphere,
 }) => {
+  // Док PHANTOM на /messenger сховано, тож вихід мусить бути тут — інакше
+  // месенджер стає глухим кутом без дороги назад в ОС.
+  const navigate = useNavigate();
+
   // Кола та перейменування живуть у сторі — сюди беремо їх напряму, бо пропів на них немає.
   const activeCircle = useMessengerStore((s) => s.activeCircle);
   const setActiveCircle = useMessengerStore((s) => s.setActiveCircle);
@@ -883,6 +889,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="hidden md:flex w-14 sm:w-16 bg-[#F7F5EF] flex-col items-center py-3 border-r border-[#E8E1D3] shrink-0 justify-between select-none z-10">
         {/* Top: Current User Avatar & Workspace Folders */}
         <div className="flex flex-col items-center gap-3 w-full">
+          <button
+            onClick={() => {
+              soundFx.playTap();
+              navigate('/');
+            }}
+            className="w-[36px] h-[36px] min-h-0 min-w-0 rounded-[10px] text-[#6E7568] hover:bg-[#F1EBDD]/60 hover:text-[#21261F] flex items-center justify-center transition-colors shrink-0"
+            title="Повернутися до PHANTOM"
+            aria-label="Повернутися до PHANTOM"
+          >
+            <LayoutGrid className="w-[18px] h-[18px]" strokeWidth={1.75} />
+          </button>
+
+          <div className="w-7 h-px bg-[#E8E1D3]" />
+
           <div
             onClick={onOpenUserProfile}
             className="relative cursor-pointer"

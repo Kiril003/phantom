@@ -15,10 +15,10 @@ export default function MessengerLayout() {
       exit={{ opacity: 0 }}
       transition={{ duration: 0.35, ease: EASE_PHANTOM as unknown as number[] }}
     >
-      {/* Док PHANTOM висить absolute bottom-3 і накривав поле вводу: людина
-          не бачила, що пише. Екран сам тримає під нього місце — 12 знизу,
-          54 висота дока і 8 повітря між доком та композером. */}
-      <div className="w-full h-full" style={{ paddingBottom: 74 }}>
+      {/* Дока на цьому маршруті більше немає (FloatingToolbar), тож резерв у
+          74px під нього перетворився б на смугу порожнечі під композером.
+          Лишаємо 8px повітря, щоб поле вводу не злипалося з краєм екрана. */}
+      <div className="w-full h-full" style={{ paddingBottom: 8 }}>
         <MessengerRoot className="w-full h-full" />
       </div>
     </motion.div>

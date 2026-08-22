@@ -245,6 +245,15 @@ export function FloatingToolbar({ items }: FloatingToolbarProps) {
   // dock competing for attention. Tap handle to expand.
   const [toolbarCollapsed, toggleToolbar] = useChromeCollapse('toolbar');
 
+  // Месенджер — чужа домівка для дока: 11 криптонімів ОС над полем вводу
+  // читаються як панель керування, а не як листування. Ховаємо за
+  // маршрутом, а не видаляємо пункти: на /, /map, /chat док лишається
+  // єдиною навігацією, і будь-яке «підчищання» списку зламало б їх.
+  // Перевірка стоїть ПІСЛЯ всіх хуків — інакше при переході
+  // /messenger → / React отримає різну кількість хуків на тому ж вузлі.
+  const inMessenger = location.pathname.startsWith('/messenger');
+  if (inMessenger) return null;
+
   if (toolbarCollapsed) {
     return (
       <div

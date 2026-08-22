@@ -18,7 +18,9 @@ body {
   overflow: hidden;
   background: var(--surface-void);
   color: var(--ink-primary);
-  font-family: var(--font-display);
+  /* Тіло — ui-гарнітура (Manrope); display-роль (Space Grotesk) береться
+   * точково через --ph-font-display / tailwind font-display. */
+  font-family: var(--ph-font-ui);
   font-size: var(--fs-sm);
   line-height: var(--lh-normal);
   -webkit-font-smoothing: antialiased;

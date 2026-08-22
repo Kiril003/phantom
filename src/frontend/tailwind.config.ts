@@ -25,9 +25,14 @@ const config: Config = {
         'signal-info': 'var(--signal-info)',
       },
       fontFamily: {
-        display: ['Space Grotesk', 'Outfit', 'system-ui', 'sans-serif'],
-        sans: ['Space Grotesk', 'Outfit', 'system-ui', 'sans-serif'],
-        mono: ['JetBrains Mono', 'ui-monospace', 'SF Mono', 'monospace'],
+        // Вирок Ф1 (шрифтова розбіжність виміряна: tokens.css ставив Manrope
+        // першим, tailwind — Space Grotesk; дві гарнітури мішались випадково).
+        // Тепер обидві системи читають ОДИН контракт --ph-font-*:
+        //   sans/тіло/контроли = Manrope; display = Space Grotesk
+        //   (заголовки/великі цифри); mono = JetBrains Mono.
+        display: ['var(--ph-font-display)'],
+        sans: ['var(--ph-font-ui)'],
+        mono: ['var(--ph-font-mono)'],
         serif: ['Playfair Display', 'Georgia', 'serif'],
       },
       screens: {

@@ -190,14 +190,36 @@ def test_legacy_user_jwt_path_still_works(auth_root_token) -> None:
         assert latest.channels is None  # legacy wildcard
 
 
-def test_unauthenticated_ws_still_accepts_with_no_user() -> None:
-    """The pre-existing unauthenticated path (no token / bogus token)
-    is still permitted — `_ws` accepts the socket and lets channels
-    that don't require a user_id (e.g. `sensor` snapshots) flow."""
+def test_ws_without_token_is_refused_4401() -> None:
+    """Ф0 безпекова підлога: без токена немає анонімного wildcard-клієнта.
+    До фікса `_ws` приймав будь-кого з channels=None — тобто всі
+    броадкасти всіх користувачів. Тепер — accept + close(4401)."""
+    from starlette.websockets import WebSocketDisconnect
+
     from api.websocket_hub import hub
 
+    pre_count = hub.client_count
     client = _ws_app_client()
-    with client.websocket_connect("/ws?token=garbage"):
-        latest = list(hub._clients.values())[-1]
-        assert latest.user_id is None
-        assert latest.channels is None
+    with pytest.raises(WebSocketDisconnect) as excinfo:
+        with client.websocket_connect("/ws") as ws:
+            ws.receive_text()
+    assert excinfo.value.code == 4401
+    # І в хабі від нього не лишилось клієнта.
+    assert hub.client_count == pre_count
+
+
+def test_ws_with_garbage_token_is_refused_4401() -> None:
+    """Невалідний токен — та сама відмова, що й відсутній: 4401 з
+    reason='unauthorized' (відрізняється від 'device_revoked', щоб
+    клієнт знав, що чистити)."""
+    from starlette.websockets import WebSocketDisconnect
+
+    from api.websocket_hub import hub
+
+    pre_count = hub.client_count
+    client = _ws_app_client()
+    with pytest.raises(WebSocketDisconnect) as excinfo:
+        with client.websocket_connect("/ws?token=garbage") as ws:
+            ws.receive_text()
+    assert excinfo.value.code == 4401
+    assert hub.client_count == pre_count

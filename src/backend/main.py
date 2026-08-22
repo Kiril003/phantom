@@ -323,8 +323,9 @@ def _refuse_lan_bind_in_packaged_mode() -> None:
     refuse to start when ``PHANTOM_PACKAGED=1`` AND ``config.host`` is
     not the loopback ``127.0.0.1``.
 
-    The default ``host = "0.0.0.0"`` is correct for a headless device
-    daemon (Radxa on the LAN) but disastrous inside a packaged desktop
+    Since Ф0 the default is ``host = "127.0.0.1"`` (loopback), so this
+    guard only fires when an operator explicitly set a LAN bind AND the
+    build is packaged. ``0.0.0.0`` is disastrous inside a packaged desktop
     build: a Tauri sidecar shipping the FastAPI backend would expose
     the entire backend — chat, /linux, voice — to anyone on the local
     Wi-Fi. The D3-A-1 default-PIN guard does not compensate (an
@@ -967,8 +968,15 @@ def create_app() -> FastAPI:
     install_enforcement(app)
 
     # API routers
-    app.include_router(stream_router)
-    
+    #
+    # Ф0 (master-plan §5): /ws/telemetry — фейковий генератор 1000 дронів
+    # навколо Сан-Франциско. Споживачів у фронтенді нуль (перевірено grep'ом),
+    # а намальована неправда на бойовій поверхні гірша за порожнечу. Маршрут
+    # існує лише за явним прапором; без нього шлях чесно відсутній (404).
+    # Повернеться хіба як «Тренажер» під --ph-color-simulated, окремою фазою.
+    if os.environ.get("PHANTOM_FAKE_TELEMETRY") == "1":
+        app.include_router(stream_router)
+
     prefix = "/api/v1"
     app.include_router(tenant_router, prefix=prefix)
     app.include_router(members_router, prefix=prefix)
@@ -1207,6 +1215,19 @@ def _register_ws(app: FastAPI) -> None:
                             return
                 except Exception as exc:
                     logger.debug("device token WS verify failed: %s", exc)
+
+        # Ф0 безпекова підлога (master-plan §5): відсутній або невалідний
+        # токен раніше давав АНОНІМНЕ підключення з wildcard-каналами
+        # (channels=None → wants() віддає True на все) — будь-хто, хто
+        # дотягнувся до порту, читав усі броадкасти всіх користувачів.
+        # Тепер: немає автентифікованого user_id (ні користувацького JWT,
+        # ні device-JWT живої пари) — відмова тим самим стабільним кодом
+        # 4401, що й у revoked-гілці, з reason, за яким клієнт розрізнить
+        # «протух токен» від «пристрій відкликано».
+        if user_id is None:
+            await ws.accept()
+            await ws.close(code=4401, reason="unauthorized")
+            return
 
         client = await hub.connect(ws, client_id, user_id)
         client.device_id = device_id

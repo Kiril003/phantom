@@ -32,6 +32,7 @@ runs entirely in zeroconf's own thread.
 from __future__ import annotations
 
 import logging
+import os
 import socket
 from typing import Optional
 
@@ -129,7 +130,17 @@ class MdnsPublisher:
 
 def start_mdns(port: int, instance_name: str = "PHANTOM") -> bool:
     """Start the global publisher. Idempotent — calling twice is a
-    no-op (returns True if already running)."""
+    no-op (returns True if already running).
+
+    PHANTOM_SKIP_MDNS=1 вимикає оголошення повністю. Причина (Ф0): на
+    одній машині живе кілька бекендів (спільне дерево на 8000, worktree
+    на 8010) — обидва оголошували б однаковий `_phantom._tcp`, і
+    телефонний one-shot скан брав би першого, хто відповів. Стендові
+    інстанси мовчать; сам механізм не чіпаємо — Ф3 поверне його з
+    розрізненим ім'ям інстанса."""
+    if os.environ.get("PHANTOM_SKIP_MDNS") == "1":
+        logger.info("mdns: оголошення вимкнено (PHANTOM_SKIP_MDNS=1)")
+        return False
     global _publisher
     if _publisher is not None:
         return True

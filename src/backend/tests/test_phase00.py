@@ -9,7 +9,9 @@ import pytest
 
 def test_config_imports() -> None:
     from config import config, PhantomConfig  # noqa: F401
-    assert config.host == "0.0.0.0"
+    # Ф0: loopback за замовчуванням — головний порт без TLS не має сам
+    # виходити в LAN; охочі ставлять HOST=0.0.0.0 явно.
+    assert config.host == "127.0.0.1"
     assert config.port == 8000
     assert config.ai_primary_provider in ("gemini", "ollama")
 

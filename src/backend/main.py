@@ -758,7 +758,27 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.warning("Ретранслятор не піднявся (%s) — лишається лише мережа поруч", exc)
         app.state.relay_client = None
 
+    # Черга месенджера: без цієї смуги повідомлення, яке не доїхало з першого
+    # разу, лежало б у базі вічно, а відправник вважав би, що написав.
+    try:
+        from messenger.redelivery import redelivery_loop
+
+        app.state.messenger_queue_task = asyncio.create_task(
+            redelivery_loop(), name="messenger_redelivery"
+        )
+    except BaseException as exc:  # noqa: BLE001
+        logger.warning("Черга месенджера не піднялась (%s)", exc)
+        app.state.messenger_queue_task = None
+
     yield
+
+    queue_task = getattr(app.state, "messenger_queue_task", None)
+    if queue_task is not None:
+        queue_task.cancel()
+        try:
+            await queue_task
+        except (asyncio.CancelledError, Exception):
+            pass
 
     try:
         from node.relay_client import stop_relay_client

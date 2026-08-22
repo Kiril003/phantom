@@ -75,3 +75,28 @@ async def flush_queue(
 
     await session.commit()
     return delivered
+
+
+async def redelivery_loop(interval_s: float = 45.0) -> None:
+    """Фонова смуга: періодично повертається до боргів.
+
+    Тихо переживає будь-який збій: недоступний співрозмовник — це нормальний
+    стан, а не привід зупинити смугу назавжди.
+    """
+    import asyncio
+
+    from db.database import AsyncSessionLocal
+
+    while True:
+        try:
+            await asyncio.sleep(interval_s)
+            from api.routes_messenger import _keys
+
+            async with AsyncSessionLocal() as session:
+                delivered = await flush_queue(session, _keys().node_id)
+            if delivered:
+                logger.info("черга месенджера: довезено %d", delivered)
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:  # noqa: BLE001
+            logger.debug("черга месенджера спіткнулась: %s", exc)

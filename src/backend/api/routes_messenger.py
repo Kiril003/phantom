@@ -34,6 +34,7 @@ from messenger.crypto.keys import KeyStore, PublicBundle, UntrustedBundle
 from messenger.crypto.safety import format_safety_number, safety_number
 from messenger.crypto.session import Session
 from messenger.inbox import InboxError, accept_frame
+from messenger.outbox import OutboxError, prepare_frame
 from node.identity import node_id
 from security.auth import get_current_user
 
@@ -262,6 +263,10 @@ class MessageOut(BaseModel):
     sent_at: datetime
     edited_at: Optional[datetime]
     deleted_at: Optional[datetime]
+    #: local — розмова ні з ким (нотатки собі), везти нікуди.
+    #: queued — кадр зашифровано, але транспорту до вузла співрозмовника немає.
+    #: sent — віддано транспорту.
+    delivery: str = 'local'
 
 
 def _body_of(row: MessengerMessage) -> Optional[str]:
@@ -363,6 +368,16 @@ async def append_message(
     await session.commit()
     await session.refresh(row)
     out = _message_out(row)
+
+    # Розмова зі співрозмовником — готуємо кадр і віддаємо транспорту. Поки
+    # транспорту немає, чесно кажемо queued: галочка «надіслано» в клієнті
+    # означає «дійшло до вузла», а не «дійшло до людини».
+    if conversation.contact_id is not None and payload.body is not None:
+        try:
+            prepared = await prepare_frame(session, _keys(), conversation, payload.body)
+            out.delivery = 'queued' if prepared is not None else 'local'
+        except OutboxError:
+            out.delivery = 'queued'
 
     # Інші пристрої власника мають побачити повідомлення без опитування —
     # телефон і ПК уже висять на цьому ж хабі, іншого каналу вигадувати не треба.

@@ -2,10 +2,10 @@ import { useCallback, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Minus, Square, X, Minimize2 } from 'lucide-react';
 import { useUIStore, type OverlayName } from '../../stores/uiStore';
+import { useViewportSize } from '../desk/useViewportSize';
 import { EASE_PHANTOM } from '../../styles/motion';
 
-const FRAME_W = 1024;
-const FRAME_H = 600;
+// Клітки 1024×600 більше нема (Ф1): межі вікна — виміряний viewport.
 const MIN_W = 280;
 const MIN_H = 200;
 const TOOLBAR_HEIGHT = 60; // approx. floating toolbar height + margin
@@ -39,6 +39,7 @@ export function FloatingWindow({ id, title, icon, children, onFocus }: FloatingW
   const restore = useUIStore((s) => s.restore);
   const close = useUIStore((s) => s.closeOverlay);
   const focus = useUIStore((s) => s.focus);
+  const { width: FRAME_W, height: FRAME_H } = useViewportSize();
 
   const shellRef = useRef<HTMLDivElement>(null);
   const dragOffset = useRef<{ dx: number; dy: number } | null>(null);
@@ -96,7 +97,7 @@ export function FloatingWindow({ id, title, icon, children, onFocus }: FloatingW
       void cx;
       void cy;
     },
-    [win.width, win.height]
+    [win.width, win.height, FRAME_W, FRAME_H]
   );
 
   const onTitlePointerUp = useCallback(
@@ -126,7 +127,7 @@ export function FloatingWindow({ id, title, icon, children, onFocus }: FloatingW
       setDraftRect(null);
       setSnapGuide(null);
     },
-    [draftRect, snapGuide, setRect, id]
+    [draftRect, snapGuide, setRect, id, FRAME_W, FRAME_H]
   );
 
   /* ── Resize ───────────────────────────────────────────────────────── */
@@ -161,7 +162,7 @@ export function FloatingWindow({ id, title, icon, children, onFocus }: FloatingW
       );
       setDraftRect({ x: win.x, y: win.y, width, height });
     },
-    [win.x, win.y]
+    [win.x, win.y, FRAME_W, FRAME_H]
   );
 
   const onResizePointerUp = useCallback(
@@ -357,6 +358,7 @@ function WindowButton({
 }
 
 function SnapGuide({ guide }: { guide: 'left' | 'right' | 'top' | 'bottom' }) {
+  const { width: FRAME_W, height: FRAME_H } = useViewportSize();
   const commonStyle: React.CSSProperties = {
     position: 'absolute',
     background: 'color-mix(in srgb, var(--accent) 14%, transparent)',

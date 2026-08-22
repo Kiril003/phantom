@@ -1,4 +1,11 @@
 @import './tokens.css';
+/* Inter — ui-гарнітура за спеком ATLAS v0.1 (самохост через @fontsource,
+ * no-CDN канон). Статичні ваги 400/500/600/700 — канонічні; variable 450
+ * за спеком «побажання, не вимога». */
+@import '@fontsource/inter/400.css';
+@import '@fontsource/inter/500.css';
+@import '@fontsource/inter/600.css';
+@import '@fontsource/inter/700.css';
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

@@ -133,8 +133,8 @@ const config: Config = {
         // Вирок Ф1 (шрифтова розбіжність виміряна: tokens.css ставив Manrope
         // першим, tailwind — Space Grotesk; дві гарнітури мішались випадково).
         // Тепер обидві системи читають ОДИН контракт --ph-font-*:
-        //   sans/тіло/контроли = Manrope; display = Space Grotesk
-        //   (заголовки/великі цифри); mono = JetBrains Mono.
+        //   sans/тіло/контроли = Inter (спек ATLAS v0.1, fallback Manrope);
+        //   display = Space Grotesk (заголовки/великі цифри); mono = JetBrains.
         display: ['var(--ph-font-display)'],
         sans: ['var(--ph-font-ui)'],
         mono: ['var(--ph-font-mono)'],

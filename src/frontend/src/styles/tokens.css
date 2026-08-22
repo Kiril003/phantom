@@ -15,7 +15,8 @@
  */
 
 :root,
-[data-theme="sunrise-warm"] {
+[data-theme="sunrise-warm"],
+[data-theme="day"] {
   /* Тепло — похідний тон між кораловим і бурштиновим. Оголошений один раз:
      var() всередині кастомної властивості розкривається в місці вжитку, тож
      значення саме йде за активною темою. */
@@ -168,7 +169,8 @@
  *
  * Token NAMES match every other theme — components stay untouched. */
 
-[data-theme="amber-night"] {
+[data-theme="amber-night"],
+[data-theme="dusk"] {
   /* ── Amber-night primary ramp ─────────────────────────────────────── */
   --primary:           #f4af25;
   --primary-soft:      #fbc66a;
@@ -254,7 +256,8 @@
  * pre-v2 VALUES so every existing component renders the legacy look
  * without code changes. */
 
-[data-theme="cyberdeck-cold"] {
+[data-theme="cyberdeck-cold"],
+[data-theme="night"] {
   --primary:           #22d3ee;
   --primary-soft:      #67e8f9;
   --primary-deep:      #0891b2;
@@ -328,7 +331,8 @@
  * Zero glassmorphism, zero glows, zero toy-like elements.
  * high contrast, high density. */
 
-[data-theme="pro-console"] {
+[data-theme="pro-console"],
+[data-theme="minimal"] {
   --primary:           #06b6d4;                  /* cyan-500 */
   --primary-soft:      #22d3ee;
   --primary-deep:      #0891b2;
@@ -413,23 +417,31 @@
 }
 
 [data-theme="pro-console"][data-state="SHADOW"],
-[data-theme="pro-console"] [data-state="SHADOW"] {
+[data-theme="pro-console"] [data-state="SHADOW"],
+[data-theme="minimal"][data-state="SHADOW"],
+[data-theme="minimal"] [data-state="SHADOW"] {
   --accent:         #404040;
   --ui-opacity:     0.8;
 }
 
 [data-theme="pro-console"][data-state="FOCUS"],
-[data-theme="pro-console"] [data-state="FOCUS"] {
+[data-theme="pro-console"] [data-state="FOCUS"],
+[data-theme="minimal"][data-state="FOCUS"],
+[data-theme="minimal"] [data-state="FOCUS"] {
   --accent:         #06b6d4;
 }
 
 [data-theme="pro-console"][data-state="SENTINEL"],
-[data-theme="pro-console"] [data-state="SENTINEL"] {
+[data-theme="pro-console"] [data-state="SENTINEL"],
+[data-theme="minimal"][data-state="SENTINEL"],
+[data-theme="minimal"] [data-state="SENTINEL"] {
   --accent:         #ef4444;
 }
 
 [data-theme="pro-console"][data-state="GHOST"],
-[data-theme="pro-console"] [data-state="GHOST"] {
+[data-theme="pro-console"] [data-state="GHOST"],
+[data-theme="minimal"][data-state="GHOST"],
+[data-theme="minimal"] [data-state="GHOST"] {
   --accent:         #10b981;
 }
 
@@ -509,7 +521,9 @@
  * amber-night. Sunrise-warm and cyberdeck-cold are untouched. */
 
 [data-theme="amber-night"][data-state="SHADOW"],
-[data-theme="amber-night"] [data-state="SHADOW"] {
+[data-theme="amber-night"] [data-state="SHADOW"],
+[data-theme="dusk"][data-state="SHADOW"],
+[data-theme="dusk"] [data-state="SHADOW"] {
   --accent:         #6f5e3c;                     /* deep dim bronze */
   --accent-rgb:     111, 94, 60;
   --accent-fade:    rgba(111, 94, 60, 0);
@@ -518,28 +532,36 @@
 }
 
 [data-theme="amber-night"][data-state="FOCUS"],
-[data-theme="amber-night"] [data-state="FOCUS"] {
+[data-theme="amber-night"] [data-state="FOCUS"],
+[data-theme="dusk"][data-state="FOCUS"],
+[data-theme="dusk"] [data-state="FOCUS"] {
   --accent:         var(--accent-override-focus, #f4af25);
   --accent-rgb:     244, 175, 37;
   --accent-glow:    rgba(244, 175, 37, 0.55);
 }
 
 [data-theme="amber-night"][data-state="DIALOGUE"],
-[data-theme="amber-night"] [data-state="DIALOGUE"] {
+[data-theme="amber-night"] [data-state="DIALOGUE"],
+[data-theme="dusk"][data-state="DIALOGUE"],
+[data-theme="dusk"] [data-state="DIALOGUE"] {
   --accent:         #f4af25;
   --accent-rgb:     244, 175, 37;
   --accent-glow:    rgba(244, 175, 37, 0.60);
 }
 
 [data-theme="amber-night"][data-state="SENTINEL"],
-[data-theme="amber-night"] [data-state="SENTINEL"] {
+[data-theme="amber-night"] [data-state="SENTINEL"],
+[data-theme="dusk"][data-state="SENTINEL"],
+[data-theme="dusk"] [data-state="SENTINEL"] {
   --accent:         var(--accent-override-sentinel, #ef4444);
   --accent-rgb:     239, 68, 68;
   --accent-glow:    rgba(239, 68, 68, 0.55);
 }
 
 [data-theme="amber-night"][data-state="GHOST"],
-[data-theme="amber-night"] [data-state="GHOST"] {
+[data-theme="amber-night"] [data-state="GHOST"],
+[data-theme="dusk"][data-state="GHOST"],
+[data-theme="dusk"] [data-state="GHOST"] {
   --accent:         var(--accent-override-ghost, #34d399);
   --accent-rgb:     52, 211, 153;
   --accent-glow:    rgba(52, 211, 153, 0.34);
@@ -548,10 +570,277 @@
 }
 
 [data-theme="amber-night"][data-state="DREAM"],
-[data-theme="amber-night"] [data-state="DREAM"] {
+[data-theme="amber-night"] [data-state="DREAM"],
+[data-theme="dusk"][data-state="DREAM"],
+[data-theme="dusk"] [data-state="DREAM"] {
   --accent:         var(--accent-override-dream, #8a5e0a);
   --accent-rgb:     138, 94, 10;
   --accent-glow:    rgba(244, 175, 37, 0.14);
   --ui-opacity:     0.65;                         /* very dim warm — sleep */
   --surface-base:   #0c0703;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════
+ * ОБСИДІАН — шар --ph-* (контракт з ATLAS, Ф1 майстерплану ПК)
+ *
+ * ІМЕНА СТАБІЛЬНІ. Значення тимчасові — ATLAS-1 замінить їх під тими
+ * самими іменами (fallback: якщо ATLAS-1 мовчить до воріт Ф2, ПК фіксує
+ * власні фінальні значення — §5-Ф1 майстерплану).
+ *
+ * Чотири теми (нові канонічні імена ← старі alias-и, обидва працюють):
+ *   day     ← sunrise-warm    (теплий крем — значення взяті звідти)
+ *   dusk    ← amber-night     (еспресо-бурштин — значення взяті звідти)
+ *   night   ← cyberdeck-cold  (НОВІ значення: глибокий обсидіан)
+ *   minimal ← pro-console     (щільний термінал — значення взяті звідти)
+ *
+ * Каскад: html несе і :root, і [data-theme] — блоки нижче за файлом
+ * перемагають. [data-state] живе на <body> (StateTransitionController),
+ * тож стейт-оверрайди перемагають будь-що звідси успадковане — шар
+ * станів не зачеплено.
+ * ═══════════════════════════════════════════════════════════════════ */
+
+:root,
+[data-theme="sunrise-warm"],
+[data-theme="day"] {
+  /* ── Колір: day (з sunrise-warm) ──────────────────────────────────── */
+  --ph-color-ground:         #f8f7f5;   /* підлога сцени — тепле офф-вайт */
+  --ph-color-surface:        #faf4ec;   /* панель над підлогою */
+  --ph-color-surface-raised: #fdf6e9;   /* піднята картка — крем */
+  --ph-color-glass:          rgba(255, 255, 255, 0.45);
+  --ph-color-scrim:          rgba(18, 15, 11, 0.40);
+  --ph-color-border:         rgba(0, 0, 0, 0.10);
+  --ph-color-ink:            #120f0b;
+  --ph-color-ink-muted:      #716455;
+  --ph-color-ink-faint:      #a39686;
+  --ph-color-accent:         #b07a10;   /* базовий інтерактивний акцент */
+  --ph-color-accent-warm:    #f4af25;   /* бурштин — тепло організму */
+  --ph-color-alert:          #f59e0b;   /* застереження */
+  --ph-color-danger:         #ef4444;   /* небезпека / руйнівна дія */
+  --ph-color-success:        #16a34a;
+  --ph-color-info:           #2563eb;
+
+  /* ДОКТРИНА ЧЕСНОСТІ: --ph-color-live — ТІЛЬКИ для реального фіда
+   * (позиція телефона, живий agent.stream, реальний прогрес бейку).
+   * --ph-color-simulated — ТІЛЬКИ для модельованих/симульованих даних.
+   * Ніколи не міняти місцями і не «прикрашати» симуляцію кольором live.
+   * (day-значення темніші за нічні — контраст на кремі; семантика та сама.) */
+  --ph-color-live:           #0fa36b;
+  --ph-color-simulated:      #7a4fd6;
+
+  /* Картографія (тимчасові, ATLAS-1 замінить) */
+  --ph-color-route:          #f4af25;
+  --ph-color-route-alt:      #fb923c;
+  --ph-color-water:          #a9c7dd;
+  --ph-color-green:          #c8d6b4;
+  --ph-color-road-major:     #ffffff;
+  --ph-color-road-minor:     #efe6d4;
+
+  /* ── Скло ─────────────────────────────────────────────────────────── */
+  --ph-glass-blur:           16px;
+  --ph-glass-opacity:        0.45;
+
+  /* ── Тіні ─────────────────────────────────────────────────────────── */
+  --ph-shadow-1: 0 2px 8px rgba(120, 70, 10, 0.04);
+  --ph-shadow-2: 0 4px 14px rgba(120, 70, 10, 0.10);
+  --ph-shadow-3: 0 8px 30px rgba(120, 70, 10, 0.08), 0 2px 8px rgba(120, 70, 10, 0.04);
+
+  /* ── Гарнітури (вирок Ф1-крок-2): ui = Manrope (тіло/контроли),
+   * display = Space Grotesk (заголовки/великі цифри), mono = JetBrains.
+   * Обидві самохостяться через @fontsource у main.tsx. ────────────── */
+  --ph-font-ui:      "Manrope", system-ui, sans-serif;
+  --ph-font-display: "Space Grotesk", "Manrope", system-ui, sans-serif;
+  --ph-font-mono:    "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+
+  /* ── Типографічна шкала (ролі; розміри — alias на наявну --fs-*,
+   * тож повзунок масштабу користувача (--fs-scale) працює далі) ────── */
+  --ph-type-display-size:     var(--fs-xl);       /* 33px */
+  --ph-type-display-weight:   700;
+  --ph-type-display-tracking: var(--tracking-tight);
+  --ph-type-title-size:       var(--fs-md);       /* 18px */
+  --ph-type-title-weight:     600;
+  --ph-type-title-tracking:   var(--tracking-tight);
+  --ph-type-body-size:        var(--fs-sm);       /* 15px */
+  --ph-type-body-weight:      400;
+  --ph-type-body-tracking:    var(--tracking-normal);
+  --ph-type-caption-size:     var(--fs-xs);       /* 13px */
+  --ph-type-caption-weight:   500;
+  --ph-type-caption-tracking: var(--tracking-normal);
+  --ph-type-micro-size:       var(--fs-xxs);      /* 10px */
+  --ph-type-micro-weight:     700;
+  --ph-type-micro-tracking:   var(--tracking-widest);
+
+  /* ── Простір: крок 4px ────────────────────────────────────────────── */
+  --ph-space-1: 4px;
+  --ph-space-2: 8px;
+  --ph-space-3: 12px;
+  --ph-space-4: 16px;
+  --ph-space-5: 20px;
+  --ph-space-6: 24px;
+  --ph-space-7: 28px;
+  --ph-space-8: 32px;
+
+  /* ── Радіуси / штрихи ─────────────────────────────────────────────── */
+  --ph-radius-s:    6px;
+  --ph-radius-m:    10px;
+  --ph-radius-l:    14px;
+  --ph-radius-pill: 999px;
+  --ph-stroke-hair: 1px;
+  --ph-stroke-thin: 2px;
+  --ph-stroke-bold: 3px;
+
+  /* ── Рух ──────────────────────────────────────────────────────────── */
+  --ph-motion-fast: 120ms;
+  --ph-motion-base: 200ms;
+  --ph-motion-slow: 420ms;
+  --ph-ease-standard: cubic-bezier(0.4, 0, 0.2, 1);
+  --ph-ease-enter:    cubic-bezier(0.16, 1, 0.3, 1);
+  --ph-ease-exit:     cubic-bezier(0.4, 0, 1, 1);
+
+  /* ── Щільність: desktop-перший мінімум контролів (globals.css піднімає
+   * до --touch-min під @media (pointer: coarse)) ─────────────────────── */
+  --ph-control-min:   28px;
+  --ph-control-pad-x: var(--ph-space-3);
+  --ph-control-pad-y: var(--ph-space-1);
+}
+
+/* ── dusk ← amber-night (еспресо; кольори взяті з наявної теми) ─────── */
+[data-theme="amber-night"],
+[data-theme="dusk"] {
+  --ph-color-ground:         #0e0a05;
+  --ph-color-surface:        #140e08;
+  --ph-color-surface-raised: #1a120a;
+  --ph-color-glass:          rgba(20, 15, 8, 0.65);
+  --ph-color-scrim:          rgba(0, 0, 0, 0.60);
+  --ph-color-border:         rgba(255, 210, 140, 0.16);
+  --ph-color-ink:            #f4ead4;
+  --ph-color-ink-muted:      #8a7758;
+  --ph-color-ink-faint:      #5e5037;
+  --ph-color-accent:         #f4af25;
+  --ph-color-accent-warm:    #f4af25;
+  --ph-color-alert:          #fbbf24;
+  --ph-color-danger:         #f87171;
+  --ph-color-success:        #34d399;
+  --ph-color-info:           #60a5fa;
+  --ph-color-live:           #3ddc97;   /* доктрина: тільки реальний фід */
+  --ph-color-simulated:      #b48cff;   /* доктрина: тільки модель */
+  --ph-color-route:          #f4af25;
+  --ph-color-route-alt:      #fb923c;
+  --ph-color-water:          #1c2733;
+  --ph-color-green:          #1e2415;
+  --ph-color-road-major:     #3a2e1c;
+  --ph-color-road-minor:     #241c11;
+  --ph-glass-blur:           16px;
+  --ph-glass-opacity:        0.65;
+  --ph-shadow-1: 0 2px 8px rgba(0, 0, 0, 0.45);
+  --ph-shadow-2: 0 4px 14px rgba(0, 0, 0, 0.55);
+  --ph-shadow-3: 0 10px 32px -8px rgba(0, 0, 0, 0.70), 0 2px 8px rgba(0, 0, 0, 0.40);
+}
+
+/* ── night ← cyberdeck-cold: ГЛИБОКИЙ ОБСИДІАН (нові значення).
+ * Організм один — тепло лишається акцентом і в холодній темі:
+ * бурштин #ffb454 на обсидіані замість старого циану. ──────────────── */
+[data-theme="cyberdeck-cold"],
+[data-theme="night"] {
+  --ph-color-ground:         #0b0e11;
+  --ph-color-surface:        #12161b;
+  --ph-color-surface-raised: #1a2027;
+  --ph-color-glass:          rgba(18, 22, 27, 0.66);
+  --ph-color-scrim:          rgba(4, 6, 8, 0.62);
+  --ph-color-border:         #2a323c;
+  --ph-color-ink:            #e8edf2;
+  --ph-color-ink-muted:      #8b98a5;
+  --ph-color-ink-faint:      #566270;
+  --ph-color-accent:         #ffb454;   /* теплий бурштин на обсидіані */
+  --ph-color-accent-warm:    #ffb454;
+  --ph-color-alert:          #fbbf24;
+  --ph-color-danger:         #f0526a;
+  --ph-color-success:        #10b981;
+  --ph-color-info:           #5cb3ff;
+  --ph-color-live:           #3ddc97;   /* доктрина: тільки реальний фід */
+  --ph-color-simulated:      #b48cff;   /* доктрина: тільки модель */
+  --ph-color-route:          #ffb454;
+  --ph-color-route-alt:      #ff8a5c;
+  --ph-color-water:          #16222e;
+  --ph-color-green:          #14201a;
+  --ph-color-road-major:     #2a323c;
+  --ph-color-road-minor:     #1c232b;
+  --ph-glass-blur:           18px;
+  --ph-glass-opacity:        0.66;
+  --ph-shadow-1: 0 2px 8px rgba(0, 0, 0, 0.30);
+  --ph-shadow-2: 0 4px 14px rgba(0, 0, 0, 0.40);
+  --ph-shadow-3: 0 10px 32px -8px rgba(0, 0, 0, 0.55);
+}
+
+/* ── minimal ← pro-console (щільний термінал; без скла і тіней) ─────── */
+[data-theme="pro-console"],
+[data-theme="minimal"] {
+  --ph-color-ground:         #000000;
+  --ph-color-surface:        #0a0a0a;
+  --ph-color-surface-raised: #121212;
+  --ph-color-glass:          rgba(255, 255, 255, 0.05);
+  --ph-color-scrim:          rgba(0, 0, 0, 0.70);
+  --ph-color-border:         rgba(255, 255, 255, 0.10);
+  --ph-color-ink:            #e5e5e5;
+  --ph-color-ink-muted:      #525252;
+  --ph-color-ink-faint:      #262626;
+  --ph-color-accent:         #06b6d4;
+  --ph-color-accent-warm:    #f59e0b;
+  --ph-color-alert:          #f59e0b;
+  --ph-color-danger:         #ef4444;
+  --ph-color-success:        #10b981;
+  --ph-color-info:           #06b6d4;
+  --ph-color-live:           #3ddc97;   /* доктрина: тільки реальний фід */
+  --ph-color-simulated:      #b48cff;   /* доктрина: тільки модель */
+  --ph-color-route:          #06b6d4;
+  --ph-color-route-alt:      #8b5cf6;
+  --ph-color-water:          #0e1a20;
+  --ph-color-green:          #0f1710;
+  --ph-color-road-major:     #262626;
+  --ph-color-road-minor:     #161616;
+  --ph-glass-blur:           0px;
+  --ph-glass-opacity:        0.05;
+  --ph-shadow-1: none;
+  --ph-shadow-2: none;
+  --ph-shadow-3: none;
+  --ph-font-ui:      "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+  --ph-font-display: "JetBrains Mono", ui-monospace, "SF Mono", monospace;
+  --ph-radius-s:    2px;
+  --ph-radius-m:    4px;
+  --ph-radius-l:    6px;
+}
+
+/* ── Старі імена → alias-и на --ph-* (де відповідність пряма).
+ * Оголошені ПІСЛЯ всіх тематичних блоків, тож перемагають старі literal-и
+ * в кожній темі; var() розкривається на html з активним [data-theme],
+ * тому значення завжди тематично правильне. Імена, що керуються станом
+ * ([data-state] на <body>: --accent*, --ui-opacity, --surface-base у
+ * GHOST/DREAM…), стейт переозначує на body — body перемагає успадковане.
+ * НЕ видаляти старі оголошення вище — вони лишаються документацією тем
+ * і страхуванням для не-аліасованих імен. ─────────────────────────── */
+:root {
+  --surface-base:   var(--ph-color-ground);
+  --surface-raised: var(--ph-color-surface-raised);
+  --ink-primary:    var(--ph-color-ink);
+  --ink-muted:      var(--ph-color-ink-muted);
+  --ink-faint:      var(--ph-color-ink-faint);
+  --line-default:   var(--ph-color-border);
+  --glass-panel:    var(--ph-color-glass);
+  --signal-ok:      var(--ph-color-success);
+  --signal-warn:    var(--ph-color-alert);
+  --signal-alert:   var(--ph-color-danger);
+  --signal-info:    var(--ph-color-info);
+  --shadow-sm:      var(--ph-shadow-1);
+  --shadow-md:      var(--ph-shadow-2);
+  --shadow-lg:      var(--ph-shadow-3);
+  /* Історично --font-display вживається як шрифт ТІЛА (134 виклики) —
+   * тому обидва мапляться на ui; справжня display-роль (Space Grotesk)
+   * живе в --ph-font-display і tailwind `font-display`. */
+  --font-display:   var(--ph-font-ui);
+  --font-body:      var(--ph-font-ui);
+  --font-mono:      var(--ph-font-mono);
+  --font-tech:      var(--ph-font-mono);
+  --radius-sm:      var(--ph-radius-s);
+  --radius-md:      var(--ph-radius-m);
+  --radius-lg:      var(--ph-radius-l);
+  --radius-pill:    var(--ph-radius-pill);
 }

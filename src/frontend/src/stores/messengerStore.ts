@@ -173,6 +173,7 @@ export interface MessengerState {
   hydrated: boolean;
   hydrateFromNode: () => Promise<void>;
   applyNodeMessage: (row: NodeMessage) => void;
+  refreshConversations: () => Promise<void>;
   loadMessagesForChat: (chatId: string) => Promise<void>;
 }
 
@@ -307,9 +308,31 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
       return hydrationInFlight;
     },
 
+    /** Дотягує розмови, яких клієнт ще не бачив — не чіпаючи вже завантажені стрічки. */
+    refreshConversations: async () => {
+      try {
+        const rows = await messengerApi.listConversations();
+        set((s2) => {
+          const known = new Set(s2.chats.map((c) => c.id));
+          const fresh = rows.filter((r) => !known.has(r.id)).map(chatFromNode);
+          return fresh.length ? { chats: [...fresh, ...s2.chats] } : {};
+        });
+      } catch (err) {
+        console.warn('[messenger] список розмов не оновився:', err);
+      }
+    },
+
     /** Повідомлення, записане вузлом (зокрема з іншого пристрою власника). */
     applyNodeMessage: (row) => {
       const selfId = get().currentUser.id;
+      // Перший лист від нової людини приходить у розмову, якої клієнт ще не знає.
+      // Без цього він тихо губився: applyNodeMessage не знаходив, куди його класти.
+      if (!get().chats.some((c) => c.id === row.conversation_id)) {
+        void get()
+          .refreshConversations()
+          .then(() => get().loadMessagesForChat(row.conversation_id));
+        return;
+      }
       set((s2) => ({
         chats: s2.chats.map((c) => {
           if (c.id !== row.conversation_id) return c;

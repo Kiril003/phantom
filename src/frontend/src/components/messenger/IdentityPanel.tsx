@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { AlertTriangle, Check, Copy, ShieldCheck, UserPlus } from 'lucide-react';
+import { AlertTriangle, Check, Copy, QrCode, ShieldCheck, UserPlus } from 'lucide-react';
+import QRCode from 'qrcode';
+import { QrScanner } from './QrScanner';
 import { messengerApi } from '../../services/messengerApi';
 import type { NodeContact, NodeIdentity } from '../../services/messengerApi';
 import { soundFx } from '../../utils/messengerSound';
@@ -16,6 +18,9 @@ export const IdentityPanel: React.FC = () => {
   const [bundleText, setBundleText] = useState('');
   const [address, setAddress] = useState('');
   const [copied, setCopied] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [showQr, setShowQr] = useState(false);
+  const [scanning, setScanning] = useState(false);
 
   useEffect(() => {
     void (async () => {
@@ -28,9 +33,24 @@ export const IdentityPanel: React.FC = () => {
     })();
   }, []);
 
+  // Малюємо справжній QR із стислого ключа. Той, що стояв тут раніше в іншому
+  // місці застосунку, був сіткою 6×6 за формулою i % 2 === 0 && i % 3 === 0 —
+  // його неможливо було відсканувати в принципі.
+  useEffect(() => {
+    if (!identity || !showQr) return;
+    void QRCode.toDataURL(identity.compact, {
+      errorCorrectionLevel: 'M',
+      margin: 1,
+      width: 260,
+      color: { dark: '#1E2521', light: '#F9F7F1' },
+    })
+      .then(setQrDataUrl)
+      .catch(() => setQrDataUrl(null));
+  }, [identity, showQr]);
+
   const copyBundle = async () => {
     if (!identity) return;
-    await navigator.clipboard.writeText(JSON.stringify(identity.bundle));
+    await navigator.clipboard.writeText(identity.compact);
     soundFx.playTap();
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
@@ -39,7 +59,12 @@ export const IdentityPanel: React.FC = () => {
   const submitContact = async () => {
     setError(null);
     try {
-      const parsed = JSON.parse(bundleText);
+      // Ключ може прийти двома шляхами: стислим рядком зі сканера або
+      // розгорнутим JSON, якщо людина скопіювала його руками.
+      const raw = bundleText.trim();
+      const parsed = raw.startsWith('{')
+        ? { bundle: JSON.parse(raw) }
+        : { compact: raw };
       const contact = await messengerApi.addContact(
         name.trim() || 'Без імені',
         parsed,
@@ -76,13 +101,43 @@ export const IdentityPanel: React.FC = () => {
             <code className="block text-[10.5px] font-mono text-[#5F6A60] break-all">
               {identity.node_id}
             </code>
-            <button
-              onClick={copyBundle}
-              className="flex items-center gap-1.5 text-[11px] font-bold text-[#C25925] active:scale-95 transition-transform"
-            >
-              {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copied ? 'Скопійовано' : 'Скопіювати для співрозмовника'}</span>
-            </button>
+            <div className="flex items-center gap-3">
+              <button
+                onClick={copyBundle}
+                className="flex items-center gap-1.5 text-[11px] font-bold text-[#C25925] active:scale-95 transition-transform"
+              >
+                {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                <span>{copied ? 'Скопійовано' : 'Скопіювати'}</span>
+              </button>
+              <button
+                onClick={() => setShowQr((v) => !v)}
+                className="flex items-center gap-1.5 text-[11px] font-bold text-[#C25925] active:scale-95 transition-transform"
+              >
+                <QrCode className="w-3.5 h-3.5" />
+                <span>{showQr ? 'Сховати код' : 'Показати код'}</span>
+              </button>
+            </div>
+            {showQr && (
+              <div className="pt-1">
+                {qrDataUrl ? (
+                  <>
+                    <img
+                      src={qrDataUrl}
+                      alt="Ключ вузла у вигляді QR"
+                      className="rounded-xl border border-[#E6DFD3]"
+                      width={200}
+                      height={200}
+                    />
+                    <span className="text-[10px] text-[#7A6A55] block mt-1.5 leading-relaxed">
+                      Дайте співрозмовнику відсканувати. Це лише публічна частина —
+                      нею можна ділитися відкрито.
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-[10.5px] text-[#7A6A55]">Малюю код…</span>
+                )}
+              </div>
+            )}
           </>
         ) : (
           <span className="text-[10.5px] text-[#7A6A55]">Читаю ключі вузла…</span>
@@ -111,6 +166,23 @@ export const IdentityPanel: React.FC = () => {
               placeholder="Імʼя"
               className="w-full px-2.5 py-1.5 text-[12px] rounded-xl border border-[#E6DFD3] bg-white"
             />
+            {scanning ? (
+              <QrScanner
+                onFound={(text) => {
+                  setBundleText(text);
+                  setScanning(false);
+                }}
+                onCancel={() => setScanning(false)}
+              />
+            ) : (
+              <button
+                onClick={() => setScanning(true)}
+                className="flex items-center gap-1.5 text-[11px] font-bold text-[#C25925] active:scale-95 transition-transform"
+              >
+                <QrCode className="w-3.5 h-3.5" />
+                <span>Відсканувати код співрозмовника</span>
+              </button>
+            )}
             <input
               value={address}
               onChange={(e) => setAddress(e.target.value)}
@@ -120,7 +192,7 @@ export const IdentityPanel: React.FC = () => {
             <textarea
               value={bundleText}
               onChange={(e) => setBundleText(e.target.value)}
-              placeholder="Ключ, який дав співрозмовник"
+              placeholder="Ключ співрозмовника — з QR або скопійований"
               rows={3}
               className="w-full px-2.5 py-1.5 text-[11px] font-mono rounded-xl border border-[#E6DFD3] bg-white"
             />

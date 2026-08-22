@@ -131,6 +131,7 @@ class SignedPreKey:
         return x25519_public_raw(self.private)
 
 
+_COMPACT_VERSION = 1
 _PREKEY_MAGIC = b"PHK1"
 _PREKEY_VERSION = 1
 _PREKEY_NONCE_LEN = 12
@@ -153,6 +154,78 @@ class PublicBundle:
     @property
     def node_id(self) -> str:
         return node_id_of(self.identity_ed)
+
+    def to_compact(self) -> str:
+        """Той самий ключ, але вдвічі коротший — щоб влізти в скануваний QR.
+
+        JSON з base64 займає під шістсот символів: QR виходить такий щільний,
+        що телефон бере його через раз. Тут поля лежать бінарно у фіксованому
+        порядку, тож розміри й так відомі, а назви полів не потрібні зовсім.
+        """
+        has_otp = self.one_time_prekey is not None
+        blob = (
+            bytes([_COMPACT_VERSION, 1 if has_otp else 0])
+            + self.identity_ed
+            + self.identity_dh
+            + self.identity_dh_sig
+            + struct.pack(">I", self.signed_prekey_id)
+            + self.signed_prekey
+            + self.signed_prekey_sig
+        )
+        if has_otp:
+            blob += struct.pack(">I", self.one_time_prekey_id or 0) + (
+                self.one_time_prekey or b""
+            )
+        return base64.urlsafe_b64encode(blob).decode().rstrip("=")
+
+    @classmethod
+    def from_compact(cls, text: str) -> "PublicBundle":
+        raw = (text or "").strip()
+        if not raw:
+            raise UntrustedBundle("порожній ключ")
+        try:
+            blob = base64.urlsafe_b64decode(raw + "=" * (-len(raw) % 4))
+        except Exception as exc:  # noqa: BLE001
+            raise UntrustedBundle("ключ не читається як base64") from exc
+
+        head = 2 + KEY_LEN * 2 + SIG_LEN + 4 + KEY_LEN + SIG_LEN
+        if len(blob) < head:
+            raise UntrustedBundle("ключ закороткий")
+        if blob[0] != _COMPACT_VERSION:
+            raise UntrustedBundle(f"невідома версія ключа: {blob[0]}")
+
+        cursor = 2
+        def take(size: int) -> bytes:
+            nonlocal cursor
+            chunk = blob[cursor : cursor + size]
+            cursor += size
+            return chunk
+
+        identity_ed = take(KEY_LEN)
+        identity_dh = take(KEY_LEN)
+        identity_dh_sig = take(SIG_LEN)
+        signed_id = struct.unpack(">I", take(4))[0]
+        signed_prekey = take(KEY_LEN)
+        signed_sig = take(SIG_LEN)
+
+        one_time_id: Optional[int] = None
+        one_time: Optional[bytes] = None
+        if blob[1]:
+            if len(blob) < cursor + 4 + KEY_LEN:
+                raise UntrustedBundle("одноразовий ключ обірваний")
+            one_time_id = struct.unpack(">I", take(4))[0]
+            one_time = take(KEY_LEN)
+
+        return cls(
+            identity_ed=identity_ed,
+            identity_dh=identity_dh,
+            identity_dh_sig=identity_dh_sig,
+            signed_prekey_id=signed_id,
+            signed_prekey=signed_prekey,
+            signed_prekey_sig=signed_sig,
+            one_time_prekey_id=one_time_id,
+            one_time_prekey=one_time,
+        )
 
     def verify(self, expected_node_id: Optional[str] = None) -> None:
         """Кидає UntrustedBundle. Мовчазне повернення = bundle прийнято."""

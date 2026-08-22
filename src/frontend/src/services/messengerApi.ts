@@ -39,6 +39,8 @@ export interface NodeMessage {
 export interface NodeIdentity {
   node_id: string;
   bundle: Record<string, unknown>;
+  /** Стислий ключ — те, що йде в QR. */
+  compact: string;
 }
 
 export interface NodeContact {
@@ -60,12 +62,13 @@ export const messengerApi = {
 
   addContact: (
     display_name: string,
-    bundle: Record<string, unknown>,
+    key: { bundle?: Record<string, unknown>; compact?: string },
     peer_address?: string | null,
   ) =>
     request<NodeContact>('POST', '/messenger/contacts', {
       display_name,
-      bundle,
+      bundle: key.bundle ?? null,
+      compact: key.compact ?? null,
       peer_address: peer_address || null,
     }),
 

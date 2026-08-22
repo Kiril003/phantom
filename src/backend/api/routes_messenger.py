@@ -440,6 +440,8 @@ async def append_message(
 class IdentityOut(BaseModel):
     node_id: str
     bundle: dict
+    #: Той самий ключ у стислому вигляді — для QR і для передачі голосом/руками.
+    compact: str
 
 
 @router.get("/identity", response_model=IdentityOut)
@@ -462,12 +464,16 @@ async def get_identity(_user: User = Depends(get_current_user)) -> IdentityOut:
     # Видали одноразовий ключ — запамʼятали. Інакше після рестарту він пішов би
     # ще комусь, а одноразовим він називається саме тому, що так не можна.
     keys.persist_prekeys(key_path().parent / "messenger_prekeys.bin")
-    return IdentityOut(node_id=keys.node_id, bundle=bundle.to_dict())
+    return IdentityOut(
+        node_id=keys.node_id, bundle=bundle.to_dict(), compact=bundle.to_compact()
+    )
 
 
 class ContactIn(BaseModel):
     display_name: str = Field(min_length=1, max_length=120)
-    bundle: dict
+    #: Один із двох: розгорнутий bundle або стислий рядок із QR.
+    bundle: Optional[dict] = None
+    compact: Optional[str] = None
     #: Пряма адреса вузла, якщо відома. Немає — кадр чекатиме на ретранслятор.
     peer_address: Optional[str] = None
 
@@ -527,7 +533,12 @@ async def add_contact(
     """
     keys = _keys()
     try:
-        bundle = PublicBundle.from_dict(payload.bundle)
+        if payload.compact:
+            bundle = PublicBundle.from_compact(payload.compact)
+        elif payload.bundle:
+            bundle = PublicBundle.from_dict(payload.bundle)
+        else:
+            raise UntrustedBundle("ключ не передано")
         bundle.verify()
     except (UntrustedBundle, KeyError, ValueError, TypeError) as exc:
         raise HTTPException(status_code=400, detail=f"неприйнятний bundle: {exc}") from exc

@@ -22,6 +22,8 @@ import {
   Bell,
   Palette,
   Trash2,
+  Eraser,
+  Inbox,
   MessageCircle,
   BarChart2,
   Pencil,
@@ -243,6 +245,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
   // Координати тримаємо окремо: меню малюється поза списком, інакше його ріже скрол-контейнер.
   const [activeMenuChatId, setActiveMenuChatId] = useState<string | null>(null);
   const [chatMenuPos, setChatMenuPos] = useState<{ x: number; y: number } | null>(null);
+  // Перейменування живе інлайн у меню: нативного window.prompt у WebView Tauri немає.
+  const [renamingChatId, setRenamingChatId] = useState<string | null>(null);
+  const [renameDraft, setRenameDraft] = useState('');
+  // Деструктивні дії проходять лише через підтвердження просто в меню.
+  const [chatConfirm, setChatConfirm] = useState<'clear' | 'delete' | null>(null);
+  // «N листів чекають» — стан черги вузла під карткою профілю.
+  const [queuedCount, setQueuedCount] = useState(0);
 
   // Right-click Context Menu on Smart Folders
   const [folderContextMenu, setFolderContextMenu] = useState<{
@@ -330,6 +339,31 @@ export const Sidebar: React.FC<SidebarProps> = ({
     };
   }, []);
 
+  // Меню закрилось чи перемкнулось на іншу розмову — гасимо його підстани.
+  useEffect(() => {
+    setRenamingChatId(null);
+    setChatConfirm(null);
+  }, [activeMenuChatId]);
+
+  // Стан черги опитуємо, лише поки список відкритий; вузол мовчить — лічильник стоїть.
+  useEffect(() => {
+    let alive = true;
+    const tick = async () => {
+      try {
+        const { queued } = await messengerApi.queueStatus();
+        if (alive) setQueuedCount(queued);
+      } catch {
+        /* вузол недоступний — не чіпаємо попереднє значення */
+      }
+    };
+    void tick();
+    const id = window.setInterval(tick, 15000);
+    return () => {
+      alive = false;
+      window.clearInterval(id);
+    };
+  }, []);
+
   const showToast = (msg: string) => {
     setToastMessage(msg);
     setTimeout(() => setToastMessage(null), 3000);
@@ -379,6 +413,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
     const matchesSearch =
       !q ||
       c.title.toLowerCase().includes(q) ||
+      // Плейсхолдер обіцяє «повідомлення» — тож матчимо й останній лист та автора.
+      (c.lastSnippet && c.lastSnippet.toLowerCase().includes(q)) ||
+      (c.lastAuthor && c.lastAuthor.toLowerCase().includes(q)) ||
       (c.description && c.description.toLowerCase().includes(q)) ||
       (c.topic && c.topic.toLowerCase().includes(q)) ||
       (c.badge && c.badge.toLowerCase().includes(q)) ||
@@ -718,13 +755,18 @@ export const Sidebar: React.FC<SidebarProps> = ({
     handleCancelRename();
   }
 
-  // Назва розмови живе на вузлі — спершу пишемо туди, і лише тоді міняємо UI.
-  const handleRenameChat = async (chat: Chat) => {
-    const next = window.prompt('Назва розмови', chat.title);
-    setActiveMenuChatId(null);
-    const trimmed = (next || '').trim();
-    if (!trimmed || trimmed === chat.title) return;
+  // Перейменування — інлайн у меню (нативного prompt у WebView немає).
+  const startRenameChat = (chat: Chat) => {
+    setRenameDraft(chat.title);
+    setRenamingChatId(chat.id);
+  };
 
+  // Назва розмови живе на вузлі — спершу пишемо туди, і лише тоді міняємо UI.
+  const saveRenameChat = async (chat: Chat) => {
+    const trimmed = renameDraft.trim();
+    setRenamingChatId(null);
+    setActiveMenuChatId(null);
+    if (!trimmed || trimmed === chat.title) return;
     try {
       await messengerApi.renameConversation(chat.id, trimmed);
       updateChat(chat.id, { title: trimmed });
@@ -732,6 +774,55 @@ export const Sidebar: React.FC<SidebarProps> = ({
     } catch {
       showToast('Вузол не прийняв нову назву');
     }
+  };
+
+  // Позначаємо прочитаним до останнього листа: вузол сам обріже seq до наявного.
+  const handleMarkChatRead = async (chat: Chat) => {
+    setActiveMenuChatId(null);
+    try {
+      await messengerApi.markRead(chat.id, Number.MAX_SAFE_INTEGER);
+      updateChat(chat.id, { unreadCount: 0 });
+      soundFx.playTap();
+    } catch {
+      showToast('Вузол не позначив прочитаним');
+    }
+  };
+
+  // Історія зникає з ЦЬОГО вузла; копію співрозмовника вузол не чіпає.
+  const handleClearChat = async (chat: Chat) => {
+    try {
+      await messengerApi.clearConversation(chat.id);
+      updateChat(chat.id, {
+        messages: [],
+        lastSnippet: undefined,
+        lastKind: undefined,
+        lastAuthor: undefined,
+        unreadCount: 0,
+      });
+      showToast('🧹 Історію очищено на цьому вузлі');
+    } catch {
+      showToast('Не вдалося очистити історію');
+    }
+    setChatConfirm(null);
+    setActiveMenuChatId(null);
+  };
+
+  const handleDeleteChat = async (chat: Chat) => {
+    try {
+      await messengerApi.deleteConversation(chat.id);
+      useMessengerStore.setState((s) => {
+        const rest = s.chats.filter((c) => c.id !== chat.id);
+        return {
+          chats: rest,
+          activeChatId: s.activeChatId === chat.id ? (rest[0]?.id ?? '') : s.activeChatId,
+        };
+      });
+      showToast('Розмову видалено з цього вузла');
+    } catch {
+      showToast('Не вдалося видалити розмову');
+    }
+    setChatConfirm(null);
+    setActiveMenuChatId(null);
   };
 
   // Find most recent active chat and its latest 3 messages in a folder
@@ -1348,64 +1439,147 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </button>
           </div>
 
-          <button
-            onClick={() => void handleRenameChat(menuChat)}
-            className="w-full p-1.5 rounded-xl text-left text-xs font-semibold flex items-center gap-1.5 text-[#1E2521] hover:bg-[#F4F1E8] transition-colors"
-          >
-            <Pencil className="w-3.5 h-3.5 text-[#C25925] shrink-0" />
-            <span>Перейменувати</span>
-          </button>
-
-          <div className="px-2 pt-1.5 text-[10px] font-extrabold text-[#8A9186] uppercase tracking-wider border-t border-[#EFEBE0]">
-            Призначити папку
-          </div>
-
-          {smartFolders
-            .filter((f) => !f.isBuiltIn)
-            .map((folder) => {
-              const isIn = isChatInFolder(menuChat, folder);
-              return (
+          {renamingChatId === menuChat.id ? (
+            /* Інлайн-перейменування — замість мертвого нативного prompt */
+            <div className="p-1.5 space-y-1.5">
+              <input
+                autoFocus
+                value={renameDraft}
+                onChange={(e) => setRenameDraft(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') void saveRenameChat(menuChat);
+                  if (e.key === 'Escape') setRenamingChatId(null);
+                }}
+                className="w-full px-2 py-1.5 text-xs rounded-lg border border-[#E0D5C2] bg-white focus:outline-none focus:border-[#E87A42]"
+              />
+              <div className="flex items-center gap-2">
                 <button
-                  key={folder.id}
-                  onClick={() => {
-                    soundFx.playTap();
-                    if (isIn) {
-                      onRemoveChatFromFolder(folder.id, menuChat.id);
-                      showToast(`Видалено з «${folder.name}»`);
-                    } else {
-                      onAddChatToFolder(folder.id, menuChat.id);
-                      soundFx.playSend();
-                      showToast(`✨ Додано до «${folder.name}»`);
-                    }
-                    setActiveMenuChatId(null);
-                  }}
-                  className={`w-full p-1.5 rounded-xl text-left text-xs font-semibold flex items-center justify-between transition-colors ${
-                    isIn
-                      ? 'bg-[#F4F1E8] text-[#C25925] border border-[#E0D5C2]'
-                      : 'hover:bg-[#F4F1E8] text-[#5F6A60] hover:text-[#1E2521]'
-                  }`}
+                  onClick={() => void saveRenameChat(menuChat)}
+                  className="px-3 py-1.5 rounded-lg bg-[#E87A42] text-[#1E2521] text-[11px] font-bold active:scale-95 transition-transform"
                 >
-                  <div className="flex items-center gap-1.5 truncate">
-                    <span>{folder.emoji}</span>
-                    <span className="truncate">{folder.name}</span>
-                  </div>
-                  {isIn && <Check className="w-3.5 h-3.5 text-[#C25925] shrink-0" />}
+                  Зберегти
                 </button>
-              );
-            })}
+                <button
+                  onClick={() => setRenamingChatId(null)}
+                  className="px-3 py-1.5 rounded-lg text-[11px] font-semibold text-[#5F6A60] hover:bg-[#F1EBDD] transition-colors"
+                >
+                  Скасувати
+                </button>
+              </div>
+            </div>
+          ) : chatConfirm ? (
+            /* Підтвердження деструктивної дії — з чесним текстом про межі видалення */
+            <div className="p-1.5 space-y-2">
+              <span className="text-[11px] text-[#5F6A60] leading-relaxed block px-0.5">
+                {chatConfirm === 'clear'
+                  ? 'Історія зникне з цього вузла. Копію співрозмовника ми не чіпаємо.'
+                  : 'Розмова зникне з цього вузла; копію співрозмовника не чіпаємо.'}
+              </span>
+              <div className="flex items-center gap-2 px-0.5">
+                <button
+                  onClick={() =>
+                    chatConfirm === 'clear'
+                      ? void handleClearChat(menuChat)
+                      : void handleDeleteChat(menuChat)
+                  }
+                  className="px-3 py-1.5 rounded-lg bg-[#B4432E] text-[#FDFCF9] text-[11px] font-bold active:scale-95 transition-transform"
+                >
+                  {chatConfirm === 'clear' ? 'Очистити' : 'Видалити'}
+                </button>
+                <button
+                  onClick={() => setChatConfirm(null)}
+                  className="px-3 py-1.5 rounded-lg text-[11px] font-semibold text-[#5F6A60] hover:bg-[#F1EBDD] transition-colors"
+                >
+                  Скасувати
+                </button>
+              </div>
+            </div>
+          ) : (
+            <>
+              <button
+                onClick={() => startRenameChat(menuChat)}
+                className="w-full p-1.5 rounded-xl text-left text-xs font-semibold flex items-center gap-1.5 text-[#1E2521] hover:bg-[#F4F1E8] transition-colors"
+              >
+                <Pencil className="w-3.5 h-3.5 text-[#C25925] shrink-0" />
+                <span>Перейменувати</span>
+              </button>
 
-          <div className="pt-1 border-t border-[#EFEBE0]">
-            <button
-              onClick={() => {
-                setActiveMenuChatId(null);
-                onOpenCreateFolder();
-              }}
-              className="w-full p-1.5 rounded-xl text-left text-xs font-bold text-[#C25925] hover:bg-[#F4F1E8] flex items-center gap-1.5 transition-colors"
-            >
-              <Plus className="w-3 h-3" />
-              <span>Новий простір</span>
-            </button>
-          </div>
+              <button
+                onClick={() => void handleMarkChatRead(menuChat)}
+                className="w-full p-1.5 rounded-xl text-left text-xs font-semibold flex items-center gap-1.5 text-[#1E2521] hover:bg-[#F4F1E8] transition-colors"
+              >
+                <CheckCheck className="w-3.5 h-3.5 text-[#3F7A4B] shrink-0" />
+                <span>Позначити прочитаним</span>
+              </button>
+
+              <button
+                onClick={() => setChatConfirm('clear')}
+                className="w-full p-1.5 rounded-xl text-left text-xs font-semibold flex items-center gap-1.5 text-[#1E2521] hover:bg-[#F4F1E8] transition-colors"
+              >
+                <Eraser className="w-3.5 h-3.5 text-[#8A9186] shrink-0" />
+                <span>Очистити історію</span>
+              </button>
+
+              <button
+                onClick={() => setChatConfirm('delete')}
+                className="w-full p-1.5 rounded-xl text-left text-xs font-semibold flex items-center gap-1.5 text-[#B4432E] hover:bg-[#F7ECE7] transition-colors"
+              >
+                <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                <span>Видалити розмову</span>
+              </button>
+
+              <div className="px-2 pt-1.5 text-[10px] font-extrabold text-[#8A9186] uppercase tracking-wider border-t border-[#EFEBE0]">
+                Призначити папку
+              </div>
+
+              {smartFolders
+                .filter((f) => !f.isBuiltIn)
+                .map((folder) => {
+                  const isIn = isChatInFolder(menuChat, folder);
+                  return (
+                    <button
+                      key={folder.id}
+                      onClick={() => {
+                        soundFx.playTap();
+                        if (isIn) {
+                          onRemoveChatFromFolder(folder.id, menuChat.id);
+                          showToast(`Видалено з «${folder.name}»`);
+                        } else {
+                          onAddChatToFolder(folder.id, menuChat.id);
+                          soundFx.playSend();
+                          showToast(`✨ Додано до «${folder.name}»`);
+                        }
+                        setActiveMenuChatId(null);
+                      }}
+                      className={`w-full p-1.5 rounded-xl text-left text-xs font-semibold flex items-center justify-between transition-colors ${
+                        isIn
+                          ? 'bg-[#F4F1E8] text-[#C25925] border border-[#E0D5C2]'
+                          : 'hover:bg-[#F4F1E8] text-[#5F6A60] hover:text-[#1E2521]'
+                      }`}
+                    >
+                      <div className="flex items-center gap-1.5 truncate">
+                        <span>{folder.emoji}</span>
+                        <span className="truncate">{folder.name}</span>
+                      </div>
+                      {isIn && <Check className="w-3.5 h-3.5 text-[#C25925] shrink-0" />}
+                    </button>
+                  );
+                })}
+
+              <div className="pt-1 border-t border-[#EFEBE0]">
+                <button
+                  onClick={() => {
+                    setActiveMenuChatId(null);
+                    onOpenCreateFolder();
+                  }}
+                  className="w-full p-1.5 rounded-xl text-left text-xs font-bold text-[#C25925] hover:bg-[#F4F1E8] flex items-center gap-1.5 transition-colors"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>Новий простір</span>
+                </button>
+              </div>
+            </>
+          )}
         </div>
       )}
 
@@ -2200,6 +2374,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <ChevronDown className={`w-4 h-4 transition-transform ${isPersonaMenuOpen ? 'rotate-180' : ''}`} strokeWidth={1.75} />
           </button>
         </div>
+
+        {/* Козир черги, зроблений видимим: тихий рядок, лише коли є що чекати. */}
+        {queuedCount > 0 && (
+          <button
+            onClick={() => {
+              soundFx.playTap();
+              if (onOpenP2PNetworkModal) onOpenP2PNetworkModal();
+              else showToast(`${queuedCount} ${queuedCount === 1 ? 'лист' : queuedCount < 5 ? 'листи' : 'листів'} чекають на зв'язок`);
+            }}
+            className="mt-1.5 w-full px-2 py-1.5 rounded-[10px] flex items-center gap-2 text-left text-[11.5px] text-[#6E7568] border border-transparent hover:bg-[#F1EBDD]/60 hover:border-[#E8E1D3] transition-colors"
+            title="Листи чекають на зв'язок — натисніть, щоб побачити чергу"
+          >
+            <span className="w-1.5 h-1.5 rounded-full bg-[#C98A2E] shrink-0" />
+            <Inbox className="w-3.5 h-3.5 text-[#98A092] shrink-0" strokeWidth={1.75} />
+            <span className="truncate">
+              {queuedCount} {queuedCount === 1 ? 'лист' : queuedCount < 5 ? 'листи' : 'листів'} чекають
+            </span>
+          </button>
+        )}
       </div>
       </div>
     </aside>

@@ -5,6 +5,7 @@ import { QrScanner } from './QrScanner';
 import { messengerApi } from '../../services/messengerApi';
 import type { NodeContact, NodeIdentity } from '../../services/messengerApi';
 import { soundFx } from '../../utils/messengerSound';
+import { SafetyVerifyBlock } from './VerifyContact';
 
 // Ключі вузла і звірка співрозмовника. Замок тут зʼявляється тільки після
 // того, як двоє прочитали одне одному число вголос — підпис у ключі цього
@@ -82,12 +83,6 @@ export const IdentityPanel: React.FC = () => {
           : 'Вузол не прийняв ключ — підпис не збігається.',
       );
     }
-  };
-
-  const markVerified = async (id: string) => {
-    const updated = await messengerApi.verifyContact(id);
-    setContacts((prev) => prev.map((c) => (c.id === id ? updated : c)));
-    soundFx.playTap();
   };
 
   return (
@@ -230,28 +225,17 @@ export const IdentityPanel: React.FC = () => {
                 </span>
               )}
             </div>
-            <code className="block text-[10.5px] font-mono text-[#5F6A60] leading-relaxed">
-              {c.safety_number_pretty}
-            </code>
             <span className="text-[10px] text-[#7A6A55] block">
               {c.peer_address
                 ? `Пряма адреса: ${c.peer_address}`
                 : 'Прямої адреси немає — повідомлення чекатимуть на ретранслятор.'}
             </span>
-            {!c.verified && (
-              <>
-                <span className="text-[10px] text-[#7A6A55] block leading-relaxed">
-                  Прочитайте це число одне одному голосом. Збіглося — натисніть нижче.
-                  Розійшлося — між вами хтось є.
-                </span>
-                <button
-                  onClick={() => markVerified(c.id)}
-                  className="text-[11px] font-bold text-[#C25925] active:scale-95 transition-transform"
-                >
-                  Число збіглося
-                </button>
-              </>
-            )}
+            <SafetyVerifyBlock
+              contact={c}
+              onVerified={(updated) =>
+                setContacts((prev) => prev.map((x) => (x.id === updated.id ? updated : x)))
+              }
+            />
           </div>
         ))}
       </div>

@@ -12,11 +12,15 @@ import {
   MessageSquare,
   MoreVertical,
   Radio,
-  ChevronLeft
+  ChevronLeft,
+  ShieldCheck,
+  Hash
 } from 'lucide-react';
 import { Chat, UserProfile, ActiveTransportStatus, TransportProtocol } from '../../types/messenger';
 import { Avatar } from './Avatar';
 import { soundFx } from '../../utils/messengerSound';
+import { useMessengerStore } from '../../stores/messengerStore';
+import { ContactSheet } from './VerifyContact';
 
 interface HeaderProps {
   currentChat: Chat;
@@ -90,6 +94,32 @@ export const Header: React.FC<HeaderProps> = ({
   const [menuAnchor, setMenuAnchor] = useState<{ top: number; right: number } | null>(null);
   const closeMenu = useCallback(() => setMenuAnchor(null), []);
 
+  // Лист співрозмовника відкривається просто з шапки — звірка за 1 клік.
+  const updateChat = useMessengerStore((s) => s.updateChat);
+  const [sheet, setSheet] = useState<{ top: number; left: number } | null>(null);
+  const hasPeer = !!currentChat.peerNodeId;
+  const isGroup = currentChat.type === 'group' || currentChat.type === 'channel';
+
+  const openSheet = (el?: HTMLElement | null) => {
+    soundFx.playTap();
+    const bar = headerRef.current?.getBoundingClientRect();
+    const r = el?.getBoundingClientRect();
+    const top = (bar?.bottom ?? 60) + 6;
+    const left = Math.min(Math.max(8, r?.left ?? (bar?.left ?? 0) + 12), window.innerWidth - 308);
+    setSheet({ top, left });
+  };
+
+  const onDeleted = () => {
+    useMessengerStore.setState((s) => {
+      const chats = s.chats.filter((c) => c.id !== currentChat.id);
+      return {
+        chats,
+        activeChatId:
+          s.activeChatId === currentChat.id ? (chats[0]?.id ?? '') : s.activeChatId,
+      };
+    });
+  };
+
   const toggleMoreMenu = () => {
     soundFx.playTap();
     if (menuAnchor) {
@@ -134,12 +164,16 @@ export const Header: React.FC<HeaderProps> = ({
         )}
 
         <div
-          onClick={() => {
-            soundFx.playTap();
-            onOpenGroupDetails();
+          onClick={(e) => {
+            // Людина — відкриваємо її картку; група — деталі простору.
+            if (hasPeer) openSheet(e.currentTarget as HTMLElement);
+            else {
+              soundFx.playTap();
+              onOpenGroupDetails();
+            }
           }}
           className="flex items-center gap-2.5 min-w-0 cursor-pointer group flex-1"
-          title="Переглянути деталі бесіди, учасників та медіа"
+          title={hasPeer ? 'Картка співрозмовника: звірка, дії з розмовою' : 'Переглянути деталі бесіди, учасників та медіа'}
         >
           <div className="relative shrink-0">
             <Avatar src={currentChat.avatar} name={currentChat.title} className="w-9 h-9" />
@@ -164,19 +198,30 @@ export const Header: React.FC<HeaderProps> = ({
                 значка — попередження не мусить кричати, щоб його прочитали. */}
             <div className="flex items-center gap-2.5 min-w-0 mt-0.5 text-[11.5px] text-[#6E7568]">
               {currentChat.contactVerified === false && (
-                <span
-                  className="inline-flex items-center gap-1.5 shrink-0"
-                  title="Звірте число безпеки в налаштуваннях, розділ «Мережа & P2P»"
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openSheet(e.currentTarget as HTMLElement);
+                  }}
+                  className="inline-flex items-center gap-1.5 shrink-0 min-h-0 min-w-0 hover:text-[#21261F] transition-colors"
+                  title="Звірити число безпеки — прямо звідси"
                 >
                   <span className="w-1.5 h-1.5 rounded-full bg-[#C98A2E] shrink-0" />
                   Не звірено
-                </span>
+                </button>
               )}
               {currentChat.contactVerified === true && (
-                <span className="inline-flex items-center gap-1.5 shrink-0">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openSheet(e.currentTarget as HTMLElement);
+                  }}
+                  className="inline-flex items-center gap-1.5 shrink-0 min-h-0 min-w-0 hover:text-[#21261F] transition-colors"
+                  title="Показати число безпеки"
+                >
                   <span className="w-1.5 h-1.5 rounded-full bg-[#4C8A55] shrink-0" />
                   Звірено
-                </span>
+                </button>
               )}
 
               {/* Показуємо тільки те, що виміряно: жодного замка, поки
@@ -289,6 +334,34 @@ export const Header: React.FC<HeaderProps> = ({
               className="fixed z-[901] w-64 bg-[#FDFCF9] border border-[#DDD4C4] rounded-2xl shadow-[0_16px_40px_rgba(30,37,33,0.18)] p-1.5 space-y-0.5 text-[#1E2521]"
               style={{ top: menuAnchor.top, right: menuAnchor.right }}
             >
+              {/* Спершу — дії про співрозмовника: те, заради чого відкривають чат. */}
+              {hasPeer && (
+                <div className="pb-1 mb-1 border-b border-[#E8E1D3]">
+                  <button
+                    onClick={() => {
+                      closeMenu();
+                      openSheet();
+                    }}
+                    className={MENU_ITEM}
+                  >
+                    <ShieldCheck className="w-4 h-4 text-[#6E7568] shrink-0" strokeWidth={1.75} />
+                    <span className="truncate">
+                      {currentChat.contactVerified === true ? 'Звірка співрозмовника' : 'Звірити число безпеки'}
+                    </span>
+                  </button>
+                  <button
+                    onClick={() => {
+                      closeMenu();
+                      openSheet();
+                    }}
+                    className={MENU_ITEM}
+                  >
+                    <Hash className="w-4 h-4 text-[#6E7568] shrink-0" strokeWidth={1.75} />
+                    <span className="truncate">Показати число безпеки</span>
+                  </button>
+                </div>
+              )}
+
               <button
                 onClick={() => {
                   closeMenu();
@@ -373,6 +446,31 @@ export const Header: React.FC<HeaderProps> = ({
           </>,
           document.body
         )}
+
+      {sheet && (
+        <ContactSheet
+          chat={{
+            id: currentChat.id,
+            title: currentChat.title,
+            peerNodeId: currentChat.peerNodeId,
+            isGroup,
+          }}
+          anchor={sheet}
+          onClose={() => setSheet(null)}
+          onVerified={(verified) => updateChat(currentChat.id, { contactVerified: verified })}
+          onRenamed={(title) => updateChat(currentChat.id, { title })}
+          onCleared={() =>
+            updateChat(currentChat.id, {
+              messages: [],
+              lastSnippet: undefined,
+              lastKind: undefined,
+              lastAuthor: undefined,
+              unreadCount: 0,
+            })
+          }
+          onDeleted={onDeleted}
+        />
+      )}
     </header>
   );
 };

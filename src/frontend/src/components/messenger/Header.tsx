@@ -12,11 +12,6 @@ import {
   MessageSquare,
   MoreVertical,
   Radio,
-  Globe,
-  ArrowDownUp,
-  ShieldCheck,
-  AlertTriangle,
-  WifiOff,
   ChevronLeft
 } from 'lucide-react';
 import { Chat, UserProfile, ActiveTransportStatus, TransportProtocol } from '../../types/messenger';
@@ -49,11 +44,21 @@ interface HeaderProps {
 
 // Кругла кнопка-іконка — єдина форма для всієї правої групи шапки.
 const ICON_BTN =
-  'w-9 h-9 rounded-full flex items-center justify-center shrink-0 transition-colors active:scale-95';
-const ICON_BTN_IDLE = 'text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F1EDE3]';
+  'w-[32px] h-[32px] min-w-0 min-h-0 rounded-full flex items-center justify-center shrink-0 transition-colors';
+const ICON_BTN_IDLE = 'text-[#6E7568] hover:text-[#21261F] hover:bg-[#F1EBDD]';
 // Рядок випадного меню: фіксовані 36px, іконка + один рядок тексту.
 const MENU_ITEM =
-  'w-full h-9 px-2.5 rounded-xl text-left text-[13px] font-semibold flex items-center gap-2.5 hover:bg-[#F1EDE3] transition-colors';
+  'w-full h-[36px] min-h-0 px-2.5 rounded-[10px] text-left text-[13px] font-medium text-[#21261F] flex items-center gap-2.5 hover:bg-[#F1EBDD] transition-colors';
+
+// Стан каналу живе в статусному рядку разом зі звіркою, а не окремою пігулкою:
+// це та сама відповідь на питання «наскільки цій розмові можна вірити».
+const TRANSPORT_LABEL: Record<string, string> = {
+  'p2p-direct': 'прямий канал',
+  'server-ws': 'вузол',
+  'relay-node': 'ретранслятор',
+  connecting: 'з’єднання…',
+  'fallback-server': 'з’єднання…',
+};
 
 export const Header: React.FC<HeaderProps> = ({
   currentChat,
@@ -111,7 +116,7 @@ export const Header: React.FC<HeaderProps> = ({
   const circleLabel = currentChat.circle && currentChat.circle !== 'all' ? currentChat.circle : null;
 
   return (
-    <header ref={headerRef} className="h-[60px] px-3 sm:px-5 bg-[#FDFCF9]/95 backdrop-blur-xl border-b border-[#E6DFD3] flex items-center justify-between gap-2 sm:gap-3 select-none shrink-0 z-30 shadow-sm">
+    <header ref={headerRef} className="h-[60px] px-3 sm:px-5 bg-[#FDFCF9]/95 backdrop-blur-xl border-b border-[#E8E1D3] flex items-center justify-between gap-2 sm:gap-3 select-none shrink-0 z-30">
       {/* 1. Left Chat Identity & Mobile Back Button */}
       <div className="flex items-center gap-1 sm:gap-2 min-w-0 flex-1">
         {onBack && (
@@ -124,7 +129,7 @@ export const Header: React.FC<HeaderProps> = ({
             title="Назад до списку бесід"
             aria-label="Назад"
           >
-            <ChevronLeft className="w-5 h-5" />
+            <ChevronLeft className="w-[18px] h-[18px]" strokeWidth={1.75} />
           </button>
         )}
 
@@ -137,103 +142,73 @@ export const Header: React.FC<HeaderProps> = ({
           title="Переглянути деталі бесіди, учасників та медіа"
         >
           <div className="relative shrink-0">
-            <Avatar
-              src={currentChat.avatar}
-              name={currentChat.title}
-              className="w-9 h-9 group-hover:scale-105 transition-transform"
-            />
+            <Avatar src={currentChat.avatar} name={currentChat.title} className="w-9 h-9" />
             {currentChat.isOnline && (
-              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-[#10B981] rounded-full ring-2 ring-[#FDFCF9]" />
+              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-[#4C8A55] rounded-full ring-2 ring-[#FDFCF9]" />
             )}
           </div>
 
           <div className="min-w-0 flex-1 leading-tight">
-            <div className="flex items-center gap-1.5">
-              <h2 className="font-bold text-[15px] sm:text-base text-[#1E2521] truncate group-hover:text-[#E87A42] transition-colors">
+            <div className="flex items-center gap-2">
+              <h2 className="font-semibold text-[15px] text-[#21261F] truncate">
                 {currentChat.title}
               </h2>
               {circleLabel && (
-                <span className="hidden phantom:inline-block px-1.5 py-px bg-[#F1EDE3] text-[#C25925] text-[10px] font-bold rounded uppercase border border-[#DDD4C4] shrink-0">
+                <span className="hidden phantom:inline-block text-[11.5px] text-[#98A092] shrink-0">
                   {circleLabel}
                 </span>
               )}
             </div>
 
-            <div className="flex items-center gap-2 min-w-0 mt-0.5">
+            {/* Один статусний рядок: звірка, канал, тема. Крапка замість
+                значка — попередження не мусить кричати, щоб його прочитали. */}
+            <div className="flex items-center gap-2.5 min-w-0 mt-0.5 text-[11.5px] text-[#6E7568]">
               {currentChat.contactVerified === false && (
                 <span
-                  className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#C25925] shrink-0"
+                  className="inline-flex items-center gap-1.5 shrink-0"
                   title="Звірте число безпеки в налаштуваннях, розділ «Мережа & P2P»"
                 >
-                  <AlertTriangle className="w-3 h-3" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#C98A2E] shrink-0" />
                   Не звірено
                 </span>
               )}
               {currentChat.contactVerified === true && (
-                <span className="inline-flex items-center gap-1 text-[11px] font-semibold text-[#528A4B] shrink-0">
-                  <ShieldCheck className="w-3 h-3" />
+                <span className="inline-flex items-center gap-1.5 shrink-0">
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#4C8A55] shrink-0" />
                   Звірено
                 </span>
               )}
-              {subtitle && <p className="text-xs text-[#7A8479] truncate">{subtitle}</p>}
+
+              {/* Показуємо тільки те, що виміряно: жодного замка, поки
+                  наскрізного шифрування немає, і жодних мілісекунд без пінга. */}
+              {onOpenP2PNetworkModal && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    soundFx.playTap();
+                    onOpenP2PNetworkModal();
+                  }}
+                  className="hidden phantom:inline-flex items-center gap-1.5 shrink-0 min-w-0 min-h-0 hover:text-[#21261F] transition-colors"
+                  title="Стан каналу — натисніть для діагностики мережі"
+                >
+                  <span className="w-1.5 h-1.5 rounded-full bg-[#98A092] shrink-0" />
+                  <span className="truncate max-w-[130px]">
+                    {TRANSPORT_LABEL[activeTransportStatus] || 'каналу немає'}
+                  </span>
+                  {typeof networkLatencyMs === 'number' && (
+                    <span className="text-[#98A092]">{networkLatencyMs} мс</span>
+                  )}
+                </button>
+              )}
+
+              {subtitle && <p className="truncate">{subtitle}</p>}
             </div>
           </div>
         </div>
       </div>
 
       {/* 2. Right Action Controls */}
-      <div className="flex items-center gap-0.5 sm:gap-1 shrink-0">
-        {/* Стан каналу. Показуємо тільки те, що виміряно: жодного замка,
-            поки наскрізного шифрування немає, і жодних мілісекунд без пінга. */}
-        {onOpenP2PNetworkModal && (
-          <button
-            onClick={() => {
-              soundFx.playTap();
-              onOpenP2PNetworkModal();
-            }}
-            className={`hidden phantom:flex items-center gap-1 mr-1 px-2 py-0.5 rounded-lg text-[11px] font-semibold border transition-colors ${
-              activeTransportStatus === 'p2p-direct'
-                ? 'bg-[#F1EDE3] hover:bg-[#E6DFD3] text-[#C25925] border-[#DDD4C4]'
-                : activeTransportStatus === 'server-ws' || activeTransportStatus === 'relay-node'
-                ? 'bg-[#F9F7F1] hover:bg-[#F1EDE3] text-[#5F6A60] border-[#E6DFD3]'
-                : activeTransportStatus === 'connecting'
-                ? 'bg-[#F9F7F1] hover:bg-[#F1EDE3] text-[#8C5A1A] border-[#E6DFD3]'
-                : 'bg-[#F9F7F1] hover:bg-[#F1EDE3] text-[#7A8479] border-[#E6DFD3]'
-            }`}
-            title="Стан каналу — натисніть для діагностики мережі"
-          >
-            {activeTransportStatus === 'p2p-direct' ? (
-              <>
-                <ArrowDownUp className="w-3 h-3" />
-                <span className="truncate max-w-[110px]">Прямий канал · DTLS</span>
-              </>
-            ) : activeTransportStatus === 'server-ws' ? (
-              <>
-                <Globe className="w-3 h-3" />
-                <span className="truncate max-w-[110px]">Вузол</span>
-              </>
-            ) : activeTransportStatus === 'relay-node' ? (
-              <>
-                <Radio className="w-3 h-3" />
-                <span className="truncate max-w-[110px]">Ретранслятор</span>
-              </>
-            ) : activeTransportStatus === 'connecting' || activeTransportStatus === 'fallback-server' ? (
-              <>
-                <Radio className="w-3 h-3" />
-                <span>З'єднання…</span>
-              </>
-            ) : (
-              <>
-                <WifiOff className="w-3 h-3" />
-                <span>Каналу немає</span>
-              </>
-            )}
-            {typeof networkLatencyMs === 'number' && (
-              <span className="text-[10px] opacity-75 font-mono">{networkLatencyMs}ms</span>
-            )}
-          </button>
-        )}
-
+      <div className="flex items-center gap-0.5 shrink-0">
         {/* Thread / Digest Comments */}
         <button
           onClick={() => {
@@ -243,7 +218,7 @@ export const Header: React.FC<HeaderProps> = ({
           className={`hidden sm:flex ${ICON_BTN} ${ICON_BTN_IDLE}`}
           title="Підсумок та коментарі бесіди"
         >
-          <MessageSquare className="w-4 h-4" />
+          <MessageSquare className="w-[18px] h-[18px]" strokeWidth={1.75} />
         </button>
 
         {/* Pinned Messages shortcut */}
@@ -253,13 +228,13 @@ export const Header: React.FC<HeaderProps> = ({
             if (onScrollToPinned) onScrollToPinned();
           }}
           className={`relative ${ICON_BTN} ${
-            pinnedCount > 0 ? 'text-[#C25925] hover:bg-[#F1EDE3]' : ICON_BTN_IDLE
+            pinnedCount > 0 ? 'text-[#21261F] hover:bg-[#F1EBDD]' : ICON_BTN_IDLE
           }`}
           title={pinnedCount > 0 ? `Закріплених повідомлень: ${pinnedCount}` : 'Немає закріплених'}
         >
-          <Bookmark className="w-4 h-4" />
+          <Bookmark className="w-[18px] h-[18px]" strokeWidth={1.75} />
           {pinnedCount > 0 && (
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 bg-[#E87A42] rounded-full ring-2 ring-[#FDFCF9]" />
+            <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-[#D96C35] rounded-full ring-2 ring-[#FDFCF9]" />
           )}
         </button>
 
@@ -270,14 +245,12 @@ export const Header: React.FC<HeaderProps> = ({
             onToggleHuddle();
           }}
           className={`${ICON_BTN} ${
-            isHuddleActive
-              ? 'bg-[#E87A42] text-[#FDFCF9] animate-pulse'
-              : 'text-[#E87A42] hover:bg-[#F1EDE3]'
+            isHuddleActive ? 'bg-[#D96C35] text-[#FDFCF9]' : ICON_BTN_IDLE
           }`}
           title={isHuddleActive ? 'Залишити кімнату дзвінка' : 'Запустити зв\'язок (аудіо/відео)'}
           aria-label={isHuddleActive ? 'В ефірі' : 'Дзвінок'}
         >
-          <Phone className="w-4 h-4" />
+          <Phone className="w-[18px] h-[18px]" strokeWidth={1.75} />
         </button>
 
         {/* In-Chat Search Trigger */}
@@ -287,23 +260,23 @@ export const Header: React.FC<HeaderProps> = ({
             onToggleSearch();
           }}
           className={`${ICON_BTN} ${
-            isSearching ? 'bg-[#E87A42] text-[#FDFCF9]' : ICON_BTN_IDLE
+            isSearching ? 'bg-[#F1EBDD] text-[#21261F]' : ICON_BTN_IDLE
           }`}
           title="Пошук у поточній бесіді"
         >
-          <Search className="w-4 h-4" />
+          <Search className="w-[18px] h-[18px]" strokeWidth={1.75} />
         </button>
 
         {/* More Actions Menu Button */}
         <button
           ref={moreBtnRef}
           onClick={toggleMoreMenu}
-          className={`${ICON_BTN} ${menuAnchor ? 'bg-[#F1EDE3] text-[#1E2521]' : ICON_BTN_IDLE}`}
+          className={`${ICON_BTN} ${menuAnchor ? 'bg-[#F1EBDD] text-[#21261F]' : ICON_BTN_IDLE}`}
           title="Більше дій"
           aria-haspopup="menu"
           aria-expanded={!!menuAnchor}
         >
-          <MoreVertical className="w-4 h-4" />
+          <MoreVertical className="w-[18px] h-[18px]" strokeWidth={1.75} />
         </button>
       </div>
 
@@ -323,7 +296,7 @@ export const Header: React.FC<HeaderProps> = ({
                 }}
                 className={`sm:hidden ${MENU_ITEM}`}
               >
-                <MessageSquare className="w-4 h-4 text-[#C25925] shrink-0" />
+                <MessageSquare className="w-4 h-4 text-[#6E7568] shrink-0" strokeWidth={1.75} />
                 <span className="truncate">Конспект бесіди</span>
               </button>
 
@@ -335,7 +308,7 @@ export const Header: React.FC<HeaderProps> = ({
                   }}
                   className={MENU_ITEM}
                 >
-                  <Radio className="w-4 h-4 text-[#E87A42] shrink-0" />
+                  <Radio className="w-4 h-4 text-[#6E7568] shrink-0" strokeWidth={1.75} />
                   <span className="truncate">Мережевий зв'язок</span>
                 </button>
               )}
@@ -347,7 +320,7 @@ export const Header: React.FC<HeaderProps> = ({
                 }}
                 className={MENU_ITEM}
               >
-                <Zap className="w-4 h-4 text-[#C25925] shrink-0" />
+                <Zap className="w-4 h-4 text-[#6E7568] shrink-0" strokeWidth={1.75} />
                 <span className="truncate">Студія карток</span>
               </button>
 
@@ -359,10 +332,10 @@ export const Header: React.FC<HeaderProps> = ({
                   }}
                   className={MENU_ITEM}
                 >
-                  <Clock className="w-4 h-4 text-[#C25925] shrink-0" />
+                  <Clock className="w-4 h-4 text-[#6E7568] shrink-0" strokeWidth={1.75} />
                   <span className="truncate flex-1">Відкладені повідомлення</span>
                   {scheduledMessagesCount > 0 && (
-                    <span className="px-1.5 bg-[#E87A42] text-[#FDFCF9] rounded-full text-[10px] font-bold shrink-0">
+                    <span className="px-1.5 bg-[#D96C35] text-[#FDFCF9] rounded-full text-[10.5px] font-semibold shrink-0">
                       {scheduledMessagesCount}
                     </span>
                   )}
@@ -377,22 +350,22 @@ export const Header: React.FC<HeaderProps> = ({
                 className={MENU_ITEM}
               >
                 {isSoundEnabled ? (
-                  <Volume2 className="w-4 h-4 text-[#E87A42] shrink-0" />
+                  <Volume2 className="w-4 h-4 text-[#6E7568] shrink-0" strokeWidth={1.75} />
                 ) : (
-                  <VolumeX className="w-4 h-4 text-[#7A8479] shrink-0" />
+                  <VolumeX className="w-4 h-4 text-[#98A092] shrink-0" strokeWidth={1.75} />
                 )}
                 <span className="truncate">{isSoundEnabled ? 'Звук увімкнено' : 'Звук вимкнено'}</span>
               </button>
 
-              <div className="pt-1 mt-1 border-t border-[#F1EDE3]">
+              <div className="pt-1 mt-1 border-t border-[#E8E1D3]">
                 <button
                   onClick={() => {
                     closeMenu();
                     onOpenSettings();
                   }}
-                  className={`${MENU_ITEM} text-[#5F6A60] hover:text-[#1E2521]`}
+                  className={MENU_ITEM}
                 >
-                  <SlidersHorizontal className="w-4 h-4 text-[#5F6A60] shrink-0" />
+                  <SlidersHorizontal className="w-4 h-4 text-[#6E7568] shrink-0" strokeWidth={1.75} />
                   <span className="truncate">Налаштування месенджера</span>
                 </button>
               </div>

@@ -45,6 +45,7 @@ export interface NodeMessage {
   deleted_at: string | null;
   /** local | queued | sent — див. routes_messenger.py */
   delivery?: string;
+  delivery_state?: string;
 }
 
 export interface NodeIdentity {
@@ -179,6 +180,16 @@ export function messageFromNode(row: NodeMessage, selfId: string, peerNodeId?: s
     type: (row.kind as Message['type']) || 'text',
     text: row.kind === 'text' ? row.body ?? undefined : (rich.text as string | undefined),
     isSelf: peerNodeId ? row.author_id !== peerNodeId : row.author_id === selfId,
+    // Стан доставки — з бази вузла, тож галочки переживають перезавантаження.
+    // «У скриньці» проти «доїхало» — саме те, чого панелі не побачили на екрані.
+    status:
+      peerNodeId && (peerNodeId ? row.author_id !== peerNodeId : false)
+        ? row.delivery_state === 'sent'
+          ? 'sent'
+          : row.delivery_state === 'queued'
+            ? 'queued'
+            : undefined
+        : undefined,
     isEdited: Boolean(row.edited_at),
     transport: (row.transport as Message['transport']) ?? undefined,
   };

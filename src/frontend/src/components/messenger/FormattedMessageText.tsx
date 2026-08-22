@@ -1,10 +1,9 @@
 import React, { useState } from 'react';
-import { ExternalLink, Eye, EyeOff } from 'lucide-react';
+import { Eye, EyeOff } from 'lucide-react';
 import { soundFx } from '../../utils/messengerSound';
 
 interface FormattedMessageTextProps {
   text: string;
-  isSelf?: boolean;
   onMentionClick?: (handleOrName: string) => void;
   searchQuery?: string;
   isActiveMatch?: boolean;
@@ -12,7 +11,6 @@ interface FormattedMessageTextProps {
 
 export const FormattedMessageText: React.FC<FormattedMessageTextProps> = ({
   text,
-  isSelf,
   onMentionClick,
   searchQuery,
   isActiveMatch,
@@ -35,11 +33,10 @@ export const FormattedMessageText: React.FC<FormattedMessageTextProps> = ({
     const parts = content.split(regex);
     if (parts.length === 1) return content;
 
+    // Підсвітка пошуку: активний збіг — тепла заливка, решта — тиха.
     const highlightStyle = isActiveMatch
-      ? 'bg-[#E87A42] text-[#1E2521] font-bold px-1 py-0.5 rounded-xs shadow-xs inline-block'
-      : isSelf
-      ? 'bg-[#F5A623] text-black font-bold px-0.5 py-0.2 rounded-xs shadow-2xs inline-block'
-      : 'bg-[#FFE082] text-[#1E2521] font-semibold px-0.5 py-0.2 rounded-xs shadow-2xs inline-block';
+      ? 'bg-[#F1D9C4] text-[#21261F] rounded-sm px-0.5'
+      : 'bg-[#F3EEE3] text-[#21261F] rounded-sm px-0.5';
 
     return parts.map((part, idx) =>
       regex.test(part) ? (
@@ -73,7 +70,7 @@ export const FormattedMessageText: React.FC<FormattedMessageTextProps> = ({
       const tokens = line.split(masterRegex);
 
       return (
-        <p key={lineIdx} className={`break-words [overflow-wrap:anywhere] ${lineIdx > 0 ? 'mt-1.5' : ''}`}>
+        <p key={lineIdx} className={`break-words ${lineIdx > 0 ? 'mt-1.5' : ''}`}>
           {tokens.map((token, tokenIdx) => {
             const uniqueKey = `${lineIdx}-${tokenIdx}`;
 
@@ -86,21 +83,19 @@ export const FormattedMessageText: React.FC<FormattedMessageTextProps> = ({
                 <span
                   key={uniqueKey}
                   onClick={(e) => toggleSpoiler(tokenIdx + lineIdx * 100, e)}
-                  className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md cursor-pointer transition-all select-none mx-0.5 font-medium text-xs ${
+                  className={`inline-flex items-center gap-1 px-1 rounded cursor-pointer transition-all select-none ${
                     isRevealed
-                      ? isSelf
-                        ? 'bg-white/20 text-[#1E2521]'
-                        : 'bg-[#EFE7D8] text-[#1E2521]'
-                      : isSelf
-                      ? 'bg-white/30 text-transparent blur-[4px] hover:blur-[2px]'
-                      : 'bg-[#DCD0BE] text-transparent blur-[4px] hover:blur-[2px]'
+                      ? 'bg-[#F3EEE3] text-[#21261F]'
+                      : 'bg-[#E2DACB] text-transparent blur-[4px] hover:blur-[2px]'
                   }`}
                   title={isRevealed ? 'Спойлер (клікніть щоб приховати)' : 'Спойлер (клікніть щоб відкрити)'}
                 >
                   <span>{isRevealed ? highlightContent(spoilerContent) : spoilerContent}</span>
-                  <span className="text-[9px] opacity-70 ml-0.5">
-                    {isRevealed ? <EyeOff className="w-2.5 h-2.5 inline" /> : <Eye className="w-2.5 h-2.5 inline text-black/50" />}
-                  </span>
+                  {isRevealed ? (
+                    <EyeOff className="w-3.5 h-3.5 inline text-[#6E7568]" strokeWidth={1.75} />
+                  ) : (
+                    <Eye className="w-3.5 h-3.5 inline text-[#6E7568]" strokeWidth={1.75} />
+                  )}
                 </span>
               );
             }
@@ -114,12 +109,9 @@ export const FormattedMessageText: React.FC<FormattedMessageTextProps> = ({
                   target="_blank"
                   rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}
-                  className={`inline-flex items-center gap-1 font-semibold underline underline-offset-2 break-all hover:opacity-80 transition-opacity ${
-                    isSelf ? 'text-[#C25925] hover:text-[#A84A1E]' : 'text-[#E87A42] hover:text-[#D46B35]'
-                  }`}
+                  className="inline underline underline-offset-2 decoration-[#D96C35]/40 break-all text-[#B85425] hover:decoration-[#D96C35] transition-colors"
                 >
-                  <span>{highlightContent(token)}</span>
-                  <ExternalLink className="w-3 h-3 shrink-0 inline opacity-70" />
+                  {highlightContent(token)}
                 </a>
               );
             }
@@ -136,11 +128,7 @@ export const FormattedMessageText: React.FC<FormattedMessageTextProps> = ({
                     soundFx.playTap();
                     onMentionClick?.(handle);
                   }}
-                  className={`inline-flex items-center px-1.5 py-0.2 mx-0.5 rounded-md font-bold text-xs transition-all ${
-                    isSelf
-                      ? 'bg-[#E87A42]/30 text-[#FFD4A3] hover:bg-[#E87A42]/50'
-                      : 'bg-[#FCE7D8] text-[#A84813] hover:bg-[#F9CCA8]'
-                  }`}
+                  className="inline font-medium text-[#B85425] hover:underline underline-offset-2 transition-colors align-baseline"
                   title={`Переглянути профіль @${handle}`}
                 >
                   @{highlightContent(handle)}
@@ -151,12 +139,7 @@ export const FormattedMessageText: React.FC<FormattedMessageTextProps> = ({
             // 4. Hashtags: #tag
             if (token.startsWith('#') && token.length > 1) {
               return (
-                <span
-                  key={uniqueKey}
-                  className={`font-semibold opacity-90 mx-0.5 ${
-                    isSelf ? 'text-[#3E7B44]' : 'text-[#3E7B44]'
-                  }`}
-                >
+                <span key={uniqueKey} className="font-medium text-[#4C8A55]">
                   #{highlightContent(token.slice(1))}
                 </span>
               );
@@ -194,11 +177,7 @@ export const FormattedMessageText: React.FC<FormattedMessageTextProps> = ({
               return (
                 <code
                   key={uniqueKey}
-                  className={`px-1.5 py-0.5 rounded-md font-mono text-[11px] mx-0.5 select-text ${
-                    isSelf
-                      ? 'bg-[#F1E4D4] text-[#7A4B22] border border-[#E6D2BC]'
-                      : 'bg-[#EFE9DD] text-[#7A8479] border border-[#DFD6C5]'
-                  }`}
+                  className="px-1 py-0.5 rounded font-mono text-[13px] select-text bg-[#F3EEE3] text-[#21261F] border border-[#E8E1D3]"
                 >
                   {highlightContent(token.slice(1, -1))}
                 </code>
@@ -213,5 +192,5 @@ export const FormattedMessageText: React.FC<FormattedMessageTextProps> = ({
     });
   };
 
-  return <div className="leading-relaxed select-text break-words [overflow-wrap:anywhere]">{renderFormattedSegments()}</div>;
+  return <div className="select-text break-words">{renderFormattedSegments()}</div>;
 };

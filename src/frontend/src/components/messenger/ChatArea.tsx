@@ -198,14 +198,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   // Text-To-Speech (TTS) Reader
   const handleSpeakMessage = (msg: Message) => {
     if (typeof window === 'undefined' || !('speechSynthesis' in window)) {
-      showToast('⚠️ Синтез мовлення не підтримується цим браузером');
+      showToast('Синтез мовлення не підтримується цим браузером');
       return;
     }
 
     if (speakingMsgId === msg.id) {
       window.speechSynthesis.cancel();
       setSpeakingMsgId(null);
-      showToast('🔇 Озвучування зупинено');
+      showToast('Озвучування зупинено');
       return;
     }
 
@@ -224,7 +224,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
     setSpeakingMsgId(msg.id);
     window.speechSynthesis.speak(utterance);
-    showToast('🔊 Озвучую повідомлення…');
+    showToast('Озвучую повідомлення…');
   };
 
   // Mobile Touch Event Handlers
@@ -243,7 +243,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       soundFx.playTap();
       onAddReaction(msg.id, '❤️');
       triggerConfetti();
-      showToast('❤️ Реакцію додано подвійним дотиком');
+      showToast('Реакцію додано подвійним дотиком');
       return;
     }
     lastTapRef.current[msg.id] = now;
@@ -295,7 +295,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         }
         soundFx.playTap();
         onReplyMessage(msg);
-        showToast('💬 Відповісти на повідомлення');
+        showToast('Відповісти на повідомлення');
       }
       setSwipingMsgId(null);
       setSwipeOffset(0);
@@ -444,7 +444,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     soundFx.playSend();
     const isNowSaved = !savedMessages[msg.id];
     setSavedMessages((prev) => ({ ...prev, [msg.id]: isNowSaved }));
-    showToast(isNowSaved ? '🔖 Додано в «Збережене»' : 'Вилучено зі «Збереженого»');
+    showToast(isNowSaved ? 'Додано в «Збережене»' : 'Вилучено зі «Збереженого»');
   };
 
   // Scroll detection
@@ -591,14 +591,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     soundFx.playTap();
     navigator.clipboard.writeText(code);
     setCopiedCodeId(id);
-    showToast('📋 Код скопійовано в буфер');
+    showToast('Код скопійовано в буфер');
     setTimeout(() => setCopiedCodeId(null), 2000);
   };
 
   const copyMessageText = (text: string) => {
     soundFx.playTap();
     navigator.clipboard.writeText(text);
-    showToast('📋 Текст скопійовано');
+    showToast('Текст скопійовано');
   };
 
   const handleOpenReactionPicker = (msgId: string) => {
@@ -650,20 +650,20 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         const pinnedMsg = pinnedMessages[currentPinnedIndex] || pinnedMessages[0];
         if (!pinnedMsg) return null;
         return (
-          <div className="px-4 py-2 bg-[#FDFCF9]/95 border-b border-[#E6DFD3] flex items-center justify-between gap-3 text-xs shrink-0 z-10 shadow-sm text-[#1E2521] backdrop-blur-md">
+          <div className="px-4 py-2 bg-[#FDFCF9] border-b border-[#E8E1D3] flex items-center justify-between gap-3 shrink-0 z-10 text-[#21261F]">
             <div
               onClick={() => scrollToMessage(pinnedMsg.id)}
               className="flex items-center gap-2.5 min-w-0 cursor-pointer group flex-1"
             >
-              <Pin className="w-4 h-4 text-[#E87A42] fill-current shrink-0" />
+              <Pin className="w-4 h-4 text-[#6E7568] shrink-0" strokeWidth={1.75} />
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5 font-bold text-[#1E2521]">
+                <div className="flex items-center gap-1.5 text-[13px] font-semibold text-[#21261F]">
                   <span>Закріплене ({Math.min(currentPinnedIndex + 1, pinnedMessages.length)} з {pinnedMessages.length})</span>
-                  <span className="text-[11px] text-[#5F6A60] font-normal">
+                  <span className="text-[11.5px] text-[#6E7568] font-normal">
                     від {pinnedMsg.senderName}
                   </span>
                 </div>
-                <p className="text-[11px] text-[#5F6A60] truncate">
+                <p className="text-[12.5px] text-[#6E7568] truncate">
                   {pinnedMsg.text || pinnedMsg.tableData?.title || pinnedMsg.type}
                 </p>
               </div>
@@ -785,11 +785,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       )}
 
       {/* 3. Messages Feed */}
+      {/* Вертикальні відступи лише на самих повідомленнях (10px між групами,
+          3px усередині групи): space-y на скролері перебивав їх специфічністю
+          і робив рівномірні дірки по всій стрічці. */}
       <div className="relative flex-1 min-h-0 flex flex-col">
       <div
         ref={messagesContainerRef}
         onScroll={handleScroll}
-        className="flex-1 overflow-y-auto p-2.5 sm:p-5 md:p-6 space-y-2.5 sm:space-y-3.5"
+        className="flex-1 overflow-y-auto px-3 py-3 sm:px-6 sm:py-4"
       >
         {(messages || []).map((msg, index) => {
           if (!msg) return null;
@@ -894,8 +897,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             <React.Fragment key={msg.id}>
               {/* Date Header Divider */}
               {showDateDivider && (
-                <div className="flex items-center justify-center my-4">
-                  <span className="px-3.5 py-1 bg-[#F1EDE3] text-[#7A8479] text-[11px] font-semibold tracking-wide rounded-full border border-[#E6DFD3]">
+                <div className="flex items-center justify-center pt-3 pb-2">
+                  <span className="px-2.5 py-1 bg-[#F3EEE3] text-[#6E7568] text-[11.5px] rounded-[8px]">
                     {dateLabel}
                   </span>
                 </div>
@@ -905,13 +908,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 id={`message-${msg.id}`}
                 onMouseEnter={() => setHoveredMessageId(msg.id)}
                 onMouseLeave={() => setHoveredMessageId(null)}
-                className={`flex items-end gap-2 ${isSelf ? 'justify-end' : 'justify-start'} ${isNewSenderTurn ? 'mt-3 sm:mt-4' : 'mt-1'} group relative transition-all ${
+                className={`flex items-end gap-2 ${isSelf ? 'justify-end' : 'justify-start'} ${isNewSenderTurn ? 'mt-[10px]' : 'mt-[3px]'} group relative ${
                   isActiveSearchMatch
-                    ? 'ring-2 ring-[#E87A42] bg-[#F9F7F1]/90 rounded-2xl p-1 shadow-sm'
+                    ? 'ring-1 ring-[#D96C35] bg-[#F3EEE3]/80 rounded-xl p-0.5'
                     : isHighlighted
-                    ? 'ring-2 ring-[#E87A42] bg-[#F9F7F1]/60 rounded-2xl p-0.5'
+                    ? 'ring-1 ring-[#D96C35] bg-[#F3EEE3]/60 rounded-xl p-0.5'
                     : isSearchMatch
-                    ? 'bg-[#F9F7F1]/60 rounded-2xl p-0.5'
+                    ? 'bg-[#F3EEE3]/60 rounded-xl p-0.5'
                     : ''
                 }`}
               >
@@ -965,15 +968,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     }}
                     style={{
                       transform:
-                        swipingMsgId === msg.id
-                          ? `translateX(${swipeOffset}px)`
-                          : isSelected
-                          ? 'scale(1.01)'
-                          : undefined,
-                      transition:
-                        swipingMsgId === msg.id
-                          ? 'none'
-                          : 'transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.24s ease',
+                        swipingMsgId === msg.id ? `translateX(${swipeOffset}px)` : undefined,
+                      transition: swipingMsgId === msg.id ? 'none' : 'transform 0.18s ease',
                     }}
                     className={`msg-bubble-fluid relative select-text cursor-pointer sm:cursor-default ${bubbleContourClass} ${densityClass} ${
                       messageDensity === 'emoji-single'
@@ -1001,10 +997,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     )}
                     {/* Top Pinned Tag Pill */}
                     {msg.isPinned && (
-                      <div className={`flex items-center gap-1 text-[9.5px] font-bold mb-1.5 px-2 py-0.5 rounded-full w-fit ${
-                        isSelf ? 'bg-[#F6DCC9] text-[#8C6B4F] border border-[#EBC7AE]' : 'bg-[#F9F7F1] text-[#B98410] border border-[#E6DFD3]'
-                      }`}>
-                        <Pin className="w-2.5 h-2.5 fill-current text-[#E0A32C]" />
+                      <div className="flex items-center gap-1.5 text-[11.5px] text-[#6E7568] mb-1 w-fit">
+                        <Pin className="w-3.5 h-3.5" strokeWidth={1.75} />
                         <span>Закріплено</span>
                       </div>
                     )}
@@ -1012,10 +1006,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     {/* Ім'я відправника — лише в групах. Роль («Учасник») у стрічці
                         нікого не цікавить, тому бейджа немає ніде. */}
                     {!isSelf && isFirstInGroup && !isDirectConversation && (
-                      <div className="mb-1 pb-0.5">
+                      <div className="mb-0.5">
                         <p
                           onClick={() => onSelectMemberByName?.(msg.senderName)}
-                          className="font-bold text-[12px] text-[#E87A42] leading-none cursor-pointer hover:underline w-fit"
+                          className="font-semibold text-[13px] text-[#D96C35] leading-tight cursor-pointer hover:underline w-fit"
                         >
                           <HighlightedText
                             text={msg.senderName}
@@ -1032,23 +1026,19 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         soundFx.playTap();
                         if (msg.replyTo!.id) scrollToMessage(msg.replyTo!.id);
                       }}
-                      className={`mb-2 p-2 px-2.5 rounded-xl text-xs border-l-2 cursor-pointer transition-all hover:opacity-90 ${
-                        isSelf
-                          ? 'bg-[#FDF4EC] border-[#E87A42] text-[#1E2521]'
-                          : 'bg-[#F9F7F1]/90 border-[#E87A42] text-[#1E2521]'
-                      }`}
+                      className="mb-1.5 py-1 pl-2.5 pr-2 rounded-r-lg border-l-2 border-[#D96C35]/45 bg-[#F3EEE3]/70 text-[#21261F] cursor-pointer transition-colors hover:bg-[#F3EEE3]"
                     >
                       {msg.replyTo.quotes && msg.replyTo.quotes.length > 1 ? (
                         /* Multi-message quotes preview */
-                        <div className="space-y-1">
-                          <p className="font-bold text-[10.5px] text-[#E87A42] flex items-center gap-1">
-                            <Quote className="w-2.5 h-2.5" />
+                        <div>
+                          <p className="font-semibold text-[12px] text-[#6E7568] flex items-center gap-1.5">
+                            <Quote className="w-3.5 h-3.5" strokeWidth={1.75} />
                             <span>Цитати ({msg.replyTo.quotes.length})</span>
                           </p>
-                          <div className="space-y-0.5 pl-1">
+                          <div className="mt-0.5">
                             {msg.replyTo.quotes.map((q) => (
-                              <div key={q.id} className="text-[10.5px] truncate flex items-center gap-1 opacity-90">
-                                <span className="font-bold text-[#E87A42] shrink-0">{q.senderName}:</span>
+                              <div key={q.id} className="text-[12px] truncate flex items-center gap-1 text-[#6E7568]">
+                                <span className="font-semibold shrink-0">{q.senderName}:</span>
                                 <span className="truncate">{q.text}</span>
                               </div>
                             ))}
@@ -1057,27 +1047,24 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       ) : msg.replyTo.quoteSelectedText ? (
                         /* Partial fragment quote */
                         <div>
-                          <p className="font-bold text-[10.5px] text-[#E87A42] flex items-center gap-1 mb-0.5">
-                            <Quote className="w-2.5 h-2.5" />
+                          <p className="font-semibold text-[12px] text-[#6E7568] flex items-center gap-1.5">
+                            <Quote className="w-3.5 h-3.5" strokeWidth={1.75} />
                             <span>Цитата: {msg.replyTo.senderName}</span>
                           </p>
-                          <p className="text-[10.5px] italic leading-relaxed opacity-90 pl-1 border-l border-[#E87A42]/40">
+                          <p className="text-[12px] leading-snug text-[#6E7568] truncate">
                             «{msg.replyTo.quoteSelectedText}»
                           </p>
                         </div>
                       ) : (
                         /* Standard single message reply */
                         <div>
-                          <p className="font-bold text-[10.5px] text-[#E87A42] flex items-center gap-1 mb-0.5">
-                            <Reply className="w-2.5 h-2.5" />
-                            <span>
-                              <HighlightedText
-                                text={msg.replyTo.senderName}
-                                query={isSearching ? chatSearchQuery : undefined}
-                              />
-                            </span>
+                          <p className="font-semibold text-[12px] text-[#6E7568]">
+                            <HighlightedText
+                              text={msg.replyTo.senderName}
+                              query={isSearching ? chatSearchQuery : undefined}
+                            />
                           </p>
-                          <p className="truncate text-[10.5px] opacity-85 pl-1">
+                          <p className="truncate text-[12px] text-[#6E7568]">
                             <HighlightedText
                               text={msg.replyTo.text}
                               query={isSearching ? chatSearchQuery : undefined}
@@ -1090,8 +1077,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
                   {/* Forwarded Header Attribution */}
                   {msg.forwardFrom && (
-                    <div className="mb-1 text-[10.5px] text-[#E87A42] flex items-center gap-1 font-medium">
-                      <Forward className="w-2.5 h-2.5" />
+                    <div className="mb-1 text-[12px] text-[#6E7568] flex items-center gap-1.5">
+                      <Forward className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} />
                       <span>
                         Переслано з «
                         <HighlightedText
@@ -1171,7 +1158,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       (() => {
                         const isExpanded = !!expandedMsgIds[msg.id];
                         return (
-                          <div className="text-xs sm:text-sm relative">
+                          <div className="relative">
                             <div
                               className={`msg-density-long-content ${
                                 isExpanded ? 'msg-density-long-expanded pb-1' : 'msg-density-long-collapsed cursor-pointer'
@@ -1184,7 +1171,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                             >
                               <FormattedMessageText
                                 text={msg.text}
-                                isSelf={isSelf}
                                 onMentionClick={(handle) => onSelectMemberByName?.(handle)}
                                 searchQuery={isSearching ? chatSearchQuery : undefined}
                                 isActiveMatch={isActiveSearchMatch}
@@ -1201,14 +1187,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                                   <button
                                     type="button"
                                     onClick={(e) => toggleExpandMessage(msg.id, e)}
-                                    className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1 rounded-full shadow-md transition-all active:scale-95 ${
-                                      isSelf
-                                        ? 'bg-[#F6DCC9] hover:bg-[#F0CDB4] text-[#A84813] border border-[#EBC7AE]'
-                                        : 'bg-[#F9F7F1] hover:bg-[#F9F7F1] text-[#E87A42] border border-[#DDD4C4] backdrop-blur-md'
-                                    }`}
+                                    className="inline-flex items-center gap-1.5 text-[12px] px-2.5 py-1 rounded-[10px] border border-[#E8E1D3] bg-[#FDFCF9] text-[#6E7568] hover:text-[#21261F] transition-colors"
                                   >
                                     <span>Читати далі</span>
-                                    <ChevronDown className="w-3 h-3 transition-transform duration-200" />
+                                    <ChevronDown className="w-3.5 h-3.5" strokeWidth={1.75} />
                                   </button>
                                 </div>
                               )}
@@ -1220,14 +1202,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                                 <button
                                   type="button"
                                   onClick={(e) => toggleExpandMessage(msg.id, e)}
-                                  className={`inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5 rounded-full transition-all active:scale-95 ${
-                                    isSelf
-                                      ? 'text-[#A84813] hover:text-[#1E2521] hover:bg-[#F0CDB4] bg-[#F6DCC9] border border-[#EBC7AE]'
-                                      : 'text-[#E87A42] hover:text-[#1E2521] hover:bg-[#F9F7F1] bg-[#F9F7F1] border border-[#E6DFD3]'
-                                  }`}
+                                  className="inline-flex items-center gap-1 text-[12px] px-2.5 py-1 rounded-[10px] border border-[#E8E1D3] bg-[#FDFCF9] text-[#6E7568] hover:text-[#21261F] transition-colors"
                                 >
                                   <span>Згорнути</span>
-                                  <ChevronUp className="w-3 h-3" />
+                                  <ChevronUp className="w-3.5 h-3.5" strokeWidth={1.75} />
                                 </button>
                               </div>
                             )}
@@ -1235,10 +1213,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         );
                       })()
                     ) : (
-                      <div className="text-xs sm:text-sm">
+                      <div>
                         <FormattedMessageText
                           text={msg.text}
-                          isSelf={isSelf}
                           onMentionClick={(handle) => onSelectMemberByName?.(handle)}
                           searchQuery={isSearching ? chatSearchQuery : undefined}
                           isActiveMatch={isActiveSearchMatch}
@@ -1609,7 +1586,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                           </p>
                           <div className="flex items-center gap-2 mt-1 text-[10px] text-[#E87A42] font-semibold">
                             <span>{msg.locationData.walkingTime}</span>
-                            <span>· Відкрити досьє 📍</span>
+                            <span>· Відкрити досьє</span>
                           </div>
                         </div>
                       </div>
@@ -1700,88 +1677,83 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   )}
 
                   {/* Message Indicators & Metadata Bar (Reading Time, Saved, Edited, Timestamp & Delivery Checks) */}
-                  <div className={`msg-meta-row flex items-center justify-end gap-1.5 mt-1 text-[10px] select-none leading-none ${
+                  <div className={`msg-meta-row flex items-center justify-end gap-1.5 mt-0.5 text-[11.5px] select-none ${
                     messageDensity === 'emoji-single'
-                      ? 'bg-[#F1EDE3] text-[#7A8479] border border-[#E6DFD3] px-1.5 py-0.5 rounded-full w-fit mx-auto text-[9.5px]'
+                      ? 'bg-[#F3EEE3] text-[#6E7568] border border-[#E8E1D3] px-1.5 py-0.5 rounded-lg w-fit mx-auto'
                       : isSelf
-                      ? 'text-[#A08B77]'
-                      : 'text-[#8A9186]'
+                      ? 'text-[#A9927C]'
+                      : 'text-[#98A092]'
                   }`}>
                     {/* Reading time metric for longer messages */}
                     {showReadingTime && (
-                      <span className="flex items-center gap-0.5 opacity-75 font-sans" title="Приблизний час прочитання">
-                        <Clock className="w-2.5 h-2.5 opacity-80" />
+                      <span className="flex items-center gap-1 opacity-80" title="Приблизний час прочитання">
+                        <Clock className="w-3.5 h-3.5" strokeWidth={1.75} />
                         <span>~{estimatedReadMinutes} хв</span>
                       </span>
                     )}
 
                     {/* Bookmarked / Saved indicator */}
                     {savedMessages[msg.id] && (
-                      <span className={`flex items-center gap-0.5 px-1.5 py-0.2 rounded-full font-semibold ${
-                        isSelf ? 'bg-[#F6DCC9] text-[#A84813]' : 'bg-[#FCE7D8] text-[#B04B14]'
-                      }`} title="Збережено в Збереженому">
-                        <Bookmark className="w-2.5 h-2.5 fill-current" />
+                      <span className="flex items-center gap-1 opacity-90" title="Збережено в Збереженому">
+                        <Bookmark className="w-3.5 h-3.5" strokeWidth={1.75} />
                         <span>Збережено</span>
                       </span>
                     )}
 
                     {/* Edited badge indicator */}
                     {msg.isEdited && (
-                      <span className="flex items-center gap-0.5 italic opacity-85" title="Повідомлення було змінено">
-                        <Edit2 className="w-2.5 h-2.5 opacity-75" />
-                        <span>ред.</span>
+                      <span className="opacity-85" title="Повідомлення було змінено">
+                        ред.
                       </span>
                     )}
 
                     {/* Transport Protocol Indicator */}
                     {msg.transport === 'p2p' ? (
                       <span
-                        className={`flex items-center gap-0.5 px-1 py-0.2 rounded text-[9px] font-bold ${
-                          isSelf ? 'bg-[#EAF3E9] text-[#3E7B44]' : 'bg-emerald-100 text-emerald-800'
-                        }`}
+                        className="flex items-center gap-1 opacity-85"
                         title="Доставлено напряму через WebRTC P2P DataChannel (транспорт DTLS)"
                       >
-                        <Radio className="w-2.5 h-2.5" />
+                        <Radio className="w-3.5 h-3.5" strokeWidth={1.75} />
                         <span>P2P</span>
                       </span>
                     ) : msg.transport === 'server' ? (
                       <span
-                        className="opacity-70 text-[9px]"
+                        className="opacity-70"
                         title="Доставлено через вузол (WebSocket)"
                       >
-                        <Globe className="w-2.5 h-2.5" />
+                        <Globe className="w-3.5 h-3.5" strokeWidth={1.75} />
                       </span>
                     ) : null}
 
                     {/* Час — завжди останній у правому нижньому куті бульбашки */}
-                    <span className="text-[10px] font-medium tabular-nums whitespace-nowrap">
+                    <span className="tabular-nums whitespace-nowrap">
                       {msg.timestamp}
                     </span>
 
                     {/* Галочки лише за фактичним msg.status — без статусу нічого не малюємо. */}
                     {isSelf && msg.status === 'sending' && (
                       <span title="Надсилається">
-                        <Clock className="w-3 h-3 text-[#A08B77]" />
+                        <Clock className="w-3.5 h-3.5 text-[#A9927C]" strokeWidth={1.75} />
                       </span>
                     )}
                     {isSelf && msg.status === 'sent' && (
                       <span title="Надіслано">
-                        <Check className="w-3 h-3 text-[#A08B77]" />
+                        <Check className="w-3.5 h-3.5 text-[#A9927C]" strokeWidth={1.75} />
                       </span>
                     )}
                     {isSelf && msg.status === 'delivered' && (
                       <span title="Доставлено">
-                        <CheckCheck className="w-3 h-3 text-[#A08B77]" />
+                        <CheckCheck className="w-3.5 h-3.5 text-[#A9927C]" strokeWidth={1.75} />
                       </span>
                     )}
                     {isSelf && msg.status === 'read' && (
                       <span title="Прочитано">
-                        <CheckCheck className="w-3 h-3 text-[#E87A42] glow-terracotta" />
+                        <CheckCheck className="w-3.5 h-3.5 text-[#D96C35]" strokeWidth={1.75} />
                       </span>
                     )}
                     {isSelf && msg.status === 'failed' && (
                       <span title="Не надіслано">
-                        <AlertCircle className="w-3 h-3 text-[#F87171]" />
+                        <AlertCircle className="w-3.5 h-3.5 text-[#C25A3A]" strokeWidth={1.75} />
                       </span>
                     )}
                   </div>
@@ -1790,7 +1762,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   {hoveredMessageId === msg.id && (
                     <div className={`absolute -top-3.5 ${
                       isSelf ? 'right-1' : 'left-1'
-                    } bg-[#FDFCF9]/95 border border-[#DDD4C4] text-[#1E2521] rounded-full px-1.5 py-0.5 flex items-center gap-0.5 shadow-xl z-20 backdrop-blur-md animate-in fade-in zoom-in-95 duration-100`}>
+                    } bg-[#FDFCF9] border border-[#E8E1D3] text-[#21261F] rounded-[10px] px-1 py-0.5 flex items-center gap-0.5 shadow-[0_1px_2px_rgba(60,44,24,0.05)] z-20 animate-in fade-in duration-100`}>
                       {/* Top 3 Quick Emojis */}
                       {['❤️', '👍', '🔥'].map((emoji) => (
                         <button
@@ -1897,13 +1869,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
         {/* Live Typing / Thinking Indicator */}
         {isAiTyping && (
-          <div className="flex items-center gap-2 text-xs text-[#7A8479] bg-white/70 backdrop-blur-xs px-3.5 py-2 rounded-2xl w-fit border border-[#DFD6C5] shadow-2xs animate-pulse">
+          <div className="mt-[10px] flex items-center gap-2 text-[12.5px] text-[#6E7568] bg-white px-3 py-2 rounded-[12px] w-fit border border-[#E8E1D3]">
             <div className="flex items-center gap-1">
-              <span className="w-1.5 h-1.5 bg-[#E87A42] rounded-full animate-bounce" />
-              <span className="w-1.5 h-1.5 bg-[#E87A42] rounded-full animate-bounce [animation-delay:0.2s]" />
-              <span className="w-1.5 h-1.5 bg-[#E87A42] rounded-full animate-bounce [animation-delay:0.4s]" />
+              <span className="w-1.5 h-1.5 bg-[#98A092] rounded-full animate-bounce" />
+              <span className="w-1.5 h-1.5 bg-[#98A092] rounded-full animate-bounce [animation-delay:0.2s]" />
+              <span className="w-1.5 h-1.5 bg-[#98A092] rounded-full animate-bounce [animation-delay:0.4s]" />
             </div>
-            <span className="font-medium text-[11px]">Локальний агент формує відповідь…</span>
+            <span>Локальний агент формує відповідь…</span>
           </div>
         )}
 
@@ -1916,17 +1888,18 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       {showScrollBottom && (
         <button
           onClick={scrollToBottom}
-          className="absolute bottom-5 right-5 w-10 h-10 bg-white text-[#E87A42] border border-[#E6DFD3] hover:bg-[#FBE9DC] hover:border-[#F0D5C2] rounded-full shadow-lg z-20 hover:scale-105 active:scale-95 transition-all animate-in fade-in zoom-in-90 duration-150 flex items-center justify-center"
+          className="absolute bottom-5 right-5 w-[34px] h-[34px] bg-white text-[#6E7568] border border-[#E8E1D3] hover:bg-[#F3EEE3] rounded-full shadow-[0_1px_2px_rgba(60,44,24,0.05)] z-20 transition-colors flex items-center justify-center"
           title="Вниз до нових повідомлень"
         >
-          <ArrowDown className="w-4 h-4" />
+          <ArrowDown className="w-4 h-4" strokeWidth={1.75} />
         </button>
       )}
       </div>
 
       {/* Toast Notification Banner */}
       {toastNotification && (
-        <div className="absolute bottom-16 left-1/2 -translate-x-1/2 bg-[#E6DFD3] text-[#1E2521] px-4 py-1.5 rounded-full text-xs font-medium shadow-xl z-30 animate-in fade-in slide-in-from-bottom-2 duration-150 flex items-center gap-1.5">
+        <div className="absolute bottom-16 left-1/2 -translate-x-1/2 bg-[#F3EEE3] border border-[#E8E1D3] text-[#21261F] px-3 py-1.5 rounded-lg text-[12.5px] shadow-[0_1px_2px_rgba(60,44,24,0.05)] z-30 animate-in fade-in duration-150 flex items-center gap-2">
+          <Info className="w-3.5 h-3.5 text-[#6E7568] shrink-0" strokeWidth={1.75} />
           <span>{toastNotification}</span>
         </div>
       )}
@@ -1940,19 +1913,19 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             top: `${selectedTextSnippet.y}px`,
             transform: 'translate(-50%, -100%)',
           }}
-          className="z-50 bg-[#F9F7F1] text-[#1E2521] px-3.5 py-1.5 rounded-full shadow-2xl flex items-center gap-2 border border-[#E87A42]/50 text-xs font-semibold animate-in fade-in zoom-in-95 cursor-pointer hover:bg-[#F1EDE3] hover:scale-105 transition-all select-none shadow-[#1C2520]/40"
+          className="z-50 bg-[#FDFCF9] text-[#21261F] px-3 py-1.5 rounded-[10px] border border-[#E8E1D3] shadow-[0_1px_2px_rgba(60,44,24,0.05)] flex items-center gap-2 text-[12.5px] animate-in fade-in duration-150 cursor-pointer hover:bg-[#F3EEE3] transition-colors select-none"
           onClick={(e) => {
             e.stopPropagation();
             soundFx.playTap();
             onReplyMessage(selectedTextSnippet.msg, selectedTextSnippet.text);
             window.getSelection()?.removeAllRanges();
             setSelectedTextSnippet(null);
-            showToast(`💬 Цитату фрагмента додано до відповіді`);
+            showToast('Цитату фрагмента додано до відповіді');
           }}
         >
-          <Quote className="w-3.5 h-3.5 text-[#E87A42]" />
+          <Quote className="w-3.5 h-3.5 text-[#6E7568] shrink-0" strokeWidth={1.75} />
           <span>Цитувати виділене</span>
-          <span className="text-[10px] text-[#1E2521]/60 truncate max-w-[120px] font-mono">
+          <span className="text-[11.5px] text-[#6E7568] truncate max-w-[120px]">
             «{selectedTextSnippet.text}»
           </span>
         </div>
@@ -1989,7 +1962,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   </span>
                 </div>
                 <p className="text-[11px] text-[#5F6A60] line-clamp-2 mt-0.5">
-                  {contextMenuMsg.text || (contextMenuMsg.type === 'file' ? `📁 ${contextMenuMsg.fileData?.name}` : `Картка: ${contextMenuMsg.type}`)}
+                  {contextMenuMsg.text || (contextMenuMsg.type === 'file' ? `Файл: ${contextMenuMsg.fileData?.name}` : `Картка: ${contextMenuMsg.type}`)}
                 </p>
               </div>
               <button

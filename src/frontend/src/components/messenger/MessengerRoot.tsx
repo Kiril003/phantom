@@ -87,7 +87,7 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
   const meParticipant = store.huddleState.participants.find((p) => p.id === store.currentUser.id);
 
   return (
-    <div className={`flex w-full h-full bg-[#F7F5EE] text-[#1E2521] overflow-hidden select-none relative font-sans ${className}`}>
+    <div className={`messenger-scale flex w-full h-full bg-[#F7F5EE] text-[#1E2521] overflow-hidden select-none relative font-sans ${className}`}>
       {/* 1. Left Sidebar (Workspaces, Folders, Circles, Chats) */}
       <div className={`${activeChat && !store.searchQuery ? 'hidden md:flex' : 'flex'} w-full md:w-auto h-full shrink-0`}>
         <Sidebar

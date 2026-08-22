@@ -418,6 +418,8 @@ class MessageOut(BaseModel):
     ciphertext: Optional[str]
     transport: Optional[str]
     reply_to_id: Optional[str] = None
+    #: local | queued | sent — з бази, переживає перезавантаження.
+    delivery_state: str = "local"
     sent_at: datetime
     edited_at: Optional[datetime]
     deleted_at: Optional[datetime]
@@ -452,6 +454,7 @@ def _message_out(row: MessengerMessage) -> MessageOut:
         ciphertext=None,
         transport=row.transport,
         reply_to_id=row.reply_to_id,
+        delivery_state=row.delivery_state,
         sent_at=row.sent_at,
         edited_at=row.edited_at,
         deleted_at=row.deleted_at,

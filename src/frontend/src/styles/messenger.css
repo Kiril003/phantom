@@ -64,20 +64,20 @@
    ========================================================= */
 
 /* Base fluid-fit wrapper for message bubbles */
+/* Без переносів зі знаком: «жо-дної» посеред бульбашки — це не доросло. */
 .msg-bubble-fluid {
   width: fit-content;
   max-width: 100%;
-  word-break: break-word;
-  overflow-wrap: anywhere;
-  hyphens: auto;
+  overflow-wrap: break-word;
+  hyphens: manual;
   box-sizing: border-box;
-  transition: max-width 0.15s ease, padding 0.15s ease, border-radius 0.15s ease, transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.24s ease;
+  transition: border-color 0.15s ease, background-color 0.15s ease;
 }
 
-/* Micro-interaction: spring scaling on message selection */
+/* Вибране повідомлення: без пружини й без світіння — лише глибша межа. */
 .msg-bubble-selected {
-  transform: scale(1.01);
-  box-shadow: 0 4px 14px -2px rgba(232, 122, 66, 0.18), 0 2px 6px -1px rgba(232, 122, 66, 0.12) !important;
+  border-color: #D96C35 !important;
+  box-shadow: 0 1px 2px rgba(60, 44, 24, 0.05) !important;
 }
 
 /* Density Variants: dynamically applied based on content analysis */
@@ -104,23 +104,33 @@
 /* Праве та нижнє поле в щільностях нижче тримає час у куті бульбашки: без
  * запасу справа він притискався до межі й обрізався на вузьких бульбашках. */
 
+/* Спільна типографіка тексту бульбашки: 14.5px/1.45. */
+.msg-density-short,
+.msg-density-medium,
+.msg-density-long,
+.msg-density-card,
+.msg-density-media {
+  font-size: 14.5px;
+  line-height: 1.45;
+}
+
 /* 2. Micro/Short text density (< 24 chars, single line): compact hugging width */
 .msg-density-short {
-  padding: 0.45rem 0.85rem 0.4rem 0.8rem;
+  padding: 0.4rem 0.7rem 0.35rem 0.7rem;
   max-width: min(280px, 100%);
   width: fit-content;
 }
 
 /* 3. Medium text density (25 - 120 chars): optimal organic line width */
 .msg-density-medium {
-  padding: 0.55rem 1rem 0.45rem 0.95rem;
+  padding: 0.45rem 0.75rem 0.4rem 0.75rem;
   max-width: min(440px, 100%);
   width: fit-content;
 }
 
 /* 4. Dense / Long text density (120+ chars): max reading width constrained to 560px / optimal 65ch */
 .msg-density-long {
-  padding: 0.65rem 1.1rem 0.5rem 1.05rem;
+  padding: 0.5rem 0.8rem 0.4rem 0.8rem;
   max-width: min(560px, 100%);
   width: fit-content;
   text-wrap: pretty;
@@ -142,7 +152,7 @@
 }
 
 .msg-read-more-fade-self {
-  background: linear-gradient(to top, rgba(251, 233, 220, 0.98) 0%, rgba(251, 233, 220, 0.75) 55%, rgba(251, 233, 220, 0) 100%);
+  background: linear-gradient(to top, rgba(246, 231, 218, 0.98) 0%, rgba(246, 231, 218, 0.75) 55%, rgba(246, 231, 218, 0) 100%);
 }
 
 .msg-read-more-fade-other {
@@ -151,75 +161,86 @@
 
 /* 5. Rich Card density (Table, Chart, Tasks, Poll, Split-bill, Map, etc.) */
 .msg-density-card {
-  padding: 0.75rem 1rem 0.6rem 1rem;
+  padding: 0.6rem 0.75rem 0.5rem 0.75rem;
   width: 100%;
   max-width: min(520px, 100%);
 }
 
 /* 6. Media / Image / File Density */
 .msg-density-media {
-  padding: 0.4rem 0.5rem 0.45rem 0.4rem;
+  padding: 0.35rem 0.4rem 0.4rem 0.35rem;
   width: fit-content;
   max-width: min(380px, 100%);
 }
 
 /* Дві бульбашки однієї родини на теплому полотні: чужа — біла картка, своя —
- * світло-теракотова. Обидві з тонкою межею та легкою тінню, без темного тла. */
+ * світло-теракотова. Тінь одна і мінімальна, hairline замість жирної межі. */
 .msg-bubble-self {
-  background-color: #FBE9DC;
-  color: #1E2521;
-  border: 1px solid #F0D5C2;
-  box-shadow: 0 1px 2px rgba(120, 74, 42, 0.07), 0 4px 12px rgba(120, 74, 42, 0.06);
+  background-color: #F6E7DA;
+  color: #21261F;
+  border: 1px solid #EAD6C4;
+  box-shadow: 0 1px 2px rgba(60, 44, 24, 0.05);
 }
 
 .msg-bubble-other {
   background-color: #FFFFFF;
-  color: #1E2521;
-  border: 1px solid #E6DFD3;
-  box-shadow: 0 1px 2px rgba(60, 44, 24, 0.06), 0 4px 12px rgba(60, 44, 24, 0.05);
+  color: #21261F;
+  border: 1px solid #E8E1D3;
+  box-shadow: 0 1px 2px rgba(60, 44, 24, 0.05);
 }
 
 /* Рядок метаданих (час, галочки) — правий нижній кут бульбашки. */
 .msg-meta-row {
   font-variant-numeric: tabular-nums;
+  font-size: 11.5px;
+  line-height: 1.2;
 }
 
 .msg-bubble-other .msg-meta-row {
-  color: #8A9186;
+  color: #98A092;
 }
 
 .msg-bubble-self .msg-meta-row {
-  color: #A08B77;
+  color: #A9927C;
 }
 
-/* Organic Asymmetric Contours: Soft, non-rigid mathematical curvature */
+/* Контури: 16px по колу, 6px на хвостовому куті та на швах усередині групи. */
 .bubble-contour-self-single {
-  border-radius: 20px 20px 4px 20px;
+  border-radius: 16px 16px 6px 16px;
 }
 .bubble-contour-self-first {
-  border-radius: 20px 20px 6px 20px;
+  border-radius: 16px 16px 6px 16px;
 }
 .bubble-contour-self-middle {
-  border-radius: 20px 6px 6px 20px;
+  border-radius: 16px 6px 6px 16px;
 }
 .bubble-contour-self-last {
-  border-radius: 20px 6px 4px 20px;
+  border-radius: 16px 6px 6px 16px;
 }
 
 .bubble-contour-other-single {
-  border-radius: 20px 20px 20px 4px;
+  border-radius: 16px 16px 16px 6px;
 }
 .bubble-contour-other-first {
-  border-radius: 20px 20px 20px 6px;
+  border-radius: 16px 16px 16px 6px;
 }
 .bubble-contour-other-middle {
-  border-radius: 6px 20px 20px 6px;
+  border-radius: 6px 16px 16px 6px;
 }
 .bubble-contour-other-last {
-  border-radius: 6px 20px 20px 4px;
+  border-radius: 6px 16px 16px 6px;
 }
 
-/* Subtle glow for read ticks and status indicators */
-.glow-terracotta {
-  filter: drop-shadow(0 0 3px rgba(232, 122, 66, 0.45));
+
+/* ОС ставить min-width/height 44px на всі контроли (тач-цілі). Для щільного
+   десктопного месенджера це роздувало кожну кнопку на третину — саме звідси
+   «дитячий» масштаб. У межах месенджера розміри задає сам месенджер. */
+.messenger-scale button,
+.messenger-scale [role='button'],
+.messenger-scale a,
+.messenger-scale input,
+.messenger-scale select,
+.messenger-scale textarea {
+  min-width: 0;
+  min-height: 0;
 }

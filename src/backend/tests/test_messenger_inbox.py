@@ -127,3 +127,52 @@ async def test_inbox_route_refuses_a_forged_frame(unauth_client):
     )
 
     assert resp.status_code == 400
+
+
+@pytest.mark.anyio
+async def test_the_first_letter_tells_where_to_reply(auth_root_client):
+    """Інакше перший лист — вулиця з одностороннім рухом."""
+    me = KeyStore.generate(one_time_count=4)
+    peer = KeyStore.generate(one_time_count=4)
+    frame = Session.initiate(peer, me.publish_bundle()).encrypt(b"hi")
+
+    async with AsyncSessionLocal() as session:
+        owner = await _owner_id(session)
+        await accept_frame(
+            session, me, owner, frame, reply_address="http://192.168.1.9:8000"
+        )
+        contact = (
+            await session.execute(
+                select(MessengerContact).where(
+                    MessengerContact.peer_node_id == peer.node_id
+                )
+            )
+        ).scalars().one()
+
+    assert contact.peer_address == "http://192.168.1.9:8000"
+
+
+@pytest.mark.anyio
+async def test_an_address_set_by_hand_is_not_overwritten(auth_root_client):
+    me = KeyStore.generate(one_time_count=4)
+    peer = KeyStore.generate(one_time_count=4)
+    peer_session = Session.initiate(peer, me.publish_bundle())
+
+    async with AsyncSessionLocal() as session:
+        owner = await _owner_id(session)
+        await accept_frame(
+            session, me, owner, peer_session.encrypt(b"one"), reply_address="chosen.local"
+        )
+        await accept_frame(
+            session, me, owner, peer_session.encrypt(b"two"),
+            peer_node_id=peer.node_id, reply_address="someone-else.local",
+        )
+        contact = (
+            await session.execute(
+                select(MessengerContact).where(
+                    MessengerContact.peer_node_id == peer.node_id
+                )
+            )
+        ).scalars().one()
+
+    assert contact.peer_address == "chosen.local"

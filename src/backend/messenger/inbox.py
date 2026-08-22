@@ -81,6 +81,8 @@ async def accept_frame(
     owner_user_id: str,
     frame: bytes,
     peer_node_id: Optional[str] = None,
+    *,
+    reply_address: Optional[str] = None,
 ) -> MessengerMessage:
     """Розшифровує кадр і кладе повідомлення у стрічку власника."""
     contact = (
@@ -119,6 +121,10 @@ async def accept_frame(
             await session.flush()
 
     contact.session_blob = peer_session.serialize(keys).hex()
+    # Адресу відповіді записуємо лише якщо своєї ще немає: те, що прийшло в
+    # листі, не має мовчки переписувати адресу, яку власник поставив руками.
+    if reply_address and not contact.peer_address:
+        contact.peer_address = reply_address
     contact.updated_at = _now()
 
     conversation = await _conversation_for(session, owner_user_id, contact)

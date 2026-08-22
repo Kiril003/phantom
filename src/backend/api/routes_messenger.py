@@ -24,6 +24,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.websocket_hub import hub
+from config import config
 from db.database import get_db
 from db.models import (
     MessengerContact,
@@ -413,6 +414,7 @@ async def append_message(
                     prepared.peer_node_id,
                     prepared.frame,
                     from_node_id=_keys().node_id,
+                    reply_address=config.messenger_public_address,
                 )
                 if address
                 else False
@@ -610,6 +612,8 @@ class InboundFrame(BaseModel):
     frame: str
     #: node_id того, ХТО пише. Приймальня шукає за ним сесію.
     from_node_id: Optional[str] = None
+    #: Куди нести відповідь, якщо відправник знає власну адресу.
+    reply_address: Optional[str] = None
 
 
 @router.post("/inbox", response_model=MessageOut)
@@ -642,7 +646,14 @@ async def receive_frame(
         raise HTTPException(status_code=429, detail=str(exc)) from exc
 
     try:
-        row = await accept_frame(session, _keys(), owner, raw, payload.from_node_id)
+        row = await accept_frame(
+            session,
+            _keys(),
+            owner,
+            raw,
+            payload.from_node_id,
+            reply_address=payload.reply_address,
+        )
     except InboxError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

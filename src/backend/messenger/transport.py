@@ -38,6 +38,7 @@ async def deliver_direct(
     frame: bytes,
     *,
     from_node_id: str,
+    reply_address: str = "",
     client: Optional[httpx.AsyncClient] = None,
 ) -> bool:
     """Кладе кадр у приймальню вузла за прямою адресою.
@@ -49,6 +50,10 @@ async def deliver_direct(
     """
     url = inbox_url(peer_address)
     payload = {"frame": frame.hex(), "from_node_id": from_node_id}
+    # Кажемо адресату, куди нести відповідь. Без цього перший лист — вулиця з
+    # одностороннім рухом: людина отримає ключ, але відповісти не зможе.
+    if reply_address:
+        payload["reply_address"] = reply_address
     own = client is None
     http = client or httpx.AsyncClient(timeout=_TIMEOUT_S)
     try:

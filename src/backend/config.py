@@ -29,6 +29,10 @@ class PhantomConfig(BaseSettings):
     # ── Server ────────────────────────────────────────────────────────────────
     host: str = "0.0.0.0"
     port: int = 8000
+    #: Адреса, за якою цей вузол досяжний іншим людям. Порожньо — значить
+    #: співрозмовник, якому ми пишемо першими, не зможе відповісти прямо:
+    #: він отримає наш ключ, але не знатиме, куди нести відповідь.
+    messenger_public_address: str = ""
     debug: bool = False
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     # Rebuild P0 (master-plan §2 S-2): local origins ONLY. Never bake a

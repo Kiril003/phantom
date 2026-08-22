@@ -106,7 +106,7 @@ async def accept_frame(
             contact = MessengerContact(
                 owner_user_id=owner_user_id,
                 peer_node_id=peer_session.peer_node_id,
-                display_name=peer_session.peer_node_id[:12],
+                display_name=f"Вузол {peer_session.peer_node_id[:8]}",
                 bundle_json="",
                 safety_number=safety_number(
                     keys.identity_ed_public,

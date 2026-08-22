@@ -20,6 +20,12 @@ export interface NodeConversation {
   is_demo?: boolean;
   /** null — розмова ні з ким, тож і звіряти нема кого. */
   contact_verified?: boolean | null;
+  peer_node_id?: string | null;
+  unread_count?: number;
+  last_kind?: string | null;
+  last_snippet?: string | null;
+  last_author?: string | null;
+  last_at?: string | null;
 }
 
 export interface NodeMessage {
@@ -79,6 +85,14 @@ export const messengerApi = {
 
   verifyContact: (id: string) =>
     request<NodeContact>('POST', `/messenger/contacts/${id}/verify`),
+
+  markRead: (conversationId: string, seq: number) =>
+    request<{ unread_count: number }>(
+      'PATCH', `/messenger/conversations/${conversationId}/read`, { seq },
+    ),
+
+  renameConversation: (conversationId: string, title: string) =>
+    request<NodeConversation>('PATCH', `/messenger/conversations/${conversationId}`, { title }),
 
   listConversations: () => request<NodeConversation[]>('GET', '/messenger/conversations'),
 
@@ -141,7 +155,7 @@ const RICH_FIELD: Record<string, string> = {
   location: 'locationData', 'multi-quote': 'multiQuoteData',
 };
 
-export function messageFromNode(row: NodeMessage, selfId: string): Message {
+export function messageFromNode(row: NodeMessage, selfId: string, peerNodeId?: string): Message {
   // Показова стрічка везе складний вміст як JSON — розбираємо його тут, щоб
   // таблиці, графіки й реакції жили тим самим шляхом, що й звичайний текст.
   let rich: Record<string, unknown> = {};
@@ -164,7 +178,7 @@ export function messageFromNode(row: NodeMessage, selfId: string): Message {
     sentAt: row.sent_at,
     type: (row.kind as Message['type']) || 'text',
     text: row.kind === 'text' ? row.body ?? undefined : (rich.text as string | undefined),
-    isSelf: row.author_id === selfId,
+    isSelf: peerNodeId ? row.author_id !== peerNodeId : row.author_id === selfId,
     isEdited: Boolean(row.edited_at),
     transport: (row.transport as Message['transport']) ?? undefined,
   };
@@ -181,7 +195,12 @@ export function chatFromNode(row: NodeConversation): Chat {
     circle: (row.circle as Chat['circle']) || 'all',
     pinned: row.pinned,
     isDemo: row.is_demo === true,
-    unreadCount: 0,
+    peerNodeId: row.peer_node_id ?? undefined,
+    unreadCount: row.unread_count ?? 0,
+    lastKind: row.last_kind ?? undefined,
+    lastSnippet: row.last_snippet ?? undefined,
+    lastAuthor: row.last_author ?? undefined,
+    lastAt: row.last_at ?? undefined,
     messages: [],
   };
 }

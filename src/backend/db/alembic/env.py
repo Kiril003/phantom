@@ -47,6 +47,11 @@ target_metadata = Base.metadata
 
 
 def _configure_and_run(connection: Connection) -> None:
+    # batch-режим перебудовує таблицю через DROP старої. SQLite з увімкненими
+    # FK робить при DROP неявний DELETE FROM — і ON DELETE CASCADE зносить усі
+    # дочірні рядки. Саме так міграція курсора читання стерла всі повідомлення
+    # месенджера. На час міграцій FK вимикаємо, як і радить Alembic.
+    connection.exec_driver_sql("PRAGMA foreign_keys=OFF")
     context.configure(
         connection=connection,
         target_metadata=target_metadata,

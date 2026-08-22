@@ -463,6 +463,11 @@ export interface Chat {
   contactVerified?: boolean | null;
   /** Показова розмова: вміст вигаданий і позначений як вигаданий. */
   isDemo?: boolean;
+  peerNodeId?: string;
+  lastKind?: string;
+  lastSnippet?: string;
+  lastAuthor?: string;
+  lastAt?: string;
   handle?: string;
   avatar: string;
   type: ChatType;

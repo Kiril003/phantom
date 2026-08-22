@@ -316,6 +316,19 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
             circle: c.circle,
             handle: c.handle ?? null,
             avatar: c.avatar ?? null,
+            // Вітрина чесна: розмова позначена показовою, а її стрічка — це
+            // кілька останніх реплік мока, засіяних у вузол тим самим шляхом.
+            is_demo: true,
+            messages: (c.messages || [])
+              .filter((m) => m.type === 'text' && m.text)
+              .slice(-3)
+              .map((m, i) => ({
+                client_id: `seed_${c.id}_${i}`,
+                author_id: m.senderId,
+                author_name: m.senderName,
+                kind: 'text',
+                body: m.text as string,
+              })),
           })),
         );
         const chats = rows.map(chatFromNode);
@@ -364,9 +377,19 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
           .then(() => get().loadMessagesForChat(row.conversation_id));
         return;
       }
+      const isActive = get().activeChatId === row.conversation_id;
+      if (isActive) void messengerApi.markRead(row.conversation_id, row.seq);
       set((s2) => ({
         chats: s2.chats.map((c) => {
           if (c.id !== row.conversation_id) return c;
+          // Прев'ю в списку живе тим самим повідомленням, що і стрічка.
+          c = {
+            ...c,
+            lastKind: row.kind,
+            lastSnippet: row.kind === 'text' ? (row.body || '').slice(0, 90) : undefined,
+            lastAuthor: row.author_name,
+            lastAt: row.sent_at,
+          };
           // Своє ж повідомлення вже лежить у стрічці під client_id — не дублюємо.
           if (c.messages.some((m) => m.id === row.client_id || m.id === row.id)) {
             return {
@@ -390,11 +413,16 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
       try {
         const rows = await messengerApi.listMessages(chatId);
         const selfId = get().currentUser.id;
+        const peer = get().chats.find((c) => c.id === chatId)?.peerNodeId;
         set((s2) => ({
           chats: s2.chats.map((c) =>
-            c.id === chatId ? { ...c, messages: rows.map((r) => messageFromNode(r, selfId)) } : c,
+            c.id === chatId
+              ? { ...c, unreadCount: 0, messages: rows.map((r) => messageFromNode(r, selfId, peer)) }
+              : c,
           ),
         }));
+        const last = rows[rows.length - 1];
+        if (last) void messengerApi.markRead(chatId, last.seq);
       } catch (err) {
         console.warn('[messenger] історію розмови не отримано:', err);
       }
@@ -561,6 +589,13 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
         }),
         drafts: { ...s.drafts, [chatId]: '' },
         replyingTo: null,
+      }));
+      set((s2) => ({
+        chats: s2.chats.map((c) =>
+          c.id === chatId
+            ? { ...c, lastKind: 'text', lastSnippet: text.trim().slice(0, 90), lastAuthor: 'Я', lastAt: new Date().toISOString() }
+            : c,
+        ),
       }));
 
       // Галочка ставиться тільки після того, як вузол підтвердив запис.

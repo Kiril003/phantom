@@ -152,11 +152,24 @@ class ConversationOut(BaseModel):
     is_demo: bool = False
     #: null — розмова ні з ким (нотатки собі), тож і звіряти нема кого.
     contact_verified: Optional[bool] = None
+    peer_node_id: Optional[str] = None
+    unread_count: int = 0
+    #: Прев'ю останнього повідомлення — список чатів живе на цьому.
+    last_kind: Optional[str] = None
+    last_snippet: Optional[str] = None
+    last_author: Optional[str] = None
+    last_at: Optional[datetime] = None
 
 
 def _conversation_out(
-    row: MessengerConversation, contact: Optional[MessengerContact] = None
+    row: MessengerConversation,
+    contact: Optional[MessengerContact] = None,
+    last: Optional[MessengerMessage] = None,
 ) -> ConversationOut:
+    snippet = None
+    if last is not None and last.kind == "text":
+        body = _body_of(last)
+        snippet = (body or "")[:90] or None
     return ConversationOut(
         id=row.id,
         title=row.title,
@@ -171,6 +184,12 @@ def _conversation_out(
         contact_id=row.contact_id,
         is_demo=row.is_demo,
         contact_verified=(contact.verified_at is not None) if contact else None,
+        peer_node_id=contact.peer_node_id if contact else None,
+        unread_count=max(0, (row.next_seq - 1) - row.last_read_seq),
+        last_kind=last.kind if last else None,
+        last_snippet=snippet,
+        last_author=last.author_name if last else None,
+        last_at=last.sent_at if last else None,
     )
 
 
@@ -191,7 +210,21 @@ async def _conversations_for(user: User, session: AsyncSession) -> list[Conversa
             )
         ).scalars().all()
     }
-    return [_conversation_out(r, contacts.get(r.contact_id or "")) for r in rows]
+    ids = [r.id for r in rows]
+    lasts: dict[str, MessengerMessage] = {}
+    if ids:
+        for m in (
+            await session.execute(
+                select(MessengerMessage)
+                .where(MessengerMessage.conversation_id.in_(ids))
+                .order_by(MessengerMessage.conversation_id, MessengerMessage.seq)
+            )
+        ).scalars():
+            lasts[m.conversation_id] = m
+    return [
+        _conversation_out(r, contacts.get(r.contact_id or ""), lasts.get(r.id))
+        for r in rows
+    ]
 
 
 @router.get("/conversations", response_model=list[ConversationOut])
@@ -264,6 +297,7 @@ async def bootstrap_conversations(
                 msg.ciphertext = seal(_keys(), m.body, aad=msg.id.encode()).hex()
             row.next_seq += 1
             session.add(msg)
+        row.last_read_seq = row.next_seq - 1
     await session.commit()
     # Віддаємо тим самим порядком, що й /conversations: інакше повторний виклик
     # поверне ті самі розмови інакше перемішаними, і клієнт вирішить, що щось змінилось.
@@ -294,6 +328,51 @@ async def create_conversation(
     await session.commit()
     await session.refresh(row)
     return _conversation_out(row)
+
+
+class ReadIn(BaseModel):
+    seq: int
+
+
+class RenameIn(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+
+
+@router.patch("/conversations/{conversation_id}/read")
+async def mark_read(
+    conversation_id: str,
+    payload: ReadIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    row = await _owned_conversation(conversation_id, user, session)
+    # Курсор лише рухається вперед: пізній запит зі старим seq не «розчитує».
+    row.last_read_seq = max(row.last_read_seq, min(payload.seq, row.next_seq - 1))
+    await session.commit()
+    return {
+        "last_read_seq": row.last_read_seq,
+        "unread_count": max(0, (row.next_seq - 1) - row.last_read_seq),
+    }
+
+
+@router.patch("/conversations/{conversation_id}", response_model=ConversationOut)
+async def rename_conversation(
+    conversation_id: str,
+    payload: RenameIn,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> ConversationOut:
+    """Імʼя співрозмовнику дає власник — автоматика знає лише його вузол."""
+    row = await _owned_conversation(conversation_id, user, session)
+    row.title = payload.title.strip()
+    contact = await session.get(MessengerContact, row.contact_id) if row.contact_id else None
+    if contact is not None:
+        contact.display_name = row.title
+        contact.updated_at = _now()
+    row.updated_at = _now()
+    await session.commit()
+    await session.refresh(row)
+    return _conversation_out(row, contact)
 
 
 async def _owned_conversation(
@@ -444,6 +523,8 @@ async def append_message(
     if payload.body is not None:
         row.ciphertext = seal(_keys(), payload.body, aad=row.id.encode()).hex()
     conversation.next_seq += 1
+    # Власник щойно сам це написав — читати тут нема чого.
+    conversation.last_read_seq = row.seq
     conversation.updated_at = _now()
     session.add(row)
     await session.commit()

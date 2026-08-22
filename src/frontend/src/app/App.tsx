@@ -30,6 +30,7 @@ const PhantomFamiliar = React.lazy(() => import('../components/familiar/PhantomF
 import { ToastRail } from '../components/core/ToastRail';
 import { PhantomIcon } from '../components/core/PhantomIcon';
 import { DeskSurface } from '../components/desk/DeskSurface';
+import { useDeskStore } from '../stores/deskStore';
 
 function GlobalGeolocationManager() {
   const authenticated = useSystemStore((s) => s.authenticated);
@@ -96,16 +97,31 @@ export function StateSurface() {
 }
 
 /**
- * «/» = активний стіл (Ф1). SystemState-режими не зламані: поки стан не
- * SHADOW, відповідна поверхня стану діє тимчасово поверх стола — К3
- * заведе Діалог і Оператора у власні пейни/столи.
+ * «/» = активний стіл (Ф1). SystemState-режими не зламані: DIALOGUE і
+ * OPERATOR діють УСЕРЕДИНІ відповідного пейна, якщо він є на активному
+ * столі (Діалог на Театрі/Кокпіті, Компанія на Компанії); стани без
+ * пейн-відповідника (FOCUS/SENTINEL/GHOST/DREAM) — тимчасово поверх.
+ * Сама машина станів неушкоджена: переходи приходять з ядра по WS.
  */
+const STATE_PANE: Partial<Record<SystemState, 'dialogue' | 'company'>> = {
+  [SystemState.DIALOGUE]: 'dialogue',
+  [SystemState.OPERATOR]: 'company',
+};
+
 function DeskIndex() {
   const state = useSystemStore((s) => s.state);
+  const desks = useDeskStore((s) => s.desks);
+  const activeDeskId = useDeskStore((s) => s.activeDeskId);
+  const desk = desks.find((d) => d.id === activeDeskId) ?? desks[0];
+
+  const paneKind = STATE_PANE[state];
+  const stateLivesInPane = paneKind !== undefined && desk.panes.some((p) => p.kind === paneKind);
+  const overlay = state !== SystemState.SHADOW && !stateLivesInPane;
+
   return (
     <div className="absolute inset-0 overflow-hidden">
       <DeskSurface />
-      {state !== SystemState.SHADOW && (
+      {overlay && (
         <div
           className="absolute inset-0 overflow-hidden"
           style={{ background: 'var(--ph-color-ground)' }}

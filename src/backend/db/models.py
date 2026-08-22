@@ -1486,6 +1486,16 @@ class MessengerMessage(Base):
     #: Шифротекст для наскрізно захищених розмов. Вузол його не розуміє.
     ciphertext: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     transport: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    #: local — везти нікуди; queued — чекає на транспорт; sent — віддано.
+    #: Стан мусить лежати в базі, інакше після рестарту вузол забуває, що
+    #: комусь щось винен, і повідомлення тихо зникає між людьми.
+    delivery_state: Mapped[str] = mapped_column(String(12), default="local", nullable=False)
+    delivery_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    #: Готовий кадр для співрозмовника. Повтор має везти ТОЙ САМИЙ кадр:
+    #: перешифрувати означало б зрушити храповик іще раз і надіслати людині
+    #: два різні повідомлення замість одного.
+    outbound_frame: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    last_attempt_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     sent_at: Mapped[datetime] = mapped_column(DateTime, default=_now, nullable=False)
     edited_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     deleted_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)

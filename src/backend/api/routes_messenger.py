@@ -418,6 +418,13 @@ async def append_message(
                 else False
             )
             out.delivery = 'sent' if delivered else 'queued'
+            row.delivery_state = out.delivery
+            row.delivery_attempts = 1 if address else 0
+            row.last_attempt_at = _now() if address else None
+            # Не доїхало — кадр лишається при повідомленні, щоб повтор віз
+            # той самий, а не шифрував наново і не роздвоював розмову.
+            row.outbound_frame = None if delivered else prepared.frame.hex()
+            await session.commit()
 
     # Інші пристрої власника мають побачити повідомлення без опитування —
     # телефон і ПК уже висять на цьому ж хабі, іншого каналу вигадувати не треба.

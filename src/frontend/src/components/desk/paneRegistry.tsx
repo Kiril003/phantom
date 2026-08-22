@@ -1,4 +1,4 @@
-import type { ComponentType, LazyExoticComponent } from 'react';
+import React, { type ComponentType, type LazyExoticComponent } from 'react';
 import type { PaneKind } from '../../stores/deskStore';
 
 /**
@@ -6,7 +6,8 @@ import type { PaneKind } from '../../stores/deskStore';
  *
  * Чіп джерела називає, ЗВІДКИ вміст пейна — не вигадуючи стану. Content
  * === null означає чесне «порожньо»: пейн існує в каркасі, вміст ще не
- * під'єднано (К2 — мапа, К3 — решта).
+ * під'єднано (К3 — решта). Вміст — наявні поверхні, лише обгорнуті:
+ * нутрощі мапи/діалогу не переписуються.
  */
 export interface PaneDef {
   kind: PaneKind;
@@ -22,7 +23,7 @@ export const PANE_REGISTRY: Record<PaneKind, PaneDef> = {
     kind: 'map',
     title: 'Мапа',
     source: 'geo-стек',
-    Content: null,
+    Content: React.lazy(() => import('../../layouts/MapLayout')),
   },
   dialogue: {
     kind: 'dialogue',

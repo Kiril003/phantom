@@ -115,7 +115,7 @@ export const FormattedMessageText: React.FC<FormattedMessageTextProps> = ({
                   rel="noopener noreferrer"
                   onClick={(e) => e.stopPropagation()}
                   className={`inline-flex items-center gap-1 font-semibold underline underline-offset-2 break-all hover:opacity-80 transition-opacity ${
-                    isSelf ? 'text-[#F5A623] hover:text-[#FFC107]' : 'text-[#E87A42] hover:text-[#D46B35]'
+                    isSelf ? 'text-[#C25925] hover:text-[#A84A1E]' : 'text-[#E87A42] hover:text-[#D46B35]'
                   }`}
                 >
                   <span>{highlightContent(token)}</span>
@@ -154,7 +154,7 @@ export const FormattedMessageText: React.FC<FormattedMessageTextProps> = ({
                 <span
                   key={uniqueKey}
                   className={`font-semibold opacity-90 mx-0.5 ${
-                    isSelf ? 'text-[#85E3A1]' : 'text-[#3E7B44]'
+                    isSelf ? 'text-[#3E7B44]' : 'text-[#3E7B44]'
                   }`}
                 >
                   #{highlightContent(token.slice(1))}
@@ -196,7 +196,7 @@ export const FormattedMessageText: React.FC<FormattedMessageTextProps> = ({
                   key={uniqueKey}
                   className={`px-1.5 py-0.5 rounded-md font-mono text-[11px] mx-0.5 select-text ${
                     isSelf
-                      ? 'bg-black/40 text-[#A8D5BA] border border-white/10'
+                      ? 'bg-[#F1E4D4] text-[#7A4B22] border border-[#E6D2BC]'
                       : 'bg-[#EFE9DD] text-[#7A8479] border border-[#DFD6C5]'
                   }`}
                 >

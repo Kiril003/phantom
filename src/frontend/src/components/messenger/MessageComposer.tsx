@@ -263,7 +263,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     : [];
 
   return (
-    <div className="px-3 pt-2.5 pb-[calc(var(--sab)+0.75rem)] sm:p-4 bg-[#FDFCF9]/95 backdrop-blur-xl border-t border-[#E6DFD3] shrink-0 select-none relative z-20 shadow-md text-[#1E2521]">
+    <div className="px-4 pt-2 pb-[calc(env(safe-area-inset-bottom,0px)+0.25rem)] bg-[#FDFCF9]/95 backdrop-blur-xl border-t border-[#E6DFD3] shrink-0 select-none relative z-30 shadow-md text-[#1E2521]">
       {/* Mention Autocomplete Dropdown */}
       {mentionQuery !== null && filteredMembers.length > 0 && (
         <div className="absolute bottom-full left-4 mb-2 bg-[#FDFCF9]/98 backdrop-blur-2xl border border-[#DDD4C4] rounded-2xl shadow-2xl w-64 max-h-48 overflow-y-auto p-1.5 z-30 animate-in fade-in zoom-in-95 duration-100 text-[#1E2521]">
@@ -467,21 +467,21 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
       ) : null}
 
       {/* 5. Main Clean Message Composer Bar */}
-      <div className="flex items-end gap-2 sm:gap-2.5">
+      <div className="flex items-end gap-2">
           {/* Action Studio & Attachments Button (+) */}
           <button
             onClick={() => {
               soundFx.playTap();
               onOpenActions();
             }}
-            className="w-10 h-10 bg-[#F9F7F1] hover:bg-[#E6DFD3] text-[#5F6A60] hover:text-[#1E2521] border border-[#E6DFD3] rounded-xl transition-all shrink-0 flex items-center justify-center shadow-sm active:scale-95"
+            className="w-10 h-10 bg-[#F9F7F1] hover:bg-[#E6DFD3] border border-[#E6DFD3] rounded-full transition-colors shrink-0 flex items-center justify-center active:scale-95"
             title="Створити картку або додати вкладення (+)"
           >
             <Plus className="w-5 h-5 text-[#E87A42]" />
           </button>
 
           {/* Center Input Box */}
-          <div className="flex-1 bg-[#FDFCF9] hover:bg-[#F9F7F1] focus-within:bg-[#FDFCF9] border border-[#E6DFD3] focus-within:border-[#E87A42] focus-within:ring-1 focus-within:ring-[#E87A42]/30 rounded-2xl px-3 py-1.5 flex items-end gap-2 transition-all shadow-inner">
+          <div className="flex-1 min-w-0 bg-[#FDFCF9] border border-[#E6DFD3] focus-within:border-[#E87A42] focus-within:ring-1 focus-within:ring-[#E87A42]/30 rounded-2xl pl-4 pr-2.5 py-1.5 flex items-end gap-2 transition-colors">
             {/* Text Input */}
             <textarea
               ref={textareaRef}
@@ -496,171 +496,176 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                   ? 'Редагувати повідомлення...'
                   : 'Написати повідомлення (Enter — відправити, Shift+Enter — новий рядок, @ для згадки)...'
               }
-              className="flex-1 max-h-32 min-h-[28px] py-1 bg-transparent text-xs sm:text-sm text-[#F0FAF3] placeholder-[#7A8479] resize-none focus:outline-none select-text leading-relaxed"
+              className="flex-1 min-w-0 max-h-32 min-h-[28px] py-1 bg-transparent text-sm text-[#1E2521] placeholder-[#7A8479] resize-none focus:outline-none select-text leading-relaxed"
             />
 
-            {/* Переписування чернетки локальним агентом */}
-            <div className="relative pb-0.5">
-              <button
-                type="button"
-                onClick={() => {
-                  soundFx.playTap();
-                  setShowStyleMenu(!showStyleMenu);
-                  setStyleError(null);
-                  setShowEmojiPicker(false);
-                  setShowFormattingBar(false);
-                }}
-                className={`p-1.5 rounded-lg transition-colors shrink-0 ${
-                  showStyleMenu ? 'text-[#F4AF25] bg-[#E6DFD3]' : 'text-[#5F6A60] hover:text-[#1E2521]'
-                }`}
-                title="Переписати чернетку локальним агентом"
-              >
-                <Sparkles className={`w-4.5 h-4.5 ${styleBusyId ? 'animate-pulse' : ''}`} />
-              </button>
+            {/* Праві іконки поля — одна група з власним проміжком, щоб не злипались */}
+            <div className="flex items-center gap-2 shrink-0 pb-1">
+              {/* Переписування чернетки локальним агентом */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundFx.playTap();
+                    setShowStyleMenu(!showStyleMenu);
+                    setStyleError(null);
+                    setShowEmojiPicker(false);
+                    setShowFormattingBar(false);
+                  }}
+                  className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+                    showStyleMenu ? 'text-[#C25925] bg-[#F1EDE3]' : 'text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F1EDE3]'
+                  }`}
+                  title="Переписати чернетку локальним агентом"
+                >
+                  <Sparkles className={`w-[18px] h-[18px] ${styleBusyId ? 'animate-pulse' : ''}`} />
+                </button>
 
-              {showStyleMenu && (
-                <div className="absolute bottom-12 right-0 bg-[#FDFCF9]/98 backdrop-blur-2xl border border-[#DDD4C4] rounded-2xl p-2 shadow-2xl w-64 z-30 space-y-1 animate-in fade-in select-none text-[#1E2521]">
-                  <div className="px-2 py-1 text-[11px] font-extrabold text-[#5F6A60] uppercase tracking-wide border-b border-[#F1EDE3]">
-                    Переписати локальним агентом
-                  </div>
-                  {stylePresets.map((s) => (
-                    <button
-                      key={s.id}
-                      type="button"
-                      disabled={!text.trim() || !!styleBusyId}
-                      onClick={() => applyStyle(s.id)}
-                      className="w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-[#F1EDE3] text-xs flex flex-col transition-colors disabled:opacity-40 disabled:hover:bg-transparent"
-                    >
-                      <span className="font-bold text-[#1E2521]">{s.label}</span>
-                      <span className="text-[10px] text-[#5F6A60]">
-                        {styleBusyId === s.id ? 'Опрацьовую…' : s.desc}
-                      </span>
-                    </button>
-                  ))}
-                  {styleError && (
-                    <div className="px-2.5 py-1.5 text-[10px] text-red-300 border-t border-[#F1EDE3]">
-                      {styleError}
+                {showStyleMenu && (
+                  <div className="absolute bottom-12 right-0 bg-[#FDFCF9]/98 backdrop-blur-2xl border border-[#DDD4C4] rounded-2xl p-2 shadow-2xl w-64 z-30 space-y-1 animate-in fade-in select-none text-[#1E2521]">
+                    <div className="px-2 py-1 text-[11px] font-extrabold text-[#5F6A60] uppercase tracking-wide border-b border-[#F1EDE3]">
+                      Переписати локальним агентом
                     </div>
-                  )}
-                </div>
-              )}
-            </div>
+                    {stylePresets.map((s) => (
+                      <button
+                        key={s.id}
+                        type="button"
+                        disabled={!text.trim() || !!styleBusyId}
+                        onClick={() => applyStyle(s.id)}
+                        className="w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-[#F1EDE3] text-xs flex flex-col transition-colors disabled:opacity-40 disabled:hover:bg-transparent"
+                      >
+                        <span className="font-bold text-[#1E2521]">{s.label}</span>
+                        <span className="text-[10px] text-[#5F6A60]">
+                          {styleBusyId === s.id ? 'Опрацьовую…' : s.desc}
+                        </span>
+                      </button>
+                    ))}
+                    {styleError && (
+                      <div className="px-2.5 py-1.5 text-[10px] text-red-300 border-t border-[#F1EDE3]">
+                        {styleError}
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
 
-            {/* Inline Formatting Menu */}
-            <div className="relative pb-0.5">
-              <button
-                type="button"
-                onClick={() => {
-                  soundFx.playTap();
-                  setShowFormattingBar(!showFormattingBar);
-                  setShowStyleMenu(false);
-                  setShowEmojiPicker(false);
-                }}
-                className={`p-1.5 rounded-lg transition-colors shrink-0 ${
-                  showFormattingBar ? 'text-[#E87A42] bg-[#E6DFD3]' : 'text-[#5F6A60] hover:text-[#1E2521]'
-                }`}
-                title="Форматування тексту (Markdown)"
-              >
-                <Type className="w-4.5 h-4.5" />
-              </button>
+              {/* Inline Formatting Menu */}
+              <div className="relative">
+                <button
+                  type="button"
+                  onClick={() => {
+                    soundFx.playTap();
+                    setShowFormattingBar(!showFormattingBar);
+                    setShowStyleMenu(false);
+                    setShowEmojiPicker(false);
+                  }}
+                  className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+                    showFormattingBar ? 'text-[#C25925] bg-[#F1EDE3]' : 'text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F1EDE3]'
+                  }`}
+                  title="Форматування тексту (Markdown)"
+                >
+                  <Type className="w-[18px] h-[18px]" />
+                </button>
 
-              {showFormattingBar && (
-                <div className="absolute bottom-12 right-0 bg-[#FDFCF9]/98 backdrop-blur-2xl border border-[#DDD4C4] rounded-2xl p-1.5 shadow-2xl flex items-center gap-1 z-30 animate-in fade-in select-none text-[#1E2521]">
-                  <button
-                    type="button"
-                    onClick={() => insertFormatting('**')}
-                    className="p-1.5 hover:bg-[#F1EDE3] rounded-lg text-xs font-bold"
-                    title="Жирний (**текст**)"
-                  >
-                    <Bold className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => insertFormatting('*')}
-                    className="p-1.5 hover:bg-[#F1EDE3] rounded-lg text-xs font-bold"
-                    title="Курсив (*текст*)"
-                  >
-                    <Italic className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    type="button"
-                    onClick={() => insertFormatting('`')}
-                    className="p-1.5 hover:bg-[#F1EDE3] rounded-lg text-xs font-bold"
-                    title="Код (`код`)"
-                  >
-                    <Code className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-              )}
-            </div>
-
-            {/* Inline Emoji Picker Button */}
-            <div className="relative pb-0.5">
-              <button
-                onClick={() => {
-                  soundFx.playTap();
-                  setShowEmojiPicker(!showEmojiPicker);
-                  setShowStyleMenu(false);
-                  setShowFormattingBar(false);
-                }}
-                className="p-1.5 text-[#5F6A60] hover:text-[#1E2521] rounded-lg transition-colors shrink-0"
-                title="Емодзі"
-              >
-                <Smile className="w-4.5 h-4.5" />
-              </button>
-
-              {showEmojiPicker && (
-                <div className="absolute bottom-12 right-0 bg-[#FDFCF9]/98 backdrop-blur-2xl border border-[#DDD4C4] rounded-2xl p-2.5 shadow-2xl grid grid-cols-5 gap-1.5 w-56 z-30 animate-in fade-in">
-                  {emojiList.map((e) => (
+                {showFormattingBar && (
+                  <div className="absolute bottom-12 right-0 bg-[#FDFCF9]/98 backdrop-blur-2xl border border-[#DDD4C4] rounded-2xl p-1.5 shadow-2xl flex items-center gap-1 z-30 animate-in fade-in select-none text-[#1E2521]">
                     <button
-                      key={e}
-                      onClick={() => {
-                        soundFx.playTap();
-                        const newText = text + e;
-                        setText(newText);
-                        if (chatId && !editingMessage && onDraftChangeRef.current) {
-                          onDraftChangeRef.current(chatId, newText);
-                        }
-                        setShowEmojiPicker(false);
-                      }}
-                      className="p-1 text-base hover:scale-125 transition-transform"
+                      type="button"
+                      onClick={() => insertFormatting('**')}
+                      className="p-1.5 hover:bg-[#F1EDE3] rounded-lg text-xs font-bold"
+                      title="Жирний (**текст**)"
                     >
-                      {e}
+                      <Bold className="w-3.5 h-3.5" />
                     </button>
-                  ))}
-                </div>
-              )}
-            </div>
+                    <button
+                      type="button"
+                      onClick={() => insertFormatting('*')}
+                      className="p-1.5 hover:bg-[#F1EDE3] rounded-lg text-xs font-bold"
+                      title="Курсив (*текст*)"
+                    >
+                      <Italic className="w-3.5 h-3.5" />
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => insertFormatting('`')}
+                      className="p-1.5 hover:bg-[#F1EDE3] rounded-lg text-xs font-bold"
+                      title="Код (`код`)"
+                    >
+                      <Code className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                )}
+              </div>
 
-            {/* Inline @ Mention Button */}
-            <button
-              onClick={() => {
-                soundFx.playTap();
-                const newText = text + '@';
-                setText(newText);
-                setMentionQuery('');
-                setMentionCursorPos(newText.length);
-                textareaRef.current?.focus();
-              }}
-              className="p-1.5 text-[#5F6A60] hover:text-[#1E2521] rounded-lg transition-colors shrink-0 pb-1"
-              title="Згадати учасника (@)"
-            >
-              <AtSign className="w-4.5 h-4.5" />
-            </button>
+              {/* Inline Emoji Picker Button */}
+              <div className="relative">
+                <button
+                  onClick={() => {
+                    soundFx.playTap();
+                    setShowEmojiPicker(!showEmojiPicker);
+                    setShowStyleMenu(false);
+                    setShowFormattingBar(false);
+                  }}
+                  className={`w-7 h-7 rounded-lg flex items-center justify-center transition-colors ${
+                    showEmojiPicker ? 'text-[#C25925] bg-[#F1EDE3]' : 'text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F1EDE3]'
+                  }`}
+                  title="Емодзі"
+                >
+                  <Smile className="w-[18px] h-[18px]" />
+                </button>
+
+                {showEmojiPicker && (
+                  <div className="absolute bottom-12 right-0 bg-[#FDFCF9]/98 backdrop-blur-2xl border border-[#DDD4C4] rounded-2xl p-2.5 shadow-2xl grid grid-cols-5 gap-1.5 w-56 z-30 animate-in fade-in">
+                    {emojiList.map((e) => (
+                      <button
+                        key={e}
+                        onClick={() => {
+                          soundFx.playTap();
+                          const newText = text + e;
+                          setText(newText);
+                          if (chatId && !editingMessage && onDraftChangeRef.current) {
+                            onDraftChangeRef.current(chatId, newText);
+                          }
+                          setShowEmojiPicker(false);
+                        }}
+                        className="p-1 text-base hover:scale-125 transition-transform"
+                      >
+                        {e}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Inline @ Mention Button */}
+              <button
+                onClick={() => {
+                  soundFx.playTap();
+                  const newText = text + '@';
+                  setText(newText);
+                  setMentionQuery('');
+                  setMentionCursorPos(newText.length);
+                  textareaRef.current?.focus();
+                }}
+                className="w-7 h-7 rounded-lg flex items-center justify-center text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F1EDE3] transition-colors"
+                title="Згадати учасника (@)"
+              >
+                <AtSign className="w-[18px] h-[18px]" />
+              </button>
+            </div>
           </div>
 
           {/* Send Button */}
           <button
             onClick={handleSend}
             disabled={!canSend}
-            className={`w-10 h-10 rounded-xl transition-transform shrink-0 flex items-center justify-center shadow-md ${
+            className={`w-10 h-10 rounded-full transition-colors shrink-0 flex items-center justify-center ${
               canSend
-                ? 'bg-[#E87A42] hover:bg-[#C25925] text-[#F7F5EE] font-bold active:scale-95'
+                ? 'bg-[#E87A42] hover:bg-[#C25925] text-[#FDFCF9] active:scale-95 shadow-sm'
                 : 'bg-[#F9F7F1] text-[#7A8479] border border-[#E6DFD3] cursor-not-allowed'
             }`}
             title="Надіслати повідомлення"
           >
-            {editingMessage ? <Check className="w-5 h-5" /> : <Send className="w-4.5 h-4.5 -rotate-12 translate-x-0.5" />}
+            {editingMessage ? <Check className="w-5 h-5" /> : <Send className="w-[18px] h-[18px] -rotate-12 translate-x-0.5" />}
           </button>
         </div>
     </div>

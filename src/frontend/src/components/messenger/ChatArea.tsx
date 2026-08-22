@@ -634,6 +634,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     return d.toLocaleDateString('uk-UA', { day: 'numeric', month: 'long', year: 'numeric' });
   };
 
+  // Розмова сам-на-сам: підписувати кожну бульбашку іменем нема сенсу —
+  // співрозмовник один і він уже в шапці бесіди.
+  const isDirectConversation =
+    currentChat?.type === 'dm' ||
+    currentChat?.type === 'direct' ||
+    !!currentChat?.peerNodeId;
+
   let lastDateLabel = '';
 
   return (
@@ -778,6 +785,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       )}
 
       {/* 3. Messages Feed */}
+      <div className="relative flex-1 min-h-0 flex flex-col">
       <div
         ref={messagesContainerRef}
         onScroll={handleScroll}
@@ -923,25 +931,27 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   </button>
                 )}
 
-                {/* Sender Avatar (Fixed standard 32px size, bottom aligned) */}
-                {!isSelf && (
-                  <div className="w-8 shrink-0 mb-1 mr-1 self-end">
-                    {isLastInGroup ? (
-                      <div
-                        onClick={() => onSelectMemberByName?.(msg.senderName)}
-                        className="cursor-pointer hover:scale-105 transition-transform shrink-0"
-                        title={`Переглянути профіль: ${msg.senderName}`}
-                      >
-                        <Avatar src={msg.senderAvatar} name={msg.senderName} className="w-8 h-8" />
-                      </div>
-                    ) : (
-                      <div className="w-8 h-8" />
-                    )}
-                  </div>
-                )}
-
                 {/* Message Bubble & Reactions Column */}
                 <div className={`flex flex-col ${isSelf ? 'items-end' : 'items-start'} min-w-0 max-w-[92%] sm:max-w-[82%] md:max-w-[72%] relative group/msg`}>
+                  {/* Аватар живе в одному рядку з бульбашкою, а не з усією колонкою:
+                      інакше рядок реакцій тягнув би його нижче за край бульбашки. */}
+                  <div className="flex items-end gap-2 max-w-full min-w-0">
+                  {!isSelf && (
+                    <div className="w-8 h-8 shrink-0 mb-0.5">
+                      {isLastInGroup ? (
+                        <div
+                          onClick={() => onSelectMemberByName?.(msg.senderName)}
+                          className="cursor-pointer hover:scale-105 transition-transform shrink-0"
+                          title={`Переглянути профіль: ${msg.senderName}`}
+                        >
+                          <Avatar src={msg.senderAvatar} name={msg.senderName} className="w-8 h-8" />
+                        </div>
+                      ) : (
+                        <div className="w-8 h-8" />
+                      )}
+                    </div>
+                  )}
+
                   {/* Message Bubble Container */}
                   <div
                     onMouseUp={(e) => handleMessageMouseUp(msg, e)}
@@ -992,19 +1002,20 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     {/* Top Pinned Tag Pill */}
                     {msg.isPinned && (
                       <div className={`flex items-center gap-1 text-[9.5px] font-bold mb-1.5 px-2 py-0.5 rounded-full w-fit ${
-                        isSelf ? 'bg-white/20 text-[#1E2521] border border-white/30' : 'bg-[#F9F7F1] text-[#FBBF24] border border-[#E6DFD3]'
+                        isSelf ? 'bg-[#F6DCC9] text-[#8C6B4F] border border-[#EBC7AE]' : 'bg-[#F9F7F1] text-[#B98410] border border-[#E6DFD3]'
                       }`}>
-                        <Pin className="w-2.5 h-2.5 fill-current text-[#FBBF24]" />
+                        <Pin className="w-2.5 h-2.5 fill-current text-[#E0A32C]" />
                         <span>Закріплено</span>
                       </div>
                     )}
 
-                    {/* Sender Name in Group Chats */}
-                    {!isSelf && isFirstInGroup && (
-                      <div className="flex items-center gap-1.5 mb-1 pb-0.5">
+                    {/* Ім'я відправника — лише в групах. Роль («Учасник») у стрічці
+                        нікого не цікавить, тому бейджа немає ніде. */}
+                    {!isSelf && isFirstInGroup && !isDirectConversation && (
+                      <div className="mb-1 pb-0.5">
                         <p
                           onClick={() => onSelectMemberByName?.(msg.senderName)}
-                          className="font-bold text-[12px] text-[#E87A42] leading-none cursor-pointer hover:underline flex items-center gap-1"
+                          className="font-bold text-[12px] text-[#E87A42] leading-none cursor-pointer hover:underline w-fit"
                         >
                           <HighlightedText
                             text={msg.senderName}
@@ -1012,9 +1023,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                             activeMatch={isActiveSearchMatch}
                           />
                         </p>
-                        <span className="text-[8.5px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#F1EDE3] text-[#7A8479] border border-[#E6DFD3]">
-                          Учасник
-                        </span>
                       </div>
                     )}
                   {/* Replying-to / Quoted Preview Header */}
@@ -1026,7 +1034,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       }}
                       className={`mb-2 p-2 px-2.5 rounded-xl text-xs border-l-2 cursor-pointer transition-all hover:opacity-90 ${
                         isSelf
-                          ? 'bg-black/25 border-[#E87A42] text-[#1E2521]/95'
+                          ? 'bg-[#FDF4EC] border-[#E87A42] text-[#1E2521]'
                           : 'bg-[#F9F7F1]/90 border-[#E87A42] text-[#1E2521]'
                       }`}
                     >
@@ -1195,7 +1203,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                                     onClick={(e) => toggleExpandMessage(msg.id, e)}
                                     className={`inline-flex items-center gap-1.5 text-[11px] font-semibold px-3 py-1 rounded-full shadow-md transition-all active:scale-95 ${
                                       isSelf
-                                        ? 'bg-white/20 hover:bg-white/30 text-[#1E2521] backdrop-blur-xs'
+                                        ? 'bg-[#F6DCC9] hover:bg-[#F0CDB4] text-[#A84813] border border-[#EBC7AE]'
                                         : 'bg-[#F9F7F1] hover:bg-[#F9F7F1] text-[#E87A42] border border-[#DDD4C4] backdrop-blur-md'
                                     }`}
                                   >
@@ -1214,7 +1222,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                                   onClick={(e) => toggleExpandMessage(msg.id, e)}
                                   className={`inline-flex items-center gap-1 text-[11px] font-medium px-2.5 py-0.5 rounded-full transition-all active:scale-95 ${
                                     isSelf
-                                      ? 'text-[#1E2521]/85 hover:text-[#1E2521] hover:bg-white/15 bg-white/10'
+                                      ? 'text-[#A84813] hover:text-[#1E2521] hover:bg-[#F0CDB4] bg-[#F6DCC9] border border-[#EBC7AE]'
                                       : 'text-[#E87A42] hover:text-[#1E2521] hover:bg-[#F9F7F1] bg-[#F9F7F1] border border-[#E6DFD3]'
                                   }`}
                                 >
@@ -1243,7 +1251,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   {agentTask?.msgId === msg.id && (
                     <div className={`mt-2 p-2 rounded-2xl text-[11px] border flex items-center gap-1.5 ${
                       isSelf
-                        ? 'bg-white/10 border-white/20 text-[#1E2521]/90'
+                        ? 'bg-[#FDF4EC] border-[#EBC7AE] text-[#8C6B4F]'
                         : 'bg-[#F2EFE8] border-[#DFD6C5] text-[#7A8479]'
                     }`}>
                       <Sparkles className="w-3 h-3 animate-pulse text-[#E87A42]" />
@@ -1255,7 +1263,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   {translatedMessages[msg.id] && (
                     <div className={`mt-2 p-2.5 rounded-2xl text-xs border animate-in fade-in zoom-in-95 duration-150 ${
                       isSelf
-                        ? 'bg-white/15 border-white/25 text-[#1E2521]'
+                        ? 'bg-[#FDF4EC] border-[#EBC7AE] text-[#1E2521]'
                         : 'bg-[#F2EFE8] border-[#DFD6C5] text-[#7A8479]'
                     }`}>
                       <div className="flex items-center justify-between gap-2 pb-1 border-b border-current/15 mb-1 text-[10px] font-mono font-bold opacity-80">
@@ -1283,7 +1291,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   {summarizedMessages[msg.id] && (
                     <div className={`mt-2 p-2 rounded-2xl text-xs border flex items-start gap-1.5 animate-in fade-in duration-150 ${
                       isSelf
-                        ? 'bg-[#E87A42]/30 border-white/20 text-[#1E2521]'
+                        ? 'bg-[#F9DCC7] border-[#E87A42]/40 text-[#8C461A]'
                         : 'bg-[#FCE7D8] border-[#E87A42]/40 text-[#8C461A]'
                     }`}>
                       <Sparkles className="w-3.5 h-3.5 shrink-0 mt-0.5 text-[#E87A42]" />
@@ -1301,7 +1309,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   {/* Завдання, які агент вичитав із повідомлення */}
                   {actionItemMessages[msg.id] && (
                     <div className={`mt-2 p-2.5 rounded-2xl text-xs border space-y-1.5 animate-in fade-in duration-150 ${
-                      isSelf ? 'bg-white/10 border-white/20 text-[#1E2521]' : 'bg-[#EAF3E9] border-[#C3DCC1] text-[#7A8479]'
+                      isSelf ? 'bg-[#FDF4EC] border-[#EBC7AE] text-[#1E2521]' : 'bg-[#EAF3E9] border-[#C3DCC1] text-[#7A8479]'
                     }`}>
                       <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider pb-1 border-b border-current/20">
                         <span className="flex items-center gap-1">
@@ -1363,7 +1371,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                             onClick={() => toggleVoice(msg)}
                             className={`w-9 h-9 rounded-2xl flex items-center justify-center transition-all ${
                               isSelf
-                                ? 'bg-[#E87A42] text-[#1E2521] hover:bg-[#D46B35]'
+                                ? 'bg-[#E87A42] text-white hover:bg-[#D46B35]'
                                 : 'bg-[#FCE7D8] text-[#E87A42] hover:bg-[#F9CCA8]'
                             }`}
                           >
@@ -1390,7 +1398,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                                 onClick={hasVoiceAudio ? () => seekVoice(msg.id, segmentPercent) : undefined}
                                 className={`flex-1 rounded-full transition-all ${hasVoiceAudio ? 'hover:scale-y-125' : 'opacity-50'} ${
                                   isSelf
-                                    ? isPast ? 'bg-[#E87A42]' : 'bg-white/30'
+                                    ? isPast ? 'bg-[#E87A42]' : 'bg-[#E6C6AE]'
                                     : isPast ? 'bg-[#E87A42]' : 'bg-[#DCD2C1]'
                                 }`}
                                 style={{ height: `${Math.max(height * 0.35, 4)}px` }}
@@ -1405,7 +1413,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                             onClick={cycleVoiceSpeed}
                             className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold font-mono transition-colors ${
                               isSelf
-                                ? 'bg-white/10 hover:bg-white/20 text-[#1E2521]'
+                                ? 'bg-[#F6DCC9] hover:bg-[#F0CDB4] text-[#8C6B4F]'
                                 : 'bg-[#F2EDE4] hover:bg-[#E8DFC8] text-[#8A9186]'
                             }`}
                           >
@@ -1433,7 +1441,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
                       {isTranscriptOpen && msg.voiceData.transcript && (
                         <div className={`p-2.5 rounded-2xl text-xs border ${
-                          isSelf ? 'bg-white/10 border-white/20 text-[#1E2521]/90' : 'bg-[#FDFCF9] border-[#DFD6C5] text-[#7A8479]'
+                          isSelf ? 'bg-[#FDF4EC] border-[#EBC7AE] text-[#5F6A60]' : 'bg-[#FDFCF9] border-[#DFD6C5] text-[#7A8479]'
                         }`}>
                           <p className="italic">
                             «
@@ -1478,17 +1486,15 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                               }}
                               className={`p-2.5 rounded-2xl border cursor-pointer relative overflow-hidden transition-all ${
                                 hasVoted
-                                  ? isSelf
-                                    ? 'bg-[#E87A42]/30 border-[#E87A42]'
-                                    : 'bg-[#FCE7D8] border-[#E87A42]'
+                                  ? 'bg-[#FCE7D8] border-[#E87A42]'
                                   : isSelf
-                                  ? 'bg-white/10 border-white/20 hover:bg-white/15'
+                                  ? 'bg-[#FDF4EC] border-[#EBC7AE] hover:bg-[#F9EADD]'
                                   : 'bg-[#FDFCF9] border-[#DFD6C5] hover:bg-[#F2EDE4]'
                               }`}
                             >
                               <div
                                 className={`absolute top-0 bottom-0 left-0 opacity-25 rounded-2xl transition-all duration-300 ${
-                                  isSelf ? 'bg-white' : 'bg-[#528A4B]'
+                                  isSelf ? 'bg-[#E87A42]' : 'bg-[#528A4B]'
                                 }`}
                                 style={{ width: `${percent}%` }}
                               />
@@ -1542,11 +1548,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                             }}
                             className={`p-2 rounded-2xl flex items-center justify-between gap-2 cursor-pointer transition-all border ${
                               part.paid
-                                ? isSelf
-                                  ? 'bg-white/10 border-white/20'
-                                  : 'bg-[#EAF3E9] border-[#C3DCC1]'
+                                ? 'bg-[#EAF3E9] border-[#C3DCC1]'
                                 : isSelf
-                                ? 'bg-white/5 border-white/10 hover:bg-white/10'
+                                ? 'bg-[#FDF4EC] border-[#EBC7AE] hover:bg-[#F9EADD]'
                                 : 'bg-white border-[#DFD6C5] hover:bg-[#FDFCF9]'
                             }`}
                           >
@@ -1563,7 +1567,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                             <div className="flex items-center gap-2 shrink-0">
                               <span className="font-mono text-xs font-bold">{part.share} {msg.splitBillData!.currency}</span>
                               <span className={`px-1.5 py-0.5 rounded text-[10px] font-bold ${
-                                part.paid ? 'bg-green-700 text-[#1E2521]' : 'bg-[#E87A42] text-[#1E2521]'
+                                part.paid ? 'bg-[#EAF3E9] text-[#3E7B44] border border-[#C3DCC1]' : 'bg-[#FCE7D8] text-[#A84813] border border-[#F0D5C2]'
                               }`}>
                                 {part.paid ? 'Оплачено' : 'Очікує'}
                               </span>
@@ -1582,7 +1586,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         onOpenLocation(msg.locationData!);
                       }}
                       className={`p-3 rounded-2xl cursor-pointer transition-all border mt-1 ${
-                        isSelf ? 'bg-white/10 border-white/20 hover:bg-white/15' : 'bg-[#FDFCF9] border-[#DFD6C5] hover:bg-[#F2EDE4]'
+                        isSelf ? 'bg-[#FDF4EC] border-[#EBC7AE] hover:bg-[#F9EADD]' : 'bg-[#FDFCF9] border-[#DFD6C5] hover:bg-[#F2EDE4]'
                       }`}
                     >
                       <div className="flex items-start gap-2.5">
@@ -1630,7 +1634,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                           <span>{copiedCodeId === msg.id ? 'Скопійовано!' : 'Копіювати'}</span>
                         </button>
                       </div>
-                      <pre className="p-3 bg-[#F9F7F1] text-[#A8D5BA] font-mono text-xs rounded-2xl overflow-x-auto select-text">
+                      <pre className="p-3 bg-[#F1EDE3] text-[#2C4A34] border border-[#E6DFD3] font-mono text-xs rounded-2xl overflow-x-auto select-text">
                         <code>{msg.codeData.code}</code>
                       </pre>
                     </div>
@@ -1639,7 +1643,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   {/* 11. FILE MESSAGE */}
                   {msg.type === 'file' && msg.fileData && (
                     <div className={`p-3 rounded-2xl flex items-center justify-between gap-3 border mt-1 ${
-                      isSelf ? 'bg-white/10 border-white/20' : 'bg-[#FDFCF9] border-[#DFD6C5]'
+                      isSelf ? 'bg-[#FDF4EC] border-[#EBC7AE]' : 'bg-[#FDFCF9] border-[#DFD6C5]'
                     }`}>
                       <div className="flex items-center gap-2.5 min-w-0">
                         <div className="p-2 bg-[#FCE7D8] text-[#E87A42] rounded-xl shrink-0">
@@ -1663,7 +1667,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                           showToast(`Завантаження: ${msg.fileData!.name}`);
                         }}
                         className={`p-2 rounded-xl transition-colors shrink-0 ${
-                          isSelf ? 'bg-white/20 hover:bg-white/30 text-[#1E2521]' : 'bg-[#F2EDE4] hover:bg-[#E8DFC8] text-[#1E2521]'
+                          isSelf ? 'bg-[#F6DCC9] hover:bg-[#F0CDB4] text-[#1E2521]' : 'bg-[#F2EDE4] hover:bg-[#E8DFC8] text-[#1E2521]'
                         }`}
                         title="Завантажити файл"
                       >
@@ -1696,12 +1700,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   )}
 
                   {/* Message Indicators & Metadata Bar (Reading Time, Saved, Edited, Timestamp & Delivery Checks) */}
-                  <div className={`flex items-center justify-end gap-1.5 mt-1 text-[10px] select-none leading-none ${
+                  <div className={`msg-meta-row flex items-center justify-end gap-1.5 mt-1 text-[10px] select-none leading-none ${
                     messageDensity === 'emoji-single'
-                      ? 'bg-black/35 text-[#1E2521]/90 px-1.5 py-0.5 rounded-full backdrop-blur-xs w-fit mx-auto text-[9.5px]'
+                      ? 'bg-[#F1EDE3] text-[#7A8479] border border-[#E6DFD3] px-1.5 py-0.5 rounded-full w-fit mx-auto text-[9.5px]'
                       : isSelf
-                      ? 'text-[#1E2521]/65'
-                      : 'text-[#7D8B81]'
+                      ? 'text-[#A08B77]'
+                      : 'text-[#8A9186]'
                   }`}>
                     {/* Reading time metric for longer messages */}
                     {showReadingTime && (
@@ -1714,7 +1718,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     {/* Bookmarked / Saved indicator */}
                     {savedMessages[msg.id] && (
                       <span className={`flex items-center gap-0.5 px-1.5 py-0.2 rounded-full font-semibold ${
-                        isSelf ? 'bg-[#E87A42]/30 text-[#FFD4A3]' : 'bg-[#FCE7D8] text-[#B04B14]'
+                        isSelf ? 'bg-[#F6DCC9] text-[#A84813]' : 'bg-[#FCE7D8] text-[#B04B14]'
                       }`} title="Збережено в Збереженому">
                         <Bookmark className="w-2.5 h-2.5 fill-current" />
                         <span>Збережено</span>
@@ -1733,7 +1737,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     {msg.transport === 'p2p' ? (
                       <span
                         className={`flex items-center gap-0.5 px-1 py-0.2 rounded text-[9px] font-bold ${
-                          isSelf ? 'bg-emerald-500/25 text-emerald-200' : 'bg-emerald-100 text-emerald-800'
+                          isSelf ? 'bg-[#EAF3E9] text-[#3E7B44]' : 'bg-emerald-100 text-emerald-800'
                         }`}
                         title="Доставлено напряму через WebRTC P2P DataChannel (транспорт DTLS)"
                       >
@@ -1749,25 +1753,25 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       </span>
                     ) : null}
 
-                    {/* Timestamp */}
-                    <span className="font-mono text-[10px] font-medium tracking-tight">
+                    {/* Час — завжди останній у правому нижньому куті бульбашки */}
+                    <span className="text-[10px] font-medium tabular-nums whitespace-nowrap">
                       {msg.timestamp}
                     </span>
 
                     {/* Галочки лише за фактичним msg.status — без статусу нічого не малюємо. */}
                     {isSelf && msg.status === 'sending' && (
                       <span title="Надсилається">
-                        <Clock className="w-3 h-3 text-[#1E2521]/50" />
+                        <Clock className="w-3 h-3 text-[#A08B77]" />
                       </span>
                     )}
                     {isSelf && msg.status === 'sent' && (
                       <span title="Надіслано">
-                        <Check className="w-3 h-3 text-[#1E2521]/60" />
+                        <Check className="w-3 h-3 text-[#A08B77]" />
                       </span>
                     )}
                     {isSelf && msg.status === 'delivered' && (
                       <span title="Доставлено">
-                        <CheckCheck className="w-3 h-3 text-[#1E2521]/60" />
+                        <CheckCheck className="w-3 h-3 text-[#A08B77]" />
                       </span>
                     )}
                     {isSelf && msg.status === 'read' && (
@@ -1842,11 +1846,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     </div>
                   )}
                   </div>
+                  </div>
 
-                  {/* Reactions Display (Clean micro-pills cleanly directed outside the bubble) */}
+                  {/* Реакції — рядок пігулок під бульбашкою; у чужих зсунутий
+                      на ширину аватара, щоб стояти рівно під бульбашкою. */}
                   {msg.reactions && msg.reactions.length > 0 && (
                     <div className={`flex flex-wrap items-center gap-1 mt-1 -mb-0.5 z-10 select-none ${
-                      isSelf ? 'justify-end pr-0.5' : 'justify-start pl-0.5'
+                      isSelf ? 'justify-end pr-0.5' : 'justify-start pl-10'
                     }`}>
                       {msg.reactions.map((r, idx) => {
                         const isUserReacted = r.users.includes(currentUserId);
@@ -1904,16 +1910,19 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         <div ref={messagesEndRef} />
       </div>
 
-      {/* Floating Scroll-to-Bottom Button */}
+      {/* Кнопка «вниз» живе поза скролером, але в межах стрічки — інакше вона
+          їхала б разом із повідомленнями. Композер — сусідній блок під ChatArea,
+          тож нижній край стрічки і є його верхньою межею. */}
       {showScrollBottom && (
         <button
           onClick={scrollToBottom}
-          className="absolute bottom-20 right-6 p-2.5 bg-[#E6DFD3] text-[#1E2521] hover:bg-black rounded-full shadow-xl z-20 hover:scale-110 active:scale-95 transition-all animate-in fade-in zoom-in-90 duration-150 flex items-center justify-center"
+          className="absolute bottom-5 right-5 w-10 h-10 bg-white text-[#E87A42] border border-[#E6DFD3] hover:bg-[#FBE9DC] hover:border-[#F0D5C2] rounded-full shadow-lg z-20 hover:scale-105 active:scale-95 transition-all animate-in fade-in zoom-in-90 duration-150 flex items-center justify-center"
           title="Вниз до нових повідомлень"
         >
           <ArrowDown className="w-4 h-4" />
         </button>
       )}
+      </div>
 
       {/* Toast Notification Banner */}
       {toastNotification && (

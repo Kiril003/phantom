@@ -35,10 +35,12 @@ import {
   ArchiveRestore,
   Link2
 } from 'lucide-react';
-import { Chat, ChatCategory, ChatCircle, PersonaSphere, SmartFolder, UserProfile } from '../../types/messenger';
+import { Chat, ChatCircle, PersonaSphere, SmartFolder, UserProfile } from '../../types/messenger';
 import { Avatar } from './Avatar';
 import { soundFx } from '../../utils/messengerSound';
 import { networkEngine } from '../../services/messengerNetworkEngine';
+import { messengerApi } from '../../services/messengerApi';
+import { useMessengerStore } from '../../stores/messengerStore';
 import { ShareFolderModal } from './ShareFolderModal';
 import { FolderInsightsModal } from './FolderInsightsModal';
 import { FolderIconPickerModal } from './FolderIconPickerModal';
@@ -70,13 +72,56 @@ interface SidebarProps {
   onSwitchPersonaSphere?: (sphere: PersonaSphere) => void;
 }
 
-const commsTabs: { id: ChatCategory; label: string }[] = [
-  { id: 'all', label: 'УСІ' },
-  { id: 'phantom', label: 'ШІ' },
-  { id: 'calls', label: 'ДЗВІНКИ' },
-  { id: 'sms', label: 'СМС' },
-  { id: 'bridges', label: 'МОСТИ' },
+const circleTabs: { id: ChatCircle; label: string; emoji: string }[] = [
+  { id: 'work', label: 'робота', emoji: '⚡' },
+  { id: 'family', label: 'сім’я', emoji: '🌿' },
+  { id: 'friends', label: 'друзі', emoji: '🎈' },
+  { id: 'study', label: 'навчання', emoji: '🎓' },
+  { id: 'communities', label: 'спільноти', emoji: '🌍' },
+  { id: 'saved', label: 'збережене', emoji: '🔖' },
 ];
+
+// Вузол віддає час без зони — тлумачимо його як UTC, як це вже робить messengerApi.
+const parseNodeTime = (iso: string): Date | null => {
+  const d = new Date(/[Z+]|-\d\d:\d\d$/.test(iso) ? iso : `${iso}Z`);
+  return Number.isNaN(d.getTime()) ? null : d;
+};
+
+const chatTimeLabel = (iso?: string): string => {
+  if (!iso) return '';
+  const d = parseNodeTime(iso);
+  if (!d) return '';
+
+  const startOfDay = (x: Date) => new Date(x.getFullYear(), x.getMonth(), x.getDate()).getTime();
+  const days = Math.round((startOfDay(new Date()) - startOfDay(d)) / 86_400_000);
+
+  if (days <= 0) return d.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
+  if (days === 1) return 'Вчора';
+  if (days < 365) return d.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit' });
+  return d.toLocaleDateString('uk-UA', { day: '2-digit', month: '2-digit', year: '2-digit' });
+};
+
+// Прев'ю нетекстового повідомлення: тип видно з іконки, тіла ми не показуємо.
+const kindPreview: Record<string, string> = {
+  table: '📊 Таблиця',
+  chart: '📈 Графік',
+  'task-list': '☑️ Задачі',
+  file: '📎 Файл',
+  voice: '🎙 Голосове',
+  image: '🖼 Фото',
+  location: '📍 Локація',
+  poll: '🗳 Опитування',
+  event: '📅 Подія',
+  code: '💻 Код',
+  'split-bill': '🧾 Рахунок',
+};
+
+// Вузол міг не встигнути дати розмові людську назву — тоді в title лежить хеш.
+const hashTitle = /^[0-9a-f]{12,}$/;
+const displayTitle = (title: string): string => {
+  const raw = (title || '').trim();
+  return hashTitle.test(raw) ? `Вузол ${raw.slice(0, 8)}…` : raw;
+};
 
 
 
@@ -141,8 +186,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenP2PNetworkModal,
   onSwitchPersonaSphere,
 }) => {
-  const activeCircle: ChatCircle = 'all';
-  const [activeCategory, setActiveCategory] = useState<ChatCategory>('all');
+  // Кола та перейменування живуть у сторі — сюди беремо їх напряму, бо пропів на них немає.
+  const activeCircle = useMessengerStore((s) => s.activeCircle);
+  const setActiveCircle = useMessengerStore((s) => s.setActiveCircle);
+  const updateChat = useMessengerStore((s) => s.updateChat);
+
   const [searchQuery, setSearchQuery] = useState('');
   const [showOnlyUnread, setShowOnlyUnread] = useState(false);
   const [isPersonaMenuOpen, setIsPersonaMenuOpen] = useState(false);
@@ -152,8 +200,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [dragOverFolderId, setDragOverFolderId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
 
-  // Chat context menu for quick folder assignment
+  // Chat context menu for quick folder assignment.
+  // Координати тримаємо окремо: меню малюється поза списком, інакше його ріже скрол-контейнер.
   const [activeMenuChatId, setActiveMenuChatId] = useState<string | null>(null);
+  const [chatMenuPos, setChatMenuPos] = useState<{ x: number; y: number } | null>(null);
 
   // Right-click Context Menu on Smart Folders
   const [folderContextMenu, setFolderContextMenu] = useState<{
@@ -201,6 +251,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const [isArchiveSectionExpanded, setIsArchiveSectionExpanded] = useState<boolean>(true);
 
   const contextMenuRef = useRef<HTMLDivElement>(null);
+  const chatMenuRef = useRef<HTMLDivElement>(null);
   const quickPreviewRef = useRef<HTMLDivElement>(null);
   const longPressTimerRef = useRef<number | null>(null);
   const hoverTimeoutRef = useRef<number | null>(null);
@@ -215,6 +266,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       }
       if (quickPreviewRef.current && !quickPreviewRef.current.contains(e.target as Node)) {
         setQuickPreview(null);
+      }
+      // Клік по самих трьох крапках не гасимо тут — інакше повторний клік не закриє меню.
+      const onTrigger = (e.target as Element)?.closest?.('[data-chat-menu-trigger]');
+      if (!onTrigger && chatMenuRef.current && !chatMenuRef.current.contains(e.target as Node)) {
+        setActiveMenuChatId(null);
       }
     };
     const handleKeyDown = (e: KeyboardEvent) => {
@@ -275,22 +331,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
     };
   };
 
-  // Filter chats by Category, Active Smart Folder, Circle, Search Query & Unread status
+  // Filter chats by Active Smart Folder, Circle, Search Query & Unread status
   const filteredChats = chats.filter((c) => {
-    // 1. Category Filter (Prototype Screen 4 COMMS)
-    if (activeCategory === 'phantom' && !(c.type === 'phantom' || c.type === 'ai' || c.id === 'chat_phantom_assistant' || c.id.includes('phantom'))) {
-      return false;
-    }
-    if (activeCategory === 'calls' && !(c.type === 'call' || c.callDuration !== undefined || c.callType !== undefined || c.title.includes('Олег') || c.title.includes('+380'))) {
-      return false;
-    }
-    if (activeCategory === 'sms' && !(c.type === 'sms' || c.title.includes('SMS') || c.title.includes('Іра'))) {
-      return false;
-    }
-    if (activeCategory === 'bridges' && !(c.type === 'bridge' || c.title.includes('Telegram') || c.title.includes('Signal') || c.title.includes('WhatsApp'))) {
-      return false;
-    }
-
     const matchesFolder = isChatInFolder(c, currentFolder);
     const matchesCircle = activeCircle === 'all' || c.circle === activeCircle;
     const matchesUnread = !showOnlyUnread || c.unreadCount > 0;
@@ -309,6 +351,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const totalUnread = chats.reduce((acc, c) => acc + c.unreadCount, 0);
   const activeSphere = currentUser.activePersonaSphere || 'work';
+  const menuChat = activeMenuChatId ? chats.find((c) => c.id === activeMenuChatId) : undefined;
 
   // Calculate unread count for each Smart Folder
   const getFolderUnreadCount = (folder: SmartFolder) => {
@@ -636,6 +679,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
     handleCancelRename();
   }
 
+  // Назва розмови живе на вузлі — спершу пишемо туди, і лише тоді міняємо UI.
+  const handleRenameChat = async (chat: Chat) => {
+    const next = window.prompt('Назва розмови', chat.title);
+    setActiveMenuChatId(null);
+    const trimmed = (next || '').trim();
+    if (!trimmed || trimmed === chat.title) return;
+
+    try {
+      await messengerApi.renameConversation(chat.id, trimmed);
+      updateChat(chat.id, { title: trimmed });
+      showToast(`✏️ Перейменовано на «${trimmed}»`);
+    } catch {
+      showToast('Вузол не прийняв нову назву');
+    }
+  };
+
   // Find most recent active chat and its latest 3 messages in a folder
   const getMostRecentChatInFolder = (folder: SmartFolder): { chat: Chat; lastMessages: any[] } | null => {
     const matchingChats = chats.filter((c) => isChatInFolder(c, folder));
@@ -780,12 +839,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         backgroundColor: isActive
                           ? (folder.color || '#E87A42')
                           : undefined,
-                        color: isActive ? '#F7F5EE' : '#FFFFFF',
+                        color: isActive ? '#FFF8F2' : '#1E2521',
                       }}
                     >
                       <span>{folder.emoji || '📁'}</span>
                       {folderUnread > 0 && (
-                        <span className="absolute -top-1 -right-1 px-1.5 py-0.2 bg-[#E87A42] text-[#1E2521] text-[9px] font-black rounded-full ring-2 ring-[#F7F5EE]">
+                        <span className="absolute -top-1 -right-1 px-1.5 py-0.2 bg-[#E87A42] text-[#FFF8F2] text-[9px] font-black rounded-full ring-2 ring-[#F7F5EE]">
                           {folderUnread}
                         </span>
                       )}
@@ -951,7 +1010,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Пошук людей, тем, повідомлень..."
-              className="w-full pl-8 pr-8 py-1.5 bg-[#F9F7F1] border border-[#E6DFD3] rounded-xl text-xs text-[#F0FAF3] placeholder-[#7A8479] focus:outline-none focus:border-[#E87A42] focus:ring-1 focus:ring-[#E87A42]/30 transition-colors shadow-inner"
+              className="w-full pl-8 pr-8 py-1.5 bg-[#F9F7F1] border border-[#E6DFD3] rounded-xl text-xs text-[#1E2521] placeholder-[#8A9186] focus:outline-none focus:border-[#E87A42] focus:ring-1 focus:ring-[#E87A42]/30 transition-colors"
             />
             {searchQuery && (
               <button
@@ -963,67 +1022,99 @@ export const Sidebar: React.FC<SidebarProps> = ({
             )}
           </div>
 
-          {/* Category Tabs (Prototype faithful: ALL, PHANTOM AI, CALL, SMS, BRIDGES) */}
-          <div className="p-0.5 bg-[#F7F5EE] border border-[#E6DFD3] rounded-xl flex items-center gap-1">
-            {commsTabs.map((tab) => {
-              const isActive = activeCategory === tab.id;
-              const count = tab.id === 'all'
-                ? chats.reduce((acc, c) => acc + c.unreadCount, 0)
-                : chats.filter((c) => {
-                    if (tab.id === 'phantom') return c.type === 'phantom' || c.type === 'ai' || c.id === 'chat_phantom_assistant';
-                    if (tab.id === 'calls') return c.type === 'call' || c.callDuration !== undefined;
-                    if (tab.id === 'sms') return c.type === 'sms' || c.title.includes('SMS') || c.title.includes('Іра');
-                    if (tab.id === 'bridges') return c.type === 'bridge' || c.title.includes('Telegram') || c.title.includes('Signal');
-                    return true;
-                  }).reduce((acc, c) => acc + c.unreadCount, 0);
+          {/* Кола: показуємо лише ті, у яких справді є бесіди — решта була б мертвим фільтром. */}
+          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar -mx-0.5 px-0.5 py-0.5">
+            <button
+              onClick={() => {
+                soundFx.playTap();
+                setShowOnlyUnread(false);
+                setActiveCircle('all');
+              }}
+              className={`shrink-0 px-2.5 py-[3px] rounded-full text-[11px] font-bold border transition-colors ${
+                activeCircle === 'all' && !showOnlyUnread
+                  ? 'bg-[#E87A42] text-[#FFF8F2] border-[#C25925] shadow-sm'
+                  : 'bg-[#F4F1E8] text-[#5F6A60] border-[#E6DFD3] hover:text-[#1E2521] hover:bg-[#EFEBE0]'
+              }`}
+            >
+              Всі
+            </button>
 
-              return (
-                <button
-                  key={tab.id}
-                  onClick={() => {
-                    soundFx.playTap();
-                    setActiveCategory(tab.id);
-                  }}
-                  className={`flex-1 py-1 text-center font-mono text-[10px] tracking-wider uppercase font-bold rounded-lg transition-all flex items-center justify-center gap-1 ${
-                    isActive
-                      ? 'bg-[#E87A42] text-[#F7F5EE] shadow-sm'
-                      : 'text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F9F7F1]'
+            {totalUnread > 0 && (
+              <button
+                onClick={() => {
+                  soundFx.playTap();
+                  setShowOnlyUnread(!showOnlyUnread);
+                }}
+                className={`shrink-0 px-2.5 py-[3px] rounded-full text-[11px] font-bold border transition-colors flex items-center gap-1.5 ${
+                  showOnlyUnread
+                    ? 'bg-[#E87A42] text-[#FFF8F2] border-[#C25925] shadow-sm'
+                    : 'bg-[#FCEFE4] text-[#C25925] border-[#F0D8C4] hover:bg-[#F9E5D5]'
+                }`}
+              >
+                <span>Непрочитані</span>
+                <span
+                  className={`px-1.5 rounded-full text-[10px] font-black ${
+                    showOnlyUnread ? 'bg-[#FFF8F2] text-[#C25925]' : 'bg-[#E87A42] text-[#FFF8F2]'
                   }`}
                 >
-                  <span>{tab.label}</span>
-                  {count > 0 && (
-                    <span className={`px-1 py-0.1 text-[8.5px] rounded-full font-black ${isActive ? 'bg-[#F7F5EE] text-[#E87A42]' : 'bg-[#E87A42] text-[#1E2521]'}`}>
-                      {count}
-                    </span>
-                  )}
-                </button>
-              );
-            })}
+                  {totalUnread}
+                </span>
+              </button>
+            )}
+
+            {circleTabs
+              .filter((circle) => chats.some((c) => c.circle === circle.id))
+              .map((circle) => {
+                const isActive = activeCircle === circle.id && !showOnlyUnread;
+                return (
+                  <button
+                    key={circle.id}
+                    onClick={() => {
+                      soundFx.playTap();
+                      setShowOnlyUnread(false);
+                      setActiveCircle(isActive ? 'all' : circle.id);
+                    }}
+                    className={`shrink-0 px-2.5 py-[3px] rounded-full text-[11px] font-semibold border transition-colors flex items-center gap-1 ${
+                      isActive
+                        ? 'bg-[#E87A42] text-[#FFF8F2] border-[#C25925] shadow-sm'
+                        : 'bg-[#F4F1E8] text-[#5F6A60] border-[#E6DFD3] hover:text-[#1E2521] hover:bg-[#EFEBE0]'
+                    }`}
+                  >
+                    <span>{circle.emoji}</span>
+                    <span>{circle.label}</span>
+                  </button>
+                );
+              })}
           </div>
         </div>
 
         {/* 3. Chats List */}
-        <div className="flex-1 overflow-y-auto px-2 py-2 space-y-1.5 pb-24 md:pb-3">
+        <div className="flex-1 min-h-0 overflow-y-auto px-2 py-2 space-y-1">
         {filteredChats.length === 0 ? (
-          <div className="py-12 text-center text-xs text-[#7A877E] space-y-2 px-4">
-            <div className="w-10 h-10 rounded-xl bg-[#FDFCF9] text-xl flex items-center justify-center mx-auto border border-[#F1EDE3]">
+          <div className="py-12 text-center text-xs space-y-2 px-4">
+            <div className="w-10 h-10 rounded-xl bg-[#F9F7F1] text-xl flex items-center justify-center mx-auto border border-[#E6DFD3]">
               {currentFolder.emoji || '📁'}
             </div>
-            <p className="font-bold text-[#1E2521]">Немає бесід у цій категорії</p>
-            <p className="text-[11px] text-[#5F6A60]">
-              Оберіть іншу вкладку або створіть новий діалог:
+            <p className="font-bold text-[#1E2521]">
+              {searchQuery
+                ? 'Нічого не знайдено'
+                : showOnlyUnread
+                ? 'Непрочитаних немає'
+                : 'Тут поки порожньо'}
             </p>
-            <div className="flex flex-col gap-1.5 pt-1">
+            {(searchQuery || showOnlyUnread || activeCircle !== 'all' || currentFolder.id !== 'all') && (
               <button
                 onClick={() => {
-                  setActiveCategory('all');
+                  setSearchQuery('');
+                  setShowOnlyUnread(false);
+                  setActiveCircle('all');
                   onSelectFolder('all');
                 }}
-                className="text-[#E87A42] font-semibold text-xs hover:underline"
+                className="text-[#C25925] font-semibold text-xs hover:underline"
               >
                 ← Показати всі бесіди
               </button>
-            </div>
+            )}
           </div>
         ) : (
           filteredChats.map((chat) => {
@@ -1032,13 +1123,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
             const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1] : undefined;
             const isDraggingThis = draggedChatId === chat.id;
 
-            // Determine left 3px indicator color
-            const isPhantom = chat.type === 'phantom' || chat.type === 'ai' || chat.id === 'chat_phantom_assistant';
-            const isHot = chat.isHot || chat.callType === 'missed' || chat.callType === 'voicemail';
-            const indicatorColor = isHot ? '#EF4444' : isPhantom ? '#F4AF25' : chat.isOnline ? '#E87A42' : undefined;
-
-            // Micro badge label
-            const metaLabel = isPhantom ? 'THREAD · 14 MSG' : chat.callDuration ? `CALL · ${chat.callDuration}` : chat.callType === 'voicemail' ? 'VOICEMAIL · 18S · ✱HOT✱' : chat.type === 'sms' ? 'SMS · 6 MSG' : chat.type === 'bridge' ? 'MATRIX BRIDGE · READ-ONLY' : chat.badge || (chat.isOnline ? 'ONLINE' : undefined);
+            // Зведення з вузла — джерело правди; завантажена стрічка лише підстраховує.
+            const lastKind = chat.lastKind || lastMsg?.type;
+            const lastSnippet = chat.lastSnippet || lastMsg?.text;
+            const lastAuthor = chat.lastAuthor || lastMsg?.senderName;
+            const timeLabel = chatTimeLabel(chat.lastAt || lastMsg?.sentAt);
+            const hasHistory = Boolean(lastKind || lastSnippet);
 
             return (
               <div
@@ -1052,171 +1142,103 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   onSelectChat(chat.id);
                   setActiveMenuChatId(null);
                 }}
-                className={`group p-2.5 rounded-xl cursor-pointer transition-all flex items-start gap-2.5 relative border ${
+                className={`group px-2.5 py-3 rounded-xl cursor-pointer transition-colors flex items-center gap-2.5 relative border ${
                   isDraggingThis
-                    ? 'opacity-40 scale-95 border-dashed border-[#E87A42] bg-[#F9F7F1]'
+                    ? 'opacity-40 border-dashed border-[#E87A42] bg-[#F4F1E8]'
                     : isSelected
-                    ? 'bg-[#F9F7F1] border-[#E6DFD3] shadow-md ring-1 ring-[#E87A42]/30'
-                    : 'bg-[#FDFCF9]/80 hover:bg-[#F9F7F1] border-[#E6DFD3] hover:border-[#E6DFD3]'
+                    ? 'bg-[#F4F1E8] border-[#E0D5C2]'
+                    : 'bg-transparent border-transparent hover:bg-[#F7F5EE]'
                 }`}
               >
-                {/* 3px Left Vertical Accent Bar (Faithful to Prototype) */}
-                {indicatorColor && (
-                  <div
-                    className="absolute left-0 top-2 bottom-2 w-[3px] rounded-r-full"
-                    style={{ backgroundColor: indicatorColor }}
-                  />
-                )}
-
-                {/* Avatar (36px) with Status Indicator */}
-                <div className="relative shrink-0 mt-0.5">
-                  <Avatar src={chat.avatar} name={chat.title} className="w-9 h-9" />
+                {/* Avatar (40px) with Status Indicator */}
+                <div className="relative shrink-0">
+                  <Avatar src={chat.avatar} name={chat.title} className="w-10 h-10" />
                   {chat.isOnline && (
-                    <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-[#E87A42] rounded-full ring-2 ring-[#FDFCF9]" />
+                    <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-[#528A4B] rounded-full ring-2 ring-[#FDFCF9]" />
                   )}
                 </div>
 
-                {/* Chat Info & Content */}
                 <div className="flex-1 min-w-0">
-                  {/* Line 1: Title + Time */}
-                  <div className="flex items-baseline justify-between gap-1 mb-0.5">
-                    <div className="flex items-center gap-1 min-w-0">
+                  {/* Лінія 1: назва + час */}
+                  <div className="flex items-baseline justify-between gap-2">
+                    <div className="flex items-center gap-1.5 min-w-0">
                       <h3 className="font-bold text-[13px] text-[#1E2521] truncate leading-tight">
-                        {chat.title}
+                        {displayTitle(chat.title)}
                       </h3>
-                      {chat.pinned && <Pin className="w-2.5 h-2.5 text-[#F4AF25] fill-current shrink-0" />}
+                      {chat.pinned && <Pin className="w-2.5 h-2.5 text-[#C25925] fill-current shrink-0" />}
+                      {chat.isDemo && (
+                        <span className="px-1 py-px rounded bg-[#EFEBE0] text-[#8A9186] text-[9px] font-bold shrink-0 leading-none">
+                          демо
+                        </span>
+                      )}
                     </div>
-                    <span className="text-[10px] text-[#5F6A60] font-mono shrink-0">
-                      {lastMsg?.timestamp || chat.lastActive || ''}
-                    </span>
-                  </div>
-
-                  {/* Line 2: Meta Subtitle (Prototype mono uppercase) */}
-                  {metaLabel && (
-                    <div className="font-mono text-[9.5px] tracking-wider uppercase mb-1 flex items-center gap-1 font-semibold text-[#5F6A60]">
-                      <span className={isHot ? 'text-red-400 font-bold' : isPhantom ? 'text-[#F4AF25]' : 'text-[#5F6A60]'}>
-                        {metaLabel}
+                    {timeLabel && (
+                      <span className="text-[10.5px] text-[#8A9186] shrink-0 leading-tight">
+                        {timeLabel}
                       </span>
-                    </div>
-                  )}
-
-                  {/* Line 3: Snippet */}
-                  <p className="text-[11.5px] text-[#C2D4C8] truncate leading-relaxed">
-                    {chat.draft ? (
-                      <span>
-                        <span className="text-[#F4AF25] font-bold">Чернетка: </span>
-                        <span className="text-[#5F6A60] italic">{chat.draft}</span>
-                      </span>
-                    ) : lastMsg?.type === 'table' ? (
-                      <span className="text-[#E87A42] font-semibold">📊 {lastMsg.tableData?.title || 'Таблиця'}</span>
-                    ) : lastMsg?.type === 'chart' ? (
-                      <span className="text-[#60A5FA] font-semibold">📈 {lastMsg.chartData?.title || 'Графік'}</span>
-                    ) : lastMsg?.type === 'task-list' ? (
-                      <span className="text-[#F4AF25] font-semibold">☑️ {lastMsg.taskListData?.title || 'Задачі'}</span>
-                    ) : lastMsg?.type === 'voice' ? (
-                      <span className="text-[#F4AF25] font-semibold">🎙️ Голосове ({lastMsg.voiceData?.duration}с)</span>
-                    ) : (
-                      lastMsg?.text || chat.description || 'Розпочати бесіду'
                     )}
-                  </p>
-
-                  {/* Line 4: AI Secretary Italic Summary (Faithful to Prototype) */}
-                  {chat.aiSecretarySummary && (
-                    <div className="font-serif italic text-[11.5px] text-[#E87A42] mt-0.5 truncate leading-tight opacity-90">
-                      AI · {chat.aiSecretarySummary}
-                    </div>
-                  )}
-                </div>
-
-                {/* Unread badge & action trigger */}
-                <div className="flex flex-col items-end justify-between self-stretch shrink-0">
-                  {chat.unreadCount > 0 && (
-                    <span className="px-1.5 py-0.2 bg-[#E87A42] text-[#F7F5EE] text-[9.5px] font-black rounded-full shadow-sm">
-                      {chat.unreadCount}
-                    </span>
-                  )}
-                  <button
-                    type="button"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      soundFx.playTap();
-                      setActiveMenuChatId(activeMenuChatId === chat.id ? null : chat.id);
-                    }}
-                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-[#F1EDE3] rounded-lg text-[#5F6A60] hover:text-[#1E2521] transition-opacity mt-auto"
-                    title="Додати або перемістити в папку"
-                  >
-                    <MoreVertical className="w-3 h-3" />
-                  </button>
-                </div>
-
-                {/* Quick Folder Move Menu Popup for Chat Items */}
-                {activeMenuChatId === chat.id && (
-                  <div
-                    onClick={(e) => e.stopPropagation()}
-                    className="absolute right-2 top-12 z-30 w-52 p-2 bg-[#FDFCF9]/98 backdrop-blur-2xl border border-[#DDD4C4] rounded-2xl shadow-2xl space-y-1 animate-in fade-in duration-100 text-[#1E2521]"
-                  >
-                    <div className="px-2 py-1 text-[10px] font-extrabold text-[#5F6A60] uppercase tracking-wider flex items-center justify-between">
-                      <span>Призначити папку:</span>
-                      <button
-                        onClick={() => setActiveMenuChatId(null)}
-                        className="text-[#5F6A60] hover:text-[#1E2521]"
-                      >
-                        <X className="w-3 h-3" />
-                      </button>
-                    </div>
-
-                    {smartFolders
-                      .filter((f) => !f.isBuiltIn)
-                      .map((folder) => {
-                        const isIn = isChatInFolder(chat, folder);
-                        return (
-                          <button
-                            key={folder.id}
-                            onClick={() => {
-                              soundFx.playTap();
-                              if (isIn) {
-                                onRemoveChatFromFolder(folder.id, chat.id);
-                                showToast(`Видалено з «${folder.name}»`);
-                              } else {
-                                onAddChatToFolder(folder.id, chat.id);
-                                soundFx.playSend();
-                                showToast(`✨ Додано до «${folder.name}»`);
-                              }
-                              setActiveMenuChatId(null);
-                            }}
-                            className={`w-full p-1.5 rounded-xl text-left text-xs font-semibold flex items-center justify-between transition-colors ${
-                              isIn
-                                ? 'bg-[#F9F7F1] text-[#E87A42] border border-[#DDD4C4]'
-                                : 'hover:bg-[#F1EDE3] text-[#5F6A60] hover:text-[#1E2521]'
-                            }`}
-                          >
-                            <div className="flex items-center gap-1.5 truncate">
-                              <span>{folder.emoji}</span>
-                              <span className="truncate">{folder.name}</span>
-                            </div>
-                            {isIn && <Check className="w-3.5 h-3.5 text-[#E87A42] shrink-0" />}
-                          </button>
-                        );
-                      })}
-
-                    <div className="pt-1 border-t border-[#F1EDE3]">
-                      <button
-                        onClick={() => {
-                          setActiveMenuChatId(null);
-                          onOpenCreateFolder();
-                        }}
-                        className="w-full p-1.5 rounded-xl text-left text-xs font-bold text-[#E87A42] hover:bg-[#F1EDE3] flex items-center gap-1.5 transition-colors"
-                      >
-                        <Plus className="w-3 h-3" />
-                        <span>+ Новий Workspace</span>
-                      </button>
-                    </div>
                   </div>
-                )}
+
+                  {/* Лінія 2: прев'ю + непрочитані */}
+                  <div className="flex items-center justify-between gap-2 mt-0.5">
+                    <p className="text-[11.5px] truncate leading-tight min-w-0 flex-1">
+                      {chat.draft ? (
+                        <>
+                          <span className="text-[#C25925] font-semibold">Чернетка: </span>
+                          <span className="text-[#7A8479] italic">{chat.draft}</span>
+                        </>
+                      ) : !hasHistory ? (
+                        <span className="text-[#A8AFA3]">Ще немає повідомлень</span>
+                      ) : lastKind && lastKind !== 'text' ? (
+                        <span className="text-[#7A8479] font-medium">
+                          {kindPreview[lastKind] || '📎 Вкладення'}
+                        </span>
+                      ) : (
+                        <span className="text-[#7A8479]">
+                          {lastAuthor ? `${lastAuthor}: ` : ''}
+                          {lastSnippet}
+                        </span>
+                      )}
+                    </p>
+
+                    {chat.unreadCount > 0 && (
+                      <span className="px-1.5 min-w-[18px] text-center bg-[#E87A42] text-[#FFF8F2] text-[10px] font-bold rounded-full shrink-0 leading-[16px]">
+                        {chat.unreadCount}
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Три крапки: зʼявляються поверх часу, щоб не красти ширину в рядка */}
+                <button
+                  type="button"
+                  data-chat-menu-trigger
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    soundFx.playTap();
+                    if (activeMenuChatId === chat.id) {
+                      setActiveMenuChatId(null);
+                      return;
+                    }
+                    const r = e.currentTarget.getBoundingClientRect();
+                    setChatMenuPos({
+                      x: Math.min(Math.max(r.right - 224, 12), window.innerWidth - 236),
+                      y: Math.min(r.bottom + 6, window.innerHeight - 332),
+                    });
+                    setActiveMenuChatId(chat.id);
+                  }}
+                  className={`absolute right-1.5 top-1.5 p-1 rounded-lg bg-[#F4F1E8] text-[#7A8479] hover:text-[#1E2521] hover:bg-[#EFEBE0] transition-opacity ${
+                    activeMenuChatId === chat.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                  }`}
+                  title="Дії з бесідою"
+                >
+                  <MoreVertical className="w-3.5 h-3.5" />
+                </button>
               </div>
             );
           })
         )}
+        </div>
 
         {/* Mobile Floating Action Button (FAB) for starting a new chat */}
         <button
@@ -1224,7 +1246,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             soundFx.playTap();
             onNewChat();
           }}
-          className="md:hidden fixed bottom-18 right-4 w-13 h-13 bg-[#E87A42] hover:bg-[#D76931] text-[#1E2521] rounded-full shadow-2xl flex items-center justify-center active:scale-90 z-25 transition-transform border-2 border-white"
+          className="md:hidden fixed bottom-18 right-4 w-13 h-13 bg-[#E87A42] hover:bg-[#C25925] text-[#FFF8F2] rounded-full shadow-xl flex items-center justify-center active:scale-90 z-25 transition-transform border-2 border-[#FDFCF9]"
           title="Новий діалог"
           aria-label="Новий діалог"
         >
@@ -1232,7 +1254,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </button>
 
         {/* Mobile Bottom Navigation Bar */}
-        <nav className="md:hidden border-t border-[#EAE2D5] bg-white/95 backdrop-blur-md px-3 pt-2 pb-[calc(var(--sab)+0.5rem)] flex items-center justify-around shrink-0 z-10 shadow-md">
+        <nav className="md:hidden border-t border-[#E6DFD3] bg-[#FDFCF9] px-3 pt-2 pb-[calc(var(--sab)+0.5rem)] flex items-center justify-around shrink-0 z-10">
           <button
             onClick={() => {
               soundFx.playTap();
@@ -1281,12 +1303,90 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <span>Параметри</span>
           </button>
         </nav>
-      </div>
+
+      {/* 5.5 Меню бесіди (три крапки) — fixed, щоб його не різав скрол списку */}
+      {menuChat && chatMenuPos && (
+        <div
+          ref={chatMenuRef}
+          onClick={(e) => e.stopPropagation()}
+          style={{ top: chatMenuPos.y, left: chatMenuPos.x }}
+          className="fixed z-50 w-56 max-h-80 overflow-y-auto no-scrollbar p-2 bg-[#FDFCF9] border border-[#E0D5C2] rounded-2xl shadow-xl space-y-1 animate-in fade-in duration-100 text-[#1E2521]"
+        >
+          <div className="px-2 py-1 text-[10px] font-extrabold text-[#8A9186] uppercase tracking-wider flex items-center justify-between">
+            <span className="truncate">{displayTitle(menuChat.title)}</span>
+            <button
+              onClick={() => setActiveMenuChatId(null)}
+              className="text-[#8A9186] hover:text-[#1E2521] shrink-0"
+            >
+              <X className="w-3 h-3" />
+            </button>
+          </div>
+
+          <button
+            onClick={() => void handleRenameChat(menuChat)}
+            className="w-full p-1.5 rounded-xl text-left text-xs font-semibold flex items-center gap-1.5 text-[#1E2521] hover:bg-[#F4F1E8] transition-colors"
+          >
+            <Pencil className="w-3.5 h-3.5 text-[#C25925] shrink-0" />
+            <span>Перейменувати</span>
+          </button>
+
+          <div className="px-2 pt-1.5 text-[10px] font-extrabold text-[#8A9186] uppercase tracking-wider border-t border-[#EFEBE0]">
+            Призначити папку
+          </div>
+
+          {smartFolders
+            .filter((f) => !f.isBuiltIn)
+            .map((folder) => {
+              const isIn = isChatInFolder(menuChat, folder);
+              return (
+                <button
+                  key={folder.id}
+                  onClick={() => {
+                    soundFx.playTap();
+                    if (isIn) {
+                      onRemoveChatFromFolder(folder.id, menuChat.id);
+                      showToast(`Видалено з «${folder.name}»`);
+                    } else {
+                      onAddChatToFolder(folder.id, menuChat.id);
+                      soundFx.playSend();
+                      showToast(`✨ Додано до «${folder.name}»`);
+                    }
+                    setActiveMenuChatId(null);
+                  }}
+                  className={`w-full p-1.5 rounded-xl text-left text-xs font-semibold flex items-center justify-between transition-colors ${
+                    isIn
+                      ? 'bg-[#F4F1E8] text-[#C25925] border border-[#E0D5C2]'
+                      : 'hover:bg-[#F4F1E8] text-[#5F6A60] hover:text-[#1E2521]'
+                  }`}
+                >
+                  <div className="flex items-center gap-1.5 truncate">
+                    <span>{folder.emoji}</span>
+                    <span className="truncate">{folder.name}</span>
+                  </div>
+                  {isIn && <Check className="w-3.5 h-3.5 text-[#C25925] shrink-0" />}
+                </button>
+              );
+            })}
+
+          <div className="pt-1 border-t border-[#EFEBE0]">
+            <button
+              onClick={() => {
+                setActiveMenuChatId(null);
+                onOpenCreateFolder();
+              }}
+              className="w-full p-1.5 rounded-xl text-left text-xs font-bold text-[#C25925] hover:bg-[#F4F1E8] flex items-center gap-1.5 transition-colors"
+            >
+              <Plus className="w-3 h-3" />
+              <span>Новий простір</span>
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* 6. HOVER TOOLTIP FOR SMART FOLDERS (.smart-folder-item) */}
       {hoveredFolderStats && !folderContextMenu && !inlineEditingFolderId && (
         <div
-          className="fixed z-40 bg-[#E6DFD3] text-[#1E2521] border border-[#E6DFD3] rounded-xl shadow-xl px-3 py-2 text-xs pointer-events-none animate-in fade-in slide-in-from-top-1 duration-150 flex flex-col gap-1.5 min-w-44 max-w-64"
+          className="fixed z-40 bg-[#FDFCF9] text-[#1E2521] border border-[#E0D5C2] rounded-xl shadow-xl px-3 py-2 text-xs pointer-events-none animate-in fade-in slide-in-from-top-1 duration-150 flex flex-col gap-1.5 min-w-44 max-w-64"
           style={{
             top: hoveredFolderStats.y,
             left: hoveredFolderStats.x,
@@ -1308,14 +1408,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           {/* Counts: Total chats and total unread message count */}
           <div className="flex items-center justify-between gap-3 text-[11px]">
-            <div className="flex items-center gap-1 text-[#D2DBD4]">
+            <div className="flex items-center gap-1 text-[#7A8479]">
               <MessageCircle className="w-3.5 h-3.5 text-[#E87A42] shrink-0" />
               <span>Чати:</span>
               <span className="font-extrabold text-[#1E2521]">{hoveredFolderStats.stats.total}</span>
             </div>
 
             <div className="flex items-center gap-1">
-              <span className="text-[#D2DBD4]">Непрочитані:</span>
+              <span className="text-[#7A8479]">Непрочитані:</span>
               {hoveredFolderStats.stats.unread > 0 ? (
                 <span className="px-1.5 py-0.2 bg-[#E87A42] text-[#F7F5EE] text-[10px] font-black rounded-full shadow-sm">
                   {hoveredFolderStats.stats.unread}
@@ -1747,7 +1847,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
                 <button
                   onClick={() => handleDeleteFolderAction(folderContextMenu.folder)}
-                  className="w-full px-2.5 py-1.5 rounded-xl hover:bg-red-950/40 text-left text-xs font-semibold flex items-center gap-2 text-red-400 transition-colors"
+                  className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#F7E3DC] text-left text-xs font-semibold flex items-center gap-2 text-[#B4442A] transition-colors"
                 >
                   <Trash2 className="w-3.5 h-3.5 shrink-0" />
                   <span className="truncate">Видалити папку</span>
@@ -1812,7 +1912,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <div
                     className={`rounded-xl px-2.5 py-1.5 max-w-[85%] space-y-0.5 ${
                       isSelf
-                        ? 'bg-gradient-to-r from-[#2E6B3E] to-[#F1EDE3] text-[#1E2521] rounded-tr-xs shadow-sm'
+                        ? 'bg-[#F6E3D4] border border-[#EAD6C4] text-[#1E2521] rounded-tr-xs shadow-sm'
                         : 'bg-[#FDFCF9] border border-[#E6DFD3] text-[#1E2521] rounded-tl-xs shadow-sm'
                     }`}
                   >
@@ -1826,7 +1926,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     </p>
                     <span
                       className={`text-[9px] block text-right font-mono ${
-                        isSelf ? 'text-[#1E2521]/80' : 'text-[#5F6A60]'
+                        isSelf ? 'text-[#8A9186]' : 'text-[#8A9186]'
                       }`}
                     >
                       {msg.timestamp}
@@ -1970,7 +2070,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         Архів
                       </span>
                       {folderUnread > 0 && (
-                        <span className="px-1.5 py-0.2 bg-[#8C988E] text-[#1E2521] text-[9px] font-bold rounded-full">
+                        <span className="px-1.5 py-0.2 bg-[#DFD6C5] text-[#5E6B62] text-[9px] font-bold rounded-full">
                           {folderUnread}
                         </span>
                       )}

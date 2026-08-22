@@ -101,23 +101,26 @@
   letter-spacing: 0.12em;
 }
 
+/* Праве та нижнє поле в щільностях нижче тримає час у куті бульбашки: без
+ * запасу справа він притискався до межі й обрізався на вузьких бульбашках. */
+
 /* 2. Micro/Short text density (< 24 chars, single line): compact hugging width */
 .msg-density-short {
-  padding: 0.45rem 0.75rem;
+  padding: 0.45rem 0.85rem 0.4rem 0.8rem;
   max-width: min(280px, 100%);
   width: fit-content;
 }
 
 /* 3. Medium text density (25 - 120 chars): optimal organic line width */
 .msg-density-medium {
-  padding: 0.55rem 0.95rem;
+  padding: 0.55rem 1rem 0.45rem 0.95rem;
   max-width: min(440px, 100%);
   width: fit-content;
 }
 
 /* 4. Dense / Long text density (120+ chars): max reading width constrained to 560px / optimal 65ch */
 .msg-density-long {
-  padding: 0.65rem 1.05rem;
+  padding: 0.65rem 1.1rem 0.5rem 1.05rem;
   max-width: min(560px, 100%);
   width: fit-content;
   text-wrap: pretty;
@@ -139,7 +142,7 @@
 }
 
 .msg-read-more-fade-self {
-  background: linear-gradient(to top, rgba(27, 38, 32, 0.98) 0%, rgba(27, 38, 32, 0.75) 55%, rgba(27, 38, 32, 0) 100%);
+  background: linear-gradient(to top, rgba(251, 233, 220, 0.98) 0%, rgba(251, 233, 220, 0.75) 55%, rgba(251, 233, 220, 0) 100%);
 }
 
 .msg-read-more-fade-other {
@@ -148,31 +151,45 @@
 
 /* 5. Rich Card density (Table, Chart, Tasks, Poll, Split-bill, Map, etc.) */
 .msg-density-card {
-  padding: 0.75rem 1rem;
+  padding: 0.75rem 1rem 0.6rem 1rem;
   width: 100%;
   max-width: min(520px, 100%);
 }
 
 /* 6. Media / Image / File Density */
 .msg-density-media {
-  padding: 0.4rem 0.4rem 0.5rem 0.4rem;
+  padding: 0.4rem 0.5rem 0.45rem 0.4rem;
   width: fit-content;
   max-width: min(380px, 100%);
 }
 
-/* Smooth and clean message bubble styles without disruptive horizontal slide/shift */
+/* Дві бульбашки однієї родини на теплому полотні: чужа — біла картка, своя —
+ * світло-теракотова. Обидві з тонкою межею та легкою тінню, без темного тла. */
 .msg-bubble-self {
-  background-color: #1B2620;
-  color: #FAF8F5;
-  border: 1px solid rgba(64, 88, 73, 0.45);
-  box-shadow: 0 1px 3px rgba(10, 16, 12, 0.12), 0 2px 8px rgba(10, 16, 12, 0.08);
+  background-color: #FBE9DC;
+  color: #1E2521;
+  border: 1px solid #F0D5C2;
+  box-shadow: 0 1px 2px rgba(120, 74, 42, 0.07), 0 4px 12px rgba(120, 74, 42, 0.06);
 }
 
 .msg-bubble-other {
   background-color: #FFFFFF;
-  color: #1A241E;
-  border: 1px solid #E3D9C8;
+  color: #1E2521;
+  border: 1px solid #E6DFD3;
   box-shadow: 0 1px 2px rgba(60, 44, 24, 0.06), 0 4px 12px rgba(60, 44, 24, 0.05);
+}
+
+/* Рядок метаданих (час, галочки) — правий нижній кут бульбашки. */
+.msg-meta-row {
+  font-variant-numeric: tabular-nums;
+}
+
+.msg-bubble-other .msg-meta-row {
+  color: #8A9186;
+}
+
+.msg-bubble-self .msg-meta-row {
+  color: #A08B77;
 }
 
 /* Organic Asymmetric Contours: Soft, non-rigid mathematical curvature */

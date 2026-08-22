@@ -16,8 +16,9 @@ export default function MessengerLayout() {
       transition={{ duration: 0.35, ease: EASE_PHANTOM as unknown as number[] }}
     >
       {/* Док PHANTOM висить absolute bottom-3 і накривав поле вводу: людина
-          не бачила, що пише. Екран мусить сам тримати під нього місце. */}
-      <div className="w-full h-full" style={{ paddingBottom: 76 }}>
+          не бачила, що пише. Екран сам тримає під нього місце — 12 знизу,
+          54 висота дока і 8 повітря між доком та композером. */}
+      <div className="w-full h-full" style={{ paddingBottom: 74 }}>
         <MessengerRoot className="w-full h-full" />
       </div>
     </motion.div>

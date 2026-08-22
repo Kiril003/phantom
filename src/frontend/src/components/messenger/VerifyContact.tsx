@@ -49,6 +49,14 @@ export const SafetyVerifyBlock: React.FC<{
   const [compared, setCompared] = useState<CompareResult | null>(null);
   const [typed, setTyped] = useState('');
   const [helpOpen, setHelpOpen] = useState(false);
+  // Числа розійшлися — підтвердження закрите. Замок липкий: перемикання
+  // панелей його не знімає, бо один випадковий клік після «між вами хтось є»
+  // ставить фальшиве «Звірено голосом», і далі людина довіряє підробці.
+  const [locked, setLocked] = useState(false);
+  // Замок відкриває лише свідомий новий цикл: людина натиснула «Порівняти
+  // заново» і після цього отримала збіг. Закрити й відкрити картку — теж
+  // новий цикл, там стан вмирає разом із компонентом.
+  const [recompare, setRecompare] = useState(false);
 
   const mine = digitsOf(contact.safety_number);
 
@@ -64,7 +72,11 @@ export const SafetyVerifyBlock: React.FC<{
       .catch(() => setQrDataUrl(null));
   }, [panel, mine]);
 
-  const confirm = async () => {
+  // fromCompare — виклик із порівняння, де замок уже знято цим самим кліком:
+  // стан ще не встиг оновитись, тож перевіряти його тут означало б відкинути
+  // законний збіг.
+  const confirm = async (fromCompare = false) => {
+    if (locked && !fromCompare) return;
     setBusy(true);
     setFailed(false);
     try {
@@ -89,10 +101,26 @@ export const SafetyVerifyBlock: React.FC<{
     }
     if (seen !== mine) {
       setCompared('mismatch');
+      setLocked(true);
+      setRecompare(false);
       return;
     }
     setCompared('match');
-    void confirm();
+    // Збіг після розбіжності зараховуємо тільки в новому циклі: інакше та сама
+    // підміна знімає свій же замок, варто лише вписати правильне число.
+    if (locked && !recompare) return;
+    setLocked(false);
+    setRecompare(false);
+    void confirm(true);
+  };
+
+  // Свідомий новий цикл: чистимо вердикт і повертаємо в скан, але замок
+  // лишається — його зніме тільки збіг.
+  const startRecompare = () => {
+    setCompared(null);
+    setTyped('');
+    setRecompare(true);
+    setPanel('scan');
   };
 
   return (
@@ -194,7 +222,9 @@ export const SafetyVerifyBlock: React.FC<{
               >
                 <ShieldCheck className="w-3.5 h-3.5 text-[#3F7A4B] mt-0.5 shrink-0" />
                 <span className="text-[10.5px] text-[#3F5F3B] leading-relaxed font-semibold">
-                  Числа збіглися — це справді ваш співрозмовник. Позначаю звірку.
+                  {locked
+                    ? 'Числа збіглися, але минуле порівняння розійшлося. Натисніть «Порівняти заново» і звірте ще раз — тоді підтвердження відкриється.'
+                    : 'Числа збіглися — це справді ваш співрозмовник. Позначаю звірку.'}
                 </span>
               </div>
             )}
@@ -205,11 +235,20 @@ export const SafetyVerifyBlock: React.FC<{
                 className="p-2.5 bg-[#F7ECE7] rounded-xl border border-[#E0B4A6] flex items-start gap-1.5"
               >
                 <ShieldAlert className="w-4 h-4 text-[#B4432E] mt-0.5 shrink-0" />
-                <span className="text-[10.5px] text-[#8E3520] leading-relaxed">
-                  <b className="font-bold">ЧИСЛА РІЗНІ — між вами хтось є.</b> Не
-                  підтверджуйте. Спробуйте інший канал звʼязку (особисто/телефоном) і
-                  порівняйте ще раз.
-                </span>
+                <div className="space-y-1.5">
+                  <span className="text-[10.5px] text-[#8E3520] leading-relaxed block">
+                    <b className="font-bold">ЧИСЛА РІЗНІ — між вами хтось є.</b>{' '}
+                    Підтвердження заблоковано. Спробуйте інший канал звʼязку
+                    (особисто/телефоном) і порівняйте ще раз.
+                  </span>
+                  <button
+                    onClick={startRecompare}
+                    data-safety-recompare
+                    className="text-[11px] font-bold text-[#B4432E] active:scale-95 transition-transform"
+                  >
+                    Порівняти заново
+                  </button>
+                </div>
               </div>
             )}
 
@@ -229,9 +268,18 @@ export const SafetyVerifyBlock: React.FC<{
 
           <div className="flex items-center gap-3 pt-0.5">
             <button
-              onClick={confirm}
-              disabled={busy}
-              className="text-[11px] font-bold text-[#C25925] active:scale-95 transition-transform disabled:opacity-50"
+              onClick={() => void confirm()}
+              disabled={busy || locked}
+              data-safety-confirm
+              data-safety-locked={locked ? 'yes' : 'no'}
+              title={
+                locked
+                  ? 'Числа розійшлися — підтвердження заборонено'
+                  : 'Позначити звірку голосом'
+              }
+              className={`text-[11px] font-bold active:scale-95 transition-transform disabled:active:scale-100 ${
+                locked ? 'text-[#98A092] cursor-not-allowed' : 'text-[#C25925] disabled:opacity-50'
+              }`}
             >
               {busy ? 'Звіряю…' : 'Підтвердити'}
             </button>
@@ -244,6 +292,23 @@ export const SafetyVerifyBlock: React.FC<{
               </button>
             )}
           </div>
+          {locked && (
+            <div data-safety-lock-note className="space-y-1">
+              <span className="text-[10px] text-[#8E3520] block leading-relaxed">
+                Числа розійшлися — підтвердження заборонено. Спершу зʼясуйте причину:
+                звʼяжіться іншим каналом і порівняйте число заново.
+              </span>
+              {compared !== 'mismatch' && (
+                <button
+                  onClick={startRecompare}
+                  data-safety-recompare
+                  className="text-[11px] font-bold text-[#B4432E] active:scale-95 transition-transform"
+                >
+                  Порівняти заново
+                </button>
+              )}
+            </div>
+          )}
           {failed && (
             <span className="text-[10px] text-[#B4432E] block">
               Вузол не прийняв звірку — спробуйте ще раз.

@@ -13,7 +13,7 @@ import {
   FileUp,
   KeyRound,
   RefreshCw,
-  AlertTriangle,
+  Shield,
   ArrowDownUp
 } from 'lucide-react';
 import {
@@ -576,8 +576,8 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
                   </div>
 
                   <div className="flex items-center justify-between p-2.5 bg-[#FAF7F1] rounded-xl border border-[#E5DC source-serif]">
-                    <span className="font-bold text-[#F9F7F1]">Наскрізне шифрування вмісту</span>
-                    <span className="font-mono text-[11px] text-[#B45309]">не увімкнено</span>
+                    <span className="font-bold text-[#F9F7F1]">Запечатування вмісту</span>
+                    <span className="font-mono text-[11px] text-[#4C8A55]">між вузлами</span>
                   </div>
                 </div>
               </div>
@@ -588,9 +588,9 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
 
         {/* Footer */}
         <div className="px-5 py-3.5 bg-[#F4EDE2] border-t border-[#E3D9C9] flex items-center justify-between shrink-0">
-          <span className="text-[11px] text-[#8C5A1A] flex items-center gap-1.5">
-            <AlertTriangle className="w-3.5 h-3.5 text-[#B45309]" />
-            <span>Наскрізного шифрування вмісту немає</span>
+          <span className="text-[11px] text-[#5F6A60] flex items-center gap-1.5">
+            <Shield className="w-3.5 h-3.5 text-[#4C8A55]" />
+            <span>Дороги везуть шифротекст; ключі лишаються на ваших вузлах</span>
           </span>
 
           <button

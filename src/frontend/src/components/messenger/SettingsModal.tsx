@@ -9,8 +9,7 @@ import {
   Check,
   Radio,
   Globe,
-  Zap,
-  AlertTriangle
+  Zap
 } from 'lucide-react';
 import { soundFx } from '../../utils/messengerSound';
 import { IdentityPanel } from './IdentityPanel';
@@ -242,7 +241,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     {
                       id: 'p2p' as TransportProtocol,
                       title: 'Тільки прямий P2P (WebRTC DataChannel)',
-                      desc: 'Прямий зв\'язок між браузерами. Жодне повідомлення не проходить через сервер.',
+                      desc: 'Прямий канал між вузлами, коли пряма адреса відома.',
                       icon: Radio,
                       badge: 'Прямий канал (DTLS)',
                       color: 'text-[#10B981]',
@@ -250,7 +249,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     {
                       id: 'server' as TransportProtocol,
                       title: 'Серверний релей (Cloud WebSocket)',
-                      desc: 'Синхронізація через вузол PHANTOM. Гарантована доставка для великих команд.',
+                      desc: 'Через ретранслятор PHANTOM — він везе шифротекст і вмісту не бачить.',
                       icon: Globe,
                       badge: 'Cloud Sync',
                       color: 'text-[#3B82F6]',
@@ -293,15 +292,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </div>
               </div>
 
-              <div className="p-3 bg-[#FDF6EC] rounded-2xl border border-[#EBD9BE] space-y-1.5">
-                <span className="text-[11px] font-bold text-[#8C5A1A] flex items-center gap-1.5">
-                  <AlertTriangle className="w-3.5 h-3.5 text-[#B45309]" />
-                  <span>Листування ще не шифрується наскрізно</span>
+              <div className="p-3 bg-[#F4F1E8] rounded-2xl border border-[#E0D5C2] space-y-1.5">
+                <span className="text-[11px] font-bold text-[#4A5548] flex items-center gap-1.5">
+                  <Shield className="w-3.5 h-3.5 text-[#4C8A55]" />
+                  <span>Листи запечатані між вузлами</span>
                 </span>
                 <span className="text-[10.5px] text-[#7A6A55] block leading-relaxed">
-                  Ключі вузла вже є, сесія зі співрозмовником зводиться — але сам транспорт
-                  повідомлень поки не переведено на неї. Захищений тільки канал: DTLS у
-                  прямому WebRTC і TLS до вузла. Історія на диску лежить запечатаною.
+                  Повідомлення і файли запечатуються між вашим вузлом і вузлом
+                  співрозмовника: дороги — ретранслятор, скринька, чужий канал — везуть
+                  лише шифротекст. Ваш власний вузол довірений: він тримає ключі й бачить
+                  вміст, як телефон бачить ваші чати. Історія на його диску лежить
+                  запечатаною. А хто саме на тому кінці — каже не шифр, а звірене число
+                  безпеки.
                 </span>
               </div>
 

@@ -1,19 +1,18 @@
-import { Settings } from 'lucide-react';
 import { useDeskStore } from '../../stores/deskStore';
 
 export const DESK_STRIP_H = 28;
 
 /**
- * Смуга столів — тонкий низ екрана: слово-назви столів, активний
- * підсвічений. Праворуч — «Налаштування» (вільним вікном на активному
- * столі), щоб зі зникненням дока жоден екран не лишився недосяжним.
+ * Смуга столів — тонкий низ екрана: ЛИШЕ перемикач столів словами,
+ * активний підсвічений. Вердикт власника: «багато знизу кнопок — погано»
+ * — старий док тут не відтворюється; входи станів і додатків чекають
+ * дизайн-дебату, навігація — за Ctrl+K (К4).
  * Хром стола: StatusBar 44px + смуга 28px = 72px ≤ 76px.
  */
 export function DeskStrip() {
   const desks = useDeskStore((s) => s.desks);
   const activeDeskId = useDeskStore((s) => s.activeDeskId);
   const setActiveDesk = useDeskStore((s) => s.setActiveDesk);
-  const openPane = useDeskStore((s) => s.openPane);
 
   return (
     <nav
@@ -53,29 +52,6 @@ export function DeskStrip() {
           </button>
         );
       })}
-      <span className="flex-1" />
-      <button
-        type="button"
-        aria-label="Налаштування"
-        title="Налаштування"
-        onClick={() => openPane('settings')}
-        className="flex items-center justify-center self-center transition-colors"
-        style={{
-          width: 24,
-          height: 24,
-          borderRadius: 'var(--ph-radius-s)',
-          color: 'var(--ph-color-ink-muted)',
-          background: 'transparent',
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.color = 'var(--ph-color-ink)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.color = 'var(--ph-color-ink-muted)';
-        }}
-      >
-        <Settings size={14} strokeWidth={1.75} />
-      </button>
     </nav>
   );
 }

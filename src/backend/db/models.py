@@ -1509,6 +1509,9 @@ class MessengerContact(Base):
     )
     peer_node_id: Mapped[str] = mapped_column(String(64), nullable=False)
     display_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    #: Пряма адреса вузла співрозмовника, якщо вона відома: та сама мережа,
+    #: власний домен, тунель. Немає адреси — кадр чекає на ретранслятор.
+    peer_address: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
     bundle_json: Mapped[str] = mapped_column(Text, nullable=False)
     #: Стан храповика, запечатаний ключем вузла. Вузол-сусід його не прочитає.
     session_blob: Mapped[Optional[str]] = mapped_column(Text, nullable=True)

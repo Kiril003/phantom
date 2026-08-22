@@ -35,6 +35,7 @@ from messenger.crypto.safety import format_safety_number, safety_number
 from messenger.crypto.session import Session
 from messenger.inbox import InboxError, accept_frame
 from messenger.outbox import OutboxError, prepare_frame
+from messenger.transport import deliver_direct
 from node.identity import node_id
 from security.auth import get_current_user
 
@@ -96,6 +97,8 @@ class ConversationIn(BaseModel):
     circle: str = "all"
     handle: Optional[str] = None
     avatar: Optional[str] = None
+    #: Розмова з конкретною людиною — тоді повідомлення поїдуть шифротекстом.
+    contact_id: Optional[str] = None
 
 
 class ConversationOut(BaseModel):
@@ -210,6 +213,7 @@ async def create_conversation(
         circle=payload.circle,
         handle=payload.handle,
         avatar=payload.avatar,
+        contact_id=payload.contact_id,
         created_at=_now(),
         updated_at=_now(),
     )
@@ -375,9 +379,18 @@ async def append_message(
     if conversation.contact_id is not None and payload.body is not None:
         try:
             prepared = await prepare_frame(session, _keys(), conversation, payload.body)
-            out.delivery = 'queued' if prepared is not None else 'local'
         except OutboxError:
+            prepared = None
             out.delivery = 'queued'
+        if prepared is not None:
+            contact = await session.get(MessengerContact, conversation.contact_id)
+            address = contact.peer_address if contact else None
+            delivered = (
+                await deliver_direct(address, prepared.peer_node_id, prepared.frame)
+                if address
+                else False
+            )
+            out.delivery = 'sent' if delivered else 'queued'
 
     # Інші пристрої власника мають побачити повідомлення без опитування —
     # телефон і ПК уже висять на цьому ж хабі, іншого каналу вигадувати не треба.
@@ -409,12 +422,15 @@ async def get_identity(_user: User = Depends(get_current_user)) -> IdentityOut:
 class ContactIn(BaseModel):
     display_name: str = Field(min_length=1, max_length=120)
     bundle: dict
+    #: Пряма адреса вузла, якщо відома. Немає — кадр чекатиме на ретранслятор.
+    peer_address: Optional[str] = None
 
 
 class ContactOut(BaseModel):
     id: str
     peer_node_id: str
     display_name: str
+    peer_address: Optional[str]
     safety_number: str
     safety_number_pretty: str
     verified: bool
@@ -427,6 +443,7 @@ def _contact_out(row: MessengerContact) -> ContactOut:
         id=row.id,
         peer_node_id=row.peer_node_id,
         display_name=row.display_name,
+        peer_address=row.peer_address,
         safety_number=row.safety_number,
         safety_number_pretty=format_safety_number(row.safety_number),
         verified=row.verified_at is not None,
@@ -492,6 +509,7 @@ async def add_contact(
         owner_user_id=user.id,
         peer_node_id=bundle.node_id,
         display_name=payload.display_name,
+        peer_address=payload.peer_address,
         bundle_json=bundle.to_json(),
         session_blob=peer_session.serialize(keys).hex(),
         safety_number=number,

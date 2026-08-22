@@ -29,6 +29,7 @@ import { FamiliarReactor } from '../components/familiar/FamiliarReactor';
 const PhantomFamiliar = React.lazy(() => import('../components/familiar/PhantomFamiliar'));
 import { ToastRail } from '../components/core/ToastRail';
 import { PhantomIcon } from '../components/core/PhantomIcon';
+import { DeskSurface } from '../components/desk/DeskSurface';
 
 function GlobalGeolocationManager() {
   const authenticated = useSystemStore((s) => s.authenticated);
@@ -94,6 +95,28 @@ export function StateSurface() {
   }
 }
 
+/**
+ * «/» = активний стіл (Ф1). SystemState-режими не зламані: поки стан не
+ * SHADOW, відповідна поверхня стану діє тимчасово поверх стола — К3
+ * заведе Діалог і Оператора у власні пейни/столи.
+ */
+function DeskIndex() {
+  const state = useSystemStore((s) => s.state);
+  return (
+    <div className="absolute inset-0 overflow-hidden">
+      <DeskSurface />
+      {state !== SystemState.SHADOW && (
+        <div
+          className="absolute inset-0 overflow-hidden"
+          style={{ background: 'var(--ph-color-ground)' }}
+        >
+          <StateSurface />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function MainRouter() {
   const { authenticated } = useSystemStore();
   const sessionPhase = useAuthStore((s) => s.sessionPhase);
@@ -114,7 +137,7 @@ function MainRouter() {
       <AnimatePresence mode="wait">
         <Routes>
           <Route path="/" element={<DashboardLayout />}>
-            <Route index element={<StateSurface />} />
+            <Route index element={<DeskIndex />} />
             <Route path="analytics" element={<AnalyticsOverview />} />
             <Route path="map" element={<MapLayout />} />
             <Route path="polis" element={<SunriseWorkspace />} />

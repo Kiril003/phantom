@@ -5,9 +5,8 @@ import type { PaneKind } from '../../stores/deskStore';
  * Реєстр пейнів: слово-назва, чіп джерела, вміст.
  *
  * Чіп джерела називає, ЗВІДКИ вміст пейна — не вигадуючи стану. Content
- * === null означає чесне «порожньо»: пейн існує в каркасі, вміст ще не
- * під'єднано (К3 — решта). Вміст — наявні поверхні, лише обгорнуті:
- * нутрощі мапи/діалогу не переписуються.
+ * === null означає чесне «порожньо» словом. Вміст — наявні поверхні,
+ * лише обгорнуті: нутрощі мапи/діалогу/кузні не переписуються.
  */
 export interface PaneDef {
   kind: PaneKind;
@@ -29,24 +28,24 @@ export const PANE_REGISTRY: Record<PaneKind, PaneDef> = {
     kind: 'dialogue',
     title: 'Діалог',
     source: 'ядро',
-    Content: null,
+    Content: React.lazy(() => import('../../layouts/DialogueLayout')),
   },
   company: {
     kind: 'company',
     title: 'Компанія',
     source: 'агенти',
-    Content: null,
+    Content: React.lazy(() => import('../../layouts/AgentFoundryLayout')),
   },
   analytics: {
     kind: 'analytics',
     title: 'Аналітика',
     source: 'ядро',
-    Content: null,
+    Content: React.lazy(() => import('../../pages/Dashboard/AnalyticsOverview')),
   },
   settings: {
     kind: 'settings',
     title: 'Налаштування',
     source: 'цей вузол',
-    Content: null,
+    Content: React.lazy(() => import('../../components/settings/SettingsPanel')),
   },
 };

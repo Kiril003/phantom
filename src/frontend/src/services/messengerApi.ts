@@ -43,6 +43,7 @@ export interface NodeContact {
   id: string;
   peer_node_id: string;
   display_name: string;
+  peer_address: string | null;
   safety_number: string;
   safety_number_pretty: string;
   verified: boolean;
@@ -55,8 +56,16 @@ export const messengerApi = {
 
   listContacts: () => request<NodeContact[]>('GET', '/messenger/contacts'),
 
-  addContact: (display_name: string, bundle: Record<string, unknown>) =>
-    request<NodeContact>('POST', '/messenger/contacts', { display_name, bundle }),
+  addContact: (
+    display_name: string,
+    bundle: Record<string, unknown>,
+    peer_address?: string | null,
+  ) =>
+    request<NodeContact>('POST', '/messenger/contacts', {
+      display_name,
+      bundle,
+      peer_address: peer_address || null,
+    }),
 
   verifyContact: (id: string) =>
     request<NodeContact>('POST', `/messenger/contacts/${id}/verify`),

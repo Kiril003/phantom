@@ -14,6 +14,7 @@ export const IdentityPanel: React.FC = () => {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
   const [bundleText, setBundleText] = useState('');
+  const [address, setAddress] = useState('');
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
@@ -39,11 +40,16 @@ export const IdentityPanel: React.FC = () => {
     setError(null);
     try {
       const parsed = JSON.parse(bundleText);
-      const contact = await messengerApi.addContact(name.trim() || 'Без імені', parsed);
+      const contact = await messengerApi.addContact(
+        name.trim() || 'Без імені',
+        parsed,
+        address.trim(),
+      );
       setContacts((prev) => (prev.some((c) => c.id === contact.id) ? prev : [...prev, contact]));
       setAdding(false);
       setName('');
       setBundleText('');
+      setAddress('');
     } catch (err) {
       setError(
         err instanceof SyntaxError
@@ -105,6 +111,12 @@ export const IdentityPanel: React.FC = () => {
               placeholder="Імʼя"
               className="w-full px-2.5 py-1.5 text-[12px] rounded-xl border border-[#E6DFD3] bg-white"
             />
+            <input
+              value={address}
+              onChange={(e) => setAddress(e.target.value)}
+              placeholder="Адреса вузла, якщо відома (напр. 192.168.1.5:8000)"
+              className="w-full px-2.5 py-1.5 text-[12px] rounded-xl border border-[#E6DFD3] bg-white"
+            />
             <textarea
               value={bundleText}
               onChange={(e) => setBundleText(e.target.value)}
@@ -149,6 +161,11 @@ export const IdentityPanel: React.FC = () => {
             <code className="block text-[10.5px] font-mono text-[#5F6A60] leading-relaxed">
               {c.safety_number_pretty}
             </code>
+            <span className="text-[10px] text-[#7A6A55] block">
+              {c.peer_address
+                ? `Пряма адреса: ${c.peer_address}`
+                : 'Прямої адреси немає — повідомлення чекатимуть на ретранслятор.'}
+            </span>
             {!c.verified && (
               <>
                 <span className="text-[10px] text-[#7A6A55] block leading-relaxed">

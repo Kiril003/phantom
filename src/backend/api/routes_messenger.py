@@ -386,7 +386,12 @@ async def append_message(
             contact = await session.get(MessengerContact, conversation.contact_id)
             address = contact.peer_address if contact else None
             delivered = (
-                await deliver_direct(address, prepared.peer_node_id, prepared.frame)
+                await deliver_direct(
+                    address,
+                    prepared.peer_node_id,
+                    prepared.frame,
+                    from_node_id=_keys().node_id,
+                )
                 if address
                 else False
             )
@@ -551,7 +556,8 @@ async def verify_contact(
 
 class InboundFrame(BaseModel):
     frame: str
-    peer_node_id: Optional[str] = None
+    #: node_id того, ХТО пише. Приймальня шукає за ним сесію.
+    from_node_id: Optional[str] = None
 
 
 @router.post("/inbox", response_model=MessageOut)
@@ -576,7 +582,7 @@ async def receive_frame(
         raise HTTPException(status_code=400, detail="кадр не є шістнадцятковим") from exc
 
     try:
-        row = await accept_frame(session, _keys(), owner, raw, payload.peer_node_id)
+        row = await accept_frame(session, _keys(), owner, raw, payload.from_node_id)
     except InboxError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 

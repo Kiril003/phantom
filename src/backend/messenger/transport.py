@@ -37,11 +37,18 @@ async def deliver_direct(
     peer_node_id: str,
     frame: bytes,
     *,
+    from_node_id: str,
     client: Optional[httpx.AsyncClient] = None,
 ) -> bool:
-    """Кладе кадр у приймальню вузла за прямою адресою."""
+    """Кладе кадр у приймальню вузла за прямою адресою.
+
+    У листі їде НАШ node_id, а не адресатів: приймальня шукає сесію за тим,
+    хто пише. Спершу тут летів peer_node_id — і вузол-адресат шукав контакт
+    за власним ідентифікатором, не знаходив і відмовляв. Видно це стало лише
+    на двох справді запущених вузлах.
+    """
     url = inbox_url(peer_address)
-    payload = {"frame": frame.hex(), "peer_node_id": peer_node_id}
+    payload = {"frame": frame.hex(), "from_node_id": from_node_id}
     own = client is None
     http = client or httpx.AsyncClient(timeout=_TIMEOUT_S)
     try:

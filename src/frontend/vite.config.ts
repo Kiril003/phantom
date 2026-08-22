@@ -32,6 +32,19 @@ const devLogin = {
   },
 };
 
+// Ф0: на одній машині живе кілька бекендів (спільне дерево — 8000, worktree
+// pc-universe — 8010). Захардкожений 8000 означав, що фронтенд worktree
+// МОВЧКИ говорить із чужим бекендом і виглядає живим — найгірший клас
+// дефекту. Порт бекенда береться з env; дефолт 8000 лишаємо, щоб не зламати
+// запуски зі спільного дерева. Наші launch-записи передають 8010 явно.
+const backendPort = Number(process.env.PHANTOM_BACKEND_PORT ?? 8000);
+const backendHttp = `http://127.0.0.1:${backendPort}`;
+const backendWs = `ws://127.0.0.1:${backendPort}`;
+// Хост dev-сервера: дефолт історично 0.0.0.0 (телефонні перевірки зі
+// спільного дерева); стенд worktree ставить 127.0.0.1 — бо разом із
+// dev-сервером на LAN виїжджає і /__dev/login з PIN'ом.
+const devHost = process.env.PHANTOM_DEV_HOST ?? '0.0.0.0';
+
 export default defineConfig({
   plugins: [devLogin, react()],
   resolve: {
@@ -51,32 +64,32 @@ export default defineConfig({
     ],
   },
   server: {
-    host: '0.0.0.0',
+    host: devHost,
     port: 5173,
     proxy: {
       '/api': {
-        target: 'http://127.0.0.1:8000',
+        target: backendHttp,
         changeOrigin: true,
       },
       '/ws': {
-        target: 'ws://127.0.0.1:8000',
+        target: backendWs,
         ws: true,
         changeOrigin: true,
       },
       '/health': {
-        target: 'http://127.0.0.1:8000',
+        target: backendHttp,
         changeOrigin: true,
       },
       '/docs': {
-        target: 'http://127.0.0.1:8000',
+        target: backendHttp,
         changeOrigin: true,
       },
       '/redoc': {
-        target: 'http://127.0.0.1:8000',
+        target: backendHttp,
         changeOrigin: true,
       },
       '/openapi.json': {
-        target: 'http://127.0.0.1:8000',
+        target: backendHttp,
         changeOrigin: true,
       },
     },

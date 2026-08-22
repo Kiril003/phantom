@@ -53,15 +53,42 @@ body {
   background: var(--accent);
 }
 
-/* Touch target minimum */
-button,
-[role='button'],
-a,
-input,
-select,
-textarea {
-  min-width: var(--touch-min);
-  min-height: var(--touch-min);
+/* Щільність — desktop-перша (Ф1, §3 майстерплану).
+ * Старе правило форсувало min 44×44 на КОЖЕН button/a/input глобально —
+ * телефонний мінімум на десктопі, головна причина рідкої сітки.
+ * Тепер мінімуми залежать від справжнього вказівника:
+ *   pointer: fine   → компактні контроли (min-height --ph-control-min=28px),
+ *                     без примусової min-width — іконка може бути іконкою;
+ *   pointer: coarse → справжні touch-пристрої зберігають 44×44 повністю. */
+@media (pointer: fine) {
+  button,
+  [role='button'],
+  input,
+  select,
+  textarea {
+    min-height: var(--ph-control-min);
+  }
+
+  /* Компактні падінги за замовчуванням для голих текстових контролів —
+   * класи компонентів (utilities) мають вищу специфічність і перемагають. */
+  input,
+  select,
+  textarea {
+    padding-block: var(--ph-control-pad-y);
+    padding-inline: var(--ph-control-pad-x);
+  }
+}
+
+@media (pointer: coarse) {
+  button,
+  [role='button'],
+  a,
+  input,
+  select,
+  textarea {
+    min-width: var(--touch-min);
+    min-height: var(--touch-min);
+  }
 }
 
 /* Consistent hover/press transitions across interactive surfaces */

@@ -17,7 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import MessengerContact, MessengerConversation, MessengerMessage
-from messenger.transport import deliver_direct
+from messenger.transport import deliver
 
 logger = logging.getLogger(__name__)
 
@@ -55,17 +55,26 @@ async def flush_queue(
         if conversation is None or conversation.contact_id is None:
             continue
         contact = await session.get(MessengerContact, conversation.contact_id)
-        if contact is None or not contact.peer_address:
-            # Адреси немає — спроба нічого не дасть, і лічильник псувати не варто.
+        if contact is None:
+            continue
+
+        from config import config
+
+        relay = (config.relay_url or "") if config.relay_enabled else ""
+        if not contact.peer_address and not relay:
+            # Ні прямої дороги, ні ретранслятора — спроба нічого не дасть,
+            # і лічильник псувати не варто.
             continue
 
         row.delivery_attempts += 1
         row.last_attempt_at = _now()
-        ok = await deliver_direct(
-            contact.peer_address,
-            contact.peer_node_id,
+        ok = await deliver(
             bytes.fromhex(row.outbound_frame),
+            peer_node_id=contact.peer_node_id,
             from_node_id=own_node_id,
+            peer_address=contact.peer_address or "",
+            relay=relay,
+            reply_address=config.messenger_public_address,
         )
         if ok:
             row.delivery_state = "sent"

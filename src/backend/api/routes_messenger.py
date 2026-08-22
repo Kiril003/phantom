@@ -39,7 +39,7 @@ from messenger.crypto.session import Session
 from messenger.guard import GuardRejected, inbox_guard
 from messenger.inbox import InboxError, accept_frame
 from messenger.outbox import OutboxError, prepare_frame
-from messenger.transport import deliver_direct
+from messenger.transport import deliver
 from node.identity import node_id
 from security.auth import get_current_user
 
@@ -420,22 +420,21 @@ async def append_message(
             out.delivery = 'queued'
         if prepared is not None:
             contact = await session.get(MessengerContact, conversation.contact_id)
-            address = contact.peer_address if contact else None
-            delivered = (
-                await deliver_direct(
-                    address,
-                    prepared.peer_node_id,
-                    prepared.frame,
-                    from_node_id=_keys().node_id,
-                    reply_address=config.messenger_public_address,
-                )
-                if address
-                else False
+            address = contact.peer_address if contact else ""
+            relay = (config.relay_url or "") if config.relay_enabled else ""
+            delivered = await deliver(
+                prepared.frame,
+                peer_node_id=prepared.peer_node_id,
+                from_node_id=_keys().node_id,
+                peer_address=address or "",
+                relay=relay,
+                reply_address=config.messenger_public_address,
             )
+            tried = bool(address or relay)
             out.delivery = 'sent' if delivered else 'queued'
             row.delivery_state = out.delivery
-            row.delivery_attempts = 1 if address else 0
-            row.last_attempt_at = _now() if address else None
+            row.delivery_attempts = 1 if tried else 0
+            row.last_attempt_at = _now() if tried else None
             # Не доїхало — кадр лишається при повідомленні, щоб повтор віз
             # той самий, а не шифрував наново і не роздвоював розмову.
             row.outbound_frame = None if delivered else prepared.frame.hex()

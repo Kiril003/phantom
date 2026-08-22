@@ -17,7 +17,7 @@ import httpx
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["deliver_direct", "inbox_url"]
+__all__ = ["deliver", "deliver_direct", "deliver_via_relay", "inbox_url", "mailbox_url"]
 
 _TIMEOUT_S = 8.0
 
@@ -68,3 +68,81 @@ async def deliver_direct(
     finally:
         if own:
             await http.aclose()
+
+
+def mailbox_url(relay: str, peer_node_id: str) -> str:
+    """Скринька адресата на ретрансляторі."""
+    raw = (relay or "").strip().rstrip("/")
+    if not raw:
+        raise ValueError("порожня адреса ретранслятора")
+    if raw.startswith("wss://"):
+        raw = "https://" + raw[len("wss://"):]
+    elif raw.startswith("ws://"):
+        raw = "http://" + raw[len("ws://"):]
+    elif not raw.startswith(("http://", "https://")):
+        raw = f"https://{raw}"
+    return f"{raw}/relay/mailbox/{peer_node_id}"
+
+
+async def deliver_via_relay(
+    relay: str,
+    peer_node_id: str,
+    frame: bytes,
+    *,
+    from_node_id: str,
+    reply_address: str = "",
+    client: Optional[httpx.AsyncClient] = None,
+) -> bool:
+    """Кладе кадр у скриньку адресата на ретрансляторі.
+
+    Тут «доставлено» означає «ретранслятор прийняв», а не «людина прочитала».
+    Ретранслятор возить непрозорі байти й не має розуміти, що в них.
+    """
+    url = mailbox_url(relay, peer_node_id)
+    payload = {"frame": frame.hex(), "from_node_id": from_node_id}
+    if reply_address:
+        payload["reply_address"] = reply_address
+    own = client is None
+    http = client or httpx.AsyncClient(timeout=_TIMEOUT_S)
+    try:
+        response = await http.post(url, json=payload)
+        if response.status_code in (200, 202):
+            return True
+        logger.info("ретранслятор не взяв лист для %s: %s", peer_node_id, response.status_code)
+        return False
+    except Exception as exc:  # noqa: BLE001
+        logger.info("до ретранслятора не достукались: %s", exc)
+        return False
+    finally:
+        if own:
+            await http.aclose()
+
+
+async def deliver(
+    frame: bytes,
+    *,
+    peer_node_id: str,
+    from_node_id: str,
+    peer_address: str = "",
+    relay: str = "",
+    reply_address: str = "",
+) -> bool:
+    """Одна дорога на вибір: спершу пряма, потім ретранслятор.
+
+    Пряма швидша й нікому не показує метаданих, тож пробуємо її першою. Але
+    вона є рідко: більшість людей за NAT або в мобільній мережі, де прямої
+    адреси просто немає. Тоді лист лягає в скриньку на ретрансляторі — він
+    возить непрозорі байти і вмісту не бачить.
+    """
+    if peer_address:
+        if await deliver_direct(
+            peer_address, peer_node_id, frame,
+            from_node_id=from_node_id, reply_address=reply_address,
+        ):
+            return True
+    if relay:
+        return await deliver_via_relay(
+            relay, peer_node_id, frame,
+            from_node_id=from_node_id, reply_address=reply_address,
+        )
+    return False

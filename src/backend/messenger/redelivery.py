@@ -17,6 +17,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import MessengerContact, MessengerConversation, MessengerMessage
+from messenger.blobs import flush_blob_queue
 from messenger.transport import deliver
 
 logger = logging.getLogger(__name__)
@@ -103,8 +104,13 @@ async def redelivery_loop(interval_s: float = 45.0) -> None:
 
             async with AsyncSessionLocal() as session:
                 delivered = await flush_queue(session, _keys().node_id)
-            if delivered:
-                logger.info("черга месенджера: довезено %d", delivered)
+                # Вкладення їдуть тією ж смугою: фото, яке не доїхало, не має
+                # чекати, поки людина згадає про нього руками.
+                blobs = await flush_blob_queue(session, _keys().node_id)
+            if delivered or blobs:
+                logger.info(
+                    "черга месенджера: довезено %d, вкладень %d", delivered, blobs
+                )
         except asyncio.CancelledError:
             raise
         except Exception as exc:  # noqa: BLE001

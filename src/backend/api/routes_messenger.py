@@ -36,6 +36,7 @@ from messenger.crypto.at_rest import AtRestError, seal, unseal
 from messenger.crypto.keys import KeyStore, PublicBundle, UntrustedBundle
 from messenger.crypto.safety import format_safety_number, safety_number
 from messenger.crypto.session import Session
+from messenger.blobs import wrap_frame
 from messenger.guard import GuardRejected, inbox_guard
 from messenger.inbox import InboxError, accept_frame
 from messenger.outbox import OutboxError, prepare_frame
@@ -539,7 +540,11 @@ async def append_message(
     # означає «дійшло до вузла», а не «дійшло до людини».
     if conversation.contact_id is not None and payload.body is not None:
         try:
-            prepared = await prepare_frame(session, _keys(), conversation, payload.body)
+            # Тип везе сам кадр: інакше вузол-адресат побачив би JSON з ключем
+            # як звичайний текст і показав людині службовий рядок замість фото.
+            prepared = await prepare_frame(
+                session, _keys(), conversation, wrap_frame(payload.kind, payload.body)
+            )
         except OutboxError:
             prepared = None
             out.delivery = 'queued'
@@ -835,8 +840,11 @@ async def queue_flush(
     """Кнопка «Повторити зараз»: людина не мусить чекати фонову смугу."""
     from messenger.redelivery import flush_queue
 
+    from messenger.blobs import flush_blob_queue
+
     delivered = await flush_queue(session, _keys().node_id)
-    return {"delivered": delivered}
+    blobs = await flush_blob_queue(session, _keys().node_id)
+    return {"delivered": delivered, "blobs": blobs}
 
 
 @router.delete("/conversations/{conversation_id}")

@@ -51,6 +51,7 @@ import { TaskListEmbed } from './TaskListEmbed';
 import { MultiQuoteEmbed } from './MultiQuoteEmbed';
 import { FormattedMessageText } from './FormattedMessageText';
 import { HighlightedText } from './HighlightedText';
+import { SecureMediaBubble } from './SecureMediaBubble';
 import { ReactionPickerModal } from './ReactionPickerModal';
 import { MessageDetailsModal } from './MessageDetailsModal';
 import { DeleteMessageModal } from './DeleteMessageModal';
@@ -1658,6 +1659,17 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         <code>{msg.codeData.code}</code>
                       </pre>
                     </div>
+                  )}
+
+                  {/* 11a. ВКЛАДЕННЯ З НАСКРІЗНИМ КЛЮЧЕМ — фото і файли від людей.
+                       Демонстраційні картки нижче лишаються для показової стрічки:
+                       у них є готовий url і немає чого розшифровувати. */}
+                  {msg.media && (msg.type === 'image' || msg.type === 'file') && (
+                    <SecureMediaBubble
+                      msg={msg}
+                      isSelf={Boolean(isSelf)}
+                      onOpenLightbox={onOpenImageLightbox}
+                    />
                   )}
 
                   {/* 11. FILE MESSAGE */}

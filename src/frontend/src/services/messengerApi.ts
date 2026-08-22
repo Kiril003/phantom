@@ -2,8 +2,8 @@
  * Стрічка месенджера з вузла. Джерело правди — база вузла, а не памʼять вкладки.
  */
 
-import { request } from './api';
-import type { Chat, Message } from '../types/messenger';
+import { BASE, request } from './api';
+import type { Chat, Message, SecureMedia } from '../types/messenger';
 
 export interface NodeConversation {
   id: string;
@@ -46,6 +46,14 @@ export interface NodeMessage {
   /** local | queued | sent — див. routes_messenger.py */
   delivery?: string;
   delivery_state?: string;
+}
+
+export interface NodeBlob {
+  blob_id: string;
+  size: number;
+  sha256: string;
+  /** stored | queued | sent | missing */
+  state: string;
 }
 
 export interface NodeIdentity {
@@ -153,7 +161,59 @@ export const messengerApi = {
   ) => request<NodeMessage>('POST', `/messenger/conversations/${conversationId}/messages`, body),
 
   /** Пробуємо проштовхнути чергу зараз; повертає, скільки доставлено. */
-  flushQueue: () => request<{ delivered: number }>('POST', '/messenger/queue/flush'),
+  flushQueue: () =>
+    request<{ delivered: number; blobs?: number }>('POST', '/messenger/queue/flush'),
+
+  /**
+   * Кладе ВЖЕ зашифрований браузером файл на власний вузол.
+   *
+   * XHR, а не fetch, з однієї причини: тільки він каже, скільки байтів справді
+   * пішло. Смуга, намальована таймером, була б вигадкою — а тут її показують
+   * людині, яка чекає на своє фото.
+   */
+  uploadFile: (
+    conversationId: string,
+    ciphertext: Blob,
+    onProgress?: (percent: number) => void,
+  ) =>
+    new Promise<NodeBlob>((resolve, reject) => {
+      const form = new FormData();
+      form.append('conversation_id', conversationId);
+      form.append('blob', ciphertext, 'blob');
+
+      const xhr = new XMLHttpRequest();
+      xhr.open('POST', `${BASE}/messenger/files/upload`);
+      const token = localStorage.getItem('phantom_token');
+      if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
+      xhr.withCredentials = true;
+
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable && onProgress) {
+          onProgress(Math.round((e.loaded / e.total) * 100));
+        }
+      };
+      xhr.onload = () => {
+        if (xhr.status >= 200 && xhr.status < 300) {
+          onProgress?.(100);
+          resolve(JSON.parse(xhr.responseText) as NodeBlob);
+        } else {
+          reject(new Error(`вузол не прийняв вкладення: ${xhr.status}`));
+        }
+      };
+      xhr.onerror = () => reject(new Error('звʼязок із вузлом обірвався'));
+      xhr.send(form);
+    }),
+
+  /** Сирий шифротекст вкладення. Розшифровує браузер — див. messengerMedia.ts. */
+  fileUrl: (blobId: string) => `${BASE}/messenger/files/${blobId}`,
+
+  /** stored | queued | sent | missing — стан ПЕРЕВЕЗЕННЯ, не вмісту. */
+  blobStatus: (blobId: string) =>
+    request<NodeBlob>('GET', `/messenger/files/${blobId}/status`),
+
+  /** «Запитати ще раз»: просимо вузол відправника надіслати блоб знову. */
+  requestBlob: (blobId: string) =>
+    request<NodeBlob>('POST', `/messenger/files/${blobId}/request`),
 };
 
 const timeLabel = (iso: string): string => {
@@ -170,6 +230,19 @@ const RICH_FIELD: Record<string, string> = {
   location: 'locationData', 'multi-quote': 'multiQuoteData',
 };
 
+/** Опис вкладення з тіла кадру. Імена полів на дроті — як у backend. */
+function mediaFromBody(raw: Record<string, unknown>): SecureMedia {
+  return {
+    name: String(raw.name ?? 'вкладення'),
+    size: Number(raw.size ?? 0),
+    mime: String(raw.mime ?? 'application/octet-stream'),
+    sha256: String(raw.sha256 ?? ''),
+    blobId: String(raw.blob_id ?? ''),
+    keyHex: String(raw.key_hex ?? ''),
+    nonceHex: String(raw.nonce_hex ?? ''),
+  };
+}
+
 export function messageFromNode(row: NodeMessage, selfId: string, peerNodeId?: string): Message {
   // Показова стрічка везе складний вміст як JSON — розбираємо його тут, щоб
   // таблиці, графіки й реакції жили тим самим шляхом, що й звичайний текст.
@@ -177,8 +250,14 @@ export function messageFromNode(row: NodeMessage, selfId: string, peerNodeId?: s
   if (row.kind !== 'text' && row.body) {
     try {
       const parsed = JSON.parse(row.body);
-      const field = RICH_FIELD[row.kind];
-      rich = field && parsed && !parsed.__msg ? { [field]: parsed } : parsed.__msg || {};
+      // Вкладення з наскрізним ключем упізнається за самим описом, а не за
+      // типом: показова стрічка теж возить kind='image', але з готовим url.
+      if (parsed && parsed.blob_id && parsed.key_hex) {
+        rich = { media: mediaFromBody(parsed) };
+      } else {
+        const field = RICH_FIELD[row.kind];
+        rich = field && parsed && !parsed.__msg ? { [field]: parsed } : parsed.__msg || {};
+      }
     } catch {
       rich = {};
     }

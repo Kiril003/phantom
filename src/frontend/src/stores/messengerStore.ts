@@ -5,6 +5,7 @@ import { messengerApi, chatFromNode, messageFromNode } from '../services/messeng
 import type { NodeMessage } from '../services/messengerApi';
 import { useUIStore } from './uiStore';
 import { soundFx } from '../utils/messengerSound';
+import { MEDIA_LIMIT_BYTES, encryptForUpload } from '../services/messengerMedia';
 import type {
   Chat,
   Message,
@@ -17,6 +18,7 @@ import type {
   PersonaSphere,
   HuddleParticipant,
   MessageReplyInfo,
+  SecureMedia,
 } from '../types/messenger';
 import {
   initialChats,
@@ -100,6 +102,12 @@ export interface MessengerState {
   removeChatFromFolder: (folderId: string, chatId: string) => void;
 
   sendMessage: (text: string) => void;
+  /**
+   * Надсилає фото або файл. Шифрує в браузері, кладе шифротекст на свій вузол,
+   * а ключ відправляє в тілі повідомлення — тобто наскрізним кадром.
+   * Відсоток іде з XHR, тож смуга показує справжні байти, а не таймер.
+   */
+  sendAttachment: (file: File, onProgress?: (percent: number) => void) => Promise<void>;
   sendVoiceMessage: (duration: number, transcript: string) => void;
   addCustomMessage: (message: Message) => void;
   editMessage: (messageId: string, newText: string) => void;
@@ -548,6 +556,98 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
     },
 
     // Message sending & modification
+    sendAttachment: async (file, onProgress) => {
+      const state = get();
+      const chatId = state.activeChatId;
+      if (!chatId) return;
+
+      if (file.size > MEDIA_LIMIT_BYTES) {
+        throw new Error(`Вузол бере файли до ${Math.round(MEDIA_LIMIT_BYTES / 1024 / 1024)} МБ`);
+      }
+
+      // Шифруємо ДО завантаження: на вузол іде шифротекст, ключ лишається тут
+      // і поїде в тілі повідомлення. Вузол не бачить ані файла, ані ключа.
+      const sealed = await encryptForUpload(file);
+      const blob = await messengerApi.uploadFile(chatId, sealed.ciphertext, onProgress);
+      if (blob.sha256 !== sealed.sha256) {
+        throw new Error('вузол зберіг не те, що ми надіслали');
+      }
+
+      const kind: 'image' | 'file' = file.type.startsWith('image/') ? 'image' : 'file';
+      const media: SecureMedia = {
+        name: file.name,
+        size: file.size,
+        mime: file.type || 'application/octet-stream',
+        sha256: blob.sha256,
+        blobId: blob.blob_id,
+        keyHex: sealed.keyHex,
+        nonceHex: sealed.nonceHex,
+      };
+
+      const clientId = `c_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      const newMsg: Message = {
+        id: clientId,
+        senderId: state.currentUser.id,
+        senderName: state.currentUser.name,
+        senderAvatar: state.currentUser.avatar,
+        timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
+        type: kind,
+        media,
+        isSelf: true,
+        status: 'sending',
+      };
+
+      soundFx.playSend();
+      set((s2) => ({
+        chats: s2.chats.map((c) =>
+          c.id === chatId
+            ? {
+                ...c,
+                messages: [...c.messages, newMsg],
+                lastKind: kind,
+                lastSnippet: file.name.slice(0, 90),
+                lastAuthor: 'Я',
+                lastAt: new Date().toISOString(),
+              }
+            : c,
+        ),
+      }));
+
+      const markStatus = (status: Message['status']) =>
+        set((s2) => ({
+          chats: s2.chats.map((c) =>
+            c.id === chatId
+              ? { ...c, messages: c.messages.map((m) => (m.id === clientId ? { ...m, status } : m)) }
+              : c,
+          ),
+        }));
+
+      // На дроті імена полів такі ж, як їх читає backend і вузол-адресат.
+      const body = JSON.stringify({
+        name: media.name,
+        size: media.size,
+        mime: media.mime,
+        sha256: media.sha256,
+        blob_id: media.blobId,
+        key_hex: media.keyHex,
+        nonce_hex: media.nonceHex,
+      });
+
+      try {
+        const row = await messengerApi.appendMessage(chatId, {
+          client_id: clientId,
+          author_id: state.currentUser.id,
+          author_name: state.currentUser.name,
+          kind,
+          body,
+        });
+        markStatus(row.delivery === 'queued' ? 'queued' : 'sent');
+      } catch (err) {
+        console.warn('[messenger] вузол не прийняв вкладення:', err);
+        markStatus('failed');
+      }
+    },
+
     sendMessage: async (text) => {
       const state = get();
       const chatId = state.activeChatId;

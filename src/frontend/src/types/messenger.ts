@@ -211,6 +211,25 @@ export interface ImageData {
   caption?: string;
 }
 
+/**
+ * Вкладення, ключ до якого приїхав у тілі повідомлення.
+ *
+ * Байти лежать окремим блобом на вузлі й самі по собі нічого не варті:
+ * розшифрувати їх може лише той, хто отримав цей опис наскрізним кадром.
+ */
+export interface SecureMedia {
+  /** Імʼя, яке дала людина. Вузол його не знає — воно живе тільки тут. */
+  name: string;
+  /** Розмір ВІДКРИТОГО файла, байтів. */
+  size: number;
+  mime: string;
+  /** Відбиток ШИФРОТЕКСТУ. Звіряємо до розшифрування. */
+  sha256: string;
+  blobId: string;
+  keyHex: string;
+  nonceHex: string;
+}
+
 export interface Reaction {
   emoji: string;
   count: number;
@@ -267,6 +286,8 @@ export interface Message {
   taskListData?: TaskListData;
   multiQuoteData?: MultiQuoteData;
   fileData?: FileData;
+  /** Фото або файл із наскрізним ключем — див. SecureMedia. */
+  media?: SecureMedia;
   ephemeral?: {
     expiresAt: number;
     durationSeconds: number;

@@ -1538,3 +1538,37 @@ class MessengerContact(Base):
     verified_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, nullable=False)
     updated_at: Mapped[datetime] = mapped_column(DateTime, default=_now, nullable=False)
+
+
+class MessengerBlob(Base):
+    """Шифротекст вкладення. Вузол тримає байти, але не ключ до них.
+
+    Ключ їде в тілі повідомлення — тобто наскрізним каналом. Тож рядок тут
+    описує лише перевезення: скільки байтів, чий відбиток, доїхало чи ні.
+    Вузол-одержувач фізично не може прочитати те, що зберігає.
+    """
+
+    __tablename__ = "messenger_blobs"
+    __table_args__ = (
+        Index("ix_messenger_blobs_state", "direction", "state"),
+    )
+
+    #: 32 випадкові байти в hex. Він же імʼя файла на диску, тож перевіряється
+    #: на «лише hex» перед кожним дотиком до файлової системи.
+    blob_id: Mapped[str] = mapped_column(String(64), primary_key=True)
+    #: Для вихідного відомий одразу; для вхідного може бути порожнім, поки
+    #: блоб приїхав раніше за повідомлення з ключем.
+    conversation_id: Mapped[Optional[str]] = mapped_column(String(36), nullable=True, index=True)
+    #: out — ми надсилаємо; in — нам привезли.
+    direction: Mapped[str] = mapped_column(String(4), nullable=False)
+    #: stored — байти на диску; queued — лежать, але до співрозмовника не доїхали;
+    #: sent — вузол-адресат підтвердив прийом.
+    state: Mapped[str] = mapped_column(String(12), default="stored", nullable=False)
+    size: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    #: Відбиток ШИФРОТЕКСТУ. Відбиток відкритого файла тут був би витоком.
+    sha256: Mapped[str] = mapped_column(String(64), nullable=False)
+    #: З ким саме це перевезення. Для вхідного — єдина зачіпка, поки немає розмови.
+    peer_node_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_attempt_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, nullable=False)

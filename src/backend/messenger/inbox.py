@@ -19,6 +19,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import MessengerContact, MessengerConversation, MessengerMessage
+from messenger.blobs import unwrap_frame
 from messenger.crypto.at_rest import seal
 from messenger.crypto.keys import KeyStore
 from messenger.crypto.safety import safety_number
@@ -128,6 +129,9 @@ async def accept_frame(
     contact.updated_at = _now()
 
     conversation = await _conversation_for(session, owner_user_id, contact)
+    # Тип приїхав у самому кадрі. Старий кадр без конверта лишається текстом,
+    # тож уже зведені сесії від цього нічого не помічають.
+    kind, body = unwrap_frame(plaintext.decode())
     row = MessengerMessage(
         id=str(uuid.uuid4()),
         conversation_id=conversation.id,
@@ -135,11 +139,11 @@ async def accept_frame(
         seq=conversation.next_seq,
         author_id=contact.peer_node_id,
         author_name=contact.display_name,
-        kind="text",
+        kind=kind,
         transport="relay",
         sent_at=_now(),
     )
-    row.ciphertext = seal(keys, plaintext.decode(), aad=row.id.encode()).hex()
+    row.ciphertext = seal(keys, body, aad=row.id.encode()).hex()
     conversation.next_seq += 1
     conversation.updated_at = _now()
     session.add(row)

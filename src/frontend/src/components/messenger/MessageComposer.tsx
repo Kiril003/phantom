@@ -22,6 +22,7 @@ import {
 import { Message, ChatMember, MessageReplyInfo } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
 import { chatApi } from '../../services/api';
+import { useMessengerStore } from '../../stores/messengerStore';
 
 interface MessageComposerProps {
   onSendMessage: (text: string, scheduledTime?: string) => void;
@@ -86,6 +87,29 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   const [showStyleMenu, setShowStyleMenu] = useState(false);
   const [showFormattingBar, setShowFormattingBar] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
+  // Смуга завантаження живе тут, бо саме тут людина натиснула «+». Відсоток
+  // приходить з XHR — це справжні надіслані байти, а не анімація очікування.
+  const [upload, setUpload] = useState<{ name: string; percent: number } | null>(null);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const sendAttachment = useMessengerStore((st) => st.sendAttachment);
+
+  const handlePickedFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+    setShowAttachMenu(false);
+    setUploadError(null);
+    setUpload({ name: file.name, percent: 0 });
+    try {
+      await sendAttachment(file, (percent) => setUpload({ name: file.name, percent }));
+    } catch (err) {
+      setUploadError(err instanceof Error ? err.message : 'вкладення не надіслалось');
+    } finally {
+      setUpload(null);
+    }
+  };
   const [styleBusyId, setStyleBusyId] = useState<string | null>(null);
   const [styleError, setStyleError] = useState<string | null>(null);
   const [multiQuoteTitle, setMultiQuoteTitle] = useState('Зведена цитата домовленостей');
@@ -472,6 +496,59 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
         </div>
       ) : null}
 
+      {/* Смуга завантаження. Показуємо лише реальні відсотки з XHR і лише поки
+          вони йдуть; жодного «майже готово» після того, як байти скінчились. */}
+      {upload && (
+        <div className="mb-2 px-3 py-2 bg-[#FDF4EC] border border-[#EBC7AE] rounded-xl">
+          <div className="flex items-center justify-between gap-2 mb-1.5">
+            <span className="text-[11.5px] font-semibold text-[#21261F] truncate">
+              {upload.name}
+            </span>
+            <span className="text-[11px] font-bold text-[#A9603A] tabular-nums shrink-0">
+              {upload.percent}%
+            </span>
+          </div>
+          <div className="h-1 bg-[#F1EBDD] rounded-full overflow-hidden">
+            <div
+              className="h-full bg-[#E87A42] transition-[width] duration-150"
+              style={{ width: `${upload.percent}%` }}
+            />
+          </div>
+        </div>
+      )}
+
+      {uploadError && (
+        <div className="mb-2 px-3 py-2 bg-[#FBEBE6] border border-[#E9BFAE] rounded-xl flex items-center justify-between gap-2">
+          <span className="text-[11.5px] text-[#8C3B22]">{uploadError}</span>
+          <button
+            type="button"
+            onClick={() => setUploadError(null)}
+            className="text-[#8C3B22] hover:opacity-70 shrink-0"
+            aria-label="Сховати помилку"
+          >
+            <X className="w-3.5 h-3.5" />
+          </button>
+        </div>
+      )}
+
+      {/* Приховані поля вибору. Для «Фото» звужуємо до зображень, для «Файл»
+          не обмежуємо: людина сама знає, що надсилає. */}
+      <input
+        ref={photoInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handlePickedFile}
+        data-testid="composer-photo-input"
+      />
+      <input
+        ref={fileInputRef}
+        type="file"
+        className="hidden"
+        onChange={handlePickedFile}
+        data-testid="composer-file-input"
+      />
+
       {/* 5. Main Clean Message Composer Bar */}
       <div className="flex items-end gap-2">
           {/* Attachments Button (+). Чесне меню вкладень: пункти є, але поки
@@ -506,9 +583,26 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                   <div className="px-2 py-1 text-[11px] font-extrabold text-[#6E7568] uppercase tracking-wide border-b border-[#F1EBDD]">
                     Вкладення
                   </div>
+                  {/* Фото і Файл працюють. Голосове й Локація чесно позначені
+                      «скоро» — мертвий пункт гірший за відсутній. */}
                   {[
-                    { icon: ImageIcon, label: 'Фото' },
-                    { icon: FileIcon, label: 'Файл' },
+                    { icon: ImageIcon, label: 'Фото', pick: () => photoInputRef.current?.click() },
+                    { icon: FileIcon, label: 'Файл', pick: () => fileInputRef.current?.click() },
+                  ].map(({ icon: Icon, label, pick }) => (
+                    <button
+                      key={label}
+                      type="button"
+                      onClick={() => {
+                        soundFx.playTap();
+                        pick();
+                      }}
+                      className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl text-left text-xs text-[#21261F] hover:bg-[#F1EBDD] transition-colors"
+                    >
+                      <Icon className="w-4 h-4 shrink-0 text-[#E87A42]" strokeWidth={1.75} />
+                      <span className="flex-1 font-semibold">{label}</span>
+                    </button>
+                  ))}
+                  {[
                     { icon: Mic, label: 'Голосове' },
                     { icon: MapPin, label: 'Локація' },
                   ].map(({ icon: Icon, label }) => (

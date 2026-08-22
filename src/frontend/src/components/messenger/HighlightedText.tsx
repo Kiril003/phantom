@@ -30,8 +30,8 @@ export const HighlightedText: React.FC<HighlightedTextProps> = ({
   }
 
   const defaultHighlightClass = activeMatch
-    ? 'bg-[#E87A42] text-white font-bold px-1 py-0.5 rounded-xs shadow-xs'
-    : 'bg-[#FFD54F] text-[#1F2521] font-semibold px-1 py-0.5 rounded-xs shadow-2xs';
+    ? 'bg-[#E87A42] text-[#1E2521] font-bold px-1 py-0.5 rounded-xs shadow-xs'
+    : 'bg-[#FFD54F] text-[#1E2521] font-semibold px-1 py-0.5 rounded-xs shadow-2xs';
 
   return (
     <span className={className}>

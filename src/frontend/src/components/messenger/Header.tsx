@@ -19,6 +19,7 @@ import {
   ChevronLeft
 } from 'lucide-react';
 import { Chat, UserProfile, ActiveTransportStatus, TransportProtocol } from '../../types/messenger';
+import { Avatar } from './Avatar';
 import { soundFx } from '../../utils/messengerSound';
 
 interface HeaderProps {
@@ -71,7 +72,7 @@ export const Header: React.FC<HeaderProps> = ({
   const [showMoreMenu, setShowMoreMenu] = useState(false);
 
   return (
-    <header className="min-h-[3.75rem] pt-[var(--sat)] px-3 sm:px-6 bg-[#121A15]/95 backdrop-blur-xl border-b border-[#1F2B22] flex items-center justify-between gap-2 sm:gap-3 select-none shrink-0 z-20 shadow-sm">
+    <header className="min-h-[3.75rem] pt-[var(--sat)] px-3 sm:px-6 bg-[#FDFCF9]/95 backdrop-blur-xl border-b border-[#E6DFD3] flex items-center justify-between gap-2 sm:gap-3 select-none shrink-0 z-20 shadow-sm">
       {/* 1. Left Chat Identity & Mobile Back Button */}
       <div className="flex items-center gap-1.5 sm:gap-3 min-w-0 flex-1 py-2">
         {/* Mobile Back Button */}
@@ -81,7 +82,7 @@ export const Header: React.FC<HeaderProps> = ({
               soundFx.playTap();
               onBack();
             }}
-            className="md:hidden w-10 h-10 -ml-1.5 text-[#8EA093] hover:text-white hover:bg-[#1A251E] rounded-full transition-colors shrink-0 active:scale-90 flex items-center justify-center"
+            className="md:hidden w-10 h-10 -ml-1.5 text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F9F7F1] rounded-full transition-colors shrink-0 active:scale-90 flex items-center justify-center"
             title="Назад до списку бесід"
             aria-label="Назад"
           >
@@ -98,22 +99,18 @@ export const Header: React.FC<HeaderProps> = ({
           title="Переглянути деталі бесіди, учасників та медіа"
         >
           <div className="relative shrink-0">
-            <img
-              src={currentChat.avatar}
-              alt={currentChat.title}
-              className="w-10 h-10 rounded-2xl object-cover ring-1 ring-white/10 shadow-sm group-hover:scale-105 transition-transform"
-            />
+            <Avatar src={currentChat.avatar} name={currentChat.title} className="w-10 h-10      group-hover:scale-105 transition-transform" />
             {currentChat.isOnline && (
-              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 sm:w-3 sm:h-3 bg-[#10B981] rounded-full ring-2 ring-[#121A15]" />
+              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 sm:w-3 sm:h-3 bg-[#10B981] rounded-full ring-2 ring-[#FDFCF9]" />
             )}
           </div>
 
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-1.5 sm:gap-2">
-              <h2 className="font-extrabold text-sm sm:text-base text-white truncate group-hover:text-[#55C778] transition-colors">
+              <h2 className="font-extrabold text-sm sm:text-base text-[#1E2521] truncate group-hover:text-[#E87A42] transition-colors">
                 {currentChat.title}
               </h2>
-              <span className="hidden xs:inline-block px-2 py-0.5 bg-[#1B271F] text-[#55C778] text-[10px] font-bold rounded-md uppercase border border-[#2B3E31] shrink-0">
+              <span className="hidden xs:inline-block px-2 py-0.5 bg-[#F1EDE3] text-[#E87A42] text-[10px] font-bold rounded-md uppercase border border-[#DDD4C4] shrink-0">
                 {currentChat.circle?.toUpperCase() || 'CORE'}
               </span>
             </div>
@@ -128,12 +125,12 @@ export const Header: React.FC<HeaderProps> = ({
               </span>
             )}
             {currentChat.contactVerified === true && (
-              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-[#55C778]">
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-[#E87A42]">
                 <ShieldCheck className="w-3 h-3" />
                 Звірено
               </span>
             )}
-            <p className="text-[11px] sm:text-xs text-[#8EA093] truncate">
+            <p className="text-[11px] sm:text-xs text-[#5F6A60] truncate">
               {currentChat.topic || currentChat.customVibe || currentChat.description || ''}
             </p>
           </div>
@@ -153,18 +150,18 @@ export const Header: React.FC<HeaderProps> = ({
             }}
             className={`hidden lg:flex items-center gap-1.5 px-2.5 py-1 rounded-xl text-xs font-bold border transition-all active:scale-95 shadow-sm ${
               activeTransportStatus === 'p2p-direct'
-                ? 'bg-[#18261D] hover:bg-[#203327] text-[#55C778] border-[#294231]'
+                ? 'bg-[#EFF6F0] hover:bg-[#E4EFE6] text-[#E87A42] border-[#DDD4C4]'
                 : activeTransportStatus === 'server-ws' || activeTransportStatus === 'relay-node'
-                ? 'bg-[#152332] hover:bg-[#1C2F44] text-[#60A5FA] border-[#243E5E]'
+                ? 'bg-[#EFF3F8] hover:bg-[#E4EBF4] text-[#60A5FA] border-[#CFDCEA]'
                 : activeTransportStatus === 'connecting'
-                ? 'bg-[#2A2013] hover:bg-[#382B1A] text-[#FBBF24] border-[#4D3A1F]'
-                : 'bg-[#2A1A1A] hover:bg-[#3A2323] text-[#F87171] border-[#4D2727]'
+                ? 'bg-[#FDF6EC] hover:bg-[#F8EEDC] text-[#FBBF24] border-[#EBD9BE]'
+                : 'bg-[#FBECEC] hover:bg-[#F6DEDE] text-[#F87171] border-[#EBC9C9]'
             }`}
             title="Стан каналу — натисніть для діагностики мережі"
           >
             {activeTransportStatus === 'p2p-direct' ? (
               <>
-                <ArrowDownUp className="w-3 h-3 text-[#55C778]" />
+                <ArrowDownUp className="w-3 h-3 text-[#E87A42]" />
                 <span className="truncate max-w-[110px]">Прямий канал · DTLS</span>
               </>
             ) : activeTransportStatus === 'server-ws' ? (
@@ -200,7 +197,7 @@ export const Header: React.FC<HeaderProps> = ({
             soundFx.playChime();
             onOpenDigest();
           }}
-          className="hidden sm:flex p-2 text-[#8EA093] hover:text-white hover:bg-[#1A251E] rounded-xl transition-colors"
+          className="hidden sm:flex p-2 text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F9F7F1] rounded-xl transition-colors"
           title="Підсумок та коментарі бесіди"
         >
           <MessageSquare className="w-4 h-4" />
@@ -215,13 +212,13 @@ export const Header: React.FC<HeaderProps> = ({
           className={`p-2 rounded-xl transition-colors relative ${
             pinnedCount > 0
               ? 'text-[#F4AF25] hover:bg-[#2A2214]'
-              : 'text-[#8EA093] hover:text-white hover:bg-[#1A251E]'
+              : 'text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F9F7F1]'
           }`}
           title={pinnedCount > 0 ? `Закріплених повідомлень: ${pinnedCount}` : 'Немає закріплених'}
         >
           <Bookmark className="w-4 h-4" />
           {pinnedCount > 0 && (
-            <span className="absolute top-1 right-1 w-2 h-2 bg-[#F4AF25] rounded-full ring-2 ring-[#121A15]" />
+            <span className="absolute top-1 right-1 w-2 h-2 bg-[#F4AF25] rounded-full ring-2 ring-[#FDFCF9]" />
           )}
         </button>
 
@@ -234,7 +231,7 @@ export const Header: React.FC<HeaderProps> = ({
           className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shadow-sm active:scale-95 ${
             isHuddleActive
               ? 'bg-red-500/20 text-red-400 border border-red-500/30 animate-pulse'
-              : 'bg-[#55C778] hover:bg-[#46AF68] text-[#0C120E] shadow-[0_0_15px_rgba(85,199,120,0.25)]'
+              : 'bg-[#E87A42] hover:bg-[#C25925] text-[#F7F5EE] shadow-[0_0_15px_rgba(85,199,120,0.25)]'
           }`}
           title={isHuddleActive ? 'Залишити кімнату дзвінка' : 'Запустити студійний зв\'язок (Аудіо/Відео)'}
         >
@@ -250,8 +247,8 @@ export const Header: React.FC<HeaderProps> = ({
           }}
           className={`p-2 rounded-xl transition-colors ${
             isSearching
-              ? 'bg-[#55C778] text-[#0C120E]'
-              : 'text-[#8EA093] hover:text-white hover:bg-[#1A251E]'
+              ? 'bg-[#E87A42] text-[#F7F5EE]'
+              : 'text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F9F7F1]'
           }`}
           title="Пошук у поточній бесіді"
         >
@@ -264,7 +261,7 @@ export const Header: React.FC<HeaderProps> = ({
             soundFx.playTap();
             setShowMoreMenu(!showMoreMenu);
           }}
-          className="p-2 text-[#8EA093] hover:text-white hover:bg-[#1A251E] rounded-xl transition-colors"
+          className="p-2 text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F9F7F1] rounded-xl transition-colors"
           title="Більше дій"
         >
           <MoreVertical className="w-4 h-4" />
@@ -277,14 +274,14 @@ export const Header: React.FC<HeaderProps> = ({
               className="fixed inset-0 z-40"
               onClick={() => setShowMoreMenu(false)}
             />
-            <div className="absolute right-0 top-12 w-64 bg-[#141C16]/98 backdrop-blur-2xl border border-[#2B3C30] rounded-2xl shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-150 space-y-0.5 text-[#E4EDE7]">
+            <div className="absolute right-0 top-12 w-64 bg-[#FDFCF9]/98 backdrop-blur-2xl border border-[#DDD4C4] rounded-2xl shadow-2xl p-1.5 z-50 animate-in fade-in zoom-in-95 duration-150 space-y-0.5 text-[#1E2521]">
               
               <button
                 onClick={() => {
                   setShowMoreMenu(false);
                   onOpenDigest();
                 }}
-                className="sm:hidden w-full p-2 rounded-xl text-left text-xs font-semibold flex items-center gap-2 hover:bg-[#1E2A21] text-[#E4EDE7] transition-colors"
+                className="sm:hidden w-full p-2 rounded-xl text-left text-xs font-semibold flex items-center gap-2 hover:bg-[#F1EDE3] text-[#1E2521] transition-colors"
               >
                 <MessageSquare className="w-4 h-4 text-[#F4AF25]" />
                 <span>AI Конспект & Підсумок</span>
@@ -296,12 +293,12 @@ export const Header: React.FC<HeaderProps> = ({
                     setShowMoreMenu(false);
                     onOpenP2PNetworkModal();
                   }}
-                  className="w-full p-2 rounded-xl text-left text-xs font-semibold flex items-center gap-2 hover:bg-[#1E2A21] text-[#E4EDE7] transition-colors"
+                  className="w-full p-2 rounded-xl text-left text-xs font-semibold flex items-center gap-2 hover:bg-[#F1EDE3] text-[#1E2521] transition-colors"
                 >
-                  <Radio className="w-4 h-4 text-[#55C778]" />
+                  <Radio className="w-4 h-4 text-[#E87A42]" />
                   <div className="flex-1">
                     <span>Мережевий зв'язок</span>
-                    <span className="block text-[10px] text-[#8EA093] font-normal">Транспорт: WebRTC та вузол</span>
+                    <span className="block text-[10px] text-[#5F6A60] font-normal">Транспорт: WebRTC та вузол</span>
                   </div>
                 </button>
               )}
@@ -311,7 +308,7 @@ export const Header: React.FC<HeaderProps> = ({
                   setShowMoreMenu(false);
                   onOpenActions();
                 }}
-                className="w-full p-2 rounded-xl text-left text-xs font-semibold flex items-center gap-2 hover:bg-[#1E2A21] text-[#E4EDE7] transition-colors"
+                className="w-full p-2 rounded-xl text-left text-xs font-semibold flex items-center gap-2 hover:bg-[#F1EDE3] text-[#1E2521] transition-colors"
               >
                 <Zap className="w-4 h-4 text-[#F4AF25]" />
                 <span>Студія карток (таблиці, опитування)</span>
@@ -323,14 +320,14 @@ export const Header: React.FC<HeaderProps> = ({
                     setShowMoreMenu(false);
                     onOpenScheduledMessages();
                   }}
-                  className="w-full p-2 rounded-xl text-left text-xs font-semibold flex items-center justify-between hover:bg-[#1E2A21] text-[#E4EDE7] transition-colors"
+                  className="w-full p-2 rounded-xl text-left text-xs font-semibold flex items-center justify-between hover:bg-[#F1EDE3] text-[#1E2521] transition-colors"
                 >
                   <div className="flex items-center gap-2">
                     <Clock className="w-4 h-4 text-[#F4AF25]" />
                     <span>Відкладені повідомлення</span>
                   </div>
                   {scheduledMessagesCount > 0 && (
-                    <span className="px-1.5 py-0.2 bg-[#F4AF25] text-[#0C120E] rounded-full text-[10px] font-bold">
+                    <span className="px-1.5 py-0.2 bg-[#F4AF25] text-[#F7F5EE] rounded-full text-[10px] font-bold">
                       {scheduledMessagesCount}
                     </span>
                   )}
@@ -342,21 +339,21 @@ export const Header: React.FC<HeaderProps> = ({
                   setShowMoreMenu(false);
                   onToggleSound();
                 }}
-                className="w-full p-2 rounded-xl text-left text-xs font-semibold flex items-center gap-2 hover:bg-[#1E2A21] text-[#E4EDE7] transition-colors"
+                className="w-full p-2 rounded-xl text-left text-xs font-semibold flex items-center gap-2 hover:bg-[#F1EDE3] text-[#1E2521] transition-colors"
               >
-                {isSoundEnabled ? <Volume2 className="w-4 h-4 text-[#55C778]" /> : <VolumeX className="w-4 h-4 text-[#8EA093]" />}
+                {isSoundEnabled ? <Volume2 className="w-4 h-4 text-[#E87A42]" /> : <VolumeX className="w-4 h-4 text-[#5F6A60]" />}
                 <span>{isSoundEnabled ? 'Звук увімкнено' : 'Звук вимкнено'}</span>
               </button>
 
-              <div className="pt-1 border-t border-[#233127]">
+              <div className="pt-1 border-t border-[#F1EDE3]">
                 <button
                   onClick={() => {
                     setShowMoreMenu(false);
                     onOpenSettings();
                   }}
-                  className="w-full p-2 rounded-xl text-left text-xs font-semibold flex items-center gap-2 hover:bg-[#1E2A21] text-[#8EA093] hover:text-white transition-colors"
+                  className="w-full p-2 rounded-xl text-left text-xs font-semibold flex items-center gap-2 hover:bg-[#F1EDE3] text-[#5F6A60] hover:text-[#1E2521] transition-colors"
                 >
-                  <SlidersHorizontal className="w-4 h-4 text-[#8EA093]" />
+                  <SlidersHorizontal className="w-4 h-4 text-[#5F6A60]" />
                   <span>Налаштування месенджера</span>
                 </button>
               </div>

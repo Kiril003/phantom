@@ -102,21 +102,21 @@ export const ChatDigestModal: React.FC<ChatDigestModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150">
-      <div className="bg-[#121A15] border-t sm:border border-[#2B3C30] rounded-t-3xl sm:rounded-3xl w-full max-w-lg max-h-[92dvh] sm:max-h-[85vh] flex flex-col shadow-2xl overflow-hidden select-none animate-in slide-in-from-bottom sm:zoom-in-95 duration-150 pb-[var(--sab)] sm:pb-0 text-[#E4EDE7]">
+      <div className="bg-[#FDFCF9] border-t sm:border border-[#DDD4C4] rounded-t-3xl sm:rounded-3xl w-full max-w-lg max-h-[92dvh] sm:max-h-[85vh] flex flex-col shadow-2xl overflow-hidden select-none animate-in slide-in-from-bottom sm:zoom-in-95 duration-150 pb-[var(--sab)] sm:pb-0 text-[#1E2521]">
         {/* Mobile Pull Indicator */}
-        <div className="sm:hidden pt-2.5 pb-1 flex justify-center bg-[#141C16]">
+        <div className="sm:hidden pt-2.5 pb-1 flex justify-center bg-[#FDFCF9]">
           <div className="w-12 h-1 bg-[#28392C] rounded-full" />
         </div>
 
         {/* Header */}
-        <div className="px-4 sm:px-5 py-3.5 sm:py-4 border-b border-[#1F2B22] flex items-center justify-between bg-[#141C16] shrink-0">
+        <div className="px-4 sm:px-5 py-3.5 sm:py-4 border-b border-[#E6DFD3] flex items-center justify-between bg-[#FDFCF9] shrink-0">
           <div className="flex items-center gap-2">
-            <div className="p-1.5 bg-[#1A261D] text-[#55C778] border border-[#2B3E31] rounded-xl shrink-0">
+            <div className="p-1.5 bg-[#F9F7F1] text-[#E87A42] border border-[#DDD4C4] rounded-xl shrink-0">
               <FileText className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-extrabold text-base text-white">Конспект бесіди</h3>
-              <p className="text-xs text-[#8EA093]">Складає локальний агент PHANTOM</p>
+              <h3 className="font-extrabold text-base text-[#1E2521]">Конспект бесіди</h3>
+              <p className="text-xs text-[#5F6A60]">Складає локальний агент PHANTOM</p>
             </div>
           </div>
 
@@ -125,7 +125,7 @@ export const ChatDigestModal: React.FC<ChatDigestModalProps> = ({
               soundFx.playTap();
               onClose();
             }}
-            className="p-1.5 text-[#8EA093] hover:text-white hover:bg-[#1E2A21] rounded-xl transition-colors"
+            className="p-1.5 text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F1EDE3] rounded-xl transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -134,23 +134,23 @@ export const ChatDigestModal: React.FC<ChatDigestModalProps> = ({
         {/* Content */}
         <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
           {/* Chat Metadata Header */}
-          <div className="p-3 bg-[#141C16] border border-[#223126] rounded-2xl flex items-center gap-3 shadow-sm">
-            <img src={chatAvatar} alt={chatTitle} className="w-10 h-10 rounded-xl object-cover ring-1 ring-[#1F2B22]" />
+          <div className="p-3 bg-[#FDFCF9] border border-[#E6DFD3] rounded-2xl flex items-center gap-3 shadow-sm">
+            <img src={chatAvatar} alt={chatTitle} className="w-10 h-10 rounded-xl object-cover ring-1 ring-[#E6DFD3]" />
             <div className="min-w-0">
-              <h4 className="font-bold text-xs sm:text-sm text-white truncate">{chatTitle}</h4>
-              <p className="text-[11px] text-[#8EA093]">
+              <h4 className="font-bold text-xs sm:text-sm text-[#1E2521] truncate">{chatTitle}</h4>
+              <p className="text-[11px] text-[#5F6A60]">
                 {messageCount} повідомлень в історії · Коло «{chat.circle || 'work'}»
               </p>
             </div>
           </div>
 
           {textMessages.length === 0 ? (
-            <p className="p-3 bg-[#141C16] border border-[#223126] rounded-2xl text-xs text-[#8EA093]">
+            <p className="p-3 bg-[#FDFCF9] border border-[#E6DFD3] rounded-2xl text-xs text-[#5F6A60]">
               У цій бесіді ще немає текстових повідомлень — конспектувати нічого.
             </p>
           ) : isLoading ? (
-            <div className="p-3 bg-[#141C16] border border-[#223126] rounded-2xl text-xs text-[#8EA093] flex items-center gap-2">
-              <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#55C778]" />
+            <div className="p-3 bg-[#FDFCF9] border border-[#E6DFD3] rounded-2xl text-xs text-[#5F6A60] flex items-center gap-2">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#E87A42]" />
               <span>Читаю бесіду та складаю конспект…</span>
             </div>
           ) : error ? (
@@ -158,32 +158,32 @@ export const ChatDigestModal: React.FC<ChatDigestModalProps> = ({
               <p>{error}</p>
               <button
                 onClick={buildDigest}
-                className="px-3 py-1.5 bg-[#141C16] hover:bg-[#18231B] border border-[#223126] rounded-xl text-[11px] font-bold text-white transition-colors"
+                className="px-3 py-1.5 bg-[#FDFCF9] hover:bg-[#F9F7F1] border border-[#E6DFD3] rounded-xl text-[11px] font-bold text-[#1E2521] transition-colors"
               >
                 Спробувати ще раз
               </button>
             </div>
           ) : digest ? (
-            <div className="p-3.5 bg-[#141C16] border border-[#223126] rounded-2xl text-xs text-[#D1DFD6] leading-relaxed whitespace-pre-wrap shadow-sm">
+            <div className="p-3.5 bg-[#FDFCF9] border border-[#E6DFD3] rounded-2xl text-xs text-[#1E2521] leading-relaxed whitespace-pre-wrap shadow-sm">
               {digest}
             </div>
           ) : null}
 
           {/* Action Buttons */}
-          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#1F2B22]">
+          <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#E6DFD3]">
             <button
               onClick={handleCopy}
               disabled={!digest}
-              className="py-2.5 px-3 bg-[#141C16] hover:bg-[#18231B] border border-[#223126] rounded-xl text-xs font-bold text-white flex items-center justify-center gap-1.5 transition-colors shadow-sm disabled:opacity-40"
+              className="py-2.5 px-3 bg-[#FDFCF9] hover:bg-[#F9F7F1] border border-[#E6DFD3] rounded-xl text-xs font-bold text-[#1E2521] flex items-center justify-center gap-1.5 transition-colors shadow-sm disabled:opacity-40"
             >
-              {copied ? <Check className="w-4 h-4 text-[#55C778]" /> : <Copy className="w-4 h-4" />}
+              {copied ? <Check className="w-4 h-4 text-[#E87A42]" /> : <Copy className="w-4 h-4" />}
               <span>{copied ? 'Скопійовано!' : 'Копіювати текст'}</span>
             </button>
 
             <button
               onClick={handleSaveToNotes}
               disabled={!digest}
-              className="py-2.5 px-3 bg-[#55C778] hover:bg-[#46AF68] text-[#0C120E] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors shadow-sm disabled:opacity-40"
+              className="py-2.5 px-3 bg-[#E87A42] hover:bg-[#C25925] text-[#F7F5EE] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors shadow-sm disabled:opacity-40"
             >
               {saved ? <Check className="w-4 h-4" /> : <Bookmark className="w-4 h-4" />}
               <span>{saved ? 'Збережено в нотатки!' : 'Зберегти у вибране'}</span>

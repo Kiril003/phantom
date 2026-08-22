@@ -166,12 +166,12 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
         className="fixed inset-0 bg-black/40 backdrop-blur-xs z-40 sm:hidden animate-in fade-in duration-150"
       />
 
-      <div className="fixed inset-y-0 right-0 z-50 w-full sm:w-[440px] bg-[#121A15] border-l border-[#2B3C30] shadow-2xl flex flex-col select-none animate-in slide-in-from-right duration-200 pb-[var(--sab)] sm:pb-0 text-[#E4EDE7]">
+      <div className="fixed inset-y-0 right-0 z-50 w-full sm:w-[440px] bg-[#FDFCF9] border-l border-[#DDD4C4] shadow-2xl flex flex-col select-none animate-in slide-in-from-right duration-200 pb-[var(--sab)] sm:pb-0 text-[#1E2521]">
         {/* 1. Header Bar */}
-        <div className="px-4 py-3.5 pt-[calc(var(--sat)+0.75rem)] sm:pt-4 border-b border-[#1F2B22] flex items-center justify-between bg-[#141C16] shrink-0">
+        <div className="px-4 py-3.5 pt-[calc(var(--sat)+0.75rem)] sm:pt-4 border-b border-[#E6DFD3] flex items-center justify-between bg-[#FDFCF9] shrink-0">
           <div className="flex items-center gap-2">
-            <h3 className="font-extrabold text-sm text-white">Керування простором</h3>
-            <span className="px-2 py-0.5 bg-[#1A261D] text-[#55C778] text-[10px] font-extrabold rounded-md uppercase border border-[#2B3E31]">
+            <h3 className="font-extrabold text-sm text-[#1E2521]">Керування простором</h3>
+            <span className="px-2 py-0.5 bg-[#F9F7F1] text-[#E87A42] text-[10px] font-extrabold rounded-md uppercase border border-[#DDD4C4]">
               {chatCircle}
             </span>
           </div>
@@ -180,51 +180,51 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
               soundFx.playTap();
               onClose();
             }}
-            className="p-1.5 text-[#8EA093] hover:text-white hover:bg-[#1E2A21] rounded-xl transition-colors"
+            className="p-1.5 text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F1EDE3] rounded-xl transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
       {/* 2. Chat Overview Profile Hero */}
-      <div className="p-4 border-b border-[#1F2B22] bg-[#141C16] shrink-0 space-y-3">
+      <div className="p-4 border-b border-[#E6DFD3] bg-[#FDFCF9] shrink-0 space-y-3">
         <div className="flex items-start gap-3.5">
           <div className="relative shrink-0">
             <img
               src={chatAvatar}
               alt={chatTitle}
-              className="w-16 h-16 rounded-2xl object-cover ring-2 ring-[#1F2B22] shadow-sm"
+              className="w-16 h-16 rounded-2xl object-cover ring-2 ring-[#E6DFD3] shadow-sm"
             />
             {chat.isOnline !== undefined && (
-              <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-[#55C778] rounded-full ring-2 ring-[#141C16]" />
+              <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-[#E87A42] rounded-full ring-2 ring-[#FDFCF9]" />
             )}
           </div>
 
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2">
-              <h2 className="font-extrabold text-base text-white truncate">{chatTitle}</h2>
+              <h2 className="font-extrabold text-base text-[#1E2521] truncate">{chatTitle}</h2>
               {chat.isPublic ? (
-                <span title="Публічна група"><Globe className="w-3.5 h-3.5 text-[#55C778] shrink-0" /></span>
+                <span title="Публічна група"><Globe className="w-3.5 h-3.5 text-[#E87A42] shrink-0" /></span>
               ) : (
-                <span title="Приватна група"><Lock className="w-3.5 h-3.5 text-[#8EA093] shrink-0" /></span>
+                <span title="Приватна група"><Lock className="w-3.5 h-3.5 text-[#5F6A60] shrink-0" /></span>
               )}
             </div>
 
-            <p className="text-xs text-[#8EA093] mt-0.5">
+            <p className="text-xs text-[#5F6A60] mt-0.5">
               {chat.members ? `${members.length} учасників` : 'Особистий контакт'}
               {onlineMembersCount > 0 && (
-                <span className="text-[#55C778] font-semibold"> · {onlineMembersCount} онлайн</span>
+                <span className="text-[#E87A42] font-semibold"> · {onlineMembersCount} онлайн</span>
               )}
             </p>
 
             {chat.publicHandle && (
-              <p className="text-xs text-[#55C778] font-semibold mt-0.5">{chat.publicHandle}</p>
+              <p className="text-xs text-[#E87A42] font-semibold mt-0.5">{chat.publicHandle}</p>
             )}
           </div>
         </div>
 
         {chat.description && (
-          <p className="text-xs text-[#A4B8AB] leading-relaxed bg-[#0E1410] p-2.5 rounded-xl border border-[#1F2B22]">
+          <p className="text-xs text-[#5F6A60] leading-relaxed bg-[#F7F5EE] p-2.5 rounded-xl border border-[#E6DFD3]">
             {chat.description}
           </p>
         )}
@@ -238,11 +238,11 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
             }}
             className={`p-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all ${
               isMuted
-                ? 'bg-[#1C2920] text-[#55C778] border-[#2B3E31]'
-                : 'bg-[#121A15] hover:bg-[#18231B] text-[#8EA093] hover:text-white border-[#223126]'
+                ? 'bg-[#F9F7F1] text-[#E87A42] border-[#DDD4C4]'
+                : 'bg-[#FDFCF9] hover:bg-[#F9F7F1] text-[#5F6A60] hover:text-[#1E2521] border-[#E6DFD3]'
             }`}
           >
-            {isMuted ? <BellOff className="w-3.5 h-3.5 text-[#55C778]" /> : <Bell className="w-3.5 h-3.5" />}
+            {isMuted ? <BellOff className="w-3.5 h-3.5 text-[#E87A42]" /> : <Bell className="w-3.5 h-3.5" />}
             <span>{isMuted ? 'Без звуку' : 'Звук увімк'}</span>
           </button>
 
@@ -253,11 +253,11 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
             }}
             className={`p-2 rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 border transition-all ${
               chat.pinned
-                ? 'bg-[#1C2920] text-[#55C778] border-[#2B3E31]'
-                : 'bg-[#121A15] hover:bg-[#18231B] text-[#8EA093] hover:text-white border-[#223126]'
+                ? 'bg-[#F9F7F1] text-[#E87A42] border-[#DDD4C4]'
+                : 'bg-[#FDFCF9] hover:bg-[#F9F7F1] text-[#5F6A60] hover:text-[#1E2521] border-[#E6DFD3]'
             }`}
           >
-            <Pin className={`w-3.5 h-3.5 ${chat.pinned ? 'fill-current text-[#55C778]' : ''}`} />
+            <Pin className={`w-3.5 h-3.5 ${chat.pinned ? 'fill-current text-[#E87A42]' : ''}`} />
             <span>{chat.pinned ? 'Закріплено' : 'Закріпити'}</span>
           </button>
 
@@ -266,7 +266,7 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
               soundFx.playTap();
               onAddMember();
             }}
-            className="p-2 bg-[#55C778] hover:bg-[#46AF68] text-[#0C120E] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm transition-colors"
+            className="p-2 bg-[#E87A42] hover:bg-[#C25925] text-[#F7F5EE] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 shadow-sm transition-colors"
           >
             <UserPlus className="w-3.5 h-3.5" />
             <span>Додати</span>
@@ -275,7 +275,7 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
       </div>
 
       {/* 3. Navigation Tabs */}
-      <div className="px-3 py-1.5 bg-[#0E1410] border-b border-[#1F2B22] flex items-center gap-1 overflow-x-auto no-scrollbar shrink-0">
+      <div className="px-3 py-1.5 bg-[#F7F5EE] border-b border-[#E6DFD3] flex items-center gap-1 overflow-x-auto no-scrollbar shrink-0">
         {[
           { id: 'members', label: `Учасники (${members.length})`, icon: Users },
           ...(chat.isForum ? [{ id: 'topics', label: 'Теми & Гілки', icon: MessagesSquare }] : []),
@@ -295,8 +295,8 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
               }}
               className={`px-2.5 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap transition-all ${
                 isActive
-                  ? 'bg-[#1C2920] text-[#55C778] border border-[#2B3E31] shadow-sm'
-                  : 'bg-[#141C16] hover:bg-[#18231B] text-[#8EA093] hover:text-white border border-[#223126]'
+                  ? 'bg-[#F9F7F1] text-[#E87A42] border border-[#DDD4C4] shadow-sm'
+                  : 'bg-[#FDFCF9] hover:bg-[#F9F7F1] text-[#5F6A60] hover:text-[#1E2521] border border-[#E6DFD3]'
               }`}
             >
               <Icon className="w-3.5 h-3.5" />
@@ -313,7 +313,7 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
           <div className="space-y-3">
             {/* Member Search Bar */}
             <div className="relative">
-              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#717E75]" />
+              <Search className="w-3.5 h-3.5 absolute left-3 top-1/2 -translate-y-1/2 text-[#7A8479]" />
               <input
                 type="text"
                 placeholder="Пошук серед учасників..."
@@ -332,7 +332,7 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
                     soundFx.playTap();
                     onSelectMember(member);
                   }}
-                  className="p-2.5 bg-white hover:bg-[#FAF8F3] border border-[#DFD6C5] rounded-2xl flex items-center justify-between gap-2.5 cursor-pointer transition-colors shadow-2xs group"
+                  className="p-2.5 bg-white hover:bg-[#FDFCF9] border border-[#DFD6C5] rounded-2xl flex items-center justify-between gap-2.5 cursor-pointer transition-colors shadow-2xs group"
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
                     <div className="relative shrink-0">
@@ -348,7 +348,7 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
 
                     <div className="min-w-0">
                       <div className="flex items-center gap-1.5">
-                        <span className="font-extrabold text-xs text-[#1F2521] truncate">
+                        <span className="font-extrabold text-xs text-[#1E2521] truncate">
                           {member.name}
                         </span>
                         {member.role === 'owner' && (
@@ -362,13 +362,13 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-[#717E75] truncate">
+                      <p className="text-[11px] text-[#7A8479] truncate">
                         {member.customTitle || member.handle}
                       </p>
                     </div>
                   </div>
 
-                  <div className="flex items-center gap-1 shrink-0 text-[#8C988E] group-hover:text-[#1F2521]">
+                  <div className="flex items-center gap-1 shrink-0 text-[#8C988E] group-hover:text-[#1E2521]">
                     <ChevronRight className="w-4 h-4" />
                   </div>
                 </div>
@@ -400,16 +400,16 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
               {chat.topics.map((topic) => (
                 <div
                   key={topic.id}
-                  className="p-3 bg-white border border-[#DFD6C5] rounded-2xl flex items-center justify-between shadow-2xs hover:border-[#1F2521] cursor-pointer transition-colors"
+                  className="p-3 bg-white border border-[#DFD6C5] rounded-2xl flex items-center justify-between shadow-2xs hover:border-[#E6DFD3] cursor-pointer transition-colors"
                 >
                   <div className="flex items-center gap-3 min-w-0">
-                    <span className="text-xl p-1.5 rounded-xl bg-[#FAF8F3] border border-[#E8DFD1]">
+                    <span className="text-xl p-1.5 rounded-xl bg-[#FDFCF9] border border-[#E8DFD1]">
                       {topic.iconEmoji}
                     </span>
                     <div className="min-w-0">
-                      <h4 className="font-extrabold text-xs text-[#1F2521] truncate">{topic.title}</h4>
+                      <h4 className="font-extrabold text-xs text-[#1E2521] truncate">{topic.title}</h4>
                       {topic.lastMessageText && (
-                        <p className="text-[11px] text-[#717E75] truncate mt-0.5">{topic.lastMessageText}</p>
+                        <p className="text-[11px] text-[#7A8479] truncate mt-0.5">{topic.lastMessageText}</p>
                       )}
                     </div>
                   </div>
@@ -446,9 +446,9 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
                   return (
                     <label
                       key={item.key}
-                      className="flex items-center justify-between p-2 bg-[#FAF8F3] hover:bg-[#F4EEE2] rounded-xl cursor-pointer transition-colors"
+                      className="flex items-center justify-between p-2 bg-[#FDFCF9] hover:bg-[#F4EEE2] rounded-xl cursor-pointer transition-colors"
                     >
-                      <span className="text-xs font-semibold text-[#1F2521]">{item.label}</span>
+                      <span className="text-xs font-semibold text-[#1E2521]">{item.label}</span>
                       <input
                         type="checkbox"
                         checked={isChecked}
@@ -466,13 +466,13 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Clock className="w-4 h-4 text-[#E87A42]" />
-                  <span className="font-extrabold text-xs text-[#1F2521]">Повільний режим</span>
+                  <span className="font-extrabold text-xs text-[#1E2521]">Повільний режим</span>
                 </div>
                 <span className="text-xs font-bold text-[#8C461A]">
                   {slowMode === 0 ? 'Вимкнено' : `${slowMode}с`}
                 </span>
               </div>
-              <p className="text-[11px] text-[#717E75]">
+              <p className="text-[11px] text-[#7A8479]">
                 Обмежує частоту надсилання повідомлень учасниками
               </p>
 
@@ -483,8 +483,8 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
                     onClick={() => handleSetSlowMode(s)}
                     className={`py-1.5 rounded-xl border text-xs font-bold transition-all ${
                       slowMode === s
-                        ? 'bg-[#1F2521] text-white border-[#1F2521]'
-                        : 'bg-[#FAF8F3] border-[#DFD6C5] text-[#4A574E]'
+                        ? 'bg-[#E6DFD3] text-[#1E2521] border-[#E6DFD3]'
+                        : 'bg-[#FDFCF9] border-[#DFD6C5] text-[#4A574E]'
                     }`}
                   >
                     {s === 0 ? 'Вимк' : `${s < 60 ? `${s}с` : `${s / 60}хв`}`}
@@ -498,7 +498,7 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
                   <Flame className="w-4 h-4 text-[#8C461A]" />
-                  <span className="font-extrabold text-xs text-[#1F2521]">Автовидалення повідомлень</span>
+                  <span className="font-extrabold text-xs text-[#1E2521]">Автовидалення повідомлень</span>
                 </div>
                 <span className="text-xs font-bold text-[#8C461A]">
                   {autoDelete === 0 ? 'Вимкнено' : autoDelete === 86400 ? '24 години' : '7 днів'}
@@ -516,8 +516,8 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
                     onClick={() => handleSetAutoDelete(item.s)}
                     className={`py-1.5 rounded-xl border text-xs font-bold transition-all ${
                       autoDelete === item.s
-                        ? 'bg-[#1F2521] text-white border-[#1F2521]'
-                        : 'bg-[#FAF8F3] border-[#DFD6C5] text-[#4A574E]'
+                        ? 'bg-[#E6DFD3] text-[#1E2521] border-[#E6DFD3]'
+                        : 'bg-[#FDFCF9] border-[#DFD6C5] text-[#4A574E]'
                     }`}
                   >
                     {item.label}
@@ -538,7 +538,7 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
                   <h4 className="font-extrabold text-xs text-[#8C461A] uppercase tracking-wide">
                     Заявки на вступ ({pendingRequests.length})
                   </h4>
-                  <span className="text-[10px] text-[#717E75]">Потрібне схвалення</span>
+                  <span className="text-[10px] text-[#7A8479]">Потрібне схвалення</span>
                 </div>
 
                 <div className="space-y-2">
@@ -550,8 +550,8 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
                       <div className="flex items-start gap-2.5">
                         <img src={req.userAvatar} alt={req.userName} className="w-9 h-9 rounded-xl object-cover" />
                         <div className="min-w-0 flex-1">
-                          <h5 className="font-bold text-xs text-[#1F2521]">{req.userName}</h5>
-                          <p className="text-[11px] text-[#717E75]">{req.requestedAt}</p>
+                          <h5 className="font-bold text-xs text-[#1E2521]">{req.userName}</h5>
+                          <p className="text-[11px] text-[#7A8479]">{req.requestedAt}</p>
                           {req.userBio && (
                             <p className="text-xs text-[#4A574E] mt-1 leading-tight">{req.userBio}</p>
                           )}
@@ -561,14 +561,14 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
                       <div className="grid grid-cols-2 gap-2 pt-1 border-t border-[#F0EAE0]">
                         <button
                           onClick={() => handleRejectRequest(req.id)}
-                          className="py-1.5 bg-[#FAF8F3] hover:bg-[#F3EDE2] text-[#717E75] rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-colors"
+                          className="py-1.5 bg-[#FDFCF9] hover:bg-[#F3EDE2] text-[#7A8479] rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-colors"
                         >
                           <UserX className="w-3.5 h-3.5" />
                           <span>Відхилити</span>
                         </button>
                         <button
                           onClick={() => handleApproveRequest(req.id)}
-                          className="py-1.5 bg-[#2E6B27] hover:bg-[#25571F] text-white rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-colors"
+                          className="py-1.5 bg-[#2E6B27] hover:bg-[#25571F] text-[#1E2521] rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-colors"
                         >
                           <UserCheck className="w-3.5 h-3.5" />
                           <span>Схвалити</span>
@@ -603,7 +603,7 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
                     setInviteLinks(updated);
                     onUpdateChatSettings?.(chat.id, { inviteLinks: updated });
                   }}
-                  className="px-2 py-1 bg-[#FAF8F3] hover:bg-[#F3EDE2] border border-[#DFD6C5] rounded-lg text-xs font-bold text-[#1F2521] flex items-center gap-1 transition-colors"
+                  className="px-2 py-1 bg-[#FDFCF9] hover:bg-[#F3EDE2] border border-[#DFD6C5] rounded-lg text-xs font-bold text-[#1E2521] flex items-center gap-1 transition-colors"
                 >
                   <Plus className="w-3 h-3" />
                   <span>Створити</span>
@@ -614,11 +614,11 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
                 {inviteLinks.map((link) => (
                   <div
                     key={link.id}
-                    className="p-3 bg-[#FAF8F3] rounded-2xl border border-[#DFD6C5] flex items-center justify-between gap-2"
+                    className="p-3 bg-[#FDFCF9] rounded-2xl border border-[#DFD6C5] flex items-center justify-between gap-2"
                   >
                     <div className="min-w-0 flex-1">
                       <div className="flex items-center gap-1.5">
-                        <span className="font-bold text-xs text-[#1F2521] truncate">{link.label}</span>
+                        <span className="font-bold text-xs text-[#1E2521] truncate">{link.label}</span>
                         {link.isPrimary && (
                           <span className="px-1.5 py-0.2 bg-[#E3EFE1] text-[#2E6B27] text-[9px] font-bold rounded">
                             Головне
@@ -626,14 +626,14 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
                         )}
                       </div>
                       <p className="text-xs text-[#E87A42] font-semibold truncate mt-0.5">{link.code}</p>
-                      <p className="text-[10px] text-[#717E75] mt-0.5">
+                      <p className="text-[10px] text-[#7A8479] mt-0.5">
                         Використано: {link.usageCount} {link.usageLimit ? `/ ${link.usageLimit}` : ''}
                       </p>
                     </div>
 
                     <button
                       onClick={() => handleCopyLink(link)}
-                      className="p-2 bg-white hover:bg-[#F3EDE2] border border-[#DFD6C5] rounded-xl text-xs font-bold text-[#1F2521] flex items-center gap-1 shrink-0 transition-colors shadow-2xs"
+                      className="p-2 bg-white hover:bg-[#F3EDE2] border border-[#DFD6C5] rounded-xl text-xs font-bold text-[#1E2521] flex items-center gap-1 shrink-0 transition-colors shadow-2xs"
                     >
                       {copiedLinkId === link.id ? (
                         <Check className="w-3.5 h-3.5 text-green-600" />
@@ -653,7 +653,7 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
         {activeTab === 'media' && (
           <div className="space-y-3">
             {/* Sub-tabs */}
-            <div className="grid grid-cols-4 gap-1 p-1 bg-[#F0EAE0] rounded-xl text-xs font-bold text-[#556157]">
+            <div className="grid grid-cols-4 gap-1 p-1 bg-[#F0EAE0] rounded-xl text-xs font-bold text-[#8A9186]">
               {[
                 { id: 'photos', label: `Фото (${sharedImages.length})` },
                 { id: 'files', label: `Файли (${sharedFiles.length})` },
@@ -668,8 +668,8 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
                   }}
                   className={`py-1.5 rounded-lg text-center transition-all ${
                     activeMediaSubTab === sub.id
-                      ? 'bg-white text-[#1F2521] shadow-2xs'
-                      : 'hover:text-[#1F2521]'
+                      ? 'bg-white text-[#1E2521] shadow-2xs'
+                      : 'hover:text-[#1E2521]'
                   }`}
                 >
                   {sub.label}
@@ -712,8 +712,8 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
                         {file.extension.toUpperCase()}
                       </div>
                       <div className="min-w-0">
-                        <h5 className="font-bold text-xs text-[#1F2521] truncate">{file.name}</h5>
-                        <p className="text-[10px] text-[#717E75]">{file.size}</p>
+                        <h5 className="font-bold text-xs text-[#1E2521] truncate">{file.name}</h5>
+                        <p className="text-[10px] text-[#7A8479]">{file.size}</p>
                       </div>
                     </div>
                   </div>
@@ -730,13 +730,13 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
                     href={link.url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="p-3 bg-white rounded-2xl border border-[#DFD6C5] flex items-center justify-between shadow-2xs hover:border-[#1F2521] transition-colors group"
+                    className="p-3 bg-white rounded-2xl border border-[#DFD6C5] flex items-center justify-between shadow-2xs hover:border-[#E6DFD3] transition-colors group"
                   >
                     <div className="min-w-0 flex-1">
-                      <h5 className="font-bold text-xs text-[#1F2521] truncate">{link.title}</h5>
+                      <h5 className="font-bold text-xs text-[#1E2521] truncate">{link.title}</h5>
                       <p className="text-[11px] text-[#E87A42] truncate mt-0.5">{link.domain}</p>
                     </div>
-                    <ExternalLink className="w-4 h-4 text-[#8C988E] group-hover:text-[#1F2521] shrink-0" />
+                    <ExternalLink className="w-4 h-4 text-[#8C988E] group-hover:text-[#1E2521] shrink-0" />
                   </a>
                 ))}
               </div>
@@ -752,9 +752,9 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
                   >
                     <div className="flex items-center gap-2">
                       <FileSpreadsheet className="w-4 h-4 text-[#528A4B]" />
-                      <h5 className="font-bold text-xs text-[#1F2521] truncate">{tbl.title}</h5>
+                      <h5 className="font-bold text-xs text-[#1E2521] truncate">{tbl.title}</h5>
                     </div>
-                    <p className="text-[11px] text-[#717E75]">
+                    <p className="text-[11px] text-[#7A8479]">
                       {tbl.rows?.length || 0} рядків · {tbl.columns?.length || 0} стовпців
                     </p>
                   </div>
@@ -796,11 +796,11 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
                 <img src={log.actorAvatar} alt={log.actorName} className="w-8 h-8 rounded-xl object-cover shrink-0" />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between">
-                    <span className="font-bold text-[#1F2521]">{log.actorName}</span>
-                    <span className="text-[10px] text-[#717E75]">{log.timestamp}</span>
+                    <span className="font-bold text-[#1E2521]">{log.actorName}</span>
+                    <span className="text-[10px] text-[#7A8479]">{log.timestamp}</span>
                   </div>
                   <p className="text-[#3F4C42] font-semibold mt-0.5">{log.action}</p>
-                  <p className="text-[11px] text-[#717E75] mt-0.5 truncate">{log.detail}</p>
+                  <p className="text-[11px] text-[#7A8479] mt-0.5 truncate">{log.detail}</p>
                 </div>
               </div>
             ))}

@@ -36,10 +36,10 @@ export const FormattedMessageText: React.FC<FormattedMessageTextProps> = ({
     if (parts.length === 1) return content;
 
     const highlightStyle = isActiveMatch
-      ? 'bg-[#E87A42] text-white font-bold px-1 py-0.5 rounded-xs shadow-xs inline-block'
+      ? 'bg-[#E87A42] text-[#1E2521] font-bold px-1 py-0.5 rounded-xs shadow-xs inline-block'
       : isSelf
       ? 'bg-[#F5A623] text-black font-bold px-0.5 py-0.2 rounded-xs shadow-2xs inline-block'
-      : 'bg-[#FFE082] text-[#1F2521] font-semibold px-0.5 py-0.2 rounded-xs shadow-2xs inline-block';
+      : 'bg-[#FFE082] text-[#1E2521] font-semibold px-0.5 py-0.2 rounded-xs shadow-2xs inline-block';
 
     return parts.map((part, idx) =>
       regex.test(part) ? (
@@ -89,8 +89,8 @@ export const FormattedMessageText: React.FC<FormattedMessageTextProps> = ({
                   className={`inline-flex items-center gap-1 px-1.5 py-0.5 rounded-md cursor-pointer transition-all select-none mx-0.5 font-medium text-xs ${
                     isRevealed
                       ? isSelf
-                        ? 'bg-white/20 text-white'
-                        : 'bg-[#EFE7D8] text-[#1F2521]'
+                        ? 'bg-white/20 text-[#1E2521]'
+                        : 'bg-[#EFE7D8] text-[#1E2521]'
                       : isSelf
                       ? 'bg-white/30 text-transparent blur-[4px] hover:blur-[2px]'
                       : 'bg-[#DCD0BE] text-transparent blur-[4px] hover:blur-[2px]'

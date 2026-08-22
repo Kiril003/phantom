@@ -263,23 +263,23 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     : [];
 
   return (
-    <div className="px-3 pt-2.5 pb-[calc(var(--sab)+0.75rem)] sm:p-4 bg-[#121A15]/95 backdrop-blur-xl border-t border-[#1F2B22] shrink-0 select-none relative z-20 shadow-md text-[#E4EDE7]">
+    <div className="px-3 pt-2.5 pb-[calc(var(--sab)+0.75rem)] sm:p-4 bg-[#FDFCF9]/95 backdrop-blur-xl border-t border-[#E6DFD3] shrink-0 select-none relative z-20 shadow-md text-[#1E2521]">
       {/* Mention Autocomplete Dropdown */}
       {mentionQuery !== null && filteredMembers.length > 0 && (
-        <div className="absolute bottom-full left-4 mb-2 bg-[#141C16]/98 backdrop-blur-2xl border border-[#2B3C30] rounded-2xl shadow-2xl w-64 max-h-48 overflow-y-auto p-1.5 z-30 animate-in fade-in zoom-in-95 duration-100 text-[#E4EDE7]">
-          <p className="text-[10px] font-bold text-[#8EA093] px-2 py-1 uppercase tracking-wider">
+        <div className="absolute bottom-full left-4 mb-2 bg-[#FDFCF9]/98 backdrop-blur-2xl border border-[#DDD4C4] rounded-2xl shadow-2xl w-64 max-h-48 overflow-y-auto p-1.5 z-30 animate-in fade-in zoom-in-95 duration-100 text-[#1E2521]">
+          <p className="text-[10px] font-bold text-[#5F6A60] px-2 py-1 uppercase tracking-wider">
             Згадати учасника
           </p>
           {filteredMembers.map((member) => (
             <button
               key={member.id}
               onClick={() => handleSelectMention(member)}
-              className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-[#1E2A21] rounded-xl text-left transition-colors"
+              className="w-full flex items-center gap-2 px-2 py-1.5 hover:bg-[#F1EDE3] rounded-xl text-left transition-colors"
             >
               <img src={member.avatar} alt={member.name} className="w-6 h-6 rounded-lg object-cover ring-1 ring-white/10" />
               <div className="min-w-0 flex-1 text-xs">
-                <p className="font-bold text-white truncate">{member.name}</p>
-                <p className="text-[10px] text-[#8EA093] truncate">{member.handle}</p>
+                <p className="font-bold text-[#1E2521] truncate">{member.name}</p>
+                <p className="text-[10px] text-[#5F6A60] truncate">{member.handle}</p>
               </div>
             </button>
           ))}
@@ -288,17 +288,17 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 
       {/* 1. Multi-Quote Synthesis Banner */}
       {selectedMessagesForQuote.length > 0 && (
-        <div className="mb-2 p-2.5 bg-[#16221A] border border-[#26372B] rounded-2xl space-y-2 shadow-sm animate-in fade-in duration-150">
+        <div className="mb-2 p-2.5 bg-[#16221A] border border-[#E6DFD3] rounded-2xl space-y-2 shadow-sm animate-in fade-in duration-150">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Layers className="w-3.5 h-3.5 text-[#55C778]" />
-              <span className="font-bold text-xs text-[#55C778]">
+              <Layers className="w-3.5 h-3.5 text-[#E87A42]" />
+              <span className="font-bold text-xs text-[#E87A42]">
                 Зведена цитата з {selectedMessagesForQuote.length} повідомлень
               </span>
             </div>
             <button
               onClick={onClearSelectedQuotes}
-              className="p-1 text-[#8EA093] hover:text-white rounded-lg"
+              className="p-1 text-[#5F6A60] hover:text-[#1E2521] rounded-lg"
             >
               <X className="w-3.5 h-3.5" />
             </button>
@@ -309,13 +309,13 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
             value={multiQuoteTitle}
             onChange={(e) => setMultiQuoteTitle(e.target.value)}
             placeholder="Заголовок зведеної цитати..."
-            className="w-full px-2.5 py-1.5 bg-[#0E1410] border border-[#233127] rounded-xl text-xs font-semibold text-white placeholder-[#6B8072] focus:outline-none focus:border-[#55C778]"
+            className="w-full px-2.5 py-1.5 bg-[#F7F5EE] border border-[#F1EDE3] rounded-xl text-xs font-semibold text-[#1E2521] placeholder-[#7A8479] focus:outline-none focus:border-[#E87A42]"
           />
 
           <div className="space-y-1 max-h-20 overflow-y-auto">
             {selectedMessagesForQuote.map((m) => (
-              <div key={m.id} className="text-[11px] text-[#A4B8AB] bg-[#0E1410] p-1.5 rounded-xl border border-[#1F2B22] truncate">
-                <span className="font-bold text-[#55C778]">{m.senderName}: </span>
+              <div key={m.id} className="text-[11px] text-[#5F6A60] bg-[#F7F5EE] p-1.5 rounded-xl border border-[#E6DFD3] truncate">
+                <span className="font-bold text-[#E87A42]">{m.senderName}: </span>
                 <span>{m.text || m.type}</span>
               </div>
             ))}
@@ -325,27 +325,27 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 
       {/* 2. Replying-to Banner */}
       {replyingTo && (
-        <div className="mb-2 p-2.5 bg-[#141C16] border border-[#28392C] border-l-4 border-l-[#55C778] rounded-2xl space-y-1.5 shadow-sm animate-in fade-in duration-150">
+        <div className="mb-2 p-2.5 bg-[#FDFCF9] border border-[#28392C] border-l-4 border-l-[#E87A42] rounded-2xl space-y-1.5 shadow-sm animate-in fade-in duration-150">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 min-w-0">
-              <Reply className="w-3.5 h-3.5 text-[#55C778] shrink-0" />
+              <Reply className="w-3.5 h-3.5 text-[#E87A42] shrink-0" />
               {replyingTo.quotes && replyingTo.quotes.length > 1 ? (
-                <span className="font-bold text-[#55C778] text-[11px] truncate">
+                <span className="font-bold text-[#E87A42] text-[11px] truncate">
                   Відповідь на {replyingTo.quotes.length} повідомлень
                 </span>
               ) : replyingTo.quoteSelectedText ? (
-                <span className="font-bold text-[#55C778] text-[11px] truncate">
+                <span className="font-bold text-[#E87A42] text-[11px] truncate">
                   Цитата фрагмента від {replyingTo.senderName}
                 </span>
               ) : (
-                <span className="font-bold text-[#55C778] text-[11px] truncate">
+                <span className="font-bold text-[#E87A42] text-[11px] truncate">
                   Відповідь для {replyingTo.senderName}
                 </span>
               )}
             </div>
             <button
               onClick={onCancelReply}
-              className="p-1 text-[#8EA093] hover:text-white hover:bg-[#1E2A21] rounded-lg transition-colors shrink-0"
+              className="p-1 text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F1EDE3] rounded-lg transition-colors shrink-0"
               title="Скасувати відповідь"
             >
               <X className="w-3.5 h-3.5" />
@@ -358,19 +358,19 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
               {replyingTo.quotes.map((q) => (
                 <div
                   key={q.id}
-                  className="flex items-center justify-between gap-2 bg-[#0E1410] px-2 py-1 rounded-xl border border-[#1F2B22] text-[11px]"
+                  className="flex items-center justify-between gap-2 bg-[#F7F5EE] px-2 py-1 rounded-xl border border-[#E6DFD3] text-[11px]"
                 >
                   <div className="min-w-0 flex items-center gap-1.5 truncate">
                     {q.senderAvatar && (
                       <img src={q.senderAvatar} alt="" className="w-3.5 h-3.5 rounded-full object-cover shrink-0" />
                     )}
-                    <span className="font-bold text-[#55C778] shrink-0">{q.senderName}:</span>
-                    <span className="text-[#A4B8AB] truncate">{q.text}</span>
+                    <span className="font-bold text-[#E87A42] shrink-0">{q.senderName}:</span>
+                    <span className="text-[#5F6A60] truncate">{q.text}</span>
                   </div>
                   {onRemoveReplyQuote && (
                     <button
                       onClick={() => onRemoveReplyQuote(q.id)}
-                      className="p-0.5 text-[#6B8072] hover:text-red-400 rounded-md shrink-0"
+                      className="p-0.5 text-[#7A8479] hover:text-red-400 rounded-md shrink-0"
                       title="Прибрати цю цитату"
                     >
                       <X className="w-3 h-3" />
@@ -380,13 +380,13 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
               ))}
             </div>
           ) : replyingTo.quoteSelectedText ? (
-            <div className="bg-[#0E1410] p-2 rounded-xl border border-[#1F2B22] text-xs">
-              <p className="italic text-[#A4B8AB] leading-relaxed">
+            <div className="bg-[#F7F5EE] p-2 rounded-xl border border-[#E6DFD3] text-xs">
+              <p className="italic text-[#5F6A60] leading-relaxed">
                 «{replyingTo.quoteSelectedText}»
               </p>
             </div>
           ) : (
-            <p className="text-[#8EA093] truncate text-[11px] pl-5">
+            <p className="text-[#5F6A60] truncate text-[11px] pl-5">
               {replyingTo.text}
             </p>
           )}
@@ -398,11 +398,11 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
         <div className="mb-2 p-2.5 bg-[#1A160E] border-l-4 border-[#F4AF25] rounded-xl flex items-center justify-between gap-2 text-xs animate-in fade-in border border-[#3A2D16]">
           <div className="min-w-0">
             <p className="font-bold text-[#F4AF25] text-[11px]">Редагування повідомлення</p>
-            <p className="text-[#A4B8AB] truncate text-[11px]">{editingMessage.text}</p>
+            <p className="text-[#5F6A60] truncate text-[11px]">{editingMessage.text}</p>
           </div>
           <button
             onClick={onCancelEdit}
-            className="p-1 hover:bg-[#2A2012] rounded-lg text-[#8EA093] hover:text-white"
+            className="p-1 hover:bg-[#2A2012] rounded-lg text-[#5F6A60] hover:text-[#1E2521]"
           >
             <X className="w-4 h-4" />
           </button>
@@ -431,7 +431,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
             )}
             <button
               onClick={onClearScheduledTime}
-              className="p-1 hover:bg-[#2E2414] rounded-lg text-[#8EA093] hover:text-white"
+              className="p-1 hover:bg-[#2E2414] rounded-lg text-[#5F6A60] hover:text-[#1E2521]"
               title="Скасувати таймер"
             >
               <X className="w-3.5 h-3.5" />
@@ -439,18 +439,18 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
           </div>
         </div>
       ) : scheduledCountInCurrentChat > 0 && onOpenScheduledList ? (
-        <div className="mb-2 px-3 py-1.5 bg-[#121A15]/95 border border-[#2B3C30] rounded-xl flex items-center justify-between gap-2 text-[11px] backdrop-blur-md animate-in fade-in shadow-md">
+        <div className="mb-2 px-3 py-1.5 bg-[#FDFCF9]/95 border border-[#DDD4C4] rounded-xl flex items-center justify-between gap-2 text-[11px] backdrop-blur-md animate-in fade-in shadow-md">
           <button
             type="button"
             onClick={() => {
               soundFx.playTap();
               onOpenScheduledList();
             }}
-            className="flex items-center gap-1.5 text-[#55C778] hover:text-white font-semibold text-left transition-colors"
+            className="flex items-center gap-1.5 text-[#E87A42] hover:text-[#1E2521] font-semibold text-left transition-colors"
           >
-            <Clock className="w-3.5 h-3.5 text-[#55C778]" />
+            <Clock className="w-3.5 h-3.5 text-[#E87A42]" />
             <span>
-              У цьому чаті заплановано <strong className="text-white">{scheduledCountInCurrentChat}</strong> повідомл.
+              У цьому чаті заплановано <strong className="text-[#1E2521]">{scheduledCountInCurrentChat}</strong> повідомл.
             </span>
           </button>
           <button
@@ -459,7 +459,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
               soundFx.playTap();
               onOpenScheduledList();
             }}
-            className="text-[10px] font-bold text-[#55C778] hover:underline"
+            className="text-[10px] font-bold text-[#E87A42] hover:underline"
           >
             Переглянути →
           </button>
@@ -474,14 +474,14 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
               soundFx.playTap();
               onOpenActions();
             }}
-            className="w-10 h-10 bg-[#1A251E] hover:bg-[#223126] text-[#A4B8AB] hover:text-white border border-[#28392C] rounded-xl transition-all shrink-0 flex items-center justify-center shadow-sm active:scale-95"
+            className="w-10 h-10 bg-[#F9F7F1] hover:bg-[#E6DFD3] text-[#5F6A60] hover:text-[#1E2521] border border-[#28392C] rounded-xl transition-all shrink-0 flex items-center justify-center shadow-sm active:scale-95"
             title="Створити картку або додати вкладення (+)"
           >
-            <Plus className="w-5 h-5 text-[#55C778]" />
+            <Plus className="w-5 h-5 text-[#E87A42]" />
           </button>
 
           {/* Center Input Box */}
-          <div className="flex-1 bg-[#162019] hover:bg-[#1A251E] focus-within:bg-[#162019] border border-[#26372B] focus-within:border-[#55C778] focus-within:ring-1 focus-within:ring-[#55C778]/30 rounded-2xl px-3 py-1.5 flex items-end gap-2 transition-all shadow-inner">
+          <div className="flex-1 bg-[#FDFCF9] hover:bg-[#F9F7F1] focus-within:bg-[#FDFCF9] border border-[#E6DFD3] focus-within:border-[#E87A42] focus-within:ring-1 focus-within:ring-[#E87A42]/30 rounded-2xl px-3 py-1.5 flex items-end gap-2 transition-all shadow-inner">
             {/* Text Input */}
             <textarea
               ref={textareaRef}
@@ -496,7 +496,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                   ? 'Редагувати повідомлення...'
                   : 'Написати повідомлення (Enter — відправити, Shift+Enter — новий рядок, @ для згадки)...'
               }
-              className="flex-1 max-h-32 min-h-[28px] py-1 bg-transparent text-xs sm:text-sm text-[#F0FAF3] placeholder-[#6B8072] resize-none focus:outline-none select-text leading-relaxed"
+              className="flex-1 max-h-32 min-h-[28px] py-1 bg-transparent text-xs sm:text-sm text-[#F0FAF3] placeholder-[#7A8479] resize-none focus:outline-none select-text leading-relaxed"
             />
 
             {/* Переписування чернетки локальним агентом */}
@@ -511,7 +511,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                   setShowFormattingBar(false);
                 }}
                 className={`p-1.5 rounded-lg transition-colors shrink-0 ${
-                  showStyleMenu ? 'text-[#F4AF25] bg-[#223126]' : 'text-[#8EA093] hover:text-white'
+                  showStyleMenu ? 'text-[#F4AF25] bg-[#E6DFD3]' : 'text-[#5F6A60] hover:text-[#1E2521]'
                 }`}
                 title="Переписати чернетку локальним агентом"
               >
@@ -519,8 +519,8 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
               </button>
 
               {showStyleMenu && (
-                <div className="absolute bottom-12 right-0 bg-[#141C16]/98 backdrop-blur-2xl border border-[#2B3C30] rounded-2xl p-2 shadow-2xl w-64 z-30 space-y-1 animate-in fade-in select-none text-[#E4EDE7]">
-                  <div className="px-2 py-1 text-[11px] font-extrabold text-[#8EA093] uppercase tracking-wide border-b border-[#233127]">
+                <div className="absolute bottom-12 right-0 bg-[#FDFCF9]/98 backdrop-blur-2xl border border-[#DDD4C4] rounded-2xl p-2 shadow-2xl w-64 z-30 space-y-1 animate-in fade-in select-none text-[#1E2521]">
+                  <div className="px-2 py-1 text-[11px] font-extrabold text-[#5F6A60] uppercase tracking-wide border-b border-[#F1EDE3]">
                     Переписати локальним агентом
                   </div>
                   {stylePresets.map((s) => (
@@ -529,16 +529,16 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                       type="button"
                       disabled={!text.trim() || !!styleBusyId}
                       onClick={() => applyStyle(s.id)}
-                      className="w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-[#1E2A21] text-xs flex flex-col transition-colors disabled:opacity-40 disabled:hover:bg-transparent"
+                      className="w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-[#F1EDE3] text-xs flex flex-col transition-colors disabled:opacity-40 disabled:hover:bg-transparent"
                     >
-                      <span className="font-bold text-white">{s.label}</span>
-                      <span className="text-[10px] text-[#8EA093]">
+                      <span className="font-bold text-[#1E2521]">{s.label}</span>
+                      <span className="text-[10px] text-[#5F6A60]">
                         {styleBusyId === s.id ? 'Опрацьовую…' : s.desc}
                       </span>
                     </button>
                   ))}
                   {styleError && (
-                    <div className="px-2.5 py-1.5 text-[10px] text-red-300 border-t border-[#233127]">
+                    <div className="px-2.5 py-1.5 text-[10px] text-red-300 border-t border-[#F1EDE3]">
                       {styleError}
                     </div>
                   )}
@@ -557,7 +557,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                   setShowEmojiPicker(false);
                 }}
                 className={`p-1.5 rounded-lg transition-colors shrink-0 ${
-                  showFormattingBar ? 'text-[#55C778] bg-[#223126]' : 'text-[#8EA093] hover:text-white'
+                  showFormattingBar ? 'text-[#E87A42] bg-[#E6DFD3]' : 'text-[#5F6A60] hover:text-[#1E2521]'
                 }`}
                 title="Форматування тексту (Markdown)"
               >
@@ -565,11 +565,11 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
               </button>
 
               {showFormattingBar && (
-                <div className="absolute bottom-12 right-0 bg-[#141C16]/98 backdrop-blur-2xl border border-[#2B3C30] rounded-2xl p-1.5 shadow-2xl flex items-center gap-1 z-30 animate-in fade-in select-none text-[#E4EDE7]">
+                <div className="absolute bottom-12 right-0 bg-[#FDFCF9]/98 backdrop-blur-2xl border border-[#DDD4C4] rounded-2xl p-1.5 shadow-2xl flex items-center gap-1 z-30 animate-in fade-in select-none text-[#1E2521]">
                   <button
                     type="button"
                     onClick={() => insertFormatting('**')}
-                    className="p-1.5 hover:bg-[#1E2A21] rounded-lg text-xs font-bold"
+                    className="p-1.5 hover:bg-[#F1EDE3] rounded-lg text-xs font-bold"
                     title="Жирний (**текст**)"
                   >
                     <Bold className="w-3.5 h-3.5" />
@@ -577,7 +577,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                   <button
                     type="button"
                     onClick={() => insertFormatting('*')}
-                    className="p-1.5 hover:bg-[#1E2A21] rounded-lg text-xs font-bold"
+                    className="p-1.5 hover:bg-[#F1EDE3] rounded-lg text-xs font-bold"
                     title="Курсив (*текст*)"
                   >
                     <Italic className="w-3.5 h-3.5" />
@@ -585,7 +585,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                   <button
                     type="button"
                     onClick={() => insertFormatting('`')}
-                    className="p-1.5 hover:bg-[#1E2A21] rounded-lg text-xs font-bold"
+                    className="p-1.5 hover:bg-[#F1EDE3] rounded-lg text-xs font-bold"
                     title="Код (`код`)"
                   >
                     <Code className="w-3.5 h-3.5" />
@@ -603,14 +603,14 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                   setShowStyleMenu(false);
                   setShowFormattingBar(false);
                 }}
-                className="p-1.5 text-[#8EA093] hover:text-white rounded-lg transition-colors shrink-0"
+                className="p-1.5 text-[#5F6A60] hover:text-[#1E2521] rounded-lg transition-colors shrink-0"
                 title="Емодзі"
               >
                 <Smile className="w-4.5 h-4.5" />
               </button>
 
               {showEmojiPicker && (
-                <div className="absolute bottom-12 right-0 bg-[#141C16]/98 backdrop-blur-2xl border border-[#2B3C30] rounded-2xl p-2.5 shadow-2xl grid grid-cols-5 gap-1.5 w-56 z-30 animate-in fade-in">
+                <div className="absolute bottom-12 right-0 bg-[#FDFCF9]/98 backdrop-blur-2xl border border-[#DDD4C4] rounded-2xl p-2.5 shadow-2xl grid grid-cols-5 gap-1.5 w-56 z-30 animate-in fade-in">
                   {emojiList.map((e) => (
                     <button
                       key={e}
@@ -642,7 +642,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                 setMentionCursorPos(newText.length);
                 textareaRef.current?.focus();
               }}
-              className="p-1.5 text-[#8EA093] hover:text-white rounded-lg transition-colors shrink-0 pb-1"
+              className="p-1.5 text-[#5F6A60] hover:text-[#1E2521] rounded-lg transition-colors shrink-0 pb-1"
               title="Згадати учасника (@)"
             >
               <AtSign className="w-4.5 h-4.5" />
@@ -655,8 +655,8 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
             disabled={!canSend}
             className={`w-10 h-10 rounded-xl transition-transform shrink-0 flex items-center justify-center shadow-md ${
               canSend
-                ? 'bg-[#55C778] hover:bg-[#46AF68] text-[#0C120E] font-bold active:scale-95'
-                : 'bg-[#1A251E] text-[#4A5A4E] border border-[#28392C] cursor-not-allowed'
+                ? 'bg-[#E87A42] hover:bg-[#C25925] text-[#F7F5EE] font-bold active:scale-95'
+                : 'bg-[#F9F7F1] text-[#4A5A4E] border border-[#28392C] cursor-not-allowed'
             }`}
             title="Надіслати повідомлення"
           >

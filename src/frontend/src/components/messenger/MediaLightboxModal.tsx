@@ -14,7 +14,7 @@ export const MediaLightboxModal: React.FC<MediaLightboxModalProps> = ({
   isOpen,
   onClose,
   mediaUrl,
-  mediaTitle = 'Медіафайл Aura',
+  mediaTitle = 'Медіафайл',
   mediaDate,
 }) => {
   if (!isOpen || !mediaUrl) return null;
@@ -22,10 +22,10 @@ export const MediaLightboxModal: React.FC<MediaLightboxModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col justify-between p-4 select-none animate-in fade-in duration-200">
       {/* Top Bar */}
-      <div className="flex items-center justify-between text-white/80 z-10 px-2 py-1">
+      <div className="flex items-center justify-between text-[#1E2521]/80 z-10 px-2 py-1">
         <div>
-          <h3 className="font-bold text-sm text-white">{mediaTitle}</h3>
-          {mediaDate && <p className="text-xs text-white/50">{mediaDate}</p>}
+          <h3 className="font-bold text-sm text-[#1E2521]">{mediaTitle}</h3>
+          {mediaDate && <p className="text-xs text-[#1E2521]/50">{mediaDate}</p>}
         </div>
 
         <div className="flex items-center gap-2">
@@ -38,7 +38,7 @@ export const MediaLightboxModal: React.FC<MediaLightboxModalProps> = ({
               a.target = '_blank';
               a.click();
             }}
-            className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-colors"
+            className="p-2 bg-white/10 hover:bg-white/20 text-[#1E2521] rounded-xl transition-colors"
             title="Завантажити оригінал"
           >
             <Download className="w-4 h-4" />
@@ -49,7 +49,7 @@ export const MediaLightboxModal: React.FC<MediaLightboxModalProps> = ({
               soundFx.playTap();
               onClose();
             }}
-            className="p-2 bg-white/10 hover:bg-white/20 text-white rounded-xl transition-colors"
+            className="p-2 bg-white/10 hover:bg-white/20 text-[#1E2521] rounded-xl transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -66,8 +66,8 @@ export const MediaLightboxModal: React.FC<MediaLightboxModalProps> = ({
       </div>
 
       {/* Bottom info bar */}
-      <div className="text-center text-xs text-white/50 py-2">
-        Aura High-Resolution Media Viewer
+      <div className="text-center text-xs text-[#1E2521]/50 py-2">
+        Перегляд медіа
       </div>
     </div>
   );

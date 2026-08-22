@@ -138,7 +138,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
   );
 
   // File state
-  const [fileName, setFileName] = useState('Aura_Product_Roadmap_2026.pdf');
+  const [fileName, setFileName] = useState('Документ.pdf');
   const [fileSize, setFileSize] = useState('3.4 МБ');
 
   // Intelligent Context Extraction on Open
@@ -321,7 +321,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
         title: chartTitle,
         type: chartType,
         data: points,
-        keys: [{ key: 'value', label: chartSeriesLabel.trim() || 'Значення', color: '#55C778' }],
+        keys: [{ key: 'value', label: chartSeriesLabel.trim() || 'Значення', color: '#E87A42' }],
       },
     });
     onClose();
@@ -454,23 +454,23 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-150">
-      <div className="bg-[#121A15] border-t sm:border border-[#2B3C30] rounded-t-3xl sm:rounded-3xl w-full max-w-2xl max-h-[92dvh] sm:max-h-[90vh] flex flex-col shadow-2xl overflow-hidden select-none animate-in slide-in-from-bottom sm:zoom-in-95 duration-150 pb-[var(--sab)] sm:pb-0 text-[#E4EDE7]">
+      <div className="bg-[#FDFCF9] border-t sm:border border-[#DDD4C4] rounded-t-3xl sm:rounded-3xl w-full max-w-2xl max-h-[92dvh] sm:max-h-[90vh] flex flex-col shadow-2xl overflow-hidden select-none animate-in slide-in-from-bottom sm:zoom-in-95 duration-150 pb-[var(--sab)] sm:pb-0 text-[#1E2521]">
         {/* Mobile Pull Indicator */}
-        <div className="sm:hidden pt-2.5 pb-1 flex justify-center bg-[#141C16]">
+        <div className="sm:hidden pt-2.5 pb-1 flex justify-center bg-[#FDFCF9]">
           <div className="w-12 h-1 bg-[#28392C] rounded-full" />
         </div>
 
         {/* Modal Header */}
-        <div className="px-4 sm:px-5 py-3.5 sm:py-4 border-b border-[#1F2B22] flex items-center justify-between bg-[#141C16]">
+        <div className="px-4 sm:px-5 py-3.5 sm:py-4 border-b border-[#E6DFD3] flex items-center justify-between bg-[#FDFCF9]">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-2xl bg-[#1A261D] text-[#55C778] border border-[#2B3E31] flex items-center justify-center font-bold text-sm sm:text-base shadow-sm">
+            <div className="w-8 h-8 sm:w-9 sm:h-9 rounded-2xl bg-[#F9F7F1] text-[#E87A42] border border-[#DDD4C4] flex items-center justify-center font-bold text-sm sm:text-base shadow-sm">
               ⚡
             </div>
             <div>
-              <h3 className="font-extrabold text-sm sm:text-base text-white flex items-center gap-2">
+              <h3 className="font-extrabold text-sm sm:text-base text-[#1E2521] flex items-center gap-2">
                 ActionHub · Інтерактивні картки
               </h3>
-              <p className="text-[11px] sm:text-xs text-[#8EA093]">
+              <p className="text-[11px] sm:text-xs text-[#5F6A60]">
                 Створюйте події в календарі, таблиці, графіки, чеки та опитування
               </p>
             </div>
@@ -481,14 +481,14 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
               soundFx.playTap();
               onClose();
             }}
-            className="p-1.5 text-[#8EA093] hover:text-white hover:bg-[#1E2A21] rounded-xl transition-colors"
+            className="p-1.5 text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F1EDE3] rounded-xl transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Action Type Selector Tabs */}
-        <div className="px-4 py-2 bg-[#0E1410] border-b border-[#1F2B22] flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+        <div className="px-4 py-2 bg-[#F7F5EE] border-b border-[#E6DFD3] flex items-center gap-1.5 overflow-x-auto no-scrollbar">
           {[
             { id: 'calendar', label: 'Calendar Sync 📅', icon: Calendar, highlight: true },
             { id: 'table', label: 'Таблиця', icon: FileSpreadsheet },
@@ -511,8 +511,8 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
                 }}
                 className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap transition-all ${
                   isActive
-                    ? 'bg-[#1C2920] text-[#55C778] border border-[#2B3E31] shadow-sm'
-                    : 'bg-[#141C16] hover:bg-[#18231B] text-[#8EA093] hover:text-white border border-[#223126]'
+                    ? 'bg-[#F9F7F1] text-[#E87A42] border border-[#DDD4C4] shadow-sm'
+                    : 'bg-[#FDFCF9] hover:bg-[#F9F7F1] text-[#5F6A60] hover:text-[#1E2521] border border-[#E6DFD3]'
                 }`}
               >
                 <Icon className="w-3.5 h-3.5" />
@@ -529,15 +529,15 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
             <div className="space-y-4">
               {/* Context Extraction Banner */}
               {extractedSourceSnippet && (
-                <div className="p-3 bg-[#141C16] border border-[#223126] rounded-2xl flex items-start gap-2.5">
-                  <div className="p-1.5 bg-[#1A261D] text-[#55C778] border border-[#2B3E31] rounded-xl shrink-0">
+                <div className="p-3 bg-[#FDFCF9] border border-[#E6DFD3] rounded-2xl flex items-start gap-2.5">
+                  <div className="p-1.5 bg-[#F9F7F1] text-[#E87A42] border border-[#DDD4C4] rounded-xl shrink-0">
                     <Sparkles className="w-4 h-4" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <span className="font-extrabold text-xs text-white">
+                    <span className="font-extrabold text-xs text-[#1E2521]">
                       Дату й час підставлено з повідомлення
                     </span>
-                    <p className="text-[11px] text-[#8EA093] truncate mt-0.5">
+                    <p className="text-[11px] text-[#5F6A60] truncate mt-0.5">
                       «{extractedSourceSnippet}»
                     </p>
                   </div>
@@ -546,7 +546,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
 
               {/* Title & Quick Presets */}
               <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-[#8EA093]">
+                <label className="block text-xs font-bold text-[#5F6A60]">
                   Тема / Назва події
                 </label>
                 <input
@@ -554,7 +554,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
                   value={eventTitle}
                   onChange={(e) => setEventTitle(e.target.value)}
                   placeholder="наприклад, Sprint Review, Кавовий синк..."
-                  className="w-full px-3.5 py-2.5 bg-[#0E1410] border border-[#1F2B22] rounded-2xl text-xs font-bold text-white focus:outline-none focus:border-[#55C778] shadow-sm"
+                  className="w-full px-3.5 py-2.5 bg-[#F7F5EE] border border-[#E6DFD3] rounded-2xl text-xs font-bold text-[#1E2521] focus:outline-none focus:border-[#E87A42] shadow-sm"
                 />
 
                 {/* Preset Chips */}
@@ -572,7 +572,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
                         soundFx.playTap();
                         setEventTitle(preset);
                       }}
-                      className="px-2.5 py-1 bg-[#141C16] hover:bg-[#18231B] border border-[#223126] rounded-xl text-[11px] text-[#A4B8AB] hover:text-white whitespace-nowrap transition-colors"
+                      className="px-2.5 py-1 bg-[#FDFCF9] hover:bg-[#F9F7F1] border border-[#E6DFD3] rounded-xl text-[11px] text-[#5F6A60] hover:text-[#1E2521] whitespace-nowrap transition-colors"
                     >
                       {preset}
                     </button>
@@ -583,48 +583,48 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
               {/* Date & Time Grid */}
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-1">
-                  <label className="block text-xs font-bold text-[#8EA093] flex items-center gap-1">
-                    <Calendar className="w-3 h-3 text-[#55C778]" />
+                  <label className="block text-xs font-bold text-[#5F6A60] flex items-center gap-1">
+                    <Calendar className="w-3 h-3 text-[#E87A42]" />
                     Дата
                   </label>
                   <input
                     type="date"
                     value={eventDate}
                     onChange={(e) => setEventDate(e.target.value)}
-                    className="w-full px-3 py-2 bg-[#0E1410] border border-[#1F2B22] rounded-xl text-xs font-semibold text-white focus:outline-none focus:border-[#55C778]"
+                    className="w-full px-3 py-2 bg-[#F7F5EE] border border-[#E6DFD3] rounded-xl text-xs font-semibold text-[#1E2521] focus:outline-none focus:border-[#E87A42]"
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <label className="block text-xs font-bold text-[#8EA093] flex items-center gap-1">
-                    <Clock className="w-3 h-3 text-[#55C778]" />
+                  <label className="block text-xs font-bold text-[#5F6A60] flex items-center gap-1">
+                    <Clock className="w-3 h-3 text-[#E87A42]" />
                     Початок
                   </label>
                   <input
                     type="time"
                     value={eventTime}
                     onChange={(e) => setEventTime(e.target.value)}
-                    className="w-full px-3 py-2 bg-[#0E1410] border border-[#1F2B22] rounded-xl text-xs font-semibold text-white focus:outline-none focus:border-[#55C778]"
+                    className="w-full px-3 py-2 bg-[#F7F5EE] border border-[#E6DFD3] rounded-xl text-xs font-semibold text-[#1E2521] focus:outline-none focus:border-[#E87A42]"
                   />
                 </div>
 
                 <div className="space-y-1">
-                  <label className="block text-xs font-bold text-[#8EA093] flex items-center gap-1">
-                    <Clock className="w-3 h-3 text-[#8EA093]" />
+                  <label className="block text-xs font-bold text-[#5F6A60] flex items-center gap-1">
+                    <Clock className="w-3 h-3 text-[#5F6A60]" />
                     Завершення
                   </label>
                   <input
                     type="time"
                     value={eventEndTime}
                     onChange={(e) => setEventEndTime(e.target.value)}
-                    className="w-full px-3 py-2 bg-[#0E1410] border border-[#1F2B22] rounded-xl text-xs font-semibold text-white focus:outline-none focus:border-[#55C778]"
+                    className="w-full px-3 py-2 bg-[#F7F5EE] border border-[#E6DFD3] rounded-xl text-xs font-semibold text-[#1E2521] focus:outline-none focus:border-[#E87A42]"
                   />
                 </div>
               </div>
 
               {/* Location or Video Link */}
               <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-[#8EA093]">
+                <label className="block text-xs font-bold text-[#5F6A60]">
                   Місце зустрічі або посилання
                 </label>
                 <div className="flex gap-2">
@@ -633,14 +633,14 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
                     value={eventLocation}
                     onChange={(e) => setEventLocation(e.target.value)}
                     placeholder="Адреса або посилання на дзвінок…"
-                    className="flex-1 px-3.5 py-2 bg-[#0E1410] border border-[#1F2B22] rounded-xl text-xs font-medium text-white focus:outline-none focus:border-[#55C778]"
+                    className="flex-1 px-3.5 py-2 bg-[#F7F5EE] border border-[#E6DFD3] rounded-xl text-xs font-medium text-[#1E2521] focus:outline-none focus:border-[#E87A42]"
                   />
                 </div>
               </div>
 
               {/* Agenda / Description */}
               <div className="space-y-1">
-                <label className="block text-xs font-bold text-[#8EA093]">
+                <label className="block text-xs font-bold text-[#5F6A60]">
                   Порядок денний / Опис
                 </label>
                 <textarea
@@ -648,18 +648,18 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
                   value={eventDescription}
                   onChange={(e) => setEventDescription(e.target.value)}
                   placeholder="Короткі тези зустрічі, посилання на матеріали чи питання для обговорення..."
-                  className="w-full p-3 bg-[#0E1410] border border-[#1F2B22] rounded-xl text-xs text-white focus:outline-none focus:border-[#55C778]"
+                  className="w-full p-3 bg-[#F7F5EE] border border-[#E6DFD3] rounded-xl text-xs text-[#1E2521] focus:outline-none focus:border-[#E87A42]"
                 />
               </div>
 
               {/* Attendees selection (Pre-filled from chat members) */}
-              <div className="space-y-2 p-3 bg-[#141C16] border border-[#223126] rounded-2xl">
+              <div className="space-y-2 p-3 bg-[#FDFCF9] border border-[#E6DFD3] rounded-2xl">
                 <div className="flex items-center justify-between">
-                  <label className="text-xs font-extrabold text-white flex items-center gap-1.5">
-                    <Users className="w-3.5 h-3.5 text-[#55C778]" />
+                  <label className="text-xs font-extrabold text-[#1E2521] flex items-center gap-1.5">
+                    <Users className="w-3.5 h-3.5 text-[#E87A42]" />
                     <span>Запрошені учасники ({selectedAttendeeIds.length}/{membersList.length})</span>
                   </label>
-                  <span className="text-[10px] text-[#8EA093]">
+                  <span className="text-[10px] text-[#5F6A60]">
                     Отримують інтерактивне запрошення з кнопками RSVP
                   </span>
                 </div>
@@ -673,21 +673,21 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
                         onClick={() => toggleAttendee(member.id)}
                         className={`p-2 rounded-xl border flex items-center justify-between cursor-pointer transition-colors ${
                           isSelected
-                            ? 'bg-[#1C2920] border-[#55C778] text-white'
-                            : 'bg-[#0E1410] border-[#1F2B22] text-[#8EA093] hover:text-white hover:bg-[#141C16]'
+                            ? 'bg-[#F9F7F1] border-[#E87A42] text-[#1E2521]'
+                            : 'bg-[#F7F5EE] border-[#E6DFD3] text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#FDFCF9]'
                         }`}
                       >
                         <div className="flex items-center gap-2 min-w-0">
                           <img
                             src={member.avatar}
                             alt={member.name}
-                            className="w-6 h-6 rounded-lg object-cover ring-1 ring-[#1F2B22]"
+                            className="w-6 h-6 rounded-lg object-cover ring-1 ring-[#E6DFD3]"
                           />
                           <span className="text-xs font-bold truncate">{member.name}</span>
                         </div>
                         <div
                           className={`w-4 h-4 rounded-md flex items-center justify-center border text-[10px] ${
-                            isSelected ? 'bg-[#55C778] text-[#0C120E] border-[#55C778]' : 'border-[#223126]'
+                            isSelected ? 'bg-[#E87A42] text-[#F7F5EE] border-[#E87A42]' : 'border-[#E6DFD3]'
                           }`}
                         >
                           {isSelected && <Check className="w-3 h-3" />}
@@ -700,7 +700,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
 
               {/* Target Calendar Provider */}
               <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-[#445047]">
+                <label className="block text-xs font-bold text-[#8A9186]">
                   Формат синхронізації
                 </label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -708,7 +708,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
                     { id: 'google', label: 'Google Calendar', icon: '📅' },
                     { id: 'apple', label: 'Apple iCal (.ics)', icon: '🍎' },
                     { id: 'outlook', label: 'Outlook Calendar', icon: '💼' },
-                    { id: 'aura', label: 'Aura Team Sync', icon: '✨' },
+                    
                   ].map((target) => (
                     <button
                       key={target.id}
@@ -716,8 +716,8 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
                       onClick={() => setCalendarTarget(target.id as any)}
                       className={`p-2.5 rounded-xl text-xs font-semibold border text-center transition-all flex items-center justify-center gap-1.5 ${
                         calendarTarget === target.id
-                          ? 'bg-[#1F2521] text-white border-[#1F2521] shadow-2xs font-bold'
-                          : 'bg-white border-[#DFD6C5] text-[#556157] hover:bg-[#FAF6EE]'
+                          ? 'bg-[#E6DFD3] text-[#1E2521] border-[#E6DFD3] shadow-2xs font-bold'
+                          : 'bg-white border-[#DFD6C5] text-[#8A9186] hover:bg-[#FAF6EE]'
                       }`}
                     >
                       <span>{target.icon}</span>
@@ -730,7 +730,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
               {/* Action Submit Button */}
               <button
                 onClick={handleInsertCalendarEvent}
-                className="w-full py-3 bg-[#E87A42] hover:bg-[#D46B35] text-white rounded-2xl font-extrabold text-xs shadow-md transition-all flex items-center justify-center gap-2 mt-2"
+                className="w-full py-3 bg-[#E87A42] hover:bg-[#D46B35] text-[#1E2521] rounded-2xl font-extrabold text-xs shadow-md transition-all flex items-center justify-center gap-2 mt-2"
               >
                 <CalendarCheck className="w-4 h-4" />
                 <span>Надіслати запрошення в чат та синхронізувати</span>
@@ -742,7 +742,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
           {activeTab === 'table' && (
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-[#445047] mb-1">
+                <label className="block text-xs font-bold text-[#8A9186] mb-1">
                   Назва та призначення таблиці
                 </label>
                 <input
@@ -754,7 +754,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[#445047] mb-1.5">
+                <label className="block text-xs font-bold text-[#8A9186] mb-1.5">
                   Шаблон структури
                 </label>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
@@ -770,7 +770,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
                       className={`p-2.5 rounded-xl text-xs font-semibold border text-center transition-all ${
                         tablePreset === p.id
                           ? 'bg-[#FCE7D8] border-[#E87A42] text-[#8C461A]'
-                          : 'bg-white border-[#DFD6C5] text-[#556157] hover:bg-[#FAF6EE]'
+                          : 'bg-white border-[#DFD6C5] text-[#8A9186] hover:bg-[#FAF6EE]'
                       }`}
                     >
                       {p.label}
@@ -780,7 +780,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
               </div>
 
               <div className="p-3 bg-[#FAF4EB] border border-[#E8DFD1] rounded-2xl text-xs text-[#626F66] space-y-1">
-                <p className="font-bold text-[#1F2521]">Таблиця вставляється порожньою — з шапкою обраного шаблону:</p>
+                <p className="font-bold text-[#1E2521]">Таблиця вставляється порожньою — з шапкою обраного шаблону:</p>
                 <p>• Рядки додаються та редагуються просто в чаті</p>
                 <p>• Сортування за будь-якою колонкою</p>
                 <p>• Експорт у CSV-файл</p>
@@ -788,7 +788,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
 
               <button
                 onClick={handleInsertTable}
-                className="w-full py-2.5 bg-[#E87A42] hover:bg-[#D46B35] text-white rounded-xl font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5"
+                className="w-full py-2.5 bg-[#E87A42] hover:bg-[#D46B35] text-[#1E2521] rounded-xl font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5"
               >
                 <Check className="w-4 h-4" />
                 <span>Вставити таблицю в чат</span>
@@ -800,7 +800,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
           {activeTab === 'chart' && (
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-[#445047] mb-1">
+                <label className="block text-xs font-bold text-[#8A9186] mb-1">
                   Заголовок графіка
                 </label>
                 <input
@@ -812,7 +812,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[#445047] mb-1.5">
+                <label className="block text-xs font-bold text-[#8A9186] mb-1.5">
                   Тип візуалізації
                 </label>
                 <div className="grid grid-cols-3 gap-2">
@@ -827,7 +827,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
                       className={`p-2.5 rounded-xl text-xs font-semibold border text-center transition-all ${
                         chartType === t.id
                           ? 'bg-[#FCE7D8] border-[#E87A42] text-[#8C461A]'
-                          : 'bg-white border-[#DFD6C5] text-[#556157] hover:bg-[#FAF6EE]'
+                          : 'bg-white border-[#DFD6C5] text-[#8A9186] hover:bg-[#FAF6EE]'
                       }`}
                     >
                       {t.label}
@@ -838,7 +838,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
 
               <div className="space-y-2">
                 <div className="flex items-center justify-between">
-                  <label className="block text-xs font-bold text-[#445047]">
+                  <label className="block text-xs font-bold text-[#8A9186]">
                     Дані графіка
                   </label>
                   <input
@@ -888,7 +888,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
 
                 <button
                   onClick={() => setChartPoints([...chartPoints, { name: '', value: '' }])}
-                  className="px-3 py-1.5 bg-[#1F2521] text-white rounded-xl text-xs font-bold flex items-center gap-1"
+                  className="px-3 py-1.5 bg-[#E6DFD3] text-[#1E2521] rounded-xl text-xs font-bold flex items-center gap-1"
                 >
                   <Plus className="w-3.5 h-3.5" />
                   <span>Додати точку</span>
@@ -898,7 +898,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
               <button
                 onClick={handleInsertChart}
                 disabled={!chartPoints.some((p) => p.name.trim() && p.value.trim())}
-                className="w-full py-2.5 bg-[#E87A42] hover:bg-[#D46B35] text-white rounded-xl font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5 disabled:opacity-40"
+                className="w-full py-2.5 bg-[#E87A42] hover:bg-[#D46B35] text-[#1E2521] rounded-xl font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5 disabled:opacity-40"
               >
                 <Check className="w-4 h-4" />
                 <span>Вставити інтерактивний графік</span>
@@ -910,7 +910,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
           {activeTab === 'task-list' && (
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-[#445047] mb-1">
+                <label className="block text-xs font-bold text-[#8A9186] mb-1">
                   Заголовок списку завдань
                 </label>
                 <input
@@ -922,15 +922,15 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
               </div>
 
               <div className="space-y-2">
-                <label className="block text-xs font-bold text-[#445047]">
+                <label className="block text-xs font-bold text-[#8A9186]">
                   Пункти завдань ({taskItems.length})
                 </label>
                 <div className="space-y-1.5">
                   {taskItems.map((item, idx) => (
                     <div key={idx} className="flex items-center gap-2 p-2 bg-white border border-[#DFD6C5] rounded-xl text-xs">
                       <span className="font-bold text-[#8C461A] w-5">{idx + 1}.</span>
-                      <span className="flex-1 font-medium text-[#1F2521]">{item.title}</span>
-                      <span className="px-2 py-0.5 bg-[#F2EDE4] rounded text-[10px] font-bold text-[#556157]">{item.assignee}</span>
+                      <span className="flex-1 font-medium text-[#1E2521]">{item.title}</span>
+                      <span className="px-2 py-0.5 bg-[#F2EDE4] rounded text-[10px] font-bold text-[#8A9186]">{item.assignee}</span>
                       <button
                         onClick={() => setTaskItems(taskItems.filter((_, i) => i !== idx))}
                         className="text-gray-400 hover:text-red-600 p-1"
@@ -962,7 +962,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
                         setNewTaskInput('');
                       }
                     }}
-                    className="px-3 py-1.5 bg-[#1F2521] text-white rounded-xl text-xs font-bold flex items-center gap-1"
+                    className="px-3 py-1.5 bg-[#E6DFD3] text-[#1E2521] rounded-xl text-xs font-bold flex items-center gap-1"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Додати</span>
@@ -972,7 +972,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
 
               <button
                 onClick={handleInsertTaskList}
-                className="w-full py-2.5 bg-[#E87A42] hover:bg-[#D46B35] text-white rounded-xl font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5"
+                className="w-full py-2.5 bg-[#E87A42] hover:bg-[#D46B35] text-[#1E2521] rounded-xl font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5"
               >
                 <Check className="w-4 h-4" />
                 <span>Вставити чек-лист у чат</span>
@@ -984,7 +984,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
           {activeTab === 'poll' && (
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-[#445047] mb-1">
+                <label className="block text-xs font-bold text-[#8A9186] mb-1">
                   Питання опитування
                 </label>
                 <input
@@ -996,14 +996,14 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
               </div>
 
               <div className="space-y-2">
-                <label className="block text-xs font-bold text-[#445047]">
+                <label className="block text-xs font-bold text-[#8A9186]">
                   Варіанти відповідей
                 </label>
                 <div className="space-y-1.5">
                   {pollOptions.map((opt, idx) => (
                     <div key={idx} className="flex items-center gap-2 p-2 bg-white border border-[#DFD6C5] rounded-xl text-xs">
                       <span className="font-bold text-[#8C461A] w-5">{idx + 1}.</span>
-                      <span className="flex-1 font-medium text-[#1F2521]">{opt}</span>
+                      <span className="flex-1 font-medium text-[#1E2521]">{opt}</span>
                       <button
                         onClick={() => setPollOptions(pollOptions.filter((_, i) => i !== idx))}
                         className="text-gray-400 hover:text-red-600 p-1"
@@ -1029,7 +1029,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
                         setNewPollOption('');
                       }
                     }}
-                    className="px-3 py-1.5 bg-[#1F2521] text-white rounded-xl text-xs font-bold flex items-center gap-1"
+                    className="px-3 py-1.5 bg-[#E6DFD3] text-[#1E2521] rounded-xl text-xs font-bold flex items-center gap-1"
                   >
                     <Plus className="w-3.5 h-3.5" />
                     <span>Додати</span>
@@ -1039,7 +1039,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
 
               <button
                 onClick={handleInsertPoll}
-                className="w-full py-2.5 bg-[#E87A42] hover:bg-[#D46B35] text-white rounded-xl font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5"
+                className="w-full py-2.5 bg-[#E87A42] hover:bg-[#D46B35] text-[#1E2521] rounded-xl font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5"
               >
                 <Check className="w-4 h-4" />
                 <span>Опублікувати опитування</span>
@@ -1051,7 +1051,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
           {activeTab === 'bill' && (
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-[#445047] mb-1">
+                <label className="block text-xs font-bold text-[#8A9186] mb-1">
                   Призначення рахунку
                 </label>
                 <input
@@ -1064,18 +1064,18 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
 
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-[#445047] mb-1">
+                  <label className="block text-xs font-bold text-[#8A9186] mb-1">
                     Загальна сума
                   </label>
                   <input
                     type="number"
                     value={billTotal}
                     onChange={(e) => setBillTotal(e.target.value)}
-                    className="w-full px-3.5 py-2 bg-white border border-[#DFD6C5] rounded-xl text-xs font-bold text-[#1F2521] focus:outline-none focus:border-[#E87A42]"
+                    className="w-full px-3.5 py-2 bg-white border border-[#DFD6C5] rounded-xl text-xs font-bold text-[#1E2521] focus:outline-none focus:border-[#E87A42]"
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-[#445047] mb-1">
+                  <label className="block text-xs font-bold text-[#8A9186] mb-1">
                     Валюта
                   </label>
                   <select
@@ -1092,7 +1092,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
 
               <button
                 onClick={handleInsertBill}
-                className="w-full py-2.5 bg-[#E87A42] hover:bg-[#D46B35] text-white rounded-xl font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5"
+                className="w-full py-2.5 bg-[#E87A42] hover:bg-[#D46B35] text-[#1E2521] rounded-xl font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5"
               >
                 <Check className="w-4 h-4" />
                 <span>Розділити чек порівну</span>
@@ -1104,7 +1104,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
           {activeTab === 'location' && (
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-[#445047] mb-1">
+                <label className="block text-xs font-bold text-[#8A9186] mb-1">
                   Назва місця / закладу
                 </label>
                 <input
@@ -1116,7 +1116,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[#445047] mb-1">
+                <label className="block text-xs font-bold text-[#8A9186] mb-1">
                   Адреса
                 </label>
                 <input
@@ -1128,7 +1128,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[#445047] mb-1">
+                <label className="block text-xs font-bold text-[#8A9186] mb-1">
                   Категорія / Теги
                 </label>
                 <input
@@ -1141,7 +1141,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
 
               <button
                 onClick={handleInsertLocation}
-                className="w-full py-2.5 bg-[#E87A42] hover:bg-[#D46B35] text-white rounded-xl font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5"
+                className="w-full py-2.5 bg-[#E87A42] hover:bg-[#D46B35] text-[#1E2521] rounded-xl font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5"
               >
                 <Check className="w-4 h-4" />
                 <span>Надіслати картку локації</span>
@@ -1153,7 +1153,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
           {activeTab === 'file' && (
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-[#445047] mb-1">
+                <label className="block text-xs font-bold text-[#8A9186] mb-1">
                   Ім’я документа / файлу
                 </label>
                 <input
@@ -1165,7 +1165,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[#445047] mb-1">
+                <label className="block text-xs font-bold text-[#8A9186] mb-1">
                   Розмір файлу
                 </label>
                 <input
@@ -1178,7 +1178,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
 
               <button
                 onClick={handleInsertFile}
-                className="w-full py-2.5 bg-[#E87A42] hover:bg-[#D46B35] text-white rounded-xl font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5"
+                className="w-full py-2.5 bg-[#E87A42] hover:bg-[#D46B35] text-[#1E2521] rounded-xl font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5"
               >
                 <Check className="w-4 h-4" />
                 <span>Прикріпити документ</span>
@@ -1191,7 +1191,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
             <div className="space-y-4">
               <div className="grid grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-[#445047] mb-1">
+                  <label className="block text-xs font-bold text-[#8A9186] mb-1">
                     Назва файлу
                   </label>
                   <input
@@ -1202,7 +1202,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
                   />
                 </div>
                 <div>
-                  <label className="block text-xs font-bold text-[#445047] mb-1">
+                  <label className="block text-xs font-bold text-[#8A9186] mb-1">
                     Мова
                   </label>
                   <select
@@ -1221,20 +1221,20 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[#445047] mb-1">
+                <label className="block text-xs font-bold text-[#8A9186] mb-1">
                   Вихідний код
                 </label>
                 <textarea
                   rows={6}
                   value={codeSnippet}
                   onChange={(e) => setCodeSnippet(e.target.value)}
-                  className="w-full p-3 bg-[#1F2521] text-[#A8D5BA] font-mono text-xs rounded-xl focus:outline-none focus:ring-2 focus:ring-[#E87A42]"
+                  className="w-full p-3 bg-[#E6DFD3] text-[#A8D5BA] font-mono text-xs rounded-xl focus:outline-none focus:ring-2 focus:ring-[#E87A42]"
                 />
               </div>
 
               <button
                 onClick={handleInsertCode}
-                className="w-full py-2.5 bg-[#E87A42] hover:bg-[#D46B35] text-white rounded-xl font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5"
+                className="w-full py-2.5 bg-[#E87A42] hover:bg-[#D46B35] text-[#1E2521] rounded-xl font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5"
               >
                 <Check className="w-4 h-4" />
                 <span>Вставити сніппет коду</span>

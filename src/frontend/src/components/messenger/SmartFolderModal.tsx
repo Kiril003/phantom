@@ -73,7 +73,7 @@ const colorOptions = [
   { id: 'cobalt', hex: '#2563EB', label: 'Кобальт' },
   { id: 'purple', hex: '#7C3AED', label: 'Лаванда' },
   { id: 'rose', hex: '#E11D48', label: 'Корал' },
-  { id: 'charcoal', hex: '#1F2521', label: 'Графіт' },
+  { id: 'charcoal', hex: '#E6DFD3', label: 'Графіт' },
 ];
 
 const workspaceTemplates = [
@@ -104,7 +104,7 @@ const workspaceTemplates = [
   {
     name: 'Private Vault',
     emoji: '🔒',
-    color: '#1F2521',
+    color: '#E6DFD3',
     vibe: '🛡️ Конфіденційно & Особисте',
   },
 ];
@@ -227,23 +227,23 @@ export const SmartFolderModal: React.FC<SmartFolderModalProps> = ({
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-150">
       <div
-        className="bg-[#121A15] border border-[#2B3C30] w-full max-w-lg rounded-3xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden text-[#E4EDE7]"
+        className="bg-[#FDFCF9] border border-[#DDD4C4] w-full max-w-lg rounded-3xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden text-[#1E2521]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Modal Header */}
-        <div className="p-5 border-b border-[#1F2B22] bg-[#141C16] flex items-center justify-between">
+        <div className="p-5 border-b border-[#E6DFD3] bg-[#FDFCF9] flex items-center justify-between">
           <div className="flex items-center gap-3">
             <div
-              className="w-11 h-11 rounded-2xl flex items-center justify-center text-white text-xl shadow-sm transition-all"
+              className="w-11 h-11 rounded-2xl flex items-center justify-center text-[#1E2521] text-xl shadow-sm transition-all"
               style={{ backgroundColor: color }}
             >
               {emoji}
             </div>
             <div>
-              <h2 className="text-base font-extrabold text-white flex items-center gap-2">
+              <h2 className="text-base font-extrabold text-[#1E2521] flex items-center gap-2">
                 {folderToEdit ? 'Налаштування простору' : 'Створити Smart Workspace'}
               </h2>
-              <p className="text-xs text-[#8EA093]">
+              <p className="text-xs text-[#5F6A60]">
                 Призначте кастомну іконку, колір та правила сортування
               </p>
             </div>
@@ -254,7 +254,7 @@ export const SmartFolderModal: React.FC<SmartFolderModalProps> = ({
               soundFx.playTap();
               onClose();
             }}
-            className="p-2 hover:bg-[#1E2A21] text-[#8EA093] hover:text-white rounded-full transition-colors"
+            className="p-2 hover:bg-[#F1EDE3] text-[#5F6A60] hover:text-[#1E2521] rounded-full transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -266,7 +266,7 @@ export const SmartFolderModal: React.FC<SmartFolderModalProps> = ({
           {!folderToEdit && (
             <div className="space-y-1.5">
               <div className="flex items-center justify-between">
-                <label className="text-[11px] font-extrabold uppercase tracking-wider text-[#717E75] flex items-center gap-1">
+                <label className="text-[11px] font-extrabold uppercase tracking-wider text-[#7A8479] flex items-center gap-1">
                   <Wand2 className="w-3 h-3 text-[#E87A42]" />
                   Швидкі шаблони воркспейсів
                 </label>
@@ -278,7 +278,7 @@ export const SmartFolderModal: React.FC<SmartFolderModalProps> = ({
                     key={tpl.name}
                     type="button"
                     onClick={() => handleApplyTemplate(tpl)}
-                    className="px-2.5 py-1.5 bg-white hover:bg-[#FAF5ED] border border-[#DFD6C5] rounded-xl text-xs font-semibold text-[#1F2521] flex items-center gap-1.5 shrink-0 transition-colors shadow-2xs"
+                    className="px-2.5 py-1.5 bg-white hover:bg-[#FAF5ED] border border-[#DFD6C5] rounded-xl text-xs font-semibold text-[#1E2521] flex items-center gap-1.5 shrink-0 transition-colors shadow-2xs"
                   >
                     <span>{tpl.emoji}</span>
                     <span>{tpl.name}</span>
@@ -290,7 +290,7 @@ export const SmartFolderModal: React.FC<SmartFolderModalProps> = ({
 
           {/* Name & Live Preview Banner */}
           <div className="space-y-1.5">
-            <label className="block text-xs font-bold uppercase tracking-wider text-[#717E75]">
+            <label className="block text-xs font-bold uppercase tracking-wider text-[#7A8479]">
               Назва простору
             </label>
             <div className="flex gap-2">
@@ -299,11 +299,11 @@ export const SmartFolderModal: React.FC<SmartFolderModalProps> = ({
                 value={name}
                 onChange={(e) => setName(e.target.value)}
                 placeholder="наприклад, Project Alpha, Private Interests..."
-                className="flex-1 px-3.5 py-2.5 bg-white border border-[#DFD6C5] rounded-2xl text-sm font-semibold text-[#1F2521] placeholder-[#8C988E] focus:outline-none focus:border-[#E87A42] transition-colors shadow-2xs"
+                className="flex-1 px-3.5 py-2.5 bg-white border border-[#DFD6C5] rounded-2xl text-sm font-semibold text-[#1E2521] placeholder-[#8C988E] focus:outline-none focus:border-[#E87A42] transition-colors shadow-2xs"
                 autoFocus
               />
               <div
-                className="px-3.5 py-2.5 rounded-2xl flex items-center gap-1.5 text-xs font-bold text-white shadow-2xs shrink-0 select-none transition-all"
+                className="px-3.5 py-2.5 rounded-2xl flex items-center gap-1.5 text-xs font-bold text-[#1E2521] shadow-2xs shrink-0 select-none transition-all"
                 style={{ backgroundColor: color }}
               >
                 <span className="text-sm">{emoji}</span>
@@ -315,7 +315,7 @@ export const SmartFolderModal: React.FC<SmartFolderModalProps> = ({
           {/* Folder Vibe / Focus Note */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
-              <label className="block text-xs font-bold uppercase tracking-wider text-[#717E75]">
+              <label className="block text-xs font-bold uppercase tracking-wider text-[#7A8479]">
                 Folder Vibe / Статус простору
               </label>
               <span className="text-[10px] text-[#8C988E]">Короткий фокус чи слоган</span>
@@ -325,20 +325,20 @@ export const SmartFolderModal: React.FC<SmartFolderModalProps> = ({
               value={vibe}
               onChange={(e) => setVibe(e.target.value)}
               placeholder="наприклад, ⚡ Deep Work & Sprint, ☕ Urban Chill..."
-              className="w-full px-3.5 py-2 bg-white border border-[#DFD6C5] rounded-2xl text-xs font-medium text-[#1F2521] placeholder-[#8C988E] focus:outline-none focus:border-[#E87A42] transition-colors shadow-2xs"
+              className="w-full px-3.5 py-2 bg-white border border-[#DFD6C5] rounded-2xl text-xs font-medium text-[#1E2521] placeholder-[#8C988E] focus:outline-none focus:border-[#E87A42] transition-colors shadow-2xs"
             />
           </div>
 
           {/* CUSTOM ICON & EMOJI PICKER (Expanded Categories + Custom Input) */}
           <div className="space-y-2.5 p-3.5 bg-white border border-[#DFD6C5] rounded-2xl">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-extrabold text-[#1F2521] flex items-center gap-1.5">
+              <label className="text-xs font-extrabold text-[#1E2521] flex items-center gap-1.5">
                 <Smile className="w-3.5 h-3.5 text-[#E87A42]" />
                 Іконка або Emoji папки
               </label>
               <div className="flex items-center gap-1.5">
-                <span className="text-[10px] text-[#717E75]">Обрано:</span>
-                <span className="text-sm font-bold bg-[#FAF8F3] px-2 py-0.5 rounded-lg border border-[#DFD6C5]">
+                <span className="text-[10px] text-[#7A8479]">Обрано:</span>
+                <span className="text-sm font-bold bg-[#FDFCF9] px-2 py-0.5 rounded-lg border border-[#DFD6C5]">
                   {emoji}
                 </span>
               </div>
@@ -352,7 +352,7 @@ export const SmartFolderModal: React.FC<SmartFolderModalProps> = ({
                   value={customEmojiInput}
                   onChange={(e) => handleCustomEmojiChange(e.target.value)}
                   placeholder="Введіть будь-яке власне emoji або символ (напр. 🥑, 🛡️, 🪐)..."
-                  className="w-full pl-3 pr-8 py-1.5 bg-[#FAF8F3] border border-[#DFD6C5] rounded-xl text-xs text-[#1F2521] placeholder-[#8C988E] focus:outline-none focus:border-[#E87A42]"
+                  className="w-full pl-3 pr-8 py-1.5 bg-[#FDFCF9] border border-[#DFD6C5] rounded-xl text-xs text-[#1E2521] placeholder-[#8C988E] focus:outline-none focus:border-[#E87A42]"
                 />
                 {customEmojiInput && (
                   <button
@@ -363,7 +363,7 @@ export const SmartFolderModal: React.FC<SmartFolderModalProps> = ({
                   </button>
                 )}
               </div>
-              <span className="text-[10px] text-[#717E75] shrink-0 font-medium">або виберіть нижче 👇</span>
+              <span className="text-[10px] text-[#7A8479] shrink-0 font-medium">або виберіть нижче 👇</span>
             </div>
 
             {/* Category Tabs */}
@@ -380,8 +380,8 @@ export const SmartFolderModal: React.FC<SmartFolderModalProps> = ({
                     }}
                     className={`px-2.5 py-1 rounded-xl text-[11px] font-bold transition-all flex items-center gap-1 whitespace-nowrap ${
                       isActive
-                        ? 'bg-[#1F2521] text-white shadow-2xs'
-                        : 'bg-[#FAF8F3] text-[#5E6B62] hover:bg-[#F2ECE2] border border-[#DFD6C5]'
+                        ? 'bg-[#E6DFD3] text-[#1E2521] shadow-2xs'
+                        : 'bg-[#FDFCF9] text-[#5E6B62] hover:bg-[#F2ECE2] border border-[#DFD6C5]'
                     }`}
                   >
                     <span>{cat.icon}</span>
@@ -392,7 +392,7 @@ export const SmartFolderModal: React.FC<SmartFolderModalProps> = ({
             </div>
 
             {/* Emoji Grid for Selected Category */}
-            <div className="grid grid-cols-8 gap-1.5 p-1 bg-[#FAF8F3] border border-[#EAE0D0] rounded-xl max-h-32 overflow-y-auto">
+            <div className="grid grid-cols-8 gap-1.5 p-1 bg-[#FDFCF9] border border-[#EAE0D0] rounded-xl max-h-32 overflow-y-auto">
               {currentCategoryObj.emojis.map((em) => {
                 const isSelected = emoji === em;
                 return (
@@ -406,8 +406,8 @@ export const SmartFolderModal: React.FC<SmartFolderModalProps> = ({
                     }}
                     className={`h-9 text-base rounded-xl transition-all flex items-center justify-center ${
                       isSelected
-                        ? 'bg-[#1F2521] text-white scale-110 shadow-xs ring-2 ring-[#E87A42]'
-                        : 'hover:bg-white text-[#1F2521]'
+                        ? 'bg-[#E6DFD3] text-[#1E2521] scale-110 shadow-xs ring-2 ring-[#E87A42]'
+                        : 'hover:bg-white text-[#1E2521]'
                     }`}
                     title={em}
                   >
@@ -420,7 +420,7 @@ export const SmartFolderModal: React.FC<SmartFolderModalProps> = ({
 
           {/* Color Accent Selection */}
           <div className="space-y-1.5">
-            <label className="block text-xs font-bold uppercase tracking-wider text-[#717E75]">
+            <label className="block text-xs font-bold uppercase tracking-wider text-[#7A8479]">
               Колірний акцент простору
             </label>
             <div className="flex items-center gap-2 flex-wrap p-2 bg-white border border-[#DFD6C5] rounded-2xl">
@@ -433,12 +433,12 @@ export const SmartFolderModal: React.FC<SmartFolderModalProps> = ({
                     setColor(c.hex);
                   }}
                   className={`w-8 h-8 rounded-xl flex items-center justify-center transition-all ${
-                    color === c.hex ? 'ring-2 ring-offset-2 ring-[#1F2521] scale-110' : 'hover:opacity-90'
+                    color === c.hex ? 'ring-2 ring-offset-2 ring-[#E6DFD3] scale-110' : 'hover:opacity-90'
                   }`}
                   style={{ backgroundColor: c.hex }}
                   title={c.label}
                 >
-                  {color === c.hex && <Check className="w-4 h-4 text-white" />}
+                  {color === c.hex && <Check className="w-4 h-4 text-[#1E2521]" />}
                 </button>
               ))}
             </div>
@@ -447,13 +447,13 @@ export const SmartFolderModal: React.FC<SmartFolderModalProps> = ({
           {/* Smart Automation Rules */}
           <div className="space-y-2 p-3.5 bg-white border border-[#DFD6C5] rounded-2xl">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-extrabold text-[#1F2521] flex items-center gap-1.5">
+              <span className="text-xs font-extrabold text-[#1E2521] flex items-center gap-1.5">
                 <SlidersHorizontal className="w-3.5 h-3.5 text-[#E87A42]" />
                 Автоматичні правила (Smart Inclusion)
               </span>
-              <span className="text-[10px] text-[#717E75]">Опціонально</span>
+              <span className="text-[10px] text-[#7A8479]">Опціонально</span>
             </div>
-            <p className="text-[11px] text-[#717E75]">
+            <p className="text-[11px] text-[#7A8479]">
               Автоматично включати в цю папку бесіди з вибраних кіл спілкування:
             </p>
 
@@ -467,14 +467,14 @@ export const SmartFolderModal: React.FC<SmartFolderModalProps> = ({
                     onClick={() => toggleCircleRule(circle.id)}
                     className={`p-2 rounded-xl text-left text-xs font-semibold flex items-center justify-between transition-colors border ${
                       isChecked
-                        ? 'bg-[#F2EDE4] border-[#1F2521] text-[#1F2521]'
-                        : 'bg-white border-[#DFD6C5] text-[#717E75] hover:bg-[#FAF8F3]'
+                        ? 'bg-[#F2EDE4] border-[#E6DFD3] text-[#1E2521]'
+                        : 'bg-white border-[#DFD6C5] text-[#7A8479] hover:bg-[#FDFCF9]'
                     }`}
                   >
                     <span>{circle.label}</span>
                     <div
                       className={`w-4 h-4 rounded-md flex items-center justify-center border text-[10px] ${
-                        isChecked ? 'bg-[#1F2521] text-white border-[#1F2521]' : 'border-[#DFD6C5]'
+                        isChecked ? 'bg-[#E6DFD3] text-[#1E2521] border-[#E6DFD3]' : 'border-[#DFD6C5]'
                       }`}
                     >
                       {isChecked && <Check className="w-3 h-3" />}
@@ -486,8 +486,8 @@ export const SmartFolderModal: React.FC<SmartFolderModalProps> = ({
 
             <div className="pt-2 border-t border-[#F2EDE4] flex items-center justify-between">
               <div>
-                <div className="text-xs font-bold text-[#1F2521]">Тільки непрочитані</div>
-                <div className="text-[10px] text-[#717E75]">
+                <div className="text-xs font-bold text-[#1E2521]">Тільки непрочитані</div>
+                <div className="text-[10px] text-[#7A8479]">
                   Відображати бесіди лише коли є нові повідомлення
                 </div>
               </div>
@@ -503,7 +503,7 @@ export const SmartFolderModal: React.FC<SmartFolderModalProps> = ({
           {/* Included Chats Selection */}
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <label className="text-xs font-bold uppercase tracking-wider text-[#717E75]">
+              <label className="text-xs font-bold uppercase tracking-wider text-[#7A8479]">
                 Включені бесіди ({selectedChatIds.length})
               </label>
               <span className="text-[11px] text-[#8C461A] font-medium">
@@ -516,7 +516,7 @@ export const SmartFolderModal: React.FC<SmartFolderModalProps> = ({
               value={searchChatQuery}
               onChange={(e) => setSearchChatQuery(e.target.value)}
               placeholder="Пошук бесіди для додавання..."
-              className="w-full px-3 py-1.5 bg-white border border-[#DFD6C5] rounded-xl text-xs text-[#1F2521] placeholder-[#8C988E] focus:outline-none focus:border-[#E87A42]"
+              className="w-full px-3 py-1.5 bg-white border border-[#DFD6C5] rounded-xl text-xs text-[#1E2521] placeholder-[#8C988E] focus:outline-none focus:border-[#E87A42]"
             />
 
             <div className="max-h-48 overflow-y-auto space-y-1 p-1 bg-white border border-[#DFD6C5] rounded-2xl divide-y divide-[#F2EDE4]">
@@ -527,7 +527,7 @@ export const SmartFolderModal: React.FC<SmartFolderModalProps> = ({
                     key={chat.id}
                     onClick={() => toggleChatSelection(chat.id)}
                     className={`p-2 rounded-xl flex items-center justify-between cursor-pointer transition-colors ${
-                      isSelected ? 'bg-[#F9F4EB]' : 'hover:bg-[#FAF8F3]'
+                      isSelected ? 'bg-[#F9F4EB]' : 'hover:bg-[#FDFCF9]'
                     }`}
                   >
                     <div className="flex items-center gap-2.5 min-w-0">
@@ -537,10 +537,10 @@ export const SmartFolderModal: React.FC<SmartFolderModalProps> = ({
                         className="w-8 h-8 rounded-xl object-cover"
                       />
                       <div className="min-w-0">
-                        <div className="font-extrabold text-xs text-[#1F2521] truncate">
+                        <div className="font-extrabold text-xs text-[#1E2521] truncate">
                           {chat.title}
                         </div>
-                        <div className="text-[10px] text-[#717E75] truncate">
+                        <div className="text-[10px] text-[#7A8479] truncate">
                           {chat.customVibe || chat.description || `Коло: ${chat.circle}`}
                         </div>
                       </div>
@@ -549,7 +549,7 @@ export const SmartFolderModal: React.FC<SmartFolderModalProps> = ({
                     <div
                       className={`w-5 h-5 rounded-lg flex items-center justify-center border transition-colors shrink-0 ${
                         isSelected
-                          ? 'bg-[#E87A42] border-[#E87A42] text-white'
+                          ? 'bg-[#E87A42] border-[#E87A42] text-[#1E2521]'
                           : 'border-[#DFD6C5] bg-white'
                       }`}
                     >
@@ -563,7 +563,7 @@ export const SmartFolderModal: React.FC<SmartFolderModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="p-4 border-t border-[#1F2B22] bg-[#141C16] flex items-center justify-between">
+        <div className="p-4 border-t border-[#E6DFD3] bg-[#FDFCF9] flex items-center justify-between">
           {folderToEdit && !folderToEdit.isBuiltIn && onDeleteFolder ? (
             <button
               type="button"
@@ -590,7 +590,7 @@ export const SmartFolderModal: React.FC<SmartFolderModalProps> = ({
                 soundFx.playTap();
                 onClose();
               }}
-              className="px-4 py-2 bg-[#141C16] hover:bg-[#18231B] text-[#8EA093] hover:text-white border border-[#223126] rounded-xl text-xs font-bold transition-colors"
+              className="px-4 py-2 bg-[#FDFCF9] hover:bg-[#F9F7F1] text-[#5F6A60] hover:text-[#1E2521] border border-[#E6DFD3] rounded-xl text-xs font-bold transition-colors"
             >
               Скасувати
             </button>
@@ -599,7 +599,7 @@ export const SmartFolderModal: React.FC<SmartFolderModalProps> = ({
               type="button"
               disabled={!name.trim()}
               onClick={handleSave}
-              className="px-4 py-2 bg-[#55C778] hover:bg-[#46AF68] disabled:opacity-50 text-[#0C120E] rounded-xl text-xs font-bold transition-colors shadow-sm flex items-center gap-1.5"
+              className="px-4 py-2 bg-[#E87A42] hover:bg-[#C25925] disabled:opacity-50 text-[#F7F5EE] rounded-xl text-xs font-bold transition-colors shadow-sm flex items-center gap-1.5"
             >
               <Check className="w-3.5 h-3.5" />
               <span>{folderToEdit ? 'Зберегти зміни' : 'Створити Workspace'}</span>

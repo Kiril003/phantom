@@ -93,7 +93,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
       title: title.trim(),
       type: chatType,
       circle: selectedCircle,
-      description: description.trim() || 'Простір спілкування в Aura',
+      description: description.trim() || 'Простір спілкування',
       topic: topic.trim() || 'Актуальні обговорення',
       avatar: finalAvatar,
       isPublic,
@@ -108,25 +108,25 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150">
-      <div className="bg-[#121A15] border-t sm:border border-[#2B3C30] rounded-t-3xl sm:rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden select-none animate-in slide-in-from-bottom sm:zoom-in-95 duration-150 flex flex-col max-h-[92dvh] sm:max-h-[88vh] pb-[var(--sab)] sm:pb-0 text-[#E4EDE7]">
+      <div className="bg-[#FDFCF9] border-t sm:border border-[#DDD4C4] rounded-t-3xl sm:rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden select-none animate-in slide-in-from-bottom sm:zoom-in-95 duration-150 flex flex-col max-h-[92dvh] sm:max-h-[88vh] pb-[var(--sab)] sm:pb-0 text-[#1E2521]">
         {/* Mobile Pull Indicator */}
-        <div className="sm:hidden pt-2.5 pb-1 flex justify-center bg-[#141C16]">
+        <div className="sm:hidden pt-2.5 pb-1 flex justify-center bg-[#FDFCF9]">
           <div className="w-12 h-1 bg-[#28392C] rounded-full" />
         </div>
 
         {/* Header */}
-        <div className="px-4 sm:px-5 py-3.5 sm:py-4 border-b border-[#1F2B22] flex items-center justify-between bg-[#141C16] shrink-0">
+        <div className="px-4 sm:px-5 py-3.5 sm:py-4 border-b border-[#E6DFD3] flex items-center justify-between bg-[#FDFCF9] shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="w-8 h-8 rounded-xl bg-[#1A261D] text-[#55C778] border border-[#2B3E31] flex items-center justify-center font-extrabold text-xs">
+            <div className="w-8 h-8 rounded-xl bg-[#F9F7F1] text-[#E87A42] border border-[#DDD4C4] flex items-center justify-center font-extrabold text-xs">
               {step}/3
             </div>
             <div>
-              <h3 className="font-extrabold text-base text-white">
+              <h3 className="font-extrabold text-base text-[#1E2521]">
                 {step === 1 && 'Тип та формат простору'}
                 {step === 2 && 'Брендинг, назва та коло'}
                 {step === 3 && 'Дозволи та приватність'}
               </h3>
-              <p className="text-xs text-[#8EA093]">Telegram-grade конфігурація для Aura</p>
+              <p className="text-xs text-[#5F6A60]">Налаштування простору</p>
             </div>
           </div>
 
@@ -135,19 +135,19 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
               soundFx.playTap();
               onClose();
             }}
-            className="p-1.5 text-[#8EA093] hover:text-white hover:bg-[#1E2A21] rounded-xl transition-colors"
+            className="p-1.5 text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F1EDE3] rounded-xl transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Step Indicator */}
-        <div className="grid grid-cols-3 gap-1.5 px-5 pt-3 pb-2 bg-[#0E1410] border-b border-[#1F2B22] shrink-0">
+        <div className="grid grid-cols-3 gap-1.5 px-5 pt-3 pb-2 bg-[#F7F5EE] border-b border-[#E6DFD3] shrink-0">
           {[1, 2, 3].map((s) => (
             <div
               key={s}
               className={`h-1.5 rounded-full transition-all ${
-                s <= step ? 'bg-[#55C778]' : 'bg-[#1F2B22]'
+                s <= step ? 'bg-[#E87A42]' : 'bg-[#E6DFD3]'
               }`}
             />
           ))}
@@ -210,7 +210,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
                         }}
                         className={`p-3.5 rounded-2xl border text-left flex flex-col gap-2 transition-all ${
                           isSelected
-                            ? 'bg-white border-[#1F2521] shadow-xs ring-1 ring-[#1F2521]'
+                            ? 'bg-white border-[#E6DFD3] shadow-xs ring-1 ring-[#E6DFD3]'
                             : 'bg-white/70 hover:bg-white border-[#DFD6C5]'
                         }`}
                       >
@@ -218,14 +218,14 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
                           <div className="p-2 rounded-xl bg-[#FAF3E8] text-[#E87A42]">
                             <Icon className="w-5 h-5" />
                           </div>
-                          <span className="px-2 py-0.5 bg-[#FAF8F3] text-[#717E75] border border-[#DFD6C5] rounded-md text-[10px] font-bold">
+                          <span className="px-2 py-0.5 bg-[#FDFCF9] text-[#7A8479] border border-[#DFD6C5] rounded-md text-[10px] font-bold">
                             {item.badge}
                           </span>
                         </div>
 
                         <div>
-                          <h4 className="font-extrabold text-sm text-[#1F2521]">{item.title}</h4>
-                          <p className="text-xs text-[#556157] mt-0.5 leading-relaxed">{item.desc}</p>
+                          <h4 className="font-extrabold text-sm text-[#1E2521]">{item.title}</h4>
+                          <p className="text-xs text-[#8A9186] mt-0.5 leading-relaxed">{item.desc}</p>
                         </div>
                       </button>
                     );
@@ -241,7 +241,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
               {/* Title & Handle */}
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                 <div>
-                  <label className="block text-xs font-bold text-[#445047] mb-1">
+                  <label className="block text-xs font-bold text-[#8A9186] mb-1">
                     Назва простору *
                   </label>
                   <input
@@ -255,7 +255,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-[#445047] mb-1">
+                  <label className="block text-xs font-bold text-[#8A9186] mb-1">
                     Публічний тег (Handle)
                   </label>
                   <input
@@ -270,7 +270,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
 
               {/* Circle Categorization */}
               <div>
-                <label className="block text-xs font-bold text-[#445047] mb-1.5">
+                <label className="block text-xs font-bold text-[#8A9186] mb-1.5">
                   Призначення до кола
                 </label>
                 <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
@@ -284,7 +284,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
                       }}
                       className={`p-2.5 rounded-xl border text-left transition-all ${
                         selectedCircle === c.id
-                          ? 'bg-[#1F2521] text-white border-[#1F2521] shadow-2xs'
+                          ? 'bg-[#E6DFD3] text-[#1E2521] border-[#E6DFD3] shadow-2xs'
                           : 'bg-white text-[#4A574E] border-[#DFD6C5] hover:bg-[#FAF6EE]'
                       }`}
                     >
@@ -292,7 +292,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
                         <span>{c.emoji}</span>
                         <span className="truncate">{c.label}</span>
                       </div>
-                      <p className={`text-[10px] mt-0.5 truncate ${selectedCircle === c.id ? 'text-[#D5DDD7]' : 'text-[#717E75]'}`}>
+                      <p className={`text-[10px] mt-0.5 truncate ${selectedCircle === c.id ? 'text-[#D5DDD7]' : 'text-[#7A8479]'}`}>
                         {c.desc}
                       </p>
                     </button>
@@ -303,7 +303,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
               {/* Description & Topic */}
               <div className="space-y-3">
                 <div>
-                  <label className="block text-xs font-bold text-[#445047] mb-1">
+                  <label className="block text-xs font-bold text-[#8A9186] mb-1">
                     Опис простору
                   </label>
                   <textarea
@@ -316,7 +316,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
                 </div>
 
                 <div>
-                  <label className="block text-xs font-bold text-[#445047] mb-1">
+                  <label className="block text-xs font-bold text-[#8A9186] mb-1">
                     Актуальна тема / Пін фокусу
                   </label>
                   <input
@@ -331,7 +331,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
 
               {/* Avatar Selector */}
               <div>
-                <label className="block text-xs font-bold text-[#445047] mb-1.5">
+                <label className="block text-xs font-bold text-[#8A9186] mb-1.5">
                   Аватар простору
                 </label>
                 <div className="flex items-center gap-3 overflow-x-auto pb-1 no-scrollbar">
@@ -353,7 +353,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
                       <img src={imgUrl} alt="preset" className="w-12 h-12 object-cover" />
                       {selectedAvatar === imgUrl && !customAvatarUrl && (
                         <span className="absolute inset-0 bg-[#E87A42]/20 flex items-center justify-center">
-                          <Check className="w-4 h-4 text-white drop-shadow" />
+                          <Check className="w-4 h-4 text-[#1E2521] drop-shadow" />
                         </span>
                       )}
                     </button>
@@ -378,7 +378,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
             <div className="space-y-4">
               {/* Privacy Type */}
               <div className="p-4 bg-white border border-[#DFD6C5] rounded-3xl space-y-3 shadow-2xs">
-                <h4 className="font-extrabold text-sm text-[#1F2521]">Тип доступу</h4>
+                <h4 className="font-extrabold text-sm text-[#1E2521]">Тип доступу</h4>
                 <div className="grid grid-cols-2 gap-2">
                   <button
                     type="button"
@@ -389,13 +389,13 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
                     className={`p-3 rounded-2xl border text-left flex items-start gap-2.5 transition-all ${
                       !isPublic
                         ? 'bg-[#FAF3E8] border-[#E87A42] shadow-2xs'
-                        : 'bg-[#FAF8F3] border-[#DFD6C5] opacity-75'
+                        : 'bg-[#FDFCF9] border-[#DFD6C5] opacity-75'
                     }`}
                   >
                     <Lock className="w-4 h-4 text-[#E87A42] shrink-0 mt-0.5" />
                     <div>
-                      <span className="font-extrabold text-xs text-[#1F2521]">Приватний простір</span>
-                      <p className="text-[11px] text-[#717E75] mt-0.5">Вхід лише за запрошенням або заявкою</p>
+                      <span className="font-extrabold text-xs text-[#1E2521]">Приватний простір</span>
+                      <p className="text-[11px] text-[#7A8479] mt-0.5">Вхід лише за запрошенням або заявкою</p>
                     </div>
                   </button>
 
@@ -408,13 +408,13 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
                     className={`p-3 rounded-2xl border text-left flex items-start gap-2.5 transition-all ${
                       isPublic
                         ? 'bg-[#FAF3E8] border-[#E87A42] shadow-2xs'
-                        : 'bg-[#FAF8F3] border-[#DFD6C5] opacity-75'
+                        : 'bg-[#FDFCF9] border-[#DFD6C5] opacity-75'
                     }`}
                   >
                     <Globe className="w-4 h-4 text-[#528A4B] shrink-0 mt-0.5" />
                     <div>
-                      <span className="font-extrabold text-xs text-[#1F2521]">Публічний простір</span>
-                      <p className="text-[11px] text-[#717E75] mt-0.5">Доступний у глобальному пошуку</p>
+                      <span className="font-extrabold text-xs text-[#1E2521]">Публічний простір</span>
+                      <p className="text-[11px] text-[#7A8479] mt-0.5">Доступний у глобальному пошуку</p>
                     </div>
                   </button>
                 </div>
@@ -423,7 +423,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
               {/* History Visibility */}
               <div className="p-4 bg-white border border-[#DFD6C5] rounded-3xl space-y-2.5 shadow-2xs">
                 <div className="flex items-center justify-between">
-                  <span className="font-extrabold text-xs text-[#1F2521]">Історія для нових учасників</span>
+                  <span className="font-extrabold text-xs text-[#1E2521]">Історія для нових учасників</span>
                   <div className="flex gap-1.5">
                     {(['visible', 'hidden'] as const).map((mode) => (
                       <button
@@ -435,8 +435,8 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
                         }}
                         className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
                           historyVisibility === mode
-                            ? 'bg-[#1F2521] text-white'
-                            : 'bg-[#FAF8F3] border border-[#DFD6C5] text-[#4A574E]'
+                            ? 'bg-[#E6DFD3] text-[#1E2521]'
+                            : 'bg-[#FDFCF9] border border-[#DFD6C5] text-[#4A574E]'
                         }`}
                       >
                         {mode === 'visible' ? 'Видна' : 'Прихована'}
@@ -451,7 +451,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
                 <div className="flex items-center justify-between">
                   <div className="flex items-center gap-2">
                     <Clock className="w-4 h-4 text-[#E87A42]" />
-                    <span className="font-extrabold text-xs text-[#1F2521]">Повільний режим (Slow Mode)</span>
+                    <span className="font-extrabold text-xs text-[#1E2521]">Повільний режим (Slow Mode)</span>
                   </div>
                   <span className="text-xs font-bold text-[#8C461A]">
                     {slowMode === 0 ? 'Вимкнено' : `${slowMode} секунд`}
@@ -469,8 +469,8 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
                       }}
                       className={`py-1.5 rounded-xl border text-xs font-bold transition-all ${
                         slowMode === s
-                          ? 'bg-[#1F2521] text-white border-[#1F2521]'
-                          : 'bg-[#FAF8F3] border-[#DFD6C5] text-[#4A574E]'
+                          ? 'bg-[#E6DFD3] text-[#1E2521] border-[#E6DFD3]'
+                          : 'bg-[#FDFCF9] border-[#DFD6C5] text-[#4A574E]'
                       }`}
                     >
                       {s === 0 ? 'Вимк' : `${s}с`}
@@ -497,9 +497,9 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
                     return (
                       <label
                         key={perm.key}
-                        className="flex items-center justify-between p-2 bg-[#FAF8F3] hover:bg-[#F4EEE2] rounded-xl cursor-pointer transition-colors"
+                        className="flex items-center justify-between p-2 bg-[#FDFCF9] hover:bg-[#F4EEE2] rounded-xl cursor-pointer transition-colors"
                       >
-                        <span className="text-xs font-semibold text-[#1F2521]">{perm.label}</span>
+                        <span className="text-xs font-semibold text-[#1E2521]">{perm.label}</span>
                         <input
                           type="checkbox"
                           checked={isChecked}
@@ -521,7 +521,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
         </div>
 
         {/* Footer Navigation */}
-        <div className="px-5 py-3.5 border-t border-[#1F2B22] bg-[#141C16] flex items-center justify-between shrink-0">
+        <div className="px-5 py-3.5 border-t border-[#E6DFD3] bg-[#FDFCF9] flex items-center justify-between shrink-0">
           {step > 1 ? (
             <button
               type="button"
@@ -529,7 +529,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
                 soundFx.playTap();
                 setStep((s) => (s - 1) as any);
               }}
-              className="px-4 py-2 bg-[#141C16] hover:bg-[#18231B] border border-[#223126] rounded-xl text-xs font-bold text-[#A4B8AB] hover:text-white flex items-center gap-1.5 transition-colors"
+              className="px-4 py-2 bg-[#FDFCF9] hover:bg-[#F9F7F1] border border-[#E6DFD3] rounded-xl text-xs font-bold text-[#5F6A60] hover:text-[#1E2521] flex items-center gap-1.5 transition-colors"
             >
               <ChevronLeft className="w-4 h-4" />
               <span>Назад</span>
@@ -541,7 +541,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
                 soundFx.playTap();
                 onClose();
               }}
-              className="px-4 py-2 text-xs font-bold text-[#8EA093] hover:text-white"
+              className="px-4 py-2 text-xs font-bold text-[#5F6A60] hover:text-[#1E2521]"
             >
               Скасувати
             </button>
@@ -555,10 +555,10 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
                 soundFx.playTap();
                 setStep((s) => (s + 1) as any);
               }}
-              className={`px-5 py-2.5 rounded-xl text-xs font-bold text-white flex items-center gap-1.5 shadow-sm transition-colors ${
+              className={`px-5 py-2.5 rounded-xl text-xs font-bold text-[#1E2521] flex items-center gap-1.5 shadow-sm transition-colors ${
                 step === 2 && !title.trim()
                   ? 'bg-gray-700 cursor-not-allowed text-gray-500'
-                  : 'bg-[#1C2920] border border-[#2B3E31] text-[#55C778] hover:bg-[#233529]'
+                  : 'bg-[#F9F7F1] border border-[#DDD4C4] text-[#E87A42] hover:bg-[#233529]'
               }`}
             >
               <span>Далі</span>
@@ -568,7 +568,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
             <button
               type="button"
               onClick={handleFinish}
-              className="px-5 py-2.5 bg-[#55C778] hover:bg-[#46AF68] text-[#0C120E] rounded-xl text-xs font-extrabold flex items-center gap-1.5 shadow-sm transition-colors"
+              className="px-5 py-2.5 bg-[#E87A42] hover:bg-[#C25925] text-[#F7F5EE] rounded-xl text-xs font-extrabold flex items-center gap-1.5 shadow-sm transition-colors"
             >
               <Sparkles className="w-4 h-4" />
               <span>Створити простір</span>

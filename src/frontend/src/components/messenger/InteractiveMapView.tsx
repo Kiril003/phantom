@@ -131,7 +131,7 @@ export const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
     <div className="relative w-full h-full bg-[#E5E0D5] overflow-hidden select-none flex flex-col">
       {/* Top Floating Geo-Bar */}
       <div className="absolute top-4 left-4 right-16 sm:right-auto z-10 flex items-center gap-2">
-        <div className="px-4 py-2 bg-[#FAF8F3]/95 backdrop-blur-md rounded-full border border-[#D8CEBC] shadow-md flex items-center gap-2 text-xs font-semibold text-[#1F2521]">
+        <div className="px-4 py-2 bg-[#FDFCF9]/95 backdrop-blur-md rounded-full border border-[#D8CEBC] shadow-md flex items-center gap-2 text-xs font-semibold text-[#1E2521]">
           <span className="w-2.5 h-2.5 rounded-full bg-[#528A4B] animate-pulse" />
           <span>{currentUser.locationName}</span>
           <span className="text-[#849287]">· Жива карта координації</span>
@@ -178,14 +178,14 @@ export const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
           {/* Building footprints (warm grey/taupe angular shapes) */}
           <rect x="55" y="4" width="10" height="14" rx="1" fill="#DDD7CB" stroke="#CCC4B5" strokeWidth="0.4" />
           {/* Road Network */}
-          <path d="M 0 50 Q 30 45, 50 50 T 100 50" fill="none" stroke="#1A251E" strokeWidth="4" />
-          <path d="M 50 0 Q 55 30, 50 50 T 50 100" fill="none" stroke="#1A251E" strokeWidth="4" />
+          <path d="M 0 50 Q 30 45, 50 50 T 100 50" fill="none" stroke="#F9F7F1" strokeWidth="4" />
+          <path d="M 50 0 Q 55 30, 50 50 T 50 100" fill="none" stroke="#F9F7F1" strokeWidth="4" />
           <path d="M 20 20 L 80 80" fill="none" stroke="#162019" strokeWidth="2.5" strokeDasharray="1,1" />
 
           {/* Buildings */}
-          <rect x="35" y="35" width="12" height="10" rx="1" fill="#141C16" stroke="#2B3C30" strokeWidth="0.5" />
-          <rect x="52" y="38" width="15" height="14" rx="1" fill="#141C16" stroke="#2B3C30" strokeWidth="0.5" />
-          <rect x="25" y="55" width="18" height="12" rx="1" fill="#141C16" stroke="#2B3C30" strokeWidth="0.5" />
+          <rect x="35" y="35" width="12" height="10" rx="1" fill="#FDFCF9" stroke="#DDD4C4" strokeWidth="0.5" />
+          <rect x="52" y="38" width="15" height="14" rx="1" fill="#FDFCF9" stroke="#DDD4C4" strokeWidth="0.5" />
+          <rect x="25" y="55" width="18" height="12" rx="1" fill="#FDFCF9" stroke="#DDD4C4" strokeWidth="0.5" />
         </svg>
 
         {/* Render Spots Pins */}
@@ -204,23 +204,23 @@ export const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
             >
               {/* Pulse ring */}
               {spot.id === 'spot_b_fresh' && (
-                <div className="absolute -inset-2.5 rounded-full bg-[#55C778]/20 animate-ping" />
+                <div className="absolute -inset-2.5 rounded-full bg-[#E87A42]/20 animate-ping" />
               )}
 
               {/* Pin Pill Label */}
               <div
                 className={`px-2.5 py-1 rounded-xl shadow-xl border flex items-center gap-1.5 transition-all transform group-hover:scale-105 ${
                   isSelected || spot.id === 'spot_b_fresh'
-                    ? 'bg-[#183021] border-[#55C778] text-white ring-2 ring-[#55C778]/40'
-                    : 'bg-[#121A15]/95 border-[#233127] text-[#A4B8AB] hover:text-white'
+                    ? 'bg-[#183021] border-[#E87A42] text-[#1E2521] ring-2 ring-[#E87A42]/40'
+                    : 'bg-[#FDFCF9]/95 border-[#F1EDE3] text-[#5F6A60] hover:text-[#1E2521]'
                 }`}
               >
                 {spot.id === 'spot_b_fresh' ? (
-                  <span className="w-5 h-5 rounded-lg bg-[#1A261D] text-[#55C778] flex items-center justify-center text-[10px] font-bold">
+                  <span className="w-5 h-5 rounded-lg bg-[#F9F7F1] text-[#E87A42] flex items-center justify-center text-[10px] font-bold">
                     🛍️
                   </span>
                 ) : (
-                  <span className="w-2 h-2 rounded-full bg-[#55C778]" />
+                  <span className="w-2 h-2 rounded-full bg-[#E87A42]" />
                 )}
                 <span className="text-[11px] font-bold whitespace-nowrap">
                   {spot.name}
@@ -241,11 +241,11 @@ export const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
               <img
                 src={friend.avatar}
                 alt={friend.name}
-                className="w-7 h-7 rounded-full object-cover ring-2 ring-[#55C778] shadow-md"
+                className="w-7 h-7 rounded-full object-cover ring-2 ring-[#E87A42] shadow-md"
               />
-              <span className="absolute -bottom-1 -right-1 w-2.5 h-2.5 bg-[#55C778] rounded-full ring-1 ring-[#0C110D]" />
+              <span className="absolute -bottom-1 -right-1 w-2.5 h-2.5 bg-[#E87A42] rounded-full ring-1 ring-[#F7F5EE]" />
             </div>
-            <span className="mt-0.5 px-1.5 py-0.5 bg-[#121A15] border border-[#233127] text-white text-[9px] font-semibold rounded-md shadow-sm">
+            <span className="mt-0.5 px-1.5 py-0.5 bg-[#FDFCF9] border border-[#F1EDE3] text-[#1E2521] text-[9px] font-semibold rounded-md shadow-sm">
               {friend.name} ({friend.status})
             </span>
           </div>
@@ -255,7 +255,7 @@ export const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
       {/* Floating Right Control Pill */}
       <div 
         id="map-floating-pill"
-        className="absolute right-4 top-1/2 -translate-y-1/2 z-30 bg-[#121A15]/95 backdrop-blur-md rounded-2xl p-1.5 border border-[#2B3C30] shadow-xl flex flex-col items-center gap-1.5"
+        className="absolute right-4 top-1/2 -translate-y-1/2 z-30 bg-[#FDFCF9]/95 backdrop-blur-md rounded-2xl p-1.5 border border-[#DDD4C4] shadow-xl flex flex-col items-center gap-1.5"
       >
         {/* Car / Drive Mode */}
         <button
@@ -263,7 +263,7 @@ export const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
             soundFx.playTap();
             alert('Режим автомобільної навігації увімкнено');
           }}
-          className="p-2.5 text-[#8EA093] hover:text-white hover:bg-[#1E2A21] rounded-xl transition-colors"
+          className="p-2.5 text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F1EDE3] rounded-xl transition-colors"
           title="Автомобільний маршрут"
         >
           <Car className="w-5 h-5" />
@@ -277,8 +277,8 @@ export const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
           }}
           className={`p-2.5 rounded-xl transition-colors ${
             activeLayer === 'vibes'
-              ? 'bg-[#1C2920] text-[#55C778] border border-[#2B3E31]'
-              : 'text-[#8EA093] hover:text-white hover:bg-[#1E2A21]'
+              ? 'bg-[#F9F7F1] text-[#E87A42] border border-[#DDD4C4]'
+              : 'text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F1EDE3]'
           }`}
           title="Шари карти"
         >
@@ -292,13 +292,13 @@ export const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
             const bFresh = mapSpots.find((s) => s.id === 'spot_b_fresh');
             if (bFresh) onSelectLocation(bFresh);
           }}
-          className="p-2.5 text-[#8EA093] hover:text-white hover:bg-[#1E2A21] rounded-xl transition-colors"
+          className="p-2.5 text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F1EDE3] rounded-xl transition-colors"
           title="Досьє поточного району"
         >
           <BookOpen className="w-5 h-5" />
         </button>
 
-        <div className="w-5 h-px bg-[#1F2B22]" />
+        <div className="w-5 h-px bg-[#E6DFD3]" />
 
         {/* My Location / Target */}
         <button
@@ -306,7 +306,7 @@ export const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
             soundFx.playTap();
             setZoomLevel(1);
           }}
-          className="p-2.5 text-[#55C778] hover:bg-[#18231B] rounded-xl transition-colors"
+          className="p-2.5 text-[#E87A42] hover:bg-[#F9F7F1] rounded-xl transition-colors"
           title="Моє місцезнаходження"
         >
           <Compass className="w-5 h-5" />
@@ -315,27 +315,27 @@ export const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
         {/* Zoom In / Out */}
         <button
           onClick={() => setZoomLevel((z) => Math.min(z + 0.2, 2))}
-          className="p-2 text-[#8EA093] hover:text-white hover:bg-[#1E2A21] rounded-xl"
+          className="p-2 text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F1EDE3] rounded-xl"
         >
           <ZoomIn className="w-4 h-4" />
         </button>
         <button
           onClick={() => setZoomLevel((z) => Math.max(z - 0.2, 0.8))}
-          className="p-2 text-[#8EA093] hover:text-white hover:bg-[#1E2A21] rounded-xl"
+          className="p-2 text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F1EDE3] rounded-xl"
         >
           <ZoomOut className="w-4 h-4" />
         </button>
       </div>
 
       {/* Bottom Floating Quick Card for B Fresh */}
-      <div className="absolute bottom-4 left-4 right-4 sm:left-6 sm:right-auto sm:w-96 z-20 bg-[#121A15]/95 backdrop-blur-md rounded-2xl p-3.5 border border-[#2B3C30] shadow-2xl flex items-center justify-between gap-3 text-[#E4EDE7]">
+      <div className="absolute bottom-4 left-4 right-4 sm:left-6 sm:right-auto sm:w-96 z-20 bg-[#FDFCF9]/95 backdrop-blur-md rounded-2xl p-3.5 border border-[#DDD4C4] shadow-2xl flex items-center justify-between gap-3 text-[#1E2521]">
         <div className="flex items-center gap-3 min-w-0">
-          <div className="w-10 h-10 rounded-xl bg-[#1A261D] flex items-center justify-center text-[#55C778] border border-[#2B3E31] shrink-0">
+          <div className="w-10 h-10 rounded-xl bg-[#F9F7F1] flex items-center justify-center text-[#E87A42] border border-[#DDD4C4] shrink-0">
             <ShoppingBag className="w-5 h-5" />
           </div>
           <div className="min-w-0">
-            <h3 className="font-bold text-sm text-white truncate">B Fresh</h3>
-            <p className="text-xs text-[#8EA093] truncate">
+            <h3 className="font-bold text-sm text-[#1E2521] truncate">B Fresh</h3>
+            <p className="text-xs text-[#5F6A60] truncate">
               Вулиця Всеволода Змієнка · 129 км
             </p>
           </div>

@@ -33,7 +33,7 @@ export const DeleteMessageModal: React.FC<DeleteMessageModalProps> = ({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm bg-[#121A15] border border-[#2B3C30] rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150 p-5 text-[#E4EDE7]"
+        className="w-full max-w-sm bg-[#FDFCF9] border border-[#DDD4C4] rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150 p-5 text-[#1E2521]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Icon & Title */}
@@ -42,12 +42,12 @@ export const DeleteMessageModal: React.FC<DeleteMessageModalProps> = ({
             <Trash2 className="w-5 h-5" />
           </div>
           <div className="flex-1 min-w-0">
-            <h3 className="font-bold text-sm text-white">Видалити повідомлення?</h3>
-            <p className="text-xs text-[#8EA093] mt-0.5">Цю дію неможливо буде скасувати.</p>
+            <h3 className="font-bold text-sm text-[#1E2521]">Видалити повідомлення?</h3>
+            <p className="text-xs text-[#5F6A60] mt-0.5">Цю дію неможливо буде скасувати.</p>
           </div>
           <button
             onClick={onClose}
-            className="p-1 hover:bg-[#1E2A21] text-[#8EA093] hover:text-white rounded-lg transition-colors"
+            className="p-1 hover:bg-[#F1EDE3] text-[#5F6A60] hover:text-[#1E2521] rounded-lg transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -55,7 +55,7 @@ export const DeleteMessageModal: React.FC<DeleteMessageModalProps> = ({
 
         {/* Message preview snippet */}
         {messageTextPreview && (
-          <div className="p-2.5 bg-[#0E1410] border border-[#1F2B22] rounded-xl text-xs text-[#A4B8AB] mb-4 truncate italic">
+          <div className="p-2.5 bg-[#F7F5EE] border border-[#E6DFD3] rounded-xl text-xs text-[#5F6A60] mb-4 truncate italic">
             «{messageTextPreview}»
           </div>
         )}
@@ -67,21 +67,21 @@ export const DeleteMessageModal: React.FC<DeleteMessageModalProps> = ({
               onClick={() => setDeleteForEveryone(true)}
               className={`p-3 rounded-2xl border flex items-center gap-3 cursor-pointer transition-all ${
                 deleteForEveryone
-                  ? 'bg-[#1C2920] border-[#55C778] ring-1 ring-[#55C778]'
-                  : 'bg-[#141C16] border-[#223126] hover:bg-[#18231B]'
+                  ? 'bg-[#F9F7F1] border-[#E87A42] ring-1 ring-[#E87A42]'
+                  : 'bg-[#FDFCF9] border-[#E6DFD3] hover:bg-[#F9F7F1]'
               }`}
             >
               <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                deleteForEveryone ? 'border-[#55C778] bg-[#55C778]' : 'border-[#4A5D50]'
+                deleteForEveryone ? 'border-[#E87A42] bg-[#E87A42]' : 'border-[#4A5D50]'
               }`}>
-                {deleteForEveryone && <div className="w-1.5 h-1.5 bg-[#0C120E] rounded-full" />}
+                {deleteForEveryone && <div className="w-1.5 h-1.5 bg-[#F7F5EE] rounded-full" />}
               </div>
               <div className="flex-1 text-xs">
-                <p className="font-bold text-white flex items-center gap-1.5">
-                  <Users className="w-3.5 h-3.5 text-[#55C778]" />
+                <p className="font-bold text-[#1E2521] flex items-center gap-1.5">
+                  <Users className="w-3.5 h-3.5 text-[#E87A42]" />
                   <span>Видалити для всіх учасників</span>
                 </p>
-                <p className="text-[11px] text-[#8EA093]">Повідомлення зникне з історії для кожного</p>
+                <p className="text-[11px] text-[#5F6A60]">Повідомлення зникне з історії для кожного</p>
               </div>
             </label>
 
@@ -89,37 +89,37 @@ export const DeleteMessageModal: React.FC<DeleteMessageModalProps> = ({
               onClick={() => setDeleteForEveryone(false)}
               className={`p-3 rounded-2xl border flex items-center gap-3 cursor-pointer transition-all ${
                 !deleteForEveryone
-                  ? 'bg-[#1C2920] border-[#55C778] ring-1 ring-[#55C778]'
-                  : 'bg-[#141C16] border-[#223126] hover:bg-[#18231B]'
+                  ? 'bg-[#F9F7F1] border-[#E87A42] ring-1 ring-[#E87A42]'
+                  : 'bg-[#FDFCF9] border-[#E6DFD3] hover:bg-[#F9F7F1]'
               }`}
             >
               <div className={`w-4 h-4 rounded-full border flex items-center justify-center ${
-                !deleteForEveryone ? 'border-[#55C778] bg-[#55C778]' : 'border-[#4A5D50]'
+                !deleteForEveryone ? 'border-[#E87A42] bg-[#E87A42]' : 'border-[#4A5D50]'
               }`}>
-                {!deleteForEveryone && <div className="w-1.5 h-1.5 bg-[#0C120E] rounded-full" />}
+                {!deleteForEveryone && <div className="w-1.5 h-1.5 bg-[#F7F5EE] rounded-full" />}
               </div>
               <div className="flex-1 text-xs">
-                <p className="font-bold text-white flex items-center gap-1.5">
-                  <User className="w-3.5 h-3.5 text-[#8EA093]" />
+                <p className="font-bold text-[#1E2521] flex items-center gap-1.5">
+                  <User className="w-3.5 h-3.5 text-[#5F6A60]" />
                   <span>Видалити тільки для мене</span>
                 </p>
-                <p className="text-[11px] text-[#8EA093]">Залишиться в історії інших співрозмовників</p>
+                <p className="text-[11px] text-[#5F6A60]">Залишиться в історії інших співрозмовників</p>
               </div>
             </label>
           </div>
         )}
 
         {/* Action Buttons */}
-        <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#1F2B22]">
+        <div className="flex items-center justify-end gap-2 pt-3 border-t border-[#E6DFD3]">
           <button
             onClick={onClose}
-            className="px-3.5 py-1.5 hover:bg-[#1E2A21] text-[#8EA093] hover:text-white font-semibold text-xs rounded-xl transition-colors"
+            className="px-3.5 py-1.5 hover:bg-[#F1EDE3] text-[#5F6A60] hover:text-[#1E2521] font-semibold text-xs rounded-xl transition-colors"
           >
             Скасувати
           </button>
           <button
             onClick={handleConfirm}
-            className="px-4 py-1.5 bg-red-600 hover:bg-red-700 text-white font-semibold text-xs rounded-xl shadow-sm transition-colors"
+            className="px-4 py-1.5 bg-red-600 hover:bg-red-700 text-[#1E2521] font-semibold text-xs rounded-xl shadow-sm transition-colors"
           >
             Видалити
           </button>

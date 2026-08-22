@@ -48,7 +48,7 @@ export const ScheduleMessageModal: React.FC<ScheduleMessageModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-xs flex items-center justify-center p-3 sm:p-4 animate-in fade-in duration-150">
-      <div className="bg-[#FAF8F3] border border-[#DCD3C1] rounded-3xl w-full max-w-md shadow-2xl overflow-hidden select-none animate-in zoom-in-95 duration-150">
+      <div className="bg-[#FDFCF9] border border-[#DCD3C1] rounded-3xl w-full max-w-md shadow-2xl overflow-hidden select-none animate-in zoom-in-95 duration-150">
         {/* Header */}
         <div className="px-5 py-4 border-b border-[#E8DFD1] flex items-center justify-between bg-[#F5EFE4]">
           <div className="flex items-center gap-2.5">
@@ -56,10 +56,10 @@ export const ScheduleMessageModal: React.FC<ScheduleMessageModalProps> = ({
               <Clock className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="font-extrabold text-sm sm:text-base text-[#1F2521]">
+              <h3 className="font-extrabold text-sm sm:text-base text-[#1E2521]">
                 Відкладене надсилання
               </h3>
-              <p className="text-xs text-[#717E75]">Повідомлення буде доставлено у вказаний час</p>
+              <p className="text-xs text-[#7A8479]">Повідомлення буде доставлено у вказаний час</p>
             </div>
           </div>
 
@@ -68,7 +68,7 @@ export const ScheduleMessageModal: React.FC<ScheduleMessageModalProps> = ({
               soundFx.playTap();
               onClose();
             }}
-            className="p-1.5 text-[#717E75] hover:text-[#1F2521] hover:bg-[#EBE2D3] rounded-xl transition-colors"
+            className="p-1.5 text-[#7A8479] hover:text-[#1E2521] hover:bg-[#EBE2D3] rounded-xl transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -76,7 +76,7 @@ export const ScheduleMessageModal: React.FC<ScheduleMessageModalProps> = ({
 
         {/* Content */}
         <div className="p-5 space-y-4">
-          <div className="flex items-center justify-between text-xs font-bold text-[#556157]">
+          <div className="flex items-center justify-between text-xs font-bold text-[#8A9186]">
             <span>Швидкі пресети:</span>
             <button
               type="button"
@@ -114,21 +114,21 @@ export const ScheduleMessageModal: React.FC<ScheduleMessageModalProps> = ({
           ) : (
             <div className="grid grid-cols-2 gap-3 p-3 bg-white border border-[#DFD6C5] rounded-2xl">
               <div>
-                <label className="text-[11px] font-bold text-[#556157] block mb-1">Дата:</label>
+                <label className="text-[11px] font-bold text-[#8A9186] block mb-1">Дата:</label>
                 <input
                   type="date"
                   value={customDate}
                   onChange={(e) => setCustomDate(e.target.value)}
-                  className="w-full p-2 bg-[#FAF8F3] border border-[#DFD6C5] rounded-xl text-xs font-mono text-[#1F2521]"
+                  className="w-full p-2 bg-[#FDFCF9] border border-[#DFD6C5] rounded-xl text-xs font-mono text-[#1E2521]"
                 />
               </div>
               <div>
-                <label className="text-[11px] font-bold text-[#556157] block mb-1">Час:</label>
+                <label className="text-[11px] font-bold text-[#8A9186] block mb-1">Час:</label>
                 <input
                   type="time"
                   value={customTime}
                   onChange={(e) => setCustomTime(e.target.value)}
-                  className="w-full p-2 bg-[#FAF8F3] border border-[#DFD6C5] rounded-xl text-xs font-mono text-[#1F2521]"
+                  className="w-full p-2 bg-[#FDFCF9] border border-[#DFD6C5] rounded-xl text-xs font-mono text-[#1E2521]"
                 />
               </div>
             </div>
@@ -136,7 +136,7 @@ export const ScheduleMessageModal: React.FC<ScheduleMessageModalProps> = ({
 
           <button
             onClick={handleConfirm}
-            className="w-full py-2.5 bg-[#E87A42] hover:bg-[#D46B35] text-white rounded-xl font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5 mt-2"
+            className="w-full py-2.5 bg-[#E87A42] hover:bg-[#D46B35] text-[#1E2521] rounded-xl font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5 mt-2"
           >
             <Check className="w-4 h-4" />
             <span>Встановити час для цього повідомлення</span>

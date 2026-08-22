@@ -57,10 +57,10 @@ export const FolderInsightsModal: React.FC<FolderInsightsModalProps> = ({
     <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-150 select-none">
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-full max-w-xl bg-[#121A15] border border-[#2B3C30] rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] text-[#E4EDE7] animate-in zoom-in-95 duration-150"
+        className="w-full max-w-xl bg-[#FDFCF9] border border-[#DDD4C4] rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] text-[#1E2521] animate-in zoom-in-95 duration-150"
       >
         {/* Modal Header */}
-        <div className="p-4 border-b border-[#1F2B22] bg-[#141C16] flex items-center justify-between">
+        <div className="p-4 border-b border-[#E6DFD3] bg-[#FDFCF9] flex items-center justify-between">
           <div className="flex items-center gap-3 min-w-0">
             <div
               className="w-10 h-10 rounded-2xl flex items-center justify-center text-lg shadow-sm shrink-0"
@@ -72,10 +72,10 @@ export const FolderInsightsModal: React.FC<FolderInsightsModalProps> = ({
               <span>{folder.emoji}</span>
             </div>
             <div className="min-w-0">
-              <h3 className="font-extrabold text-sm text-white truncate">
+              <h3 className="font-extrabold text-sm text-[#1E2521] truncate">
                 {folder.name}
               </h3>
-              <p className="text-[11px] text-[#8EA093] truncate">
+              <p className="text-[11px] text-[#5F6A60] truncate">
                 Склад папки та обсяг збережених повідомлень
               </p>
             </div>
@@ -86,7 +86,7 @@ export const FolderInsightsModal: React.FC<FolderInsightsModalProps> = ({
               soundFx.playTap();
               onClose();
             }}
-            className="p-1.5 hover:bg-[#1E2A21] rounded-xl text-[#8EA093] hover:text-white transition-colors shrink-0"
+            className="p-1.5 hover:bg-[#F1EDE3] rounded-xl text-[#5F6A60] hover:text-[#1E2521] transition-colors shrink-0"
             title="Закрити"
           >
             <X className="w-5 h-5" />
@@ -97,49 +97,49 @@ export const FolderInsightsModal: React.FC<FolderInsightsModalProps> = ({
         <div className="p-4 space-y-4 overflow-y-auto flex-1 text-xs">
           {/* Реальні лічильники */}
           <div className="grid grid-cols-3 gap-2">
-            <div className="p-3 bg-[#141C16] border border-[#223126] rounded-2xl space-y-1">
-              <div className="flex items-center justify-between text-[#8EA093]">
+            <div className="p-3 bg-[#FDFCF9] border border-[#E6DFD3] rounded-2xl space-y-1">
+              <div className="flex items-center justify-between text-[#5F6A60]">
                 <span className="text-[10px] font-bold uppercase tracking-wider">Бесід</span>
                 <Users className="w-3.5 h-3.5" style={{ color: accentColor }} />
               </div>
-              <div className="text-xl font-black text-white tracking-tight">
+              <div className="text-xl font-black text-[#1E2521] tracking-tight">
                 {folderChats.length}
               </div>
             </div>
 
-            <div className="p-3 bg-[#141C16] border border-[#223126] rounded-2xl space-y-1">
-              <div className="flex items-center justify-between text-[#8EA093]">
+            <div className="p-3 bg-[#FDFCF9] border border-[#E6DFD3] rounded-2xl space-y-1">
+              <div className="flex items-center justify-between text-[#5F6A60]">
                 <span className="text-[10px] font-bold uppercase tracking-wider">Повідомлень</span>
-                <MessageSquare className="w-3.5 h-3.5 text-[#55C778]" />
+                <MessageSquare className="w-3.5 h-3.5 text-[#E87A42]" />
               </div>
-              <div className="text-xl font-black text-white tracking-tight">
+              <div className="text-xl font-black text-[#1E2521] tracking-tight">
                 {totalMessages}
               </div>
-              <div className="text-[10px] text-[#8EA093]">в історії на цьому вузлі</div>
+              <div className="text-[10px] text-[#5F6A60]">в історії на цьому вузлі</div>
             </div>
 
-            <div className="p-3 bg-[#141C16] border border-[#223126] rounded-2xl space-y-1">
-              <div className="flex items-center justify-between text-[#8EA093]">
+            <div className="p-3 bg-[#FDFCF9] border border-[#E6DFD3] rounded-2xl space-y-1">
+              <div className="flex items-center justify-between text-[#5F6A60]">
                 <span className="text-[10px] font-bold uppercase tracking-wider">Непрочитаних</span>
                 <Inbox className="w-3.5 h-3.5 text-[#F4AF25]" />
               </div>
-              <div className="text-xl font-black text-white tracking-tight">
+              <div className="text-xl font-black text-[#1E2521] tracking-tight">
                 {totalUnread}
               </div>
             </div>
           </div>
 
           {/* Розподіл повідомлень за бесідами */}
-          <div className="bg-[#141C16] border border-[#223126] rounded-2xl p-3.5 space-y-2.5">
+          <div className="bg-[#FDFCF9] border border-[#E6DFD3] rounded-2xl p-3.5 space-y-2.5">
             <div className="flex items-center justify-between">
-              <span className="text-[11px] font-bold text-[#8EA093] uppercase tracking-wider">
+              <span className="text-[11px] font-bold text-[#5F6A60] uppercase tracking-wider">
                 Розподіл повідомлень за бесідами
               </span>
             </div>
 
             <div className="space-y-2 max-h-60 overflow-y-auto pr-1">
               {folderChats.length === 0 ? (
-                <p className="text-center text-[#8EA093] py-2">У цій папці немає чатів</p>
+                <p className="text-center text-[#5F6A60] py-2">У цій папці немає чатів</p>
               ) : (
                 sortedChats.map((chat, idx) => {
                   const msgs = chat.messages?.length || 0;
@@ -151,22 +151,22 @@ export const FolderInsightsModal: React.FC<FolderInsightsModalProps> = ({
                           <img
                             src={chat.avatar}
                             alt={chat.title}
-                            className="w-5 h-5 rounded-lg object-cover ring-1 ring-[#1F2B22] shrink-0"
+                            className="w-5 h-5 rounded-lg object-cover ring-1 ring-[#E6DFD3] shrink-0"
                           />
-                          <span className="font-bold text-white truncate">
+                          <span className="font-bold text-[#1E2521] truncate">
                             {chat.title}
                           </span>
                         </div>
-                        <span className="font-mono text-[11px] text-[#8EA093] shrink-0">
+                        <span className="font-mono text-[11px] text-[#5F6A60] shrink-0">
                           {msgs} пов. ({percent}%)
                         </span>
                       </div>
-                      <div className="w-full h-1.5 bg-[#0E1410] rounded-full overflow-hidden">
+                      <div className="w-full h-1.5 bg-[#F7F5EE] rounded-full overflow-hidden">
                         <div
                           className="h-full rounded-full"
                           style={{
                             width: `${percent}%`,
-                            backgroundColor: idx === 0 ? accentColor : '#55C778',
+                            backgroundColor: idx === 0 ? accentColor : '#E87A42',
                           }}
                         />
                       </div>
@@ -179,13 +179,13 @@ export const FolderInsightsModal: React.FC<FolderInsightsModalProps> = ({
         </div>
 
         {/* Modal Footer */}
-        <div className="p-3.5 border-t border-[#1F2B22] bg-[#141C16] flex items-center justify-end">
+        <div className="p-3.5 border-t border-[#E6DFD3] bg-[#FDFCF9] flex items-center justify-end">
           <button
             onClick={() => {
               soundFx.playTap();
               onClose();
             }}
-            className="px-4 py-2 bg-[#55C778] hover:bg-[#46AF68] text-[#0C120E] rounded-xl font-bold text-xs transition-colors"
+            className="px-4 py-2 bg-[#E87A42] hover:bg-[#C25925] text-[#F7F5EE] rounded-xl font-bold text-xs transition-colors"
           >
             Зрозуміло
           </button>

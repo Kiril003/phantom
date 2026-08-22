@@ -36,6 +36,7 @@ import {
   Link2
 } from 'lucide-react';
 import { Chat, ChatCategory, ChatCircle, PersonaSphere, SmartFolder, UserProfile } from '../../types/messenger';
+import { Avatar } from './Avatar';
 import { soundFx } from '../../utils/messengerSound';
 import { networkEngine } from '../../services/messengerNetworkEngine';
 import { ShareFolderModal } from './ShareFolderModal';
@@ -94,7 +95,7 @@ const colorPalette = [
   { hex: '#2563EB', label: 'Кобальт' },
   { hex: '#7C3AED', label: 'Лаванда' },
   { hex: '#E11D48', label: 'Корал' },
-  { hex: '#1F2521', label: 'Графіт' },
+  { hex: '#E6DFD3', label: 'Графіт' },
 ];
 
 const vibePresets = [
@@ -538,7 +539,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
     const exportData = {
       exportVersion: '1.0',
       exportedAt: new Date().toISOString(),
-      appName: 'Aura Messenger',
+      appName: 'PHANTOM Messenger',
       folder: {
         id: folder.id,
         name: folder.name,
@@ -684,13 +685,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
     <aside className="flex h-full w-full md:w-auto bg-[#101713] border-r border-[#1C281F] select-none shrink-0 overflow-hidden relative">
       {/* Toast Notification Banner */}
       {toastMessage && (
-        <div className="absolute top-4 left-4 right-4 z-50 bg-[#14261A]/95 border border-[#2B4E33] text-[#55C778] px-3 py-2 rounded-xl text-xs font-bold shadow-2xl text-center animate-in fade-in">
+        <div className="absolute top-4 left-4 right-4 z-50 bg-[#14261A]/95 border border-[#2B4E33] text-[#E87A42] px-3 py-2 rounded-xl text-xs font-bold shadow-2xl text-center animate-in fade-in">
           {toastMessage}
         </div>
       )}
 
       {/* 0. Left Organic Dark Workspace / Folder Rail (Desktop & Tablet) */}
-      <div className="hidden md:flex w-14 sm:w-16 bg-[#0E1410] flex-col items-center py-3.5 border-r border-[#1B261D] shrink-0 justify-between select-none z-10">
+      <div className="hidden md:flex w-14 sm:w-16 bg-[#F7F5EE] flex-col items-center py-3.5 border-r border-[#1B261D] shrink-0 justify-between select-none z-10">
         {/* Top: Current User Avatar & Workspace Folders */}
         <div className="flex flex-col items-center gap-3.5 w-full">
           <div
@@ -698,15 +699,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
             className="relative cursor-pointer group"
             title={`${currentUser.name} (${currentUser.circleRole || 'Користувач'}) — Профіль`}
           >
-            <img
-              src={currentUser.avatar}
-              alt={currentUser.name}
-              className="w-10 h-10 rounded-2xl object-cover ring-2 ring-[#55C778]/80 group-hover:scale-105 transition-transform shadow-sm"
-            />
-            <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-[#10B981] rounded-full ring-2 ring-[#0E1410]" />
+            <Avatar src={currentUser.avatar} name={currentUser.name} className="w-10 h-10     group-hover:scale-105 transition-transform" />
+            <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-[#10B981] rounded-full ring-2 ring-[#F7F5EE]" />
           </div>
 
-          <div className="w-7 h-px bg-[#1F2B22]" />
+          <div className="w-7 h-px bg-[#E6DFD3]" />
 
           {/* Smart Folders List */}
           <div className="flex flex-col items-center gap-2.5 w-full overflow-y-auto no-scrollbar max-h-[calc(100vh-210px)] py-1">
@@ -726,13 +723,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
               title="Усі бесіди"
             >
               {activeFolderId === 'all' && (
-                <span className="absolute left-0 w-1 h-5 bg-[#55C778] rounded-r-full shadow-[0_0_8px_rgba(85,199,120,0.8)]" />
+                <span className="absolute left-0 w-1 h-5 bg-[#E87A42] rounded-r-full shadow-[0_0_8px_rgba(85,199,120,0.8)]" />
               )}
               <div
                 className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-black transition-all ${
                   activeFolderId === 'all'
-                    ? 'bg-[#55C778] text-[#0C120E] shadow-md scale-105 font-bold'
-                    : 'bg-[#162019] text-[#8EA093] hover:bg-[#1E2B22] hover:text-white hover:scale-105'
+                    ? 'bg-[#E87A42] text-[#F7F5EE] shadow-md scale-105 font-bold'
+                    : 'bg-[#162019] text-[#5F6A60] hover:bg-[#1E2B22] hover:text-[#1E2521] hover:scale-105'
                 }`}
               >
                 💬
@@ -768,27 +765,27 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     {isActive && (
                       <span
                         className="absolute left-0 w-1 h-5 rounded-r-full shadow-[0_0_8px_rgba(85,199,120,0.8)]"
-                        style={{ backgroundColor: folder.color || '#55C778' }}
+                        style={{ backgroundColor: folder.color || '#E87A42' }}
                       />
                     )}
                     <div
                       className={`w-10 h-10 rounded-xl flex items-center justify-center text-base transition-all relative ${
                         isDragTarget
-                          ? 'ring-2 ring-[#55C778] scale-110 shadow-lg'
+                          ? 'ring-2 ring-[#E87A42] scale-110 shadow-lg'
                           : isActive
                           ? 'shadow-md scale-105 ring-1 ring-white/30 font-bold'
                           : 'opacity-80 hover:opacity-100 hover:scale-105 bg-[#162019]'
                       }`}
                       style={{
                         backgroundColor: isActive
-                          ? (folder.color || '#55C778')
+                          ? (folder.color || '#E87A42')
                           : undefined,
-                        color: isActive ? '#0C120E' : '#FFFFFF',
+                        color: isActive ? '#F7F5EE' : '#FFFFFF',
                       }}
                     >
                       <span>{folder.emoji || '📁'}</span>
                       {folderUnread > 0 && (
-                        <span className="absolute -top-1 -right-1 px-1.5 py-0.2 bg-[#E87A42] text-white text-[9px] font-black rounded-full ring-2 ring-[#0E1410]">
+                        <span className="absolute -top-1 -right-1 px-1.5 py-0.2 bg-[#E87A42] text-[#1E2521] text-[9px] font-black rounded-full ring-2 ring-[#F7F5EE]">
                           {folderUnread}
                         </span>
                       )}
@@ -803,7 +800,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 soundFx.playTap();
                 onOpenCreateFolder();
               }}
-              className="w-10 h-10 rounded-xl bg-[#162019] hover:bg-[#1E2B22] text-[#8EA093] hover:text-white flex items-center justify-center transition-all hover:scale-105 shadow-sm"
+              className="w-10 h-10 rounded-xl bg-[#162019] hover:bg-[#1E2B22] text-[#5F6A60] hover:text-[#1E2521] flex items-center justify-center transition-all hover:scale-105 shadow-sm"
               title="Створити нову папку / простір (+)"
             >
               <Plus className="w-5 h-5" />
@@ -812,13 +809,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* Bottom: Settings */}
-        <div className="flex flex-col items-center gap-2 pt-2 border-t border-[#1F2B22] w-full">
+        <div className="flex flex-col items-center gap-2 pt-2 border-t border-[#E6DFD3] w-full">
           <button
             onClick={() => {
               soundFx.playTap();
               onOpenSettings();
             }}
-            className="w-10 h-10 rounded-xl bg-[#162019] hover:bg-[#1E2B22] text-[#8EA093] hover:text-white flex items-center justify-center transition-all hover:scale-105 shadow-sm"
+            className="w-10 h-10 rounded-xl bg-[#162019] hover:bg-[#1E2B22] text-[#5F6A60] hover:text-[#1E2521] flex items-center justify-center transition-all hover:scale-105 shadow-sm"
             title="Налаштування застосунку"
           >
             <Settings className="w-4.5 h-4.5" />
@@ -827,33 +824,29 @@ export const Sidebar: React.FC<SidebarProps> = ({
       </div>
 
       {/* Main Chat List Container */}
-      <div className="w-full md:w-80 lg:w-84 flex flex-col h-full bg-[#121A15] min-w-0 overflow-hidden relative">
+      <div className="w-full md:w-80 lg:w-84 flex flex-col h-full bg-[#FDFCF9] min-w-0 overflow-hidden relative">
         {/* Mobile Top Brand & Quick Actions Header */}
-        <div className="md:hidden px-4 pt-[calc(var(--sat)+0.65rem)] pb-2.5 bg-[#0E1410] text-white flex items-center justify-between shrink-0 shadow-sm border-b border-[#1B261D]">
+        <div className="md:hidden px-4 pt-[calc(var(--sat)+0.65rem)] pb-2.5 bg-[#F7F5EE] text-[#1E2521] flex items-center justify-between shrink-0 shadow-sm border-b border-[#1B261D]">
           <div className="flex items-center gap-3 min-w-0">
             <div
               onClick={onOpenUserProfile}
               className="relative cursor-pointer shrink-0 active:scale-95 transition-transform"
               title={`${currentUser.name} — Профіль`}
             >
-              <img
-                src={currentUser.avatar}
-                alt={currentUser.name}
-                className="w-9 h-9 rounded-2xl object-cover ring-2 ring-[#55C778]"
-              />
-              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-[#10B981] rounded-full ring-2 ring-[#0E1410]" />
+              <Avatar src={currentUser.avatar} name={currentUser.name} className="w-9 h-9" />
+              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-[#10B981] rounded-full ring-2 ring-[#F7F5EE]" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <h1 className="font-black text-base tracking-tight text-white flex items-center gap-1">
-                  <span>Aura</span>
-                  <Sparkles className="w-3.5 h-3.5 text-[#55C778]" />
+                <h1 className="font-black text-base tracking-tight text-[#1E2521] flex items-center gap-1">
+                  <span>PHANTOM</span>
+                  <Sparkles className="w-3.5 h-3.5 text-[#E87A42]" />
                 </h1>
-                <span className="px-1.5 py-0.2 bg-[#1A251E] text-[#55C778] rounded-md text-[9px] font-bold">
+                <span className="px-1.5 py-0.2 bg-[#F9F7F1] text-[#E87A42] rounded-md text-[9px] font-bold">
                   v2.4
                 </span>
               </div>
-              <p className="text-[10px] text-[#8EA093] font-semibold flex items-center gap-1 leading-none mt-0.5 truncate">
+              <p className="text-[10px] text-[#5F6A60] font-semibold flex items-center gap-1 leading-none mt-0.5 truncate">
                 <span className="w-1.5 h-1.5 rounded-full bg-[#10B981] animate-pulse" />
                 <span>{networkEngine.getTransportMode() === 'p2p' ? 'P2P Direct' : 'Auto Hybrid'}</span>
               </p>
@@ -867,7 +860,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   soundFx.playTap();
                   onOpenP2PNetworkModal();
                 }}
-                className="p-2 text-[#8EA093] hover:text-white hover:bg-[#1A251E] rounded-xl transition-colors active:scale-90"
+                className="p-2 text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F9F7F1] rounded-xl transition-colors active:scale-90"
                 title="P2P / Серверні протоколи"
                 aria-label="P2P Протоколи"
               >
@@ -879,7 +872,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 soundFx.playTap();
                 onOpenSettings();
               }}
-              className="p-2 text-[#8EA093] hover:text-white hover:bg-[#1A251E] rounded-xl transition-colors active:scale-90"
+              className="p-2 text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F9F7F1] rounded-xl transition-colors active:scale-90"
               title="Налаштування"
               aria-label="Налаштування"
             >
@@ -890,7 +883,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 soundFx.playTap();
                 onNewChat();
               }}
-              className="p-2 bg-[#55C778] text-[#0C120E] rounded-xl hover:bg-[#46AF68] transition-transform active:scale-90 shadow-md font-bold"
+              className="p-2 bg-[#E87A42] text-[#F7F5EE] rounded-xl hover:bg-[#C25925] transition-transform active:scale-90 shadow-md font-bold"
               title="Новий діалог"
               aria-label="Створити новий діалог"
             >
@@ -900,14 +893,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* 1. Folder Header and Action (Desktop) */}
-        <div className="hidden md:flex px-3.5 py-3 border-b border-[#1F2B22] items-center justify-between gap-2 bg-[#121A15]">
+        <div className="hidden md:flex px-3.5 py-3 border-b border-[#E6DFD3] items-center justify-between gap-2 bg-[#FDFCF9]">
           <div className="flex items-center gap-2 min-w-0">
             <span className="text-xl shrink-0">{currentFolder.emoji || '💬'}</span>
             <div className="min-w-0">
-              <h2 className="font-extrabold text-sm tracking-tight text-white truncate">
+              <h2 className="font-extrabold text-sm tracking-tight text-[#1E2521] truncate">
                 {currentFolder.name}
               </h2>
-              <p className="text-[10px] text-[#8EA093] font-medium truncate">
+              <p className="text-[10px] text-[#5F6A60] font-medium truncate">
                 {filteredChats.length} {filteredChats.length === 1 ? 'чат' : filteredChats.length < 5 ? 'чати' : 'чатів'}
                 {totalUnread > 0 && ` • ${totalUnread} нових`}
               </p>
@@ -918,7 +911,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {currentFolder.id !== 'all' && !currentFolder.isBuiltIn && (
               <button
                 onClick={() => onOpenEditFolder(currentFolder)}
-                className="p-1.5 text-[#8EA093] hover:text-white hover:bg-[#1A251E] rounded-xl transition-colors"
+                className="p-1.5 text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F9F7F1] rounded-xl transition-colors"
                 title="Налаштувати папку"
               >
                 <SlidersHorizontal className="w-3.5 h-3.5" />
@@ -929,7 +922,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 soundFx.playTap();
                 onNewChat();
               }}
-              className="p-1.5 text-[#0C120E] bg-[#55C778] hover:bg-[#46AF68] rounded-xl transition-transform active:scale-95 shadow-md flex items-center gap-1 text-xs font-bold px-2.5"
+              className="p-1.5 text-[#F7F5EE] bg-[#E87A42] hover:bg-[#C25925] rounded-xl transition-transform active:scale-95 shadow-md flex items-center gap-1 text-xs font-bold px-2.5"
               title="Новий діалог"
             >
               <Plus className="w-3.5 h-3.5" />
@@ -940,7 +933,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
         {/* Drag-and-drop helper tip */}
         {draggedChatId && (
-          <div className="bg-[#55C778] text-[#0C120E] px-3 py-1.5 text-[11px] font-bold flex items-center justify-between animate-pulse">
+          <div className="bg-[#E87A42] text-[#F7F5EE] px-3 py-1.5 text-[11px] font-bold flex items-center justify-between animate-pulse">
             <div className="flex items-center gap-1.5">
               <GripVertical className="w-3.5 h-3.5" />
               <span>Перетягніть у потрібну папку на лівій панелі 👈</span>
@@ -950,20 +943,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
 
         {/* 2. Search & Quick Filters */}
-        <div className="px-3 pt-2.5 pb-1.5 space-y-2 border-b border-[#1F2B22] bg-[#121A15]">
+        <div className="px-3 pt-2.5 pb-1.5 space-y-2 border-b border-[#E6DFD3] bg-[#FDFCF9]">
           <div className="relative">
-            <Search className="w-3.5 h-3.5 text-[#6B8072] absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-3.5 h-3.5 text-[#7A8479] absolute left-3 top-1/2 -translate-y-1/2" />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Пошук людей, тем, повідомлень..."
-              className="w-full pl-8 pr-8 py-1.5 bg-[#162019] border border-[#26372B] rounded-xl text-xs text-[#F0FAF3] placeholder-[#6B8072] focus:outline-none focus:border-[#55C778] focus:ring-1 focus:ring-[#55C778]/30 transition-colors shadow-inner"
+              className="w-full pl-8 pr-8 py-1.5 bg-[#162019] border border-[#26372B] rounded-xl text-xs text-[#F0FAF3] placeholder-[#7A8479] focus:outline-none focus:border-[#E87A42] focus:ring-1 focus:ring-[#E87A42]/30 transition-colors shadow-inner"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8EA093] hover:text-white"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#5F6A60] hover:text-[#1E2521]"
               >
                 <X className="w-3.5 h-3.5" />
               </button>
@@ -971,7 +964,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
 
           {/* Category Tabs (Prototype faithful: ALL, PHANTOM AI, CALL, SMS, BRIDGES) */}
-          <div className="p-0.5 bg-[#0E1410] border border-[#1F2B22] rounded-xl flex items-center gap-1">
+          <div className="p-0.5 bg-[#F7F5EE] border border-[#E6DFD3] rounded-xl flex items-center gap-1">
             {commsTabs.map((tab) => {
               const isActive = activeCategory === tab.id;
               const count = tab.id === 'all'
@@ -993,13 +986,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   }}
                   className={`flex-1 py-1 text-center font-mono text-[10px] tracking-wider uppercase font-bold rounded-lg transition-all flex items-center justify-center gap-1 ${
                     isActive
-                      ? 'bg-[#55C778] text-[#0C120E] shadow-sm'
-                      : 'text-[#8EA093] hover:text-white hover:bg-[#162019]'
+                      ? 'bg-[#E87A42] text-[#F7F5EE] shadow-sm'
+                      : 'text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#162019]'
                   }`}
                 >
                   <span>{tab.label}</span>
                   {count > 0 && (
-                    <span className={`px-1 py-0.1 text-[8.5px] rounded-full font-black ${isActive ? 'bg-[#0C120E] text-[#55C778]' : 'bg-[#E87A42] text-white'}`}>
+                    <span className={`px-1 py-0.1 text-[8.5px] rounded-full font-black ${isActive ? 'bg-[#F7F5EE] text-[#E87A42]' : 'bg-[#E87A42] text-[#1E2521]'}`}>
                       {count}
                     </span>
                   )}
@@ -1013,11 +1006,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="flex-1 overflow-y-auto px-2 py-2 space-y-1.5 pb-24 md:pb-3">
         {filteredChats.length === 0 ? (
           <div className="py-12 text-center text-xs text-[#7A877E] space-y-2 px-4">
-            <div className="w-10 h-10 rounded-xl bg-[#141C16] text-xl flex items-center justify-center mx-auto border border-[#233127]">
+            <div className="w-10 h-10 rounded-xl bg-[#FDFCF9] text-xl flex items-center justify-center mx-auto border border-[#F1EDE3]">
               {currentFolder.emoji || '📁'}
             </div>
-            <p className="font-bold text-white">Немає бесід у цій категорії</p>
-            <p className="text-[11px] text-[#8EA093]">
+            <p className="font-bold text-[#1E2521]">Немає бесід у цій категорії</p>
+            <p className="text-[11px] text-[#5F6A60]">
               Оберіть іншу вкладку або створіть новий діалог:
             </p>
             <div className="flex flex-col gap-1.5 pt-1">
@@ -1026,7 +1019,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   setActiveCategory('all');
                   onSelectFolder('all');
                 }}
-                className="text-[#55C778] font-semibold text-xs hover:underline"
+                className="text-[#E87A42] font-semibold text-xs hover:underline"
               >
                 ← Показати всі бесіди
               </button>
@@ -1042,7 +1035,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             // Determine left 3px indicator color
             const isPhantom = chat.type === 'phantom' || chat.type === 'ai' || chat.id === 'chat_phantom_assistant';
             const isHot = chat.isHot || chat.callType === 'missed' || chat.callType === 'voicemail';
-            const indicatorColor = isHot ? '#EF4444' : isPhantom ? '#F4AF25' : chat.isOnline ? '#55C778' : undefined;
+            const indicatorColor = isHot ? '#EF4444' : isPhantom ? '#F4AF25' : chat.isOnline ? '#E87A42' : undefined;
 
             // Micro badge label
             const metaLabel = isPhantom ? 'THREAD · 14 MSG' : chat.callDuration ? `CALL · ${chat.callDuration}` : chat.callType === 'voicemail' ? 'VOICEMAIL · 18S · ✱HOT✱' : chat.type === 'sms' ? 'SMS · 6 MSG' : chat.type === 'bridge' ? 'MATRIX BRIDGE · READ-ONLY' : chat.badge || (chat.isOnline ? 'ONLINE' : undefined);
@@ -1061,10 +1054,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 }}
                 className={`group p-2.5 rounded-xl cursor-pointer transition-all flex items-start gap-2.5 relative border ${
                   isDraggingThis
-                    ? 'opacity-40 scale-95 border-dashed border-[#55C778] bg-[#162219]'
+                    ? 'opacity-40 scale-95 border-dashed border-[#E87A42] bg-[#162219]'
                     : isSelected
-                    ? 'bg-[#18231B] border-[#2E4833] shadow-md ring-1 ring-[#55C778]/30'
-                    : 'bg-[#121A15]/80 hover:bg-[#162019] border-[#1C281F] hover:border-[#26372B]'
+                    ? 'bg-[#F9F7F1] border-[#2E4833] shadow-md ring-1 ring-[#E87A42]/30'
+                    : 'bg-[#FDFCF9]/80 hover:bg-[#162019] border-[#1C281F] hover:border-[#26372B]'
                 }`}
               >
                 {/* 3px Left Vertical Accent Bar (Faithful to Prototype) */}
@@ -1077,13 +1070,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
                 {/* Avatar (36px) with Status Indicator */}
                 <div className="relative shrink-0 mt-0.5">
-                  <img
-                    src={chat.avatar}
-                    alt={chat.title}
-                    className="w-9 h-9 rounded-xl object-cover ring-1 ring-white/10 shadow-sm"
-                  />
+                  <Avatar src={chat.avatar} name={chat.title} className="w-9 h-9" />
                   {chat.isOnline && (
-                    <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-[#55C778] rounded-full ring-2 ring-[#121A15]" />
+                    <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-[#E87A42] rounded-full ring-2 ring-[#FDFCF9]" />
                   )}
                 </div>
 
@@ -1092,20 +1081,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   {/* Line 1: Title + Time */}
                   <div className="flex items-baseline justify-between gap-1 mb-0.5">
                     <div className="flex items-center gap-1 min-w-0">
-                      <h3 className="font-bold text-[13px] text-white truncate leading-tight">
+                      <h3 className="font-bold text-[13px] text-[#1E2521] truncate leading-tight">
                         {chat.title}
                       </h3>
                       {chat.pinned && <Pin className="w-2.5 h-2.5 text-[#F4AF25] fill-current shrink-0" />}
                     </div>
-                    <span className="text-[10px] text-[#8EA093] font-mono shrink-0">
+                    <span className="text-[10px] text-[#5F6A60] font-mono shrink-0">
                       {lastMsg?.timestamp || chat.lastActive || ''}
                     </span>
                   </div>
 
                   {/* Line 2: Meta Subtitle (Prototype mono uppercase) */}
                   {metaLabel && (
-                    <div className="font-mono text-[9.5px] tracking-wider uppercase mb-1 flex items-center gap-1 font-semibold text-[#8EA093]">
-                      <span className={isHot ? 'text-red-400 font-bold' : isPhantom ? 'text-[#F4AF25]' : 'text-[#8EA093]'}>
+                    <div className="font-mono text-[9.5px] tracking-wider uppercase mb-1 flex items-center gap-1 font-semibold text-[#5F6A60]">
+                      <span className={isHot ? 'text-red-400 font-bold' : isPhantom ? 'text-[#F4AF25]' : 'text-[#5F6A60]'}>
                         {metaLabel}
                       </span>
                     </div>
@@ -1116,10 +1105,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     {chat.draft ? (
                       <span>
                         <span className="text-[#F4AF25] font-bold">Чернетка: </span>
-                        <span className="text-[#8EA093] italic">{chat.draft}</span>
+                        <span className="text-[#5F6A60] italic">{chat.draft}</span>
                       </span>
                     ) : lastMsg?.type === 'table' ? (
-                      <span className="text-[#55C778] font-semibold">📊 {lastMsg.tableData?.title || 'Таблиця'}</span>
+                      <span className="text-[#E87A42] font-semibold">📊 {lastMsg.tableData?.title || 'Таблиця'}</span>
                     ) : lastMsg?.type === 'chart' ? (
                       <span className="text-[#60A5FA] font-semibold">📈 {lastMsg.chartData?.title || 'Графік'}</span>
                     ) : lastMsg?.type === 'task-list' ? (
@@ -1133,7 +1122,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
                   {/* Line 4: AI Secretary Italic Summary (Faithful to Prototype) */}
                   {chat.aiSecretarySummary && (
-                    <div className="font-serif italic text-[11.5px] text-[#55C778] mt-0.5 truncate leading-tight opacity-90">
+                    <div className="font-serif italic text-[11.5px] text-[#E87A42] mt-0.5 truncate leading-tight opacity-90">
                       AI · {chat.aiSecretarySummary}
                     </div>
                   )}
@@ -1142,7 +1131,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 {/* Unread badge & action trigger */}
                 <div className="flex flex-col items-end justify-between self-stretch shrink-0">
                   {chat.unreadCount > 0 && (
-                    <span className="px-1.5 py-0.2 bg-[#55C778] text-[#0C120E] text-[9.5px] font-black rounded-full shadow-sm">
+                    <span className="px-1.5 py-0.2 bg-[#E87A42] text-[#F7F5EE] text-[9.5px] font-black rounded-full shadow-sm">
                       {chat.unreadCount}
                     </span>
                   )}
@@ -1153,7 +1142,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       soundFx.playTap();
                       setActiveMenuChatId(activeMenuChatId === chat.id ? null : chat.id);
                     }}
-                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-[#202D24] rounded-lg text-[#8EA093] hover:text-white transition-opacity mt-auto"
+                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-[#202D24] rounded-lg text-[#5F6A60] hover:text-[#1E2521] transition-opacity mt-auto"
                     title="Додати або перемістити в папку"
                   >
                     <MoreVertical className="w-3 h-3" />
@@ -1164,13 +1153,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 {activeMenuChatId === chat.id && (
                   <div
                     onClick={(e) => e.stopPropagation()}
-                    className="absolute right-2 top-12 z-30 w-52 p-2 bg-[#141C16]/98 backdrop-blur-2xl border border-[#2B3C30] rounded-2xl shadow-2xl space-y-1 animate-in fade-in duration-100 text-[#E4EDE7]"
+                    className="absolute right-2 top-12 z-30 w-52 p-2 bg-[#FDFCF9]/98 backdrop-blur-2xl border border-[#DDD4C4] rounded-2xl shadow-2xl space-y-1 animate-in fade-in duration-100 text-[#1E2521]"
                   >
-                    <div className="px-2 py-1 text-[10px] font-extrabold text-[#8EA093] uppercase tracking-wider flex items-center justify-between">
+                    <div className="px-2 py-1 text-[10px] font-extrabold text-[#5F6A60] uppercase tracking-wider flex items-center justify-between">
                       <span>Призначити папку:</span>
                       <button
                         onClick={() => setActiveMenuChatId(null)}
-                        className="text-[#8EA093] hover:text-white"
+                        className="text-[#5F6A60] hover:text-[#1E2521]"
                       >
                         <X className="w-3 h-3" />
                       </button>
@@ -1197,26 +1186,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             }}
                             className={`w-full p-1.5 rounded-xl text-left text-xs font-semibold flex items-center justify-between transition-colors ${
                               isIn
-                                ? 'bg-[#1C2920] text-[#55C778] border border-[#2B3E31]'
-                                : 'hover:bg-[#1E2A21] text-[#8EA093] hover:text-white'
+                                ? 'bg-[#F9F7F1] text-[#E87A42] border border-[#DDD4C4]'
+                                : 'hover:bg-[#F1EDE3] text-[#5F6A60] hover:text-[#1E2521]'
                             }`}
                           >
                             <div className="flex items-center gap-1.5 truncate">
                               <span>{folder.emoji}</span>
                               <span className="truncate">{folder.name}</span>
                             </div>
-                            {isIn && <Check className="w-3.5 h-3.5 text-[#55C778] shrink-0" />}
+                            {isIn && <Check className="w-3.5 h-3.5 text-[#E87A42] shrink-0" />}
                           </button>
                         );
                       })}
 
-                    <div className="pt-1 border-t border-[#233127]">
+                    <div className="pt-1 border-t border-[#F1EDE3]">
                       <button
                         onClick={() => {
                           setActiveMenuChatId(null);
                           onOpenCreateFolder();
                         }}
-                        className="w-full p-1.5 rounded-xl text-left text-xs font-bold text-[#55C778] hover:bg-[#1E2A21] flex items-center gap-1.5 transition-colors"
+                        className="w-full p-1.5 rounded-xl text-left text-xs font-bold text-[#E87A42] hover:bg-[#F1EDE3] flex items-center gap-1.5 transition-colors"
                       >
                         <Plus className="w-3 h-3" />
                         <span>+ Новий Workspace</span>
@@ -1235,7 +1224,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             soundFx.playTap();
             onNewChat();
           }}
-          className="md:hidden fixed bottom-18 right-4 w-13 h-13 bg-[#E87A42] hover:bg-[#D76931] text-white rounded-full shadow-2xl flex items-center justify-center active:scale-90 z-25 transition-transform border-2 border-white"
+          className="md:hidden fixed bottom-18 right-4 w-13 h-13 bg-[#E87A42] hover:bg-[#D76931] text-[#1E2521] rounded-full shadow-2xl flex items-center justify-center active:scale-90 z-25 transition-transform border-2 border-white"
           title="Новий діалог"
           aria-label="Новий діалог"
         >
@@ -1250,7 +1239,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onSelectFolder('all');
             }}
             className={`flex flex-col items-center gap-0.5 text-[10px] font-bold transition-colors active:scale-95 ${
-              activeFolderId === 'all' ? 'text-[#E87A42]' : 'text-[#728178] hover:text-[#1F2521]'
+              activeFolderId === 'all' ? 'text-[#E87A42]' : 'text-[#728178] hover:text-[#1E2521]'
             }`}
           >
             <MessagesSquare className="w-5 h-5" />
@@ -1262,7 +1251,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               soundFx.playTap();
               onOpenCreateFolder();
             }}
-            className="flex flex-col items-center gap-0.5 text-[10px] font-bold text-[#728178] hover:text-[#1F2521] transition-colors active:scale-95"
+            className="flex flex-col items-center gap-0.5 text-[10px] font-bold text-[#728178] hover:text-[#1E2521] transition-colors active:scale-95"
           >
             <FolderPlus className="w-5 h-5" />
             <span>Простори</span>
@@ -1274,7 +1263,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 soundFx.playTap();
                 onOpenP2PNetworkModal();
               }}
-              className="flex flex-col items-center gap-0.5 text-[10px] font-bold text-[#728178] hover:text-[#1F2521] transition-colors active:scale-95"
+              className="flex flex-col items-center gap-0.5 text-[10px] font-bold text-[#728178] hover:text-[#1E2521] transition-colors active:scale-95"
             >
               <Radio className="w-5 h-5 text-[#10B981]" />
               <span>P2P Вузол</span>
@@ -1286,7 +1275,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               soundFx.playTap();
               onOpenSettings();
             }}
-            className="flex flex-col items-center gap-0.5 text-[10px] font-bold text-[#728178] hover:text-[#1F2521] transition-colors active:scale-95"
+            className="flex flex-col items-center gap-0.5 text-[10px] font-bold text-[#728178] hover:text-[#1E2521] transition-colors active:scale-95"
           >
             <Settings className="w-5 h-5" />
             <span>Параметри</span>
@@ -1297,7 +1286,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* 6. HOVER TOOLTIP FOR SMART FOLDERS (.smart-folder-item) */}
       {hoveredFolderStats && !folderContextMenu && !inlineEditingFolderId && (
         <div
-          className="fixed z-40 bg-[#1F2521] text-white border border-[#3D473F] rounded-xl shadow-xl px-3 py-2 text-xs pointer-events-none animate-in fade-in slide-in-from-top-1 duration-150 flex flex-col gap-1.5 min-w-44 max-w-64"
+          className="fixed z-40 bg-[#E6DFD3] text-[#1E2521] border border-[#3D473F] rounded-xl shadow-xl px-3 py-2 text-xs pointer-events-none animate-in fade-in slide-in-from-top-1 duration-150 flex flex-col gap-1.5 min-w-44 max-w-64"
           style={{
             top: hoveredFolderStats.y,
             left: hoveredFolderStats.x,
@@ -1307,32 +1296,32 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <div className="flex items-center justify-between gap-2 border-b border-[#313C34] pb-1">
             <div className="flex items-center gap-1.5 min-w-0">
               <span className="text-xs">{hoveredFolderStats.folder.emoji}</span>
-              <span className="font-extrabold text-xs text-[#FAF8F3] truncate">
+              <span className="font-extrabold text-xs text-[#1E2521] truncate">
                 {hoveredFolderStats.folder.name}
               </span>
             </div>
             <span
               className="w-2 h-2 rounded-full shrink-0"
-              style={{ backgroundColor: hoveredFolderStats.folder.color || '#55C778' }}
+              style={{ backgroundColor: hoveredFolderStats.folder.color || '#E87A42' }}
             />
           </div>
 
           {/* Counts: Total chats and total unread message count */}
           <div className="flex items-center justify-between gap-3 text-[11px]">
             <div className="flex items-center gap-1 text-[#D2DBD4]">
-              <MessageCircle className="w-3.5 h-3.5 text-[#55C778] shrink-0" />
+              <MessageCircle className="w-3.5 h-3.5 text-[#E87A42] shrink-0" />
               <span>Чати:</span>
-              <span className="font-extrabold text-white">{hoveredFolderStats.stats.total}</span>
+              <span className="font-extrabold text-[#1E2521]">{hoveredFolderStats.stats.total}</span>
             </div>
 
             <div className="flex items-center gap-1">
               <span className="text-[#D2DBD4]">Непрочитані:</span>
               {hoveredFolderStats.stats.unread > 0 ? (
-                <span className="px-1.5 py-0.2 bg-[#55C778] text-[#0C120E] text-[10px] font-black rounded-full shadow-sm">
+                <span className="px-1.5 py-0.2 bg-[#E87A42] text-[#F7F5EE] text-[10px] font-black rounded-full shadow-sm">
                   {hoveredFolderStats.stats.unread}
                 </span>
               ) : (
-                <span className="text-[10px] font-bold text-[#55C778]">
+                <span className="text-[10px] font-bold text-[#E87A42]">
                   0
                 </span>
               )}
@@ -1346,48 +1335,48 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div
           ref={contextMenuRef}
           onClick={(e) => e.stopPropagation()}
-          className="fixed z-50 w-72 max-h-[calc(100vh-28px)] overflow-y-auto no-scrollbar bg-[#121A15]/98 backdrop-blur-md border border-[#2B3C30] rounded-2xl shadow-2xl p-1.5 space-y-1.5 animate-in fade-in slide-in-from-left-2 duration-150 ease-out text-white select-none"
+          className="fixed z-50 w-72 max-h-[calc(100vh-28px)] overflow-y-auto no-scrollbar bg-[#FDFCF9]/98 backdrop-blur-md border border-[#DDD4C4] rounded-2xl shadow-2xl p-1.5 space-y-1.5 animate-in fade-in slide-in-from-left-2 duration-150 ease-out text-[#1E2521] select-none"
           style={{
             top: folderContextMenu.y,
             left: folderContextMenu.x,
           }}
         >
           {/* Menu Header with Folder Info */}
-          <div className="px-2.5 py-2 border-b border-[#1F2B22] flex items-center justify-between bg-[#141C16] rounded-xl">
+          <div className="px-2.5 py-2 border-b border-[#E6DFD3] flex items-center justify-between bg-[#FDFCF9] rounded-xl">
             <div className="flex items-center gap-2 min-w-0">
               <span className="text-base shrink-0">{folderContextMenu.folder.emoji}</span>
               <div className="min-w-0">
-                <h4 className="font-extrabold text-xs text-white truncate">
+                <h4 className="font-extrabold text-xs text-[#1E2521] truncate">
                   {folderContextMenu.folder.name}
                 </h4>
-                <p className="text-[10px] text-[#8EA093] truncate">
+                <p className="text-[10px] text-[#5F6A60] truncate">
                   {folderContextMenu.folder.vibe || 'Розумний простір'}
                 </p>
               </div>
             </div>
             <span
               className="w-2.5 h-2.5 rounded-full shrink-0 ring-1 ring-white/10"
-              style={{ backgroundColor: folderContextMenu.folder.color || '#55C778' }}
+              style={{ backgroundColor: folderContextMenu.folder.color || '#E87A42' }}
             />
           </div>
 
           {/* Section 1: Actions */}
           <div className="space-y-0.5">
-            <div className="px-2 py-0.5 text-[9px] font-extrabold text-[#8EA093] uppercase tracking-wider">
+            <div className="px-2 py-0.5 text-[9px] font-extrabold text-[#5F6A60] uppercase tracking-wider">
               Основні дії
             </div>
 
             {/* Mark all as read */}
             <button
               onClick={() => handleMarkAllAsReadAction(folderContextMenu.folder)}
-              className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#18231B] text-left text-xs font-semibold flex items-center justify-between text-[#D1DFD6] hover:text-white transition-colors"
+              className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#F9F7F1] text-left text-xs font-semibold flex items-center justify-between text-[#1E2521] hover:text-[#1E2521] transition-colors"
             >
               <div className="flex items-center gap-2 min-w-0">
-                <CheckCheck className="w-3.5 h-3.5 text-[#55C778] shrink-0" />
+                <CheckCheck className="w-3.5 h-3.5 text-[#E87A42] shrink-0" />
                 <span className="truncate">Позначити як прочитані</span>
               </div>
               {getFolderUnreadCount(folderContextMenu.folder) > 0 && (
-                <span className="px-1.5 py-0.2 bg-[#55C778] text-[#0C120E] text-[9px] font-extrabold rounded-full shrink-0">
+                <span className="px-1.5 py-0.2 bg-[#E87A42] text-[#F7F5EE] text-[9px] font-extrabold rounded-full shrink-0">
                   {getFolderUnreadCount(folderContextMenu.folder)}
                 </span>
               )}
@@ -1403,14 +1392,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 soundFx.playTap();
                 showToast(`⚡ Priority View: тільки бесіди з новими в «${f.name}»`);
               }}
-              className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#18231B] text-left text-xs font-semibold flex items-center justify-between text-[#D1DFD6] hover:text-white transition-colors"
+              className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#F9F7F1] text-left text-xs font-semibold flex items-center justify-between text-[#1E2521] hover:text-[#1E2521] transition-colors"
             >
               <div className="flex items-center gap-2 min-w-0">
-                <Zap className="w-3.5 h-3.5 text-[#55C778] shrink-0" />
+                <Zap className="w-3.5 h-3.5 text-[#E87A42] shrink-0" />
                 <span className="truncate">Priority View (лише нові)</span>
               </div>
               {getFolderUnreadCount(folderContextMenu.folder) > 0 && (
-                <span className="px-1.5 py-0.2 bg-[#55C778] text-[#0C120E] text-[9px] font-extrabold rounded-full shrink-0">
+                <span className="px-1.5 py-0.2 bg-[#E87A42] text-[#F7F5EE] text-[9px] font-extrabold rounded-full shrink-0">
                   {getFolderUnreadCount(folderContextMenu.folder)}
                 </span>
               )}
@@ -1419,13 +1408,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {/* Quick Preview (Last 3 messages from most recent chat) */}
             <button
               onClick={() => handleOpenQuickPreview(folderContextMenu.folder)}
-              className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#18231B] text-left text-xs font-semibold flex items-center justify-between text-[#D1DFD6] hover:text-white transition-colors"
+              className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#F9F7F1] text-left text-xs font-semibold flex items-center justify-between text-[#1E2521] hover:text-[#1E2521] transition-colors"
             >
               <div className="flex items-center gap-2 min-w-0">
-                <Eye className="w-3.5 h-3.5 text-[#55C778] shrink-0" />
+                <Eye className="w-3.5 h-3.5 text-[#E87A42] shrink-0" />
                 <span className="truncate">Швидкий перегляд (3 ост.)</span>
               </div>
-              <span className="text-[10px] text-[#8EA093] font-mono shrink-0 whitespace-nowrap">
+              <span className="text-[10px] text-[#5F6A60] font-mono shrink-0 whitespace-nowrap">
                 Останній чат
               </span>
             </button>
@@ -1433,13 +1422,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {/* Toggle Notifications (Mute / Unmute) */}
             <button
               onClick={() => handleToggleMuteAction(folderContextMenu.folder)}
-              className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#18231B] text-left text-xs font-semibold flex items-center justify-between text-[#D1DFD6] hover:text-white transition-colors"
+              className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#F9F7F1] text-left text-xs font-semibold flex items-center justify-between text-[#1E2521] hover:text-[#1E2521] transition-colors"
             >
               <div className="flex items-center gap-2 min-w-0">
                 {folderContextMenu.folder.isMuted ? (
-                  <Bell className="w-3.5 h-3.5 text-[#55C778] shrink-0" />
+                  <Bell className="w-3.5 h-3.5 text-[#E87A42] shrink-0" />
                 ) : (
-                  <BellOff className="w-3.5 h-3.5 text-[#8EA093] shrink-0" />
+                  <BellOff className="w-3.5 h-3.5 text-[#5F6A60] shrink-0" />
                 )}
                 <span className="truncate">
                   {folderContextMenu.folder.isMuted ? 'Увімкнути звук' : 'Вимкнути звук'}
@@ -1448,8 +1437,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span
                 className={`text-[10px] font-mono font-bold px-1.5 py-0.2 rounded shrink-0 whitespace-nowrap ${
                   folderContextMenu.folder.isMuted
-                    ? 'bg-[#1F2B22] text-[#8EA093]'
-                    : 'bg-[#183021] text-[#55C778]'
+                    ? 'bg-[#E6DFD3] text-[#5F6A60]'
+                    : 'bg-[#183021] text-[#E87A42]'
                 }`}
               >
                 {folderContextMenu.folder.isMuted ? '🔕 Muted' : '🔔 Active'}
@@ -1458,8 +1447,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
 
           {/* Section 2: Style & Customization */}
-          <div className="border-t border-[#1F2B22] pt-1 space-y-0.5">
-            <div className="px-2 py-0.5 text-[9px] font-extrabold text-[#8EA093] uppercase tracking-wider">
+          <div className="border-t border-[#E6DFD3] pt-1 space-y-0.5">
+            <div className="px-2 py-0.5 text-[9px] font-extrabold text-[#5F6A60] uppercase tracking-wider">
               Стиль & Персоналізація
             </div>
 
@@ -1470,19 +1459,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   setIsColorPaletteOpen(!isColorPaletteOpen);
                   setIsVibePaletteOpen(false);
                 }}
-                className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#18231B] text-left text-xs font-semibold flex items-center justify-between text-[#D1DFD6] hover:text-white transition-colors"
+                className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#F9F7F1] text-left text-xs font-semibold flex items-center justify-between text-[#1E2521] hover:text-[#1E2521] transition-colors"
               >
                 <div className="flex items-center gap-2 min-w-0">
-                  <Palette className="w-3.5 h-3.5 text-[#55C778] shrink-0" />
+                  <Palette className="w-3.5 h-3.5 text-[#E87A42] shrink-0" />
                   <span className="truncate">Колірний акцент</span>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
                   <span
                     className="w-3 h-3 rounded-full border border-white/20 shadow-sm"
-                    style={{ backgroundColor: folderContextMenu.folder.color || '#55C778' }}
+                    style={{ backgroundColor: folderContextMenu.folder.color || '#E87A42' }}
                   />
                   <ChevronDown
-                    className={`w-3 h-3 text-[#8EA093] transition-transform ${
+                    className={`w-3 h-3 text-[#5F6A60] transition-transform ${
                       isColorPaletteOpen ? 'rotate-180' : ''
                     }`}
                   />
@@ -1490,14 +1479,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </button>
 
               {isColorPaletteOpen && (
-                <div className="p-2 bg-[#141C16] rounded-xl mt-1 space-y-2 border border-[#223126] animate-in fade-in slide-in-from-top-1 duration-150">
-                  <div className="flex items-center justify-between text-[10px] font-bold text-[#8EA093]">
+                <div className="p-2 bg-[#FDFCF9] rounded-xl mt-1 space-y-2 border border-[#E6DFD3] animate-in fade-in slide-in-from-top-1 duration-150">
+                  <div className="flex items-center justify-between text-[10px] font-bold text-[#5F6A60]">
                     <span>Палітра:</span>
                     <span
-                      className="font-mono text-[9px] px-1.5 py-0.2 rounded bg-[#0E1410] border border-[#1F2B22] font-bold"
-                      style={{ color: folderContextMenu.folder.color || '#55C778' }}
+                      className="font-mono text-[9px] px-1.5 py-0.2 rounded bg-[#F7F5EE] border border-[#E6DFD3] font-bold"
+                      style={{ color: folderContextMenu.folder.color || '#E87A42' }}
                     >
-                      {folderContextMenu.folder.color || '#55C778'}
+                      {folderContextMenu.folder.color || '#E87A42'}
                     </span>
                   </div>
 
@@ -1511,32 +1500,32 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           onClick={() => handleSetColorAction(folderContextMenu.folder, c.hex)}
                           className={`h-6 rounded-lg flex items-center justify-center transition-all ${
                             isSelected
-                              ? 'ring-2 ring-white scale-105 shadow-sm font-bold text-white'
+                              ? 'ring-2 ring-white scale-105 shadow-sm font-bold text-[#1E2521]'
                               : 'hover:scale-105'
                           }`}
                           style={{ backgroundColor: c.hex }}
                           title={c.label}
                         >
-                          {isSelected && <Check className="w-3.5 h-3.5 text-white stroke-[3]" />}
+                          {isSelected && <Check className="w-3.5 h-3.5 text-[#1E2521] stroke-[3]" />}
                         </button>
                       );
                     })}
                   </div>
 
-                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#1F2B22]">
+                  <div className="flex items-center justify-between gap-2 pt-1 border-t border-[#E6DFD3]">
                     <label
                       htmlFor="folder-custom-color"
-                      className="text-[10px] font-bold text-[#8EA093] flex items-center gap-1 cursor-pointer flex-1"
+                      className="text-[10px] font-bold text-[#5F6A60] flex items-center gap-1 cursor-pointer flex-1"
                     >
-                      <Pipette className="w-3 h-3 text-[#8EA093]" />
+                      <Pipette className="w-3 h-3 text-[#5F6A60]" />
                       <span>Свій відтінок:</span>
                     </label>
                     <input
                       id="folder-custom-color"
                       type="color"
-                      value={folderContextMenu.folder.color || '#55C778'}
+                      value={folderContextMenu.folder.color || '#E87A42'}
                       onChange={(e) => handleSetColorAction(folderContextMenu.folder, e.target.value)}
-                      className="w-8 h-6 p-0 border border-[#223126] rounded-md cursor-pointer bg-transparent"
+                      className="w-8 h-6 p-0 border border-[#E6DFD3] rounded-md cursor-pointer bg-transparent"
                       title="Обрати довільний колір"
                     />
                   </div>
@@ -1551,22 +1540,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   setIsVibePaletteOpen(!isVibePaletteOpen);
                   setIsColorPaletteOpen(false);
                 }}
-                className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#18231B] text-left text-xs font-semibold flex items-center justify-between text-[#D1DFD6] hover:text-white transition-colors"
+                className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#F9F7F1] text-left text-xs font-semibold flex items-center justify-between text-[#1E2521] hover:text-[#1E2521] transition-colors"
               >
                 <div className="flex items-center gap-2 min-w-0">
-                  <Sparkles className="w-3.5 h-3.5 text-[#55C778] shrink-0" />
+                  <Sparkles className="w-3.5 h-3.5 text-[#E87A42] shrink-0" />
                   <span className="truncate">Налаштувати Vibe</span>
                 </div>
                 <ChevronDown
-                  className={`w-3 h-3 text-[#8EA093] transition-transform shrink-0 ${
+                  className={`w-3 h-3 text-[#5F6A60] transition-transform shrink-0 ${
                     isVibePaletteOpen ? 'rotate-180' : ''
                   }`}
                 />
               </button>
 
               {isVibePaletteOpen && (
-                <div className="p-2 bg-[#141C16] rounded-xl mt-1 space-y-2 border border-[#223126] animate-in fade-in slide-in-from-top-1 duration-150">
-                  <label className="block text-[10px] font-bold text-[#8EA093]">
+                <div className="p-2 bg-[#FDFCF9] rounded-xl mt-1 space-y-2 border border-[#E6DFD3] animate-in fade-in slide-in-from-top-1 duration-150">
+                  <label className="block text-[10px] font-bold text-[#5F6A60]">
                     Швидкі пресети:
                   </label>
                   <div className="flex flex-col gap-1 max-h-24 overflow-y-auto">
@@ -1574,7 +1563,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       <button
                         key={v}
                         onClick={() => handleSetVibeAction(folderContextMenu.folder, v)}
-                        className="text-left text-[11px] px-2 py-1 bg-[#0E1410] hover:bg-[#18231B] rounded-lg text-white font-medium truncate transition-colors border border-[#1F2B22]"
+                        className="text-left text-[11px] px-2 py-1 bg-[#F7F5EE] hover:bg-[#F9F7F1] rounded-lg text-[#1E2521] font-medium truncate transition-colors border border-[#E6DFD3]"
                       >
                         {v}
                       </button>
@@ -1587,12 +1576,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       value={customVibeInput}
                       onChange={(e) => setCustomVibeInput(e.target.value)}
                       placeholder="Власний vibe..."
-                      className="flex-1 px-2 py-1 text-[11px] bg-[#0E1410] border border-[#1F2B22] rounded-lg text-white placeholder-[#8EA093] focus:outline-none focus:border-[#55C778]"
+                      className="flex-1 px-2 py-1 text-[11px] bg-[#F7F5EE] border border-[#E6DFD3] rounded-lg text-[#1E2521] placeholder-[#5F6A60] focus:outline-none focus:border-[#E87A42]"
                     />
                     <button
                       onClick={() => handleSetVibeAction(folderContextMenu.folder, customVibeInput)}
                       disabled={!customVibeInput.trim()}
-                      className="px-2 py-1 bg-[#55C778] hover:bg-[#46AF68] disabled:opacity-50 text-[#0C120E] text-[10px] font-bold rounded-lg transition-colors shrink-0"
+                      className="px-2 py-1 bg-[#E87A42] hover:bg-[#C25925] disabled:opacity-50 text-[#F7F5EE] text-[10px] font-bold rounded-lg transition-colors shrink-0"
                     >
                       ОК
                     </button>
@@ -1609,21 +1598,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 setIconPickerFolder(f);
                 soundFx.playTap();
               }}
-              className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#18231B] text-left text-xs font-semibold flex items-center justify-between text-[#D1DFD6] hover:text-white transition-colors"
+              className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#F9F7F1] text-left text-xs font-semibold flex items-center justify-between text-[#1E2521] hover:text-[#1E2521] transition-colors"
             >
               <div className="flex items-center gap-2 min-w-0">
-                <Smile className="w-3.5 h-3.5 text-[#55C778] shrink-0" />
+                <Smile className="w-3.5 h-3.5 text-[#E87A42] shrink-0" />
                 <span className="truncate">Змінити Emoji</span>
               </div>
-              <span className="text-xs font-bold px-1.5 py-0.2 rounded bg-[#141C16] border border-[#223126] shrink-0">
+              <span className="text-xs font-bold px-1.5 py-0.2 rounded bg-[#FDFCF9] border border-[#E6DFD3] shrink-0">
                 {folderContextMenu.folder.emoji}
               </span>
             </button>
           </div>
 
           {/* Section 3: Tools & Sharing */}
-          <div className="border-t border-[#1F2B22] pt-1 space-y-0.5">
-            <div className="px-2 py-0.5 text-[9px] font-extrabold text-[#8EA093] uppercase tracking-wider">
+          <div className="border-t border-[#E6DFD3] pt-1 space-y-0.5">
+            <div className="px-2 py-0.5 text-[9px] font-extrabold text-[#5F6A60] uppercase tracking-wider">
               Інструменти & Шеринг
             </div>
 
@@ -1635,10 +1624,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 setInsightsFolder(f);
                 soundFx.playTap();
               }}
-              className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#18231B] text-left text-xs font-semibold flex items-center justify-between text-[#D1DFD6] hover:text-white transition-colors"
+              className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#F9F7F1] text-left text-xs font-semibold flex items-center justify-between text-[#1E2521] hover:text-[#1E2521] transition-colors"
             >
               <div className="flex items-center gap-2 min-w-0">
-                <BarChart2 className="w-3.5 h-3.5 text-[#55C778] shrink-0" />
+                <BarChart2 className="w-3.5 h-3.5 text-[#E87A42] shrink-0" />
                 <span className="truncate">Склад папки</span>
               </div>
             </button>
@@ -1646,13 +1635,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {/* Copy Folder Link (Deep Link) */}
             <button
               onClick={() => handleCopyFolderLinkAction(folderContextMenu.folder)}
-              className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#18231B] text-left text-xs font-semibold flex items-center justify-between text-[#D1DFD6] hover:text-white transition-colors"
+              className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#F9F7F1] text-left text-xs font-semibold flex items-center justify-between text-[#1E2521] hover:text-[#1E2521] transition-colors"
             >
               <div className="flex items-center gap-2 min-w-0">
-                <Link2 className="w-3.5 h-3.5 text-[#55C778] shrink-0" />
+                <Link2 className="w-3.5 h-3.5 text-[#E87A42] shrink-0" />
                 <span className="truncate">Копіювати посилання</span>
               </div>
-              <span className="text-[10px] text-[#55C778] font-mono font-bold bg-[#183021] px-1.5 py-0.2 rounded shrink-0 whitespace-nowrap">
+              <span className="text-[10px] text-[#E87A42] font-mono font-bold bg-[#183021] px-1.5 py-0.2 rounded shrink-0 whitespace-nowrap">
                 Deep Link
               </span>
             </button>
@@ -1665,13 +1654,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 setSharingFolder(f);
                 soundFx.playTap();
               }}
-              className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#18231B] text-left text-xs font-semibold flex items-center justify-between text-[#D1DFD6] hover:text-white transition-colors"
+              className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#F9F7F1] text-left text-xs font-semibold flex items-center justify-between text-[#1E2521] hover:text-[#1E2521] transition-colors"
             >
               <div className="flex items-center gap-2 min-w-0">
-                <Share2 className="w-3.5 h-3.5 text-[#55C778] shrink-0" />
+                <Share2 className="w-3.5 h-3.5 text-[#E87A42] shrink-0" />
                 <span className="truncate">Поділитися простором</span>
               </div>
-              <span className="text-[10px] text-[#8EA093] font-mono shrink-0 whitespace-nowrap">
+              <span className="text-[10px] text-[#5F6A60] font-mono shrink-0 whitespace-nowrap">
                 Код
               </span>
             </button>
@@ -1679,30 +1668,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {/* Export Chat List as JSON */}
             <button
               onClick={() => handleExportChatListAction(folderContextMenu.folder)}
-              className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#18231B] text-left text-xs font-semibold flex items-center justify-between text-[#D1DFD6] hover:text-white transition-colors"
+              className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#F9F7F1] text-left text-xs font-semibold flex items-center justify-between text-[#1E2521] hover:text-[#1E2521] transition-colors"
             >
               <div className="flex items-center gap-2 min-w-0">
-                <Download className="w-3.5 h-3.5 text-[#55C778] shrink-0" />
+                <Download className="w-3.5 h-3.5 text-[#E87A42] shrink-0" />
                 <span className="truncate">Експорт чатів</span>
               </div>
-              <span className="text-[10px] text-[#55C778] font-mono font-bold bg-[#183021] px-1.5 py-0.2 rounded shrink-0 whitespace-nowrap">
+              <span className="text-[10px] text-[#E87A42] font-mono font-bold bg-[#183021] px-1.5 py-0.2 rounded shrink-0 whitespace-nowrap">
                 JSON
               </span>
             </button>
           </div>
 
           {/* Section 4: Management */}
-          <div className="border-t border-[#1F2B22] pt-1 space-y-0.5">
-            <div className="px-2 py-0.5 text-[9px] font-extrabold text-[#8EA093] uppercase tracking-wider">
+          <div className="border-t border-[#E6DFD3] pt-1 space-y-0.5">
+            <div className="px-2 py-0.5 text-[9px] font-extrabold text-[#5F6A60] uppercase tracking-wider">
               Керування
             </div>
 
             {/* Rename Folder (Inline overlay) */}
             <button
               onClick={() => handleStartRename(folderContextMenu.folder)}
-              className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#18231B] text-left text-xs font-semibold flex items-center gap-2 text-[#D1DFD6] hover:text-white transition-colors"
+              className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#F9F7F1] text-left text-xs font-semibold flex items-center gap-2 text-[#1E2521] hover:text-[#1E2521] transition-colors"
             >
-              <Pencil className="w-3.5 h-3.5 text-[#55C778] shrink-0" />
+              <Pencil className="w-3.5 h-3.5 text-[#E87A42] shrink-0" />
               <span className="truncate">Перейменувати</span>
             </button>
 
@@ -1713,20 +1702,20 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 setFolderContextMenu(null);
                 onOpenEditFolder(f);
               }}
-              className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#18231B] text-left text-xs font-semibold flex items-center gap-2 text-[#D1DFD6] hover:text-white transition-colors"
+              className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#F9F7F1] text-left text-xs font-semibold flex items-center gap-2 text-[#1E2521] hover:text-[#1E2521] transition-colors"
             >
-              <FolderEdit className="w-3.5 h-3.5 text-[#8EA093] shrink-0" />
+              <FolderEdit className="w-3.5 h-3.5 text-[#5F6A60] shrink-0" />
               <span className="truncate">Налаштувати простір...</span>
             </button>
 
             {/* Archive / Restore Folder */}
             <button
               onClick={() => handleToggleArchiveAction(folderContextMenu.folder)}
-              className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#18231B] text-left text-xs font-semibold flex items-center justify-between text-[#D1DFD6] hover:text-white transition-colors"
+              className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#F9F7F1] text-left text-xs font-semibold flex items-center justify-between text-[#1E2521] hover:text-[#1E2521] transition-colors"
             >
               <div className="flex items-center gap-2 min-w-0">
                 {folderContextMenu.folder.isArchived ? (
-                  <ArchiveRestore className="w-3.5 h-3.5 text-[#55C778] shrink-0" />
+                  <ArchiveRestore className="w-3.5 h-3.5 text-[#E87A42] shrink-0" />
                 ) : (
                   <Archive className="w-3.5 h-3.5 text-[#F4AF25] shrink-0" />
                 )}
@@ -1737,7 +1726,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span
                 className={`text-[10px] font-mono font-bold px-1.5 py-0.2 rounded shrink-0 whitespace-nowrap ${
                   folderContextMenu.folder.isArchived
-                    ? 'bg-[#183021] text-[#55C778]'
+                    ? 'bg-[#183021] text-[#E87A42]'
                     : 'bg-[#F4AF25]/15 text-[#F4AF25]'
                 }`}
               >
@@ -1747,10 +1736,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
             {/* Clear / Delete for custom folders */}
             {!folderContextMenu.folder.isBuiltIn && (
-              <div className="border-t border-[#1F2B22] pt-1 space-y-0.5">
+              <div className="border-t border-[#E6DFD3] pt-1 space-y-0.5">
                 <button
                   onClick={() => handleClearFolderAction(folderContextMenu.folder)}
-                  className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#18231B] text-left text-xs font-semibold flex items-center gap-2 text-[#8EA093] hover:text-white transition-colors"
+                  className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#F9F7F1] text-left text-xs font-semibold flex items-center gap-2 text-[#5F6A60] hover:text-[#1E2521] transition-colors"
                 >
                   <Folder className="w-3.5 h-3.5 shrink-0" />
                   <span className="truncate">Очистити чати</span>
@@ -1774,30 +1763,26 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div
           ref={quickPreviewRef}
           onClick={(e) => e.stopPropagation()}
-          className="fixed z-50 w-80 sm:w-88 bg-[#121A15]/98 backdrop-blur-md border border-[#2B3C30] rounded-2xl shadow-2xl p-3.5 space-y-2.5 animate-in fade-in zoom-in-95 duration-200 text-white"
+          className="fixed z-50 w-80 sm:w-88 bg-[#FDFCF9]/98 backdrop-blur-md border border-[#DDD4C4] rounded-2xl shadow-2xl p-3.5 space-y-2.5 animate-in fade-in zoom-in-95 duration-200 text-[#1E2521]"
           style={{
             top: quickPreview.y,
             left: quickPreview.x,
           }}
         >
           {/* Header */}
-          <div className="flex items-center justify-between gap-2 border-b border-[#1F2B22] pb-2">
+          <div className="flex items-center justify-between gap-2 border-b border-[#E6DFD3] pb-2">
             <div className="flex items-center gap-2.5 min-w-0">
-              <img
-                src={quickPreview.chat.avatar}
-                alt={quickPreview.chat.title}
-                className="w-8 h-8 rounded-xl object-cover ring-1 ring-[#223126] shrink-0"
-              />
+              <Avatar src={quickPreview.chat.avatar} name={quickPreview.chat.title} className="w-8 h-8     shrink-0" />
               <div className="min-w-0">
                 <div className="flex items-center gap-1.5">
-                  <h4 className="font-extrabold text-xs text-white truncate">
+                  <h4 className="font-extrabold text-xs text-[#1E2521] truncate">
                     {quickPreview.chat.title}
                   </h4>
-                  <span className="text-[10px] px-1.5 py-0.2 bg-[#141C16] text-[#55C778] font-bold rounded-md shrink-0 border border-[#223126]">
+                  <span className="text-[10px] px-1.5 py-0.2 bg-[#FDFCF9] text-[#E87A42] font-bold rounded-md shrink-0 border border-[#E6DFD3]">
                     {quickPreview.folder.emoji} {quickPreview.folder.name}
                   </span>
                 </div>
-                <p className="text-[10px] text-[#8EA093] truncate">
+                <p className="text-[10px] text-[#5F6A60] truncate">
                   {quickPreview.chat.description || quickPreview.chat.topic || 'Остання активність у просторі'}
                 </p>
               </div>
@@ -1805,7 +1790,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
             <button
               onClick={() => setQuickPreview(null)}
-              className="p-1 hover:bg-[#18231B] rounded-lg text-[#8EA093] hover:text-white transition-colors shrink-0"
+              className="p-1 hover:bg-[#F9F7F1] rounded-lg text-[#5F6A60] hover:text-[#1E2521] transition-colors shrink-0"
               title="Закрити"
             >
               <X className="w-4 h-4" />
@@ -1822,21 +1807,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   className={`flex items-start gap-1.5 text-xs ${isSelf ? 'flex-row-reverse' : ''}`}
                 >
                   {!isSelf && (
-                    <img
-                      src={msg.senderAvatar || quickPreview.chat.avatar}
-                      alt={msg.senderName}
-                      className="w-5 h-5 rounded-full object-cover shrink-0 mt-0.5"
-                    />
+                    <Avatar src={msg.senderAvatar || quickPreview.chat.avatar} name={msg.senderName} className="w-5 h-5   shrink-0 mt-0.5" />
                   )}
                   <div
                     className={`rounded-xl px-2.5 py-1.5 max-w-[85%] space-y-0.5 ${
                       isSelf
-                        ? 'bg-gradient-to-r from-[#2E6B3E] to-[#1E4E2C] text-white rounded-tr-xs shadow-sm'
-                        : 'bg-[#141C16] border border-[#1F2B22] text-[#E4EDE7] rounded-tl-xs shadow-sm'
+                        ? 'bg-gradient-to-r from-[#2E6B3E] to-[#1E4E2C] text-[#1E2521] rounded-tr-xs shadow-sm'
+                        : 'bg-[#FDFCF9] border border-[#E6DFD3] text-[#1E2521] rounded-tl-xs shadow-sm'
                     }`}
                   >
                     {!isSelf && (
-                      <span className="font-extrabold text-[10px] text-[#55C778] block leading-none">
+                      <span className="font-extrabold text-[10px] text-[#E87A42] block leading-none">
                         {msg.senderName}
                       </span>
                     )}
@@ -1845,7 +1826,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     </p>
                     <span
                       className={`text-[9px] block text-right font-mono ${
-                        isSelf ? 'text-white/80' : 'text-[#8EA093]'
+                        isSelf ? 'text-[#1E2521]/80' : 'text-[#5F6A60]'
                       }`}
                     >
                       {msg.timestamp}
@@ -1857,9 +1838,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
 
           {/* Action Footer */}
-          <div className="pt-2 border-t border-[#1F2B22] flex items-center justify-between gap-2">
-            <span className="text-[10px] font-semibold text-[#8EA093] flex items-center gap-1">
-              <Eye className="w-3 h-3 text-[#55C778]" />
+          <div className="pt-2 border-t border-[#E6DFD3] flex items-center justify-between gap-2">
+            <span className="text-[10px] font-semibold text-[#5F6A60] flex items-center gap-1">
+              <Eye className="w-3 h-3 text-[#E87A42]" />
               <span>Швидкий перегляд</span>
             </span>
 
@@ -1870,7 +1851,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 setQuickPreview(null);
                 soundFx.playTap();
               }}
-              className="px-3 py-1.5 bg-[#55C778] hover:bg-[#46AF68] text-[#0C120E] font-bold text-xs rounded-xl shadow-sm transition-colors flex items-center gap-1.5"
+              className="px-3 py-1.5 bg-[#E87A42] hover:bg-[#C25925] text-[#F7F5EE] font-bold text-xs rounded-xl shadow-sm transition-colors flex items-center gap-1.5"
             >
               <span>Відкрити чат</span>
               <MoveRight className="w-3.5 h-3.5" />
@@ -1923,7 +1904,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               soundFx.playTap();
               setIsArchiveSectionExpanded(!isArchiveSectionExpanded);
             }}
-            className="w-full flex items-center justify-between text-xs font-bold text-[#717E75] hover:text-[#1F2521] px-1.5 py-1 rounded-lg hover:bg-white/40 transition-colors select-none"
+            className="w-full flex items-center justify-between text-xs font-bold text-[#7A8479] hover:text-[#1E2521] px-1.5 py-1 rounded-lg hover:bg-white/40 transition-colors select-none"
           >
             <div className="flex items-center gap-1.5">
               <Archive className="w-3.5 h-3.5 text-[#8C461A]" />
@@ -1933,7 +1914,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </span>
             </div>
             <ChevronDown
-              className={`w-3.5 h-3.5 text-[#717E75] transition-transform duration-200 ${
+              className={`w-3.5 h-3.5 text-[#7A8479] transition-transform duration-200 ${
                 isArchiveSectionExpanded ? 'rotate-180' : ''
               }`}
             />
@@ -1957,8 +1938,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       }}
                       className={`smart-folder-item group px-2.5 py-1.5 rounded-xl cursor-pointer flex items-center gap-1.5 text-xs whitespace-nowrap border transition-all select-none opacity-60 hover:opacity-100 filter grayscale-40 hover:grayscale-0 ${
                         isActive
-                          ? 'bg-white text-[#1F2521] font-bold shadow-xs border-[#C9BFA8] ring-1 ring-[#8C988E]'
-                          : 'bg-white/45 text-[#717E75] hover:bg-white/90 border-dashed border-[#D2C5B2]'
+                          ? 'bg-white text-[#1E2521] font-bold shadow-xs border-[#C9BFA8] ring-1 ring-[#8C988E]'
+                          : 'bg-white/45 text-[#7A8479] hover:bg-white/90 border-dashed border-[#D2C5B2]'
                       }`}
                       title={`Архівований простір: «${folder.name}» (правий клік для опцій / розархівації)`}
                     >
@@ -1974,7 +1955,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                             ? `Порожній простір (0 чатів)`
                             : `Змінити іконку`
                         }
-                        className={`w-4.5 h-4.5 rounded-md flex items-center justify-center text-xs shrink-0 bg-[#E8DFD1]/60 text-[#717E75] hover:scale-110 transition-all ${
+                        className={`w-4.5 h-4.5 rounded-md flex items-center justify-center text-xs shrink-0 bg-[#E8DFD1]/60 text-[#7A8479] hover:scale-110 transition-all ${
                           chats.filter((c) => isChatInFolder(c, folder)).length === 0
                             ? 'opacity-35 hover:opacity-80 grayscale-50'
                             : 'opacity-100'
@@ -1985,11 +1966,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       <span className="truncate max-w-24 line-through decoration-[#8C988E]/70">
                         {folder.name}
                       </span>
-                      <span className="text-[9px] px-1 py-0.2 rounded bg-[#DFD6C5]/70 text-[#717E75] font-mono font-bold">
+                      <span className="text-[9px] px-1 py-0.2 rounded bg-[#DFD6C5]/70 text-[#7A8479] font-mono font-bold">
                         Архів
                       </span>
                       {folderUnread > 0 && (
-                        <span className="px-1.5 py-0.2 bg-[#8C988E] text-white text-[9px] font-bold rounded-full">
+                        <span className="px-1.5 py-0.2 bg-[#8C988E] text-[#1E2521] text-[9px] font-bold rounded-full">
                           {folderUnread}
                         </span>
                       )}
@@ -2003,7 +1984,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           soundFx.playTap();
                           openFolderContextMenu(e, folder);
                         }}
-                        className="folder-settings opacity-0 group-hover:opacity-100 p-0.5 hover:bg-[#DFD6C5] rounded-md text-[#717E75] hover:text-[#1F2521] transition-all cursor-pointer hover:scale-110 active:scale-95 ml-0.5"
+                        className="folder-settings opacity-0 group-hover:opacity-100 p-0.5 hover:bg-[#DFD6C5] rounded-md text-[#7A8479] hover:text-[#1E2521] transition-all cursor-pointer hover:scale-110 active:scale-95 ml-0.5"
                         title="Налаштування та опції архівованого простору"
                         aria-label="folder-settings"
                       >
@@ -2018,11 +1999,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
       )}
 
       {/* 8. Bottom Multi-Sphere Persona Panel */}
-      <div className="p-2.5 border-t border-[#1C281F] bg-[#0E1410] relative">
+      <div className="p-2.5 border-t border-[#1C281F] bg-[#F7F5EE] relative">
         {/* Persona quick switcher popup */}
         {isPersonaMenuOpen && onSwitchPersonaSphere && (
-          <div className="absolute bottom-full left-2 right-2 mb-2 p-2 bg-[#141C16]/98 backdrop-blur-2xl border border-[#2B3C30] rounded-2xl shadow-2xl z-30 space-y-1 animate-in fade-in zoom-in-95 duration-100 text-[#E4EDE7]">
-            <div className="px-2 py-1 text-[10px] font-extrabold text-[#8EA093] uppercase tracking-wider">
+          <div className="absolute bottom-full left-2 right-2 mb-2 p-2 bg-[#FDFCF9]/98 backdrop-blur-2xl border border-[#DDD4C4] rounded-2xl shadow-2xl z-30 space-y-1 animate-in fade-in zoom-in-95 duration-100 text-[#1E2521]">
+            <div className="px-2 py-1 text-[10px] font-extrabold text-[#5F6A60] uppercase tracking-wider">
               Перемкнути активну ідентичність
             </div>
             {(['work', 'personal', 'creative', 'family'] as PersonaSphere[]).map((sphere) => {
@@ -2038,15 +2019,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   }}
                   className={`w-full p-2 rounded-xl text-left flex items-center justify-between text-xs font-bold transition-colors ${
                     isSelected
-                      ? 'bg-[#1C2920] text-[#55C778] border border-[#2B3E31]'
-                      : 'hover:bg-[#1E2A21] text-[#E4EDE7]'
+                      ? 'bg-[#F9F7F1] text-[#E87A42] border border-[#DDD4C4]'
+                      : 'hover:bg-[#F1EDE3] text-[#1E2521]'
                   }`}
                 >
                   <div className="flex items-center gap-2">
                     <span>{meta.emoji}</span>
                     <span>{meta.label}</span>
                   </div>
-                  <span className={`text-[10px] ${isSelected ? 'text-[#55C778]' : 'text-[#8EA093]'}`}>
+                  <span className={`text-[10px] ${isSelected ? 'text-[#E87A42]' : 'text-[#5F6A60]'}`}>
                     {currentUser.personas?.[sphere]?.statusText || 'В мережі'}
                   </span>
                 </button>
@@ -2062,16 +2043,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
               soundFx.playTap();
               onOpenUserProfile();
             }}
-            className="flex-1 p-2 bg-[#141C16] hover:bg-[#18231B] border border-[#233127] rounded-2xl flex items-center justify-between cursor-pointer transition-all shadow-sm group min-w-0"
+            className="flex-1 p-2 bg-[#FDFCF9] hover:bg-[#F9F7F1] border border-[#F1EDE3] rounded-2xl flex items-center justify-between cursor-pointer transition-all shadow-sm group min-w-0"
             title="Відкрити картку профілю"
           >
             <div className="flex items-center gap-2 min-w-0">
               <div className="relative shrink-0">
-                <img
-                  src={currentUser.avatar}
-                  alt={currentUser.name}
-                  className="w-8 h-8 rounded-xl object-cover ring-1 ring-white/10"
-                />
+                <Avatar src={currentUser.avatar} name={currentUser.name} className="w-8 h-8" />
                 <span className="absolute -bottom-1 -right-1 text-[10px]">
                   {currentUser.statusEmoji}
                 </span>
@@ -2079,16 +2056,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
               <div className="min-w-0">
                 <div className="flex items-center gap-1">
-                  <span className="font-extrabold text-xs text-white truncate">
+                  <span className="font-extrabold text-xs text-[#1E2521] truncate">
                     {currentUser.name.split(' ')[0]}
                   </span>
                   <span
-                    className="px-1.5 py-0.2 text-[9px] font-extrabold rounded-md uppercase bg-[#1B271F] text-[#55C778] border border-[#2B3E31]"
+                    className="px-1.5 py-0.2 text-[9px] font-extrabold rounded-md uppercase bg-[#F1EDE3] text-[#E87A42] border border-[#DDD4C4]"
                   >
                     {activeSphere}
                   </span>
                 </div>
-                <p className="text-[10px] text-[#8EA093] truncate">
+                <p className="text-[10px] text-[#5F6A60] truncate">
                   {currentUser.status}
                 </p>
               </div>
@@ -2101,7 +2078,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               soundFx.playTap();
               setIsPersonaMenuOpen(!isPersonaMenuOpen);
             }}
-            className="p-2 bg-[#141C16] hover:bg-[#18231B] border border-[#233127] rounded-2xl text-[#8EA093] hover:text-white shadow-sm transition-colors shrink-0"
+            className="p-2 bg-[#FDFCF9] hover:bg-[#F9F7F1] border border-[#F1EDE3] rounded-2xl text-[#5F6A60] hover:text-[#1E2521] shadow-sm transition-colors shrink-0"
             title="Швидка зміна сфери"
           >
             <ChevronDown className={`w-4 h-4 transition-transform ${isPersonaMenuOpen ? 'rotate-180' : ''}`} />

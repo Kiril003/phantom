@@ -34,9 +34,9 @@ export const MultiSelectBar: React.FC<MultiSelectBarProps> = ({
   if (selectedCount === 0) return null;
 
   return (
-    <div className="absolute bottom-20 left-1/2 -translate-y-1/2 z-40 bg-[#141C16]/98 backdrop-blur-2xl border border-[#2B3C30] shadow-2xl rounded-2xl p-2 sm:p-2.5 flex items-center gap-1.5 sm:gap-2 animate-in fade-in slide-in-from-bottom-3 text-xs max-w-[95%] sm:max-w-xl text-[#E4EDE7]">
+    <div className="absolute bottom-20 left-1/2 -translate-y-1/2 z-40 bg-[#FDFCF9]/98 backdrop-blur-2xl border border-[#DDD4C4] shadow-2xl rounded-2xl p-2 sm:p-2.5 flex items-center gap-1.5 sm:gap-2 animate-in fade-in slide-in-from-bottom-3 text-xs max-w-[95%] sm:max-w-xl text-[#1E2521]">
       {/* Count pill */}
-      <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[#1A261D] text-[#55C778] border border-[#2B3E31] rounded-xl font-bold shrink-0">
+      <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[#F9F7F1] text-[#E87A42] border border-[#DDD4C4] rounded-xl font-bold shrink-0">
         <CheckSquare className="w-3.5 h-3.5" />
         <span>{selectedCount} обрано</span>
       </div>
@@ -48,7 +48,7 @@ export const MultiSelectBar: React.FC<MultiSelectBarProps> = ({
             soundFx.playTap();
             onReplyMultiple();
           }}
-          className="px-3 py-1.5 bg-[#55C778] hover:bg-[#46AF68] text-[#0C120E] rounded-xl font-bold flex items-center gap-1.5 transition-colors shrink-0 shadow-md active:scale-95"
+          className="px-3 py-1.5 bg-[#E87A42] hover:bg-[#C25925] text-[#F7F5EE] rounded-xl font-bold flex items-center gap-1.5 transition-colors shrink-0 shadow-md active:scale-95"
           title="Відповісти / цитувати обрані повідомлення"
         >
           <Reply className="w-3.5 h-3.5" />
@@ -62,7 +62,7 @@ export const MultiSelectBar: React.FC<MultiSelectBarProps> = ({
           soundFx.playChime();
           onSynthesize();
         }}
-        className="px-3 py-1.5 bg-[#1E2E23] hover:bg-[#253A2B] text-[#55C778] border border-[#2B3E31] rounded-xl font-bold flex items-center gap-1.5 transition-colors shrink-0 shadow-sm active:scale-95"
+        className="px-3 py-1.5 bg-[#1E2E23] hover:bg-[#253A2B] text-[#E87A42] border border-[#DDD4C4] rounded-xl font-bold flex items-center gap-1.5 transition-colors shrink-0 shadow-sm active:scale-95"
         title="Синтезувати зміст обраних повідомлень через AI"
       >
         <Sparkles className="w-3.5 h-3.5" />
@@ -76,10 +76,10 @@ export const MultiSelectBar: React.FC<MultiSelectBarProps> = ({
             soundFx.playTap();
             onCalendarSync();
           }}
-          className="px-2.5 py-1.5 bg-[#1A251E] hover:bg-[#223126] text-[#A4B8AB] hover:text-white border border-[#28392C] rounded-xl font-semibold flex items-center gap-1 transition-colors"
+          className="px-2.5 py-1.5 bg-[#F9F7F1] hover:bg-[#E6DFD3] text-[#5F6A60] hover:text-[#1E2521] border border-[#28392C] rounded-xl font-semibold flex items-center gap-1 transition-colors"
           title="Створити подію в календарі з обраних"
         >
-          <Calendar className="w-3.5 h-3.5 text-[#55C778]" />
+          <Calendar className="w-3.5 h-3.5 text-[#E87A42]" />
           <span className="hidden md:inline">Подія</span>
         </button>
       )}
@@ -90,7 +90,7 @@ export const MultiSelectBar: React.FC<MultiSelectBarProps> = ({
           soundFx.playTap();
           onCopyAll();
         }}
-        className="p-2 bg-[#1A251E] hover:bg-[#223126] text-[#A4B8AB] hover:text-white border border-[#28392C] rounded-xl transition-colors"
+        className="p-2 bg-[#F9F7F1] hover:bg-[#E6DFD3] text-[#5F6A60] hover:text-[#1E2521] border border-[#28392C] rounded-xl transition-colors"
         title="Копіювати всі тексти"
       >
         <Copy className="w-3.5 h-3.5" />
@@ -102,13 +102,13 @@ export const MultiSelectBar: React.FC<MultiSelectBarProps> = ({
           soundFx.playTap();
           onForward();
         }}
-        className="p-2 bg-[#1A251E] hover:bg-[#223126] text-[#A4B8AB] hover:text-white border border-[#28392C] rounded-xl transition-colors"
+        className="p-2 bg-[#F9F7F1] hover:bg-[#E6DFD3] text-[#5F6A60] hover:text-[#1E2521] border border-[#28392C] rounded-xl transition-colors"
         title="Переслати"
       >
         <Forward className="w-3.5 h-3.5" />
       </button>
 
-      <div className="w-px h-5 bg-[#233127] my-auto" />
+      <div className="w-px h-5 bg-[#F1EDE3] my-auto" />
 
       {/* Cancel selection */}
       <button
@@ -116,7 +116,7 @@ export const MultiSelectBar: React.FC<MultiSelectBarProps> = ({
           soundFx.playTap();
           onClearSelection();
         }}
-        className="p-1.5 text-[#8EA093] hover:text-white hover:bg-[#1E2A21] rounded-lg transition-colors"
+        className="p-1.5 text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F1EDE3] rounded-lg transition-colors"
         title="Скасувати виділення"
       >
         <X className="w-4 h-4" />

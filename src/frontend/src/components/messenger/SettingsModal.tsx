@@ -54,16 +54,16 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150">
-      <div className="bg-[#121A15] border-t sm:border border-[#2B3C30] rounded-t-3xl sm:rounded-3xl w-full max-w-lg max-h-[92dvh] sm:max-h-[85vh] flex flex-col shadow-2xl overflow-hidden select-none animate-in slide-in-from-bottom sm:zoom-in-95 duration-150 pb-[var(--sab)] sm:pb-0 text-[#E4EDE7]">
+      <div className="bg-[#FDFCF9] border-t sm:border border-[#DDD4C4] rounded-t-3xl sm:rounded-3xl w-full max-w-lg max-h-[92dvh] sm:max-h-[85vh] flex flex-col shadow-2xl overflow-hidden select-none animate-in slide-in-from-bottom sm:zoom-in-95 duration-150 pb-[var(--sab)] sm:pb-0 text-[#1E2521]">
         {/* Mobile Pull Indicator */}
-        <div className="sm:hidden pt-2.5 pb-1 flex justify-center bg-[#141C16]">
+        <div className="sm:hidden pt-2.5 pb-1 flex justify-center bg-[#FDFCF9]">
           <div className="w-12 h-1 bg-[#28392C] rounded-full" />
         </div>
 
         {/* Header */}
-        <div className="px-4 sm:px-5 py-3.5 sm:py-4 border-b border-[#1F2B22] flex items-center justify-between bg-[#141C16]">
+        <div className="px-4 sm:px-5 py-3.5 sm:py-4 border-b border-[#E6DFD3] flex items-center justify-between bg-[#FDFCF9]">
           <div className="flex items-center gap-2.5">
-            <h3 className="font-extrabold text-base text-white">Налаштування Aura</h3>
+            <h3 className="font-extrabold text-base text-[#1E2521]">Налаштування месенджера</h3>
           </div>
 
           <button
@@ -71,14 +71,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               soundFx.playTap();
               onClose();
             }}
-            className="p-1.5 text-[#8EA093] hover:text-white hover:bg-[#1E2A21] rounded-xl transition-colors"
+            className="p-1.5 text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F1EDE3] rounded-xl transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
         </div>
 
         {/* Tab Selection */}
-        <div className="px-4 py-2 bg-[#0E1410] border-b border-[#1F2B22] flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+        <div className="px-4 py-2 bg-[#F7F5EE] border-b border-[#E6DFD3] flex items-center gap-1.5 overflow-x-auto no-scrollbar">
           {[
             { id: 'appearance', label: 'Оформлення', icon: Palette },
             { id: 'network', label: 'Мережа & P2P', icon: Radio },
@@ -95,10 +95,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   soundFx.playTap();
                   setActiveTab(t.id as any);
                 }}
-                className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap transition-all ${
+                className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap shrink-0 transition-all ${
                   isActive
-                    ? 'bg-[#1C2920] text-[#55C778] border border-[#2B3E31] shadow-sm'
-                    : 'bg-[#141C16] hover:bg-[#18231B] text-[#8EA093] hover:text-white border border-[#223126]'
+                    ? 'bg-[#F9F7F1] text-[#E87A42] border border-[#DDD4C4] shadow-sm'
+                    : 'bg-[#FDFCF9] hover:bg-[#F9F7F1] text-[#5F6A60] hover:text-[#1E2521] border border-[#E6DFD3]'
                 }`}
               >
                 <Icon className="w-3.5 h-3.5" />
@@ -114,7 +114,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {activeTab === 'appearance' && (
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-bold text-[#445047] mb-2">
+                <label className="block text-xs font-bold text-[#8A9186] mb-2">
                   Акцентний природний відтінок
                 </label>
                 <div className="grid grid-cols-4 gap-2">
@@ -132,7 +132,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       }}
                       className={`p-2.5 rounded-2xl border text-center transition-all ${
                         accentColor === c.id
-                          ? 'bg-white border-[#1F2521] shadow-xs'
+                          ? 'bg-white border-[#E6DFD3] shadow-xs'
                           : 'bg-white/60 border-[#DFD6C5] hover:bg-white'
                       }`}
                     >
@@ -140,14 +140,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         className="w-5 h-5 rounded-full mx-auto block mb-1.5 shadow-2xs"
                         style={{ backgroundColor: c.color }}
                       />
-                      <span className="text-[11px] font-bold text-[#1F2521] block">{c.label}</span>
+                      <span className="text-[11px] font-bold text-[#1E2521] block">{c.label}</span>
                     </button>
                   ))}
                 </div>
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[#445047] mb-2">
+                <label className="block text-xs font-bold text-[#8A9186] mb-2">
                   Розмір шрифту інтерфейсу
                 </label>
                 <div className="grid grid-cols-2 gap-2">
@@ -158,12 +158,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     }}
                     className={`p-3 rounded-2xl border text-left transition-all ${
                       fontSize === 'standard'
-                        ? 'bg-white border-[#1F2521] shadow-xs'
+                        ? 'bg-white border-[#E6DFD3] shadow-xs'
                         : 'bg-white/60 border-[#DFD6C5]'
                     }`}
                   >
-                    <span className="font-extrabold text-xs text-[#1F2521] block">Стандартний (14-15px)</span>
-                    <span className="text-[11px] text-[#717E75]">Оптимальна щільність</span>
+                    <span className="font-extrabold text-xs text-[#1E2521] block">Стандартний (14-15px)</span>
+                    <span className="text-[11px] text-[#7A8479]">Оптимальна щільність</span>
                   </button>
                   <button
                     onClick={() => {
@@ -172,12 +172,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     }}
                     className={`p-3 rounded-2xl border text-left transition-all ${
                       fontSize === 'large'
-                        ? 'bg-white border-[#1F2521] shadow-xs'
+                        ? 'bg-white border-[#E6DFD3] shadow-xs'
                         : 'bg-white/60 border-[#DFD6C5]'
                     }`}
                   >
-                    <span className="font-extrabold text-sm text-[#1F2521] block">Збільшений (16-17px)</span>
-                    <span className="text-[11px] text-[#717E75]">Максимальна читабельність</span>
+                    <span className="font-extrabold text-sm text-[#1E2521] block">Збільшений (16-17px)</span>
+                    <span className="text-[11px] text-[#7A8479]">Максимальна читабельність</span>
                   </button>
                 </div>
               </div>
@@ -193,7 +193,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <Radio className="w-4 h-4" />
                   </div>
                   <div>
-                    <h4 className="font-extrabold text-xs text-[#1F2521]">Гібридна P2P / Серверна архітектура</h4>
+                    <h4 className="font-extrabold text-xs text-[#1E2521]">Гібридна P2P / Серверна архітектура</h4>
                     <p className="text-[11px] text-[#69796F]">Прямий WebRTC тунель або хмарний релей</p>
                   </div>
                 </div>
@@ -204,7 +204,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       onClose();
                       onOpenP2PNetworkModal();
                     }}
-                    className="px-3 py-1.5 bg-[#1F2521] hover:bg-[#323D35] text-white rounded-xl text-xs font-bold transition-all shadow-2xs"
+                    className="px-3 py-1.5 bg-[#E6DFD3] hover:bg-[#323D35] text-[#1E2521] rounded-xl text-xs font-bold transition-all shadow-2xs"
                   >
                     Термінал P2P
                   </button>
@@ -212,7 +212,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </div>
 
               <div>
-                <label className="block text-xs font-bold text-[#445047] mb-2 uppercase tracking-wider">
+                <label className="block text-xs font-bold text-[#8A9186] mb-2 uppercase tracking-wider">
                   Протокол за замовчуванням
                 </label>
                 <div className="space-y-2">
@@ -236,7 +236,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     {
                       id: 'server' as TransportProtocol,
                       title: 'Серверний релей (Cloud WebSocket)',
-                      desc: 'Синхронізація через сервер Aura. Гарантована доставка для великих команд.',
+                      desc: 'Синхронізація через вузол PHANTOM. Гарантована доставка для великих команд.',
                       icon: Globe,
                       badge: 'Cloud Sync',
                       color: 'text-[#3B82F6]',
@@ -250,7 +250,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         onClick={() => handleSetMode(opt.id)}
                         className={`p-3.5 rounded-2xl border cursor-pointer transition-all flex items-start justify-between gap-3 ${
                           isSel
-                            ? 'bg-white border-[#1F2521] ring-1 ring-[#1F2521] shadow-xs'
+                            ? 'bg-white border-[#E6DFD3] ring-1 ring-[#E6DFD3] shadow-xs'
                             : 'bg-white/60 border-[#DFD6C5] hover:bg-white'
                         }`}
                       >
@@ -260,8 +260,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           </div>
                           <div>
                             <div className="flex items-center gap-2">
-                              <h5 className="font-extrabold text-xs text-[#1F2521]">{opt.title}</h5>
-                              <span className="px-1.5 py-0.2 rounded text-[9.5px] font-bold bg-[#FAF6EE] border border-[#DDD3BF] text-[#717E75]">
+                              <h5 className="font-extrabold text-xs text-[#1E2521]">{opt.title}</h5>
+                              <span className="px-1.5 py-0.2 rounded text-[9.5px] font-bold bg-[#FAF6EE] border border-[#DDD3BF] text-[#7A8479]">
                                 {opt.badge}
                               </span>
                             </div>
@@ -269,7 +269,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                           </div>
                         </div>
                         {isSel && (
-                          <div className="w-4 h-4 rounded-full bg-[#1F2521] text-white flex items-center justify-center shrink-0 mt-1">
+                          <div className="w-4 h-4 rounded-full bg-[#E6DFD3] text-[#1E2521] flex items-center justify-center shrink-0 mt-1">
                             <Check className="w-2.5 h-2.5" />
                           </div>
                         )}
@@ -300,8 +300,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="space-y-3">
               <div className="flex items-center justify-between p-3.5 bg-white border border-[#DFD6C5] rounded-2xl">
                 <div>
-                  <p className="font-bold text-xs text-[#1F2521]">Звуковий супровід Aura</p>
-                  <p className="text-[11px] text-[#717E75]">Природні кліки, надсилання та дзвіночки</p>
+                  <p className="font-bold text-xs text-[#1E2521]">Звуковий супровід PHANTOM</p>
+                  <p className="text-[11px] text-[#7A8479]">Природні кліки, надсилання та дзвіночки</p>
                 </div>
                 <button
                   onClick={() => {
@@ -322,8 +322,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
               <div className="flex items-center justify-between p-3.5 bg-white border border-[#DFD6C5] rounded-2xl">
                 <div>
-                  <p className="font-bold text-xs text-[#1F2521]">Системні сповіщення</p>
-                  <p className="text-[11px] text-[#717E75]">Показувати спливаючі банери в браузері</p>
+                  <p className="font-bold text-xs text-[#1E2521]">Системні сповіщення</p>
+                  <p className="text-[11px] text-[#7A8479]">Показувати спливаючі банери в браузері</p>
                 </div>
                 <button
                   onClick={() => {
@@ -349,8 +349,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <div className="space-y-3">
               <div className="flex items-center justify-between p-3.5 bg-white border border-[#DFD6C5] rounded-2xl">
                 <div>
-                  <p className="font-bold text-xs text-[#1F2521]">Звіти про прочитання</p>
-                  <p className="text-[11px] text-[#717E75]">Повідомляти співрозмовників про перегляд</p>
+                  <p className="font-bold text-xs text-[#1E2521]">Звіти про прочитання</p>
+                  <p className="text-[11px] text-[#7A8479]">Повідомляти співрозмовників про перегляд</p>
                 </div>
                 <button
                   onClick={() => {
@@ -371,8 +371,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
               <div className="flex items-center justify-between p-3.5 bg-white border border-[#DFD6C5] rounded-2xl">
                 <div>
-                  <p className="font-bold text-xs text-[#1F2521]">Статус "Був у мережі"</p>
-                  <p className="text-[11px] text-[#717E75]">Відображати час останньої активності</p>
+                  <p className="font-bold text-xs text-[#1E2521]">Статус "Був у мережі"</p>
+                  <p className="text-[11px] text-[#7A8479]">Відображати час останньої активності</p>
                 </div>
                 <button
                   onClick={() => {
@@ -397,8 +397,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           {activeTab === 'data' && (
             <div className="space-y-3">
               <div className="p-4 bg-white border border-[#DFD6C5] rounded-2xl space-y-2 shadow-2xs">
-                <p className="font-bold text-xs text-[#1F2521]">Експорт даних та історії</p>
-                <p className="text-[11px] text-[#717E75]">
+                <p className="font-bold text-xs text-[#1E2521]">Експорт даних та історії</p>
+                <p className="text-[11px] text-[#7A8479]">
                   Завантажте всі ваші бесіди, таблиці, графіки та конспекти у структурованому JSON-архіві.
                 </p>
                 <button
@@ -427,7 +427,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         onClose();
                       }
                     }}
-                    className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-xl text-xs flex items-center gap-1.5 transition-colors"
+                    className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-[#1E2521] font-semibold rounded-xl text-xs flex items-center gap-1.5 transition-colors"
                   >
                     <Trash2 className="w-3.5 h-3.5" />
                     <span>Очистити історію</span>

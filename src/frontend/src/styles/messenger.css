@@ -1,0 +1,208 @@
+/* Вигляд месенджера: бульбашки, контури, щільність, анімації.
+ *
+ * Ці класи були в прототипі й до PHANTOM їх просто не перенесли — тому
+ * повідомлення виглядали пласким логом, а не розмовою. ChatArea їх
+ * використовує весь час: msg-bubble-self, bubble-contour-*, msg-density-*.
+ */
+
+
+/* Smooth pulse for live radar pins */
+@keyframes map-pulse {
+  0% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(232, 122, 66, 0.5);
+  }
+  70% {
+    transform: scale(1.05);
+    box-shadow: 0 0 0 12px rgba(232, 122, 66, 0);
+  }
+  100% {
+    transform: scale(0.95);
+    box-shadow: 0 0 0 0 rgba(232, 122, 66, 0);
+  }
+}
+
+.animate-map-pulse {
+  animation: map-pulse 2.4s infinite cubic-bezier(0.4, 0, 0.6, 1);
+}
+
+/* Audio waveform animation */
+@keyframes soundwave {
+  0%, 100% { height: 25%; }
+  50% { height: 100%; }
+}
+
+.animate-wave-bar {
+  animation: soundwave 1.2s ease-in-out infinite;
+}
+
+/* Subtle organic bounce entrance for smart folders */
+@keyframes organic-bounce {
+  0% {
+    opacity: 0;
+    transform: scale(0.86) translateY(5px);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.035) translateY(-2px);
+  }
+  80% {
+    transform: scale(0.985) translateY(1px);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-organic-bounce {
+  animation: organic-bounce 0.42s cubic-bezier(0.34, 1.45, 0.64, 1) both;
+}
+
+/* =========================================================
+   FLUID-FIT DYNAMIC MESSAGE BUBBLE LAYOUT ENGINE
+   ========================================================= */
+
+/* Base fluid-fit wrapper for message bubbles */
+.msg-bubble-fluid {
+  width: fit-content;
+  max-width: 100%;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  hyphens: auto;
+  box-sizing: border-box;
+  transition: max-width 0.15s ease, padding 0.15s ease, border-radius 0.15s ease, transform 0.28s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.24s ease;
+}
+
+/* Micro-interaction: spring scaling on message selection */
+.msg-bubble-selected {
+  transform: scale(1.01);
+  box-shadow: 0 4px 14px -2px rgba(232, 122, 66, 0.18), 0 2px 6px -1px rgba(232, 122, 66, 0.12) !important;
+}
+
+/* Density Variants: dynamically applied based on content analysis */
+
+/* 1. Emoji-Only Density: Snug, clean, larger glyphs with compact organic padding */
+.msg-density-emoji-single {
+  background: transparent !important;
+  border-color: transparent !important;
+  box-shadow: none !important;
+  padding: 0.15rem 0.25rem !important;
+  font-size: 2.75rem;
+  line-height: 1.15;
+  width: fit-content;
+}
+
+.msg-density-emoji-multi {
+  padding: 0.35rem 0.65rem !important;
+  font-size: 1.75rem;
+  line-height: 1.25;
+  width: fit-content;
+  letter-spacing: 0.12em;
+}
+
+/* 2. Micro/Short text density (< 24 chars, single line): compact hugging width */
+.msg-density-short {
+  padding: 0.45rem 0.75rem;
+  max-width: min(280px, 100%);
+  width: fit-content;
+}
+
+/* 3. Medium text density (25 - 120 chars): optimal organic line width */
+.msg-density-medium {
+  padding: 0.55rem 0.95rem;
+  max-width: min(440px, 100%);
+  width: fit-content;
+}
+
+/* 4. Dense / Long text density (120+ chars): max reading width constrained to 560px / optimal 65ch */
+.msg-density-long {
+  padding: 0.65rem 1.05rem;
+  max-width: min(560px, 100%);
+  width: fit-content;
+  text-wrap: pretty;
+}
+
+/* Long Message Read More / Collapse dynamic transitions */
+.msg-density-long-content {
+  transition: max-height 0.35s cubic-bezier(0.4, 0, 0.2, 1);
+  overflow: hidden;
+  position: relative;
+}
+
+.msg-density-long-collapsed {
+  max-height: 112px;
+}
+
+.msg-density-long-expanded {
+  max-height: 2000px;
+}
+
+.msg-read-more-fade-self {
+  background: linear-gradient(to top, rgba(27, 38, 32, 0.98) 0%, rgba(27, 38, 32, 0.75) 55%, rgba(27, 38, 32, 0) 100%);
+}
+
+.msg-read-more-fade-other {
+  background: linear-gradient(to top, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.75) 55%, rgba(255, 255, 255, 0) 100%);
+}
+
+/* 5. Rich Card density (Table, Chart, Tasks, Poll, Split-bill, Map, etc.) */
+.msg-density-card {
+  padding: 0.75rem 1rem;
+  width: 100%;
+  max-width: min(520px, 100%);
+}
+
+/* 6. Media / Image / File Density */
+.msg-density-media {
+  padding: 0.4rem 0.4rem 0.5rem 0.4rem;
+  width: fit-content;
+  max-width: min(380px, 100%);
+}
+
+/* Smooth and clean message bubble styles without disruptive horizontal slide/shift */
+.msg-bubble-self {
+  background-color: #1B2620;
+  color: #FAF8F5;
+  border: 1px solid rgba(64, 88, 73, 0.45);
+  box-shadow: 0 1px 3px rgba(10, 16, 12, 0.12), 0 2px 8px rgba(10, 16, 12, 0.08);
+}
+
+.msg-bubble-other {
+  background-color: #FFFFFF;
+  color: #1A241E;
+  border: 1px solid #E6DDCF;
+  box-shadow: 0 1px 3px rgba(35, 25, 15, 0.04), 0 2px 6px rgba(35, 25, 15, 0.03);
+}
+
+/* Organic Asymmetric Contours: Soft, non-rigid mathematical curvature */
+.bubble-contour-self-single {
+  border-radius: 20px 20px 4px 20px;
+}
+.bubble-contour-self-first {
+  border-radius: 20px 20px 6px 20px;
+}
+.bubble-contour-self-middle {
+  border-radius: 20px 6px 6px 20px;
+}
+.bubble-contour-self-last {
+  border-radius: 20px 6px 4px 20px;
+}
+
+.bubble-contour-other-single {
+  border-radius: 20px 20px 20px 4px;
+}
+.bubble-contour-other-first {
+  border-radius: 20px 20px 20px 6px;
+}
+.bubble-contour-other-middle {
+  border-radius: 6px 20px 20px 6px;
+}
+.bubble-contour-other-last {
+  border-radius: 6px 20px 20px 4px;
+}
+
+/* Subtle glow for read ticks and status indicators */
+.glow-terracotta {
+  filter: drop-shadow(0 0 3px rgba(232, 122, 66, 0.45));
+}

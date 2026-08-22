@@ -65,7 +65,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
     statusEmoji: currentUser.statusEmoji,
     bio: currentUser.bio,
     jobTitle: 'Product Designer',
-    company: 'Aura',
+    company: 'PHANTOM',
     phoneVisibility: 'contacts',
     lastSeenVisibility: 'everyone',
   };
@@ -122,23 +122,23 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150">
-      <div className="bg-[#121A15] border-t sm:border border-[#2B3C30] rounded-t-3xl sm:rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden select-none animate-in slide-in-from-bottom sm:zoom-in-95 duration-150 flex flex-col max-h-[92dvh] sm:max-h-[88vh] pb-[var(--sab)] sm:pb-0 text-[#E4EDE7]">
+      <div className="bg-[#FDFCF9] border-t sm:border border-[#DDD4C4] rounded-t-3xl sm:rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden select-none animate-in slide-in-from-bottom sm:zoom-in-95 duration-150 flex flex-col max-h-[92dvh] sm:max-h-[88vh] pb-[var(--sab)] sm:pb-0 text-[#1E2521]">
         {/* Mobile Pull Indicator */}
-        <div className="sm:hidden pt-2.5 pb-1 flex justify-center bg-[#141C16]">
+        <div className="sm:hidden pt-2.5 pb-1 flex justify-center bg-[#FDFCF9]">
           <div className="w-12 h-1 bg-[#28392C] rounded-full" />
         </div>
 
         {/* 1. Header Bar */}
-        <div className="px-4 sm:px-5 py-3.5 sm:py-4 border-b border-[#1F2B22] flex items-center justify-between bg-[#141C16] shrink-0">
+        <div className="px-4 sm:px-5 py-3.5 sm:py-4 border-b border-[#E6DFD3] flex items-center justify-between bg-[#FDFCF9] shrink-0">
           <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-[#1A261D] text-[#55C778] border border-[#2B3E31] rounded-xl shadow-sm">
+            <div className="p-2 bg-[#F9F7F1] text-[#E87A42] border border-[#DDD4C4] rounded-xl shadow-sm">
               <User className="w-4 h-4" />
             </div>
             <div>
-              <h3 className="font-extrabold text-base text-white">
+              <h3 className="font-extrabold text-base text-[#1E2521]">
                 {isEditingSelf ? 'Особистий профіль & Сфери' : 'Картка контакту'}
               </h3>
-              <p className="text-xs text-[#8EA093]">
+              <p className="text-xs text-[#5F6A60]">
                 {isEditingSelf
                   ? 'Керування ідентичностями, приватністю та сховищем'
                   : viewingMember?.role ? `Роль: ${viewingMember.role.toUpperCase()}` : 'Учасник бесіди'}
@@ -151,7 +151,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               soundFx.playTap();
               onClose();
             }}
-            className="p-1.5 text-[#8EA093] hover:text-white hover:bg-[#1E2A21] rounded-xl transition-colors"
+            className="p-1.5 text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F1EDE3] rounded-xl transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -159,7 +159,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
         {/* 2. Top Navigation Tabs (For Self) */}
         {isEditingSelf && (
-          <div className="px-4 py-2 bg-[#0E1410] border-b border-[#1F2B22] flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
+          <div className="px-4 py-2 bg-[#F7F5EE] border-b border-[#E6DFD3] flex items-center gap-1.5 overflow-x-auto no-scrollbar shrink-0">
             {[
               { id: 'profile', label: 'Сфери та Профіль', icon: Briefcase },
               { id: 'privacy', label: 'Конфіденційність', icon: Shield },
@@ -177,8 +177,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   }}
                   className={`px-3 py-1.5 rounded-xl text-xs font-bold flex items-center gap-1.5 whitespace-nowrap transition-all ${
                     isActive
-                      ? 'bg-[#1C2920] text-[#55C778] border border-[#2B3E31] shadow-sm'
-                      : 'bg-[#141C16] hover:bg-[#18231B] text-[#8EA093] hover:text-white border border-[#223126]'
+                      ? 'bg-[#F9F7F1] text-[#E87A42] border border-[#DDD4C4] shadow-sm'
+                      : 'bg-[#FDFCF9] hover:bg-[#F9F7F1] text-[#5F6A60] hover:text-[#1E2521] border border-[#E6DFD3]'
                   }`}
                 >
                   <Icon className="w-3.5 h-3.5" />
@@ -207,7 +207,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 </div>
 
                 <div>
-                  <h2 className="font-extrabold text-lg text-[#1F2521]">{viewingMember.name}</h2>
+                  <h2 className="font-extrabold text-lg text-[#1E2521]">{viewingMember.name}</h2>
                   <p className="text-xs text-[#E87A42] font-semibold">{viewingMember.handle}</p>
                 </div>
 
@@ -226,7 +226,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                     onOpenDirectChat?.(viewingMember);
                     onClose();
                   }}
-                  className="p-2.5 bg-[#E87A42] hover:bg-[#D46B35] text-white rounded-2xl flex flex-col items-center gap-1 shadow-2xs font-bold text-xs transition-colors"
+                  className="p-2.5 bg-[#E87A42] hover:bg-[#D46B35] text-[#1E2521] rounded-2xl flex flex-col items-center gap-1 shadow-2xs font-bold text-xs transition-colors"
                 >
                   <MessageSquare className="w-4 h-4" />
                   <span>Повідомлення</span>
@@ -267,7 +267,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 {viewingMember.phone && (
                   <div className="pt-2 border-t border-[#F0EAE0] flex items-center justify-between">
                     <span className="text-[#8C988E]">Телефон</span>
-                    <span className="font-semibold text-[#1F2521]">{viewingMember.phone}</span>
+                    <span className="font-semibold text-[#1E2521]">{viewingMember.phone}</span>
                   </div>
                 )}
               </div>
@@ -283,7 +283,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   <label className="text-xs font-extrabold text-[#3F4C42] uppercase tracking-wide">
                     Оберіть активну сферу
                   </label>
-                  <span className="text-[11px] text-[#717E75]">
+                  <span className="text-[11px] text-[#7A8479]">
                     Різні кола бачать відповідну ідентичність
                   </span>
                 </div>
@@ -321,10 +321,10 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                             />
                           )}
                         </div>
-                        <span className="font-extrabold text-xs text-[#1F2521] mt-0.5">
+                        <span className="font-extrabold text-xs text-[#1E2521] mt-0.5">
                           {meta.label.split('&')[0]}
                         </span>
-                        <span className="text-[10px] text-[#717E75] truncate">
+                        <span className="text-[10px] text-[#7A8479] truncate">
                           {currentUser.personas?.[sphere]?.statusEmoji}{' '}
                           {currentUser.personas?.[sphere]?.statusText || 'В мережі'}
                         </span>
@@ -343,7 +343,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                         <img
                           src={currentUser.avatar}
                           alt={formData.name}
-                          className="w-16 h-16 rounded-2xl object-cover ring-2 ring-[#FAF8F3] shadow-xs"
+                          className="w-16 h-16 rounded-2xl object-cover ring-2 ring-[#1E2521] shadow-xs"
                         />
                         <span className="absolute -bottom-1 -right-1 text-sm bg-white p-0.5 rounded-md shadow-2xs">
                           {formData.statusEmoji}
@@ -351,7 +351,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                       </div>
                       <div>
                         <div className="flex items-center gap-2">
-                          <h4 className="font-extrabold text-base text-[#1F2521]">{formData.name}</h4>
+                          <h4 className="font-extrabold text-base text-[#1E2521]">{formData.name}</h4>
                           <span
                             className="px-2 py-0.5 text-[10px] font-bold rounded-md uppercase border"
                             style={{
@@ -365,7 +365,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                         </div>
                         <p className="text-xs text-[#E87A42] font-semibold">{formData.handle}</p>
                         {formData.jobTitle && (
-                          <p className="text-xs text-[#717E75] font-medium mt-0.5">
+                          <p className="text-xs text-[#7A8479] font-medium mt-0.5">
                             {formData.jobTitle} {formData.company ? `· ${formData.company}` : ''}
                           </p>
                         )}
@@ -385,7 +385,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   </div>
 
                   {/* Status & Bio */}
-                  <div className="p-3 bg-[#FAF8F3] rounded-2xl border border-[#EBE2D3] space-y-1.5">
+                  <div className="p-3 bg-[#FDFCF9] rounded-2xl border border-[#EBE2D3] space-y-1.5">
                     <div className="flex items-center gap-1.5 text-xs text-[#3F4C42]">
                       <span className="font-bold">Поточний статус:</span>
                       <span>«{formData.statusEmoji} {formData.statusText}»</span>
@@ -441,7 +441,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                             href={link.url}
                             target="_blank"
                             rel="noopener noreferrer"
-                            className="p-2 bg-[#FAF8F3] hover:bg-[#F3EDE2] border border-[#DFD6C5] rounded-xl flex items-center justify-between text-xs text-[#1F2521] font-semibold transition-colors group"
+                            className="p-2 bg-[#FDFCF9] hover:bg-[#F3EDE2] border border-[#DFD6C5] rounded-xl flex items-center justify-between text-xs text-[#1E2521] font-semibold transition-colors group"
                           >
                             <span className="truncate">{link.title}</span>
                             <ExternalLink className="w-3.5 h-3.5 text-[#8C988E] group-hover:text-[#E87A42]" />
@@ -455,13 +455,13 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 /* Edit Form Mode */
                 <form onSubmit={handleSaveProfile} className="p-4 bg-white border border-[#DFD6C5] rounded-3xl space-y-4 shadow-2xs">
                   <div className="flex items-center justify-between pb-2 border-b border-[#E8DFD1]">
-                    <h4 className="font-extrabold text-sm text-[#1F2521]">
+                    <h4 className="font-extrabold text-sm text-[#1E2521]">
                       Редагування сфери «{sphereMeta[selectedSphere].label}»
                     </h4>
                     <button
                       type="button"
                       onClick={() => setIsEditMode(false)}
-                      className="text-xs text-[#717E75] hover:text-[#1F2521]"
+                      className="text-xs text-[#7A8479] hover:text-[#1E2521]"
                     >
                       Скасувати
                     </button>
@@ -469,91 +469,91 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-[11px] font-bold text-[#445047] mb-1">
+                      <label className="block text-[11px] font-bold text-[#8A9186] mb-1">
                         Ім’я у цій сфері
                       </label>
                       <input
                         type="text"
                         value={formData.name}
                         onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                        className="w-full px-3 py-2 bg-[#FAF8F3] border border-[#DFD6C5] rounded-xl text-xs focus:outline-none focus:border-[#E87A42]"
+                        className="w-full px-3 py-2 bg-[#FDFCF9] border border-[#DFD6C5] rounded-xl text-xs focus:outline-none focus:border-[#E87A42]"
                       />
                     </div>
 
                     <div>
-                      <label className="block text-[11px] font-bold text-[#445047] mb-1">
+                      <label className="block text-[11px] font-bold text-[#8A9186] mb-1">
                         Нікнейм / Handle
                       </label>
                       <input
                         type="text"
                         value={formData.handle}
                         onChange={(e) => setFormData({ ...formData, handle: e.target.value })}
-                        className="w-full px-3 py-2 bg-[#FAF8F3] border border-[#DFD6C5] rounded-xl text-xs focus:outline-none focus:border-[#E87A42]"
+                        className="w-full px-3 py-2 bg-[#FDFCF9] border border-[#DFD6C5] rounded-xl text-xs focus:outline-none focus:border-[#E87A42]"
                       />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-3 gap-2">
                     <div className="col-span-1">
-                      <label className="block text-[11px] font-bold text-[#445047] mb-1">Емодзі</label>
+                      <label className="block text-[11px] font-bold text-[#8A9186] mb-1">Емодзі</label>
                       <input
                         type="text"
                         value={formData.statusEmoji}
                         onChange={(e) => setFormData({ ...formData, statusEmoji: e.target.value })}
-                        className="w-full px-3 py-2 bg-[#FAF8F3] border border-[#DFD6C5] rounded-xl text-xs text-center focus:outline-none focus:border-[#E87A42]"
+                        className="w-full px-3 py-2 bg-[#FDFCF9] border border-[#DFD6C5] rounded-xl text-xs text-center focus:outline-none focus:border-[#E87A42]"
                       />
                     </div>
                     <div className="col-span-2">
-                      <label className="block text-[11px] font-bold text-[#445047] mb-1">Текст статусу</label>
+                      <label className="block text-[11px] font-bold text-[#8A9186] mb-1">Текст статусу</label>
                       <input
                         type="text"
                         value={formData.statusText}
                         onChange={(e) => setFormData({ ...formData, statusText: e.target.value })}
-                        className="w-full px-3 py-2 bg-[#FAF8F3] border border-[#DFD6C5] rounded-xl text-xs focus:outline-none focus:border-[#E87A42]"
+                        className="w-full px-3 py-2 bg-[#FDFCF9] border border-[#DFD6C5] rounded-xl text-xs focus:outline-none focus:border-[#E87A42]"
                       />
                     </div>
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-[11px] font-bold text-[#445047] mb-1">
+                      <label className="block text-[11px] font-bold text-[#8A9186] mb-1">
                         Посада / Роль
                       </label>
                       <input
                         type="text"
                         value={formData.jobTitle || ''}
                         onChange={(e) => setFormData({ ...formData, jobTitle: e.target.value })}
-                        className="w-full px-3 py-2 bg-[#FAF8F3] border border-[#DFD6C5] rounded-xl text-xs focus:outline-none focus:border-[#E87A42]"
+                        className="w-full px-3 py-2 bg-[#FDFCF9] border border-[#DFD6C5] rounded-xl text-xs focus:outline-none focus:border-[#E87A42]"
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-bold text-[#445047] mb-1">
+                      <label className="block text-[11px] font-bold text-[#8A9186] mb-1">
                         Компанія / Простір
                       </label>
                       <input
                         type="text"
                         value={formData.company || ''}
                         onChange={(e) => setFormData({ ...formData, company: e.target.value })}
-                        className="w-full px-3 py-2 bg-[#FAF8F3] border border-[#DFD6C5] rounded-xl text-xs focus:outline-none focus:border-[#E87A42]"
+                        className="w-full px-3 py-2 bg-[#FDFCF9] border border-[#DFD6C5] rounded-xl text-xs focus:outline-none focus:border-[#E87A42]"
                       />
                     </div>
                   </div>
 
                   <div>
-                    <label className="block text-[11px] font-bold text-[#445047] mb-1">
+                    <label className="block text-[11px] font-bold text-[#8A9186] mb-1">
                       Опис (Bio)
                     </label>
                     <textarea
                       rows={3}
                       value={formData.bio}
                       onChange={(e) => setFormData({ ...formData, bio: e.target.value })}
-                      className="w-full px-3 py-2 bg-[#FAF8F3] border border-[#DFD6C5] rounded-xl text-xs focus:outline-none focus:border-[#E87A42] resize-none"
+                      className="w-full px-3 py-2 bg-[#FDFCF9] border border-[#DFD6C5] rounded-xl text-xs focus:outline-none focus:border-[#E87A42] resize-none"
                     />
                   </div>
 
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                     <div>
-                      <label className="block text-[11px] font-bold text-[#445047] mb-1">
+                      <label className="block text-[11px] font-bold text-[#8A9186] mb-1">
                         Графік доступності
                       </label>
                       <input
@@ -561,11 +561,11 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                         placeholder="напр. 10:00 – 19:00 (Пн-Пт)"
                         value={formData.workHours || ''}
                         onChange={(e) => setFormData({ ...formData, workHours: e.target.value })}
-                        className="w-full px-3 py-2 bg-[#FAF8F3] border border-[#DFD6C5] rounded-xl text-xs focus:outline-none focus:border-[#E87A42]"
+                        className="w-full px-3 py-2 bg-[#FDFCF9] border border-[#DFD6C5] rounded-xl text-xs focus:outline-none focus:border-[#E87A42]"
                       />
                     </div>
                     <div>
-                      <label className="block text-[11px] font-bold text-[#445047] mb-1">
+                      <label className="block text-[11px] font-bold text-[#8A9186] mb-1">
                         Локація
                       </label>
                       <input
@@ -573,7 +573,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                         placeholder="Київ · Поділ"
                         value={formData.locationName || ''}
                         onChange={(e) => setFormData({ ...formData, locationName: e.target.value })}
-                        className="w-full px-3 py-2 bg-[#FAF8F3] border border-[#DFD6C5] rounded-xl text-xs focus:outline-none focus:border-[#E87A42]"
+                        className="w-full px-3 py-2 bg-[#FDFCF9] border border-[#DFD6C5] rounded-xl text-xs focus:outline-none focus:border-[#E87A42]"
                       />
                     </div>
                   </div>
@@ -582,13 +582,13 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                     <button
                       type="button"
                       onClick={() => setIsEditMode(false)}
-                      className="px-4 py-2 bg-white border border-[#DFD6C5] rounded-xl text-xs font-bold text-[#4A574E] hover:bg-[#FAF8F3]"
+                      className="px-4 py-2 bg-white border border-[#DFD6C5] rounded-xl text-xs font-bold text-[#4A574E] hover:bg-[#FDFCF9]"
                     >
                       Скасувати
                     </button>
                     <button
                       type="submit"
-                      className="px-4 py-2 bg-[#1F2521] text-white rounded-xl text-xs font-bold shadow-2xs hover:bg-black flex items-center gap-1.5"
+                      className="px-4 py-2 bg-[#E6DFD3] text-[#1E2521] rounded-xl text-xs font-bold shadow-2xs hover:bg-black flex items-center gap-1.5"
                     >
                       <Check className="w-4 h-4" />
                       <span>Зберегти сферу</span>
@@ -603,11 +603,11 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
           {isEditingSelf && activeTab === 'privacy' && (
             <div className="space-y-4">
               <div className="p-4 bg-white border border-[#DFD6C5] rounded-3xl space-y-4 shadow-2xs">
-                <h4 className="font-extrabold text-sm text-[#1F2521]">Видимість даних для сфери «{sphereMeta[selectedSphere].label}»</h4>
+                <h4 className="font-extrabold text-sm text-[#1E2521]">Видимість даних для сфери «{sphereMeta[selectedSphere].label}»</h4>
 
                 {/* Phone visibility */}
                 <div className="space-y-2">
-                  <label className="block text-xs font-bold text-[#445047]">
+                  <label className="block text-xs font-bold text-[#8A9186]">
                     Хто бачить мій номер телефону у цій сфері?
                   </label>
                   <div className="grid grid-cols-3 gap-2">
@@ -625,8 +625,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                         }}
                         className={`p-2.5 rounded-xl border text-xs font-semibold transition-all ${
                           formData.phoneVisibility === opt.id
-                            ? 'bg-[#1F2521] text-white border-[#1F2521] shadow-2xs'
-                            : 'bg-[#FAF8F3] border-[#DFD6C5] text-[#4A574E] hover:bg-white'
+                            ? 'bg-[#E6DFD3] text-[#1E2521] border-[#E6DFD3] shadow-2xs'
+                            : 'bg-[#FDFCF9] border-[#DFD6C5] text-[#4A574E] hover:bg-white'
                         }`}
                       >
                         {opt.label}
@@ -637,7 +637,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
                 {/* Last Seen visibility */}
                 <div className="space-y-2 pt-2 border-t border-[#F0EAE0]">
-                  <label className="block text-xs font-bold text-[#445047]">
+                  <label className="block text-xs font-bold text-[#8A9186]">
                     Час останнього візиту (Last Seen)
                   </label>
                   <div className="grid grid-cols-3 gap-2">
@@ -655,8 +655,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                         }}
                         className={`p-2.5 rounded-xl border text-xs font-semibold transition-all ${
                           formData.lastSeenVisibility === opt.id
-                            ? 'bg-[#1F2521] text-white border-[#1F2521] shadow-2xs'
-                            : 'bg-[#FAF8F3] border-[#DFD6C5] text-[#4A574E] hover:bg-white'
+                            ? 'bg-[#E6DFD3] text-[#1E2521] border-[#E6DFD3] shadow-2xs'
+                            : 'bg-[#FDFCF9] border-[#DFD6C5] text-[#4A574E] hover:bg-white'
                         }`}
                       >
                         {opt.label}
@@ -675,8 +675,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               {!currentUser.activeDevices?.length && (
                 <div className="p-4 bg-white border border-[#DFD6C5] rounded-2xl text-center">
                   <Laptop className="w-7 h-7 text-[#A8B6AB] mx-auto mb-2 opacity-50" />
-                  <p className="text-xs font-bold text-[#1F2521]">Немає даних про активні сеанси</p>
-                  <p className="text-[11px] text-[#717E75] mt-1">
+                  <p className="text-xs font-bold text-[#1E2521]">Немає даних про активні сеанси</p>
+                  <p className="text-[11px] text-[#7A8479] mt-1">
                     Реєстр сеансів ще не ведеться, тому список порожній.
                   </p>
                 </div>
@@ -699,14 +699,14 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                     </div>
                     <div>
                       <div className="flex items-center gap-2">
-                        <h5 className="font-bold text-xs text-[#1F2521]">{device.name}</h5>
+                        <h5 className="font-bold text-xs text-[#1E2521]">{device.name}</h5>
                         {device.isCurrent && (
                           <span className="px-2 py-0.5 bg-[#E3EFE1] text-[#2E6B27] rounded-md text-[10px] font-bold">
                             Цей пристрій
                           </span>
                         )}
                       </div>
-                      <p className="text-[11px] text-[#717E75]">
+                      <p className="text-[11px] text-[#7A8479]">
                         {device.location} · IP: {device.ipAddress}
                       </p>
                       <p className="text-[10px] text-[#8C461A] font-medium mt-0.5">
@@ -736,8 +736,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               <div className="p-4 bg-white border border-[#DFD6C5] rounded-3xl space-y-4 shadow-2xs">
                 <div className="flex items-center justify-between">
                   <div>
-                    <h4 className="font-extrabold text-sm text-[#1F2521]">Використання сховища</h4>
-                    <p className="text-xs text-[#717E75]">Загалом: 1.18 ГБ на локальному пристрої</p>
+                    <h4 className="font-extrabold text-sm text-[#1E2521]">Використання сховища</h4>
+                    <p className="text-xs text-[#7A8479]">Загалом: 1.18 ГБ на локальному пристрої</p>
                   </div>
                   <button
                     onClick={handleClearCache}
@@ -764,10 +764,10 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                     { label: 'Голосові', size: '145 MB', color: '#8C461A' },
                     { label: 'Кеш застосунку', size: '85 MB', color: '#D99026' },
                   ].map((item, i) => (
-                    <div key={i} className="p-2 bg-[#FAF8F3] rounded-xl border border-[#DFD6C5]">
+                    <div key={i} className="p-2 bg-[#FDFCF9] rounded-xl border border-[#DFD6C5]">
                       <div className="flex items-center gap-1.5">
                         <span className="w-2.5 h-2.5 rounded-full" style={{ backgroundColor: item.color }} />
-                        <span className="text-[11px] font-bold text-[#1F2521] truncate">{item.label}</span>
+                        <span className="text-[11px] font-bold text-[#1E2521] truncate">{item.label}</span>
                       </div>
                       <p className="text-xs font-semibold text-[#525F56] mt-0.5">{item.size}</p>
                     </div>

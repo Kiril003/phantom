@@ -109,19 +109,19 @@ export const DataTableViewer: React.FC<DataTableViewerProps> = ({ data, onUpdate
   };
 
   return (
-    <div className="space-y-2.5 pt-1 select-text bg-[#121A15] border border-[#233127] rounded-2xl p-3 sm:p-4 shadow-xl text-[#E4EDE7]">
+    <div className="space-y-2.5 pt-1 select-text bg-[#FDFCF9] border border-[#F1EDE3] rounded-2xl p-3 sm:p-4 shadow-xl text-[#1E2521]">
       {/* Header Bar */}
-      <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-[#1F2B22]">
+      <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-[#E6DFD3]">
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="p-2 bg-[#1A261D] text-[#55C778] border border-[#2B3E31] rounded-xl shrink-0 shadow-sm">
+          <div className="p-2 bg-[#F9F7F1] text-[#E87A42] border border-[#DDD4C4] rounded-xl shrink-0 shadow-sm">
             <FileSpreadsheet className="w-4 h-4" />
           </div>
           <div className="min-w-0">
-            <h4 className="font-extrabold text-xs sm:text-sm text-white leading-tight truncate">
+            <h4 className="font-extrabold text-xs sm:text-sm text-[#1E2521] leading-tight truncate">
               {data.title}
             </h4>
             {data.description && (
-              <p className="text-[11px] text-[#8EA093] truncate mt-0.5">{data.description}</p>
+              <p className="text-[11px] text-[#5F6A60] truncate mt-0.5">{data.description}</p>
             )}
           </div>
         </div>
@@ -130,19 +130,19 @@ export const DataTableViewer: React.FC<DataTableViewerProps> = ({ data, onUpdate
         <div className="flex items-center gap-1.5 shrink-0">
           <button
             onClick={() => setIsAddingRow(!isAddingRow)}
-            className="px-2.5 py-1 bg-[#18231B] hover:bg-[#202E24] text-[#A4B8AB] hover:text-white border border-[#26372B] rounded-lg text-[11px] font-semibold flex items-center gap-1 transition-colors active:scale-95 shadow-sm"
+            className="px-2.5 py-1 bg-[#F9F7F1] hover:bg-[#202E24] text-[#5F6A60] hover:text-[#1E2521] border border-[#26372B] rounded-lg text-[11px] font-semibold flex items-center gap-1 transition-colors active:scale-95 shadow-sm"
             title="Додати новий рядок"
           >
-            <Plus className="w-3 h-3 text-[#55C778]" />
+            <Plus className="w-3 h-3 text-[#E87A42]" />
             <span>Рядок</span>
           </button>
 
           <button
             onClick={exportCSV}
-            className="px-2.5 py-1 bg-[#18231B] hover:bg-[#202E24] text-[#A4B8AB] hover:text-white border border-[#26372B] rounded-lg text-[11px] font-semibold flex items-center gap-1 transition-colors active:scale-95 shadow-sm"
+            className="px-2.5 py-1 bg-[#F9F7F1] hover:bg-[#202E24] text-[#5F6A60] hover:text-[#1E2521] border border-[#26372B] rounded-lg text-[11px] font-semibold flex items-center gap-1 transition-colors active:scale-95 shadow-sm"
             title="Експортувати в CSV"
           >
-            {isCopied ? <Check className="w-3 h-3 text-[#55C778]" /> : <Download className="w-3 h-3 text-[#8EA093]" />}
+            {isCopied ? <Check className="w-3 h-3 text-[#E87A42]" /> : <Download className="w-3 h-3 text-[#5F6A60]" />}
             <span>CSV</span>
           </button>
         </div>
@@ -150,46 +150,46 @@ export const DataTableViewer: React.FC<DataTableViewerProps> = ({ data, onUpdate
 
       {/* Search Input Filter */}
       <div className="relative">
-        <Search className="w-3.5 h-3.5 text-[#6B8072] absolute left-3 top-1/2 -translate-y-1/2" />
+        <Search className="w-3.5 h-3.5 text-[#7A8479] absolute left-3 top-1/2 -translate-y-1/2" />
         <input
           type="text"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           placeholder="Пошук або фільтр рядків таблиці..."
-          className="w-full pl-8 pr-3 py-1.5 bg-[#0E1410] border border-[#202E23] rounded-xl text-xs text-[#F0FAF3] placeholder-[#6B8072] focus:outline-none focus:border-[#55C778] focus:ring-1 focus:ring-[#55C778]/30 transition-colors shadow-inner"
+          className="w-full pl-8 pr-3 py-1.5 bg-[#F7F5EE] border border-[#202E23] rounded-xl text-xs text-[#F0FAF3] placeholder-[#7A8479] focus:outline-none focus:border-[#E87A42] focus:ring-1 focus:ring-[#E87A42]/30 transition-colors shadow-inner"
         />
       </div>
 
       {/* Table Container */}
-      <div className="overflow-x-auto rounded-xl border border-[#1F2B22] bg-[#0E1410] shadow-inner">
+      <div className="overflow-x-auto rounded-xl border border-[#E6DFD3] bg-[#F7F5EE] shadow-inner">
         <table className="w-full text-left text-xs border-collapse">
           <thead>
-            <tr className="bg-[#141C16] text-[#8EA093] font-bold border-b border-[#1F2B22] uppercase tracking-wider text-[10.5px]">
+            <tr className="bg-[#FDFCF9] text-[#5F6A60] font-bold border-b border-[#E6DFD3] uppercase tracking-wider text-[10.5px]">
               {data.columns.map((col) => (
                 <th
                   key={col.key}
                   onClick={() => handleSort(col.key)}
-                  className="px-3 py-2 cursor-pointer hover:bg-[#1A251E] hover:text-white transition-colors whitespace-nowrap"
+                  className="px-3 py-2 cursor-pointer hover:bg-[#F9F7F1] hover:text-[#1E2521] transition-colors whitespace-nowrap"
                 >
                   <div className="flex items-center gap-1">
                     <span>{col.label}</span>
-                    <ArrowUpDown className="w-3 h-3 text-[#6B8072]" />
+                    <ArrowUpDown className="w-3 h-3 text-[#7A8479]" />
                   </div>
                 </th>
               ))}
-              <th className="px-2 py-2 w-8 text-center text-[#6B8072]">···</th>
+              <th className="px-2 py-2 w-8 text-center text-[#7A8479]">···</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-[#1B261D]">
             {filteredRows.map(({ row, originalIndex }) => (
-              <tr key={row.id || originalIndex} className="hover:bg-[#141C16] group/row transition-colors">
+              <tr key={row.id || originalIndex} className="hover:bg-[#FDFCF9] group/row transition-colors">
                 {data.columns.map((col) => {
                   const val = row[col.key];
                   const isEditing = editingCell?.rowIdx === originalIndex && editingCell?.colKey === col.key;
 
                   if (isEditing) {
                     return (
-                      <td key={col.key} className="px-2 py-1 whitespace-nowrap bg-[#18261D]">
+                      <td key={col.key} className="px-2 py-1 whitespace-nowrap bg-[#EFF6F0]">
                         <div className="flex items-center gap-1">
                           <input
                             type={col.type === 'number' ? 'number' : 'text'}
@@ -200,11 +200,11 @@ export const DataTableViewer: React.FC<DataTableViewerProps> = ({ data, onUpdate
                               if (e.key === 'Enter') handleSaveCell(originalIndex, col.key);
                               if (e.key === 'Escape') setEditingCell(null);
                             }}
-                            className="px-2 py-1 border border-[#55C778] rounded text-xs w-full bg-[#0E1410] text-white focus:outline-none"
+                            className="px-2 py-1 border border-[#E87A42] rounded text-xs w-full bg-[#F7F5EE] text-[#1E2521] focus:outline-none"
                           />
                           <button
                             onClick={() => handleSaveCell(originalIndex, col.key)}
-                            className="p-1 bg-[#55C778] text-[#0C120E] rounded hover:bg-[#46AF68]"
+                            className="p-1 bg-[#E87A42] text-[#F7F5EE] rounded hover:bg-[#C25925]"
                           >
                             <Check className="w-3 h-3" />
                           </button>
@@ -223,13 +223,13 @@ export const DataTableViewer: React.FC<DataTableViewerProps> = ({ data, onUpdate
                       <td
                         key={col.key}
                         onClick={() => handleCellClick(originalIndex, col.key, val)}
-                        className="px-3 py-2 whitespace-nowrap cursor-pointer hover:bg-[#1A251E]"
+                        className="px-3 py-2 whitespace-nowrap cursor-pointer hover:bg-[#F9F7F1]"
                         title="Натисніть для зміни"
                       >
                         <span
                           className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${
                             isDone
-                              ? 'bg-[#183021] text-[#55C778] border-[#2A5439]'
+                              ? 'bg-[#183021] text-[#E87A42] border-[#2A5439]'
                               : isInProgress
                               ? 'bg-[#2E2413] text-[#FBBF24] border-[#4E3C1E]'
                               : 'bg-[#2B1B36] text-[#C084FC] border-[#48285D]'
@@ -247,17 +247,17 @@ export const DataTableViewer: React.FC<DataTableViewerProps> = ({ data, onUpdate
                       <td
                         key={col.key}
                         onClick={() => handleCellClick(originalIndex, col.key, val)}
-                        className="px-3 py-2 whitespace-nowrap cursor-pointer hover:bg-[#1A251E]"
+                        className="px-3 py-2 whitespace-nowrap cursor-pointer hover:bg-[#F9F7F1]"
                         title="Натисніть для редагування"
                       >
                         <div className="flex items-center gap-2">
                           <div className="w-16 h-1.5 bg-[#1B261D] rounded-full overflow-hidden">
                             <div
-                              className="h-full bg-gradient-to-r from-[#55C778] to-[#10B981] rounded-full transition-all"
+                              className="h-full bg-gradient-to-r from-[#E87A42] to-[#10B981] rounded-full transition-all"
                               style={{ width: `${Math.min(Number(val) || 0, 100)}%` }}
                             />
                           </div>
-                          <span className="font-mono text-[10px] font-bold text-[#8EA093]">{val}%</span>
+                          <span className="font-mono text-[10px] font-bold text-[#5F6A60]">{val}%</span>
                         </div>
                       </td>
                     );
@@ -267,7 +267,7 @@ export const DataTableViewer: React.FC<DataTableViewerProps> = ({ data, onUpdate
                     <td
                       key={col.key}
                       onClick={() => handleCellClick(originalIndex, col.key, val)}
-                      className={`px-3 py-2 text-[#D1DFD6] cursor-pointer hover:bg-[#1A251E] ${
+                      className={`px-3 py-2 text-[#1E2521] cursor-pointer hover:bg-[#F9F7F1] ${
                         col.type === 'number' ? 'font-mono text-right font-medium text-[#F4AF25]' : ''
                       }`}
                       title="Натисніть для редагування"
@@ -281,7 +281,7 @@ export const DataTableViewer: React.FC<DataTableViewerProps> = ({ data, onUpdate
                 <td className="px-2 py-2 text-center">
                   <button
                     onClick={() => handleDeleteRow(originalIndex)}
-                    className="opacity-0 group-hover/row:opacity-100 text-[#6B8072] hover:text-red-400 transition-opacity p-0.5"
+                    className="opacity-0 group-hover/row:opacity-100 text-[#7A8479] hover:text-red-400 transition-opacity p-0.5"
                     title="Видалити рядок"
                   >
                     <Trash2 className="w-3 h-3" />
@@ -292,7 +292,7 @@ export const DataTableViewer: React.FC<DataTableViewerProps> = ({ data, onUpdate
 
             {/* Inline Add Row Form */}
             {isAddingRow && (
-              <tr className="bg-[#141C16] border-t-2 border-[#55C778]">
+              <tr className="bg-[#FDFCF9] border-t-2 border-[#E87A42]">
                 {data.columns.map((col) => (
                   <td key={col.key} className="px-2 py-1.5">
                     <input
@@ -302,14 +302,14 @@ export const DataTableViewer: React.FC<DataTableViewerProps> = ({ data, onUpdate
                       onChange={(e) =>
                         setNewRowData({ ...newRowData, [col.key]: e.target.value })
                       }
-                      className="w-full px-2 py-1 bg-[#0E1410] border border-[#26372B] rounded text-xs text-white placeholder-[#6B8072] focus:outline-none focus:border-[#55C778]"
+                      className="w-full px-2 py-1 bg-[#F7F5EE] border border-[#26372B] rounded text-xs text-[#1E2521] placeholder-[#7A8479] focus:outline-none focus:border-[#E87A42]"
                     />
                   </td>
                 ))}
                 <td className="px-2 py-1.5 text-center">
                   <button
                     onClick={handleAddRow}
-                    className="p-1 bg-[#55C778] text-[#0C120E] rounded hover:bg-[#46AF68]"
+                    className="p-1 bg-[#E87A42] text-[#F7F5EE] rounded hover:bg-[#C25925]"
                     title="Зберегти новий рядок"
                   >
                     <Check className="w-3.5 h-3.5 font-bold" />
@@ -320,12 +320,12 @@ export const DataTableViewer: React.FC<DataTableViewerProps> = ({ data, onUpdate
 
             {/* Summary Row if present */}
             {data.summaryRow && (
-              <tr className="bg-[#162019] font-bold text-white border-t-2 border-[#26372B]">
+              <tr className="bg-[#162019] font-bold text-[#1E2521] border-t-2 border-[#26372B]">
                 {data.columns.map((col) => (
                   <td
                     key={col.key}
                     className={`px-3 py-2 ${
-                      col.type === 'number' ? 'font-mono text-right text-[#55C778]' : ''
+                      col.type === 'number' ? 'font-mono text-right text-[#E87A42]' : ''
                     }`}
                   >
                     {data.summaryRow?.[col.key] ?? ''}

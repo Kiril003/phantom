@@ -198,7 +198,7 @@ export const IdentityPanel: React.FC = () => {
             />
             <button
               onClick={submitContact}
-              className="px-3 py-1.5 rounded-xl bg-[#E87A42] text-white text-[11px] font-bold active:scale-95 transition-transform"
+              className="px-3 py-1.5 rounded-xl bg-[#E87A42] text-[#1E2521] text-[11px] font-bold active:scale-95 transition-transform"
             >
               Звести сесію
             </button>

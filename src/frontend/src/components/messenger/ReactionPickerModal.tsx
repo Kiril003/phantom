@@ -80,25 +80,25 @@ export const ReactionPickerModal: React.FC<ReactionPickerModalProps> = ({
       onClick={onClose}
     >
       <div
-        className="w-full max-w-sm bg-[#121A15] border border-[#2B3C30] rounded-3xl shadow-2xl p-4 overflow-hidden animate-in zoom-in-95 duration-150 text-[#E4EDE7]"
+        className="w-full max-w-sm bg-[#FDFCF9] border border-[#DDD4C4] rounded-3xl shadow-2xl p-4 overflow-hidden animate-in zoom-in-95 duration-150 text-[#1E2521]"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header with search */}
         <div className="flex items-center justify-between gap-2 mb-3">
-          <div className="flex items-center gap-2 flex-1 px-3 py-1.5 bg-[#0E1410] border border-[#233127] rounded-2xl">
-            <Search className="w-4 h-4 text-[#6B8072]" />
+          <div className="flex items-center gap-2 flex-1 px-3 py-1.5 bg-[#F7F5EE] border border-[#F1EDE3] rounded-2xl">
+            <Search className="w-4 h-4 text-[#7A8479]" />
             <input
               type="text"
               autoFocus
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Пошук реакції або емодзі..."
-              className="w-full text-xs text-white placeholder-[#6B8072] focus:outline-none bg-transparent"
+              className="w-full text-xs text-[#1E2521] placeholder-[#7A8479] focus:outline-none bg-transparent"
             />
           </div>
           <button
             onClick={onClose}
-            className="p-1.5 hover:bg-[#1E2A21] text-[#8EA093] hover:text-white rounded-xl transition-colors"
+            className="p-1.5 hover:bg-[#F1EDE3] text-[#5F6A60] hover:text-[#1E2521] rounded-xl transition-colors"
           >
             <X className="w-4 h-4" />
           </button>
@@ -106,7 +106,7 @@ export const ReactionPickerModal: React.FC<ReactionPickerModalProps> = ({
 
         {/* Category Tabs */}
         {!search && (
-          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-2 mb-2 border-b border-[#1F2B22]">
+          <div className="flex items-center gap-1 overflow-x-auto no-scrollbar pb-2 mb-2 border-b border-[#E6DFD3]">
             {emojiCategories.map((cat) => {
               const Icon = cat.icon;
               const isActive = activeCategory === cat.id;
@@ -116,8 +116,8 @@ export const ReactionPickerModal: React.FC<ReactionPickerModalProps> = ({
                   onClick={() => setActiveCategory(cat.id)}
                   className={`px-2.5 py-1 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all shrink-0 ${
                     isActive
-                      ? 'bg-[#1C2920] text-[#55C778] border border-[#2B3E31] shadow-sm'
-                      : 'hover:bg-[#18231B] text-[#8EA093] hover:text-white'
+                      ? 'bg-[#F9F7F1] text-[#E87A42] border border-[#DDD4C4] shadow-sm'
+                      : 'hover:bg-[#F9F7F1] text-[#5F6A60] hover:text-[#1E2521]'
                   }`}
                 >
                   <Icon className="w-3.5 h-3.5" />
@@ -136,7 +136,7 @@ export const ReactionPickerModal: React.FC<ReactionPickerModalProps> = ({
                 <button
                   key={idx}
                   onClick={() => handlePick(emoji)}
-                  className="w-10 h-10 flex items-center justify-center text-2xl rounded-2xl hover:bg-[#1A261D] hover:shadow-xs hover:scale-120 active:scale-95 transition-all"
+                  className="w-10 h-10 flex items-center justify-center text-2xl rounded-2xl hover:bg-[#F9F7F1] hover:shadow-xs hover:scale-120 active:scale-95 transition-all"
                 >
                   {emoji}
                 </button>
@@ -150,7 +150,7 @@ export const ReactionPickerModal: React.FC<ReactionPickerModalProps> = ({
                   <button
                     key={idx}
                     onClick={() => handlePick(emoji)}
-                    className="w-10 h-10 flex items-center justify-center text-2xl rounded-2xl hover:bg-[#1A261D] hover:shadow-xs hover:scale-120 active:scale-95 transition-all"
+                    className="w-10 h-10 flex items-center justify-center text-2xl rounded-2xl hover:bg-[#F9F7F1] hover:shadow-xs hover:scale-120 active:scale-95 transition-all"
                   >
                     {emoji}
                   </button>
@@ -160,12 +160,12 @@ export const ReactionPickerModal: React.FC<ReactionPickerModalProps> = ({
         </div>
 
         {/* Quick hint footer */}
-        <div className="mt-3 pt-2.5 border-t border-[#1F2B22] flex items-center justify-between text-[11px] text-[#8EA093]">
+        <div className="mt-3 pt-2.5 border-t border-[#E6DFD3] flex items-center justify-between text-[11px] text-[#5F6A60]">
           <span className="flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-[#55C778]" />
+            <Sparkles className="w-3.5 h-3.5 text-[#E87A42]" />
             <span>Натисніть щоб відправити реакцію</span>
           </span>
-          <span className="font-mono text-[10px] text-[#55C778]">Aura Reactions</span>
+          <span className="font-mono text-[10px] text-[#E87A42]">PHANTOM Reactions</span>
         </div>
       </div>
     </div>

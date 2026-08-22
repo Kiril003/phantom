@@ -37,12 +37,12 @@ export const AudioHuddleBar: React.FC<AudioHuddleBarProps> = ({
   if (!huddleState.active) return null;
 
   return (
-    <div className="bg-[#121A15]/95 backdrop-blur-xl border-b border-[#1F2B22] shadow-md select-none z-20 text-[#E4EDE7]">
+    <div className="bg-[#FDFCF9]/95 backdrop-blur-xl border-b border-[#E6DFD3] shadow-md select-none z-20 text-[#1E2521]">
       {/* Compact Main Bar */}
       <div className="px-4 py-2.5 flex items-center justify-between gap-3">
         {/* Left: Indicator & Active Participants */}
         <div className="flex items-center gap-3 min-w-0">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-[#183021] text-[#55C778] rounded-full text-xs font-bold shrink-0 border border-[#2A5439]">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-[#183021] text-[#E87A42] rounded-full text-xs font-bold shrink-0 border border-[#2A5439]">
             <Mic className="w-3 h-3" />
             <span>Аудіо-простір</span>
           </div>
@@ -55,29 +55,29 @@ export const AudioHuddleBar: React.FC<AudioHuddleBarProps> = ({
                   src={p.avatar}
                   alt={p.name}
                   className={`w-7 h-7 rounded-full object-cover ring-2 ${
-                    p.isSpeaking ? 'ring-[#55C778] scale-105' : 'ring-[#121A15]'
+                    p.isSpeaking ? 'ring-[#E87A42] scale-105' : 'ring-[#FDFCF9]'
                   }`}
                 />
                 {p.isSpeaking && (
-                  <span className="absolute -bottom-1 -right-1 w-2.5 h-2.5 bg-[#55C778] rounded-full ring-1 ring-[#121A15] animate-pulse" />
+                  <span className="absolute -bottom-1 -right-1 w-2.5 h-2.5 bg-[#E87A42] rounded-full ring-1 ring-[#FDFCF9] animate-pulse" />
                 )}
               </div>
             ))}
           </div>
 
-          <span className="text-xs font-semibold text-white hidden sm:inline truncate">
+          <span className="text-xs font-semibold text-[#1E2521] hidden sm:inline truncate">
             {huddleState.title}
           </span>
         </div>
 
         {/* Center: Mic status */}
-        <div className="hidden md:flex items-center gap-1.5 h-6 px-3 bg-[#0E1410] rounded-full border border-[#1F2B22]">
+        <div className="hidden md:flex items-center gap-1.5 h-6 px-3 bg-[#F7F5EE] rounded-full border border-[#E6DFD3]">
           {isMuted ? (
-            <MicOff className="w-3 h-3 text-[#8EA093]" />
+            <MicOff className="w-3 h-3 text-[#5F6A60]" />
           ) : (
-            <Mic className="w-3 h-3 text-[#55C778]" />
+            <Mic className="w-3 h-3 text-[#E87A42]" />
           )}
-          <span className="text-[10px] font-medium text-[#8EA093]">
+          <span className="text-[10px] font-medium text-[#5F6A60]">
             {isMuted ? 'Мікрофон вимкнено' : 'Мікрофон увімкнено'}
           </span>
         </div>
@@ -91,8 +91,8 @@ export const AudioHuddleBar: React.FC<AudioHuddleBarProps> = ({
             }}
             className={`p-2 rounded-full font-semibold text-xs flex items-center gap-1 transition-all ${
               isMuted
-                ? 'bg-[#1A251E] text-[#8EA093] hover:bg-[#223126]'
-                : 'bg-[#55C778] text-[#0C120E] shadow-sm font-bold'
+                ? 'bg-[#F9F7F1] text-[#5F6A60] hover:bg-[#E6DFD3]'
+                : 'bg-[#E87A42] text-[#F7F5EE] shadow-sm font-bold'
             }`}
             title={isMuted ? 'Увімкнути мікрофон' : 'Вимкнути мікрофон'}
           >
@@ -107,7 +107,7 @@ export const AudioHuddleBar: React.FC<AudioHuddleBarProps> = ({
             className={`p-2 rounded-full transition-colors ${
               hasRaisedHand
                 ? 'bg-[#2E2413] text-[#FBBF24] border border-[#4E3C1E]'
-                : 'bg-[#1A251E] text-[#8EA093] hover:text-white hover:bg-[#223126] border border-[#26372B]'
+                : 'bg-[#F9F7F1] text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#E6DFD3] border border-[#26372B]'
             }`}
             title="Підняти руку"
           >
@@ -120,7 +120,7 @@ export const AudioHuddleBar: React.FC<AudioHuddleBarProps> = ({
                 soundFx.playTap();
                 onOpenVideoModal();
               }}
-              className="p-2 bg-[#1A261D] hover:bg-[#223326] text-[#55C778] rounded-full transition-colors border border-[#2B3E31]"
+              className="p-2 bg-[#F9F7F1] hover:bg-[#223326] text-[#E87A42] rounded-full transition-colors border border-[#DDD4C4]"
               title="Відкрити HD Відео-Студію"
             >
               <Video className="w-3.5 h-3.5" />
@@ -129,9 +129,9 @@ export const AudioHuddleBar: React.FC<AudioHuddleBarProps> = ({
 
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="px-2.5 py-1.5 bg-[#1A251E] hover:bg-[#223126] text-[#E4EDE7] border border-[#26372B] rounded-full text-xs font-semibold flex items-center gap-1 transition-colors"
+            className="px-2.5 py-1.5 bg-[#F9F7F1] hover:bg-[#E6DFD3] text-[#1E2521] border border-[#26372B] rounded-full text-xs font-semibold flex items-center gap-1 transition-colors"
           >
-            <FileText className="w-3.5 h-3.5 text-[#55C778]" />
+            <FileText className="w-3.5 h-3.5 text-[#E87A42]" />
             <span className="hidden lg:inline">Стенограма</span>
             {isExpanded ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
           </button>
@@ -151,14 +151,14 @@ export const AudioHuddleBar: React.FC<AudioHuddleBarProps> = ({
 
       {/* Стенограма: тільки те, що вузол справді записав */}
       {isExpanded && (
-        <div className="px-4 pb-3 pt-1 border-t border-[#1F2B22] bg-[#0E1410]/95 space-y-2 text-xs">
-          <div className="flex items-center gap-1 text-[11px] font-bold text-[#8EA093]">
-            <FileText className="w-3.5 h-3.5 text-[#55C778]" />
+        <div className="px-4 pb-3 pt-1 border-t border-[#E6DFD3] bg-[#F7F5EE]/95 space-y-2 text-xs">
+          <div className="flex items-center gap-1 text-[11px] font-bold text-[#5F6A60]">
+            <FileText className="w-3.5 h-3.5 text-[#E87A42]" />
             <span>Стенограма зустрічі</span>
           </div>
 
           {transcript.length === 0 ? (
-            <p className="text-[11px] text-[#6B8072] py-2">
+            <p className="text-[11px] text-[#7A8479] py-2">
               Стенограми ще немає — розпізнавання мовлення в аудіо-просторі не ведеться.
             </p>
           ) : (
@@ -166,13 +166,13 @@ export const AudioHuddleBar: React.FC<AudioHuddleBarProps> = ({
               {transcript.map((t, idx) => (
                 <div
                   key={idx}
-                  className="p-2 rounded-xl border text-xs flex items-start justify-between gap-2 bg-[#141C16] border-[#233127] text-[#D1DFD6]"
+                  className="p-2 rounded-xl border text-xs flex items-start justify-between gap-2 bg-[#FDFCF9] border-[#F1EDE3] text-[#1E2521]"
                 >
                   <div className="min-w-0">
-                    <span className="font-bold mr-1.5 text-white">{t.speaker}:</span>
+                    <span className="font-bold mr-1.5 text-[#1E2521]">{t.speaker}:</span>
                     <span>{t.text}</span>
                   </div>
-                  <span className="text-[10px] text-[#6B8072] shrink-0 font-mono">
+                  <span className="text-[10px] text-[#7A8479] shrink-0 font-mono">
                     {t.time}
                   </span>
                 </div>

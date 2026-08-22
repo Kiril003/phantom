@@ -88,7 +88,7 @@ export const VideoCallModal: React.FC<VideoCallModalProps> = ({
             </div>
             <div>
               <div className="flex items-center gap-2">
-                <h3 className="font-bold text-white text-base sm:text-lg">{huddleState.title || 'Studio HD Room'}</h3>
+                <h3 className="font-bold text-[#1E2521] text-base sm:text-lg">{huddleState.title || 'Studio HD Room'}</h3>
                 {isRecording && (
                   <span className="px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-red-950/80 text-red-400 border border-red-800 flex items-center gap-1.5 animate-pulse">
                     <span className="w-2 h-2 rounded-full bg-red-500" />
@@ -114,7 +114,7 @@ export const VideoCallModal: React.FC<VideoCallModalProps> = ({
               className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 transition-all ${
                 studioQuality === 'studio-hd-48khz'
                   ? 'bg-[#E87A42]/20 text-[#E87A42] border border-[#E87A42]/40'
-                  : 'bg-[#232F26] text-[#A6B8AB] hover:text-white'
+                  : 'bg-[#232F26] text-[#A6B8AB] hover:text-[#1E2521]'
               }`}
               title="Перемкнути аудіопрофіль"
             >
@@ -124,7 +124,7 @@ export const VideoCallModal: React.FC<VideoCallModalProps> = ({
 
             <button
               onClick={() => setIsFullscreen(!isFullscreen)}
-              className="p-2 text-[#8A9C8F] hover:text-white hover:bg-[#232F26] rounded-xl transition-colors"
+              className="p-2 text-[#8A9C8F] hover:text-[#1E2521] hover:bg-[#232F26] rounded-xl transition-colors"
               title={isFullscreen ? 'Згорнути' : 'На весь екран'}
             >
               {isFullscreen ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
@@ -132,7 +132,7 @@ export const VideoCallModal: React.FC<VideoCallModalProps> = ({
 
             <button
               onClick={onClose}
-              className="p-2 text-[#8A9C8F] hover:text-white hover:bg-[#232F26] rounded-xl transition-colors ml-1"
+              className="p-2 text-[#8A9C8F] hover:text-[#1E2521] hover:bg-[#232F26] rounded-xl transition-colors ml-1"
               title="Згорнути у плашку"
             >
               ✕
@@ -162,30 +162,30 @@ export const VideoCallModal: React.FC<VideoCallModalProps> = ({
                       className="w-20 h-20 rounded-full object-cover ring-4 ring-[#2D3930]"
                     />
                     {!isMuted && (
-                      <span className="absolute inset-0 rounded-full ring-4 ring-[#55C778] animate-ping opacity-60 pointer-events-none" />
+                      <span className="absolute inset-0 rounded-full ring-4 ring-[#E87A42] animate-ping opacity-60 pointer-events-none" />
                     )}
                   </div>
-                  <span className="text-xs font-semibold text-white">Ви (Я)</span>
+                  <span className="text-xs font-semibold text-[#1E2521]">Ви (Я)</span>
                 </div>
               )}
 
               {/* Status pills inside tile */}
               <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between pointer-events-none">
-                <span className="px-2 py-0.5 bg-black/60 backdrop-blur-md rounded-lg text-xs font-medium text-white/90">
+                <span className="px-2 py-0.5 bg-black/60 backdrop-blur-md rounded-lg text-xs font-medium text-[#1E2521]/90">
                   Ви {isScreenSharing && '• 🖥️ Екран'}
                 </span>
                 <div className="flex items-center gap-1.5">
                   {hasRaisedHand && (
-                    <span className="p-1 bg-amber-500/80 rounded-md text-white">
+                    <span className="p-1 bg-amber-500/80 rounded-md text-[#1E2521]">
                       <Hand className="w-3 h-3" />
                     </span>
                   )}
                   {isMuted ? (
-                    <span className="p-1 bg-red-500/80 rounded-md text-white">
+                    <span className="p-1 bg-red-500/80 rounded-md text-[#1E2521]">
                       <MicOff className="w-3 h-3" />
                     </span>
                   ) : (
-                    <span className="p-1 bg-emerald-500/80 rounded-md text-white animate-pulse">
+                    <span className="p-1 bg-emerald-500/80 rounded-md text-[#1E2521] animate-pulse">
                       <Mic className="w-3 h-3" />
                     </span>
                   )}
@@ -217,27 +217,27 @@ export const VideoCallModal: React.FC<VideoCallModalProps> = ({
                         <span className="absolute inset-0 rounded-full ring-4 ring-[#E87A42] animate-ping opacity-75 pointer-events-none" />
                       )}
                     </div>
-                    <span className="text-xs font-semibold text-white">{p.name}</span>
+                    <span className="text-xs font-semibold text-[#1E2521]">{p.name}</span>
                   </div>
                 )}
 
                 {/* Status bottom bar */}
                 <div className="absolute bottom-3 left-3 right-3 flex items-center justify-between pointer-events-none">
-                  <span className="px-2 py-0.5 bg-black/60 backdrop-blur-md rounded-lg text-xs font-medium text-white/90">
+                  <span className="px-2 py-0.5 bg-black/60 backdrop-blur-md rounded-lg text-xs font-medium text-[#1E2521]/90">
                     {p.name}
                   </span>
                   <div className="flex items-center gap-1.5">
                     {p.hasRaisedHand && (
-                      <span className="p-1 bg-amber-500/80 rounded-md text-white">
+                      <span className="p-1 bg-amber-500/80 rounded-md text-[#1E2521]">
                         <Hand className="w-3 h-3" />
                       </span>
                     )}
                     {p.isMuted ? (
-                      <span className="p-1 bg-red-500/80 rounded-md text-white">
+                      <span className="p-1 bg-red-500/80 rounded-md text-[#1E2521]">
                         <MicOff className="w-3 h-3" />
                       </span>
                     ) : (
-                      <span className="p-1 bg-emerald-500/80 rounded-md text-white">
+                      <span className="p-1 bg-emerald-500/80 rounded-md text-[#1E2521]">
                         <Mic className="w-3 h-3" />
                       </span>
                     )}
@@ -249,8 +249,8 @@ export const VideoCallModal: React.FC<VideoCallModalProps> = ({
 
           {/* Right Side: Meeting Transcript */}
           <div className="w-full md:w-80 border-t md:border-t-0 md:border-l border-[#232F26] bg-[#161E18] flex flex-col shrink-0">
-            <div className="p-3 border-b border-[#232F26] flex items-center gap-2 text-xs font-bold text-[#55C778]">
-              <FileText className="w-4 h-4 text-[#55C778]" />
+            <div className="p-3 border-b border-[#232F26] flex items-center gap-2 text-xs font-bold text-[#E87A42]">
+              <FileText className="w-4 h-4 text-[#E87A42]" />
               <span>Стенограма зустрічі</span>
             </div>
 
@@ -282,7 +282,7 @@ export const VideoCallModal: React.FC<VideoCallModalProps> = ({
               {[14, 28, 18, 32, 16, 26, 20, 30, 12].map((h, i) => (
                 <div
                   key={i}
-                  className="w-1 bg-[#55C778] rounded-full transition-all duration-150"
+                  className="w-1 bg-[#E87A42] rounded-full transition-all duration-150"
                   style={{
                     height: isMuted ? '4px' : `${h}px`,
                   }}
@@ -302,7 +302,7 @@ export const VideoCallModal: React.FC<VideoCallModalProps> = ({
               className={`p-3.5 rounded-2xl font-bold transition-all shadow-md active:scale-95 ${
                 isMuted
                   ? 'bg-red-500/20 text-red-400 border border-red-500/40 hover:bg-red-500/30'
-                  : 'bg-[#55C778] text-[#0E1310] hover:bg-[#4BB66B]'
+                  : 'bg-[#E87A42] text-[#0E1310] hover:bg-[#4BB66B]'
               }`}
               title={isMuted ? 'Увімкнути мікрофон' : 'Вимкнути мікрофон'}
             >
@@ -317,8 +317,8 @@ export const VideoCallModal: React.FC<VideoCallModalProps> = ({
               }}
               className={`p-3.5 rounded-2xl font-bold transition-all shadow-md active:scale-95 ${
                 !isVideoOn
-                  ? 'bg-[#28362C] text-[#8EA093] hover:text-white'
-                  : 'bg-[#55C778] text-[#0E1310] hover:bg-[#4BB66B]'
+                  ? 'bg-[#28362C] text-[#5F6A60] hover:text-[#1E2521]'
+                  : 'bg-[#E87A42] text-[#0E1310] hover:bg-[#4BB66B]'
               }`}
               title={isVideoOn ? 'Вимкнути камеру' : 'Увімкнути камеру 1080p'}
             >
@@ -333,8 +333,8 @@ export const VideoCallModal: React.FC<VideoCallModalProps> = ({
               }}
               className={`p-3.5 rounded-2xl font-bold transition-all shadow-md active:scale-95 ${
                 isScreenSharing
-                  ? 'bg-[#E87A42] text-white'
-                  : 'bg-[#28362C] text-[#8EA093] hover:text-white'
+                  ? 'bg-[#E87A42] text-[#1E2521]'
+                  : 'bg-[#28362C] text-[#5F6A60] hover:text-[#1E2521]'
               }`}
               title="Поділитися екраном"
             >
@@ -350,7 +350,7 @@ export const VideoCallModal: React.FC<VideoCallModalProps> = ({
               className={`p-3.5 rounded-2xl font-bold transition-all shadow-md active:scale-95 ${
                 hasRaisedHand
                   ? 'bg-amber-500 text-[#0E1310]'
-                  : 'bg-[#28362C] text-[#8EA093] hover:text-white'
+                  : 'bg-[#28362C] text-[#5F6A60] hover:text-[#1E2521]'
               }`}
               title="Підняти руку"
             >
@@ -365,8 +365,8 @@ export const VideoCallModal: React.FC<VideoCallModalProps> = ({
               }}
               className={`p-3.5 rounded-2xl font-bold transition-all shadow-md active:scale-95 ${
                 isRecording
-                  ? 'bg-red-600 text-white animate-pulse'
-                  : 'bg-[#28362C] text-[#8EA093] hover:text-white'
+                  ? 'bg-red-600 text-[#1E2521] animate-pulse'
+                  : 'bg-[#28362C] text-[#5F6A60] hover:text-[#1E2521]'
               }`}
               title="Запис зустрічі у хмару"
             >
@@ -380,7 +380,7 @@ export const VideoCallModal: React.FC<VideoCallModalProps> = ({
                 onLeaveHuddle();
                 onClose();
               }}
-              className="px-5 py-3.5 rounded-2xl bg-red-600 hover:bg-red-700 text-white font-bold flex items-center gap-2 shadow-lg active:scale-95 transition-all ml-2"
+              className="px-5 py-3.5 rounded-2xl bg-red-600 hover:bg-red-700 text-[#1E2521] font-bold flex items-center gap-2 shadow-lg active:scale-95 transition-all ml-2"
             >
               <PhoneOff className="w-5 h-5" />
               <span className="hidden sm:inline">Завершити</span>
@@ -390,7 +390,7 @@ export const VideoCallModal: React.FC<VideoCallModalProps> = ({
           <div className="flex items-center gap-2">
             <button
               onClick={onClose}
-              className="px-4 py-2 bg-[#28362C] text-xs font-bold text-white rounded-xl hover:bg-[#344538] transition-colors"
+              className="px-4 py-2 bg-[#28362C] text-xs font-bold text-[#1E2521] rounded-xl hover:bg-[#344538] transition-colors"
             >
               Згорнути
             </button>

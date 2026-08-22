@@ -1639,11 +1639,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
             >
               <div className="flex items-center gap-2 min-w-0">
                 <BarChart2 className="w-3.5 h-3.5 text-[#55C778] shrink-0" />
-                <span className="truncate">Аналітика (Insights)</span>
+                <span className="truncate">Склад папки</span>
               </div>
-              <span className="text-[10px] text-[#55C778] font-mono font-bold bg-[#183021] px-1.5 py-0.2 rounded shrink-0 whitespace-nowrap">
-                30 днів
-              </span>
             </button>
 
             {/* Copy Folder Link (Deep Link) */}
@@ -1895,7 +1892,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         />
       )}
 
-      {/* 10. Folder Insights Modal (30-day message frequency chart) */}
+      {/* 10. Folder Insights Modal (склад папки) */}
       {insightsFolder && (
         <FolderInsightsModal
           isOpen={!!insightsFolder}

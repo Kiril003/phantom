@@ -8,7 +8,7 @@ import {
   PhoneOff,
   Hand,
   Disc,
-  Sparkles,
+  FileText,
   Maximize2,
   Minimize2,
   Zap,
@@ -247,29 +247,29 @@ export const VideoCallModal: React.FC<VideoCallModalProps> = ({
             ))}
           </div>
 
-          {/* Right Side: Gemini Live Scribe & Meeting Transcript */}
+          {/* Right Side: Meeting Transcript */}
           <div className="w-full md:w-80 border-t md:border-t-0 md:border-l border-[#232F26] bg-[#161E18] flex flex-col shrink-0">
             <div className="p-3 border-b border-[#232F26] flex items-center gap-2 text-xs font-bold text-[#55C778]">
-              <Sparkles className="w-4 h-4 text-[#E87A42]" />
-              <span>Gemini Live Scribe (Розшифровка)</span>
-            </div>
-            
-            <div className="flex-1 p-3 overflow-y-auto space-y-2.5 font-sans">
-              {huddleState.liveTranscript.map((t, idx) => (
-                <div key={idx} className="p-2.5 rounded-xl bg-[#1D2720] border border-[#2B392E] text-xs">
-                  <div className="flex items-center justify-between mb-1">
-                    <span className="font-bold text-[#E87A42]">{t.speaker}</span>
-                    <span className="text-[10px] text-[#7A8C7E] font-mono">{t.time}</span>
-                  </div>
-                  <p className="text-[#D3DFD6] leading-relaxed">{t.text}</p>
-                </div>
-              ))}
+              <FileText className="w-4 h-4 text-[#55C778]" />
+              <span>Стенограма зустрічі</span>
             </div>
 
-            <div className="p-3 border-t border-[#232F26] bg-[#121814]">
-              <p className="text-[11px] text-[#86998B] leading-tight">
-                ✦ ШІ автоматично фіксує домовленості та згенерує протокол зустрічі після завершення.
-              </p>
+            <div className="flex-1 p-3 overflow-y-auto space-y-2.5 font-sans">
+              {huddleState.liveTranscript.length === 0 ? (
+                <p className="text-[11px] text-[#7A8C7E] leading-relaxed">
+                  Стенограми ще немає — розпізнавання мовлення у дзвінку не ведеться.
+                </p>
+              ) : (
+                huddleState.liveTranscript.map((t, idx) => (
+                  <div key={idx} className="p-2.5 rounded-xl bg-[#1D2720] border border-[#2B392E] text-xs">
+                    <div className="flex items-center justify-between mb-1">
+                      <span className="font-bold text-[#E87A42]">{t.speaker}</span>
+                      <span className="text-[10px] text-[#7A8C7E] font-mono">{t.time}</span>
+                    </div>
+                    <p className="text-[#D3DFD6] leading-relaxed">{t.text}</p>
+                  </div>
+                ))
+              )}
             </div>
           </div>
         </div>

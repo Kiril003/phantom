@@ -1,14 +1,12 @@
 import React, { useState, useRef, useEffect } from 'react';
 import {
   Send,
-  Mic,
   Smile,
   X,
   Plus,
   Clock,
   Check,
   Layers,
-  Trash2,
   AtSign,
   Reply,
   Sparkles,
@@ -19,6 +17,7 @@ import {
 } from 'lucide-react';
 import { Message, ChatMember, MessageReplyInfo } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
+import { chatApi } from '../../services/api';
 
 interface MessageComposerProps {
   onSendMessage: (text: string, scheduledTime?: string) => void;
@@ -47,17 +46,17 @@ interface MessageComposerProps {
 const emojiList = ['✨', '🌱', '☕', '❤️', '👍', '🔥', '👏', '🙌', '💡', '📌', '🎯', '🚀', '🌿', '🤝', '😊', '👌', '🤩', '🫡', '🎉', '🏆'];
 
 const stylePresets = [
-  { id: 'concise', label: 'Лаконічно ⚡', desc: 'Прибрати зайве та виділити суть' },
-  { id: 'warm', label: 'Тепло & Дружньо ☕', desc: 'Додати щирого настрою та привітання' },
-  { id: 'business', label: 'Діловий тон 💼', desc: 'Чіткі конструкції для робочих домовленостей' },
-  { id: 'polite', label: 'Ввічливо & М’яко 🌿', desc: 'Турботливий та делікатний запит' },
-  { id: 'translate_en', label: 'Перекласти на English 🌐', desc: 'Швидкий переклад тексту англійською' },
-  { id: 'fix_grammar', label: 'Виправити граматику ✨', desc: 'Очистити пунктуацію та автокорекція' },
+  { id: 'concise', label: 'Лаконічно ⚡', desc: 'Прибрати зайве та виділити суть', prompt: 'Перепиши текст стисло, зберігши зміст.' },
+  { id: 'warm', label: 'Тепло & Дружньо ☕', desc: 'Тепліший, дружній тон', prompt: 'Перепиши текст теплішим, дружнім тоном.' },
+  { id: 'business', label: 'Діловий тон 💼', desc: 'Стриманий робочий тон', prompt: 'Перепиши текст стриманим діловим тоном.' },
+  { id: 'polite', label: 'Ввічливо & М’яко 🌿', desc: 'Делікатніше формулювання', prompt: 'Перепиши текст ввічливіше й делікатніше.' },
+  { id: 'translate_en', label: 'Перекласти на English 🌐', desc: 'Переклад тексту англійською', prompt: 'Переклади текст англійською.' },
+  { id: 'fix_grammar', label: 'Виправити граматику ✨', desc: 'Правопис і пунктуація', prompt: 'Виправ орфографію та пунктуацію, не змінюючи змісту й тону.' },
 ];
 
 export const MessageComposer: React.FC<MessageComposerProps> = ({
   onSendMessage,
-  onSendVoiceMessage,
+  onSendVoiceMessage: _onSendVoiceMessage,
   onOpenActions,
   onOpenScheduler: _onOpenScheduler,
   onOpenScheduledList,
@@ -82,8 +81,8 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showStyleMenu, setShowStyleMenu] = useState(false);
   const [showFormattingBar, setShowFormattingBar] = useState(false);
-  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
-  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const [styleBusyId, setStyleBusyId] = useState<string | null>(null);
+  const [styleError, setStyleError] = useState<string | null>(null);
   const [multiQuoteTitle, setMultiQuoteTitle] = useState('Зведена цитата домовленостей');
 
   // Mention autocomplete state
@@ -91,7 +90,6 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   const [mentionCursorPos, setMentionCursorPos] = useState<number>(0);
 
   const textareaRef = useRef<HTMLTextAreaElement>(null);
-  const recordingTimerRef = useRef<any>(null);
   const prevChatIdRef = useRef<string | undefined>(chatId);
   const onDraftChangeRef = useRef(onDraftChange);
   onDraftChangeRef.current = onDraftChange;
@@ -225,63 +223,37 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     }
   };
 
-  const startVoiceRecording = () => {
+  const applyStyle = async (styleId: string) => {
     soundFx.playTap();
-    setIsRecordingVoice(true);
-    setRecordingSeconds(0);
-    recordingTimerRef.current = setInterval(() => {
-      setRecordingSeconds((prev) => prev + 1);
-    }, 1000);
-  };
+    const source = text.trim();
+    const preset = stylePresets.find((s) => s.id === styleId);
+    if (!source || !preset || styleBusyId) return;
 
-  const cancelVoiceRecording = () => {
-    soundFx.playTap();
-    clearInterval(recordingTimerRef.current);
-    setIsRecordingVoice(false);
-    setRecordingSeconds(0);
-  };
-
-  const finishVoiceRecording = () => {
-    soundFx.playSend();
-    clearInterval(recordingTimerRef.current);
-    const duration = Math.max(recordingSeconds, 3);
-    const mockTranscripts = [
-      'Привіт! Переглянув структуру, виглядає дуже продумано і зручно. До зустрічі!',
-      'Узгодили всі параметри для запуску. Завтра о 10:00 проведемо фінальний синхрон.',
-      'Кава на Подолі була чудовою ідеєю, встигли обговорити всі ключові деталі проєкту.',
-      'Ознайомився з дизайн-системою, кольори та типографіка ідеально підходять.',
-    ];
-    const randomTranscript = mockTranscripts[Math.floor(Math.random() * mockTranscripts.length)];
-    onSendVoiceMessage(duration, randomTranscript);
-    setIsRecordingVoice(false);
-    setRecordingSeconds(0);
-  };
-
-  const applyStyle = (styleId: string) => {
-    soundFx.playTap();
-    if (!text.trim()) return;
-    let newText = text.trim();
-    if (styleId === 'concise') {
-      newText = newText.replace(/будь ласка/gi, '').replace(/\s+/g, ' ').trim();
-      newText = `📌 **Суть:** ${newText}`;
-    } else if (styleId === 'warm') {
-      newText = `Привіт! 😊 ${newText} Дякую за співпрацю! ☕`;
-    } else if (styleId === 'business') {
-      newText = `Доброго дня. Щодо питання: ${newText}. Прошу підтвердити узгодження.`;
-    } else if (styleId === 'polite') {
-      newText = `Буду дуже вдячний, якщо знайдете хвилинку: ${newText} ✨`;
-    } else if (styleId === 'translate_en') {
-      newText = `Hi team! Regarding the update: ${newText}. Everything is aligned.`;
-    } else if (styleId === 'fix_grammar') {
-      newText = newText.charAt(0).toUpperCase() + newText.slice(1);
-      if (!/[.!?]$/.test(newText)) newText += '.';
+    setStyleBusyId(styleId);
+    setStyleError(null);
+    try {
+      const res = await chatApi.sendMessage({
+        content: `${preset.prompt} У відповідь дай лише готовий текст, без коментарів.\n\n${source}`,
+        input_method: 'text',
+      });
+      const newText = (res?.message?.content || '').trim();
+      if (!newText) {
+        setStyleError('Локальний агент не повернув тексту');
+        return;
+      }
+      setText(newText);
+      if (chatId && !editingMessage && onDraftChangeRef.current) {
+        onDraftChangeRef.current(chatId, newText);
+      }
+      setShowStyleMenu(false);
+    } catch {
+      setStyleError('Локальний агент недоступний');
+    } finally {
+      setStyleBusyId(null);
     }
-    setText(newText);
-    if (chatId && !editingMessage && onDraftChangeRef.current) {
-      onDraftChangeRef.current(chatId, newText);
-    }
-    setShowStyleMenu(false);
   };
+
+  const canSend = !!text.trim() || selectedMessagesForQuote.length > 0 || !!editingMessage;
 
   const filteredMembers = mentionQuery !== null
     ? chatMembers.filter((m) =>
@@ -321,7 +293,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
             <div className="flex items-center gap-2">
               <Layers className="w-3.5 h-3.5 text-[#55C778]" />
               <span className="font-bold text-xs text-[#55C778]">
-                Синтез {selectedMessagesForQuote.length} вибраних повідомлень
+                Зведена цитата з {selectedMessagesForQuote.length} повідомлень
               </span>
             </div>
             <button
@@ -336,7 +308,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
             type="text"
             value={multiQuoteTitle}
             onChange={(e) => setMultiQuoteTitle(e.target.value)}
-            placeholder="Заголовок синтезу цитат..."
+            placeholder="Заголовок зведеної цитати..."
             className="w-full px-2.5 py-1.5 bg-[#0E1410] border border-[#233127] rounded-xl text-xs font-semibold text-white placeholder-[#6B8072] focus:outline-none focus:border-[#55C778]"
           />
 
@@ -494,54 +466,8 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
         </div>
       ) : null}
 
-      {/* 5. Voice Recording Live Visualizer Bar */}
-      {isRecordingVoice ? (
-        <div className="p-3 bg-[#141C16] border border-[#2B3C30] text-white rounded-2xl flex items-center justify-between gap-3 animate-in fade-in shadow-xl">
-          <div className="flex items-center gap-3 flex-1 min-w-0">
-            <span className="w-3 h-3 rounded-full bg-red-500 animate-ping shrink-0" />
-            <span className="font-mono text-sm font-bold shrink-0">
-              {Math.floor(recordingSeconds / 60)}:
-              {(recordingSeconds % 60).toString().padStart(2, '0')}
-            </span>
-
-            {/* Equalizer frequency bars animation */}
-            <div className="flex items-center gap-1 h-6 px-2">
-              {[40, 75, 55, 90, 60, 85, 45, 95, 70, 50, 80].map((val, i) => (
-                <div
-                  key={i}
-                  className="w-1 bg-[#55C778] rounded-full animate-pulse"
-                  style={{
-                    height: `${(val * 0.22) + Math.sin(Date.now() / 200 + i) * 6}px`,
-                    animationDelay: `${i * 0.1}s`,
-                  }}
-                />
-              ))}
-            </div>
-
-            <span className="text-xs text-[#8EA093] truncate hidden sm:inline">Запис аудіо...</span>
-          </div>
-
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              onClick={cancelVoiceRecording}
-              className="p-2 bg-[#1E2A21] hover:bg-[#28382D] text-[#E4EDE7] rounded-xl text-xs flex items-center gap-1 transition-colors"
-            >
-              <Trash2 className="w-4 h-4 text-red-400" />
-              <span>Скасувати</span>
-            </button>
-
-            <button
-              onClick={finishVoiceRecording}
-              className="px-3.5 py-2 bg-[#55C778] hover:bg-[#46AF68] text-[#0C120E] font-bold rounded-xl text-xs flex items-center gap-1.5 transition-colors shadow-md"
-            >
-              <Send className="w-4 h-4" />
-              <span>Надіслати</span>
-            </button>
-          </div>
-        </div>
-      ) : (
-        /* 6. Main Clean Message Composer Bar */
-        <div className="flex items-end gap-2 sm:gap-2.5">
+      {/* 5. Main Clean Message Composer Bar */}
+      <div className="flex items-end gap-2 sm:gap-2.5">
           {/* Action Studio & Attachments Button (+) */}
           <button
             onClick={() => {
@@ -573,40 +499,49 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
               className="flex-1 max-h-32 min-h-[28px] py-1 bg-transparent text-xs sm:text-sm text-[#F0FAF3] placeholder-[#6B8072] resize-none focus:outline-none select-text leading-relaxed"
             />
 
-            {/* Inline AI Tone Shift Menu */}
+            {/* Переписування чернетки локальним агентом */}
             <div className="relative pb-0.5">
               <button
                 type="button"
                 onClick={() => {
                   soundFx.playTap();
                   setShowStyleMenu(!showStyleMenu);
+                  setStyleError(null);
                   setShowEmojiPicker(false);
                   setShowFormattingBar(false);
                 }}
                 className={`p-1.5 rounded-lg transition-colors shrink-0 ${
                   showStyleMenu ? 'text-[#F4AF25] bg-[#223126]' : 'text-[#8EA093] hover:text-white'
                 }`}
-                title="AI Стилізація & Тон (Gemini Tone Shifter)"
+                title="Переписати чернетку локальним агентом"
               >
-                <Sparkles className="w-4.5 h-4.5" />
+                <Sparkles className={`w-4.5 h-4.5 ${styleBusyId ? 'animate-pulse' : ''}`} />
               </button>
 
               {showStyleMenu && (
                 <div className="absolute bottom-12 right-0 bg-[#141C16]/98 backdrop-blur-2xl border border-[#2B3C30] rounded-2xl p-2 shadow-2xl w-64 z-30 space-y-1 animate-in fade-in select-none text-[#E4EDE7]">
                   <div className="px-2 py-1 text-[11px] font-extrabold text-[#8EA093] uppercase tracking-wide border-b border-[#233127]">
-                    ✨ ШІ Стилізація тону
+                    Переписати локальним агентом
                   </div>
                   {stylePresets.map((s) => (
                     <button
                       key={s.id}
                       type="button"
+                      disabled={!text.trim() || !!styleBusyId}
                       onClick={() => applyStyle(s.id)}
-                      className="w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-[#1E2A21] text-xs flex flex-col transition-colors"
+                      className="w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-[#1E2A21] text-xs flex flex-col transition-colors disabled:opacity-40 disabled:hover:bg-transparent"
                     >
                       <span className="font-bold text-white">{s.label}</span>
-                      <span className="text-[10px] text-[#8EA093]">{s.desc}</span>
+                      <span className="text-[10px] text-[#8EA093]">
+                        {styleBusyId === s.id ? 'Опрацьовую…' : s.desc}
+                      </span>
                     </button>
                   ))}
+                  {styleError && (
+                    <div className="px-2.5 py-1.5 text-[10px] text-red-300 border-t border-[#233127]">
+                      {styleError}
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -714,26 +649,20 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
             </button>
           </div>
 
-          {/* Mic for Voice Message OR Send Button */}
-          {text.trim() || selectedMessagesForQuote.length > 0 || editingMessage ? (
-            <button
-              onClick={handleSend}
-              className="w-10 h-10 bg-[#55C778] hover:bg-[#46AF68] text-[#0C120E] font-bold rounded-xl transition-transform active:scale-95 shadow-md shrink-0 flex items-center justify-center"
-              title="Надіслати повідомлення"
-            >
-              {editingMessage ? <Check className="w-5 h-5" /> : <Send className="w-4.5 h-4.5 -rotate-12 translate-x-0.5" />}
-            </button>
-          ) : (
-            <button
-              onClick={startVoiceRecording}
-              className="w-10 h-10 bg-[#1A251E] hover:bg-[#223126] text-[#A4B8AB] hover:text-[#55C778] border border-[#28392C] rounded-xl transition-colors shrink-0 flex items-center justify-center shadow-sm active:scale-95"
-              title="Записати голосове повідомлення"
-            >
-              <Mic className="w-4.5 h-4.5" />
-            </button>
-          )}
+          {/* Send Button */}
+          <button
+            onClick={handleSend}
+            disabled={!canSend}
+            className={`w-10 h-10 rounded-xl transition-transform shrink-0 flex items-center justify-center shadow-md ${
+              canSend
+                ? 'bg-[#55C778] hover:bg-[#46AF68] text-[#0C120E] font-bold active:scale-95'
+                : 'bg-[#1A251E] text-[#4A5A4E] border border-[#28392C] cursor-not-allowed'
+            }`}
+            title="Надіслати повідомлення"
+          >
+            {editingMessage ? <Check className="w-5 h-5" /> : <Send className="w-4.5 h-4.5 -rotate-12 translate-x-0.5" />}
+          </button>
         </div>
-      )}
     </div>
   );
 };

@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Quote, Sparkles, ChevronDown, ChevronUp, Copy, Check } from 'lucide-react';
+import { Quote, ListChecks, ChevronDown, ChevronUp, Copy, Check } from 'lucide-react';
 import { MultiQuoteData } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
 
@@ -14,7 +14,7 @@ export const MultiQuoteEmbed: React.FC<MultiQuoteEmbedProps> = ({ data }) => {
 
   const copySynthesis = () => {
     soundFx.playTap();
-    const textToCopy = `📋 ${data.title || 'Синтез цитат'}:\n${data.synthesis?.keyPoints.map((k) => `• ${k}`).join('\n')}\n\nВисновок: ${data.synthesis?.conclusion || ''}`;
+    const textToCopy = `📋 ${data.title || 'Зведена цитата'}:\n${data.synthesis?.keyPoints.map((k) => `• ${k}`).join('\n')}\n\nВисновок: ${data.synthesis?.conclusion || ''}`;
     navigator.clipboard.writeText(textToCopy);
     setIsCopied(true);
     setTimeout(() => setIsCopied(false), 2000);
@@ -30,7 +30,7 @@ export const MultiQuoteEmbed: React.FC<MultiQuoteEmbedProps> = ({ data }) => {
           </div>
           <div>
             <h4 className="font-bold text-xs sm:text-sm text-white leading-tight">
-              {data?.title || 'Комбінована цитата та аналіз'}
+              {data?.title || 'Комбінована цитата'}
             </h4>
             <span className="text-[10px] text-[#8EA093]">
               {(data?.quotes || []).length} підкріплених повідомлень
@@ -41,7 +41,7 @@ export const MultiQuoteEmbed: React.FC<MultiQuoteEmbedProps> = ({ data }) => {
         <button
           onClick={copySynthesis}
           className="p-1.5 bg-[#141C16] hover:bg-[#18231B] text-[#8EA093] hover:text-white rounded-lg text-xs transition-colors border border-[#223126]"
-          title="Копіювати синтез"
+          title="Копіювати"
         >
           {isCopied ? <Check className="w-3.5 h-3.5 text-[#55C778]" /> : <Copy className="w-3.5 h-3.5" />}
         </button>
@@ -51,8 +51,8 @@ export const MultiQuoteEmbed: React.FC<MultiQuoteEmbedProps> = ({ data }) => {
       {data?.synthesis && (
         <div className="p-3.5 bg-[#141C16] rounded-2xl border border-[#223126] space-y-2 text-xs">
           <div className="flex items-center gap-1.5 text-[11px] font-bold text-[#55C778]">
-            <Sparkles className="w-3.5 h-3.5 text-[#55C778]" />
-            <span>AI Синтез ключових тез:</span>
+            <ListChecks className="w-3.5 h-3.5 text-[#55C778]" />
+            <span>Ключові тези:</span>
           </div>
 
           <div className="space-y-1.5 pl-1">

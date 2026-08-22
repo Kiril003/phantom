@@ -1,13 +1,15 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import {
   X,
   FileText,
   Copy,
   Check,
-  Bookmark
+  Bookmark,
+  RefreshCw
 } from 'lucide-react';
 import { Chat } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
+import { chatApi } from '../../services/api';
 
 interface ChatDigestModalProps {
   isOpen: boolean;
@@ -15,6 +17,8 @@ interface ChatDigestModalProps {
   chat: Chat;
   onSaveToNotes?: (digestContent: string) => void;
 }
+
+const MAX_MESSAGES_IN_PROMPT = 60;
 
 export const ChatDigestModal: React.FC<ChatDigestModalProps> = ({
   isOpen,
@@ -24,36 +28,64 @@ export const ChatDigestModal: React.FC<ChatDigestModalProps> = ({
 }) => {
   const [copied, setCopied] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [digest, setDigest] = useState<string | null>(null);
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const textMessages = (chat?.messages || []).filter((m) => m && m.text && m.text.trim());
+
+  const buildDigest = async () => {
+    if (textMessages.length === 0) return;
+    setIsLoading(true);
+    setError(null);
+    try {
+      const transcript = textMessages
+        .slice(-MAX_MESSAGES_IN_PROMPT)
+        .map((m) => `${m.senderName || 'Учасник'}: ${m.text}`)
+        .join('\n');
+      const res = await chatApi.sendMessage({
+        content:
+          'Склади короткий конспект цієї переписки українською: домовленості, рішення та завдання. ' +
+          'Спирайся лише на текст нижче, нічого не додумуй.\n\n' +
+          transcript,
+        input_method: 'text',
+      });
+      const reply = (res?.message?.content || '').trim();
+      if (!reply) {
+        setError('Локальний агент не повернув конспекту');
+        return;
+      }
+      setDigest(reply);
+    } catch {
+      setError('Локальний агент недоступний — конспект не сформовано');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    if (!isOpen) return;
+    setDigest(null);
+    setError(null);
+    void buildDigest();
+    // навмисно лише на відкриття та зміну чату — інакше конспект перезапитувався б на кожен рендер
+  }, [isOpen, chat?.id]);
 
   if (!isOpen || !chat) return null;
-
-  // Generate structured brief dynamically from the chat context
-  const keyAgreements = [
-    'Зустріч на Подолі: узгоджено вільний четвер о 18:00 (тераса кав’ярні «Каштан»).',
-    'Завершення розробки інтерактивних таблиць: Кирило та Олексій закривають модуль таблиць із редагуванням клітинок.',
-    'Спільні витрати: сформовано та розподілено чек на 650 ₴ за каву та десерти.',
-    'Тестування доступності: Дарина готує чек-лист перевірки контрастності WCAG AA.',
-  ];
-
-  const actionItems = [
-    { text: 'Надіслати підсумковий звіт за спринт', assignee: 'Олексій', due: 'П’ятниця' },
-    { text: 'Оновити структуру кіл спілкування', assignee: 'Кирило', due: 'Сьогодні' },
-    { text: 'Узгодити таймінг аудіо-ефіру', assignee: 'Марта', due: 'Четвер' },
-  ];
 
   const chatTitle = chat.title || 'Бесіда';
   const chatCircle = (chat.circle || 'work').toUpperCase();
   const chatAvatar = chat.avatar || 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=200&auto=format&fit=crop&q=80';
   const messageCount = chat.messages ? chat.messages.length : 0;
 
-  const fullDigestMarkdown = `# Конспект та домовленості: ${chatTitle}\n` +
-    `Коло: ${chatCircle} | Дата: ${new Date().toLocaleDateString('uk-UA')}\n\n` +
-    `## 📌 Ключові підсумки обговорення\n` +
-    keyAgreements.map((a) => `- ${a}`).join('\n') +
-    `\n\n## ⚡ Задачі та зобов’язання\n` +
-    actionItems.map((ai) => `- [ ] ${ai.text} (@${ai.assignee}, дедлайн: ${ai.due})`).join('\n');
+  const fullDigestMarkdown = digest
+    ? `# Конспект бесіди: ${chatTitle}\n` +
+      `Коло: ${chatCircle} | Дата: ${new Date().toLocaleDateString('uk-UA')}\n\n` +
+      digest
+    : '';
 
   const handleCopy = () => {
+    if (!fullDigestMarkdown) return;
     soundFx.playTap();
     navigator.clipboard.writeText(fullDigestMarkdown);
     setCopied(true);
@@ -61,6 +93,7 @@ export const ChatDigestModal: React.FC<ChatDigestModalProps> = ({
   };
 
   const handleSaveToNotes = () => {
+    if (!fullDigestMarkdown) return;
     soundFx.playSend();
     onSaveToNotes?.(fullDigestMarkdown);
     setSaved(true);
@@ -83,7 +116,7 @@ export const ChatDigestModal: React.FC<ChatDigestModalProps> = ({
             </div>
             <div>
               <h3 className="font-extrabold text-base text-white">Конспект бесіди</h3>
-              <p className="text-xs text-[#8EA093]">Зведення домовленостей, рішень та задач</p>
+              <p className="text-xs text-[#8EA093]">Складає локальний агент PHANTOM</p>
             </div>
           </div>
 
@@ -111,54 +144,37 @@ export const ChatDigestModal: React.FC<ChatDigestModalProps> = ({
             </div>
           </div>
 
-          {/* Section 1: Key Agreements */}
-          <div className="space-y-2">
-            <h4 className="font-bold text-xs text-[#8EA093] uppercase tracking-wide flex items-center gap-1.5">
-              <span>📌 Ключові рішення</span>
-            </h4>
-            <div className="space-y-1.5">
-              {keyAgreements.map((agr, idx) => (
-                <div
-                  key={idx}
-                  className="p-2.5 bg-[#141C16] border border-[#223126] rounded-xl text-xs text-[#D1DFD6] leading-relaxed shadow-sm"
-                >
-                  {agr}
-                </div>
-              ))}
+          {textMessages.length === 0 ? (
+            <p className="p-3 bg-[#141C16] border border-[#223126] rounded-2xl text-xs text-[#8EA093]">
+              У цій бесіді ще немає текстових повідомлень — конспектувати нічого.
+            </p>
+          ) : isLoading ? (
+            <div className="p-3 bg-[#141C16] border border-[#223126] rounded-2xl text-xs text-[#8EA093] flex items-center gap-2">
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#55C778]" />
+              <span>Читаю бесіду та складаю конспект…</span>
             </div>
-          </div>
-
-          {/* Section 2: Action Items */}
-          <div className="space-y-2">
-            <h4 className="font-bold text-xs text-[#8EA093] uppercase tracking-wide flex items-center gap-1.5">
-              <span>⚡ Задачі та виконавці</span>
-            </h4>
-            <div className="space-y-1.5">
-              {actionItems.map((item, idx) => (
-                <div
-                  key={idx}
-                  className="p-2.5 bg-[#141C16] border border-[#223126] rounded-xl flex items-center justify-between gap-2 text-xs shadow-sm"
-                >
-                  <div className="flex items-center gap-2 min-w-0">
-                    <span className="w-1.5 h-1.5 rounded-full bg-[#55C778] shrink-0" />
-                    <span className="font-medium text-white truncate">{item.text}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 shrink-0 font-semibold text-[10px]">
-                    <span className="bg-[#1A261D] text-[#55C778] border border-[#2B3E31] px-2 py-0.5 rounded-md">
-                      {item.assignee}
-                    </span>
-                    <span className="text-[#8EA093]">{item.due}</span>
-                  </div>
-                </div>
-              ))}
+          ) : error ? (
+            <div className="p-3 bg-[#1E1614] border border-[#4D2424] rounded-2xl text-xs text-red-300 space-y-2">
+              <p>{error}</p>
+              <button
+                onClick={buildDigest}
+                className="px-3 py-1.5 bg-[#141C16] hover:bg-[#18231B] border border-[#223126] rounded-xl text-[11px] font-bold text-white transition-colors"
+              >
+                Спробувати ще раз
+              </button>
             </div>
-          </div>
+          ) : digest ? (
+            <div className="p-3.5 bg-[#141C16] border border-[#223126] rounded-2xl text-xs text-[#D1DFD6] leading-relaxed whitespace-pre-wrap shadow-sm">
+              {digest}
+            </div>
+          ) : null}
 
           {/* Action Buttons */}
           <div className="grid grid-cols-2 gap-2 pt-2 border-t border-[#1F2B22]">
             <button
               onClick={handleCopy}
-              className="py-2.5 px-3 bg-[#141C16] hover:bg-[#18231B] border border-[#223126] rounded-xl text-xs font-bold text-white flex items-center justify-center gap-1.5 transition-colors shadow-sm"
+              disabled={!digest}
+              className="py-2.5 px-3 bg-[#141C16] hover:bg-[#18231B] border border-[#223126] rounded-xl text-xs font-bold text-white flex items-center justify-center gap-1.5 transition-colors shadow-sm disabled:opacity-40"
             >
               {copied ? <Check className="w-4 h-4 text-[#55C778]" /> : <Copy className="w-4 h-4" />}
               <span>{copied ? 'Скопійовано!' : 'Копіювати текст'}</span>
@@ -166,7 +182,8 @@ export const ChatDigestModal: React.FC<ChatDigestModalProps> = ({
 
             <button
               onClick={handleSaveToNotes}
-              className="py-2.5 px-3 bg-[#55C778] hover:bg-[#46AF68] text-[#0C120E] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors shadow-sm"
+              disabled={!digest}
+              className="py-2.5 px-3 bg-[#55C778] hover:bg-[#46AF68] text-[#0C120E] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors shadow-sm disabled:opacity-40"
             >
               {saved ? <Check className="w-4 h-4" /> : <Bookmark className="w-4 h-4" />}
               <span>{saved ? 'Збережено в нотатки!' : 'Зберегти у вибране'}</span>

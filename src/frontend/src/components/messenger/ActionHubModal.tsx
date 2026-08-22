@@ -16,11 +16,41 @@ import {
   Sparkles,
   Users,
   Clock,
-  CalendarCheck,
-  Video
+  CalendarCheck
 } from 'lucide-react';
 import { Chat, ChatMember, EventAttendee, EventData, Message } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
+
+type TablePreset = 'sprint' | 'budget' | 'comparison' | 'schedule';
+
+// Пресет задає лише шапку таблиці — жодних готових рядків
+const TABLE_PRESET_COLUMNS: Record<
+  TablePreset,
+  { key: string; label: string; type: 'text' | 'badge' | 'number' }[]
+> = {
+  sprint: [
+    { key: 'task', label: 'Задача', type: 'text' },
+    { key: 'assignee', label: 'Відповідальний', type: 'text' },
+    { key: 'status', label: 'Статус', type: 'badge' },
+    { key: 'progress', label: 'Прогрес (%)', type: 'number' },
+  ],
+  budget: [
+    { key: 'item', label: 'Стаття витрат', type: 'text' },
+    { key: 'category', label: 'Категорія', type: 'badge' },
+    { key: 'amount', label: 'Сума (₴)', type: 'number' },
+  ],
+  comparison: [
+    { key: 'option', label: 'Варіант', type: 'text' },
+    { key: 'pros', label: 'Плюси', type: 'text' },
+    { key: 'cons', label: 'Мінуси', type: 'text' },
+    { key: 'status', label: 'Рішення', type: 'badge' },
+  ],
+  schedule: [
+    { key: 'date', label: 'Дата', type: 'text' },
+    { key: 'person', label: 'Хто', type: 'text' },
+    { key: 'note', label: 'Примітка', type: 'text' },
+  ],
+};
 
 interface ActionHubModalProps {
   isOpen: boolean;
@@ -62,11 +92,15 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
 
   // Table form state
   const [tableTitle, setTableTitle] = useState('План завдань та витрат');
-  const [tablePreset, setTablePreset] = useState<'sprint' | 'budget' | 'comparison' | 'schedule'>('sprint');
+  const [tablePreset, setTablePreset] = useState<TablePreset>('sprint');
 
   // Chart form state
   const [chartTitle, setChartTitle] = useState('Динаміка закриття задач за тиждень');
   const [chartType, setChartType] = useState<'bar' | 'line' | 'area'>('bar');
+  const [chartSeriesLabel, setChartSeriesLabel] = useState('Значення');
+  const [chartPoints, setChartPoints] = useState<{ name: string; value: string }[]>([
+    { name: '', value: '' },
+  ]);
 
   // Task list form state
   const [taskTitle, setTaskTitle] = useState('Список завдань та доручень');
@@ -186,15 +220,10 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
       setEventEndTime(endFormatted);
     }
 
-    // Detect Location
-    if (lower.includes('каштан') || lower.includes('рейтарськ')) {
-      setEventLocation('📍 Кав’ярня «Каштан» (вул. Рейтарська, 9Б)');
-    } else if (lower.includes('поділ') || lower.includes('терас')) {
-      setEventLocation('📍 Тераса на Подолі (Контрактова площа)');
-    } else if (lower.includes('офіс') || lower.includes('коворкінг')) {
-      setEventLocation('🏢 Офісний простір Aura, Зал А');
-    } else if (lower.includes('meet') || lower.includes('онлайн') || lower.includes('zoom')) {
-      setEventLocation('🎥 Google Meet (https://meet.google.com/aur-sync-hub)');
+    // Посилання на зустріч беремо тільки те, що людина справді написала
+    const urlMatch = text.match(/https?:\/\/\S+/);
+    if (urlMatch) {
+      setEventLocation(urlMatch[0]);
     }
 
     // Extract Title & Agenda
@@ -205,7 +234,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
       setEventTitle(`${cleanSnippet}${text.length > 45 ? '...' : ''}`);
     }
 
-    setEventDescription(`Автоматично згенеровано з контексту повідомлення: «${text.slice(0, 120)}${text.length > 120 ? '...' : ''}»`);
+    setEventDescription(`З повідомлення: «${text.slice(0, 120)}${text.length > 120 ? '...' : ''}»`);
   };
 
   if (!isOpen) return null;
@@ -246,7 +275,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
       attendees: attendeeDetails.map((a) => a.name),
       attendeeDetails,
       calendarType: calendarTarget,
-      meetLink: eventLocation.includes('meet.google.com') ? 'https://meet.google.com/aur-sync-hub' : undefined,
+      meetLink: eventLocation.match(/https?:\/\/\S+/)?.[0],
       sourceMessageText: extractedSourceSnippet || undefined,
     };
 
@@ -259,44 +288,10 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
     onClose();
   };
 
-  // Insert Table
+  // Insert Table — вставляємо порожню структуру, рядки людина заповнює вже в чаті
   const handleInsertTable = () => {
     soundFx.playTap();
-    let columns = [
-      { key: 'task', label: 'Задача', type: 'text' as const },
-      { key: 'assignee', label: 'Відповідальний', type: 'text' as const },
-      { key: 'status', label: 'Статус', type: 'badge' as const },
-      { key: 'progress', label: 'Прогрес (%)', type: 'number' as const },
-    ];
-    let rows: Record<string, any>[] = [
-      { id: '1', task: 'Проєктування модулів чату', assignee: 'Кирило', status: 'Готово', progress: 100 },
-      { id: '2', task: 'Редагування таблиць', assignee: 'Олексій', status: 'Готово', progress: 100 },
-      { id: '3', task: 'Тестування доступності WCAG', assignee: 'Дарина', status: 'В процесі', progress: 80 },
-    ];
-
-    if (tablePreset === 'budget') {
-      columns = [
-        { key: 'item', label: 'Стаття витрат', type: 'text' },
-        { key: 'category', label: 'Категорія', type: 'badge' },
-        { key: 'amount', label: 'Сума (₴)', type: 'number' },
-      ];
-      rows = [
-        { id: '1', item: 'Оренда коворкінгу', category: 'Офіс', amount: 8500 },
-        { id: '2', item: 'Підписки на дизайн-сервіси', category: 'Софт', amount: 3200 },
-        { id: '3', item: 'Кава та снеки для команди', category: 'Затишок', amount: 1450 },
-      ];
-    } else if (tablePreset === 'comparison') {
-      columns = [
-        { key: 'option', label: 'Варіант локації', type: 'text' },
-        { key: 'capacity', label: 'Місткість (осіб)', type: 'number' },
-        { key: 'score', label: 'Оцінка (1-10)', type: 'number' },
-        { key: 'status', label: 'Рішення', type: 'badge' },
-      ];
-      rows = [
-        { id: '1', option: 'Тераса на Подолі', capacity: 15, score: 9.5, status: 'Рекомендовано' },
-        { id: '2', option: 'Конференц-зал на Золотих', capacity: 25, score: 8.0, status: 'Резерв' },
-      ];
-    }
+    const columns = TABLE_PRESET_COLUMNS[tablePreset];
 
     onInsertAction({
       type: 'table',
@@ -305,8 +300,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
         title: tableTitle,
         description: 'Інтерактивна таблиця з можливістю редагування клітинок',
         columns,
-        rows,
-        summaryRow: { task: 'Разом', assignee: 'Команда', status: 'Активно', progress: 93 },
+        rows: [],
       },
     });
     onClose();
@@ -315,26 +309,19 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
   // Insert Chart
   const handleInsertChart = () => {
     soundFx.playTap();
+    const points = chartPoints
+      .map((p) => ({ name: p.name.trim(), value: Number(p.value) }))
+      .filter((p) => p.name && Number.isFinite(p.value));
+    if (points.length === 0) return;
+
     onInsertAction({
       type: 'chart',
       text: `Створено інтерактивний графік: «${chartTitle}»`,
       chartData: {
         title: chartTitle,
         type: chartType,
-        data: [
-          { name: 'Пн', tasks: 8, activity: 14 },
-          { name: 'Вт', tasks: 14, activity: 22 },
-          { name: 'Ср', tasks: 24, activity: 30 },
-          { name: 'Чт', tasks: 19, activity: 28 },
-          { name: 'Пт', tasks: 29, activity: 38 },
-          { name: 'Сб', tasks: 12, activity: 15 },
-          { name: 'Нд', tasks: 6, activity: 10 },
-        ],
-        keys: [
-          { key: 'tasks', label: 'Закриті завдання', color: '#E87A42' },
-          { key: 'activity', label: 'Активність обговорень', color: '#528A4B' },
-        ],
-        takeaway: 'Найвища продуктивність зафіксована у середу та п’ятницю.',
+        data: points,
+        keys: [{ key: 'value', label: chartSeriesLabel.trim() || 'Значення', color: '#55C778' }],
       },
     });
     onClose();
@@ -547,12 +534,9 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
                     <Sparkles className="w-4 h-4" />
                   </div>
                   <div className="flex-1 min-w-0">
-                    <div className="flex items-center justify-between">
-                      <span className="font-extrabold text-xs text-white">
-                        Дані авто-заповнено з контексту бесіди
-                      </span>
-                      <span className="text-[10px] text-[#55C778] font-bold">✓ Smart Parsed</span>
-                    </div>
+                    <span className="font-extrabold text-xs text-white">
+                      Дату й час підставлено з повідомлення
+                    </span>
                     <p className="text-[11px] text-[#8EA093] truncate mt-0.5">
                       «{extractedSourceSnippet}»
                     </p>
@@ -640,29 +624,17 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
 
               {/* Location or Video Link */}
               <div className="space-y-1.5">
-                <label className="block text-xs font-bold text-[#8EA093] flex items-center justify-between">
-                  <span>Місце зустрічі або посилання</span>
-                  <span className="text-[10px] text-[#8EA093]">Фізична адреса або Google Meet</span>
+                <label className="block text-xs font-bold text-[#8EA093]">
+                  Місце зустрічі або посилання
                 </label>
                 <div className="flex gap-2">
                   <input
                     type="text"
                     value={eventLocation}
                     onChange={(e) => setEventLocation(e.target.value)}
-                    placeholder="📍 Кав’ярня «Каштан», Рейтарська 9Б або Google Meet..."
+                    placeholder="Адреса або посилання на дзвінок…"
                     className="flex-1 px-3.5 py-2 bg-[#0E1410] border border-[#1F2B22] rounded-xl text-xs font-medium text-white focus:outline-none focus:border-[#55C778]"
                   />
-                  <button
-                    type="button"
-                    onClick={() => {
-                      soundFx.playTap();
-                      setEventLocation('🎥 Google Meet (https://meet.google.com/aur-sync-hub)');
-                    }}
-                    className="px-3 py-2 bg-[#141C16] hover:bg-[#18231B] text-white border border-[#223126] rounded-xl text-xs font-bold transition-colors flex items-center gap-1 shrink-0"
-                  >
-                    <Video className="w-3.5 h-3.5 text-[#55C778]" />
-                    <span>Meet</span>
-                  </button>
                 </div>
               </div>
 
@@ -808,10 +780,10 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
               </div>
 
               <div className="p-3 bg-[#FAF4EB] border border-[#E8DFD1] rounded-2xl text-xs text-[#626F66] space-y-1">
-                <p className="font-bold text-[#1F2521]">✨ Можливості таблиці в чаті:</p>
-                <p>• Пряме редагування будь-якої клітинки в один клік</p>
-                <p>• Додавання нових рядків та сортування за колонками</p>
-                <p>• Миттєвий експорт у CSV-файл для Excel / Google Sheets</p>
+                <p className="font-bold text-[#1F2521]">Таблиця вставляється порожньою — з шапкою обраного шаблону:</p>
+                <p>• Рядки додаються та редагуються просто в чаті</p>
+                <p>• Сортування за будь-якою колонкою</p>
+                <p>• Експорт у CSV-файл</p>
               </div>
 
               <button
@@ -864,9 +836,69 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
                 </div>
               </div>
 
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <label className="block text-xs font-bold text-[#445047]">
+                    Дані графіка
+                  </label>
+                  <input
+                    type="text"
+                    value={chartSeriesLabel}
+                    onChange={(e) => setChartSeriesLabel(e.target.value)}
+                    placeholder="Назва серії"
+                    className="px-2.5 py-1 bg-white border border-[#DFD6C5] rounded-lg text-[11px] font-semibold w-40 focus:outline-none focus:border-[#E87A42]"
+                  />
+                </div>
+
+                <div className="space-y-1.5">
+                  {chartPoints.map((point, idx) => (
+                    <div key={idx} className="flex items-center gap-2">
+                      <input
+                        type="text"
+                        value={point.name}
+                        onChange={(e) =>
+                          setChartPoints(
+                            chartPoints.map((p, i) => (i === idx ? { ...p, name: e.target.value } : p))
+                          )
+                        }
+                        placeholder="Підпис"
+                        className="flex-1 px-3 py-1.5 bg-white border border-[#DFD6C5] rounded-xl text-xs focus:outline-none focus:border-[#E87A42]"
+                      />
+                      <input
+                        type="number"
+                        value={point.value}
+                        onChange={(e) =>
+                          setChartPoints(
+                            chartPoints.map((p, i) => (i === idx ? { ...p, value: e.target.value } : p))
+                          )
+                        }
+                        placeholder="Значення"
+                        className="w-28 px-3 py-1.5 bg-white border border-[#DFD6C5] rounded-xl text-xs font-mono focus:outline-none focus:border-[#E87A42]"
+                      />
+                      <button
+                        onClick={() => setChartPoints(chartPoints.filter((_, i) => i !== idx))}
+                        disabled={chartPoints.length === 1}
+                        className="text-gray-400 hover:text-red-600 p-1 disabled:opacity-30"
+                      >
+                        <Trash2 className="w-3.5 h-3.5" />
+                      </button>
+                    </div>
+                  ))}
+                </div>
+
+                <button
+                  onClick={() => setChartPoints([...chartPoints, { name: '', value: '' }])}
+                  className="px-3 py-1.5 bg-[#1F2521] text-white rounded-xl text-xs font-bold flex items-center gap-1"
+                >
+                  <Plus className="w-3.5 h-3.5" />
+                  <span>Додати точку</span>
+                </button>
+              </div>
+
               <button
                 onClick={handleInsertChart}
-                className="w-full py-2.5 bg-[#E87A42] hover:bg-[#D46B35] text-white rounded-xl font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5"
+                disabled={!chartPoints.some((p) => p.name.trim() && p.value.trim())}
+                className="w-full py-2.5 bg-[#E87A42] hover:bg-[#D46B35] text-white rounded-xl font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5 disabled:opacity-40"
               >
                 <Check className="w-4 h-4" />
                 <span>Вставити інтерактивний графік</span>

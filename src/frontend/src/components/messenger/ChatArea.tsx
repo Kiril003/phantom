@@ -42,6 +42,7 @@ import {
 import confetti from 'canvas-confetti';
 import { Message, LocationData, TableData, TaskListData, Chat } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
+import { chatApi } from '../../services/api';
 import { DataTableViewer } from './DataTableViewer';
 import { ChartEmbed } from './ChartEmbed';
 import { TaskListEmbed } from './TaskListEmbed';
@@ -127,10 +128,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [inspectingMessage, setInspectingMessage] = useState<Message | null>(null);
   const [deletingMessage, setDeletingMessage] = useState<Message | null>(null);
 
-  // AI Instant Features (Translation, Summary, Bookmarks, Action Items)
+  // Відповіді локального агента на повідомлення (переклад, підсумок, завдання)
   const [translatedMessages, setTranslatedMessages] = useState<Record<string, { text: string; lang: string }>>({});
   const [summarizedMessages, setSummarizedMessages] = useState<Record<string, string>>({});
   const [actionItemMessages, setActionItemMessages] = useState<Record<string, string[]>>({});
+  const [agentTask, setAgentTask] = useState<{ msgId: string; label: string } | null>(null);
   const [savedMessages, setSavedMessages] = useState<Record<string, boolean>>({});
   const [toastNotification, setToastNotification] = useState<string | null>(null);
 
@@ -146,7 +148,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [showScrollBottom, setShowScrollBottom] = useState(false);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
-  const voiceIntervalRef = useRef<any>(null);
+  const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
 
   // In-chat search state
   const [chatSearchQuery, setChatSearchQuery] = useState('');
@@ -221,7 +223,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
     setSpeakingMsgId(msg.id);
     window.speechSynthesis.speak(utterance);
-    showToast('🔊 Озвучування повідомлення (AI TTS)...');
+    showToast('🔊 Озвучую повідомлення…');
   };
 
   // Mobile Touch Event Handlers
@@ -300,7 +302,28 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     isTouchSwipingRef.current = false;
   };
 
-  const handleToggleTranslate = (msg: Message, targetLang: string = 'EN') => {
+  // Один запит до локального агента PHANTOM. На порожню відповідь чи помилку
+  // повертає null: показувати щось замість відповіді моделі не можна.
+  const askLocalAgent = async (msgId: string, label: string, prompt: string): Promise<string | null> => {
+    if (agentTask) return null;
+    setAgentTask({ msgId, label });
+    try {
+      const res = await chatApi.sendMessage({ content: prompt, input_method: 'text' });
+      const reply = (res?.message?.content || '').trim();
+      if (!reply) {
+        showToast('Локальний агент не повернув відповіді');
+        return null;
+      }
+      return reply;
+    } catch {
+      showToast('Локальний агент недоступний');
+      return null;
+    } finally {
+      setAgentTask(null);
+    }
+  };
+
+  const handleToggleTranslate = async (msg: Message, targetLang: string = 'EN') => {
     soundFx.playTap();
     if (translatedMessages[msg.id] && translatedMessages[msg.id].lang === targetLang) {
       setTranslatedMessages((prev) => {
@@ -311,32 +334,25 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       return;
     }
 
-    const originalText = msg.text || '';
-    let translation = '';
-    if (targetLang === 'EN') {
-      if (originalText.includes('Aura') || originalText.includes('дизайн') || originalText.includes('зустріч')) {
-        translation = 'Design updates and interactive components have been seamlessly integrated. Everything looks consistent and responsive.';
-      } else if (originalText.includes('кава') || originalText.includes('Поділ') || originalText.includes('вул.')) {
-        translation = 'Let’s meet at the specialty coffee spot on Reitarska st. at 15:00. The atmosphere is ideal for deep work.';
-      } else {
-        translation = `[English Translation]: ${originalText}`;
-      }
-    } else if (targetLang === 'DE') {
-      translation = `[Deutsch]: Alle Änderungen wurden erfolgreich übernommen. Wir treffen uns um 15:00 Uhr.`;
-    } else if (targetLang === 'PL') {
-      translation = `[Polski]: Wszystkie szczegóły zostały uzgodnione. Do zobaczenia na Podole!`;
-    } else {
-      translation = `[Переклад ${targetLang}]: ${originalText}`;
-    }
+    const originalText = (msg.text || '').trim();
+    if (!originalText) return;
+
+    const langName =
+      translationLanguages.find((l) => l.code === targetLang)?.name || targetLang;
+    const translation = await askLocalAgent(
+      msg.id,
+      `Перекладаю (${targetLang})…`,
+      `Переклади це повідомлення на ${langName}. У відповідь дай лише переклад, без коментарів.\n\n${originalText}`
+    );
+    if (!translation) return;
 
     setTranslatedMessages((prev) => ({
       ...prev,
       [msg.id]: { text: translation, lang: targetLang },
     }));
-    showToast(`✨ Повідомлення перекладено (${targetLang})`);
   };
 
-  const handleToggleSummary = (msg: Message) => {
+  const handleToggleSummary = async (msg: Message) => {
     soundFx.playTap();
     if (summarizedMessages[msg.id]) {
       setSummarizedMessages((prev) => {
@@ -347,15 +363,20 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       return;
     }
 
-    const summary = msg.text
-      ? `💡 Ключовий висновок: ${msg.text.slice(0, 80)}... Всі домовленості зафіксовано.`
-      : '💡 Структуровані дані готові до експорту';
+    const originalText = (msg.text || '').trim();
+    if (!originalText) return;
+
+    const summary = await askLocalAgent(
+      msg.id,
+      'Формую підсумок…',
+      `Стисни це повідомлення до одного речення українською. У відповідь дай лише підсумок.\n\n${originalText}`
+    );
+    if (!summary) return;
 
     setSummarizedMessages((prev) => ({
       ...prev,
       [msg.id]: summary,
     }));
-    showToast('⚡ AI підсумок згенеровано');
   };
 
   const handleMessageMouseUp = (msg: Message, _e?: React.MouseEvent) => {
@@ -381,7 +402,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     }
   };
 
-  const handleGenerateActionItems = (msg: Message) => {
+  const handleGenerateActionItems = async (msg: Message) => {
     soundFx.playChime();
     if (actionItemMessages[msg.id]) {
       setActionItemMessages((prev) => {
@@ -392,16 +413,30 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       return;
     }
 
-    const items = [
-      'Перевірити параметри рендерингу та типографіки',
-      'Узгодити таймінг фінального релізу на 18:00',
-      'Надіслати оновлений звіт у робоче коло',
-    ];
+    const originalText = (msg.text || '').trim();
+    if (!originalText) return;
+
+    const reply = await askLocalAgent(
+      msg.id,
+      'Шукаю завдання…',
+      `Випиши завдання, які випливають із цього повідомлення, по одному в рядок, без нумерації. Якщо завдань немає — відповідай словом НЕМАЄ.\n\n${originalText}`
+    );
+    if (!reply) return;
+
+    const items = reply
+      .split('\n')
+      .map((line) => line.replace(/^[-•*\d.)\s]+/, '').trim())
+      .filter(Boolean);
+
+    if (items.length === 0 || /^немає$/i.test(reply.trim())) {
+      showToast('Завдань у повідомленні не знайдено');
+      return;
+    }
+
     setActionItemMessages((prev) => ({
       ...prev,
       [msg.id]: items,
     }));
-    showToast('✅ Список завдань сформовано з повідомлення');
   };
 
   const handleToggleBookmark = (msg: Message) => {
@@ -484,58 +519,63 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     scrollToMessage(searchMatchingIds[prevIdx]);
   };
 
-  // Voice note playback simulation with seeker
-  const toggleVoice = (msgId: string, duration: number = 15) => {
-    soundFx.playTap();
-    if (playingVoiceId === msgId) {
-      clearInterval(voiceIntervalRef.current);
-      setPlayingVoiceId(null);
-      setVoiceProgress(0);
-    } else {
-      if (voiceIntervalRef.current) clearInterval(voiceIntervalRef.current);
-      setPlayingVoiceId(msgId);
-      setVoiceProgress(0);
-
-      const stepMs = 100;
-      const totalSteps = (duration * 1000) / (stepMs * voiceSpeed);
-      let currentStep = 0;
-
-      voiceIntervalRef.current = setInterval(() => {
-        currentStep += 1;
-        setVoiceProgress((currentStep / totalSteps) * 100);
-        if (currentStep >= totalSteps) {
-          clearInterval(voiceIntervalRef.current);
-          setPlayingVoiceId(null);
-          setVoiceProgress(0);
-        }
-      }, stepMs);
+  const stopVoice = () => {
+    if (voiceAudioRef.current) {
+      voiceAudioRef.current.pause();
+      voiceAudioRef.current.src = '';
+      voiceAudioRef.current = null;
     }
+    setPlayingVoiceId(null);
+    setVoiceProgress(0);
   };
 
-  const seekVoice = (msgId: string, percent: number, duration: number = 15) => {
+  useEffect(() => stopVoice, []);
+
+  const toggleVoice = (msg: Message) => {
+    const url = msg.voiceData?.audioUrl;
+    if (!url) return;
     soundFx.playTap();
-    setPlayingVoiceId(msgId);
+
+    if (playingVoiceId === msg.id) {
+      stopVoice();
+      return;
+    }
+    stopVoice();
+
+    const audio = new Audio(url);
+    audio.playbackRate = voiceSpeed;
+    audio.ontimeupdate = () => {
+      if (audio.duration) setVoiceProgress((audio.currentTime / audio.duration) * 100);
+    };
+    audio.onended = stopVoice;
+    audio.onerror = () => {
+      showToast('Не вдалося відтворити аудіо');
+      stopVoice();
+    };
+    voiceAudioRef.current = audio;
+    setPlayingVoiceId(msg.id);
+    setVoiceProgress(0);
+    audio.play().catch(() => {
+      showToast('Не вдалося відтворити аудіо');
+      stopVoice();
+    });
+  };
+
+  const seekVoice = (msgId: string, percent: number) => {
+    const audio = voiceAudioRef.current;
+    if (!audio || playingVoiceId !== msgId || !audio.duration) return;
+    soundFx.playTap();
+    audio.currentTime = (percent / 100) * audio.duration;
     setVoiceProgress(percent);
-    if (voiceIntervalRef.current) clearInterval(voiceIntervalRef.current);
-
-    const stepMs = 100;
-    const totalSteps = (duration * 1000) / (stepMs * voiceSpeed);
-    let currentStep = Math.floor((percent / 100) * totalSteps);
-
-    voiceIntervalRef.current = setInterval(() => {
-      currentStep += 1;
-      setVoiceProgress((currentStep / totalSteps) * 100);
-      if (currentStep >= totalSteps) {
-        clearInterval(voiceIntervalRef.current);
-        setPlayingVoiceId(null);
-        setVoiceProgress(0);
-      }
-    }, stepMs);
   };
 
   const cycleVoiceSpeed = () => {
     soundFx.playTap();
-    setVoiceSpeed((prev) => (prev === 1 ? 1.5 : prev === 1.5 ? 2 : 1));
+    setVoiceSpeed((prev) => {
+      const next = prev === 1 ? 1.5 : prev === 1.5 ? 2 : 1;
+      if (voiceAudioRef.current) voiceAudioRef.current.playbackRate = next;
+      return next;
+    });
   };
 
   const toggleTranscript = (msgId: string) => {
@@ -746,6 +786,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           if (!msg) return null;
           const isSelf = msg.senderId === currentUserId || msg.isSelf;
           const isVoicePlaying = playingVoiceId === msg.id;
+          const hasVoiceAudio = !!msg.voiceData?.audioUrl;
           const isTranscriptOpen = !!expandedTranscripts[msg.id];
           const isSelected = (selectedMessageIds || []).includes(msg.id);
           const isHighlighted = highlightedMessageId === msg.id;
@@ -1197,7 +1238,19 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     )
                   )}
 
-                  {/* AI Inline Translation */}
+                  {/* Очікування відповіді локального агента */}
+                  {agentTask?.msgId === msg.id && (
+                    <div className={`mt-2 p-2 rounded-2xl text-[11px] border flex items-center gap-1.5 ${
+                      isSelf
+                        ? 'bg-white/10 border-white/20 text-white/90'
+                        : 'bg-[#F2EFE8] border-[#DFD6C5] text-[#2F3D33]'
+                    }`}>
+                      <Sparkles className="w-3 h-3 animate-pulse text-[#E87A42]" />
+                      <span>{agentTask.label}</span>
+                    </div>
+                  )}
+
+                  {/* Переклад від локального агента */}
                   {translatedMessages[msg.id] && (
                     <div className={`mt-2 p-2.5 rounded-2xl text-xs border animate-in fade-in zoom-in-95 duration-150 ${
                       isSelf
@@ -1207,7 +1260,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       <div className="flex items-center justify-between gap-2 pb-1 border-b border-current/15 mb-1 text-[10px] font-mono font-bold opacity-80">
                         <span className="flex items-center gap-1">
                           <Languages className="w-3 h-3 text-[#E87A42]" />
-                          <span>AI Переклад ({translatedMessages[msg.id].lang})</span>
+                          <span>Переклад агента ({translatedMessages[msg.id].lang})</span>
                         </span>
                         <button
                           onClick={() => handleToggleTranslate(msg)}
@@ -1225,7 +1278,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     </div>
                   )}
 
-                  {/* AI Instant Summary */}
+                  {/* Підсумок від локального агента */}
                   {summarizedMessages[msg.id] && (
                     <div className={`mt-2 p-2 rounded-2xl text-xs border flex items-start gap-1.5 animate-in fade-in duration-150 ${
                       isSelf
@@ -1244,7 +1297,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     </div>
                   )}
 
-                  {/* AI Generated Action Checklist */}
+                  {/* Завдання, які агент вичитав із повідомлення */}
                   {actionItemMessages[msg.id] && (
                     <div className={`mt-2 p-2.5 rounded-2xl text-xs border space-y-1.5 animate-in fade-in duration-150 ${
                       isSelf ? 'bg-white/10 border-white/20 text-white' : 'bg-[#EAF3E9] border-[#C3DCC1] text-[#2C4A34]'
@@ -1252,12 +1305,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider pb-1 border-b border-current/20">
                         <span className="flex items-center gap-1">
                           <CheckCircle2 className="w-3 h-3 text-[#528A4B]" />
-                          <span>AI Завдання до виконання</span>
+                          <span>Завдання з повідомлення</span>
                         </span>
                       </div>
                       {actionItemMessages[msg.id].map((item, idx) => (
-                        <div key={idx} className="flex items-center gap-2 text-xs">
-                          <input type="checkbox" className="rounded accent-[#E87A42]" defaultChecked={idx === 0} />
+                        <div key={idx} className="flex items-start gap-2 text-xs">
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#528A4B] mt-1.5 shrink-0" />
                           <span>{item}</span>
                         </div>
                       ))}
@@ -1304,63 +1357,68 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   {msg.type === 'voice' && msg.voiceData && (
                     <div className="space-y-2 pt-1 w-full max-w-full min-w-0 sm:min-w-[240px]">
                       <div className="flex items-center gap-3">
-                        <button
-                          onClick={() => toggleVoice(msg.id, msg.voiceData?.duration || 15)}
-                          className={`w-9 h-9 rounded-2xl flex items-center justify-center transition-all ${
-                            isSelf
-                              ? 'bg-[#E87A42] text-white hover:bg-[#D46B35]'
-                              : 'bg-[#FCE7D8] text-[#E87A42] hover:bg-[#F9CCA8]'
-                          }`}
-                        >
-                          {isVoicePlaying ? (
-                            <Pause className="w-4 h-4" />
-                          ) : (
-                            <Play className="w-4 h-4 ml-0.5" />
-                          )}
-                        </button>
+                        {hasVoiceAudio && (
+                          <button
+                            onClick={() => toggleVoice(msg)}
+                            className={`w-9 h-9 rounded-2xl flex items-center justify-center transition-all ${
+                              isSelf
+                                ? 'bg-[#E87A42] text-white hover:bg-[#D46B35]'
+                                : 'bg-[#FCE7D8] text-[#E87A42] hover:bg-[#F9CCA8]'
+                            }`}
+                          >
+                            {isVoicePlaying ? (
+                              <Pause className="w-4 h-4" />
+                            ) : (
+                              <Play className="w-4 h-4 ml-0.5" />
+                            )}
+                          </button>
+                        )}
 
                         {/* Interactive Sound Waveform (Click to Seek) */}
                         <div
-                          className="flex-1 flex items-center gap-0.8 h-8 px-1 relative cursor-pointer group/wave"
-                          title="Клікніть щоб перейти до моменту аудіо"
+                          className={`flex-1 flex items-center gap-0.8 h-8 px-1 relative ${hasVoiceAudio ? 'cursor-pointer group/wave' : ''}`}
+                          title={hasVoiceAudio ? 'Клікніть щоб перейти до моменту аудіо' : undefined}
                         >
                           {(msg.voiceData?.waveform || []).map((height, i) => {
                             const waveLen = msg.voiceData?.waveform?.length || 1;
                             const segmentPercent = ((i + 1) / waveLen) * 100;
-                            const isPast = segmentPercent <= voiceProgress;
+                            const isPast = hasVoiceAudio && segmentPercent <= voiceProgress;
                             return (
                               <div
                                 key={i}
-                                onClick={() => seekVoice(msg.id, segmentPercent, msg.voiceData?.duration || 15)}
-                                className={`flex-1 rounded-full transition-all hover:scale-y-125 ${
+                                onClick={hasVoiceAudio ? () => seekVoice(msg.id, segmentPercent) : undefined}
+                                className={`flex-1 rounded-full transition-all ${hasVoiceAudio ? 'hover:scale-y-125' : 'opacity-50'} ${
                                   isSelf
                                     ? isPast ? 'bg-[#E87A42]' : 'bg-white/30'
                                     : isPast ? 'bg-[#E87A42]' : 'bg-[#DCD2C1]'
                                 }`}
-                                style={{
-                                  height: `${Math.max(height * 0.35, 4)}px`,
-                                  transform: isVoicePlaying && isPast ? `scaleY(${1 + Math.sin(Date.now() / 200 + i) * 0.25})` : 'scaleY(1)',
-                                }}
+                                style={{ height: `${Math.max(height * 0.35, 4)}px` }}
                               />
                             );
                           })}
                         </div>
 
                         {/* Speed toggle */}
-                        <button
-                          onClick={cycleVoiceSpeed}
-                          className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold font-mono transition-colors ${
-                            isSelf
-                              ? 'bg-white/10 hover:bg-white/20 text-white'
-                              : 'bg-[#F2EDE4] hover:bg-[#E8DFC8] text-[#556157]'
-                          }`}
-                        >
-                          {voiceSpeed}x
-                        </button>
+                        {hasVoiceAudio && (
+                          <button
+                            onClick={cycleVoiceSpeed}
+                            className={`px-1.5 py-0.5 rounded-md text-[10px] font-bold font-mono transition-colors ${
+                              isSelf
+                                ? 'bg-white/10 hover:bg-white/20 text-white'
+                                : 'bg-[#F2EDE4] hover:bg-[#E8DFC8] text-[#556157]'
+                            }`}
+                          >
+                            {voiceSpeed}x
+                          </button>
+                        )}
                       </div>
 
                       <div className="flex items-center justify-between text-[10px] opacity-70">
-                        <span>{msg.voiceData.duration} сек</span>
+                        <span>
+                          {hasVoiceAudio
+                            ? `${msg.voiceData.duration} сек`
+                            : `${msg.voiceData.duration} сек · аудіо немає на цьому вузлі`}
+                        </span>
                         {msg.voiceData.transcript && (
                           <button
                             onClick={() => toggleTranscript(msg.id)}
@@ -1838,7 +1896,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               <span className="w-1.5 h-1.5 bg-[#E87A42] rounded-full animate-bounce [animation-delay:0.2s]" />
               <span className="w-1.5 h-1.5 bg-[#E87A42] rounded-full animate-bounce [animation-delay:0.4s]" />
             </div>
-            <span className="font-medium text-[11px]">AI Copilot формує відповідь...</span>
+            <span className="font-medium text-[11px]">Локальний агент формує відповідь…</span>
           </div>
         )}
 
@@ -1980,7 +2038,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   <Volume2 className="w-4 h-4 text-[#55C778] shrink-0" />
                 )}
                 <span className="truncate">
-                  {speakingMsgId === contextMenuMsg.id ? 'Зупинити AI голос' : 'Прослухати (TTS)'}
+                  {speakingMsgId === contextMenuMsg.id ? 'Зупинити озвучування' : 'Прослухати (TTS)'}
                 </span>
               </button>
 
@@ -2024,7 +2082,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   className="p-2.5 bg-[#141C16] hover:bg-[#18231B] border border-[#223126] hover:border-[#2B3E31] rounded-xl flex items-center gap-2 transition-all text-left shadow-sm hover:text-white"
                 >
                   <Languages className="w-4 h-4 text-[#55C778] shrink-0" />
-                  <span className="truncate">AI Переклад (EN)</span>
+                  <span className="truncate">Перекласти (EN)</span>
                 </button>
               )}
 
@@ -2038,7 +2096,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   className="p-2.5 bg-[#141C16] hover:bg-[#18231B] border border-[#223126] hover:border-[#2B3E31] rounded-xl flex items-center gap-2 transition-all text-left shadow-sm hover:text-white"
                 >
                   <Sparkles className="w-4 h-4 text-[#55C778] shrink-0" />
-                  <span className="truncate">AI Підсумок</span>
+                  <span className="truncate">Підсумок агента</span>
                 </button>
               )}
 
@@ -2052,7 +2110,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   className="p-2.5 bg-[#141C16] hover:bg-[#18231B] border border-[#223126] hover:border-[#2B3E31] rounded-xl flex items-center gap-2 transition-all text-left shadow-sm hover:text-white"
                 >
                   <CheckCircle2 className="w-4 h-4 text-[#55C778] shrink-0" />
-                  <span className="truncate">AI Чек-лист дій</span>
+                  <span className="truncate">Завдання з повідомлення</span>
                 </button>
               )}
 

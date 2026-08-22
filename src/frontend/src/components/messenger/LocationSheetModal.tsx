@@ -7,16 +7,15 @@ import {
   Share2,
   ChevronDown,
   ChevronUp,
-  Sparkles,
+  Info,
   MapPin,
   Clock,
   Footprints,
-  RefreshCw,
   ExternalLink,
   Users,
   X
 } from 'lucide-react';
-import { LocationData, LocationDossier } from '../../types/messenger';
+import { LocationData } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
 
 interface LocationSheetModalProps {
@@ -36,38 +35,14 @@ export const LocationSheetModal: React.FC<LocationSheetModalProps> = ({
 }) => {
   const [isDossierExpanded, setIsDossierExpanded] = useState(true);
   const [isSaved, setIsSaved] = useState(false);
-  const [isLoadingAi, setIsLoadingAi] = useState(false);
-  const [liveDossier, setLiveDossier] = useState<LocationDossier | null>(
-    location?.dossier || null
-  );
 
   if (!isOpen || !location) return null;
 
-  const handleGenerateAiDossier = async () => {
-    setIsLoadingAi(true);
-    soundFx.playChime();
-    try {
-      const res = await fetch('/api/gemini/location-dossier', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          placeName: location.name,
-          category: location.category,
-          address: location.address,
-        }),
-      });
-      const data = await res.json();
-      if (data.dossier) {
-        setLiveDossier(data.dossier);
-      }
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setIsLoadingAi(false);
-    }
-  };
-
-  const dossier = liveDossier || location.dossier;
+  const dossier = location.dossier;
+  const hasDossier =
+    !!dossier &&
+    !!(dossier.vibe || dossier.crowdLevel || dossier.transitTips || dossier.recommendations ||
+      (dossier.atmosphere && dossier.atmosphere.length > 0));
 
   return (
     <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-md p-0 sm:p-4 transition-all select-none">
@@ -188,14 +163,16 @@ export const LocationSheetModal: React.FC<LocationSheetModalProps> = ({
 
           {/* Info Rows */}
           <div className="space-y-2.5 py-2 text-sm border-t border-b border-[#1F2B22]">
-            <div className="flex items-center justify-between text-xs sm:text-sm">
-              <span className="text-[#8EA093] flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-[#55C778]" /> Години роботи
-              </span>
-              <span className="font-semibold text-white">
-                {dossier?.bestHours || location.hours || '08:30 – 22:00'}
-              </span>
-            </div>
+            {(dossier?.bestHours || location.hours) && (
+              <div className="flex items-center justify-between text-xs sm:text-sm">
+                <span className="text-[#8EA093] flex items-center gap-1.5">
+                  <Clock className="w-3.5 h-3.5 text-[#55C778]" /> Години роботи
+                </span>
+                <span className="font-semibold text-white">
+                  {dossier?.bestHours || location.hours}
+                </span>
+              </div>
+            )}
 
             <div className="flex items-center justify-between text-xs sm:text-sm">
               <span className="text-[#8EA093] flex items-center gap-1.5">
@@ -207,100 +184,87 @@ export const LocationSheetModal: React.FC<LocationSheetModalProps> = ({
             </div>
           </div>
 
-          {/* Signature Gemini AI "Досьє локації" Accordion */}
-          <div className="bg-[#141C16] rounded-2xl border border-[#223126] overflow-hidden">
-            <button
-              id="toggle-dossier-accordion"
-              onClick={() => setIsDossierExpanded(!isDossierExpanded)}
-              className="w-full px-4 py-3 flex items-center justify-between hover:bg-[#18231B] transition-colors"
-            >
-              <div className="flex items-center gap-2">
-                <Sparkles className="w-4 h-4 text-[#55C778]" />
-                <span className="font-bold text-sm text-white">
-                  ✦ Досьє локації
-                </span>
-                <span className="px-1.5 py-0.5 text-[10px] font-semibold bg-[#183021] text-[#55C778] border border-[#2B3E31] rounded-full">
-                  Gemini AI
-                </span>
-              </div>
-              {isDossierExpanded ? (
-                <ChevronUp className="w-4 h-4 text-[#8EA093]" />
-              ) : (
-                <ChevronDown className="w-4 h-4 text-[#8EA093]" />
-              )}
-            </button>
-
-            {isDossierExpanded && (
-              <div className="px-4 pb-4 pt-1 space-y-3 text-xs sm:text-sm text-[#A4B8AB]">
-                {/* Vibe description */}
-                <p className="leading-relaxed text-[#D1DFD6] bg-[#0E1410] p-3 rounded-xl border border-[#1F2B22]">
-                  {dossier?.vibe ||
-                    'Сучасний простір із фокусом на натуральні продукти, свіжу каву та спокійну атмосферу для зустрічей.'}
-                </p>
-
-                {/* Atmosphere Tag Pills */}
-                {dossier?.atmosphere && dossier.atmosphere.length > 0 && (
-                  <div className="flex flex-wrap gap-1.5">
-                    {dossier.atmosphere.map((tag, idx) => (
-                      <span
-                        key={idx}
-                        className="px-2.5 py-1 text-xs bg-[#0E1410] text-[#55C778] font-medium rounded-full border border-[#223126]"
-                      >
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                )}
-
-                {/* Crowd & Transit notes */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
-                  <div className="p-2.5 bg-[#0E1410] rounded-xl border border-[#1F2B22]">
-                    <div className="font-semibold text-white mb-1 flex items-center gap-1">
-                      <Users className="w-3 h-3 text-[#55C778]" /> Заповненість
-                    </div>
-                    <p className="text-[#8EA093]">
-                      {dossier?.crowdLevel || 'Помірний трафік'} (найкраще: 11:00-15:00)
-                    </p>
-                  </div>
-
-                  <div className="p-2.5 bg-[#0E1410] rounded-xl border border-[#1F2B22]">
-                    <div className="font-semibold text-white mb-1 flex items-center gap-1">
-                      <Footprints className="w-3 h-3 text-[#55C778]" /> Доступність
-                    </div>
-                    <p className="text-[#8EA093] truncate">
-                      {dossier?.transitTips || 'Зручно пішки та на авто'}
-                    </p>
-                  </div>
+          {/* Досьє локації — лише поля, що прийшли разом із карткою */}
+          {hasDossier && (
+            <div className="bg-[#141C16] rounded-2xl border border-[#223126] overflow-hidden">
+              <button
+                id="toggle-dossier-accordion"
+                onClick={() => setIsDossierExpanded(!isDossierExpanded)}
+                className="w-full px-4 py-3 flex items-center justify-between hover:bg-[#18231B] transition-colors"
+              >
+                <div className="flex items-center gap-2">
+                  <Info className="w-4 h-4 text-[#55C778]" />
+                  <span className="font-bold text-sm text-white">
+                    Досьє локації
+                  </span>
                 </div>
-
-                {/* Secret Recommendation */}
-                {dossier?.recommendations && (
-                  <div className="p-2.5 bg-[#183021] rounded-xl border border-[#2B3E31] text-xs text-[#55C778]">
-                    <span className="font-bold">Порада від Gemini:</span> {dossier.recommendations}
-                  </div>
+                {isDossierExpanded ? (
+                  <ChevronUp className="w-4 h-4 text-[#8EA093]" />
+                ) : (
+                  <ChevronDown className="w-4 h-4 text-[#8EA093]" />
                 )}
+              </button>
 
-                {/* Regenerate with AI button */}
-                <button
-                  onClick={handleGenerateAiDossier}
-                  disabled={isLoadingAi}
-                  className="w-full py-2 px-3 bg-[#141C16] hover:bg-[#18231B] text-white font-semibold text-xs rounded-xl border border-[#223126] flex items-center justify-center gap-1.5 transition-all"
-                >
-                  <RefreshCw className={`w-3.5 h-3.5 text-[#55C778] ${isLoadingAi ? 'animate-spin' : ''}`} />
-                  <span>{isLoadingAi ? 'Аналізую локацію...' : 'Оновити досьє через Gemini'}</span>
-                </button>
-              </div>
-            )}
-          </div>
+              {isDossierExpanded && (
+                <div className="px-4 pb-4 pt-1 space-y-3 text-xs sm:text-sm text-[#A4B8AB]">
+                  {dossier?.vibe && (
+                    <p className="leading-relaxed text-[#D1DFD6] bg-[#0E1410] p-3 rounded-xl border border-[#1F2B22]">
+                      {dossier.vibe}
+                    </p>
+                  )}
 
-          {/* Proximity and OpenStreetMap footer from screenshot */}
+                  {/* Atmosphere Tag Pills */}
+                  {dossier?.atmosphere && dossier.atmosphere.length > 0 && (
+                    <div className="flex flex-wrap gap-1.5">
+                      {dossier.atmosphere.map((tag, idx) => (
+                        <span
+                          key={idx}
+                          className="px-2.5 py-1 text-xs bg-[#0E1410] text-[#55C778] font-medium rounded-full border border-[#223126]"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
+
+                  {/* Crowd & Transit notes */}
+                  {(dossier?.crowdLevel || dossier?.transitTips) && (
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs">
+                      {dossier?.crowdLevel && (
+                        <div className="p-2.5 bg-[#0E1410] rounded-xl border border-[#1F2B22]">
+                          <div className="font-semibold text-white mb-1 flex items-center gap-1">
+                            <Users className="w-3 h-3 text-[#55C778]" /> Заповненість
+                          </div>
+                          <p className="text-[#8EA093]">{dossier.crowdLevel}</p>
+                        </div>
+                      )}
+
+                      {dossier?.transitTips && (
+                        <div className="p-2.5 bg-[#0E1410] rounded-xl border border-[#1F2B22]">
+                          <div className="font-semibold text-white mb-1 flex items-center gap-1">
+                            <Footprints className="w-3 h-3 text-[#55C778]" /> Доступність
+                          </div>
+                          <p className="text-[#8EA093] truncate">{dossier.transitTips}</p>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {dossier?.recommendations && (
+                    <div className="p-2.5 bg-[#183021] rounded-xl border border-[#2B3E31] text-xs text-[#55C778]">
+                      <span className="font-bold">Порада:</span> {dossier.recommendations}
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Посилання на карту */}
           <div className="pt-2 space-y-1.5 text-xs">
             <div className="text-[11px] font-bold text-[#8EA093] uppercase tracking-wider">
-              ПОРУЧ
+              НА КАРТІ
             </div>
-            <p className="text-[#6B8072] text-[11px]">
-              Дані зіставлено з OpenStreetMap & Gemini Location Intelligence
-            </p>
             <a
               href={`https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location.name + ' ' + location.address)}`}
               target="_blank"

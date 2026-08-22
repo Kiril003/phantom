@@ -31,6 +31,8 @@ import { ShareFolderModal } from './ShareFolderModal';
 import { SmartFolderModal } from './SmartFolderModal';
 import { UserProfileModal } from './UserProfileModal';
 import { VideoCallModal } from './VideoCallModal';
+import { CallOverlay } from './CallOverlay';
+import { callEngine } from '../../services/callEngine';
 import type { Message, SmartFolder, ChatCircle } from '../../types/messenger';
 
 interface MessengerRootProps {
@@ -59,12 +61,38 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
 
   // Живі повідомлення з вузла: те, що надіслали з телефона, приходить сюди.
   useEffect(() => {
-    wsClient.send({ control: 'subscribe', channels: ['messenger'] });
+    wsClient.send({ control: 'subscribe', channels: ['messenger', 'call'] });
     const off = wsClient.on('messenger', (msg: any) => {
       if (msg?.type === 'message:new' && msg?.data) store.applyNodeMessage(msg.data);
     });
     return () => {
       off();
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Дзвінки: рушій слухає сигнали вузла, поки месенджер відкритий. Запуск поки
+  // йде подією — кнопку слухавки приєднають до startCall() окремо.
+  useEffect(() => {
+    const detach = callEngine.attach();
+    const onStart = (event: Event) => {
+      const detail = (event as CustomEvent).detail ?? {};
+      const chat = store.getActiveChat();
+      const peerNodeId = detail.peerNodeId ?? chat?.peerNodeId;
+      if (!detail.contactId && !peerNodeId) return;
+      void callEngine.startCall(
+        {
+          contactId: detail.contactId,
+          peerNodeId,
+          displayName: detail.displayName ?? chat?.title ?? 'Співрозмовник',
+        },
+        detail.video ? 'video' : 'audio',
+      );
+    };
+    window.addEventListener('phantom:start-call', onStart);
+    return () => {
+      window.removeEventListener('phantom:start-call', onStart);
+      detach();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -483,6 +511,7 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
         isRecording={store.huddleState.isRecording ?? false}
         onLeaveHuddle={store.leaveHuddle}
       />
+      <CallOverlay />
     </div>
   );
 };

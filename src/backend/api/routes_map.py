@@ -737,6 +737,20 @@ async def list_layers(
     }
 
 
+def _wifi_scanner():
+    """geo/wifi_scan.py на цій гілці свідомо відсутній — він має повернутися
+    з rescue-гілки після вердикту власника, і вигадувати його тут заборонено
+    (Ф0 §5). Чотири закомічені виклики без файлу давали 500 зі стектрейсом;
+    чесна відповідь — 503 і тіло, яке каже правду."""
+    try:
+        from geo import wifi_scan
+    except ImportError as exc:
+        raise HTTPException(
+            status_code=503, detail="сканер відсутній на цій гілці"
+        ) from exc
+    return wifi_scan
+
+
 @router.get("/wifi_scan")
 async def wifi_scan(
     db: AsyncSession = Depends(get_db),
@@ -750,8 +764,8 @@ async def wifi_scan(
     координат.
     """
     from db.models import WardrivingRecord
-    from geo.wifi_scan import scan
 
+    scan = _wifi_scanner().scan
     seen = await scan()
     if not seen:
         return {"aps": [], "known": 0}
@@ -801,9 +815,13 @@ async def set_here(
     людини розриває це коло — далі місце тримає Wi-Fi, і питати більше
     не доведеться.
     """
+    # Відмова ДО першого запису: якщо сканера немає, хай 503 прилетить
+    # раніше, ніж точка ляже в історію — пів-зробленої роботи, яка
+    # виглядає успіхом, тут гірша за чесну відмову.
+    scan = _wifi_scanner().scan
+
     from agent.localization.sources.user_stated import set_user_stated
     from db.models import LocationHistory, WardrivingRecord
-    from geo.wifi_scan import scan
 
     set_user_stated(
         lat=body.lat,
@@ -875,9 +893,11 @@ async def wifi_observe(
     Одна добра засічка — і сусідські точки назавжди стають орієнтирами:
     далі ПК знаходить себе сам, без телефона й без мережі.
     """
-    from geo.wifi_scan import learn, scan
+    _scanner = _wifi_scanner()
 
-    return await learn(db, body.lat, body.lon, body.accuracy_m, await scan())
+    return await _scanner.learn(
+        db, body.lat, body.lon, body.accuracy_m, await _scanner.scan()
+    )
 
 
 @router.get("/layers/{layer_id}/live")

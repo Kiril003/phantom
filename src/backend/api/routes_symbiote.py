@@ -201,7 +201,17 @@ async def send_command(
 async def _learn_from_phone_radio(
     db: AsyncSession, device: PairedDevice, packed: str,
 ) -> None:
-    from geo.wifi_scan import learn, parse_packed
+    try:
+        from geo.wifi_scan import learn, parse_packed
+    except ImportError:
+        # Ф0: geo/wifi_scan.py живе на rescue-гілці і сюди ще не приїхав.
+        # Це фонове донавчання радіо, а не обіцяний маршрут — телефонний
+        # виклик не має 500-ити через відсутній файл; втрату чесно видно
+        # в debug-лозі, а не приховано порожнім успіхом.
+        logger.debug(
+            "symbiote: geo.wifi_scan відсутній на цій гілці — пакет радіо не вивчено"
+        )
+        return
 
     body = presence_store.get(device.user_id, device.id)
     if body is None or body.lat is None or body.lon is None:

@@ -95,6 +95,17 @@ export const messengerApi = {
   renameConversation: (conversationId: string, title: string) =>
     request<NodeConversation>('PATCH', `/messenger/conversations/${conversationId}`, { title }),
 
+  /** Розмова зникає з ЦЬОГО вузла; копію співрозмовника вузол не чіпає. */
+  deleteConversation: (conversationId: string) =>
+    request<{ deleted: boolean }>('DELETE', `/messenger/conversations/${conversationId}`),
+
+  /** Стирає листи розмови на цьому вузлі, саму розмову лишає. */
+  clearConversation: (conversationId: string) =>
+    request<{ cleared: number }>('POST', `/messenger/conversations/${conversationId}/clear`),
+
+  /** Скільки листів чекають на зв'язок — головний козир черги, зроблений видимим. */
+  queueStatus: () => request<{ queued: number }>('GET', '/messenger/queue/status'),
+
   listConversations: () => request<NodeConversation[]>('GET', '/messenger/conversations'),
 
   /** Первинний список. Вузол сам вирішує, створювати чи віддати наявне. */
@@ -140,6 +151,9 @@ export const messengerApi = {
       reply_to_id?: string | null;
     },
   ) => request<NodeMessage>('POST', `/messenger/conversations/${conversationId}/messages`, body),
+
+  /** Пробуємо проштовхнути чергу зараз; повертає, скільки доставлено. */
+  flushQueue: () => request<{ delivered: number }>('POST', '/messenger/queue/flush'),
 };
 
 const timeLabel = (iso: string): string => {

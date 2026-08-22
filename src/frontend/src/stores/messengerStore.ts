@@ -3,6 +3,7 @@ import { messengerNetworkEngine } from '../services/messengerNetworkEngine';
 import { chatApi } from '../services/api';
 import { messengerApi, chatFromNode, messageFromNode } from '../services/messengerApi';
 import type { NodeMessage } from '../services/messengerApi';
+import { useUIStore } from './uiStore';
 import { soundFx } from '../utils/messengerSound';
 import type {
   Chat,
@@ -107,6 +108,8 @@ export interface MessengerState {
   toggleReaction: (messageId: string, emoji: string) => void;
   addReaction: (messageId: string, emoji: string) => void;
   forwardMessage: (msg: Message, targetChatId: string) => void;
+  /** Повторна спроба надіслати лист, що впав або застряг у черзі. */
+  retrySend: (messageId: string) => Promise<void>;
 
   // Interactive message widget mutators
   updateTableData: (messageId: string, data: any) => void;
@@ -880,6 +883,7 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
     forwardMessage: (msg, targetChatId) => {
       soundFx.playSend();
       const state = get();
+      const targetTitle = state.chats.find((c) => c.id === targetChatId)?.title || 'чат';
       const forwarded: Message = {
         ...msg,
         id: `msg_fwd_${Date.now()}`,
@@ -898,6 +902,43 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
         isForwardModalOpen: false,
         activeForwardMessage: null,
       }));
+      // Модалка зникає миттєво — тост лишається єдиним підтвердженням, куди поїхало.
+      useUIStore.getState().toast({ kind: 'success', message: `Переслано в «${targetTitle}»` });
+    },
+
+    // Лист упав або застряг у черзі — повторюємо той самий client_id, тож вузол
+    // упізнає його і не роздвоїть стрічку.
+    retrySend: async (messageId) => {
+      const state = get();
+      const chatId = state.activeChatId;
+      const msg = state.chats.find((c) => c.id === chatId)?.messages.find((m) => m.id === messageId);
+      if (!chatId || !msg) return;
+
+      const markStatus = (status: Message['status']) =>
+        set((s) => ({
+          chats: s.chats.map((c) =>
+            c.id === chatId
+              ? { ...c, messages: c.messages.map((m) => (m.id === messageId ? { ...m, status } : m)) }
+              : c,
+          ),
+        }));
+
+      markStatus('sending');
+      try {
+        const row = await messengerApi.appendMessage(chatId, {
+          client_id: messageId,
+          author_id: state.currentUser.id,
+          author_name: state.currentUser.name,
+          kind: 'text',
+          body: msg.text ?? '',
+          transport: msg.transport ?? null,
+          reply_to_id: msg.replyTo?.id ?? null,
+        });
+        markStatus(row.delivery === 'queued' ? 'queued' : 'sent');
+      } catch (err) {
+        console.warn('[messenger] повтор надсилання не вдався:', err);
+        markStatus('failed');
+      }
     },
 
     // Interactive Widget Update Handlers

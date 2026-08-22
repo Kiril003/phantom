@@ -13,7 +13,11 @@ import {
   Type,
   Bold,
   Italic,
-  Code
+  Code,
+  Image as ImageIcon,
+  File as FileIcon,
+  Mic,
+  MapPin
 } from 'lucide-react';
 import { Message, ChatMember, MessageReplyInfo } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
@@ -57,7 +61,7 @@ const stylePresets = [
 export const MessageComposer: React.FC<MessageComposerProps> = ({
   onSendMessage,
   onSendVoiceMessage: _onSendVoiceMessage,
-  onOpenActions,
+  onOpenActions: _onOpenActions,
   onOpenScheduler: _onOpenScheduler,
   onOpenScheduledList,
   scheduledCountInCurrentChat = 0,
@@ -81,6 +85,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   const [showEmojiPicker, setShowEmojiPicker] = useState(false);
   const [showStyleMenu, setShowStyleMenu] = useState(false);
   const [showFormattingBar, setShowFormattingBar] = useState(false);
+  const [showAttachMenu, setShowAttachMenu] = useState(false);
   const [styleBusyId, setStyleBusyId] = useState<string | null>(null);
   const [styleError, setStyleError] = useState<string | null>(null);
   const [multiQuoteTitle, setMultiQuoteTitle] = useState('Зведена цитата домовленостей');
@@ -103,6 +108,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
       setShowEmojiPicker(false);
       setShowStyleMenu(false);
       setShowFormattingBar(false);
+      setShowAttachMenu(false);
       setMentionQuery(null);
     }
   }, [chatId, initialDraft]);
@@ -468,17 +474,62 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 
       {/* 5. Main Clean Message Composer Bar */}
       <div className="flex items-end gap-2">
-          {/* Action Studio & Attachments Button (+) */}
-          <button
-            onClick={() => {
-              soundFx.playTap();
-              onOpenActions();
-            }}
-            className="w-[34px] h-[34px] min-w-0 min-h-0 mb-[5px] bg-transparent hover:bg-[#F1EBDD] border border-[#E8E1D3] rounded-full transition-colors shrink-0 flex items-center justify-center text-[#6E7568] hover:text-[#21261F]"
-            title="Створити картку або додати вкладення (+)"
-          >
-            <Plus className="w-[18px] h-[18px]" strokeWidth={1.75} />
-          </button>
+          {/* Attachments Button (+). Чесне меню вкладень: пункти є, але поки
+              вимкнені з підписом «скоро» — жодних мертвих переходів у сторонні
+              застосунки. */}
+          <div className="relative shrink-0">
+            <button
+              onClick={() => {
+                soundFx.playTap();
+                setShowAttachMenu((v) => !v);
+                setShowEmojiPicker(false);
+                setShowStyleMenu(false);
+                setShowFormattingBar(false);
+              }}
+              className={`w-[34px] h-[34px] min-w-0 min-h-0 mb-[5px] border border-[#E8E1D3] rounded-full transition-colors flex items-center justify-center ${
+                showAttachMenu ? 'bg-[#F1EBDD] text-[#21261F]' : 'bg-transparent text-[#6E7568] hover:bg-[#F1EBDD] hover:text-[#21261F]'
+              }`}
+              title="Додати вкладення"
+              aria-label="Додати вкладення"
+            >
+              <Plus className={`w-[18px] h-[18px] transition-transform ${showAttachMenu ? 'rotate-45' : ''}`} strokeWidth={1.75} />
+            </button>
+
+            {showAttachMenu && (
+              <>
+                <button
+                  className="fixed inset-0 z-20 cursor-default"
+                  onClick={() => setShowAttachMenu(false)}
+                  aria-hidden
+                />
+                <div className="absolute bottom-12 left-0 bg-[#FDFCF9]/98 backdrop-blur-2xl border border-[#E8E1D3] rounded-2xl p-1.5 shadow-2xl w-52 z-30 space-y-0.5 animate-in fade-in zoom-in-95 duration-100 select-none text-[#21261F]">
+                  <div className="px-2 py-1 text-[11px] font-extrabold text-[#6E7568] uppercase tracking-wide border-b border-[#F1EBDD]">
+                    Вкладення
+                  </div>
+                  {[
+                    { icon: ImageIcon, label: 'Фото' },
+                    { icon: FileIcon, label: 'Файл' },
+                    { icon: Mic, label: 'Голосове' },
+                    { icon: MapPin, label: 'Локація' },
+                  ].map(({ icon: Icon, label }) => (
+                    <button
+                      key={label}
+                      type="button"
+                      disabled
+                      className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl text-left text-xs text-[#98A092] cursor-not-allowed"
+                      title="Скоро"
+                    >
+                      <Icon className="w-4 h-4 shrink-0" strokeWidth={1.75} />
+                      <span className="flex-1 font-semibold">{label}</span>
+                      <span className="text-[9.5px] font-bold uppercase tracking-wide bg-[#F1EBDD] text-[#6E7568] px-1.5 py-0.5 rounded-full">
+                        скоро
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
 
           {/* Center Input Box. Фокус показуємо темнішою межею, а не теракотовою
               рамкою на весь композер: підсвічувати треба курсор, не меблі. */}

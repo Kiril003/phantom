@@ -39,11 +39,12 @@ import {
   Check,
   AlertCircle
 } from 'lucide-react';
-import confetti from 'canvas-confetti';
 import { Message, LocationData, TableData, TaskListData, Chat } from '../../types/messenger';
 import { Avatar } from './Avatar';
 import { soundFx } from '../../utils/messengerSound';
 import { chatApi } from '../../services/api';
+import { messengerApi } from '../../services/messengerApi';
+import { useMessengerStore } from '../../stores/messengerStore';
 import { DataTableViewer } from './DataTableViewer';
 import { ChartEmbed } from './ChartEmbed';
 import { TaskListEmbed } from './TaskListEmbed';
@@ -182,16 +183,62 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     setTimeout(() => setToastNotification(null), 2500);
   };
 
-  const triggerConfetti = () => {
+  // Картка «шлях листа» — клік по статусу власного повідомлення відкриває, де
+  // лист лежить зараз і що з ним далі. Раніше галочка була мертвим <span>.
+  const [pathCardMsgId, setPathCardMsgId] = useState<string | null>(null);
+  const [queueInfo, setQueueInfo] = useState<{ queued: number } | null>(null);
+  const [flushing, setFlushing] = useState(false);
+
+  const statusLabel = (status?: Message['status']): string => {
+    switch (status) {
+      case 'sending': return 'Надсилається';
+      case 'queued': return 'У черзі — чекає на співрозмовника';
+      case 'sent': return 'Надіслано на вузол';
+      case 'delivered': return 'Доставлено';
+      case 'read': return 'Прочитано';
+      case 'failed': return 'Не вдалося надіслати';
+      default: return '';
+    }
+  };
+
+  const statusDot = (status?: Message['status']): string => {
+    switch (status) {
+      case 'queued': return '#C98A2E';
+      case 'read': return '#D96C35';
+      case 'failed': return '#C25A3A';
+      case 'sent':
+      case 'delivered': return '#7E8B72';
+      default: return '#A9927C';
+    }
+  };
+
+  const openPathCard = (msg: Message) => {
+    soundFx.playTap();
+    if (pathCardMsgId === msg.id) {
+      setPathCardMsgId(null);
+      return;
+    }
+    setPathCardMsgId(msg.id);
+    setQueueInfo(null);
+    if (msg.status === 'queued') {
+      messengerApi.queueStatus().then(setQueueInfo).catch(() => setQueueInfo(null));
+    }
+  };
+
+  // «Спробувати зараз» — проштовхуємо чергу вузла й перечитуємо стрічку, щоб
+  // галочка застряглого листа сама змінилась із «у черзі» на «надіслано».
+  const handleFlushQueue = async () => {
+    setFlushing(true);
     try {
-      confetti({
-        particleCount: 40,
-        spread: 70,
-        origin: { y: 0.8 },
-        colors: ['#E87A42', '#528A4B', '#F5A623', '#2C4A34'],
-      });
+      const res = await messengerApi.flushQueue();
+      showToast(res.delivered > 0 ? `Доставлено: ${res.delivered}` : 'Черга поки не рушила');
+      const st = await messengerApi.queueStatus().catch(() => null);
+      setQueueInfo(st);
+      if (currentChat) await useMessengerStore.getState().loadMessagesForChat(currentChat.id);
     } catch {
-      // ignore
+      showToast('Не вдалося звернутися до черги вузла');
+    } finally {
+      setFlushing(false);
     }
   };
 
@@ -242,7 +289,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       lastTapRef.current[msg.id] = 0;
       soundFx.playTap();
       onAddReaction(msg.id, '❤️');
-      triggerConfetti();
       showToast('Реакцію додано подвійним дотиком');
       return;
     }
@@ -610,9 +656,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const handleSelectReactionEmoji = (emoji: string) => {
     if (targetReactionMsgId) {
       onAddReaction(targetReactionMsgId, emoji);
-      if (['❤️', '🔥', '🎉', '🚀'].includes(emoji)) {
-        triggerConfetti();
-      }
     }
   };
 
@@ -1707,8 +1750,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       </span>
                     )}
 
-                    {/* Transport Protocol Indicator */}
-                    {msg.transport === 'p2p' ? (
+                    {/* Транспорт показуємо лише під ЧУЖИМ листом. Під власним
+                        єдине джерело правди — статусна галочка (клік → «шлях
+                        листа»); інакше глобус «доставлено» сперечався б із нею. */}
+                    {!isSelf && (msg.transport === 'p2p' ? (
                       <span
                         className="flex items-center gap-1 opacity-85"
                         title="Доставлено напряму через WebRTC P2P DataChannel (транспорт DTLS)"
@@ -1723,44 +1768,113 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       >
                         <Globe className="w-3.5 h-3.5" strokeWidth={1.75} />
                       </span>
-                    ) : null}
+                    ) : null)}
 
                     {/* Час — завжди останній у правому нижньому куті бульбашки */}
                     <span className="tabular-nums whitespace-nowrap">
                       {msg.timestamp}
                     </span>
 
-                    {/* Галочки лише за фактичним msg.status — без статусу нічого не малюємо. */}
-                    {isSelf && msg.status === 'sending' && (
-                      <span title="Надсилається">
-                        <Clock className="w-3.5 h-3.5 text-[#A9927C]" strokeWidth={1.75} />
-                      </span>
-                    )}
-                    {isSelf && msg.status === 'sent' && (
-                      <span title="Надіслано">
-                        <Check className="w-3.5 h-3.5 text-[#A9927C]" strokeWidth={1.75} />
-                      </span>
-                    )}
-                    {isSelf && msg.status === 'delivered' && (
-                      <span title="Доставлено">
-                        <CheckCheck className="w-3.5 h-3.5 text-[#A9927C]" strokeWidth={1.75} />
-                      </span>
-                    )}
-                    {isSelf && msg.status === 'read' && (
-                      <span title="Прочитано">
-                        <CheckCheck className="w-3.5 h-3.5 text-[#D96C35]" strokeWidth={1.75} />
-                      </span>
-                    )}
-                    {isSelf && msg.status === 'failed' && (
-                      <span title="Не надіслано">
-                        <AlertCircle className="w-3.5 h-3.5 text-[#C25A3A]" strokeWidth={1.75} />
+                    {/* Галочка — вхід у «шлях листа». Клік відкриває картку зі
+                        станом і, для черги/помилки, дією. Без статусу — нічого. */}
+                    {isSelf && msg.status && (
+                      <span className="relative flex items-center">
+                        <button
+                          onClick={(e) => { e.stopPropagation(); openPathCard(msg); }}
+                          className="flex items-center rounded p-0.5 -mr-0.5 hover:bg-[#F1EBDD] transition-colors"
+                          title="Шлях листа"
+                          aria-label="Шлях листа"
+                        >
+                          {msg.status === 'sending' && <Clock className="w-3.5 h-3.5 text-[#A9927C]" strokeWidth={1.75} />}
+                          {msg.status === 'queued' && <Clock className="w-3.5 h-3.5 text-[#C98A2E]" strokeWidth={1.75} />}
+                          {msg.status === 'sent' && <Check className="w-3.5 h-3.5 text-[#A9927C]" strokeWidth={1.75} />}
+                          {msg.status === 'delivered' && <CheckCheck className="w-3.5 h-3.5 text-[#A9927C]" strokeWidth={1.75} />}
+                          {msg.status === 'read' && <CheckCheck className="w-3.5 h-3.5 text-[#D96C35]" strokeWidth={1.75} />}
+                          {msg.status === 'failed' && <AlertCircle className="w-3.5 h-3.5 text-[#C25A3A]" strokeWidth={1.75} />}
+                        </button>
+
+                        {pathCardMsgId === msg.id && (
+                          <>
+                            <button
+                              className="fixed inset-0 z-30 cursor-default"
+                              onClick={() => setPathCardMsgId(null)}
+                              aria-hidden
+                            />
+                            <div className="absolute bottom-full right-0 mb-1.5 w-60 bg-[#FDFCF9] border border-[#E8E1D3] rounded-[12px] shadow-[0_4px_16px_rgba(60,44,24,0.12)] z-40 p-3 text-left cursor-default animate-in fade-in zoom-in-95 duration-100">
+                              <div className="flex items-center justify-between mb-2">
+                                <span className="text-[11px] font-extrabold uppercase tracking-wide text-[#6E7568]">Шлях листа</span>
+                                <button
+                                  onClick={() => setPathCardMsgId(null)}
+                                  className="p-0.5 text-[#98A092] hover:text-[#21261F] rounded"
+                                  aria-label="Закрити"
+                                >
+                                  <X className="w-3.5 h-3.5" />
+                                </button>
+                              </div>
+
+                              <div className="flex items-center gap-2">
+                                <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: statusDot(msg.status) }} />
+                                <span className="text-[12.5px] font-semibold text-[#21261F]">{statusLabel(msg.status)}</span>
+                              </div>
+
+                              {msg.status === 'sending' && (
+                                <p className="text-[11.5px] text-[#6E7568] pl-4 mt-1 leading-relaxed">
+                                  Вузол ще не підтвердив запис листа.
+                                </p>
+                              )}
+
+                              {(msg.status === 'sent' || msg.status === 'delivered' || msg.status === 'read') && (
+                                <p className="text-[11.5px] text-[#6E7568] pl-4 mt-1">
+                                  {msg.transport === 'p2p'
+                                    ? 'Напряму, P2P'
+                                    : msg.transport === 'relay'
+                                    ? 'Через релей'
+                                    : 'Через вузол'}
+                                </p>
+                              )}
+
+                              {msg.status === 'queued' && (
+                                <div className="mt-2 space-y-2">
+                                  <p className="text-[11.5px] text-[#6E7568] leading-relaxed">
+                                    Лист лежить у скриньці на вузлі. Повторимо доставку, щойно
+                                    співрозмовник вийде на зв'язок.
+                                    {queueInfo ? ` Зараз у черзі: ${queueInfo.queued}.` : ''}
+                                  </p>
+                                  <button
+                                    onClick={handleFlushQueue}
+                                    disabled={flushing}
+                                    className="w-full py-1.5 rounded-[10px] bg-[#D96C35] hover:bg-[#B85425] text-[#FDFCF9] text-[12px] font-bold transition-colors disabled:opacity-50"
+                                  >
+                                    {flushing ? 'Пробуємо…' : 'Спробувати зараз'}
+                                  </button>
+                                </div>
+                              )}
+
+                              {msg.status === 'failed' && (
+                                <div className="mt-2">
+                                  <p className="text-[11.5px] text-[#6E7568] leading-relaxed mb-2">
+                                    Вузол не прийняв лист. Можна повторити спробу.
+                                  </p>
+                                  <button
+                                    onClick={() => useMessengerStore.getState().retrySend(msg.id)}
+                                    className="w-full py-1.5 rounded-[10px] bg-[#D96C35] hover:bg-[#B85425] text-[#FDFCF9] text-[12px] font-bold transition-colors"
+                                  >
+                                    Повторити
+                                  </button>
+                                </div>
+                              )}
+                            </div>
+                          </>
+                        )}
                       </span>
                     )}
                   </div>
 
-                  {/* Compact & Clean Message Hover Bar (Desktop) */}
+                  {/* Compact & Clean Message Hover Bar (Desktop). Тримаємо його
+                      ПОВНІСТЮ над бульбашкою (bottom-full), інакше нижній край
+                      панелі накривав перший рядок тексту. */}
                   {hoveredMessageId === msg.id && (
-                    <div className={`absolute -top-3.5 ${
+                    <div className={`absolute bottom-full mb-1 ${
                       isSelf ? 'right-1' : 'left-1'
                     } bg-[#FDFCF9] border border-[#E8E1D3] text-[#21261F] rounded-[10px] px-1 py-0.5 flex items-center gap-0.5 shadow-[0_1px_2px_rgba(60,44,24,0.05)] z-20 animate-in fade-in duration-100`}>
                       {/* Top 3 Quick Emojis */}
@@ -1770,9 +1884,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                           onClick={() => {
                             soundFx.playTap();
                             onAddReaction(msg.id, emoji);
-                            if (['❤️', '🔥'].includes(emoji)) {
-                              triggerConfetti();
-                            }
                           }}
                           className="hover:scale-125 transition-transform text-xs p-1"
                           title={emoji}
@@ -1834,9 +1945,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                             onClick={() => {
                               soundFx.playSend();
                               onAddReaction(msg.id, r.emoji);
-                              if (['❤️', '🔥', '🎉', '🚀'].includes(r.emoji)) {
-                                triggerConfetti();
-                              }
                             }}
                             className={`group/reaction relative px-2 py-0.5 rounded-full text-xs flex items-center gap-1 border transition-all duration-150 active:scale-95 shadow-sm ${
                               isUserReacted
@@ -1981,9 +2089,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   onClick={() => {
                     soundFx.playTap();
                     onAddReaction(contextMenuMsg.id, emoji);
-                    if (['❤️', '🔥', '🎉', '🚀'].includes(emoji)) {
-                      triggerConfetti();
-                    }
                     setContextMenuMsg(null);
                     showToast(`${emoji} Реакцію надіслано`);
                   }}

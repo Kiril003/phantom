@@ -235,12 +235,14 @@
 /* ОС ставить min-width/height 44px на всі контроли (тач-цілі). Для щільного
    десктопного месенджера це роздувало кожну кнопку на третину — саме звідси
    «дитячий» масштаб. У межах месенджера розміри задає сам месенджер. */
-.messenger-scale button,
-.messenger-scale [role='button'],
-.messenger-scale a,
-.messenger-scale input,
-.messenger-scale select,
-.messenger-scale textarea {
-  min-width: 0;
-  min-height: 0;
+@media (pointer: fine) {
+  .messenger-scale button,
+  .messenger-scale [role='button'],
+  .messenger-scale a,
+  .messenger-scale input,
+  .messenger-scale select,
+  .messenger-scale textarea {
+    min-width: 0;
+    min-height: 0;
+  }
 }

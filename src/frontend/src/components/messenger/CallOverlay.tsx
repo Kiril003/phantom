@@ -18,6 +18,8 @@ const HAIRLINE = '#E8E1D3';
 const ACCENT = '#D96C35';
 const END = '#B85425';
 const MUTED = '#8A8577';
+const TRUST_OK = '#4C8A55';
+const TRUST_WARN = '#C98A2E';
 
 const initialsOf = (name: string): string =>
   name
@@ -109,6 +111,37 @@ const VideoPane: React.FC<{
   );
 };
 
+/**
+ * Стан звірки особи — і тільки він. Це не про шифрування: замок і напис «E2E»
+ * тут були б обіцянкою, якої дзвінок не дає. Звірили число — зелена крапка,
+ * не звірили — бурштинова, не питали вузол — кажемо, що не знаємо.
+ */
+const TrustRow: React.FC<{ verified?: boolean | null }> = ({ verified }) => {
+  if (verified === true || verified === false) {
+    const tone = verified ? TRUST_OK : TRUST_WARN;
+    return (
+      <span
+        data-call-trust={verified ? 'verified' : 'unverified'}
+        className="inline-flex items-center gap-1.5 text-[11.5px]"
+        style={{ color: tone }}
+        title={
+          verified
+            ? 'Число безпеки звірено — це та людина, за яку себе видає'
+            : 'Число безпеки не звірено — особу співрозмовника не підтверджено'
+        }
+      >
+        <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ background: tone }} />
+        {verified ? 'Звірено ✓' : 'Не звірено'}
+      </span>
+    );
+  }
+  return (
+    <span data-call-trust="unknown" className="text-[11.5px]" style={{ color: MUTED }}>
+      стан звірки невідомий
+    </span>
+  );
+};
+
 const StatsLine: React.FC<{ snapshot: CallSnapshot }> = ({ snapshot }) => {
   const s = snapshot.stats;
   if (!s) {
@@ -124,6 +157,11 @@ const StatsLine: React.FC<{ snapshot: CallSnapshot }> = ({ snapshot }) => {
   if (s.kbps !== null) parts.push(`${s.kbps} кбіт/с`);
   const codecs = [s.audioCodec, s.videoCodec].filter(Boolean).join(' · ');
   if (codecs) parts.push(codecs);
+  // Тип пари кандидатів: host — та сама мережа, srflx — крізь NAT, relay —
+  // через TURN. Саме це каже, чи встане цей дзвінок поза локальною мережею.
+  if (s.localCandidate || s.remoteCandidate) {
+    parts.push(`шлях ${s.localCandidate ?? '?'}↔${s.remoteCandidate ?? '?'}`);
+  }
   return (
     <span
       className="text-[11px]"
@@ -190,15 +228,41 @@ export const CallOverlay: React.FC = () => {
           <div className="mt-1 text-[13px]" style={{ color: MUTED }}>
             {snapshot.state === 'ended'
               ? snapshot.endedReason ?? 'дзвінок завершено'
-              : ringing
-                ? snapshot.media === 'video'
-                  ? 'вхідний відеодзвінок'
-                  : 'вхідний дзвінок'
-                : 'набираю…'}
+              : snapshot.stall
+                ? snapshot.stall.kind === 'no-path'
+                  ? 'зʼєднання не встає'
+                  : 'відповіді немає'
+                : ringing
+                  ? snapshot.media === 'video'
+                    ? 'вхідний відеодзвінок'
+                    : 'вхідний дзвінок'
+                  : 'набираю…'}
           </div>
-          {snapshot.peer?.verified === false && snapshot.state !== 'ended' && (
-            <div className="mt-2 text-[11px]" style={{ color: MUTED }}>
-              число безпеки не звірено
+          {snapshot.state !== 'ended' && (
+            <div className="mt-2 flex justify-center">
+              <TrustRow verified={snapshot.peer?.verified} />
+            </div>
+          )}
+
+          {/* Зʼєднання не встало за відведений час. Мовчати далі — брехати
+              очікуванням; кажемо межу вголос і даємо вийти. */}
+          {snapshot.stall && snapshot.state !== 'ended' && (
+            <div
+              data-call-stalled={snapshot.stall.kind}
+              className="mt-4 p-3 rounded-2xl text-left"
+              style={{ background: '#FDF6EC', border: '1px solid #EBD9BE' }}
+            >
+              <span className="text-[11.5px] leading-relaxed block" style={{ color: '#8C5A1A' }}>
+                {snapshot.stall.note}
+              </span>
+              <button
+                type="button"
+                onClick={() => callEngine.hangup()}
+                className="mt-2 text-[11.5px] font-bold active:scale-95 transition-transform"
+                style={{ color: END }}
+              >
+                Припинити
+              </button>
             </div>
           )}
 
@@ -258,8 +322,10 @@ export const CallOverlay: React.FC = () => {
         >
           <div className="min-w-0">
             <div className="text-[15px] font-semibold truncate">{name}</div>
-            <div className="text-[12px]" style={{ color: MUTED }}>
+            <div className="flex items-center gap-2.5 text-[12px]" style={{ color: MUTED }}>
               <CallTimer startedAt={snapshot.startedAt} />
+              <span style={{ color: HAIRLINE }}>·</span>
+              <TrustRow verified={snapshot.peer?.verified} />
             </div>
           </div>
           <StatsLine snapshot={snapshot} />

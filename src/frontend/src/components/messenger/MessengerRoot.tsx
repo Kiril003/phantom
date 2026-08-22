@@ -85,6 +85,8 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
           contactId: detail.contactId,
           peerNodeId,
           displayName: detail.displayName ?? chat?.title ?? 'Співрозмовник',
+          // Стан звірки їде разом з імʼям: у дзвінку його вже нема де взяти.
+          verified: detail.verified ?? chat?.contactVerified ?? null,
         },
         detail.video ? 'video' : 'audio',
       );

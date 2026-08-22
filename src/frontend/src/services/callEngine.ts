@@ -19,6 +19,39 @@ const ICE_SERVERS: RTCIceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }];
 const STATS_PERIOD_MS = 2000;
 /** Скільки триматися на екрані після завершення, перш ніж зникнути. */
 const ENDED_LINGER_MS = 2600;
+/** Скільки чекати зʼєднання, перш ніж сказати людині правду замість «набираю…». */
+const STALL_AFTER_MS = 8000;
+
+/**
+ * Чи є в конфігурації ретранслятор. STUN лише повідомляє наші зовнішні адреси;
+ * провести медіа крізь симетричний NAT він не може — це робить тільки TURN.
+ * Перевіряємо конфігурацію, а не здогад: додадуть TURN — текст зміниться сам.
+ */
+const HAS_TURN = ICE_SERVERS.some((server) => {
+  const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
+  return urls.some((u) => typeof u === 'string' && u.trim().toLowerCase().startsWith('turn'));
+});
+
+/**
+ * Що показати, коли доріжка не встає, хоч співрозмовник уже відповів. Без TURN
+ * це не «щось підвисло», а відома межа збірки, і людина має почути саме її.
+ */
+export const LINK_STALL_NOTE = HAS_TURN
+  ? 'Не вдається зʼєднатися напряму. Пробуємо через ретранслятор — це може зайняти ще кілька секунд.'
+  : 'Не вдається зʼєднатися напряму. Без TURN-сервера дзвінок за суворим NAT неможливий — це відома межа поточної версії.';
+
+/**
+ * А це — інша біда, і плутати їх не можна: відповіді ще не було, тож про
+ * доріжку ми поки нічого не знаємо і валити все на TURN не маємо права.
+ */
+export const NO_ANSWER_NOTE =
+  'Співрозмовник не бере слухавку. Дзвінок доїхав до його вузла, але відповіді ще немає.';
+
+/** Чому дзвінок стоїть: `no-answer` — не відповіли, `no-path` — немає дороги. */
+export interface CallStall {
+  kind: 'no-answer' | 'no-path';
+  note: string;
+}
 
 export type CallState = 'idle' | 'calling' | 'ringing' | 'active' | 'ended';
 export type CallMedia = 'audio' | 'video';
@@ -38,6 +71,13 @@ export interface CallStats {
   audioCodec: string | null;
   videoCodec: string | null;
   kbps: number | null;
+  /**
+   * Тип пари кандидатів, якою реально йде медіа: host — те саме LAN,
+   * srflx — крізь NAT по STUN, relay — через TURN. Саме це число каже,
+   * чи встане такий самий дзвінок поза локальною мережею.
+   */
+  localCandidate: string | null;
+  remoteCandidate: string | null;
 }
 
 export interface CallSnapshot {
@@ -58,6 +98,8 @@ export interface CallSnapshot {
   stats: CallStats | null;
   /** Чому все скінчилось: словами, які можна показати людині. */
   endedReason: string | null;
+  /** Зʼєднання не встало за відведений час — час сказати причину вголос. */
+  stall: CallStall | null;
 }
 
 interface SignalResult {
@@ -97,6 +139,7 @@ const IDLE: CallSnapshot = {
   startedAt: null,
   stats: null,
   endedReason: null,
+  stall: null,
 };
 
 const newCallId = (): string =>
@@ -110,6 +153,7 @@ class CallEngine {
   private localStream: MediaStream | null = null;
   private statsTimer: ReturnType<typeof setInterval> | null = null;
   private lingerTimer: ReturnType<typeof setTimeout> | null = null;
+  private stallTimer: ReturnType<typeof setTimeout> | null = null;
   private offWs: (() => void) | null = null;
 
   /** Кандидати, що прилетіли раніше, ніж зʼявилось куди їх класти. */
@@ -118,6 +162,8 @@ class CallEngine {
   private pendingOffer: string | null = null;
   /** Попередній вимір — щоб порахувати бітрейт як різницю, а не як здогад. */
   private lastBytes: { at: number; bytes: number } | null = null;
+  /** Чи озвалась інша сторона. Без цього «немає дороги» — це здогад, не факт. */
+  private answered = false;
 
   /* ── підписка ───────────────────────────────────────────────────────── */
 
@@ -159,6 +205,7 @@ class CallEngine {
   async startCall(peer: CallPeer, media: CallMedia = 'audio'): Promise<void> {
     if (this.snapshot.state !== 'idle' && this.snapshot.state !== 'ended') return;
     this.clearLinger();
+    this.answered = false;
 
     const callId = newCallId();
     this.patch({
@@ -193,7 +240,10 @@ class CallEngine {
       });
       if (!result.delivered) {
         this.finish(result.detail || 'вузол співрозмовника не прийняв дзвінок');
+        return;
       }
+      // Пропозиція пішла — з цієї миті мовчання означає проблему зі звʼязком.
+      this.armStall(callId);
     } catch (err) {
       this.finish(this.plainError(err, 'не вдалося скласти пропозицію'));
     }
@@ -208,6 +258,8 @@ class CallEngine {
 
     const offerSdp = this.pendingOffer;
     this.pendingOffer = null;
+    // Пропозиція в руках — інша сторона точно на звʼязку.
+    this.answered = true;
 
     let stream: MediaStream;
     try {
@@ -230,7 +282,11 @@ class CallEngine {
       });
       if (!result.delivered) {
         this.finish(result.detail || 'відповідь не доїхала до співрозмовника');
+        return;
       }
+      // Той, хто взяв слухавку, чекає на зʼєднання так само — і має право
+      // почути ту саму правду, якщо воно не встає.
+      this.armStall(callId);
     } catch (err) {
       this.finish(this.plainError(err, 'не вдалося прийняти дзвінок'));
     }
@@ -291,6 +347,7 @@ class CallEngine {
     if (kind === 'answer' && data.sdp) {
       try {
         await this.pc?.setRemoteDescription({ type: 'answer', sdp: data.sdp });
+        this.answered = true;
         await this.drainIce();
       } catch (err) {
         this.finish(this.plainError(err, 'відповідь співрозмовника не прийнялась'));
@@ -319,6 +376,7 @@ class CallEngine {
     if (!data.sdp) return;
 
     this.clearLinger();
+    this.answered = false;
     this.pendingOffer = data.sdp;
     this.pendingIce = [];
     this.patch({
@@ -372,17 +430,52 @@ class CallEngine {
     pc.onconnectionstatechange = () => {
       if (pc.connectionState === 'connected') {
         if (this.snapshot.state !== 'active') {
-          this.patch({ state: 'active', startedAt: Date.now() });
+          this.clearStall();
+          this.patch({ state: 'active', startedAt: Date.now(), stall: null });
           this.startStats();
         }
       } else if (pc.connectionState === 'failed') {
-        this.finish('зʼєднання не встановилось');
+        this.finish(this.linkFailureReason());
       } else if (pc.connectionState === 'disconnected' && this.snapshot.state === 'active') {
         this.finish('звʼязок обірвався');
       }
     };
 
+    // ICE ламається раніше, ніж падає зʼєднання загалом: саме тут видно,
+    // що прохідних пар кандидатів не лишилось.
+    pc.oniceconnectionstatechange = () => {
+      if (pc.iceConnectionState === 'failed') this.finish(this.linkFailureReason());
+    };
+
     return pc;
+  }
+
+  /* ── чесна межа звʼязку ─────────────────────────────────────────────── */
+
+  /** Зʼєднання не встало жодного разу — це не «обірвалось», а не зійшлось. */
+  private linkFailureReason(): string {
+    if (this.snapshot.startedAt !== null) return 'звʼязок обірвався';
+    return this.answered ? LINK_STALL_NOTE : 'зʼєднання не встановилось';
+  }
+
+  private armStall(callId: string): void {
+    this.clearStall();
+    this.stallTimer = setTimeout(() => {
+      this.stallTimer = null;
+      if (this.snapshot.callId !== callId) return;
+      if (this.snapshot.state === 'calling' || this.snapshot.state === 'ringing') {
+        this.patch({
+          stall: this.answered
+            ? { kind: 'no-path', note: LINK_STALL_NOTE }
+            : { kind: 'no-answer', note: NO_ANSWER_NOTE },
+        });
+      }
+    }, STALL_AFTER_MS);
+  }
+
+  private clearStall(): void {
+    if (this.stallTimer) clearTimeout(this.stallTimer);
+    this.stallTimer = null;
   }
 
   private async addIce(candidate: RTCIceCandidateInit): Promise<void> {
@@ -464,16 +557,28 @@ class CallEngine {
       return mime ? mime.split('/')[1] ?? mime : null;
     };
 
+    // Тип кандидата беремо з рядка, на який посилається пара, — вигадати
+    // його з SDP не можна, а саме він каже, чи це LAN, STUN чи ретранслятор.
+    const candidateTypeOf = (id: unknown): string | null => {
+      if (typeof id !== 'string') return null;
+      const type = rows.get(id)?.candidateType;
+      return typeof type === 'string' ? type : null;
+    };
+
     let rttMs: number | null = null;
     let packetsLost: number | null = null;
     let audioCodec: string | null = null;
     let videoCodec: string | null = null;
+    let localCandidate: string | null = null;
+    let remoteCandidate: string | null = null;
     let bytes = 0;
 
     rows.forEach((row) => {
       if (row.type === 'candidate-pair' && (row.nominated === true || row.state === 'succeeded')) {
         const rtt = row.currentRoundTripTime as number | undefined;
         if (typeof rtt === 'number') rttMs = Math.round(rtt * 1000);
+        localCandidate = candidateTypeOf(row.localCandidateId) ?? localCandidate;
+        remoteCandidate = candidateTypeOf(row.remoteCandidateId) ?? remoteCandidate;
       }
       if (row.type === 'inbound-rtp') {
         const lost = row.packetsLost as number | undefined;
@@ -495,10 +600,20 @@ class CallEngine {
 
     // Порожній вимір — це «ще нема», а не «нуль»: показувати нулі як
     // результат вимірювання не можна.
-    if (rttMs === null && packetsLost === null && !audioCodec && !videoCodec && kbps === null) {
+    if (
+      rttMs === null &&
+      packetsLost === null &&
+      !audioCodec &&
+      !videoCodec &&
+      kbps === null &&
+      !localCandidate &&
+      !remoteCandidate
+    ) {
       return;
     }
-    this.patch({ stats: { rttMs, packetsLost, audioCodec, videoCodec, kbps } });
+    this.patch({
+      stats: { rttMs, packetsLost, audioCodec, videoCodec, kbps, localCandidate, remoteCandidate },
+    });
   }
 
   /* ── завершення ─────────────────────────────────────────────────────── */
@@ -506,6 +621,8 @@ class CallEngine {
   private finish(reason: string): void {
     if (this.snapshot.state === 'idle') return;
     this.stopStats();
+    this.clearStall();
+    this.answered = false;
     this.pendingIce = [];
     this.pendingOffer = null;
 
@@ -515,6 +632,7 @@ class CallEngine {
       this.pc.onicecandidate = null;
       this.pc.ontrack = null;
       this.pc.onconnectionstatechange = null;
+      this.pc.oniceconnectionstatechange = null;
       try {
         this.pc.close();
       } catch {
@@ -528,6 +646,7 @@ class CallEngine {
       localStream: null,
       remoteStream: null,
       endedReason: reason,
+      stall: null,
     });
 
     this.clearLinger();

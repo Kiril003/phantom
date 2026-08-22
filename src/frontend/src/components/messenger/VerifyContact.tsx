@@ -2,16 +2,33 @@ import React, { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import {
   ShieldCheck,
+  ShieldAlert,
   AlertTriangle,
+  ChevronDown,
+  ChevronUp,
   Pencil,
   Eraser,
+  QrCode,
+  ScanLine,
   Trash2,
   X,
   Check,
 } from 'lucide-react';
+import QRCode from 'qrcode';
+import { QrScanner } from './QrScanner';
 import { messengerApi } from '../../services/messengerApi';
 import type { NodeContact } from '../../services/messengerApi';
 import { soundFx } from '../../utils/messengerSound';
+
+// У код кладемо число звірки, а не ключ: звіряються саме числа. Префікс
+// потрібен, щоб відрізнити його від QR з ключовим бандлом у панелі ідентичності.
+const SAFETY_QR_PREFIX = 'phantom-safety:';
+
+// Порівнюємо голі цифри: пробіли, префікс і переноси в різних збірках можуть
+// відрізнятись, а число — ні.
+const digitsOf = (text: string): string => text.replace(/\D/g, '');
+
+type CompareResult = 'match' | 'mismatch' | 'unreadable';
 
 // Вузол приходить сирим хексом — людині показуємо короткий людяний ярлик,
 // повний ключ лишається в title для наведення.
@@ -27,6 +44,25 @@ export const SafetyVerifyBlock: React.FC<{
 }> = ({ contact, onVerified, onDismiss }) => {
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [panel, setPanel] = useState<'none' | 'qr' | 'scan'>('none');
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+  const [compared, setCompared] = useState<CompareResult | null>(null);
+  const [typed, setTyped] = useState('');
+  const [helpOpen, setHelpOpen] = useState(false);
+
+  const mine = digitsOf(contact.safety_number);
+
+  useEffect(() => {
+    if (panel !== 'qr') return;
+    void QRCode.toDataURL(`${SAFETY_QR_PREFIX}${mine}`, {
+      errorCorrectionLevel: 'M',
+      margin: 1,
+      width: 220,
+      color: { dark: '#1E2521', light: '#F9F7F1' },
+    })
+      .then(setQrDataUrl)
+      .catch(() => setQrDataUrl(null));
+  }, [panel, mine]);
 
   const confirm = async () => {
     setBusy(true);
@@ -40,6 +76,23 @@ export const SafetyVerifyBlock: React.FC<{
     } finally {
       setBusy(false);
     }
+  };
+
+  // Скан і вставлене руками число йдуть однією дорогою. Чужий QR (наприклад,
+  // ключовий бандл) — це не «числа різні», а «це не число»: плутати ці два
+  // стани не можна, бо перший означає посередника, а другий — не той код.
+  const compareWith = (raw: string) => {
+    const seen = digitsOf(raw);
+    if (!seen || seen.length !== mine.length) {
+      setCompared('unreadable');
+      return;
+    }
+    if (seen !== mine) {
+      setCompared('mismatch');
+      return;
+    }
+    setCompared('match');
+    void confirm();
   };
 
   return (
@@ -58,6 +111,122 @@ export const SafetyVerifyBlock: React.FC<{
             Прочитайте це число одне одному голосом. Збіглося — підтвердьте.
             Розійшлося — між вами хтось є.
           </span>
+
+          {/* Читати вголос 60 цифр здатні не всі й не завжди — той самий
+              результат дає звірка кодом, і вона ще й порівнює за вас. */}
+          <div className="pt-0.5 space-y-1.5" data-safety-qr>
+            <button
+              onClick={() => {
+                setPanel((v) => (v === 'none' ? 'qr' : 'none'));
+                setCompared(null);
+              }}
+              className="flex items-center gap-1.5 text-[11px] font-bold text-[#C25925] active:scale-95 transition-transform"
+            >
+              <QrCode className="w-3.5 h-3.5" />
+              <span>Порівняти QR-кодом</span>
+              {panel === 'none' ? (
+                <ChevronDown className="w-3 h-3" />
+              ) : (
+                <ChevronUp className="w-3 h-3" />
+              )}
+            </button>
+
+            {panel === 'qr' && (
+              <div className="space-y-1.5" data-safety-qr-open>
+                <div className="p-2 bg-[#F9F7F1] rounded-xl border border-[#E6DFD3] flex flex-col items-center gap-1.5">
+                  {qrDataUrl ? (
+                    <img
+                      src={qrDataUrl}
+                      alt="QR власного числа безпеки"
+                      className="w-full max-w-[190px] rounded-lg"
+                    />
+                  ) : (
+                    <span className="text-[10px] text-[#7A6A55] py-6">Малюю код…</span>
+                  )}
+                  <span className="text-[10px] text-[#7A6A55] leading-relaxed text-center">
+                    Це ваше число цієї розмови. Покажіть екран співрозмовнику —
+                    хай наведе камеру.
+                  </span>
+                </div>
+                <button
+                  onClick={() => {
+                    setPanel('scan');
+                    setCompared(null);
+                  }}
+                  className="flex items-center gap-1.5 text-[11px] font-bold text-[#C25925] active:scale-95 transition-transform"
+                >
+                  <ScanLine className="w-3.5 h-3.5" />
+                  <span>Сканувати код співрозмовника</span>
+                </button>
+              </div>
+            )}
+
+            {panel === 'scan' && (
+              <div className="space-y-1.5" data-safety-scan-open>
+                <QrScanner onFound={compareWith} onCancel={() => setPanel('qr')} />
+                {/* Камери може не бути — тоді число вводять руками, як і диктували б голосом. */}
+                <div className="flex items-center gap-1.5">
+                  <input
+                    value={typed}
+                    onChange={(e) => setTyped(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') compareWith(typed);
+                    }}
+                    placeholder="…або впишіть число співрозмовника"
+                    data-safety-manual
+                    className="flex-1 min-w-0 px-2 py-1 text-[11px] rounded-lg border border-[#E6DFD3] bg-white focus:outline-none focus:border-[#E87A42]"
+                  />
+                  <button
+                    onClick={() => compareWith(typed)}
+                    data-safety-compare-btn
+                    className="shrink-0 text-[11px] font-bold text-[#C25925] active:scale-95 transition-transform"
+                  >
+                    Порівняти
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {compared === 'match' && (
+              <div
+                data-safety-compare="match"
+                className="p-2 bg-[#F0F5EE] rounded-xl border border-[#CBDDC4] flex items-start gap-1.5"
+              >
+                <ShieldCheck className="w-3.5 h-3.5 text-[#3F7A4B] mt-0.5 shrink-0" />
+                <span className="text-[10.5px] text-[#3F5F3B] leading-relaxed font-semibold">
+                  Числа збіглися — це справді ваш співрозмовник. Позначаю звірку.
+                </span>
+              </div>
+            )}
+
+            {compared === 'mismatch' && (
+              <div
+                data-safety-compare="mismatch"
+                className="p-2.5 bg-[#F7ECE7] rounded-xl border border-[#E0B4A6] flex items-start gap-1.5"
+              >
+                <ShieldAlert className="w-4 h-4 text-[#B4432E] mt-0.5 shrink-0" />
+                <span className="text-[10.5px] text-[#8E3520] leading-relaxed">
+                  <b className="font-bold">ЧИСЛА РІЗНІ — між вами хтось є.</b> Не
+                  підтверджуйте. Спробуйте інший канал звʼязку (особисто/телефоном) і
+                  порівняйте ще раз.
+                </span>
+              </div>
+            )}
+
+            {compared === 'unreadable' && (
+              <div
+                data-safety-compare="unreadable"
+                className="p-2 bg-[#FDF6EC] rounded-xl border border-[#EBD9BE] flex items-start gap-1.5"
+              >
+                <AlertTriangle className="w-3.5 h-3.5 text-[#B45309] mt-0.5 shrink-0" />
+                <span className="text-[10.5px] text-[#8C5A1A] leading-relaxed">
+                  Це не число безпеки — код не з тієї картки. Нічого не сталося:
+                  наведіть камеру на екран звірки співрозмовника.
+                </span>
+              </div>
+            )}
+          </div>
+
           <div className="flex items-center gap-3 pt-0.5">
             <button
               onClick={confirm}
@@ -82,6 +251,29 @@ export const SafetyVerifyBlock: React.FC<{
           )}
         </>
       )}
+
+      {/* Стоїть завжди: людина має знати відповідь до того, як побачить
+          розбіжність, а не шукати її в паніці. */}
+      <div className="pt-1 border-t border-[#E8E1D3]">
+        <button
+          onClick={() => setHelpOpen((v) => !v)}
+          data-safety-help
+          className="flex items-center gap-1 text-[10px] font-semibold text-[#7A6A55] hover:text-[#5F6A60] transition-colors"
+        >
+          <span>Що робити, якщо розійшлося?</span>
+          {helpOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+        </button>
+        {helpOpen && (
+          <p className="mt-1 text-[10px] text-[#7A6A55] leading-relaxed">
+            Різні числа означають, що ключ, який ви бачите, — не ключ вашого
+            співрозмовника. Так виглядає посередник: він читає й переписує все, що
+            ви одне одному пишете. Не підтверджуйте звірку і не надсилайте нічого
+            важливого. Звʼяжіться інакше — особисто або дзвінком на відомий вам
+            номер — і продиктуйте число ще раз. Якщо і там воно різне, видаліть
+            контакт і обміняйтеся ключами наново, краще при зустрічі.
+          </p>
+        )}
+      </div>
     </div>
   );
 };

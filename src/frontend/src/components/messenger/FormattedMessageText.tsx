@@ -197,7 +197,7 @@ export const FormattedMessageText: React.FC<FormattedMessageTextProps> = ({
                   className={`px-1.5 py-0.5 rounded-md font-mono text-[11px] mx-0.5 select-text ${
                     isSelf
                       ? 'bg-black/40 text-[#A8D5BA] border border-white/10'
-                      : 'bg-[#EFE9DD] text-[#2C4A34] border border-[#DFD6C5]'
+                      : 'bg-[#EFE9DD] text-[#7A8479] border border-[#DFD6C5]'
                   }`}
                 >
                   {highlightContent(token.slice(1, -1))}

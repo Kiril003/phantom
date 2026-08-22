@@ -457,7 +457,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
       <div className="bg-[#FDFCF9] border-t sm:border border-[#DDD4C4] rounded-t-3xl sm:rounded-3xl w-full max-w-2xl max-h-[92dvh] sm:max-h-[90vh] flex flex-col shadow-2xl overflow-hidden select-none animate-in slide-in-from-bottom sm:zoom-in-95 duration-150 pb-[var(--sab)] sm:pb-0 text-[#1E2521]">
         {/* Mobile Pull Indicator */}
         <div className="sm:hidden pt-2.5 pb-1 flex justify-center bg-[#FDFCF9]">
-          <div className="w-12 h-1 bg-[#28392C] rounded-full" />
+          <div className="w-12 h-1 bg-[#F1EDE3] rounded-full" />
         </div>
 
         {/* Modal Header */}

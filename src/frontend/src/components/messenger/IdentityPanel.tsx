@@ -93,7 +93,7 @@ export const IdentityPanel: React.FC = () => {
   return (
     <div className="space-y-3">
       <div className="p-3 bg-[#F9F7F1] rounded-2xl border border-[#E6DFD3] space-y-2">
-        <span className="text-[11px] font-bold text-[#4B584F] uppercase tracking-wider">
+        <span className="text-[11px] font-bold text-[#7A8479] uppercase tracking-wider">
           Ключ цього вузла
         </span>
         {identity ? (
@@ -146,7 +146,7 @@ export const IdentityPanel: React.FC = () => {
 
       <div className="space-y-2">
         <div className="flex items-center justify-between">
-          <span className="text-[11px] font-bold text-[#4B584F] uppercase tracking-wider">
+          <span className="text-[11px] font-bold text-[#7A8479] uppercase tracking-wider">
             Співрозмовники
           </span>
           <button

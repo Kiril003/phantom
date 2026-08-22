@@ -111,7 +111,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
       <div className="bg-[#FDFCF9] border-t sm:border border-[#DDD4C4] rounded-t-3xl sm:rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden select-none animate-in slide-in-from-bottom sm:zoom-in-95 duration-150 flex flex-col max-h-[92dvh] sm:max-h-[88vh] pb-[var(--sab)] sm:pb-0 text-[#1E2521]">
         {/* Mobile Pull Indicator */}
         <div className="sm:hidden pt-2.5 pb-1 flex justify-center bg-[#FDFCF9]">
-          <div className="w-12 h-1 bg-[#28392C] rounded-full" />
+          <div className="w-12 h-1 bg-[#F1EDE3] rounded-full" />
         </div>
 
         {/* Header */}
@@ -159,7 +159,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
           {step === 1 && (
             <div className="space-y-4">
               <div>
-                <label className="block text-xs font-extrabold text-[#3F4C42] uppercase tracking-wide mb-2">
+                <label className="block text-xs font-extrabold text-[#7A8479] uppercase tracking-wide mb-2">
                   Оберіть тип простору
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5">
@@ -285,7 +285,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
                       className={`p-2.5 rounded-xl border text-left transition-all ${
                         selectedCircle === c.id
                           ? 'bg-[#E6DFD3] text-[#1E2521] border-[#E6DFD3] shadow-2xs'
-                          : 'bg-white text-[#4A574E] border-[#DFD6C5] hover:bg-[#FAF6EE]'
+                          : 'bg-white text-[#7A8479] border-[#DFD6C5] hover:bg-[#FAF6EE]'
                       }`}
                     >
                       <div className="flex items-center gap-1.5 font-bold text-xs">
@@ -436,7 +436,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
                         className={`px-3 py-1 rounded-xl text-xs font-bold transition-all ${
                           historyVisibility === mode
                             ? 'bg-[#E6DFD3] text-[#1E2521]'
-                            : 'bg-[#FDFCF9] border border-[#DFD6C5] text-[#4A574E]'
+                            : 'bg-[#FDFCF9] border border-[#DFD6C5] text-[#7A8479]'
                         }`}
                       >
                         {mode === 'visible' ? 'Видна' : 'Прихована'}
@@ -470,7 +470,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
                       className={`py-1.5 rounded-xl border text-xs font-bold transition-all ${
                         slowMode === s
                           ? 'bg-[#E6DFD3] text-[#1E2521] border-[#E6DFD3]'
-                          : 'bg-[#FDFCF9] border-[#DFD6C5] text-[#4A574E]'
+                          : 'bg-[#FDFCF9] border-[#DFD6C5] text-[#7A8479]'
                       }`}
                     >
                       {s === 0 ? 'Вимк' : `${s}с`}
@@ -481,7 +481,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
 
               {/* Granular Permissions */}
               <div className="p-4 bg-white border border-[#DFD6C5] rounded-3xl space-y-2.5 shadow-2xs">
-                <h4 className="font-extrabold text-xs text-[#3F4C42] uppercase tracking-wide">
+                <h4 className="font-extrabold text-xs text-[#7A8479] uppercase tracking-wide">
                   Базові права учасників
                 </h4>
 
@@ -558,7 +558,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
               className={`px-5 py-2.5 rounded-xl text-xs font-bold text-[#1E2521] flex items-center gap-1.5 shadow-sm transition-colors ${
                 step === 2 && !title.trim()
                   ? 'bg-gray-700 cursor-not-allowed text-gray-500'
-                  : 'bg-[#F9F7F1] border border-[#DDD4C4] text-[#E87A42] hover:bg-[#233529]'
+                  : 'bg-[#F9F7F1] border border-[#DDD4C4] text-[#E87A42] hover:bg-[#F1EDE3]'
               }`}
             >
               <span>Далі</span>

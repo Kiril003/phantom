@@ -17,6 +17,7 @@ export interface NodeConversation {
   created_at: string;
   updated_at: string;
   contact_id?: string | null;
+  is_demo?: boolean;
   /** null — розмова ні з ким, тож і звіряти нема кого. */
   contact_verified?: boolean | null;
 }
@@ -88,6 +89,14 @@ export const messengerApi = {
     circle?: string;
     handle?: string | null;
     avatar?: string | null;
+    is_demo?: boolean;
+    messages?: Array<{
+      client_id: string;
+      author_id: string;
+      author_name: string;
+      kind?: string;
+      body?: string | null;
+    }>;
   }>) => request<NodeConversation[]>('POST', '/messenger/bootstrap', { conversations }),
 
   createConversation: (body: {
@@ -125,8 +134,28 @@ const timeLabel = (iso: string): string => {
     : d.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
 };
 
+const RICH_FIELD: Record<string, string> = {
+  table: 'tableData', chart: 'chartData', 'task-list': 'taskListData',
+  poll: 'pollData', event: 'eventData', 'split-bill': 'splitBillData',
+  code: 'codeData', image: 'imageData', file: 'fileData', voice: 'voiceData',
+  location: 'locationData', 'multi-quote': 'multiQuoteData',
+};
+
 export function messageFromNode(row: NodeMessage, selfId: string): Message {
+  // Показова стрічка везе складний вміст як JSON — розбираємо його тут, щоб
+  // таблиці, графіки й реакції жили тим самим шляхом, що й звичайний текст.
+  let rich: Record<string, unknown> = {};
+  if (row.kind !== 'text' && row.body) {
+    try {
+      const parsed = JSON.parse(row.body);
+      const field = RICH_FIELD[row.kind];
+      rich = field && parsed && !parsed.__msg ? { [field]: parsed } : parsed.__msg || {};
+    } catch {
+      rich = {};
+    }
+  }
   return {
+    ...rich,
     id: row.id,
     senderId: row.author_id,
     senderName: row.author_name,
@@ -134,7 +163,7 @@ export function messageFromNode(row: NodeMessage, selfId: string): Message {
     timestamp: timeLabel(row.sent_at),
     sentAt: row.sent_at,
     type: (row.kind as Message['type']) || 'text',
-    text: row.body ?? undefined,
+    text: row.kind === 'text' ? row.body ?? undefined : (rich.text as string | undefined),
     isSelf: row.author_id === selfId,
     isEdited: Boolean(row.edited_at),
     transport: (row.transport as Message['transport']) ?? undefined,
@@ -151,6 +180,7 @@ export function chatFromNode(row: NodeConversation): Chat {
     type: (row.kind as Chat['type']) || 'dm',
     circle: (row.circle as Chat['circle']) || 'all',
     pinned: row.pinned,
+    isDemo: row.is_demo === true,
     unreadCount: 0,
     messages: [],
   };

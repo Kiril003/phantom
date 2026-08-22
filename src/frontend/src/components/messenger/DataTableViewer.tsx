@@ -130,7 +130,7 @@ export const DataTableViewer: React.FC<DataTableViewerProps> = ({ data, onUpdate
         <div className="flex items-center gap-1.5 shrink-0">
           <button
             onClick={() => setIsAddingRow(!isAddingRow)}
-            className="px-2.5 py-1 bg-[#F9F7F1] hover:bg-[#202E24] text-[#5F6A60] hover:text-[#1E2521] border border-[#26372B] rounded-lg text-[11px] font-semibold flex items-center gap-1 transition-colors active:scale-95 shadow-sm"
+            className="px-2.5 py-1 bg-[#F9F7F1] hover:bg-[#F1EDE3] text-[#5F6A60] hover:text-[#1E2521] border border-[#E6DFD3] rounded-lg text-[11px] font-semibold flex items-center gap-1 transition-colors active:scale-95 shadow-sm"
             title="Додати новий рядок"
           >
             <Plus className="w-3 h-3 text-[#E87A42]" />
@@ -139,7 +139,7 @@ export const DataTableViewer: React.FC<DataTableViewerProps> = ({ data, onUpdate
 
           <button
             onClick={exportCSV}
-            className="px-2.5 py-1 bg-[#F9F7F1] hover:bg-[#202E24] text-[#5F6A60] hover:text-[#1E2521] border border-[#26372B] rounded-lg text-[11px] font-semibold flex items-center gap-1 transition-colors active:scale-95 shadow-sm"
+            className="px-2.5 py-1 bg-[#F9F7F1] hover:bg-[#F1EDE3] text-[#5F6A60] hover:text-[#1E2521] border border-[#E6DFD3] rounded-lg text-[11px] font-semibold flex items-center gap-1 transition-colors active:scale-95 shadow-sm"
             title="Експортувати в CSV"
           >
             {isCopied ? <Check className="w-3 h-3 text-[#E87A42]" /> : <Download className="w-3 h-3 text-[#5F6A60]" />}
@@ -156,7 +156,7 @@ export const DataTableViewer: React.FC<DataTableViewerProps> = ({ data, onUpdate
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}
           placeholder="Пошук або фільтр рядків таблиці..."
-          className="w-full pl-8 pr-3 py-1.5 bg-[#F7F5EE] border border-[#202E23] rounded-xl text-xs text-[#F0FAF3] placeholder-[#7A8479] focus:outline-none focus:border-[#E87A42] focus:ring-1 focus:ring-[#E87A42]/30 transition-colors shadow-inner"
+          className="w-full pl-8 pr-3 py-1.5 bg-[#F7F5EE] border border-[#E6DFD3] rounded-xl text-xs text-[#F0FAF3] placeholder-[#7A8479] focus:outline-none focus:border-[#E87A42] focus:ring-1 focus:ring-[#E87A42]/30 transition-colors shadow-inner"
         />
       </div>
 
@@ -229,10 +229,10 @@ export const DataTableViewer: React.FC<DataTableViewerProps> = ({ data, onUpdate
                         <span
                           className={`px-2 py-0.5 rounded-md text-[10px] font-bold border ${
                             isDone
-                              ? 'bg-[#183021] text-[#E87A42] border-[#2A5439]'
+                              ? 'bg-[#F1EDE3] text-[#E87A42] border-[#E6DFD3]'
                               : isInProgress
-                              ? 'bg-[#2E2413] text-[#FBBF24] border-[#4E3C1E]'
-                              : 'bg-[#2B1B36] text-[#C084FC] border-[#48285D]'
+                              ? 'bg-[#F9F7F1] text-[#FBBF24] border-[#E6DFD3]'
+                              : 'bg-[#F9F7F1] text-[#C084FC] border-[#E6DFD3]'
                           }`}
                         >
                           {val}
@@ -251,7 +251,7 @@ export const DataTableViewer: React.FC<DataTableViewerProps> = ({ data, onUpdate
                         title="Натисніть для редагування"
                       >
                         <div className="flex items-center gap-2">
-                          <div className="w-16 h-1.5 bg-[#1B261D] rounded-full overflow-hidden">
+                          <div className="w-16 h-1.5 bg-[#F9F7F1] rounded-full overflow-hidden">
                             <div
                               className="h-full bg-gradient-to-r from-[#E87A42] to-[#10B981] rounded-full transition-all"
                               style={{ width: `${Math.min(Number(val) || 0, 100)}%` }}
@@ -302,7 +302,7 @@ export const DataTableViewer: React.FC<DataTableViewerProps> = ({ data, onUpdate
                       onChange={(e) =>
                         setNewRowData({ ...newRowData, [col.key]: e.target.value })
                       }
-                      className="w-full px-2 py-1 bg-[#F7F5EE] border border-[#26372B] rounded text-xs text-[#1E2521] placeholder-[#7A8479] focus:outline-none focus:border-[#E87A42]"
+                      className="w-full px-2 py-1 bg-[#F7F5EE] border border-[#E6DFD3] rounded text-xs text-[#1E2521] placeholder-[#7A8479] focus:outline-none focus:border-[#E87A42]"
                     />
                   </td>
                 ))}
@@ -320,7 +320,7 @@ export const DataTableViewer: React.FC<DataTableViewerProps> = ({ data, onUpdate
 
             {/* Summary Row if present */}
             {data.summaryRow && (
-              <tr className="bg-[#162019] font-bold text-[#1E2521] border-t-2 border-[#26372B]">
+              <tr className="bg-[#F9F7F1] font-bold text-[#1E2521] border-t-2 border-[#E6DFD3]">
                 {data.columns.map((col) => (
                   <td
                     key={col.key}

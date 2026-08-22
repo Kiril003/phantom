@@ -125,7 +125,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
       <div className="bg-[#FDFCF9] border-t sm:border border-[#DDD4C4] rounded-t-3xl sm:rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden select-none animate-in slide-in-from-bottom sm:zoom-in-95 duration-150 flex flex-col max-h-[92dvh] sm:max-h-[88vh] pb-[var(--sab)] sm:pb-0 text-[#1E2521]">
         {/* Mobile Pull Indicator */}
         <div className="sm:hidden pt-2.5 pb-1 flex justify-center bg-[#FDFCF9]">
-          <div className="w-12 h-1 bg-[#28392C] rounded-full" />
+          <div className="w-12 h-1 bg-[#F1EDE3] rounded-full" />
         </div>
 
         {/* 1. Header Bar */}
@@ -237,7 +237,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                     soundFx.playChime();
                     alert(`Аудіодзвінок для ${viewingMember.name}`);
                   }}
-                  className="p-2.5 bg-white hover:bg-[#FAF6EE] text-[#3F4B41] border border-[#DFD6C5] rounded-2xl flex flex-col items-center gap-1 font-bold text-xs transition-colors shadow-2xs"
+                  className="p-2.5 bg-white hover:bg-[#FAF6EE] text-[#7A8479] border border-[#DFD6C5] rounded-2xl flex flex-col items-center gap-1 font-bold text-xs transition-colors shadow-2xs"
                 >
                   <Phone className="w-4 h-4 text-[#528A4B]" />
                   <span>Дзвінок</span>
@@ -248,7 +248,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                     soundFx.playTap();
                     alert(`Відеозв’язок для ${viewingMember.name}`);
                   }}
-                  className="p-2.5 bg-white hover:bg-[#FAF6EE] text-[#3F4B41] border border-[#DFD6C5] rounded-2xl flex flex-col items-center gap-1 font-bold text-xs transition-colors shadow-2xs"
+                  className="p-2.5 bg-white hover:bg-[#FAF6EE] text-[#7A8479] border border-[#DFD6C5] rounded-2xl flex flex-col items-center gap-1 font-bold text-xs transition-colors shadow-2xs"
                 >
                   <Video className="w-4 h-4 text-[#8C461A]" />
                   <span>Відео</span>
@@ -260,7 +260,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 {viewingMember.bio && (
                   <div>
                     <span className="text-[10px] font-bold text-[#8C988E] uppercase">Про себе</span>
-                    <p className="text-[#2F3B32] font-medium leading-relaxed mt-0.5">{viewingMember.bio}</p>
+                    <p className="text-[#7A8479] font-medium leading-relaxed mt-0.5">{viewingMember.bio}</p>
                   </div>
                 )}
 
@@ -280,7 +280,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
               {/* Persona Sphere Selector Strip */}
               <div>
                 <div className="flex items-center justify-between mb-2">
-                  <label className="text-xs font-extrabold text-[#3F4C42] uppercase tracking-wide">
+                  <label className="text-xs font-extrabold text-[#7A8479] uppercase tracking-wide">
                     Оберіть активну сферу
                   </label>
                   <span className="text-[11px] text-[#7A8479]">
@@ -386,7 +386,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
 
                   {/* Status & Bio */}
                   <div className="p-3 bg-[#FDFCF9] rounded-2xl border border-[#EBE2D3] space-y-1.5">
-                    <div className="flex items-center gap-1.5 text-xs text-[#3F4C42]">
+                    <div className="flex items-center gap-1.5 text-xs text-[#7A8479]">
                       <span className="font-bold">Поточний статус:</span>
                       <span>«{formData.statusEmoji} {formData.statusText}»</span>
                     </div>
@@ -419,7 +419,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                         {formData.tags.map((tag, i) => (
                           <span
                             key={i}
-                            className="px-2.5 py-1 bg-white border border-[#DFD6C5] text-[#3F4C42] rounded-lg text-xs font-semibold"
+                            className="px-2.5 py-1 bg-white border border-[#DFD6C5] text-[#7A8479] rounded-lg text-xs font-semibold"
                           >
                             #{tag}
                           </span>
@@ -582,7 +582,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                     <button
                       type="button"
                       onClick={() => setIsEditMode(false)}
-                      className="px-4 py-2 bg-white border border-[#DFD6C5] rounded-xl text-xs font-bold text-[#4A574E] hover:bg-[#FDFCF9]"
+                      className="px-4 py-2 bg-white border border-[#DFD6C5] rounded-xl text-xs font-bold text-[#7A8479] hover:bg-[#FDFCF9]"
                     >
                       Скасувати
                     </button>
@@ -626,7 +626,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                         className={`p-2.5 rounded-xl border text-xs font-semibold transition-all ${
                           formData.phoneVisibility === opt.id
                             ? 'bg-[#E6DFD3] text-[#1E2521] border-[#E6DFD3] shadow-2xs'
-                            : 'bg-[#FDFCF9] border-[#DFD6C5] text-[#4A574E] hover:bg-white'
+                            : 'bg-[#FDFCF9] border-[#DFD6C5] text-[#7A8479] hover:bg-white'
                         }`}
                       >
                         {opt.label}
@@ -656,7 +656,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                         className={`p-2.5 rounded-xl border text-xs font-semibold transition-all ${
                           formData.lastSeenVisibility === opt.id
                             ? 'bg-[#E6DFD3] text-[#1E2521] border-[#E6DFD3] shadow-2xs'
-                            : 'bg-[#FDFCF9] border-[#DFD6C5] text-[#4A574E] hover:bg-white'
+                            : 'bg-[#FDFCF9] border-[#DFD6C5] text-[#7A8479] hover:bg-white'
                         }`}
                       >
                         {opt.label}
@@ -688,7 +688,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   className="p-3.5 bg-white border border-[#DFD6C5] rounded-2xl flex items-center justify-between shadow-2xs"
                 >
                   <div className="flex items-center gap-3">
-                    <div className="p-2 bg-[#F0EAE0] text-[#3F4C42] rounded-xl">
+                    <div className="p-2 bg-[#F0EAE0] text-[#7A8479] rounded-xl">
                       {device.type === 'desktop' ? (
                         <Laptop className="w-5 h-5" />
                       ) : device.type === 'mobile' ? (

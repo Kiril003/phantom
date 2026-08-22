@@ -42,7 +42,7 @@ export const AudioHuddleBar: React.FC<AudioHuddleBarProps> = ({
       <div className="px-4 py-2.5 flex items-center justify-between gap-3">
         {/* Left: Indicator & Active Participants */}
         <div className="flex items-center gap-3 min-w-0">
-          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-[#183021] text-[#E87A42] rounded-full text-xs font-bold shrink-0 border border-[#2A5439]">
+          <div className="flex items-center gap-1.5 px-2.5 py-1 bg-[#F1EDE3] text-[#E87A42] rounded-full text-xs font-bold shrink-0 border border-[#E6DFD3]">
             <Mic className="w-3 h-3" />
             <span>Аудіо-простір</span>
           </div>
@@ -106,8 +106,8 @@ export const AudioHuddleBar: React.FC<AudioHuddleBarProps> = ({
             }}
             className={`p-2 rounded-full transition-colors ${
               hasRaisedHand
-                ? 'bg-[#2E2413] text-[#FBBF24] border border-[#4E3C1E]'
-                : 'bg-[#F9F7F1] text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#E6DFD3] border border-[#26372B]'
+                ? 'bg-[#F9F7F1] text-[#FBBF24] border border-[#E6DFD3]'
+                : 'bg-[#F9F7F1] text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#E6DFD3] border border-[#E6DFD3]'
             }`}
             title="Підняти руку"
           >
@@ -120,7 +120,7 @@ export const AudioHuddleBar: React.FC<AudioHuddleBarProps> = ({
                 soundFx.playTap();
                 onOpenVideoModal();
               }}
-              className="p-2 bg-[#F9F7F1] hover:bg-[#223326] text-[#E87A42] rounded-full transition-colors border border-[#DDD4C4]"
+              className="p-2 bg-[#F9F7F1] hover:bg-[#F1EDE3] text-[#E87A42] rounded-full transition-colors border border-[#DDD4C4]"
               title="Відкрити HD Відео-Студію"
             >
               <Video className="w-3.5 h-3.5" />
@@ -129,7 +129,7 @@ export const AudioHuddleBar: React.FC<AudioHuddleBarProps> = ({
 
           <button
             onClick={() => setIsExpanded(!isExpanded)}
-            className="px-2.5 py-1.5 bg-[#F9F7F1] hover:bg-[#E6DFD3] text-[#1E2521] border border-[#26372B] rounded-full text-xs font-semibold flex items-center gap-1 transition-colors"
+            className="px-2.5 py-1.5 bg-[#F9F7F1] hover:bg-[#E6DFD3] text-[#1E2521] border border-[#E6DFD3] rounded-full text-xs font-semibold flex items-center gap-1 transition-colors"
           >
             <FileText className="w-3.5 h-3.5 text-[#E87A42]" />
             <span className="hidden lg:inline">Стенограма</span>
@@ -141,7 +141,7 @@ export const AudioHuddleBar: React.FC<AudioHuddleBarProps> = ({
               soundFx.playTap();
               onLeaveHuddle();
             }}
-            className="p-2 bg-[#2D1616] hover:bg-[#3D1E1E] text-red-400 rounded-full transition-colors border border-[#4D2424]"
+            className="p-2 bg-[#F9F7F1] hover:bg-[#F9F7F1] text-red-400 rounded-full transition-colors border border-[#E6DFD3]"
             title="Залишити аудіо-ефір"
           >
             <PhoneOff className="w-3.5 h-3.5" />

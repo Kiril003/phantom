@@ -211,7 +211,7 @@ export const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
               <div
                 className={`px-2.5 py-1 rounded-xl shadow-xl border flex items-center gap-1.5 transition-all transform group-hover:scale-105 ${
                   isSelected || spot.id === 'spot_b_fresh'
-                    ? 'bg-[#183021] border-[#E87A42] text-[#1E2521] ring-2 ring-[#E87A42]/40'
+                    ? 'bg-[#F1EDE3] border-[#E87A42] text-[#1E2521] ring-2 ring-[#E87A42]/40'
                     : 'bg-[#FDFCF9]/95 border-[#F1EDE3] text-[#5F6A60] hover:text-[#1E2521]'
                 }`}
               >

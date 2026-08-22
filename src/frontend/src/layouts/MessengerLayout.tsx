@@ -9,7 +9,7 @@ export default function MessengerLayout() {
   return (
     <motion.div
       className="w-full h-full min-w-[1024px] min-h-full relative overflow-hidden"
-      style={{ background: '#F7F5EE' }}
+      style={{ background: '#FDFCF9' }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}

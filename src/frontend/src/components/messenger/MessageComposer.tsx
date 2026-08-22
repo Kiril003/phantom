@@ -288,7 +288,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 
       {/* 1. Multi-Quote Synthesis Banner */}
       {selectedMessagesForQuote.length > 0 && (
-        <div className="mb-2 p-2.5 bg-[#16221A] border border-[#E6DFD3] rounded-2xl space-y-2 shadow-sm animate-in fade-in duration-150">
+        <div className="mb-2 p-2.5 bg-[#F9F7F1] border border-[#E6DFD3] rounded-2xl space-y-2 shadow-sm animate-in fade-in duration-150">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
               <Layers className="w-3.5 h-3.5 text-[#E87A42]" />
@@ -325,7 +325,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 
       {/* 2. Replying-to Banner */}
       {replyingTo && (
-        <div className="mb-2 p-2.5 bg-[#FDFCF9] border border-[#28392C] border-l-4 border-l-[#E87A42] rounded-2xl space-y-1.5 shadow-sm animate-in fade-in duration-150">
+        <div className="mb-2 p-2.5 bg-[#FDFCF9] border border-[#E6DFD3] border-l-4 border-l-[#E87A42] rounded-2xl space-y-1.5 shadow-sm animate-in fade-in duration-150">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 min-w-0">
               <Reply className="w-3.5 h-3.5 text-[#E87A42] shrink-0" />
@@ -395,14 +395,14 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 
       {/* 3. Editing Message Banner */}
       {editingMessage && (
-        <div className="mb-2 p-2.5 bg-[#1A160E] border-l-4 border-[#F4AF25] rounded-xl flex items-center justify-between gap-2 text-xs animate-in fade-in border border-[#3A2D16]">
+        <div className="mb-2 p-2.5 bg-[#F9F7F1] border-l-4 border-[#F4AF25] rounded-xl flex items-center justify-between gap-2 text-xs animate-in fade-in border border-[#E6DFD3]">
           <div className="min-w-0">
             <p className="font-bold text-[#F4AF25] text-[11px]">Редагування повідомлення</p>
             <p className="text-[#5F6A60] truncate text-[11px]">{editingMessage.text}</p>
           </div>
           <button
             onClick={onCancelEdit}
-            className="p-1 hover:bg-[#2A2012] rounded-lg text-[#5F6A60] hover:text-[#1E2521]"
+            className="p-1 hover:bg-[#F9F7F1] rounded-lg text-[#5F6A60] hover:text-[#1E2521]"
           >
             <X className="w-4 h-4" />
           </button>
@@ -411,7 +411,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
 
       {/* 4. Scheduled Time Badge */}
       {scheduledTime ? (
-        <div className="mb-2 p-2 bg-[#1F190E] border border-[#3E3019] rounded-xl flex items-center justify-between gap-2 text-xs">
+        <div className="mb-2 p-2 bg-[#F9F7F1] border border-[#E6DFD3] rounded-xl flex items-center justify-between gap-2 text-xs">
           <div className="flex items-center gap-1.5 text-[#FBBF24] font-semibold text-[11px]">
             <Clock className="w-3.5 h-3.5 text-[#F4AF25]" />
             <span>Заплановано на: {scheduledTime}</span>
@@ -431,7 +431,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
             )}
             <button
               onClick={onClearScheduledTime}
-              className="p-1 hover:bg-[#2E2414] rounded-lg text-[#5F6A60] hover:text-[#1E2521]"
+              className="p-1 hover:bg-[#F9F7F1] rounded-lg text-[#5F6A60] hover:text-[#1E2521]"
               title="Скасувати таймер"
             >
               <X className="w-3.5 h-3.5" />
@@ -474,7 +474,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
               soundFx.playTap();
               onOpenActions();
             }}
-            className="w-10 h-10 bg-[#F9F7F1] hover:bg-[#E6DFD3] text-[#5F6A60] hover:text-[#1E2521] border border-[#28392C] rounded-xl transition-all shrink-0 flex items-center justify-center shadow-sm active:scale-95"
+            className="w-10 h-10 bg-[#F9F7F1] hover:bg-[#E6DFD3] text-[#5F6A60] hover:text-[#1E2521] border border-[#E6DFD3] rounded-xl transition-all shrink-0 flex items-center justify-center shadow-sm active:scale-95"
             title="Створити картку або додати вкладення (+)"
           >
             <Plus className="w-5 h-5 text-[#E87A42]" />
@@ -656,7 +656,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
             className={`w-10 h-10 rounded-xl transition-transform shrink-0 flex items-center justify-center shadow-md ${
               canSend
                 ? 'bg-[#E87A42] hover:bg-[#C25925] text-[#F7F5EE] font-bold active:scale-95'
-                : 'bg-[#F9F7F1] text-[#4A5A4E] border border-[#28392C] cursor-not-allowed'
+                : 'bg-[#F9F7F1] text-[#7A8479] border border-[#E6DFD3] cursor-not-allowed'
             }`}
             title="Надіслати повідомлення"
           >

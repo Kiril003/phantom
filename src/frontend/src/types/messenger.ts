@@ -461,6 +461,8 @@ export interface Chat {
   title: string;
   /** null — розмова ні з ким; false — співрозмовника ще не звірено голосом. */
   contactVerified?: boolean | null;
+  /** Показова розмова: вміст вигаданий і позначений як вигаданий. */
+  isDemo?: boolean;
   handle?: string;
   avatar: string;
   type: ChatType;

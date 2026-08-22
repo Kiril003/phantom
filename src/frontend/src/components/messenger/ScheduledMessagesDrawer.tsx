@@ -167,7 +167,7 @@ export const ScheduledMessagesDrawer: React.FC<ScheduledMessagesDrawerProps> = (
                 <h3 className="font-extrabold text-base text-[#1E2521]">
                   Відкладені повідомлення
                 </h3>
-                <span className="px-2 py-0.5 bg-[#183021] text-[#E87A42] border border-[#DDD4C4] text-[11px] font-bold rounded-full shadow-sm">
+                <span className="px-2 py-0.5 bg-[#F1EDE3] text-[#E87A42] border border-[#DDD4C4] text-[11px] font-bold rounded-full shadow-sm">
                   {totalCount}
                 </span>
               </div>
@@ -225,7 +225,7 @@ export const ScheduledMessagesDrawer: React.FC<ScheduledMessagesDrawerProps> = (
               <span>Цей чат</span>
               <span
                 className={`px-1.5 py-0.5 rounded-md text-[10px] ${
-                  filterScope === 'current' ? 'bg-[#183021] text-[#E87A42]' : 'bg-[#FDFCF9] text-[#5F6A60]'
+                  filterScope === 'current' ? 'bg-[#F1EDE3] text-[#E87A42]' : 'bg-[#FDFCF9] text-[#5F6A60]'
                 }`}
               >
                 {currentChatCount}
@@ -246,7 +246,7 @@ export const ScheduledMessagesDrawer: React.FC<ScheduledMessagesDrawerProps> = (
               <span>Всі чати</span>
               <span
                 className={`px-1.5 py-0.5 rounded-md text-[10px] ${
-                  filterScope === 'all' ? 'bg-[#183021] text-[#E87A42]' : 'bg-[#FDFCF9] text-[#5F6A60]'
+                  filterScope === 'all' ? 'bg-[#F1EDE3] text-[#E87A42]' : 'bg-[#FDFCF9] text-[#5F6A60]'
                 }`}
               >
                 {totalCount}
@@ -333,7 +333,7 @@ export const ScheduledMessagesDrawer: React.FC<ScheduledMessagesDrawerProps> = (
                     soundFx.playTap();
                     setNewText(tpl.text);
                   }}
-                  className="px-2 py-1 bg-white hover:bg-[#FAF6EE] border border-[#DFD6C5] rounded-lg text-[10px] font-semibold text-[#4A574E] transition-colors"
+                  className="px-2 py-1 bg-white hover:bg-[#FAF6EE] border border-[#DFD6C5] rounded-lg text-[10px] font-semibold text-[#7A8479] transition-colors"
                 >
                   {tpl.label}
                 </button>
@@ -367,7 +367,7 @@ export const ScheduledMessagesDrawer: React.FC<ScheduledMessagesDrawerProps> = (
                         className={`p-2 rounded-xl text-[11px] font-bold text-left border transition-all ${
                           newPreset === p
                             ? 'bg-[#FCE7D8] border-[#E87A42] text-[#8C461A]'
-                            : 'bg-white border-[#DFD6C5] text-[#3F4B41] hover:bg-[#FAF6EE]'
+                            : 'bg-white border-[#DFD6C5] text-[#7A8479] hover:bg-[#FAF6EE]'
                         }`}
                       >
                         {p}
@@ -573,7 +573,7 @@ export const ScheduledMessagesDrawer: React.FC<ScheduledMessagesDrawerProps> = (
                             {msg.taskListData.tasks.slice(0, 3).map((t) => (
                               <div
                                 key={t.id}
-                                className="flex items-center gap-1.5 text-[11px] text-[#475249]"
+                                className="flex items-center gap-1.5 text-[11px] text-[#7A8479]"
                               >
                                 <span className="w-2.5 h-2.5 rounded border border-[#8C9A90]" />
                                 <span className="truncate">{t.title}</span>

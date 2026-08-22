@@ -128,7 +128,7 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
       <div className="bg-[#FDFCF9] border-t sm:border border-[#DDD4C4] rounded-t-3xl sm:rounded-3xl w-full max-w-2xl shadow-2xl overflow-hidden flex flex-col max-h-[92dvh] sm:max-h-[90vh] animate-in slide-in-from-bottom sm:zoom-in-95 duration-150 pb-[var(--sab)] sm:pb-0 text-[#1E2521]">
         {/* Mobile Pull Indicator */}
         <div className="sm:hidden pt-2.5 pb-1 flex justify-center bg-[#FDFCF9]">
-          <div className="w-12 h-1 bg-[#28392C] rounded-full" />
+          <div className="w-12 h-1 bg-[#F1EDE3] rounded-full" />
         </div>
         
         {/* Modal Top Header */}
@@ -142,10 +142,10 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
                 <h3 className="font-extrabold text-base text-[#1E2521]">Керування протоколами зв'язку</h3>
                 <span className={`px-2 py-0.5 rounded-full text-[10.5px] font-bold border flex items-center gap-1.5 ${
                   diagnostics.activeStatus === 'p2p-direct'
-                    ? 'bg-[#183021] text-[#E87A42] border-[#DDD4C4]'
+                    ? 'bg-[#F1EDE3] text-[#E87A42] border-[#DDD4C4]'
                     : diagnostics.activeStatus === 'server-ws'
-                    ? 'bg-[#162738] text-[#60A5FA] border-[#1E3A5F]'
-                    : 'bg-[#332211] text-[#FBBF24] border-[#553311]'
+                    ? 'bg-[#F9F7F1] text-[#60A5FA] border-[#E6DFD3]'
+                    : 'bg-[#F9F7F1] text-[#FBBF24] border-[#E6DFD3]'
                 }`}>
                   <span className={`w-2 h-2 rounded-full ${
                     diagnostics.activeStatus === 'p2p-direct' ? 'bg-[#E87A42]' : diagnostics.activeStatus === 'server-ws' ? 'bg-[#3B82F6]' : 'bg-[#F59E0B]'
@@ -214,7 +214,7 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
           {activeTab === 'overview' && (
             <div className="space-y-5">
               <div>
-                <label className="block text-xs font-bold text-[#4B584F] mb-2 uppercase tracking-wider">
+                <label className="block text-xs font-bold text-[#7A8479] mb-2 uppercase tracking-wider">
                   Виберіть спосіб доставки повідомлень
                 </label>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -361,7 +361,7 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
           {activeTab === 'peers' && (
             <div className="space-y-3">
               <div className="flex items-center justify-between">
-                <h4 className="text-xs font-bold uppercase tracking-wider text-[#4D5A51]">
+                <h4 className="text-xs font-bold uppercase tracking-wider text-[#7A8479]">
                   Активні прямі WebRTC вузли ({peers.length})
                 </h4>
                 <button
@@ -460,7 +460,7 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
                       readOnly
                       rows={3}
                       value={manualOfferText}
-                      className="w-full p-2.5 text-[11px] font-mono bg-[#FAF8F4] border border-[#DDD3BF] rounded-xl text-[#2F3C33] resize-none focus:outline-hidden"
+                      className="w-full p-2.5 text-[11px] font-mono bg-[#FAF8F4] border border-[#DDD3BF] rounded-xl text-[#7A8479] resize-none focus:outline-hidden"
                     />
                     <button
                       onClick={handleCopyOffer}
@@ -481,12 +481,12 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
                   value={manualAnswerInput}
                   onChange={(e) => setManualAnswerInput(e.target.value)}
                   placeholder="Вставте сюди скопійований Answer від другого учасника..."
-                  className="w-full p-2.5 text-[11px] font-mono bg-[#FAF8F4] border border-[#DDD3BF] rounded-xl text-[#2F3C33] resize-none focus:outline-hidden focus:border-[#E87A42]"
+                  className="w-full p-2.5 text-[11px] font-mono bg-[#FAF8F4] border border-[#DDD3BF] rounded-xl text-[#7A8479] resize-none focus:outline-hidden focus:border-[#E87A42]"
                 />
                 <button
                   onClick={handleApplyManualAnswer}
                   disabled={!manualAnswerInput.trim()}
-                  className="w-full py-2 bg-[#F9F7F1] hover:bg-[#323E35] disabled:opacity-40 text-[#1E2521] rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-98 flex items-center justify-center gap-2"
+                  className="w-full py-2 bg-[#F9F7F1] hover:bg-[#F1EDE3] disabled:opacity-40 text-[#1E2521] rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-98 flex items-center justify-center gap-2"
                 >
                   <Check className="w-3.5 h-3.5 text-[#10B981]" />
                   <span>Перевірити SDP Answer</span>
@@ -598,7 +598,7 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
               soundFx.playTap();
               onClose();
             }}
-            className="px-4 py-1.5 bg-[#F9F7F1] hover:bg-[#344037] text-[#1E2521] rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-95"
+            className="px-4 py-1.5 bg-[#F9F7F1] hover:bg-[#F1EDE3] text-[#1E2521] rounded-xl text-xs font-bold transition-all shadow-2xs active:scale-95"
           >
             Готово
           </button>

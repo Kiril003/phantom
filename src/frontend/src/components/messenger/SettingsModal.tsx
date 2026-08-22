@@ -57,7 +57,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       <div className="bg-[#FDFCF9] border-t sm:border border-[#DDD4C4] rounded-t-3xl sm:rounded-3xl w-full max-w-lg max-h-[92dvh] sm:max-h-[85vh] flex flex-col shadow-2xl overflow-hidden select-none animate-in slide-in-from-bottom sm:zoom-in-95 duration-150 pb-[var(--sab)] sm:pb-0 text-[#1E2521]">
         {/* Mobile Pull Indicator */}
         <div className="sm:hidden pt-2.5 pb-1 flex justify-center bg-[#FDFCF9]">
-          <div className="w-12 h-1 bg-[#28392C] rounded-full" />
+          <div className="w-12 h-1 bg-[#F1EDE3] rounded-full" />
         </div>
 
         {/* Header */}
@@ -204,7 +204,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       onClose();
                       onOpenP2PNetworkModal();
                     }}
-                    className="px-3 py-1.5 bg-[#E6DFD3] hover:bg-[#323D35] text-[#1E2521] rounded-xl text-xs font-bold transition-all shadow-2xs"
+                    className="px-3 py-1.5 bg-[#E6DFD3] hover:bg-[#F1EDE3] text-[#1E2521] rounded-xl text-xs font-bold transition-all shadow-2xs"
                   >
                     Термінал P2P
                   </button>

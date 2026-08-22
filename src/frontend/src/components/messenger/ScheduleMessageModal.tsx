@@ -100,7 +100,7 @@ export const ScheduleMessageModal: React.FC<ScheduleMessageModalProps> = ({
                   className={`w-full p-2.5 rounded-xl text-xs font-semibold text-left border flex items-center justify-between transition-all ${
                     selectedPreset === p.value
                       ? 'bg-[#FCE7D8] border-[#E87A42] text-[#8C461A]'
-                      : 'bg-white border-[#DFD6C5] text-[#3F4B41] hover:bg-[#FAF6EE]'
+                      : 'bg-white border-[#DFD6C5] text-[#7A8479] hover:bg-[#FAF6EE]'
                   }`}
                 >
                   <span className="flex items-center gap-2">

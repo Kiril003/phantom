@@ -381,7 +381,7 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
         {activeTab === 'topics' && chat.topics && (
           <div className="space-y-3">
             <div className="flex items-center justify-between">
-              <span className="text-xs font-extrabold text-[#3F4C42] uppercase tracking-wide">
+              <span className="text-xs font-extrabold text-[#7A8479] uppercase tracking-wide">
                 Тематичні гілки бесіди
               </span>
               <button
@@ -414,7 +414,7 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
                     </div>
                   </div>
 
-                  <span className="px-2 py-0.5 bg-[#F0EAE0] text-[#4A574E] text-[10px] font-bold rounded-md shrink-0">
+                  <span className="px-2 py-0.5 bg-[#F0EAE0] text-[#7A8479] text-[10px] font-bold rounded-md shrink-0">
                     {topic.messageCount} пов.
                   </span>
                 </div>
@@ -428,7 +428,7 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
           <div className="space-y-4">
             {/* Telegram-style Permissions Matrix */}
             <div className="p-3.5 bg-white border border-[#DFD6C5] rounded-3xl space-y-2.5 shadow-2xs">
-              <h4 className="font-extrabold text-xs text-[#3F4C42] uppercase tracking-wide">
+              <h4 className="font-extrabold text-xs text-[#7A8479] uppercase tracking-wide">
                 Права звичайних учасників
               </h4>
 
@@ -484,7 +484,7 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
                     className={`py-1.5 rounded-xl border text-xs font-bold transition-all ${
                       slowMode === s
                         ? 'bg-[#E6DFD3] text-[#1E2521] border-[#E6DFD3]'
-                        : 'bg-[#FDFCF9] border-[#DFD6C5] text-[#4A574E]'
+                        : 'bg-[#FDFCF9] border-[#DFD6C5] text-[#7A8479]'
                     }`}
                   >
                     {s === 0 ? 'Вимк' : `${s < 60 ? `${s}с` : `${s / 60}хв`}`}
@@ -517,7 +517,7 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
                     className={`py-1.5 rounded-xl border text-xs font-bold transition-all ${
                       autoDelete === item.s
                         ? 'bg-[#E6DFD3] text-[#1E2521] border-[#E6DFD3]'
-                        : 'bg-[#FDFCF9] border-[#DFD6C5] text-[#4A574E]'
+                        : 'bg-[#FDFCF9] border-[#DFD6C5] text-[#7A8479]'
                     }`}
                   >
                     {item.label}
@@ -553,7 +553,7 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
                           <h5 className="font-bold text-xs text-[#1E2521]">{req.userName}</h5>
                           <p className="text-[11px] text-[#7A8479]">{req.requestedAt}</p>
                           {req.userBio && (
-                            <p className="text-xs text-[#4A574E] mt-1 leading-tight">{req.userBio}</p>
+                            <p className="text-xs text-[#7A8479] mt-1 leading-tight">{req.userBio}</p>
                           )}
                         </div>
                       </div>
@@ -568,7 +568,7 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
                         </button>
                         <button
                           onClick={() => handleApproveRequest(req.id)}
-                          className="py-1.5 bg-[#2E6B27] hover:bg-[#25571F] text-[#1E2521] rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-colors"
+                          className="py-1.5 bg-[#2E6B27] hover:bg-[#F1EDE3] text-[#1E2521] rounded-xl text-xs font-bold flex items-center justify-center gap-1 transition-colors"
                         >
                           <UserCheck className="w-3.5 h-3.5" />
                           <span>Схвалити</span>
@@ -583,7 +583,7 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
             {/* Invite Links List */}
             <div className="p-3.5 bg-white border border-[#DFD6C5] rounded-3xl space-y-3 shadow-2xs">
               <div className="flex items-center justify-between">
-                <h4 className="font-extrabold text-xs text-[#3F4C42] uppercase tracking-wide">
+                <h4 className="font-extrabold text-xs text-[#7A8479] uppercase tracking-wide">
                   Посилання для запрошення
                 </h4>
                 <button
@@ -767,7 +767,7 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
         {/* TAB 6: AUDIT LOGS */}
         {activeTab === 'logs' && (
           <div className="space-y-2">
-            <h4 className="font-extrabold text-xs text-[#3F4C42] uppercase tracking-wide mb-2">
+            <h4 className="font-extrabold text-xs text-[#7A8479] uppercase tracking-wide mb-2">
               Нещодавні дії в просторі
             </h4>
 
@@ -799,7 +799,7 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
                     <span className="font-bold text-[#1E2521]">{log.actorName}</span>
                     <span className="text-[10px] text-[#7A8479]">{log.timestamp}</span>
                   </div>
-                  <p className="text-[#3F4C42] font-semibold mt-0.5">{log.action}</p>
+                  <p className="text-[#7A8479] font-semibold mt-0.5">{log.action}</p>
                   <p className="text-[11px] text-[#7A8479] mt-0.5 truncate">{log.detail}</p>
                 </div>
               </div>

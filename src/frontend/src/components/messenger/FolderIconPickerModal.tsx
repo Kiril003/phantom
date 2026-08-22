@@ -199,7 +199,7 @@ export const FolderIconPickerModal: React.FC<FolderIconPickerModalProps> = ({
               const random = allItems[Math.floor(Math.random() * allItems.length)];
               handlePickEmoji(random);
             }}
-            className="px-2.5 py-1.5 bg-white hover:bg-[#F2ECE2] text-[#4A574E] rounded-xl border border-[#DFD6C5] text-xs font-bold transition-all flex items-center gap-1 shadow-2xs hover:scale-102"
+            className="px-2.5 py-1.5 bg-white hover:bg-[#F2ECE2] text-[#7A8479] rounded-xl border border-[#DFD6C5] text-xs font-bold transition-all flex items-center gap-1 shadow-2xs hover:scale-102"
             title="Випадковий символ"
           >
             <Wand2 className="w-3.5 h-3.5 text-[#E87A42]" />

@@ -68,7 +68,7 @@ export const TaskListEmbed: React.FC<TaskListEmbedProps> = ({ data, onUpdateTask
 
         <button
           onClick={() => setIsAdding(!isAdding)}
-          className="px-2.5 py-1 bg-[#F9F7F1] hover:bg-[#202E24] text-[#5F6A60] hover:text-[#1E2521] border border-[#26372B] rounded-lg text-[11px] font-semibold flex items-center gap-1 transition-colors shrink-0 shadow-sm active:scale-95"
+          className="px-2.5 py-1 bg-[#F9F7F1] hover:bg-[#F1EDE3] text-[#5F6A60] hover:text-[#1E2521] border border-[#E6DFD3] rounded-lg text-[11px] font-semibold flex items-center gap-1 transition-colors shrink-0 shadow-sm active:scale-95"
         >
           <Plus className="w-3 h-3 text-[#E87A42]" />
           <span>Задача</span>
@@ -91,7 +91,7 @@ export const TaskListEmbed: React.FC<TaskListEmbedProps> = ({ data, onUpdateTask
             onClick={() => toggleTask(task.id)}
             className={`p-2.5 rounded-xl flex items-center justify-between gap-2.5 cursor-pointer transition-all border ${
               task.completed
-                ? 'bg-[#F7F5EE]/60 border-[#1B261D] text-[#7A8479]'
+                ? 'bg-[#F7F5EE]/60 border-[#E6DFD3] text-[#7A8479]'
                 : 'bg-[#FDFCF9] hover:bg-[#F9F7F1] border-[#E6DFD3] text-[#E2EFE5] shadow-sm'
             }`}
           >
@@ -146,7 +146,7 @@ export const TaskListEmbed: React.FC<TaskListEmbedProps> = ({ data, onUpdateTask
                 if (e.key === 'Enter') handleAddTask();
                 if (e.key === 'Escape') setIsAdding(false);
               }}
-              className="w-full px-2.5 py-1.5 bg-[#F7F5EE] border border-[#26372B] rounded-lg text-xs text-[#1E2521] placeholder-[#7A8479] focus:outline-none focus:border-[#E87A42]"
+              className="w-full px-2.5 py-1.5 bg-[#F7F5EE] border border-[#E6DFD3] rounded-lg text-xs text-[#1E2521] placeholder-[#7A8479] focus:outline-none focus:border-[#E87A42]"
             />
             <div className="flex items-center gap-2">
               <input
@@ -158,12 +158,12 @@ export const TaskListEmbed: React.FC<TaskListEmbedProps> = ({ data, onUpdateTask
                   if (e.key === 'Enter') handleAddTask();
                   if (e.key === 'Escape') setIsAdding(false);
                 }}
-                className="flex-1 px-2.5 py-1.5 bg-[#F7F5EE] border border-[#26372B] rounded-lg text-xs text-[#1E2521] placeholder-[#7A8479] focus:outline-none focus:border-[#E87A42]"
+                className="flex-1 px-2.5 py-1.5 bg-[#F7F5EE] border border-[#E6DFD3] rounded-lg text-xs text-[#1E2521] placeholder-[#7A8479] focus:outline-none focus:border-[#E87A42]"
               />
               <button
                 type="button"
                 onClick={() => setIsAdding(false)}
-                className="px-2.5 py-1.5 text-xs text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#1E2B22] rounded-lg transition-colors"
+                className="px-2.5 py-1.5 text-xs text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F9F7F1] rounded-lg transition-colors"
               >
                 Скасувати
               </button>

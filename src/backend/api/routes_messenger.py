@@ -114,6 +114,15 @@ async def get_relay_status(
 # ── Розмови ──────────────────────────────────────────────────────────────────
 
 
+class SeedMessage(BaseModel):
+    client_id: str
+    author_id: str
+    author_name: str
+    kind: str = "text"
+    #: Для складних типів тут лежить JSON — клієнт його і збирає назад.
+    body: Optional[str] = None
+
+
 class ConversationIn(BaseModel):
     title: str = Field(min_length=1, max_length=200)
     kind: str = "dm"
@@ -122,6 +131,10 @@ class ConversationIn(BaseModel):
     avatar: Optional[str] = None
     #: Розмова з конкретною людиною — тоді повідомлення поїдуть шифротекстом.
     contact_id: Optional[str] = None
+    #: Показова розмова: вміст вигаданий і буде позначений як вигаданий.
+    is_demo: bool = False
+    #: Готова стрічка для показової розмови.
+    messages: list[SeedMessage] = []
 
 
 class ConversationOut(BaseModel):
@@ -136,6 +149,7 @@ class ConversationOut(BaseModel):
     created_at: datetime
     updated_at: datetime
     contact_id: Optional[str] = None
+    is_demo: bool = False
     #: null — розмова ні з ким (нотатки собі), тож і звіряти нема кого.
     contact_verified: Optional[bool] = None
 
@@ -155,6 +169,7 @@ def _conversation_out(
         created_at=row.created_at,
         updated_at=row.updated_at,
         contact_id=row.contact_id,
+        is_demo=row.is_demo,
         contact_verified=(contact.verified_at is not None) if contact else None,
     )
 
@@ -214,20 +229,41 @@ async def bootstrap_conversations(
     if existing:
         return await _conversations_for(user, session)
 
-    rows = [
-        MessengerConversation(
+    rows = []
+    for c in payload.conversations:
+        row = MessengerConversation(
             owner_user_id=user.id,
             title=c.title,
             kind=c.kind,
             circle=c.circle,
             handle=c.handle,
             avatar=c.avatar,
+            is_demo=c.is_demo,
             created_at=_now(),
             updated_at=_now(),
         )
-        for c in payload.conversations
-    ]
-    session.add_all(rows)
+        session.add(row)
+        await session.flush()
+        rows.append(row)
+        # Показова стрічка лягає в базу тим самим шляхом, що й справжня —
+        # інакше вітрина жила б окремим життям і розходилась із дійсністю.
+        for m in c.messages:
+            msg = MessengerMessage(
+                id=str(uuid.uuid4()),
+                conversation_id=row.id,
+                client_id=m.client_id,
+                seq=row.next_seq,
+                author_id=m.author_id,
+                author_name=m.author_name,
+                kind=m.kind,
+                transport=None,
+                delivery_state="local",
+                sent_at=_now(),
+            )
+            if m.body is not None:
+                msg.ciphertext = seal(_keys(), m.body, aad=msg.id.encode()).hex()
+            row.next_seq += 1
+            session.add(msg)
     await session.commit()
     # Віддаємо тим самим порядком, що й /conversations: інакше повторний виклик
     # поверне ті самі розмови інакше перемішаними, і клієнт вирішить, що щось змінилось.
@@ -250,6 +286,7 @@ async def create_conversation(
         handle=payload.handle,
         avatar=payload.avatar,
         contact_id=payload.contact_id,
+        is_demo=payload.is_demo,
         created_at=_now(),
         updated_at=_now(),
     )

@@ -121,7 +121,7 @@ export const ShareFolderModal: React.FC<ShareFolderModalProps> = ({
                 folderChats.map((chat) => (
                   <div
                     key={chat.id}
-                    className="p-1.5 rounded-xl hover:bg-[#F9F7F1] flex items-center justify-between gap-2 transition-colors border border-transparent hover:border-[#26372B]"
+                    className="p-1.5 rounded-xl hover:bg-[#F9F7F1] flex items-center justify-between gap-2 transition-colors border border-transparent hover:border-[#E6DFD3]"
                   >
                     <div className="flex items-center gap-2 min-w-0">
                       <img

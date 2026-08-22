@@ -637,7 +637,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   let lastDateLabel = '';
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-[#F7F5EE] relative overflow-hidden select-none">
+    <div className="flex-1 flex flex-col h-full bg-[#FDFCF9] relative overflow-hidden select-none">
       {/* 1. Pinned Messages Banner */}
       {pinnedMessages.length > 0 && (() => {
         const pinnedMsg = pinnedMessages[currentPinnedIndex] || pinnedMessages[0];
@@ -887,7 +887,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               {/* Date Header Divider */}
               {showDateDivider && (
                 <div className="flex items-center justify-center my-4">
-                  <span className="px-3.5 py-1 bg-[#16221A] text-[#5F6A60] text-[11px] font-mono font-semibold tracking-wide rounded-full shadow-xs border border-[#253629]">
+                  <span className="px-3.5 py-1 bg-[#F1EDE3] text-[#7A8479] text-[11px] font-semibold tracking-wide rounded-full border border-[#E6DFD3]">
                     {dateLabel}
                   </span>
                 </div>
@@ -899,11 +899,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 onMouseLeave={() => setHoveredMessageId(null)}
                 className={`flex items-end gap-2 ${isSelf ? 'justify-end' : 'justify-start'} ${isNewSenderTurn ? 'mt-3 sm:mt-4' : 'mt-1'} group relative transition-all ${
                   isActiveSearchMatch
-                    ? 'ring-2 ring-[#E87A42] bg-[#16291C]/90 rounded-2xl p-1 shadow-sm'
+                    ? 'ring-2 ring-[#E87A42] bg-[#F9F7F1]/90 rounded-2xl p-1 shadow-sm'
                     : isHighlighted
-                    ? 'ring-2 ring-[#E87A42] bg-[#16291C]/60 rounded-2xl p-0.5'
+                    ? 'ring-2 ring-[#E87A42] bg-[#F9F7F1]/60 rounded-2xl p-0.5'
                     : isSearchMatch
-                    ? 'bg-[#142018]/60 rounded-2xl p-0.5'
+                    ? 'bg-[#F9F7F1]/60 rounded-2xl p-0.5'
                     : ''
                 }`}
               >
@@ -992,7 +992,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     {/* Top Pinned Tag Pill */}
                     {msg.isPinned && (
                       <div className={`flex items-center gap-1 text-[9.5px] font-bold mb-1.5 px-2 py-0.5 rounded-full w-fit ${
-                        isSelf ? 'bg-white/20 text-[#1E2521] border border-white/30' : 'bg-[#2E2414] text-[#FBBF24] border border-[#523F20]'
+                        isSelf ? 'bg-white/20 text-[#1E2521] border border-white/30' : 'bg-[#F9F7F1] text-[#FBBF24] border border-[#E6DFD3]'
                       }`}>
                         <Pin className="w-2.5 h-2.5 fill-current text-[#FBBF24]" />
                         <span>Закріплено</span>
@@ -1012,7 +1012,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                             activeMatch={isActiveSearchMatch}
                           />
                         </p>
-                        <span className="text-[8.5px] font-bold uppercase tracking-wider px-1.5 py-0.2 rounded bg-[#1C281F] text-[#5F6A60] border border-[#DDD4C4]">
+                        <span className="text-[8.5px] font-bold uppercase tracking-wider px-1.5 py-0.5 rounded bg-[#F1EDE3] text-[#7A8479] border border-[#E6DFD3]">
                           Учасник
                         </span>
                       </div>
@@ -1027,7 +1027,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                       className={`mb-2 p-2 px-2.5 rounded-xl text-xs border-l-2 cursor-pointer transition-all hover:opacity-90 ${
                         isSelf
                           ? 'bg-black/25 border-[#E87A42] text-[#1E2521]/95'
-                          : 'bg-[#101712]/90 border-[#E87A42] text-[#1E2521]'
+                          : 'bg-[#F9F7F1]/90 border-[#E87A42] text-[#1E2521]'
                       }`}
                     >
                       {msg.replyTo.quotes && msg.replyTo.quotes.length > 1 ? (
@@ -1102,7 +1102,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
                   {/* 🧠 PHANTOM Mind Panel (Living Thought Pipeline: сприймаю → пригадую → міркую → дію → пишу) */}
                   {msg.thinking && (
-                    <div className="mb-2 p-2.5 bg-[#0E1511] border border-[#233327] rounded-xl shadow-inner text-xs space-y-1.5 animate-in fade-in">
+                    <div className="mb-2 p-2.5 bg-[#FDFCF9] border border-[#E6DFD3] rounded-xl shadow-inner text-xs space-y-1.5 animate-in fade-in">
                       <div className="flex items-center justify-between gap-2">
                         <div className="flex items-center gap-1.5 text-[10.5px] font-mono uppercase tracking-wider text-[#E87A42] font-bold">
                           {msg.thinking.active && <span className="w-1.5 h-1.5 rounded-full bg-[#E87A42] animate-ping" />}
@@ -1130,13 +1130,13 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
                           return (
                             <React.Fragment key={st.key}>
-                              {i > 0 && <span className="text-[#3A5040] font-mono">→</span>}
+                              {i > 0 && <span className="text-[#7A8479] font-mono">→</span>}
                               <span
                                 className={`px-1.5 py-0.5 rounded transition-all ${
                                   isCurrent
                                     ? 'bg-[#E87A42] text-[#F7F5EE] font-black shadow-xs'
                                     : isPassed
-                                    ? 'text-[#E87A42] bg-[#142319]'
+                                    ? 'text-[#E87A42] bg-[#F9F7F1]'
                                     : 'text-[#5A6D60] bg-[#FDFCF9]'
                                 }`}
                               >
@@ -1244,7 +1244,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     <div className={`mt-2 p-2 rounded-2xl text-[11px] border flex items-center gap-1.5 ${
                       isSelf
                         ? 'bg-white/10 border-white/20 text-[#1E2521]/90'
-                        : 'bg-[#F2EFE8] border-[#DFD6C5] text-[#2F3D33]'
+                        : 'bg-[#F2EFE8] border-[#DFD6C5] text-[#7A8479]'
                     }`}>
                       <Sparkles className="w-3 h-3 animate-pulse text-[#E87A42]" />
                       <span>{agentTask.label}</span>
@@ -1256,7 +1256,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     <div className={`mt-2 p-2.5 rounded-2xl text-xs border animate-in fade-in zoom-in-95 duration-150 ${
                       isSelf
                         ? 'bg-white/15 border-white/25 text-[#1E2521]'
-                        : 'bg-[#F2EFE8] border-[#DFD6C5] text-[#2F3D33]'
+                        : 'bg-[#F2EFE8] border-[#DFD6C5] text-[#7A8479]'
                     }`}>
                       <div className="flex items-center justify-between gap-2 pb-1 border-b border-current/15 mb-1 text-[10px] font-mono font-bold opacity-80">
                         <span className="flex items-center gap-1">
@@ -1301,7 +1301,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   {/* Завдання, які агент вичитав із повідомлення */}
                   {actionItemMessages[msg.id] && (
                     <div className={`mt-2 p-2.5 rounded-2xl text-xs border space-y-1.5 animate-in fade-in duration-150 ${
-                      isSelf ? 'bg-white/10 border-white/20 text-[#1E2521]' : 'bg-[#EAF3E9] border-[#C3DCC1] text-[#2C4A34]'
+                      isSelf ? 'bg-white/10 border-white/20 text-[#1E2521]' : 'bg-[#EAF3E9] border-[#C3DCC1] text-[#7A8479]'
                     }`}>
                       <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider pb-1 border-b border-current/20">
                         <span className="flex items-center gap-1">
@@ -1433,7 +1433,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
                       {isTranscriptOpen && msg.voiceData.transcript && (
                         <div className={`p-2.5 rounded-2xl text-xs border ${
-                          isSelf ? 'bg-white/10 border-white/20 text-[#1E2521]/90' : 'bg-[#FDFCF9] border-[#DFD6C5] text-[#333E35]'
+                          isSelf ? 'bg-white/10 border-white/20 text-[#1E2521]/90' : 'bg-[#FDFCF9] border-[#DFD6C5] text-[#7A8479]'
                         }`}>
                           <p className="italic">
                             «
@@ -1630,7 +1630,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                           <span>{copiedCodeId === msg.id ? 'Скопійовано!' : 'Копіювати'}</span>
                         </button>
                       </div>
-                      <pre className="p-3 bg-[#171C18] text-[#A8D5BA] font-mono text-xs rounded-2xl overflow-x-auto select-text">
+                      <pre className="p-3 bg-[#F9F7F1] text-[#A8D5BA] font-mono text-xs rounded-2xl overflow-x-auto select-text">
                         <code>{msg.codeData.code}</code>
                       </pre>
                     </div>
@@ -1862,7 +1862,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                             }}
                             className={`group/reaction relative px-2 py-0.5 rounded-full text-xs flex items-center gap-1 border transition-all duration-150 active:scale-95 shadow-sm ${
                               isUserReacted
-                                ? 'bg-[#183021] border-[#E87A42] text-[#E87A42] font-bold ring-1 ring-[#E87A42]/30'
+                                ? 'bg-[#F1EDE3] border-[#E87A42] text-[#E87A42] font-bold ring-1 ring-[#E87A42]/30'
                                 : 'bg-[#FDFCF9] border-[#E6DFD3] text-[#1E2521] hover:bg-[#F9F7F1] hover:text-[#1E2521]'
                             }`}
                             title={`Реагували: ${r.users.join(', ')}`}
@@ -1931,7 +1931,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             top: `${selectedTextSnippet.y}px`,
             transform: 'translate(-50%, -100%)',
           }}
-          className="z-50 bg-[#1C2520] text-[#1E2521] px-3.5 py-1.5 rounded-full shadow-2xl flex items-center gap-2 border border-[#E87A42]/50 text-xs font-semibold animate-in fade-in zoom-in-95 cursor-pointer hover:bg-[#2B3931] hover:scale-105 transition-all select-none shadow-[#1C2520]/40"
+          className="z-50 bg-[#F9F7F1] text-[#1E2521] px-3.5 py-1.5 rounded-full shadow-2xl flex items-center gap-2 border border-[#E87A42]/50 text-xs font-semibold animate-in fade-in zoom-in-95 cursor-pointer hover:bg-[#F1EDE3] hover:scale-105 transition-all select-none shadow-[#1C2520]/40"
           onClick={(e) => {
             e.stopPropagation();
             soundFx.playTap();

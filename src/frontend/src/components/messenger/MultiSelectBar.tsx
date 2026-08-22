@@ -62,7 +62,7 @@ export const MultiSelectBar: React.FC<MultiSelectBarProps> = ({
           soundFx.playChime();
           onSynthesize();
         }}
-        className="px-3 py-1.5 bg-[#1E2E23] hover:bg-[#253A2B] text-[#E87A42] border border-[#DDD4C4] rounded-xl font-bold flex items-center gap-1.5 transition-colors shrink-0 shadow-sm active:scale-95"
+        className="px-3 py-1.5 bg-[#F1EDE3] hover:bg-[#F1EDE3] text-[#E87A42] border border-[#DDD4C4] rounded-xl font-bold flex items-center gap-1.5 transition-colors shrink-0 shadow-sm active:scale-95"
         title="Синтезувати зміст обраних повідомлень через AI"
       >
         <Sparkles className="w-3.5 h-3.5" />
@@ -76,7 +76,7 @@ export const MultiSelectBar: React.FC<MultiSelectBarProps> = ({
             soundFx.playTap();
             onCalendarSync();
           }}
-          className="px-2.5 py-1.5 bg-[#F9F7F1] hover:bg-[#E6DFD3] text-[#5F6A60] hover:text-[#1E2521] border border-[#28392C] rounded-xl font-semibold flex items-center gap-1 transition-colors"
+          className="px-2.5 py-1.5 bg-[#F9F7F1] hover:bg-[#E6DFD3] text-[#5F6A60] hover:text-[#1E2521] border border-[#E6DFD3] rounded-xl font-semibold flex items-center gap-1 transition-colors"
           title="Створити подію в календарі з обраних"
         >
           <Calendar className="w-3.5 h-3.5 text-[#E87A42]" />
@@ -90,7 +90,7 @@ export const MultiSelectBar: React.FC<MultiSelectBarProps> = ({
           soundFx.playTap();
           onCopyAll();
         }}
-        className="p-2 bg-[#F9F7F1] hover:bg-[#E6DFD3] text-[#5F6A60] hover:text-[#1E2521] border border-[#28392C] rounded-xl transition-colors"
+        className="p-2 bg-[#F9F7F1] hover:bg-[#E6DFD3] text-[#5F6A60] hover:text-[#1E2521] border border-[#E6DFD3] rounded-xl transition-colors"
         title="Копіювати всі тексти"
       >
         <Copy className="w-3.5 h-3.5" />
@@ -102,7 +102,7 @@ export const MultiSelectBar: React.FC<MultiSelectBarProps> = ({
           soundFx.playTap();
           onForward();
         }}
-        className="p-2 bg-[#F9F7F1] hover:bg-[#E6DFD3] text-[#5F6A60] hover:text-[#1E2521] border border-[#28392C] rounded-xl transition-colors"
+        className="p-2 bg-[#F9F7F1] hover:bg-[#E6DFD3] text-[#5F6A60] hover:text-[#1E2521] border border-[#E6DFD3] rounded-xl transition-colors"
         title="Переслати"
       >
         <Forward className="w-3.5 h-3.5" />

@@ -211,7 +211,7 @@ export const Header: React.FC<HeaderProps> = ({
           }}
           className={`p-2 rounded-xl transition-colors relative ${
             pinnedCount > 0
-              ? 'text-[#F4AF25] hover:bg-[#2A2214]'
+              ? 'text-[#F4AF25] hover:bg-[#F9F7F1]'
               : 'text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F9F7F1]'
           }`}
           title={pinnedCount > 0 ? `Закріплених повідомлень: ${pinnedCount}` : 'Немає закріплених'}

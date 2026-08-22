@@ -1450,6 +1450,9 @@ class MessengerConversation(Base):
     contact_id: Mapped[Optional[str]] = mapped_column(
         ForeignKey("messenger_contacts.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    #: Показова розмова: вміст вигаданий і позначений як вигаданий. Так вітрина
+    #: можливостей лишається, але нікого не вводить в оману.
+    is_demo: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     #: Наступний номер у стрічці. Порядок повідомлень тримається на ньому, а не
     #: на годиннику: у двох пристроїв час розходиться, лічильник — ні.
     next_seq: Mapped[int] = mapped_column(Integer, default=1, nullable=False)

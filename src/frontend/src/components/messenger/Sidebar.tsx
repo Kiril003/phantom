@@ -682,16 +682,16 @@ export const Sidebar: React.FC<SidebarProps> = ({
   };
 
   return (
-    <aside className="flex h-full w-full md:w-auto bg-[#101713] border-r border-[#1C281F] select-none shrink-0 overflow-hidden relative">
+    <aside className="flex h-full w-full md:w-auto bg-[#F9F7F1] border-r border-[#E6DFD3] select-none shrink-0 overflow-hidden relative">
       {/* Toast Notification Banner */}
       {toastMessage && (
-        <div className="absolute top-4 left-4 right-4 z-50 bg-[#14261A]/95 border border-[#2B4E33] text-[#E87A42] px-3 py-2 rounded-xl text-xs font-bold shadow-2xl text-center animate-in fade-in">
+        <div className="absolute top-4 left-4 right-4 z-50 bg-[#F9F7F1]/95 border border-[#E6DFD3] text-[#E87A42] px-3 py-2 rounded-xl text-xs font-bold shadow-2xl text-center animate-in fade-in">
           {toastMessage}
         </div>
       )}
 
       {/* 0. Left Organic Dark Workspace / Folder Rail (Desktop & Tablet) */}
-      <div className="hidden md:flex w-14 sm:w-16 bg-[#F7F5EE] flex-col items-center py-3.5 border-r border-[#1B261D] shrink-0 justify-between select-none z-10">
+      <div className="hidden md:flex w-14 sm:w-16 bg-[#F7F5EE] flex-col items-center py-3.5 border-r border-[#E6DFD3] shrink-0 justify-between select-none z-10">
         {/* Top: Current User Avatar & Workspace Folders */}
         <div className="flex flex-col items-center gap-3.5 w-full">
           <div
@@ -729,7 +729,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 className={`w-10 h-10 rounded-xl flex items-center justify-center text-sm font-black transition-all ${
                   activeFolderId === 'all'
                     ? 'bg-[#E87A42] text-[#F7F5EE] shadow-md scale-105 font-bold'
-                    : 'bg-[#162019] text-[#5F6A60] hover:bg-[#1E2B22] hover:text-[#1E2521] hover:scale-105'
+                    : 'bg-[#F9F7F1] text-[#5F6A60] hover:bg-[#F9F7F1] hover:text-[#1E2521] hover:scale-105'
                 }`}
               >
                 💬
@@ -774,7 +774,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           ? 'ring-2 ring-[#E87A42] scale-110 shadow-lg'
                           : isActive
                           ? 'shadow-md scale-105 ring-1 ring-white/30 font-bold'
-                          : 'opacity-80 hover:opacity-100 hover:scale-105 bg-[#162019]'
+                          : 'opacity-80 hover:opacity-100 hover:scale-105 bg-[#F9F7F1]'
                       }`}
                       style={{
                         backgroundColor: isActive
@@ -800,7 +800,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 soundFx.playTap();
                 onOpenCreateFolder();
               }}
-              className="w-10 h-10 rounded-xl bg-[#162019] hover:bg-[#1E2B22] text-[#5F6A60] hover:text-[#1E2521] flex items-center justify-center transition-all hover:scale-105 shadow-sm"
+              className="w-10 h-10 rounded-xl bg-[#F9F7F1] hover:bg-[#F9F7F1] text-[#5F6A60] hover:text-[#1E2521] flex items-center justify-center transition-all hover:scale-105 shadow-sm"
               title="Створити нову папку / простір (+)"
             >
               <Plus className="w-5 h-5" />
@@ -815,7 +815,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               soundFx.playTap();
               onOpenSettings();
             }}
-            className="w-10 h-10 rounded-xl bg-[#162019] hover:bg-[#1E2B22] text-[#5F6A60] hover:text-[#1E2521] flex items-center justify-center transition-all hover:scale-105 shadow-sm"
+            className="w-10 h-10 rounded-xl bg-[#F9F7F1] hover:bg-[#F9F7F1] text-[#5F6A60] hover:text-[#1E2521] flex items-center justify-center transition-all hover:scale-105 shadow-sm"
             title="Налаштування застосунку"
           >
             <Settings className="w-4.5 h-4.5" />
@@ -826,7 +826,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* Main Chat List Container */}
       <div className="w-full md:w-80 lg:w-84 flex flex-col h-full bg-[#FDFCF9] min-w-0 overflow-hidden relative">
         {/* Mobile Top Brand & Quick Actions Header */}
-        <div className="md:hidden px-4 pt-[calc(var(--sat)+0.65rem)] pb-2.5 bg-[#F7F5EE] text-[#1E2521] flex items-center justify-between shrink-0 shadow-sm border-b border-[#1B261D]">
+        <div className="md:hidden px-4 pt-[calc(var(--sat)+0.65rem)] pb-2.5 bg-[#F7F5EE] text-[#1E2521] flex items-center justify-between shrink-0 shadow-sm border-b border-[#E6DFD3]">
           <div className="flex items-center gap-3 min-w-0">
             <div
               onClick={onOpenUserProfile}
@@ -951,7 +951,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Пошук людей, тем, повідомлень..."
-              className="w-full pl-8 pr-8 py-1.5 bg-[#162019] border border-[#26372B] rounded-xl text-xs text-[#F0FAF3] placeholder-[#7A8479] focus:outline-none focus:border-[#E87A42] focus:ring-1 focus:ring-[#E87A42]/30 transition-colors shadow-inner"
+              className="w-full pl-8 pr-8 py-1.5 bg-[#F9F7F1] border border-[#E6DFD3] rounded-xl text-xs text-[#F0FAF3] placeholder-[#7A8479] focus:outline-none focus:border-[#E87A42] focus:ring-1 focus:ring-[#E87A42]/30 transition-colors shadow-inner"
             />
             {searchQuery && (
               <button
@@ -987,7 +987,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   className={`flex-1 py-1 text-center font-mono text-[10px] tracking-wider uppercase font-bold rounded-lg transition-all flex items-center justify-center gap-1 ${
                     isActive
                       ? 'bg-[#E87A42] text-[#F7F5EE] shadow-sm'
-                      : 'text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#162019]'
+                      : 'text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F9F7F1]'
                   }`}
                 >
                   <span>{tab.label}</span>
@@ -1054,10 +1054,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 }}
                 className={`group p-2.5 rounded-xl cursor-pointer transition-all flex items-start gap-2.5 relative border ${
                   isDraggingThis
-                    ? 'opacity-40 scale-95 border-dashed border-[#E87A42] bg-[#162219]'
+                    ? 'opacity-40 scale-95 border-dashed border-[#E87A42] bg-[#F9F7F1]'
                     : isSelected
-                    ? 'bg-[#F9F7F1] border-[#2E4833] shadow-md ring-1 ring-[#E87A42]/30'
-                    : 'bg-[#FDFCF9]/80 hover:bg-[#162019] border-[#1C281F] hover:border-[#26372B]'
+                    ? 'bg-[#F9F7F1] border-[#E6DFD3] shadow-md ring-1 ring-[#E87A42]/30'
+                    : 'bg-[#FDFCF9]/80 hover:bg-[#F9F7F1] border-[#E6DFD3] hover:border-[#E6DFD3]'
                 }`}
               >
                 {/* 3px Left Vertical Accent Bar (Faithful to Prototype) */}
@@ -1142,7 +1142,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       soundFx.playTap();
                       setActiveMenuChatId(activeMenuChatId === chat.id ? null : chat.id);
                     }}
-                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-[#202D24] rounded-lg text-[#5F6A60] hover:text-[#1E2521] transition-opacity mt-auto"
+                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-[#F1EDE3] rounded-lg text-[#5F6A60] hover:text-[#1E2521] transition-opacity mt-auto"
                     title="Додати або перемістити в папку"
                   >
                     <MoreVertical className="w-3 h-3" />
@@ -1286,14 +1286,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
       {/* 6. HOVER TOOLTIP FOR SMART FOLDERS (.smart-folder-item) */}
       {hoveredFolderStats && !folderContextMenu && !inlineEditingFolderId && (
         <div
-          className="fixed z-40 bg-[#E6DFD3] text-[#1E2521] border border-[#3D473F] rounded-xl shadow-xl px-3 py-2 text-xs pointer-events-none animate-in fade-in slide-in-from-top-1 duration-150 flex flex-col gap-1.5 min-w-44 max-w-64"
+          className="fixed z-40 bg-[#E6DFD3] text-[#1E2521] border border-[#E6DFD3] rounded-xl shadow-xl px-3 py-2 text-xs pointer-events-none animate-in fade-in slide-in-from-top-1 duration-150 flex flex-col gap-1.5 min-w-44 max-w-64"
           style={{
             top: hoveredFolderStats.y,
             left: hoveredFolderStats.x,
           }}
         >
           {/* Folder Name & Emoji */}
-          <div className="flex items-center justify-between gap-2 border-b border-[#313C34] pb-1">
+          <div className="flex items-center justify-between gap-2 border-b border-[#E6DFD3] pb-1">
             <div className="flex items-center gap-1.5 min-w-0">
               <span className="text-xs">{hoveredFolderStats.folder.emoji}</span>
               <span className="font-extrabold text-xs text-[#1E2521] truncate">
@@ -1438,7 +1438,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 className={`text-[10px] font-mono font-bold px-1.5 py-0.2 rounded shrink-0 whitespace-nowrap ${
                   folderContextMenu.folder.isMuted
                     ? 'bg-[#E6DFD3] text-[#5F6A60]'
-                    : 'bg-[#183021] text-[#E87A42]'
+                    : 'bg-[#F1EDE3] text-[#E87A42]'
                 }`}
               >
                 {folderContextMenu.folder.isMuted ? '🔕 Muted' : '🔔 Active'}
@@ -1641,7 +1641,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <Link2 className="w-3.5 h-3.5 text-[#E87A42] shrink-0" />
                 <span className="truncate">Копіювати посилання</span>
               </div>
-              <span className="text-[10px] text-[#E87A42] font-mono font-bold bg-[#183021] px-1.5 py-0.2 rounded shrink-0 whitespace-nowrap">
+              <span className="text-[10px] text-[#E87A42] font-mono font-bold bg-[#F1EDE3] px-1.5 py-0.2 rounded shrink-0 whitespace-nowrap">
                 Deep Link
               </span>
             </button>
@@ -1674,7 +1674,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <Download className="w-3.5 h-3.5 text-[#E87A42] shrink-0" />
                 <span className="truncate">Експорт чатів</span>
               </div>
-              <span className="text-[10px] text-[#E87A42] font-mono font-bold bg-[#183021] px-1.5 py-0.2 rounded shrink-0 whitespace-nowrap">
+              <span className="text-[10px] text-[#E87A42] font-mono font-bold bg-[#F1EDE3] px-1.5 py-0.2 rounded shrink-0 whitespace-nowrap">
                 JSON
               </span>
             </button>
@@ -1726,7 +1726,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span
                 className={`text-[10px] font-mono font-bold px-1.5 py-0.2 rounded shrink-0 whitespace-nowrap ${
                   folderContextMenu.folder.isArchived
-                    ? 'bg-[#183021] text-[#E87A42]'
+                    ? 'bg-[#F1EDE3] text-[#E87A42]'
                     : 'bg-[#F4AF25]/15 text-[#F4AF25]'
                 }`}
               >
@@ -1812,7 +1812,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <div
                     className={`rounded-xl px-2.5 py-1.5 max-w-[85%] space-y-0.5 ${
                       isSelf
-                        ? 'bg-gradient-to-r from-[#2E6B3E] to-[#1E4E2C] text-[#1E2521] rounded-tr-xs shadow-sm'
+                        ? 'bg-gradient-to-r from-[#2E6B3E] to-[#F1EDE3] text-[#1E2521] rounded-tr-xs shadow-sm'
                         : 'bg-[#FDFCF9] border border-[#E6DFD3] text-[#1E2521] rounded-tl-xs shadow-sm'
                     }`}
                   >
@@ -1999,7 +1999,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       )}
 
       {/* 8. Bottom Multi-Sphere Persona Panel */}
-      <div className="p-2.5 border-t border-[#1C281F] bg-[#F7F5EE] relative">
+      <div className="p-2.5 border-t border-[#E6DFD3] bg-[#F7F5EE] relative">
         {/* Persona quick switcher popup */}
         {isPersonaMenuOpen && onSwitchPersonaSphere && (
           <div className="absolute bottom-full left-2 right-2 mb-2 p-2 bg-[#FDFCF9]/98 backdrop-blur-2xl border border-[#DDD4C4] rounded-2xl shadow-2xl z-30 space-y-1 animate-in fade-in zoom-in-95 duration-100 text-[#1E2521]">

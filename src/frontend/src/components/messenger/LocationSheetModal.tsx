@@ -56,7 +56,7 @@ export const LocationSheetModal: React.FC<LocationSheetModalProps> = ({
       >
         {/* Top Handle */}
         <div className="pt-3 pb-1 flex justify-center">
-          <div className="w-10 h-1.2 rounded-full bg-[#28392C]" />
+          <div className="w-10 h-1.2 rounded-full bg-[#F1EDE3]" />
         </div>
 
         {/* Close Button top-right */}
@@ -123,7 +123,7 @@ export const LocationSheetModal: React.FC<LocationSheetModalProps> = ({
               }}
               className={`py-2.5 px-2 text-xs font-semibold rounded-2xl flex flex-col items-center justify-center gap-1 border transition-colors ${
                 isSaved
-                  ? 'bg-[#183021] text-[#E87A42] border-[#DDD4C4]'
+                  ? 'bg-[#F1EDE3] text-[#E87A42] border-[#DDD4C4]'
                   : 'bg-[#FDFCF9] hover:bg-[#F9F7F1] text-[#5F6A60] hover:text-[#1E2521] border-[#E6DFD3]'
               }`}
             >
@@ -154,7 +154,7 @@ export const LocationSheetModal: React.FC<LocationSheetModalProps> = ({
                 if (onScheduleMeetup) onScheduleMeetup(location);
                 onClose();
               }}
-              className="py-2.5 px-3 bg-[#F9F7F1] hover:bg-[#233529] text-[#E87A42] text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 border border-[#DDD4C4] transition-colors"
+              className="py-2.5 px-3 bg-[#F9F7F1] hover:bg-[#F1EDE3] text-[#E87A42] text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 border border-[#DDD4C4] transition-colors"
             >
               <Users className="w-3.5 h-3.5" />
               <span>Збір тут</span>
@@ -251,7 +251,7 @@ export const LocationSheetModal: React.FC<LocationSheetModalProps> = ({
                   )}
 
                   {dossier?.recommendations && (
-                    <div className="p-2.5 bg-[#183021] rounded-xl border border-[#DDD4C4] text-xs text-[#E87A42]">
+                    <div className="p-2.5 bg-[#F1EDE3] rounded-xl border border-[#DDD4C4] text-xs text-[#E87A42]">
                       <span className="font-bold">Порада:</span> {dossier.recommendations}
                     </div>
                   )}

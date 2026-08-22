@@ -178,7 +178,7 @@ export const MessageDetailsModal: React.FC<MessageDetailsModalProps> = ({
               soundFx.playTap();
               onClose();
             }}
-            className="px-4 py-1.5 bg-[#F9F7F1] border border-[#DDD4C4] text-[#E87A42] hover:bg-[#233529] rounded-xl text-xs font-semibold transition-colors"
+            className="px-4 py-1.5 bg-[#F9F7F1] border border-[#DDD4C4] text-[#E87A42] hover:bg-[#F1EDE3] rounded-xl text-xs font-semibold transition-colors"
           >
             Закрити
           </button>

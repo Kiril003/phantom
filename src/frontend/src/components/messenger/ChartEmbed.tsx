@@ -101,7 +101,7 @@ export const ChartEmbed: React.FC<ChartEmbedProps> = ({ data }) => {
 
       {/* Key Takeaway Insight Pill */}
       {data.takeaway && (
-        <div className="flex items-center gap-2 p-2.5 bg-[#16221A] border border-[#26372B] rounded-xl text-xs text-[#5F6A60] shadow-sm">
+        <div className="flex items-center gap-2 p-2.5 bg-[#F9F7F1] border border-[#E6DFD3] rounded-xl text-xs text-[#5F6A60] shadow-sm">
           <TrendingUp className="w-4 h-4 text-[#E87A42] shrink-0" />
           <p className="leading-snug">{data.takeaway}</p>
         </div>

@@ -171,8 +171,8 @@
 .msg-bubble-other {
   background-color: #FFFFFF;
   color: #1A241E;
-  border: 1px solid #E6DDCF;
-  box-shadow: 0 1px 3px rgba(35, 25, 15, 0.04), 0 2px 6px rgba(35, 25, 15, 0.03);
+  border: 1px solid #E3D9C8;
+  box-shadow: 0 1px 2px rgba(60, 44, 24, 0.06), 0 4px 12px rgba(60, 44, 24, 0.05);
 }
 
 /* Organic Asymmetric Contours: Soft, non-rigid mathematical curvature */

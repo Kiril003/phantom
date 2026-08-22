@@ -88,7 +88,7 @@ export const ForwardMessageModal: React.FC<ForwardMessageModalProps> = ({
               <div
                 key={chat.id}
                 onClick={() => handleForward(chat.id)}
-                className="p-2.5 rounded-2xl hover:bg-[#F9F7F1] border border-transparent hover:border-[#26372B] cursor-pointer flex items-center justify-between gap-3 transition-all group"
+                className="p-2.5 rounded-2xl hover:bg-[#F9F7F1] border border-transparent hover:border-[#E6DFD3] cursor-pointer flex items-center justify-between gap-3 transition-all group"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
                   <img

@@ -53,7 +53,7 @@ export interface CallStall {
   note: string;
 }
 
-export type CallState = 'idle' | 'calling' | 'ringing' | 'active' | 'ended';
+export type CallState = 'idle' | 'calling' | 'ringing' | 'connecting' | 'active' | 'ended';
 export type CallMedia = 'audio' | 'video';
 
 export interface CallPeer {
@@ -260,6 +260,9 @@ class CallEngine {
     this.pendingOffer = null;
     // Пропозиція в руках — інша сторона точно на звʼязку.
     this.answered = true;
+    // Слухавку взято — «вхідний дзвінок» із кнопкою «Прийняти» з цієї миті
+    // був би брехнею. ICE ще попереду, тож і «розмова йде» — теж.
+    this.patch({ state: 'connecting' });
 
     let stream: MediaStream;
     try {
@@ -463,7 +466,11 @@ class CallEngine {
     this.stallTimer = setTimeout(() => {
       this.stallTimer = null;
       if (this.snapshot.callId !== callId) return;
-      if (this.snapshot.state === 'calling' || this.snapshot.state === 'ringing') {
+      if (
+        this.snapshot.state === 'calling' ||
+        this.snapshot.state === 'ringing' ||
+        this.snapshot.state === 'connecting'
+      ) {
         this.patch({
           stall: this.answered
             ? { kind: 'no-path', note: LINK_STALL_NOTE }

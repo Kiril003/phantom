@@ -205,7 +205,12 @@ export const CallOverlay: React.FC = () => {
   const card = `rounded-3xl border shadow-2xl overflow-hidden`;
 
   /* Вхідний і вихідний до зʼєднання — невелика картка, а не весь екран. */
-  if (snapshot.state === 'ringing' || snapshot.state === 'calling' || snapshot.state === 'ended') {
+  if (
+    snapshot.state === 'ringing' ||
+    snapshot.state === 'calling' ||
+    snapshot.state === 'connecting' ||
+    snapshot.state === 'ended'
+  ) {
     const ringing = snapshot.state === 'ringing';
     return createPortal(
       <div
@@ -236,7 +241,9 @@ export const CallOverlay: React.FC = () => {
                   ? snapshot.media === 'video'
                     ? 'вхідний відеодзвінок'
                     : 'вхідний дзвінок'
-                  : 'набираю…'}
+                  : snapshot.state === 'connecting'
+                    ? 'зʼєднуємось…'
+                    : 'набираю…'}
           </div>
           {snapshot.state !== 'ended' && (
             <div className="mt-2 flex justify-center">

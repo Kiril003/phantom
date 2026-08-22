@@ -1,5 +1,5 @@
 import React, { useEffect } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Providers } from './providers';
 import { StateTransitionController } from './StateTransitionController';
@@ -50,13 +50,10 @@ function GlobalGeolocationManager() {
 /* ─── Lazy layouts ────────────────────────────────────────────────────────── */
 
 const ShadowLayout = React.lazy(() => import('../layouts/ShadowLayout'));
-const AnalyticsOverview = React.lazy(() => import('../pages/Dashboard/AnalyticsOverview'));
 const LoginScreen = React.lazy(() => import('../components/auth/LoginScreen'));
 const CoreDownWall = React.lazy(() =>
   import('../components/auth/LoginScreen').then((m) => ({ default: m.CoreDownWall })),
 );
-const SettingsPanel = React.lazy(() => import('../components/settings/SettingsPanel'));
-const MapLayout = React.lazy(() => import('../layouts/MapLayout'));
 const SunriseWorkspace = React.lazy(() => import('../layouts/SunriseWorkspace'));
 const AgentFoundryLayout = React.lazy(() => import('../layouts/AgentFoundryLayout'));
 
@@ -108,6 +105,24 @@ const STATE_PANE: Partial<Record<SystemState, 'dialogue' | 'company'>> = {
   [SystemState.OPERATOR]: 'company',
 };
 
+/**
+ * Редирект старого шляху в стіл/пейн (К4): активує стіл і/або відкриває
+ * пейн вільним вікном, далі веде на «/». Старі закладки й внутрішні
+ * navigate('/map' тощо) не ламаються — вони ведуть у ту саму поверхню,
+ * що тепер живе пейном.
+ */
+function GoDesk({ desk, float }: { desk?: string; float?: 'settings' }) {
+  const setActiveDesk = useDeskStore((s) => s.setActiveDesk);
+  const openPane = useDeskStore((s) => s.openPane);
+  useEffect(() => {
+    if (desk) setActiveDesk(desk);
+    if (float) openPane(float);
+    // Одноразово на вході в маршрут: це редирект, не підписка.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return <Navigate to="/" replace />;
+}
+
 function DeskIndex() {
   const state = useSystemStore((s) => s.state);
   const desks = useDeskStore((s) => s.desks);
@@ -154,16 +169,19 @@ function MainRouter() {
         <Routes>
           <Route path="/" element={<DashboardLayout />}>
             <Route index element={<DeskIndex />} />
-            <Route path="analytics" element={<AnalyticsOverview />} />
-            <Route path="map" element={<MapLayout />} />
+            {/* К4: старі шляхи ведуть у відповідний стіл/пейн. */}
+            <Route path="map" element={<GoDesk desk="theatre" />} />
+            <Route path="chat" element={<GoDesk desk="theatre" />} />
+            <Route path="analytics" element={<GoDesk desk="cockpit" />} />
+            <Route path="operator" element={<GoDesk desk="company" />} />
+            <Route path="foundry" element={<GoDesk desk="company" />} />
+            <Route path="settings/:categoryId?" element={<GoDesk float="settings" />} />
+            {/* Поліс редиректу не має: власної пейн-долі ще не отримав. */}
             <Route path="polis" element={<SunriseWorkspace />} />
-            <Route path="chat" element={<DialogueLayout />} />
-            <Route path="operator" element={<AgentFoundryLayout />} />
-            <Route path="foundry" element={<AgentFoundryLayout />} />
-            <Route path="system" element={<FocusLayout />} />
-            <Route path="sentinel" element={<SentinelLayout />} />
-            <Route path="settings/:categoryId?" element={<SettingsPanel />} />
-            <Route path="*" element={<ShadowLayout />} />
+            {/* Зомбі-шляхи — на стіл. */}
+            <Route path="system" element={<Navigate to="/" replace />} />
+            <Route path="sentinel" element={<Navigate to="/" replace />} />
+            <Route path="*" element={<Navigate to="/" replace />} />
           </Route>
         </Routes>
       </AnimatePresence>

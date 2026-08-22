@@ -445,6 +445,12 @@ async def get_identity(_user: User = Depends(get_current_user)) -> IdentityOut:
     from node.identity import key_path
 
     keys = _keys()
+    # Обслуговуємо набір саме тут: bundle питають рідко, але щоразу перед тим,
+    # як хтось почне нову розмову — кращого моменту для ротації немає.
+    keys.rotate_if_stale()
+    keys.forget_old_signed()
+    if keys.one_time_low():
+        keys.generate_one_time_prekeys(32)
     bundle = keys.publish_bundle()
     # Видали одноразовий ключ — запамʼятали. Інакше після рестарту він пішов би
     # ще комусь, а одноразовим він називається саме тому, що так не можна.

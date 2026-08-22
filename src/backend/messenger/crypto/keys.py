@@ -380,6 +380,42 @@ class KeyStore:
             one_time_prekey=opk_pub,
         )
 
+    #: Скільки живе підписаний prekey, поки не поступиться новому.
+    SIGNED_PREKEY_MAX_AGE_S = 7 * 24 * 3600
+    #: Скільки старе покоління ще приймається: рівно стільки, скільки може
+    #: летіти перший кадр від того, хто взяв bundle раніше.
+    SIGNED_PREKEY_RETENTION_S = 30 * 24 * 3600
+
+    def rotate_if_stale(self, *, now: Optional[float] = None) -> bool:
+        """Міняє підписаний prekey, коли він застарів.
+
+        Без ротації один скомпрометований ключ відкривав би нові сесії вічно —
+        саме те, від чого має захищати форвард-секретність.
+        """
+        moment = time.time() if now is None else now
+        current = self._signed.get(self._current_signed_id)
+        if current is not None and moment - current.created_at < self.SIGNED_PREKEY_MAX_AGE_S:
+            return False
+        self.rotate_signed_prekey()
+        return True
+
+    def forget_old_signed(self, *, now: Optional[float] = None) -> int:
+        """Викидає покоління, якими вже ніхто не може скористатись."""
+        moment = time.time() if now is None else now
+        stale = [
+            key_id
+            for key_id, spk in self._signed.items()
+            if key_id != self._current_signed_id
+            and moment - spk.created_at > self.SIGNED_PREKEY_RETENTION_S
+        ]
+        for key_id in stale:
+            self._signed.pop(key_id, None)
+        return len(stale)
+
+    def one_time_low(self, threshold: int = 8) -> bool:
+        """Запас одноразових ключів на межі — час поповнити."""
+        return self.one_time_available < threshold
+
     def persist_prekeys(self, path: Path) -> None:
         """Prekey-набір мусить пережити рестарт.
 

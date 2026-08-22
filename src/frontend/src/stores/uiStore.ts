@@ -73,9 +73,15 @@ function persistChrome(state: ChromeState): void {
   }
 }
 
-// Logical frame size used when positioning overlays. Matches App shell.
-const FRAME_W = 1024;
-const FRAME_H = 600;
+// Клітки 1024×600 більше нема (Ф1): межі оверлеїв — справжній viewport.
+// Функції, а не константи: вікно живе, viewport міняється. Fallback —
+// лише для середовищ без window (тести).
+function frameW(): number {
+  return typeof window !== 'undefined' ? window.innerWidth : 1024;
+}
+function frameH(): number {
+  return typeof window !== 'undefined' ? window.innerHeight : 600;
+}
 const TOOLBAR_CLEARANCE = 64;
 const MIN_W = 280;
 const MIN_H = 200;
@@ -89,16 +95,16 @@ function defaultRectFor(id: OverlayName): WindowRect {
     const width = 720;
     const height = 460;
     return {
-      x: clampX(Math.round((FRAME_W - width) / 2), width),
-      y: clampY(Math.round((FRAME_H - TOOLBAR_CLEARANCE - height) / 2), height),
+      x: clampX(Math.round((frameW() - width) / 2), width),
+      y: clampY(Math.round((frameH() - TOOLBAR_CLEARANCE - height) / 2), height),
       width,
       height,
     };
   }
   const width = 360;
   const height = 420;
-  const baseX = Math.round((FRAME_W - width) / 2);
-  const baseY = Math.round((FRAME_H - TOOLBAR_CLEARANCE - height) / 2);
+  const baseX = Math.round((frameW() - width) / 2);
+  const baseY = Math.round((frameH() - TOOLBAR_CLEARANCE - height) / 2);
   const order: OverlayName[] = ['terminal', 'wardriving', 'camera', 'apps'];
   const offset = order.indexOf(id);
   return {
@@ -110,14 +116,14 @@ function defaultRectFor(id: OverlayName): WindowRect {
 }
 
 function clampX(x: number, w: number): number {
-  return Math.max(0, Math.min(FRAME_W - w, x));
+  return Math.max(0, Math.min(frameW() - w, x));
 }
 function clampY(y: number, h: number): number {
-  return Math.max(0, Math.min(FRAME_H - TOOLBAR_CLEARANCE - h, y));
+  return Math.max(0, Math.min(frameH() - TOOLBAR_CLEARANCE - h, y));
 }
 function clampRect(rect: WindowRect): WindowRect {
-  const width = Math.max(MIN_W, Math.min(FRAME_W, rect.width));
-  const height = Math.max(MIN_H, Math.min(FRAME_H - TOOLBAR_CLEARANCE, rect.height));
+  const width = Math.max(MIN_W, Math.min(frameW(), rect.width));
+  const height = Math.max(MIN_H, Math.min(frameH() - TOOLBAR_CLEARANCE, rect.height));
   return { x: clampX(rect.x, width), y: clampY(rect.y, height), width, height };
 }
 

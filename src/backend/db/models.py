@@ -1486,6 +1486,9 @@ class MessengerMessage(Base):
     #: Шифротекст для наскрізно захищених розмов. Вузол його не розуміє.
     ciphertext: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
     transport: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
+    #: На яке повідомлення це відповідь. Без цього цитата жила лише в памʼяті
+    #: вкладки й зникала при перезавантаженні — тобто була прикрасою.
+    reply_to_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
     #: local — везти нікуди; queued — чекає на транспорт; sent — віддано.
     #: Стан мусить лежати в базі, інакше після рестарту вузол забуває, що
     #: комусь щось винен, і повідомлення тихо зникає між людьми.

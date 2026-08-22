@@ -252,3 +252,34 @@ async def test_new_message_is_announced_to_the_owner_devices(auth_root_client):
     assert data["client_id"] == "live-1"
     # Розсилка адресна: чуже листування не летить іншим користувачам.
     assert user_id is not None
+
+
+@pytest.mark.anyio
+async def test_a_reply_keeps_its_quote_after_a_reload(auth_root_client):
+    """Цитата, яка живе лише в памʼяті вкладки, — прикраса, а не відповідь."""
+    chat = auth_root_client.post(
+        "/api/v1/messenger/conversations", json={"title": "Гілка"}
+    ).json()
+    first = auth_root_client.post(
+        f"/api/v1/messenger/conversations/{chat['id']}/messages",
+        json={"client_id": "q-1", "author_id": "me", "author_name": "Кирило", "body": "коли зустріч?"},
+    ).json()
+
+    auth_root_client.post(
+        f"/api/v1/messenger/conversations/{chat['id']}/messages",
+        json={
+            "client_id": "q-2",
+            "author_id": "me",
+            "author_name": "Кирило",
+            "body": "о шостій",
+            "reply_to_id": first["id"],
+        },
+    )
+
+    # «Перезавантаження»: читаємо стрічку з нуля.
+    rows = auth_root_client.get(
+        f"/api/v1/messenger/conversations/{chat['id']}/messages"
+    ).json()
+
+    assert rows[1]["reply_to_id"] == first["id"]
+    assert rows[0]["reply_to_id"] is None

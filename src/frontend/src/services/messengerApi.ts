@@ -32,6 +32,7 @@ export interface NodeMessage {
   body: string | null;
   ciphertext: string | null;
   transport: string | null;
+  reply_to_id?: string | null;
   sent_at: string;
   edited_at: string | null;
   deleted_at: string | null;
@@ -112,6 +113,7 @@ export const messengerApi = {
       kind?: string;
       body?: string | null;
       transport?: string | null;
+      reply_to_id?: string | null;
     },
   ) => request<NodeMessage>('POST', `/messenger/conversations/${conversationId}/messages`, body),
 };

@@ -15,6 +15,7 @@ import type {
   LocationData,
   PersonaSphere,
   HuddleParticipant,
+  MessageReplyInfo,
 } from '../types/messenger';
 import {
   initialChats,
@@ -170,6 +171,14 @@ export interface MessengerState {
   closeReactionPicker: () => void;
 
   /** Стрічку ще не забрано з вузла — показувати як «завантаження», не як «порожньо». */
+  /** На яке повідомлення відповідаємо і яке редагуємо — стан композера. */
+  replyingTo: MessageReplyInfo | null;
+  editingMessage: Message | null;
+  startReply: (msg: Message, quoteSelectedText?: string) => void;
+  cancelReply: () => void;
+  startEdit: (msg: Message) => void;
+  cancelEdit: () => void;
+
   hydrated: boolean;
   hydrateFromNode: () => Promise<void>;
   applyNodeMessage: (row: NodeMessage) => void;
@@ -268,7 +277,29 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
 
     drafts: {},
     typingUsers: {},
+    replyingTo: null,
+    editingMessage: null,
     hydrated: false,
+
+    startReply: (msg, quoteSelectedText) => {
+      soundFx.playTap();
+      set({
+        editingMessage: null,
+        replyingTo: {
+          id: msg.id,
+          senderName: msg.senderName,
+          text: msg.text || '',
+          type: msg.type,
+          quoteSelectedText,
+        },
+      });
+    },
+    cancelReply: () => set({ replyingTo: null }),
+    startEdit: (msg) => {
+      soundFx.playTap();
+      set({ replyingTo: null, editingMessage: msg });
+    },
+    cancelEdit: () => set({ editingMessage: null }),
 
     // Джерело правди — вузол. Мок-розмови лишаються тільки як перший засів
     // списку: їх історія була вигадана, тож у базу вона не їде.
@@ -510,6 +541,7 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
         text: text.trim(),
         isSelf: true,
         status: 'sending',
+        replyTo: state.replyingTo || undefined,
       };
 
       soundFx.playSend();
@@ -528,6 +560,7 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
           return c;
         }),
         drafts: { ...s.drafts, [chatId]: '' },
+        replyingTo: null,
       }));
 
       // Галочка ставиться тільки після того, як вузол підтвердив запис.
@@ -551,6 +584,7 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
           kind: 'text',
           body: text.trim(),
           transport: transport ?? null,
+          reply_to_id: newMsg.replyTo?.id ?? null,
         })
         // Вузол сам каже, чи доїхало до людини. queued — записано, але не
         // доставлено; малювати галочку «надіслано» в цьому разі означало б

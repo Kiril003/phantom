@@ -287,6 +287,7 @@ class MessageIn(BaseModel):
     body: Optional[str] = None
     ciphertext: Optional[str] = None
     transport: Optional[str] = None
+    reply_to_id: Optional[str] = None
 
 
 class MessageOut(BaseModel):
@@ -300,6 +301,7 @@ class MessageOut(BaseModel):
     body: Optional[str]
     ciphertext: Optional[str]
     transport: Optional[str]
+    reply_to_id: Optional[str] = None
     sent_at: datetime
     edited_at: Optional[datetime]
     deleted_at: Optional[datetime]
@@ -333,6 +335,7 @@ def _message_out(row: MessengerMessage) -> MessageOut:
         # Назовні шифротекст не віддаємо: клієнту він ні до чого, а в логах зайвий.
         ciphertext=None,
         transport=row.transport,
+        reply_to_id=row.reply_to_id,
         sent_at=row.sent_at,
         edited_at=row.edited_at,
         deleted_at=row.deleted_at,
@@ -398,6 +401,7 @@ async def append_message(
         body=None,
         ciphertext=None,
         transport=payload.transport,
+        reply_to_id=payload.reply_to_id,
         sent_at=_now(),
     )
     if payload.body is not None:

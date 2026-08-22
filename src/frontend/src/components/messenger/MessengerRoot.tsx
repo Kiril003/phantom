@@ -173,8 +173,8 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
               onVotePoll={(msgId, optId) => store.votePoll(msgId, optId)}
               onPayBillShare={(msgId, payerId) => store.payBillShare(msgId, payerId)}
               onAddReaction={(msgId, emoji) => store.addReaction(msgId, emoji)}
-              onReplyMessage={(_msg) => {}}
-              onEditMessage={(_msg) => {}}
+              onReplyMessage={(msg, quoted) => store.startReply(msg, quoted)}
+              onEditMessage={(msg) => store.startEdit(msg)}
               onDeleteMessage={(msgId) => {
                 const m = activeChat.messages.find((x) => x.id === msgId);
                 if (m) store.openDeleteModal(m);
@@ -234,11 +234,14 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
             onOpenScheduler={() => store.setScheduleModalOpen(true)}
             onOpenScheduledList={() => store.setScheduledDrawerOpen(true)}
             scheduledCountInCurrentChat={store.getScheduledForActiveChat().length}
-            replyingTo={null}
-            onCancelReply={() => {}}
-            editingMessage={null}
-            onCancelEdit={() => {}}
-            onSaveEdit={(msgId, newText) => store.editMessage(msgId, newText)}
+            replyingTo={store.replyingTo}
+            onCancelReply={() => store.cancelReply()}
+            editingMessage={store.editingMessage}
+            onCancelEdit={() => store.cancelEdit()}
+            onSaveEdit={(msgId, newText) => {
+              store.editMessage(msgId, newText);
+              store.cancelEdit();
+            }}
             selectedMessagesForQuote={[]}
             onSynthesizeMultiQuote={(_title, _comment) => {}}
             onClearSelectedQuotes={() => {}}

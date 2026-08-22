@@ -8,7 +8,8 @@ import logging
 import os
 import secrets
 
-from fastapi import FastAPI, Query, WebSocket, WebSocketDisconnect
+from fastapi import FastAPI, HTTPException, Query, Request, WebSocket, WebSocketDisconnect
+from pydantic import BaseModel
 from starlette.websockets import WebSocketState
 
 from hub import (
@@ -31,11 +32,41 @@ app = FastAPI(title="PHANTOM Relay", docs_url=None, redoc_url=None, openapi_url=
 
 @app.get("/relay/health")
 async def health() -> dict:
+    # Тільки числа: скільки скриньок і листів. Хто з ким листується — не наша справа.
     return {
         "ok": True,
         "nodes": hub.node_count,
         "sessions": hub.session_count,
+        "mailboxes": hub.mailbox_count,
+        "letters": hub.letter_count,
     }
+
+
+class MailboxBody(BaseModel):
+    frame: str = ""
+    from_node_id: str = ""
+    reply_address: str | None = None
+
+
+@app.post("/relay/mailbox/{node_id}", status_code=202)
+async def mailbox(node_id: str, body: MailboxBody, request: Request) -> dict:
+    """Без авторизації свідомо: пише чужа людина, токена цього ретранслятора в неї немає.
+
+    Автентичність дає шифрування самого кадру, якого ми не бачимо і бачити не маємо.
+    """
+    try:
+        await hub.post_letter(
+            node_id=node_id,
+            frame=body.frame,
+            from_node_id=body.from_node_id,
+            reply_address=body.reply_address,
+            sender_ip=_peer_ip(request),
+        )
+    except RelayError as exc:
+        raise HTTPException(status_code=exc.code, detail=str(exc)) from exc
+    # Відповідь однакова, чи адресат на місці, чи його скринька чекатиме добу:
+    # присутність — чужі метадані, не нам їх розголошувати.
+    return {"ok": True}
 
 
 async def _close(ws: WebSocket, code: int, reason: str = "") -> None:
@@ -45,11 +76,11 @@ async def _close(ws: WebSocket, code: int, reason: str = "") -> None:
         await ws.close(code=code, reason=reason)
 
 
-def _peer_ip(ws: WebSocket) -> str:
-    forwarded = ws.headers.get("x-forwarded-for", "")
+def _peer_ip(conn: WebSocket | Request) -> str:
+    forwarded = conn.headers.get("x-forwarded-for", "")
     if forwarded:
         return forwarded.split(",")[0].strip()
-    return ws.client.host if ws.client else "unknown"
+    return conn.client.host if conn.client else "unknown"
 
 
 @app.websocket("/relay/node")
@@ -80,6 +111,9 @@ async def relay_node(ws: WebSocket) -> None:
 
     ping = asyncio.create_task(_ping_loop(node_id, ws))
     try:
+        handed = await hub.flush_mailbox(node_id, ws)
+        if handed:
+            logger.info("зі скриньки віддано листів: %d", handed)
         while True:
             message = await ws.receive()
             if message["type"] == "websocket.disconnect":

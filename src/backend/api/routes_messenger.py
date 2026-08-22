@@ -35,6 +35,7 @@ from messenger.crypto.at_rest import AtRestError, seal, unseal
 from messenger.crypto.keys import KeyStore, PublicBundle, UntrustedBundle
 from messenger.crypto.safety import format_safety_number, safety_number
 from messenger.crypto.session import Session
+from messenger.guard import GuardRejected, inbox_guard
 from messenger.inbox import InboxError, accept_frame
 from messenger.outbox import OutboxError, prepare_frame
 from messenger.transport import deliver_direct
@@ -590,6 +591,7 @@ class InboundFrame(BaseModel):
 @router.post("/inbox", response_model=MessageOut)
 async def receive_frame(
     payload: InboundFrame,
+    request: Request,
     session: AsyncSession = Depends(get_db),
 ) -> MessageOut:
     """Приймає зашифрований кадр від чужого вузла.
@@ -607,6 +609,13 @@ async def receive_frame(
         raw = bytes.fromhex(payload.frame)
     except ValueError as exc:
         raise HTTPException(status_code=400, detail="кадр не є шістнадцятковим") from exc
+
+    # Відсікаємо сміття до крипти: спроба X3DH навмисне недешева, тож потік
+    # безглуздих кадрів був би дешевим способом покласти вузол.
+    try:
+        inbox_guard.check(request.client.host if request.client else "?", len(raw))
+    except GuardRejected as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
 
     try:
         row = await accept_frame(session, _keys(), owner, raw, payload.from_node_id)

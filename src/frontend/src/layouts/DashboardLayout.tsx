@@ -1,6 +1,7 @@
 import { Outlet } from 'react-router-dom';
 import { StatusBar } from '../components/core/StatusBar';
 import { DeskStrip } from '../components/desk/DeskStrip';
+import { CommandBarMount, OrganismStripMount } from '../components/desk/IntegrationMounts';
 import { useMapOpenNavigator } from '../hooks/useMapOpenNavigator';
 
 export default function DashboardLayout() {
@@ -14,6 +15,10 @@ export default function DashboardLayout() {
       className="flex flex-col h-screen w-screen overflow-hidden font-sans"
       style={{ background: 'var(--ph-color-ground)', color: 'var(--ph-color-ink)' }}
     >
+      {/* Стрічка організму (агент f1-command-organism): поки файла нема —
+          рендериться null. Бюджет хрому з нею вирішується коммітом
+          інтеграції, коли вона приїде. */}
+      <OrganismStripMount />
       <StatusBar />
       {/* Хром стола: StatusBar 44px + смуга столів 28px = 72px ≤ 76px.
           Старий док (FloatingToolbar) у новому шляху НЕ монтується —
@@ -26,6 +31,8 @@ export default function DashboardLayout() {
         </div>
       </main>
       <DeskStrip />
+      {/* Командний рядок (Ctrl+K) — глобально в оболонці; null до приїзду. */}
+      <CommandBarMount />
     </div>
   );
 }

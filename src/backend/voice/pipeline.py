@@ -61,6 +61,17 @@ def get_tts_provider() -> TTSProvider:
     return _tts
 
 
+def voice_for_text(text: str) -> str:
+    """Питає рушій, що говоритиме: Piper — модель мови, Supertonic — пресет."""
+    provider = get_tts_provider()
+    chooser = getattr(provider, "voice_for_text", None)
+    if callable(chooser):
+        return chooser(text)
+    from voice.tts_engine import select_voice_for_text
+
+    return select_voice_for_text(text)
+
+
 def reset_providers() -> None:
     """Force a rebuild of both providers — call after a voice_* setting
     changes in /settings so the new mode / voice takes effect."""

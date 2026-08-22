@@ -16,6 +16,8 @@ import uuid
 from datetime import datetime, timezone
 from typing import Optional
 
+import logging
+
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
@@ -43,11 +45,30 @@ _node_keys: KeyStore | None = None
 
 
 def _keys() -> KeyStore:
-    """Ключі вузла читаємо з диска один раз на процес."""
+    """Ключі вузла читаємо з диска один раз на процес.
+
+    Prekey-набір теж підіймається з диска: вузол уже роздав публічні частини
+    у своєму bundle, і якщо після рестарту згенерувати нові, той, хто саме
+    зараз пише вперше, отримає сесію, яку неможливо прийняти.
+    """
     global _node_keys
     if _node_keys is None:
-        _node_keys = KeyStore.from_node()
+        from node.identity import key_path
+
+        store = KeyStore.from_node()
+        prekeys = key_path().parent / "messenger_prekeys.bin"
+        if prekeys.exists():
+            try:
+                store.restore_prekeys(prekeys)
+            except Exception as exc:  # noqa: BLE001 — зіпсований файл не має валити вузол
+                logger.warning("prekey-набір не піднявся, беремо свіжий: %s", exc)
+                store.persist_prekeys(prekeys)
+        else:
+            store.persist_prekeys(prekeys)
+        _node_keys = store
     return _node_keys
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/messenger", tags=["messenger"])
 
@@ -420,8 +441,14 @@ async def get_identity(_user: User = Depends(get_current_user)) -> IdentityOut:
     Публічні частини — ділитися ними безпечно. Одноразовий prekey кожен виклик
     віддає новий, тому смикати це «про запас» не варто: запас скінченний.
     """
+    from node.identity import key_path
+
     keys = _keys()
-    return IdentityOut(node_id=keys.node_id, bundle=keys.publish_bundle().to_dict())
+    bundle = keys.publish_bundle()
+    # Видали одноразовий ключ — запамʼятали. Інакше після рестарту він пішов би
+    # ще комусь, а одноразовим він називається саме тому, що так не можна.
+    keys.persist_prekeys(key_path().parent / "messenger_prekeys.bin")
+    return IdentityOut(node_id=keys.node_id, bundle=bundle.to_dict())
 
 
 class ContactIn(BaseModel):

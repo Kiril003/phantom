@@ -5,6 +5,7 @@ import { soundFx } from '../../utils/messengerSound';
 
 const deliveryStatusLabel: Record<NonNullable<Message['status']>, string> = {
   sending: 'Надсилається',
+  queued: 'Записано вузлом, до співрозмовника ще не доїхало',
   sent: 'Надіслано',
   delivered: 'Доставлено',
   read: 'Прочитано',

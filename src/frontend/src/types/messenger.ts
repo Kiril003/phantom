@@ -280,8 +280,12 @@ export interface Message {
   isPinned?: boolean;
   isEdited?: boolean;
   isSelf?: boolean;
-  /** sending — ще не підтверджено вузлом; failed — не збереглося. */
-  status?: 'sending' | 'sent' | 'delivered' | 'read' | 'failed';
+  /**
+   * sending — ще не підтверджено вузлом;
+   * queued — вузол записав, але до співрозмовника не доїхало;
+   * sent — віддано транспорту; failed — не збереглося.
+   */
+  status?: 'sending' | 'queued' | 'sent' | 'delivered' | 'read' | 'failed';
   scheduledTime?: string;
   transport?: 'server' | 'p2p' | 'relay';
   p2pMeta?: {

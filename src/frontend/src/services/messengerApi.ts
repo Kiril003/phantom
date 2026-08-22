@@ -32,6 +32,8 @@ export interface NodeMessage {
   sent_at: string;
   edited_at: string | null;
   deleted_at: string | null;
+  /** local | queued | sent — див. routes_messenger.py */
+  delivery?: string;
 }
 
 export interface NodeIdentity {

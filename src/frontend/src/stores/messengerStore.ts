@@ -552,7 +552,10 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
           body: text.trim(),
           transport: transport ?? null,
         })
-        .then(() => markStatus('sent'))
+        // Вузол сам каже, чи доїхало до людини. queued — записано, але не
+        // доставлено; малювати галочку «надіслано» в цьому разі означало б
+        // повторити те, з чим борюся весь цей час.
+        .then((row) => markStatus(row.delivery === 'queued' ? 'queued' : 'sent'))
         .catch((err) => {
           console.warn('[messenger] вузол не прийняв повідомлення:', err);
           markStatus('failed');

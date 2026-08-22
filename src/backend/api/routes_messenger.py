@@ -18,9 +18,9 @@ from typing import Optional
 
 import logging
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel, Field
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from api.websocket_hub import hub
@@ -799,3 +799,73 @@ async def receive_frame(
         "messenger", "message:new", out.model_dump(mode="json"), user_id=owner
     )
     return out
+
+
+# ── Черга і прибирання ───────────────────────────────────────────────────────
+
+
+@router.get("/queue/status")
+async def queue_status(
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    """«N листів чекають» — видимість черги, якої вимагали і панелі, і аудит."""
+    n = (
+        await session.execute(
+            select(func.count())
+            .select_from(MessengerMessage)
+            .join(
+                MessengerConversation,
+                MessengerConversation.id == MessengerMessage.conversation_id,
+            )
+            .where(
+                MessengerConversation.owner_user_id == user.id,
+                MessengerMessage.delivery_state == "queued",
+            )
+        )
+    ).scalar_one()
+    return {"queued": int(n)}
+
+
+@router.post("/queue/flush")
+async def queue_flush(
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    """Кнопка «Повторити зараз»: людина не мусить чекати фонову смугу."""
+    from messenger.redelivery import flush_queue
+
+    delivered = await flush_queue(session, _keys().node_id)
+    return {"delivered": delivered}
+
+
+@router.delete("/conversations/{conversation_id}")
+async def delete_conversation(
+    conversation_id: str,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    row = await _owned_conversation(conversation_id, user, session)
+    await session.delete(row)
+    await session.commit()
+    return {"deleted": True}
+
+
+@router.post("/conversations/{conversation_id}/clear")
+async def clear_history(
+    conversation_id: str,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    """Історія зникає з ЦЬОГО вузла. Копію співрозмовника ми чіпати не можемо —
+    і чесніше сказати це прямо, ніж вдавати всесвітнє видалення."""
+    row = await _owned_conversation(conversation_id, user, session)
+    result = await session.execute(
+        MessengerMessage.__table__.delete().where(
+            MessengerMessage.conversation_id == conversation_id
+        )
+    )
+    row.last_read_seq = row.next_seq - 1
+    row.updated_at = _now()
+    await session.commit()
+    return {"cleared": result.rowcount}

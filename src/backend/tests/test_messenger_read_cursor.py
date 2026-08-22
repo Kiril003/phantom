@@ -119,3 +119,34 @@ async def test_rename_gives_the_contact_a_human_name(auth_root_client):
             )
         ).scalar_one()
     assert row.display_name == "Марта"
+
+
+@pytest.mark.anyio
+async def test_queue_is_visible_and_deletion_actually_deletes(auth_root_client):
+    conv = auth_root_client.post(
+        "/api/v1/messenger/conversations", json={"title": "Прибирання"}
+    ).json()
+    auth_root_client.post(
+        f"/api/v1/messenger/conversations/{conv['id']}/messages",
+        json={"client_id": "c1", "author_id": "me", "author_name": "К", "body": "раз"},
+    )
+
+    status = auth_root_client.get("/api/v1/messenger/queue/status").json()
+    assert "queued" in status and status["queued"] >= 0
+
+    cleared = auth_root_client.post(
+        f"/api/v1/messenger/conversations/{conv['id']}/clear"
+    ).json()
+    assert cleared["cleared"] == 1
+    assert (
+        auth_root_client.get(
+            f"/api/v1/messenger/conversations/{conv['id']}/messages"
+        ).json()
+        == []
+    )
+
+    assert auth_root_client.delete(
+        f"/api/v1/messenger/conversations/{conv['id']}"
+    ).json() == {"deleted": True}
+    rows = auth_root_client.get("/api/v1/messenger/conversations").json()
+    assert conv["id"] not in [c["id"] for c in rows]

@@ -1886,9 +1886,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
           onClose={() => setSharingFolder(null)}
           folder={sharingFolder}
           chats={chats}
-          onSendToChat={(folder) => {
-            showToast(`🚀 Запрошення у «${folder.name}» надіслано в активний чат!`);
-          }}
         />
       )}
 

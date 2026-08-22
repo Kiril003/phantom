@@ -1,14 +1,9 @@
 import React, { useState } from 'react';
 import {
+  AlertTriangle,
   X,
-  Copy,
-  Check,
-  QrCode,
   Shield,
   Layers,
-  Link,
-  Send,
-  RefreshCw
 } from 'lucide-react';
 import { Chat, SmartFolder } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
@@ -18,7 +13,6 @@ interface ShareFolderModalProps {
   onClose: () => void;
   folder: SmartFolder | null;
   chats: Chat[];
-  onSendToChat?: (folder: SmartFolder, inviteUrl: string) => void;
 }
 
 export const ShareFolderModal: React.FC<ShareFolderModalProps> = ({
@@ -26,14 +20,10 @@ export const ShareFolderModal: React.FC<ShareFolderModalProps> = ({
   onClose,
   folder,
   chats,
-  onSendToChat,
 }) => {
-  const [copied, setCopied] = useState(false);
-  const [showQr, setShowQr] = useState(false);
   const [allowJoinAll, setAllowJoinAll] = useState(true);
   const [autoSyncTopics, setAutoSyncTopics] = useState(true);
   
-  const [tokenSeed, setTokenSeed] = useState(() => Math.random().toString(36).substring(2, 9));
 
   if (!isOpen || !folder) return null;
 
@@ -50,19 +40,6 @@ export const ShareFolderModal: React.FC<ShareFolderModalProps> = ({
     return false;
   });
 
-  const inviteUrl = `https://aura.chat/folder/${folder.id}-${tokenSeed}?join=1`;
-
-  const handleCopyLink = () => {
-    navigator.clipboard.writeText(inviteUrl);
-    setCopied(true);
-    soundFx.playSend();
-    setTimeout(() => setCopied(false), 2500);
-  };
-
-  const handleRegenerate = () => {
-    soundFx.playTap();
-    setTokenSeed(Math.random().toString(36).substring(2, 9));
-  };
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-150">
@@ -107,102 +84,23 @@ export const ShareFolderModal: React.FC<ShareFolderModalProps> = ({
 
         {/* Modal Body */}
         <div className="p-4 space-y-4 overflow-y-auto flex-1 text-xs">
-          {/* 1. Invite Link Box */}
-          <div className="space-y-1.5">
-            <label className="block text-[11px] font-bold text-[#8EA093] uppercase tracking-wider">
-              Унікальне посилання для запрошення
-            </label>
-            <div className="flex items-center gap-1.5 p-1.5 bg-[#0E1410] border border-[#223126] rounded-2xl shadow-sm">
-              <Link className="w-4 h-4 text-[#55C778] ml-1.5 shrink-0" />
-              <input
-                type="text"
-                readOnly
-                value={inviteUrl}
-                className="flex-1 bg-transparent text-xs font-mono text-white focus:outline-none truncate px-1"
-              />
-              <button
-                onClick={handleRegenerate}
-                className="p-1.5 hover:bg-[#18231B] text-[#8EA093] hover:text-white rounded-xl transition-colors shrink-0"
-                title="Оновити посилання"
-              >
-                <RefreshCw className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={handleCopyLink}
-                className={`px-3 py-1.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shrink-0 ${
-                  copied
-                    ? 'bg-[#183021] text-[#55C778] border border-[#2B3E31]'
-                    : 'bg-[#55C778] hover:bg-[#46AF68] text-[#0C120E]'
-                }`}
-              >
-                {copied ? (
-                  <>
-                    <Check className="w-3.5 h-3.5" />
-                    <span>Скопійовано!</span>
-                  </>
-                ) : (
-                  <>
-                    <Copy className="w-3.5 h-3.5" />
-                    <span>Копіювати</span>
-                  </>
-                )}
-              </button>
+          {/* Посилання-запрошення тут не було чим підкріпити: домену aura.chat не
+              існує, токен генерувався через Math.random, а QR був сіткою 6×6 за
+              формулою i % 2 === 0 && i % 3 === 0 — його неможливо відсканувати.
+              Спільного каталогу просторів немає, тож і посилання бути не може. */}
+          <div className="p-3 bg-[#2A2013] border border-[#4D3A1F] rounded-2xl space-y-1.5">
+            <div className="flex items-center gap-2 font-bold text-[#FBBF24]">
+              <AlertTriangle className="w-4 h-4" />
+              <span>Посилань-запрошень поки немає</span>
             </div>
+            <span className="text-[11px] text-[#B9A88C] block leading-relaxed">
+              Спільного каталогу просторів не існує, тож посилання не було б куди вести.
+              Щоб хтось зміг вам написати, дайте йому ключ вашого вузла — він у
+              налаштуваннях, розділ «Мережа &amp; P2P».
+            </span>
           </div>
 
-          {/* 2. QR Code Toggle & Preview */}
-          <div className="bg-[#141C16] border border-[#223126] rounded-2xl p-3 space-y-2 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2 font-bold text-white">
-                <QrCode className="w-4 h-4 text-[#55C778]" />
-                <span>QR-код для мобільних пристроїв</span>
-              </div>
-              <button
-                type="button"
-                onClick={() => {
-                  soundFx.playTap();
-                  setShowQr(!showQr);
-                }}
-                className="text-[11px] font-extrabold text-[#55C778] hover:underline"
-              >
-                {showQr ? 'Сховати' : 'Показати'}
-              </button>
-            </div>
-
-            {showQr && (
-              <div className="pt-2 flex flex-col items-center justify-center gap-2 border-t border-[#1F2B22] animate-in fade-in duration-150">
-                <div className="p-3 bg-[#0E1410] border border-[#2B3C30] rounded-2xl shadow-sm flex items-center justify-center">
-                  {/* Stylized QR Code Graphic */}
-                  <div className="w-36 h-36 bg-[#141C16] border border-[#233127] rounded-xl flex flex-col items-center justify-center p-2 relative overflow-hidden">
-                    <div className="grid grid-cols-6 gap-1 w-full h-full opacity-80">
-                      {Array.from({ length: 36 }).map((_, i) => (
-                        <div
-                          key={i}
-                          className={`rounded-xs ${
-                            (i % 2 === 0 && i % 3 === 0) || i === 0 || i === 5 || i === 30 || i === 35
-                              ? 'bg-[#55C778]'
-                              : i % 5 === 0
-                              ? 'bg-[#3E9457]'
-                              : 'bg-[#1C281F]'
-                          }`}
-                        />
-                      ))}
-                    </div>
-                    <div className="absolute inset-0 flex items-center justify-center">
-                      <div className="w-8 h-8 rounded-xl bg-[#0E1410] border border-[#55C778] flex items-center justify-center shadow-md text-sm">
-                        {folder.emoji}
-                      </div>
-                    </div>
-                  </div>
-                </div>
-                <p className="text-[10px] text-[#8EA093] text-center">
-                  Відскануйте камерою телефону для автоматичного імпорту простору
-                </p>
-              </div>
-            )}
-          </div>
-
-          {/* 3. Included Chats & Topics Preview */}
+          {/* Чати у структурі */}
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <label className="text-[11px] font-bold text-[#8EA093] uppercase tracking-wider flex items-center gap-1.5">
@@ -295,20 +193,6 @@ export const ShareFolderModal: React.FC<ShareFolderModalProps> = ({
 
         {/* Modal Footer */}
         <div className="p-3.5 border-t border-[#1F2B22] bg-[#141C16] flex items-center justify-between gap-2">
-          {onSendToChat && (
-            <button
-              onClick={() => {
-                soundFx.playSend();
-                onSendToChat(folder, inviteUrl);
-                onClose();
-              }}
-              className="px-3.5 py-2 bg-[#1A261D] hover:bg-[#233529] text-[#55C778] border border-[#2B3E31] rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors shadow-sm"
-            >
-              <Send className="w-3.5 h-3.5 text-[#55C778]" />
-              <span>Надіслати у чат</span>
-            </button>
-          )}
-
           <div className="flex items-center gap-2 ml-auto">
             <button
               onClick={() => {
@@ -318,13 +202,6 @@ export const ShareFolderModal: React.FC<ShareFolderModalProps> = ({
               className="px-3.5 py-2 hover:bg-[#1E2A21] text-[#8EA093] hover:text-white rounded-xl font-bold text-xs transition-colors"
             >
               Закрити
-            </button>
-            <button
-              onClick={handleCopyLink}
-              className="px-4 py-2 bg-[#1C2920] hover:bg-[#233529] border border-[#2B3E31] text-[#55C778] rounded-xl font-bold text-xs flex items-center gap-1.5 transition-colors shadow-sm"
-            >
-              {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
-              <span>{copied ? 'Скопійовано!' : 'Копіювати посилання'}</span>
             </button>
           </div>
         </div>

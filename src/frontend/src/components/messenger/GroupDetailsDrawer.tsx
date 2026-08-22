@@ -77,21 +77,10 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
     chat.pendingJoinRequests || []
   );
 
-  // Invite links local state
-  const [inviteLinks, setInviteLinks] = useState<GroupInviteLink[]>(
-    chat.inviteLinks || [
-      {
-        id: 'inv_default',
-        code: `t.me/+${chat.id}`,
-        label: 'Основне посилання простору',
-        creatorName: 'Кирило Милосердов',
-        createdAt: 'Сьогодні',
-        usageCount: chat.membersCount || 4,
-        requireAdminApproval: false,
-        isPrimary: true,
-      },
-    ]
-  );
+  // Посилань-запрошень немає. Раніше тут підставлялося t.me/+<id> — адреса,
+  // що належить Telegram і нікуди звідси не веде, зі «використано: 4», яке
+  // просто дорівнювало кількості учасників.
+  const [inviteLinks, setInviteLinks] = useState<GroupInviteLink[]>(chat.inviteLinks || []);
 
   if (!isOpen || !chat) return null;
 
@@ -602,7 +591,7 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
                     soundFx.playTap();
                     const newLink: GroupInviteLink = {
                       id: `inv_${Date.now()}`,
-                      code: `t.me/+aura_${Math.random().toString(36).substring(7)}`,
+                      code: '',
                       label: 'Нове тимчасове посилання',
                       creatorName: 'Кирило Милосердов',
                       createdAt: 'Щойно',
@@ -788,7 +777,7 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
                 actorName: 'Кирило Милосердов',
                 actorAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
                 action: 'Створено нове посилання для запрошення',
-                detail: 't.me/+join_aura_qa_review',
+                detail: '',
                 timestamp: '11:45',
               },
               {

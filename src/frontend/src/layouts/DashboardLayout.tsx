@@ -1,6 +1,5 @@
 import { Outlet } from 'react-router-dom';
 import { StatusBar } from '../components/core/StatusBar';
-import { FloatingToolbar } from '../components/core/FloatingToolbar';
 import { DeskStrip } from '../components/desk/DeskStrip';
 import { useMapOpenNavigator } from '../hooks/useMapOpenNavigator';
 
@@ -17,14 +16,16 @@ export default function DashboardLayout() {
     >
       <StatusBar />
       {/* Хром стола: StatusBar 44px + смуга столів 28px = 72px ≤ 76px.
-          Док (FloatingToolbar) плаває поверх і зникне на К4. */}
+          Старий док (FloatingToolbar) у новому шляху НЕ монтується —
+          вердикт власника: «багато знизу кнопок — погано»; входи станів
+          чекають дизайн-дебату, навігація — за Ctrl+K (К4). Файл дока не
+          чіпаємо: вирок мертвому коду — окрема робота. */}
       <main className="flex-1 relative overflow-hidden">
         <div className="absolute inset-0 overflow-y-auto no-scrollbar">
           <Outlet />
         </div>
       </main>
       <DeskStrip />
-      <FloatingToolbar />
     </div>
   );
 }

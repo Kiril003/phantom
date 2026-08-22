@@ -1836,9 +1836,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                               {msg.status === 'queued' && (
                                 <div className="mt-2 space-y-2">
                                   <p className="text-[11.5px] text-[#6E7568] leading-relaxed">
-                                    Лист лежить у скриньці на вузлі. Повторимо доставку, щойно
-                                    співрозмовник вийде на зв'язок.
-                                    {queueInfo ? ` Зараз у черзі: ${queueInfo.queued}.` : ''}
+                                    Повідомлення чекає на вашому вузлі. Надішлемо, щойно
+                                    співрозмовник з'явиться в мережі.
+                                    {queueInfo && queueInfo.queued > 1
+                                      ? ` Разом у черзі: ${queueInfo.queued}.`
+                                      : ''}
                                   </p>
                                   <button
                                     onClick={handleFlushQueue}

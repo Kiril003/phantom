@@ -276,7 +276,7 @@ export const ContactSheet: React.FC<ContactSheetProps> = ({
               )}
               <span className="text-[10px] text-[#98A092]">·</span>
               <span className="text-[10px] text-[#7A6A55] truncate">
-                {contact.peer_address ? `пряма адреса: ${contact.peer_address}` : 'прямої адреси немає'}
+                {contact.peer_address ? 'прямий звʼязок: є' : 'прямого звʼязку немає — листи підуть через скриньку'}
               </span>
             </div>
             <SafetyVerifyBlock
@@ -292,7 +292,7 @@ export const ContactSheet: React.FC<ContactSheetProps> = ({
 
         {/* Дії з розмовою — деструктивні лише через підтвердження */}
         {confirmKind === null ? (
-          <div className="space-y-0.5 pt-0.5">
+          <div className="space-y-0.5 mt-2 pt-2 border-t border-[#E8E1D3]">
             <button
               onClick={() => {
                 setNameDraft(chat.title);

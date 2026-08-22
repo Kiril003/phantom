@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState, useSyncExternalStore } from 'react';
 import {
   X,
   Bell,
@@ -16,6 +16,15 @@ import { soundFx } from '../../utils/messengerSound';
 import { IdentityPanel } from './IdentityPanel';
 import { networkEngine } from '../../services/messengerNetworkEngine';
 import { TransportProtocol } from '../../types/messenger';
+import { notificationPrefs } from '../../services/notificationPrefs';
+
+// Стан дозволу словами. Це єдине, що тут можна чесно пообіцяти.
+const NOTIF_NOTE: Record<string, string> = {
+  unsupported: 'Цей браузер системних сповіщень не має',
+  default: 'Дозволу ще не питали — увімкніть, і браузер спитає',
+  granted: 'Дозвіл надано — банер покажеться навіть поза вкладкою',
+  denied: 'Дозвіл заблоковано в налаштуваннях сайту — зніміть блок у браузері',
+};
 
 interface SettingsModalProps {
   isOpen: boolean;
@@ -39,10 +48,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   const [activeTab, setActiveTab] = useState<'appearance' | 'network' | 'notifications' | 'privacy' | 'data'>('appearance');
   const [accentColor, setAccentColor] = useState<'terracotta' | 'sage' | 'chestnut' | 'amber'>('terracotta');
   const [fontSize, setFontSize] = useState<'standard' | 'large'>('standard');
-  const [desktopNotifs, setDesktopNotifs] = useState(true);
   const [readReceipts, setReadReceipts] = useState(true);
   const [lastSeenVisible, setLastSeenVisible] = useState(true);
   const [transportMode, setTransportMode] = useState<TransportProtocol>(networkEngine.getTransportMode());
+  const notifs = useSyncExternalStore(notificationPrefs.subscribe, notificationPrefs.getSnapshot);
+
+  // Дозвіл могли змінити в налаштуваннях сайту, поки вкладка стояла відкритою.
+  useEffect(() => {
+    if (isOpen) notificationPrefs.sync();
+  }, [isOpen]);
 
   if (!isOpen) return null;
 
@@ -320,23 +334,31 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </button>
               </div>
 
+              {/* Перемикач показує не власне бажання, а дозвіл браузера: без
+                  нього банера не буде, скільки не вмикай. */}
               <div className="flex items-center justify-between p-3.5 bg-white border border-[#DFD6C5] rounded-2xl">
-                <div>
+                <div className="min-w-0 pr-3">
                   <p className="font-bold text-xs text-[#1E2521]">Системні сповіщення</p>
-                  <p className="text-[11px] text-[#7A8479]">Показувати спливаючі банери в браузері</p>
+                  <p className="text-[11px] text-[#7A8479]" data-notif-state={notifs.access}>
+                    {NOTIF_NOTE[notifs.access]}
+                  </p>
                 </div>
                 <button
                   onClick={() => {
                     soundFx.playTap();
-                    setDesktopNotifs(!desktopNotifs);
+                    if (notifs.effective) notificationPrefs.disable();
+                    else void notificationPrefs.enable();
                   }}
-                  className={`w-12 h-6 rounded-full transition-colors relative p-0.5 ${
-                    desktopNotifs ? 'bg-[#E87A42]' : 'bg-[#D6CDC0]'
+                  disabled={notifs.access === 'unsupported' || notifs.access === 'denied'}
+                  data-notif-toggle={notifs.effective ? 'on' : 'off'}
+                  title={NOTIF_NOTE[notifs.access]}
+                  className={`w-12 h-6 rounded-full transition-colors relative p-0.5 shrink-0 disabled:opacity-45 disabled:cursor-not-allowed ${
+                    notifs.effective ? 'bg-[#E87A42]' : 'bg-[#D6CDC0]'
                   }`}
                 >
                   <div
                     className={`w-5 h-5 rounded-full bg-white transition-transform ${
-                      desktopNotifs ? 'translate-x-6' : 'translate-x-0'
+                      notifs.effective ? 'translate-x-6' : 'translate-x-0'
                     }`}
                   />
                 </button>

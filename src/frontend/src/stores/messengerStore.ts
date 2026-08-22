@@ -13,10 +13,8 @@ import type {
   SmartFolder,
   UserProfile,
   ScheduledMessage,
-  AudioHuddleState,
   LocationData,
   PersonaSphere,
-  HuddleParticipant,
   MessageReplyInfo,
   SecureMedia,
 } from '../types/messenger';
@@ -41,9 +39,6 @@ export interface MessengerState {
   // Multi-select & Bulk operations
   multiSelectMode: boolean;
   selectedMessageIds: string[];
-
-  // Audio Huddle
-  huddleState: AudioHuddleState;
 
   // Modals & Panels State
   isP2PModalOpen: boolean;
@@ -84,16 +79,6 @@ export interface MessengerState {
   setSearchQuery: (query: string) => void;
   setDraft: (chatId: string, text: string) => void;
 
-  createChat: (newChatData: {
-    title: string;
-    type: string;
-    circle: ChatCircle;
-    description: string;
-    topic: string;
-    avatar: string;
-    isPublic?: boolean;
-    publicHandle?: string;
-  }) => void;
   updateChat: (chatId: string, updates: Partial<Chat>) => void;
   togglePinChat: (chatId: string) => void;
   toggleMuteChat: (chatId: string) => void;
@@ -144,17 +129,6 @@ export interface MessengerState {
   toggleSelectMessage: (messageId: string) => void;
   clearSelection: () => void;
   setMultiSelectMode: (enabled: boolean) => void;
-
-  // Audio & Video Huddle
-  startHuddle: (chatId: string, title: string) => void;
-  leaveHuddle: () => void;
-  toggleHuddleMute: () => void;
-  toggleHuddleHand: () => void;
-  toggleHuddleScreenShare: () => void;
-  toggleHuddleVideo: () => void;
-  toggleHuddleRecording: () => void;
-  setVideoModalOpen: (open: boolean) => void;
-  addHuddleTranscript: (speaker: string, text: string) => void;
 
   // Modals Setters
   setP2PModalOpen: (open: boolean) => void;
@@ -254,15 +228,6 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
 
     multiSelectMode: false,
     selectedMessageIds: [],
-
-    huddleState: {
-      active: false,
-      chatId: '',
-      title: '',
-      participants: [],
-      liveTranscript: [],
-      isScreenSharing: false,
-    },
 
     isP2PModalOpen: false,
     isProfileModalOpen: false,
@@ -465,37 +430,6 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
       set((state) => ({
         drafts: { ...state.drafts, [chatId]: text },
       })),
-
-    createChat: (newChatData) => {
-      soundFx.playSend();
-      const newChat: Chat = {
-        id: `chat_${Date.now()}`,
-        title: newChatData.title,
-        type: newChatData.type as any,
-        circle: newChatData.circle,
-        description: newChatData.description,
-        topic: newChatData.topic,
-        avatar: newChatData.avatar,
-        isPublic: newChatData.isPublic,
-        publicHandle: newChatData.publicHandle,
-        unreadCount: 0,
-        messages: [
-          {
-            id: `msg_init_${Date.now()}`,
-            senderId: 'system',
-            senderName: 'Aura Network',
-            senderAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop&crop=faces',
-            timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            type: 'system',
-            text: `Простір «${newChatData.title}» успішно створено.`,
-          },
-        ],
-      };
-      set((state) => ({
-        chats: [newChat, ...state.chats],
-        activeChatId: newChat.id,
-      }));
-    },
 
     updateChat: (chatId, updates) => {
       set((state) => ({
@@ -1241,115 +1175,6 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
 
     clearSelection: () => set({ selectedMessageIds: [], multiSelectMode: false }),
     setMultiSelectMode: (enabled) => set({ multiSelectMode: enabled, selectedMessageIds: [] }),
-
-    // Audio Huddle
-    startHuddle: (chatId, title) => {
-      soundFx.playHuddleJoin();
-      const me: HuddleParticipant = {
-        id: get().currentUser.id,
-        name: get().currentUser.name,
-        avatar: get().currentUser.avatar,
-        isSpeaking: true,
-        isMuted: false,
-        hasRaisedHand: false,
-      };
-      const huddle: AudioHuddleState = {
-        active: true,
-        chatId,
-        title,
-        participants: [me],
-        liveTranscript: [{ speaker: me.name, text: 'Приєднався до простору.', time: 'Зараз' }],
-        isScreenSharing: false,
-      };
-      set({ huddleState: huddle });
-    },
-
-    leaveHuddle: () => {
-      soundFx.playHuddleLeave();
-      set({
-        huddleState: {
-          active: false,
-          chatId: '',
-          title: '',
-          participants: [],
-          liveTranscript: [],
-          isScreenSharing: false,
-        },
-      });
-    },
-
-    toggleHuddleMute: () => {
-      set((state) => {
-        const myId = state.currentUser.id;
-        const participants = state.huddleState.participants.map((p) =>
-          p.id === myId ? { ...p, isMuted: !p.isMuted } : p
-        );
-        return { huddleState: { ...state.huddleState, participants } };
-      });
-    },
-
-    toggleHuddleHand: () => {
-      set((state) => {
-        const myId = state.currentUser.id;
-        const participants = state.huddleState.participants.map((p) =>
-          p.id === myId ? { ...p, hasRaisedHand: !p.hasRaisedHand } : p
-        );
-        return { huddleState: { ...state.huddleState, participants } };
-      });
-    },
-
-    toggleHuddleScreenShare: () => {
-      set((state) => ({
-        huddleState: {
-          ...state.huddleState,
-          isScreenSharing: !state.huddleState.isScreenSharing,
-        },
-      }));
-    },
-
-    toggleHuddleVideo: () => {
-      set((state) => {
-        const myId = state.currentUser.id;
-        const participants = state.huddleState.participants.map((p) =>
-          p.id === myId ? { ...p, isVideoOn: !p.isVideoOn } : p
-        );
-        return { huddleState: { ...state.huddleState, participants } };
-      });
-    },
-
-    toggleHuddleRecording: () => {
-      set((state) => ({
-        huddleState: {
-          ...state.huddleState,
-          isRecording: !state.huddleState.isRecording,
-        },
-      }));
-    },
-
-    setVideoModalOpen: (open) => {
-      set((state) => ({
-        huddleState: {
-          ...state.huddleState,
-          isVideoModalOpen: open,
-        },
-      }));
-    },
-
-    addHuddleTranscript: (speaker, text) => {
-      set((state) => ({
-        huddleState: {
-          ...state.huddleState,
-          liveTranscript: [
-            ...state.huddleState.liveTranscript,
-            {
-              speaker,
-              text,
-              time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
-            },
-          ],
-        },
-      }));
-    },
 
     // Modal Setters
     setActionHubOpen: (open) => set({ isActionHubOpen: open }),

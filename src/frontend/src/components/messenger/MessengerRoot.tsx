@@ -9,7 +9,6 @@ import { Header } from './Header';
 import { ChatArea } from './ChatArea';
 import { MessageComposer } from './MessageComposer';
 import { MultiSelectBar } from './MultiSelectBar';
-import { AudioHuddleBar } from './AudioHuddleBar';
 
 // Modals & Drawers
 import { ActionHubModal } from './ActionHubModal';
@@ -30,10 +29,11 @@ import { SettingsModal } from './SettingsModal';
 import { ShareFolderModal } from './ShareFolderModal';
 import { SmartFolderModal } from './SmartFolderModal';
 import { UserProfileModal } from './UserProfileModal';
-import { VideoCallModal } from './VideoCallModal';
 import { CallOverlay } from './CallOverlay';
 import { callEngine } from '../../services/callEngine';
-import type { Message, SmartFolder, ChatCircle } from '../../types/messenger';
+import { useCallAlerts } from '../../hooks/useCallAlerts';
+import { soundFx } from '../../utils/messengerSound';
+import type { Message, SmartFolder } from '../../types/messenger';
 
 interface MessengerRootProps {
   className?: string;
@@ -49,6 +49,13 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
 
   // Sound settings
   const [isSoundEnabled, setIsSoundEnabled] = useState(true);
+  // Вхідний дзвінок чутно й видно навіть тоді, коли вкладка не активна.
+  useCallAlerts();
+
+  // Перемикач звуку глушить синтезатор, а не лише власну іконку.
+  useEffect(() => {
+    soundFx.enabled = isSoundEnabled;
+  }, [isSoundEnabled]);
 
   // Scheduled message temporary date
   const [pendingScheduledTime, setPendingScheduledTime] = useState<string | undefined>(undefined);
@@ -71,8 +78,8 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Дзвінки: рушій слухає сигнали вузла, поки месенджер відкритий. Запуск поки
-  // йде подією — кнопку слухавки приєднають до startCall() окремо.
+  // Дзвінки: рушій слухає сигнали вузла, поки месенджер відкритий. Кнопки
+  // слухавки в шапці кидають сюди 'phantom:start-call'.
   useEffect(() => {
     const detach = callEngine.attach();
     const onStart = (event: Event) => {
@@ -113,8 +120,6 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
       off();
     };
   }, []);
-
-  const meParticipant = store.huddleState.participants.find((p) => p.id === store.currentUser.id);
 
   return (
     <div className={`messenger-scale flex w-full h-full bg-[#F7F5EE] text-[#1E2521] overflow-hidden select-none relative font-sans ${className}`}>
@@ -163,14 +168,6 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
             scheduledMessagesCount={store.getScheduledForActiveChat().length}
             onOpenSettings={() => store.setSettingsModalOpen(true)}
             onOpenGroupDetails={() => store.setGroupDetailsOpen(true)}
-            isHuddleActive={store.huddleState.active}
-            onToggleHuddle={() => {
-              if (store.huddleState.active) {
-                store.leaveHuddle();
-              } else {
-                store.startHuddle(activeChat.id, activeChat.title);
-              }
-            }}
             isSoundEnabled={isSoundEnabled}
             onToggleSound={() => setIsSoundEnabled(!isSoundEnabled)}
             isSearching={isSearchingInChat}
@@ -179,19 +176,6 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
             onOpenP2PNetworkModal={() => store.setP2PModalOpen(true)}
             onBack={() => store.setActiveChat('')}
           />
-
-          {/* Audio Huddle Live Strip */}
-          {store.huddleState.active && (
-            <AudioHuddleBar
-              huddleState={store.huddleState}
-              onToggleMute={store.toggleHuddleMute}
-              isMuted={meParticipant?.isMuted ?? false}
-              onRaiseHand={store.toggleHuddleHand}
-              hasRaisedHand={meParticipant?.hasRaisedHand ?? false}
-              onOpenVideoModal={() => store.setVideoModalOpen(true)}
-              onLeaveHuddle={store.leaveHuddle}
-            />
-          )}
 
           {/* Messages Feed */}
           <div className="flex-1 min-h-0 relative">
@@ -318,18 +302,11 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
       <CreateChatModal
         isOpen={store.isCreateChatModalOpen}
         onClose={() => store.setCreateChatModalOpen(false)}
-        onCreateChat={(data) => {
-          store.createChat({
-            title: data.title,
-            type: data.type,
-            circle: data.circle as ChatCircle,
-            description: data.description,
-            topic: data.topic,
-            avatar: data.avatar,
-            isPublic: data.isPublic,
-            publicHandle: data.publicHandle,
-          });
+        onConversationReady={async (conversationId) => {
+          // Розмову вже створив вузол — забираємо її в список і відкриваємо.
           store.setCreateChatModalOpen(false);
+          await store.refreshConversations();
+          store.setActiveChat(conversationId);
         }}
       />
 
@@ -495,23 +472,6 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
           }
           store.closeReactionPicker();
         }}
-      />
-      <VideoCallModal
-        isOpen={store.huddleState.active && (store.huddleState.isVideoModalOpen ?? false)}
-        onClose={() => store.setVideoModalOpen(false)}
-        huddleState={store.huddleState}
-        currentUserId={store.currentUser.id}
-        onToggleMute={store.toggleHuddleMute}
-        isMuted={meParticipant?.isMuted ?? false}
-        onToggleVideo={store.toggleHuddleVideo}
-        isVideoOn={meParticipant?.isVideoOn ?? false}
-        onToggleScreenShare={store.toggleHuddleScreenShare}
-        isScreenSharing={store.huddleState.isScreenSharing ?? false}
-        onToggleHand={store.toggleHuddleHand}
-        hasRaisedHand={meParticipant?.hasRaisedHand ?? false}
-        onToggleRecording={store.toggleHuddleRecording}
-        isRecording={store.huddleState.isRecording ?? false}
-        onLeaveHuddle={store.leaveHuddle}
       />
       <CallOverlay />
     </div>

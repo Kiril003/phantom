@@ -140,60 +140,6 @@ class SoundEffectsManager {
   playConfetti() {
     this.playChime();
   }
-
-  // Audio Huddle join chime
-  playHuddleJoin() {
-    if (!this.enabled) return;
-    try {
-      this.initContext();
-      if (!this.ctx) return;
-      if (this.ctx.state === 'suspended') this.ctx.resume();
-
-      const notes = [440, 554.37, 659.25]; // A4, C#5, E5 (Major chord ascent)
-      const now = this.ctx.currentTime;
-      notes.forEach((freq, idx) => {
-        const osc = this.ctx!.createOscillator();
-        const gain = this.ctx!.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(freq, now + idx * 0.06);
-        gain.gain.setValueAtTime(0.09, now + idx * 0.06);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.06 + 0.3);
-        osc.connect(gain);
-        gain.connect(this.ctx!.destination);
-        osc.start(now + idx * 0.06);
-        osc.stop(now + idx * 0.06 + 0.3);
-      });
-    } catch {
-      // ignore
-    }
-  }
-
-  // Audio Huddle leave sound
-  playHuddleLeave() {
-    if (!this.enabled) return;
-    try {
-      this.initContext();
-      if (!this.ctx) return;
-      if (this.ctx.state === 'suspended') this.ctx.resume();
-
-      const notes = [659.25, 440]; // E5, A4 (Soft descent)
-      const now = this.ctx.currentTime;
-      notes.forEach((freq, idx) => {
-        const osc = this.ctx!.createOscillator();
-        const gain = this.ctx!.createGain();
-        osc.type = 'sine';
-        osc.frequency.setValueAtTime(freq, now + idx * 0.07);
-        gain.gain.setValueAtTime(0.08, now + idx * 0.07);
-        gain.gain.exponentialRampToValueAtTime(0.001, now + idx * 0.07 + 0.25);
-        osc.connect(gain);
-        gain.connect(this.ctx!.destination);
-        osc.start(now + idx * 0.07);
-        osc.stop(now + idx * 0.07 + 0.25);
-      });
-    } catch {
-      // ignore
-    }
-  }
 }
 
 export const soundFx = new SoundEffectsManager();

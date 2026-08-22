@@ -302,6 +302,12 @@ export interface Message {
   isEdited?: boolean;
   isSelf?: boolean;
   /**
+   * Надгробок: тіла вже немає ні тут, ні на диску. Сам рядок лишається —
+   * прибрати згадку про те, що співрозмовник уже бачив, неможливо, і вдавати
+   * протилежне було б брехнею.
+   */
+  isDeleted?: boolean;
+  /**
    * sending — ще не підтверджено вузлом;
    * queued — вузол записав, але до співрозмовника не доїхало;
    * sent — віддано транспорту; failed — не збереглося.
@@ -502,7 +508,6 @@ export interface Chat {
   archived?: boolean;
   unreadCount: number;
   membersCount?: number;
-  activeHuddle?: boolean;
   customVibe?: string;
   description?: string;
   topic?: string;
@@ -575,28 +580,4 @@ export interface NetworkDiagnostics {
   dataChannelStatus: string;
   relayConnected?: boolean;
   relayNodeId?: string;
-}
-
-export interface HuddleParticipant {
-  id: string;
-  name: string;
-  avatar: string;
-  isSpeaking: boolean;
-  isMuted: boolean;
-  hasRaisedHand: boolean;
-  isVideoOn?: boolean;
-  videoStreamUrl?: string;
-}
-
-export interface AudioHuddleState {
-  active: boolean;
-  chatId: string;
-  title: string;
-  participants: HuddleParticipant[];
-  liveTranscript: { speaker: string; text: string; time: string }[];
-  isScreenSharing?: boolean;
-  isVideoModalOpen?: boolean;
-  isRecording?: boolean;
-  audioQuality?: 'standard' | 'studio-hd-48khz';
-  bandwidthKbps?: number;
 }

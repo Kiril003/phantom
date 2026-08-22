@@ -8,6 +8,7 @@ import {
   VolumeX,
   SlidersHorizontal,
   Phone,
+  Video,
   Bookmark,
   MessageSquare,
   MoreVertical,
@@ -31,8 +32,6 @@ interface HeaderProps {
   scheduledMessagesCount?: number;
   onOpenSettings: () => void;
   onOpenGroupDetails: () => void;
-  isHuddleActive: boolean;
-  onToggleHuddle: () => void;
   isSoundEnabled: boolean;
   onToggleSound: () => void;
   onToggleSearch: () => void;
@@ -50,6 +49,9 @@ interface HeaderProps {
 const ICON_BTN =
   'w-[32px] h-[32px] min-w-0 min-h-0 rounded-full flex items-center justify-center shrink-0 transition-colors';
 const ICON_BTN_IDLE = 'text-[#6E7568] hover:text-[#21261F] hover:bg-[#F1EBDD]';
+const ICON_BTN_OFF = 'text-[#C6C8BF] cursor-not-allowed';
+// Чому кнопка не натискається — сказано словами, а не сірим кольором.
+const NO_CALL_NOTE = 'Дзвінки лише зі звіреними вузловими контактами';
 // Рядок випадного меню: фіксовані 36px, іконка + один рядок тексту.
 const MENU_ITEM =
   'w-full h-[36px] min-h-0 px-2.5 rounded-[10px] text-left text-[13px] font-medium text-[#21261F] flex items-center gap-2.5 hover:bg-[#F1EBDD] transition-colors';
@@ -73,8 +75,6 @@ export const Header: React.FC<HeaderProps> = ({
   scheduledMessagesCount = 0,
   onOpenSettings,
   onOpenGroupDetails,
-  isHuddleActive,
-  onToggleHuddle,
   isSoundEnabled,
   onToggleSound,
   onToggleSearch,
@@ -99,6 +99,27 @@ export const Header: React.FC<HeaderProps> = ({
   const [sheet, setSheet] = useState<{ top: number; left: number } | null>(null);
   const hasPeer = !!currentChat.peerNodeId;
   const isGroup = currentChat.type === 'group' || currentChat.type === 'channel';
+
+  // Дзвонити можна лише туди, куди рушій справді донесе сигнал: на живий вузол
+  // співрозмовника. Показова розмова такого вузла не має — і кнопка каже це
+  // вголос, замість вдавати, що набирає.
+  const canCall = hasPeer && !isGroup && !currentChat.isDemo;
+
+  const startCall = (video: boolean) => {
+    if (!canCall) return;
+    soundFx.playTap();
+    window.dispatchEvent(
+      new CustomEvent('phantom:start-call', {
+        detail: {
+          peerNodeId: currentChat.peerNodeId,
+          displayName: currentChat.title,
+          // Стан звірки їде разом: у картці дзвінка його вже нема де взяти.
+          verified: currentChat.contactVerified ?? null,
+          video,
+        },
+      }),
+    );
+  };
 
   const openSheet = (el?: HTMLElement | null) => {
     soundFx.playTap();
@@ -283,20 +304,34 @@ export const Header: React.FC<HeaderProps> = ({
           )}
         </button>
 
-        {/* Audio / Video Huddle Quick Toggle */}
-        <button
-          onClick={() => {
-            soundFx.playTap();
-            onToggleHuddle();
-          }}
-          className={`${ICON_BTN} ${
-            isHuddleActive ? 'bg-[#D96C35] text-[#FDFCF9]' : ICON_BTN_IDLE
-          }`}
-          title={isHuddleActive ? 'Залишити кімнату дзвінка' : 'Запустити зв\'язок (аудіо/відео)'}
-          aria-label={isHuddleActive ? 'В ефірі' : 'Дзвінок'}
+        {/* Дзвінок: аудіо і відео. Обгортка існує лише заради підказки —
+            у вимкненої кнопки браузер власний title не показує. */}
+        <span
+          className="flex items-center gap-0.5"
+          title={canCall ? undefined : NO_CALL_NOTE}
         >
-          <Phone className="w-[18px] h-[18px]" strokeWidth={1.75} />
-        </button>
+          <button
+            onClick={() => startCall(false)}
+            disabled={!canCall}
+            data-call-start="audio"
+            className={`${ICON_BTN} ${canCall ? ICON_BTN_IDLE : ICON_BTN_OFF}`}
+            title={canCall ? `Аудіодзвінок: ${currentChat.title}` : NO_CALL_NOTE}
+            aria-label="Аудіодзвінок"
+          >
+            <Phone className="w-[18px] h-[18px]" strokeWidth={1.75} />
+          </button>
+
+          <button
+            onClick={() => startCall(true)}
+            disabled={!canCall}
+            data-call-start="video"
+            className={`${ICON_BTN} ${canCall ? ICON_BTN_IDLE : ICON_BTN_OFF}`}
+            title={canCall ? `Відеодзвінок: ${currentChat.title}` : NO_CALL_NOTE}
+            aria-label="Відеодзвінок"
+          >
+            <Video className="w-[18px] h-[18px]" strokeWidth={1.75} />
+          </button>
+        </span>
 
         {/* In-Chat Search Trigger */}
         <button

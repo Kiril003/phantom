@@ -1,42 +1,18 @@
 import React from 'react';
 
 /**
- * К4-міст до агента f1-command-organism: CommandBar (Ctrl+K, глобально)
- * і OrganismStrip (верхня смуга пульсів) пише він, у своїх директоріях
- * components/command/** і components/organism/**.
+ * К4-міст до агента f1-command-organism — файли ПРИЇХАЛИ, міст
+ * перейшов з runtime-проби (@vite-ignore) на статичні lazy-імпорти:
+ * тепер їх бачить і tsc, і бандлер.
  *
- * Файлів на момент цього комміту в дереві НЕМА — тож import іде повз
- * статичний аналіз (через new URL + @vite-ignore): щойно файли
- * з'являться, перезавантаження стенда їх підхопить; поки нема — чесний
- * null, жодного макета замість реальних пульсів.
- *
- * TODO(f1-command-organism): коли CommandBar.tsx і OrganismStrip.tsx
- * приїдуть — замінити на статичні lazy-імпорти окремим коммітом і
- * вирішити з ними бюджет хрому (OrganismStrip + StatusBar + смуга
- * столів разом не мають перевищити 76px).
+ * CommandBar сам дефолтить навігацію в deskStore.openPane і сам слухає
+ * Ctrl+K; OrganismStrip (30px) — верхня смуга реальних пульсів, вона ж
+ * заміна StatusBar на столі. Бюджет хрому: 30 + 28 (смуга столів) =
+ * 58px ≤ 76px.
  */
 
-type AnyModule = Record<string, unknown>;
-
-function pickComponent(m: AnyModule, named: string[]): React.ComponentType {
-  for (const key of ['default', ...named]) {
-    const v = m[key];
-    if (typeof v === 'function') return v as React.ComponentType;
-  }
-  return () => null;
-}
-
-function optionalComponent(relPath: string, named: string[]): React.LazyExoticComponent<React.ComponentType> {
-  return React.lazy(() =>
-    import(/* @vite-ignore */ new URL(relPath, import.meta.url).href).then(
-      (m: AnyModule) => ({ default: pickComponent(m, named) }),
-      () => ({ default: () => null }),
-    ),
-  );
-}
-
-const CommandBar = optionalComponent('../command/CommandBar.tsx', ['CommandBar']);
-const OrganismStrip = optionalComponent('../organism/OrganismStrip.tsx', ['OrganismStrip']);
+const CommandBar = React.lazy(() => import('../command/CommandBar'));
+const OrganismStrip = React.lazy(() => import('../organism/OrganismStrip'));
 
 /** Командний рядок (Ctrl+K) — глобально в оболонці застосунку. */
 export function CommandBarMount() {

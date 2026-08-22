@@ -34,7 +34,10 @@ export const PANE_REGISTRY: Record<PaneKind, PaneDef> = {
     kind: 'company',
     title: 'Компанія',
     source: 'агенти',
-    Content: React.lazy(() => import('../../layouts/AgentFoundryLayout')),
+    // Вердикт дизайн-дебати 23.08: не сира кузня, а анатомія «Компанії»
+    // (стан + Воля + прогони + глобальна смуга контролів). Кузня
+    // (AgentFoundryLayout) лишається жити за станом OPERATOR до Ф5.
+    Content: React.lazy(() => import('./CompanyPane')),
   },
   analytics: {
     kind: 'analytics',

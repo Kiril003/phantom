@@ -16,6 +16,9 @@ export interface NodeConversation {
   archived: boolean;
   created_at: string;
   updated_at: string;
+  contact_id?: string | null;
+  /** null — розмова ні з ким, тож і звіряти нема кого. */
+  contact_verified?: boolean | null;
 }
 
 export interface NodeMessage {
@@ -138,6 +141,7 @@ export function messageFromNode(row: NodeMessage, selfId: string): Message {
 
 export function chatFromNode(row: NodeConversation): Chat {
   return {
+    contactVerified: row.contact_verified ?? null,
     id: row.id,
     title: row.title,
     handle: row.handle ?? undefined,

@@ -13,6 +13,8 @@ import {
   Radio,
   Globe,
   ArrowDownUp,
+  ShieldCheck,
+  AlertTriangle,
   WifiOff,
   ChevronLeft
 } from 'lucide-react';
@@ -116,6 +118,21 @@ export const Header: React.FC<HeaderProps> = ({
               </span>
             </div>
 
+            {currentChat.contactVerified === false && (
+              <span
+                className="inline-flex items-center gap-1 text-[10px] font-bold text-[#F4AF25]"
+                title="Звірте число безпеки в налаштуваннях, розділ «Мережа & P2P»"
+              >
+                <AlertTriangle className="w-3 h-3" />
+                Співрозмовника не звірено
+              </span>
+            )}
+            {currentChat.contactVerified === true && (
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-[#55C778]">
+                <ShieldCheck className="w-3 h-3" />
+                Звірено
+              </span>
+            )}
             <p className="text-[11px] sm:text-xs text-[#8EA093] truncate">
               {currentChat.topic || currentChat.customVibe || currentChat.description || ''}
             </p>

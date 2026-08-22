@@ -135,9 +135,14 @@ class ConversationOut(BaseModel):
     archived: bool
     created_at: datetime
     updated_at: datetime
+    contact_id: Optional[str] = None
+    #: null — розмова ні з ким (нотатки собі), тож і звіряти нема кого.
+    contact_verified: Optional[bool] = None
 
 
-def _conversation_out(row: MessengerConversation) -> ConversationOut:
+def _conversation_out(
+    row: MessengerConversation, contact: Optional[MessengerContact] = None
+) -> ConversationOut:
     return ConversationOut(
         id=row.id,
         title=row.title,
@@ -149,14 +154,13 @@ def _conversation_out(row: MessengerConversation) -> ConversationOut:
         archived=row.archived,
         created_at=row.created_at,
         updated_at=row.updated_at,
+        contact_id=row.contact_id,
+        contact_verified=(contact.verified_at is not None) if contact else None,
     )
 
 
-@router.get("/conversations", response_model=list[ConversationOut])
-async def list_conversations(
-    user: User = Depends(get_current_user),
-    session: AsyncSession = Depends(get_db),
-) -> list[ConversationOut]:
+async def _conversations_for(user: User, session: AsyncSession) -> list[ConversationOut]:
+    """Список розмов разом зі станом звірки — його малює заголовок чату."""
     rows = (
         await session.execute(
             select(MessengerConversation)
@@ -164,7 +168,23 @@ async def list_conversations(
             .order_by(MessengerConversation.updated_at.desc(), MessengerConversation.id)
         )
     ).scalars().all()
-    return [_conversation_out(r) for r in rows]
+    contacts = {
+        c.id: c
+        for c in (
+            await session.execute(
+                select(MessengerContact).where(MessengerContact.owner_user_id == user.id)
+            )
+        ).scalars().all()
+    }
+    return [_conversation_out(r, contacts.get(r.contact_id or "")) for r in rows]
+
+
+@router.get("/conversations", response_model=list[ConversationOut])
+async def list_conversations(
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> list[ConversationOut]:
+    return await _conversations_for(user, session)
 
 
 class BootstrapIn(BaseModel):
@@ -192,7 +212,7 @@ async def bootstrap_conversations(
         )
     ).scalars().all()
     if existing:
-        return [_conversation_out(r) for r in existing]
+        return await _conversations_for(user, session)
 
     rows = [
         MessengerConversation(
@@ -211,14 +231,7 @@ async def bootstrap_conversations(
     await session.commit()
     # Віддаємо тим самим порядком, що й /conversations: інакше повторний виклик
     # поверне ті самі розмови інакше перемішаними, і клієнт вирішить, що щось змінилось.
-    created = (
-        await session.execute(
-            select(MessengerConversation)
-            .where(MessengerConversation.owner_user_id == user.id)
-            .order_by(MessengerConversation.updated_at.desc(), MessengerConversation.id)
-        )
-    ).scalars().all()
-    return [_conversation_out(r) for r in created]
+    return await _conversations_for(user, session)
 
 
 @router.post(

@@ -459,6 +459,8 @@ export interface GroupTopic {
 export interface Chat {
   id: string;
   title: string;
+  /** null — розмова ні з ким; false — співрозмовника ще не звірено голосом. */
+  contactVerified?: boolean | null;
   handle?: string;
   avatar: string;
   type: ChatType;

@@ -9,8 +9,9 @@ import {
   Tooltip,
   ResponsiveContainer,
 } from 'recharts';
-import { Bot, Zap, Activity, Users, ArrowUpRight, ArrowDownRight } from 'lucide-react';
+import { Bot, Zap, Activity, Users, Cpu, ArrowUpRight, ArrowDownRight } from 'lucide-react';
 import { request } from '../../services/api';
+import { fetchHealth } from '../../services/organismApi';
 
 interface OverviewOperator {
   name: string;
@@ -28,10 +29,20 @@ interface Overview {
 
 type Load =
   | { s: 'reading' }
-  | { s: 'ok'; data: Overview }
-  | { s: 'empty' }
+  | { s: 'ok'; data: Overview; at: Date }
+  | { s: 'empty'; at: Date }
   | { s: 'offline' }
   | { s: 'denied'; why: string };
+
+/** Ланцюг ШІ з /health: активний → запасний. Мовчання — чесне слово. */
+type AiChain =
+  | { s: 'reading' }
+  | { s: 'ok'; active: string; fallback: string; at: Date }
+  | { s: 'silent' };
+
+function hhmm(d: Date): string {
+  return d.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
+}
 
 const containerVariants = {
   hidden: { opacity: 0 },
@@ -60,7 +71,7 @@ function useOverview(): Load {
           data.active_agents == null &&
           data.total_sessions == null &&
           !data.daily_activity?.length;
-        setState(empty ? { s: 'empty' } : { s: 'ok', data });
+        setState(empty ? { s: 'empty', at: new Date() } : { s: 'ok', data, at: new Date() });
       })
       .catch((err: unknown) => {
         if (!alive) return;
@@ -81,6 +92,32 @@ function useOverview(): Load {
   return state;
 }
 
+/**
+ * Ланцюг ШІ приїхав сюди зі стрічки організму (гонтлет У10): стрічка
+ * несе пульси, не архітектуру. Джерело — публічний GET /health
+ * (organismApi, без побічних ефектів на токен).
+ */
+function useAiChain(): AiChain {
+  const [state, setState] = React.useState<AiChain>({ s: 'reading' });
+
+  React.useEffect(() => {
+    let alive = true;
+    void fetchHealth().then((pulse) => {
+      if (!alive) return;
+      setState(
+        pulse.ok
+          ? { s: 'ok', active: pulse.data.ai_active, fallback: pulse.data.ai_fallback, at: new Date() }
+          : { s: 'silent' },
+      );
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
+
+  return state;
+}
+
 const nf = new Intl.NumberFormat('uk-UA');
 
 function num(v: number | null | undefined): string | null {
@@ -89,6 +126,7 @@ function num(v: number | null | undefined): string | null {
 
 export default function AnalyticsOverview() {
   const load = useOverview();
+  const ai = useAiChain();
   const data = load.s === 'ok' ? load.data : null;
   // Токенів тут більше немає: висновок іде на пристрої, ми його не рахуємо.
   // Замість вигаданої кривої — справжня активність по днях.
@@ -96,6 +134,16 @@ export default function AnalyticsOverview() {
     name: new Date(d.date).toLocaleDateString('uk-UA', { weekday: 'short' }),
     messages: d.messages,
   }));
+  /* Гонтлет У5: лінія — лише від ≥2 днів зі справжніми записами.
+   * Сім нулів, з'єднаних лінією, — сфабриковане чорнило: відсутність
+   * вимірів, намальована як вимір. До двох реальних точок — слово. */
+  const realDays = series.filter((d) => d.messages > 0);
+  const chartWord =
+    realDays.length >= 2
+      ? null
+      : realDays.length === 1
+        ? `записано лише один день: ${realDays[0].name} · ${nf.format(realDays[0].messages)} повід. — лінія з'явиться від двох днів із записами`
+        : 'записів ще нема — за 7 днів жодного повідомлення';
   const operators = data?.operators ?? [];
 
   return (
@@ -124,27 +172,49 @@ export default function AnalyticsOverview() {
           </div>
         </header>
 
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+        {/* Гонтлет У5: кожен нуль підписаний — за який період, з якого
+            джерела. «Усього сеансів» перейменовано чесно: ядро рахує
+            сеанси ЧАТУ з журналу, не живі вікна цього кокпіта. */}
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-6">
           <MetricCard
             title="Повідомлень за тиждень"
+            basis="останні 7 днів · журнал чату"
             value={num(data?.messages_this_week)}
             trend={null}
             load={load}
             icon={<Zap size={24} style={{ color: 'var(--accent)' }} />}
           />
           <MetricCard
-            title="Активних агентів"
+            title="Активних прогонів"
+            basis="зараз · таблиця прогонів агентів"
             value={num(data?.active_agents)}
             trend={null}
             load={load}
             icon={<Bot size={24} style={{ color: 'var(--accent)' }} />}
           />
           <MetricCard
-            title="Усього сеансів"
+            title="Сеансів чату"
+            basis="за весь час · журнал чату"
             value={num(data?.total_sessions)}
             trend={null}
             load={load}
             icon={<Activity size={24} style={{ color: 'var(--accent)' }} />}
+          />
+          {/* Ланцюг ШІ — сюди зі стрічки організму (У10): активний двигун
+              і запасний, як їх називає /health. */}
+          <MetricCard
+            title="ШІ"
+            basis={
+              ai.s === 'ok'
+                ? `активний → запасний · /health · станом на ${hhmm(ai.at)}`
+                : 'активний → запасний · /health'
+            }
+            value={ai.s === 'ok' ? `${ai.active} → ${ai.fallback}` : null}
+            blankText={ai.s === 'reading' ? '…' : 'ядро мовчить'}
+            dense
+            trend={null}
+            load={load}
+            icon={<Cpu size={24} style={{ color: 'var(--accent)' }} />}
           />
         </div>
 
@@ -155,12 +225,16 @@ export default function AnalyticsOverview() {
             style={{ background: 'var(--surface-raised)', borderColor: 'var(--glass-border)' }}
           >
             <div className="absolute inset-0 bg-gradient-to-br from-white/5 to-transparent pointer-events-none" />
-            <h3 className="text-lg font-medium mb-6 flex items-center gap-2" style={{ color: 'var(--ink-primary)' }}>
+            <h3 className="text-lg font-medium mb-1 flex items-center gap-2" style={{ color: 'var(--ink-primary)' }}>
               <Activity size={18} style={{ color: 'var(--ink-muted)' }} /> Активність · 7 днів
             </h3>
+            <p className="text-xs mb-5" style={{ color: 'var(--ink-muted)' }}>
+              повідомлення за добу · журнал чату
+              {load.s === 'ok' && ` · станом на ${hhmm(load.at)}`}
+            </p>
             <div className="h-[300px] w-full">
-              {series.length === 0 ? (
-                <Hollow load={load} nothing="за цей тиждень ще нічого не записано" />
+              {chartWord !== null ? (
+                <Hollow load={load} nothing={chartWord} />
               ) : (
                 <ResponsiveContainer width="100%" height="100%">
                   <AreaChart data={series} margin={{ top: 10, right: 10, left: -20, bottom: 0 }}>
@@ -171,8 +245,8 @@ export default function AnalyticsOverview() {
                       </linearGradient>
                     </defs>
                     <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.05)" vertical={false} />
-                    <XAxis dataKey="name" stroke="rgba(255,255,255,0.3)" fontSize={12} tickLine={false} axisLine={false} />
-                    <YAxis stroke="rgba(255,255,255,0.3)" fontSize={12} tickLine={false} axisLine={false} />
+                    <XAxis dataKey="name" stroke="rgba(255,255,255,0.3)" fontSize={12} tickLine={false} axisLine />
+                    <YAxis stroke="rgba(255,255,255,0.3)" fontSize={12} tickLine={false} axisLine allowDecimals={false} />
                     <Tooltip
                       contentStyle={{
                         backgroundColor: 'rgba(20,20,22,0.9)',
@@ -203,9 +277,12 @@ export default function AnalyticsOverview() {
             style={{ background: 'var(--surface-raised)', borderColor: 'var(--glass-border)' }}
           >
             <div className="absolute inset-0 bg-gradient-to-b from-white/5 to-transparent pointer-events-none" />
-            <h3 className="text-lg font-medium mb-6 flex items-center gap-2" style={{ color: 'var(--ink-primary)' }}>
+            <h3 className="text-lg font-medium mb-1 flex items-center gap-2" style={{ color: 'var(--ink-primary)' }}>
               <Users size={18} style={{ color: 'var(--ink-muted)' }} /> Хто працює
             </h3>
+            <p className="text-xs mb-5" style={{ color: 'var(--ink-muted)' }}>
+              число — повідомлень за весь час · журнал чату
+            </p>
 
             <div className="flex-1 space-y-4">
               {operators.length === 0 ? (
@@ -253,9 +330,12 @@ function statusLine(load: Load): string {
     case 'denied':
       return load.why;
     case 'empty':
-      return 'PHANTOM ще не накопичив статистики';
+      return `PHANTOM ще не накопичив статистики · станом на ${hhmm(load.at)}`;
     case 'ok':
-      return 'справжні показники цього ядра';
+      /* «Справжні» викинуто з копі (гонтлет У5): показник або справжній,
+       * або його нема — присягатись словом не можна. Натомість факт:
+       * коли прочитано. */
+      return `показники цього ядра · станом на ${hhmm(load.at)}`;
   }
 }
 
@@ -277,26 +357,36 @@ function Hollow({ load, nothing }: { load: Load; nothing: string }) {
 
 function MetricCard({
   title,
+  basis,
   value,
+  blankText,
+  dense = false,
   trend,
   load,
   icon,
 }: {
   title: string;
+  /** Підпис числа: за який період, з якого джерела. Нуль без підпису — брехня. */
+  basis: string;
   value: string | null;
+  /** Власне слово порожнечі (для карток, що живуть не з /analytics/overview). */
+  blankText?: string;
+  /** Текстові значення (не числа) — меншим кеглем, щоб не рвати картку. */
+  dense?: boolean;
   trend: string | null;
   load: Load;
   icon: React.ReactNode;
 }) {
   const isUp = trend ? !trend.trim().startsWith('-') : false;
   const blank =
-    load.s === 'reading'
+    blankText ??
+    (load.s === 'reading'
       ? '…'
       : load.s === 'offline'
         ? 'нема зв\'язку'
         : load.s === 'denied'
           ? 'недоступно'
-          : 'ще нема';
+          : 'ще нема');
 
   return (
     <motion.div
@@ -324,10 +414,13 @@ function MetricCard({
         <h3 className="text-sm font-medium mb-1" style={{ color: 'var(--ink-muted)' }}>{title}</h3>
         <div
           className={`font-display font-semibold tracking-tight ${
-            value ? 'text-3xl' : 'text-base opacity-60'
+            value ? (dense ? 'text-xl' : 'text-3xl') : 'text-base opacity-60'
           }`}
         >
           {value ?? blank}
+        </div>
+        <div className="text-[11px] mt-1" style={{ color: 'var(--ink-muted)' }}>
+          {basis}
         </div>
       </div>
     </motion.div>

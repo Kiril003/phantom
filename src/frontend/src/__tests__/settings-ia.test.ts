@@ -248,6 +248,26 @@ describe('ІА Налаштувань: пошук по назві І поясн�
     expect(hits[0].section.label).toBe('Мова і голос');
   });
 
+  it('ключ із власним контролом досяжний і через пошук (двері до контрола)', () => {
+    // ui_theme не рендериться генеричним рядком (ним володіє ThemePicker),
+    // але пошук зобовʼязаний його знаходити — панель малює такий хіт
+    // стрибком до підрозділу, не редактором.
+    const withTheme: SettingsCategory[] = [
+      ...categories,
+      {
+        id: 'theme',
+        label: 'Тема',
+        icon: '◐',
+        settings: [
+          makeDef({ key: 'ui_theme', label: 'Тема', category: 'theme' }),
+        ],
+      },
+    ];
+    const hits = searchAllSettings(withTheme, 'кіберпалуба');
+    expect(hits.map((h) => h.def.key)).toEqual(['ui_theme']);
+    expect(hits[0].section.label).toBe('Вигляд');
+  });
+
   it('порожній запит → порожній результат, без «усього підряд»', () => {
     expect(searchAllSettings(categories, '   ')).toEqual([]);
   });

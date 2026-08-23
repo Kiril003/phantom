@@ -11,7 +11,7 @@ import { create } from 'zustand';
  * відновлює її частку.
  */
 
-export type PaneKind = 'map' | 'dialogue' | 'company' | 'analytics' | 'settings';
+export type PaneKind = 'map' | 'dialogue' | 'company' | 'analytics' | 'settings' | 'cockpit';
 export type PaneMode = 'tile' | 'float' | 'full';
 
 export interface PaneRect {
@@ -75,9 +75,12 @@ function presetDesks(): Desk[] {
       panes: [gridPane('theatre', 'map', 2 / 3), gridPane('theatre', 'dialogue', 1 / 3)],
     },
     {
+      // Ф4: стіл «Кокпіт» — один пейн-кокпіт (2×2 чарунки всередині:
+      // Машина+Активність зверху, Пристрої+Аудит знизу). Огляд
+      // аналітики лишається досяжним пейном «Огляд» через палітру.
       id: 'cockpit',
       name: 'Кокпіт',
-      panes: [gridPane('cockpit', 'analytics', 1 / 2), gridPane('cockpit', 'dialogue', 1 / 2)],
+      panes: [gridPane('cockpit', 'cockpit', 1)],
     },
     {
       id: 'company',
@@ -87,7 +90,7 @@ function presetDesks(): Desk[] {
   ];
 }
 
-const KNOWN_KINDS: PaneKind[] = ['map', 'dialogue', 'company', 'analytics', 'settings'];
+const KNOWN_KINDS: PaneKind[] = ['map', 'dialogue', 'company', 'analytics', 'settings', 'cockpit'];
 const KNOWN_MODES: PaneMode[] = ['tile', 'float', 'full'];
 
 function isFiniteNumber(v: unknown): v is number {
@@ -150,6 +153,16 @@ function loadPersisted(): PersistedShape {
     const merged = [...stored];
     for (const preset of presets) {
       if (!merged.some((d) => d.id === preset.id)) merged.push(preset);
+    }
+    // Ф4-міграція стола «Кокпіт»: до Ф4 пресет був analytics+dialogue,
+    // і власники несуть його в localStorage — домердж вище його не
+    // зачепить. Якщо збережений кокпіт ще НЕ знає пейна 'cockpit' —
+    // підставляємо новий пресет. Кастомний кокпіт, куди власник уже
+    // додав пейн-кокпіт сам, не чіпаємо.
+    const cockpitIdx = merged.findIndex((d) => d.id === 'cockpit');
+    if (cockpitIdx >= 0 && !merged[cockpitIdx].panes.some((p) => p.kind === 'cockpit')) {
+      const preset = presets.find((d) => d.id === 'cockpit');
+      if (preset) merged[cockpitIdx] = preset;
     }
     const activeDeskId =
       typeof parsed.activeDeskId === 'string' && merged.some((d) => d.id === parsed.activeDeskId)

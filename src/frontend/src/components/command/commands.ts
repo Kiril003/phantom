@@ -72,7 +72,9 @@ const NAV_TARGETS: ReadonlyArray<{ kind: PaneKind; title: string; keywords: stri
   { kind: 'dialogue', title: 'Діалог', keywords: ['dialogue', 'chat', 'чат'] },
   { kind: 'company', title: 'Компанія', keywords: ['company', 'агенти', 'foundry'] },
   { kind: 'settings', title: 'Налаштування', keywords: ['settings', 'опції'] },
-  { kind: 'analytics', title: 'Аналітика', keywords: ['analytics', 'кокпіт'] },
+  // Ф4: слово «кокпіт» тепер веде на стіл «Кокпіт» (авто-рядок
+  // «Стіл: Кокпіт» нижче), а огляд аналітики зветься «Огляд».
+  { kind: 'analytics', title: 'Огляд', keywords: ['analytics', 'огляд', 'аналітика'] },
 ];
 
 /**

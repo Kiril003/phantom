@@ -41,9 +41,17 @@ export const PANE_REGISTRY: Record<PaneKind, PaneDef> = {
   },
   analytics: {
     kind: 'analytics',
-    title: 'Аналітика',
+    // Ф4: слово «Огляд» — стіл «Кокпіт» тепер живе окремим пейном
+    // cockpit, а огляд аналітики лишається досяжним через палітру.
+    title: 'Огляд',
     source: 'ядро',
     Content: React.lazy(() => import('../../pages/Dashboard/AnalyticsOverview')),
+  },
+  cockpit: {
+    kind: 'cockpit',
+    title: 'Кокпіт',
+    source: 'цей вузол + агенти',
+    Content: React.lazy(() => import('../cockpit/CockpitPane')),
   },
   settings: {
     kind: 'settings',

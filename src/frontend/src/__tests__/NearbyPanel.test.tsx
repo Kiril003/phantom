@@ -80,7 +80,7 @@ describe('NearbyPanel', () => {
     render(<NearbyPanel lat={50.45} lon={30.52} zoom={16} />);
     await waitFor(() => expect(mapApi.getNearby).toHaveBeenCalled());
     await waitFor(() => {
-      expect(screen.getByText(/Околиці пусті/i)).toBeInTheDocument();
+      expect(screen.getByText(/Околиці · даних немає/i)).toBeInTheDocument();
     });
   });
 

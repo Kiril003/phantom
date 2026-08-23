@@ -32,6 +32,8 @@ export interface NearbyPanelProps {
 }
 
 const MIN_ZOOM = 14;
+/** Скільки OSM-обʼєктів показуємо; решта — чесним словом у заголовку. */
+const OSM_LIMIT = 10;
 
 export function NearbyPanel({
   lat,
@@ -79,6 +81,15 @@ export function NearbyPanel({
       (data?.pois.length ?? 0),
     [data],
   );
+  // Заголовок обіцяє рівно стільки рядків, скільки панель справді малює:
+  // OSM ріжеться до OSM_LIMIT, і лічильник мусить це визнавати.
+  const shown = useMemo(
+    () =>
+      (data?.remembered.length ?? 0) +
+      Math.min(data?.osm.length ?? 0, OSM_LIMIT) +
+      (data?.pois.length ?? 0),
+    [data],
+  );
 
   if (!shouldFetch) return null;
 
@@ -89,7 +100,7 @@ export function NearbyPanel({
         type="button"
         onClick={() => void fetchNow()}
         aria-label="Не вдалося знайти поруч — повторити"
-        className="px-3 py-2 min-h-[40px] rounded-full bg-rose-500/10 border border-rose-500/30 text-[10px] font-bold uppercase tracking-wider text-rose-300 hover:bg-rose-500/20 flex items-center gap-2 shadow-2xl"
+        className="glass-card px-3 py-2 min-h-[44px] rounded-full border border-rose-500/40 text-[10px] font-bold uppercase tracking-wider text-[color:var(--signal-alert)] hover:bg-rose-500/10 flex items-center gap-2 shadow-2xl"
       >
         <AlertTriangle size={14} />
         <span>Помилка пошуку — повторити</span>
@@ -110,10 +121,11 @@ export function NearbyPanel({
   }
 
   if (total === 0) {
+    // Порожнеча — словом, а не рядками-привидами (гонтлет Р1, удар №1).
     return (
-      <div className="glass-card flex min-h-[44px] items-center gap-2 rounded-full px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[color:var(--ink-muted)]">
-        <MapPin size={12} />
-        <span>Околиці пусті</span>
+      <div className="glass-card flex min-h-[44px] items-center gap-2 rounded-full px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[color:var(--ink-secondary)]">
+        <MapPin size={12} className="text-[color:var(--ink-muted)]" />
+        <span>Околиці · даних немає</span>
       </div>
     );
   }
@@ -124,7 +136,7 @@ export function NearbyPanel({
         type="button"
         onClick={() => setExpanded(true)}
         aria-label={`${total} місць поруч`}
-        className="glass-card flex min-h-[44px] items-center gap-2 rounded-full px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[color:var(--primary-shadow,#5c3d05)] shadow-2xl transition-all hover:bg-white/5 active:scale-95"
+        className="glass-card flex min-h-[44px] items-center gap-2 rounded-full px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[color:var(--ink-primary)] shadow-2xl transition-all hover:bg-amber-500/10 active:scale-95"
       >
         <MapPin size={14} className="text-amber-500" />
         <span>{total} поруч</span>
@@ -136,16 +148,23 @@ export function NearbyPanel({
   return (
     <div
       role="dialog"
-      className="glass-elevated flex max-h-[400px] w-[320px] flex-col overflow-hidden rounded-2xl shadow-2xl animate-in zoom-in-95 duration-200"
+      aria-label="Околиці"
+      /* Скло тут було напівпрозорим білим поверх бежевої підложки — дев'ять
+         рядків розчинялись у мапі (гонтлет Р1, удар №1, 6/6 голосів).
+         Списку, який треба ЧИТАТИ, належить непрозора поверхня. */
+      className="flex max-h-[320px] w-[320px] flex-col overflow-hidden rounded-2xl border border-[color:var(--glass-border)] shadow-2xl animate-in zoom-in-95 duration-200"
+      style={{ background: 'var(--surface-raised)' }}
     >
-      <header className="px-4 py-3 border-b border-white/5 flex items-center justify-between">
-        <span className="text-amber-400 font-bold uppercase tracking-widest text-[10px]">
-          Околиці ({total})
+      <header className="pl-4 pr-2 py-1.5 border-b border-[color:var(--glass-border)] flex items-center justify-between">
+        <span className="font-bold uppercase tracking-widest text-[10px] text-[color:var(--ink-secondary)] flex items-center gap-1.5">
+          <MapPin size={12} className="text-amber-600" aria-hidden />
+          Околиці ({shown}{total > shown ? ` з ${total}` : ''})
         </span>
         <button
           type="button"
           onClick={() => setExpanded(false)}
-          className="text-white/40 hover:text-white transition-colors"
+          aria-label="Згорнути околиці"
+          className="flex h-11 w-11 items-center justify-center rounded-full text-[color:var(--ink-muted)] hover:text-[color:var(--ink-primary)] transition-colors"
         >
           <ChevronRight size={16} className="rotate-90" />
         </button>
@@ -155,64 +174,56 @@ export function NearbyPanel({
         {data?.remembered && data.remembered.length > 0 && (
           <Section icon={<Brain size={14} />} label="Пам'ять" tone="cyan">
             {data.remembered.map((m) => (
-              <button
+              <NearbyRow
                 key={m.id}
-                type="button"
+                name={m.place_name || m.content}
+                distanceM={m.distance_m}
                 onClick={() => onSelect?.({ kind: 'remembered', item: m })}
-                className="w-full text-left px-3 py-2 hover:bg-white/5 rounded-xl flex items-center justify-between gap-2 transition-colors group"
-              >
-                <span className="truncate text-xs text-white/80 group-hover:text-white">{m.place_name || m.content}</span>
-                <span className="text-[10px] font-mono text-white/30 shrink-0">
-                  {m.distance_m}m
-                </span>
-              </button>
+              />
             ))}
           </Section>
         )}
         {data?.osm && data.osm.length > 0 && (
-          <Section icon={<Landmark size={14} />} label="Об'єкти" tone="white">
-            {data.osm.slice(0, 10).map((f) => (
-              <button
+          <Section
+            icon={<Landmark size={14} />}
+            label={
+              data.osm.length > OSM_LIMIT
+                ? `Об'єкти · перші ${OSM_LIMIT} з ${data.osm.length}`
+                : "Об'єкти"
+            }
+            tone="white"
+          >
+            {data.osm.slice(0, OSM_LIMIT).map((f) => (
+              <NearbyRow
                 key={f.osm_id}
-                type="button"
+                name={f.name || f.type || `node#${f.osm_id}`}
+                distanceM={f.distance_m}
                 onClick={() => onSelect?.({ kind: 'osm', item: f })}
-                className="w-full text-left px-3 py-2 hover:bg-white/5 rounded-xl flex items-center justify-between gap-2 transition-colors group"
-              >
-                <span className="truncate text-xs text-white/80 group-hover:text-white">
-                  {f.name || f.type || `node#${f.osm_id}`}
-                </span>
-                <span className="text-[10px] font-mono text-white/30 shrink-0">
-                  {f.distance_m}m
-                </span>
-              </button>
+              />
             ))}
           </Section>
         )}
         {data?.pois && data.pois.length > 0 && (
           <Section icon={<MapPin size={14} />} label="Збережене" tone="yellow">
             {data.pois.map((p) => (
-              <button
+              <NearbyRow
                 key={p.id}
-                type="button"
+                name={p.name}
+                distanceM={p.distance_m}
                 onClick={() => onSelect?.({ kind: 'poi', item: p })}
-                className="w-full text-left px-3 py-2 hover:bg-white/5 rounded-xl flex items-center justify-between gap-2 transition-colors group"
-              >
-                <span className="truncate text-xs text-white/80 group-hover:text-white">{p.name}</span>
-                <span className="text-[10px] font-mono text-white/30 shrink-0">
-                  {p.distance_m}m
-                </span>
-              </button>
+              />
             ))}
           </Section>
         )}
       </div>
-      <footer className="px-4 py-2 text-[9px] font-bold uppercase tracking-widest text-white/20 border-t border-white/5 flex items-center justify-between">
-        <span>Радіус {radiusM}м</span>
+      <footer className="px-4 py-2 text-[9px] font-bold uppercase tracking-widest text-[color:var(--ink-muted)] border-t border-[color:var(--glass-border)] flex items-center justify-between">
+        <span>Радіус {radiusM} м</span>
         <button
           type="button"
           onClick={() => void fetchNow()}
           disabled={loading}
-          className="hover:text-amber-400 transition-colors disabled:opacity-20"
+          aria-label="Оновити околиці"
+          className="hover:text-amber-600 transition-colors disabled:opacity-30"
         >
           <RefreshCw size={12} className={loading ? 'animate-spin' : ''} />
         </button>
@@ -220,6 +231,43 @@ export function NearbyPanel({
     </div>
   );
 }
+
+/**
+ * Один рядок списку. Текст — чорнилом теми, а не білим-на-білому:
+ * рядок, який неможливо прочитати, гірший за відсутній.
+ */
+function NearbyRow({
+  name,
+  distanceM,
+  onClick,
+}: {
+  name: string;
+  distanceM: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="w-full text-left px-3 py-2 hover:bg-amber-500/10 rounded-xl flex items-center justify-between gap-2 transition-colors"
+    >
+      <span className="truncate text-xs text-[color:var(--ink-primary)]">{name}</span>
+      <span className="text-[10px] tabular-nums text-[color:var(--ink-muted)] shrink-0">
+        {distanceM} м
+      </span>
+    </button>
+  );
+}
+
+/**
+ * Роль секції каже кольорова крапка-бейдж і вага шрифту, а не прозорість
+ * тексту: колір — декорація, читабельність — з чорнила теми.
+ */
+const SECTION_DOT: Record<'cyan' | 'white' | 'yellow', string> = {
+  cyan: '#0891b2',
+  yellow: '#d97706',
+  white: 'var(--ink-muted)',
+};
 
 function Section({
   icon,
@@ -232,15 +280,14 @@ function Section({
   tone: 'cyan' | 'white' | 'yellow';
   children: React.ReactNode;
 }) {
-  const toneClass =
-    tone === 'cyan'
-      ? 'text-cyan-400'
-      : tone === 'yellow'
-        ? 'text-amber-500'
-        : 'text-white/50';
   return (
     <div className="mb-2 px-1">
-      <div className={`px-3 py-1 text-[9px] font-bold uppercase tracking-widest flex items-center gap-1.5 ${toneClass}`}>
+      <div className="px-3 py-1 text-[9px] font-bold uppercase tracking-widest flex items-center gap-1.5 text-[color:var(--ink-secondary)]">
+        <span
+          aria-hidden
+          className="block h-1.5 w-1.5 shrink-0 rounded-full"
+          style={{ background: SECTION_DOT[tone] }}
+        />
         {icon}
         <span>{label}</span>
       </div>

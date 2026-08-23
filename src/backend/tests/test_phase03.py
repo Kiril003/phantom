@@ -1078,6 +1078,20 @@ async def chat_client() -> AsyncGenerator[AsyncClient, None]:
         await ensure_default_user(session)
         await session.commit()
 
+    # Boot parity: production runs the home_tenant lane right after
+    # ensure_default_user (not skippable even under PHANTOM_SKIP_G2_WARMUP=1),
+    # because get_current_tenant 403s every chat route for a tenantless user.
+    # The lane swallows its own exceptions, so assert the binding happened.
+    from lifespan_warmup import _lane_home_tenant
+    await _lane_home_tenant()
+    async with factory() as session:
+        from sqlalchemy import select as _select
+        from db.models import User
+        root = (await session.execute(
+            _select(User).where(User.username == "phantom")
+        )).scalar_one()
+        assert root.tenant_id, "home_tenant lane did not bind the ROOT user"
+
     app.dependency_overrides[get_db] = _override_get_db
 
     mock_response = AIResponse(

@@ -10,11 +10,16 @@
  */
 
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import CommandBar from '../components/command/CommandBar';
 import { buildCommands, SECTION_ORDER } from '../components/command/commands';
 import { useSystemStore } from '../stores/systemStore';
 import { useAuthStore } from '../stores/authStore';
+import { fetchHealth } from '../services/organismApi';
+
+vi.mock('../services/organismApi', () => ({
+  fetchHealth: vi.fn(),
+}));
 
 function openPalette() {
   render(<CommandBar />);
@@ -133,5 +138,53 @@ describe('палітра: «Вийти з сесії» вимагає друго
     fireEvent.change(input, { target: { value: 'тема' } });
     expect(screen.queryByText('Точно вийти? Enter — підтвердити')).toBeNull();
     expect(useSystemStore.getState().authenticated).toBe(true);
+  });
+});
+
+describe('палітра: «ШІ: стан ланцюга» — швидкий погляд без переходу (борг У10)', () => {
+  afterEach(() => {
+    cleanup();
+    vi.restoreAllMocks();
+  });
+
+  it('Enter не закриває палітру — відповідь словом у той самий рядок', async () => {
+    vi.mocked(fetchHealth).mockResolvedValue({
+      ok: true,
+      data: {
+        status: 'ok',
+        version: '0.1.0',
+        hostname: 'test',
+        ws_clients: 1,
+        esp32_connected: false,
+        serial_enabled: false,
+        ai_active: 'gemini',
+        ai_fallback: 'ollama',
+      },
+    });
+    const input = openPalette();
+    fireEvent.change(input, { target: { value: 'ланцюг' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+
+    // Палітра жива, контекст (стіл/пейн) не змінено — це погляд, не перехід.
+    expect(screen.getByRole('dialog')).toBeTruthy();
+    await waitFor(() => {
+      expect(screen.getByText(/gemini → ollama · \/health · станом на/)).toBeTruthy();
+    });
+
+    // Esc спершу ховає відповідь, палітра лишається.
+    fireEvent.keyDown(input, { key: 'Escape' });
+    expect(screen.queryByText(/gemini → ollama/)).toBeNull();
+    expect(screen.getByRole('dialog')).toBeTruthy();
+  });
+
+  it('мовчання ядра — чесним словом, не вигаданим ланцюгом', async () => {
+    vi.mocked(fetchHealth).mockResolvedValue({ ok: false, reason: 'unreachable' });
+    const input = openPalette();
+    fireEvent.change(input, { target: { value: 'ланцюг' } });
+    fireEvent.keyDown(input, { key: 'Enter' });
+    await waitFor(() => {
+      expect(screen.getByText('ядро мовчить — ланцюг невідомий')).toBeTruthy();
+    });
+    expect(screen.getByRole('dialog')).toBeTruthy();
   });
 });

@@ -11,6 +11,9 @@
  * ДВОМА Enter'ами: перший переводить рядок у confirm-стан, другий —
  * виконує; Esc чи відхід курсора з рядка скасовує підтвердження, а не
  * палітру (У8 — вихід у рукавицях одним нечітким Enter'ом заборонено).
+ * Рядок-погляд (peek, борг У10) на Enter НЕ закриває палітру: відповідь
+ * приходить словом у той самий рядок; Esc спершу ховає відповідь, потім
+ * закриває палітру.
  * Хоткеї пунктів показуються лише реальні; сьогодні глобальних хоткеїв
  * навігації нема — колонка порожня.
  */
@@ -94,6 +97,8 @@ export function CommandBar({ onNavigate, disableHotkey }: CommandBarProps) {
   const [cursor, setCursor] = useState(0);
   /** id деструктивного рядка, що чекає другого Enter'а. */
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  /** Відповідь рядка-погляду (peek, У10): слово живе в самому рядку. */
+  const [peek, setPeek] = useState<{ id: string; word: string } | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
 
@@ -102,6 +107,7 @@ export function CommandBar({ onNavigate, disableHotkey }: CommandBarProps) {
     setQuery('');
     setCursor(0);
     setConfirmingId(null);
+    setPeek(null);
   }, []);
 
   /* Глобальний Ctrl/Cmd+K. */
@@ -157,6 +163,7 @@ export function CommandBar({ onNavigate, disableHotkey }: CommandBarProps) {
   /**
    * Виконання пункту: деструктивний вимагає двох підтверджень — перший
    * виклик лише озброює рядок (confirm-стан), другий — виконує.
+   * Рядок-погляд (peek) не закриває палітру: відповідь — словом у рядок.
    */
   const execute = useCallback(
     (item: CommandItem) => {
@@ -165,7 +172,15 @@ export function CommandBar({ onNavigate, disableHotkey }: CommandBarProps) {
         return;
       }
       setConfirmingId(null);
-      item.run();
+      if (item.peek) {
+        setPeek({ id: item.id, word: 'читаю…' });
+        void item.peek().then((word) => {
+          // Відповідь лягає, лише якщо погляд не скасовано і не замінено.
+          setPeek((p) => (p && p.id === item.id ? { id: item.id, word } : p));
+        });
+        return;
+      }
+      item.run?.();
     },
     [confirmingId],
   );
@@ -173,8 +188,10 @@ export function CommandBar({ onNavigate, disableHotkey }: CommandBarProps) {
   const onInputKey = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       e.preventDefault();
-      // Спершу знімається зведення деструктивного рядка, потім палітра.
+      // Спершу знімається зведення деструктивного рядка чи відповідь
+      // погляду, потім палітра.
       if (confirmingId) setConfirmingId(null);
+      else if (peek) setPeek(null);
       else close();
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
@@ -233,6 +250,7 @@ export function CommandBar({ onNavigate, disableHotkey }: CommandBarProps) {
             setQuery(e.target.value);
             setCursor(0);
             setConfirmingId(null);
+            setPeek(null);
           }}
           onKeyDown={onInputKey}
           placeholder="Команда, стіл або пейн…"
@@ -311,10 +329,26 @@ export function CommandBar({ onNavigate, disableHotkey }: CommandBarProps) {
                         <Highlighted text={s.item.title} indices={s.indices} />
                       </span>
                     )}
-                    {!confirming && s.item.hint && (
-                      <span style={{ color: FAINT, fontSize: 'var(--ph-type-caption-size, 12.5px)' }}>
-                        {s.item.hint}
+                    {/* Відповідь погляду (У10) — чорнилом і моно, щоб
+                        відрізнятись від тьмяної підказки-опису. */}
+                    {!confirming && peek?.id === s.item.id ? (
+                      <span
+                        data-peek="true"
+                        style={{
+                          color: INK,
+                          fontFamily: FONT_MONO,
+                          fontSize: 'var(--ph-type-caption-size, 12.5px)',
+                        }}
+                      >
+                        {peek.word}
                       </span>
+                    ) : (
+                      !confirming &&
+                      s.item.hint && (
+                        <span style={{ color: FAINT, fontSize: 'var(--ph-type-caption-size, 12.5px)' }}>
+                          {s.item.hint}
+                        </span>
+                      )
                     )}
                     <span style={{ flex: 1 }} />
                     {s.item.hotkey && (
@@ -353,7 +387,7 @@ export function CommandBar({ onNavigate, disableHotkey }: CommandBarProps) {
           ) : (
             <span>Enter виконати</span>
           )}
-          <span>{confirmingId ? 'Esc скасувати' : 'Esc закрити'}</span>
+          <span>{confirmingId ? 'Esc скасувати' : peek ? 'Esc сховати відповідь' : 'Esc закрити'}</span>
           <span style={{ flex: 1 }} />
           <span>Ctrl+K</span>
         </div>

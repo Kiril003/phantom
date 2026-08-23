@@ -13,7 +13,10 @@
  *                 підказка називає наслідок: відкрити пейн на активному
  *                 столі;
  *  «Дії»        — теми (settingsStore.setTheme: DOM+localStorage одразу,
- *                 бекенд best-effort);
+ *                 бекенд best-effort) і швидкий погляд «ШІ: стан ланцюга»
+ *                 (борг У10: ланцюг живе карткою в «Огляді», але глянути
+ *                 його треба одним хордом — peek показує відповідь просто
+ *                 в рядку палітри, без переходу між столами);
  *  «Небезпечне» — вихід із сесії (канон FloatingToolbar: clearAuth +
  *                 setAuthenticated(false) + closeAll) — НЕ пласким
  *                 рядком серед тем: розділ завжди внизу, рядок вимагає
@@ -33,6 +36,7 @@ import { useSettingsStore } from '../../stores/settingsStore';
 import { useSystemStore } from '../../stores/systemStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useUIStore } from '../../stores/uiStore';
+import { fetchHealth } from '../../services/organismApi';
 import type { ThemeId } from '@shared/types';
 
 export type CommandSection = 'Столи' | 'Переходи' | 'Дії' | 'Небезпечне';
@@ -63,7 +67,14 @@ export interface CommandItem {
   danger?: boolean;
   /** Слово підтвердження в confirm-стані деструктивного рядка. */
   confirmLabel?: string;
-  run: () => void;
+  /** Дія рядка. Відсутня лише в рядках-поглядах (peek). */
+  run?: () => void;
+  /**
+   * Швидкий погляд (У10): Enter НЕ закриває палітру — відповідь приходить
+   * словом просто в рядок. Для стану, який треба глянути, не міняючи
+   * контексту (стіл, пейн, скрол лишаються як були).
+   */
+  peek?: () => Promise<string>;
 }
 
 /** Пейни «Переходів» — рівно п'ять, за вердиктом власника. */
@@ -159,6 +170,25 @@ export function buildCommands(opts: BuildCommandsOptions): CommandItem[] {
       },
     });
   }
+
+  /* Швидкий погляд на ланцюг ШІ (борг У10). Картка живе в «Огляді»
+   * (AnalyticsOverview, MetricCard «ШІ») — але потреба оператора інша:
+   * глянути «хто зараз відповідає» за секунду, не полишаючи стола.
+   * Перехід на «Огляд» заради одного рядка був би дорожчим і нечеснішим
+   * за пряму відповідь тут: джерело те саме — публічний GET /health. */
+  items.push({
+    id: 'peek:ai-chain',
+    section: 'Дії',
+    title: 'ШІ: стан ланцюга',
+    hint: 'активний → запасний · відповідь тут, без переходу',
+    keywords: ['ai', 'llm', 'ші', 'ланцюг', 'gemini', 'ollama', 'провайдер', 'chain', 'health'],
+    peek: async () => {
+      const pulse = await fetchHealth();
+      if (!pulse.ok) return 'ядро мовчить — ланцюг невідомий';
+      const at = new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
+      return `${pulse.data.ai_active} → ${pulse.data.ai_fallback} · /health · станом на ${at}`;
+    },
+  });
 
   items.push({
     id: 'action:sign-out',

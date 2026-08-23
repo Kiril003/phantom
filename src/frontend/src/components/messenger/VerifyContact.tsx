@@ -19,6 +19,7 @@ import { QrScanner } from './QrScanner';
 import { messengerApi } from '../../services/messengerApi';
 import type { NodeContact } from '../../services/messengerApi';
 import { soundFx } from '../../utils/messengerSound';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
 
 // У код кладемо число звірки, а не ключ: звіряються саме числа. Префікс
 // потрібен, щоб відрізнити його від QR з ключовим бандлом у панелі ідентичності.
@@ -130,7 +131,7 @@ export const SafetyVerifyBlock: React.FC<{
       </code>
       {contact.verified ? (
         <span className="inline-flex items-center gap-1 text-[10px] font-bold text-[#3F7A4B]">
-          <ShieldCheck className="w-3.5 h-3.5" />
+          <ShieldCheck className="w-3.5 h-3.5" strokeWidth={1.75} />
           Звірено голосом
         </span>
       ) : (
@@ -150,12 +151,12 @@ export const SafetyVerifyBlock: React.FC<{
               }}
               className="flex items-center gap-1.5 text-[11px] font-bold text-[#C25925] active:scale-95 transition-transform"
             >
-              <QrCode className="w-3.5 h-3.5" />
+              <QrCode className="w-3.5 h-3.5" strokeWidth={1.75} />
               <span>Порівняти QR-кодом</span>
               {panel === 'none' ? (
-                <ChevronDown className="w-3 h-3" />
+                <ChevronDown className="w-3 h-3" strokeWidth={1.75} />
               ) : (
-                <ChevronUp className="w-3 h-3" />
+                <ChevronUp className="w-3 h-3" strokeWidth={1.75} />
               )}
             </button>
 
@@ -183,7 +184,7 @@ export const SafetyVerifyBlock: React.FC<{
                   }}
                   className="flex items-center gap-1.5 text-[11px] font-bold text-[#C25925] active:scale-95 transition-transform"
                 >
-                  <ScanLine className="w-3.5 h-3.5" />
+                  <ScanLine className="w-3.5 h-3.5" strokeWidth={1.75} />
                   <span>Сканувати код співрозмовника</span>
                 </button>
               </div>
@@ -220,7 +221,7 @@ export const SafetyVerifyBlock: React.FC<{
                 data-safety-compare="match"
                 className="p-2 bg-[#F0F5EE] rounded-xl border border-[#CBDDC4] flex items-start gap-1.5"
               >
-                <ShieldCheck className="w-3.5 h-3.5 text-[#3F7A4B] mt-0.5 shrink-0" />
+                <ShieldCheck className="w-3.5 h-3.5 text-[#3F7A4B] mt-0.5 shrink-0" strokeWidth={1.75} />
                 <span className="text-[10.5px] text-[#3F5F3B] leading-relaxed font-semibold">
                   {locked
                     ? 'Числа збіглися, але минуле порівняння розійшлося. Натисніть «Порівняти заново» і звірте ще раз — тоді підтвердження відкриється.'
@@ -234,7 +235,7 @@ export const SafetyVerifyBlock: React.FC<{
                 data-safety-compare="mismatch"
                 className="p-2.5 bg-[#F7ECE7] rounded-xl border border-[#E0B4A6] flex items-start gap-1.5"
               >
-                <ShieldAlert className="w-4 h-4 text-[#B4432E] mt-0.5 shrink-0" />
+                <ShieldAlert className="w-4 h-4 text-[#B4432E] mt-0.5 shrink-0" strokeWidth={1.75} />
                 <div className="space-y-1.5">
                   <span className="text-[10.5px] text-[#8E3520] leading-relaxed block">
                     <b className="font-bold">ЧИСЛА РІЗНІ — між вами хтось є.</b>{' '}
@@ -257,7 +258,7 @@ export const SafetyVerifyBlock: React.FC<{
                 data-safety-compare="unreadable"
                 className="p-2 bg-[#FDF6EC] rounded-xl border border-[#EBD9BE] flex items-start gap-1.5"
               >
-                <AlertTriangle className="w-3.5 h-3.5 text-[#B45309] mt-0.5 shrink-0" />
+                <AlertTriangle className="w-3.5 h-3.5 text-[#B45309] mt-0.5 shrink-0" strokeWidth={1.75} />
                 <span className="text-[10.5px] text-[#8C5A1A] leading-relaxed">
                   Це не число безпеки — код не з тієї картки. Нічого не сталося:
                   наведіть камеру на екран звірки співрозмовника.
@@ -326,7 +327,7 @@ export const SafetyVerifyBlock: React.FC<{
           className="flex items-center gap-1 text-[10px] font-semibold text-[#7A6A55] hover:text-[#5F6A60] transition-colors"
         >
           <span>Що робити, якщо розійшлося?</span>
-          {helpOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+          {helpOpen ? <ChevronUp className="w-3 h-3" strokeWidth={1.75} /> : <ChevronDown className="w-3 h-3" strokeWidth={1.75} />}
         </button>
         {helpOpen && (
           <p className="mt-1 text-[10px] text-[#7A6A55] leading-relaxed">
@@ -380,6 +381,9 @@ export const ContactSheet: React.FC<ContactSheetProps> = ({
   const [confirmKind, setConfirmKind] = useState<'clear' | 'delete' | null>(null);
   const [busy, setBusy] = useState(false);
   const [note, setNote] = useState<string | null>(null);
+
+  // Картка живе, лише поки її змонтовано, тож умова завжди істинна.
+  useEscapeClose(true, onClose);
 
   useEffect(() => {
     let alive = true;
@@ -454,11 +458,13 @@ export const ContactSheet: React.FC<ContactSheetProps> = ({
   return createPortal(
     <>
       <div className="fixed inset-0 z-[900]" onClick={onClose} />
+      {/* Висота картки залежить від стану звірки (QR, скан, підтвердження) —
+          на телефоні вона доростала за нижній край. Стеля + власний скрол. */}
       <div
         role="dialog"
         aria-label="Картка співрозмовника"
-        className="fixed z-[901] w-[300px] max-w-[calc(100vw-16px)] bg-[#FDFCF9] border border-[#DDD4C4] rounded-2xl shadow-[0_16px_40px_rgba(30,37,33,0.18)] p-3 space-y-2.5 text-[#1E2521]"
-        style={{ top: anchor.top, left: anchor.left }}
+        className="fixed z-[901] w-[300px] max-w-[calc(100vw-16px)] overflow-y-auto overscroll-contain bg-[#FDFCF9] border border-[#DDD4C4] rounded-2xl shadow-[0_16px_40px_rgba(30,37,33,0.18)] p-3 space-y-2.5 text-[#1E2521]"
+        style={{ top: anchor.top, left: anchor.left, maxHeight: `calc(100dvh - ${anchor.top}px - 12px)` }}
       >
         {/* Заголовок: назва (з інлайн-перейменуванням) + закриття */}
         <div className="flex items-start justify-between gap-2">
@@ -480,7 +486,7 @@ export const ContactSheet: React.FC<ContactSheetProps> = ({
                 className="shrink-0 text-[#3F7A4B] hover:scale-110 active:scale-95 transition-transform disabled:opacity-50"
                 title="Зберегти назву"
               >
-                <Check className="w-4 h-4" />
+                <Check className="w-4 h-4" strokeWidth={1.75} />
               </button>
             </div>
           ) : (
@@ -499,7 +505,7 @@ export const ContactSheet: React.FC<ContactSheetProps> = ({
             className="shrink-0 text-[#8A9186] hover:text-[#1E2521]"
             aria-label="Закрити"
           >
-            <X className="w-4 h-4" />
+            <X className="w-4 h-4" strokeWidth={1.75} />
           </button>
         </div>
 
@@ -522,12 +528,12 @@ export const ContactSheet: React.FC<ContactSheetProps> = ({
             <div className="flex items-center gap-1.5">
               {contact.verified ? (
                 <span className="flex items-center gap-1 text-[10px] font-bold text-[#3F7A4B]">
-                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <ShieldCheck className="w-3.5 h-3.5" strokeWidth={1.75} />
                   Звірено
                 </span>
               ) : (
                 <span className="flex items-center gap-1 text-[10px] font-bold text-[#B45309]">
-                  <AlertTriangle className="w-3.5 h-3.5" />
+                  <AlertTriangle className="w-3.5 h-3.5" strokeWidth={1.75} />
                   Не звірено
                 </span>
               )}
@@ -557,21 +563,21 @@ export const ContactSheet: React.FC<ContactSheetProps> = ({
               }}
               className={`${SHEET_ACTION} hover:bg-[#F4F1E8]`}
             >
-              <Pencil className="w-3.5 h-3.5 text-[#C25925] shrink-0" />
+              <Pencil className="w-3.5 h-3.5 text-[#C25925] shrink-0" strokeWidth={1.75} />
               <span>Перейменувати</span>
             </button>
             <button
               onClick={() => setConfirmKind('clear')}
               className={`${SHEET_ACTION} hover:bg-[#F4F1E8]`}
             >
-              <Eraser className="w-3.5 h-3.5 text-[#8A9186] shrink-0" />
+              <Eraser className="w-3.5 h-3.5 text-[#8A9186] shrink-0" strokeWidth={1.75} />
               <span>Очистити історію</span>
             </button>
             <button
               onClick={() => setConfirmKind('delete')}
               className={`${SHEET_ACTION} text-[#B4432E] hover:bg-[#F7ECE7]`}
             >
-              <Trash2 className="w-3.5 h-3.5 shrink-0" />
+              <Trash2 className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} />
               <span>Видалити розмову</span>
             </button>
           </div>

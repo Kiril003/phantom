@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { SmartFolder } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
 
 interface FolderIconPickerModalProps {
   isOpen: boolean;
@@ -92,6 +93,9 @@ export const FolderIconPickerModal: React.FC<FolderIconPickerModalProps> = ({
   const [customInput, setCustomInput] = useState<string>('');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
+  // Escape виводить із шару так само, як хрестик.
+  useEscapeClose(isOpen, onClose);
+
   if (!isOpen) return null;
 
   const currentCategory = curatedCategories.find((c) => c.id === activeCategoryId) || curatedCategories[0];
@@ -127,7 +131,7 @@ export const FolderIconPickerModal: React.FC<FolderIconPickerModalProps> = ({
         <div className="p-4 border-b border-[#E6DFD3] flex items-center justify-between bg-[#FDFCF9]">
           <div className="flex items-center gap-2.5">
             <div className="w-8 h-8 rounded-xl bg-[#F9F7F1] border border-[#DDD4C4] flex items-center justify-center text-[#E87A42]">
-              <Sparkles className="w-4 h-4" />
+              <Sparkles className="w-4 h-4" strokeWidth={1.75} />
             </div>
             <div>
               <h3 className="font-extrabold text-sm text-[#1E2521]">
@@ -145,7 +149,7 @@ export const FolderIconPickerModal: React.FC<FolderIconPickerModalProps> = ({
             }}
             className="p-1.5 rounded-xl hover:bg-[#F1EDE3] text-[#5F6A60] hover:text-[#1E2521] transition-colors"
           >
-            <X className="w-4 h-4" />
+            <X className="w-4 h-4" strokeWidth={1.75} />
           </button>
         </div>
 
@@ -202,7 +206,7 @@ export const FolderIconPickerModal: React.FC<FolderIconPickerModalProps> = ({
             className="px-2.5 py-1.5 bg-white hover:bg-[#F2ECE2] text-[#7A8479] rounded-xl border border-[#DFD6C5] text-xs font-bold transition-all flex items-center gap-1 shadow-2xs hover:scale-102"
             title="Випадковий символ"
           >
-            <Wand2 className="w-3.5 h-3.5 text-[#E87A42]" />
+            <Wand2 className="w-3.5 h-3.5 text-[#E87A42]" strokeWidth={1.75} />
             <span className="text-[11px]">Мікс</span>
           </button>
         </div>
@@ -212,7 +216,7 @@ export const FolderIconPickerModal: React.FC<FolderIconPickerModalProps> = ({
           {/* Custom Input / Search */}
           <div className="flex gap-2">
             <div className="flex-1 relative">
-              <Search className="w-3.5 h-3.5 text-[#8C988E] absolute left-3 top-1/2 -translate-y-1/2" />
+              <Search className="w-3.5 h-3.5 text-[#8C988E] absolute left-3 top-1/2 -translate-y-1/2" strokeWidth={1.75} />
               <input
                 type="text"
                 value={searchQuery}
@@ -307,7 +311,7 @@ export const FolderIconPickerModal: React.FC<FolderIconPickerModalProps> = ({
             onClick={handleSave}
             className="px-4 py-2 bg-[#E87A42] hover:bg-[#C25925] text-[#F7F5EE] text-xs font-bold rounded-xl shadow-sm transition-colors flex items-center gap-1.5"
           >
-            <Check className="w-3.5 h-3.5 text-[#F7F5EE]" />
+            <Check className="w-3.5 h-3.5 text-[#F7F5EE]" strokeWidth={1.75} />
             <span>Застосувати іконку</span>
           </button>
         </div>

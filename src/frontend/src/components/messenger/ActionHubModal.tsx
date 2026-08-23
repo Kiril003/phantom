@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import { Chat, ChatMember, EventAttendee, EventData, Message } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
 
 type TablePreset = 'sprint' | 'budget' | 'comparison' | 'schedule';
 
@@ -236,6 +237,9 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
 
     setEventDescription(`З повідомлення: «${text.slice(0, 120)}${text.length > 120 ? '...' : ''}»`);
   };
+
+  // Escape виводить із шару так само, як хрестик.
+  useEscapeClose(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -483,7 +487,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
             }}
             className="p-1.5 text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F1EDE3] rounded-xl transition-colors"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5" strokeWidth={1.75} />
           </button>
         </div>
 
@@ -531,7 +535,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
               {extractedSourceSnippet && (
                 <div className="p-3 bg-[#FDFCF9] border border-[#E6DFD3] rounded-2xl flex items-start gap-2.5">
                   <div className="p-1.5 bg-[#F9F7F1] text-[#E87A42] border border-[#DDD4C4] rounded-xl shrink-0">
-                    <Sparkles className="w-4 h-4" />
+                    <Sparkles className="w-4 h-4" strokeWidth={1.75} />
                   </div>
                   <div className="flex-1 min-w-0">
                     <span className="font-extrabold text-xs text-[#1E2521]">
@@ -584,7 +588,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
                 <div className="space-y-1">
                   <label className="block text-xs font-bold text-[#5F6A60] flex items-center gap-1">
-                    <Calendar className="w-3 h-3 text-[#E87A42]" />
+                    <Calendar className="w-3 h-3 text-[#E87A42]" strokeWidth={1.75} />
                     Дата
                   </label>
                   <input
@@ -597,7 +601,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
 
                 <div className="space-y-1">
                   <label className="block text-xs font-bold text-[#5F6A60] flex items-center gap-1">
-                    <Clock className="w-3 h-3 text-[#E87A42]" />
+                    <Clock className="w-3 h-3 text-[#E87A42]" strokeWidth={1.75} />
                     Початок
                   </label>
                   <input
@@ -610,7 +614,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
 
                 <div className="space-y-1">
                   <label className="block text-xs font-bold text-[#5F6A60] flex items-center gap-1">
-                    <Clock className="w-3 h-3 text-[#5F6A60]" />
+                    <Clock className="w-3 h-3 text-[#5F6A60]" strokeWidth={1.75} />
                     Завершення
                   </label>
                   <input
@@ -656,7 +660,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
               <div className="space-y-2 p-3 bg-[#FDFCF9] border border-[#E6DFD3] rounded-2xl">
                 <div className="flex items-center justify-between">
                   <label className="text-xs font-extrabold text-[#1E2521] flex items-center gap-1.5">
-                    <Users className="w-3.5 h-3.5 text-[#E87A42]" />
+                    <Users className="w-3.5 h-3.5 text-[#E87A42]" strokeWidth={1.75} />
                     <span>Запрошені учасники ({selectedAttendeeIds.length}/{membersList.length})</span>
                   </label>
                   <span className="text-[10px] text-[#5F6A60]">
@@ -690,7 +694,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
                             isSelected ? 'bg-[#E87A42] text-[#F7F5EE] border-[#E87A42]' : 'border-[#E6DFD3]'
                           }`}
                         >
-                          {isSelected && <Check className="w-3 h-3" />}
+                          {isSelected && <Check className="w-3 h-3" strokeWidth={1.75} />}
                         </div>
                       </div>
                     );
@@ -732,7 +736,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
                 onClick={handleInsertCalendarEvent}
                 className="w-full py-3 bg-[#E87A42] hover:bg-[#D46B35] text-[#1E2521] rounded-2xl font-extrabold text-xs shadow-md transition-all flex items-center justify-center gap-2 mt-2"
               >
-                <CalendarCheck className="w-4 h-4" />
+                <CalendarCheck className="w-4 h-4" strokeWidth={1.75} />
                 <span>Надіслати запрошення в чат та синхронізувати</span>
               </button>
             </div>
@@ -790,7 +794,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
                 onClick={handleInsertTable}
                 className="w-full py-2.5 bg-[#E87A42] hover:bg-[#D46B35] text-[#1E2521] rounded-xl font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5"
               >
-                <Check className="w-4 h-4" />
+                <Check className="w-4 h-4" strokeWidth={1.75} />
                 <span>Вставити таблицю в чат</span>
               </button>
             </div>
@@ -880,7 +884,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
                         disabled={chartPoints.length === 1}
                         className="text-gray-400 hover:text-red-600 p-1 disabled:opacity-30"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
                       </button>
                     </div>
                   ))}
@@ -890,7 +894,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
                   onClick={() => setChartPoints([...chartPoints, { name: '', value: '' }])}
                   className="px-3 py-1.5 bg-[#E6DFD3] text-[#1E2521] rounded-xl text-xs font-bold flex items-center gap-1"
                 >
-                  <Plus className="w-3.5 h-3.5" />
+                  <Plus className="w-3.5 h-3.5" strokeWidth={1.75} />
                   <span>Додати точку</span>
                 </button>
               </div>
@@ -900,7 +904,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
                 disabled={!chartPoints.some((p) => p.name.trim() && p.value.trim())}
                 className="w-full py-2.5 bg-[#E87A42] hover:bg-[#D46B35] text-[#1E2521] rounded-xl font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5 disabled:opacity-40"
               >
-                <Check className="w-4 h-4" />
+                <Check className="w-4 h-4" strokeWidth={1.75} />
                 <span>Вставити інтерактивний графік</span>
               </button>
             </div>
@@ -935,7 +939,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
                         onClick={() => setTaskItems(taskItems.filter((_, i) => i !== idx))}
                         className="text-gray-400 hover:text-red-600 p-1"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
                       </button>
                     </div>
                   ))}
@@ -964,7 +968,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
                     }}
                     className="px-3 py-1.5 bg-[#E6DFD3] text-[#1E2521] rounded-xl text-xs font-bold flex items-center gap-1"
                   >
-                    <Plus className="w-3.5 h-3.5" />
+                    <Plus className="w-3.5 h-3.5" strokeWidth={1.75} />
                     <span>Додати</span>
                   </button>
                 </div>
@@ -974,7 +978,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
                 onClick={handleInsertTaskList}
                 className="w-full py-2.5 bg-[#E87A42] hover:bg-[#D46B35] text-[#1E2521] rounded-xl font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5"
               >
-                <Check className="w-4 h-4" />
+                <Check className="w-4 h-4" strokeWidth={1.75} />
                 <span>Вставити чек-лист у чат</span>
               </button>
             </div>
@@ -1008,7 +1012,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
                         onClick={() => setPollOptions(pollOptions.filter((_, i) => i !== idx))}
                         className="text-gray-400 hover:text-red-600 p-1"
                       >
-                        <Trash2 className="w-3.5 h-3.5" />
+                        <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
                       </button>
                     </div>
                   ))}
@@ -1031,7 +1035,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
                     }}
                     className="px-3 py-1.5 bg-[#E6DFD3] text-[#1E2521] rounded-xl text-xs font-bold flex items-center gap-1"
                   >
-                    <Plus className="w-3.5 h-3.5" />
+                    <Plus className="w-3.5 h-3.5" strokeWidth={1.75} />
                     <span>Додати</span>
                   </button>
                 </div>
@@ -1041,7 +1045,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
                 onClick={handleInsertPoll}
                 className="w-full py-2.5 bg-[#E87A42] hover:bg-[#D46B35] text-[#1E2521] rounded-xl font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5"
               >
-                <Check className="w-4 h-4" />
+                <Check className="w-4 h-4" strokeWidth={1.75} />
                 <span>Опублікувати опитування</span>
               </button>
             </div>
@@ -1094,7 +1098,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
                 onClick={handleInsertBill}
                 className="w-full py-2.5 bg-[#E87A42] hover:bg-[#D46B35] text-[#1E2521] rounded-xl font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5"
               >
-                <Check className="w-4 h-4" />
+                <Check className="w-4 h-4" strokeWidth={1.75} />
                 <span>Розділити чек порівну</span>
               </button>
             </div>
@@ -1143,7 +1147,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
                 onClick={handleInsertLocation}
                 className="w-full py-2.5 bg-[#E87A42] hover:bg-[#D46B35] text-[#1E2521] rounded-xl font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5"
               >
-                <Check className="w-4 h-4" />
+                <Check className="w-4 h-4" strokeWidth={1.75} />
                 <span>Надіслати картку локації</span>
               </button>
             </div>
@@ -1180,7 +1184,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
                 onClick={handleInsertFile}
                 className="w-full py-2.5 bg-[#E87A42] hover:bg-[#D46B35] text-[#1E2521] rounded-xl font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5"
               >
-                <Check className="w-4 h-4" />
+                <Check className="w-4 h-4" strokeWidth={1.75} />
                 <span>Прикріпити документ</span>
               </button>
             </div>
@@ -1236,7 +1240,7 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
                 onClick={handleInsertCode}
                 className="w-full py-2.5 bg-[#E87A42] hover:bg-[#D46B35] text-[#1E2521] rounded-xl font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5"
               >
-                <Check className="w-4 h-4" />
+                <Check className="w-4 h-4" strokeWidth={1.75} />
                 <span>Вставити сніппет коду</span>
               </button>
             </div>

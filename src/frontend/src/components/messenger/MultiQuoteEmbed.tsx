@@ -26,7 +26,7 @@ export const MultiQuoteEmbed: React.FC<MultiQuoteEmbedProps> = ({ data }) => {
       <div className="flex items-center justify-between gap-2 pb-2 border-b border-[#E6DFD3]">
         <div className="flex items-center gap-2">
           <div className="p-1.5 bg-[#F9F7F1] text-[#E87A42] border border-[#DDD4C4] rounded-lg">
-            <Quote className="w-4 h-4" />
+            <Quote className="w-4 h-4" strokeWidth={1.75} />
           </div>
           <div>
             <h4 className="font-bold text-xs sm:text-sm text-[#1E2521] leading-tight">
@@ -43,7 +43,7 @@ export const MultiQuoteEmbed: React.FC<MultiQuoteEmbedProps> = ({ data }) => {
           className="p-1.5 bg-[#FDFCF9] hover:bg-[#F9F7F1] text-[#5F6A60] hover:text-[#1E2521] rounded-lg text-xs transition-colors border border-[#E6DFD3]"
           title="Копіювати"
         >
-          {isCopied ? <Check className="w-3.5 h-3.5 text-[#E87A42]" /> : <Copy className="w-3.5 h-3.5" />}
+          {isCopied ? <Check className="w-3.5 h-3.5 text-[#E87A42]" strokeWidth={1.75} /> : <Copy className="w-3.5 h-3.5" strokeWidth={1.75} />}
         </button>
       </div>
 
@@ -51,7 +51,7 @@ export const MultiQuoteEmbed: React.FC<MultiQuoteEmbedProps> = ({ data }) => {
       {data?.synthesis && (
         <div className="p-3.5 bg-[#FDFCF9] rounded-2xl border border-[#E6DFD3] space-y-2 text-xs">
           <div className="flex items-center gap-1.5 text-[11px] font-bold text-[#E87A42]">
-            <ListChecks className="w-3.5 h-3.5 text-[#E87A42]" />
+            <ListChecks className="w-3.5 h-3.5 text-[#E87A42]" strokeWidth={1.75} />
             <span>Ключові тези:</span>
           </div>
 
@@ -82,7 +82,7 @@ export const MultiQuoteEmbed: React.FC<MultiQuoteEmbedProps> = ({ data }) => {
           className="w-full px-3 py-2 text-left flex items-center justify-between text-xs font-semibold text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F9F7F1] transition-colors"
         >
           <span>Оригінальні цитати ({(data?.quotes || []).length})</span>
-          {showFullQuotes ? <ChevronUp className="w-3.5 h-3.5" /> : <ChevronDown className="w-3.5 h-3.5" />}
+          {showFullQuotes ? <ChevronUp className="w-3.5 h-3.5" strokeWidth={1.75} /> : <ChevronDown className="w-3.5 h-3.5" strokeWidth={1.75} />}
         </button>
 
         {showFullQuotes && (

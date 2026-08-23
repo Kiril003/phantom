@@ -3,6 +3,7 @@ import { X, QrCode, UserPlus, Users } from 'lucide-react';
 import { QrScanner } from './QrScanner';
 import { messengerApi } from '../../services/messengerApi';
 import { soundFx } from '../../utils/messengerSound';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
 
 interface CreateChatModalProps {
   isOpen: boolean;
@@ -26,6 +27,9 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
   const [scanning, setScanning] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Escape виводить із шару так само, як хрестик.
+  useEscapeClose(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -96,7 +100,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
         <div className="px-5 py-4 border-b border-[#E6DFD3] flex items-center justify-between bg-[#FDFCF9] shrink-0">
           <div className="flex items-center gap-2.5 min-w-0">
             <div className="w-9 h-9 rounded-2xl bg-[#F9F7F1] text-[#E87A42] border border-[#DDD4C4] flex items-center justify-center shrink-0">
-              <UserPlus className="w-4.5 h-4.5" />
+              <UserPlus className="w-4.5 h-4.5" strokeWidth={1.75} />
             </div>
             <div className="min-w-0">
               <h3 className="font-extrabold text-base text-[#1E2521] leading-tight">
@@ -113,7 +117,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
             className="p-1.5 text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F1EDE3] rounded-xl transition-colors shrink-0"
             aria-label="Закрити"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5" strokeWidth={1.75} />
           </button>
         </div>
 
@@ -138,7 +142,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
                 data-testid="scan-peer-qr"
                 className="w-full py-2.5 rounded-2xl bg-white border border-[#DDD4C4] text-[#C25925] text-[12.5px] font-bold flex items-center justify-center gap-2 hover:bg-[#FAF6EE] active:scale-98 transition-all"
               >
-                <QrCode className="w-4 h-4" />
+                <QrCode className="w-4 h-4" strokeWidth={1.75} />
                 <span>Сканувати QR співрозмовника</span>
               </button>
             )}

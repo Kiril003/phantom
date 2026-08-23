@@ -13,7 +13,7 @@
  */
 
 import React, { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle, Download, FileText, RefreshCw } from 'lucide-react';
+import { AlertTriangle, Download, FileText, Image as ImageIcon, RefreshCw } from 'lucide-react';
 import type { Message } from '../../types/messenger';
 import { messengerApi } from '../../services/messengerApi';
 import {
@@ -131,24 +131,33 @@ export const SecureMediaBubble: React.FC<Props> = ({ msg, isSelf, onOpenLightbox
   // ── Байти ще не доїхали ────────────────────────────────────────────────────
   if (phase === 'waiting') {
     return (
-      <div className={`mt-1 p-3 rounded-2xl border ${shell}`} data-testid="media-waiting">
-        <div className="flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#C9A227] shrink-0" />
-          <span className="text-xs font-semibold text-[#21261F]">
-            {label} · очікує передачі
-          </span>
+      <div className={`mt-1 p-3 rounded-[16px] border ${shell}`} data-testid="media-waiting">
+        {/* Та сама картка, що й у готового файла: значок, імʼя, вага. Без неї
+            «очікує передачі» було порожнім прямокутником — людина не бачила
+            навіть того, ЩО саме до неї їде. */}
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="p-2 bg-[#F2EDE4] text-[#8A7A5C] rounded-[10px] shrink-0">
+            {isImage ? <ImageIcon className="w-4 h-4" strokeWidth={1.75} /> : <FileText className="w-4 h-4" strokeWidth={1.75} />}
+          </div>
+          <div className="min-w-0">
+            <p className="text-[14px] font-semibold truncate text-[#21261F]">{media.name}</p>
+            <p className="text-[12.5px] text-[color:var(--msg-meta)] truncate">
+              {humanSize(media.size)} · {extensionOf(media.name)}
+            </p>
+          </div>
         </div>
-        <p className="mt-1 text-[11px] text-[#6E7568] truncate">
-          {media.name} · {humanSize(media.size)}
+        <p className="mt-2 flex items-center gap-1.5 text-[12.5px] text-[#8A7A5C]">
+          <span className="w-1.5 h-1.5 rounded-full bg-[#C9A227] shrink-0" />
+          {label} · очікує передачі
         </p>
-        {detail && <p className="mt-1 text-[11px] text-[#8C3B22]">{detail}</p>}
+        {detail && <p className="mt-1 text-[12.5px] text-[#8C3B22]">{detail}</p>}
         <button
           type="button"
           onClick={askAgain}
           disabled={asking}
-          className="mt-2 flex items-center gap-1.5 px-2.5 py-1 rounded-xl bg-[#F2EDE4] hover:bg-[#E8DFC8] disabled:opacity-60 text-[11px] font-semibold text-[#1E2521] transition-colors"
+          className="mt-2 flex items-center gap-1.5 px-2.5 h-[28px] rounded-[10px] bg-[#F2EDE4] hover:bg-[#E8DFC8] disabled:opacity-60 text-[12.5px] font-medium text-[#1E2521] transition-colors"
         >
-          <RefreshCw className={`w-3 h-3 ${asking ? 'animate-spin' : ''}`} />
+          <RefreshCw className={`w-3.5 h-3.5 ${asking ? 'animate-spin' : ''}`} strokeWidth={1.75} />
           {asking ? 'Запитуємо…' : 'Запитати ще раз'}
         </button>
         {caption && <div className="mt-2">{captionLine}</div>}
@@ -161,23 +170,23 @@ export const SecureMediaBubble: React.FC<Props> = ({ msg, isSelf, onOpenLightbox
     const tampered = phase === 'tampered';
     return (
       <div
-        className="mt-1 p-3 rounded-2xl border bg-[#FBEBE6] border-[#E9BFAE]"
+        className="mt-1 p-3 rounded-[16px] border bg-[#FBEBE6] border-[#E9BFAE]"
         data-testid="media-error"
       >
         <div className="flex items-center gap-2">
-          <AlertTriangle className="w-3.5 h-3.5 text-[#8C3B22] shrink-0" />
+          <AlertTriangle className="w-4 h-4 text-[#8C3B22] shrink-0" strokeWidth={1.75} />
           {/* Формулювання без роду: «Фото» середнього, «Файл» чоловічого,
               а однакова фраза мусить читатись природно для обох. */}
-          <span className="text-xs font-bold text-[#8C3B22]">
+          <span className="text-[14px] font-semibold text-[#8C3B22]">
             {label} · {tampered ? 'відбиток не збігся' : 'не прочиталось'}
           </span>
         </div>
-        <p className="mt-1 text-[11px] text-[#8C3B22]/85">
+        <p className="mt-1 text-[12.5px] text-[#8C3B22]/85">
           {tampered
             ? 'Байти на вузлі не ті, що надсилав співрозмовник. Показувати їх не будемо.'
             : detail}
         </p>
-        <p className="mt-1 text-[11px] text-[#6E7568] truncate">{media.name}</p>
+        <p className="mt-1 text-[12.5px] text-[color:var(--msg-meta)] truncate">{media.name}</p>
       </div>
     );
   }
@@ -185,10 +194,10 @@ export const SecureMediaBubble: React.FC<Props> = ({ msg, isSelf, onOpenLightbox
   // ── Читаємо ────────────────────────────────────────────────────────────────
   if (phase === 'reading' || !url) {
     return (
-      <div className={`mt-1 p-3 rounded-2xl border ${shell}`} data-testid="media-reading">
+      <div className={`mt-1 p-3 rounded-[16px] border ${shell}`} data-testid="media-reading">
         <div className="flex items-center gap-2">
           <span className="w-1.5 h-1.5 rounded-full bg-[var(--msg-meta)] animate-pulse shrink-0" />
-          <span className="text-xs text-[#6E7568]">{label} · розшифровуємо…</span>
+          <span className="text-[14px] text-[color:var(--msg-meta)]">{label} · розшифровуємо…</span>
         </div>
       </div>
     );
@@ -201,8 +210,8 @@ export const SecureMediaBubble: React.FC<Props> = ({ msg, isSelf, onOpenLightbox
   // немає ні там, ні там, тож жоден із двох не вдає доставку.
   const transferBadge =
     isSelf && (outState === 'queued' || outState === 'parked') ? (
-      <span className="flex items-center gap-1 text-[10.5px] text-[#8A7A5C]">
-        <span className="w-1.5 h-1.5 rounded-full bg-[#C9A227]" />
+      <span className="flex items-center gap-1.5 text-[12.5px] text-[#8A7A5C]">
+        <span className="w-1.5 h-1.5 rounded-full bg-[#C9A227] shrink-0" />
         {outState === 'parked' ? 'у дорозі через хмару' : 'очікує передачі'}
       </span>
     ) : null;
@@ -217,11 +226,19 @@ export const SecureMediaBubble: React.FC<Props> = ({ msg, isSelf, onOpenLightbox
             src={url}
             alt={media.name}
             onError={() => setImgBroken(true)}
+            // Не кожен непридатний байт доходить до onError: буває, що браузер
+            // «завантажив» картинку нульового розміру. Тоді бульбашка ставала
+            // порожнім прямокутником із самотньою крапкою під ним. Нульова
+            // сторона — те саме, що бите фото: показуємо картку файла.
+            onLoad={(e) => {
+              const img = e.currentTarget;
+              if (!img.naturalWidth || !img.naturalHeight) setImgBroken(true);
+            }}
             onClick={() => {
               soundFx.playTap();
               onOpenLightbox?.(url, media.name);
             }}
-            className="rounded-2xl max-w-[360px] max-h-[360px] w-auto object-contain cursor-pointer hover:opacity-95 transition-opacity"
+            className="rounded-[16px] max-w-full sm:max-w-[360px] max-h-[360px] w-auto object-contain cursor-pointer hover:opacity-95 transition-opacity"
           />
           <button
             type="button"
@@ -231,12 +248,12 @@ export const SecureMediaBubble: React.FC<Props> = ({ msg, isSelf, onOpenLightbox
             title="Зберегти"
             aria-label="Зберегти"
           >
-            <Download className="w-3.5 h-3.5" />
+            <Download className="w-3.5 h-3.5" strokeWidth={1.75} />
           </button>
         </div>
         {captionLine}
         <div className="flex items-center justify-between gap-2">
-          <span className="text-[10.5px] text-[#6E7568] truncate">
+          <span className="text-[12.5px] text-[color:var(--msg-meta)] truncate">
             {media.name} · {humanSize(media.size)}
           </span>
           {transferBadge}
@@ -248,15 +265,15 @@ export const SecureMediaBubble: React.FC<Props> = ({ msg, isSelf, onOpenLightbox
   return (
     <div className="mt-1 space-y-1" data-testid="media-file">
       <div
-        className={`p-3 rounded-2xl border flex items-center justify-between gap-3 ${shell}`}
+        className={`p-3 rounded-[16px] border flex items-center justify-between gap-3 ${shell}`}
       >
         <div className="flex items-center gap-2.5 min-w-0">
-          <div className="p-2 bg-[#FCE7D8] text-[#E87A42] rounded-xl shrink-0">
-            <FileText className="w-4 h-4" />
+          <div className="p-2 bg-[#FCE7D8] text-[#C25925] rounded-[10px] shrink-0">
+            {imgBroken ? <ImageIcon className="w-4 h-4" strokeWidth={1.75} /> : <FileText className="w-4 h-4" strokeWidth={1.75} />}
           </div>
           <div className="min-w-0">
-            <p className="font-bold text-xs truncate text-[#21261F]">{media.name}</p>
-            <p className="text-[10px] text-[#6E7568]">
+            <p className="text-[14px] font-semibold truncate text-[#21261F]">{media.name}</p>
+            <p className="text-[12.5px] text-[color:var(--msg-meta)]">
               {humanSize(media.size)} · {extensionOf(media.name)}
             </p>
             {transferBadge}
@@ -264,7 +281,7 @@ export const SecureMediaBubble: React.FC<Props> = ({ msg, isSelf, onOpenLightbox
         </div>
         <button
           onClick={save}
-          className={`p-2 rounded-xl transition-colors shrink-0 ${
+          className={`w-[32px] h-[32px] min-w-0 min-h-0 flex items-center justify-center rounded-[10px] transition-colors shrink-0 ${
             isSelf
               ? 'bg-[#F6DCC9] hover:bg-[#F0CDB4] text-[#1E2521]'
               : 'bg-[#F2EDE4] hover:bg-[#E8DFC8] text-[#1E2521]'
@@ -272,7 +289,7 @@ export const SecureMediaBubble: React.FC<Props> = ({ msg, isSelf, onOpenLightbox
           title="Зберегти"
           aria-label="Зберегти"
         >
-          <Download className="w-4 h-4" />
+          <Download className="w-4 h-4" strokeWidth={1.75} />
         </button>
       </div>
       {captionLine}

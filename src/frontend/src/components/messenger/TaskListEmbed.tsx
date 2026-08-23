@@ -54,7 +54,7 @@ export const TaskListEmbed: React.FC<TaskListEmbedProps> = ({ data, onUpdateTask
       <div className="flex items-center justify-between gap-2 pb-2 border-b border-[#E6DFD3]">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="p-2 bg-[#F9F7F1] text-[#E87A42] border border-[#DDD4C4] rounded-xl shrink-0 shadow-sm">
-            <ListTodo className="w-4 h-4" />
+            <ListTodo className="w-4 h-4" strokeWidth={1.75} />
           </div>
           <div className="min-w-0">
             <h4 className="font-extrabold text-xs sm:text-sm text-[#1E2521] leading-tight truncate">
@@ -70,7 +70,7 @@ export const TaskListEmbed: React.FC<TaskListEmbedProps> = ({ data, onUpdateTask
           onClick={() => setIsAdding(!isAdding)}
           className="px-2.5 py-1 bg-[#F9F7F1] hover:bg-[#F1EDE3] text-[#5F6A60] hover:text-[#1E2521] border border-[#E6DFD3] rounded-lg text-[11px] font-semibold flex items-center gap-1 transition-colors shrink-0 shadow-sm active:scale-95"
         >
-          <Plus className="w-3 h-3 text-[#E87A42]" />
+          <Plus className="w-3 h-3 text-[#E87A42]" strokeWidth={1.75} />
           <span>Задача</span>
         </button>
       </div>
@@ -78,7 +78,7 @@ export const TaskListEmbed: React.FC<TaskListEmbedProps> = ({ data, onUpdateTask
       {/* Progress Bar */}
       <div className="w-full bg-[#F7F5EE] h-2 rounded-full overflow-hidden border border-[#E6DFD3]">
         <div
-          className="bg-gradient-to-r from-[#E87A42] to-[#10B981] h-full rounded-full transition-all duration-300 shadow-[0_0_8px_rgba(85,199,120,0.5)]"
+          className="bg-gradient-to-r from-[#E87A42] to-[#4C8A55] h-full rounded-full transition-all duration-300 shadow-[0_0_8px_rgba(85,199,120,0.5)]"
           style={{ width: `${progressPercent}%` }}
         />
       </div>
@@ -103,9 +103,9 @@ export const TaskListEmbed: React.FC<TaskListEmbedProps> = ({ data, onUpdateTask
                 }`}
               >
                 {task.completed ? (
-                  <CheckSquare className="w-4 h-4 fill-current" />
+                  <CheckSquare className="w-4 h-4 fill-current" strokeWidth={1.75} />
                 ) : (
-                  <Square className="w-4 h-4" />
+                  <Square className="w-4 h-4" strokeWidth={1.75} />
                 )}
               </button>
               <span
@@ -120,7 +120,7 @@ export const TaskListEmbed: React.FC<TaskListEmbedProps> = ({ data, onUpdateTask
             <div className="flex items-center gap-2 shrink-0">
               {task.dueDate && (
                 <span className="text-[10px] text-[#5F6A60] flex items-center gap-0.5 bg-[#F7F5EE] px-2 py-0.5 rounded-md border border-[#E6DFD3] font-mono">
-                  <Calendar className="w-2.5 h-2.5" />
+                  <Calendar className="w-2.5 h-2.5" strokeWidth={1.75} />
                   {task.dueDate}
                 </span>
               )}
@@ -172,7 +172,7 @@ export const TaskListEmbed: React.FC<TaskListEmbedProps> = ({ data, onUpdateTask
                 onClick={handleAddTask}
                 className="px-3 py-1.5 bg-[#E87A42] hover:bg-[#C25925] text-[#F7F5EE] font-bold rounded-lg text-xs flex items-center gap-1 transition-colors"
               >
-                <Check className="w-3.5 h-3.5" />
+                <Check className="w-3.5 h-3.5" strokeWidth={1.75} />
                 <span>Додати</span>
               </button>
             </div>

@@ -17,6 +17,7 @@ import {
 } from 'lucide-react';
 import { LocationData } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
 
 interface LocationSheetModalProps {
   location: LocationData | null;
@@ -35,6 +36,9 @@ export const LocationSheetModal: React.FC<LocationSheetModalProps> = ({
 }) => {
   const [isDossierExpanded, setIsDossierExpanded] = useState(true);
   const [isSaved, setIsSaved] = useState(false);
+
+  // Escape виводить із шару так само, як хрестик.
+  useEscapeClose(isOpen, onClose);
 
   if (!isOpen || !location) return null;
 
@@ -64,7 +68,7 @@ export const LocationSheetModal: React.FC<LocationSheetModalProps> = ({
           onClick={onClose}
           className="absolute top-3 right-4 p-1.5 text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F1EDE3] rounded-full transition-colors"
         >
-          <X className="w-4 h-4" />
+          <X className="w-4 h-4" strokeWidth={1.75} />
         </button>
 
         {/* Scrollable Content */}
@@ -73,7 +77,7 @@ export const LocationSheetModal: React.FC<LocationSheetModalProps> = ({
           <div className="flex items-start gap-3.5">
             {/* Emerald Icon */}
             <div className="w-12 h-12 rounded-2xl bg-[#F9F7F1] flex items-center justify-center text-[#E87A42] shrink-0 shadow-sm border border-[#DDD4C4]">
-              <ShoppingBag className="w-6 h-6" />
+              <ShoppingBag className="w-6 h-6" strokeWidth={1.75} />
             </div>
 
             <div className="min-w-0 flex-1">
@@ -97,7 +101,7 @@ export const LocationSheetModal: React.FC<LocationSheetModalProps> = ({
               }}
               className="col-span-2 py-3 px-4 bg-[#E87A42] hover:bg-[#C25925] active:scale-[0.98] text-[#F7F5EE] font-bold text-sm rounded-2xl flex items-center justify-center gap-2 transition-all shadow-sm"
             >
-              <Navigation className="w-4 h-4 fill-current" />
+              <Navigation className="w-4 h-4 fill-current" strokeWidth={1.75} />
               <span>Маршрут</span>
             </button>
 
@@ -110,7 +114,7 @@ export const LocationSheetModal: React.FC<LocationSheetModalProps> = ({
               }}
               className="py-2.5 px-2 bg-[#FDFCF9] hover:bg-[#F9F7F1] text-[#5F6A60] hover:text-[#1E2521] text-xs font-semibold rounded-2xl flex flex-col items-center justify-center gap-1 border border-[#E6DFD3] transition-colors"
             >
-              <GitFork className="w-4 h-4 text-[#E87A42]" />
+              <GitFork className="w-4 h-4 text-[#E87A42]" strokeWidth={1.75} />
               <span>Через</span>
             </button>
 
@@ -127,7 +131,7 @@ export const LocationSheetModal: React.FC<LocationSheetModalProps> = ({
                   : 'bg-[#FDFCF9] hover:bg-[#F9F7F1] text-[#5F6A60] hover:text-[#1E2521] border-[#E6DFD3]'
               }`}
             >
-              <Bookmark className={`w-4 h-4 ${isSaved ? 'fill-current' : 'text-[#E87A42]'}`} />
+              <Bookmark className={`w-4 h-4 ${isSaved ? 'fill-current' : 'text-[#E87A42]'}`} strokeWidth={1.75} />
               <span>{isSaved ? 'Збережено' : 'Зберегти'}</span>
             </button>
           </div>
@@ -143,7 +147,7 @@ export const LocationSheetModal: React.FC<LocationSheetModalProps> = ({
               }}
               className="flex-1 py-2.5 px-3 bg-[#FDFCF9] hover:bg-[#F9F7F1] text-[#5F6A60] hover:text-[#1E2521] text-xs font-semibold rounded-xl flex items-center justify-center gap-2 border border-[#E6DFD3] transition-colors"
             >
-              <Share2 className="w-3.5 h-3.5 text-[#E87A42]" />
+              <Share2 className="w-3.5 h-3.5 text-[#E87A42]" strokeWidth={1.75} />
               <span>Надіслати картку в бесіду</span>
             </button>
 
@@ -156,7 +160,7 @@ export const LocationSheetModal: React.FC<LocationSheetModalProps> = ({
               }}
               className="py-2.5 px-3 bg-[#F9F7F1] hover:bg-[#F1EDE3] text-[#E87A42] text-xs font-semibold rounded-xl flex items-center justify-center gap-1.5 border border-[#DDD4C4] transition-colors"
             >
-              <Users className="w-3.5 h-3.5" />
+              <Users className="w-3.5 h-3.5" strokeWidth={1.75} />
               <span>Збір тут</span>
             </button>
           </div>
@@ -166,7 +170,7 @@ export const LocationSheetModal: React.FC<LocationSheetModalProps> = ({
             {(dossier?.bestHours || location.hours) && (
               <div className="flex items-center justify-between text-xs sm:text-sm">
                 <span className="text-[#5F6A60] flex items-center gap-1.5">
-                  <Clock className="w-3.5 h-3.5 text-[#E87A42]" /> Години роботи
+                  <Clock className="w-3.5 h-3.5 text-[#E87A42]" strokeWidth={1.75} /> Години роботи
                 </span>
                 <span className="font-semibold text-[#1E2521]">
                   {dossier?.bestHours || location.hours}
@@ -176,7 +180,7 @@ export const LocationSheetModal: React.FC<LocationSheetModalProps> = ({
 
             <div className="flex items-center justify-between text-xs sm:text-sm">
               <span className="text-[#5F6A60] flex items-center gap-1.5">
-                <MapPin className="w-3.5 h-3.5 text-[#E87A42]" /> Адреса
+                <MapPin className="w-3.5 h-3.5 text-[#E87A42]" strokeWidth={1.75} /> Адреса
               </span>
               <span className="font-medium text-[#1E2521] text-right truncate max-w-[60%]">
                 {location.address}
@@ -193,15 +197,15 @@ export const LocationSheetModal: React.FC<LocationSheetModalProps> = ({
                 className="w-full px-4 py-3 flex items-center justify-between hover:bg-[#F9F7F1] transition-colors"
               >
                 <div className="flex items-center gap-2">
-                  <Info className="w-4 h-4 text-[#E87A42]" />
+                  <Info className="w-4 h-4 text-[#E87A42]" strokeWidth={1.75} />
                   <span className="font-bold text-sm text-[#1E2521]">
                     Досьє локації
                   </span>
                 </div>
                 {isDossierExpanded ? (
-                  <ChevronUp className="w-4 h-4 text-[#5F6A60]" />
+                  <ChevronUp className="w-4 h-4 text-[#5F6A60]" strokeWidth={1.75} />
                 ) : (
-                  <ChevronDown className="w-4 h-4 text-[#5F6A60]" />
+                  <ChevronDown className="w-4 h-4 text-[#5F6A60]" strokeWidth={1.75} />
                 )}
               </button>
 
@@ -233,7 +237,7 @@ export const LocationSheetModal: React.FC<LocationSheetModalProps> = ({
                       {dossier?.crowdLevel && (
                         <div className="p-2.5 bg-[#F7F5EE] rounded-xl border border-[#E6DFD3]">
                           <div className="font-semibold text-[#1E2521] mb-1 flex items-center gap-1">
-                            <Users className="w-3 h-3 text-[#E87A42]" /> Заповненість
+                            <Users className="w-3 h-3 text-[#E87A42]" strokeWidth={1.75} /> Заповненість
                           </div>
                           <p className="text-[#5F6A60]">{dossier.crowdLevel}</p>
                         </div>
@@ -242,7 +246,7 @@ export const LocationSheetModal: React.FC<LocationSheetModalProps> = ({
                       {dossier?.transitTips && (
                         <div className="p-2.5 bg-[#F7F5EE] rounded-xl border border-[#E6DFD3]">
                           <div className="font-semibold text-[#1E2521] mb-1 flex items-center gap-1">
-                            <Footprints className="w-3 h-3 text-[#E87A42]" /> Доступність
+                            <Footprints className="w-3 h-3 text-[#E87A42]" strokeWidth={1.75} /> Доступність
                           </div>
                           <p className="text-[#5F6A60] truncate">{dossier.transitTips}</p>
                         </div>
@@ -272,7 +276,7 @@ export const LocationSheetModal: React.FC<LocationSheetModalProps> = ({
               className="inline-flex items-center gap-1 text-sm font-semibold text-[#E87A42] hover:underline"
             >
               <span>{location.address}</span>
-              <ExternalLink className="w-3.5 h-3.5" />
+              <ExternalLink className="w-3.5 h-3.5" strokeWidth={1.75} />
             </a>
           </div>
         </div>

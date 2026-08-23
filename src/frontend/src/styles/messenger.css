@@ -13,6 +13,39 @@
   --msg-meta-self: #7A6248;   /* те саме в своїй бульбашці — ≈4.7:1 */
   --msg-scrim: rgba(60, 44, 24, 0.38);
   --msg-scrim-blur: 4px;
+
+  /* Безпечні зони телефона. Класи на кшталт pt-[calc(var(--sat)+0.65rem)] вже
+     стояли в розмітці, але змінних ніхто не оголосив — і весь calc() мовчки
+     ставав недійсним, забираючи разом із собою верхній відступ. */
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
+
+  /* Шкала кеглів: шість щаблів на весь месенджер. Розсип 9/10/10.5/11/11.5/
+     12/12.5/13/14/14.5/15/16 читався як складений із чужих деталей. */
+  --t-micro: 11px;    /* бейджі, лічильники */
+  --t-meta: 12.5px;   /* час, підписи, другий рядок */
+  --t-body: 14px;     /* тіло списків і кнопок */
+  --t-read: 15.5px;   /* текст повідомлення й назва бесіди */
+  --t-title: 18px;    /* заголовок модалки */
+  --t-display: 22px;  /* єдиний великий заголовок екрана */
+
+  /* Радіуси: чотири значення. 6 — шов усередині групи, 10 — контрол,
+     16 — картка й модалка, коло — аватар і кругла кнопка. */
+  --r-seam: 6px;
+  --r-control: 10px;
+  --r-card: 16px;
+
+  /* Три креми замість шести майже однакових. */
+  --c-canvas: #F7F5EE;  /* полотно під стрічкою */
+  --c-panel: #FDFCF9;   /* панелі, картки, шапки */
+  --c-sunk: #F1EBDD;    /* заглиблення: наведення, активний чіп */
+  --c-line: #E8E1D3;    /* єдина лінія-волосина */
+
+  /* Система руху: 120 — відгук контрола, 200 — поява шару, 280 — перехід
+     цілого екрана. Більше швидкостей не потрібно. */
+  --m-tap: 120ms;
+  --m-layer: 200ms;
+  --m-screen: 280ms;
 }
 
 /* Теплий серпанок під модалкою: полотно лишається впізнаваним і теплим. */
@@ -20,6 +53,51 @@
   background: var(--msg-scrim);
   -webkit-backdrop-filter: blur(var(--msg-scrim-blur));
   backdrop-filter: blur(var(--msg-scrim-blur));
+}
+
+/* Жодна панель у заслінці не має права вилізти за екран телефона. Модалки
+ * писалися під десктоп і фіксовану висоту не мали — на 375×812 вони просто
+ * тікали під нижній край, і кнопки підтвердження діставав лише той, хто знав,
+ * що вони там є. Стеля висоти + власний скрол усередині вирішують це один раз
+ * для всіх сімнадцяти, а не в кожній окремо. */
+.phantom-scrim > * {
+  max-width: 100%;
+  max-height: 100%;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Смуга вкладок і фільтрів. Гортати їх було можна й раніше, але no-scrollbar
+ * ховав єдиний натяк на це — остання вкладка просто обривалась на межі, і
+ * виглядало це як брак, а не як «далі є ще». Тонка тепла смужка з'являється
+ * лише тоді, коли вміст справді не влазить. */
+.msg-strip {
+  display: flex;
+  align-items: center;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
+  scrollbar-color: #DDD4C4 transparent;
+  scroll-padding-inline: 12px;
+}
+
+.msg-strip::-webkit-scrollbar {
+  height: 3px;
+}
+
+.msg-strip::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.msg-strip::-webkit-scrollbar-thumb {
+  background: #DDD4C4;
+  border-radius: 999px;
+}
+
+.msg-strip > * {
+  flex-shrink: 0;
+  scroll-snap-align: start;
 }
 
 /* Колонка повідомлень: одна вісь для своїх і чужих реплік, коротка розмова
@@ -132,13 +210,14 @@
 /* Праве та нижнє поле в щільностях нижче тримає час у куті бульбашки: без
  * запасу справа він притискався до межі й обрізався на вузьких бульбашках. */
 
-/* Спільна типографіка тексту бульбашки: 14.5px/1.45. */
+/* Спільна типографіка тексту бульбашки. 14.5px випадало зі шкали — текст
+ * розмови це головна поверхня читання, і їй належить щабель --t-read. */
 .msg-density-short,
 .msg-density-medium,
 .msg-density-long,
 .msg-density-card,
 .msg-density-media {
-  font-size: 14.5px;
+  font-size: var(--t-read);
   line-height: 1.45;
 }
 
@@ -220,7 +299,7 @@
 /* Рядок метаданих (час, галочки) — правий нижній кут бульбашки. */
 .msg-meta-row {
   font-variant-numeric: tabular-nums;
-  font-size: 11.5px;
+  font-size: var(--t-micro);
   line-height: 1.2;
 }
 
@@ -232,33 +311,127 @@
   color: var(--msg-meta-self);
 }
 
-/* Контури: 16px по колу, 6px на хвостовому куті та на швах усередині групи. */
-.bubble-contour-self-single {
-  border-radius: 16px 16px 6px 16px;
+/* Контури: 16px по колу, 6px на хвостовому куті та на швах усередині групи.
+ * Питомість подвоєна навмисне — нижче шкала радіусів зводить усі rounded-* до
+ * чотирьох значень, і без цього вона зрізала б хвіст бульбашки. */
+.bubble-contour-self-single.bubble-contour-self-single,
+.bubble-contour-self-first.bubble-contour-self-first {
+  border-radius: var(--r-card) var(--r-card) var(--r-seam) var(--r-card);
 }
-.bubble-contour-self-first {
-  border-radius: 16px 16px 6px 16px;
-}
-.bubble-contour-self-middle {
-  border-radius: 16px 6px 6px 16px;
-}
-.bubble-contour-self-last {
-  border-radius: 16px 6px 6px 16px;
+.bubble-contour-self-middle.bubble-contour-self-middle,
+.bubble-contour-self-last.bubble-contour-self-last {
+  border-radius: var(--r-card) var(--r-seam) var(--r-seam) var(--r-card);
 }
 
-.bubble-contour-other-single {
-  border-radius: 16px 16px 16px 6px;
+.bubble-contour-other-single.bubble-contour-other-single,
+.bubble-contour-other-first.bubble-contour-other-first {
+  border-radius: var(--r-card) var(--r-card) var(--r-card) var(--r-seam);
 }
-.bubble-contour-other-first {
-  border-radius: 16px 16px 16px 6px;
-}
-.bubble-contour-other-middle {
-  border-radius: 6px 16px 16px 6px;
-}
-.bubble-contour-other-last {
-  border-radius: 6px 16px 16px 6px;
+.bubble-contour-other-middle.bubble-contour-other-middle,
+.bubble-contour-other-last.bubble-contour-other-last {
+  border-radius: var(--r-seam) var(--r-card) var(--r-card) var(--r-seam);
 }
 
+
+/* =========================================================
+   ШКАЛА КЕГЛІВ І РАДІУСІВ — ОДНЕ МІСЦЕ
+   =========================================================
+   У розмітці месенджера жило 26 різних кеглів (8, 9, 9.5, 10, 10.5, 11, 11.5,
+   12, 12.5, 13, 13.5, 14, 15, 15.5 + шість тейлвіндових) і 13 радіусів. Через
+   це два сусідні підписи відрізнялись на півпікселя — око цього не називає, але
+   бачить як недбалість. Перебирати 700 місць у розмітці означало б величезну
+   правку заради косметики; натомість зводимо їх сюди, до шести кеглів і чотирьох
+   радіусів. Це і є та сама шкала: міняється вона тут, а не в 39 файлах.
+
+   Селектори мають вищу питомість, ніж утиліти Tailwind (додано .messenger-scale),
+   тож !important не потрібен. Кеглі бульбашок задають .msg-density-*, вони нижче
+   й лишаються власними. */
+
+.messenger-scale .text-\[8px\],
+.messenger-scale .text-\[9px\],
+.messenger-scale .text-\[9\.5px\],
+.messenger-scale .text-\[10px\],
+.messenger-scale .text-\[10\.5px\],
+.messenger-scale .text-\[11px\] {
+  font-size: var(--t-micro);
+}
+
+.messenger-scale .text-\[11\.5px\],
+.messenger-scale .text-\[12px\],
+.messenger-scale .text-\[12\.5px\],
+.messenger-scale .text-xs {
+  font-size: var(--t-meta);
+}
+
+.messenger-scale .text-\[13px\],
+.messenger-scale .text-\[13\.5px\],
+.messenger-scale .text-\[14px\],
+.messenger-scale .text-sm {
+  font-size: var(--t-body);
+}
+
+.messenger-scale .text-\[15px\],
+.messenger-scale .text-\[15\.5px\],
+.messenger-scale .text-base {
+  font-size: var(--t-read);
+}
+
+.messenger-scale .text-\[18px\],
+.messenger-scale .text-lg {
+  font-size: var(--t-title);
+}
+
+.messenger-scale .text-\[22px\],
+.messenger-scale .text-xl,
+.messenger-scale .text-2xl {
+  font-size: var(--t-display);
+}
+
+/* Радіуси: шов 6, контрол 10, картка 16, коло — як було. */
+.messenger-scale .rounded-sm,
+.messenger-scale .rounded-md,
+.messenger-scale .rounded-\[4px\],
+.messenger-scale .rounded-\[6px\] {
+  border-radius: var(--r-seam);
+}
+
+.messenger-scale .rounded-lg,
+.messenger-scale .rounded-\[8px\] {
+  border-radius: var(--r-control);
+}
+
+.messenger-scale .rounded-xl,
+.messenger-scale .rounded-2xl,
+.messenger-scale .rounded-3xl,
+.messenger-scale .rounded-\[12px\] {
+  border-radius: var(--r-card);
+}
+
+/* Нижні аркуші на телефоні: заокруглення лише зверху. */
+.messenger-scale .rounded-t-3xl,
+.messenger-scale .rounded-t-2xl {
+  border-radius: var(--r-card) var(--r-card) 0 0;
+}
+
+/* Система руху: три швидкості замість розсипу. Утиліти duration-* Tailwind і
+ * власні transition-* зводяться сюди. */
+.messenger-scale .duration-100,
+.messenger-scale .duration-150 {
+  animation-duration: var(--m-tap);
+  transition-duration: var(--m-tap);
+}
+
+.messenger-scale .duration-200,
+.messenger-scale .duration-300 {
+  animation-duration: var(--m-layer);
+  transition-duration: var(--m-layer);
+}
+
+.messenger-scale .duration-500,
+.messenger-scale .duration-700 {
+  animation-duration: var(--m-screen);
+  transition-duration: var(--m-screen);
+}
 
 /* ОС ставить min-width/height 44px на всі контроли (тач-цілі). Для щільного
    десктопного месенджера це роздувало кожну кнопку на третину — саме звідси

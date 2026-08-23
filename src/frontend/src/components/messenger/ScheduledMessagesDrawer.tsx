@@ -16,6 +16,7 @@ import {
 import { Chat, ScheduledMessage } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
 import { Avatar } from './Avatar';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
 
 interface ScheduledMessagesDrawerProps {
   isOpen: boolean;
@@ -61,6 +62,9 @@ export const ScheduledMessagesDrawer: React.FC<ScheduledMessagesDrawerProps> = (
 
   // Copied feedback toast
   const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // Escape виводить із шару так само, як хрестик.
+  useEscapeClose(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -161,7 +165,7 @@ export const ScheduledMessagesDrawer: React.FC<ScheduledMessagesDrawerProps> = (
         <div className="p-4 sm:p-5 border-b border-[#E6DFD3] bg-[#FDFCF9] flex items-center justify-between shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-[#F9F7F1] text-[#E87A42] border border-[#DDD4C4] flex items-center justify-center shadow-sm">
-              <Clock className="w-5 h-5" />
+              <Clock className="w-5 h-5" strokeWidth={1.75} />
             </div>
             <div>
               <div className="flex items-center gap-2">
@@ -191,7 +195,7 @@ export const ScheduledMessagesDrawer: React.FC<ScheduledMessagesDrawerProps> = (
               }`}
               title="Запланувати нове повідомлення"
             >
-              <Plus className="w-4 h-4 text-[#E87A42]" />
+              <Plus className="w-4 h-4 text-[#E87A42]" strokeWidth={1.75} />
               <span className="hidden sm:inline">Створити</span>
             </button>
 
@@ -203,7 +207,7 @@ export const ScheduledMessagesDrawer: React.FC<ScheduledMessagesDrawerProps> = (
               className="p-2 text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F1EDE3] rounded-xl transition-colors"
               title="Закрити"
             >
-              <X className="w-5 h-5" />
+              <X className="w-5 h-5" strokeWidth={1.75} />
             </button>
           </div>
         </div>
@@ -257,7 +261,7 @@ export const ScheduledMessagesDrawer: React.FC<ScheduledMessagesDrawerProps> = (
 
           {/* Search Bar */}
           <div className="relative">
-            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#8C9A90]" />
+            <Search className="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-[#8C9A90]" strokeWidth={1.75} />
             <input
               type="text"
               value={searchQuery}
@@ -270,7 +274,7 @@ export const ScheduledMessagesDrawer: React.FC<ScheduledMessagesDrawerProps> = (
                 onClick={() => setSearchQuery('')}
                 className="absolute right-2.5 top-1/2 -translate-y-1/2 text-[#8C9A90] hover:text-[#1E2521]"
               >
-                <X className="w-3.5 h-3.5" />
+                <X className="w-3.5 h-3.5" strokeWidth={1.75} />
               </button>
             )}
           </div>
@@ -284,7 +288,7 @@ export const ScheduledMessagesDrawer: React.FC<ScheduledMessagesDrawerProps> = (
           >
             <div className="flex items-center justify-between">
               <span className="text-xs font-extrabold text-[#1E2521] flex items-center gap-1.5">
-                <Sparkles className="w-3.5 h-3.5 text-[#E87A42]" />
+                <Sparkles className="w-3.5 h-3.5 text-[#E87A42]" strokeWidth={1.75} />
                 <span>Нове відкладене повідомлення</span>
               </span>
               <button
@@ -405,7 +409,7 @@ export const ScheduledMessagesDrawer: React.FC<ScheduledMessagesDrawerProps> = (
               disabled={!newText.trim()}
               className="w-full py-2.5 bg-[#E87A42] hover:bg-[#D46B35] disabled:opacity-50 text-[#1E2521] font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center justify-center gap-1.5 mt-2"
             >
-              <Check className="w-4 h-4" />
+              <Check className="w-4 h-4" strokeWidth={1.75} />
               <span>Запланувати повідомлення</span>
             </button>
           </form>
@@ -416,7 +420,7 @@ export const ScheduledMessagesDrawer: React.FC<ScheduledMessagesDrawerProps> = (
           {filteredMessages.length === 0 ? (
             <div className="py-12 px-6 text-center space-y-3">
               <div className="w-14 h-14 mx-auto rounded-3xl bg-[#F0EAE0] text-[#8C9A90] flex items-center justify-center">
-                <Clock className="w-7 h-7" />
+                <Clock className="w-7 h-7" strokeWidth={1.75} />
               </div>
               <h4 className="font-extrabold text-sm text-[#1E2521]">
                 Немає відкладених повідомлень
@@ -430,7 +434,7 @@ export const ScheduledMessagesDrawer: React.FC<ScheduledMessagesDrawerProps> = (
                 onClick={() => setIsCreating(true)}
                 className="px-4 py-2 bg-[#E87A42] text-[#1E2521] text-xs font-bold rounded-xl shadow-xs hover:bg-[#D46B35] transition-colors inline-flex items-center gap-1.5"
               >
-                <Plus className="w-4 h-4" />
+                <Plus className="w-4 h-4" strokeWidth={1.75} />
                 <span>Запланувати перше повідомлення</span>
               </button>
             </div>
@@ -471,7 +475,7 @@ export const ScheduledMessagesDrawer: React.FC<ScheduledMessagesDrawerProps> = (
 
                     {/* Timing Badge */}
                     <div className="px-2.5 py-1 bg-[#FCE7D8] text-[#8C461A] border border-[#F6D0B7] rounded-xl text-[11px] font-bold font-mono flex items-center gap-1 shrink-0">
-                      <Clock className="w-3 h-3 text-[#E87A42]" />
+                      <Clock className="w-3 h-3 text-[#E87A42]" strokeWidth={1.75} />
                       <span>{msg.scheduledTime}</span>
                     </div>
                   </div>
@@ -543,7 +547,7 @@ export const ScheduledMessagesDrawer: React.FC<ScheduledMessagesDrawerProps> = (
                           onClick={() => handleSaveEdit(msg.id)}
                           className="px-3.5 py-1.5 bg-[#E87A42] hover:bg-[#D46B35] text-[#1E2521] font-bold text-xs rounded-xl shadow-2xs transition-colors flex items-center gap-1"
                         >
-                          <Check className="w-3.5 h-3.5" />
+                          <Check className="w-3.5 h-3.5" strokeWidth={1.75} />
                           <span>Зберегти зміни</span>
                         </button>
                       </div>
@@ -554,7 +558,7 @@ export const ScheduledMessagesDrawer: React.FC<ScheduledMessagesDrawerProps> = (
                       <div className="bg-[#FDFCF9] border border-[#EDE4D6] rounded-xl p-3 text-xs text-[#1E2521] space-y-1.5">
                         {msg.type !== 'text' && (
                           <div className="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-wider text-[#E87A42]">
-                            <Layers className="w-3 h-3" />
+                            <Layers className="w-3 h-3" strokeWidth={1.75} />
                             <span>Тип: {msg.type}</span>
                           </div>
                         )}
@@ -591,7 +595,7 @@ export const ScheduledMessagesDrawer: React.FC<ScheduledMessagesDrawerProps> = (
                           className="px-3 py-1.5 bg-[#528A4B] hover:bg-[#43723E] text-[#1E2521] rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-all hover:scale-102"
                           title="Надіслати повідомлення негайно зараз"
                         >
-                          <Send className="w-3.5 h-3.5" />
+                          <Send className="w-3.5 h-3.5" strokeWidth={1.75} />
                           <span>Надіслати зараз</span>
                         </button>
 
@@ -606,7 +610,7 @@ export const ScheduledMessagesDrawer: React.FC<ScheduledMessagesDrawerProps> = (
                               className="p-1.5 hover:bg-[#F2ECE0] text-[#8A9186] hover:text-[#1E2521] rounded-xl transition-colors text-xs font-semibold flex items-center gap-1"
                               title="Перейти до цього чату"
                             >
-                              <ExternalLink className="w-3.5 h-3.5" />
+                              <ExternalLink className="w-3.5 h-3.5" strokeWidth={1.75} />
                               <span className="hidden sm:inline">До чату</span>
                             </button>
                           )}
@@ -619,9 +623,9 @@ export const ScheduledMessagesDrawer: React.FC<ScheduledMessagesDrawerProps> = (
                               title="Скопіювати текст"
                             >
                               {copiedId === msg.id ? (
-                                <Check className="w-3.5 h-3.5 text-emerald-600" />
+                                <Check className="w-3.5 h-3.5 text-emerald-600" strokeWidth={1.75} />
                               ) : (
-                                <Copy className="w-3.5 h-3.5" />
+                                <Copy className="w-3.5 h-3.5" strokeWidth={1.75} />
                               )}
                             </button>
                           )}
@@ -632,7 +636,7 @@ export const ScheduledMessagesDrawer: React.FC<ScheduledMessagesDrawerProps> = (
                             className="p-1.5 hover:bg-[#FCE7D8] text-[#8A9186] hover:text-[#E87A42] rounded-xl transition-colors"
                             title="Редагувати вміст або час"
                           >
-                            <Edit2 className="w-3.5 h-3.5" />
+                            <Edit2 className="w-3.5 h-3.5" strokeWidth={1.75} />
                           </button>
 
                           {/* Delete / Cancel Button */}
@@ -644,7 +648,7 @@ export const ScheduledMessagesDrawer: React.FC<ScheduledMessagesDrawerProps> = (
                             className="p-1.5 hover:bg-rose-100 text-[#8A9186] hover:text-rose-600 rounded-xl transition-colors"
                             title="Видалити зі списку відкладених"
                           >
-                            <Trash2 className="w-3.5 h-3.5" />
+                            <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
                           </button>
                         </div>
                       </div>
@@ -659,7 +663,7 @@ export const ScheduledMessagesDrawer: React.FC<ScheduledMessagesDrawerProps> = (
         {/* Footer Info */}
         <div className="p-3 bg-[#F5EFE4] border-t border-[#E8DFD1] text-[11px] text-[#7A8479] flex items-center justify-between shrink-0">
           <span className="flex items-center gap-1.5">
-            <Clock className="w-3.5 h-3.5 text-[#E87A42]" />
+            <Clock className="w-3.5 h-3.5 text-[#E87A42]" strokeWidth={1.75} />
             <span>Автоматичне фонове надсилання активне</span>
           </span>
           <span className="font-mono font-bold text-[#1E2521]">

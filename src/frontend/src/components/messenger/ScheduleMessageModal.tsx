@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { X, Clock, Check, ListFilter } from 'lucide-react';
 import { soundFx } from '../../utils/messengerSound';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
 
 interface ScheduleMessageModalProps {
   isOpen: boolean;
@@ -21,6 +22,9 @@ export const ScheduleMessageModal: React.FC<ScheduleMessageModalProps> = ({
   const [isCustom, setIsCustom] = useState<boolean>(false);
   const [customTime, setCustomTime] = useState<string>('18:00');
   const [customDate, setCustomDate] = useState<string>(new Date().toISOString().split('T')[0]);
+
+  // Escape виводить із шару так само, як хрестик.
+  useEscapeClose(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -53,7 +57,7 @@ export const ScheduleMessageModal: React.FC<ScheduleMessageModalProps> = ({
         <div className="px-5 py-4 border-b border-[#E8DFD1] flex items-center justify-between bg-[#F5EFE4]">
           <div className="flex items-center gap-2.5">
             <div className="w-9 h-9 rounded-xl bg-[#FCE7D8] text-[#E87A42] flex items-center justify-center shadow-2xs">
-              <Clock className="w-5 h-5" />
+              <Clock className="w-5 h-5" strokeWidth={1.75} />
             </div>
             <div>
               <h3 className="font-extrabold text-sm sm:text-base text-[#1E2521]">
@@ -70,7 +74,7 @@ export const ScheduleMessageModal: React.FC<ScheduleMessageModalProps> = ({
             }}
             className="p-1.5 text-[#7A8479] hover:text-[#1E2521] hover:bg-[#EBE2D3] rounded-xl transition-colors"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5" strokeWidth={1.75} />
           </button>
         </div>
 
@@ -104,10 +108,10 @@ export const ScheduleMessageModal: React.FC<ScheduleMessageModalProps> = ({
                   }`}
                 >
                   <span className="flex items-center gap-2">
-                    <Clock className="w-3.5 h-3.5 text-[#E87A42]" />
+                    <Clock className="w-3.5 h-3.5 text-[#E87A42]" strokeWidth={1.75} />
                     <span>{p.label}</span>
                   </span>
-                  {selectedPreset === p.value && <Check className="w-4 h-4 text-[#E87A42]" />}
+                  {selectedPreset === p.value && <Check className="w-4 h-4 text-[#E87A42]" strokeWidth={1.75} />}
                 </button>
               ))}
             </div>
@@ -138,7 +142,7 @@ export const ScheduleMessageModal: React.FC<ScheduleMessageModalProps> = ({
             onClick={handleConfirm}
             className="w-full py-2.5 bg-[#E87A42] hover:bg-[#D46B35] text-[#1E2521] rounded-xl font-bold text-xs shadow-xs transition-colors flex items-center justify-center gap-1.5 mt-2"
           >
-            <Check className="w-4 h-4" />
+            <Check className="w-4 h-4" strokeWidth={1.75} />
             <span>Встановити час для цього повідомлення</span>
           </button>
 
@@ -153,7 +157,7 @@ export const ScheduleMessageModal: React.FC<ScheduleMessageModalProps> = ({
               }}
               className="w-full py-2 px-3 bg-[#F0EAE0] hover:bg-[#E5DCCF] text-[#6B5A4B] rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5"
             >
-              <ListFilter className="w-3.5 h-3.5 text-[#E87A42]" />
+              <ListFilter className="w-3.5 h-3.5 text-[#E87A42]" strokeWidth={1.75} />
               <span>Переглянути всі заплановані повідомлення</span>
             </button>
           )}

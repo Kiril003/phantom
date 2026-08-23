@@ -71,7 +71,7 @@ export const QrScanner: React.FC<QrScannerProps> = ({ onFound, onCancel }) => {
     <div className="space-y-2">
       {error ? (
         <div className="p-3 bg-[#FDF6EC] rounded-2xl border border-[#EBD9BE] flex items-start gap-2">
-          <CameraOff className="w-4 h-4 text-[#B45309] mt-0.5 shrink-0" />
+          <CameraOff className="w-4 h-4 text-[#B45309] mt-0.5 shrink-0" strokeWidth={1.75} />
           <span className="text-[10.5px] text-[#8C5A1A] leading-relaxed">{error}</span>
         </div>
       ) : (
@@ -85,7 +85,7 @@ export const QrScanner: React.FC<QrScannerProps> = ({ onFound, onCancel }) => {
         onClick={onCancel}
         className="flex items-center gap-1.5 text-[11px] font-bold text-[#7A6A55] active:scale-95 transition-transform"
       >
-        <X className="w-3.5 h-3.5" />
+        <X className="w-3.5 h-3.5" strokeWidth={1.75} />
         <span>Зупинити камеру</span>
       </button>
     </div>

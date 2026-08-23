@@ -331,7 +331,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     : [];
 
   return (
-    <div className="px-4 pt-2 pb-[calc(env(safe-area-inset-bottom,0px)+0.25rem)] bg-[#FDFCF9]/95 backdrop-blur-xl border-t border-[#E8E1D3] shrink-0 select-none relative z-30 text-[#21261F]">
+    <div className="px-2.5 sm:px-4 pt-2 pb-[calc(env(safe-area-inset-bottom,0px)+0.25rem)] bg-[#FDFCF9]/95 backdrop-blur-xl border-t border-[#E8E1D3] shrink-0 select-none relative z-30 text-[#21261F]">
       {/* Mention Autocomplete Dropdown */}
       {mentionQuery !== null && filteredMembers.length > 0 && (
         <div className="absolute bottom-full left-4 mb-2 bg-[#FDFCF9]/[0.97] backdrop-blur-2xl border border-[#E8E1D3] rounded-2xl shadow-[0_12px_32px_rgba(60,44,24,0.14)] w-64 max-h-48 overflow-y-auto p-1.5 z-30 animate-in fade-in zoom-in-95 duration-100 text-[#21261F]">
@@ -359,7 +359,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
         <div className="mb-2 p-2.5 bg-[#F7F5EF] border border-[#E8E1D3] rounded-2xl space-y-2 shadow-sm animate-in fade-in duration-150">
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-2">
-              <Layers className="w-3.5 h-3.5 text-[#D96C35]" />
+              <Layers className="w-3.5 h-3.5 text-[#D96C35]" strokeWidth={1.75} />
               <span className="font-bold text-xs text-[#D96C35]">
                 Зведена цитата з {selectedMessagesForQuote.length} повідомлень
               </span>
@@ -368,7 +368,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
               onClick={onClearSelectedQuotes}
               className="p-1 text-[#6E7568] hover:text-[#21261F] rounded-lg"
             >
-              <X className="w-3.5 h-3.5" />
+              <X className="w-3.5 h-3.5" strokeWidth={1.75} />
             </button>
           </div>
 
@@ -396,7 +396,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
         <div className="mb-2 p-2.5 bg-[#FDFCF9] border border-[#E8E1D3] border-l-4 border-l-[#D96C35] rounded-2xl space-y-1.5 shadow-sm animate-in fade-in duration-150">
           <div className="flex items-center justify-between gap-2">
             <div className="flex items-center gap-1.5 min-w-0">
-              <Reply className="w-3.5 h-3.5 text-[#D96C35] shrink-0" />
+              <Reply className="w-3.5 h-3.5 text-[#D96C35] shrink-0" strokeWidth={1.75} />
               {replyingTo.quotes && replyingTo.quotes.length > 1 ? (
                 <span className="font-bold text-[#D96C35] text-[11px] truncate">
                   Відповідь на {replyingTo.quotes.length} повідомлень
@@ -416,7 +416,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
               className="p-1 text-[#6E7568] hover:text-[#21261F] hover:bg-[#F1EBDD] rounded-lg transition-colors shrink-0"
               title="Скасувати відповідь"
             >
-              <X className="w-3.5 h-3.5" />
+              <X className="w-3.5 h-3.5" strokeWidth={1.75} />
             </button>
           </div>
 
@@ -441,7 +441,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                       className="p-0.5 text-[color:var(--msg-meta)] hover:text-red-400 rounded-md shrink-0"
                       title="Прибрати цю цитату"
                     >
-                      <X className="w-3 h-3" />
+                      <X className="w-3 h-3" strokeWidth={1.75} />
                     </button>
                   )}
                 </div>
@@ -472,7 +472,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
             onClick={onCancelEdit}
             className="p-1 hover:bg-[#F7F5EF] rounded-lg text-[#6E7568] hover:text-[#21261F]"
           >
-            <X className="w-4 h-4" />
+            <X className="w-4 h-4" strokeWidth={1.75} />
           </button>
         </div>
       )}
@@ -481,7 +481,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
       {scheduledTime ? (
         <div className="mb-2 p-2 bg-[#F7F5EF] border border-[#E8E1D3] rounded-xl flex items-center justify-between gap-2 text-xs">
           <div className="flex items-center gap-1.5 text-[#C98A2E] font-semibold text-[11px]">
-            <Clock className="w-3.5 h-3.5 text-[#C98A2E]" />
+            <Clock className="w-3.5 h-3.5 text-[#C98A2E]" strokeWidth={1.75} />
             <span>Заплановано на: {scheduledTime}</span>
           </div>
           <div className="flex items-center gap-1">
@@ -502,7 +502,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
               className="p-1 hover:bg-[#F7F5EF] rounded-lg text-[#6E7568] hover:text-[#21261F]"
               title="Скасувати таймер"
             >
-              <X className="w-3.5 h-3.5" />
+              <X className="w-3.5 h-3.5" strokeWidth={1.75} />
             </button>
           </div>
         </div>
@@ -516,7 +516,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
             }}
             className="flex items-center gap-1.5 text-[#D96C35] hover:text-[#21261F] font-semibold text-left transition-colors"
           >
-            <Clock className="w-3.5 h-3.5 text-[#D96C35]" />
+            <Clock className="w-3.5 h-3.5 text-[#D96C35]" strokeWidth={1.75} />
             <span>
               У цьому чаті заплановано <strong className="text-[#21261F]">{scheduledCountInCurrentChat}</strong> повідомл.
             </span>
@@ -569,7 +569,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
             className="text-[#8C3B22] hover:opacity-70 shrink-0"
             aria-label="Сховати помилку"
           >
-            <X className="w-3.5 h-3.5" />
+            <X className="w-3.5 h-3.5" strokeWidth={1.75} />
           </button>
         </div>
       )}
@@ -747,8 +747,10 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                 )}
               </div>
 
-              {/* Inline Formatting Menu */}
-              <div className="relative">
+              {/* Inline Formatting Menu. На телефоні згорнуто: чотири значки
+                  лишали полю вводу 116 px, а те саме розмітка дає набором
+                  (**жирний**) — на відміну від переписування чи емодзі. */}
+              <div className="relative hidden sm:block">
                 <button
                   type="button"
                   onClick={() => {
@@ -773,7 +775,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                       className="p-1.5 hover:bg-[#F1EBDD] rounded-lg text-xs font-bold"
                       title="Жирний (**текст**)"
                     >
-                      <Bold className="w-3.5 h-3.5" />
+                      <Bold className="w-3.5 h-3.5" strokeWidth={1.75} />
                     </button>
                     <button
                       type="button"
@@ -781,7 +783,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                       className="p-1.5 hover:bg-[#F1EBDD] rounded-lg text-xs font-bold"
                       title="Курсив (*текст*)"
                     >
-                      <Italic className="w-3.5 h-3.5" />
+                      <Italic className="w-3.5 h-3.5" strokeWidth={1.75} />
                     </button>
                     <button
                       type="button"
@@ -789,7 +791,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                       className="p-1.5 hover:bg-[#F1EBDD] rounded-lg text-xs font-bold"
                       title="Код (`код`)"
                     >
-                      <Code className="w-3.5 h-3.5" />
+                      <Code className="w-3.5 h-3.5" strokeWidth={1.75} />
                     </button>
                   </div>
                 )}
@@ -845,7 +847,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                   setMentionCursorPos(newText.length);
                   textareaRef.current?.focus();
                 }}
-                className="w-[28px] h-[28px] min-w-0 min-h-0 rounded-[8px] flex items-center justify-center text-[#6E7568] hover:text-[#21261F] hover:bg-[#F1EBDD] transition-colors"
+                className="hidden sm:flex w-[28px] h-[28px] min-w-0 min-h-0 rounded-[8px] items-center justify-center text-[#6E7568] hover:text-[#21261F] hover:bg-[#F1EBDD] transition-colors"
                 title="Згадати учасника (@)"
               >
                 <AtSign className="w-[18px] h-[18px]" strokeWidth={1.75} />

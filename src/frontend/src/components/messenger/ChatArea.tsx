@@ -822,7 +822,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     className="p-1 hover:bg-[#F9F7F1] rounded-lg text-[#5F6A60] hover:text-[#1E2521] transition-colors"
                     title="Попереднє закріплене"
                   >
-                    <ChevronLeft className="w-3.5 h-3.5" />
+                    <ChevronLeft className="w-3.5 h-3.5" strokeWidth={1.75} />
                   </button>
                   <button
                     onClick={() =>
@@ -831,7 +831,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     className="p-1 hover:bg-[#F9F7F1] rounded-lg text-[#5F6A60] hover:text-[#1E2521] transition-colors"
                     title="Наступне закріплене"
                   >
-                    <ChevronRight className="w-3.5 h-3.5" />
+                    <ChevronRight className="w-3.5 h-3.5" strokeWidth={1.75} />
                   </button>
                 </>
               )}
@@ -841,7 +841,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 className="p-1 text-[#5F6A60] hover:text-[#E87A42] hover:bg-[#F9F7F1] rounded-lg transition-colors"
                 title="Відкріпити"
               >
-                <X className="w-3.5 h-3.5" />
+                <X className="w-3.5 h-3.5" strokeWidth={1.75} />
               </button>
             </div>
           </div>
@@ -852,7 +852,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       {isSearching && (
         <div className="px-4 py-2 bg-[#F3ECE0] border-b border-[#DFD6C5] flex items-center justify-between gap-3 shrink-0 z-10">
           <div className="flex items-center gap-2 flex-1 max-w-md">
-            <Search className="w-4 h-4 text-[#8C988E]" />
+            <Search className="w-4 h-4 text-[#8C988E]" strokeWidth={1.75} />
             <input
               type="text"
               autoFocus
@@ -901,14 +901,14 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   className="p-1 hover:bg-[#E5DCCF] rounded-lg"
                   title="Попередній збіг"
                 >
-                  <ChevronUp className="w-4 h-4" />
+                  <ChevronUp className="w-4 h-4" strokeWidth={1.75} />
                 </button>
                 <button
                   onClick={handleNextSearchMatch}
                   className="p-1 hover:bg-[#E5DCCF] rounded-lg"
                   title="Наступний збіг"
                 >
-                  <ChevronDown className="w-4 h-4" />
+                  <ChevronDown className="w-4 h-4" strokeWidth={1.75} />
                 </button>
               </>
             )}
@@ -919,7 +919,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
               }}
               className="p-1 hover:bg-[#E5DCCF] rounded-lg text-gray-500"
             >
-              <X className="w-4 h-4" />
+              <X className="w-4 h-4" strokeWidth={1.75} />
             </button>
           </div>
         </div>
@@ -1113,7 +1113,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     }`}
                     title="Вибрати повідомлення"
                   >
-                    {isSelected ? <CheckSquare className="w-4 h-4 fill-current" /> : <Square className="w-4 h-4" />}
+                    {isSelected ? <CheckSquare className="w-4 h-4 fill-current" strokeWidth={1.75} /> : <Square className="w-4 h-4" strokeWidth={1.75} />}
                   </button>
                 )}
 
@@ -1175,7 +1175,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                           opacity: Math.min(1, Math.abs(swipeOffset) / 25),
                         }}
                       >
-                        <Reply className="w-3 h-3" />
+                        <Reply className="w-3 h-3" strokeWidth={1.75} />
                       </div>
                     )}
                     {/* Top Pinned Tag Pill */}
@@ -1416,7 +1416,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         ? 'bg-[#FDF4EC] border-[#EBC7AE] text-[#8C6B4F]'
                         : 'bg-[#F2EFE8] border-[#DFD6C5] text-[#7A8479]'
                     }`}>
-                      <Sparkles className="w-3 h-3 animate-pulse text-[#E87A42]" />
+                      <Sparkles className="w-3 h-3 animate-pulse text-[#E87A42]" strokeWidth={1.75} />
                       <span>{agentTask.label}</span>
                     </div>
                   )}
@@ -1430,7 +1430,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     }`}>
                       <div className="flex items-center justify-between gap-2 pb-1 border-b border-current/15 mb-1 text-[10px] font-mono font-bold opacity-80">
                         <span className="flex items-center gap-1">
-                          <Languages className="w-3 h-3 text-[#E87A42]" />
+                          <Languages className="w-3 h-3 text-[#E87A42]" strokeWidth={1.75} />
                           <span>Переклад агента ({translatedMessages[msg.id].lang})</span>
                         </span>
                         <button
@@ -1456,7 +1456,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         ? 'bg-[#F9DCC7] border-[#E87A42]/40 text-[#8C461A]'
                         : 'bg-[#FCE7D8] border-[#E87A42]/40 text-[#8C461A]'
                     }`}>
-                      <Sparkles className="w-3.5 h-3.5 shrink-0 mt-0.5 text-[#E87A42]" />
+                      <Sparkles className="w-3.5 h-3.5 shrink-0 mt-0.5 text-[#E87A42]" strokeWidth={1.75} />
                       <div className="flex-1 min-w-0">
                         <p className="text-[11px] font-medium leading-snug">
                           <HighlightedText
@@ -1475,7 +1475,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     }`}>
                       <div className="flex items-center justify-between text-[10px] font-bold uppercase tracking-wider pb-1 border-b border-current/20">
                         <span className="flex items-center gap-1">
-                          <CheckCircle2 className="w-3 h-3 text-[#528A4B]" />
+                          <CheckCircle2 className="w-3 h-3 text-[#528A4B]" strokeWidth={1.75} />
                           <span>Завдання з повідомлення</span>
                         </span>
                       </div>
@@ -1538,9 +1538,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                             }`}
                           >
                             {isVoicePlaying ? (
-                              <Pause className="w-4 h-4" />
+                              <Pause className="w-4 h-4" strokeWidth={1.75} />
                             ) : (
-                              <Play className="w-4 h-4 ml-0.5" />
+                              <Play className="w-4 h-4 ml-0.5" strokeWidth={1.75} />
                             )}
                           </button>
                         )}
@@ -1596,7 +1596,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                             className="hover:underline flex items-center gap-0.5 text-[#E87A42] font-semibold"
                           >
                             <span>{isTranscriptOpen ? 'Сховати розшифровку' : 'Читати текст'}</span>
-                            {isTranscriptOpen ? <ChevronUp className="w-3 h-3" /> : <ChevronDown className="w-3 h-3" />}
+                            {isTranscriptOpen ? <ChevronUp className="w-3 h-3" strokeWidth={1.75} /> : <ChevronDown className="w-3 h-3" strokeWidth={1.75} />}
                           </button>
                         )}
                       </div>
@@ -1623,7 +1623,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   {msg.type === 'poll' && msg.pollData && (
                     <div className="space-y-2.5 pt-1 w-full max-w-full min-w-0 sm:min-w-[240px]">
                       <div className="flex items-center gap-2 pb-1 border-black/10 border-b">
-                        <BarChart2 className="w-4 h-4 text-[#528A4B]" />
+                        <BarChart2 className="w-4 h-4 text-[#528A4B]" strokeWidth={1.75} />
                         <h4 className="font-bold text-xs sm:text-sm">
                           <HighlightedText
                             text={msg.pollData.question}
@@ -1686,7 +1686,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     <div className="space-y-2.5 pt-1 w-full max-w-full min-w-0 sm:min-w-[240px]">
                       <div className="flex items-center justify-between pb-1 border-black/10 border-b">
                         <div className="flex items-center gap-1.5">
-                          <Receipt className="w-4 h-4 text-[#E87A42]" />
+                          <Receipt className="w-4 h-4 text-[#E87A42]" strokeWidth={1.75} />
                           <h4 className="font-bold text-xs sm:text-sm">
                             <HighlightedText
                               text={msg.splitBillData.title}
@@ -1753,7 +1753,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     >
                       <div className="flex items-start gap-2.5">
                         <div className="p-2 bg-[#FCE7D8] text-[#E87A42] rounded-xl shrink-0">
-                          <MapPin className="w-4 h-4" />
+                          <MapPin className="w-4 h-4" strokeWidth={1.75} />
                         </div>
                         <div className="min-w-0 flex-1">
                           <h4 className="font-bold text-xs sm:text-sm truncate">
@@ -1792,7 +1792,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                           onClick={() => copyCode(msg.codeData!.code, msg.id)}
                           className="hover:underline flex items-center gap-1"
                         >
-                          <Copy className="w-3 h-3" />
+                          <Copy className="w-3 h-3" strokeWidth={1.75} />
                           <span>{copiedCodeId === msg.id ? 'Скопійовано!' : 'Копіювати'}</span>
                         </button>
                       </div>
@@ -1820,7 +1820,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     }`}>
                       <div className="flex items-center gap-2.5 min-w-0">
                         <div className="p-2 bg-[#FCE7D8] text-[#E87A42] rounded-xl shrink-0">
-                          <FileText className="w-4 h-4" />
+                          <FileText className="w-4 h-4" strokeWidth={1.75} />
                         </div>
                         <div className="min-w-0">
                           <p className="font-bold text-xs truncate">
@@ -1844,7 +1844,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         }`}
                         title="Завантажити файл"
                       >
-                        <Download className="w-4 h-4" />
+                        <Download className="w-4 h-4" strokeWidth={1.75} />
                       </button>
                     </div>
                   )}
@@ -1973,7 +1973,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                                   className="p-0.5 text-[color:var(--msg-meta)] hover:text-[#21261F] rounded"
                                   aria-label="Закрити"
                                 >
-                                  <X className="w-3.5 h-3.5" />
+                                  <X className="w-3.5 h-3.5" strokeWidth={1.75} />
                                 </button>
                               </div>
 
@@ -2074,7 +2074,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         className="p-1 hover:bg-[#F9F7F1] text-[#5F6A60] hover:text-[#E87A42] rounded-full transition-colors"
                         title="Інші реакції"
                       >
-                        <SmilePlus className="w-3.5 h-3.5" />
+                        <SmilePlus className="w-3.5 h-3.5" strokeWidth={1.75} />
                       </button>
 
                       <div className="w-px h-3 bg-[#E6DFD3] mx-0.5" />
@@ -2088,7 +2088,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         className="p-1 hover:bg-[#F9F7F1] text-[#5F6A60] hover:text-[#E87A42] rounded-full transition-colors"
                         title="Відповісти"
                       >
-                        <Reply className="w-3.5 h-3.5" />
+                        <Reply className="w-3.5 h-3.5" strokeWidth={1.75} />
                       </button>
 
                       {/* More Menu / Actions Sheet */}
@@ -2100,7 +2100,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         className="p-1 hover:bg-[#F9F7F1] text-[#5F6A60] hover:text-[#E87A42] rounded-full transition-colors"
                         title="Всі дії та AI інструменти"
                       >
-                        <MoreHorizontal className="w-3.5 h-3.5" />
+                        <MoreHorizontal className="w-3.5 h-3.5" strokeWidth={1.75} />
                       </button>
                     </div>
                   )}
@@ -2141,7 +2141,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                         className="px-1.5 py-0.5 rounded-full text-xs border border-dashed border-[#E6DFD3] text-[#5F6A60] hover:text-[#E87A42] hover:border-[#E87A42] bg-[#FDFCF9]/70 hover:bg-[#F9F7F1] transition-all flex items-center justify-center shadow-xs"
                         title="Додати реакцію"
                       >
-                        <SmilePlus className="w-2.5 h-2.5" />
+                        <SmilePlus className="w-2.5 h-2.5" strokeWidth={1.75} />
                       </button>
                     </div>
                   )}
@@ -2273,7 +2273,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 onClick={() => setContextMenuMsg(null)}
                 className="p-1.5 hover:bg-[#F9F7F1] text-[#5F6A60] hover:text-[#1E2521] rounded-xl transition-colors shrink-0"
               >
-                <X className="w-4 h-4" />
+                <X className="w-4 h-4" strokeWidth={1.75} />
               </button>
             </div>
 
@@ -2302,7 +2302,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 className="p-1.5 hover:bg-[#F9F7F1] text-[#5F6A60] hover:text-[#E87A42] rounded-xl text-xs font-bold flex items-center gap-1"
                 title="Більше емодзі"
               >
-                <SmilePlus className="w-4 h-4 text-[#E87A42]" />
+                <SmilePlus className="w-4 h-4 text-[#E87A42]" strokeWidth={1.75} />
               </button>
             </div>
 
@@ -2317,9 +2317,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 className="p-2.5 bg-[#FDFCF9] hover:bg-[#F9F7F1] border border-[#E6DFD3] hover:border-[#DDD4C4] rounded-xl flex items-center gap-2 transition-all text-left shadow-sm hover:text-[#1E2521]"
               >
                 {speakingMsgId === contextMenuMsg.id ? (
-                  <VolumeX className="w-4 h-4 text-[#E87A42] shrink-0" />
+                  <VolumeX className="w-4 h-4 text-[#E87A42] shrink-0" strokeWidth={1.75} />
                 ) : (
-                  <Volume2 className="w-4 h-4 text-[#E87A42] shrink-0" />
+                  <Volume2 className="w-4 h-4 text-[#E87A42] shrink-0" strokeWidth={1.75} />
                 )}
                 <span className="truncate">
                   {speakingMsgId === contextMenuMsg.id ? 'Зупинити озвучування' : 'Прослухати (TTS)'}
@@ -2335,7 +2335,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 }}
                 className="p-2.5 bg-[#FDFCF9] hover:bg-[#F9F7F1] border border-[#E6DFD3] hover:border-[#DDD4C4] rounded-xl flex items-center gap-2 transition-all text-left shadow-sm hover:text-[#1E2521]"
               >
-                <Reply className="w-4 h-4 text-[#E87A42] shrink-0" />
+                <Reply className="w-4 h-4 text-[#E87A42] shrink-0" strokeWidth={1.75} />
                 <span className="truncate">Відповісти</span>
               </button>
 
@@ -2351,7 +2351,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   }}
                   className="p-2.5 bg-[#FDFCF9] hover:bg-[#F9F7F1] border border-[#E6DFD3] hover:border-[#DDD4C4] rounded-xl flex items-center gap-2 transition-all text-left shadow-sm hover:text-[#1E2521]"
                 >
-                  <Quote className="w-4 h-4 text-[#E87A42] shrink-0" />
+                  <Quote className="w-4 h-4 text-[#E87A42] shrink-0" strokeWidth={1.75} />
                   <span className="truncate">Цитувати</span>
                 </button>
               )}
@@ -2365,7 +2365,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   }}
                   className="p-2.5 bg-[#FDFCF9] hover:bg-[#F9F7F1] border border-[#E6DFD3] hover:border-[#DDD4C4] rounded-xl flex items-center gap-2 transition-all text-left shadow-sm hover:text-[#1E2521]"
                 >
-                  <Languages className="w-4 h-4 text-[#E87A42] shrink-0" />
+                  <Languages className="w-4 h-4 text-[#E87A42] shrink-0" strokeWidth={1.75} />
                   <span className="truncate">Перекласти (EN)</span>
                 </button>
               )}
@@ -2379,7 +2379,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   }}
                   className="p-2.5 bg-[#FDFCF9] hover:bg-[#F9F7F1] border border-[#E6DFD3] hover:border-[#DDD4C4] rounded-xl flex items-center gap-2 transition-all text-left shadow-sm hover:text-[#1E2521]"
                 >
-                  <Sparkles className="w-4 h-4 text-[#E87A42] shrink-0" />
+                  <Sparkles className="w-4 h-4 text-[#E87A42] shrink-0" strokeWidth={1.75} />
                   <span className="truncate">Підсумок агента</span>
                 </button>
               )}
@@ -2393,7 +2393,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   }}
                   className="p-2.5 bg-[#FDFCF9] hover:bg-[#F9F7F1] border border-[#E6DFD3] hover:border-[#DDD4C4] rounded-xl flex items-center gap-2 transition-all text-left shadow-sm hover:text-[#1E2521]"
                 >
-                  <CheckCircle2 className="w-4 h-4 text-[#E87A42] shrink-0" />
+                  <CheckCircle2 className="w-4 h-4 text-[#E87A42] shrink-0" strokeWidth={1.75} />
                   <span className="truncate">Завдання з повідомлення</span>
                 </button>
               )}
@@ -2407,7 +2407,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 }}
                 className="p-2.5 bg-[#FDFCF9] hover:bg-[#F9F7F1] border border-[#E6DFD3] hover:border-[#DDD4C4] rounded-xl flex items-center gap-2 transition-all text-left shadow-sm hover:text-[#1E2521]"
               >
-                <Pin className="w-4 h-4 text-[#E87A42] shrink-0" />
+                <Pin className="w-4 h-4 text-[#E87A42] shrink-0" strokeWidth={1.75} />
                 <span className="truncate">{contextMenuMsg.isPinned ? 'Відкріпити' : 'Закріпити'}</span>
               </button>
 
@@ -2419,7 +2419,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 }}
                 className="p-2.5 bg-[#FDFCF9] hover:bg-[#F9F7F1] border border-[#E6DFD3] hover:border-[#DDD4C4] rounded-xl flex items-center gap-2 transition-all text-left shadow-sm hover:text-[#1E2521]"
               >
-                <Bookmark className="w-4 h-4 text-[#E87A42] shrink-0" />
+                <Bookmark className="w-4 h-4 text-[#E87A42] shrink-0" strokeWidth={1.75} />
                 <span className="truncate">{savedMessages[contextMenuMsg.id] ? 'Видалити з Обраного' : 'В Обране'}</span>
               </button>
 
@@ -2432,7 +2432,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   }}
                   className="p-2.5 bg-[#FDFCF9] hover:bg-[#F9F7F1] border border-[#E6DFD3] hover:border-[#DDD4C4] rounded-xl flex items-center gap-2 transition-all text-left shadow-sm hover:text-[#1E2521]"
                 >
-                  <Copy className="w-4 h-4 text-[#5F6A60] shrink-0" />
+                  <Copy className="w-4 h-4 text-[#5F6A60] shrink-0" strokeWidth={1.75} />
                   <span className="truncate">Копіювати</span>
                 </button>
               )}
@@ -2446,7 +2446,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 }}
                 className="p-2.5 bg-[#FDFCF9] hover:bg-[#F9F7F1] border border-[#E6DFD3] hover:border-[#DDD4C4] rounded-xl flex items-center gap-2 transition-all text-left shadow-sm hover:text-[#1E2521]"
               >
-                <Forward className="w-4 h-4 text-[#5F6A60] shrink-0" />
+                <Forward className="w-4 h-4 text-[#5F6A60] shrink-0" strokeWidth={1.75} />
                 <span className="truncate">Переслати</span>
               </button>
 
@@ -2459,7 +2459,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 }}
                 className="p-2.5 bg-[#FDFCF9] hover:bg-[#F9F7F1] border border-[#E6DFD3] hover:border-[#DDD4C4] rounded-xl flex items-center gap-2 transition-all text-left shadow-sm hover:text-[#1E2521]"
               >
-                <CheckSquare className="w-4 h-4 text-[#5F6A60] shrink-0" />
+                <CheckSquare className="w-4 h-4 text-[#5F6A60] shrink-0" strokeWidth={1.75} />
                 <span className="truncate">Вибрати</span>
               </button>
 
@@ -2472,7 +2472,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 }}
                 className="p-2.5 bg-[#FDFCF9] hover:bg-[#F9F7F1] border border-[#E6DFD3] hover:border-[#DDD4C4] rounded-xl flex items-center gap-2 transition-all text-left shadow-sm hover:text-[#1E2521]"
               >
-                <Info className="w-4 h-4 text-[#5F6A60] shrink-0" />
+                <Info className="w-4 h-4 text-[#5F6A60] shrink-0" strokeWidth={1.75} />
                 <span className="truncate">Інфо / P2P</span>
               </button>
 
@@ -2486,7 +2486,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   }}
                   className="p-2.5 bg-[#FDFCF9] hover:bg-[#F9F7F1] border border-[#E6DFD3] hover:border-[#DDD4C4] rounded-xl flex items-center gap-2 transition-all text-left shadow-sm hover:text-[#1E2521]"
                 >
-                  <Edit2 className="w-4 h-4 text-[#E87A42] shrink-0" />
+                  <Edit2 className="w-4 h-4 text-[#E87A42] shrink-0" strokeWidth={1.75} />
                   <span className="truncate">Редагувати</span>
                 </button>
               )}
@@ -2500,7 +2500,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 }}
                 className="p-2.5 bg-red-950/40 hover:bg-red-950/70 border border-red-900/60 text-red-400 rounded-xl flex items-center gap-2 transition-all text-left shadow-sm col-span-2"
               >
-                <Trash2 className="w-4 h-4 text-red-400 shrink-0" />
+                <Trash2 className="w-4 h-4 text-red-400 shrink-0" strokeWidth={1.75} />
                 <span className="font-bold">Видалити повідомлення</span>
               </button>
             </div>

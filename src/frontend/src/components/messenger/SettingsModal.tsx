@@ -16,6 +16,7 @@ import { IdentityPanel } from './IdentityPanel';
 import { networkEngine } from '../../services/messengerNetworkEngine';
 import { TransportProtocol } from '../../types/messenger';
 import { notificationPrefs } from '../../services/notificationPrefs';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
 
 // Стан дозволу словами. Це єдине, що тут можна чесно пообіцяти.
 const NOTIF_NOTE: Record<string, string> = {
@@ -57,6 +58,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     if (isOpen) notificationPrefs.sync();
   }, [isOpen]);
 
+  // Escape виводить із шару так само, як хрестик.
+  useEscapeClose(isOpen, onClose);
+
   if (!isOpen) return null;
 
   const handleSetMode = (mode: TransportProtocol) => {
@@ -86,12 +90,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             }}
             className="p-1.5 text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F1EDE3] rounded-xl transition-colors"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5" strokeWidth={1.75} />
           </button>
         </div>
 
         {/* Tab Selection */}
-        <div className="px-4 py-2 bg-[#F7F5EE] border-b border-[#E6DFD3] flex items-center gap-1.5 overflow-x-auto no-scrollbar">
+        <div className="msg-strip px-4 pt-2 pb-1.5 bg-[#F7F5EE] border-b border-[#E6DFD3] gap-1.5 shrink-0">
           {[
             { id: 'appearance', label: 'Оформлення', icon: Palette },
             { id: 'network', label: 'Мережа & P2P', icon: Radio },
@@ -203,7 +207,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               <div className="p-3.5 bg-[#F6EEE2] rounded-2xl border border-[#E4D8C4] flex items-center justify-between">
                 <div className="flex items-center gap-2.5">
                   <div className="w-8 h-8 rounded-xl bg-[#E87A42]/15 text-[#E87A42] flex items-center justify-center">
-                    <Radio className="w-4 h-4" />
+                    <Radio className="w-4 h-4" strokeWidth={1.75} />
                   </div>
                   <div>
                     <h4 className="font-extrabold text-xs text-[#1E2521]">Гібридна P2P / Серверна архітектура</h4>
@@ -244,7 +248,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       desc: 'Прямий канал між вузлами, коли пряма адреса відома.',
                       icon: Radio,
                       badge: 'Прямий канал (DTLS)',
-                      color: 'text-[#10B981]',
+                      color: 'text-[#4C8A55]',
                     },
                     {
                       id: 'server' as TransportProtocol,
@@ -252,7 +256,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                       desc: 'Через ретранслятор PHANTOM — він везе шифротекст і вмісту не бачить.',
                       icon: Globe,
                       badge: 'Cloud Sync',
-                      color: 'text-[#3B82F6]',
+                      color: 'text-[#7A8479]',
                     },
                   ].map((opt) => {
                     const Icon = opt.icon;
@@ -283,7 +287,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         </div>
                         {isSel && (
                           <div className="w-4 h-4 rounded-full bg-[#E6DFD3] text-[#1E2521] flex items-center justify-center shrink-0 mt-1">
-                            <Check className="w-2.5 h-2.5" />
+                            <Check className="w-2.5 h-2.5" strokeWidth={1.75} />
                           </div>
                         )}
                       </div>
@@ -294,7 +298,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
               <div className="p-3 bg-[#F4F1E8] rounded-2xl border border-[#E0D5C2] space-y-1.5">
                 <span className="text-[11px] font-bold text-[#4A5548] flex items-center gap-1.5">
-                  <Shield className="w-3.5 h-3.5 text-[#4C8A55]" />
+                  <Shield className="w-3.5 h-3.5 text-[#4C8A55]" strokeWidth={1.75} />
                   <span>Листи запечатані між вузлами</span>
                 </span>
                 <span className="text-[10.5px] text-[#7A6A55] block leading-relaxed">
@@ -432,7 +436,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   }}
                   className="px-3.5 py-2 bg-[#FCE7D8] hover:bg-[#F9CCA8] text-[#8C461A] font-bold rounded-xl text-xs flex items-center gap-2 transition-colors"
                 >
-                  <Download className="w-4 h-4" />
+                  <Download className="w-4 h-4" strokeWidth={1.75} />
                   <span>Експортувати повний бекап (.json)</span>
                 </button>
               </div>
@@ -453,7 +457,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     }}
                     className="px-3.5 py-1.5 bg-red-600 hover:bg-red-700 text-[#1E2521] font-semibold rounded-xl text-xs flex items-center gap-1.5 transition-colors"
                   >
-                    <Trash2 className="w-3.5 h-3.5" />
+                    <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />
                     <span>Очистити історію</span>
                   </button>
                 </div>

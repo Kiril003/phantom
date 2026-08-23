@@ -1,6 +1,7 @@
 import React from 'react';
 import { X, Download } from 'lucide-react';
 import { soundFx } from '../../utils/messengerSound';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
 
 interface MediaLightboxModalProps {
   isOpen: boolean;
@@ -17,6 +18,9 @@ export const MediaLightboxModal: React.FC<MediaLightboxModalProps> = ({
   mediaTitle = 'Медіафайл',
   mediaDate,
 }) => {
+  // Escape виводить із шару так само, як хрестик.
+  useEscapeClose(isOpen, onClose);
+
   if (!isOpen || !mediaUrl) return null;
 
   return (
@@ -43,7 +47,7 @@ export const MediaLightboxModal: React.FC<MediaLightboxModalProps> = ({
             className="p-2 bg-white/10 hover:bg-white/20 text-[#FDFCF9] rounded-xl transition-colors"
             title="Завантажити оригінал"
           >
-            <Download className="w-4 h-4" />
+            <Download className="w-4 h-4" strokeWidth={1.75} />
           </button>
 
           <button
@@ -53,7 +57,7 @@ export const MediaLightboxModal: React.FC<MediaLightboxModalProps> = ({
             }}
             className="p-2 bg-white/10 hover:bg-white/20 text-[#FDFCF9] rounded-xl transition-colors"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5" strokeWidth={1.75} />
           </button>
         </div>
       </div>

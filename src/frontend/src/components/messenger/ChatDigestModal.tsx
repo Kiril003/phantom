@@ -11,6 +11,7 @@ import { Chat } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
 import { chatApi } from '../../services/api';
 import { Avatar } from './Avatar';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
 
 interface ChatDigestModalProps {
   isOpen: boolean;
@@ -72,6 +73,9 @@ export const ChatDigestModal: React.FC<ChatDigestModalProps> = ({
     // навмисно лише на відкриття та зміну чату — інакше конспект перезапитувався б на кожен рендер
   }, [isOpen, chat?.id]);
 
+  // Escape виводить із шару так само, як хрестик.
+  useEscapeClose(isOpen, onClose);
+
   if (!isOpen || !chat) return null;
 
   const chatTitle = chat.title || 'Бесіда';
@@ -113,7 +117,7 @@ export const ChatDigestModal: React.FC<ChatDigestModalProps> = ({
         <div className="px-4 sm:px-5 py-3.5 sm:py-4 border-b border-[#E6DFD3] flex items-center justify-between bg-[#FDFCF9] shrink-0">
           <div className="flex items-center gap-2">
             <div className="p-1.5 bg-[#F9F7F1] text-[#E87A42] border border-[#DDD4C4] rounded-xl shrink-0">
-              <FileText className="w-4 h-4" />
+              <FileText className="w-4 h-4" strokeWidth={1.75} />
             </div>
             <div>
               <h3 className="font-extrabold text-base text-[#1E2521]">Конспект бесіди</h3>
@@ -128,7 +132,7 @@ export const ChatDigestModal: React.FC<ChatDigestModalProps> = ({
             }}
             className="p-1.5 text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F1EDE3] rounded-xl transition-colors"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5" strokeWidth={1.75} />
           </button>
         </div>
 
@@ -151,7 +155,7 @@ export const ChatDigestModal: React.FC<ChatDigestModalProps> = ({
             </p>
           ) : isLoading ? (
             <div className="p-3 bg-[#FDFCF9] border border-[#E6DFD3] rounded-2xl text-xs text-[#5F6A60] flex items-center gap-2">
-              <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#E87A42]" />
+              <RefreshCw className="w-3.5 h-3.5 animate-spin text-[#E87A42]" strokeWidth={1.75} />
               <span>Читаю бесіду та складаю конспект…</span>
             </div>
           ) : error ? (
@@ -177,7 +181,7 @@ export const ChatDigestModal: React.FC<ChatDigestModalProps> = ({
               disabled={!digest}
               className="py-2.5 px-3 bg-[#FDFCF9] hover:bg-[#F9F7F1] border border-[#E6DFD3] rounded-xl text-xs font-bold text-[#1E2521] flex items-center justify-center gap-1.5 transition-colors shadow-sm disabled:opacity-40"
             >
-              {copied ? <Check className="w-4 h-4 text-[#E87A42]" /> : <Copy className="w-4 h-4" />}
+              {copied ? <Check className="w-4 h-4 text-[#E87A42]" strokeWidth={1.75} /> : <Copy className="w-4 h-4" strokeWidth={1.75} />}
               <span>{copied ? 'Скопійовано!' : 'Копіювати текст'}</span>
             </button>
 
@@ -186,7 +190,7 @@ export const ChatDigestModal: React.FC<ChatDigestModalProps> = ({
               disabled={!digest}
               className="py-2.5 px-3 bg-[#E87A42] hover:bg-[#C25925] text-[#F7F5EE] rounded-xl text-xs font-bold flex items-center justify-center gap-1.5 transition-colors shadow-sm disabled:opacity-40"
             >
-              {saved ? <Check className="w-4 h-4" /> : <Bookmark className="w-4 h-4" />}
+              {saved ? <Check className="w-4 h-4" strokeWidth={1.75} /> : <Bookmark className="w-4 h-4" strokeWidth={1.75} />}
               <span>{saved ? 'Збережено в нотатки!' : 'Зберегти у вибране'}</span>
             </button>
           </div>

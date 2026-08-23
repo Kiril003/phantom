@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { Trash2, X, User, Users } from 'lucide-react';
 import { soundFx } from '../../utils/messengerSound';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
 
 interface DeleteMessageModalProps {
   isOpen: boolean;
@@ -18,6 +19,9 @@ export const DeleteMessageModal: React.FC<DeleteMessageModalProps> = ({
   messageTextPreview,
 }) => {
   const [deleteForEveryone, setDeleteForEveryone] = useState(true);
+
+  // Escape виводить із шару так само, як хрестик.
+  useEscapeClose(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -39,7 +43,7 @@ export const DeleteMessageModal: React.FC<DeleteMessageModalProps> = ({
         {/* Icon & Title */}
         <div className="flex items-start gap-3 mb-4">
           <div className="p-2.5 bg-red-950/60 text-red-400 border border-red-900/50 rounded-2xl shrink-0">
-            <Trash2 className="w-5 h-5" />
+            <Trash2 className="w-5 h-5" strokeWidth={1.75} />
           </div>
           <div className="flex-1 min-w-0">
             <h3 className="font-bold text-sm text-[#1E2521]">Видалити повідомлення?</h3>
@@ -49,7 +53,7 @@ export const DeleteMessageModal: React.FC<DeleteMessageModalProps> = ({
             onClick={onClose}
             className="p-1 hover:bg-[#F1EDE3] text-[#5F6A60] hover:text-[#1E2521] rounded-lg transition-colors"
           >
-            <X className="w-4 h-4" />
+            <X className="w-4 h-4" strokeWidth={1.75} />
           </button>
         </div>
 
@@ -78,7 +82,7 @@ export const DeleteMessageModal: React.FC<DeleteMessageModalProps> = ({
               </div>
               <div className="flex-1 text-xs">
                 <p className="font-bold text-[#1E2521] flex items-center gap-1.5">
-                  <Users className="w-3.5 h-3.5 text-[#E87A42]" />
+                  <Users className="w-3.5 h-3.5 text-[#E87A42]" strokeWidth={1.75} />
                   <span>Видалити для всіх учасників</span>
                 </p>
                 <p className="text-[11px] text-[#5F6A60]">Повідомлення зникне з історії для кожного</p>
@@ -100,7 +104,7 @@ export const DeleteMessageModal: React.FC<DeleteMessageModalProps> = ({
               </div>
               <div className="flex-1 text-xs">
                 <p className="font-bold text-[#1E2521] flex items-center gap-1.5">
-                  <User className="w-3.5 h-3.5 text-[#5F6A60]" />
+                  <User className="w-3.5 h-3.5 text-[#5F6A60]" strokeWidth={1.75} />
                   <span>Видалити тільки для мене</span>
                 </p>
                 <p className="text-[11px] text-[#5F6A60]">Залишиться в історії інших співрозмовників</p>

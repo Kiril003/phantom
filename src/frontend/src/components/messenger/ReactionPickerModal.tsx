@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Search, X, Sparkles, Smile, Zap, Coffee } from 'lucide-react';
 import confetti from 'canvas-confetti';
 import { soundFx } from '../../utils/messengerSound';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
 
 interface ReactionPickerModalProps {
   isOpen: boolean;
@@ -45,6 +46,9 @@ export const ReactionPickerModal: React.FC<ReactionPickerModalProps> = ({
   const [search, setSearch] = useState('');
   const [activeCategory, setActiveCategory] = useState('frequent');
 
+  // Escape виводить із шару так само, як хрестик.
+  useEscapeClose(isOpen, onClose);
+
   if (!isOpen) return null;
 
   const triggerConfetti = () => {
@@ -86,7 +90,7 @@ export const ReactionPickerModal: React.FC<ReactionPickerModalProps> = ({
         {/* Header with search */}
         <div className="flex items-center justify-between gap-2 mb-3">
           <div className="flex items-center gap-2 flex-1 px-3 py-1.5 bg-[#F7F5EE] border border-[#F1EDE3] rounded-2xl">
-            <Search className="w-4 h-4 text-[#7A8479]" />
+            <Search className="w-4 h-4 text-[#7A8479]" strokeWidth={1.75} />
             <input
               type="text"
               autoFocus
@@ -100,7 +104,7 @@ export const ReactionPickerModal: React.FC<ReactionPickerModalProps> = ({
             onClick={onClose}
             className="p-1.5 hover:bg-[#F1EDE3] text-[#5F6A60] hover:text-[#1E2521] rounded-xl transition-colors"
           >
-            <X className="w-4 h-4" />
+            <X className="w-4 h-4" strokeWidth={1.75} />
           </button>
         </div>
 
@@ -162,7 +166,7 @@ export const ReactionPickerModal: React.FC<ReactionPickerModalProps> = ({
         {/* Quick hint footer */}
         <div className="mt-3 pt-2.5 border-t border-[#E6DFD3] flex items-center justify-between text-[11px] text-[#5F6A60]">
           <span className="flex items-center gap-1.5">
-            <Sparkles className="w-3.5 h-3.5 text-[#E87A42]" />
+            <Sparkles className="w-3.5 h-3.5 text-[#E87A42]" strokeWidth={1.75} />
             <span>Натисніть щоб відправити реакцію</span>
           </span>
           <span className="font-mono text-[10px] text-[#E87A42]">PHANTOM Reactions</span>

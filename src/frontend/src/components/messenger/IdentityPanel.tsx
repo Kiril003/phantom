@@ -101,14 +101,14 @@ export const IdentityPanel: React.FC = () => {
                 onClick={copyBundle}
                 className="flex items-center gap-1.5 text-[11px] font-bold text-[#C25925] active:scale-95 transition-transform"
               >
-                {copied ? <Check className="w-3.5 h-3.5" /> : <Copy className="w-3.5 h-3.5" />}
+                {copied ? <Check className="w-3.5 h-3.5" strokeWidth={1.75} /> : <Copy className="w-3.5 h-3.5" strokeWidth={1.75} />}
                 <span>{copied ? 'Скопійовано' : 'Скопіювати'}</span>
               </button>
               <button
                 onClick={() => setShowQr((v) => !v)}
                 className="flex items-center gap-1.5 text-[11px] font-bold text-[#C25925] active:scale-95 transition-transform"
               >
-                <QrCode className="w-3.5 h-3.5" />
+                <QrCode className="w-3.5 h-3.5" strokeWidth={1.75} />
                 <span>{showQr ? 'Сховати код' : 'Показати код'}</span>
               </button>
             </div>
@@ -148,7 +148,7 @@ export const IdentityPanel: React.FC = () => {
             onClick={() => setAdding((v) => !v)}
             className="flex items-center gap-1 text-[11px] font-bold text-[#C25925] active:scale-95 transition-transform"
           >
-            <UserPlus className="w-3.5 h-3.5" />
+            <UserPlus className="w-3.5 h-3.5" strokeWidth={1.75} />
             <span>Додати</span>
           </button>
         </div>
@@ -174,7 +174,7 @@ export const IdentityPanel: React.FC = () => {
                 onClick={() => setScanning(true)}
                 className="flex items-center gap-1.5 text-[11px] font-bold text-[#C25925] active:scale-95 transition-transform"
               >
-                <QrCode className="w-3.5 h-3.5" />
+                <QrCode className="w-3.5 h-3.5" strokeWidth={1.75} />
                 <span>Відсканувати код співрозмовника</span>
               </button>
             )}
@@ -215,12 +215,12 @@ export const IdentityPanel: React.FC = () => {
               <span className="text-[12px] font-bold text-[#1E2521]">{c.display_name}</span>
               {c.verified ? (
                 <span className="flex items-center gap-1 text-[10px] font-bold text-[#3F7A4B]">
-                  <ShieldCheck className="w-3.5 h-3.5" />
+                  <ShieldCheck className="w-3.5 h-3.5" strokeWidth={1.75} />
                   Звірено
                 </span>
               ) : (
                 <span className="flex items-center gap-1 text-[10px] font-bold text-[#B45309]">
-                  <AlertTriangle className="w-3.5 h-3.5" />
+                  <AlertTriangle className="w-3.5 h-3.5" strokeWidth={1.75} />
                   Не звірено
                 </span>
               )}

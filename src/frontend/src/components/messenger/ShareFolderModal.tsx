@@ -8,6 +8,7 @@ import {
 import { Chat, SmartFolder } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
 import { Avatar } from './Avatar';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
 
 interface ShareFolderModalProps {
   isOpen: boolean;
@@ -25,6 +26,9 @@ export const ShareFolderModal: React.FC<ShareFolderModalProps> = ({
   const [allowJoinAll, setAllowJoinAll] = useState(true);
   const [autoSyncTopics, setAutoSyncTopics] = useState(true);
   
+
+  // Escape виводить із шару так само, як хрестик.
+  useEscapeClose(isOpen, onClose);
 
   if (!isOpen || !folder) return null;
 
@@ -79,7 +83,7 @@ export const ShareFolderModal: React.FC<ShareFolderModalProps> = ({
             className="p-1.5 hover:bg-[#F1EDE3] rounded-xl text-[#5F6A60] hover:text-[#1E2521] transition-colors"
             title="Закрити"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5" strokeWidth={1.75} />
           </button>
         </div>
 
@@ -90,8 +94,8 @@ export const ShareFolderModal: React.FC<ShareFolderModalProps> = ({
               формулою i % 2 === 0 && i % 3 === 0 — його неможливо відсканувати.
               Спільного каталогу просторів немає, тож і посилання бути не може. */}
           <div className="p-3 bg-[#FDF6EC] border border-[#EBD9BE] rounded-2xl space-y-1.5">
-            <div className="flex items-center gap-2 font-bold text-[#FBBF24]">
-              <AlertTriangle className="w-4 h-4" />
+            <div className="flex items-center gap-2 font-bold text-[#C98A2E]">
+              <AlertTriangle className="w-4 h-4" strokeWidth={1.75} />
               <span>Посилань-запрошень поки немає</span>
             </div>
             <span className="text-[11px] text-[#B9A88C] block leading-relaxed">
@@ -105,7 +109,7 @@ export const ShareFolderModal: React.FC<ShareFolderModalProps> = ({
           <div className="space-y-1.5">
             <div className="flex items-center justify-between">
               <label className="text-[11px] font-bold text-[#5F6A60] uppercase tracking-wider flex items-center gap-1.5">
-                <Layers className="w-3.5 h-3.5 text-[#E87A42]" />
+                <Layers className="w-3.5 h-3.5 text-[#E87A42]" strokeWidth={1.75} />
                 <span>Чати у структурі ({folderChats.length})</span>
               </label>
               <span className="text-[10px] text-[#5F6A60]">
@@ -148,7 +152,7 @@ export const ShareFolderModal: React.FC<ShareFolderModalProps> = ({
           {/* 4. Permissions & Rules */}
           <div className="bg-[#FDFCF9] border border-[#E6DFD3] rounded-2xl p-3 space-y-2.5 shadow-sm">
             <div className="text-[11px] font-bold text-[#5F6A60] uppercase tracking-wider flex items-center gap-1.5">
-              <Shield className="w-3.5 h-3.5 text-[#E87A42]" />
+              <Shield className="w-3.5 h-3.5 text-[#E87A42]" strokeWidth={1.75} />
               <span>Параметри запрошення</span>
             </div>
 

@@ -23,6 +23,7 @@ import {
 import { ChatMember, PersonaSphere, UserProfile, UserProfilePersona } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
 import { Avatar } from './Avatar';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
 
 interface UserProfileModalProps {
   isOpen: boolean;
@@ -119,6 +120,9 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
     setTimeout(() => setCacheCleared(false), 3000);
   };
 
+  // Escape виводить із шару так само, як хрестик.
+  useEscapeClose(isOpen, onClose);
+
   if (!isOpen) return null;
 
   return (
@@ -133,7 +137,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
         <div className="px-4 sm:px-5 py-3.5 sm:py-4 border-b border-[#E6DFD3] flex items-center justify-between bg-[#FDFCF9] shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="p-2 bg-[#F9F7F1] text-[#E87A42] border border-[#DDD4C4] rounded-xl shadow-sm">
-              <User className="w-4 h-4" />
+              <User className="w-4 h-4" strokeWidth={1.75} />
             </div>
             <div>
               <h3 className="font-extrabold text-base text-[#1E2521]">
@@ -154,7 +158,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             }}
             className="p-1.5 text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F1EDE3] rounded-xl transition-colors"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5" strokeWidth={1.75} />
           </button>
         </div>
 
@@ -225,7 +229,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   }}
                   className="p-2.5 bg-[#E87A42] hover:bg-[#D46B35] text-[#1E2521] rounded-2xl flex flex-col items-center gap-1 shadow-2xs font-bold text-xs transition-colors"
                 >
-                  <MessageSquare className="w-4 h-4" />
+                  <MessageSquare className="w-4 h-4" strokeWidth={1.75} />
                   <span>Повідомлення</span>
                 </button>
 
@@ -236,7 +240,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   }}
                   className="p-2.5 bg-white hover:bg-[#FAF6EE] text-[#7A8479] border border-[#DFD6C5] rounded-2xl flex flex-col items-center gap-1 font-bold text-xs transition-colors shadow-2xs"
                 >
-                  <Phone className="w-4 h-4 text-[#528A4B]" />
+                  <Phone className="w-4 h-4 text-[#528A4B]" strokeWidth={1.75} />
                   <span>Дзвінок</span>
                 </button>
 
@@ -247,7 +251,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   }}
                   className="p-2.5 bg-white hover:bg-[#FAF6EE] text-[#7A8479] border border-[#DFD6C5] rounded-2xl flex flex-col items-center gap-1 font-bold text-xs transition-colors shadow-2xs"
                 >
-                  <Video className="w-4 h-4 text-[#8C461A]" />
+                  <Video className="w-4 h-4 text-[#8C461A]" strokeWidth={1.75} />
                   <span>Відео</span>
                 </button>
               </div>
@@ -372,7 +376,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                       }}
                       className="px-3 py-1.5 bg-[#FAF3E8] hover:bg-[#F3E6D5] text-[#8C461A] border border-[#EADBCC] rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"
                     >
-                      <Edit3 className="w-3.5 h-3.5" />
+                      <Edit3 className="w-3.5 h-3.5" strokeWidth={1.75} />
                       <span>Редагувати</span>
                     </button>
                   </div>
@@ -390,13 +394,13 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 text-xs text-[#525F56]">
                     {formData.workHours && (
                       <div className="flex items-center gap-2 p-2.5 bg-[#F6F4ED] rounded-xl">
-                        <Clock className="w-4 h-4 text-[#E87A42]" />
+                        <Clock className="w-4 h-4 text-[#E87A42]" strokeWidth={1.75} />
                         <span>Години: {formData.workHours}</span>
                       </div>
                     )}
                     {formData.locationName && (
                       <div className="flex items-center gap-2 p-2.5 bg-[#F6F4ED] rounded-xl">
-                        <MapPin className="w-4 h-4 text-[#528A4B]" />
+                        <MapPin className="w-4 h-4 text-[#528A4B]" strokeWidth={1.75} />
                         <span>{formData.locationName}</span>
                       </div>
                     )}
@@ -437,7 +441,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                             className="p-2 bg-[#FDFCF9] hover:bg-[#F3EDE2] border border-[#DFD6C5] rounded-xl flex items-center justify-between text-xs text-[#1E2521] font-semibold transition-colors group"
                           >
                             <span className="truncate">{link.title}</span>
-                            <ExternalLink className="w-3.5 h-3.5 text-[#8C988E] group-hover:text-[#E87A42]" />
+                            <ExternalLink className="w-3.5 h-3.5 text-[#8C988E] group-hover:text-[#E87A42]" strokeWidth={1.75} />
                           </a>
                         ))}
                       </div>
@@ -583,7 +587,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                       type="submit"
                       className="px-4 py-2 bg-[#E6DFD3] text-[#1E2521] rounded-xl text-xs font-bold shadow-2xs hover:bg-black flex items-center gap-1.5"
                     >
-                      <Check className="w-4 h-4" />
+                      <Check className="w-4 h-4" strokeWidth={1.75} />
                       <span>Зберегти сферу</span>
                     </button>
                   </div>
@@ -667,7 +671,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             <div className="space-y-3">
               {!currentUser.activeDevices?.length && (
                 <div className="p-4 bg-white border border-[#DFD6C5] rounded-2xl text-center">
-                  <Laptop className="w-7 h-7 text-[#A8B6AB] mx-auto mb-2 opacity-50" />
+                  <Laptop className="w-7 h-7 text-[#A8B6AB] mx-auto mb-2 opacity-50" strokeWidth={1.75} />
                   <p className="text-xs font-bold text-[#1E2521]">Немає даних про активні сеанси</p>
                   <p className="text-[11px] text-[#7A8479] mt-1">
                     Реєстр сеансів ще не ведеться, тому список порожній.
@@ -683,11 +687,11 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   <div className="flex items-center gap-3">
                     <div className="p-2 bg-[#F0EAE0] text-[#7A8479] rounded-xl">
                       {device.type === 'desktop' ? (
-                        <Laptop className="w-5 h-5" />
+                        <Laptop className="w-5 h-5" strokeWidth={1.75} />
                       ) : device.type === 'mobile' ? (
-                        <Smartphone className="w-5 h-5" />
+                        <Smartphone className="w-5 h-5" strokeWidth={1.75} />
                       ) : (
-                        <Globe className="w-5 h-5" />
+                        <Globe className="w-5 h-5" strokeWidth={1.75} />
                       )}
                     </div>
                     <div>
@@ -736,7 +740,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                     onClick={handleClearCache}
                     className="px-3 py-1.5 bg-[#FCE7D8] hover:bg-[#F9D2BA] text-[#8C461A] rounded-xl text-xs font-bold flex items-center gap-1.5 transition-colors"
                   >
-                    {cacheCleared ? <Check className="w-3.5 h-3.5 text-green-700" /> : <Trash2 className="w-3.5 h-3.5" />}
+                    {cacheCleared ? <Check className="w-3.5 h-3.5 text-green-700" strokeWidth={1.75} /> : <Trash2 className="w-3.5 h-3.5" strokeWidth={1.75} />}
                     <span>{cacheCleared ? 'Кеш очищено!' : 'Очистити кеш (85 MB)'}</span>
                   </button>
                 </div>

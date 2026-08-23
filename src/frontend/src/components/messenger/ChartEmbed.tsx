@@ -25,7 +25,7 @@ export const ChartEmbed: React.FC<ChartEmbedProps> = ({ data }) => {
       <div className="flex items-start justify-between gap-2 pb-2 border-b border-[#E6DFD3]">
         <div className="flex items-center gap-2.5">
           <div className="p-2 bg-[#F9F7F1] text-[#E87A42] border border-[#DDD4C4] rounded-xl shadow-sm">
-            <BarChart3 className="w-4 h-4" />
+            <BarChart3 className="w-4 h-4" strokeWidth={1.75} />
           </div>
           <div>
             <h4 className="font-extrabold text-xs sm:text-sm text-[#1E2521] leading-tight">
@@ -102,7 +102,7 @@ export const ChartEmbed: React.FC<ChartEmbedProps> = ({ data }) => {
       {/* Key Takeaway Insight Pill */}
       {data.takeaway && (
         <div className="flex items-center gap-2 p-2.5 bg-[#F9F7F1] border border-[#E6DFD3] rounded-xl text-xs text-[#5F6A60] shadow-sm">
-          <TrendingUp className="w-4 h-4 text-[#E87A42] shrink-0" />
+          <TrendingUp className="w-4 h-4 text-[#E87A42] shrink-0" strokeWidth={1.75} />
           <p className="leading-snug">{data.takeaway}</p>
         </div>
       )}

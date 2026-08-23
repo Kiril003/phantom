@@ -266,7 +266,7 @@ export const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
           className="p-2.5 text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F1EDE3] rounded-xl transition-colors"
           title="Автомобільний маршрут"
         >
-          <Car className="w-5 h-5" />
+          <Car className="w-5 h-5" strokeWidth={1.75} />
         </button>
 
         {/* Layers switch */}
@@ -282,7 +282,7 @@ export const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
           }`}
           title="Шари карти"
         >
-          <Layers className="w-5 h-5" />
+          <Layers className="w-5 h-5" strokeWidth={1.75} />
         </button>
 
         {/* Guide / Book info */}
@@ -295,7 +295,7 @@ export const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
           className="p-2.5 text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F1EDE3] rounded-xl transition-colors"
           title="Досьє поточного району"
         >
-          <BookOpen className="w-5 h-5" />
+          <BookOpen className="w-5 h-5" strokeWidth={1.75} />
         </button>
 
         <div className="w-5 h-px bg-[#E6DFD3]" />
@@ -309,7 +309,7 @@ export const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
           className="p-2.5 text-[#E87A42] hover:bg-[#F9F7F1] rounded-xl transition-colors"
           title="Моє місцезнаходження"
         >
-          <Compass className="w-5 h-5" />
+          <Compass className="w-5 h-5" strokeWidth={1.75} />
         </button>
 
         {/* Zoom In / Out */}
@@ -317,13 +317,13 @@ export const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
           onClick={() => setZoomLevel((z) => Math.min(z + 0.2, 2))}
           className="p-2 text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F1EDE3] rounded-xl"
         >
-          <ZoomIn className="w-4 h-4" />
+          <ZoomIn className="w-4 h-4" strokeWidth={1.75} />
         </button>
         <button
           onClick={() => setZoomLevel((z) => Math.max(z - 0.2, 0.8))}
           className="p-2 text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F1EDE3] rounded-xl"
         >
-          <ZoomOut className="w-4 h-4" />
+          <ZoomOut className="w-4 h-4" strokeWidth={1.75} />
         </button>
       </div>
 
@@ -331,7 +331,7 @@ export const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
       <div className="absolute bottom-4 left-4 right-4 sm:left-6 sm:right-auto sm:w-96 z-20 bg-[#FDFCF9]/95 backdrop-blur-md rounded-2xl p-3.5 border border-[#DDD4C4] shadow-2xl flex items-center justify-between gap-3 text-[#1E2521]">
         <div className="flex items-center gap-3 min-w-0">
           <div className="w-10 h-10 rounded-xl bg-[#F9F7F1] flex items-center justify-center text-[#E87A42] border border-[#DDD4C4] shrink-0">
-            <ShoppingBag className="w-5 h-5" />
+            <ShoppingBag className="w-5 h-5" strokeWidth={1.75} />
           </div>
           <div className="min-w-0">
             <h3 className="font-bold text-sm text-[#1E2521] truncate">B Fresh</h3>

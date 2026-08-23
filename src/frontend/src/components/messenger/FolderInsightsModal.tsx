@@ -8,6 +8,7 @@ import {
 import { Chat, SmartFolder } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
 import { Avatar } from './Avatar';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
 
 interface FolderInsightsModalProps {
   isOpen: boolean;
@@ -50,6 +51,9 @@ export const FolderInsightsModal: React.FC<FolderInsightsModalProps> = ({
     };
   }, [folderChats]);
 
+  // Escape виводить із шару так само, як хрестик.
+  useEscapeClose(isOpen, onClose);
+
   if (!isOpen || !folder) return null;
 
   const accentColor = folder.color || '#E87A42';
@@ -90,7 +94,7 @@ export const FolderInsightsModal: React.FC<FolderInsightsModalProps> = ({
             className="p-1.5 hover:bg-[#F1EDE3] rounded-xl text-[#5F6A60] hover:text-[#1E2521] transition-colors shrink-0"
             title="Закрити"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5" strokeWidth={1.75} />
           </button>
         </div>
 
@@ -101,7 +105,7 @@ export const FolderInsightsModal: React.FC<FolderInsightsModalProps> = ({
             <div className="p-3 bg-[#FDFCF9] border border-[#E6DFD3] rounded-2xl space-y-1">
               <div className="flex items-center justify-between text-[#5F6A60]">
                 <span className="text-[10px] font-bold uppercase tracking-wider">Бесід</span>
-                <Users className="w-3.5 h-3.5" style={{ color: accentColor }} />
+                <Users className="w-3.5 h-3.5" style={{ color: accentColor }} strokeWidth={1.75} />
               </div>
               <div className="text-xl font-black text-[#1E2521] tracking-tight">
                 {folderChats.length}
@@ -111,7 +115,7 @@ export const FolderInsightsModal: React.FC<FolderInsightsModalProps> = ({
             <div className="p-3 bg-[#FDFCF9] border border-[#E6DFD3] rounded-2xl space-y-1">
               <div className="flex items-center justify-between text-[#5F6A60]">
                 <span className="text-[10px] font-bold uppercase tracking-wider">Повідомлень</span>
-                <MessageSquare className="w-3.5 h-3.5 text-[#E87A42]" />
+                <MessageSquare className="w-3.5 h-3.5 text-[#E87A42]" strokeWidth={1.75} />
               </div>
               <div className="text-xl font-black text-[#1E2521] tracking-tight">
                 {totalMessages}
@@ -122,7 +126,7 @@ export const FolderInsightsModal: React.FC<FolderInsightsModalProps> = ({
             <div className="p-3 bg-[#FDFCF9] border border-[#E6DFD3] rounded-2xl space-y-1">
               <div className="flex items-center justify-between text-[#5F6A60]">
                 <span className="text-[10px] font-bold uppercase tracking-wider">Непрочитаних</span>
-                <Inbox className="w-3.5 h-3.5 text-[#F4AF25]" />
+                <Inbox className="w-3.5 h-3.5 text-[#F4AF25]" strokeWidth={1.75} />
               </div>
               <div className="text-xl font-black text-[#1E2521] tracking-tight">
                 {totalUnread}

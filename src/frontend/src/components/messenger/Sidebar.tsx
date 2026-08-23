@@ -1018,71 +1018,72 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
 
-      {/* Main Chat List Container */}
-      <div className="w-full md:w-80 lg:w-84 flex flex-col h-full bg-[#FDFCF9] min-w-0 overflow-hidden relative">
+      {/* Main Chat List Container. На планшеті (768–1024) список вужчий, щоб
+          розмова поруч лишалася читабельною; lg:w-84 тут був мертвим класом —
+          такої сходинки в шкалі немає, тож ширина мовчки лишалась 320. */}
+      <div className="w-full md:w-[264px] phantom:w-[320px] flex flex-col h-full bg-[#FDFCF9] min-w-0 overflow-hidden relative">
         {/* Mobile Top Brand & Quick Actions Header */}
-        <div className="md:hidden px-4 pt-[calc(var(--sat)+0.65rem)] pb-2.5 bg-[#F7F5EE] text-[#1E2521] flex items-center justify-between shrink-0 shadow-sm border-b border-[#E6DFD3]">
-          <div className="flex items-center gap-3 min-w-0">
+        <div className="md:hidden px-3 pt-[calc(var(--sat)+0.65rem)] pb-2.5 bg-[#F7F5EE] text-[#1E2521] flex items-center justify-between gap-2 shrink-0 shadow-sm border-b border-[#E6DFD3]">
+          <div className="flex items-center gap-2 min-w-0">
+            {/* Вихід із месенджера. На телефоні рейки немає, а разом з нею
+                зникала єдина дорога назад до PHANTOM — глухий кут. */}
+            <button
+              onClick={() => {
+                soundFx.playTap();
+                navigate('/');
+              }}
+              className="w-[34px] h-[34px] min-h-0 min-w-0 shrink-0 -ml-1 rounded-[10px] text-[#6E7568] hover:text-[#21261F] hover:bg-[#F1EBDD] flex items-center justify-center transition-colors"
+              title="Повернутися до PHANTOM"
+              aria-label="Повернутися до PHANTOM"
+            >
+              <LayoutGrid className="w-[18px] h-[18px]" strokeWidth={1.75} />
+            </button>
             <div
               onClick={onOpenUserProfile}
               className="relative cursor-pointer shrink-0 active:scale-95 transition-transform"
               title={`${currentUser.name} — Профіль`}
             >
               <Avatar src={currentUser.avatar} name={currentUser.name} className="w-9 h-9" />
-              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-[#10B981] rounded-full ring-2 ring-[#F7F5EE]" />
+              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-[#4C8A55] rounded-full ring-2 ring-[#F7F5EE]" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <h1 className="font-black text-base tracking-tight text-[#1E2521] flex items-center gap-1">
+                <h1 className="font-semibold text-[15.5px] tracking-tight text-[#1E2521] flex items-center gap-1">
                   <span>PHANTOM</span>
-                  <Sparkles className="w-3.5 h-3.5 text-[#E87A42]" />
+                  <Sparkles className="w-3.5 h-3.5 text-[#E87A42]" strokeWidth={1.75} />
                 </h1>
-                <span className="px-1.5 py-0.2 bg-[#F9F7F1] text-[#E87A42] rounded-md text-[9px] font-bold">
-                  v2.4
-                </span>
               </div>
-              <p className="text-[10px] text-[#5F6A60] font-semibold flex items-center gap-1 leading-none mt-0.5 truncate">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#10B981] animate-pulse" />
-                <span>{networkEngine.getTransportMode() === 'p2p' ? 'P2P Direct' : 'Auto Hybrid'}</span>
+              <p className="text-[11px] text-[color:var(--msg-meta)] flex items-center gap-1 leading-none mt-0.5 truncate">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#4C8A55]" />
+                <span>{networkEngine.getTransportMode() === 'p2p' ? 'прямий канал' : 'авто'}</span>
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-1.5 shrink-0">
-            {onOpenP2PNetworkModal && (
-              <button
-                onClick={() => {
-                  soundFx.playTap();
-                  onOpenP2PNetworkModal();
-                }}
-                className="p-2 text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F9F7F1] rounded-xl transition-colors active:scale-90"
-                title="P2P / Серверні протоколи"
-                aria-label="P2P Протоколи"
-              >
-                <Radio className="w-5 h-5 text-[#10B981]" />
-              </button>
-            )}
+          {/* P2P звідси прибрано навмисне: він і так стоїть у нижній навігації
+              окремою кнопкою, а на 375 px четвертий значок з'їдав назву. */}
+          <div className="flex items-center gap-1 shrink-0">
             <button
               onClick={() => {
                 soundFx.playTap();
                 onOpenSettings();
               }}
-              className="p-2 text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F9F7F1] rounded-xl transition-colors active:scale-90"
+              className="w-[34px] h-[34px] min-h-0 min-w-0 rounded-[10px] text-[#6E7568] hover:text-[#21261F] hover:bg-[#F1EBDD] flex items-center justify-center transition-colors active:scale-95"
               title="Налаштування"
               aria-label="Налаштування"
             >
-              <Settings className="w-5 h-5" />
+              <Settings className="w-[18px] h-[18px]" strokeWidth={1.75} />
             </button>
             <button
               onClick={() => {
                 soundFx.playTap();
                 onNewChat();
               }}
-              className="p-2 bg-[#E87A42] text-[#F7F5EE] rounded-xl hover:bg-[#C25925] transition-transform active:scale-90 shadow-md font-bold"
+              className="w-[34px] h-[34px] min-h-0 min-w-0 rounded-[10px] bg-[#D96C35] text-[#FDFCF9] hover:bg-[#B85425] flex items-center justify-center transition-colors active:scale-95"
               title="Новий діалог"
               aria-label="Створити новий діалог"
             >
-              <Plus className="w-5 h-5" />
+              <Plus className="w-[18px] h-[18px]" strokeWidth={1.75} />
             </button>
           </div>
         </div>
@@ -1156,7 +1157,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
 
           {/* Кола: показуємо лише ті, у яких справді є бесіди — решта була б мертвим фільтром. */}
-          <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar -mx-0.5 px-0.5 py-0.5">
+          <div className="msg-strip gap-1.5 -mx-0.5 px-0.5 pt-0.5 pb-1">
             <button
               onClick={() => {
                 soundFx.playTap();
@@ -1377,31 +1378,21 @@ export const Sidebar: React.FC<SidebarProps> = ({
         )}
         </div>
 
-        {/* Mobile Floating Action Button (FAB) for starting a new chat */}
-        <button
-          onClick={() => {
-            soundFx.playTap();
-            onNewChat();
-          }}
-          className="md:hidden fixed bottom-18 right-4 w-13 h-13 bg-[#E87A42] hover:bg-[#C25925] text-[#FFF8F2] rounded-full shadow-xl flex items-center justify-center active:scale-90 z-25 transition-transform border-2 border-[#FDFCF9]"
-          title="Новий діалог"
-          aria-label="Новий діалог"
-        >
-          <Plus className="w-6 h-6" />
-        </button>
-
-        {/* Mobile Bottom Navigation Bar */}
+        {/* Mobile Bottom Navigation Bar. Плаваючої кнопки «+» тут більше немає:
+            її класи (bottom-18, w-13, z-25) не існують у шкалі, тож вона
+            падала в потік десь посеред списку — а те саме «Новий діалог» уже
+            стоїть у шапці списку. */}
         <nav className="md:hidden border-t border-[#E6DFD3] bg-[#FDFCF9] px-3 pt-2 pb-[calc(var(--sab)+0.5rem)] flex items-center justify-around shrink-0 z-10">
           <button
             onClick={() => {
               soundFx.playTap();
               onSelectFolder('all');
             }}
-            className={`flex flex-col items-center gap-0.5 text-[10px] font-bold transition-colors active:scale-95 ${
-              activeFolderId === 'all' ? 'text-[#E87A42]' : 'text-[#728178] hover:text-[#1E2521]'
+            className={`flex flex-col items-center gap-1 text-[11px] font-medium transition-colors active:scale-95 ${
+              activeFolderId === 'all' ? 'text-[#C25925]' : 'text-[#6E7568] hover:text-[#21261F]'
             }`}
           >
-            <MessagesSquare className="w-5 h-5" />
+            <MessagesSquare className="w-[18px] h-[18px]" strokeWidth={1.75} />
             <span>Чати</span>
           </button>
 
@@ -1410,9 +1401,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
               soundFx.playTap();
               onOpenCreateFolder();
             }}
-            className="flex flex-col items-center gap-0.5 text-[10px] font-bold text-[#728178] hover:text-[#1E2521] transition-colors active:scale-95"
+            className="flex flex-col items-center gap-1 text-[11px] font-medium text-[#6E7568] hover:text-[#21261F] transition-colors active:scale-95"
           >
-            <FolderPlus className="w-5 h-5" />
+            <FolderPlus className="w-[18px] h-[18px]" strokeWidth={1.75} />
             <span>Простори</span>
           </button>
 
@@ -1422,10 +1413,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 soundFx.playTap();
                 onOpenP2PNetworkModal();
               }}
-              className="flex flex-col items-center gap-0.5 text-[10px] font-bold text-[#728178] hover:text-[#1E2521] transition-colors active:scale-95"
+              className="flex flex-col items-center gap-1 text-[11px] font-medium text-[#6E7568] hover:text-[#21261F] transition-colors active:scale-95"
             >
-              <Radio className="w-5 h-5 text-[#10B981]" />
-              <span>P2P Вузол</span>
+              <Radio className="w-[18px] h-[18px]" strokeWidth={1.75} />
+              <span>Мережа</span>
             </button>
           )}
 
@@ -1434,9 +1425,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
               soundFx.playTap();
               onOpenSettings();
             }}
-            className="flex flex-col items-center gap-0.5 text-[10px] font-bold text-[#728178] hover:text-[#1E2521] transition-colors active:scale-95"
+            className="flex flex-col items-center gap-1 text-[11px] font-medium text-[#6E7568] hover:text-[#21261F] transition-colors active:scale-95"
           >
-            <Settings className="w-5 h-5" />
+            <Settings className="w-[18px] h-[18px]" strokeWidth={1.75} />
             <span>Параметри</span>
           </button>
         </nav>
@@ -1455,7 +1446,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onClick={() => setActiveMenuChatId(null)}
               className="text-[#8A9186] hover:text-[#1E2521] shrink-0"
             >
-              <X className="w-3 h-3" />
+              <X className="w-3 h-3" strokeWidth={1.75} />
             </button>
           </div>
 
@@ -1520,7 +1511,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 onClick={() => startRenameChat(menuChat)}
                 className="w-full p-1.5 rounded-xl text-left text-xs font-semibold flex items-center gap-1.5 text-[#1E2521] hover:bg-[#F4F1E8] transition-colors"
               >
-                <Pencil className="w-3.5 h-3.5 text-[#C25925] shrink-0" />
+                <Pencil className="w-3.5 h-3.5 text-[#C25925] shrink-0" strokeWidth={1.75} />
                 <span>Перейменувати</span>
               </button>
 
@@ -1528,7 +1519,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 onClick={() => void handleMarkChatRead(menuChat)}
                 className="w-full p-1.5 rounded-xl text-left text-xs font-semibold flex items-center gap-1.5 text-[#1E2521] hover:bg-[#F4F1E8] transition-colors"
               >
-                <CheckCheck className="w-3.5 h-3.5 text-[#3F7A4B] shrink-0" />
+                <CheckCheck className="w-3.5 h-3.5 text-[#3F7A4B] shrink-0" strokeWidth={1.75} />
                 <span>Позначити прочитаним</span>
               </button>
 
@@ -1536,7 +1527,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 onClick={() => setChatConfirm('clear')}
                 className="w-full p-1.5 rounded-xl text-left text-xs font-semibold flex items-center gap-1.5 text-[#1E2521] hover:bg-[#F4F1E8] transition-colors"
               >
-                <Eraser className="w-3.5 h-3.5 text-[#8A9186] shrink-0" />
+                <Eraser className="w-3.5 h-3.5 text-[#8A9186] shrink-0" strokeWidth={1.75} />
                 <span>Очистити історію</span>
               </button>
 
@@ -1544,7 +1535,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 onClick={() => setChatConfirm('delete')}
                 className="w-full p-1.5 rounded-xl text-left text-xs font-semibold flex items-center gap-1.5 text-[#B4432E] hover:bg-[#F7ECE7] transition-colors"
               >
-                <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                <Trash2 className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} />
                 <span>Видалити розмову</span>
               </button>
 
@@ -1581,7 +1572,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         <span>{folder.emoji}</span>
                         <span className="truncate">{folder.name}</span>
                       </div>
-                      {isIn && <Check className="w-3.5 h-3.5 text-[#C25925] shrink-0" />}
+                      {isIn && <Check className="w-3.5 h-3.5 text-[#C25925] shrink-0" strokeWidth={1.75} />}
                     </button>
                   );
                 })}
@@ -1594,7 +1585,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   }}
                   className="w-full p-1.5 rounded-xl text-left text-xs font-bold text-[#C25925] hover:bg-[#F4F1E8] flex items-center gap-1.5 transition-colors"
                 >
-                  <Plus className="w-3 h-3" />
+                  <Plus className="w-3 h-3" strokeWidth={1.75} />
                   <span>Новий простір</span>
                 </button>
               </div>
@@ -1629,7 +1620,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {/* Counts: Total chats and total unread message count */}
           <div className="flex items-center justify-between gap-3 text-[11px]">
             <div className="flex items-center gap-1 text-[#7A8479]">
-              <MessageCircle className="w-3.5 h-3.5 text-[#E87A42] shrink-0" />
+              <MessageCircle className="w-3.5 h-3.5 text-[#E87A42] shrink-0" strokeWidth={1.75} />
               <span>Чати:</span>
               <span className="font-extrabold text-[#1E2521]">{hoveredFolderStats.stats.total}</span>
             </div>
@@ -1692,7 +1683,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#F9F7F1] text-left text-xs font-semibold flex items-center justify-between text-[#1E2521] hover:text-[#1E2521] transition-colors"
             >
               <div className="flex items-center gap-2 min-w-0">
-                <CheckCheck className="w-3.5 h-3.5 text-[#E87A42] shrink-0" />
+                <CheckCheck className="w-3.5 h-3.5 text-[#E87A42] shrink-0" strokeWidth={1.75} />
                 <span className="truncate">Позначити як прочитані</span>
               </div>
               {getFolderUnreadCount(folderContextMenu.folder) > 0 && (
@@ -1715,7 +1706,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#F9F7F1] text-left text-xs font-semibold flex items-center justify-between text-[#1E2521] hover:text-[#1E2521] transition-colors"
             >
               <div className="flex items-center gap-2 min-w-0">
-                <Zap className="w-3.5 h-3.5 text-[#E87A42] shrink-0" />
+                <Zap className="w-3.5 h-3.5 text-[#E87A42] shrink-0" strokeWidth={1.75} />
                 <span className="truncate">Priority View (лише нові)</span>
               </div>
               {getFolderUnreadCount(folderContextMenu.folder) > 0 && (
@@ -1731,7 +1722,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#F9F7F1] text-left text-xs font-semibold flex items-center justify-between text-[#1E2521] hover:text-[#1E2521] transition-colors"
             >
               <div className="flex items-center gap-2 min-w-0">
-                <Eye className="w-3.5 h-3.5 text-[#E87A42] shrink-0" />
+                <Eye className="w-3.5 h-3.5 text-[#E87A42] shrink-0" strokeWidth={1.75} />
                 <span className="truncate">Швидкий перегляд (3 ост.)</span>
               </div>
               <span className="text-[10px] text-[#5F6A60] font-mono shrink-0 whitespace-nowrap">
@@ -1746,9 +1737,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
             >
               <div className="flex items-center gap-2 min-w-0">
                 {folderContextMenu.folder.isMuted ? (
-                  <Bell className="w-3.5 h-3.5 text-[#E87A42] shrink-0" />
+                  <Bell className="w-3.5 h-3.5 text-[#E87A42] shrink-0" strokeWidth={1.75} />
                 ) : (
-                  <BellOff className="w-3.5 h-3.5 text-[#5F6A60] shrink-0" />
+                  <BellOff className="w-3.5 h-3.5 text-[#5F6A60] shrink-0" strokeWidth={1.75} />
                 )}
                 <span className="truncate">
                   {folderContextMenu.folder.isMuted ? 'Увімкнути звук' : 'Вимкнути звук'}
@@ -1782,7 +1773,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#F9F7F1] text-left text-xs font-semibold flex items-center justify-between text-[#1E2521] hover:text-[#1E2521] transition-colors"
               >
                 <div className="flex items-center gap-2 min-w-0">
-                  <Palette className="w-3.5 h-3.5 text-[#E87A42] shrink-0" />
+                  <Palette className="w-3.5 h-3.5 text-[#E87A42] shrink-0" strokeWidth={1.75} />
                   <span className="truncate">Колірний акцент</span>
                 </div>
                 <div className="flex items-center gap-1.5 shrink-0">
@@ -1793,8 +1784,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <ChevronDown
                     className={`w-3 h-3 text-[#5F6A60] transition-transform ${
                       isColorPaletteOpen ? 'rotate-180' : ''
-                    }`}
-                  />
+                    }`} strokeWidth={1.75} />
                 </div>
               </button>
 
@@ -1826,7 +1816,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           style={{ backgroundColor: c.hex }}
                           title={c.label}
                         >
-                          {isSelected && <Check className="w-3.5 h-3.5 text-[#1E2521] stroke-[3]" />}
+                          {isSelected && <Check className="w-3.5 h-3.5 text-[#1E2521] stroke-[3]" strokeWidth={1.75} />}
                         </button>
                       );
                     })}
@@ -1837,7 +1827,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       htmlFor="folder-custom-color"
                       className="text-[10px] font-bold text-[#5F6A60] flex items-center gap-1 cursor-pointer flex-1"
                     >
-                      <Pipette className="w-3 h-3 text-[#5F6A60]" />
+                      <Pipette className="w-3 h-3 text-[#5F6A60]" strokeWidth={1.75} />
                       <span>Свій відтінок:</span>
                     </label>
                     <input
@@ -1863,14 +1853,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#F9F7F1] text-left text-xs font-semibold flex items-center justify-between text-[#1E2521] hover:text-[#1E2521] transition-colors"
               >
                 <div className="flex items-center gap-2 min-w-0">
-                  <Sparkles className="w-3.5 h-3.5 text-[#E87A42] shrink-0" />
+                  <Sparkles className="w-3.5 h-3.5 text-[#E87A42] shrink-0" strokeWidth={1.75} />
                   <span className="truncate">Налаштувати Vibe</span>
                 </div>
                 <ChevronDown
                   className={`w-3 h-3 text-[#5F6A60] transition-transform shrink-0 ${
                     isVibePaletteOpen ? 'rotate-180' : ''
-                  }`}
-                />
+                  }`} strokeWidth={1.75} />
               </button>
 
               {isVibePaletteOpen && (
@@ -1921,7 +1910,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#F9F7F1] text-left text-xs font-semibold flex items-center justify-between text-[#1E2521] hover:text-[#1E2521] transition-colors"
             >
               <div className="flex items-center gap-2 min-w-0">
-                <Smile className="w-3.5 h-3.5 text-[#E87A42] shrink-0" />
+                <Smile className="w-3.5 h-3.5 text-[#E87A42] shrink-0" strokeWidth={1.75} />
                 <span className="truncate">Змінити Emoji</span>
               </div>
               <span className="text-xs font-bold px-1.5 py-0.2 rounded bg-[#FDFCF9] border border-[#E6DFD3] shrink-0">
@@ -1947,7 +1936,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#F9F7F1] text-left text-xs font-semibold flex items-center justify-between text-[#1E2521] hover:text-[#1E2521] transition-colors"
             >
               <div className="flex items-center gap-2 min-w-0">
-                <BarChart2 className="w-3.5 h-3.5 text-[#E87A42] shrink-0" />
+                <BarChart2 className="w-3.5 h-3.5 text-[#E87A42] shrink-0" strokeWidth={1.75} />
                 <span className="truncate">Склад папки</span>
               </div>
             </button>
@@ -1958,7 +1947,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#F9F7F1] text-left text-xs font-semibold flex items-center justify-between text-[#1E2521] hover:text-[#1E2521] transition-colors"
             >
               <div className="flex items-center gap-2 min-w-0">
-                <Link2 className="w-3.5 h-3.5 text-[#E87A42] shrink-0" />
+                <Link2 className="w-3.5 h-3.5 text-[#E87A42] shrink-0" strokeWidth={1.75} />
                 <span className="truncate">Копіювати посилання</span>
               </div>
               <span className="text-[10px] text-[#E87A42] font-mono font-bold bg-[#F1EDE3] px-1.5 py-0.2 rounded shrink-0 whitespace-nowrap">
@@ -1977,7 +1966,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#F9F7F1] text-left text-xs font-semibold flex items-center justify-between text-[#1E2521] hover:text-[#1E2521] transition-colors"
             >
               <div className="flex items-center gap-2 min-w-0">
-                <Share2 className="w-3.5 h-3.5 text-[#E87A42] shrink-0" />
+                <Share2 className="w-3.5 h-3.5 text-[#E87A42] shrink-0" strokeWidth={1.75} />
                 <span className="truncate">Поділитися простором</span>
               </div>
               <span className="text-[10px] text-[#5F6A60] font-mono shrink-0 whitespace-nowrap">
@@ -1991,7 +1980,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#F9F7F1] text-left text-xs font-semibold flex items-center justify-between text-[#1E2521] hover:text-[#1E2521] transition-colors"
             >
               <div className="flex items-center gap-2 min-w-0">
-                <Download className="w-3.5 h-3.5 text-[#E87A42] shrink-0" />
+                <Download className="w-3.5 h-3.5 text-[#E87A42] shrink-0" strokeWidth={1.75} />
                 <span className="truncate">Експорт чатів</span>
               </div>
               <span className="text-[10px] text-[#E87A42] font-mono font-bold bg-[#F1EDE3] px-1.5 py-0.2 rounded shrink-0 whitespace-nowrap">
@@ -2011,7 +2000,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               onClick={() => handleStartRename(folderContextMenu.folder)}
               className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#F9F7F1] text-left text-xs font-semibold flex items-center gap-2 text-[#1E2521] hover:text-[#1E2521] transition-colors"
             >
-              <Pencil className="w-3.5 h-3.5 text-[#E87A42] shrink-0" />
+              <Pencil className="w-3.5 h-3.5 text-[#E87A42] shrink-0" strokeWidth={1.75} />
               <span className="truncate">Перейменувати</span>
             </button>
 
@@ -2024,7 +2013,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               }}
               className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#F9F7F1] text-left text-xs font-semibold flex items-center gap-2 text-[#1E2521] hover:text-[#1E2521] transition-colors"
             >
-              <FolderEdit className="w-3.5 h-3.5 text-[#5F6A60] shrink-0" />
+              <FolderEdit className="w-3.5 h-3.5 text-[#5F6A60] shrink-0" strokeWidth={1.75} />
               <span className="truncate">Налаштувати простір...</span>
             </button>
 
@@ -2035,9 +2024,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
             >
               <div className="flex items-center gap-2 min-w-0">
                 {folderContextMenu.folder.isArchived ? (
-                  <ArchiveRestore className="w-3.5 h-3.5 text-[#E87A42] shrink-0" />
+                  <ArchiveRestore className="w-3.5 h-3.5 text-[#E87A42] shrink-0" strokeWidth={1.75} />
                 ) : (
-                  <Archive className="w-3.5 h-3.5 text-[#F4AF25] shrink-0" />
+                  <Archive className="w-3.5 h-3.5 text-[#F4AF25] shrink-0" strokeWidth={1.75} />
                 )}
                 <span className="truncate">
                   {folderContextMenu.folder.isArchived ? 'Розархівувати' : 'В архів'}
@@ -2061,7 +2050,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   onClick={() => handleClearFolderAction(folderContextMenu.folder)}
                   className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#F9F7F1] text-left text-xs font-semibold flex items-center gap-2 text-[#5F6A60] hover:text-[#1E2521] transition-colors"
                 >
-                  <Folder className="w-3.5 h-3.5 shrink-0" />
+                  <Folder className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} />
                   <span className="truncate">Очистити чати</span>
                 </button>
 
@@ -2069,7 +2058,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   onClick={() => handleDeleteFolderAction(folderContextMenu.folder)}
                   className="w-full px-2.5 py-1.5 rounded-xl hover:bg-[#F7E3DC] text-left text-xs font-semibold flex items-center gap-2 text-[#B4442A] transition-colors"
                 >
-                  <Trash2 className="w-3.5 h-3.5 shrink-0" />
+                  <Trash2 className="w-3.5 h-3.5 shrink-0" strokeWidth={1.75} />
                   <span className="truncate">Видалити папку</span>
                 </button>
               </div>
@@ -2113,7 +2102,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               className="p-1 hover:bg-[#F9F7F1] rounded-lg text-[#5F6A60] hover:text-[#1E2521] transition-colors shrink-0"
               title="Закрити"
             >
-              <X className="w-4 h-4" />
+              <X className="w-4 h-4" strokeWidth={1.75} />
             </button>
           </div>
 
@@ -2160,7 +2149,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           {/* Action Footer */}
           <div className="pt-2 border-t border-[#E6DFD3] flex items-center justify-between gap-2">
             <span className="text-[10px] font-semibold text-[#5F6A60] flex items-center gap-1">
-              <Eye className="w-3 h-3 text-[#E87A42]" />
+              <Eye className="w-3 h-3 text-[#E87A42]" strokeWidth={1.75} />
               <span>Швидкий перегляд</span>
             </span>
 
@@ -2174,7 +2163,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
               className="px-3 py-1.5 bg-[#E87A42] hover:bg-[#C25925] text-[#F7F5EE] font-bold text-xs rounded-xl shadow-sm transition-colors flex items-center gap-1.5"
             >
               <span>Відкрити чат</span>
-              <MoveRight className="w-3.5 h-3.5" />
+              <MoveRight className="w-3.5 h-3.5" strokeWidth={1.75} />
             </button>
           </div>
         </div>
@@ -2227,7 +2216,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             className="w-full flex items-center justify-between text-xs font-bold text-[#7A8479] hover:text-[#1E2521] px-1.5 py-1 rounded-lg hover:bg-white/40 transition-colors select-none"
           >
             <div className="flex items-center gap-1.5">
-              <Archive className="w-3.5 h-3.5 text-[#8C461A]" />
+              <Archive className="w-3.5 h-3.5 text-[#8C461A]" strokeWidth={1.75} />
               <span>Архів просторів</span>
               <span className="px-1.5 py-0.2 bg-[#DFD6C5] text-[#5E6B62] rounded-full text-[10px] font-extrabold">
                 {smartFolders.filter((f) => f.isArchived).length}
@@ -2236,8 +2225,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <ChevronDown
               className={`w-3.5 h-3.5 text-[#7A8479] transition-transform duration-200 ${
                 isArchiveSectionExpanded ? 'rotate-180' : ''
-              }`}
-            />
+              }`} strokeWidth={1.75} />
           </button>
 
           {isArchiveSectionExpanded && (
@@ -2308,7 +2296,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                         title="Налаштування та опції архівованого простору"
                         aria-label="folder-settings"
                       >
-                        <MoreVertical className="w-3 h-3" />
+                        <MoreVertical className="w-3 h-3" strokeWidth={1.75} />
                       </button>
                     </div>
                   );

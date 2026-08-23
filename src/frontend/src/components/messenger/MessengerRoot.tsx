@@ -125,10 +125,14 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
     };
   }, []);
 
+  // Вужче за 768 колонка одна: показуємо або список, або відкриту розмову.
+  // Пошук завжди повертає до списку — шукають саме в ньому.
+  const showList = !activeChat || !!store.searchQuery;
+
   return (
     <div className={`messenger-scale flex w-full h-full bg-[#F7F5EE] text-[#1E2521] overflow-hidden select-none relative font-sans ${className}`}>
       {/* 1. Left Sidebar (Workspaces, Folders, Circles, Chats) */}
-      <div className={`${activeChat && !store.searchQuery ? 'hidden md:flex' : 'flex'} w-full md:w-auto h-full shrink-0`}>
+      <div className={`${showList ? 'flex' : 'hidden'} md:flex w-full md:w-auto h-full shrink-0`}>
         <Sidebar
           currentUser={store.currentUser}
           chats={store.chats}
@@ -158,7 +162,7 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
 
       {/* 2. Main Chat Area */}
       {activeChat ? (
-        <div className="flex-1 flex flex-col h-full min-w-0 bg-[#F7F5EE] relative overflow-hidden">
+        <div className={`${showList ? 'hidden' : 'flex'} md:flex flex-1 flex-col h-full min-w-0 bg-[#F7F5EE] relative overflow-hidden`}>
           {/* Header */}
           <Header
             activeTransportStatus={diagnostics?.activeStatus}
@@ -274,12 +278,15 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
           />
         </div>
       ) : (
-        <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-[#F7F5EE] select-none">
-          <div className="w-18 h-18 rounded-3xl bg-[#E87A42]/10 border border-[#E87A42]/20 flex items-center justify-center text-3xl mb-4 text-[#E87A42] shadow-[0_0_30px_rgba(85,199,120,0.15)]">
+        // На телефоні колонка одна: або список, або розмова. Заставка «Оберіть
+        // бесіду» там відбирала б у списку половину екрана й пропонувала
+        // вибрати зі списку, якого не видно.
+        <div className="hidden md:flex flex-1 flex-col items-center justify-center p-8 text-center bg-[#F7F5EE] select-none">
+          <div className="w-[72px] h-[72px] rounded-[16px] bg-[#F1EBDD] border border-[#E8E1D3] flex items-center justify-center text-[22px] mb-4">
             💬
           </div>
-          <h2 className="font-extrabold text-xl text-[#1E2521] mb-2 tracking-tight">Оберіть бесіду</h2>
-          <p className="text-sm text-[#5F6A60] max-w-sm leading-relaxed">
+          <h2 className="font-semibold text-[18px] text-[#1E2521] mb-1.5 tracking-tight">Оберіть бесіду</h2>
+          <p className="text-[14px] text-[color:var(--msg-meta)] max-w-sm leading-relaxed">
             Виберіть чат зі списку ліворуч або створіть новий простір для співпраці та спілкування
           </p>
         </div>

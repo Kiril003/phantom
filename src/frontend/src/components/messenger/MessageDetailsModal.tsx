@@ -2,6 +2,7 @@ import React from 'react';
 import { X, Info, CheckCheck, Clock, Radio } from 'lucide-react';
 import { Message, ChatMember } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
 
 const deliveryStatusLabel: Record<NonNullable<Message['status']>, string> = {
   sending: 'Надсилається',
@@ -33,6 +34,9 @@ export const MessageDetailsModal: React.FC<MessageDetailsModalProps> = ({
   chatTitle = 'Бесіда',
   members: _members = [],
 }) => {
+  // Escape виводить із шару так само, як хрестик.
+  useEscapeClose(isOpen, onClose);
+
   if (!isOpen || !message) return null;
 
   const textLength = message.text ? message.text.length : 0;
@@ -51,7 +55,7 @@ export const MessageDetailsModal: React.FC<MessageDetailsModalProps> = ({
         <div className="px-5 py-4 bg-[#FDFCF9] border-b border-[#E6DFD3] flex items-center justify-between">
           <div className="flex items-center gap-2.5">
             <div className="p-2 bg-[#F9F7F1] text-[#E87A42] border border-[#DDD4C4] rounded-xl">
-              <Info className="w-4 h-4" />
+              <Info className="w-4 h-4" strokeWidth={1.75} />
             </div>
             <div>
               <h3 className="font-bold text-sm text-[#1E2521]">Інформація про повідомлення</h3>
@@ -65,7 +69,7 @@ export const MessageDetailsModal: React.FC<MessageDetailsModalProps> = ({
             }}
             className="p-1.5 hover:bg-[#F1EDE3] text-[#5F6A60] hover:text-[#1E2521] rounded-xl transition-colors"
           >
-            <X className="w-4 h-4" />
+            <X className="w-4 h-4" strokeWidth={1.75} />
           </button>
         </div>
 
@@ -91,7 +95,7 @@ export const MessageDetailsModal: React.FC<MessageDetailsModalProps> = ({
           <div className="p-3.5 bg-[#FDFCF9] border border-[#E6DFD3] rounded-2xl space-y-2.5 text-xs">
             <div className="flex items-center justify-between pb-2 border-b border-[#E6DFD3]">
               <span className="text-[#5F6A60] flex items-center gap-1.5">
-                <Clock className="w-3.5 h-3.5 text-[#E87A42]" />
+                <Clock className="w-3.5 h-3.5 text-[#E87A42]" strokeWidth={1.75} />
                 <span>Час відправки</span>
               </span>
               <span className="font-mono font-medium text-[#1E2521]">{message.timestamp}</span>
@@ -100,11 +104,11 @@ export const MessageDetailsModal: React.FC<MessageDetailsModalProps> = ({
             {message.status && (
               <div className="flex items-center justify-between pb-2 border-b border-[#E6DFD3]">
                 <span className="text-[#5F6A60] flex items-center gap-1.5">
-                  <CheckCheck className="w-3.5 h-3.5 text-[#5F6A60]" />
+                  <CheckCheck className="w-3.5 h-3.5 text-[#5F6A60]" strokeWidth={1.75} />
                   <span>Статус доставки</span>
                 </span>
                 <span className={`font-semibold ${
-                  message.status === 'failed' ? 'text-[#F87171]' : 'text-[#1E2521]'
+                  message.status === 'failed' ? 'text-[#B4432E]' : 'text-[#1E2521]'
                 }`}>
                   {deliveryStatusLabel[message.status]}
                 </span>
@@ -113,7 +117,7 @@ export const MessageDetailsModal: React.FC<MessageDetailsModalProps> = ({
 
             <div className="flex items-center justify-between">
               <span className="text-[#5F6A60] flex items-center gap-1.5">
-                <Radio className="w-3.5 h-3.5 text-[#5F6A60]" />
+                <Radio className="w-3.5 h-3.5 text-[#5F6A60]" strokeWidth={1.75} />
                 <span>Транспорт</span>
               </span>
               <span className="font-mono text-[11px] text-[#1E2521]">
@@ -139,7 +143,7 @@ export const MessageDetailsModal: React.FC<MessageDetailsModalProps> = ({
                 <div className="flex items-center justify-between text-[11px] text-[#5F6A60] pt-1">
                   <span>Символів: <strong className="text-[#1E2521]">{textLength}</strong></span>
                   <span>Слів: <strong className="text-[#1E2521]">{wordCount}</strong></span>
-                  {message.isEdited && <span className="text-[#FBBF24] font-semibold">Було відредаговано</span>}
+                  {message.isEdited && <span className="text-[#C98A2E] font-semibold">Було відредаговано</span>}
                 </div>
               </>
             )}

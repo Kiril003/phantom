@@ -114,7 +114,7 @@ export const DataTableViewer: React.FC<DataTableViewerProps> = ({ data, onUpdate
       <div className="flex flex-wrap items-center justify-between gap-2 pb-2.5 border-b border-[#E6DFD3]">
         <div className="flex items-center gap-2.5 min-w-0">
           <div className="p-2 bg-[#F9F7F1] text-[#E87A42] border border-[#DDD4C4] rounded-xl shrink-0 shadow-sm">
-            <FileSpreadsheet className="w-4 h-4" />
+            <FileSpreadsheet className="w-4 h-4" strokeWidth={1.75} />
           </div>
           <div className="min-w-0">
             <h4 className="font-extrabold text-xs sm:text-sm text-[#1E2521] leading-tight truncate">
@@ -133,7 +133,7 @@ export const DataTableViewer: React.FC<DataTableViewerProps> = ({ data, onUpdate
             className="px-2.5 py-1 bg-[#F9F7F1] hover:bg-[#F1EDE3] text-[#5F6A60] hover:text-[#1E2521] border border-[#E6DFD3] rounded-lg text-[11px] font-semibold flex items-center gap-1 transition-colors active:scale-95 shadow-sm"
             title="Додати новий рядок"
           >
-            <Plus className="w-3 h-3 text-[#E87A42]" />
+            <Plus className="w-3 h-3 text-[#E87A42]" strokeWidth={1.75} />
             <span>Рядок</span>
           </button>
 
@@ -142,7 +142,7 @@ export const DataTableViewer: React.FC<DataTableViewerProps> = ({ data, onUpdate
             className="px-2.5 py-1 bg-[#F9F7F1] hover:bg-[#F1EDE3] text-[#5F6A60] hover:text-[#1E2521] border border-[#E6DFD3] rounded-lg text-[11px] font-semibold flex items-center gap-1 transition-colors active:scale-95 shadow-sm"
             title="Експортувати в CSV"
           >
-            {isCopied ? <Check className="w-3 h-3 text-[#E87A42]" /> : <Download className="w-3 h-3 text-[#5F6A60]" />}
+            {isCopied ? <Check className="w-3 h-3 text-[#E87A42]" strokeWidth={1.75} /> : <Download className="w-3 h-3 text-[#5F6A60]" strokeWidth={1.75} />}
             <span>CSV</span>
           </button>
         </div>
@@ -150,7 +150,7 @@ export const DataTableViewer: React.FC<DataTableViewerProps> = ({ data, onUpdate
 
       {/* Search Input Filter */}
       <div className="relative">
-        <Search className="w-3.5 h-3.5 text-[#7A8479] absolute left-3 top-1/2 -translate-y-1/2" />
+        <Search className="w-3.5 h-3.5 text-[#7A8479] absolute left-3 top-1/2 -translate-y-1/2" strokeWidth={1.75} />
         <input
           type="text"
           value={searchTerm}
@@ -173,7 +173,7 @@ export const DataTableViewer: React.FC<DataTableViewerProps> = ({ data, onUpdate
                 >
                   <div className="flex items-center gap-1">
                     <span>{col.label}</span>
-                    <ArrowUpDown className="w-3 h-3 text-[#7A8479]" />
+                    <ArrowUpDown className="w-3 h-3 text-[#7A8479]" strokeWidth={1.75} />
                   </div>
                 </th>
               ))}
@@ -206,7 +206,7 @@ export const DataTableViewer: React.FC<DataTableViewerProps> = ({ data, onUpdate
                             onClick={() => handleSaveCell(originalIndex, col.key)}
                             className="p-1 bg-[#E87A42] text-[#F7F5EE] rounded hover:bg-[#C25925]"
                           >
-                            <Check className="w-3 h-3" />
+                            <Check className="w-3 h-3" strokeWidth={1.75} />
                           </button>
                         </div>
                       </td>
@@ -231,7 +231,7 @@ export const DataTableViewer: React.FC<DataTableViewerProps> = ({ data, onUpdate
                             isDone
                               ? 'bg-[#F1EDE3] text-[#E87A42] border-[#E6DFD3]'
                               : isInProgress
-                              ? 'bg-[#F9F7F1] text-[#FBBF24] border-[#E6DFD3]'
+                              ? 'bg-[#F9F7F1] text-[#C98A2E] border-[#E6DFD3]'
                               : 'bg-[#F9F7F1] text-[#C084FC] border-[#E6DFD3]'
                           }`}
                         >
@@ -253,7 +253,7 @@ export const DataTableViewer: React.FC<DataTableViewerProps> = ({ data, onUpdate
                         <div className="flex items-center gap-2">
                           <div className="w-16 h-1.5 bg-[#F9F7F1] rounded-full overflow-hidden">
                             <div
-                              className="h-full bg-gradient-to-r from-[#E87A42] to-[#10B981] rounded-full transition-all"
+                              className="h-full bg-gradient-to-r from-[#E87A42] to-[#4C8A55] rounded-full transition-all"
                               style={{ width: `${Math.min(Number(val) || 0, 100)}%` }}
                             />
                           </div>
@@ -284,7 +284,7 @@ export const DataTableViewer: React.FC<DataTableViewerProps> = ({ data, onUpdate
                     className="opacity-0 group-hover/row:opacity-100 text-[#7A8479] hover:text-red-400 transition-opacity p-0.5"
                     title="Видалити рядок"
                   >
-                    <Trash2 className="w-3 h-3" />
+                    <Trash2 className="w-3 h-3" strokeWidth={1.75} />
                   </button>
                 </td>
               </tr>
@@ -312,7 +312,7 @@ export const DataTableViewer: React.FC<DataTableViewerProps> = ({ data, onUpdate
                     className="p-1 bg-[#E87A42] text-[#F7F5EE] rounded hover:bg-[#C25925]"
                     title="Зберегти новий рядок"
                   >
-                    <Check className="w-3.5 h-3.5 font-bold" />
+                    <Check className="w-3.5 h-3.5 font-bold" strokeWidth={1.75} />
                   </button>
                 </td>
               </tr>

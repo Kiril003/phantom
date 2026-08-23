@@ -7,8 +7,11 @@ import '../styles/messenger.css';
 // PHANTOM зі сценами й голосом; сюди приходять розмови з людьми.
 export default function MessengerLayout() {
   return (
+    // min-w-[1024px] тут різав месенджер на телефоні: полотно лишалось 1024 px
+    // усередині 375-піксельного екрана, тож кнопка «Надіслати» стояла на x=975
+    // — за краєм. Ширину диктує екран, а не ця обгортка.
     <motion.div
-      className="w-full h-full min-w-[1024px] min-h-full relative overflow-hidden"
+      className="w-full h-full min-w-0 min-h-full relative overflow-hidden"
       style={{ background: '#FDFCF9' }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}

@@ -3,6 +3,7 @@ import { X, Forward, Search } from 'lucide-react';
 import { Chat, Message } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
 import { Avatar } from './Avatar';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
 
 interface ForwardMessageModalProps {
   isOpen: boolean;
@@ -23,6 +24,9 @@ export const ForwardMessageModal: React.FC<ForwardMessageModalProps> = ({
 }) => {
   const [search, setSearch] = useState('');
   
+
+  // Escape виводить із шару так само, як хрестик.
+  useEscapeClose(isOpen, onClose);
 
   if (!isOpen) return null;
 
@@ -45,7 +49,7 @@ export const ForwardMessageModal: React.FC<ForwardMessageModalProps> = ({
         <div className="px-5 py-4 border-b border-[#E6DFD3] flex items-center justify-between bg-[#FDFCF9]">
           <div className="flex items-center gap-2.5">
             <div className="p-2 bg-[#F9F7F1] text-[#E87A42] border border-[#DDD4C4] rounded-xl">
-              <Forward className="w-5 h-5 text-[#E87A42]" />
+              <Forward className="w-5 h-5 text-[#E87A42]" strokeWidth={1.75} />
             </div>
             <div>
               <h3 className="font-extrabold text-sm sm:text-base text-[#1E2521]">
@@ -64,14 +68,14 @@ export const ForwardMessageModal: React.FC<ForwardMessageModalProps> = ({
             }}
             className="p-1.5 text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F1EDE3] rounded-xl transition-colors"
           >
-            <X className="w-5 h-5" />
+            <X className="w-5 h-5" strokeWidth={1.75} />
           </button>
         </div>
 
         {/* Search */}
         <div className="p-3 border-b border-[#E6DFD3] bg-[#F7F5EE]">
           <div className="relative">
-            <Search className="w-4 h-4 text-[#7A8479] absolute left-3 top-1/2 -translate-y-1/2" />
+            <Search className="w-4 h-4 text-[#7A8479] absolute left-3 top-1/2 -translate-y-1/2" strokeWidth={1.75} />
             <input
               type="text"
               placeholder="Пошук чату або групи для пересилання..."

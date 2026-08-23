@@ -229,7 +229,7 @@ const RadioBanner: React.FC<{ snapshot: CallSnapshot }> = ({ snapshot }) => {
       style={{ background: NOTE_BG, borderColor: NOTE_EDGE }}
     >
       <div className="flex items-start gap-2.5">
-        <Radio className="w-4 h-4 mt-0.5 shrink-0" style={{ color: NOTE_INK }} />
+        <Radio className="w-4 h-4 mt-0.5 shrink-0" style={{ color: NOTE_INK }} strokeWidth={1.75} />
         <div className="min-w-0">
           <div className="text-[12.5px] font-semibold" style={{ color: NOTE_INK }}>
             Канал вузький — режим рації
@@ -387,7 +387,7 @@ export const CallOverlay: React.FC = () => {
                     title="Прийняти"
                     tone="accent"
                   >
-                    <Phone className="w-5 h-5" />
+                    <Phone className="w-5 h-5" strokeWidth={1.75} />
                   </RoundButton>
                   <span className="text-[11px]" style={{ color: MUTED }}>
                     Прийняти
@@ -400,7 +400,7 @@ export const CallOverlay: React.FC = () => {
                   title={ringing ? 'Відхилити' : 'Завершити'}
                   tone="end"
                 >
-                  <PhoneOff className="w-5 h-5" />
+                  <PhoneOff className="w-5 h-5" strokeWidth={1.75} />
                 </RoundButton>
                 <span className="text-[11px]" style={{ color: MUTED }}>
                   {ringing ? 'Відхилити' : 'Завершити'}
@@ -485,7 +485,7 @@ export const CallOverlay: React.FC = () => {
             title={snapshot.micOn ? 'Вимкнути мікрофон' : 'Увімкнути мікрофон'}
             tone={snapshot.micOn ? 'plain' : 'accent'}
           >
-            {snapshot.micOn ? <Mic className="w-5 h-5" /> : <MicOff className="w-5 h-5" />}
+            {snapshot.micOn ? <Mic className="w-5 h-5" strokeWidth={1.75} /> : <MicOff className="w-5 h-5" strokeWidth={1.75} />}
           </RoundButton>
           <RoundButton
             onClick={() => callEngine.toggleCamera()}
@@ -501,10 +501,10 @@ export const CallOverlay: React.FC = () => {
             tone={snapshot.hasCamera && snapshot.cameraOn && !snapshot.radio ? 'plain' : 'accent'}
             disabled={!snapshot.hasCamera || !!snapshot.radio}
           >
-            {snapshot.cameraOn ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
+            {snapshot.cameraOn ? <Video className="w-5 h-5" strokeWidth={1.75} /> : <VideoOff className="w-5 h-5" strokeWidth={1.75} />}
           </RoundButton>
           <RoundButton onClick={() => callEngine.hangup()} title="Завершити" tone="end">
-            <PhoneOff className="w-5 h-5" />
+            <PhoneOff className="w-5 h-5" strokeWidth={1.75} />
           </RoundButton>
         </div>
       </div>

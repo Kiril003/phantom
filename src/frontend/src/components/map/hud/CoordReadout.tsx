@@ -87,7 +87,19 @@ export function CoordReadout({ className = '' }: { className?: string }): JSX.El
 
   // Без курсора рядок чесно показує центр екрана — знята з нього
   // координата так само реальна, просто джерело підписане інакше.
-  const point = cursor ?? (center ? { lat: center[1], lon: center[0] } : null);
+  // Store синхронізує центр лише на moveend, тож до першого руху камери
+  // він порожній — а мапа при цьому вже стоїть і центр ЗНАЄ. Питаємо її
+  // саму; «координат ще немає» лишається правдою тільки без мапи.
+  const liveCenter = (() => {
+    if (cursor || center || !map) return null;
+    try {
+      const c = map.getCenter();
+      return { lat: c.lat, lon: c.lng };
+    } catch {
+      return null;
+    }
+  })();
+  const point = cursor ?? (center ? { lat: center[1], lon: center[0] } : liveCenter);
   const text = point ? coordText(format, point.lat, point.lon) : 'координат ще немає';
 
   const cycleFormat = useCallback(() => {

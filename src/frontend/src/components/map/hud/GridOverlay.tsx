@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useHudMap } from './useHudMap';
+import { useSettingsStore } from '../../../stores/settingsStore';
 import {
   e100kLetter,
   latitudeBand,
@@ -57,9 +58,28 @@ export function GridOverlay({ active }: GridOverlayProps): JSX.Element | null {
   const map = useHudMap();
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const [offReason, setOffReason] = useState<string | null>(null);
+  // Бурштин 0.3 на бежевій підложці «вулиць» — невидима сітка (виміряно
+  // кадром metrology-05): палітра їде за стилем мапи, як і сама підложка.
+  const mapStyle = useSettingsStore((s) => (s.values.ui_map_style as string) || 'dark');
 
   useEffect(() => {
     if (!active || !map) return;
+    const light = mapStyle === 'streets';
+    const palette = light
+      ? {
+          line: 'rgba(74,56,18,0.4)',
+          major: 'rgba(74,56,18,0.6)',
+          seam: 'rgba(74,56,18,0.7)',
+          text: 'rgba(46,34,8,0.95)',
+          halo: 'rgba(255,255,255,0.9)',
+        }
+      : {
+          line: 'rgba(244,175,37,0.3)',
+          major: 'rgba(244,175,37,0.55)',
+          seam: 'rgba(244,175,37,0.65)',
+          text: 'rgba(255,255,255,0.92)',
+          halo: 'rgba(0,0,0,0.7)',
+        };
 
     const setOff = (reason: string | null) =>
       setOffReason((prev) => (prev === reason ? prev : reason));
@@ -109,8 +129,8 @@ export function GridOverlay({ active }: GridOverlayProps): JSX.Element | null {
       const hemisphere: Hemisphere = centerLat < 0 ? 'S' : 'N';
 
       const isMajor = spacing === 100000;
-      const lineColor = isMajor ? 'rgba(244,175,37,0.5)' : 'rgba(244,175,37,0.3)';
-      const majorColor = 'rgba(244,175,37,0.55)';
+      const lineColor = palette.line;
+      const majorColor = palette.major;
       const project = (latDeg: number, lonDeg: number): { x: number; y: number } =>
         map.project([lonDeg, latDeg]);
 
@@ -142,9 +162,9 @@ export function GridOverlay({ active }: GridOverlayProps): JSX.Element | null {
         ctx.textAlign = 'center';
         ctx.textBaseline = 'middle';
         ctx.lineWidth = 3;
-        ctx.strokeStyle = 'rgba(0,0,0,0.7)';
+        ctx.strokeStyle = palette.halo;
         ctx.strokeText(text, x, y);
-        ctx.fillStyle = 'rgba(255,255,255,0.92)';
+        ctx.fillStyle = palette.text;
         ctx.fillText(text, x, y);
       };
 
@@ -253,7 +273,7 @@ export function GridOverlay({ active }: GridOverlayProps): JSX.Element | null {
           for (let i = 0; i <= SAMPLES; i++) {
             pts.push({ latDeg: south + ((north - south) * i) / SAMPLES, lonDeg: sliceW });
           }
-          drawSampledLine(pts, 'rgba(244,175,37,0.65)', true);
+          drawSampledLine(pts, palette.seam, true);
         }
       }
     };
@@ -277,7 +297,7 @@ export function GridOverlay({ active }: GridOverlayProps): JSX.Element | null {
       if (raf) cancelAnimationFrame(raf);
       clearCanvas();
     };
-  }, [active, map]);
+  }, [active, map, mapStyle]);
 
   if (!active) return null;
 

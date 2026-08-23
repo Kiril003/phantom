@@ -173,6 +173,15 @@ describe('CoordReadout', () => {
     render(<CoordReadout />);
     expect(screen.getByTestId('coord-value')).toHaveTextContent('координат ще немає');
   });
+
+  it('store ще без центра, але мапа стоїть — центр питається в самої мапи', () => {
+    // До першого moveend store.center порожній; «ще немає» тут була б
+    // брехня — мапа на екрані і свій центр знає.
+    useMapStore.setState({ center: null });
+    render(<CoordReadout />);
+    expect(screen.getByTestId('coord-source')).toHaveTextContent('центр');
+    expect(screen.getByTestId('coord-value')).toHaveTextContent('50.45010° пн · 30.52340° сх');
+  });
 });
 
 describe('RulerTool — воскресіння: жива лінійка', () => {

@@ -15,7 +15,6 @@
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { act, render, screen, fireEvent, waitFor, within } from '@testing-library/react';
-import React from 'react';
 import type { SettingDefinition, SettingsCategory } from '@shared/types';
 
 /* ─── Легкі заглушки важких bespoke-панелей (у них свої тести) ────────── */

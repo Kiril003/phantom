@@ -89,14 +89,16 @@ export interface MessengerState {
   sendMessage: (text: string) => void;
   /**
    * Надсилає фото або файл. Шифрує в браузері, кладе шифротекст на свій вузол,
-   * а ключ відправляє в тілі повідомлення — тобто наскрізним кадром.
+   * а ключ відправляє в тілі повідомлення — його вузол запечатує кадром до
+   * вузла співрозмовника.
    * Відсоток іде з XHR, тож смуга показує справжні байти, а не таймер.
    */
   sendAttachment: (file: File, onProgress?: (percent: number) => void) => Promise<void>;
   sendVoiceMessage: (duration: number, transcript: string) => void;
   addCustomMessage: (message: Message) => void;
   editMessage: (messageId: string, newText: string) => void;
-  deleteMessage: (messageId: string) => void;
+  /** forEveryone — службовий кадр поїде співрозмовнику; інакше чистка своя. */
+  deleteMessage: (messageId: string, forEveryone?: boolean) => Promise<void>;
   togglePinMessage: (messageId: string) => void;
   toggleReaction: (messageId: string, emoji: string) => void;
   addReaction: (messageId: string, emoji: string) => void;
@@ -167,11 +169,35 @@ export interface MessengerState {
   hydrated: boolean;
   hydrateFromNode: () => Promise<void>;
   applyNodeMessage: (row: NodeMessage) => void;
+  applyNodeDelete: (row: NodeMessage) => void;
   refreshConversations: () => Promise<void>;
   loadMessagesForChat: (chatId: string) => Promise<void>;
 }
 
 let hydrationInFlight: Promise<void> | null = null;
+
+/** Надгробок замість тіла. Саме повідомлення лишається — прибрати можна вміст. */
+const asTombstone = (m: Message): Message => ({
+  ...m,
+  isDeleted: true,
+  text: undefined,
+  media: undefined,
+  status: undefined,
+});
+
+/**
+ * Прев'ю в списку чатів після видалення.
+ *
+ * Стрічка вже показує надгробок, а список збоку однаково писав «Фото» — тобто
+ * обіцяв вкладення, якого немає на жодному з дисків. Прев'ю живе тим самим
+ * останнім повідомленням, тож і перечитувати його треба звідти.
+ */
+const withFreshPreview = (chat: Chat): Chat => {
+  const last = chat.messages[chat.messages.length - 1];
+  if (!last) return { ...chat, lastKind: undefined, lastSnippet: undefined };
+  if (!last.isDeleted) return chat;
+  return { ...chat, lastKind: 'text', lastSnippet: 'Повідомлення видалено' };
+};
 
 export const useMessengerStore = create<MessengerState>((set, get) => {
   // Connect network engine listeners
@@ -499,8 +525,9 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
         throw new Error(`Вузол бере файли до ${Math.round(MEDIA_LIMIT_BYTES / 1024 / 1024)} МБ`);
       }
 
-      // Шифруємо ДО завантаження: на вузол іде шифротекст, ключ лишається тут
-      // і поїде в тілі повідомлення. Вузол не бачить ані файла, ані ключа.
+      // Шифруємо ДО завантаження: на вузол іде шифротекст, а ключ поїде в тілі
+      // повідомлення, яке вузол запечатає кадром до співрозмовника. Самого
+      // файла вузол не відкриває; тіло — відкрите, він свій.
       const sealed = await encryptForUpload(file);
       const blob = await messengerApi.uploadFile(chatId, sealed.ciphertext, onProgress);
       if (blob.sha256 !== sealed.sha256) {
@@ -575,7 +602,10 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
           kind,
           body,
         });
-        markStatus(row.delivery === 'queued' ? 'queued' : 'sent');
+        // Кадр із ключем міг доїхати, а байти застрягнути на нашому вузлі.
+        // Тоді в людини немає фото — і галочка «надіслано» була б брехнею.
+        const stuck = blob.state === 'queued' || blob.state === 'missing';
+        markStatus(stuck || row.delivery === 'queued' ? 'queued' : 'sent');
       } catch (err) {
         console.warn('[messenger] вузол не прийняв вкладення:', err);
         markStatus('failed');
@@ -852,15 +882,55 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
       }));
     },
 
-    deleteMessage: (messageId) => {
+    /**
+     * Видалення, яке доходить до диска.
+     *
+     * Дві різні обіцянки, і плутати їх не можна. «Для всіх» лишає надгробок
+     * тут і шле службовий кадр співрозмовнику — той видалить у себе, коли
+     * кадр доїде (вимкнений вузол видалить пізніше, і це чесно). «Для себе»
+     * прибирає рядок і байти вкладення лише з нашого вузла.
+     *
+     * Стрічку оновлюємо ПІСЛЯ відповіді вузла: прибрати бульбашку одразу
+     * означало б показати видалення, якого могло й не статись.
+     */
+    deleteMessage: async (messageId, forEveryone = false) => {
       soundFx.playTap();
+      const chat = get().chats.find((c) => c.messages.some((m) => m.id === messageId));
+      set({ isDeleteModalOpen: false, activeDeleteMessage: null });
+      if (!chat) return;
+
+      try {
+        await messengerApi.deleteMessage(chat.id, messageId, forEveryone);
+      } catch (err) {
+        console.warn('[messenger] вузол не видалив повідомлення:', err);
+        return;
+      }
+
       set((state) => ({
-        chats: state.chats.map((c) => ({
-          ...c,
-          messages: c.messages.filter((m) => m.id !== messageId),
-        })),
-        isDeleteModalOpen: false,
-        activeDeleteMessage: null,
+        chats: state.chats.map((c) =>
+          c.id !== chat.id
+            ? c
+            : withFreshPreview({
+                ...c,
+                messages: forEveryone
+                  ? c.messages.map((m) => (m.id === messageId ? asTombstone(m) : m))
+                  : c.messages.filter((m) => m.id !== messageId),
+              }),
+        ),
+      }));
+    },
+
+    /** Надгробок приїхав від вузла: своє видалення з іншої вкладки або чуже. */
+    applyNodeDelete: (row) => {
+      set((state) => ({
+        chats: state.chats.map((c) =>
+          c.id !== row.conversation_id
+            ? c
+            : withFreshPreview({
+                ...c,
+                messages: c.messages.map((m) => (m.id === row.id ? asTombstone(m) : m)),
+              }),
+        ),
       }));
     },
 

@@ -190,7 +190,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [queueInfo, setQueueInfo] = useState<{ queued: number } | null>(null);
   const [flushing, setFlushing] = useState(false);
 
-  const statusLabel = (status?: Message['status']): string => {
+  const statusLabel = (status?: Message['status'], msg?: Message): string => {
+    // Вкладення застрягло — кажемо саме про нього. «У черзі» звучало б так,
+    // ніби чекає текст, а насправді в людини немає файла.
+    if (status === 'queued' && msg?.media) return 'Вкладення очікує передачі';
     switch (status) {
       case 'sending': return 'Надсилається';
       case 'queued': return 'У черзі — чекає на співрозмовника';
@@ -851,6 +854,32 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
           const dateLabel = getDateLabel(msg);
           const showDateDivider = dateLabel !== '' && dateLabel !== lastDateLabel;
           if (dateLabel) lastDateLabel = dateLabel;
+
+          // Надгробок. Тіла немає ні тут, ні на диску — тож немає ні дій над
+          // ним, ні галочок стану: везти вже нічого. Скромно й сіро навмисно:
+          // рядок мусить бути видимим, але не претендувати на увагу.
+          if (msg.isDeleted) {
+            return (
+              <React.Fragment key={msg.id}>
+                {showDateDivider && (
+                  <div className="flex items-center justify-center pt-3 pb-2">
+                    <span className="px-2.5 py-1 bg-[#F3EEE3] text-[#6E7568] text-[11.5px] rounded-[8px]">
+                      {dateLabel}
+                    </span>
+                  </div>
+                )}
+                <div
+                  id={`message-${msg.id}`}
+                  data-testid="message-tombstone"
+                  className={`flex ${isSelf ? 'justify-end' : 'justify-start'} mt-[6px]`}
+                >
+                  <span className="px-3 py-1.5 rounded-2xl border border-dashed border-[#DFD6C5] bg-[#F3EEE3]/50 text-[12px] italic text-[#8A9186]">
+                    Повідомлення видалено
+                  </span>
+                </div>
+              </React.Fragment>
+            );
+          }
 
           // Message sequence grouping for harmonious organic contours
           const prevMsg = index > 0 ? messages[index - 1] : undefined;
@@ -1798,7 +1827,16 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                           aria-label="Шлях листа"
                         >
                           {msg.status === 'sending' && <Clock className="w-3.5 h-3.5 text-[#A9927C]" strokeWidth={1.75} />}
-                          {msg.status === 'queued' && <Clock className="w-3.5 h-3.5 text-[#C98A2E]" strokeWidth={1.75} />}
+                          {/* Застрягле вкладення носить амберову крапку, а не
+                              годинник: у людини немає файла, і це стан самого
+                              повідомлення, а не дрібний підпис під фото. */}
+                          {msg.status === 'queued' && msg.media && (
+                            <span
+                              className="w-2 h-2 rounded-full bg-[#C9A227]"
+                              title="Вкладення очікує передачі"
+                            />
+                          )}
+                          {msg.status === 'queued' && !msg.media && <Clock className="w-3.5 h-3.5 text-[#C98A2E]" strokeWidth={1.75} />}
                           {msg.status === 'sent' && <Check className="w-3.5 h-3.5 text-[#A9927C]" strokeWidth={1.75} />}
                           {msg.status === 'delivered' && <CheckCheck className="w-3.5 h-3.5 text-[#A9927C]" strokeWidth={1.75} />}
                           {msg.status === 'read' && <CheckCheck className="w-3.5 h-3.5 text-[#D96C35]" strokeWidth={1.75} />}
@@ -1812,7 +1850,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                               onClick={() => setPathCardMsgId(null)}
                               aria-hidden
                             />
-                            <div className="absolute bottom-full right-0 mb-1.5 w-60 bg-[#FDFCF9] border border-[#E8E1D3] rounded-[12px] shadow-[0_4px_16px_rgba(60,44,24,0.12)] z-40 p-3 text-left cursor-default animate-in fade-in zoom-in-95 duration-100">
+                            <div
+                              data-path-card
+                              className="absolute bottom-full right-0 mb-1.5 w-60 bg-[#FDFCF9] border border-[#E8E1D3] rounded-[12px] shadow-[0_4px_16px_rgba(60,44,24,0.12)] z-40 p-3 text-left cursor-default animate-in fade-in zoom-in-95 duration-100"
+                            >
                               <div className="flex items-center justify-between mb-2">
                                 <span className="text-[11px] font-extrabold uppercase tracking-wide text-[#6E7568]">Шлях листа</span>
                                 <button
@@ -1826,7 +1867,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
                               <div className="flex items-center gap-2">
                                 <span className="w-2 h-2 rounded-full shrink-0" style={{ backgroundColor: statusDot(msg.status) }} />
-                                <span className="text-[12.5px] font-semibold text-[#21261F]">{statusLabel(msg.status)}</span>
+                                <span className="text-[12.5px] font-semibold text-[#21261F]">{statusLabel(msg.status, msg)}</span>
                               </div>
 
                               {msg.status === 'sending' && (
@@ -1844,6 +1885,15 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                                     : 'Через вузол'}
                                 </p>
                               )}
+
+                              {/* Чесна межа: що саме бачать дороги, а що — свій
+                                  вузол. Без цього «шлях листа» показує лише
+                                  дорогу і мовчить про те, хто на ній читає. */}
+                              <p className="text-[11px] text-[#8A9186] leading-relaxed mt-2 pt-2 border-t border-[#F0EADD]">
+                                Лист запечатано між вузлами — ретранслятор і скринька
+                                везуть тільки шифротекст. Ваш власний вузол довірений:
+                                він тримає ключі, як телефон тримає ваші чати.
+                              </p>
 
                               {msg.status === 'queued' && (
                                 <div className="mt-2 space-y-2">

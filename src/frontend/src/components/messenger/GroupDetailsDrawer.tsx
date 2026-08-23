@@ -17,7 +17,6 @@ import {
   Clock,
   Lock,
   Globe,
-  MessagesSquare,
   Flame,
   UserCheck,
   UserX,
@@ -49,7 +48,7 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
   onUpdateChatSettings,
 }) => {
   const [activeTab, setActiveTab] = useState<
-    'members' | 'topics' | 'permissions' | 'invites' | 'media' | 'logs'
+    'members' | 'permissions' | 'invites' | 'media' | 'logs'
   >('members');
   const [activeMediaSubTab, setActiveMediaSubTab] = useState<'photos' | 'files' | 'links' | 'tables'>('photos');
   const [memberSearchQuery, setMemberSearchQuery] = useState('');
@@ -278,7 +277,6 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
       <div className="px-3 py-1.5 bg-[#F7F5EE] border-b border-[#E6DFD3] flex items-center gap-1 overflow-x-auto no-scrollbar shrink-0">
         {[
           { id: 'members', label: `Учасники (${members.length})`, icon: Users },
-          ...(chat.isForum ? [{ id: 'topics', label: 'Теми & Гілки', icon: MessagesSquare }] : []),
           { id: 'permissions', label: 'Дозволи', icon: Shield },
           { id: 'invites', label: `Запрошення ${pendingRequests.length ? `(${pendingRequests.length})` : ''}`, icon: Link2 },
           { id: 'media', label: 'Медіа & Файли', icon: ImageIcon },
@@ -377,55 +375,22 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
           </div>
         )}
 
-        {/* TAB 2: TOPICS & FORUM */}
-        {activeTab === 'topics' && chat.topics && (
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-extrabold text-[#7A8479] uppercase tracking-wide">
-                Тематичні гілки бесіди
-              </span>
-              <button
-                onClick={() => {
-                  soundFx.playTap();
-                  alert('Створення нової гілки форуму');
-                }}
-                className="px-2.5 py-1 bg-[#FAF3E8] hover:bg-[#F3E6D5] text-[#8C461A] border border-[#EADBCC] rounded-lg text-xs font-bold flex items-center gap-1 transition-colors"
-              >
-                <Plus className="w-3.5 h-3.5" />
-                <span>Нова тема</span>
-              </button>
-            </div>
+        {/* Вкладка «Теми & Гілки» жила тут з кнопкою, що показувала alert
+            «Створення нової гілки форуму» — форумів у продукті немає, тож і
+            вкладки більше немає. */}
 
-            <div className="space-y-2">
-              {chat.topics.map((topic) => (
-                <div
-                  key={topic.id}
-                  className="p-3 bg-white border border-[#DFD6C5] rounded-2xl flex items-center justify-between shadow-2xs hover:border-[#E6DFD3] cursor-pointer transition-colors"
-                >
-                  <div className="flex items-center gap-3 min-w-0">
-                    <span className="text-xl p-1.5 rounded-xl bg-[#FDFCF9] border border-[#E8DFD1]">
-                      {topic.iconEmoji}
-                    </span>
-                    <div className="min-w-0">
-                      <h4 className="font-extrabold text-xs text-[#1E2521] truncate">{topic.title}</h4>
-                      {topic.lastMessageText && (
-                        <p className="text-[11px] text-[#7A8479] truncate mt-0.5">{topic.lastMessageText}</p>
-                      )}
-                    </div>
-                  </div>
-
-                  <span className="px-2 py-0.5 bg-[#F0EAE0] text-[#7A8479] text-[10px] font-bold rounded-md shrink-0">
-                    {topic.messageCount} пов.
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-        )}
-
-        {/* TAB 3: PERMISSIONS & SLOW MODE */}
+        {/* TAB 2: PERMISSIONS & SLOW MODE */}
         {activeTab === 'permissions' && (
           <div className="space-y-4">
+            {/* Перемикачі нижче нічого не стережуть: вузол про них не знає,
+                і жоден із них не спиняє повідомлення. Кажемо це вголос. */}
+            <div className="p-3 bg-[#FDF6EC] border border-[#EBD9BE] rounded-2xl">
+              <span className="text-[11px] text-[#8C5A1A] leading-relaxed">
+                Ці перемикачі поки нічого не обмежують: вузол про них не знає, а
+                надсилання вони не спиняють. Лишаються як чернетка налаштувань.
+              </span>
+            </div>
+
             {/* Telegram-style Permissions Matrix */}
             <div className="p-3.5 bg-white border border-[#DFD6C5] rounded-3xl space-y-2.5 shadow-2xs">
               <h4 className="font-extrabold text-xs text-[#7A8479] uppercase tracking-wide">

@@ -27,6 +27,7 @@ from api.websocket_hub import hub
 from config import config
 from db.database import get_db
 from db.models import (
+    MessengerBlob,
     MessengerContact,
     MessengerConversation,
     MessengerMessage,
@@ -40,6 +41,13 @@ from messenger.blobs import wrap_frame
 from messenger.guard import GuardRejected, inbox_guard
 from messenger.inbox import InboxError, accept_frame
 from messenger.outbox import OutboxError, prepare_frame
+from messenger.purge import (
+    blob_ids_of,
+    origin_of,
+    purge_conversation_blobs,
+    tombstone,
+    wipe_message,
+)
 from messenger.transport import deliver
 from node.identity import node_id
 from security.auth import get_current_user
@@ -168,7 +176,11 @@ def _conversation_out(
     last: Optional[MessengerMessage] = None,
 ) -> ConversationOut:
     snippet = None
-    if last is not None and last.kind == "text":
+    last_kind = last.kind if last else None
+    if last is not None and last.deleted_at:
+        # Прев'ю не має обіцяти фото, якого вже немає на жодному з дисків.
+        last_kind, snippet = "text", "Повідомлення видалено"
+    elif last is not None and last.kind == "text":
         body = _body_of(last)
         snippet = (body or "")[:90] or None
     return ConversationOut(
@@ -187,7 +199,7 @@ def _conversation_out(
         contact_verified=(contact.verified_at is not None) if contact else None,
         peer_node_id=contact.peer_node_id if contact else None,
         unread_count=max(0, (row.next_seq - 1) - row.last_read_seq),
-        last_kind=last.kind if last else None,
+        last_kind=last_kind,
         last_snippet=snippet,
         last_author=last.author_name if last else None,
         last_at=last.sent_at if last else None,
@@ -421,6 +433,10 @@ class MessageOut(BaseModel):
     reply_to_id: Optional[str] = None
     #: local | queued | sent — з бази, переживає перезавантаження.
     delivery_state: str = "local"
+    #: Стан ПЕРЕВЕЗЕННЯ вкладення цього повідомлення: stored | queued | sent |
+    #: missing. Кадр із ключем міг доїхати, а байти — ні, і тоді галочка
+    #: «надіслано» на бульбашці була б брехнею: у людини немає фото.
+    attachment_state: Optional[str] = None
     sent_at: datetime
     edited_at: Optional[datetime]
     deleted_at: Optional[datetime]
@@ -441,7 +457,9 @@ def _body_of(row: MessengerMessage) -> Optional[str]:
         return None
 
 
-def _message_out(row: MessengerMessage) -> MessageOut:
+def _message_out(
+    row: MessengerMessage, attachment_state: Optional[str] = None
+) -> MessageOut:
     return MessageOut(
         id=row.id,
         conversation_id=row.conversation_id,
@@ -450,16 +468,51 @@ def _message_out(row: MessengerMessage) -> MessageOut:
         author_id=row.author_id,
         author_name=row.author_name,
         kind=row.kind,
-        body=_body_of(row),
+        # Видалене не має тіла — ані відкритого, ані запечатаного. Клієнт
+        # малює надгробок за deleted_at, а не за порожнім рядком.
+        body=None if row.deleted_at else _body_of(row),
         # Назовні шифротекст не віддаємо: клієнту він ні до чого, а в логах зайвий.
         ciphertext=None,
         transport=row.transport,
         reply_to_id=row.reply_to_id,
         delivery_state=row.delivery_state,
+        attachment_state=attachment_state,
         sent_at=row.sent_at,
         edited_at=row.edited_at,
         deleted_at=row.deleted_at,
     )
+
+
+async def _attachment_states(
+    session: AsyncSession, rows: list[MessengerMessage]
+) -> dict[str, str]:
+    """Стан перевезення вкладень для стрічки — одним запитом на всю пачку.
+
+    Ключ у відповіді — id ПОВІДОМЛЕННЯ, а не блоба: клієнту треба знати стан
+    бульбашки, і зшивати одне з одним він не мусить.
+    """
+    keys = _keys()
+    by_blob: dict[str, list[str]] = {}
+    for row in rows:
+        if row.deleted_at:
+            continue
+        for blob_id in blob_ids_of(keys, row):
+            by_blob.setdefault(blob_id, []).append(row.id)
+    if not by_blob:
+        return {}
+
+    states = (
+        await session.execute(
+            select(MessengerBlob.blob_id, MessengerBlob.state).where(
+                MessengerBlob.blob_id.in_(list(by_blob))
+            )
+        )
+    ).all()
+    out: dict[str, str] = {}
+    for blob_id, state in states:
+        for message_id in by_blob.get(blob_id, ()):
+            out[message_id] = state
+    return out
 
 
 @router.get("/conversations/{conversation_id}/messages", response_model=list[MessageOut])
@@ -482,7 +535,8 @@ async def list_messages(
             .limit(min(max(limit, 1), 500))
         )
     ).scalars().all()
-    return [_message_out(r) for r in rows]
+    attachments = await _attachment_states(session, list(rows))
+    return [_message_out(r, attachments.get(r.id)) for r in rows]
 
 
 @router.post("/conversations/{conversation_id}/messages", response_model=MessageOut)
@@ -542,8 +596,13 @@ async def append_message(
         try:
             # Тип везе сам кадр: інакше вузол-адресат побачив би JSON з ключем
             # як звичайний текст і показав людині службовий рядок замість фото.
+            # Разом із типом їде client_id — спільне ім'я цього повідомлення на
+            # обох вузлах. Без нього «видалити для всіх» не мало б за що взятись.
             prepared = await prepare_frame(
-                session, _keys(), conversation, wrap_frame(payload.kind, payload.body)
+                session,
+                _keys(),
+                conversation,
+                wrap_frame(payload.kind, payload.body, payload.client_id),
             )
         except OutboxError:
             prepared = None
@@ -758,18 +817,22 @@ class InboundFrame(BaseModel):
     reply_address: Optional[str] = None
 
 
-@router.post("/inbox", response_model=MessageOut)
+@router.post("/inbox")
 async def receive_frame(
     payload: InboundFrame,
     request: Request,
     session: AsyncSession = Depends(get_db),
-) -> MessageOut:
+) -> dict:
     """Приймає зашифрований кадр від чужого вузла.
 
     Свідомо без JWT: відправник — інша людина, у неї немає і не може бути
     токена цього вузла. Автентичність дає сама криптографія — кадр або
     розшифровується сесією, або летить у 400. Токен тут був би слабшою
     перевіркою, ніж тег AEAD, і створював би ілюзію контролю.
+
+    Не кожен кадр повертає повідомлення: службовий 'delete' міг прийти на те,
+    чого в нас ніколи не було. Це прийнято й виконано, тож відповідь — 200 із
+    порожньою вказівкою, а не 400: інакше відправник повторював би вічно.
     """
     owner = (await session.execute(select(User.id).order_by(User.id))).scalars().first()
     if owner is None:
@@ -799,11 +862,18 @@ async def receive_frame(
     except InboxError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
-    out = _message_out(row)
+    if row is None:
+        return {"accepted": True}
+
+    attachments = await _attachment_states(session, [row])
+    out = _message_out(row, attachments.get(row.id))
+    # Видалення — не нове повідомлення. Окрема подія потрібна, щоб відкрита
+    # вкладка одержувача замінила бульбашку надгробком, а не додала рядок.
+    event = "message:deleted" if row.deleted_at else "message:new"
     await hub.broadcast(
-        "messenger", "message:new", out.model_dump(mode="json"), user_id=owner
+        "messenger", event, out.model_dump(mode="json"), user_id=owner
     )
-    return out
+    return out.model_dump(mode="json")
 
 
 # ── Черга і прибирання ───────────────────────────────────────────────────────
@@ -853,10 +923,12 @@ async def delete_conversation(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> dict:
+    """Розмова зникає разом із вкладеннями — інакше вона зникає лише з очей."""
     row = await _owned_conversation(conversation_id, user, session)
+    dropped = await purge_conversation_blobs(session, _keys(), conversation_id)
     await session.delete(row)
     await session.commit()
-    return {"deleted": True}
+    return {"deleted": True, "blobs": dropped}
 
 
 @router.post("/conversations/{conversation_id}/clear")
@@ -866,8 +938,15 @@ async def clear_history(
     session: AsyncSession = Depends(get_db),
 ) -> dict:
     """Історія зникає з ЦЬОГО вузла. Копію співрозмовника ми чіпати не можемо —
-    і чесніше сказати це прямо, ніж вдавати всесвітнє видалення."""
+    і чесніше сказати це прямо, ніж вдавати всесвітнє видалення.
+
+    «Зникає» тут означає диск, а не лише стрічку: разом із рядками йдуть байти
+    вкладень і записи в messenger_blobs. Доти «очистити історію» лишала по
+    собі мегабайти шифротексту й журнал перевезень — тобто саме те, від чого
+    людина й хотіла позбутись.
+    """
     row = await _owned_conversation(conversation_id, user, session)
+    dropped = await purge_conversation_blobs(session, _keys(), conversation_id)
     result = await session.execute(
         MessengerMessage.__table__.delete().where(
             MessengerMessage.conversation_id == conversation_id
@@ -876,4 +955,96 @@ async def clear_history(
     row.last_read_seq = row.next_seq - 1
     row.updated_at = _now()
     await session.commit()
-    return {"cleared": result.rowcount}
+    return {"cleared": result.rowcount, "blobs": dropped}
+
+
+@router.delete("/conversations/{conversation_id}/messages/{message_id}")
+async def delete_message(
+    conversation_id: str,
+    message_id: str,
+    for_everyone: bool = False,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> dict:
+    """Видаляє повідомлення. Для себе — назавжди; для всіх — ще й у нього.
+
+    Дві різні обіцянки, і плутати їх не можна.
+
+    «Для себе» — рядок і байти зникають з цього вузла, копія співрозмовника
+    лишається. «Для всіх» — те саме тут, плюс службовий кадр kind='delete',
+    який їде тією ж наскрізною дорогою, що й текст. Відправник бачить
+    результат одразу; одержувач — коли кадр доїде. Якщо його вузол вимкнено,
+    кадр чекає в черзі, і видалення станеться пізніше. Обіцяти миттєвість
+    ми не можемо, тож і не обіцяємо.
+    """
+    conversation = await _owned_conversation(conversation_id, user, session)
+    row = (
+        await session.execute(
+            select(MessengerMessage).where(
+                MessengerMessage.conversation_id == conversation_id,
+                MessengerMessage.id == message_id,
+            )
+        )
+    ).scalar_one_or_none()
+    if row is None:
+        raise HTTPException(status_code=404, detail="message not found")
+
+    if not for_everyone:
+        # Локальне видалення: рядок іде цілком, байти — з нашого диска.
+        dropped = await wipe_message(session, _keys(), row)
+        await session.delete(row)
+        await session.commit()
+        return {"deleted": True, "for_everyone": False, "blobs": dropped}
+
+    # Кадр треба зашифрувати ДО того, як ми зітремо тіло: сам кадр везе лише
+    # ім'я цілі, але сесія має зрушитись рівно один раз, і робити це після
+    # затирання означало б покластись на порядок, якого ніхто не гарантує.
+    origin = origin_of(row)
+    prepared = None
+    if conversation.contact_id is not None and origin:
+        try:
+            prepared = await prepare_frame(
+                session, _keys(), conversation, wrap_frame("delete", origin)
+            )
+        except OutboxError:
+            prepared = None
+
+    dropped = await tombstone(session, _keys(), row)
+
+    delivered = False
+    if prepared is not None:
+        contact = await session.get(MessengerContact, conversation.contact_id)
+        address = (contact.peer_address if contact else "") or ""
+        relay = (config.relay_url or "") if config.relay_enabled else ""
+        delivered = await deliver(
+            prepared.frame,
+            peer_node_id=prepared.peer_node_id,
+            from_node_id=_keys().node_id,
+            peer_address=address,
+            relay=relay,
+            reply_address=config.messenger_public_address,
+        )
+        if not delivered:
+            # Той самий механізм, що й у звичайного повідомлення: кадр лежить
+            # при рядку і чекає на смугу повторів. Вимкнений вузол одержувача
+            # не скасовує видалення — лише відкладає його.
+            row.outbound_frame = prepared.frame.hex()
+            row.delivery_state = "queued"
+            row.delivery_attempts = 1 if (address or relay) else 0
+            row.last_attempt_at = _now() if (address or relay) else None
+
+    conversation.updated_at = _now()
+    await session.commit()
+    await session.refresh(row)
+
+    out = _message_out(row)
+    await hub.broadcast(
+        "messenger", "message:deleted", out.model_dump(mode="json"), user_id=user.id
+    )
+    return {
+        "deleted": True,
+        "for_everyone": True,
+        "blobs": dropped,
+        #: Чесно: кадр віддано вузлу співрозмовника чи ще чекає в черзі.
+        "frame": "sent" if delivered else ("queued" if prepared is not None else "local"),
+    }

@@ -145,8 +145,10 @@ async def test_queue_is_visible_and_deletion_actually_deletes(auth_root_client):
         == []
     )
 
+    # Разом із розмовою відповідь каже, скільки вкладень пішло з диска —
+    # у цієї їх не було, але число мусить бути, а не матись на увазі.
     assert auth_root_client.delete(
         f"/api/v1/messenger/conversations/{conv['id']}"
-    ).json() == {"deleted": True}
+    ).json() == {"deleted": True, "blobs": 0}
     rows = auth_root_client.get("/api/v1/messenger/conversations").json()
     assert conv["id"] not in [c["id"] for c in rows]

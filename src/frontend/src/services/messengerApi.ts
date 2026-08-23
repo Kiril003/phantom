@@ -46,6 +46,12 @@ export interface NodeMessage {
   /** local | queued | sent — див. routes_messenger.py */
   delivery?: string;
   delivery_state?: string;
+  /**
+   * stored | queued | sent | missing — стан ПЕРЕВЕЗЕННЯ вкладення.
+   * Кадр із ключем міг доїхати, а байти — ні; тоді галочка «надіслано» на
+   * бульбашці означала б фото, якого в людини немає.
+   */
+  attachment_state?: string | null;
 }
 
 export interface NodeBlob {
@@ -107,9 +113,26 @@ export const messengerApi = {
   deleteConversation: (conversationId: string) =>
     request<{ deleted: boolean }>('DELETE', `/messenger/conversations/${conversationId}`),
 
-  /** Стирає листи розмови на цьому вузлі, саму розмову лишає. */
+  /** Стирає листи розмови на цьому вузлі разом із вкладеннями на диску. */
   clearConversation: (conversationId: string) =>
-    request<{ cleared: number }>('POST', `/messenger/conversations/${conversationId}/clear`),
+    request<{ cleared: number; blobs: number }>(
+      'POST', `/messenger/conversations/${conversationId}/clear`,
+    ),
+
+  /**
+   * Видаляє повідомлення. forEveryone шле службовий кадр співрозмовнику —
+   * тією ж наскрізною дорогою, що й текст.
+   *
+   * `frame` у відповіді каже правду про долю кадру: 'sent' — вузол адресата
+   * його взяв, 'queued' — чекає в черзі (адресат офлайн і видалить пізніше),
+   * 'local' — везти нікуди, розмова ні з ким.
+   */
+  deleteMessage: (conversationId: string, messageId: string, forEveryone: boolean) =>
+    request<{ deleted: boolean; for_everyone: boolean; blobs: number; frame?: string }>(
+      'DELETE',
+      `/messenger/conversations/${conversationId}/messages/${messageId}`
+        + `?for_everyone=${forEveryone ? 'true' : 'false'}`,
+    ),
 
   /** Скільки листів чекають на зв'язок — головний козир черги, зроблений видимим. */
   queueStatus: () => request<{ queued: number }>('GET', '/messenger/queue/status'),
@@ -139,6 +162,8 @@ export const messengerApi = {
     circle?: string;
     handle?: string | null;
     avatar?: string | null;
+    /** Без нього розмова ні з ким: лист нікуди не поїде. */
+    contact_id?: string | null;
   }) => request<NodeConversation>('POST', '/messenger/conversations', body),
 
   listMessages: (conversationId: string, afterSeq = 0) =>
@@ -275,14 +300,21 @@ export function messageFromNode(row: NodeMessage, selfId: string, peerNodeId?: s
     isSelf: peerNodeId ? row.author_id !== peerNodeId : row.author_id === selfId,
     // Стан доставки — з бази вузла, тож галочки переживають перезавантаження.
     // «У скриньці» проти «доїхало» — саме те, чого панелі не побачили на екрані.
+    //
+    // Вкладення важить більше за кадр: ключ міг доїхати, а байти застрягнути.
+    // Тоді повідомлення НЕ надіслане — у людини немає фото, і галочка про
+    // «надіслано» була б брехнею про стан, а не дрібною неточністю.
     status:
       peerNodeId && (peerNodeId ? row.author_id !== peerNodeId : false)
-        ? row.delivery_state === 'sent'
-          ? 'sent'
-          : row.delivery_state === 'queued'
-            ? 'queued'
-            : undefined
+        ? row.attachment_state === 'queued' || row.attachment_state === 'missing'
+          ? 'queued'
+          : row.delivery_state === 'sent'
+            ? 'sent'
+            : row.delivery_state === 'queued'
+              ? 'queued'
+              : undefined
         : undefined,
+    isDeleted: Boolean(row.deleted_at),
     isEdited: Boolean(row.edited_at),
     transport: (row.transport as Message['transport']) ?? undefined,
   };

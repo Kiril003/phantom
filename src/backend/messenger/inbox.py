@@ -8,6 +8,12 @@
 Перший кадр від незнайомця відкриває нову сесію і створює контакт, але
 verified_at лишається порожнім: те, що людина вміє шифрувати, ще не означає,
 що вона та, за кого себе видає. Звірку робить власник голосом.
+
+Не кожен кадр стає рядком у стрічці. Службовий кадр kind='delete' нічого не
+показує — він ВИКОНУЄТЬСЯ: знаходить своє повідомлення, стирає тіло, знімає
+вкладення з диска. Їде він тією ж дорогою і тією ж сесією, що й текст, саме
+тому видалення доїжджає навіть до вузла, який був вимкнений: кадр чекає в
+черзі відправника рівно так само, як чекало б звичайне повідомлення.
 """
 from __future__ import annotations
 
@@ -19,11 +25,12 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import MessengerContact, MessengerConversation, MessengerMessage
-from messenger.blobs import unwrap_frame
+from messenger.blobs import ORIGIN_LIMIT, unwrap_frame
 from messenger.crypto.at_rest import seal
 from messenger.crypto.keys import KeyStore
 from messenger.crypto.safety import safety_number
 from messenger.crypto.session import Session
+from messenger.purge import find_by_origin, tombstone
 
 __all__ = ["InboxError", "accept_frame"]
 
@@ -84,8 +91,15 @@ async def accept_frame(
     peer_node_id: Optional[str] = None,
     *,
     reply_address: Optional[str] = None,
-) -> MessengerMessage:
-    """Розшифровує кадр і кладе повідомлення у стрічку власника."""
+) -> Optional[MessengerMessage]:
+    """Розшифровує кадр і кладе повідомлення у стрічку власника.
+
+    Повертає рядок стрічки: нове повідомлення, а для кадру 'delete' — той
+    надгробок, який щойно лишився від видаленого. None означає «кадр прийнято
+    й виконано, показувати нічого»: наприклад, видалення приїхало на те, чого
+    в нас ніколи не було. Це не помилка, тож і 400 у відповідь бути не може —
+    інакше відправник вічно повторював би кадр, який уже зробив свою роботу.
+    """
     contact = (
         await _contact_for(session, owner_user_id, peer_node_id) if peer_node_id else None
     )
@@ -131,11 +145,32 @@ async def accept_frame(
     conversation = await _conversation_for(session, owner_user_id, contact)
     # Тип приїхав у самому кадрі. Старий кадр без конверта лишається текстом,
     # тож уже зведені сесії від цього нічого не помічають.
-    kind, body = unwrap_frame(plaintext.decode())
+    kind, body, origin = unwrap_frame(plaintext.decode())
+
+    if kind == "delete":
+        # Службовий кадр: ніякого нового рядка, лише робота над наявним.
+        # Стан храповика вже зрушено вище — його треба зберегти в будь-якому
+        # разі, інакше наступний кадр від цієї людини не розшифрується.
+        target = await find_by_origin(session, conversation.id, body.strip())
+        if target is None:
+            await session.commit()
+            return None
+        await tombstone(session, keys, target)
+        conversation.updated_at = _now()
+        await session.commit()
+        await session.refresh(target)
+        return target
+
     row = MessengerMessage(
         id=str(uuid.uuid4()),
         conversation_id=conversation.id,
-        client_id=f"in_{uuid.uuid4().hex[:16]}",
+        # Ім'я з вузла-відправника під префіксом: воно єдине спільне для двох
+        # вузлів, і саме за ним потім приїде видалення. Немає origin (старий
+        # кадр) — лишаємось із власним випадковим, але видалити таке ззовні
+        # вже не вийде, і вдавати протилежне не будемо.
+        client_id=(
+            f"in_{origin[:ORIGIN_LIMIT]}" if origin else f"in_{uuid.uuid4().hex[:16]}"
+        ),
         seq=conversation.next_seq,
         author_id=contact.peer_node_id,
         author_name=contact.display_name,

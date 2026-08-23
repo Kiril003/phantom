@@ -300,12 +300,26 @@ async def test_missing_bytes_are_reported_not_invented(auth_root_client):
 
 
 def test_the_frame_carries_its_kind_without_breaking_old_text():
-    assert unwrap_frame(wrap_frame("image", '{"a":1}')) == ("image", '{"a":1}')
-    assert unwrap_frame(wrap_frame("file", "тіло")) == ("file", "тіло")
+    assert unwrap_frame(wrap_frame("image", '{"a":1}')) == ("image", '{"a":1}', "")
+    assert unwrap_frame(wrap_frame("file", "тіло")) == ("file", "тіло", "")
 
-    # Текст їде як їхав — інакше зведені сесії почали б бачити службовий рядок.
+    # Текст без origin їде як їхав — інакше зведені сесії почали б бачити
+    # службовий рядок замість самого повідомлення.
     assert wrap_frame("text", "привіт") == "привіт"
-    assert unwrap_frame("привіт") == ("text", "привіт")
+    assert unwrap_frame("привіт") == ("text", "привіт", "")
 
     # Незнайомий тип не має права стати чимось, чого ми не вміємо показати.
     assert unwrap_frame("\x01phantom-kind:executable\nrm -rf /")[0] == "text"
+
+
+def test_the_frame_carries_the_name_the_other_node_will_delete_by():
+    """Без спільного імені видалення для всіх не мало б за що взятись."""
+    assert unwrap_frame(wrap_frame("text", "привіт", "c_42")) == ("text", "привіт", "c_42")
+    assert unwrap_frame(wrap_frame("image", "{}", "c_7")) == ("image", "{}", "c_7")
+
+    # Тіло з переносами лишається цілим: конверт займає рівно перший рядок.
+    body = "перший\nдругий\nтретій"
+    assert unwrap_frame(wrap_frame("text", body, "c_9")) == ("text", body, "c_9")
+
+    # Службовий кадр везе саме ім'я цілі й нічого більше.
+    assert unwrap_frame(wrap_frame("delete", "c_42")) == ("delete", "c_42", "")

@@ -71,6 +71,10 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
     wsClient.send({ control: 'subscribe', channels: ['messenger', 'call'] });
     const off = wsClient.on('messenger', (msg: any) => {
       if (msg?.type === 'message:new' && msg?.data) store.applyNodeMessage(msg.data);
+      // Видалення — не нове повідомлення: бульбашку треба замінити надгробком,
+      // а не дописати рядок. Приїхати може і від співрозмовника, і з іншої
+      // вкладки власника, тож слухаємо тим самим каналом.
+      if (msg?.type === 'message:deleted' && msg?.data) store.applyNodeDelete(msg.data);
     });
     return () => {
       off();
@@ -189,9 +193,11 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
               onAddReaction={(msgId, emoji) => store.addReaction(msgId, emoji)}
               onReplyMessage={(msg, quoted) => store.startReply(msg, quoted)}
               onEditMessage={(msg) => store.startEdit(msg)}
-              onDeleteMessage={(msgId) => {
-                const m = activeChat.messages.find((x) => x.id === msgId);
-                if (m) store.openDeleteModal(m);
+              // Вибір «для всіх / для себе» людина вже зробила у вікні ChatArea.
+              // Тут стояло відкриття ДРУГОГО такого ж вікна, і вибір із першого
+              // мовчки губився — саме тому «для всіх» не робило нічого.
+              onDeleteMessage={(msgId, forEveryone) => {
+                void store.deleteMessage(msgId, Boolean(forEveryone));
               }}
               onTogglePinMessage={(msgId) => store.togglePinMessage(msgId)}
               onForwardMessage={(msg) => store.openForwardModal(msg)}
@@ -455,9 +461,9 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
         onClose={() => store.closeDeleteModal()}
         isSelfMessage={store.activeDeleteMessage?.isSelf ?? true}
         messageTextPreview={store.activeDeleteMessage?.text}
-        onConfirmDelete={(_deleteForEveryone) => {
+        onConfirmDelete={(deleteForEveryone) => {
           if (store.activeDeleteMessage) {
-            store.deleteMessage(store.activeDeleteMessage.id);
+            void store.deleteMessage(store.activeDeleteMessage.id, deleteForEveryone);
           }
           store.closeDeleteModal();
         }}

@@ -1,9 +1,8 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { MapLayerMouseEvent } from 'maplibre-gl';
 import { useHudMap } from './useHudMap';
 import { useMapStore } from '../../../stores/mapStore';
 import { useSettingsStore } from '../../../stores/settingsStore';
-import { settingsApi } from '../../../services/api';
 import { formatLatLonUa } from '../../../utils/geo';
 import { formatMgrs, latLonToMgrsRef } from '../../../utils/mgrs';
 import { formatUsk, wgs84ToUsk2000 } from '../../../utils/usk2000';
@@ -33,6 +32,14 @@ const FORMAT_LABEL: Record<CoordFormat, string> = {
   usk: 'УСК-2000',
 };
 const SETTING_KEY = 'ui_coord_format';
+/**
+ * Персистентність — localStorage, не settingsApi: бекендів config не
+ * знає ключа ui_coord_format, PUT /settings/ui_coord_format відповідає
+ * 404 (виміряно на стенді). Реєстрація ключа в config.py — територія
+ * бекенда; коли вона станеться, цей рядок переїде на спільні рейки
+ * ui_map_style. Доти локальне сховище чесно переживає перезапуск.
+ */
+const STORAGE_KEY = 'phantom_coord_format';
 
 /** Текст координати в обраному форматі; недоступність — словом. */
 export function coordText(format: CoordFormat, lat: number, lon: number): string {
@@ -53,9 +60,16 @@ export function CoordReadout({ className = '' }: { className?: string }): JSX.El
   const setToast = useMapStore((s) => s.setToast);
   const storedFormat = useSettingsStore((s) => s.values[SETTING_KEY]);
   const setSettingValue = useSettingsStore((s) => s.setValue);
-  const format: CoordFormat = FORMAT_ORDER.includes(storedFormat as CoordFormat)
-    ? (storedFormat as CoordFormat)
-    : 'latlon';
+  const format: CoordFormat = useMemo(() => {
+    if (FORMAT_ORDER.includes(storedFormat as CoordFormat)) return storedFormat as CoordFormat;
+    try {
+      const saved = typeof localStorage !== 'undefined' ? localStorage.getItem(STORAGE_KEY) : null;
+      if (FORMAT_ORDER.includes(saved as CoordFormat)) return saved as CoordFormat;
+    } catch {
+      /* приватний режим / SSR — живемо з типовим */
+    }
+    return 'latlon';
+  }, [storedFormat]);
 
   const [cursor, setCursor] = useState<{ lat: number; lon: number } | null>(null);
 
@@ -105,9 +119,11 @@ export function CoordReadout({ className = '' }: { className?: string }): JSX.El
   const cycleFormat = useCallback(() => {
     const next = FORMAT_ORDER[(FORMAT_ORDER.indexOf(format) + 1) % FORMAT_ORDER.length];
     setSettingValue(SETTING_KEY, next);
-    settingsApi.set(SETTING_KEY, next).catch(() => {
-      /* Бекенд мовчить — вибір усе одно живе в сесії через store. */
-    });
+    try {
+      localStorage.setItem(STORAGE_KEY, next);
+    } catch {
+      /* сховище недоступне — вибір живе принаймні до кінця сесії */
+    }
   }, [format, setSettingValue]);
 
   const copy = useCallback(() => {

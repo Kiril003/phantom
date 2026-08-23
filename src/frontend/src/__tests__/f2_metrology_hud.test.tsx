@@ -139,8 +139,23 @@ describe('CoordReadout', () => {
     fireEvent.click(screen.getByTestId('coord-format'));
     expect(useSettingsStore.getState().values.ui_coord_format).toBe('usk');
     expect(screen.getByTestId('coord-value').textContent).toMatch(/^зона 6/);
+    // Персистентність — localStorage (бекенд ключа не знає, PUT 404 —
+    // виміряно на стенді), тож вибір переживає перезапуск фронта.
+    expect(localStorage.getItem('phantom_coord_format')).toBe('usk');
     fireEvent.click(screen.getByTestId('coord-format'));
     expect(useSettingsStore.getState().values.ui_coord_format).toBe('latlon');
+  });
+
+  it('свіжий монт без значення в store читає збережений формат зі сховища', () => {
+    localStorage.setItem('phantom_coord_format', 'mgrs');
+    useSettingsStore.setState((s) => {
+      const values = { ...s.values };
+      delete values.ui_coord_format;
+      return { values };
+    });
+    render(<CoordReadout />);
+    expect(screen.getByTestId('coord-format')).toHaveTextContent('MGRS');
+    expect(screen.getByTestId('coord-value').textContent).toMatch(/^36U UA/);
   });
 
   it('клац по координаті копіює її в буфер і каже про це тостом', async () => {

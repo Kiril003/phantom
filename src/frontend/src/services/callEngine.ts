@@ -17,6 +17,7 @@
  * на відправнику — це діє миттєво і не чіпає ані ICE, ані DTLS, тож розмова
  * не переривається. ptime живе в SDP і без нової пропозиції не змінюється;
  * рушій пробує її дотягнути окремо і не вдає, що вийшло, якщо не вийшло.
+ * Механіка кроків — у `callLadder.ts`.
  *
  * РАЦІЯ. Коли доріжки немає зовсім, дзвінок не завершується: голос переходить
  * на кадри листування (`callRadio.ts`). Це остання сходинка драбини, а не
@@ -25,8 +26,10 @@
 
 import { request } from './api';
 import { wsClient } from './websocket';
-import { AUDIO_LEVELS, capSender, tuneOpus } from './callOpus';
+import { tuneOpus } from './callOpus';
 import type { AudioLevel } from './callOpus';
+import { OpusLadder } from './callLadder';
+import type { LadderStep } from './callLadder';
 import { RadioLink } from './callRadio';
 import type { RadioTally } from './callRadio';
 
@@ -37,18 +40,6 @@ const ENDED_LINGER_MS = 2600;
 /** Скільки чекати зʼєднання, перш ніж сказати людині правду замість «набираю…». */
 const STALL_AFTER_MS = 8000;
 
-/* ── пороги драбини ───────────────────────────────────────────────────── */
-
-/** Втрати у відсотках, з яких канал уже не тримає поточну сходинку. */
-const LOSS_BAD_PCT = 8;
-const LOSS_GOOD_PCT = 2;
-/** RTT, з якого розмова перестає бути розмовою. */
-const RTT_BAD_MS = 500;
-const RTT_GOOD_MS = 250;
-/** Скільки поспіль поганих вимірів — і спускаємось. Два, щоб не смикатись. */
-const BAD_SAMPLES_TO_DROP = 2;
-/** А вгору — тільки після довгої тиші: 8 вимірів по 2 с це ті самі 15 с+. */
-const GOOD_SAMPLES_TO_RISE = 8;
 /** Скільки триматися в `disconnected`, перш ніж визнати доріжку мертвою. */
 const DEAD_LINK_MS = 10000;
 /** Як часто з рації пробувати повернутись у реальний час. */
@@ -215,19 +206,24 @@ class CallEngine {
   private pendingOffer: string | null = null;
   /** Попередній вимір — щоб порахувати бітрейт як різницю, а не як здогад. */
   private lastBytes: { at: number; bytes: number } | null = null;
-  /** Втрати рахуємо як різницю за проміжок: сумарне число нічого не каже. */
-  private lastLoss: { lost: number; received: number } | null = null;
   /** Чи озвалась інша сторона. Без цього «немає дороги» — це здогад, не факт. */
   private answered = false;
 
   /* ── драбина ────────────────────────────────────────────────────────── */
 
-  private badStreak = 0;
-  private goodStreak = 0;
-  /** Відправник відео памʼятаємо окремо: знявши доріжку, ми його вже не знайдемо. */
-  private videoSender: RTCRtpSender | null = null;
-  /** Останній вимір бітрейту перед сходинкою — доказ, що вона щось змінила. */
-  private ladderLog: Array<{ at: number; rung: string; kbpsBefore: number | null }> = [];
+  /** Драбині даємо руки, а не рушій — щоб не було кола імпортів. */
+  private readonly ladder = new OpusLadder({
+    pc: () => this.pc,
+    localStream: () => this.localStream,
+    view: () => this.snapshot,
+    patch: (next) => this.patch(next),
+    armNote: () => this.armNote(),
+    sendOffer: (sdp) => {
+      const callId = this.snapshot.callId;
+      if (!callId) return;
+      void this.post('offer', callId, { sdp, media: this.snapshot.media });
+    },
+  });
 
   /* ── рація ──────────────────────────────────────────────────────────── */
 
@@ -277,7 +273,7 @@ class CallEngine {
     if (this.snapshot.state !== 'idle' && this.snapshot.state !== 'ended') return;
     this.clearLinger();
     this.answered = false;
-    this.ladderLog = [];
+    this.ladder.newCall();
 
     const callId = newCallId();
     this.patch({
@@ -573,7 +569,7 @@ class CallEngine {
           this.patch({ state: 'active', startedAt: Date.now(), stall: null });
         }
         this.startStats();
-        void this.applyRung();
+        void this.ladder.applyRung();
       } else if (pc.connectionState === 'failed') {
         this.onLinkLost('доріжка не тримається');
       } else if (pc.connectionState === 'disconnected') {
@@ -722,150 +718,14 @@ class CallEngine {
 
   /* ── драбина ────────────────────────────────────────────────────────── */
 
-  /**
-   * Сходинки від кращої до гіршої. Відео — окрема, найдорожча: на вузькому
-   * каналі воно з'їдає все, а розмова живе голосом, не картинкою. Тому першим
-   * ділом гине відео, і лише потім починає худнути звук.
-   */
-  private rungs(): Array<{ video: boolean; level: AudioLevel }> {
-    const ladder: Array<{ video: boolean; level: AudioLevel }> = [];
-    if (this.snapshot.hasCamera) ladder.push({ video: true, level: 'full' });
-    AUDIO_LEVELS.forEach((level) => ladder.push({ video: false, level }));
-    return ladder;
-  }
-
-  private rungIndex(): number {
-    const ladder = this.rungs();
-    const wantVideo = this.snapshot.hasCamera && !this.snapshot.videoDropped;
-    const found = ladder.findIndex(
-      (r) => r.video === wantVideo && r.level === this.snapshot.audioLevel,
-    );
-    return found < 0 ? 0 : found;
-  }
-
-  private rungName(): string {
-    const rung = this.rungs()[this.rungIndex()];
-    return rung.video ? `відео+${rung.level}` : rung.level;
-  }
-
-  /** Ставить те, що вже записано в знімку, на живі доріжки. */
-  private async applyRung(): Promise<boolean> {
-    const pc = this.pc;
-    if (!pc) return false;
-    const senders = pc.getSenders();
-
-    const video = senders.find((s) => s.track?.kind === 'video' || s === this.videoSender);
-    if (video) {
-      const want = this.snapshot.hasCamera && !this.snapshot.videoDropped;
-      // replaceTrack(null), а не track.enabled=false: вимкнена доріжка все
-      // одно жене чорні кадри в канал, а нам треба, щоб не йшло нічого.
-      if (!want && video.track) {
-        this.videoSender = video;
-        try {
-          await video.replaceTrack(null);
-        } catch {
-          /* не вийшло зняти — звук усе одно отримає свою стелю */
-        }
-      } else if (want && !video.track) {
-        const track = this.localStream?.getVideoTracks()[0] ?? null;
-        if (track) {
-          try {
-            await video.replaceTrack(track);
-          } catch {
-            /* камера могла вже зникнути */
-          }
-        }
-      }
-    }
-
-    return capSender(
-      senders.find((s) => s.track?.kind === 'audio'),
-      this.snapshot.audioLevel,
-    );
-  }
-
-  /**
-   * Спуск або підйом на одну сходинку. Крок робиться `setParameters` —
-   * миттєво і без переговорів. ptime так не змінити, тож для двох нижніх
-   * сходинок пробуємо ще й нову пропозицію; не вийде — стеля бітрейту вже
-   * стоїть, і саме її буде видно у вимірах.
-   */
-  private async step(delta: number, why: string): Promise<void> {
-    const ladder = this.rungs();
-    const next = Math.min(ladder.length - 1, Math.max(0, this.rungIndex() + delta));
-    if (next === this.rungIndex()) return;
-
-    this.badStreak = 0;
-    this.goodStreak = 0;
-    this.ladderLog.push({
-      at: Date.now(),
-      rung: `${this.rungName()} → ${ladder[next].video ? `відео+${ladder[next].level}` : ladder[next].level}`,
-      kbpsBefore: this.snapshot.stats?.kbps ?? null,
-    });
-
-    const target = ladder[next];
-    this.patch({
-      audioLevel: target.level,
-      videoDropped: !target.video && this.snapshot.hasCamera,
-      linkNote: why,
-    });
-    this.armNote();
-    await this.applyRung();
-    if (delta > 0) void this.renegotiatePtime();
-  }
-
-  /**
-   * Довгий ptime — головний виграш на вузькому каналі, але він живе тільки в
-   * SDP. Пробуємо домовитись заново поверх тієї самої доріжки: ICE не
-   * перезапускаємо, тож розмова не рветься. Пропонує лише той, хто набирав —
-   * інакше дві пропозиції зустрілись би посередині і не встала б жодна.
-   */
-  private async renegotiatePtime(): Promise<void> {
-    const pc = this.pc;
-    const callId = this.snapshot.callId;
-    if (!pc || !callId || !this.snapshot.outgoing) return;
-    if (pc.signalingState !== 'stable') return;
-    try {
-      const offer = await pc.createOffer();
-      await pc.setLocalDescription({
-        type: 'offer',
-        sdp: tuneOpus(offer.sdp ?? '', this.snapshot.audioLevel),
-      });
-      await this.post('offer', callId, {
-        sdp: pc.localDescription?.sdp,
-        media: this.snapshot.media,
-      });
-    } catch {
-      /* не домовились — стеля бітрейту вже діє, і це не привід валити дзвінок */
-    }
-  }
-
-  /** Тест-хук і ручний режим: тримати сходинку силою, автоспуск не заважає. */
-  async forceLadder(level: AudioLevel | 'video' | 'auto'): Promise<string> {
-    if (level === 'auto') {
-      this.patch({ ladderPinned: false });
-      return 'автоспуск увімкнено';
-    }
-    const ladder = this.rungs();
-    const index =
-      level === 'video'
-        ? 0
-        : ladder.findIndex((r) => !r.video && r.level === level);
-    if (index < 0) return 'такої сходинки немає';
-    const target = ladder[index];
-    this.patch({
-      ladderPinned: true,
-      audioLevel: target.level,
-      videoDropped: !target.video && this.snapshot.hasCamera,
-    });
-    const applied = await this.applyRung();
-    await this.renegotiatePtime();
-    return applied ? `сходинка ${this.rungName()}` : `сходинка ${this.rungName()} (без setParameters)`;
+  /** Тест-хук і ручний режим — сама механіка в `callLadder.ts`. */
+  forceLadder(level: AudioLevel | 'video' | 'auto'): Promise<string> {
+    return this.ladder.force(level);
   }
 
   /** Що драбина встигла зробити — для доказів, а не для екрана. */
-  ladderHistory(): Array<{ at: number; rung: string; kbpsBefore: number | null }> {
-    return [...this.ladderLog];
+  ladderHistory(): LadderStep[] {
+    return this.ladder.history();
   }
 
   /* ── рація ──────────────────────────────────────────────────────────── */
@@ -1000,7 +860,7 @@ class CallEngine {
     if (this.statsTimer) clearInterval(this.statsTimer);
     this.statsTimer = null;
     this.lastBytes = null;
-    this.lastLoss = null;
+    this.ladder.resetLoss();
   }
 
   private async sampleStats(): Promise<void> {
@@ -1083,58 +943,9 @@ class CallEngine {
     this.patch({
       stats: { rttMs, packetsLost, audioCodec, videoCodec, kbps, localCandidate, remoteCandidate },
     });
-    this.judgeLink(rttMs, packetsLost, packetsReceived);
-  }
-
-  /**
-   * Один вимір — один вирок каналу, і за ним крок драбини.
-   *
-   * Втрати рахуємо ЗА ПРОМІЖОК, а не сумарні: сумарне число росте вічно й
-   * після поганої хвилини назавжди виглядало б погано, навіть коли канал уже
-   * вилікувався.
-   */
-  private judgeLink(
-    rttMs: number | null,
-    packetsLost: number | null,
-    packetsReceived: number,
-  ): void {
-    if (this.snapshot.state !== 'active' || this.radio) return;
-
-    const prev = this.lastLoss;
-    this.lastLoss = { lost: packetsLost ?? 0, received: packetsReceived };
-    if (!prev) return;
-
-    const lost = Math.max(0, (packetsLost ?? 0) - prev.lost);
-    const got = Math.max(0, packetsReceived - prev.received);
-    const total = lost + got;
-    // Нічого не приїхало за проміжок — це не «0% втрат», це відсутність виміру.
-    if (total === 0) return;
-    const lossPct = (lost / total) * 100;
-
-    const bad = lossPct >= LOSS_BAD_PCT || (rttMs !== null && rttMs >= RTT_BAD_MS);
-    const good =
-      lossPct <= LOSS_GOOD_PCT && rttMs !== null && rttMs <= RTT_GOOD_MS;
-
-    if (bad) {
-      this.goodStreak = 0;
-      this.badStreak += 1;
-    } else if (good) {
-      this.badStreak = 0;
-      this.goodStreak += 1;
-    } else {
-      this.badStreak = 0;
-      this.goodStreak = 0;
-    }
-
-    if (this.snapshot.ladderPinned) return;
-
-    if (this.badStreak >= BAD_SAMPLES_TO_DROP) {
-      void this.step(
-        1,
-        `Канал просів — ${Math.round(lossPct)}% втрат. Тримаємо голос.`,
-      );
-    } else if (this.goodStreak >= GOOD_SAMPLES_TO_RISE) {
-      void this.step(-1, 'Канал вирівнявся — повертаємо якість.');
+    // Вирок каналу — лише живій розмові: у рації доріжки немає, судити нічого.
+    if (this.snapshot.state === 'active' && !this.radio) {
+      this.ladder.judgeLink(rttMs, packetsLost, packetsReceived);
     }
   }
 
@@ -1144,7 +955,7 @@ class CallEngine {
   private teardownPc(): void {
     const pc = this.pc;
     this.pc = null;
-    this.videoSender = null;
+    this.ladder.dropSender();
     if (!pc) return;
     pc.onicecandidate = null;
     pc.ontrack = null;
@@ -1167,8 +978,7 @@ class CallEngine {
     this.noteTimer = null;
     this.radio?.stop();
     this.radio = null;
-    this.badStreak = 0;
-    this.goodStreak = 0;
+    this.ladder.endCall();
     this.answered = false;
     this.pendingIce = [];
     this.pendingOffer = null;

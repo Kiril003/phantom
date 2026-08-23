@@ -49,7 +49,8 @@ from messenger.purge import (
     tombstone,
     wipe_message,
 )
-from messenger.transport import deliver
+from messenger.transport import deliver, supabase_road
+from messenger.turn import ice_payload, load_turn_config
 from node.identity import node_id
 # Месенджер приймає і користувацький JWT, і токен спареного пристрою:
 # телефон власника — повноцінний клієнт вузла (рішення власника 23.08.2026).
@@ -121,6 +122,42 @@ async def get_relay_status(
             last_error="relay client not started",
         )
     return RelayStatus(**client.status())
+
+
+# ── Дороги для медіа ─────────────────────────────────────────────────────────
+
+
+class IceServer(BaseModel):
+    """Один запис для RTCPeerConnection — форма прямо з WebRTC."""
+
+    urls: list[str]
+    username: Optional[str] = None
+    credential: Optional[str] = None
+
+
+class IceConfig(BaseModel):
+    """Чим браузеру шукати дорогу до співрозмовника.
+
+    `turn=false` — це не помилка, а стан: ретранслятора цей вузол не має, і
+    за суворим NAT дзвінок не встане. Клієнт має право сказати це людині
+    вголос, і саме тому прапорець тут окремий, а не вгадується з urls.
+    """
+
+    iceServers: list[IceServer]
+    turn: bool
+    #: Скільки секунд живе видана пара. 0 — видавати не було чого.
+    ttl: int
+
+
+@router.get("/ice", response_model=IceConfig)
+async def get_ice_config(_user: User = Depends(get_user_or_device_user)) -> IceConfig:
+    """Ефемерна пара до ретранслятора — на один дзвінок, а не назавжди.
+
+    Секрет coturn лишається на вузлі: браузер отримує username (час смерті
+    пари) і пароль, виведений із секрету через HMAC-SHA1. Механіка — у
+    `messenger/turn.py`.
+    """
+    return IceConfig(**ice_payload(load_turn_config()))
 
 
 # ── Розмови ──────────────────────────────────────────────────────────────────
@@ -614,15 +651,18 @@ async def append_message(
             contact = await session.get(MessengerContact, conversation.contact_id)
             address = contact.peer_address if contact else ""
             relay = (config.relay_url or "") if config.relay_enabled else ""
+            sb_url, sb_key = supabase_road(config)
             delivered = await deliver(
                 prepared.frame,
                 peer_node_id=prepared.peer_node_id,
                 from_node_id=_keys().node_id,
                 peer_address=address or "",
                 relay=relay,
+                supabase_url=sb_url,
+                supabase_key=sb_key,
                 reply_address=config.messenger_public_address,
             )
-            tried = bool(address or relay)
+            tried = bool(address or relay or sb_url)
             out.delivery = 'sent' if delivered else 'queued'
             row.delivery_state = out.delivery
             row.delivery_attempts = 1 if tried else 0
@@ -1043,12 +1083,15 @@ async def delete_message(
         contact = await session.get(MessengerContact, conversation.contact_id)
         address = (contact.peer_address if contact else "") or ""
         relay = (config.relay_url or "") if config.relay_enabled else ""
+        sb_url, sb_key = supabase_road(config)
         delivered = await deliver(
             prepared.frame,
             peer_node_id=prepared.peer_node_id,
             from_node_id=_keys().node_id,
             peer_address=address,
             relay=relay,
+            supabase_url=sb_url,
+            supabase_key=sb_key,
             reply_address=config.messenger_public_address,
         )
         if not delivered:

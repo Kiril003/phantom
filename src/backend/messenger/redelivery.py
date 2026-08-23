@@ -10,19 +10,28 @@
 """
 from __future__ import annotations
 
+import json
 import logging
+import os
 from datetime import datetime, timezone
+from typing import Any, Optional
 
+import httpx
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import MessengerContact, MessengerConversation, MessengerMessage
 from messenger.blobs import flush_blob_queue
-from messenger.transport import deliver
+from messenger.transport import deliver, supabase_mailbox_endpoint, supabase_road
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["MAX_ATTEMPTS", "flush_queue"]
+__all__ = [
+    "MAX_ATTEMPTS",
+    "flush_queue",
+    "read_supabase_mailbox",
+    "supabase_service_key",
+]
 
 #: Після цього числа спроб повідомлення лишається queued, але вузол перестає
 #: гатити в стіну. Воно не зникає — просто чекає на кращий транспорт.
@@ -62,8 +71,9 @@ async def flush_queue(
         from config import config
 
         relay = (config.relay_url or "") if config.relay_enabled else ""
-        if not contact.peer_address and not relay:
-            # Ні прямої дороги, ні ретранслятора — спроба нічого не дасть,
+        sb_url, sb_key = supabase_road(config)
+        if not contact.peer_address and not relay and not sb_url:
+            # Жодної дороги — спроба нічого не дасть,
             # і лічильник псувати не варто.
             continue
 
@@ -75,6 +85,8 @@ async def flush_queue(
             from_node_id=own_node_id,
             peer_address=contact.peer_address or "",
             relay=relay,
+            supabase_url=sb_url,
+            supabase_key=sb_key,
             reply_address=config.messenger_public_address,
         )
         if ok:
@@ -87,6 +99,83 @@ async def flush_queue(
     return delivered
 
 
+def supabase_service_key() -> str:
+    """Службовий ключ читання — ТІЛЬКИ з середовища, ніколи з конфігурації.
+
+    Ключ, що читає чужі скриньки, не має жодного права опинитись у файлі
+    конфігурації, базі чи коді: власник вставляє його в env сам.
+    """
+    return os.environ.get("SUPABASE_SERVICE_KEY", "").strip()
+
+
+async def read_supabase_mailbox(
+    session: AsyncSession,
+    keys: Any,
+    owner_user_id: str,
+    *,
+    url: str,
+    service_key: str,
+    client: Optional[httpx.AsyncClient] = None,
+    limit: int = 20,
+) -> int:
+    """Забирає свої листи зі скриньки Supabase у стрічку власника.
+
+    Кожен принесений конверт штампується delivered_at після ОДНІЄЇ спроби:
+    кадр, що не розшифрувався зараз, не розшифрується й завтра (храповик не
+    ходить назад), а вічний повтор отруйного листа заступив би дорогу решті.
+    """
+    endpoint = supabase_mailbox_endpoint(url)
+    headers = {"apikey": service_key, "Authorization": f"Bearer {service_key}"}
+    own = client is None
+    http = client or httpx.AsyncClient(timeout=8.0)
+    try:
+        response = await http.get(
+            endpoint,
+            params={
+                "recipient_node_id": f"eq.{keys.node_id}",
+                "delivered_at": "is.null",
+                "select": "id,frame",
+                "order": "created_at.asc",
+                "limit": str(limit),
+            },
+            headers=headers,
+        )
+        if response.status_code != 200:
+            logger.info(
+                "скринька Supabase: читання не вдалось (%s)", response.status_code
+            )
+            return 0
+        accepted = 0
+        for item in response.json():
+            try:
+                from messenger.inbox import accept_frame
+
+                envelope = json.loads(str(item.get("frame") or "") or "{}")
+                frame_hex = str(envelope.get("frame", ""))
+                if frame_hex:
+                    await accept_frame(
+                        session,
+                        keys,
+                        owner_user_id,
+                        bytes.fromhex(frame_hex),
+                        envelope.get("from_node_id"),
+                        reply_address=envelope.get("reply_address"),
+                    )
+                    accepted += 1
+            except Exception as exc:  # noqa: BLE001
+                logger.info("лист зі скриньки Supabase не прийнявся: %s", exc)
+            await http.patch(
+                endpoint,
+                params={"id": f"eq.{item.get('id')}"},
+                json={"delivered_at": datetime.now(timezone.utc).isoformat()},
+                headers={**headers, "Prefer": "return=minimal"},
+            )
+        return accepted
+    finally:
+        if own:
+            await http.aclose()
+
+
 async def redelivery_loop(interval_s: float = 45.0) -> None:
     """Фонова смуга: періодично повертається до боргів.
 
@@ -95,7 +184,12 @@ async def redelivery_loop(interval_s: float = 45.0) -> None:
     """
     import asyncio
 
+    from config import config
     from db.database import AsyncSessionLocal
+
+    sb_url = (getattr(config, "supabase_mailbox_url", "") or "").strip()
+    if sb_url and not supabase_service_key():
+        logger.info("скринька Supabase: читання вимкнено — немає службового ключа")
 
     while True:
         try:
@@ -107,9 +201,29 @@ async def redelivery_loop(interval_s: float = 45.0) -> None:
                 # Вкладення їдуть тією ж смугою: фото, яке не доїхало, не має
                 # чекати, поки людина згадає про нього руками.
                 blobs = await flush_blob_queue(session, _keys().node_id)
-            if delivered or blobs:
+            letters = 0
+            service_key = supabase_service_key()
+            if sb_url and service_key:
+                from db.models import User
+
+                async with AsyncSessionLocal() as session:
+                    owner = (
+                        await session.execute(select(User.id).order_by(User.id))
+                    ).scalars().first()
+                    if owner is not None:
+                        letters = await read_supabase_mailbox(
+                            session,
+                            _keys(),
+                            owner,
+                            url=sb_url,
+                            service_key=service_key,
+                        )
+            if delivered or blobs or letters:
                 logger.info(
-                    "черга месенджера: довезено %d, вкладень %d", delivered, blobs
+                    "черга месенджера: довезено %d, вкладень %d, зі скриньки Supabase %d",
+                    delivered,
+                    blobs,
+                    letters,
                 )
         except asyncio.CancelledError:
             raise

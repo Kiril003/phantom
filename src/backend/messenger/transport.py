@@ -1,8 +1,9 @@
 """Хто фізично несе кадр до вузла співрозмовника.
 
-Два шляхи, і обидва не потребують чужої хмари. Перший — пряма адреса: та сама
-мережа, власний домен, тунель. Другий — ретранслятор PHANTOM, коли прямої
-дороги немає (він сирий тунель, тож ним їде звичайний HTTP).
+Дороги за порядком чесності: пряма адреса (та сама мережа, власний домен,
+тунель), ретранслятор PHANTOM (сирий тунель, ним їде звичайний HTTP), і
+остання — Supabase-скринька: чужа хмара, якій ми довіряємо лише непрозорий
+конверт, коли перші дві дороги мовчать.
 
 Тут навмисно немає жодного «як правило, дійшло». Функція повертає True лише
 коли вузол-адресат відповів 200; усе інше — False, і повідомлення лишається
@@ -10,16 +11,29 @@
 """
 from __future__ import annotations
 
+import json
 import logging
-from typing import Optional
+from typing import Any, Optional
 
 import httpx
 
 logger = logging.getLogger(__name__)
 
-__all__ = ["deliver", "deliver_direct", "deliver_via_relay", "inbox_url", "mailbox_url"]
+__all__ = [
+    "deliver",
+    "deliver_direct",
+    "deliver_via_relay",
+    "deliver_via_supabase",
+    "inbox_url",
+    "mailbox_url",
+    "supabase_mailbox_endpoint",
+    "supabase_road",
+]
 
 _TIMEOUT_S = 8.0
+#: Стеля колонки frame у таблиці messenger_mailbox: конверт понад неї база
+#: відкине, тож чесніше не нести його зовсім і сказати False одразу.
+SUPABASE_LETTER_MAX = 131072
 
 
 def inbox_url(peer_address: str) -> str:
@@ -118,6 +132,80 @@ async def deliver_via_relay(
             await http.aclose()
 
 
+def supabase_mailbox_endpoint(url: str) -> str:
+    """Таблиця messenger_mailbox за адресою проєкту Supabase."""
+    raw = (url or "").strip().rstrip("/")
+    if not raw:
+        raise ValueError("порожня адреса скриньки Supabase")
+    if not raw.startswith(("http://", "https://")):
+        raw = f"https://{raw}"
+    return f"{raw}/rest/v1/messenger_mailbox"
+
+
+def supabase_road(config: Any) -> tuple[str, str]:
+    """Адреса і ключ четвертої дороги; («», «») — дороги немає."""
+    url = (getattr(config, "supabase_mailbox_url", "") or "").strip()
+    key = (getattr(config, "supabase_anon_key", "") or "").strip()
+    if url and key:
+        return url, key
+    return "", ""
+
+
+async def deliver_via_supabase(
+    url: str,
+    anon_key: str,
+    peer_node_id: str,
+    frame: bytes,
+    *,
+    from_node_id: str,
+    reply_address: str = "",
+    client: Optional[httpx.AsyncClient] = None,
+) -> bool:
+    """Кладе конверт у Supabase-скриньку адресата.
+
+    У колонці frame їде той самий конверт, що й у скриньку ретранслятора:
+    шифротекст кадру плюс імʼя відправника, без якого адресат не знайде
+    сесію. Ключ publishable за задумом — RLS пускає його лише на insert,
+    прочитати чужу скриньку ним не можна.
+    """
+    endpoint = supabase_mailbox_endpoint(url)
+    envelope: dict[str, str] = {"frame": frame.hex(), "from_node_id": from_node_id}
+    if reply_address:
+        envelope["reply_address"] = reply_address
+    letter = json.dumps(envelope, separators=(",", ":"))
+    if len(letter) > SUPABASE_LETTER_MAX:
+        logger.info(
+            "лист для %s завеликий для скриньки Supabase: %d", peer_node_id, len(letter)
+        )
+        return False
+    own = client is None
+    http = client or httpx.AsyncClient(timeout=_TIMEOUT_S)
+    try:
+        response = await http.post(
+            endpoint,
+            json={"recipient_node_id": peer_node_id, "frame": letter},
+            headers={
+                "apikey": anon_key,
+                "Authorization": f"Bearer {anon_key}",
+                "Prefer": "return=minimal",
+            },
+        )
+        if response.status_code in (200, 201, 204):
+            return True
+        logger.info(
+            "скринька Supabase не взяла лист для %s: %s",
+            peer_node_id,
+            response.status_code,
+        )
+        return False
+    except Exception as exc:  # noqa: BLE001
+        logger.info("до скриньки Supabase не достукались: %s", exc)
+        return False
+    finally:
+        if own:
+            await http.aclose()
+
+
 async def deliver(
     frame: bytes,
     *,
@@ -125,14 +213,17 @@ async def deliver(
     from_node_id: str,
     peer_address: str = "",
     relay: str = "",
+    supabase_url: str = "",
+    supabase_key: str = "",
     reply_address: str = "",
 ) -> bool:
-    """Одна дорога на вибір: спершу пряма, потім ретранслятор.
+    """Дороги по черзі: пряма, ретранслятор, Supabase-скринька.
 
     Пряма швидша й нікому не показує метаданих, тож пробуємо її першою. Але
     вона є рідко: більшість людей за NAT або в мобільній мережі, де прямої
     адреси просто немає. Тоді лист лягає в скриньку на ретрансляторі — він
-    возить непрозорі байти і вмісту не бачить.
+    возить непрозорі байти і вмісту не бачить. Коли мовчить і ретранслятор,
+    лишається чужа хмара — Supabase-скринька з тим самим непрозорим конвертом.
     """
     if peer_address:
         if await deliver_direct(
@@ -141,8 +232,14 @@ async def deliver(
         ):
             return True
     if relay:
-        return await deliver_via_relay(
+        if await deliver_via_relay(
             relay, peer_node_id, frame,
+            from_node_id=from_node_id, reply_address=reply_address,
+        ):
+            return True
+    if supabase_url and supabase_key:
+        return await deliver_via_supabase(
+            supabase_url, supabase_key, peer_node_id, frame,
             from_node_id=from_node_id, reply_address=reply_address,
         )
     return False

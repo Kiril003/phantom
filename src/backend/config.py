@@ -79,6 +79,12 @@ class PhantomConfig(BaseSettings):
     # IP-адресу. Поки свого не розгорнуто — зовнішнього шляху просто немає.
     relay_enabled: bool = True
     relay_url: str = ""
+    # Supabase-скринька — четверта дорога листа, коли мовчать і пряма, і
+    # ретранслятор. Ключ тут publishable: RLS пускає його лише на insert,
+    # читає скриньку тільки службовий ключ адресата (env SUPABASE_SERVICE_KEY,
+    # у конфіг і код він не потрапляє ніколи). Порожні поля — дороги немає.
+    supabase_mailbox_url: str = ""
+    supabase_anon_key: str = ""
 
     # ── Database ──────────────────────────────────────────────────────────────
     database_url: str = Field(

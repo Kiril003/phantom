@@ -51,7 +51,9 @@ from messenger.purge import (
 )
 from messenger.transport import deliver
 from node.identity import node_id
-from security.auth import get_current_user
+# Месенджер приймає і користувацький JWT, і токен спареного пристрою:
+# телефон власника — повноцінний клієнт вузла (рішення власника 23.08.2026).
+from security.device_auth import get_user_or_device_user
 
 _node_keys: KeyStore | None = None
 
@@ -105,7 +107,7 @@ class RelayStatus(BaseModel):
 @router.get("/relay/status", response_model=RelayStatus)
 async def get_relay_status(
     request: Request,
-    _user: User = Depends(get_current_user),
+    _user: User = Depends(get_user_or_device_user),
 ) -> RelayStatus:
     client = getattr(request.app.state, "relay_client", None)
     if client is None:
@@ -243,7 +245,7 @@ async def _conversations_for(user: User, session: AsyncSession) -> list[Conversa
 
 @router.get("/conversations", response_model=list[ConversationOut])
 async def list_conversations(
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_user_or_device_user),
     session: AsyncSession = Depends(get_db),
 ) -> list[ConversationOut]:
     return await _conversations_for(user, session)
@@ -256,7 +258,7 @@ class BootstrapIn(BaseModel):
 @router.post("/bootstrap", response_model=list[ConversationOut])
 async def bootstrap_conversations(
     payload: BootstrapIn,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_user_or_device_user),
     session: AsyncSession = Depends(get_db),
 ) -> list[ConversationOut]:
     """Первинний список розмов. Ідемпотентний за побудовою.
@@ -323,7 +325,7 @@ async def bootstrap_conversations(
 )
 async def create_conversation(
     payload: ConversationIn,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_user_or_device_user),
     session: AsyncSession = Depends(get_db),
 ) -> ConversationOut:
     row = MessengerConversation(
@@ -356,7 +358,7 @@ class RenameIn(BaseModel):
 async def mark_read(
     conversation_id: str,
     payload: ReadIn,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_user_or_device_user),
     session: AsyncSession = Depends(get_db),
 ) -> dict:
     row = await _owned_conversation(conversation_id, user, session)
@@ -373,7 +375,7 @@ async def mark_read(
 async def rename_conversation(
     conversation_id: str,
     payload: RenameIn,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_user_or_device_user),
     session: AsyncSession = Depends(get_db),
 ) -> ConversationOut:
     """Імʼя співрозмовнику дає власник — автоматика знає лише його вузол."""
@@ -521,7 +523,7 @@ async def list_messages(
     conversation_id: str,
     after_seq: int = 0,
     limit: int = 200,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_user_or_device_user),
     session: AsyncSession = Depends(get_db),
 ) -> list[MessageOut]:
     await _owned_conversation(conversation_id, user, session)
@@ -544,7 +546,7 @@ async def list_messages(
 async def append_message(
     conversation_id: str,
     payload: MessageIn,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_user_or_device_user),
     session: AsyncSession = Depends(get_db),
 ) -> MessageOut:
     conversation = await _owned_conversation(conversation_id, user, session)
@@ -649,7 +651,7 @@ class IdentityOut(BaseModel):
 
 
 @router.get("/identity", response_model=IdentityOut)
-async def get_identity(_user: User = Depends(get_current_user)) -> IdentityOut:
+async def get_identity(_user: User = Depends(get_user_or_device_user)) -> IdentityOut:
     """Те, що вузол дає співрозмовнику, аби той міг почати розмову.
 
     Публічні частини — ділитися ними безпечно. Одноразовий prekey кожен виклик
@@ -710,7 +712,7 @@ def _contact_out(row: MessengerContact) -> ContactOut:
 
 @router.get("/contacts", response_model=list[ContactOut])
 async def list_contacts(
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_user_or_device_user),
     session: AsyncSession = Depends(get_db),
 ) -> list[ContactOut]:
     rows = (
@@ -726,7 +728,7 @@ async def list_contacts(
 @router.post("/contacts", response_model=ContactOut, status_code=status.HTTP_201_CREATED)
 async def add_contact(
     payload: ContactIn,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_user_or_device_user),
     session: AsyncSession = Depends(get_db),
 ) -> ContactOut:
     """Приймає bundle співрозмовника і одразу зводить крипто-сесію.
@@ -786,7 +788,7 @@ async def add_contact(
 @router.post("/contacts/{contact_id}/verify", response_model=ContactOut)
 async def verify_contact(
     contact_id: str,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_user_or_device_user),
     session: AsyncSession = Depends(get_db),
 ) -> ContactOut:
     """Ставиться рукою власника після того, як число звірили голосом."""
@@ -906,7 +908,7 @@ async def receive_frame(
 
 @router.get("/queue/status")
 async def queue_status(
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_user_or_device_user),
     session: AsyncSession = Depends(get_db),
 ) -> dict:
     """«N листів чекають» — видимість черги, якої вимагали і панелі, і аудит."""
@@ -929,7 +931,7 @@ async def queue_status(
 
 @router.post("/queue/flush")
 async def queue_flush(
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_user_or_device_user),
     session: AsyncSession = Depends(get_db),
 ) -> dict:
     """Кнопка «Повторити зараз»: людина не мусить чекати фонову смугу."""
@@ -945,7 +947,7 @@ async def queue_flush(
 @router.delete("/conversations/{conversation_id}")
 async def delete_conversation(
     conversation_id: str,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_user_or_device_user),
     session: AsyncSession = Depends(get_db),
 ) -> dict:
     """Розмова зникає разом із вкладеннями — інакше вона зникає лише з очей."""
@@ -959,7 +961,7 @@ async def delete_conversation(
 @router.post("/conversations/{conversation_id}/clear")
 async def clear_history(
     conversation_id: str,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_user_or_device_user),
     session: AsyncSession = Depends(get_db),
 ) -> dict:
     """Історія зникає з ЦЬОГО вузла. Копію співрозмовника ми чіпати не можемо —
@@ -988,7 +990,7 @@ async def delete_message(
     conversation_id: str,
     message_id: str,
     for_everyone: bool = False,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_user_or_device_user),
     session: AsyncSession = Depends(get_db),
 ) -> dict:
     """Видаляє повідомлення. Для себе — назавжди; для всіх — ще й у нього.

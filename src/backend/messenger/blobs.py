@@ -38,6 +38,7 @@ logger = logging.getLogger(__name__)
 __all__ = [
     "BLOB_LIMIT_BYTES",
     "BlobRejected",
+    "GROUP_TOKEN_LIMIT",
     "InboundBlobGuard",
     "MAX_BLOB_ATTEMPTS",
     "ORIGIN_LIMIT",
@@ -89,35 +90,67 @@ _WIRE_MARK = "\x01phantom-kind:"
 #: із префіксом `in_`, і обрізати ім'я вже після приїзду було б пізно.
 ORIGIN_LIMIT = 60
 
+#: `g={gid}:{gseq}` — 32 hex групи, двокрапка і лічильник. Довше не буває, а
+#: обрізати цей токен уже після приїзду означало б відкрити кадр не тій групі.
+GROUP_TOKEN_LIMIT = 48
+
 #: Типи, які вузол уміє показати або виконати. Усе інше з дроту — текст.
 #: 'radio' нічого не показує: це шматок голосу для живого дзвінка, і саме тому
 #: він мусить бути тут — інакше приймальня визнала б його невідомим і поклала
 #: б у стрічку як текст, тобто 8 КБ base64 замість розмови.
-WIRE_KINDS = ("text", "image", "file", "delete", "radio")
+#:
+#: 'group:invite' — запрошення до групи: склад і bundle кожного учасника. У
+#: стрічку воно не лягає, як і 'delete', — воно ВИКОНУЄТЬСЯ. Решти групових
+#: типів (member/leave/rename) тут навмисне немає: їх ще не написано, а
+#: оголосити тип, який вузол не виконує, означало б обіцяти неіснуюче.
+WIRE_KINDS = ("text", "image", "file", "delete", "radio", "group:invite")
 
 
-def wrap_frame(kind: str, body: str, origin_id: str = "") -> str:
-    """Готує відкритий текст кадру: тип, origin і тіло.
+def wrap_frame(kind: str, body: str, origin_id: str = "", group: str = "") -> str:
+    """Готує відкритий текст кадру: тип, origin, група і тіло.
 
-    Текст без origin їде голим рядком — рівно як їхав, доки конверта не було.
+    Текст без origin і без групи їде голим рядком — рівно як їхав, доки
+    конверта не було.
+
+    Третій токен `g={gid}:{gseq}` і є вся різниця між груповим кадром і
+    особистим: тип, сесія й дорога однакові, тож text/image/file/delete
+    працюють у групі без окремих типів на кожен.
     """
     origin = (origin_id or "").strip()[:ORIGIN_LIMIT]
-    if kind == "text" and not origin:
+    token = (group or "").strip()[:GROUP_TOKEN_LIMIT]
+    if kind == "text" and not origin and not token:
         return body
-    head = f"{kind} {origin}" if origin else kind
+    head = kind
+    if origin:
+        head += f" {origin}"
+    if token:
+        head += f" g={token}"
     return f"{_WIRE_MARK}{head}\n{body}"
 
 
-def unwrap_frame(plaintext: str) -> tuple[str, str, str]:
-    """Розбирає кадр у (kind, body, origin). Без префікса — це текст."""
+def unwrap_frame(plaintext: str) -> tuple[str, str, str, str]:
+    """Розбирає кадр у (kind, body, origin, group). Без префікса — це текст.
+
+    Групу впізнаємо за префіксом `g=`, а не за місцем у рядку: старий кадр має
+    два токени і розбирається рівно як раніше, тож сумісність на дроті не
+    ламається навіть із вузлом, який про групи ще не знає.
+    """
     if not plaintext.startswith(_WIRE_MARK):
-        return "text", plaintext, ""
+        return "text", plaintext, "", ""
     head, _, body = plaintext.partition("\n")
-    kind, _, origin = head[len(_WIRE_MARK):].strip().partition(" ")
+    tokens = head[len(_WIRE_MARK):].strip().split()
+    kind = tokens[0] if tokens else ""
+    origin = ""
+    group = ""
+    for token in tokens[1:]:
+        if token.startswith("g="):
+            group = token[2:]
+        elif not origin:
+            origin = token
     # Тип приїхав ззовні — беремо лише те, що вміємо показати.
     if kind not in WIRE_KINDS:
-        return "text", plaintext, ""
-    return kind, body, origin.strip()[:ORIGIN_LIMIT]
+        return "text", plaintext, "", ""
+    return kind, body, origin[:ORIGIN_LIMIT], group[:GROUP_TOKEN_LIMIT]
 
 
 # ── Байти на диску ───────────────────────────────────────────────────────────

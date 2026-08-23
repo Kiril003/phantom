@@ -1453,6 +1453,18 @@ class MessengerConversation(Base):
     #: Показова розмова: вміст вигаданий і позначений як вигаданий. Так вітрина
     #: можливостей лишається, але нікого не вводить в оману.
     is_demo: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    #: Група живе в цій самій таблиці з kind='group' — і тому список, курсор
+    #: прочитаного, пошук і видалення працюють без жодної окремої стрічки.
+    #: 16 байтів hex: спільне імʼя групи на всіх вузлах.
+    group_id: Mapped[Optional[str]] = mapped_column(String(32), nullable=True, index=True)
+    #: Чиї кадри про склад визнаємо. Джерело правди про членство — творець,
+    #: і це єдине адміністративне правило, яке крипта справді тримає.
+    group_creator_node_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    #: Версія складу.
+    group_epoch: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    #: Відбиток складу — 16 hex, які двоє читають вголос. Не заміна підписаному
+    #: gossip: він лише робить розбіжний склад видимим.
+    group_fingerprint: Mapped[Optional[str]] = mapped_column(String(16), nullable=True)
     #: Останній прочитаний seq. Різниця з next_seq-1 і є лічильником непрочитаного.
     last_read_seq: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     #: Наступний номер у стрічці. Порядок повідомлень тримається на ньому, а не
@@ -1570,6 +1582,77 @@ class MessengerBlob(Base):
     sha256: Mapped[str] = mapped_column(String(64), nullable=False)
     #: З ким саме це перевезення. Для вхідного — єдина зачіпка, поки немає розмови.
     peer_node_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True, index=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    last_attempt_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, nullable=False)
+
+
+class MessengerGroupMember(Base):
+    """Один учасник групи очима ЦЬОГО вузла.
+
+    Копія складу, а не джерело правди: правду веде творець, а тут лежить те,
+    що він розповів. Поруч із іменем і ключем — те, що потрібно, аби фізично
+    довезти кадр: адреса вузла і власна попарна сесія через contact_id.
+    """
+
+    __tablename__ = "messenger_group_members"
+    __table_args__ = (
+        UniqueConstraint("conversation_id", "node_id", name="uq_messenger_group_member"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    conversation_id: Mapped[str] = mapped_column(
+        ForeignKey("messenger_conversations.id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    node_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    display_name: Mapped[str] = mapped_column(String(120), nullable=False)
+    #: Порожній, доки попарної сесії з цією людиною ще немає: меш зводиться
+    #: ліниво, на першому повідомленні, а не на вході в групу.
+    contact_id: Mapped[Optional[str]] = mapped_column(
+        ForeignKey("messenger_contacts.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    #: Bundle БЕЗ одноразового prekey: один OPK не ділиться між учасниками —
+    #: другий ініціатор отримав би відмову, і меш ніколи б не зійшовся.
+    bundle_json: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    address: Mapped[Optional[str]] = mapped_column(String(255), nullable=True)
+    #: creator — веде склад; member — усі решта. Інших ролей немає і не буде:
+    #: будь-яке інше «право» криптографічно незабезпечуване.
+    role: Mapped[str] = mapped_column(String(8), default="member", nullable=False)
+    #: active | left | removed | pending. pending — це МИ самі, доки не
+    #: прийняли запрошення: приєднувати мовчки вузол не має права.
+    state: Mapped[str] = mapped_column(String(12), default="active", nullable=False)
+    added_epoch: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    removed_epoch: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    last_delivered_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
+    failed_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+
+
+class MessengerGroupDelivery(Base):
+    """Один кадр одному учаснику — рядок черги віяра.
+
+    Окрема таблиця, бо в messenger_messages колонка outbound_frame ОДНА, а
+    кадр для кожного отримувача свій і неповторний: перешифрувати означало б
+    зрушити храповик удруге й надіслати людині два різні повідомлення.
+    """
+
+    __tablename__ = "messenger_group_deliveries"
+    __table_args__ = (
+        UniqueConstraint(
+            "message_id", "member_node_id", name="uq_messenger_group_delivery"
+        ),
+        Index("ix_messenger_group_deliveries_state", "state"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    message_id: Mapped[str] = mapped_column(
+        ForeignKey("messenger_messages.id", ondelete="CASCADE"), nullable=False, index=True
+    )
+    member_node_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    outbound_frame: Mapped[Optional[str]] = mapped_column(Text, nullable=True)
+    #: queued — чекає; sent — вузол-адресат узяв; failed — дороги немає взагалі.
+    state: Mapped[str] = mapped_column(String(12), default="queued", nullable=False)
     attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
     last_attempt_at: Mapped[Optional[datetime]] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, nullable=False)

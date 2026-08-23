@@ -99,6 +99,76 @@ async def conversation_for(
     return row
 
 
+async def _group_conversation(
+    session: AsyncSession,
+    keys: KeyStore,
+    owner_user_id: str,
+    contact: MessengerContact,
+    kind: str,
+    body: str,
+    group_id: str,
+) -> Optional[MessengerConversation]:
+    """Яка розмова прийме груповий кадр — і чи прийме взагалі.
+
+    Правила тут навмисно суворі: інакше груповий токен у конверті став би
+    способом матеріалізувати будь-що в чужому списку розмов.
+    """
+    from messenger.groups import accept_invite, conversation_by_group_id, member_of
+
+    if kind == "group:invite":
+        return await accept_invite(
+            session,
+            keys,
+            owner_user_id,
+            contact.peer_node_id,
+            body,
+            expected_group_id=group_id,
+        )
+
+    conversation = await conversation_by_group_id(session, owner_user_id, group_id)
+    if conversation is None:
+        # Кадр про групу, якої ми не знаємо. Приєднати нас до неї міг би лише
+        # group:invite, а текст сам собою — ні.
+        return None
+    member = await member_of(session, conversation.id, contact.peer_node_id)
+    if member is None or member.state != "active":
+        # Пише той, кого немає в нашій копії складу. Мовчки відкидаємо.
+        return None
+    return conversation
+
+
+async def _group_client_id(
+    session: AsyncSession,
+    conversation_id: str,
+    origin: str,
+    author_id: str,
+) -> tuple[str, Optional[MessengerMessage]]:
+    """Імʼя рядка в груповій стрічці плюс той рядок, якщо він уже є.
+
+    Дедуп тримається на UniqueConstraint(conversation_id, client_id) — той
+    самий кадр удруге дає той самий рядок. Але в групі origin вигадують РІЗНІ
+    вузли, тож збіг двох імен від двох людей теоретично можливий, і тоді
+    унікальність зняла б чуже повідомлення. Такий збіг розводимо власним
+    імʼям, а не втратою рядка.
+    """
+    candidate = f"in_{origin[:ORIGIN_LIMIT]}" if origin else ""
+    if not candidate:
+        return f"in_{uuid.uuid4().hex[:16]}", None
+    existing = (
+        await session.execute(
+            select(MessengerMessage).where(
+                MessengerMessage.conversation_id == conversation_id,
+                MessengerMessage.client_id == candidate,
+            )
+        )
+    ).scalar_one_or_none()
+    if existing is None:
+        return candidate, None
+    if existing.author_id == author_id:
+        return candidate, existing
+    return f"in_{uuid.uuid4().hex[:16]}", None
+
+
 async def accept_frame(
     session: AsyncSession,
     keys: KeyStore,
@@ -160,10 +230,29 @@ async def accept_frame(
         contact.peer_address = reply_address
     contact.updated_at = _now()
 
-    conversation = await conversation_for(session, owner_user_id, contact)
     # Тип приїхав у самому кадрі. Старий кадр без конверта лишається текстом,
     # тож уже зведені сесії від цього нічого не помічають.
-    kind, body, origin = unwrap_frame(plaintext.decode())
+    kind, body, origin, group = unwrap_frame(plaintext.decode())
+    group_id = group.partition(":")[0]
+
+    if group_id or kind == "group:invite":
+        # Груповий кадр НЕ має права матеріалізувати особисту розмову: інакше
+        # будь-хто заводив би собі рядок у чужому списку самим лише кадром.
+        conversation = await _group_conversation(
+            session, keys, owner_user_id, contact, kind, body, group_id
+        )
+        if conversation is None:
+            # Невідома група, не той відправник або зіпсоване запрошення.
+            # Стан храповика вже зрушено — його треба зберегти в будь-якому
+            # разі, інакше наступний кадр від цієї людини не розшифрується.
+            await session.commit()
+            return None
+        if kind == "group:invite":
+            conversation.updated_at = _now()
+            await session.commit()
+            return None
+    else:
+        conversation = await conversation_for(session, owner_user_id, contact)
 
     if kind == "radio":
         # Голос, а не лист. Стан храповика вже зрушено вище і його треба
@@ -186,16 +275,23 @@ async def accept_frame(
         await session.refresh(target)
         return target
 
+    # Ім'я з вузла-відправника під префіксом: воно єдине спільне для двох
+    # вузлів, і саме за ним потім приїде видалення. Немає origin (старий
+    # кадр) — лишаємось із власним випадковим, але видалити таке ззовні
+    # вже не вийде, і вдавати протилежне не будемо.
+    client_id, duplicate = await _group_client_id(
+        session, conversation.id, origin, contact.peer_node_id
+    )
+    if duplicate is not None:
+        # Той самий кадр приїхав удруге — двома дорогами або після повтору.
+        # Стан храповика вже зрушено, зберігаємо його і віддаємо наявний рядок.
+        await session.commit()
+        return duplicate
+
     row = MessengerMessage(
         id=str(uuid.uuid4()),
         conversation_id=conversation.id,
-        # Ім'я з вузла-відправника під префіксом: воно єдине спільне для двох
-        # вузлів, і саме за ним потім приїде видалення. Немає origin (старий
-        # кадр) — лишаємось із власним випадковим, але видалити таке ззовні
-        # вже не вийде, і вдавати протилежне не будемо.
-        client_id=(
-            f"in_{origin[:ORIGIN_LIMIT]}" if origin else f"in_{uuid.uuid4().hex[:16]}"
-        ),
+        client_id=client_id,
         seq=conversation.next_seq,
         author_id=contact.peer_node_id,
         author_name=contact.display_name,

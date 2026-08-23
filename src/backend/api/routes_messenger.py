@@ -206,6 +206,11 @@ class ConversationOut(BaseModel):
     updated_at: datetime
     contact_id: Optional[str] = None
     is_demo: bool = False
+    #: Група: спільне імʼя на всіх вузлах, версія складу і відбиток для звірки
+    #: вголос. Для розмови з однією людиною тут порожньо.
+    group_id: Optional[str] = None
+    group_epoch: Optional[int] = None
+    group_fingerprint: Optional[str] = None
     #: null — розмова ні з ким (нотатки собі), тож і звіряти нема кого.
     contact_verified: Optional[bool] = None
     peer_node_id: Optional[str] = None
@@ -243,6 +248,9 @@ def _conversation_out(
         updated_at=row.updated_at,
         contact_id=row.contact_id,
         is_demo=row.is_demo,
+        group_id=row.group_id,
+        group_epoch=row.group_epoch,
+        group_fingerprint=row.group_fingerprint,
         contact_verified=(contact.verified_at is not None) if contact else None,
         peer_node_id=contact.peer_node_id if contact else None,
         unread_count=max(0, (row.next_seq - 1) - row.last_read_seq),
@@ -595,6 +603,27 @@ async def append_message(
 ) -> MessageOut:
     conversation = await _owned_conversation(conversation_id, user, session)
 
+    # Відмовляємо ДО того, як рядок ляже в базу: інакше в стрічці лишилось би
+    # повідомлення, якого ніхто не отримав, — саме та тиха брехня, від якої
+    # черга повторів і рятує.
+    if conversation.kind == "group" and conversation.group_id:
+        from messenger.groups import self_member
+
+        if payload.kind != "text":
+            raise HTTPException(
+                status_code=400,
+                detail=(
+                    "вкладення в групі — хвиля 4: байти довозить окрема дорога, "
+                    "якої для групи ще немає, і кадр із ключем без байтів був би "
+                    "порожньою обіцянкою"
+                ),
+            )
+        mine = await self_member(session, conversation.id, _keys().node_id)
+        if mine is None or mine.state != "active":
+            raise HTTPException(
+                status_code=400, detail="ви ще не в цій групі — запрошення не прийнято"
+            )
+
     # Повтор після обриву — не помилка. Віддаємо те, що вже лежить, і мовчимо.
     existing = (
         await session.execute(
@@ -635,6 +664,37 @@ async def append_message(
     await session.commit()
     await session.refresh(row)
     out = _message_out(row)
+
+    # Група: один текст — N попарних кадрів, кожен своєю сесією. Галочка
+    # «надіслано» зʼявиться лише коли ВСІ вузли складу взяли свій кадр.
+    if (
+        conversation.kind == "group"
+        and conversation.group_id
+        and payload.body is not None
+    ):
+        from messenger.groups import GroupError, fan_out, settle_message_state
+
+        try:
+            spread = await fan_out(
+                session,
+                _keys(),
+                user.id,
+                conversation,
+                row,
+                kind=payload.kind,
+                body=payload.body,
+            )
+        except GroupError as exc:
+            raise HTTPException(status_code=400, detail=str(exc)) from exc
+        out.delivery = await settle_message_state(session, row.id)
+        out.delivery_state = out.delivery
+        await session.commit()
+        if spread["skipped"]:
+            logger.info(
+                "у групі %s без ключа лишилось %d учасників",
+                conversation.group_id[:8],
+                spread["skipped"],
+            )
 
     # Розмова зі співрозмовником — готуємо кадр і віддаємо транспорту. Поки
     # транспорту немає, чесно кажемо queued: галочка «надіслано» в клієнті
@@ -856,6 +916,209 @@ async def verify_contact(
     return _contact_out(row)
 
 
+# ── Групи ────────────────────────────────────────────────────────────────────
+
+
+class GroupIn(BaseModel):
+    title: str = Field(min_length=1, max_length=200)
+    #: Тільки наявні контакти: щоб зашифрувати людині, потрібен її ключ, а він
+    #: береться з контакту. Запрошень посиланням і QR у групу немає.
+    contact_ids: list[str] = Field(min_length=1)
+    #: Як нас звати в цій групі для інших. Вузол свого імені не знає.
+    display_name: str = Field(default="Я", max_length=120)
+
+
+class GroupMemberOut(BaseModel):
+    node_id: str
+    display_name: str
+    role: str
+    state: str
+    address: Optional[str] = None
+    #: Звірка — на КОЖНУ ПАРУ окремо. Одного числа на групу не існує:
+    #: спільного секрету в групі немає, є N попарних сесій.
+    verified: bool = False
+    session_ready: bool = False
+    last_delivered_at: Optional[datetime] = None
+    failed_attempts: int = 0
+    #: True після MAX_ATTEMPTS невдалих спроб. Не привід виганяти людину —
+    #: привід чесно написати «не доїжджає».
+    undeliverable: bool = False
+
+
+class GroupOut(BaseModel):
+    conversation_id: str
+    group_id: str
+    title: str
+    epoch: int
+    #: 16 hex, які двоє читають вголос. Збіглось — склад не роздвоєно.
+    fingerprint: str
+    creator_node_id: str
+    own_node_id: str
+    #: Наш власний стан у складі: pending, доки запрошення не прийнято.
+    own_state: str
+    #: Скільки пар звірено з усіх. Замок — лише коли всі.
+    verified_pairs: int
+    member_count: int
+    members: list[GroupMemberOut]
+
+
+async def _group_out(
+    conversation: MessengerConversation, user: User, session: AsyncSession
+) -> GroupOut:
+    from messenger.groups import MAX_GROUP_ATTEMPTS, all_members
+
+    keys = _keys()
+    members = await all_members(session, conversation.id)
+    contacts = {
+        c.id: c
+        for c in (
+            await session.execute(
+                select(MessengerContact).where(MessengerContact.owner_user_id == user.id)
+            )
+        ).scalars().all()
+    }
+    out: list[GroupMemberOut] = []
+    verified = 0
+    own_state = "unknown"
+    for member in members:
+        contact = contacts.get(member.contact_id or "")
+        if contact is None:
+            contact = next(
+                (c for c in contacts.values() if c.peer_node_id == member.node_id), None
+            )
+        is_verified = contact is not None and contact.verified_at is not None
+        if member.node_id == keys.node_id:
+            own_state = member.state
+        elif is_verified:
+            verified += 1
+        out.append(
+            GroupMemberOut(
+                node_id=member.node_id,
+                display_name=member.display_name,
+                role=member.role,
+                state=member.state,
+                address=contact.peer_address if contact else member.address,
+                verified=is_verified,
+                session_ready=bool(contact is not None and contact.session_blob),
+                last_delivered_at=member.last_delivered_at,
+                failed_attempts=member.failed_attempts,
+                undeliverable=member.failed_attempts >= MAX_GROUP_ATTEMPTS,
+            )
+        )
+    return GroupOut(
+        conversation_id=conversation.id,
+        group_id=conversation.group_id or "",
+        title=conversation.title,
+        epoch=conversation.group_epoch or 1,
+        fingerprint=conversation.group_fingerprint or "",
+        creator_node_id=conversation.group_creator_node_id or "",
+        own_node_id=keys.node_id,
+        own_state=own_state,
+        verified_pairs=verified,
+        member_count=len(out),
+        members=out,
+    )
+
+
+@router.post("/groups", response_model=GroupOut, status_code=status.HTTP_201_CREATED)
+async def create_group_route(
+    payload: GroupIn,
+    user: User = Depends(get_user_or_device_user),
+    session: AsyncSession = Depends(get_db),
+) -> GroupOut:
+    """Заводить групу з наявних контактів і розсилає запрошення.
+
+    Прав адміністратора тут немає жодних — ні мута, ні «лише читання». Коли в
+    учасника є склад і попарні сесії, він фізично може написати кожному
+    напряму, і вузол цього не спинить. Єдине, що ми обіцяємо і виконуємо:
+    склад веде творець.
+    """
+    from messenger.groups import GroupError, create_group, send_invites
+
+    contacts = list(
+        (
+            await session.execute(
+                select(MessengerContact).where(
+                    MessengerContact.owner_user_id == user.id,
+                    MessengerContact.id.in_(payload.contact_ids),
+                )
+            )
+        ).scalars().all()
+    )
+    missing = set(payload.contact_ids) - {c.id for c in contacts}
+    if missing:
+        raise HTTPException(
+            status_code=400, detail=f"немає таких контактів: {sorted(missing)}"
+        )
+
+    try:
+        conversation = await create_group(
+            session,
+            _keys(),
+            user.id,
+            title=payload.title,
+            contacts=contacts,
+            own_display_name=payload.display_name,
+        )
+    except GroupError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    await session.commit()
+
+    spread = await send_invites(session, _keys(), user.id, conversation)
+    logger.info(
+        "групу %s створено: запрошень доїхало %d, чекає %d, без ключа %d",
+        conversation.group_id[:8],
+        spread["sent"],
+        spread["queued"],
+        spread["skipped"],
+    )
+    return await _group_out(conversation, user, session)
+
+
+async def _owned_group(
+    conversation_id: str, user: User, session: AsyncSession
+) -> MessengerConversation:
+    row = await _owned_conversation(conversation_id, user, session)
+    if row.kind != "group" or not row.group_id:
+        raise HTTPException(status_code=400, detail="ця розмова не є групою")
+    return row
+
+
+@router.get("/groups/{conversation_id}", response_model=GroupOut)
+async def get_group(
+    conversation_id: str,
+    user: User = Depends(get_user_or_device_user),
+    session: AsyncSession = Depends(get_db),
+) -> GroupOut:
+    conversation = await _owned_group(conversation_id, user, session)
+    return await _group_out(conversation, user, session)
+
+
+@router.post("/groups/{conversation_id}/accept", response_model=GroupOut)
+async def accept_group(
+    conversation_id: str,
+    user: User = Depends(get_user_or_device_user),
+    session: AsyncSession = Depends(get_db),
+) -> GroupOut:
+    """Згода на запрошення. До неї вузол у цю групу нічого не пише.
+
+    Історії до цієї миті у вас немає і не буде: ратчет навмисно не дозволяє
+    віддати старі ключі, а переслати старі повідомлення заново означало б
+    вдавати історію.
+    """
+    conversation = await _owned_group(conversation_id, user, session)
+    from messenger.groups import self_member
+
+    mine = await self_member(session, conversation.id, _keys().node_id)
+    if mine is None:
+        raise HTTPException(status_code=400, detail="вас немає у складі цієї групи")
+    if mine.state == "pending":
+        mine.state = "active"
+        conversation.updated_at = _now()
+        await session.commit()
+    return await _group_out(conversation, user, session)
+
+
 # ── Приймальня для чужих вузлів ──────────────────────────────────────────────
 
 
@@ -973,7 +1236,29 @@ async def queue_status(
             )
         )
     ).scalar_one()
-    return {"queued": int(n)}
+    # Групові кадри лежать окремими рядками: одне повідомлення на 31 отримувача
+    # може стояти в черзі 31 рядком, і показати «1» означало б применшити борг.
+    from db.models import MessengerGroupDelivery
+
+    group = (
+        await session.execute(
+            select(func.count())
+            .select_from(MessengerGroupDelivery)
+            .join(
+                MessengerMessage,
+                MessengerMessage.id == MessengerGroupDelivery.message_id,
+            )
+            .join(
+                MessengerConversation,
+                MessengerConversation.id == MessengerMessage.conversation_id,
+            )
+            .where(
+                MessengerConversation.owner_user_id == user.id,
+                MessengerGroupDelivery.state == "queued",
+            )
+        )
+    ).scalar_one()
+    return {"queued": int(n), "group_frames_queued": int(group)}
 
 
 @router.post("/queue/flush")
@@ -985,10 +1270,12 @@ async def queue_flush(
     from messenger.redelivery import flush_queue
 
     from messenger.blobs import flush_blob_queue
+    from messenger.groups import flush_group_queue
 
     delivered = await flush_queue(session, _keys().node_id)
     blobs = await flush_blob_queue(session, _keys().node_id)
-    return {"delivered": delivered, "blobs": blobs}
+    group = await flush_group_queue(session, _keys().node_id)
+    return {"delivered": delivered, "blobs": blobs, "group_frames": group}
 
 
 @router.delete("/conversations/{conversation_id}")
@@ -1062,6 +1349,18 @@ async def delete_message(
     ).scalar_one_or_none()
     if row is None:
         raise HTTPException(status_code=404, detail="message not found")
+
+    if for_everyone and conversation.kind == "group" and conversation.group_id:
+        # Видалення для всіх у групі — хвиля 3. Стерти лише в себе і сказати
+        # «для всіх» означало б віддати людині впевненість, якої немає.
+        raise HTTPException(
+            status_code=400,
+            detail=(
+                "видалення для всіх у групі — хвиля 3: службовий кадр треба "
+                "розвіяти на весь склад, а цього ще не написано. Видалити "
+                "лише в себе можна вже зараз"
+            ),
+        )
 
     if not for_everyone:
         # Локальне видалення: рядок іде цілком, байти — з нашого диска.

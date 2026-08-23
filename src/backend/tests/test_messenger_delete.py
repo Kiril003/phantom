@@ -379,8 +379,8 @@ async def test_the_route_carries_the_delete_frame_to_the_other_node(auth_root_cl
     from messenger.blobs import unwrap_frame
 
     peer_side, plain = Session.accept(peer, sent[0])
-    assert unwrap_frame(plain.decode()) == ("text", "прощавай", "c_bye")
-    kind, body, _origin = unwrap_frame(peer_side.decrypt(sent[1]).decode())
+    assert unwrap_frame(plain.decode()) == ("text", "прощавай", "c_bye", "")
+    kind, body, _origin, _group = unwrap_frame(peer_side.decrypt(sent[1]).decode())
     assert (kind, body) == ("delete", "c_bye")
 
     # У нас лишився надгробок, а не рядок із текстом.
@@ -464,7 +464,7 @@ async def test_a_delete_for_an_offline_peer_waits_in_the_queue(auth_root_client,
     from messenger.blobs import unwrap_frame
 
     peer_side, plain = Session.accept(peer, carried[0])
-    kind, body, _origin = unwrap_frame(plain.decode())
+    kind, body, _origin, _group = unwrap_frame(plain.decode())
     assert (kind, body) == ("delete", "c_off")
 
     async with AsyncSessionLocal() as session:

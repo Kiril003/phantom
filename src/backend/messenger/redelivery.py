@@ -284,6 +284,12 @@ async def redelivery_loop(interval_s: float = 45.0) -> None:
                 # Вкладення їдуть тією ж смугою: фото, яке не доїхало, не має
                 # чекати, поки людина згадає про нього руками.
                 blobs = await flush_blob_queue(session, _keys().node_id)
+                # Групові кадри — тією ж смугою і тим самим LIMIT 50: у групі
+                # на 32 одне застрягле повідомлення (31 рядок) ще вміщається
+                # в один прохід і не морить голодом решту черги.
+                from messenger.groups import flush_group_queue
+
+                group = await flush_group_queue(session, _keys().node_id)
             letters = 0
             parked = 0
             service_key = supabase_service_key()
@@ -307,12 +313,13 @@ async def redelivery_loop(interval_s: float = 45.0) -> None:
                         # Вкладення, що чекають у хмарі: ключ до них уже в
                         # стрічці, лишилось забрати байти.
                         parked = await fetch_parked_blobs(session, _keys(), owner)
-            if delivered or blobs or letters or parked:
+            if delivered or blobs or group or letters or parked:
                 logger.info(
-                    "черга месенджера: довезено %d, вкладень %d, "
+                    "черга месенджера: довезено %d, вкладень %d, групових %d, "
                     "зі скриньки Supabase %d, з хмари %d",
                     delivered,
                     blobs,
+                    group,
                     letters,
                     parked,
                 )

@@ -168,7 +168,15 @@ function MachineBody({
           Слухачі вузла
         </div>
         <div className="grid grid-cols-2 gap-x-3 gap-y-1 text-xs">
-          <ListenerRow name="HTTP" word={`${data.listeners.http.host}:${data.listeners.http.port}`} />
+          <ListenerRow
+            name="HTTP"
+            word={
+              data.listeners.http.port !== null
+                ? `${data.listeners.http.host}:${data.listeners.http.port}`
+                : 'сокет не названий сервером'
+            }
+            dead={data.listeners.http.port === null}
+          />
           <ListenerRow
             name="TLS"
             word={

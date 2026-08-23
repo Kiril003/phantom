@@ -32,7 +32,8 @@ export interface MachinePulse {
   disk: { total: number; used: number; pct: number };
   uptime: { host_s: number; backend_s: number };
   listeners: {
-    http: { host: string; port: number };
+    /** Справжній сокет, що прийняв запит; null — ASGI-сервер його не назвав. */
+    http: { host: string | null; port: number | null };
     tls: { state: string; port: number; bound: string[] };
     mdns: { state: string };
     ws_clients: number;

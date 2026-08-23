@@ -51,9 +51,13 @@ class TestCockpitMachine:
         assert body["uptime"]["host_s"] >= body["uptime"]["backend_s"] >= 0
 
         listeners = body["listeners"]
-        from config import config
-
-        assert listeners["http"]["port"] == config.port
+        # HTTP-слухач — справжній сокет запиту (request.scope["server"]),
+        # не config.port: стенд ганяє uvicorn --port 8010, і config там
+        # бреше. У TestClient сокет зветься ("testserver", 80).
+        http = listeners["http"]
+        assert (http["port"] is None and http["host"] is None) or (
+            isinstance(http["port"], int) and http["port"] > 0 and isinstance(http["host"], str)
+        )
         # TLS у тестовому app не піднімається лайфспаном → чесне слово.
         assert listeners["tls"]["state"] in ("слухає", "не піднявся")
         assert isinstance(listeners["mdns"]["state"], str)

@@ -84,6 +84,16 @@ async def get_machine(
         0, int(time.time() - psutil.Process(os.getpid()).create_time())
     )
 
+    # HTTP-слухач: СПРАВЖНІЙ сокет, що прийняв цей запит (request.scope
+    # ["server"]), НЕ config.port — стенд ганяє `uvicorn --port 8010`, і
+    # config.port (8000) там просто брехня. Нема сокета в scope (ASGI-
+    # сервер його не віддав) — чесний null, не конфіг-побажання.
+    server = request.scope.get("server")
+    if isinstance(server, (tuple, list)) and len(server) == 2 and server[1]:
+        http: dict[str, Any] = {"host": str(server[0]), "port": int(server[1])}
+    else:
+        http = {"host": None, "port": None}
+
     tls_listener = getattr(request.app.state, "tls_listener", None)
     if tls_listener is not None:
         tls: dict[str, Any] = {
@@ -112,7 +122,7 @@ async def get_machine(
         },
         "uptime": {"host_s": host_uptime_s, "backend_s": backend_uptime_s},
         "listeners": {
-            "http": {"host": config.host, "port": int(config.port)},
+            "http": http,
             "tls": tls,
             "mdns": {"state": _mdns_state()},
             "ws_clients": hub.client_count,

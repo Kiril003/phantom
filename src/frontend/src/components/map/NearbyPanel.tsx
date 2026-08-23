@@ -8,7 +8,7 @@
  * instead of silently disappearing so the operator always knows the
  * subsystem is alive.
  */
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { MapPin, Landmark, Brain, ChevronRight, RefreshCw, AlertTriangle } from 'lucide-react';
 import {
   mapApi,
@@ -46,6 +46,20 @@ export function NearbyPanel({
   const [expanded, setExpanded] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Гонтлет Р2, Н1: заголовок обіцяє 9, у вікні видно 5 — і жодного натяку,
+  // що далі є ще. Стежимо, чи список обрізаний вікном, і кажемо це словом.
+  const listRef = useRef<HTMLDivElement | null>(null);
+  const [hasBelow, setHasBelow] = useState(false);
+  const measureOverflow = useCallback(() => {
+    const el = listRef.current;
+    if (!el) return;
+    setHasBelow(el.scrollTop + el.clientHeight < el.scrollHeight - 4);
+  }, []);
+  useEffect(() => {
+    if (!expanded) return;
+    const raf = requestAnimationFrame(measureOverflow);
+    return () => cancelAnimationFrame(raf);
+  }, [expanded, data, measureOverflow]);
 
   const shouldFetch = lat !== null && lon !== null && zoom >= MIN_ZOOM;
 
@@ -170,7 +184,11 @@ export function NearbyPanel({
         </button>
       </header>
 
-      <div className="flex-1 overflow-y-auto py-2 custom-scrollbar">
+      <div
+        ref={listRef}
+        onScroll={measureOverflow}
+        className="flex-1 overflow-y-auto py-2 custom-scrollbar"
+      >
         {data?.remembered && data.remembered.length > 0 && (
           <Section icon={<Brain size={14} />} label="Пам'ять" tone="cyan">
             {data.remembered.map((m) => (
@@ -216,6 +234,15 @@ export function NearbyPanel({
           </Section>
         )}
       </div>
+      {hasBelow && (
+        <div
+          aria-hidden
+          className="flex items-center justify-center gap-1 py-0.5 text-[9px] font-bold uppercase tracking-widest text-[color:var(--ink-muted)] border-t border-[color:var(--glass-border)] bg-[color:var(--surface-raised)]"
+        >
+          <ChevronRight size={10} className="rotate-90" />
+          <span>нижче ще</span>
+        </div>
+      )}
       <footer className="px-4 py-2 text-[9px] font-bold uppercase tracking-widest text-[color:var(--ink-muted)] border-t border-[color:var(--glass-border)] flex items-center justify-between">
         <span>Радіус {radiusM} м</span>
         <button

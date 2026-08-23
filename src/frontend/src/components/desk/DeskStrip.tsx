@@ -10,16 +10,18 @@ export const DESK_STRIP_TOUCH_H = 44;
  * Первинний вказівник грубий (палець)? Живе слухачем: планшет із
  * докнутою клавіатурою міняє відповідь на льоту. Без matchMedia
  * (jsdom/старий WebView) чесно вважаємо вказівник точним.
+ * any-pointer, не pointer: тач-ноутбук із трекпадом-первинним звітує
+ * pointer:fine, а пальцю на його екрані все одно потрібні 44px.
  */
 function usePointerCoarse(): boolean {
   const [coarse, setCoarse] = useState<boolean>(() =>
     typeof window !== 'undefined' && typeof window.matchMedia === 'function'
-      ? window.matchMedia('(pointer: coarse)').matches
+      ? window.matchMedia('(any-pointer: coarse)').matches
       : false,
   );
   useEffect(() => {
     if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') return;
-    const mq = window.matchMedia('(pointer: coarse)');
+    const mq = window.matchMedia('(any-pointer: coarse)');
     const onChange = (e: MediaQueryListEvent) => setCoarse(e.matches);
     // Стан міг змінитись між рендером і підпискою.
     setCoarse(mq.matches);

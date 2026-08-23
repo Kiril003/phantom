@@ -49,8 +49,12 @@ export const SecureMediaBubble: React.FC<Props> = ({ msg, isSelf, onOpenLightbox
   );
   const [detail, setDetail] = useState('');
   const [asking, setAsking] = useState(false);
-  /** Стан ПЕРЕВЕЗЕННЯ свого вкладення: доїхало до співрозмовника чи ще ні. */
-  const [outState, setOutState] = useState<string | null>(null);
+  /**
+   * Стан ПЕРЕВЕЗЕННЯ свого вкладення: доїхало до співрозмовника чи ще ні.
+   * Початкове значення — з рядка вузла, щоб підпис стояв одразу, а не через
+   * перший опит: саме в цю щілину людина й дивиться, коли надіслала фото.
+   */
+  const [outState, setOutState] = useState<string | null>(msg.attachmentState ?? null);
 
   const open = useCallback(async () => {
     setPhase('reading');
@@ -252,11 +256,13 @@ export const SecureMediaBubble: React.FC<Props> = ({ msg, isSelf, onOpenLightbox
           </button>
         </div>
         {captionLine}
+        {/* Стан перевезення тут не повторюємо: під фото він стояв би за
+            двадцять пікселів від такого ж підпису в рядку часу. Слово про
+            чергу живе при годиннику/крапці, поруч із часом. */}
         <div className="flex items-center justify-between gap-2">
           <span className="text-[12.5px] text-[color:var(--msg-meta)] truncate">
             {media.name} · {humanSize(media.size)}
           </span>
-          {transferBadge}
         </div>
       </div>
     );

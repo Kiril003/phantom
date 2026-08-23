@@ -22,6 +22,7 @@ import { Avatar } from './Avatar';
 import { soundFx } from '../../utils/messengerSound';
 import { useMessengerStore } from '../../stores/messengerStore';
 import { ContactSheet } from './VerifyContact';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
 
 interface HeaderProps {
   currentChat: Chat;
@@ -52,6 +53,7 @@ const ICON_BTN_IDLE = 'text-[#6E7568] hover:text-[#21261F] hover:bg-[#F1EBDD]';
 const ICON_BTN_OFF = 'text-[#C6C8BF] cursor-not-allowed';
 // Чому кнопка не натискається — сказано словами, а не сірим кольором.
 const NO_CALL_NOTE = 'Дзвінки лише зі звіреними вузловими контактами';
+const NO_PINNED_NOTE = 'Немає закріплених';
 // Рядок випадного меню: фіксовані 36px, іконка + один рядок тексту.
 const MENU_ITEM =
   'w-full h-[36px] min-h-0 px-2.5 rounded-[10px] text-left text-[13px] font-medium text-[#21261F] flex items-center gap-2.5 hover:bg-[#F1EBDD] transition-colors';
@@ -104,6 +106,8 @@ export const Header: React.FC<HeaderProps> = ({
   // співрозмовника. Показова розмова такого вузла не має — і кнопка каже це
   // вголос, замість вдавати, що набирає.
   const canCall = hasPeer && !isGroup && !currentChat.isDemo;
+
+  const hasPinned = pinnedCount > 0 && !!onScrollToPinned;
 
   const startCall = (video: boolean) => {
     if (!canCall) return;
@@ -161,6 +165,10 @@ export const Header: React.FC<HeaderProps> = ({
     window.addEventListener('resize', closeMenu);
     return () => window.removeEventListener('resize', closeMenu);
   }, [menuAnchor, closeMenu]);
+
+  // Меню «⋮» кладе на екран заслінку на весь екран. Escape його не закривав —
+  // і поки воно висіло, жоден клік у стрічці не проходив.
+  useEscapeClose(!!menuAnchor, closeMenu);
 
   const subtitle = currentChat.topic || currentChat.customVibe || currentChat.description || '';
   // «all» — це не коло, а вся стрічка: чіп із написом ALL нічого не повідомляє.
@@ -288,22 +296,28 @@ export const Header: React.FC<HeaderProps> = ({
           <MessageSquare className="w-[18px] h-[18px]" strokeWidth={1.75} />
         </button>
 
-        {/* Pinned Messages shortcut */}
-        <button
-          onClick={() => {
-            soundFx.playTap();
-            if (onScrollToPinned) onScrollToPinned();
-          }}
-          className={`relative ${ICON_BTN} ${
-            pinnedCount > 0 ? 'text-[#21261F] hover:bg-[#F1EBDD]' : ICON_BTN_IDLE
-          }`}
-          title={pinnedCount > 0 ? `Закріплених повідомлень: ${pinnedCount}` : 'Немає закріплених'}
-        >
-          <Bookmark className="w-[18px] h-[18px]" strokeWidth={1.75} />
-          {pinnedCount > 0 && (
-            <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-[#D96C35] rounded-full ring-2 ring-[#FDFCF9]" />
-          )}
-        </button>
+        {/* Закріплене: веде до першого закріпленого в стрічці. Обгортка — заради
+            підказки: у вимкненої кнопки браузер власний title не показує. */}
+        <span title={hasPinned ? undefined : NO_PINNED_NOTE} className="flex">
+          <button
+            onClick={() => {
+              if (!hasPinned) return;
+              soundFx.playTap();
+              onScrollToPinned?.();
+            }}
+            disabled={!hasPinned}
+            className={`relative ${ICON_BTN} ${
+              hasPinned ? 'text-[#21261F] hover:bg-[#F1EBDD]' : ICON_BTN_OFF
+            }`}
+            title={hasPinned ? `Закріплених повідомлень: ${pinnedCount}` : NO_PINNED_NOTE}
+            aria-label="Закріплені повідомлення"
+          >
+            <Bookmark className="w-[18px] h-[18px]" strokeWidth={1.75} />
+            {hasPinned && (
+              <span className="absolute top-1 right-1 w-1.5 h-1.5 bg-[#D96C35] rounded-full ring-2 ring-[#FDFCF9]" />
+            )}
+          </button>
+        </span>
 
         {/* Дзвінок: аудіо і відео. Обгортка існує лише заради підказки —
             у вимкненої кнопки браузер власний title не показує. */}

@@ -4,6 +4,7 @@
 
 import { BASE, request } from './api';
 import type { Chat, Message, SecureMedia } from '../types/messenger';
+import { readToken } from './tokenStore';
 
 export interface NodeConversation {
   id: string;
@@ -208,7 +209,7 @@ export const messengerApi = {
 
       const xhr = new XMLHttpRequest();
       xhr.open('POST', `${BASE}/messenger/files/upload`);
-      const token = localStorage.getItem('phantom_token');
+      const token = readToken();
       if (token) xhr.setRequestHeader('Authorization', `Bearer ${token}`);
       xhr.withCredentials = true;
 
@@ -271,6 +272,31 @@ function mediaFromBody(raw: Record<string, unknown>): SecureMedia {
   };
 }
 
+/**
+ * Єдине місце, де стан вузла стає галочкою.
+ *
+ * Раніше правило жило у трьох місцях (розбір стрічки, відповідь на надсилання,
+ * ехо по WebSocket) і в кожному розходилось — саме звідти бралося вікно, коли
+ * лист у черзі виглядав доставленим.
+ *
+ * Галочка означає рівно одне: вузол-адресат узяв кадр. Вкладення важить
+ * більше за кадр: поки байти не в людини ('queued' — у нас, 'parked' — у
+ * хмарі, 'missing' — загублені), лист не надісланий, хоч би що казав
+ * delivery_state.
+ */
+export function deliveryStatus(
+  deliveryState?: string | null,
+  attachmentState?: string | null,
+): Message['status'] {
+  if (attachmentState && attachmentState !== 'sent' && attachmentState !== 'stored') {
+    return 'queued';
+  }
+  if (deliveryState === 'sent') return 'sent';
+  if (deliveryState === 'queued') return 'queued';
+  if (deliveryState === 'sending') return 'sending';
+  return undefined;
+}
+
 export function messageFromNode(row: NodeMessage, selfId: string, peerNodeId?: string): Message {
   // Показова стрічка везе складний вміст як JSON — розбираємо його тут, щоб
   // таблиці, графіки й реакції жили тим самим шляхом, що й звичайний текст.
@@ -305,27 +331,13 @@ export function messageFromNode(row: NodeMessage, selfId: string, peerNodeId?: s
     text: row.kind === 'text' ? row.body ?? undefined : (rich.text as string | undefined),
     isSelf: peerNodeId ? row.author_id !== peerNodeId : row.author_id === selfId,
     // Стан доставки — з бази вузла, тож галочки переживають перезавантаження.
-    // «У скриньці» проти «доїхало» — саме те, чого панелі не побачили на екрані.
-    //
-    // Вкладення важить більше за кадр: ключ міг доїхати, а байти застрягнути.
-    // Тоді повідомлення НЕ надіслане — у людини немає фото, і галочка про
-    // «надіслано» була б брехнею про стан, а не дрібною неточністю.
-    //
-    // 'parked' — байти лежать у хмарі й чекають, поки адресат їх забере. Це
-    // краще за чергу (наш вузол уже не потрібен), але це ще НЕ «доїхало»:
-    // галочка лишається тією ж, поки вкладення справді не в людини.
     status:
-      peerNodeId && (peerNodeId ? row.author_id !== peerNodeId : false)
-        ? row.attachment_state === 'queued'
-          || row.attachment_state === 'parked'
-          || row.attachment_state === 'missing'
-          ? 'queued'
-          : row.delivery_state === 'sent'
-            ? 'sent'
-            : row.delivery_state === 'queued'
-              ? 'queued'
-              : undefined
+      peerNodeId && row.author_id !== peerNodeId
+        ? deliveryStatus(row.delivery_state, row.attachment_state)
         : undefined,
+    // Підстава під підписом бульбашки: «очікує передачі» проти «у дорозі
+    // через хмару» — різні речі, і крапка одного кольору їх не розрізняє.
+    attachmentState: row.attachment_state ?? undefined,
     isDeleted: Boolean(row.deleted_at),
     isEdited: Boolean(row.edited_at),
     transport: (row.transport as Message['transport']) ?? undefined,

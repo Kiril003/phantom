@@ -1,11 +1,10 @@
-import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback, useImperativeHandle, useLayoutEffect, forwardRef } from 'react';
 import {
   MapPin,
   Play,
   Pause,
   ChevronDown,
   ChevronUp,
-  CheckCheck,
   Pin,
   Clock,
   Copy,
@@ -56,6 +55,7 @@ import { SecureMediaBubble } from './SecureMediaBubble';
 import { ReactionPickerModal } from './ReactionPickerModal';
 import { MessageDetailsModal } from './MessageDetailsModal';
 import { DeleteMessageModal } from './DeleteMessageModal';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
 
 interface ChatAreaProps {
   currentChat?: Chat;
@@ -82,6 +82,11 @@ interface ChatAreaProps {
   isAiTyping?: boolean;
 }
 
+// Шапка не має власного доступу до стрічки: закріплене гортає ChatArea.
+export interface ChatAreaHandle {
+  scrollToPinned: () => void;
+}
+
 export const quickReactions = ['❤️', '🔥', '👍', '👏', '💡', '🎉'];
 
 /**
@@ -101,7 +106,7 @@ export const translationLanguages = [
   { code: 'ES', name: 'Español (ES)' },
 ];
 
-export const ChatArea: React.FC<ChatAreaProps> = ({
+export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
   currentChat,
   messages,
   currentUserId,
@@ -124,7 +129,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   isSearching,
   onCloseSearch,
   isAiTyping = false,
-}) => {
+}, ref) => {
   const [playingVoiceId, setPlayingVoiceId] = useState<string | null>(null);
   const [voiceProgress, setVoiceProgress] = useState<number>(0);
   const [voiceSpeed, setVoiceSpeed] = useState<number>(1);
@@ -134,6 +139,12 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
   const [contextMenuMsg, setContextMenuMsg] = useState<Message | null>(null);
+
+  // Довгий тап відкриває шторку дій, а вона кладе заслінку на весь екран.
+  // Escape її не закривав — і телефон стояв мертвий, доки людина не здогадається
+  // тицьнути повз.
+  const closeContextMenu = useCallback(() => setContextMenuMsg(null), []);
+  useEscapeClose(!!contextMenuMsg, closeContextMenu);
 
   // Modals
   const [isReactionModalOpen, setIsReactionModalOpen] = useState(false);
@@ -169,6 +180,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const atBottomRef = useRef(true);
   /** Чи вже приземлились у низ цієї розмови (перше відкриття). */
   const landedRef = useRef(false);
+  /** Доки триває стрибок до листа — тримання низу мовчить. */
+  const jumpUntilRef = useRef(0);
   const landedChatRef = useRef<string | undefined>(undefined);
   const seenCountRef = useRef(0);
 
@@ -209,17 +222,48 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const [queueInfo, setQueueInfo] = useState<{ queued: number } | null>(null);
   const [flushing, setFlushing] = useState(false);
 
+  // Картка теж кладе заслінку (z-30) — виходити з неї треба тим самим Escape.
+  const closePathCard = useCallback(() => setPathCardMsgId(null), []);
+  useEscapeClose(!!pathCardMsgId, closePathCard);
+
+  // Що саме тримає лист: байти вкладення чи сам кадр із ключем. Байти могли
+  // доїхати першими — тоді казати «вкладення чекає» було б новою неточністю
+  // замість старої.
+  const stuckAttachment = (msg?: Message): 'queued' | 'parked' | null => {
+    const st = msg?.attachmentState;
+    if (!msg?.media || !st || st === 'sent' || st === 'stored') return null;
+    return st === 'parked' ? 'parked' : 'queued';
+  };
+
   const statusLabel = (status?: Message['status'], msg?: Message): string => {
     // Вкладення застрягло — кажемо саме про нього. «У черзі» звучало б так,
     // ніби чекає текст, а насправді в людини немає файла.
-    if (status === 'queued' && msg?.media) return 'Вкладення очікує передачі';
+    const stuck = status === 'queued' ? stuckAttachment(msg) : null;
+    if (stuck) {
+      return stuck === 'parked'
+        ? 'Вкладення в дорозі через хмару'
+        : 'Вкладення очікує передачі';
+    }
     switch (status) {
       case 'sending': return 'Надсилається';
       case 'queued': return 'У черзі — чекає на співрозмовника';
       case 'sent': return 'Надіслано на вузол';
-      case 'delivered': return 'Доставлено';
-      case 'read': return 'Прочитано';
       case 'failed': return 'Не вдалося надіслати';
+      default: return '';
+    }
+  };
+
+  // Короткий підпис при бульбашці. Стоїть біля значка ЗАВЖДИ, без наведення:
+  // на дотиковому екрані hover не існує, а «твоє фото не поїхало» не має права
+  // важити вісім пікселів. Для доставленого підпису немає — це тиша за
+  // замовчуванням, а не приховане попередження.
+  const statusNote = (status?: Message['status'], msg?: Message): string => {
+    const stuck = status === 'queued' ? stuckAttachment(msg) : null;
+    if (stuck) return stuck === 'parked' ? 'у дорозі через хмару' : 'чекає передачі';
+    switch (status) {
+      case 'sending': return 'надсилаю';
+      case 'queued': return 'у черзі';
+      case 'failed': return 'не пішло';
       default: return '';
     }
   };
@@ -227,10 +271,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const statusDot = (status?: Message['status']): string => {
     switch (status) {
       case 'queued': return '#C98A2E';
-      case 'read': return '#D96C35';
       case 'failed': return '#C25A3A';
-      case 'sent':
-      case 'delivered': return '#7E8B72';
+      case 'sent': return '#7E8B72';
       default: return 'var(--msg-meta-self)';
     }
   };
@@ -536,6 +578,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   // Scroll detection
   const handleScroll = () => {
     if (!messagesContainerRef.current) return;
+    // Перші кадри стрибка ще біля низу: якби ми тут повернули atBottom, тримач
+    // низу вбив би сам стрибок.
+    if (performance.now() < jumpUntilRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
     const isScrolledUp = scrollHeight - scrollTop - clientHeight > 150;
     atBottomRef.current = !isScrolledUp;
@@ -598,6 +643,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     if (!content || typeof ResizeObserver === 'undefined') return undefined;
     const ro = new ResizeObserver(() => {
       const el = messagesContainerRef.current;
+      if (performance.now() < jumpUntilRef.current) return;
       if (el && atBottomRef.current) el.scrollTop = el.scrollHeight;
     });
     ro.observe(content);
@@ -607,11 +653,29 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
   const scrollToMessage = (msgId: string) => {
     const el = document.getElementById(`message-${msgId}`);
     if (el) {
+      // Стрибок до листа означає, що ми більше НЕ внизу. Підсвітка додає
+      // бульбашці рамку — висота стрічки росте, спалахує тримач низу і смикає
+      // scrollTop назад у кінець, вбиваючи плавний перехід на першому ж кадрі.
+      // Тож на час перельоту тримання низу мовчить.
+      jumpUntilRef.current = performance.now() + 1200;
+      atBottomRef.current = false;
+      setShowScrollBottom(true);
       el.scrollIntoView({ behavior: 'smooth', block: 'center' });
       setHighlightedMessageId(msgId);
       setTimeout(() => setHighlightedMessageId(null), 2500);
     }
   };
+
+  // Закладка в шапці веде до ПЕРШОГО закріпленого і повертає банер на нього ж:
+  // інакше банер лишався б на своєму місці гортання і показував інше повідомлення.
+  useImperativeHandle(ref, () => ({
+    scrollToPinned: () => {
+      const first = pinnedMessages[0];
+      if (!first) return;
+      setCurrentPinnedIndex(0);
+      scrollToMessage(first.id);
+    },
+  }));
 
   // Search in chat
   const searchMatchingIds = (isSearching && chatSearchQuery.trim())
@@ -1938,21 +2002,29 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                           title="Шлях листа"
                           aria-label="Шлях листа"
                         >
+                          {/* Галочка — тільки коли вузол-адресат узяв кадр.
+                              Поки лист у черзі, це годинник; поки байти
+                              вкладення не в людини — амберова крапка. */}
                           {msg.status === 'sending' && <Clock className="w-3.5 h-3.5 text-[color:var(--msg-meta-self)]" strokeWidth={1.75} />}
-                          {/* Застрягле вкладення носить амберову крапку, а не
-                              годинник: у людини немає файла, і це стан самого
-                              повідомлення, а не дрібний підпис під фото. */}
-                          {msg.status === 'queued' && msg.media && (
-                            <span
-                              className="w-2 h-2 rounded-full bg-[#C9A227]"
-                              title="Вкладення очікує передачі"
-                            />
-                          )}
-                          {msg.status === 'queued' && !msg.media && <Clock className="w-3.5 h-3.5 text-[#C98A2E]" strokeWidth={1.75} />}
+                          {msg.status === 'queued' && (stuckAttachment(msg) ? (
+                            <span className="w-2 h-2 rounded-full bg-[#C9A227]" />
+                          ) : (
+                            <Clock className="w-3.5 h-3.5 text-[#C98A2E]" strokeWidth={1.75} />
+                          ))}
                           {msg.status === 'sent' && <Check className="w-3.5 h-3.5 text-[color:var(--msg-meta-self)]" strokeWidth={1.75} />}
-                          {msg.status === 'delivered' && <CheckCheck className="w-3.5 h-3.5 text-[color:var(--msg-meta-self)]" strokeWidth={1.75} />}
-                          {msg.status === 'read' && <CheckCheck className="w-3.5 h-3.5 text-[#D96C35]" strokeWidth={1.75} />}
                           {msg.status === 'failed' && <AlertCircle className="w-3.5 h-3.5 text-[#C25A3A]" strokeWidth={1.75} />}
+                          {/* Слово поруч зі значком — щоб правду було видно
+                              без наведення, пальцем і на сонці. */}
+                          {statusNote(msg.status, msg) && (
+                            <span
+                              data-msg-status-note
+                              className={`ml-1 text-[11px] font-medium ${
+                                msg.status === 'failed' ? 'text-[#C25A3A]' : 'text-[#8A6D2E]'
+                              }`}
+                            >
+                              {statusNote(msg.status, msg)}
+                            </span>
+                          )}
                         </button>
 
                         {pathCardMsgId === msg.id && (
@@ -1988,7 +2060,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                                 </p>
                               )}
 
-                              {(msg.status === 'sent' || msg.status === 'delivered' || msg.status === 'read') && (
+                              {msg.status === 'sent' && (
                                 <p className="text-[11.5px] text-[#6E7568] pl-4 mt-1">
                                   {msg.transport === 'p2p'
                                     ? 'Напряму, P2P'
@@ -2010,8 +2082,11 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                               {msg.status === 'queued' && (
                                 <div className="mt-2 space-y-2">
                                   <p className="text-[11.5px] text-[#6E7568] leading-relaxed">
-                                    Повідомлення чекає на вашому вузлі. Надішлемо, щойно
-                                    співрозмовник з'явиться в мережі.
+                                    {stuckAttachment(msg) === 'parked'
+                                      ? 'Байти вкладення вже в хмарі — співрозмовник забере їх сам, щойно прокинеться. Але поки що їх у нього немає.'
+                                      : stuckAttachment(msg)
+                                        ? 'Вкладення лежить на вашому вузлі. Повеземо, щойно вузол співрозмовника обізветься.'
+                                        : "Повідомлення чекає на вашому вузлі. Надішлемо, щойно співрозмовник з'явиться в мережі."}
                                     {queueInfo && queueInfo.queued > 1
                                       ? ` Разом у черзі: ${queueInfo.queued}.`
                                       : ''}
@@ -2539,4 +2614,6 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       />
     </div>
   );
-};
+});
+
+ChatArea.displayName = 'ChatArea';

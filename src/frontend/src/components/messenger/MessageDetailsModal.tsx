@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Info, CheckCheck, Clock, Radio } from 'lucide-react';
+import { X, Info, Check, Clock, Radio } from 'lucide-react';
 import { Message, ChatMember } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
@@ -7,9 +7,7 @@ import { useEscapeClose } from '../../hooks/useEscapeClose';
 const deliveryStatusLabel: Record<NonNullable<Message['status']>, string> = {
   sending: 'Надсилається',
   queued: 'Записано вузлом, до співрозмовника ще не доїхало',
-  sent: 'Надіслано',
-  delivered: 'Доставлено',
-  read: 'Прочитано',
+  sent: 'Вузол співрозмовника взяв кадр',
   failed: 'Не надіслано',
 };
 
@@ -104,7 +102,7 @@ export const MessageDetailsModal: React.FC<MessageDetailsModalProps> = ({
             {message.status && (
               <div className="flex items-center justify-between pb-2 border-b border-[#E6DFD3]">
                 <span className="text-[#5F6A60] flex items-center gap-1.5">
-                  <CheckCheck className="w-3.5 h-3.5 text-[#5F6A60]" strokeWidth={1.75} />
+                  <Check className="w-3.5 h-3.5 text-[#5F6A60]" strokeWidth={1.75} />
                   <span>Статус доставки</span>
                 </span>
                 <span className={`font-semibold ${

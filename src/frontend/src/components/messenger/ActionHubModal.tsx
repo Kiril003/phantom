@@ -457,8 +457,16 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
   ];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 phantom-scrim animate-in fade-in duration-150">
-      <div className="bg-[#FDFCF9] border-t sm:border border-[#DDD4C4] rounded-t-3xl sm:rounded-3xl w-full max-w-2xl max-h-[92dvh] sm:max-h-[90vh] flex flex-col shadow-2xl overflow-hidden select-none animate-in slide-in-from-bottom sm:zoom-in-95 duration-150 pb-[var(--sab)] sm:pb-0 text-[#1E2521]">
+    // Заслінка мусить закривати шар: інакше вихід звідси — це знайти хрестик
+    // у верхньому куті, а палець тримається за нижній край.
+    <div
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 phantom-scrim animate-in fade-in duration-150"
+      onClick={onClose}
+    >
+      <div
+        className="bg-[#FDFCF9] border-t sm:border border-[#DDD4C4] rounded-t-3xl sm:rounded-3xl w-full max-w-2xl max-h-[92dvh] sm:max-h-[90vh] flex flex-col shadow-2xl overflow-hidden select-none animate-in slide-in-from-bottom sm:zoom-in-95 duration-150 pb-[var(--sab)] sm:pb-0 text-[#1E2521]"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Mobile Pull Indicator */}
         <div className="sm:hidden pt-2.5 pb-1 flex justify-center bg-[#FDFCF9]">
           <div className="w-12 h-1 bg-[#F1EDE3] rounded-full" />

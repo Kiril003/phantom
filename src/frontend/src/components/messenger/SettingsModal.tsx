@@ -16,6 +16,7 @@ import { IdentityPanel } from './IdentityPanel';
 import { networkEngine } from '../../services/messengerNetworkEngine';
 import { TransportProtocol } from '../../types/messenger';
 import { notificationPrefs } from '../../services/notificationPrefs';
+import { messengerFontScale } from '../../services/messengerFontScale';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 
 // Стан дозволу словами. Це єдине, що тут можна чесно пообіцяти.
@@ -47,7 +48,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 }) => {
   const [activeTab, setActiveTab] = useState<'appearance' | 'network' | 'notifications' | 'privacy' | 'data'>('appearance');
   const [accentColor, setAccentColor] = useState<'terracotta' | 'sage' | 'chestnut' | 'amber'>('terracotta');
-  const [fontSize, setFontSize] = useState<'standard' | 'large'>('standard');
+  // Кегль живе у власному сховищі: він мусить пережити закриття модалки і F5,
+  // інакше це знову напис на кнопці замість пікселів.
+  const fontSize = useSyncExternalStore(messengerFontScale.subscribe, messengerFontScale.getSnapshot);
   const [readReceipts, setReadReceipts] = useState(true);
   const [lastSeenVisible, setLastSeenVisible] = useState(true);
   const [transportMode, setTransportMode] = useState<TransportProtocol>(networkEngine.getTransportMode());
@@ -169,9 +172,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 </label>
                 <div className="grid grid-cols-2 gap-2">
                   <button
+                    data-font-standard
                     onClick={() => {
                       soundFx.playTap();
-                      setFontSize('standard');
+                      messengerFontScale.set('standard');
                     }}
                     className={`p-3 rounded-2xl border text-left transition-all ${
                       fontSize === 'standard'
@@ -179,13 +183,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         : 'bg-white/60 border-[#DFD6C5]'
                     }`}
                   >
-                    <span className="font-extrabold text-xs text-[#1E2521] block">Стандартний (14-15px)</span>
+                    <span className="font-extrabold text-xs text-[#1E2521] block">Стандартний (14–15.5px)</span>
                     <span className="text-[11px] text-[#7A8479]">Оптимальна щільність</span>
                   </button>
                   <button
+                    data-font-large
                     onClick={() => {
                       soundFx.playTap();
-                      setFontSize('large');
+                      messengerFontScale.set('large');
                     }}
                     className={`p-3 rounded-2xl border text-left transition-all ${
                       fontSize === 'large'
@@ -193,8 +198,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                         : 'bg-white/60 border-[#DFD6C5]'
                     }`}
                   >
-                    <span className="font-extrabold text-sm text-[#1E2521] block">Збільшений (16-17px)</span>
-                    <span className="text-[11px] text-[#7A8479]">Максимальна читабельність</span>
+                    <span className="font-extrabold text-sm text-[#1E2521] block">Збільшений (16–17.5px)</span>
+                    <span className="text-[11px] text-[#7A8479]">Стрічка й список бесід разом</span>
                   </button>
                 </div>
               </div>

@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { messengerNetworkEngine } from '../services/messengerNetworkEngine';
 import { chatApi } from '../services/api';
-import { messengerApi, chatFromNode, messageFromNode } from '../services/messengerApi';
+import { messengerApi, chatFromNode, messageFromNode, deliveryStatus } from '../services/messengerApi';
 import type { NodeMessage } from '../services/messengerApi';
 import { useUIStore } from './uiStore';
 import { soundFx } from '../utils/messengerSound';
@@ -407,11 +407,24 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
             lastAt: row.sent_at,
           };
           // Своє ж повідомлення вже лежить у стрічці під client_id — не дублюємо.
+          //
+          // Ехо ставило тут галочку «надіслано» беззастережно — і накривало нею
+          // лист, який у базі стояв queued. Стан беремо з рядка вузла, як і
+          // всюди; ехо про власне вкладення взагалі не має права його чіпати
+          // (attachment_state у ньому не їде), тож лишаємо, що було.
           if (c.messages.some((m) => m.id === row.client_id || m.id === row.id)) {
             return {
               ...c,
               messages: c.messages.map((m) =>
-                m.id === row.client_id ? { ...m, id: row.id, status: 'sent' as const } : m,
+                m.id === row.client_id
+                  ? {
+                      ...m,
+                      id: row.id,
+                      status: m.media
+                        ? m.status
+                        : deliveryStatus(row.delivery_state, row.attachment_state) ?? m.status,
+                    }
+                  : m,
               ),
             };
           }
@@ -600,14 +613,16 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
         ),
       }));
 
-      const markStatus = (status: Message['status']) =>
+      const patch = (fields: Partial<Message>) =>
         set((s2) => ({
           chats: s2.chats.map((c) =>
             c.id === chatId
-              ? { ...c, messages: c.messages.map((m) => (m.id === clientId ? { ...m, status } : m)) }
+              ? { ...c, messages: c.messages.map((m) => (m.id === clientId ? { ...m, ...fields } : m)) }
               : c,
           ),
         }));
+      const markStatus = (status: Message['status']) => patch({ status });
+      const markAttachment = (attachmentState: string) => patch({ attachmentState });
 
       // На дроті імена полів такі ж, як їх читає backend і вузол-адресат.
       // caption дописуємо лише коли він є: старі тіла без нього читаються
@@ -633,8 +648,9 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
         });
         // Кадр із ключем міг доїхати, а байти застрягнути на нашому вузлі.
         // Тоді в людини немає фото — і галочка «надіслано» була б брехнею.
-        const stuck = blob.state === 'queued' || blob.state === 'missing';
-        markStatus(stuck || row.delivery === 'queued' ? 'queued' : 'sent');
+        // 'parked' сюди теж належить: байти в хмарі — це ще не байти в людини.
+        markStatus(deliveryStatus(row.delivery ?? row.delivery_state, blob.state));
+        markAttachment(blob.state);
       } catch (err) {
         console.warn('[messenger] вузол не прийняв вкладення:', err);
         markStatus('failed');
@@ -719,8 +735,9 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
         })
         // Вузол сам каже, чи доїхало до людини. queued — записано, але не
         // доставлено; малювати галочку «надіслано» в цьому разі означало б
-        // повторити те, з чим борюся весь цей час.
-        .then((row) => markStatus(row.delivery === 'queued' ? 'queued' : 'sent'))
+        // повторити те, з чим борюся весь цей час. 'local' (розмова ні з ким)
+        // не дає галочки взагалі — так само, як після перезавантаження.
+        .then((row) => markStatus(deliveryStatus(row.delivery ?? row.delivery_state)))
         .catch((err) => {
           console.warn('[messenger] вузол не прийняв повідомлення:', err);
           markStatus('failed');
@@ -867,7 +884,8 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
         timestamp: timeFormatted,
         type: 'voice',
         isSelf: true,
-        status: 'sent',
+        // Голосове не йде через вузол узагалі — підтверджувати нікому. Тож
+        // жодного стану: галочка тут означала б доставку, якої не було.
         voiceData: {
           duration,
           waveform: Array.from({ length: 32 }, () => Math.random() * 0.8 + 0.2),
@@ -1067,7 +1085,7 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
           transport: msg.transport ?? null,
           reply_to_id: msg.replyTo?.id ?? null,
         });
-        markStatus(row.delivery === 'queued' ? 'queued' : 'sent');
+        markStatus(deliveryStatus(row.delivery ?? row.delivery_state));
       } catch (err) {
         console.warn('[messenger] повтор надсилання не вдався:', err);
         markStatus('failed');

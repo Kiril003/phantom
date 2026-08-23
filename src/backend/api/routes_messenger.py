@@ -714,6 +714,11 @@ async def append_message(
         except OutboxError:
             prepared = None
             out.delivery = 'queued'
+            # Стан мусить лягти в рядок, а не лише у відповідь: інакше живий
+            # екран каже «у черзі», а після перезавантаження стрічки лист
+            # виглядає як звичайний — той самий клас брехні, що й галочка
+            # на недоставленому.
+            row.delivery_state = 'queued'
         if prepared is not None:
             contact = await session.get(MessengerContact, conversation.contact_id)
             address = contact.peer_address if contact else ""

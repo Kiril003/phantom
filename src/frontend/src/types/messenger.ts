@@ -310,9 +310,19 @@ export interface Message {
   /**
    * sending — ще не підтверджено вузлом;
    * queued — вузол записав, але до співрозмовника не доїхало;
-   * sent — віддано транспорту; failed — не збереглося.
+   * sent — вузол-адресат узяв кадр; failed — не збереглося.
+   *
+   * «delivered» і «read» тут немає навмисно: вузол таких станів не віддає
+   * (delivery_state ∈ local|queued|sent), тож дві галочки означали б стан,
+   * якого в системі не буває.
    */
-  status?: 'sending' | 'queued' | 'sent' | 'delivered' | 'read' | 'failed';
+  status?: 'sending' | 'queued' | 'sent' | 'failed';
+  /**
+   * Стан ПЕРЕВЕЗЕННЯ вкладення: stored | queued | parked | sent | missing.
+   * Кадр із ключем міг доїхати, а байти — ні, і тоді бульбашка мусить сказати
+   * це словом, а не лише кольором крапки.
+   */
+  attachmentState?: string;
   scheduledTime?: string;
   transport?: 'server' | 'p2p' | 'relay';
   p2pMeta?: {

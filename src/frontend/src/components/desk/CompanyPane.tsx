@@ -25,6 +25,12 @@ import { ExecutionInspector } from '../foundry/ExecutionInspector';
  * зупиняє лише передній) і «Втрутитись (дійде до активного слоту)».
  * Per-task контролів нема — шина глобальна, per-task стоп був би брехнею.
  *
+ * Гонтлет Ф1, удар №2: при нулі активних прогонів обидва контролі
+ * disabled зі словом причини поряд («нема активного прогону») — кнопка,
+ * що клікається і мовчки нічого не робить, — найгірший клас дефекту.
+ * Порожнеча скомпонована (що таке прогін, чому порожньо, одна первинна
+ * дія «Дати перше завдання» — реальний POST /agent/task).
+ *
  * НЕ малюється (доктрина, не побажання): витрати Волі (атрибуції origin
  * нема), хто запустив прогін (колонки origin нема), токени/гроші
  * (скрізь нулі), «Відкотити», метафори заліза.
@@ -87,8 +93,9 @@ export default function CompanyPane() {
   const [journalOpen, setJournalOpen] = useState(false);
   const [selectedTask, setSelectedTask] = useState<AgentTaskSummary | null>(null);
   const [stateMenuOpen, setStateMenuOpen] = useState(false);
-  const [intervening, setIntervening] = useState(false);
-  const [interveneText, setInterveneText] = useState('');
+  /** Смуга контролів: null — кнопки; 'intervene' — інпут у слот; 'launch' — інпут нового завдання. */
+  const [barMode, setBarMode] = useState<null | 'intervene' | 'launch'>(null);
+  const [barText, setBarText] = useState('');
   const [controlWord, setControlWord] = useState<string | null>(null);
   const alive = useRef(true);
 
@@ -140,6 +147,18 @@ export default function CompanyPane() {
 
   const activeCount = (tasks ?? []).filter((t) => ACTIVE_STATUSES.has(t.status)).length;
 
+  /* Озброєність контролів: «Стоп» і «Втрутитись» мають сенс лише коли є
+   * активний прогін. Інакше — disabled зі СЛОВОМ причини поряд, а не
+   * клікабельна кнопка, що мовчки нічого не робить. */
+  const controlReason = tasksError
+    ? 'ядро не відповіло'
+    : tasks === null
+      ? 'читаю прогони…'
+      : activeCount === 0
+        ? 'нема активного прогону'
+        : null;
+  const armed = controlReason === null;
+
   const openJournal = () => {
     setJournalOpen(true);
     try {
@@ -169,7 +188,7 @@ export default function CompanyPane() {
   };
 
   const sendIntervention = async () => {
-    const text = interveneText.trim();
+    const text = barText.trim();
     if (!text) return;
     try {
       const st = await agentApi.status();
@@ -180,8 +199,29 @@ export default function CompanyPane() {
       }
       await agentApi.intervene(slot.task_id, text);
       setControlWord('передано в активний слот');
-      setInterveneText('');
-      setIntervening(false);
+      setBarText('');
+      setBarMode(null);
+    } catch {
+      setControlWord('ядро не відповіло');
+    }
+  };
+
+  /** Нове завдання — реальний POST /agent/task, жодних симуляцій. */
+  const sendLaunch = async () => {
+    const goal = barText.trim();
+    if (!goal) return;
+    try {
+      const res = await agentApi.startTask(goal);
+      setControlWord(
+        res.started
+          ? 'прогін запущено'
+          : res.queued
+            ? 'поставлено в чергу — слот зайнятий'
+            : (res.detail ?? 'ядро відмовило без пояснення'),
+      );
+      setBarText('');
+      setBarMode(null);
+      void load();
     } catch {
       setControlWord('ядро не відповіло');
     }
@@ -355,7 +395,55 @@ export default function CompanyPane() {
       {/* Список прогонів як є */}
       <div className="flex-1 min-h-0 overflow-y-auto" style={{ padding: 'var(--ph-space-2) var(--ph-space-4)' }}>
         {tasksError && <Word text="ядро не відповіло — список прогонів недоступний" />}
-        {!tasksError && tasks !== null && tasks.length === 0 && <Word text="прогонів ще не було" />}
+        {/* Порожнеча — скомпонована: що це, чому порожньо, ОДНА первинна дія.
+         * Не «сторінка не долоадилась», а спроєктована тиша. */}
+        {!tasksError && tasks !== null && tasks.length === 0 && (
+          <div
+            className="h-full flex flex-col items-center justify-center text-center"
+            style={{ gap: 'var(--ph-space-3)', padding: 'var(--ph-space-6) var(--ph-space-5)' }}
+          >
+            <span
+              style={{
+                fontSize: 'var(--ph-type-title-size)',
+                fontWeight: 600,
+                letterSpacing: '0.02em',
+                color: 'var(--ph-color-ink)',
+              }}
+            >
+              Прогонів ще не було
+            </span>
+            <span
+              style={{
+                maxWidth: 380,
+                fontSize: 'var(--ph-type-caption-size)',
+                lineHeight: 1.5,
+                color: 'var(--ph-color-ink-muted)',
+              }}
+            >
+              Прогін — це завдання, яке Компанія веде сама: планує кроки, діє
+              і лишає слід у журналі Волі. Тут з&apos;явиться кожен — живий і
+              завершений.
+            </span>
+            <button
+              type="button"
+              onClick={() => setBarMode('launch')}
+              style={{
+                marginTop: 'var(--ph-space-2)',
+                height: 'var(--ph-touch-target, 44px)',
+                minHeight: 44,
+                padding: '0 var(--ph-space-5)',
+                fontSize: 'var(--ph-type-caption-size)',
+                fontWeight: 600,
+                color: 'var(--ph-color-accent)',
+                border: 'var(--ph-stroke-hair) solid var(--ph-color-accent)',
+                borderRadius: 'var(--ph-radius-s)',
+                background: 'transparent',
+              }}
+            >
+              Дати перше завдання
+            </button>
+          </div>
+        )}
         {!tasksError &&
           (tasks ?? []).map((t) => (
             <button
@@ -401,17 +489,24 @@ export default function CompanyPane() {
         className="shrink-0"
         style={{ borderTop: 'var(--ph-stroke-hair) solid var(--ph-color-border)', padding: 'var(--ph-space-3) var(--ph-space-4)' }}
       >
-        {intervening ? (
+        {barMode !== null ? (
           <div className="flex items-center" style={{ gap: 'var(--ph-space-2)' }}>
             <input
               autoFocus
-              value={interveneText}
-              onChange={(e) => setInterveneText(e.target.value)}
+              value={barText}
+              onChange={(e) => setBarText(e.target.value)}
               onKeyDown={(e) => {
-                if (e.key === 'Enter') void sendIntervention();
-                if (e.key === 'Escape') setIntervening(false);
+                if (e.key === 'Enter') void (barMode === 'launch' ? sendLaunch() : sendIntervention());
+                if (e.key === 'Escape') {
+                  setBarMode(null);
+                  setBarText('');
+                }
               }}
-              placeholder="Що передати активному слоту…"
+              placeholder={
+                barMode === 'launch'
+                  ? 'Що доручити Компанії — одним реченням…'
+                  : 'Що передати активному слоту…'
+              }
               className="flex-1"
               style={{
                 height: 30,
@@ -423,16 +518,41 @@ export default function CompanyPane() {
                 borderRadius: 'var(--ph-radius-s)',
               }}
             />
-            <ControlButton label="Надіслати" onClick={() => void sendIntervention()} />
-            <ControlButton label="Скасувати" onClick={() => setIntervening(false)} />
+            <ControlButton
+              label={barMode === 'launch' ? 'Запустити' : 'Надіслати'}
+              onClick={() => void (barMode === 'launch' ? sendLaunch() : sendIntervention())}
+            />
+            <ControlButton
+              label="Скасувати"
+              onClick={() => {
+                setBarMode(null);
+                setBarText('');
+              }}
+            />
           </div>
         ) : (
           <div className="flex items-center" style={{ gap: 'var(--ph-space-3)' }}>
-            <ControlButton label="Стоп усій Компанії" tone="danger" onClick={() => void stopAll()} />
-            <ControlButton label="Втрутитись (дійде до активного слоту)" onClick={() => setIntervening(true)} />
+            {tasks !== null && !tasksError && tasks.length > 0 && (
+              <ControlButton label="Нове завдання" onClick={() => setBarMode('launch')} />
+            )}
+            <ControlButton
+              label="Стоп усій Компанії"
+              tone="danger"
+              disabled={!armed}
+              reason={controlReason}
+              onClick={() => void stopAll()}
+            />
+            <ControlButton
+              label="Втрутитись (дійде до активного слоту)"
+              disabled={!armed}
+              reason={controlReason}
+              onClick={() => setBarMode('intervene')}
+            />
             <span className="flex-1" />
-            {controlWord && (
-              <span style={{ fontSize: 11, color: 'var(--ph-color-ink-muted)' }}>{controlWord}</span>
+            {(controlWord || controlReason) && (
+              <span style={{ fontSize: 11, color: 'var(--ph-color-ink-muted)' }}>
+                {[controlWord, controlReason].filter(Boolean).join(' · ')}
+              </span>
             )}
           </div>
         )}
@@ -467,26 +587,44 @@ function ControlButton({
   label,
   onClick,
   tone = 'default',
+  disabled = false,
+  reason,
 }: {
   label: string;
   onClick: () => void;
   tone?: 'default' | 'danger';
+  /** Роззброєна кнопка: не клікається, причина — словом поряд (reason). */
+  disabled?: boolean;
+  reason?: string | null;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
+      disabled={disabled}
+      aria-disabled={disabled}
+      title={disabled ? (reason ?? undefined) : undefined}
       style={{
         height: 'var(--ph-control-min)',
         padding: '0 var(--ph-control-pad-x)',
         fontSize: 'var(--ph-type-caption-size)',
-        color: tone === 'danger' ? 'var(--ph-color-danger)' : 'var(--ph-color-ink)',
+        color: disabled
+          ? 'var(--ph-color-ink-faint)'
+          : tone === 'danger'
+            ? 'var(--ph-color-danger)'
+            : 'var(--ph-color-ink)',
         border: `var(--ph-stroke-hair) solid ${
-          tone === 'danger' ? 'var(--ph-color-danger)' : 'var(--ph-color-border)'
+          disabled
+            ? 'var(--ph-color-border)'
+            : tone === 'danger'
+              ? 'var(--ph-color-danger)'
+              : 'var(--ph-color-border)'
         }`,
         borderRadius: 'var(--ph-radius-s)',
         background: 'transparent',
         whiteSpace: 'nowrap',
+        cursor: disabled ? 'not-allowed' : undefined,
+        opacity: disabled ? 0.55 : 1,
       }}
     >
       {label}

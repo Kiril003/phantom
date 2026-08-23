@@ -18,10 +18,12 @@ export function NavigationToolbar({
       <ToolbarButton icon={<Minus size={16} strokeWidth={1.75} />} onClick={onZoomOut} label="Віддалити" />
       <ToolbarButton icon={<Plus size={16} strokeWidth={1.75} />} onClick={onZoomIn} label="Наблизити" />
       <span className="w-px h-5 bg-white/10 mx-1" />
+      {/* Причина disabled — словом (Ф2 «дрібне»): сіра кнопка без
+          пояснення читається як зламана, а не як чесна. */}
       <ToolbarButton
         icon={<Crosshair size={16} strokeWidth={1.75} />}
         onClick={onCenter}
-        label="До мого місця"
+        label={fix ? 'До мого місця' : 'Місце ще невідоме'}
         disabled={!fix}
       />
       <ToolbarButton 

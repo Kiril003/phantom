@@ -13,6 +13,7 @@ import { TimeMachineSlider } from './TimeMachineSlider';
 import { WhereChip } from './WhereChip';
 import { usePosition } from '../../../hooks/usePosition';
 import { AttributionDrawer } from './AttributionDrawer';
+import { CoordReadout } from './CoordReadout';
 import { RoutingTool } from './RoutingTool';
 import { GeofenceDrawTool } from './GeofenceDrawTool';
 import { AirRaidLayer } from '../layers/AirRaidLayer';
@@ -316,6 +317,12 @@ export function HudShell({
         <div className="pointer-events-auto flex w-[168px] shrink-0 justify-end">
           <NearbyPanel lat={center?.[1] ?? tactical.lat} lon={center?.[0] ?? tactical.lon} zoom={zoom} onSelect={() => {}} />
         </div>
+      </div>
+
+      {/* Метрологія (Ф2, У6): координата під курсором — нижній край
+          пейна, під головним рядком, який стоїть на 84 px. */}
+      <div className="pointer-events-auto absolute bottom-3 left-1/2 -translate-x-1/2">
+        <CoordReadout />
       </div>
     </div>
   );

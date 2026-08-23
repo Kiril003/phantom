@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { SettingsCategory, isThemeId, type ThemeId } from '@shared/types';
 import { settingsApi } from '../services/api';
 import { DEFAULT_LOCALE, isLocale, type Locale } from '../i18n/locales';
+import { readToken } from '../services/tokenStore';
 
 /* phase-5-R0-3-THEME-NIGHT — theme picker wiring.
  *
@@ -173,8 +174,8 @@ export const useSettingsStore = create<SettingsStoreState>((set, get) => ({
     //    still works on the LoginScreen if we ever surface it there.
     try {
       if (
-        typeof localStorage === 'undefined' ||
-        localStorage.getItem('phantom_token')
+        typeof sessionStorage === 'undefined' ||
+        readToken()
       ) {
         await settingsApi.set(THEME_SETTING_KEY, id);
       }
@@ -213,8 +214,8 @@ export const useSettingsStore = create<SettingsStoreState>((set, get) => ({
     });
     try {
       if (
-        typeof localStorage === 'undefined' ||
-        localStorage.getItem('phantom_token')
+        typeof sessionStorage === 'undefined' ||
+        readToken()
       ) {
         await settingsApi.set(LANGUAGE_SETTING_KEY, locale);
       }

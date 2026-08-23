@@ -28,6 +28,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import workletUrl from '../workers/voice-capture.worklet.js?url';
 import { useMicStream } from './useMicStream';
 import { useInputMode } from '../stores/inputModeStore';
+import { readToken } from '../services/tokenStore';
+import { openAuthedSocket } from '../services/wsAuth';
 // Лише тип: статичний імпорт значення клав увесь застосунок білим екраном.
 import type { MicVAD as MicVADType } from '@ricky0123/vad-web';
 
@@ -63,7 +65,7 @@ export interface AlwaysOnConfig {
   enabled?: boolean;
   /** Override the default ws URL. Used by tests. */
   wsUrl?: string;
-  /** Bearer token. Falls back to `localStorage.phantom_token`. */
+  /** Bearer token. Falls back to the session token store. */
   token?: string;
   /** Fired when the orchestrator emits a `final` event. */
   onFinalTranscript?: (t: FinalTranscript) => void;
@@ -131,7 +133,7 @@ interface AcquiredWS {
   fresh: boolean;
 }
 
-function _acquireWS(url: string): AcquiredWS {
+function _acquireWS(url: string, token: string | null): AcquiredWS {
   // Phase 12.4 — cancel any pending deferred close. A remount inside the
   // 50ms grace window means we're picking the singleton back up, not
   // tearing it down.
@@ -159,7 +161,7 @@ function _acquireWS(url: string): AcquiredWS {
   }
 
   _wsState = 'connecting';
-  const ws = new WebSocket(url);
+  const ws = openAuthedSocket(url, token);
   _wsInstance = ws;
   _wsRefCount = 1;
 
@@ -307,7 +309,7 @@ function _resolveWsUrl(explicit?: string): string {
 function _resolveToken(explicit?: string): string | null {
   if (explicit) return explicit;
   try {
-    return localStorage.getItem('phantom_token');
+    return readToken();
   } catch {
     return null;
   }
@@ -574,8 +576,12 @@ export function useVoiceAlwaysOn(config: AlwaysOnConfig = {}) {
     // Open WS first so a token rejection fails fast without the mic prompt.
     // Acquire via singleton so React StrictMode double-mounts and rapid
     // toolbar clicks don't spawn duplicate sockets (Phase 11c.5 Bug 1).
-    const url = `${_resolveWsUrl(wsUrl)}?token=${encodeURIComponent(resolvedToken)}`;
-    const { ws, ready } = _acquireWS(url);
+    //
+    // Раунд-4 П4: токен більше не їде в query string — uvicorn писав повний
+    // JWT у access-лог на кожному відкритті мікрофона. Тепер він у
+    // під-протоколі рукостискання, а URL чистий і його не соромно логувати.
+    const url = _resolveWsUrl(wsUrl);
+    const { ws, ready } = _acquireWS(url, resolvedToken);
     ws.binaryType = 'arraybuffer';
     wsRef.current = ws;
     wsHeldRef.current = true;

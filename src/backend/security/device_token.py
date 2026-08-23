@@ -39,7 +39,7 @@ from typing import Optional
 
 from jose import JWTError, jwt
 
-from config import config
+from security.node_secret import token_signing_secret
 from security.jwt_manager import ABSOLUTE_LIFETIME_DAYS
 
 __all__ = [
@@ -65,12 +65,9 @@ class DeviceTokenPayload:
 
 
 def _secret() -> str:
-    secret = config.jwt_secret_key
-    if not secret:
-        raise RuntimeError(
-            "JWT_SECRET_KEY is not set — device tokens cannot be issued."
-        )
-    return secret
+    # Той самий секрет вузла, що й у jwt_manager: токен телефона теж не має
+    # відкривати сусідній вузол. Див. `security/node_secret.py`.
+    return token_signing_secret()
 
 
 def create_device_token(

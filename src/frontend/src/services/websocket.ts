@@ -1,4 +1,6 @@
 import type { ContextSnapshot, SystemState, ChatMessage, StateTransition } from '@shared/types';
+import { readToken } from './tokenStore';
+import { BEARER_SUBPROTOCOL } from './wsAuth';
 
 /* ─── Message types ───────────────────────────────────────────────────────── */
 
@@ -221,17 +223,21 @@ class WebSocketClient {
     // expire). A reconnect on the stale/expired token authenticates as
     // user=None on the backend, which then filters this client out of all
     // user-scoped broadcasts — so chat replies silently never arrive.
-    const liveToken =
-      (typeof localStorage !== 'undefined' && localStorage.getItem('phantom_token')) ||
-      this.token;
+    const liveToken = readToken() || this.token;
     if (liveToken) {
       this.token = liveToken;
-      url.searchParams.set('token', liveToken);
     }
 
     let ws: WebSocket;
     try {
-      ws = new WebSocket(url.toString());
+      // Раунд-4 П4: токен їде під-протоколом, а не в `?token=`. Адресний
+      // рядок uvicorn пише в лог дослівно — панель нарахувала 25 повних
+      // JWT у логах вузла за один прогін. Заголовок рукостискання в лог
+      // не потрапляє. Вузол підтверджує маркер у відповіді, інакше
+      // браузер розірве зʼєднання.
+      ws = liveToken
+        ? new WebSocket(url.toString(), [BEARER_SUBPROTOCOL, liveToken])
+        : new WebSocket(url.toString());
     } catch {
       this._scheduleReconnect();
       return;

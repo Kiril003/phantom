@@ -10,6 +10,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { readToken } from '../../services/tokenStore';
 
 interface StandingOrder {
   id: string;
@@ -28,7 +29,7 @@ export function StandingOrdersOverlay() {
 
   const fetchOrders = useCallback(async () => {
     try {
-      const token = localStorage.getItem('phantom_token');
+      const token = readToken();
       const res = await fetch('/api/v1/agent/standing_orders', {
         headers: { Authorization: `Bearer ${token}` }
       });
@@ -49,7 +50,7 @@ export function StandingOrdersOverlay() {
 
   const toggleOrder = async (order: StandingOrder) => {
     try {
-      const token = localStorage.getItem('phantom_token');
+      const token = readToken();
       const res = await fetch(`/api/v1/agent/standing_orders/${order.id}`, {
         method: 'PATCH',
         headers: { 

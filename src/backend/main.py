@@ -70,6 +70,14 @@ logging.basicConfig(
     level=getattr(logging, config.log_level),
     format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
 )
+
+# Раунд-4 П4: другий рубіж — навіть якщо секрет усе-таки доїде до логера
+# (свій же старий клієнт, дамп заголовків, трасування винятку), на диск він
+# ляже маскою. Ставимо одразу після basicConfig, щоб накрити і старт.
+from security.log_scrub import install_log_scrubber  # noqa: E402
+
+install_log_scrubber()
+
 logger = logging.getLogger(__name__)
 
 _last_batch_ts: float = 0.0
@@ -1141,6 +1149,10 @@ def create_app() -> FastAPI:
     app.middleware("http")(correlation_id_middleware)
     _register_observability(app)
 
+    # Переставляємо фільтр ще раз: uvicorn перебудовує своє логування через
+    # dictConfig і скидає хендлери, тож маска мусить сісти на нові.
+    install_log_scrubber()
+
     # Phase 18 — serve the built frontend bundle when the operator deploys
     # via the multi-stage Dockerfile. The path is the build target the
     # frontend stage of that Dockerfile produces; on dev it doesn't exist
@@ -1183,6 +1195,14 @@ def _register_ws(app: FastAPI) -> None:
         client_id = str(uuid.uuid4())
         user_id: str | None = None
         device_id: str | None = None
+
+        # Раунд-4 П4: токен більше не їде в query string — його везе
+        # під-протокол `phantom.bearer.v1`, бо шлях запиту логується
+        # uvicorn'ом дослівно. `?token=` ще приймається заради мобільного
+        # клієнта, але позначений застарілим. Див. `security/ws_auth.py`.
+        from security.ws_auth import extract_ws_token
+
+        token, accept_subprotocol = extract_ws_token(ws, token)
 
         # Validate JWT if provided. Try user audience first (the desktop
         # path that's been running since phase-2). On failure, try the
@@ -1228,13 +1248,15 @@ def _register_ws(app: FastAPI) -> None:
                             # Stable close code so the phone can clear its
                             # EncryptedSharedPreferences and prompt a
                             # re-pair flow.
-                            await ws.accept()
+                            await ws.accept(subprotocol=accept_subprotocol)
                             await ws.close(code=4401, reason="device_revoked")
                             return
                 except Exception as exc:
                     logger.debug("device token WS verify failed: %s", exc)
 
-        client = await hub.connect(ws, client_id, user_id)
+        client = await hub.connect(
+            ws, client_id, user_id, subprotocol=accept_subprotocol
+        )
         client.device_id = device_id
         # Phase 19-7 — phones get a narrower default channel filter so
         # they don't pay for `agent.stream` / `inner_monologue.stream`

@@ -33,6 +33,7 @@ import { faceApi } from '../../services/faceApi';
 import { SystemState } from '@shared/types';
 import { StandingOrdersOverlay } from './StandingOrdersOverlay';
 import { Zap } from 'lucide-react';
+import { readToken } from '../../services/tokenStore';
 
 const TITLES: Record<OverlayName, string> = {
   terminal: 'Terminal',
@@ -198,7 +199,7 @@ function TerminalOverlay() {
     }
 
     try {
-      const token = localStorage.getItem('phantom_token');
+      const token = readToken();
       const res = await fetch('/api/v1/linux/execute', {
         method: 'POST',
         headers: {

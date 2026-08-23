@@ -8,9 +8,10 @@
  */
 
 import { request, BASE } from './api';
+import { readToken } from './tokenStore';
 
 function _authHeaders(extra: Record<string, string> = {}): Record<string, string> {
-  const token = localStorage.getItem('phantom_token');
+  const token = readToken();
   const headers: Record<string, string> = { ...extra };
   if (token) headers['Authorization'] = `Bearer ${token}`;
   return headers;

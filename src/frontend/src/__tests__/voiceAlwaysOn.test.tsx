@@ -155,7 +155,7 @@ beforeEach(() => {
     connect(t: unknown) { return t; }
     disconnect() {}
   };
-  window.localStorage.setItem('phantom_token', 'test-token');
+  window.sessionStorage.setItem('phantom_token', 'test-token');
 });
 
 // ---- Tests ------------------------------------------------------------------
@@ -183,7 +183,7 @@ describe('useVoiceAlwaysOn — initial state', () => {
 
 describe('useVoiceAlwaysOn — auth & media availability', () => {
   it('sets error when no token is available', async () => {
-    window.localStorage.removeItem('phantom_token');
+    window.sessionStorage.removeItem('phantom_token');
     render(<Harness />);
     await act(async () => {
       screen.getByTestId('start').click();

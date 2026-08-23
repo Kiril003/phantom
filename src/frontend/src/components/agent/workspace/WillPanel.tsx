@@ -9,6 +9,7 @@ import {
   Cell 
 } from 'recharts';
 import { Brain, Target, User, Activity } from 'lucide-react';
+import { readToken } from '../../../services/tokenStore';
 
 interface Drive {
   name: string;
@@ -29,7 +30,7 @@ export function WillPanel() {
     queryFn: async () => {
       const resp = await fetch('/api/v1/agent/will/state', {
         headers: {
-          'Authorization': `Bearer ${localStorage.getItem('phantom_token')}`
+          'Authorization': `Bearer ${readToken()}`
         }
       });
       if (!resp.ok) throw new Error('Failed to fetch will state');

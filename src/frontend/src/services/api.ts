@@ -13,6 +13,7 @@ import type {
   CliffScreeFeature,
   CliffScreeKind,
 } from '@shared/types';
+import { clearToken, readToken } from './tokenStore';
 
 export const BASE = '/api/v1';
 
@@ -32,7 +33,7 @@ export async function request<T>(
   path: string,
   body?: unknown
 ): Promise<T> {
-  const token = localStorage.getItem('phantom_token');
+  const token = readToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
@@ -52,8 +53,7 @@ export async function request<T>(
     // can still fail-normal when no valid token exists.
     if (res.status === 401 && path !== '/auth/me') {
       try {
-        localStorage.removeItem('phantom_token');
-        localStorage.removeItem('phantom_token_expires');
+        clearToken();
         window.dispatchEvent(new CustomEvent('phantom:unauthorized'));
       } catch {
         /* SSR / restricted storage: ignore */

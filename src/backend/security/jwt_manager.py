@@ -48,12 +48,13 @@ class TokenPayload:
 
 
 def _secret() -> str:
-    secret = config.jwt_secret_key
-    if not secret:
-        raise RuntimeError(
-            "JWT_SECRET_KEY is not set. Set it via JWT_SECRET_KEY environment variable."
-        )
-    return secret
+    # Раунд-4 П4: секрет підпису належить вузлу, а не збірці — інакше токен
+    # вузла B валідний на вузлі A. Порядок вибору і причини — у
+    # `security/node_secret.py`. Ключі шифрування даних (crypto.py,
+    # vault_crypto.py) навмисно лишилися на config.jwt_secret_key.
+    from security.node_secret import token_signing_secret
+
+    return token_signing_secret()
 
 
 def create_token(

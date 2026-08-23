@@ -33,8 +33,13 @@ import {
  */
 
 const CANDIDATE_SPACINGS = [100, 1000, 10000, 100000] as const;
-/** Мінімальна відстань між лініями, щоб сітка читалась, а не зливалась. */
-const MIN_LINE_PX = 70;
+/**
+ * Мінімальна відстань між лініями, щоб сітка читалась, а не зливалась.
+ * 60 px впускає 100-метровий крок уже на z≈16 (місто впритул) — на
+ * кадрі стенда z16 із порогом 70 сітка трималась кілометрової і
+ * показувала дві лінії на весь екран.
+ */
+const MIN_LINE_PX = 60;
 
 /** Крок сітки (м) для масштабу; null — чесно «не малюємо». */
 export function chooseGridSpacing(metersPerPixel: number): number | null {
@@ -67,9 +72,9 @@ export function GridOverlay({ active }: GridOverlayProps): JSX.Element | null {
     const light = mapStyle === 'streets';
     const palette = light
       ? {
-          line: 'rgba(74,56,18,0.4)',
-          major: 'rgba(74,56,18,0.6)',
-          seam: 'rgba(74,56,18,0.7)',
+          line: 'rgba(74,56,18,0.5)',
+          major: 'rgba(74,56,18,0.7)',
+          seam: 'rgba(74,56,18,0.8)',
           text: 'rgba(46,34,8,0.95)',
           halo: 'rgba(255,255,255,0.9)',
         }
@@ -138,9 +143,10 @@ export function GridOverlay({ active }: GridOverlayProps): JSX.Element | null {
         samples: Array<{ latDeg: number; lonDeg: number }>,
         color: string,
         dashed = false,
+        width = 1,
       ) => {
         ctx.strokeStyle = color;
-        ctx.lineWidth = 1;
+        ctx.lineWidth = width;
         ctx.setLineDash(dashed ? [6, 5] : []);
         ctx.beginPath();
         let started = false;
@@ -214,7 +220,8 @@ export function GridOverlay({ active }: GridOverlayProps): JSX.Element | null {
             pts.push({ latDeg: ll.latDeg, lonDeg: clampLon(ll.lonDeg) });
           }
           if (pts.length < 2) continue;
-          drawSampledLine(pts, e % 100000 === 0 ? majorColor : lineColor);
+          const eIsMajor = e % 100000 === 0;
+          drawSampledLine(pts, eIsMajor ? majorColor : lineColor, false, eIsMajor ? 1.5 : 1);
           if (!isMajor) {
             const top = project(pts[pts.length - 1].latDeg, pts[pts.length - 1].lonDeg);
             const kmDigits = spacing === 100
@@ -234,7 +241,8 @@ export function GridOverlay({ active }: GridOverlayProps): JSX.Element | null {
             pts.push({ latDeg: ll.latDeg, lonDeg: clampLon(ll.lonDeg) });
           }
           if (pts.length < 2) continue;
-          drawSampledLine(pts, n % 100000 === 0 ? majorColor : lineColor);
+          const nIsMajor = n % 100000 === 0;
+          drawSampledLine(pts, nIsMajor ? majorColor : lineColor, false, nIsMajor ? 1.5 : 1);
           if (!isMajor) {
             const left = pts.find((p) => p.lonDeg > lonA + 1e-9) ?? pts[0];
             const px = project(left.latDeg, left.lonDeg);

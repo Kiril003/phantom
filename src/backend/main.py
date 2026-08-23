@@ -59,6 +59,7 @@ from api.routes_workbench import router as workbench_router
 from api.routes_tenant import router as tenant_router
 from api.routes_api_keys import router as api_keys_router
 from api.routes_analytics import router as analytics_router
+from api.routes_cockpit import router as cockpit_router
 from api.routes_members import router as members_router
 from api.routes_marketplace import router as marketplace_router
 from api.stream import router as stream_router
@@ -982,6 +983,10 @@ def create_app() -> FastAPI:
     app.include_router(members_router, prefix=prefix)
     app.include_router(api_keys_router, prefix=prefix)
     app.include_router(analytics_router, prefix=prefix)
+    # Ф4 «Кокпіт оператора» — тонкі читальні вікна в наявні джерела:
+    # /cockpit/machine (сампер CPU + psutil + слухачі вузла) і
+    # /cockpit/audit (журнал agent_audit з курсорною пагінацією).
+    app.include_router(cockpit_router, prefix=prefix)
     # Оплата НЕ живе на пристрої. Тут стояли /billing і /stripe: перший давав
     # будь-якому простору підняти собі рівень до Enterprise одним POST, другий
     # не перевіряв підпис вебхука і віддавав вигадане посилання на оплату.

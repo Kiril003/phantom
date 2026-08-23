@@ -38,8 +38,19 @@ from messenger.purge import blob_ids_of, purge_conversation_blobs, tombstone
 PNG = b"\x89PNG\r\n\x1a\n" + b"phantom-test-bytes" * 4
 
 
-async def _owner_id(session) -> str:
-    return (await session.execute(select(User.id))).scalars().first()
+def _client_owner(client) -> str:
+    """Власник — саме той, ким автентифікований клієнт.
+
+    Раніше власника брали як «першого-ліпшого» користувача бази: варто було
+    сусідньому тесту лишити ще один рядок User, і розмова народжувалась під
+    чужим власником. Вузол чесно відповідав «conversation not found» — падав
+    тест, а не продукт. Тепер id дістаємо з того самого токена, яким клієнт
+    стукає у вузол.
+    """
+    from jose import jwt as _jwt
+
+    token = client.headers["Authorization"].split(" ", 1)[1]
+    return _jwt.get_unverified_claims(token)["sub"]
 
 
 def _seal_file(plain: bytes) -> tuple[bytes, bytes, bytes, str]:
@@ -211,7 +222,7 @@ async def test_a_delete_frame_wipes_the_message_on_the_receiving_node(auth_root_
     store_bytes(blob_id, ct)
 
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = _client_owner(auth_root_client)
 
         # Співрозмовник шле фото — тим самим шляхом, що й у житті.
         frame = peer_session.encrypt(
@@ -234,7 +245,7 @@ async def test_a_delete_frame_wipes_the_message_on_the_receiving_node(auth_root_
 
     # А тепер службовий кадр — тією ж сесією, тією ж дорогою.
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = _client_owner(auth_root_client)
         killed = await accept_frame(
             session, me, owner,
             peer_session.encrypt(wrap_frame("delete", "c_orig").encode()),
@@ -257,6 +268,7 @@ async def test_a_delete_frame_wipes_the_message_on_the_receiving_node(auth_root_
     feed = auth_root_client.get(
         f"/api/v1/messenger/conversations/{conversation_id}/messages"
     ).json()
+    assert isinstance(feed, list), f"вузол віддав не стрічку: {feed!r}"
     stone = [m for m in feed if m["id"] == message_id][0]
     assert stone["deleted_at"] is not None
     assert stone["body"] is None
@@ -272,13 +284,13 @@ async def test_a_delete_frame_for_something_we_never_had_is_still_accepted(auth_
     peer_session = Session.initiate(peer, me.publish_bundle())
 
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = _client_owner(auth_root_client)
         # Спершу звичайний кадр, щоб зʼявилась сесія й розмова.
         first = await accept_frame(session, me, owner, peer_session.encrypt(b"hi"))
         assert first is not None
 
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = _client_owner(auth_root_client)
         nothing = await accept_frame(
             session, me, owner,
             peer_session.encrypt(wrap_frame("delete", "c_never_existed").encode()),
@@ -290,7 +302,7 @@ async def test_a_delete_frame_for_something_we_never_had_is_still_accepted(auth_
 
     # Головне: сесія вціліла, і наступне повідомлення читається.
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = _client_owner(auth_root_client)
         after = await accept_frame(
             session, me, owner, peer_session.encrypt("а тепер далі".encode()),
             peer_node_id=peer.node_id,
@@ -312,7 +324,7 @@ async def test_the_route_carries_the_delete_frame_to_the_other_node(auth_root_cl
     peer = KeyStore.generate(one_time_count=8)
 
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = _client_owner(auth_root_client)
         peer_bundle = peer.publish_bundle()
         my_side = Session.initiate(me, peer_bundle, expected_node_id=peer.node_id)
         contact = MessengerContact(
@@ -390,7 +402,7 @@ async def test_a_delete_for_an_offline_peer_waits_in_the_queue(auth_root_client,
     peer = KeyStore.generate(one_time_count=8)
 
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = _client_owner(auth_root_client)
         peer_bundle = peer.publish_bundle()
         my_side = Session.initiate(me, peer_bundle, expected_node_id=peer.node_id)
         contact = MessengerContact(

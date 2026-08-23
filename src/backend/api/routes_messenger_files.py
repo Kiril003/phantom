@@ -42,8 +42,10 @@ from db.models import (
 from messenger.blobs import (
     BLOB_LIMIT_BYTES,
     BlobRejected,
+    blob_path,
     inbound_blob_guard,
     new_blob_id,
+    park_blob,
     push_blob,
     read_bytes,
     record,
@@ -68,8 +70,17 @@ class BlobOut(BaseModel):
     size: int
     #: Відбиток ШИФРОТЕКСТУ. Браузер звіряє його перед розшифруванням.
     sha256: str
-    #: stored | queued | sent | missing — стан перевезення, не вмісту.
+    #: stored | queued | parked | sent | missing — стан перевезення, не вмісту.
+    #: parked — байти чекають в хмарі; адресат забере їх сам.
     state: str
+
+
+def _bytes_on_disk(blob_id: str) -> bool:
+    """Чи лежать байти тут. Непридатне імʼя — те саме, що й «немає»."""
+    try:
+        return blob_path(blob_id).exists()
+    except ValueError:
+        return False
 
 
 async def _contact_of(
@@ -151,15 +162,23 @@ async def upload_blob(
     state = "stored"
     attempts = 0
     if peer_node_id:
-        # Ретранслятор возить кадри, не файли. Немає прямої адреси — блоб
-        # чесно лягає в чергу і чекає, а не вдає доставленим.
+        # Ретранслятор возить кадри, не файли. Дороги для байтів дві: пряма
+        # адреса й хмара. Немає жодної — блоб чесно лягає в чергу і чекає, а
+        # не вдає доставленим.
         state = "queued"
+        pushed = False
         if address:
             attempts = 1
-            if await push_blob(
+            pushed = await push_blob(
                 address, blob_id, data, from_node_id=_keys().node_id
-            ):
-                state = "sent"
+            )
+        if pushed:
+            state = "sent"
+        elif await park_blob(blob_id, data, peer_node_id):
+            # Байти в хмарі: адресат забере їх сам, навіть якщо цей вузол
+            # вимкнуть за секунду після надсилання.
+            state = "parked"
+            attempts = max(attempts, 1)
 
     row = await record(
         session,
@@ -326,7 +345,30 @@ async def ask_again(
     user: User = Depends(get_current_user),
     session: AsyncSession = Depends(get_db),
 ) -> BlobOut:
-    """«Запитати ще раз» — прохання до вузла відправника надіслати блоб знову."""
+    """«Запитати ще раз»: спершу хмара, потім вузол відправника.
+
+    Порядок саме такий, бо хмарі не треба бути увімкненою. Прохання до вузла
+    відправника працює, лише поки той живий і має нашу адресу; байти, що
+    лежать у бакеті, чекають на нас самі.
+    """
+    from messenger.redelivery import fetch_parked_blobs
+
+    if not _bytes_on_disk(blob_id):
+        # Своє й тільки своє: імʼя обʼєкта починається з node_id цього вузла,
+        # а ідентифікатор блоба доводиться повідомленням у стрічці власника.
+        taken = await fetch_parked_blobs(
+            session, _keys(), user.id, only_blob_id=blob_id
+        )
+        if taken:
+            arrived = await session.get(MessengerBlob, blob_id)
+            if arrived is not None:
+                return BlobOut(
+                    blob_id=blob_id,
+                    size=arrived.size,
+                    sha256=arrived.sha256,
+                    state=arrived.state,
+                )
+
     row = await session.get(MessengerBlob, blob_id)
     peer_node_id = row.peer_node_id if row is not None else None
     conversation_id = row.conversation_id if row is not None else None

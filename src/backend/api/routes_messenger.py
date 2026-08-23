@@ -57,19 +57,25 @@ from node.identity import node_id
 from security.device_auth import get_user_or_device_user
 
 _node_keys: KeyStore | None = None
+_node_keys_path: str | None = None
 
 
 def _keys() -> KeyStore:
-    """Ключі вузла читаємо з диска один раз на процес.
+    """Ключі вузла читаємо з диска один раз на теку даних.
 
     Prekey-набір теж підіймається з диска: вузол уже роздав публічні частини
     у своєму bundle, і якщо після рестарту згенерувати нові, той, хто саме
     зараз пише вперше, отримає сесію, яку неможливо прийняти.
-    """
-    global _node_keys
-    if _node_keys is None:
-        from node.identity import key_path
 
+    Кеш памʼятає, з якого файла взято ключі: у одному процесі тека даних може
+    змінитися, і мовчки лишити в памʼяті ключі чужого вузла — найгірший з
+    можливих наслідків, бо сесії перестають розшифровуватись без жодної помилки.
+    """
+    global _node_keys, _node_keys_path
+    from node.identity import key_path
+
+    current = str(key_path())
+    if _node_keys is None or _node_keys_path != current:
         store = KeyStore.from_node()
         prekeys = key_path().parent / "messenger_prekeys.bin"
         if prekeys.exists():
@@ -81,6 +87,7 @@ def _keys() -> KeyStore:
         else:
             store.persist_prekeys(prekeys)
         _node_keys = store
+        _node_keys_path = current
     return _node_keys
 
 logger = logging.getLogger(__name__)

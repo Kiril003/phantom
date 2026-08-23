@@ -232,11 +232,14 @@ export const messengerApi = {
   /** Сирий шифротекст вкладення. Розшифровує браузер — див. messengerMedia.ts. */
   fileUrl: (blobId: string) => `${BASE}/messenger/files/${blobId}`,
 
-  /** stored | queued | sent | missing — стан ПЕРЕВЕЗЕННЯ, не вмісту. */
+  /** stored | queued | parked | sent | missing — стан ПЕРЕВЕЗЕННЯ, не вмісту. */
   blobStatus: (blobId: string) =>
     request<NodeBlob>('GET', `/messenger/files/${blobId}/status`),
 
-  /** «Запитати ще раз»: просимо вузол відправника надіслати блоб знову. */
+  /**
+   * «Запитати ще раз»: спершу вузол шукає байти в хмарі, а якщо їх там немає —
+   * просить вузол відправника надіслати блоб знову.
+   */
   requestBlob: (blobId: string) =>
     request<NodeBlob>('POST', `/messenger/files/${blobId}/request`),
 };
@@ -307,9 +310,15 @@ export function messageFromNode(row: NodeMessage, selfId: string, peerNodeId?: s
     // Вкладення важить більше за кадр: ключ міг доїхати, а байти застрягнути.
     // Тоді повідомлення НЕ надіслане — у людини немає фото, і галочка про
     // «надіслано» була б брехнею про стан, а не дрібною неточністю.
+    //
+    // 'parked' — байти лежать у хмарі й чекають, поки адресат їх забере. Це
+    // краще за чергу (наш вузол уже не потрібен), але це ще НЕ «доїхало»:
+    // галочка лишається тією ж, поки вкладення справді не в людини.
     status:
       peerNodeId && (peerNodeId ? row.author_id !== peerNodeId : false)
-        ? row.attachment_state === 'queued' || row.attachment_state === 'missing'
+        ? row.attachment_state === 'queued'
+          || row.attachment_state === 'parked'
+          || row.attachment_state === 'missing'
           ? 'queued'
           : row.delivery_state === 'sent'
             ? 'sent'

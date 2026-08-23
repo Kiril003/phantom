@@ -255,7 +255,7 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
                         <span className="w-2.5 h-2.5 rounded-full bg-[#E87A42]" />
                       )}
                     </div>
-                    <h4 className="font-extrabold text-sm text-[#F9F7F1] mb-1">Автоматичний (Hybrid)</h4>
+                    <h4 className="font-extrabold text-sm text-[#1E2521] mb-1">Автоматичний (Hybrid)</h4>
                     <p className="text-[11.5px] text-[#637268] leading-relaxed">
                       Миттєвий прямий P2P тунель за наявності зв'язку, з непомітним підстрахуванням через WebSocket сервер.
                     </p>
@@ -282,7 +282,7 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
                         <span className="w-2.5 h-2.5 rounded-full bg-[#10B981]" />
                       )}
                     </div>
-                    <h4 className="font-extrabold text-sm text-[#F9F7F1] mb-1">Чистий P2P (WebRTC)</h4>
+                    <h4 className="font-extrabold text-sm text-[#1E2521] mb-1">Чистий P2P (WebRTC)</h4>
                     <p className="text-[11.5px] text-[#637268] leading-relaxed">
                       Прямий DataChannel між браузерами. Текст і файли не проходять через сервер.
                     </p>
@@ -309,7 +309,7 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
                         <span className="w-2.5 h-2.5 rounded-full bg-[#3B82F6]" />
                       )}
                     </div>
-                    <h4 className="font-extrabold text-sm text-[#F9F7F1] mb-1">Серверний релей</h4>
+                    <h4 className="font-extrabold text-sm text-[#1E2521] mb-1">Серверний релей</h4>
                     <p className="text-[11.5px] text-[#637268] leading-relaxed">
                       Стандартна доставка через WebSocket вузол PHANTOM. Забезпечує гарантовану доставку для великих груп.
                     </p>
@@ -327,7 +327,7 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
                 <div className="p-3 bg-white rounded-2xl border border-[#E2D8C6] shadow-2xs">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-[#79887D] block">Затримка (RTT)</span>
                   <div className="flex items-baseline gap-1.5 mt-0.5">
-                    <span className="text-xl font-black text-[#F9F7F1]">
+                    <span className="text-xl font-black text-[#1E2521]">
                       {diagnostics.latencyMs !== null ? diagnostics.latencyMs : '—'}
                     </span>
                     {diagnostics.latencyMs !== null && (
@@ -342,7 +342,7 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
                 <div className="p-3 bg-white rounded-2xl border border-[#E2D8C6] shadow-2xs">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-[#79887D] block">P2P Вузли онлайн</span>
                   <div className="flex items-baseline gap-1.5 mt-0.5">
-                    <span className="text-xl font-black text-[#F9F7F1]">{peers.length}</span>
+                    <span className="text-xl font-black text-[#1E2521]">{peers.length}</span>
                     <span className="text-xs font-semibold text-[#79887D]">пірів</span>
                   </div>
                   <span className="text-[10px] text-[#637268] font-semibold block mt-1">
@@ -398,7 +398,7 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
               {peers.length === 0 ? (
                 <div className="p-8 text-center bg-white rounded-2xl border border-[#DFD6C4]">
                   <Users className="w-8 h-8 text-[#A8B6AB] mx-auto mb-2 opacity-50" />
-                  <p className="text-xs font-bold text-[#F9F7F1]">Немає активних прямих пірів у кімнаті</p>
+                  <p className="text-xs font-bold text-[#1E2521]">Немає активних прямих пірів у кімнаті</p>
                   <p className="text-[11px] text-[#6E7E73] mt-1">
                     Відкрийте додаток у другій вкладці або на іншому пристрої для автоматичного P2P з'єднання.
                   </p>
@@ -415,7 +415,7 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
                         />
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
-                            <h5 className="font-extrabold text-xs sm:text-sm text-[#F9F7F1] truncate">{peer.peerName}</h5>
+                            <h5 className="font-extrabold text-xs sm:text-sm text-[#1E2521] truncate">{peer.peerName}</h5>
                             {peer.isDirectP2P && (
                               <span className="px-1.5 py-0.2 rounded text-[9.5px] font-bold bg-[#E8F5E9] text-[#2E7D32] border border-[#C8E6C9]">
                                 WebRTC Direct
@@ -433,7 +433,7 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
 
                       <div className="text-right shrink-0">
                         {peer.rttMs !== undefined && (
-                          <span className="text-xs font-bold text-[#F9F7F1] block">{peer.rttMs} мс</span>
+                          <span className="text-xs font-bold text-[#1E2521] block">{peer.rttMs} мс</span>
                         )}
                         <span className="text-[10px] text-[#7A8A80] block mt-0.5">
                           {peer.bytesReceived
@@ -452,7 +452,7 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
           {activeTab === 'handshake' && (
             <div className="space-y-4">
               <div className="p-3.5 bg-[#F6EEE2] rounded-2xl border border-[#E6DC source-serif]">
-                <h4 className="font-bold text-xs text-[#F9F7F1] flex items-center gap-1.5">
+                <h4 className="font-bold text-xs text-[#1E2521] flex items-center gap-1.5">
                   <KeyRound className="w-4 h-4 text-[#E87A42]" />
                   <span>Ручний обмін ключами (SDP Handshake без сервера)</span>
                 </h4>
@@ -464,7 +464,7 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
               {/* Step 1: Create Offer */}
               <div className="p-4 bg-white rounded-2xl border border-[#DFD6C4] space-y-2.5">
                 <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-[#F9F7F1]">Крок 1. Згенерувати локальний P2P Offer</span>
+                  <span className="text-xs font-bold text-[#1E2521]">Крок 1. Згенерувати локальний P2P Offer</span>
                   <button
                     onClick={handleGenerateManualOffer}
                     className="px-3 py-1 bg-[#E87A42] hover:bg-[#D56832] text-[#1E2521] rounded-xl text-xs font-bold shadow-2xs transition-all active:scale-95"
@@ -483,7 +483,7 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
                     />
                     <button
                       onClick={handleCopyOffer}
-                      className="absolute top-2 right-2 px-2.5 py-1 bg-white hover:bg-[#F2ECE0] border border-[#D5C9B5] text-[#F9F7F1] rounded-lg text-xs font-bold flex items-center gap-1 shadow-2xs"
+                      className="absolute top-2 right-2 px-2.5 py-1 bg-white hover:bg-[#F2ECE0] border border-[#D5C9B5] text-[#1E2521] rounded-lg text-xs font-bold flex items-center gap-1 shadow-2xs"
                     >
                       {copiedOffer ? <Check className="w-3.5 h-3.5 text-[#10B981]" /> : <Copy className="w-3.5 h-3.5" />}
                       <span>{copiedOffer ? 'Скопійовано' : 'Копіювати'}</span>
@@ -494,7 +494,7 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
 
               {/* Step 2: Paste Remote Answer */}
               <div className="p-4 bg-white rounded-2xl border border-[#DFD6C4] space-y-2.5">
-                <span className="text-xs font-bold text-[#F9F7F1] block">Крок 2. Вставити отриманий SDP Answer від співрозмовника</span>
+                <span className="text-xs font-bold text-[#1E2521] block">Крок 2. Вставити отриманий SDP Answer від співрозмовника</span>
                 <textarea
                   rows={3}
                   value={manualAnswerInput}
@@ -528,7 +528,7 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
                   <UploadCloud className="w-6 h-6" />
                 </div>
                 <div>
-                  <h4 className="font-extrabold text-sm text-[#F9F7F1]">Пряма передача файлів через WebRTC</h4>
+                  <h4 className="font-extrabold text-sm text-[#1E2521]">Пряма передача файлів через WebRTC</h4>
                   <p className="text-xs text-[#6A7B71] max-w-md mx-auto mt-1 leading-relaxed">
                     Файли нарізаються на бінарні фрагменти (16KB) та передаються безпосередньо у браузер одержувача, не проходячи через сервер.
                   </p>
@@ -552,7 +552,7 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
 
               {fileProgress && (
                 <div className="p-4 bg-white rounded-2xl border border-[#DFD6C4] space-y-2 shadow-2xs animate-in fade-in">
-                  <div className="flex items-center justify-between text-xs font-bold text-[#F9F7F1]">
+                  <div className="flex items-center justify-between text-xs font-bold text-[#1E2521]">
                     <span className="truncate">{fileProgress.fileName}</span>
                     <span className="text-[#E87A42]">{fileProgress.percentage}%</span>
                   </div>

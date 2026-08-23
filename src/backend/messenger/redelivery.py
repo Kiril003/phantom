@@ -22,12 +22,14 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import MessengerContact, MessengerConversation, MessengerMessage
 from messenger.blobs import flush_blob_queue
+from messenger.r2 import R2Road, drop_object, fetch_object, object_key, r2_road
 from messenger.transport import deliver, supabase_mailbox_endpoint, supabase_road
 
 logger = logging.getLogger(__name__)
 
 __all__ = [
     "MAX_ATTEMPTS",
+    "fetch_parked_blobs",
     "flush_queue",
     "read_supabase_mailbox",
     "supabase_service_key",
@@ -97,6 +99,87 @@ async def flush_queue(
 
     await session.commit()
     return delivered
+
+
+async def fetch_parked_blobs(
+    session: AsyncSession,
+    keys: Any,
+    owner_user_id: str,
+    *,
+    road: Optional[R2Road] = None,
+    only_blob_id: str = "",
+    client: Optional[httpx.AsyncClient] = None,
+    limit: int = 40,
+) -> int:
+    """Забирає з хмари вкладення, ключі до яких уже приїхали в стрічці.
+
+    Тягне вузол АДРЕСАТА і тільки своє: імʼя обʼєкта починається з його
+    власного node_id, тож попросити чуже нічим. Ідентифікатор блоба лежить під
+    пломбою в тілі повідомлення — без ключів вузла не дізнатись навіть того,
+    що просити, і це навмисно.
+
+    Забране одразу прибирається з хмари: байти вже на диску, а місце в
+    безкоштовному бакеті скінченне. Невдале прибирання — не помилка.
+    """
+    from messenger.blobs import blob_path, record, store_bytes
+    from messenger.purge import blob_ids_of
+
+    if road is None:
+        from config import config
+
+        road = r2_road(config)
+    if road is None:
+        return 0
+
+    rows = (
+        await session.execute(
+            select(MessengerMessage)
+            .join(
+                MessengerConversation,
+                MessengerConversation.id == MessengerMessage.conversation_id,
+            )
+            .where(
+                MessengerConversation.owner_user_id == owner_user_id,
+                MessengerMessage.kind.in_(("image", "file")),
+                MessengerMessage.deleted_at.is_(None),
+                MessengerMessage.author_id != keys.node_id,
+            )
+            .order_by(MessengerMessage.sent_at.desc())
+            .limit(limit)
+        )
+    ).scalars().all()
+
+    taken = 0
+    for row in rows:
+        for blob_id in blob_ids_of(keys, row):
+            if only_blob_id and blob_id != only_blob_id:
+                continue
+            try:
+                if blob_path(blob_id).exists():
+                    continue
+                key = object_key(keys.node_id, blob_id)
+            except ValueError:
+                continue
+            data = await fetch_object(road, key, client=client)
+            if data is None:
+                continue
+            digest = store_bytes(blob_id, data)
+            await record(
+                session,
+                blob_id,
+                direction="in",
+                state="stored",
+                size=len(data),
+                sha256=digest,
+                conversation_id=row.conversation_id,
+                peer_node_id=row.author_id,
+            )
+            taken += 1
+            if not await drop_object(road, key, client=client):
+                logger.info("обʼєкт %s лишився в хмарі — прибрати не вдалось", blob_id[:8])
+    if taken:
+        await session.commit()
+    return taken
 
 
 def supabase_service_key() -> str:
@@ -202,15 +285,17 @@ async def redelivery_loop(interval_s: float = 45.0) -> None:
                 # чекати, поки людина згадає про нього руками.
                 blobs = await flush_blob_queue(session, _keys().node_id)
             letters = 0
+            parked = 0
             service_key = supabase_service_key()
-            if sb_url and service_key:
+            has_r2 = r2_road(config) is not None
+            if (sb_url and service_key) or has_r2:
                 from db.models import User
 
                 async with AsyncSessionLocal() as session:
                     owner = (
                         await session.execute(select(User.id).order_by(User.id))
                     ).scalars().first()
-                    if owner is not None:
+                    if owner is not None and sb_url and service_key:
                         letters = await read_supabase_mailbox(
                             session,
                             _keys(),
@@ -218,12 +303,18 @@ async def redelivery_loop(interval_s: float = 45.0) -> None:
                             url=sb_url,
                             service_key=service_key,
                         )
-            if delivered or blobs or letters:
+                    if owner is not None and has_r2:
+                        # Вкладення, що чекають у хмарі: ключ до них уже в
+                        # стрічці, лишилось забрати байти.
+                        parked = await fetch_parked_blobs(session, _keys(), owner)
+            if delivered or blobs or letters or parked:
                 logger.info(
-                    "черга месенджера: довезено %d, вкладень %d, зі скриньки Supabase %d",
+                    "черга месенджера: довезено %d, вкладень %d, "
+                    "зі скриньки Supabase %d, з хмари %d",
                     delivered,
                     blobs,
                     letters,
+                    parked,
                 )
         except asyncio.CancelledError:
             raise

@@ -49,6 +49,7 @@ class RelayClient:
         self._local_target = local_target
         self._task: Optional[asyncio.Task] = None
         self._sessions: set[asyncio.Task] = set()
+        self._mailbox: set[asyncio.Task] = set()
         self._connected = False
         self._stopping = False
         self._last_error = ""
@@ -82,7 +83,7 @@ class RelayClient:
 
     async def stop(self) -> None:
         self._stopping = True
-        for task in list(self._sessions):
+        for task in list(self._sessions) + list(self._mailbox):
             task.cancel()
         if self._task is not None:
             self._task.cancel()
@@ -161,9 +162,13 @@ class RelayClient:
                 # Лист, який ретранслятор притримав, поки нас не було в мережі.
                 # Розбирати його тут нічим: вміст зашифрований, і ретранслятор
                 # його теж не бачив. Просто передаємо в приймальню месенджера.
-                asyncio.create_task(
+                # Посилання тримаємо самі: цикл подій тримає задачі слабко,
+                # і збирач сміття здатен зжерти лист до того, як він ляже.
+                letter = asyncio.create_task(
                     _accept_mailbox(message), name="relay_mailbox"
                 )
+                self._mailbox.add(letter)
+                letter.add_done_callback(self._mailbox.discard)
                 continue
             if kind != "open":
                 continue

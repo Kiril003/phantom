@@ -1562,6 +1562,7 @@ class MessengerBlob(Base):
     #: out — ми надсилаємо; in — нам привезли.
     direction: Mapped[str] = mapped_column(String(4), nullable=False)
     #: stored — байти на диску; queued — лежать, але до співрозмовника не доїхали;
+    #: parked — лежать у хмарі й чекають, поки адресат їх забере;
     #: sent — вузол-адресат підтвердив прийом.
     state: Mapped[str] = mapped_column(String(12), default="stored", nullable=False)
     size: Mapped[int] = mapped_column(Integer, default=0, nullable=False)

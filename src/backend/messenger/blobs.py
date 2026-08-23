@@ -10,7 +10,9 @@
 файла все одно робить браузер власника, а вузол зберігає шифротекст.
 
 Тут немає жодного «майже доставлено». Блоб або підтверджений вузлом-адресатом
-(state='sent'), або чесно лежить у черзі (state='queued') і чекає повтору.
+(state='sent'), або лежить у хмарі й чекає, поки адресат прокинеться і забере
+його сам (state='parked'), або чесно лишається в черзі (state='queued'), коли
+хмарної дороги немає взагалі.
 """
 from __future__ import annotations
 
@@ -29,6 +31,7 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import MessengerBlob, MessengerContact, MessengerConversation
+from messenger.r2 import R2Road, object_key, park_object, r2_road
 
 logger = logging.getLogger(__name__)
 
@@ -45,6 +48,7 @@ __all__ = [
     "flush_blob_queue",
     "inbound_blob_guard",
     "new_blob_id",
+    "park_blob",
     "push_blob",
     "read_bytes",
     "request_from_peer",
@@ -279,6 +283,34 @@ async def push_blob(
             await http.aclose()
 
 
+async def park_blob(
+    blob_id: str,
+    data: bytes,
+    peer_node_id: str,
+    *,
+    road: Optional[R2Road] = None,
+    client: Optional[httpx.AsyncClient] = None,
+) -> bool:
+    """Кладе шифротекст у хмару під імʼям `<node_id адресата>/<blob_id>`.
+
+    Дорога для тих випадків, де прямої немає взагалі: вимкнений телефон, NAT,
+    мобільна мережа. Хмарі дістаються самі байти — ключ до них їде окремо, у
+    тілі повідомлення. Немає креденшелів — немає й дороги, і це чесне False.
+    """
+    if road is None:
+        from config import config
+
+        road = r2_road(config)
+    if road is None or not peer_node_id:
+        return False
+    try:
+        key = object_key(peer_node_id, blob_id)
+    except ValueError as exc:
+        logger.info("хмарне імʼя для вкладення не склалось: %s", exc)
+        return False
+    return await park_object(road, key, data, client=client)
+
+
 async def request_from_peer(
     peer_address: str,
     blob_id: str,
@@ -353,13 +385,24 @@ async def flush_blob_queue(
 
     Йде тією ж смугою, що й черга повідомлень: людина надіслала фото, воно не
     доїхало, і ніхто про це не мусить памʼятати руками.
+
+    Дороги за порядком: пряма адреса, а коли вона мовчить або її немає —
+    хмара. Повернене число рахує лише те, що взяв ВУЗОЛ адресата: блоб, який
+    ліг у хмару, ще не в людини, і додавати його сюди означало б повторити ту
+    саму брехню, заради якої цю дорогу й будували.
     """
+    from config import config
+
+    road = r2_road(config)
     rows = (
         await session.execute(
             select(MessengerBlob)
             .where(
                 MessengerBlob.direction == "out",
-                MessengerBlob.state == "queued",
+                # Припарковане теж повертається сюди: якщо в адресата немає
+                # креденшелів, він ніколи не забере блоб із хмари, і пряма
+                # дорога лишається єдиною, що може його довезти.
+                MessengerBlob.state.in_(("queued", "parked")),
                 MessengerBlob.attempts < MAX_BLOB_ATTEMPTS,
             )
             .order_by(MessengerBlob.created_at)
@@ -368,6 +411,7 @@ async def flush_blob_queue(
     ).scalars().all()
 
     delivered = 0
+    parked = 0
     for row in rows:
         address = ""
         if row.conversation_id:
@@ -376,22 +420,38 @@ async def flush_blob_queue(
                 contact = await session.get(MessengerContact, conversation.contact_id)
                 if contact is not None:
                     address = contact.peer_address or ""
-        if not address:
-            # Прямої дороги немає — спроба нічого не дасть, лічильник не псуємо.
-            # Ретранслятор блоби не возить: він тунель для кадрів, не для файлів.
+        in_cloud = row.state == "parked"
+        if not address and (road is None or in_cloud):
+            # Робити нічого: або дороги немає взагалі, або блоб уже в хмарі й
+            # класти його туди вдруге означало б платити за те саме двічі.
+            # Ретранслятор блоби не возить — він тунель для кадрів.
             continue
 
         data = read_bytes(row.blob_id)
         if data is None:
-            # Байти зникли з диска — вигадувати доставку нема з чого.
-            row.state = "missing"
+            # Байти зникли з диска. Для припаркованого це нічого не міняє —
+            # його копія лежить у хмарі й на адресата чекає саме вона.
+            if not in_cloud:
+                row.state = "missing"
             continue
 
         row.attempts += 1
         row.last_attempt_at = _now()
-        if await push_blob(address, row.blob_id, data, from_node_id=own_node_id):
+        if address and await push_blob(
+            address, row.blob_id, data, from_node_id=own_node_id
+        ):
             row.state = "sent"
             delivered += 1
+            continue
+        if not in_cloud and road is not None and row.peer_node_id and await park_blob(
+            row.blob_id, data, row.peer_node_id, road=road
+        ):
+            # Байти чекають в хмарі: адресат забере їх сам, і для цього наш
+            # вузол уже не потрібен — можна вимикати телефон.
+            row.state = "parked"
+            parked += 1
 
     await session.commit()
+    if parked:
+        logger.info("вкладень лягло в хмару: %d", parked)
     return delivered

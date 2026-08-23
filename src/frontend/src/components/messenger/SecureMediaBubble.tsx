@@ -195,11 +195,15 @@ export const SecureMediaBubble: React.FC<Props> = ({ msg, isSelf, onOpenLightbox
   }
 
   // ── Готово ─────────────────────────────────────────────────────────────────
+  // Два різні стани, і різниця не косметична: 'queued' — байти лежать у нас і
+  // чекають, поки вузол співрозмовника обізветься; 'parked' — вони вже в
+  // хмарі, і наш вузол для їх приїзду більше не потрібен. Але в людини їх ще
+  // немає ні там, ні там, тож жоден із двох не вдає доставку.
   const transferBadge =
-    isSelf && outState === 'queued' ? (
+    isSelf && (outState === 'queued' || outState === 'parked') ? (
       <span className="flex items-center gap-1 text-[10.5px] text-[#8A7A5C]">
         <span className="w-1.5 h-1.5 rounded-full bg-[#C9A227]" />
-        очікує передачі
+        {outState === 'parked' ? 'у дорозі через хмару' : 'очікує передачі'}
       </span>
     ) : null;
 

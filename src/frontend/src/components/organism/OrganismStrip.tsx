@@ -267,13 +267,16 @@ export function OrganismStrip() {
         <Value tone={wsConnected ? INK : ALERT}>{wsConnected ? 'живий' : 'обрив'}</Value>
       </Pulse>
 
-      {/* Ядро: /health кожні 5 с. */}
+      {/* Ядро: /health кожні 5 с. Ланцюг ШІ-провайдерів тут НЕ живе
+          (гонтлет №1, У10): стрічка несе машинні пульси, не архітектуру —
+          «gemini→ollama» людині за плечем розповідав, куди ходять
+          діалоги. Його місце — кокпіт. */}
       <Pulse>
         <Word>ядро</Word>
         {h ? (
           <>
             <Value tone={h.status === 'ok' ? INK : ALERT}>
-              {`v${h.version} · кл ${h.ws_clients} · ШІ ${h.ai_active}→${h.ai_fallback}`}
+              {`v${h.version} · кл ${h.ws_clients}`}
             </Value>
             {health.silent && health.ageS !== null && <Age ageS={health.ageS} />}
           </>

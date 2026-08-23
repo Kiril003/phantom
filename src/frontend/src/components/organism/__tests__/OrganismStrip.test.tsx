@@ -41,6 +41,39 @@ describe('standalone-збірка Ф1', () => {
     expect(screen.getByText('Тінь')).toBeTruthy();
   });
 
+  it('живе ядро не друкує ланцюг ШІ-провайдерів (У10: пульси, не архітектура)', async () => {
+    // /health відповідає, решта джерел мертві.
+    fetchMock.mockImplementation(async (url?: unknown) => {
+      if (String(url) === '/health') {
+        return {
+          ok: true,
+          status: 200,
+          json: async () => ({
+            status: 'ok',
+            version: '1.2.3',
+            hostname: 'phantom',
+            ws_clients: 2,
+            esp32_connected: false,
+            serial_enabled: false,
+            ai_active: 'gemini',
+            ai_fallback: 'ollama',
+          }),
+        } as Response;
+      }
+      throw new TypeError('failed to fetch');
+    });
+    await act(async () => {
+      render(<OrganismStrip />);
+    });
+    // Машинні пульси на місці…
+    expect(screen.getByText(/v1\.2\.3 · кл 2/)).toBeTruthy();
+    // …а ланцюг провайдерів зі стрічки виїхав у кокпіт: людині за плечем
+    // стрічка не розповідає, куди ходять діалоги.
+    expect(screen.queryByText(/ШІ/)).toBeNull();
+    expect(screen.queryByText(/gemini/)).toBeNull();
+    expect(screen.queryByText(/ollama/)).toBeNull();
+  });
+
   it('клік по слову стану відкриває тихе меню з єдиним «Привид»', async () => {
     await act(async () => {
       render(<OrganismStrip />);

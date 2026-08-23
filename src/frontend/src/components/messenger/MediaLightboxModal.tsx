@@ -21,24 +21,26 @@ export const MediaLightboxModal: React.FC<MediaLightboxModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-50 bg-black/90 backdrop-blur-md flex flex-col justify-between p-4 select-none animate-in fade-in duration-200">
-      {/* Top Bar */}
-      <div className="flex items-center justify-between text-[#1E2521]/80 z-10 px-2 py-1">
-        <div>
-          <h3 className="font-bold text-sm text-[#1E2521]">{mediaTitle}</h3>
-          {mediaDate && <p className="text-xs text-[#1E2521]/50">{mediaDate}</p>}
+      {/* Top Bar. Полотно тут чорне, тож і чорнило мусить бути світлим:
+          імʼя файла на темному темним — це той самий підпис, якого не видно. */}
+      <div className="flex items-center justify-between text-[#F7F5EE]/80 z-10 px-2 py-1">
+        <div className="min-w-0 pr-3">
+          <h3 className="font-bold text-sm text-[#FDFCF9] truncate">{mediaTitle}</h3>
+          {mediaDate && <p className="text-xs text-[#F7F5EE]/60">{mediaDate}</p>}
         </div>
 
         <div className="flex items-center gap-2">
           <button
             onClick={() => {
               soundFx.playTap();
+              // Зберігаємо під тим імʼям, яке людина бачить у заголовку,
+              // а не під вигаданим «aura_media».
               const a = document.createElement('a');
               a.href = mediaUrl;
-              a.download = 'aura_media';
-              a.target = '_blank';
+              a.download = mediaTitle;
               a.click();
             }}
-            className="p-2 bg-white/10 hover:bg-white/20 text-[#1E2521] rounded-xl transition-colors"
+            className="p-2 bg-white/10 hover:bg-white/20 text-[#FDFCF9] rounded-xl transition-colors"
             title="Завантажити оригінал"
           >
             <Download className="w-4 h-4" />
@@ -49,7 +51,7 @@ export const MediaLightboxModal: React.FC<MediaLightboxModalProps> = ({
               soundFx.playTap();
               onClose();
             }}
-            className="p-2 bg-white/10 hover:bg-white/20 text-[#1E2521] rounded-xl transition-colors"
+            className="p-2 bg-white/10 hover:bg-white/20 text-[#FDFCF9] rounded-xl transition-colors"
           >
             <X className="w-5 h-5" />
           </button>
@@ -66,7 +68,7 @@ export const MediaLightboxModal: React.FC<MediaLightboxModalProps> = ({
       </div>
 
       {/* Bottom info bar */}
-      <div className="text-center text-xs text-[#1E2521]/50 py-2">
+      <div className="text-center text-xs text-[#F7F5EE]/50 py-2">
         Перегляд медіа
       </div>
     </div>

@@ -37,7 +37,11 @@ interface Props {
 
 export const SecureMediaBubble: React.FC<Props> = ({ msg, isSelf, onOpenLightbox }) => {
   const media = msg.media!;
-  const isImage = msg.type === 'image';
+  // Якщо браузер таки не намалював те, що ми вважали фото, — падаємо в картку
+  // файла. Бита іконка не дає дістати файл, картка дає.
+  const [imgBroken, setImgBroken] = useState(false);
+  const isImage = msg.type === 'image' && !imgBroken;
+  const caption = (msg.text || '').trim();
 
   const [url, setUrl] = useState<string | undefined>(() => cachedMediaUrl(media.blobId));
   const [phase, setPhase] = useState<Phase>(() =>
@@ -112,6 +116,13 @@ export const SecureMediaBubble: React.FC<Props> = ({ msg, isSelf, onOpenLightbox
     a.click();
   };
 
+  /** Підпис живе під превʼю — він пояснює те, що вже видно вище. */
+  const captionLine = caption ? (
+    <p className="text-[12.5px] leading-snug text-[#21261F] whitespace-pre-wrap break-words">
+      {caption}
+    </p>
+  ) : null;
+
   const label = isImage ? 'Фото' : 'Файл';
   const shell = isSelf
     ? 'bg-[#FDF4EC] border-[#EBC7AE]'
@@ -140,6 +151,7 @@ export const SecureMediaBubble: React.FC<Props> = ({ msg, isSelf, onOpenLightbox
           <RefreshCw className={`w-3 h-3 ${asking ? 'animate-spin' : ''}`} />
           {asking ? 'Запитуємо…' : 'Запитати ще раз'}
         </button>
+        {caption && <div className="mt-2">{captionLine}</div>}
       </div>
     );
   }
@@ -194,15 +206,31 @@ export const SecureMediaBubble: React.FC<Props> = ({ msg, isSelf, onOpenLightbox
   if (isImage) {
     return (
       <div className="space-y-1 pt-1" data-testid="media-image">
-        <img
-          src={url}
-          alt={media.name}
-          onClick={() => {
-            soundFx.playTap();
-            onOpenLightbox?.(url, media.name);
-          }}
-          className="rounded-2xl max-w-[360px] max-h-[360px] w-auto object-contain cursor-pointer hover:opacity-95 transition-opacity"
-        />
+        {/* Фото — теж файл, тож «Зберегти» мусить бути і тут. На дотику
+            кнопка видима завжди, на миші зʼявляється під курсором. */}
+        <div className="relative group/photo w-fit">
+          <img
+            src={url}
+            alt={media.name}
+            onError={() => setImgBroken(true)}
+            onClick={() => {
+              soundFx.playTap();
+              onOpenLightbox?.(url, media.name);
+            }}
+            className="rounded-2xl max-w-[360px] max-h-[360px] w-auto object-contain cursor-pointer hover:opacity-95 transition-opacity"
+          />
+          <button
+            type="button"
+            onClick={save}
+            data-testid="media-photo-save"
+            className="absolute top-2 right-2 p-1.5 rounded-xl bg-[#FDFCF9]/90 hover:bg-[#FDFCF9] text-[#1E2521] border border-[#E8E1D3] shadow-[0_1px_2px_rgba(60,44,24,0.08)] transition-opacity sm:opacity-0 sm:group-hover/photo:opacity-100 focus:opacity-100"
+            title="Зберегти"
+            aria-label="Зберегти"
+          >
+            <Download className="w-3.5 h-3.5" />
+          </button>
+        </div>
+        {captionLine}
         <div className="flex items-center justify-between gap-2">
           <span className="text-[10.5px] text-[#6E7568] truncate">
             {media.name} · {humanSize(media.size)}
@@ -214,34 +242,36 @@ export const SecureMediaBubble: React.FC<Props> = ({ msg, isSelf, onOpenLightbox
   }
 
   return (
-    <div
-      className={`mt-1 p-3 rounded-2xl border flex items-center justify-between gap-3 ${shell}`}
-      data-testid="media-file"
-    >
-      <div className="flex items-center gap-2.5 min-w-0">
-        <div className="p-2 bg-[#FCE7D8] text-[#E87A42] rounded-xl shrink-0">
-          <FileText className="w-4 h-4" />
-        </div>
-        <div className="min-w-0">
-          <p className="font-bold text-xs truncate text-[#21261F]">{media.name}</p>
-          <p className="text-[10px] text-[#6E7568]">
-            {humanSize(media.size)} · {extensionOf(media.name)}
-          </p>
-          {transferBadge}
-        </div>
-      </div>
-      <button
-        onClick={save}
-        className={`p-2 rounded-xl transition-colors shrink-0 ${
-          isSelf
-            ? 'bg-[#F6DCC9] hover:bg-[#F0CDB4] text-[#1E2521]'
-            : 'bg-[#F2EDE4] hover:bg-[#E8DFC8] text-[#1E2521]'
-        }`}
-        title="Зберегти"
-        aria-label="Зберегти"
+    <div className="mt-1 space-y-1" data-testid="media-file">
+      <div
+        className={`p-3 rounded-2xl border flex items-center justify-between gap-3 ${shell}`}
       >
-        <Download className="w-4 h-4" />
-      </button>
+        <div className="flex items-center gap-2.5 min-w-0">
+          <div className="p-2 bg-[#FCE7D8] text-[#E87A42] rounded-xl shrink-0">
+            <FileText className="w-4 h-4" />
+          </div>
+          <div className="min-w-0">
+            <p className="font-bold text-xs truncate text-[#21261F]">{media.name}</p>
+            <p className="text-[10px] text-[#6E7568]">
+              {humanSize(media.size)} · {extensionOf(media.name)}
+            </p>
+            {transferBadge}
+          </div>
+        </div>
+        <button
+          onClick={save}
+          className={`p-2 rounded-xl transition-colors shrink-0 ${
+            isSelf
+              ? 'bg-[#F6DCC9] hover:bg-[#F0CDB4] text-[#1E2521]'
+              : 'bg-[#F2EDE4] hover:bg-[#E8DFC8] text-[#1E2521]'
+          }`}
+          title="Зберегти"
+          aria-label="Зберегти"
+        >
+          <Download className="w-4 h-4" />
+        </button>
+      </div>
+      {captionLine}
     </div>
   );
 };

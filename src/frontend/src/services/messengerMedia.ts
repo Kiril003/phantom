@@ -15,8 +15,42 @@
 
 import type { SecureMedia } from '../types/messenger';
 
-/** Стеля вузла — та сама, що в messenger/blobs.py. */
+/** Стеля вузла — та сама, що в messenger/blobs.py. Міряє ШИФРОТЕКСТ. */
 export const MEDIA_LIMIT_BYTES = 25 * 1024 * 1024;
+
+/**
+ * Стеля для ВІДКРИТОГО файла.
+ *
+ * Вузол зважує шифротекст, а AES-GCM дописує до нього 16 байтів тега. Файл
+ * рівно в 25 МіБ проходив тут і гинув там із сирим 413 — тож віднімаємо
+ * запас із запасом і кажемо про межу до вибору, а не після завантаження.
+ */
+export const MEDIA_PLAIN_LIMIT_BYTES = MEDIA_LIMIT_BYTES - 64;
+
+/** Одне формулювання межі на весь застосунок. */
+export const MEDIA_LIMIT_LABEL = 'до 25 МБ';
+
+/**
+ * Чи це те, що браузер справді намалює тегом <img>.
+ *
+ * mime image/* сюди не годиться: .psd приходить як image/vnd.adobe.photoshop,
+ * ставав «фото» і показувався битою іконкою БЕЗ кнопки «Зберегти» — файл
+ * ставав недосяжним. Тож питаємо і розширення, і mime.
+ */
+const RENDERABLE_MIME = new Set([
+  'image/png', 'image/jpeg', 'image/jpg', 'image/webp', 'image/gif', 'image/avif',
+]);
+const RENDERABLE_EXT = new Set(['png', 'jpg', 'jpeg', 'webp', 'gif', 'avif']);
+const VAGUE_MIME = new Set(['', 'application/octet-stream']);
+
+export function isRenderableImage(name: string, mime: string): boolean {
+  const dot = name.lastIndexOf('.');
+  const ext = dot > 0 ? name.slice(dot + 1).toLowerCase() : '';
+  if (!RENDERABLE_EXT.has(ext)) return false;
+  const m = (mime || '').toLowerCase().split(';')[0].trim();
+  // Система інколи не знає mime для файла з диска — розширення тоді вирішує.
+  return RENDERABLE_MIME.has(m) || VAGUE_MIME.has(m);
+}
 
 export class MediaNotArrived extends Error {
   constructor() {

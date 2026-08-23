@@ -23,6 +23,7 @@ import { Message, ChatMember, MessageReplyInfo } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
 import { chatApi } from '../../services/api';
 import { useMessengerStore } from '../../stores/messengerStore';
+import { MEDIA_LIMIT_LABEL } from '../../services/messengerMedia';
 
 interface MessageComposerProps {
   onSendMessage: (text: string, scheduledTime?: string) => void;
@@ -89,26 +90,54 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   // Смуга завантаження живе тут, бо саме тут людина натиснула «+». Відсоток
   // приходить з XHR — це справжні надіслані байти, а не анімація очікування.
-  const [upload, setUpload] = useState<{ name: string; percent: number } | null>(null);
+  // index/total — чесна черга, коли файлів кілька.
+  const [upload, setUpload] = useState<{
+    name: string;
+    percent: number;
+    index: number;
+    total: number;
+  } | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sendAttachment = useMessengerStore((st) => st.sendAttachment);
 
+  /**
+   * Кілька файлів — послідовні надсилання, по одному, з чесною чергою.
+   *
+   * Підпис їде з ПЕРШИМ вкладенням: людина набрала його ДО вибору файлів, і в
+   * стрічці, яку читають згори вниз, пояснення мусить стояти перед тим, що
+   * пояснює — інакше решта пакета проїде повз читача без слів.
+   */
   const handlePickedFile = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
+    const files = Array.from(e.target.files || []);
     e.target.value = '';
-    if (!file) return;
+    if (!files.length) return;
     setShowAttachMenu(false);
     setUploadError(null);
-    setUpload({ name: file.name, percent: 0 });
-    try {
-      await sendAttachment(file, (percent) => setUpload({ name: file.name, percent }));
-    } catch (err) {
-      setUploadError(err instanceof Error ? err.message : 'вкладення не надіслалось');
-    } finally {
-      setUpload(null);
+
+    const note = text.trim();
+    if (note) {
+      setText('');
+      if (chatId && onDraftChangeRef.current) onDraftChangeRef.current(chatId, '');
     }
+
+    const failed: string[] = [];
+    for (let i = 0; i < files.length; i += 1) {
+      const file = files[i];
+      setUpload({ name: file.name, percent: 0, index: i + 1, total: files.length });
+      try {
+        await sendAttachment(
+          file,
+          (percent) => setUpload({ name: file.name, percent, index: i + 1, total: files.length }),
+          i === 0 ? note : undefined,
+        );
+      } catch (err) {
+        failed.push(err instanceof Error ? err.message : `«${file.name}» не надіслалось`);
+      }
+    }
+    setUpload(null);
+    if (failed.length) setUploadError(failed.join('; '));
   };
   const [styleBusyId, setStyleBusyId] = useState<string | null>(null);
   const [styleError, setStyleError] = useState<string | null>(null);
@@ -502,6 +531,11 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
         <div className="mb-2 px-3 py-2 bg-[#FDF4EC] border border-[#EBC7AE] rounded-xl">
           <div className="flex items-center justify-between gap-2 mb-1.5">
             <span className="text-[11.5px] font-semibold text-[#21261F] truncate">
+              {upload.total > 1 && (
+                <span className="text-[#A9603A] tabular-nums">
+                  {upload.index} з {upload.total} ·{' '}
+                </span>
+              )}
               {upload.name}
             </span>
             <span className="text-[11px] font-bold text-[#A9603A] tabular-nums shrink-0">
@@ -532,11 +566,13 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
       )}
 
       {/* Приховані поля вибору. Для «Фото» звужуємо до зображень, для «Файл»
-          не обмежуємо: людина сама знає, що надсилає. */}
+          не обмежуємо: людина сама знає, що надсилає. multiple — бо пакет
+          знімків це одна дія, а не п'ять походів у меню. */}
       <input
         ref={photoInputRef}
         type="file"
         accept="image/*"
+        multiple
         className="hidden"
         onChange={handlePickedFile}
         data-testid="composer-photo-input"
@@ -544,6 +580,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
       <input
         ref={fileInputRef}
         type="file"
+        multiple
         className="hidden"
         onChange={handlePickedFile}
         data-testid="composer-file-input"
@@ -580,8 +617,15 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                   aria-hidden
                 />
                 <div className="absolute bottom-12 left-0 bg-[#FDFCF9]/98 backdrop-blur-2xl border border-[#E8E1D3] rounded-2xl p-1.5 shadow-2xl w-52 z-30 space-y-0.5 animate-in fade-in zoom-in-95 duration-100 select-none text-[#21261F]">
-                  <div className="px-2 py-1 text-[11px] font-extrabold text-[#6E7568] uppercase tracking-wide border-b border-[#F1EBDD]">
-                    Вкладення
+                  <div className="px-2 py-1 flex items-baseline justify-between gap-2 border-b border-[#F1EBDD]">
+                    <span className="text-[11px] font-extrabold text-[#6E7568] uppercase tracking-wide">
+                      Вкладення
+                    </span>
+                    {/* Межу кажемо ДО вибору — щоб відмова не приходила після
+                        того, як людина вже почекала на завантаження. */}
+                    <span className="text-[10px] font-semibold text-[#98A092] normal-case">
+                      {MEDIA_LIMIT_LABEL}
+                    </span>
                   </div>
                   {/* Фото і Файл працюють. Голосове й Локація чесно позначені
                       «скоро» — мертвий пункт гірший за відсутній. */}

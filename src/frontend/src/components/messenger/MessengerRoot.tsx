@@ -207,7 +207,7 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
               isSelectionMode={store.multiSelectMode}
               onUpdateTableData={(msgId, data) => store.updateTableData(msgId, data)}
               onUpdateTaskListData={(msgId, tasks) => store.updateTaskListData(msgId, tasks)}
-              onOpenImageLightbox={(url) => store.openLightbox(url)}
+              onOpenImageLightbox={(url, title) => store.openLightbox(url, title)}
               isSearching={isSearchingInChat}
               onCloseSearch={() => setIsSearchingInChat(false)}
             />
@@ -376,7 +376,7 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
           onSelectMember={(_m) => {}}
           onAddMember={() => {}}
           onTogglePinChat={(chatId) => store.togglePinChat(chatId)}
-          onOpenImageLightbox={(url) => store.openLightbox(url)}
+          onOpenImageLightbox={(url, title) => store.openLightbox(url, title)}
           onUpdateChatSettings={(chatId, updated) => store.updateChat(chatId, updated)}
         />
       )}
@@ -434,6 +434,7 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
         isOpen={store.isMediaLightboxOpen}
         onClose={() => store.closeLightbox()}
         mediaUrl={store.activeLightboxUrl}
+        mediaTitle={store.activeLightboxTitle || undefined}
       />
 
       <MessageDetailsModal

@@ -278,7 +278,10 @@ export function messageFromNode(row: NodeMessage, selfId: string, peerNodeId?: s
       // Вкладення з наскрізним ключем упізнається за самим описом, а не за
       // типом: показова стрічка теж возить kind='image', але з готовим url.
       if (parsed && parsed.blob_id && parsed.key_hex) {
-        rich = { media: mediaFromBody(parsed) };
+        // caption — необовʼязковий: тіла, надіслані до нього, читаються тим
+        // самим розбором і просто лишаються без підпису.
+        const caption = typeof parsed.caption === 'string' ? parsed.caption.trim() : '';
+        rich = { media: mediaFromBody(parsed), ...(caption ? { text: caption } : {}) };
       } else {
         const field = RICH_FIELD[row.kind];
         rich = field && parsed && !parsed.__msg ? { [field]: parsed } : parsed.__msg || {};

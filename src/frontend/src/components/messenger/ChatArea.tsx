@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import {
   MapPin,
   Play,
@@ -83,6 +83,15 @@ interface ChatAreaProps {
 
 export const quickReactions = ['❤️', '🔥', '👍', '👏', '💡', '🎉'];
 
+/**
+ * Імʼя вкладення для меню й озвучення.
+ *
+ * Справжні вкладення живуть у msg.media, показові — у msg.fileData; читання
+ * лише другого давало «Файл: undefined» на кожному живому файлі.
+ */
+const attachmentName = (msg: Message): string =>
+  msg.media?.name || msg.fileData?.name || 'без імені';
+
 export const translationLanguages = [
   { code: 'EN', name: 'English (EN)' },
   { code: 'UA', name: 'Українська (UA)' },
@@ -149,9 +158,18 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
 
   // Scroll to bottom tracking
   const [showScrollBottom, setShowScrollBottom] = useState(false);
+  /** Скільки чужих листів прийшло, поки людина читала історію вище. */
+  const [newIncoming, setNewIncoming] = useState(0);
   const messagesContainerRef = useRef<HTMLDivElement>(null);
+  const contentRef = useRef<HTMLDivElement>(null);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   const voiceAudioRef = useRef<HTMLAudioElement | null>(null);
+  /** Людина зараз біля низу — тоді нове тягне стрічку за собою. */
+  const atBottomRef = useRef(true);
+  /** Чи вже приземлились у низ цієї розмови (перше відкриття). */
+  const landedRef = useRef(false);
+  const landedChatRef = useRef<string | undefined>(undefined);
+  const seenCountRef = useRef(0);
 
   // In-chat search state
   const [chatSearchQuery, setChatSearchQuery] = useState('');
@@ -261,7 +279,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     }
 
     window.speechSynthesis.cancel();
-    const textToSpeak = msg.text || (msg.type === 'file' ? `Файл: ${msg.fileData?.name}` : msg.type === 'poll' ? `Опитування: ${msg.pollData?.question}` : 'Повідомлення');
+    const textToSpeak = msg.text || (msg.type === 'file' ? `Файл: ${attachmentName(msg)}` : msg.type === 'poll' ? `Опитування: ${msg.pollData?.question}` : 'Повідомлення');
     if (!textToSpeak) return;
 
     const utterance = new SpeechSynthesisUtterance(textToSpeak);
@@ -497,18 +515,93 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
     showToast(isNowSaved ? 'Додано в «Збережене»' : 'Вилучено зі «Збереженого»');
   };
 
+  /**
+   * Стрічка — це низ, а не початок історії.
+   *
+   * Відкриття розмови садить нас у низ БЕЗ анімації: людина мусить бачити
+   * останнє, а не подорож туди. Своє надіслане і чуже, що прийшло біля низу,
+   * підтягують стрічку плавно. А якщо людина читає вище — не смикаємо її, а
+   * рахуємо нове і кажемо про це кнопкою.
+   */
+  const pinBottom = (behavior: ScrollBehavior) => {
+    const el = messagesContainerRef.current;
+    if (!el) return;
+    el.scrollTo({ top: el.scrollHeight, behavior });
+    atBottomRef.current = true;
+    setShowScrollBottom(false);
+    setNewIncoming(0);
+  };
+
   // Scroll detection
   const handleScroll = () => {
     if (!messagesContainerRef.current) return;
     const { scrollTop, scrollHeight, clientHeight } = messagesContainerRef.current;
     const isScrolledUp = scrollHeight - scrollTop - clientHeight > 150;
+    atBottomRef.current = !isScrolledUp;
     setShowScrollBottom(isScrolledUp);
+    if (!isScrolledUp) setNewIncoming(0);
   };
 
   const scrollToBottom = () => {
     soundFx.playTap();
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    pinBottom('smooth');
   };
+
+  // Стрічка приїжджає з вузла асинхронно, тож приземлення чекає на перші листи.
+  // Скидання лічильників живе ТУТ, а не в окремому useEffect: той спрацював би
+  // після цього ефекту, і перший кадр нової розмови встиг би порахувати чужу
+  // історію як «нові повідомлення».
+  useLayoutEffect(() => {
+    if (!messagesContainerRef.current) return;
+    const list = messages || [];
+    const count = list.length;
+
+    if (landedChatRef.current !== currentChat?.id) {
+      landedChatRef.current = currentChat?.id;
+      landedRef.current = false;
+      seenCountRef.current = 0;
+      atBottomRef.current = true;
+      setNewIncoming(0);
+      setShowScrollBottom(false);
+    }
+
+    if (!landedRef.current) {
+      if (count === 0) return;
+      landedRef.current = true;
+      seenCountRef.current = count;
+      pinBottom('auto');
+      return;
+    }
+
+    if (count <= seenCountRef.current) {
+      seenCountRef.current = count;
+      return;
+    }
+
+    const added = list.slice(seenCountRef.current);
+    seenCountRef.current = count;
+    const mine = added.some((m) => m && (m.isSelf || m.senderId === currentUserId));
+    if (mine || atBottomRef.current) {
+      pinBottom('smooth');
+    } else {
+      setNewIncoming((n) => n + added.length);
+    }
+  }, [messages, currentChat?.id, currentUserId]);
+
+  // Вміст доростає ВЖЕ ПІСЛЯ приземлення: фото дешифрується, бейдж «очікує
+  // передачі» приходить відповіддю вузла, шрифт домальовується. Кожен такий
+  // приріст лишав людину на кілька пікселів вище низу. Ловимо саму висоту —
+  // це дешевше і чесніше, ніж вгадувати всі джерела приросту.
+  useEffect(() => {
+    const content = contentRef.current;
+    if (!content || typeof ResizeObserver === 'undefined') return undefined;
+    const ro = new ResizeObserver(() => {
+      const el = messagesContainerRef.current;
+      if (el && atBottomRef.current) el.scrollTop = el.scrollHeight;
+    });
+    ro.observe(content);
+    return () => ro.disconnect();
+  }, []);
 
   const scrollToMessage = (msgId: string) => {
     const el = document.getElementById(`message-${msgId}`);
@@ -839,8 +932,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       <div
         ref={messagesContainerRef}
         onScroll={handleScroll}
+        data-testid="messages-scroller"
         className="flex-1 overflow-y-auto px-3 py-3 sm:px-6 sm:py-4"
       >
+        <div ref={contentRef}>
         {(messages || []).map((msg, index) => {
           if (!msg) return null;
           const isSelf = msg.senderId === currentUserId || msg.isSelf;
@@ -1218,7 +1313,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   )}
 
                   {/* 1. TEXT MESSAGE (Formatted with Markdown, Spoilers, Mentions, Search Highlighting, or Organic Emoji Cluster) */}
-                  {msg.text && (
+                  {/* У вкладення текст — це підпис, і його місце ПІД превʼю;
+                      малює його SecureMediaBubble, тож тут ми мовчимо. */}
+                  {msg.text && !msg.media && (
                     messageDensity === 'emoji-single' ? (
                       <div className="text-[44px] sm:text-[50px] leading-none select-text py-0.5 filter drop-shadow-xs text-center">
                         {msg.text.trim()}
@@ -2052,19 +2149,36 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         )}
 
         <div ref={messagesEndRef} />
+        </div>
       </div>
 
       {/* Кнопка «вниз» живе поза скролером, але в межах стрічки — інакше вона
           їхала б разом із повідомленнями. Композер — сусідній блок під ChatArea,
           тож нижній край стрічки і є його верхньою межею. */}
       {showScrollBottom && (
-        <button
-          onClick={scrollToBottom}
-          className="absolute bottom-5 right-5 w-[34px] h-[34px] bg-white text-[#6E7568] border border-[#E8E1D3] hover:bg-[#F3EEE3] rounded-full shadow-[0_1px_2px_rgba(60,44,24,0.05)] z-20 transition-colors flex items-center justify-center"
-          title="Вниз до нових повідомлень"
-        >
-          <ArrowDown className="w-4 h-4" strokeWidth={1.75} />
-        </button>
+        newIncoming > 0 ? (
+          <button
+            onClick={scrollToBottom}
+            data-testid="scroll-new-messages"
+            className="absolute bottom-5 right-5 h-[34px] pl-2.5 pr-3 bg-[#D96C35] text-[#FDFCF9] hover:bg-[#B85425] rounded-full shadow-[0_1px_3px_rgba(60,44,24,0.18)] z-20 transition-colors flex items-center gap-1.5 text-[12.5px] font-semibold"
+            title="Вниз до нових повідомлень"
+          >
+            <ArrowDown className="w-4 h-4 shrink-0" strokeWidth={2} />
+            <span>нові повідомлення</span>
+            <span className="tabular-nums bg-[#FDFCF9]/25 rounded-full px-1.5 text-[11.5px]">
+              {newIncoming}
+            </span>
+          </button>
+        ) : (
+          <button
+            onClick={scrollToBottom}
+            data-testid="scroll-bottom"
+            className="absolute bottom-5 right-5 w-[34px] h-[34px] bg-white text-[#6E7568] border border-[#E8E1D3] hover:bg-[#F3EEE3] rounded-full shadow-[0_1px_2px_rgba(60,44,24,0.05)] z-20 transition-colors flex items-center justify-center"
+            title="Вниз до нових повідомлень"
+          >
+            <ArrowDown className="w-4 h-4" strokeWidth={1.75} />
+          </button>
+        )
       )}
       </div>
 
@@ -2134,7 +2248,10 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                   </span>
                 </div>
                 <p className="text-[11px] text-[#5F6A60] line-clamp-2 mt-0.5">
-                  {contextMenuMsg.text || (contextMenuMsg.type === 'file' ? `Файл: ${contextMenuMsg.fileData?.name}` : `Картка: ${contextMenuMsg.type}`)}
+                  {contextMenuMsg.text
+                    || (contextMenuMsg.media || contextMenuMsg.fileData
+                      ? `${contextMenuMsg.type === 'image' ? 'Фото' : 'Файл'}: ${attachmentName(contextMenuMsg)}`
+                      : `Картка: ${contextMenuMsg.type}`)}
                 </p>
               </div>
               <button

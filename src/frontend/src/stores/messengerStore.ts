@@ -5,7 +5,13 @@ import { messengerApi, chatFromNode, messageFromNode } from '../services/messeng
 import type { NodeMessage } from '../services/messengerApi';
 import { useUIStore } from './uiStore';
 import { soundFx } from '../utils/messengerSound';
-import { MEDIA_LIMIT_BYTES, encryptForUpload } from '../services/messengerMedia';
+import {
+  MEDIA_LIMIT_LABEL,
+  MEDIA_PLAIN_LIMIT_BYTES,
+  encryptForUpload,
+  humanSize,
+  isRenderableImage,
+} from '../services/messengerMedia';
 import type {
   Chat,
   Message,
@@ -58,6 +64,8 @@ export interface MessengerState {
   isDeleteModalOpen: boolean;
   isMediaLightboxOpen: boolean;
   activeLightboxUrl: string;
+  /** Імʼя файла, а не «Медіафайл»: людина мусить бачити, що саме відкрила. */
+  activeLightboxTitle: string;
   activeLocationData: LocationData | null;
   activeDetailsMessage: Message | null;
   activeForwardMessage: Message | null;
@@ -92,8 +100,13 @@ export interface MessengerState {
    * а ключ відправляє в тілі повідомлення — його вузол запечатує кадром до
    * вузла співрозмовника.
    * Відсоток іде з XHR, тож смуга показує справжні байти, а не таймер.
+   * caption — текст із композера: їде підписом У ТОМУ Ж повідомленні.
    */
-  sendAttachment: (file: File, onProgress?: (percent: number) => void) => Promise<void>;
+  sendAttachment: (
+    file: File,
+    onProgress?: (percent: number) => void,
+    caption?: string,
+  ) => Promise<void>;
   sendVoiceMessage: (duration: number, transcript: string) => void;
   addCustomMessage: (message: Message) => void;
   editMessage: (messageId: string, newText: string) => void;
@@ -144,7 +157,7 @@ export interface MessengerState {
   setFolderInsightsOpen: (open: boolean) => void;
   setShareFolderOpen: (open: boolean) => void;
   setDigestModalOpen: (open: boolean) => void;
-  openLightbox: (url: string) => void;
+  openLightbox: (url: string, title?: string) => void;
   closeLightbox: () => void;
   openLocationSheet: (data: LocationData) => void;
   closeLocationSheet: () => void;
@@ -271,6 +284,7 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
     isDeleteModalOpen: false,
     isMediaLightboxOpen: false,
     activeLightboxUrl: '',
+    activeLightboxTitle: '',
     activeLocationData: null,
     activeDetailsMessage: null,
     activeForwardMessage: null,
@@ -516,13 +530,21 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
     },
 
     // Message sending & modification
-    sendAttachment: async (file, onProgress) => {
+    sendAttachment: async (file, onProgress, caption) => {
       const state = get();
       const chatId = state.activeChatId;
       if (!chatId) return;
 
-      if (file.size > MEDIA_LIMIT_BYTES) {
-        throw new Error(`Вузол бере файли до ${Math.round(MEDIA_LIMIT_BYTES / 1024 / 1024)} МБ`);
+      // Відмова ДО завантаження і людськими словами: вузол зважує шифротекст,
+      // тож межа для відкритого файла на кілька байтів нижча.
+      if (file.size > MEDIA_PLAIN_LIMIT_BYTES) {
+        // Файл упритул до межі не варто описувати округленим розміром: «25.0 МБ
+        // при межі до 25 МБ» читається як суперечність, хоч це правда.
+        throw new Error(
+          file.size - MEDIA_PLAIN_LIMIT_BYTES <= 4096
+            ? `«${file.name}» упритул до межі: вузол бере ${MEDIA_LIMIT_LABEL}, і шифрування додає ще кілька байтів згори`
+            : `«${file.name}» важить ${humanSize(file.size)} — вузол бере вкладення ${MEDIA_LIMIT_LABEL}`,
+        );
       }
 
       // Шифруємо ДО завантаження: на вузол іде шифротекст, а ключ поїде в тілі
@@ -534,7 +556,10 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
         throw new Error('вузол зберіг не те, що ми надіслали');
       }
 
-      const kind: 'image' | 'file' = file.type.startsWith('image/') ? 'image' : 'file';
+      // «Фото» лише для того, що браузер справді намалює. Решта — картка
+      // файла з кнопкою «Зберегти»: .psd теж має дістатись людині.
+      const kind: 'image' | 'file' = isRenderableImage(file.name, file.type) ? 'image' : 'file';
+      const note = (caption || '').trim();
       const media: SecureMedia = {
         name: file.name,
         size: file.size,
@@ -554,6 +579,7 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
         timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
         type: kind,
         media,
+        text: note || undefined,
         isSelf: true,
         status: 'sending',
       };
@@ -566,7 +592,7 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
                 ...c,
                 messages: [...c.messages, newMsg],
                 lastKind: kind,
-                lastSnippet: file.name.slice(0, 90),
+                lastSnippet: (note || file.name).slice(0, 90),
                 lastAuthor: 'Я',
                 lastAt: new Date().toISOString(),
               }
@@ -584,6 +610,8 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
         }));
 
       // На дроті імена полів такі ж, як їх читає backend і вузол-адресат.
+      // caption дописуємо лише коли він є: старі тіла без нього читаються
+      // тим самим розбором і нічого не ламають.
       const body = JSON.stringify({
         name: media.name,
         size: media.size,
@@ -592,6 +620,7 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
         blob_id: media.blobId,
         key_hex: media.keyHex,
         nonce_hex: media.nonceHex,
+        ...(note ? { caption: note } : {}),
       });
 
       try {
@@ -1259,8 +1288,10 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
     setFolderInsightsOpen: (open) => set({ isFolderInsightsOpen: open }),
     setShareFolderOpen: (open) => set({ isShareFolderOpen: open }),
     setDigestModalOpen: (open) => set({ isDigestModalOpen: open }),
-    openLightbox: (url) => set({ isMediaLightboxOpen: true, activeLightboxUrl: url }),
-    closeLightbox: () => set({ isMediaLightboxOpen: false, activeLightboxUrl: '' }),
+    openLightbox: (url, title) =>
+      set({ isMediaLightboxOpen: true, activeLightboxUrl: url, activeLightboxTitle: title || '' }),
+    closeLightbox: () =>
+      set({ isMediaLightboxOpen: false, activeLightboxUrl: '', activeLightboxTitle: '' }),
     openLocationSheet: (data) => set({ activeLocationData: data }),
     closeLocationSheet: () => set({ activeLocationData: null }),
     openMessageDetails: (msg) => set({ activeDetailsMessage: msg }),

@@ -548,10 +548,18 @@ export default function CompanyPane() {
               reason={controlReason}
               onClick={() => setBarMode('intervene')}
             />
-            <span className="flex-1" />
-            {(controlWord || controlReason) && (
+            {/* Гонтлет Р2, Н4: причина роззброєння стоїть ВПРИТУЛ до своїх
+             * кнопок (плюс тултіп на самій кнопці), а не через ~1500px
+             * порожнечі футера в дальньому куті. */}
+            {controlReason && (
               <span style={{ fontSize: 11, color: 'var(--ph-color-ink-muted)' }}>
-                {[controlWord, controlReason].filter(Boolean).join(' · ')}
+                {controlReason}
+              </span>
+            )}
+            <span className="flex-1" />
+            {controlWord && (
+              <span style={{ fontSize: 11, color: 'var(--ph-color-ink-muted)' }}>
+                {controlWord}
               </span>
             )}
           </div>

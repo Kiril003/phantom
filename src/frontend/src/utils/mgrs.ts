@@ -77,6 +77,20 @@ export function utmToLatLon(p: UtmPoint): { latDeg: number; lonDeg: number } {
   return tmInverse(WGS84, utmProjection(p.zone, p.hemisphere), p.easting, p.northing);
 }
 
+/**
+ * Проєкція в НАКАЗАНУ зону, без вибору канонічної — сітці потрібні
+ * координати точки саме в зоні зрізу, навіть коли точка за його межею
+ * (інакше діапазон ліній рветься на шві зон).
+ */
+export function latLonToUtmForced(
+  latDeg: number,
+  lonDeg: number,
+  zone: number,
+  hemisphere: Hemisphere,
+): { easting: number; northing: number } {
+  return tmForward(WGS84, utmProjection(zone, hemisphere), latDeg, lonDeg);
+}
+
 const COL_SETS = ['ABCDEFGH', 'JKLMNPQR', 'STUVWXYZ'] as const;
 const ROW_LETTERS = 'ABCDEFGHJKLMNPQRSTUV';
 

@@ -21,6 +21,7 @@ import {
   latLonToMgrs,
   latLonToMgrsRef,
   latLonToUtm,
+  latLonToUtmForced,
   formatMgrs,
   n100kLetter,
   utmToLatLon,
@@ -162,6 +163,20 @@ describe('круговий обхід і незалежні перевірки �
         expect(Math.abs(series - simpson(ell, lat))).toBeLessThan(0.01);
       }
     }
+  });
+
+  it('примусова зона неперервна через шов (для сітки)', () => {
+    // Точка канонічно в зоні 36 (лон 30.1), примусово в 35-й — easting
+    // просто продовжує рости за межу зони, без стрибка.
+    const inside = latLonToUtmForced(50, 29.9, 35, 'N');
+    const beyond = latLonToUtmForced(50, 30.1, 35, 'N');
+    expect(beyond.easting).toBeGreaterThan(inside.easting);
+    expect(beyond.easting - inside.easting).toBeGreaterThan(12000);
+    expect(beyond.easting - inside.easting).toBeLessThan(16500);
+    // Збігається з канонічною, коли зона та сама.
+    const canonical = latLonToUtm(50, 29.9)!;
+    expect(canonical.zone).toBe(35);
+    expect(Math.abs(latLonToUtmForced(50, 29.9, 35, 'N').easting - canonical.easting)).toBeLessThan(1e-9);
   });
 
   it('northing на осьовому меридіані — рівно k0·M(φ)', () => {

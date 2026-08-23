@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import {
-  Activity, BookOpen, Clock, Flame, HardDrive, Layers, Library, MapPin, Pentagon,
+  Activity, BookOpen, Clock, Flame, Grid3x3, HardDrive, Layers, Library, MapPin, Pentagon,
   Radar, Route, Ruler, Shield, Sparkles, Wifi,
 } from 'lucide-react';
 import { ScaleBar } from './ScaleBar';
@@ -14,6 +14,7 @@ import { WhereChip } from './WhereChip';
 import { usePosition } from '../../../hooks/usePosition';
 import { AttributionDrawer } from './AttributionDrawer';
 import { CoordReadout } from './CoordReadout';
+import { GridOverlay } from './GridOverlay';
 import { RoutingTool } from './RoutingTool';
 import { RulerTool } from './RulerTool';
 import { GeofenceDrawTool } from './GeofenceDrawTool';
@@ -123,6 +124,9 @@ export function HudShell({
   // Ф2 метрологія: лінійка теж міряє кліки по мапі, тому інструменти,
   // що слухають клік, взаємовиключні — інакше одна дія двом хазяям.
   const [rulerActive, setRulerActive] = useState(false);
+  // Сітка MGRS — не інструмент, а «що намальовано»: живе на лівій
+  // рейці серед шарів і нікому не заважає.
+  const [gridOn, setGridOn] = useState(false);
 
   const tactical = useMapStore((s) => s.tactical);
   const zoom = useMapStore((s) => s.zoom);
@@ -177,6 +181,19 @@ export function HudShell({
         toggleLayer(item.key);
       },
     })),
+    /**
+     * Сітка MGRS (Ф2, У6) — теж відповідь на «що намальовано»; лічильник
+     * не має сенсу: сітка — не записи, а розмітка.
+     */
+    {
+      key: 'mgrs-grid',
+      icon: <Grid3x3 size={18} strokeWidth={1.75} />,
+      label: 'Сітка MGRS',
+      short: 'Сітка',
+      active: gridOn,
+      count: null,
+      onClick: () => setGridOn((v) => !v),
+    },
     /**
      * Сім кнопок вище — улюблені шари. Реєстр знає ще двадцять шість, і
      * доти вони не мали жодних дверей: панель була змонтована, але
@@ -239,6 +256,8 @@ export function HudShell({
 
   return (
     <div data-testid="hud-shell" className={`pointer-events-none absolute inset-0 z-30 ${className}`}>
+      {/* Сітка — найнижчий шар HUD: розмітка під хромом, не над ним. */}
+      <GridOverlay active={gridOn} />
       <div className="absolute inset-x-3 top-3 flex items-start justify-between gap-3">
         <div className="pointer-events-auto">
           <ViewControls

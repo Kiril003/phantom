@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { CoordReadout, coordText } from '../components/map/hud/CoordReadout';
+import { GridOverlay, chooseGridSpacing, metersPerPixelAt } from '../components/map/hud/GridOverlay';
 import { RulerTool } from '../components/map/hud/RulerTool';
 import { useMapStore } from '../stores/mapStore';
 import { useSettingsStore } from '../stores/settingsStore';
@@ -25,6 +26,8 @@ type Handler = (payload: unknown) => void;
 class FakeMap {
   handlers = new Map<string, Set<Handler>>();
   canvas = { style: { cursor: '' } };
+  zoom = 15;
+  center = { lat: 50.4501, lng: 30.5234 };
   dblZoomEnabled = true;
   doubleClickZoom = {
     isEnabled: () => this.dblZoomEnabled,
@@ -51,6 +54,14 @@ class FakeMap {
 
   getCanvas(): { style: { cursor: string } } {
     return this.canvas;
+  }
+
+  getZoom(): number {
+    return this.zoom;
+  }
+
+  getCenter(): { lat: number; lng: number } {
+    return this.center;
   }
 
   /** Лінійна проєкція навколо Києва — достатня для перевірки SVG. */
@@ -233,5 +244,64 @@ describe('RulerTool — воскресіння: жива лінійка', () => 
     unmount();
     expect(fakeMap.getCanvas().style.cursor).toBe('');
     expect(fakeMap.doubleClickZoom.isEnabled()).toBe(true);
+  });
+});
+
+describe('GridOverlay — сітка MGRS', () => {
+  it('chooseGridSpacing: крок росте з масштабом, на дрібних зумах — null', () => {
+    // ~0.6 м/px (з18, Київ) → 100 м; ~5 м/px → 1 км; ~50 → 10 км.
+    expect(chooseGridSpacing(0.6)).toBe(100);
+    expect(chooseGridSpacing(5)).toBe(1000);
+    expect(chooseGridSpacing(50)).toBe(10000);
+    expect(chooseGridSpacing(600)).toBe(100000);
+    // Навіть 100-км лінії ближче за 70 px — чесна відмова.
+    expect(chooseGridSpacing(2000)).toBeNull();
+  });
+
+  it('metersPerPixelAt узгоджений із формулою ScaleBar', () => {
+    // z=15 на широті Києва ≈ 3.04 м/px.
+    const mpp = metersPerPixelAt(15, 50.45);
+    expect(mpp).toBeGreaterThan(2.9);
+    expect(mpp).toBeLessThan(3.2);
+  });
+
+  it('неактивна — нічого не рендерить', () => {
+    render(<GridOverlay active={false} />);
+    expect(screen.queryByTestId('grid-overlay')).toBeNull();
+  });
+
+  it('замалий масштаб — вимикається словом', async () => {
+    fakeMap.zoom = 3;
+    render(<GridOverlay active />);
+    await waitFor(() => {
+      expect(screen.getByTestId('grid-off-chip')).toHaveTextContent(
+        'Сітка MGRS: замалий масштаб — наблизь мапу',
+      );
+    });
+  });
+
+  it('поза смугою UTM — словом', async () => {
+    fakeMap.center = { lat: 86, lng: 20 };
+    fakeMap.zoom = 10;
+    render(<GridOverlay active />);
+    await waitFor(() => {
+      expect(screen.getByTestId('grid-off-chip')).toHaveTextContent(
+        'Сітка MGRS: поза смугою UTM (84° пн — 80° пд)',
+      );
+    });
+  });
+
+  it('на робочому зумі чипа відмови немає, канвас стоїть', () => {
+    fakeMap.zoom = 12;
+    render(<GridOverlay active />);
+    expect(screen.getByTestId('grid-overlay')).toBeInTheDocument();
+    expect(screen.queryByTestId('grid-off-chip')).toBeNull();
+  });
+
+  it('без мапи — «мапа ще не готова»', () => {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (window as any).__phantom;
+    render(<GridOverlay active />);
+    expect(screen.getByTestId('grid-off-chip')).toHaveTextContent('Сітка: мапа ще не готова');
   });
 });

@@ -12,7 +12,6 @@ from pathlib import Path
 import platformdirs
 
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
-_root_dir = REPO_ROOT
 
 def resolve_data_dir(kind: str) -> Path:
     """

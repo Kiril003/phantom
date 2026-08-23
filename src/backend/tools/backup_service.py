@@ -14,16 +14,25 @@ from typing import Optional
 from cryptography.fernet import InvalidToken
 
 from config import config
-from paths import _root_dir, REPO_ROOT
+from paths import resolve_data_dir, REPO_ROOT
 from security.crypto import _fernet
 
 # Track A-1: configurable paths for easier testing
 ENV_FILE_PATH = REPO_ROOT / ".env"
 
 
+def _data_root() -> Path:
+    """Base data directory — the parent of sqlite/, chroma/, voice_models/…
+
+    Respects PHANTOM_DATA_DIR / packaged mode via resolve_data_dir; the old
+    `paths._root_dir()` this service was written against no longer exists.
+    """
+    return resolve_data_dir("sqlite").parent
+
+
 def create_backup() -> bytes:
     """Create an encrypted zip of the data directory and .env."""
-    data_dir = _root_dir()
+    data_dir = _data_root()
     env_file = ENV_FILE_PATH
 
     buf = io.BytesIO()
@@ -86,7 +95,7 @@ async def restore_backup(encrypted_bytes: bytes) -> None:
             else:
                 # member.filename looks like ".phantom-data/chroma/..." or "data/..."
                 # Extract relative to data_dir.parent so it overwrites correctly
-                target_path = _root_dir().parent / member.filename
+                target_path = _data_root().parent / member.filename
 
             target_path.parent.mkdir(parents=True, exist_ok=True)
             if not member.is_dir():

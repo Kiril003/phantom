@@ -13,7 +13,7 @@ from unittest.mock import MagicMock
 import pytest
 from httpx import AsyncClient
 
-from paths import _root_dir, REPO_ROOT
+from paths import REPO_ROOT
 from tools.backup_service import create_backup, restore_backup
 from security.crypto import _fernet
 

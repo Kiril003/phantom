@@ -1394,7 +1394,7 @@ async def delete_session(
 
     # Synthesize session before deleting (background, uses own DB session)
     _track_task(asyncio.create_task(
-        _synthesize_session_end(token_data.user_id, session_id)
+        _synthesize_session_end(user.id, session_id)
     ))
 
     await db.delete(session)

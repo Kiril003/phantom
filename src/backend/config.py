@@ -405,6 +405,11 @@ class PhantomConfig(BaseSettings):
     ui_chat_max_messages_visible: int = 50
     ui_map_default_zoom: int = 15
     ui_map_style: Literal["dark", "satellite", "streets"] = "dark"
+    # Ф2 метрологія: формат координатного рядка мапи. Фронтенд тримав вибір у
+    # localStorage, бо PUT /settings/ui_coord_format відповідав 404 — ключа не
+    # існувало (стикова діра, названа у звіті метролога). Тепер вибір їде тими
+    # самими рейками, що й ui_map_style, і переживає зміну машини.
+    ui_coord_format: Literal["latlon", "mgrs", "usk"] = "latlon"
 
     # ── Security ──────────────────────────────────────────────────────────────
     jwt_secret_key: str = ""  # REQUIRED: set via JWT_SECRET_KEY env var or .env

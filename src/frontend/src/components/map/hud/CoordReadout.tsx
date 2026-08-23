@@ -33,11 +33,10 @@ const FORMAT_LABEL: Record<CoordFormat, string> = {
 };
 const SETTING_KEY = 'ui_coord_format';
 /**
- * Персистентність — localStorage, не settingsApi: бекендів config не
- * знає ключа ui_coord_format, PUT /settings/ui_coord_format відповідає
- * 404 (виміряно на стенді). Реєстрація ключа в config.py — територія
- * бекенда; коли вона станеться, цей рядок переїде на спільні рейки
- * ui_map_style. Доти локальне сховище чесно переживає перезапуск.
+ * Персистентність двошарова: ключ ui_coord_format зареєстровано в
+ * config.py (їде рейками ui_map_style і переживає зміну машини),
+ * localStorage лишається чесним фолбеком на офлайн і час до першої
+ * синхронізації настройок.
  */
 const STORAGE_KEY = 'phantom_coord_format';
 

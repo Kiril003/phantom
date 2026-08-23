@@ -3,6 +3,7 @@ import { motion } from 'framer-motion';
 import { Wind, TrendingDown, Route } from 'lucide-react';
 import { AmbientGlows } from '../components/core/AmbientGlows';
 import { ChatWindow } from '../components/chat/ChatWindow';
+import { useElementSize } from '../components/desk/useViewportSize';
 import { useSystemStore } from '../stores/systemStore';
 import { useChatStore } from '../stores/chatStore';
 import { useVoiceAlwaysOnStatusStore } from '../stores/voiceAlwaysOnStatusStore';
@@ -21,11 +22,17 @@ import { EASE_PHANTOM } from '../styles/motion';
  *   │                                                                │
  *   └────────────────────────────────────────────────────────────────┘
  *
- * The old 296px voice-orb panel duplicated the input-pill mic button
- * and cost a third of the screen; its wiring (always-on status, voice
- * mode, breathing/stress/provider chips) now lives in one 44px strip.
- * The orb still breathes: it pulses while PHANTOM thinks or listens.
+ * Верстка ЧИТАЄ КОНТЕЙНЕР (гонтлет №1, У3): цей layout живе і пейном
+ * стола (плитка Театру ~640px, вільне вікно, повний стіл), і оверлеєм
+ * стану DIALOGUE — тож жодної фіксованої «телефонної» ширини і жодних
+ * відступів під чужий хром (StatusBar 44px і док 84px у новому мості не
+ * монтуються). Власна ширина міряється ResizeObserver'ом; на вузькому
+ * контейнері присутність скидає біо-чипи, а поля стискаються — контент
+ * перетікає, а не кліпається правим краєм.
  */
+
+/** Вужче за це — «вузький» контейнер: біо-чипи присутності зайві. */
+const NARROW_W = 700;
 export default function DialogueLayout() {
   const context = useSystemStore((s) => s.context);
   const isTyping = useChatStore((s) => s.isTyping);
@@ -71,22 +78,27 @@ export default function DialogueLayout() {
   const stress = context?.body.stress_level;
   const provider = context?.system.ai_provider;
 
+  // Вимір власного контейнера — пейн, вікно чи повний стіл; 0 = ще не
+  // виміряно (перший кадр, jsdom) — тоді поводимось як «широкий».
+  const { ref, width } = useElementSize<HTMLDivElement>();
+  const narrow = width > 0 && width < NARROW_W;
+  const pad = narrow ? 8 : 12;
+
   return (
-    <motion.div
-      className="w-full h-full min-w-[1024px] min-h-full relative"
+    <div
+      ref={ref}
+      className="w-full h-full relative"
+      data-testid="dialogue-surface"
+      data-narrow={narrow ? 'true' : undefined}
       style={{ background: 'var(--surface-base)' }}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      exit={{ opacity: 0 }}
-      transition={{ duration: 0.4, ease: EASE_PHANTOM as unknown as number[] }}
     >
       <AmbientGlows />
 
-      <main className="absolute inset-0 z-10" style={{ top: 44, bottom: 0 }}>
+      <main className="absolute inset-0 z-10 flex" style={{ padding: `8px ${pad}px ${pad}px` }}>
         {/* === TRANSCRIPT — full-bleed chat =============================== */}
         <motion.div
-          className="absolute"
-          style={{ left: 12, right: 12, top: 8, bottom: 84, zIndex: 2 }}
+          className="relative flex-1 min-w-0 min-h-0"
+          style={{ zIndex: 2 }}
           initial={{ y: 12, opacity: 0 }}
           animate={{ y: 0, opacity: 1 }}
           transition={{ duration: 0.5, ease: EASE_PHANTOM as unknown as number[] }}
@@ -114,13 +126,14 @@ export default function DialogueLayout() {
                   stress={stress}
                   provider={provider}
                   voiceMode={voiceMode}
+                  narrow={narrow}
                 />
               }
             />
           </div>
         </motion.div>
       </main>
-    </motion.div>
+    </div>
   );
 }
 
@@ -133,6 +146,7 @@ function Presence({
   stress,
   provider,
   voiceMode,
+  narrow = false,
 }: {
   pulsing: boolean;
   label: string;
@@ -140,6 +154,8 @@ function Presence({
   stress: number | null | undefined;
   provider: string | null | undefined;
   voiceMode: 'off' | 'continuous' | 'wake_word';
+  /** Вузький контейнер (плитка): біо-чипи ховаються, орб і слово живуть. */
+  narrow?: boolean;
 }) {
   return (
     <div className="flex items-center min-w-0" style={{ gap: 10 }}>
@@ -178,14 +194,15 @@ function Presence({
       </span>
 
       {/* Живий датчик показуємо, мертвий ховаємо: ряд прочерків
-          створював враження зламаного приладу. */}
-      {bpm != null && (
+          створював враження зламаного приладу. На вузькій плитці біо-чипи
+          не влазять чесно — краще їх нема, ніж зрізані посеред слова. */}
+      {!narrow && bpm != null && (
         <span className="flex items-center" style={{ gap: 5, fontSize: 11 }}>
           <Wind size={12} strokeWidth={1.75} style={{ color: 'var(--primary-deep)' }} />
           <span className="tabular" style={{ fontWeight: 600 }}>{bpm}/хв</span>
         </span>
       )}
-      {stress != null && <StressChip stress={stress} />}
+      {!narrow && stress != null && <StressChip stress={stress} />}
       <span className="flex items-center" style={{ gap: 5, fontSize: 11 }}>
         <Route size={12} strokeWidth={1.75} style={{ color: 'var(--primary-deep)' }} />
         <span style={{ fontWeight: 600, textTransform: 'capitalize' }}>

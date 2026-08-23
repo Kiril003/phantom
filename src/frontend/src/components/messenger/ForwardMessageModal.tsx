@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { X, Forward, Search } from 'lucide-react';
 import { Chat, Message } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
+import { Avatar } from './Avatar';
 
 interface ForwardMessageModalProps {
   isOpen: boolean;
@@ -38,7 +39,7 @@ export const ForwardMessageModal: React.FC<ForwardMessageModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-center justify-center p-3 sm:p-4">
+    <div className="fixed inset-0 z-50 phantom-scrim flex items-center justify-center p-3 sm:p-4">
       <div className="bg-[#FDFCF9] border border-[#DDD4C4] rounded-3xl w-full max-w-md shadow-2xl overflow-hidden select-none animate-in fade-in zoom-in-95 duration-150 text-[#1E2521]">
         {/* Header */}
         <div className="px-5 py-4 border-b border-[#E6DFD3] flex items-center justify-between bg-[#FDFCF9]">
@@ -93,16 +94,12 @@ export const ForwardMessageModal: React.FC<ForwardMessageModalProps> = ({
                 className="p-2.5 rounded-2xl hover:bg-[#F9F7F1] border border-transparent hover:border-[#E6DFD3] cursor-pointer flex items-center justify-between gap-3 transition-all group"
               >
                 <div className="flex items-center gap-2.5 min-w-0">
-                  <img
-                    src={chat.avatar}
-                    alt={chat.title}
-                    className="w-9 h-9 rounded-xl object-cover ring-1 ring-white/10 shrink-0"
-                  />
+                  <Avatar src={chat.avatar} name={chat.title} className="w-9 h-9 shrink-0" />
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5 min-w-0">
                       <p className="font-bold text-xs text-[#1E2521] truncate group-hover:text-[#E87A42] transition-colors">{chat.title}</p>
                       {chat.isDemo && (
-                        <span className="px-1 py-px rounded-[4px] border border-[#E8E1D3] text-[#98A092] text-[10px] shrink-0 leading-[13px]">
+                        <span className="px-1 py-px rounded-[4px] border border-[#E8E1D3] text-[color:var(--msg-meta)] text-[10px] shrink-0 leading-[13px]">
                           демо
                         </span>
                       )}

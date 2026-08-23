@@ -10,6 +10,7 @@ import {
 import { Chat } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
 import { chatApi } from '../../services/api';
+import { Avatar } from './Avatar';
 
 interface ChatDigestModalProps {
   isOpen: boolean;
@@ -101,7 +102,7 @@ export const ChatDigestModal: React.FC<ChatDigestModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 phantom-scrim flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150">
       <div className="bg-[#FDFCF9] border-t sm:border border-[#DDD4C4] rounded-t-3xl sm:rounded-3xl w-full max-w-lg max-h-[92dvh] sm:max-h-[85vh] flex flex-col shadow-2xl overflow-hidden select-none animate-in slide-in-from-bottom sm:zoom-in-95 duration-150 pb-[var(--sab)] sm:pb-0 text-[#1E2521]">
         {/* Mobile Pull Indicator */}
         <div className="sm:hidden pt-2.5 pb-1 flex justify-center bg-[#FDFCF9]">
@@ -135,7 +136,7 @@ export const ChatDigestModal: React.FC<ChatDigestModalProps> = ({
         <div className="p-5 space-y-4 max-h-[75vh] overflow-y-auto">
           {/* Chat Metadata Header */}
           <div className="p-3 bg-[#FDFCF9] border border-[#E6DFD3] rounded-2xl flex items-center gap-3 shadow-sm">
-            <img src={chatAvatar} alt={chatTitle} className="w-10 h-10 rounded-xl object-cover ring-1 ring-[#E6DFD3]" />
+            <Avatar src={chatAvatar} name={chatTitle} className="w-10 h-10 shrink-0" />
             <div className="min-w-0">
               <h4 className="font-bold text-xs sm:text-sm text-[#1E2521] truncate">{chatTitle}</h4>
               <p className="text-[11px] text-[#5F6A60]">

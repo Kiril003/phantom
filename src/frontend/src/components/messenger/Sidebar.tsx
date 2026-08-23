@@ -1130,25 +1130,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <GripVertical className="w-3.5 h-3.5" strokeWidth={1.75} />
               <span>Перетягніть у потрібну папку на лівій панелі</span>
             </div>
-            <span className="text-[11px] text-[#98A092]">Відпустіть для додавання</span>
+            <span className="text-[11px] text-[color:var(--msg-meta)]">Відпустіть для додавання</span>
           </div>
         )}
 
         {/* 2. Search & Quick Filters */}
         <div className="px-3 pt-2.5 pb-2 space-y-2 border-b border-[#E8E1D3] bg-[#FDFCF9]">
           <div className="relative">
-            <Search className="w-[16px] h-[16px] text-[#98A092] absolute left-2.5 top-1/2 -translate-y-1/2" strokeWidth={1.75} />
+            <Search className="w-[16px] h-[16px] text-[color:var(--msg-meta)] absolute left-2.5 top-1/2 -translate-y-1/2" strokeWidth={1.75} />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Пошук людей, тем, повідомлень…"
-              className="w-full h-[32px] min-h-0 min-w-0 pl-8 pr-8 bg-transparent border border-[#E8E1D3] rounded-[10px] text-[13px] text-[#21261F] placeholder-[#98A092] focus:outline-none focus:border-[#D2C8B4] transition-colors"
+              className="w-full h-[32px] min-h-0 min-w-0 pl-8 pr-8 bg-transparent border border-[#E8E1D3] rounded-[10px] text-[13px] text-[#21261F] placeholder-[var(--msg-meta)] focus:outline-none focus:border-[#D2C8B4] transition-colors"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 min-h-0 min-w-0 text-[#98A092] hover:text-[#21261F]"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 min-h-0 min-w-0 text-[color:var(--msg-meta)] hover:text-[#21261F]"
               >
                 <X className="w-3.5 h-3.5" strokeWidth={1.75} />
               </button>
@@ -1218,7 +1218,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div className="flex-1 min-h-0 overflow-y-auto px-2 py-2 space-y-1">
         {filteredChats.length === 0 ? (
           <div className="py-12 text-center space-y-2 px-4">
-            <div className="w-9 h-9 rounded-[10px] text-[#98A092] flex items-center justify-center mx-auto border border-[#E8E1D3]">
+            <div className="w-9 h-9 rounded-[10px] text-[color:var(--msg-meta)] flex items-center justify-center mx-auto border border-[#E8E1D3]">
               {React.createElement(folderIcon(currentFolder), { className: 'w-[18px] h-[18px]', strokeWidth: 1.75 })}
             </div>
             <p className="text-[13px] font-semibold text-[#21261F]">
@@ -1291,9 +1291,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
                       <h3 className="font-semibold text-[13.5px] text-[#21261F] truncate leading-tight">
                         {displayTitle(chat.title)}
                       </h3>
-                      {chat.pinned && <Pin className="w-3 h-3 text-[#98A092] shrink-0" strokeWidth={1.75} />}
+                      {chat.pinned && <Pin className="w-3 h-3 text-[color:var(--msg-meta)] shrink-0" strokeWidth={1.75} />}
                       {chat.isDemo && (
-                        <span className="px-1 py-px rounded-[4px] border border-[#E8E1D3] text-[#98A092] text-[10px] shrink-0 leading-[13px]">
+                        <span className="px-1 py-px rounded-[4px] border border-[#E8E1D3] text-[color:var(--msg-meta)] text-[10px] shrink-0 leading-[13px]">
                           демо
                         </span>
                       )}
@@ -1301,7 +1301,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     {timeLabel && (
                       /* На ховері звільняємо кут під кнопку дій — інакше час ріжеться навпіл */
                       <span
-                        className={`text-[11.5px] text-[#98A092] shrink-0 leading-tight transition-opacity ${
+                        className={`text-[11.5px] text-[color:var(--msg-meta)] shrink-0 leading-tight transition-opacity ${
                           activeMenuChatId === chat.id ? 'opacity-0' : 'group-hover:opacity-0'
                         }`}
                       >
@@ -1319,11 +1319,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           <span className="text-[#6E7568]">{chat.draft}</span>
                         </span>
                       ) : !hasHistory ? (
-                        <span className="text-[#98A092] truncate">Ще немає повідомлень</span>
+                        <span className="text-[color:var(--msg-meta)] truncate">Ще немає повідомлень</span>
                       ) : lastKind && lastKind !== 'text' ? (
                         <>
                           {React.createElement(kindPreview[lastKind]?.icon || Paperclip, {
-                            className: 'w-3.5 h-3.5 text-[#98A092] shrink-0',
+                            className: 'w-3.5 h-3.5 text-[color:var(--msg-meta)] shrink-0',
                             strokeWidth: 1.75,
                           })}
                           <span className="text-[#6E7568] truncate">
@@ -1655,7 +1655,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div
           ref={contextMenuRef}
           onClick={(e) => e.stopPropagation()}
-          className="fixed z-50 w-72 max-h-[calc(100vh-28px)] overflow-y-auto no-scrollbar bg-[#FDFCF9]/98 backdrop-blur-md border border-[#DDD4C4] rounded-2xl shadow-2xl p-1.5 space-y-1.5 animate-in fade-in slide-in-from-left-2 duration-150 ease-out text-[#1E2521] select-none"
+          className="fixed z-50 w-72 max-h-[calc(100vh-28px)] overflow-y-auto no-scrollbar bg-[#FDFCF9]/[0.97] backdrop-blur-md border border-[#DDD4C4] rounded-2xl shadow-2xl p-1.5 space-y-1.5 animate-in fade-in slide-in-from-left-2 duration-150 ease-out text-[#1E2521] select-none"
           style={{
             top: folderContextMenu.y,
             left: folderContextMenu.x,
@@ -2083,7 +2083,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
         <div
           ref={quickPreviewRef}
           onClick={(e) => e.stopPropagation()}
-          className="fixed z-50 w-80 sm:w-88 bg-[#FDFCF9]/98 backdrop-blur-md border border-[#DDD4C4] rounded-2xl shadow-2xl p-3.5 space-y-2.5 animate-in fade-in zoom-in-95 duration-200 text-[#1E2521]"
+          className="fixed z-50 w-80 sm:w-88 bg-[#FDFCF9]/[0.97] backdrop-blur-md border border-[#DDD4C4] rounded-2xl shadow-2xl p-3.5 space-y-2.5 animate-in fade-in zoom-in-95 duration-200 text-[#1E2521]"
           style={{
             top: quickPreview.y,
             left: quickPreview.x,
@@ -2322,7 +2322,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       <div className="p-2 border-t border-[#E8E1D3] bg-[#F7F5EF] relative">
         {/* Persona quick switcher popup */}
         {isPersonaMenuOpen && onSwitchPersonaSphere && (
-          <div className="absolute bottom-full left-2 right-2 mb-2 p-2 bg-[#FDFCF9]/98 backdrop-blur-2xl border border-[#DDD4C4] rounded-2xl shadow-2xl z-30 space-y-1 animate-in fade-in zoom-in-95 duration-100 text-[#1E2521]">
+          <div className="absolute bottom-full left-2 right-2 mb-2 p-2 bg-[#FDFCF9]/[0.97] backdrop-blur-2xl border border-[#DDD4C4] rounded-2xl shadow-2xl z-30 space-y-1 animate-in fade-in zoom-in-95 duration-100 text-[#1E2521]">
             <div className="px-2 py-1 text-[10px] font-extrabold text-[#5F6A60] uppercase tracking-wider">
               Перемкнути активну ідентичність
             </div>
@@ -2371,7 +2371,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                   <span className="font-semibold text-[13px] text-[#21261F] truncate">
                     {currentUser.name.split(' ')[0]}
                   </span>
-                  <span className="px-1 py-px text-[10px] rounded-[4px] uppercase tracking-[.06em] border border-[#E8E1D3] text-[#98A092] leading-[13px] shrink-0">
+                  <span className="px-1 py-px text-[10px] rounded-[4px] uppercase tracking-[.06em] border border-[#E8E1D3] text-[color:var(--msg-meta)] leading-[13px] shrink-0">
                     {activeSphere}
                   </span>
                 </div>
@@ -2409,7 +2409,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <span
             className={`w-1.5 h-1.5 rounded-full shrink-0 ${queuedCount > 0 ? 'bg-[#C98A2E]' : 'bg-[#4C8A55]'}`}
           />
-          <Inbox className="w-3.5 h-3.5 text-[#98A092] shrink-0" strokeWidth={1.75} />
+          <Inbox className="w-3.5 h-3.5 text-[color:var(--msg-meta)] shrink-0" strokeWidth={1.75} />
           <span className="truncate">
             {queuedCount > 0
               ? `${queuedCount} ${queuedCount === 1 ? 'повідомлення чекає' : queuedCount < 5 ? 'повідомлення чекають' : 'повідомлень чекають'} на зв'язок`

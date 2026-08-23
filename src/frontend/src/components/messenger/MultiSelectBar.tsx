@@ -34,7 +34,7 @@ export const MultiSelectBar: React.FC<MultiSelectBarProps> = ({
   if (selectedCount === 0) return null;
 
   return (
-    <div className="absolute bottom-20 left-1/2 -translate-y-1/2 z-40 bg-[#FDFCF9]/98 backdrop-blur-2xl border border-[#DDD4C4] shadow-2xl rounded-2xl p-2 sm:p-2.5 flex items-center gap-1.5 sm:gap-2 animate-in fade-in slide-in-from-bottom-3 text-xs max-w-[95%] sm:max-w-xl text-[#1E2521]">
+    <div className="absolute bottom-20 left-1/2 -translate-y-1/2 z-40 bg-[#FDFCF9]/[0.97] backdrop-blur-2xl border border-[#DDD4C4] shadow-2xl rounded-2xl p-2 sm:p-2.5 flex items-center gap-1.5 sm:gap-2 animate-in fade-in slide-in-from-bottom-3 text-xs max-w-[95%] sm:max-w-xl text-[#1E2521]">
       {/* Count pill */}
       <div className="flex items-center gap-1.5 px-3 py-1.5 bg-[#F9F7F1] text-[#E87A42] border border-[#DDD4C4] rounded-xl font-bold shrink-0">
         <CheckSquare className="w-3.5 h-3.5" />

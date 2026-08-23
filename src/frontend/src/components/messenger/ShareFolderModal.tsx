@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { Chat, SmartFolder } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
+import { Avatar } from './Avatar';
 
 interface ShareFolderModalProps {
   isOpen: boolean;
@@ -42,7 +43,7 @@ export const ShareFolderModal: React.FC<ShareFolderModalProps> = ({
 
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 phantom-scrim animate-in fade-in duration-150">
       <div
         className="w-full max-w-md bg-[#FDFCF9] border border-[#DDD4C4] rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] text-[#1E2521] animate-in zoom-in-95 duration-150"
         onClick={(e) => e.stopPropagation()}
@@ -124,11 +125,7 @@ export const ShareFolderModal: React.FC<ShareFolderModalProps> = ({
                     className="p-1.5 rounded-xl hover:bg-[#F9F7F1] flex items-center justify-between gap-2 transition-colors border border-transparent hover:border-[#E6DFD3]"
                   >
                     <div className="flex items-center gap-2 min-w-0">
-                      <img
-                        src={chat.avatar}
-                        alt={chat.title}
-                        className="w-6 h-6 rounded-lg object-cover ring-1 ring-white/10 shrink-0"
-                      />
+                      <Avatar src={chat.avatar} name={chat.title} className="w-6 h-6 shrink-0" radius="rounded-lg" />
                       <div className="min-w-0">
                         <h4 className="font-bold text-xs text-[#1E2521] truncate">
                           {chat.title}

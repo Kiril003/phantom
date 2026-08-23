@@ -86,7 +86,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 phantom-scrim flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150">
       <div className="bg-[#FDFCF9] border-t sm:border border-[#DDD4C4] rounded-t-3xl sm:rounded-3xl w-full max-w-md shadow-2xl overflow-hidden select-none animate-in slide-in-from-bottom sm:zoom-in-95 duration-150 flex flex-col max-h-[92dvh] sm:max-h-[88vh] pb-[var(--sab)] sm:pb-0 text-[#1E2521]">
         {/* Mobile Pull Indicator */}
         <div className="sm:hidden pt-2.5 pb-1 flex justify-center bg-[#FDFCF9]">
@@ -145,7 +145,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
 
             <div className="flex items-center gap-2 pt-0.5">
               <span className="h-px flex-1 bg-[#E6DFD3]" />
-              <span className="text-[10px] font-bold uppercase tracking-wide text-[#98A092]">
+              <span className="text-[10px] font-bold uppercase tracking-wide text-[color:var(--msg-meta)]">
                 або вручну
               </span>
               <span className="h-px flex-1 bg-[#E6DFD3]" />
@@ -192,7 +192,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
           </div>
 
           {/* Обіцянок тут більше немає — тільки те, чого поки немає. */}
-          <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-2xl border border-[#EFEBE0] text-[#98A092]">
+          <div className="flex items-center gap-2 px-3.5 py-2.5 rounded-2xl border border-[#EFEBE0] text-[color:var(--msg-meta)]">
             <Users className="w-4 h-4 shrink-0" strokeWidth={1.75} />
             <span className="text-[11.5px] flex-1">Групи — ще ні. Працюємо.</span>
             <span className="text-[9.5px] font-bold uppercase tracking-wide bg-[#F1EBDD] text-[#6E7568] px-1.5 py-0.5 rounded-full">

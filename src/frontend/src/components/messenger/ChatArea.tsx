@@ -37,7 +37,8 @@ import {
   Globe,
   Radio,
   Check,
-  AlertCircle
+  AlertCircle,
+  MessageSquare
 } from 'lucide-react';
 import { Message, LocationData, TableData, TaskListData, Chat } from '../../types/messenger';
 import { Avatar } from './Avatar';
@@ -230,7 +231,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       case 'failed': return '#C25A3A';
       case 'sent':
       case 'delivered': return '#7E8B72';
-      default: return '#A9927C';
+      default: return 'var(--msg-meta-self)';
     }
   };
 
@@ -933,9 +934,21 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         ref={messagesContainerRef}
         onScroll={handleScroll}
         data-testid="messages-scroller"
-        className="flex-1 overflow-y-auto px-3 py-3 sm:px-6 sm:py-4"
+        className="flex-1 overflow-y-auto px-3 sm:px-6"
       >
-        <div ref={contentRef}>
+        <div ref={contentRef} className="msg-column py-3 sm:py-4">
+        {/* Порожня розмова — не пустка: та сама картка, що й у порожньому пошуку. */}
+        {(messages || []).length === 0 && (
+          <div className="flex-1 flex flex-col items-center justify-center text-center gap-2 px-6 py-12">
+            <div className="w-11 h-11 rounded-full bg-[#F3EEE3] border border-[#E8E1D3] flex items-center justify-center text-[#8A5A33]">
+              <MessageSquare className="w-5 h-5" strokeWidth={1.75} />
+            </div>
+            <p className="text-[15px] font-semibold text-[#21261F]">Тут ще тихо</p>
+            <p className="text-[12.5px] text-[#6E7568] max-w-[300px] leading-relaxed">
+              Листи запечатані між вузлами. Напишіть перше — воно піде прямо співрозмовнику.
+            </p>
+          </div>
+        )}
         {(messages || []).map((msg, index) => {
           if (!msg) return null;
           const isSelf = msg.senderId === currentUserId || msg.isSelf;
@@ -957,7 +970,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             return (
               <React.Fragment key={msg.id}>
                 {showDateDivider && (
-                  <div className="flex items-center justify-center pt-3 pb-2">
+                  <div className="flex items-center justify-center pt-[32px] pb-0">
                     <span className="px-2.5 py-1 bg-[#F3EEE3] text-[#6E7568] text-[11.5px] rounded-[8px]">
                       {dateLabel}
                     </span>
@@ -966,7 +979,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                 <div
                   id={`message-${msg.id}`}
                   data-testid="message-tombstone"
-                  className={`flex ${isSelf ? 'justify-end' : 'justify-start'} mt-[6px]`}
+                  className={`flex ${isSelf ? 'justify-end' : 'justify-start'} mt-[14px]`}
                 >
                   <span className="px-3 py-1.5 rounded-2xl border border-dashed border-[#DFD6C5] bg-[#F3EEE3]/50 text-[12px] italic text-[#8A9186]">
                     Повідомлення видалено
@@ -1065,18 +1078,20 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
             <React.Fragment key={msg.id}>
               {/* Date Header Divider */}
               {showDateDivider && (
-                <div className="flex items-center justify-center pt-3 pb-2">
+                <div className="flex items-center justify-center pt-[32px] pb-0">
                   <span className="px-2.5 py-1 bg-[#F3EEE3] text-[#6E7568] text-[11.5px] rounded-[8px]">
                     {dateLabel}
                   </span>
                 </div>
               )}
 
+              {/* Три сходинки ритму: 2px усередині групи, 14px на зміні мовця,
+                  32px до роздільника дня — черга реплік читається периферійно. */}
               <div
                 id={`message-${msg.id}`}
                 onMouseEnter={() => setHoveredMessageId(msg.id)}
                 onMouseLeave={() => setHoveredMessageId(null)}
-                className={`flex items-end gap-2 ${isSelf ? 'justify-end' : 'justify-start'} ${isNewSenderTurn ? 'mt-[10px]' : 'mt-[3px]'} group relative ${
+                className={`flex items-end gap-2 ${isSelf ? 'justify-end' : 'justify-start'} ${isNewSenderTurn || showDateDivider ? 'mt-[14px]' : 'mt-[2px]'} group relative ${
                   isActiveSearchMatch
                     ? 'ring-1 ring-[#D96C35] bg-[#F3EEE3]/80 rounded-xl p-0.5'
                     : isHighlighted
@@ -1862,8 +1877,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                     messageDensity === 'emoji-single'
                       ? 'bg-[#F3EEE3] text-[#6E7568] border border-[#E8E1D3] px-1.5 py-0.5 rounded-lg w-fit mx-auto'
                       : isSelf
-                      ? 'text-[#A9927C]'
-                      : 'text-[#98A092]'
+                      ? 'text-[color:var(--msg-meta-self)]'
+                      : 'text-[color:var(--msg-meta)]'
                   }`}>
                     {/* Reading time metric for longer messages */}
                     {showReadingTime && (
@@ -1923,7 +1938,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                           title="Шлях листа"
                           aria-label="Шлях листа"
                         >
-                          {msg.status === 'sending' && <Clock className="w-3.5 h-3.5 text-[#A9927C]" strokeWidth={1.75} />}
+                          {msg.status === 'sending' && <Clock className="w-3.5 h-3.5 text-[color:var(--msg-meta-self)]" strokeWidth={1.75} />}
                           {/* Застрягле вкладення носить амберову крапку, а не
                               годинник: у людини немає файла, і це стан самого
                               повідомлення, а не дрібний підпис під фото. */}
@@ -1934,8 +1949,8 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                             />
                           )}
                           {msg.status === 'queued' && !msg.media && <Clock className="w-3.5 h-3.5 text-[#C98A2E]" strokeWidth={1.75} />}
-                          {msg.status === 'sent' && <Check className="w-3.5 h-3.5 text-[#A9927C]" strokeWidth={1.75} />}
-                          {msg.status === 'delivered' && <CheckCheck className="w-3.5 h-3.5 text-[#A9927C]" strokeWidth={1.75} />}
+                          {msg.status === 'sent' && <Check className="w-3.5 h-3.5 text-[color:var(--msg-meta-self)]" strokeWidth={1.75} />}
+                          {msg.status === 'delivered' && <CheckCheck className="w-3.5 h-3.5 text-[color:var(--msg-meta-self)]" strokeWidth={1.75} />}
                           {msg.status === 'read' && <CheckCheck className="w-3.5 h-3.5 text-[#D96C35]" strokeWidth={1.75} />}
                           {msg.status === 'failed' && <AlertCircle className="w-3.5 h-3.5 text-[#C25A3A]" strokeWidth={1.75} />}
                         </button>
@@ -1955,7 +1970,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
                                 <span className="text-[11px] font-extrabold uppercase tracking-wide text-[#6E7568]">Шлях листа</span>
                                 <button
                                   onClick={() => setPathCardMsgId(null)}
-                                  className="p-0.5 text-[#98A092] hover:text-[#21261F] rounded"
+                                  className="p-0.5 text-[color:var(--msg-meta)] hover:text-[#21261F] rounded"
                                   aria-label="Закрити"
                                 >
                                   <X className="w-3.5 h-3.5" />
@@ -2140,9 +2155,9 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
         {isAiTyping && (
           <div className="mt-[10px] flex items-center gap-2 text-[12.5px] text-[#6E7568] bg-white px-3 py-2 rounded-[12px] w-fit border border-[#E8E1D3]">
             <div className="flex items-center gap-1">
-              <span className="w-1.5 h-1.5 bg-[#98A092] rounded-full animate-bounce" />
-              <span className="w-1.5 h-1.5 bg-[#98A092] rounded-full animate-bounce [animation-delay:0.2s]" />
-              <span className="w-1.5 h-1.5 bg-[#98A092] rounded-full animate-bounce [animation-delay:0.4s]" />
+              <span className="w-1.5 h-1.5 bg-[var(--msg-meta)] rounded-full animate-bounce" />
+              <span className="w-1.5 h-1.5 bg-[var(--msg-meta)] rounded-full animate-bounce [animation-delay:0.2s]" />
+              <span className="w-1.5 h-1.5 bg-[var(--msg-meta)] rounded-full animate-bounce [animation-delay:0.4s]" />
             </div>
             <span>Локальний агент формує відповідь…</span>
           </div>
@@ -2221,7 +2236,7 @@ export const ChatArea: React.FC<ChatAreaProps> = ({
       {/* Mobile Context Action Sheet / Long-Press Menu */}
       {contextMenuMsg && (
         <div
-          className="fixed inset-0 bg-black/75 backdrop-blur-md z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150"
+          className="fixed inset-0 phantom-scrim z-50 flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150"
           onClick={() => setContextMenuMsg(null)}
         >
           <div

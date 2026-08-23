@@ -4,6 +4,7 @@ interface AvatarProps {
   src?: string | null;
   name: string;
   className?: string;
+  radius?: string;
 }
 
 // Аватара може не бути — і це нормальний стан, а не помилка.
@@ -11,7 +12,7 @@ interface AvatarProps {
 // колір несе тільки літера, підкладка лишається паперовою.
 const inkTones = ['#D96C35', '#6E7568', '#8A5A33', '#4C8A55'];
 
-export const Avatar: React.FC<AvatarProps> = ({ src, name, className = 'w-9 h-9' }) => {
+export const Avatar: React.FC<AvatarProps> = ({ src, name, className = 'w-9 h-9', radius = 'rounded-[12px]' }) => {
   const [broken, setBroken] = useState(false);
   const usable = src && src.trim() && !broken;
 
@@ -21,7 +22,7 @@ export const Avatar: React.FC<AvatarProps> = ({ src, name, className = 'w-9 h-9'
         src={src as string}
         alt={name}
         onError={() => setBroken(true)}
-        className={`${className} rounded-[12px] object-cover ring-1 ring-[#E8E1D3]`}
+        className={`${className} ${radius} object-cover ring-1 ring-[#E8E1D3]`}
       />
     );
   }
@@ -31,8 +32,8 @@ export const Avatar: React.FC<AvatarProps> = ({ src, name, className = 'w-9 h-9'
 
   return (
     <div
-      className={`${className} rounded-[12px] flex items-center justify-center font-semibold select-none bg-[#EFE9DC] border border-[#E8E1D3]`}
-      style={{ color: tone, fontSize: '0.75rem', letterSpacing: '0.01em' }}
+      className={`${className} ${radius} text-xs flex items-center justify-center font-semibold select-none bg-[#EFE9DC] border border-[#E8E1D3]`}
+      style={{ color: tone, letterSpacing: '0.01em' }}
       aria-label={name}
     >
       {letters.toUpperCase()}

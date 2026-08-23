@@ -22,6 +22,7 @@ import {
 } from 'lucide-react';
 import { ChatMember, PersonaSphere, UserProfile, UserProfilePersona } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
+import { Avatar } from './Avatar';
 
 interface UserProfileModalProps {
   isOpen: boolean;
@@ -121,7 +122,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 phantom-scrim flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150">
       <div className="bg-[#FDFCF9] border-t sm:border border-[#DDD4C4] rounded-t-3xl sm:rounded-3xl w-full max-w-xl shadow-2xl overflow-hidden select-none animate-in slide-in-from-bottom sm:zoom-in-95 duration-150 flex flex-col max-h-[92dvh] sm:max-h-[88vh] pb-[var(--sab)] sm:pb-0 text-[#1E2521]">
         {/* Mobile Pull Indicator */}
         <div className="sm:hidden pt-2.5 pb-1 flex justify-center bg-[#FDFCF9]">
@@ -196,11 +197,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
             <div className="space-y-4">
               <div className="text-center space-y-2">
                 <div className="relative inline-block">
-                  <img
-                    src={viewingMember.avatar}
-                    alt={viewingMember.name}
-                    className="w-24 h-24 rounded-3xl object-cover ring-4 ring-white shadow-md mx-auto"
-                  />
+                  <Avatar src={viewingMember.avatar} name={viewingMember.name} className="w-24 h-24 mx-auto text-2xl" radius="rounded-3xl" />
                   {viewingMember.isOnline && (
                     <span className="absolute bottom-1 right-1 w-4 h-4 bg-[#528A4B] rounded-full ring-2 ring-white" />
                   )}
@@ -340,11 +337,7 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   <div className="flex items-start justify-between gap-3">
                     <div className="flex items-center gap-3">
                       <div className="relative">
-                        <img
-                          src={currentUser.avatar}
-                          alt={formData.name}
-                          className="w-16 h-16 rounded-2xl object-cover ring-2 ring-[#1E2521] shadow-xs"
-                        />
+                        <Avatar src={currentUser.avatar} name={formData.name} className="w-16 h-16 text-lg" radius="rounded-2xl" />
                         <span className="absolute -bottom-1 -right-1 text-sm bg-white p-0.5 rounded-md shadow-2xs">
                           {formData.statusEmoji}
                         </span>

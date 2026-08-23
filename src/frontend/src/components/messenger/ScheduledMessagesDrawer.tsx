@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import { Chat, ScheduledMessage } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
+import { Avatar } from './Avatar';
 
 interface ScheduledMessagesDrawerProps {
   isOpen: boolean;
@@ -154,7 +155,7 @@ export const ScheduledMessagesDrawer: React.FC<ScheduledMessagesDrawerProps> = (
   ];
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/75 backdrop-blur-md flex justify-end animate-in fade-in duration-200">
+    <div className="fixed inset-0 z-50 phantom-scrim flex justify-end animate-in fade-in duration-200">
       <div className="bg-[#FDFCF9] border-l border-[#DDD4C4] w-full max-w-lg h-full shadow-2xl flex flex-col select-none animate-in slide-in-from-right duration-250 text-[#1E2521]">
         {/* Top Header */}
         <div className="p-4 sm:p-5 border-b border-[#E6DFD3] bg-[#FDFCF9] flex items-center justify-between shrink-0">
@@ -451,11 +452,7 @@ export const ScheduledMessagesDrawer: React.FC<ScheduledMessagesDrawerProps> = (
                     {/* Chat Info & Tag */}
                     <div className="flex items-center gap-2.5 min-w-0">
                       {msg.chatAvatar ? (
-                        <img
-                          src={msg.chatAvatar}
-                          alt={msg.chatTitle}
-                          className="w-7 h-7 rounded-xl object-cover ring-1 ring-black/5 shrink-0"
-                        />
+                        <Avatar src={msg.chatAvatar} name={msg.chatTitle} className="w-7 h-7 shrink-0" />
                       ) : (
                         <div className="w-7 h-7 rounded-xl bg-[#EFE8DC] flex items-center justify-center text-xs font-bold shrink-0">
                           💬

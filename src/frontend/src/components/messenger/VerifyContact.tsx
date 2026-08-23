@@ -278,7 +278,7 @@ export const SafetyVerifyBlock: React.FC<{
                   : 'Позначити звірку голосом'
               }
               className={`text-[11px] font-bold active:scale-95 transition-transform disabled:active:scale-100 ${
-                locked ? 'text-[#98A092] cursor-not-allowed' : 'text-[#C25925] disabled:opacity-50'
+                locked ? 'text-[color:var(--msg-meta)] cursor-not-allowed' : 'text-[#C25925] disabled:opacity-50'
               }`}
             >
               {busy ? 'Звіряю…' : 'Підтвердити'}
@@ -531,7 +531,7 @@ export const ContactSheet: React.FC<ContactSheetProps> = ({
                   Не звірено
                 </span>
               )}
-              <span className="text-[10px] text-[#98A092]">·</span>
+              <span className="text-[10px] text-[color:var(--msg-meta)]">·</span>
               <span className="text-[10px] text-[#7A6A55] truncate">
                 {contact.peer_address ? 'прямий звʼязок: є' : 'прямого звʼязку немає — листи підуть через скриньку'}
               </span>

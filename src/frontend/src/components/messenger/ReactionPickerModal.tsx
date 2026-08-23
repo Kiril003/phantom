@@ -76,7 +76,7 @@ export const ReactionPickerModal: React.FC<ReactionPickerModalProps> = ({
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/75 backdrop-blur-md p-4 animate-in fade-in duration-150"
+      className="fixed inset-0 z-50 flex items-center justify-center phantom-scrim p-4 animate-in fade-in duration-150"
       onClick={onClose}
     >
       <div

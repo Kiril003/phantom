@@ -209,7 +209,7 @@ export const Header: React.FC<HeaderProps> = ({
                 {currentChat.title}
               </h2>
               {circleLabel && (
-                <span className="hidden phantom:inline-block text-[11.5px] text-[#98A092] shrink-0">
+                <span className="hidden phantom:inline-block text-[11.5px] text-[color:var(--msg-meta)] shrink-0">
                   {circleLabel}
                 </span>
               )}
@@ -258,12 +258,12 @@ export const Header: React.FC<HeaderProps> = ({
                   className="hidden phantom:inline-flex items-center gap-1.5 shrink-0 min-w-0 min-h-0 hover:text-[#21261F] transition-colors"
                   title="Стан каналу — натисніть для діагностики мережі"
                 >
-                  <span className="w-1.5 h-1.5 rounded-full bg-[#98A092] shrink-0" />
+                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--msg-meta)] shrink-0" />
                   <span className="truncate max-w-[130px]">
                     {TRANSPORT_LABEL[activeTransportStatus] || 'каналу немає'}
                   </span>
                   {typeof networkLatencyMs === 'number' && (
-                    <span className="text-[#98A092]">{networkLatencyMs} мс</span>
+                    <span className="text-[color:var(--msg-meta)]">{networkLatencyMs} мс</span>
                   )}
                 </button>
               )}
@@ -461,7 +461,7 @@ export const Header: React.FC<HeaderProps> = ({
                 {isSoundEnabled ? (
                   <Volume2 className="w-4 h-4 text-[#6E7568] shrink-0" strokeWidth={1.75} />
                 ) : (
-                  <VolumeX className="w-4 h-4 text-[#98A092] shrink-0" strokeWidth={1.75} />
+                  <VolumeX className="w-4 h-4 text-[color:var(--msg-meta)] shrink-0" strokeWidth={1.75} />
                 )}
                 <span className="truncate">{isSoundEnabled ? 'Звук увімкнено' : 'Звук вимкнено'}</span>
               </button>

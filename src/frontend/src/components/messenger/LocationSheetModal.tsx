@@ -45,7 +45,7 @@ export const LocationSheetModal: React.FC<LocationSheetModalProps> = ({
       (dossier.atmosphere && dossier.atmosphere.length > 0));
 
   return (
-    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/75 backdrop-blur-md p-0 sm:p-4 transition-all select-none">
+    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center phantom-scrim p-0 sm:p-4 transition-all select-none">
       {/* Backdrop click */}
       <div className="absolute inset-0" onClick={onClose} />
 

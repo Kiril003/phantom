@@ -225,7 +225,7 @@ export const SmartFolderModal: React.FC<SmartFolderModalProps> = ({
   const currentCategoryObj = emojiCategories.find((cat) => cat.id === activeCategory) || emojiCategories[0];
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-150">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 phantom-scrim animate-in fade-in duration-150">
       <div
         className="bg-[#FDFCF9] border border-[#DDD4C4] w-full max-w-lg rounded-3xl shadow-2xl flex flex-col max-h-[90vh] overflow-hidden text-[#1E2521]"
         onClick={(e) => e.stopPropagation()}

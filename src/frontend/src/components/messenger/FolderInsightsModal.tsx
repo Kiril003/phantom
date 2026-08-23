@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { Chat, SmartFolder } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
+import { Avatar } from './Avatar';
 
 interface FolderInsightsModalProps {
   isOpen: boolean;
@@ -54,7 +55,7 @@ export const FolderInsightsModal: React.FC<FolderInsightsModalProps> = ({
   const accentColor = folder.color || '#E87A42';
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/75 backdrop-blur-md animate-in fade-in duration-150 select-none">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 phantom-scrim animate-in fade-in duration-150 select-none">
       <div
         onClick={(e) => e.stopPropagation()}
         className="w-full max-w-xl bg-[#FDFCF9] border border-[#DDD4C4] rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[92vh] text-[#1E2521] animate-in zoom-in-95 duration-150"
@@ -148,11 +149,7 @@ export const FolderInsightsModal: React.FC<FolderInsightsModalProps> = ({
                     <div key={chat.id} className="space-y-1">
                       <div className="flex items-center justify-between text-xs">
                         <div className="flex items-center gap-1.5 min-w-0">
-                          <img
-                            src={chat.avatar}
-                            alt={chat.title}
-                            className="w-5 h-5 rounded-lg object-cover ring-1 ring-[#E6DFD3] shrink-0"
-                          />
+                          <Avatar src={chat.avatar} name={chat.title} className="w-5 h-5 shrink-0" radius="rounded-lg" />
                           <span className="font-bold text-[#1E2521] truncate">
                             {chat.title}
                           </span>

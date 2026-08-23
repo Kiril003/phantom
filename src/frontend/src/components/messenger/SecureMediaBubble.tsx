@@ -187,7 +187,7 @@ export const SecureMediaBubble: React.FC<Props> = ({ msg, isSelf, onOpenLightbox
     return (
       <div className={`mt-1 p-3 rounded-2xl border ${shell}`} data-testid="media-reading">
         <div className="flex items-center gap-2">
-          <span className="w-1.5 h-1.5 rounded-full bg-[#98A092] animate-pulse shrink-0" />
+          <span className="w-1.5 h-1.5 rounded-full bg-[var(--msg-meta)] animate-pulse shrink-0" />
           <span className="text-xs text-[#6E7568]">{label} · розшифровуємо…</span>
         </div>
       </div>

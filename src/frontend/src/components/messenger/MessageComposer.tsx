@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import {
   Send,
   Smile,
@@ -166,6 +166,15 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     }
   }, [chatId, initialDraft]);
 
+  // Композер росте під чернетку до ~6 рядків, далі — власний скрол. Без цього
+  // з другого рядка людина не бачить, що пише: поле лишалось 28px завжди.
+  useLayoutEffect(() => {
+    const el = textareaRef.current;
+    if (!el) return;
+    el.style.height = 'auto';
+    el.style.height = `${Math.min(el.scrollHeight, 140)}px`;
+  }, [text]);
+
   // Sync editing message
   useEffect(() => {
     if (editingMessage) {
@@ -325,7 +334,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     <div className="px-4 pt-2 pb-[calc(env(safe-area-inset-bottom,0px)+0.25rem)] bg-[#FDFCF9]/95 backdrop-blur-xl border-t border-[#E8E1D3] shrink-0 select-none relative z-30 text-[#21261F]">
       {/* Mention Autocomplete Dropdown */}
       {mentionQuery !== null && filteredMembers.length > 0 && (
-        <div className="absolute bottom-full left-4 mb-2 bg-[#FDFCF9]/98 backdrop-blur-2xl border border-[#E8E1D3] rounded-2xl shadow-2xl w-64 max-h-48 overflow-y-auto p-1.5 z-30 animate-in fade-in zoom-in-95 duration-100 text-[#21261F]">
+        <div className="absolute bottom-full left-4 mb-2 bg-[#FDFCF9]/[0.97] backdrop-blur-2xl border border-[#E8E1D3] rounded-2xl shadow-[0_12px_32px_rgba(60,44,24,0.14)] w-64 max-h-48 overflow-y-auto p-1.5 z-30 animate-in fade-in zoom-in-95 duration-100 text-[#21261F]">
           <p className="text-[10px] font-bold text-[#6E7568] px-2 py-1 uppercase tracking-wider">
             Згадати учасника
           </p>
@@ -368,7 +377,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
             value={multiQuoteTitle}
             onChange={(e) => setMultiQuoteTitle(e.target.value)}
             placeholder="Заголовок зведеної цитати..."
-            className="w-full px-2.5 py-1.5 bg-[#F3EEE3] border border-[#F1EBDD] rounded-xl text-xs font-semibold text-[#21261F] placeholder-[#98A092] focus:outline-none focus:border-[#D96C35]"
+            className="w-full px-2.5 py-1.5 bg-[#F3EEE3] border border-[#F1EBDD] rounded-xl text-xs font-semibold text-[#21261F] placeholder-[var(--msg-meta)] focus:outline-none focus:border-[#D96C35]"
           />
 
           <div className="space-y-1 max-h-20 overflow-y-auto">
@@ -429,7 +438,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                   {onRemoveReplyQuote && (
                     <button
                       onClick={() => onRemoveReplyQuote(q.id)}
-                      className="p-0.5 text-[#98A092] hover:text-red-400 rounded-md shrink-0"
+                      className="p-0.5 text-[color:var(--msg-meta)] hover:text-red-400 rounded-md shrink-0"
                       title="Прибрати цю цитату"
                     >
                       <X className="w-3 h-3" />
@@ -616,14 +625,14 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                   onClick={() => setShowAttachMenu(false)}
                   aria-hidden
                 />
-                <div className="absolute bottom-12 left-0 bg-[#FDFCF9]/98 backdrop-blur-2xl border border-[#E8E1D3] rounded-2xl p-1.5 shadow-2xl w-52 z-30 space-y-0.5 animate-in fade-in zoom-in-95 duration-100 select-none text-[#21261F]">
+                <div className="absolute bottom-12 left-0 bg-[#FDFCF9]/[0.97] backdrop-blur-2xl border border-[#E8E1D3] rounded-2xl p-1.5 shadow-[0_12px_32px_rgba(60,44,24,0.14)] w-52 z-30 space-y-0.5 animate-in fade-in zoom-in-95 duration-100 select-none text-[#21261F]">
                   <div className="px-2 py-1 flex items-baseline justify-between gap-2 border-b border-[#F1EBDD]">
                     <span className="text-[11px] font-extrabold text-[#6E7568] uppercase tracking-wide">
                       Вкладення
                     </span>
                     {/* Межу кажемо ДО вибору — щоб відмова не приходила після
                         того, як людина вже почекала на завантаження. */}
-                    <span className="text-[10px] font-semibold text-[#98A092] normal-case">
+                    <span className="text-[10px] font-semibold text-[color:var(--msg-meta)] normal-case">
                       {MEDIA_LIMIT_LABEL}
                     </span>
                   </div>
@@ -654,7 +663,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                       key={label}
                       type="button"
                       disabled
-                      className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl text-left text-xs text-[#98A092] cursor-not-allowed"
+                      className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl text-left text-xs text-[color:var(--msg-meta)] cursor-not-allowed"
                       title="Скоро"
                     >
                       <Icon className="w-4 h-4 shrink-0" strokeWidth={1.75} />
@@ -686,7 +695,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                   ? 'Редагувати повідомлення…'
                   : 'Написати повідомлення…'
               }
-              className="flex-1 min-w-0 max-h-32 min-h-[28px] py-[5px] bg-transparent text-[13px] text-[#21261F] placeholder-[#6E7568] resize-none focus:outline-none select-text leading-[18px]"
+              className="flex-1 min-w-0 max-h-[140px] min-h-[28px] py-[5px] bg-transparent text-[13px] text-[#21261F] placeholder-[#6E7568] resize-none focus:outline-none select-text leading-[18px]"
             />
 
             {/* Праві іконки поля — одна група з власним проміжком, щоб не злипались */}
@@ -711,7 +720,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                 </button>
 
                 {showStyleMenu && (
-                  <div className="absolute bottom-12 right-0 bg-[#FDFCF9]/98 backdrop-blur-2xl border border-[#E8E1D3] rounded-2xl p-2 shadow-2xl w-64 z-30 space-y-1 animate-in fade-in select-none text-[#21261F]">
+                  <div className="absolute bottom-12 right-0 bg-[#FDFCF9]/[0.97] backdrop-blur-2xl border border-[#E8E1D3] rounded-2xl p-2 shadow-[0_12px_32px_rgba(60,44,24,0.14)] w-64 z-30 space-y-1 animate-in fade-in select-none text-[#21261F]">
                     <div className="px-2 py-1 text-[11px] font-extrabold text-[#6E7568] uppercase tracking-wide border-b border-[#F1EBDD]">
                       Переписати локальним агентом
                     </div>
@@ -757,7 +766,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                 </button>
 
                 {showFormattingBar && (
-                  <div className="absolute bottom-12 right-0 bg-[#FDFCF9]/98 backdrop-blur-2xl border border-[#E8E1D3] rounded-2xl p-1.5 shadow-2xl flex items-center gap-1 z-30 animate-in fade-in select-none text-[#21261F]">
+                  <div className="absolute bottom-12 right-0 bg-[#FDFCF9]/[0.97] backdrop-blur-2xl border border-[#E8E1D3] rounded-2xl p-1.5 shadow-[0_12px_32px_rgba(60,44,24,0.14)] flex items-center gap-1 z-30 animate-in fade-in select-none text-[#21261F]">
                     <button
                       type="button"
                       onClick={() => insertFormatting('**')}
@@ -804,7 +813,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                 </button>
 
                 {showEmojiPicker && (
-                  <div className="absolute bottom-12 right-0 bg-[#FDFCF9]/98 backdrop-blur-2xl border border-[#E8E1D3] rounded-2xl p-2.5 shadow-2xl grid grid-cols-5 gap-1.5 w-56 z-30 animate-in fade-in">
+                  <div className="absolute bottom-12 right-0 bg-[#FDFCF9]/[0.97] backdrop-blur-2xl border border-[#E8E1D3] rounded-2xl p-2.5 shadow-[0_12px_32px_rgba(60,44,24,0.14)] grid grid-cols-5 gap-1.5 w-56 z-30 animate-in fade-in">
                     {emojiList.map((e) => (
                       <button
                         key={e}
@@ -851,7 +860,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
             className={`w-[34px] h-[34px] min-w-0 min-h-0 mb-[5px] rounded-full transition-colors shrink-0 flex items-center justify-center ${
               canSend
                 ? 'bg-[#D96C35] hover:bg-[#B85425] text-[#FDFCF9]'
-                : 'bg-transparent text-[#98A092] border border-[#E8E1D3] cursor-not-allowed'
+                : 'bg-transparent text-[color:var(--msg-meta)] border border-[#E8E1D3] cursor-not-allowed'
             }`}
             title="Надіслати повідомлення"
           >

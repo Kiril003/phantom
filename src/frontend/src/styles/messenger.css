@@ -6,6 +6,34 @@
  */
 
 
+/* Токени месенджера: колір метаданих і заслінка модалок. Значення живуть тут,
+ * щоб контраст і теплота заслінки правились в одному місці, а не в 17 файлах. */
+:root {
+  --msg-meta: #656C5E;        /* час, бейджі, підписи на кремі — ≈5.0:1 */
+  --msg-meta-self: #7A6248;   /* те саме в своїй бульбашці — ≈4.7:1 */
+  --msg-scrim: rgba(60, 44, 24, 0.38);
+  --msg-scrim-blur: 4px;
+}
+
+/* Теплий серпанок під модалкою: полотно лишається впізнаваним і теплим. */
+.phantom-scrim {
+  background: var(--msg-scrim);
+  -webkit-backdrop-filter: blur(var(--msg-scrim-blur));
+  backdrop-filter: blur(var(--msg-scrim-blur));
+}
+
+/* Колонка повідомлень: одна вісь для своїх і чужих реплік, коротка розмова
+ * сідає на композер замість того, щоб висіти під стелею. */
+.msg-column {
+  width: 100%;
+  max-width: 760px;
+  margin-inline: auto;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+}
+
 /* Smooth pulse for live radar pins */
 @keyframes map-pulse {
   0% {
@@ -197,11 +225,11 @@
 }
 
 .msg-bubble-other .msg-meta-row {
-  color: #98A092;
+  color: var(--msg-meta);
 }
 
 .msg-bubble-self .msg-meta-row {
-  color: #A9927C;
+  color: var(--msg-meta-self);
 }
 
 /* Контури: 16px по колу, 6px на хвостовому куті та на швах усередині групи. */

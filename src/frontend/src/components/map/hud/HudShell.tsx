@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import {
   Activity, BookOpen, Clock, Flame, HardDrive, Layers, Library, MapPin, Pentagon,
-  Radar, Route, Shield, Sparkles, Wifi,
+  Radar, Route, Ruler, Shield, Sparkles, Wifi,
 } from 'lucide-react';
 import { ScaleBar } from './ScaleBar';
 import { MapRail, type RailItem } from './MapRail';
@@ -15,6 +15,7 @@ import { usePosition } from '../../../hooks/usePosition';
 import { AttributionDrawer } from './AttributionDrawer';
 import { CoordReadout } from './CoordReadout';
 import { RoutingTool } from './RoutingTool';
+import { RulerTool } from './RulerTool';
 import { GeofenceDrawTool } from './GeofenceDrawTool';
 import { AirRaidLayer } from '../layers/AirRaidLayer';
 import { NearbyPanel } from '../NearbyPanel';
@@ -119,6 +120,9 @@ export function HudShell({
   useMapAgentBridge({ skip: !bridgeAgent });
   const [routingActive, setRoutingActive] = useState(false);
   const [geofenceActive, setGeofenceActive] = useState(false);
+  // Ф2 метрологія: лінійка теж міряє кліки по мапі, тому інструменти,
+  // що слухають клік, взаємовиключні — інакше одна дія двом хазяям.
+  const [rulerActive, setRulerActive] = useState(false);
 
   const tactical = useMapStore((s) => s.tactical);
   const zoom = useMapStore((s) => s.zoom);
@@ -199,6 +203,7 @@ export function HudShell({
       onClick: () => {
         setRoutingActive((v) => !v);
         setGeofenceActive(false);
+        setRulerActive(false);
       },
     },
     {
@@ -210,6 +215,19 @@ export function HudShell({
       onClick: () => {
         setGeofenceActive((v) => !v);
         setRoutingActive(false);
+        setRulerActive(false);
+      },
+    },
+    {
+      key: 'ruler',
+      icon: <Ruler size={18} strokeWidth={1.75} />,
+      label: 'Лінійка — відстань і азимут',
+      short: 'Лінійка',
+      active: rulerActive,
+      onClick: () => {
+        setRulerActive((v) => !v);
+        setRoutingActive(false);
+        setGeofenceActive(false);
       },
     },
     { key: 'time', icon: <Clock size={18} strokeWidth={1.75} />, label: 'Машина часу', short: 'Час', active: timelineOpen, onClick: onToggleTimeline },
@@ -278,6 +296,7 @@ export function HudShell({
           <GeofenceDrawTool active onToggle={() => setGeofenceActive(false)} />
         </div>
       )}
+      {rulerActive && <RulerTool onClose={() => setRulerActive(false)} />}
 
       {/* Машина часу з'являється разом зі своєю панеллю, а не стоїть на
           екрані завжди — постійний степер із датою нікуди не вів. */}

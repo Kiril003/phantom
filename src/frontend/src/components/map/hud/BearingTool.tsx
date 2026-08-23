@@ -1,28 +1,16 @@
 import { useMemo } from 'react';
 import { Navigation } from 'lucide-react';
-import { haversineKm, type LatLon } from './RulerTool';
+import { haversineKm, initialBearingDeg, type GeoPoint } from '../../../utils/geo';
 
 /**
  * Phase 24-D — bearing chip.
  *
- * Computes the initial-bearing (forward azimuth) between two points
- * using the spherical-trig formula. The 24-Q draw tool will set the
- * two points; for 24-D the chip simply shows whatever the parent
- * passes in. Doctrine §7.1.
+ * Ф2: сферична математика переїхала в utils/geo.ts (тести проти
+ * точних властивостей) — чип лишився показом того, що передасть
+ * батько. Доти живої точки монтування він не має.
  */
 
-function initialBearingDegrees(a: LatLon, b: LatLon): number {
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const φ1 = toRad(a.lat);
-  const φ2 = toRad(b.lat);
-  const Δλ = toRad(b.lon - a.lon);
-  const y = Math.sin(Δλ) * Math.cos(φ2);
-  const x =
-    Math.cos(φ1) * Math.sin(φ2) -
-    Math.sin(φ1) * Math.cos(φ2) * Math.cos(Δλ);
-  const θ = Math.atan2(y, x);
-  return ((θ * 180) / Math.PI + 360) % 360;
-}
+type LatLon = GeoPoint;
 
 const COMPASS_LABELS = ['Пн', 'ПнСх', 'Сх', 'ПдСх', 'Пд', 'ПдЗх', 'Зх', 'ПнЗх'];
 
@@ -49,7 +37,7 @@ export function BearingTool({
   const bearing = useMemo(() => {
     if (!from || !to) return null;
     if (haversineKm(from, to) < 0.0005) return null;
-    return initialBearingDegrees(from, to);
+    return initialBearingDeg(from, to);
   }, [from, to]);
   const label =
     bearing === null

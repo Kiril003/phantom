@@ -8,6 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react';
 
 import { CoordReadout, coordText } from '../components/map/hud/CoordReadout';
+import { RulerTool } from '../components/map/hud/RulerTool';
 import { useMapStore } from '../stores/mapStore';
 import { useSettingsStore } from '../stores/settingsStore';
 
@@ -23,6 +24,17 @@ type Handler = (payload: unknown) => void;
 
 class FakeMap {
   handlers = new Map<string, Set<Handler>>();
+  canvas = { style: { cursor: '' } };
+  dblZoomEnabled = true;
+  doubleClickZoom = {
+    isEnabled: () => this.dblZoomEnabled,
+    disable: () => {
+      this.dblZoomEnabled = false;
+    },
+    enable: () => {
+      this.dblZoomEnabled = true;
+    },
+  };
 
   on(event: string, fn: Handler): void {
     if (!this.handlers.has(event)) this.handlers.set(event, new Set());
@@ -36,6 +48,20 @@ class FakeMap {
   fire(event: string, payload: unknown): void {
     for (const fn of this.handlers.get(event) ?? []) fn(payload);
   }
+
+  getCanvas(): { style: { cursor: string } } {
+    return this.canvas;
+  }
+
+  /** Лінійна проєкція навколо Києва — достатня для перевірки SVG. */
+  project([lon, lat]: [number, number]): { x: number; y: number } {
+    return { x: (lon - 30) * 1000, y: (51 - lat) * 1000 };
+  }
+}
+
+/** Клік по фейковій мапі в географічній точці. */
+function mapClick(map: FakeMap, event: string, lat: number, lon: number): void {
+  map.fire(event, { lngLat: { lat, lng: lon }, preventDefault: () => {} });
 }
 
 let fakeMap: FakeMap;
@@ -135,5 +161,77 @@ describe('CoordReadout', () => {
     useMapStore.setState({ center: null });
     render(<CoordReadout />);
     expect(screen.getByTestId('coord-value')).toHaveTextContent('координат ще немає');
+  });
+});
+
+describe('RulerTool — воскресіння: жива лінійка', () => {
+  it('без точок — інструкція, без мапи — чесна відмова', () => {
+    const { unmount } = render(<RulerTool onClose={() => {}} />);
+    expect(screen.getByTestId('ruler-panel')).toHaveTextContent('Клац по мапі — точка');
+    unmount();
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    delete (window as any).__phantom;
+    render(<RulerTool onClose={() => {}} />);
+    expect(screen.getByTestId('ruler-panel')).toHaveTextContent('Мапа ще не готова');
+  });
+
+  it('клац-клац міряє сегмент: відстань і істинний азимут на північ', async () => {
+    render(<RulerTool onClose={() => {}} />);
+    act(() => {
+      mapClick(fakeMap, 'click', 50.0, 30.5);
+      mapClick(fakeMap, 'click', 50.5, 30.5);
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('ruler-overlay')).toHaveAttribute('data-points', '2');
+    });
+    // 0.5° меридіана ≈ 55.6 км, азимут точно 000°.
+    expect(screen.getByTestId('ruler-total')).toHaveTextContent(/55\.\d км/);
+    expect(screen.getByTestId('ruler-azimuth')).toHaveTextContent('000°');
+    expect(screen.getByTestId('ruler-segments').children).toHaveLength(1);
+  });
+
+  it('подвійний клац завершує лінію і не подвоює останню точку', async () => {
+    render(<RulerTool onClose={() => {}} />);
+    act(() => {
+      mapClick(fakeMap, 'click', 50.0, 30.5);
+      // Перед dblclick мапа реально видає ДВА click у тій самій точці.
+      mapClick(fakeMap, 'click', 50.5, 30.5);
+      mapClick(fakeMap, 'click', 50.5, 30.5);
+      mapClick(fakeMap, 'dblclick', 50.5, 30.5);
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('ruler-overlay')).toHaveAttribute('data-done', 'true');
+    });
+    expect(screen.getByTestId('ruler-overlay')).toHaveAttribute('data-points', '2');
+    // Наступний клац починає нову лінію, а не тягне стару.
+    act(() => {
+      mapClick(fakeMap, 'click', 49.0, 30.0);
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('ruler-overlay')).toHaveAttribute('data-points', '1');
+    });
+  });
+
+  it('«Скинути» повертає порожнечу', async () => {
+    render(<RulerTool onClose={() => {}} />);
+    act(() => {
+      mapClick(fakeMap, 'click', 50.0, 30.5);
+      mapClick(fakeMap, 'click', 50.5, 30.5);
+    });
+    await waitFor(() => {
+      expect(screen.getByTestId('ruler-overlay')).toHaveAttribute('data-points', '2');
+    });
+    fireEvent.click(screen.getByTestId('ruler-reset'));
+    expect(screen.getByTestId('ruler-overlay')).toHaveAttribute('data-points', '0');
+    expect(screen.getByTestId('ruler-panel')).toHaveTextContent('Клац по мапі — точка');
+  });
+
+  it('керує курсором і подвійним зумом, а на виході повертає як було', () => {
+    const { unmount } = render(<RulerTool onClose={() => {}} />);
+    expect(fakeMap.getCanvas().style.cursor).toBe('crosshair');
+    expect(fakeMap.doubleClickZoom.isEnabled()).toBe(false);
+    unmount();
+    expect(fakeMap.getCanvas().style.cursor).toBe('');
+    expect(fakeMap.doubleClickZoom.isEnabled()).toBe(true);
   });
 });

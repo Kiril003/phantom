@@ -8,7 +8,7 @@ import { MapStateBadge } from '../components/map/hud/MapStateBadge';
 import { ScaleBar, computeScale } from '../components/map/hud/ScaleBar';
 import { LayerPalette } from '../components/map/hud/LayerPalette';
 import { SearchOmnibar } from '../components/map/hud/SearchOmnibar';
-import { RulerTool, haversineKm } from '../components/map/hud/RulerTool';
+import { haversineKm } from '../utils/geo';
 import { BearingTool } from '../components/map/hud/BearingTool';
 import {
   ElevationProfileSheet,
@@ -178,21 +178,11 @@ describe('SearchOmnibar', () => {
 // ── RulerTool / BearingTool ──────────────────────────────────────────────
 
 
-describe('RulerTool', () => {
-  it('reports cumulative distance for a 3-point trail', () => {
-    const pts = [
-      { lat: 50.0, lon: 30.0 },
-      { lat: 50.01, lon: 30.0 },
-      { lat: 50.02, lon: 30.0 },
-    ];
-    render(<RulerTool points={pts} />);
-    const chip = screen.getByTestId('ruler-tool');
-    // 0.01° lat ≈ 1.11 km × 2 ≈ 2.22 km.
-    expect(chip).toHaveTextContent(/км/);
-    expect(chip).toHaveAttribute('data-points', '3');
-  });
-
-  it('haversineKm matches a known reference (Kyiv↔Lviv ≈ 470 km)', () => {
+// RulerTool воскрес у Ф2 як інтерактивний інструмент (клік-клік-подвійний
+// по живій мапі) — його тести живуть у f2_metrology_hud.test.tsx.
+// Гаверсинус переїхав у utils/geo.ts; ця перевірка їде за ним.
+describe('haversineKm (utils/geo)', () => {
+  it('matches a known reference (Kyiv↔Lviv ≈ 470 km)', () => {
     const km = haversineKm({ lat: 50.45, lon: 30.52 }, { lat: 49.84, lon: 24.03 });
     expect(km).toBeGreaterThan(450);
     expect(km).toBeLessThan(500);

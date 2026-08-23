@@ -266,6 +266,11 @@ day/dusk/night/minimal). Значення прийдуть з ATLAS-1; до то
   під поверхнею; персони №5 (проти Linear/Jira+ChatGPT: «чому тут, а не там?»).
 
 ### Ф6 «Дистрибуція» — ПК стає продуктом
+
+*Виміряно 23.08: `cargo build` оболонки падає ЛИШЕ на відсутньому sidecar
+(`binaries/phantom-backend-x86_64-unknown-linux-gnu` — externalBin); Rust-залежності
+компілюються чисто. Порядок Ф6 жорсткий: `scripts/build_sidecar.sh` (PyInstaller,
+важкий) → `cargo build` → bundle.*
 - Tauri bundle (AppImage+deb перші; msi/nsis за чергою), updater + підпис (ключі генерує
   і зберігає власник), манифест оновлень у `phantom-forge`.
 - `publish-build.sh`: desktop-гілка (зараз половина скрипта android-only);

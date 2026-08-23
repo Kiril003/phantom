@@ -165,8 +165,13 @@ export function NearbyPanel({
       aria-label="Околиці"
       /* Скло тут було напівпрозорим білим поверх бежевої підложки — дев'ять
          рядків розчинялись у мапі (гонтлет Р1, удар №1, 6/6 голосів).
-         Списку, який треба ЧИТАТИ, належить непрозора поверхня. */
-      className="flex max-h-[320px] w-[320px] flex-col overflow-hidden rounded-2xl border border-[color:var(--glass-border)] shadow-2xl animate-in zoom-in-95 duration-200"
+         Списку, який треба ЧИТАТИ, належить непрозора поверхня.
+         Ширина 360 + shrink-0 (гонтлет Р2, Н3): панель живе у флекс-слоті
+         HUD шириною 168px, і без shrink-0 її «320px» мовчки стискались до
+         168 — саме тому «Софійський соб…» різався при вільному місці на
+         мапі. Слот має justify-end, тож ширша панель чесно виростає вліво
+         поверх мапи, а не тисне сусідів. */
+      className="flex max-h-[320px] w-[360px] shrink-0 flex-col overflow-hidden rounded-2xl border border-[color:var(--glass-border)] shadow-2xl animate-in zoom-in-95 duration-200"
       style={{ background: 'var(--surface-raised)' }}
     >
       <header className="pl-4 pr-2 py-1.5 border-b border-[color:var(--glass-border)] flex items-center justify-between">
@@ -262,6 +267,11 @@ export function NearbyPanel({
 /**
  * Один рядок списку. Текст — чорнилом теми, а не білим-на-білому:
  * рядок, який неможливо прочитати, гірший за відсутній.
+ *
+ * Гонтлет Р2, Н3: ім'я — корисне навантаження навігаційного списку,
+ * а колонка дистанцій коротка. Довге ім'я переносимо на другий рядок;
+ * еліпсис — лише коли справді нема куди (після двох рядків), і тоді
+ * повне ім'я лишається доступним через title.
  */
 function NearbyRow({
   name,
@@ -276,9 +286,12 @@ function NearbyRow({
     <button
       type="button"
       onClick={onClick}
-      className="w-full text-left px-3 py-2 hover:bg-amber-500/10 rounded-xl flex items-center justify-between gap-2 transition-colors"
+      title={name}
+      className="w-full text-left px-3 py-2 hover:bg-amber-500/10 rounded-xl flex items-baseline justify-between gap-2 transition-colors"
     >
-      <span className="truncate text-xs text-[color:var(--ink-primary)]">{name}</span>
+      <span className="line-clamp-2 break-words min-w-0 flex-1 text-xs leading-snug text-[color:var(--ink-primary)]">
+        {name}
+      </span>
       <span className="text-[10px] tabular-nums text-[color:var(--ink-muted)] shrink-0">
         {distanceM} м
       </span>

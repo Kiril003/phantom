@@ -14,33 +14,30 @@ import platformdirs
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 _root_dir = REPO_ROOT
 
+def data_root() -> Path:
+    """Root of this node's data directory — everything else hangs off it."""
+    phantom_data_dir = os.environ.get("PHANTOM_DATA_DIR")
+    if phantom_data_dir:
+        return Path(phantom_data_dir).expanduser()
+    if os.environ.get("PHANTOM_PACKAGED") == "1":
+        return Path(platformdirs.user_data_dir("PHANTOM", "PHANTOM-OS"))
+    return REPO_ROOT / ".phantom-data"
+
+
 def resolve_data_dir(kind: str) -> Path:
     """
     Resolve the absolute path for a given data kind.
-    
+
     Arguments:
         kind: "chroma", "sqlite", "voice_models", "workspace", "frontend_dist"
-    
+
     Returns:
         Path object pointing to the specific directory.
     """
-    # 1. Specific overrides
     if kind == "frontend_dist" and os.environ.get("PHANTOM_FRONTEND_DIST"):
         return Path(os.environ["PHANTOM_FRONTEND_DIST"]).expanduser()
-        
-    # 2. Base directory resolution
-    phantom_data_dir = os.environ.get("PHANTOM_DATA_DIR")
-    is_packaged = os.environ.get("PHANTOM_PACKAGED") == "1"
-    
-    if phantom_data_dir:
-        base_dir = Path(phantom_data_dir).expanduser()
-    elif is_packaged:
-        base_dir = Path(platformdirs.user_data_dir("PHANTOM", "PHANTOM-OS"))
-    else:
-        base_dir = REPO_ROOT / ".phantom-data"
-        
-    # 3. Kind-specific subdirectories
-    return base_dir / kind
+
+    return data_root() / kind
 
 
 def ensure_data_dirs() -> None:

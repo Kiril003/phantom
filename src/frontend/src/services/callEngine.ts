@@ -6,6 +6,12 @@
  * `api/routes_calls.py`. Тому все, що тут показано як «дзвінок», або справді
  * зʼєдналось, або чесно каже, що ні: жоден стан не малюється наперед.
  *
+ * РЕТРАНСЛЯТОР. Коли прямої дороги немає, медіа їде через TURN — і змінюється
+ * тільки маршрут: ключі лишаються в браузерах, тож ретранслятор возить той
+ * самий шифротекст, якого не розуміє. Список доріг питаємо у вузла
+ * (`GET /messenger/ice`): TURN належить вузлу, і його наявність — факт із
+ * відповіді, а не константа в збірці.
+ *
  * Таймер починає рахувати не з натискання кнопки, а з моменту, коли
  * з'єднання перейшло в `connected` — інакше він рахував би очікування.
  * Статистика береться з `getStats()`; поки перший вимір не прийшов, її немає,
@@ -33,7 +39,6 @@ import type { LadderStep } from './callLadder';
 import { RadioLink } from './callRadio';
 import type { RadioTally } from './callRadio';
 
-const ICE_SERVERS: RTCIceServer[] = [{ urls: 'stun:stun.l.google.com:19302' }];
 const STATS_PERIOD_MS = 2000;
 /** Скільки триматися на екрані після завершення, перш ніж зникнути. */
 const ENDED_LINGER_MS = 2600;
@@ -46,22 +51,44 @@ const DEAD_LINK_MS = 10000;
 const REVIVE_PERIOD_MS = 20000;
 
 /**
- * Чи є в конфігурації ретранслятор. STUN лише повідомляє наші зовнішні адреси;
+ * Дороги для медіа. STUN лише повідомляє браузеру його зовнішню адресу;
  * провести медіа крізь симетричний NAT він не може — це робить тільки TURN.
- * Перевіряємо конфігурацію, а не здогад: додадуть TURN — текст зміниться сам.
+ * Список приходить від вузла (`GET /messenger/ice`), бо ретранслятор належить
+ * вузлу, а не збірці: у власника він є, у сусіда може не бути.
  */
-const HAS_TURN = ICE_SERVERS.some((server) => {
-  const urls = Array.isArray(server.urls) ? server.urls : [server.urls];
-  return urls.some((u) => typeof u === 'string' && u.trim().toLowerCase().startsWith('turn'));
-});
+interface IceConfig {
+  iceServers: RTCIceServer[];
+  /** Чи є в списку ретранслятор. Прапорець від вузла, а не здогад із urls. */
+  turn: boolean;
+  /** Скільки секунд живе видана пара креденшелів. 0 — пари немає. */
+  ttl: number;
+}
+
+const STUN_ONLY: IceConfig = {
+  iceServers: [{ urls: ['stun:stun.l.google.com:19302'] }],
+  turn: false,
+  ttl: 0,
+};
+
+/** Як часто перепитувати вузол, коли ретранслятора в нього немає. */
+const NO_TURN_RETRY_MS = 60_000;
+
+/**
+ * Чи має цей вузол ретранслятор. Живе від відповіді `/ice` — тобто від факту,
+ * а не від константи в коді: підняли TURN на вузлі, і тексти нижче змінились
+ * самі, без нової збірки.
+ */
+let hasTurn = false;
 
 /**
  * Що показати, коли доріжка не встає, хоч співрозмовник уже відповів. Без TURN
- * це не «щось підвисло», а відома межа збірки, і людина має почути саме її.
+ * це не «щось підвисло», а відома межа вузла, і людина має почути саме її.
+ * З TURN казати це було б брехнею — тож текст залежить від виміряного стану.
  */
-export const LINK_STALL_NOTE = HAS_TURN
-  ? 'Не вдається зʼєднатися напряму. Пробуємо через ретранслятор — це може зайняти ще кілька секунд.'
-  : 'Не вдається зʼєднатися напряму. Без TURN-сервера дзвінок за суворим NAT неможливий — це відома межа поточної версії.';
+export const linkStallNote = (): string =>
+  hasTurn
+    ? 'Не вдається зʼєднатися напряму. Пробуємо через ретранслятор — це може зайняти ще кілька секунд.'
+    : 'Не вдається зʼєднатися напряму. Без TURN-сервера дзвінок за суворим NAT неможливий — це відома межа поточної версії.';
 
 /**
  * А це — інша біда, і плутати їх не можна: відповіді ще не було, тож про
@@ -208,6 +235,8 @@ class CallEngine {
   private lastBytes: { at: number; bytes: number } | null = null;
   /** Чи озвалась інша сторона. Без цього «немає дороги» — це здогад, не факт. */
   private answered = false;
+  /** Дороги від вузла і мить, до якої їм можна вірити. */
+  private ice: { config: IceConfig; until: number } | null = null;
 
   /* ── драбина ────────────────────────────────────────────────────────── */
 
@@ -293,7 +322,7 @@ class CallEngine {
       return;
     }
 
-    const pc = this.buildPeerConnection(callId);
+    const pc = this.buildPeerConnection(callId, await this.iceConfig());
     stream.getTracks().forEach((track) => pc.addTrack(track, stream));
 
     try {
@@ -346,7 +375,7 @@ class CallEngine {
       return;
     }
 
-    const pc = this.buildPeerConnection(callId);
+    const pc = this.buildPeerConnection(callId, await this.iceConfig());
     try {
       await pc.setRemoteDescription({ type: 'offer', sdp: offerSdp });
       stream.getTracks().forEach((track) => pc.addTrack(track, stream));
@@ -503,7 +532,7 @@ class CallEngine {
       const stream = this.localStream;
       if (!stream) return;
       this.teardownPc();
-      pc = this.buildPeerConnection(callId);
+      pc = this.buildPeerConnection(callId, await this.iceConfig());
       stream.getTracks().forEach((track) => {
         if (track.kind === 'video' && this.snapshot.videoDropped) return;
         pc?.addTrack(track, stream);
@@ -537,8 +566,61 @@ class CallEngine {
     return stream;
   }
 
-  private buildPeerConnection(callId: string): RTCPeerConnection {
-    const pc = new RTCPeerConnection({ iceServers: ICE_SERVERS });
+  /**
+   * Дороги питаємо у вузла, а не вигадуємо. Креденшели ретранслятора живуть
+   * годину, тож тримаємо їх у пам'яті пів цього часу: пара, видана зараз,
+   * точно переживе дзвінок, який починається зараз. Вузол не відповів —
+   * лишається STUN: у тій самій мережі дзвінок від цього не постраждає.
+   */
+  private async iceConfig(): Promise<IceConfig> {
+    const now = Date.now();
+    if (this.ice && now < this.ice.until) return this.ice.config;
+    try {
+      const got = await request<IceConfig>('GET', '/messenger/ice');
+      const servers = Array.isArray(got?.iceServers) ? got.iceServers : [];
+      const config: IceConfig = {
+        iceServers: servers.length ? servers : STUN_ONLY.iceServers,
+        turn: got?.turn === true,
+        ttl: Number(got?.ttl) || 0,
+      };
+      hasTurn = config.turn;
+      this.ice = {
+        config,
+        until: now + (config.ttl > 0 ? (config.ttl * 1000) / 2 : NO_TURN_RETRY_MS),
+      };
+      return config;
+    } catch {
+      hasTurn = false;
+      return STUN_ONLY;
+    }
+  }
+
+  /** Що вузол віддав минулого разу — для екрана налаштувань і доказів. */
+  async iceInfo(): Promise<{ turn: boolean; ttl: number; urls: string[] }> {
+    const config = await this.iceConfig();
+    const urls = config.iceServers.flatMap((server) =>
+      (Array.isArray(server.urls) ? server.urls : [server.urls]).filter(
+        (u): u is string => typeof u === 'string',
+      ),
+    );
+    // Креденшели сюди не потрапляють свідомо: екрану вони не потрібні, а в
+    // логу доказу були б зайвим життям пари, яка й так вмирає за годину.
+    return { turn: config.turn, ttl: config.ttl, urls };
+  }
+
+  private buildPeerConnection(callId: string, ice: IceConfig): RTCPeerConnection {
+    // Тест-хук: змушує браузер відкинути host і srflx і піти виключно через
+    // ретранслятор. Потрібен, щоб relay можна було ДОВЕСТИ, а не чекати
+    // симетричного NAT, якого на цьому столі немає.
+    const forceRelay =
+      import.meta.env.DEV &&
+      typeof window !== 'undefined' &&
+      (window as unknown as Record<string, unknown>).__phantomForceRelay === true;
+
+    const pc = new RTCPeerConnection({
+      iceServers: ice.iceServers,
+      ...(forceRelay ? { iceTransportPolicy: 'relay' as RTCIceTransportPolicy } : {}),
+    });
     this.pc = pc;
 
     const remote = new MediaStream();
@@ -638,7 +720,7 @@ class CallEngine {
   /** Зʼєднання не встало жодного разу — це не «обірвалось», а не зійшлось. */
   private linkFailureReason(): string {
     if (this.snapshot.startedAt !== null) return 'звʼязок обірвався';
-    return this.answered ? LINK_STALL_NOTE : 'зʼєднання не встановилось';
+    return this.answered ? linkStallNote() : 'зʼєднання не встановилось';
   }
 
   private armStall(callId: string): void {
@@ -659,7 +741,7 @@ class CallEngine {
         }
         this.patch({
           stall: this.answered
-            ? { kind: 'no-path', note: LINK_STALL_NOTE }
+            ? { kind: 'no-path', note: linkStallNote() }
             : { kind: 'no-answer', note: NO_ANSWER_NOTE },
         });
       }
@@ -811,7 +893,7 @@ class CallEngine {
     const stream = this.localStream;
     if (!stream) return;
     this.teardownPc();
-    const pc = this.buildPeerConnection(callId);
+    const pc = this.buildPeerConnection(callId, await this.iceConfig());
     stream.getTracks().forEach((track) => {
       if (track.kind === 'video' && this.snapshot.videoDropped) return;
       pc.addTrack(track, stream);
@@ -1054,6 +1136,52 @@ class CallEngine {
       : null;
   }
 
+  /**
+   * Куди саме їде медіа: обрана пара кандидатів із адресами й лічильниками.
+   * `candidateType: 'relay'` з адресою ретранслятора — це і є доказ, що байти
+   * ідуть крізь нього, а не повз. Вигадати це з SDP неможливо.
+   */
+  async probePath(): Promise<Record<string, unknown> | null> {
+    const pc = this.pc;
+    if (!pc) return null;
+    const report = await pc.getStats();
+    const rows = new Map<string, Record<string, unknown>>();
+    report.forEach((row: Record<string, unknown>, id: string) => rows.set(id, row));
+
+    const pairs: Array<Record<string, unknown>> = [];
+    rows.forEach((row) => {
+      if (row.type === 'candidate-pair' && (row.nominated === true || row.state === 'succeeded')) {
+        pairs.push(row);
+      }
+    });
+    // Пар може бути кілька; медіа їде тією, якою течуть байти.
+    pairs.sort((a, b) => Number(b.bytesSent ?? 0) - Number(a.bytesSent ?? 0));
+    const pair = pairs[0];
+    if (!pair) return null;
+
+    const side = (id: unknown): Record<string, unknown> => {
+      const row = typeof id === 'string' ? rows.get(id) : undefined;
+      return {
+        type: row?.candidateType ?? null,
+        address: row?.address ?? row?.ip ?? null,
+        port: row?.port ?? null,
+        protocol: row?.protocol ?? null,
+        relayProtocol: row?.relayProtocol ?? null,
+      };
+    };
+
+    const rtt = pair.currentRoundTripTime;
+    return {
+      at: Date.now(),
+      state: pair.state ?? null,
+      bytesSent: pair.bytesSent ?? null,
+      bytesReceived: pair.bytesReceived ?? null,
+      rttMs: typeof rtt === 'number' ? Math.round(rtt * 1000) : null,
+      local: side(pair.localCandidateId),
+      remote: side(pair.remoteCandidateId),
+    };
+  }
+
   killLinkForTest(): string {
     if (!this.pc) return 'доріжки й так немає';
     this.teardownPc();
@@ -1077,6 +1205,10 @@ if (import.meta.env.DEV && typeof window !== 'undefined') {
     callEngine.forceLadder(level);
   w.__phantomCallKillLink = () => callEngine.killLinkForTest();
   w.__phantomCallRtp = () => callEngine.probeRtp();
+  w.__phantomCallPath = () => callEngine.probePath();
+  w.__phantomIce = () => callEngine.iceInfo();
+  // Текст про межу звʼязку — щоб було видно, що він живе від стану вузла.
+  w.__phantomLinkNote = () => linkStallNote();
   w.__phantomCallState = () => {
     const s = callEngine.getSnapshot();
     return {

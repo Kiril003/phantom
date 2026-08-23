@@ -22,7 +22,11 @@ import {
   NetworkDiagnostics
 } from '../../types/messenger';
 import { networkEngine } from '../../services/messengerNetworkEngine';
+import { callEngine } from '../../services/callEngine';
 import { soundFx } from '../../utils/messengerSound';
+
+/** Адреса без схеми й хвоста запиту — те, що людині корисно бачити. */
+const hostOf = (url: string): string => url.replace(/^\w+:/, '').split('?')[0];
 
 interface P2PNetworkModalProps {
   isOpen: boolean;
@@ -49,6 +53,10 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
   const [fileProgress, setFileProgress] = useState<{ fileName: string; percentage: number; isReceiving: boolean; senderName: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Дороги для медіа беремо у вузла, а не з константи: TURN то є, то немає,
+  // і екран мусить казати те, що зараз, а не те, що було на час збірки.
+  const [ice, setIce] = useState<{ turn: boolean; ttl: number; urls: string[] } | null>(null);
+
   useEffect(() => {
     if (!isOpen) return;
 
@@ -67,7 +75,18 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
       }
     });
 
+    let alive = true;
+    void callEngine
+      .iceInfo()
+      .then((info) => {
+        if (alive) setIce(info);
+      })
+      .catch(() => {
+        if (alive) setIce(null);
+      });
+
     return () => {
+      alive = false;
       unsubDiag();
       unsubPeers();
       unsubProgress();
@@ -555,28 +574,59 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
           {activeTab === 'advanced' && (
             <div className="space-y-3">
               <div className="p-4 bg-white rounded-2xl border border-[#DFD6C4] space-y-3">
-                <h4 className="font-extrabold text-xs text-[#F9F7F1] uppercase tracking-wider">
+                <h4 className="font-extrabold text-xs text-[#1E2521] uppercase tracking-wider">
                   Конфігурація STUN / TURN серверів
                 </h4>
 
                 <div className="space-y-2 text-xs">
                   <div className="flex items-center justify-between p-2.5 bg-[#FAF7F1] rounded-xl border border-[#E5DC source-serif]">
-                    <span className="font-bold text-[#F9F7F1]">STUN Сервер за замовчуванням</span>
-                    <span className="font-mono text-[11px] text-[#6A7B71]">stun.l.google.com:19302</span>
+                    <span className="font-bold text-[#1E2521]">STUN Сервер</span>
+                    <span className="font-mono text-[11px] text-[#6A7B71]" data-ice-stun>
+                      {ice === null
+                        ? 'питаю вузол…'
+                        : hostOf(ice.urls.find((u) => u.startsWith('stun:')) ?? '') || '—'}
+                    </span>
                   </div>
 
+                  {/* Ретранслятор — єдине, що проводить медіа крізь суворий NAT.
+                      Тому тут стоїть стан від вузла, а не рядок із коду. */}
+                  <div
+                    className="flex items-center justify-between p-2.5 bg-[#FAF7F1] rounded-xl border border-[#E5DC source-serif]"
+                    data-ice-turn={ice === null ? 'unknown' : ice.turn ? 'on' : 'off'}
+                  >
+                    <span className="font-bold text-[#1E2521]">TURN ретранслятор</span>
+                    <span
+                      className="font-mono text-[11px]"
+                      style={{ color: ice?.turn ? '#4C8A55' : '#6A7B71' }}
+                    >
+                      {ice === null
+                        ? 'питаю вузол…'
+                        : ice.turn
+                          ? hostOf(ice.urls.find((u) => u.startsWith('turn:')) ?? '')
+                          : 'не налаштований'}
+                    </span>
+                  </div>
+
+                  {ice !== null && (
+                    <p className="px-1 text-[10.5px] leading-relaxed text-[#718177]">
+                      {ice.turn
+                        ? 'Пряма дорога лишається першою; ретранслятор вмикається, лише коли її немає. Ключі при цьому не залишають ваші вузли — крізь нього їде той самий шифротекст.'
+                        : 'Без ретранслятора дзвінок за суворим NAT не встане: STUN лише повідомляє адресу, провести медіа він не вміє.'}
+                    </p>
+                  )}
+
                   <div className="flex items-center justify-between p-2.5 bg-[#FAF7F1] rounded-xl border border-[#E5DC source-serif]">
-                    <span className="font-bold text-[#F9F7F1]">Транспорт DataChannel</span>
+                    <span className="font-bold text-[#1E2521]">Транспорт DataChannel</span>
                     <span className="font-mono text-[11px] text-[#6A7B71]">DTLS / SCTP (WebRTC)</span>
                   </div>
 
                   <div className="flex items-center justify-between p-2.5 bg-[#FAF7F1] rounded-xl border border-[#E5DC source-serif]">
-                    <span className="font-bold text-[#F9F7F1]">Розмір P2P чанка</span>
+                    <span className="font-bold text-[#1E2521]">Розмір P2P чанка</span>
                     <span className="font-mono text-[11px] text-[#6A7B71]">16,384 байт (16 KB)</span>
                   </div>
 
                   <div className="flex items-center justify-between p-2.5 bg-[#FAF7F1] rounded-xl border border-[#E5DC source-serif]">
-                    <span className="font-bold text-[#F9F7F1]">Запечатування вмісту</span>
+                    <span className="font-bold text-[#1E2521]">Запечатування вмісту</span>
                     <span className="font-mono text-[11px] text-[#4C8A55]">між вузлами</span>
                   </div>
                 </div>

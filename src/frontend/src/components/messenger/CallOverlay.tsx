@@ -8,9 +8,10 @@
 
 import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
-import { Mic, MicOff, Video, VideoOff, Phone, PhoneOff } from 'lucide-react';
+import { Mic, MicOff, Video, VideoOff, Phone, PhoneOff, Radio } from 'lucide-react';
 import { callEngine } from '../../services/callEngine';
 import type { CallSnapshot } from '../../services/callEngine';
+import { AUDIO_LEVEL_LABEL } from '../../services/callOpus';
 
 const PAPER = '#FDFCF9';
 const INK = '#21261F';
@@ -20,6 +21,10 @@ const END = '#B85425';
 const MUTED = '#8A8577';
 const TRUST_OK = '#4C8A55';
 const TRUST_WARN = '#C98A2E';
+/** Тепле паперове тло для тривожної, але не смертельної звістки. */
+const NOTE_BG = '#FDF6EC';
+const NOTE_EDGE = '#EBD9BE';
+const NOTE_INK = '#8C5A1A';
 
 const initialsOf = (name: string): string =>
   name
@@ -146,7 +151,39 @@ const TrustRow: React.FC<{ verified?: boolean | null }> = ({ verified }) => {
   );
 };
 
+/**
+ * Сходинка звуку — поруч із телеметрією, тими самими словами, що й у рушії.
+ * «Повний» тут означає 64 кбіт/с, а не «HD»: обіцяти студію по дроту, якого
+ * немає, — це рівно те, від чого ми тікаємо.
+ */
+const LadderChip: React.FC<{ snapshot: CallSnapshot }> = ({ snapshot }) => {
+  if (snapshot.radio) return null;
+  const narrow = snapshot.audioLevel === 'narrow';
+  return (
+    <span
+      data-call-level={snapshot.audioLevel}
+      className="text-[11px] whitespace-nowrap"
+      style={{ color: narrow ? NOTE_INK : MUTED }}
+      title={
+        // Сходинка — про ВИХІДНИЙ звук, а телеметрія поруч — про вхідний.
+        // Числа можуть не збігатися, і людина має знати чому.
+        (snapshot.ladderPinned
+          ? 'Сходинку тримають вручну — автоспуск не втручається. '
+          : 'Сходинка обирається сама за втратами і затримкою. ') +
+        'Це про звук, який відсилаєте ВИ; телеметрія поруч — про той, що приходить.'
+      }
+    >
+      звук: {AUDIO_LEVEL_LABEL[snapshot.audioLevel]}
+      {snapshot.videoDropped ? ' · відео знято' : ''}
+      {snapshot.ladderPinned ? ' · вручну' : ''}
+    </span>
+  );
+};
+
 const StatsLine: React.FC<{ snapshot: CallSnapshot }> = ({ snapshot }) => {
+  // У рації міряти нічого: доріжки немає. Свої лічильники в неї власні, і
+  // вони в банері — а RTT доріжки, якої не існує, показувати не можна.
+  if (snapshot.radio) return null;
   const s = snapshot.stats;
   if (!s) {
     return (
@@ -174,6 +211,68 @@ const StatsLine: React.FC<{ snapshot: CallSnapshot }> = ({ snapshot }) => {
     >
       {parts.length ? parts.join('  ·  ') : 'вимірюю…'}
     </span>
+  );
+};
+
+/**
+ * Рація. Головне тут — не злякати: дзвінок НЕ впав, він змінив спосіб їзди.
+ * Тому банер каже і ціну (затримка), і виграш (нічого не губиться), і показує
+ * лічильники, за якими це видно, а не просить вірити на слово.
+ */
+const RadioBanner: React.FC<{ snapshot: CallSnapshot }> = ({ snapshot }) => {
+  const radio = snapshot.radio;
+  if (!radio) return null;
+  return (
+    <div
+      data-call-radio="on"
+      className="px-5 py-3 border-b"
+      style={{ background: NOTE_BG, borderColor: NOTE_EDGE }}
+    >
+      <div className="flex items-start gap-2.5">
+        <Radio className="w-4 h-4 mt-0.5 shrink-0" style={{ color: NOTE_INK }} />
+        <div className="min-w-0">
+          <div className="text-[12.5px] font-semibold" style={{ color: NOTE_INK }}>
+            Канал вузький — режим рації
+          </div>
+          <div className="text-[11.5px] leading-relaxed" style={{ color: NOTE_INK }}>
+            Затримка кілька секунд, але жодне слово не губиться.
+            {snapshot.radioReason ? ` Причина: ${snapshot.radioReason}.` : ''}
+          </div>
+          <div
+            className="mt-1 text-[11px] flex items-center gap-2 flex-wrap"
+            style={{ color: NOTE_INK, fontVariantNumeric: 'tabular-nums' }}
+            data-call-radio-tally
+          >
+            {radio.speaking ? (
+              <span
+                data-call-radio-speaking="yes"
+                className="inline-flex items-center gap-1.5 font-semibold"
+              >
+                <span
+                  className="w-1.5 h-1.5 rounded-full"
+                  style={{ background: ACCENT }}
+                />
+                говорить…
+              </span>
+            ) : (
+              <span data-call-radio-speaking="no" style={{ opacity: 0.7 }}>
+                слухаю
+              </span>
+            )}
+            <span style={{ opacity: 0.45 }}>·</span>
+            <span>надіслано {radio.delivered}/{radio.sent}</span>
+            <span style={{ opacity: 0.45 }}>·</span>
+            <span>відтворено {radio.played}</span>
+            {radio.missing > 0 && (
+              <>
+                <span style={{ opacity: 0.45 }}>·</span>
+                <span>загублено {radio.missing}</span>
+              </>
+            )}
+          </div>
+        </div>
+      </div>
+    </div>
   );
 };
 
@@ -320,6 +419,7 @@ export const CallOverlay: React.FC = () => {
     <div
       data-call-overlay
       data-call-state="active"
+      data-call-mode={snapshot.radio ? 'radio' : 'live'}
       className="fixed inset-0 z-[9999] flex items-center justify-center p-0 sm:p-6"
       style={{ background: 'rgba(20,22,18,0.55)' }}
     >
@@ -333,14 +433,31 @@ export const CallOverlay: React.FC = () => {
         >
           <div className="min-w-0">
             <div className="text-[15px] font-semibold truncate">{name}</div>
-            <div className="flex items-center gap-2.5 text-[12px]" style={{ color: MUTED }}>
+            <div className="flex items-center gap-2.5 text-[12px] flex-wrap" style={{ color: MUTED }}>
               <CallTimer startedAt={snapshot.startedAt} />
               <span style={{ color: HAIRLINE }}>·</span>
               <TrustRow verified={snapshot.peer?.verified} />
+              <span style={{ color: HAIRLINE }}>·</span>
+              <LadderChip snapshot={snapshot} />
             </div>
           </div>
           <StatsLine snapshot={snapshot} />
         </div>
+
+        <RadioBanner snapshot={snapshot} />
+
+        {/* Коротка звістка про канал: сходинка змінилась або доріжка ожила.
+            Живе кілька секунд і зникає — постійний банер про те, що вже
+            минуло, тільки відволікає. */}
+        {snapshot.linkNote && !snapshot.radio && (
+          <div
+            data-call-note
+            className="px-5 py-2 text-[11.5px] border-b"
+            style={{ background: NOTE_BG, borderColor: NOTE_EDGE, color: NOTE_INK }}
+          >
+            {snapshot.linkNote}
+          </div>
+        )}
 
         <div className="relative flex-1 min-h-0" data-call-remote>
           <VideoPane stream={snapshot.remoteStream} muted={false} name={name} />
@@ -373,14 +490,16 @@ export const CallOverlay: React.FC = () => {
           <RoundButton
             onClick={() => callEngine.toggleCamera()}
             title={
-              !snapshot.hasCamera
-                ? 'Дзвінок без відео'
-                : snapshot.cameraOn
-                  ? 'Вимкнути камеру'
-                  : 'Увімкнути камеру'
+              snapshot.radio
+                ? 'У режимі рації відео не їде — тільки голос'
+                : !snapshot.hasCamera
+                  ? 'Дзвінок без відео'
+                  : snapshot.cameraOn
+                    ? 'Вимкнути камеру'
+                    : 'Увімкнути камеру'
             }
-            tone={snapshot.hasCamera && snapshot.cameraOn ? 'plain' : 'accent'}
-            disabled={!snapshot.hasCamera}
+            tone={snapshot.hasCamera && snapshot.cameraOn && !snapshot.radio ? 'plain' : 'accent'}
+            disabled={!snapshot.hasCamera || !!snapshot.radio}
           >
             {snapshot.cameraOn ? <Video className="w-5 h-5" /> : <VideoOff className="w-5 h-5" />}
           </RoundButton>

@@ -86,7 +86,10 @@ _WIRE_MARK = "\x01phantom-kind:"
 ORIGIN_LIMIT = 60
 
 #: Типи, які вузол уміє показати або виконати. Усе інше з дроту — текст.
-WIRE_KINDS = ("text", "image", "file", "delete")
+#: 'radio' нічого не показує: це шматок голосу для живого дзвінка, і саме тому
+#: він мусить бути тут — інакше приймальня визнала б його невідомим і поклала
+#: б у стрічку як текст, тобто 8 КБ base64 замість розмови.
+WIRE_KINDS = ("text", "image", "file", "delete", "radio")
 
 
 def wrap_frame(kind: str, body: str, origin_id: str = "") -> str:

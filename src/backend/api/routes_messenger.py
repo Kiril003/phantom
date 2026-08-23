@@ -12,6 +12,7 @@
 """
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import datetime, timezone
 from typing import Optional
@@ -39,7 +40,7 @@ from messenger.crypto.safety import format_safety_number, safety_number
 from messenger.crypto.session import Session
 from messenger.blobs import wrap_frame
 from messenger.guard import GuardRejected, inbox_guard
-from messenger.inbox import InboxError, accept_frame
+from messenger.inbox import InboxError, RadioFrame, accept_frame
 from messenger.outbox import OutboxError, prepare_frame
 from messenger.purge import (
     blob_ids_of,
@@ -833,6 +834,9 @@ async def receive_frame(
     Не кожен кадр повертає повідомлення: службовий 'delete' міг прийти на те,
     чого в нас ніколи не було. Це прийнято й виконано, тож відповідь — 200 із
     порожньою вказівкою, а не 400: інакше відправник повторював би вічно.
+
+    Кадр рації теж не стає рядком: він іде тим самим каналом, що й сигнали
+    дзвінка, бо слухає його дзвінок, а не стрічка.
     """
     owner = (await session.execute(select(User.id).order_by(User.id))).scalars().first()
     if owner is None:
@@ -863,6 +867,27 @@ async def receive_frame(
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
     if row is None:
+        return {"accepted": True}
+
+    if isinstance(row, RadioFrame):
+        # Шматок голосу: віддаємо його каналу дзвінка й на цьому все. Ані рядка
+        # в стрічці, ані оновлення прев'ю — розмову чують, а не читають.
+        try:
+            chunk = json.loads(row.body)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="кадр рації не є JSON") from None
+        await hub.broadcast(
+            "call",
+            "call:radio",
+            {
+                "kind": "radio",
+                "call_id": str(chunk.get("call_id") or ""),
+                "seq": int(chunk.get("seq") or 0),
+                "audio_b64": str(chunk.get("audio_b64") or ""),
+                "from_node_id": row.peer_node_id,
+            },
+            user_id=owner,
+        )
         return {"accepted": True}
 
     attachments = await _attachment_states(session, [row])

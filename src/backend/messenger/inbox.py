@@ -14,12 +14,19 @@ verified_at лишається порожнім: те, що людина вмі�
 вкладення з диска. Їде він тією ж дорогою і тією ж сесією, що й текст, саме
 тому видалення доїжджає навіть до вузла, який був вимкнений: кадр чекає в
 черзі відправника рівно так само, як чекало б звичайне повідомлення.
+
+Кадр kind='radio' — те саме за формою, але інше за суттю: це шматок голосу з
+режиму рації. Голос їде кадром саме тому, що кадр — єдина дорога, яка ще жива,
+коли RTP уже не доходить: він переживає втрати, бо його везуть по TCP з
+повтором, і його не треба домовляти наново. У стрічку він не лягає — розмову
+чують, а не читають, і рядок «6 КБ звуку» в чаті був би сміттям.
 """
 from __future__ import annotations
 
 import uuid
+from dataclasses import dataclass
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Optional, Union
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -32,11 +39,20 @@ from messenger.crypto.safety import safety_number
 from messenger.crypto.session import Session
 from messenger.purge import find_by_origin, tombstone
 
-__all__ = ["InboxError", "accept_frame"]
+__all__ = ["InboxError", "RadioFrame", "accept_frame", "conversation_for"]
 
 
 class InboxError(Exception):
     """Кадр не належить жодній відомій сесії."""
+
+
+@dataclass(frozen=True)
+class RadioFrame:
+    """Шматок голосу з рації: його чують і забувають, у базі він не осідає."""
+
+    peer_node_id: str
+    #: JSON з {call_id, seq, audio_b64} — розбирає його той, хто веде дзвінок.
+    body: str
 
 
 def _now() -> datetime:
@@ -56,7 +72,7 @@ async def _contact_for(
     ).scalar_one_or_none()
 
 
-async def _conversation_for(
+async def conversation_for(
     session: AsyncSession, owner_user_id: str, contact: MessengerContact
 ) -> MessengerConversation:
     row = (
@@ -91,14 +107,16 @@ async def accept_frame(
     peer_node_id: Optional[str] = None,
     *,
     reply_address: Optional[str] = None,
-) -> Optional[MessengerMessage]:
+) -> Optional[Union[MessengerMessage, RadioFrame]]:
     """Розшифровує кадр і кладе повідомлення у стрічку власника.
 
     Повертає рядок стрічки: нове повідомлення, а для кадру 'delete' — той
-    надгробок, який щойно лишився від видаленого. None означає «кадр прийнято
-    й виконано, показувати нічого»: наприклад, видалення приїхало на те, чого
-    в нас ніколи не було. Це не помилка, тож і 400 у відповідь бути не може —
-    інакше відправник вічно повторював би кадр, який уже зробив свою роботу.
+    надгробок, який щойно лишився від видаленого. Для 'radio' повертає
+    `RadioFrame`: у стрічці йому місця немає, його треба віддати живому
+    дзвінку. None означає «кадр прийнято й виконано, показувати нічого»:
+    наприклад, видалення приїхало на те, чого в нас ніколи не було. Це не
+    помилка, тож і 400 у відповідь бути не може — інакше відправник вічно
+    повторював би кадр, який уже зробив свою роботу.
     """
     contact = (
         await _contact_for(session, owner_user_id, peer_node_id) if peer_node_id else None
@@ -142,10 +160,17 @@ async def accept_frame(
         contact.peer_address = reply_address
     contact.updated_at = _now()
 
-    conversation = await _conversation_for(session, owner_user_id, contact)
+    conversation = await conversation_for(session, owner_user_id, contact)
     # Тип приїхав у самому кадрі. Старий кадр без конверта лишається текстом,
     # тож уже зведені сесії від цього нічого не помічають.
     kind, body, origin = unwrap_frame(plaintext.decode())
+
+    if kind == "radio":
+        # Голос, а не лист. Стан храповика вже зрушено вище і його треба
+        # зберегти в будь-якому разі, інакше наступний кадр від цієї людини —
+        # хоч голос, хоч текст — уже не розшифрується.
+        await session.commit()
+        return RadioFrame(peer_node_id=contact.peer_node_id, body=body)
 
     if kind == "delete":
         # Службовий кадр: ніякого нового рядка, лише робота над наявним.

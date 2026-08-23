@@ -12,9 +12,15 @@
 
 Шлях сигналу: браузер А → свій вузол А → вузол Б (пряма адреса контакту) →
 hub.broadcast('call') → браузер Б. І дзеркально назад.
+
+Один виняток із «медіа сюди не заходить» — `/radio`. Коли доріжки RTP немає
+взагалі, голос їде шматками як звичайний E2E-кадр листування: повільніше на
+секунди, зате доїжджає. Вузол і тут вмісту не бачить — кадр запечатаний тією
+самою сесією, що й текст.
 """
 from __future__ import annotations
 
+import json
 import logging
 from typing import Any, Optional
 
@@ -209,6 +215,91 @@ async def send_hangup(
     session: AsyncSession = Depends(get_db),
 ) -> SignalResult:
     return await _send("hangup", payload, user, session)
+
+
+#: Шматок рації: 3 секунди Opus на 16 кбіт/с — це 6-8 КБ, у base64 близько 10.
+#: Стеля з великим запасом, але нижче за межу приймальні (64 КБ): кадр, який
+#: туди не пролізе, не варто ні шифрувати, ні везти.
+RADIO_B64_LIMIT = 48_000
+
+
+class RadioChunk(BaseModel):
+    """Шматок голосу, коли доріжки RTP уже немає."""
+
+    call_id: str = Field(min_length=1, max_length=64)
+    #: Порядковий номер у межах дзвінка — за ним приймач збирає чергу.
+    seq: int = Field(ge=0)
+    audio_b64: str = Field(min_length=1, max_length=RADIO_B64_LIMIT)
+    contact_id: Optional[str] = None
+    peer_node_id: Optional[str] = None
+
+
+@router.post("/radio", response_model=SignalResult)
+async def send_radio(
+    payload: RadioChunk,
+    user: User = Depends(get_current_user),
+    session: AsyncSession = Depends(get_db),
+) -> SignalResult:
+    """Везе шматок голосу тією ж дорогою, що й лист: E2E-кадром через вузол.
+
+    Саме тому це працює там, де вмирає дзвінок. RTP — це UDP без повтору: на
+    25% втрат від голосу лишається каша. Кадр іде по TCP до вузла, шифрується
+    тією ж сесією, що й листування, і вузол його вмісту не бачить так само,
+    як не бачить тексту. Повільніше на секунди — зате доїжджає цілим.
+
+    Рядка в стрічці цей кадр не лишає з жодного боку: ні тут (нічого не
+    пишемо в базу), ні там (приймальня віддає його дзвінку, а не розмові).
+    """
+    from api.routes_messenger import _keys
+    from messenger.blobs import wrap_frame
+    from messenger.inbox import conversation_for
+    from messenger.outbox import OutboxError, prepare_frame
+    from messenger.transport import deliver
+
+    contact = await _contact_of(
+        session,
+        user.id,
+        contact_id=payload.contact_id,
+        peer_node_id=payload.peer_node_id,
+    )
+    if contact is None:
+        raise HTTPException(status_code=404, detail="контакт не знайдено")
+
+    conversation = await conversation_for(session, user.id, contact)
+    body = json.dumps(
+        {"call_id": payload.call_id, "seq": payload.seq, "audio_b64": payload.audio_b64},
+        separators=(",", ":"),
+    )
+    try:
+        prepared = await prepare_frame(
+            session, _keys(), conversation, wrap_frame("radio", body)
+        )
+    except OutboxError as exc:
+        raise HTTPException(status_code=409, detail=str(exc)) from exc
+    if prepared is None:
+        raise HTTPException(status_code=409, detail="сесія з цим контактом не зведена")
+
+    # Храповик зрушив — це треба зберегти навіть якщо шматок не доїде, інакше
+    # наступний кадр піде тим самим ключем.
+    await session.commit()
+
+    from config import config
+
+    delivered = await deliver(
+        prepared.frame,
+        peer_node_id=prepared.peer_node_id,
+        from_node_id=_keys().node_id,
+        peer_address=contact.peer_address or "",
+        relay=(config.relay_url or "") if config.relay_enabled else "",
+        reply_address=config.messenger_public_address,
+    )
+    # Не доїхав — і не поїде: секунда голосу, доставлена через хвилину, це вже
+    # не розмова. Черга тут була б шкодою, а не послугою.
+    return SignalResult(
+        delivered=delivered,
+        call_id=payload.call_id,
+        detail="" if delivered else "шматок не доїхав",
+    )
 
 
 @router.post("/inbound", response_model=SignalResult)

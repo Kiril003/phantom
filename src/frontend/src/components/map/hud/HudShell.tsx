@@ -231,7 +231,17 @@ export function HudShell({
             onResetBearing={onResetBearing}
           />
         </div>
-        <div className="pointer-events-auto pt-1">
+        {/* «стан невідомий · дані не надходили» висіло без предмета і
+            воювало з «Наживо» сусіднього чипа (гонтлет Р1, удар №5).
+            Сам бейдж — нутрощі шару, тому предмет підписує каркас;
+            has-гард ховає підпис, якщо шар нічого не намалював. */}
+        <div className="pointer-events-auto hidden items-center gap-1.5 pt-1 has-[[data-alert-state]]:flex">
+          <span
+            className="flex items-center rounded-md border border-white/5 bg-black/55 px-2 py-1 text-[10px] uppercase tracking-wider text-white/85 backdrop-blur-md"
+            title="Повітряні тривоги по Україні · alerts.in.ua"
+          >
+            Тривоги
+          </span>
           <AirRaidLayer />
         </div>
         <div className="pointer-events-auto">

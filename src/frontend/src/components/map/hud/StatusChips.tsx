@@ -86,11 +86,34 @@ export function CoordinateReadout({ lat, lon, source }: {
 /** Румб словом — «Пн · 000°» вимагало читати число, щоб зрозуміти напрямок. */
 const RHUMB = ['Пн', 'Пн-Сх', 'Сх', 'Пд-Сх', 'Пд', 'Пд-Зх', 'Зх', 'Пн-Зх'];
 
-export function CompassChip({ bearing }: { bearing: number }) {
+/**
+ * «Пн · 0°» поруч із «Приймача немає» — неініціалізований нуль у костюмі
+ * показу (гонтлет Р1, удар №8/№11). Коли курс нема кому виміряти,
+ * чип каже прочерк: прочерк — теж чесне слово.
+ */
+export function CompassChip({ bearing, known = true }: { bearing: number; known?: boolean }) {
+  if (!known) {
+    return (
+      <div
+        className="glass-card flex items-center gap-2 px-3 h-[30px] rounded-full"
+        title="Приймача немає — курс невідомий"
+        data-testid="compass-chip"
+        data-known="false"
+      >
+        <Compass size={14} strokeWidth={1.75} className="text-ink-muted" aria-hidden />
+        <span className="text-[10px] font-semibold text-ink-secondary">Курс</span>
+        <span className="text-[10px] text-ink-muted">· —</span>
+      </div>
+    );
+  }
   const deg = ((Math.round(bearing) % 360) + 360) % 360;
   const word = RHUMB[Math.round(deg / 45) % 8];
   return (
-    <div className="glass-card flex items-center gap-2 px-3 h-[30px] rounded-full">
+    <div
+      className="glass-card flex items-center gap-2 px-3 h-[30px] rounded-full"
+      data-testid="compass-chip"
+      data-known="true"
+    >
       <Compass
         size={14}
         strokeWidth={1.75}
@@ -98,8 +121,9 @@ export function CompassChip({ bearing }: { bearing: number }) {
         style={{ transform: `rotate(${bearing}deg)` }}
         aria-hidden
       />
+      <span className="text-[10px] font-semibold text-ink-secondary">Курс</span>
       <span className="text-[10px] font-semibold text-ink-primary tabular-nums">
-        {word} · {deg}°
+        · {word} · {deg}°
       </span>
     </div>
   );
@@ -121,14 +145,19 @@ export function GpsQualityChip({ satellites, fix, speed, source = 'none' }: {
 
   // «0 супутників» читалось як несправний приймач. Приймача тут немає
   // взагалі: ESP32 з GNSS не підключений, місце приходить від браузера.
-  // Це різні речі, і людина має бачити, яка саме.
+  // Це різні речі, і людина має бачити, яка саме. Предмет чипа — ПРИЙМАЧ:
+  // правду про позицію тримає WhereChip унизу, і два бейджі про одне й те
+  // саме воювали б між собою (гонтлет Р1, удар №5).
   if (!fix && NO_RECEIVER.has(source)) {
     return (
-      <div className="glass-card flex h-[30px] items-center gap-2 rounded-full px-3">
+      <div
+        className="glass-card flex h-[30px] items-center gap-2 rounded-full px-3"
+        title="Супутникового приймача на цьому ПК немає; позиція складається з мережевих джерел — див. чип позиції внизу ліворуч"
+      >
         <Satellite size={12} strokeWidth={1.75} className="text-ink-muted" aria-hidden />
-        <span className="text-[10px] font-semibold text-ink-secondary">Приймача немає</span>
+        <span className="text-[10px] font-semibold text-ink-secondary">Приймач</span>
         <span className="text-[10px] text-ink-muted">
-          · {source === 'none' ? 'місце невідоме' : 'місце за мережею'}
+          · немає · {source === 'none' ? 'місце невідоме' : 'місце за мережею'}
         </span>
       </div>
     );
@@ -138,8 +167,9 @@ export function GpsQualityChip({ satellites, fix, speed, source = 'none' }: {
     <div className="glass-card flex items-center gap-2.5 px-3 h-[30px] rounded-full">
       <span className="flex items-center gap-1.5">
         <Satellite size={12} strokeWidth={1.75} className="text-ink-muted" aria-hidden />
+        <span className="text-[10px] font-semibold text-ink-secondary">Приймач</span>
         <span className={`text-[10px] font-semibold tabular-nums ${satTone}`}>
-          {satellites}
+          · {satellites}
         </span>
         <span className="text-[10px] text-ink-muted">
           {satellites === 1 ? 'супутник' : satellites >= 2 && satellites <= 4 ? 'супутники' : 'супутників'}
@@ -180,11 +210,17 @@ export function RenderTierChip({ tier }: { tier: RenderTier | null }) {
       data-tier={tier}
     >
       <MonitorDown size={12} strokeWidth={1.75} className="text-amber-600" aria-hidden />
-      <span className="text-[10px] font-semibold text-amber-700">Спрощена графіка</span>
+      <span className="text-[10px] font-semibold text-ink-secondary">Графіка</span>
+      <span className="text-[10px] font-semibold text-amber-700">· спрощена</span>
     </div>
   );
 }
 
+/**
+ * «Наживо» без предмета воювало з «Приймача немає» та «стан невідомий» на
+ * одному екрані (гонтлет Р1, удар №5). Предмет цього чипа — МАПА:
+ * живість підложки, не позиції і не тривог.
+ */
 export function StatusChip({ loading, zoom }: { loading: boolean; zoom: number }) {
   // z15 — жаргон рендерера. Людині корисніше знати, наскільки близько вона
   // дивиться: місто, район чи вулиця.
@@ -198,6 +234,7 @@ export function StatusChip({ loading, zoom }: { loading: boolean; zoom: number }
       ) : (
         <Eye size={12} strokeWidth={1.75} className="text-emerald-600" aria-hidden />
       )}
+      <span className="text-[10px] font-semibold text-ink-secondary">Мапа ·</span>
       <span
         className={`text-[10px] font-semibold ${loading ? 'text-amber-700' : 'text-emerald-700'}`}
       >

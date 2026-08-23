@@ -52,13 +52,15 @@ describe('standalone-збірка Ф1', () => {
     expect(items[0].textContent).toBe('Привид');
   });
 
-  it('Ctrl+K відкриває палітру; «Перейти» — рівно п\'ять входів', () => {
+  it('Ctrl+K відкриває палітру; «Переходи» — рівно п\'ять входів', () => {
     render(<CommandBar />);
     expect(screen.queryByRole('dialog')).toBeNull();
     fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
     expect(screen.getByRole('dialog')).toBeTruthy();
+    // getAllByText: «Компанія» живе і назвою пейна, і вмістом стола в
+    // підказці рядка «Стіл: Компанія» (У9 — вміст стола підказкою).
     for (const title of ['Мапа', 'Діалог', 'Компанія', 'Налаштування', 'Аналітика']) {
-      expect(screen.getByText(title)).toBeTruthy();
+      expect(screen.getAllByText(title).length).toBeGreaterThanOrEqual(1);
     }
     // Заборонені входи (вердикт власника) відсутні.
     for (const banned of ['Воля', 'Вартовий', 'Привид', 'Система']) {
@@ -73,9 +75,14 @@ describe('standalone-збірка Ф1', () => {
     fireEvent.keyDown(window, { key: 'k', ctrlKey: true });
     const input = screen.getByLabelText('Пошук команди');
     fireEvent.change(input, { target: { value: 'мапа' } });
-    // Підсвітка збігу дробить назву на посимвольні span-и — шукаємо
-    // за accessible name кнопки, а не суцільним текстом.
-    expect(screen.getByRole('button', { name: 'Мапа' })).toBeTruthy();
+    // Підсвітка збігу дробить назву на посимвольні span-и (accessible
+    // name отримує пробіли між літерами) — порівнюємо без пропусків;
+    // ім'я тепер несе і підказку-наслідок переходу.
+    expect(
+      screen.getByRole('button', {
+        name: (n) => n.replace(/\s+/g, '').startsWith('Мапа'),
+      }),
+    ).toBeTruthy();
     expect(screen.queryByText('Налаштування')).toBeNull();
     fireEvent.keyDown(input, { key: 'Escape' });
     expect(screen.queryByRole('dialog')).toBeNull();

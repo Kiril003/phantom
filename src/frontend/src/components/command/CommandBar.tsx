@@ -3,12 +3,16 @@
  *
  * Виглядом — інструмент, не вітрина: площина surface-raised, тонка
  * межа, моноширинні цифри, нуль декору. Розділи в жорсткому порядку
- * Столи → Перейти → Дії; список будується з живого стану сторів на
- * кожне відкриття; нечіткий пошук по назвах і ключових словах.
+ * Столи → Переходи → Дії → Небезпечне; список будується з живого стану
+ * сторів на кожне відкриття; нечіткий пошук по назвах і ключових словах.
  *
  * Клавіатура: Ctrl/Cmd+K — відкрити/закрити, ↑↓ — вибір, Enter —
- * виконати, Esc — закрити. Хоткеї пунктів показуються лише реальні;
- * сьогодні глобальних хоткеїв навігації нема — колонка порожня.
+ * виконати, Esc — закрити. Деструктивний рядок (danger) виконується
+ * ДВОМА Enter'ами: перший переводить рядок у confirm-стан, другий —
+ * виконує; Esc чи відхід курсора з рядка скасовує підтвердження, а не
+ * палітру (У8 — вихід у рукавицях одним нечітким Enter'ом заборонено).
+ * Хоткеї пунктів показуються лише реальні; сьогодні глобальних хоткеїв
+ * навігації нема — колонка порожня.
  */
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -25,6 +29,7 @@ const ACCENT = 'var(--ph-color-accent, var(--primary, #C77B21))';
 const RAISED = 'var(--ph-color-surface-raised, var(--surface-raised, #fdf6e9))';
 const BORDER = 'var(--ph-color-border, var(--glass-border, rgba(0,0,0,0.14)))';
 const SCRIM = 'var(--ph-color-scrim, rgba(20,24,28,0.35))';
+const DANGER = 'var(--ph-color-danger, var(--ph-color-alert, #D93B26))';
 const FONT_UI = 'var(--ph-font-ui, system-ui, sans-serif)';
 const FONT_MONO = 'var(--ph-font-mono, ui-monospace, monospace)';
 
@@ -87,6 +92,8 @@ export function CommandBar({ onNavigate, disableHotkey }: CommandBarProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [cursor, setCursor] = useState(0);
+  /** id деструктивного рядка, що чекає другого Enter'а. */
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const inputRef = useRef<HTMLInputElement | null>(null);
   const listRef = useRef<HTMLDivElement | null>(null);
 
@@ -94,6 +101,7 @@ export function CommandBar({ onNavigate, disableHotkey }: CommandBarProps) {
     setOpen(false);
     setQuery('');
     setCursor(0);
+    setConfirmingId(null);
   }, []);
 
   /* Глобальний Ctrl/Cmd+K. */
@@ -139,10 +147,35 @@ export function CommandBar({ onNavigate, disableHotkey }: CommandBarProps) {
     el?.scrollIntoView({ block: 'nearest' });
   }, [cursor]);
 
+  /* Confirm-стан живе лише на своєму рядку: відхід курсора скасовує. */
+  useEffect(() => {
+    if (confirmingId && flat[cursor]?.item.id !== confirmingId) {
+      setConfirmingId(null);
+    }
+  }, [cursor, confirmingId, flat]);
+
+  /**
+   * Виконання пункту: деструктивний вимагає двох підтверджень — перший
+   * виклик лише озброює рядок (confirm-стан), другий — виконує.
+   */
+  const execute = useCallback(
+    (item: CommandItem) => {
+      if (item.danger && confirmingId !== item.id) {
+        setConfirmingId(item.id);
+        return;
+      }
+      setConfirmingId(null);
+      item.run();
+    },
+    [confirmingId],
+  );
+
   const onInputKey = (e: React.KeyboardEvent) => {
     if (e.key === 'Escape') {
       e.preventDefault();
-      close();
+      // Спершу знімається зведення деструктивного рядка, потім палітра.
+      if (confirmingId) setConfirmingId(null);
+      else close();
     } else if (e.key === 'ArrowDown') {
       e.preventDefault();
       setCursor((c) => Math.min(c + 1, Math.max(0, flat.length - 1)));
@@ -151,7 +184,8 @@ export function CommandBar({ onNavigate, disableHotkey }: CommandBarProps) {
       setCursor((c) => Math.max(0, c - 1));
     } else if (e.key === 'Enter') {
       e.preventDefault();
-      flat[cursor]?.item.run();
+      const current = flat[cursor];
+      if (current) execute(current.item);
     }
   };
 
@@ -198,6 +232,7 @@ export function CommandBar({ onNavigate, disableHotkey }: CommandBarProps) {
           onChange={(e) => {
             setQuery(e.target.value);
             setCursor(0);
+            setConfirmingId(null);
           }}
           onKeyDown={onInputKey}
           placeholder="Команда, стіл або пейн…"
@@ -238,13 +273,15 @@ export function CommandBar({ onNavigate, disableHotkey }: CommandBarProps) {
                 flatIndex += 1;
                 const idx = flatIndex;
                 const active = idx === cursor;
+                const confirming = confirmingId === s.item.id;
                 return (
                   <button
                     key={s.item.id}
                     type="button"
                     data-cursor={active ? 'true' : undefined}
+                    data-confirming={confirming ? 'true' : undefined}
                     onMouseEnter={() => setCursor(idx)}
-                    onClick={() => s.item.run()}
+                    onClick={() => execute(s.item)}
                     style={{
                       display: 'flex',
                       alignItems: 'baseline',
@@ -253,17 +290,28 @@ export function CommandBar({ onNavigate, disableHotkey }: CommandBarProps) {
                       textAlign: 'left',
                       border: 'none',
                       cursor: 'pointer',
-                      background: active ? SCRIM : 'transparent',
-                      color: INK,
+                      background: confirming
+                        ? 'color-mix(in srgb, var(--ph-color-danger, #D93B26) 12%, transparent)'
+                        : active
+                          ? SCRIM
+                          : 'transparent',
+                      color: s.item.danger ? DANGER : INK,
                       padding: '7px var(--ph-space-4, 16px)',
                       fontFamily: FONT_UI,
                       fontSize: 'inherit',
                     }}
                   >
-                    <span style={{ flex: 'none' }}>
-                      <Highlighted text={s.item.title} indices={s.indices} />
-                    </span>
-                    {s.item.hint && (
+                    {confirming ? (
+                      // Confirm-стан рядка: слово підтвердження замість назви.
+                      <span style={{ flex: 'none', fontWeight: 600 }}>
+                        {s.item.confirmLabel ?? `${s.item.title} — Enter ще раз`}
+                      </span>
+                    ) : (
+                      <span style={{ flex: 'none' }}>
+                        <Highlighted text={s.item.title} indices={s.indices} />
+                      </span>
+                    )}
+                    {!confirming && s.item.hint && (
                       <span style={{ color: FAINT, fontSize: 'var(--ph-type-caption-size, 12.5px)' }}>
                         {s.item.hint}
                       </span>
@@ -300,8 +348,12 @@ export function CommandBar({ onNavigate, disableHotkey }: CommandBarProps) {
           }}
         >
           <span>↑↓ вибір</span>
-          <span>Enter виконати</span>
-          <span>Esc закрити</span>
+          {confirmingId ? (
+            <span style={{ color: DANGER }}>Enter підтвердити</span>
+          ) : (
+            <span>Enter виконати</span>
+          )}
+          <span>{confirmingId ? 'Esc скасувати' : 'Esc закрити'}</span>
           <span style={{ flex: 1 }} />
           <span>Ctrl+K</span>
         </div>

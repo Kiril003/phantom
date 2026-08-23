@@ -1,14 +1,23 @@
 /**
  * commands — реєстр пунктів командної палітри (Ф1, Ctrl+K).
  *
- * Три розділи, і ТІЛЬКИ реальні дії з робочим шляхом сьогодні:
- *  «Столи»   — перемикання столів (deskStore двигуна f1-desk-engine);
- *  «Перейти» — рівно п'ять пейнів: Мапа, Діалог, Компанія,
- *              Налаштування, Аналітика (вердикт власника 22.08:
- *              «багато кнопок погано» — інші входи чекають дебату);
- *  «Дії»     — теми (settingsStore.setTheme: DOM+localStorage одразу,
- *              бекенд best-effort) і вихід (канон FloatingToolbar:
- *              clearAuth + setAuthenticated(false) + closeAll).
+ * Чотири розділи (гонтлет №1, У8/У9: одна частина мови — іменники в
+ * одному регістрі; деструктивне — окремо внизу), і ТІЛЬКИ реальні дії
+ * з робочим шляхом сьогодні:
+ *  «Столи»      — перемикання столів (deskStore двигуна f1-desk-engine);
+ *                 підказка рядка несе вміст стола — «Стіл: Компанія» і
+ *                 пейн «Компанія» більше не близнюки;
+ *  «Переходи»   — рівно п'ять пейнів: Мапа, Діалог, Компанія,
+ *                 Налаштування, Аналітика (вердикт власника 22.08:
+ *                 «багато кнопок погано» — інші входи чекають дебату);
+ *                 підказка називає наслідок: відкрити пейн на активному
+ *                 столі;
+ *  «Дії»        — теми (settingsStore.setTheme: DOM+localStorage одразу,
+ *                 бекенд best-effort);
+ *  «Небезпечне» — вихід із сесії (канон FloatingToolbar: clearAuth +
+ *                 setAuthenticated(false) + closeAll) — НЕ пласким
+ *                 рядком серед тем: розділ завжди внизу, рядок вимагає
+ *                 підтвердження (другий Enter у confirm-стані рядка).
  *
  * «Стоп усій Компанії» СВІДОМО відсутній: agent_runtime.stop(None)
  * зупиняє лише foreground-слот (agent/kernel/runtime.py:1150), глобальної
@@ -19,32 +28,45 @@
  */
 
 import { useDeskStore, type PaneKind } from '../../stores/deskStore';
+import { PANE_REGISTRY } from '../desk/paneRegistry';
 import { useSettingsStore } from '../../stores/settingsStore';
 import { useSystemStore } from '../../stores/systemStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useUIStore } from '../../stores/uiStore';
 import type { ThemeId } from '@shared/types';
 
-export type CommandSection = 'Столи' | 'Перейти' | 'Дії';
+export type CommandSection = 'Столи' | 'Переходи' | 'Дії' | 'Небезпечне';
 
-/** Порядок розділів у палітрі. */
-export const SECTION_ORDER: readonly CommandSection[] = ['Столи', 'Перейти', 'Дії'];
+/** Порядок розділів у палітрі; «Небезпечне» — завжди останнє. */
+export const SECTION_ORDER: readonly CommandSection[] = [
+  'Столи',
+  'Переходи',
+  'Дії',
+  'Небезпечне',
+];
 
 export interface CommandItem {
   id: string;
   section: CommandSection;
   /** Назва укр. */
   title: string;
-  /** Тьмяний суфікс стану (напр. «активний»). */
+  /** Тьмяний суфікс: стан («активний»), вміст стола або наслідок дії. */
   hint?: string;
   /** Хоткей — лише реальний. Моноширинним у правій колонці. */
   hotkey?: string;
   /** Додаткові цілі нечіткого пошуку (латинка, синоніми). */
   keywords?: string[];
+  /**
+   * Деструктивна дія: перший Enter/клік переводить рядок у confirm-стан
+   * (показує confirmLabel), і лише другий — виконує run.
+   */
+  danger?: boolean;
+  /** Слово підтвердження в confirm-стані деструктивного рядка. */
+  confirmLabel?: string;
   run: () => void;
 }
 
-/** Пейни «Перейти» — рівно п'ять, за вердиктом власника. */
+/** Пейни «Переходів» — рівно п'ять, за вердиктом власника. */
 const NAV_TARGETS: ReadonlyArray<{ kind: PaneKind; title: string; keywords: string[] }> = [
   { kind: 'map', title: 'Мапа', keywords: ['map', 'мапа', 'карта'] },
   { kind: 'dialogue', title: 'Діалог', keywords: ['dialogue', 'chat', 'чат'] },
@@ -85,11 +107,19 @@ export function buildCommands(opts: BuildCommandsOptions): CommandItem[] {
   const items: CommandItem[] = [];
 
   for (const desk of desks) {
+    // Вміст стола підказкою: на запит «компан» рядок стола і рядок
+    // пейна розрізняються ефектом, а не лише префіксом (У9).
+    const contents =
+      desk.panes.length > 0
+        ? desk.panes.map((p) => PANE_REGISTRY[p.kind].title).join(' + ')
+        : 'порожній';
     items.push({
       id: `desk:${desk.id}`,
       section: 'Столи',
       title: `Стіл: ${desk.name}`,
-      hint: desk.id === activeDeskId ? 'активний' : undefined,
+      hint: [desk.id === activeDeskId ? 'активний' : null, contents]
+        .filter(Boolean)
+        .join(' · '),
       keywords: ['desk', 'стіл', desk.id],
       run: () => {
         opts.close();
@@ -101,8 +131,10 @@ export function buildCommands(opts: BuildCommandsOptions): CommandItem[] {
   for (const nav of NAV_TARGETS) {
     items.push({
       id: `nav:${nav.kind}`,
-      section: 'Перейти',
+      section: 'Переходи',
       title: nav.title,
+      // Наслідок дії словами — не «Компанія» проти «Стіл: Компанія» наосліп.
+      hint: 'відкрити пейн на активному столі',
       keywords: nav.keywords,
       run: () => {
         opts.close();
@@ -128,9 +160,15 @@ export function buildCommands(opts: BuildCommandsOptions): CommandItem[] {
 
   items.push({
     id: 'action:sign-out',
-    section: 'Дії',
+    section: 'Небезпечне',
     title: 'Вийти з сесії',
+    hint: 'розлогінить цей вузол',
     keywords: ['logout', 'вихід', 'exit'],
+    // У8 (veteran): один нечіткий пошук + Enter у рукавицях розлогінював
+    // посеред роботи. Деструктивне живе окремим розділом унизу і вимагає
+    // другого Enter у confirm-стані рядка.
+    danger: true,
+    confirmLabel: 'Точно вийти? Enter — підтвердити',
     run: () => {
       opts.close();
       // Канон виходу — FloatingToolbar.signOut (без router-залежності:

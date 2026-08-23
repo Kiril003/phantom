@@ -1,19 +1,15 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
 import {
-  ArrowLeft,
   Save,
-  RotateCcw,
   Loader2,
   Plug,
   CheckCircle2,
   AlertTriangle,
   Cpu,
-  GitCompareArrows,
+  RotateCcw,
   Sun,
   Moon,
   Cog,
-  SlidersHorizontal as Tune,
   Languages,
   Search,
   X as XIcon,
@@ -25,7 +21,6 @@ import { BackupRestoreCard } from './BackupRestoreCard';
 import {
   useSettingsStore,
   THEME_SETTING_KEY,
-  LANGUAGE_SETTING_KEY,
 } from '../../stores/settingsStore';
 import { LOCALES, LOCALE_LABELS, type Locale } from '../../i18n';
 import { useTranslation } from '../../i18n/useTranslation';
@@ -39,7 +34,7 @@ import {
 } from '../../services/api';
 import { voiceApi, type VoiceStatusResponse } from '../../services/voiceApi';
 import { applyUISettings } from '../../services/settingsBootstrap';
-import type { SettingDefinition } from '@shared/types';
+import type { SettingDefinition, SettingsCategory } from '@shared/types';
 import { groupByInferredSubgroup } from './groupSettings';
 import {
   SettingsAccordion,
@@ -49,23 +44,80 @@ import {
 import { AgentLimitsGroup } from './AgentLimitsGroup';
 import { AgentLayoutGroup } from './AgentLayoutGroup';
 import { DesktopShellGroup } from './DesktopShellGroup';
-import { Monitor, KeyRound, ShieldCheck, Key, Users, Smartphone } from 'lucide-react';
 import { KeyVaultPanel } from './KeyVaultPanel';
 import { LicenseGroup } from './LicenseGroup';
 import { ApiKeysTab } from './ApiKeysTab';
 import { MembersTab } from './MembersTab';
+import { DangerZonePanel } from './DangerZonePanel';
+import {
+  SETTINGS_SECTIONS,
+  sectionForCategory,
+  categoriesForSection,
+  DANGER_CATEGORY_ID,
+} from './settingsSections';
+import { resolveDescription } from './settingDescriptions';
+import {
+  filterVisibleDefs,
+  searchAllSettings,
+  DEDICATED_CONTROL_KEYS,
+  type SettingsSearchHit,
+} from './visibleSettings';
+import { useElementSize } from '../desk/useViewportSize';
 
 type ThemeId = 'sunrise-warm' | 'amber-night' | 'cyberdeck-cold';
 
-/* ─── SettingsPanel — sunrise repaint (phase-5-R1-FE-SET) ─────────────
- * Preserves ALL existing Zustand selectors, store actions, and API
- * calls (settingsApi.getAll/set/reset, applyUISettings, etc.). Only
- * the visual chrome and theme-picker tile UI are new. THEME-NIGHT
- * agent owns the active-theme writeback through the same setValue/
- * settingsApi.set pipeline; this file just renders the picker so the
- * operator can choose. */
+/* ─── Ф1.5 — анатомія пейна Налаштувань ────────────────────────────────
+ *
+ * Пейн живе у світі столів: закривається засобами стола, тож кнопки
+ * «Назад на головну» не існує. Верстка ЧИТАЄ ВЛАСНИЙ КОНТЕЙНЕР
+ * (useElementSize, як DialogueLayout): на широкому пейні — дві колонки
+ * (розділи+підрозділи | вміст), на вузькій плитці — одна (чипи згори).
+ *
+ * ІА: 7 розділів (settingsSections.ts), категорії бекенда стали
+ * підрозділами, жодна не зникла — тест settings-ia.test.ts обходить
+ * реєстр бекенда і доводить покриття. Пошук — глобальний: по назві,
+ * людському поясненню (settingDescriptions.ts) і ключу, з розділом
+ * знахідки. Небезпечне (скидання) — окремий підрозділ зі зброюванням.
+ *
+ * Щільність: pointer-media, не глобальні 44px — компактні контроли на
+ * миші, 44px на справжньому тачі (any-pointer: coarse, як DeskStrip).
+ * Токени — тільки --ph-* з фолбеками.
+ */
+
+/** Вужче за це — «вузька» плитка: навігація стає чипами згори. */
+const NARROW_W = 640;
+
+/** Категорії, що існують лише на фронтенді (bespoke-панелі). */
+const VIRTUAL_CATEGORIES: SettingsCategory[] = [
+  { id: 'mobile', label: 'Телефон', icon: '', settings: [] },
+  { id: 'desktop', label: 'Оболонка', icon: '', settings: [] },
+  { id: 'polis_keys', label: 'Ключі Поліса', icon: '', settings: [] },
+  { id: 'license', label: 'Ліцензія', icon: '', settings: [] },
+  { id: 'api_keys', label: 'Ключі доступу', icon: '', settings: [] },
+  { id: 'members', label: 'Учасники', icon: '', settings: [] },
+  { id: DANGER_CATEGORY_ID, label: 'Небезпечна зона', icon: '', settings: [] },
+];
+
+/** Тач-детект: any-pointer, як у DeskStrip — тач-ноутбук теж рахується. */
+function usePointerCoarse(): boolean {
+  const [coarse, setCoarse] = useState<boolean>(() =>
+    typeof window !== 'undefined' && typeof window.matchMedia === 'function'
+      ? window.matchMedia('(any-pointer: coarse)').matches
+      : false
+  );
+  useEffect(() => {
+    if (typeof window === 'undefined' || typeof window.matchMedia !== 'function') {
+      return;
+    }
+    const mq = window.matchMedia('(any-pointer: coarse)');
+    const onChange = () => setCoarse(mq.matches);
+    mq.addEventListener?.('change', onChange);
+    return () => mq.removeEventListener?.('change', onChange);
+  }, []);
+  return coarse;
+}
+
 export default function SettingsPanel() {
-  const navigate = useNavigate();
   const categories = useSettingsStore((s) => s.categories);
   const values = useSettingsStore((s) => s.values);
   const dirty = useSettingsStore((s) => s.dirty);
@@ -73,13 +125,11 @@ export default function SettingsPanel() {
   const setCategories = useSettingsStore((s) => s.setCategories);
   const setValue = useSettingsStore((s) => s.setValue);
   const markClean = useSettingsStore((s) => s.markClean);
-  // Phase 22 — IA: Basic / Advanced gate + live search.
   const showAdvanced = useSettingsStore((s) => s.showAdvanced);
   const setShowAdvanced = useSettingsStore((s) => s.setShowAdvanced);
   const query = useSettingsStore((s) => s.query);
   const setQuery = useSettingsStore((s) => s.setQuery);
 
-  const { categoryId: urlCategoryId } = useParams<{ categoryId: string }>();
   const [activeCategoryId, setActiveCategoryId] = useState<string>('');
   const [status, setStatus] = useState<
     | { kind: 'idle' }
@@ -92,127 +142,86 @@ export default function SettingsPanel() {
     Record<string, Record<string, boolean>>
   >({});
 
+  const { ref, width } = useElementSize<HTMLDivElement>();
+  const narrow = width > 0 && width < NARROW_W;
+  const coarse = usePointerCoarse();
+  /** Висота рядка навігації: тач — 44, миша — компактно. */
+  const navRowH = coarse ? 44 : 28;
+  /** Мінімум контролів у рядках (input/select/toggle). */
+  const controlMin = coarse ? 44 : 32;
+
+  const reload = useCallback(async () => {
+    const data = await settingsApi.getAll();
+    setCategories(data.categories);
+    return data.categories;
+  }, [setCategories]);
+
   useEffect(() => {
     let cancelled = false;
     setStatus({ kind: 'loading' });
-    settingsApi
-      .getAll()
-      .then((data) => {
+    reload()
+      .then(() => {
         if (cancelled) return;
-        setCategories(data.categories);
-        setActiveCategoryId((prev) => urlCategoryId || prev || data.categories[0]?.id || '');
         setStatus({ kind: 'idle' });
       })
       .catch((err: unknown) => {
         if (cancelled) return;
         setStatus({
           kind: 'error',
-          msg: err instanceof Error ? err.message : 'Failed to load settings',
+          msg:
+            err instanceof Error
+              ? err.message
+              : 'Не вдалося завантажити налаштування',
         });
       });
     return () => {
       cancelled = true;
     };
-  }, [setCategories]);
+  }, [reload]);
 
-  useEffect(() => {
-    if (!activeCategoryId && categories.length > 0) {
-      setActiveCategoryId(categories[0].id);
-    }
-  }, [categories, activeCategoryId]);
-
-  const allCategories = useMemo(() => {
-    const virtual: any = {
-      id: 'desktop',
-      label: 'Оболонка',
-      icon: <Monitor size={14} />,
-      settings: [],
-    };
-    const polisKeys: any = {
-      id: 'polis_keys',
-      label: 'Ключі Поліса',
-      icon: <KeyRound size={14} />,
-      settings: [],
-    };
-    const license: any = {
-      id: 'license',
-      label: 'Ліцензія',
-      icon: <ShieldCheck size={14} />,
-      settings: [],
-    };
-    // Вкладки «Оплата» більше немає. Вона показувала зашитий рівень «Pro» і
-    // 45 000 витрачених токенів — обидва числа вигадані просто в компоненті,
-    // і жоден лічильник у системі їх не рахував. Правда про ліцензію одна і
-    // живе у вкладці «Ліцензія»; продаж — на сайті, не в пристрої.
-    const apiKeys: any = {
-      id: 'api_keys',
-      label: 'Ключі доступу',
-      icon: <Key size={14} />,
-      settings: [],
-    };
-    const members: any = {
-      id: 'members',
-      label: 'Учасники',
-      icon: <Users size={14} />,
-      settings: [],
-    };
-    // Панель пари з телефоном була написана й НЕДОСЯЖНА: рендер чекав на
-    // категорію `mobile`, а в списку її не було взагалі. Тобто єдиний шлях
-    // дати ПК точне місце існував лише в коді.
-    const mobile: any = {
-      id: 'mobile',
-      label: 'Телефон',
-      icon: <Smartphone size={14} />,
-      settings: [],
-    };
-    // Бекенд теж віддає `mobile`, тому зводимо за id: дубль давав React
-    // попередження про однакові ключі, а користувачу — дві однакові вкладки.
-    const merged = [...categories, mobile, polisKeys, license, virtual, apiKeys, members];
+  /** Бекендові категорії + віртуальні, дедуп за id (бекенд перемагає). */
+  const allCategories = useMemo<SettingsCategory[]>(() => {
+    const merged = [...categories, ...VIRTUAL_CATEGORIES];
     const seen = new Set<string>();
-    return merged.filter((c: any) => {
+    return merged.filter((c) => {
       if (seen.has(c.id)) return false;
       seen.add(c.id);
       return true;
     });
   }, [categories]);
 
+  /** Перший наявний підрозділ у порядку ІА — стартова точка. */
+  useEffect(() => {
+    if (activeCategoryId || allCategories.length === 0) return;
+    for (const section of SETTINGS_SECTIONS) {
+      const present = categoriesForSection(section, allCategories);
+      if (present.length > 0) {
+        setActiveCategoryId(present[0].id);
+        return;
+      }
+    }
+    setActiveCategoryId(allCategories[0].id);
+  }, [allCategories, activeCategoryId]);
+
   const activeCategory = useMemo(
     () => allCategories.find((c) => c.id === activeCategoryId),
     [allCategories, activeCategoryId]
   );
+  const activeSection = useMemo(
+    () => sectionForCategory(activeCategoryId),
+    [activeCategoryId]
+  );
 
-  const dirtyInCategory = useMemo(() => {
-    if (!activeCategory) return [] as string[];
-    return (activeCategory.settings || [])
-      .map((d: any) => d.key)
-      .filter((k: string) => dirty.has(k));
-  }, [activeCategory, dirty]);
+  const dirtyKeys = useMemo(() => Array.from(dirty), [dirty]);
 
-  /* ── Aggregate progress (configured / total) across all categories.
-     A setting counts as "configured" if its current value differs from
-     its registered default — otherwise it's pristine. Mirrors the
-     "83 / 88" pill in the design comp. ────────────────────────────── */
-  const overallProgress = useMemo(() => {
-    let total = 0;
-    let configured = 0;
-    for (const cat of categories) {
-      for (const def of cat.settings) {
-        total += 1;
-        const cur = values[def.key];
-        if (cur !== undefined && JSON.stringify(cur) !== JSON.stringify(def.default)) {
-          configured += 1;
-        }
-      }
-    }
-    return { total, configured, ratio: total === 0 ? 0 : configured / total };
-  }, [categories, values]);
-
+  /** Зберегти ВСІ незбережені ключі — пошук дозволяє правити крізь
+   * категорії, тож збереження теж глобальне. */
   const handleSave = useCallback(async () => {
-    if (!activeCategory || dirtyInCategory.length === 0) return;
+    if (dirtyKeys.length === 0) return;
     setStatus({ kind: 'saving' });
     try {
       const appliedPatch: Record<string, unknown> = {};
-      for (const key of dirtyInCategory) {
+      for (const key of dirtyKeys) {
         await settingsApi.set(key, values[key]);
         appliedPatch[key] = values[key];
         markClean(key);
@@ -223,658 +232,315 @@ export default function SettingsPanel() {
     } catch (err) {
       setStatus({
         kind: 'error',
-        msg: err instanceof Error ? err.message : 'Save failed',
+        msg: err instanceof Error ? err.message : 'Зберегти не вдалося',
       });
     }
-  }, [activeCategory, dirtyInCategory, values, markClean]);
+  }, [dirtyKeys, values, markClean]);
 
-  const handleReset = useCallback(async () => {
-    if (!activeCategory) return;
-    try {
-      await settingsApi.reset(activeCategory.id);
-      const fresh = await settingsApi.getAll();
-      setCategories(fresh.categories);
-      const all: Record<string, unknown> = {};
-      for (const cat of fresh.categories) {
-        for (const def of cat.settings) {
-          all[def.key] = def.value;
-        }
-      }
-      applyUISettings(all);
-      setStatus({ kind: 'saved' });
-      setTimeout(() => setStatus({ kind: 'idle' }), 1200);
-    } catch (err) {
-      setStatus({
-        kind: 'error',
-        msg: err instanceof Error ? err.message : 'Скинути не вдалося',
-      });
-    }
-  }, [activeCategory, setCategories]);
+  const searchHits = useMemo(
+    () => searchAllSettings(allCategories, query),
+    [allCategories, query]
+  );
+  const searching = query.trim().length > 0;
 
-  /* ── Pending-changes diff summary (3 PENDING CHANGES · …). Shows
-     up to 2 keys verbatim then "+N more" so the strip stays inside
-     the main pane width. ─────────────────────────────────────────── */
-  const diffSummary = useMemo(() => {
-    if (!activeCategory) return null;
-    const dirtyKeys = (activeCategory.settings || []).filter((d: any) => dirty.has(d.key));
-    if (dirtyKeys.length === 0) return null;
-    const head = dirtyKeys.slice(0, 2);
-    const rest = dirtyKeys.length - head.length;
-    const parts = head.map((d: any) => {
-      const next = values[d.key];
-      const prev = d.value;
-      const fmt = (v: unknown) =>
-        typeof v === 'string' || typeof v === 'number' || typeof v === 'boolean'
-          ? String(v)
-          : '…';
-      return `${d.key} · ${fmt(prev)}→${fmt(next)}`;
-    });
-    return {
-      count: dirtyKeys.length,
-      caption:
-        parts.join(' · ') + (rest > 0 ? ` · +${rest} more` : ''),
-    };
-  }, [activeCategory, dirty, values]);
+  const jumpToCategory = useCallback(
+    (categoryId: string) => {
+      setActiveCategoryId(categoryId);
+      setQuery('');
+    },
+    [setQuery]
+  );
 
   return (
     <div
-      className="sunrise-frame relative"
-      style={{
-        width: '100%',
-        height: '100%',
-        background: 'var(--surface-base)',
-        overflow: 'hidden',
-      }}
-    >
-      {/* === SIDEBAR === */}
-      <aside
-        className="glass"
-        style={{
-          position: 'absolute',
-          left: 12,
-          top: 12,
-          bottom: 76,
-          width: 260,
-          padding: 10,
-          zIndex: 3,
+      ref={ref}
+      data-testid="settings-surface"
+      data-narrow={narrow ? 'true' : undefined}
+      style={
+        {
+          width: '100%',
+          height: '100%',
           display: 'flex',
           flexDirection: 'column',
-          borderRadius: 14,
+          minHeight: 0,
+          minWidth: 0,
+          background: 'var(--ph-color-surface, #fff)',
+          color: 'var(--ph-color-ink, #1C1F23)',
+          fontFamily: 'var(--ph-font-ui, system-ui)',
+          '--set-control-min': `${controlMin}px`,
+        } as React.CSSProperties
+      }
+    >
+      {/* ── Легка шапка: пошук + експертний тумблер + збереження ────── */}
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 'var(--ph-space-2, 8px)',
+          padding: 'var(--ph-space-2, 8px) var(--ph-space-3, 12px)',
+          borderBottom:
+            'var(--ph-stroke-thin, 1px) solid var(--ph-color-border, #D8D2C6)',
+          flexShrink: 0,
         }}
       >
-        {/* Phase 22-G — sidebar progress pill removed. Was a 50px-tall
-            CONFIGURED block (label + count + 3px progress bar) that
-            fully duplicated the 95/100 score chip already shown in the
-            section header. Reclaiming the 50px lets all 10+ categories
-            fit on a 600px display without sidebar scrolling — direct
-            response to the operator's "деякі не видно" complaint. The
-            eyebrow keeps the row but with tighter margin since the
-            category list now starts immediately below it. */}
-        <div className="eyebrow" style={{ marginBottom: 6 }}>
-          НАЛАШТУВАННЯ · {overallProgress.configured}/{overallProgress.total}
-        </div>
-
-        {/* Category list */}
-        <div
-          className="no-scrollbar"
+        <Search
+          size={14}
+          strokeWidth={1.75}
+          aria-hidden
+          style={{ color: 'var(--ph-color-ink-faint, #9A958B)', flexShrink: 0 }}
+        />
+        <input
+          type="search"
+          value={query}
+          onChange={(e) => setQuery(e.currentTarget.value)}
+          placeholder="Пошук: назва або пояснення…"
+          aria-label="Пошук по всіх налаштуваннях"
           style={{
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 1,
             flex: 1,
-            overflowY: 'auto',
-            minHeight: 0,
+            minWidth: 0,
+            minHeight: controlMin,
+            background: 'transparent',
+            border: 'none',
+            outline: 'none',
+            color: 'var(--ph-color-ink, #1C1F23)',
+            fontSize: 'var(--ph-type-caption-size, 12.5px)',
           }}
-        >
-          {allCategories.map((cat: any) => {
-            const active = cat.id === activeCategoryId;
-            const dirtyCount = (cat.settings || []).filter((d: any) =>
-              dirty.has(d.key)
-            ).length;
-            const total = (cat.settings || []).length;            const done = total - dirtyCount;
-            const pillBg = dirtyCount > 0
-              ? 'rgba(244,175,37,0.20)'
-              : 'rgba(34,197,94,0.18)';
-            const pillFg = dirtyCount > 0 ? '#b07a10' : '#16a34a';
-            return (
-              <button
-                key={cat.id}
-                type="button"
-                onClick={() => setActiveCategoryId(cat.id)}
-                className="active:scale-[0.99]"
-                style={{
-                  minHeight: 44,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 10,
-                  padding: '6px 10px',
-                  borderRadius: 10,
-                  background: active ? 'rgba(244,175,37,0.18)' : 'transparent',
-                  borderLeft: active
-                    ? '3px solid #f4af25'
-                    : '3px solid transparent',
-                  color: active ? '#8a5e0a' : 'var(--ink-secondary)',
-                  cursor: 'pointer',
-                  fontSize: 12,
-                  fontWeight: active ? 600 : 500,
-                  textAlign: 'left',
-                }}
-              >
-                <span
-                  aria-hidden
-                  style={{
-                    width: 16,
-                    textAlign: 'center',
-                    color: active ? '#b07a10' : 'var(--ink-muted)',
-                  }}
-                >
-                  {cat.icon}
-                </span>
-                <span style={{ flex: 1 }}>{cat.label}</span>
-                <span
-                  className="tabular"
-                  style={{
-                    fontSize: 9,
-                    fontWeight: 700,
-                    padding: '1px 6px',
-                    borderRadius: 999,
-                    background: pillBg,
-                    color: pillFg,
-                  }}
-                >
-                  {done}/{total}
-                </span>
-              </button>
-            );
-          })}
-        </div>
+        />
+        {query && (
+          <button
+            type="button"
+            onClick={() => setQuery('')}
+            aria-label="Очистити пошук"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              width: Math.max(20, navRowH - 8),
+              height: Math.max(20, navRowH - 8),
+              borderRadius: 'var(--ph-radius-pill, 999px)',
+              border: 'none',
+              background: 'var(--ph-color-glass, rgba(0,0,0,0.05))',
+              color: 'var(--ph-color-ink-muted, #5A5F66)',
+              cursor: 'pointer',
+              flexShrink: 0,
+            }}
+          >
+            <XIcon size={11} strokeWidth={1.75} />
+          </button>
+        )}
 
-        {/* Bottom — back button */}
+        {/* Тумблер експертних значень — з ПІДПИСАНИМ призначенням,
+            а не безіменний перемикач у пошуковому рядку. */}
         <button
           type="button"
-          onClick={() => navigate(-1)}
+          role="switch"
+          aria-checked={showAdvanced}
+          onClick={() => setShowAdvanced(!showAdvanced)}
+          title="Показати експертні налаштування: тонкі пороги й бюджети, які щодня не чіпають"
           style={{
-            marginTop: 8,
-            minHeight: 44,
-            padding: '8px 12px',
-            borderRadius: 999,
-            background: 'rgba(255,255,255,0.6)',
-            border: '1px solid rgba(255,255,255,0.6)',
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            minHeight: controlMin,
+            padding: '0 var(--ph-space-2, 8px)',
+            borderRadius: 'var(--ph-radius-s, 6px)',
+            border: `var(--ph-stroke-thin, 1px) solid ${
+              showAdvanced
+                ? 'var(--ph-color-accent, #C77B21)'
+                : 'var(--ph-color-border, #D8D2C6)'
+            }`,
+            background: showAdvanced
+              ? 'color-mix(in srgb, var(--ph-color-accent, #C77B21) 12%, transparent)'
+              : 'transparent',
+            color: showAdvanced
+              ? 'var(--ph-color-accent, #C77B21)'
+              : 'var(--ph-color-ink-muted, #5A5F66)',
             cursor: 'pointer',
-            fontSize: 11,
+            fontSize: 'var(--ph-type-micro-size, 10.5px)',
+            fontWeight: 600,
+            letterSpacing: '0.05em',
+            textTransform: 'uppercase',
+            flexShrink: 0,
+          }}
+        >
+          Експертні
+          <span
+            aria-hidden
+            style={{
+              width: 8,
+              height: 8,
+              borderRadius: 'var(--ph-radius-pill, 999px)',
+              background: showAdvanced
+                ? 'var(--ph-color-accent, #C77B21)'
+                : 'var(--ph-color-border, #D8D2C6)',
+            }}
+          />
+        </button>
+
+        <StatusPill status={status} />
+
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={dirtyKeys.length === 0 || status.kind === 'saving'}
+          style={{
+            minHeight: controlMin,
+            padding: '0 var(--ph-space-3, 12px)',
+            borderRadius: 'var(--ph-radius-s, 6px)',
+            border: 'none',
+            background:
+              dirtyKeys.length > 0
+                ? 'var(--ph-color-accent, #C77B21)'
+                : 'var(--ph-color-glass, rgba(0,0,0,0.05))',
+            color:
+              dirtyKeys.length > 0
+                ? 'var(--ph-color-surface, #fff)'
+                : 'var(--ph-color-ink-faint, #9A958B)',
+            cursor: dirtyKeys.length > 0 ? 'pointer' : 'default',
+            fontSize: 'var(--ph-type-caption-size, 12.5px)',
             fontWeight: 600,
             display: 'inline-flex',
             alignItems: 'center',
             gap: 6,
-            justifyContent: 'center',
-            color: 'var(--ink-secondary)',
+            flexShrink: 0,
           }}
         >
-          <ArrowLeft size={12} strokeWidth={1.75} />
-          Назад на головну
-        </button>
-      </aside>
-
-      {/* === MAIN PANE === */}
-      <div
-        style={{
-          position: 'absolute',
-          left: 284,
-          right: 12,
-          top: 12,
-          bottom: 76,
-          display: 'flex',
-          flexDirection: 'column',
-          zIndex: 2,
-          gap: 10,
-        }}
-      >
-        {/* Compact section header — replaces the old breadcrumb +
-            ~80px Hero glass row. Surfaces section identity, score
-            chip, status pill, Reset, Save in a single ~40px strip so
-            the settings list gets the screen real-estate it deserves
-            on a 600px-tall display. */}
-        <div
-          style={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            padding: '2px 4px 0',
-          }}
-        >
-          <span
-            aria-hidden
-            style={{
-              width: 22,
-              height: 22,
-              borderRadius: 7,
-              display: 'inline-flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              background: 'linear-gradient(135deg,#f4af25,#fb923c)',
-              color: 'white',
-              fontSize: 12,
-              fontWeight: 700,
-              boxShadow: '0 2px 6px rgba(244,175,37,0.30)',
-              flexShrink: 0,
-            }}
-          >
-            {activeCategory?.icon ?? '⚙'}
-          </span>
-          <span
-            style={{
-              fontSize: 14,
-              fontWeight: 600,
-              letterSpacing: '-0.01em',
-              color: 'var(--ink-primary)',
-              overflow: 'hidden',
-              textOverflow: 'ellipsis',
-              whiteSpace: 'nowrap',
-              maxWidth: 280,
-            }}
-          >
-            {activeCategory?.label ?? '—'}
-          </span>
-          <span
-            className="tabular"
-            title={`Змінено ${overallProgress.configured} з ${overallProgress.total} налаштувань`}
-            style={{
-              fontSize: 9,
-              fontWeight: 700,
-              padding: '2px 7px',
-              borderRadius: 999,
-              background: 'rgba(34,197,94,0.16)',
-              color: '#16a34a',
-              letterSpacing: '0.04em',
-            }}
-          >
-            {Math.round(overallProgress.ratio * 100)}/100
-          </span>
-          <span style={{ flex: 1 }} />
-          <StatusPill status={status} />
-          <button
-            type="button"
-            onClick={handleReset}
-            style={{
-              minHeight: 44,
-              padding: '6px 12px',
-              borderRadius: 999,
-              background: 'transparent',
-              border: '1.5px solid rgba(0,0,0,0.12)',
-              fontSize: 11,
-              fontWeight: 600,
-              cursor: 'pointer',
-              color: 'var(--ink-secondary)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-            }}
-            title="Повернути розділ до типових значень"
-          >
-            <RotateCcw size={12} strokeWidth={1.75} />
-            Скинути
-          </button>
-          <button
-            type="button"
-            onClick={handleSave}
-            disabled={
-              dirtyInCategory.length === 0 || status.kind === 'saving'
-            }
-            style={{
-              minHeight: 44,
-              padding: '6px 14px',
-              borderRadius: 999,
-              background:
-                dirtyInCategory.length > 0
-                  ? 'linear-gradient(135deg,#f4af25,#fb923c)'
-                  : 'rgba(0,0,0,0.04)',
-              border: 'none',
-              cursor: dirtyInCategory.length > 0 ? 'pointer' : 'default',
-              color:
-                dirtyInCategory.length > 0
-                  ? 'white'
-                  : 'var(--ink-muted)',
-              fontSize: 11,
-              fontWeight: 700,
-              letterSpacing: '0.06em',
-              textTransform: 'uppercase',
-              opacity: dirtyInCategory.length > 0 ? 1 : 0.6,
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 6,
-              boxShadow:
-                dirtyInCategory.length > 0
-                  ? '0 4px 14px rgba(244,175,37,0.40)'
-                  : 'none',
-            }}
-          >
-            {status.kind === 'saving' ? (
-              <Loader2
-                size={14}
-                strokeWidth={1.75}
-                className="animate-spin"
-              />
-            ) : (
-              <Save size={14} strokeWidth={1.75} />
-            )}
-            ЗБЕРЕГТИ
-            {dirtyInCategory.length > 0 && (
-              <span
-                style={{
-                  background: 'rgba(255,255,255,0.30)',
-                  padding: '1px 6px',
-                  borderRadius: 999,
-                  fontSize: 9,
-                }}
-              >
-                {dirtyInCategory.length}
-              </span>
-            )}
-          </button>
-        </div>
-
-        {/* Settings list (scrollable inside main only). Padding tightened
-            from 14 → 10 and the redundant KEY/eyebrow row removed — the
-            section title is now in the compact header above and the dirty
-            count is already on the SAVE button, so duplicating them here
-            was pure visual weight. */}
-        <div
-          className="glass"
-          style={{
-            padding: 8,
-            flex: 1,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: 6,
-            overflow: 'hidden',
-            minHeight: 0,
-          }}
-        >
-          {/* Phase 22 — sticky search + Advanced gate. Search filters by
-              label / description / key substring across the active
-              category; the toggle persists in localStorage. */}
-          <SettingsFilterBar
-            query={query}
-            onQuery={setQuery}
-            showAdvanced={showAdvanced}
-            onShowAdvanced={setShowAdvanced}
-          />
-
-          <div
-            style={{
-              flex: 1,
-              overflowY: 'auto',
-              minHeight: 0,
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 8,
-              paddingRight: 4,
-            }}
-          >
-            {!loaded && status.kind === 'loading' && (
-              <div
-                style={{
-                  flex: 1,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  gap: 10,
-                }}
-              >
-                <Loader2
-                  size={20}
-                  strokeWidth={1.5}
-                  className="animate-spin"
-                  style={{ color: 'var(--accent)' }}
-                />
-                <span className="micro-label">Завантаження…</span>
-              </div>
-            )}
-
-            {status.kind === 'error' && (
-              <div
-                style={{
-                  padding: '8px 12px',
-                  borderRadius: 10,
-                  background:
-                    'color-mix(in srgb, var(--signal-alert) 10%, transparent)',
-                  border:
-                    '1px solid color-mix(in srgb, var(--signal-alert) 40%, transparent)',
-                  color: 'var(--signal-alert)',
-                  fontFamily: 'var(--font-display)',
-                  fontSize: 12,
-                }}
-              >
-                {status.msg}
-              </div>
-            )}
-
-            {/* Theme picker tiles in the Theme group ────────────────── */}
-            {loaded && activeCategory && activeCategory.id === 'theme' && (
-              <>
-                <ThemePicker values={values} />
-                <LanguagePicker />
-              </>
-            )}
-
-            {loaded && activeCategory && activeCategory.id === 'about' && (
-              <>
-                <AboutSection />
-                <div style={{ marginTop: 24 }}>
-                  <BackupRestoreCard />
-                </div>
-              </>
-            )}
-
-            {/* Phase 19 — Mobile Companion virtual category. Fully bespoke
-                pane: QR generator, countdown ring, live paired-devices list.
-                Bypasses the regular settings/accordion flow because there
-                are no settings keys to render here. */}
-            {loaded && activeCategory && activeCategory.id === 'mobile' && (
-              <MobilePairing />
-            )}
-
-            {/* Phase 25-E — Personal Vault. Bespoke pane (cards grid +
-                per-kind editor + reveal flow). Bypasses the regular
-                settings/accordion flow because there are no settings
-                keys to render. */}
-            {loaded && activeCategory && activeCategory.id === 'vault' && (
-              <VaultPanel />
-            )}
-
-            {/* Desktop Shell status and native features */}
-            {loaded && activeCategory && activeCategory.id === 'desktop' && (
-              <DesktopShellGroup />
-            )}
-
-            {/* ПОЛІС — encrypted multi-key vault, fully UI-operated. */}
-            {loaded && activeCategory && activeCategory.id === 'polis_keys' && (
-              <KeyVaultPanel />
-            )}
-
-            {/* Licensing — status, activation, revalidate, deactivate. */}
-            {loaded && activeCategory && activeCategory.id === 'license' && (
-              <LicenseGroup />
-            )}
-
-            {loaded && activeCategory && activeCategory.id === 'api_keys' && (
-              <ApiKeysTab />
-            )}
-
-            {loaded && activeCategory && activeCategory.id === 'members' && (
-              <MembersTab />
-            )}
-
-            {loaded &&
-              activeCategory &&
-              activeCategory.id !== 'about' &&
-              activeCategory.id !== 'mobile' &&
-              activeCategory.id !== 'vault' &&
-              activeCategory.id !== 'desktop' &&
-              activeCategory.id !== 'polis_keys' &&
-              activeCategory.id !== 'license' &&
-              activeCategory.id !== 'api_keys' &&
-              activeCategory.id !== 'members' && (
-              <>
-                {activeCategory.id === 'ai' && <AIProviderDiagnostics />}
-                {activeCategory.id === 'voice' && <NPUDiagnostics />}
-                {activeCategory.id === 'agent' && (
-                  <>
-                    <AgentLimitsGroup values={values} onChange={setValue} />
-                    <AgentLayoutGroup values={values} onChange={setValue} />
-                  </>
-                )}
-                {(activeCategory.id === 'profile' ||
-                  activeCategory.id === 'personality') && (
-                  <>
-                    <FamiliarControlSection />
-                    <ProfileManagementSection />
-                  </>
-                )}
-                {activeCategory.settings.length === 0 && (
-                  <div
-                    className="playfair"
-                    style={{
-                      fontSize: 13,
-                      color: 'var(--ink-muted)',
-                      fontStyle: 'italic',
-                    }}
-                  >
-                    No settings yet for this category.
-                  </div>
-                )}
-                {(() => {
-                  const q = query.trim().toLowerCase();
-                  const visible = (activeCategory.settings || []).filter((def: any) => {
-                    if (def.key === 'voice_always_on_enabled') return false;
-                    // `ui_language` is registered on the backend so it
-                    // round-trips through GET /settings and bootstrap can
-                    // apply it — but LanguagePicker owns the control, and a
-                    // generic enum row would write the key without the
-                    // instant <html lang> flip.
-                    if (def.key === LANGUAGE_SETTING_KEY) return false;
-                    // Phase 22 — gate advanced rows behind the toggle. Search
-                    // overrides the gate: if the operator types into the
-                    // search box, surface every match regardless of tier.
-                    if (def.tier === 'advanced' && !showAdvanced && !q) {
-                      return false;
-                    }
-                    if (q) {
-                      const haystack = `${def.label} ${def.description} ${def.key}`.toLowerCase();
-                      if (!haystack.includes(q)) return false;
-                    }
-                    return true;
-                  });
-                  const groups = groupByInferredSubgroup(
-                    activeCategory.id,
-                    visible
-                  );
-                  const stateForCategory =
-                    accordionState[activeCategory.id] ??
-                    (() => {
-                      const stored = readAccordionState(activeCategory.id);
-                      if (stored) return stored;
-                      const seed: Record<string, boolean> = {};
-                      groups.forEach((g, idx) => {
-                        seed[g.bucket.id] = idx === 0;
-                      });
-                      return seed;
-                    })();
-                  if (groups.length <= 1) {
-                    return groups[0]?.items.map((def: any) => (
-                      <SettingRow
-                        key={def.key}
-                        def={def}
-                        value={values[def.key]}
-                        dirty={dirty.has(def.key)}
-                        onChange={(v) => setValue(def.key, v)}
-                      />
-                    ));
-                  }
-                  return groups.map((g) => {
-                    const open = stateForCategory[g.bucket.id] ?? false;
-                    const dirtyCount = g.items.filter((d: any) =>
-                      dirty.has(d.key)
-                    ).length;
-                    return (
-                      <SettingsAccordion
-                        key={g.bucket.id}
-                        id={g.bucket.id}
-                        label={g.bucket.label}
-                        count={g.items.length}
-                        dirtyCount={dirtyCount}
-                        open={open}
-                        onToggle={() => {
-                          const nextForCategory = {
-                            ...stateForCategory,
-                            [g.bucket.id]: !open,
-                          };
-                          setAccordionState((curr) => ({
-                            ...curr,
-                            [activeCategory.id]: nextForCategory,
-                          }));
-                          writeAccordionState(
-                            activeCategory.id,
-                            nextForCategory
-                          );
-                        }}
-                      >
-                        {g.items.map((def: any) => (
-                          <SettingRow
-                            key={def.key}
-                            def={def}
-                            value={values[def.key]}
-                            dirty={dirty.has(def.key)}
-                            onChange={(v) => setValue(def.key, v)}
-                          />
-                        ))}
-                      </SettingsAccordion>
-                    );
-                  });
-                })()}
-              </>
-            )}
-          </div>
-
-          {/* Diff strip — sticky to the bottom of the glass */}
-          {diffSummary && (
-            <div
+          {status.kind === 'saving' ? (
+            <Loader2 size={13} strokeWidth={1.75} className="animate-spin" />
+          ) : (
+            <Save size={13} strokeWidth={1.75} />
+          )}
+          Зберегти
+          {dirtyKeys.length > 0 && (
+            <span
+              className="tabular-nums"
               style={{
-                marginTop: 'auto',
-                display: 'flex',
-                alignItems: 'center',
-                gap: 10,
-                padding: '8px 10px',
-                borderRadius: 10,
-                background: 'rgba(244,175,37,0.08)',
-                border: '1px dashed rgba(244,175,37,0.32)',
+                fontSize: 'var(--ph-type-micro-size, 10.5px)',
+                padding: '0 5px',
+                borderRadius: 'var(--ph-radius-pill, 999px)',
+                background: 'color-mix(in srgb, var(--ph-color-surface, #fff) 30%, transparent)',
               }}
             >
-              <GitCompareArrows
-                size={14}
-                strokeWidth={1.75}
-                style={{ color: '#b07a10' }}
+              {dirtyKeys.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {/* ── Тіло: навігація + вміст, від контейнера ─────────────────── */}
+      <div
+        style={{
+          flex: 1,
+          minHeight: 0,
+          minWidth: 0,
+          display: 'flex',
+          flexDirection: narrow ? 'column' : 'row',
+        }}
+      >
+        {!searching && (
+          <SectionNav
+            narrow={narrow}
+            rowH={navRowH}
+            allCategories={allCategories}
+            activeCategoryId={activeCategoryId}
+            activeSectionId={activeSection.id}
+            onPick={setActiveCategoryId}
+          />
+        )}
+
+        {/* Вміст (скрол лише тут) */}
+        <div
+          style={{
+            flex: 1,
+            minHeight: 0,
+            minWidth: 0,
+            overflowY: 'auto',
+            padding: 'var(--ph-space-3, 12px)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 'var(--ph-space-2, 8px)',
+          }}
+        >
+          {!loaded && status.kind === 'loading' && (
+            <div
+              style={{
+                flex: 1,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 10,
+                color: 'var(--ph-color-ink-muted, #5A5F66)',
+              }}
+            >
+              <Loader2
+                size={20}
+                strokeWidth={1.5}
+                className="animate-spin"
+                style={{ color: 'var(--ph-color-accent, #C77B21)' }}
               />
-              <span className="micro-label" style={{ color: '#b07a10' }}>
-                {diffSummary.count} PENDING CHANGES
-              </span>
-              <span style={{ flex: 1 }} />
-              <span
-                className="mono"
-                style={{
-                  fontSize: 10,
-                  color: 'var(--ink-secondary)',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                  whiteSpace: 'nowrap',
-                  maxWidth: 420,
-                }}
-                title={diffSummary.caption}
-              >
-                {diffSummary.caption}
+              <span style={{ fontSize: 'var(--ph-type-caption-size, 12.5px)' }}>
+                Завантаження…
               </span>
             </div>
+          )}
+
+          {status.kind === 'error' && (
+            <div
+              style={{
+                padding: '8px 12px',
+                borderRadius: 'var(--ph-radius-m, 10px)',
+                background:
+                  'color-mix(in srgb, var(--ph-color-alert, #D93B26) 10%, transparent)',
+                border:
+                  'var(--ph-stroke-thin, 1px) solid color-mix(in srgb, var(--ph-color-alert, #D93B26) 40%, transparent)',
+                color: 'var(--ph-color-alert, #D93B26)',
+                fontSize: 'var(--ph-type-caption-size, 12.5px)',
+              }}
+            >
+              {status.msg}
+            </div>
+          )}
+
+          {loaded && searching && (
+            <SearchResults
+              hits={searchHits}
+              query={query}
+              values={values}
+              dirty={dirty}
+              onChange={setValue}
+              onJump={jumpToCategory}
+            />
+          )}
+
+          {loaded && !searching && activeCategory && (
+            <>
+              {/* Крихта місця: розділ › підрозділ — словами. */}
+              <div
+                style={{
+                  fontSize: 'var(--ph-type-micro-size, 10.5px)',
+                  fontWeight: 500,
+                  letterSpacing: '0.05em',
+                  textTransform: 'uppercase',
+                  color: 'var(--ph-color-ink-faint, #9A958B)',
+                }}
+              >
+                {activeSection.label} › {activeCategory.label}
+              </div>
+
+              <CategoryContent
+                category={activeCategory}
+                allCategories={allCategories}
+                values={values}
+                dirty={dirty}
+                query={query}
+                showAdvanced={showAdvanced}
+                accordionState={accordionState}
+                setAccordionState={setAccordionState}
+                onChange={setValue}
+                onAfterReset={reload}
+              />
+            </>
           )}
         </div>
       </div>
@@ -882,164 +548,489 @@ export default function SettingsPanel() {
   );
 }
 
-/* ─── Phase 22 — sticky filter bar ────────────────────────────────────
+/* ─── Навігація розділів ────────────────────────────────────────────────
  *
- * Surfaces two IA controls above the active category's settings list:
- *
- *   • Search — substring match against label, description and key
- *     (operator-friendly: types "ollama" and lands on the model + host
- *     fields no matter which category they live in).
- *   • Показати розширені — gates `tier: 'advanced'` rows behind a
- *     toggle that persists in localStorage. Search overrides the gate
- *     so an operator searching for an advanced-tier knob always finds
- *     it.
+ * Широкий пейн: ліва колонка, розділи словами, підрозділи активного
+ * розділу — під ним (акордеон навігації). Вузька плитка: два ряди
+ * горизонтальних чипів (розділи / підрозділи активного розділу).
  */
-function SettingsFilterBar({
-  query,
-  onQuery,
-  showAdvanced,
-  onShowAdvanced,
+function SectionNav({
+  narrow,
+  rowH,
+  allCategories,
+  activeCategoryId,
+  activeSectionId,
+  onPick,
 }: {
-  query: string;
-  onQuery: (v: string) => void;
-  showAdvanced: boolean;
-  onShowAdvanced: (v: boolean) => void;
+  narrow: boolean;
+  rowH: number;
+  allCategories: SettingsCategory[];
+  activeCategoryId: string;
+  activeSectionId: string;
+  onPick: (categoryId: string) => void;
 }) {
-  // Phase 22-G — was 44px tall (8/10 padding + 28px toggle), with the
-  // "Розширені" label always visible eating ~70px horizontal even when
-  // off. Now ~26px tall (3/8 padding), divider gone, toggle label is
-  // shown only when ON (the switch position is the affordance when off,
-  // and the wrapping <label> still carries the title= for tooltips).
+  const sectionsWithCats = useMemo(
+    () =>
+      SETTINGS_SECTIONS.map((section) => ({
+        section,
+        cats: categoriesForSection(section, allCategories),
+      })).filter(({ cats }) => cats.length > 0),
+    [allCategories]
+  );
+
+  if (narrow) {
+    const active = sectionsWithCats.find(
+      ({ section }) => section.id === activeSectionId
+    );
+    return (
+      <nav
+        aria-label="Розділи налаштувань"
+        style={{
+          flexShrink: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 4,
+          padding: 'var(--ph-space-2, 8px) var(--ph-space-3, 12px) 4px',
+          borderBottom:
+            'var(--ph-stroke-thin, 1px) solid var(--ph-color-border, #D8D2C6)',
+        }}
+      >
+        <div style={{ display: 'flex', gap: 4, overflowX: 'auto' }}>
+          {sectionsWithCats.map(({ section, cats }) => (
+            <NavChip
+              key={section.id}
+              label={section.label}
+              active={section.id === activeSectionId}
+              rowH={rowH}
+              onClick={() => onPick(cats[0].id)}
+            />
+          ))}
+        </div>
+        {active && active.cats.length > 1 && (
+          <div style={{ display: 'flex', gap: 4, overflowX: 'auto' }}>
+            {active.cats.map((cat) => (
+              <NavChip
+                key={cat.id}
+                label={cat.label}
+                active={cat.id === activeCategoryId}
+                subtle
+                rowH={rowH}
+                onClick={() => onPick(cat.id)}
+              />
+            ))}
+          </div>
+        )}
+      </nav>
+    );
+  }
+
   return (
-    <div
+    <nav
+      aria-label="Розділи налаштувань"
       style={{
+        width: 208,
+        flexShrink: 0,
+        overflowY: 'auto',
+        padding: 'var(--ph-space-2, 8px)',
+        borderRight:
+          'var(--ph-stroke-thin, 1px) solid var(--ph-color-border, #D8D2C6)',
         display: 'flex',
-        alignItems: 'center',
-        gap: 8,
-        padding: '3px 8px',
-        background: 'rgba(255,250,244,0.62)',
-        border: '1px solid rgba(40,30,15,0.10)',
-        borderRadius: 10,
-        boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.45)',
+        flexDirection: 'column',
+        gap: 2,
       }}
     >
-      <Search
-        size={13}
-        strokeWidth={1.75}
-        style={{ color: 'var(--ink-muted)', flexShrink: 0 }}
-      />
-      <input
-        type="search"
-        value={query}
-        onChange={(e) => onQuery(e.currentTarget.value)}
-        placeholder="Пошук по налаштуваннях…"
-        aria-label="Пошук по налаштуваннях"
-        style={{
-          flex: 1,
-          minWidth: 0,
-          background: 'transparent',
-          border: 'none',
-          outline: 'none',
-          color: 'var(--ink-primary)',
-          fontFamily: 'var(--font-display)',
-          fontSize: 12,
-          letterSpacing: '0.01em',
-        }}
-      />
-      {query && (
-        <button
-          type="button"
-          onClick={() => onQuery('')}
-          aria-label="Очистити пошук"
-          style={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            width: 20,
-            height: 20,
-            borderRadius: 999,
-            border: 'none',
-            background: 'rgba(40,30,15,0.06)',
-            color: 'var(--ink-muted)',
-            cursor: 'pointer',
-            flexShrink: 0,
-          }}
-        >
-          <XIcon size={11} strokeWidth={1.75} />
-        </button>
-      )}
-      <label
-        style={{
-          display: 'inline-flex',
-          alignItems: 'center',
-          gap: 6,
-          cursor: 'pointer',
-          userSelect: 'none',
-        }}
-        title="Розширені (експертне налаштування)"
-        aria-label="Показати розширені налаштування"
-      >
-        {showAdvanced && (
-          <span
-            style={{
-              fontSize: 10,
-              fontWeight: 700,
-              letterSpacing: '0.06em',
-              textTransform: 'uppercase',
-              color: '#8a5e0a',
-              fontFamily: 'var(--font-display)',
-            }}
-          >
-            Розшир.
-          </span>
-        )}
-        <span
-          role="switch"
-          aria-checked={showAdvanced}
-          tabIndex={0}
-          onClick={() => onShowAdvanced(!showAdvanced)}
-          onKeyDown={(e) => {
-            if (e.key === ' ' || e.key === 'Enter') {
-              e.preventDefault();
-              onShowAdvanced(!showAdvanced);
-            }
-          }}
-          style={{
-            position: 'relative',
-            display: 'inline-block',
-            width: 30,
-            height: 16,
-            borderRadius: 999,
-            background: showAdvanced
-              ? 'linear-gradient(135deg, rgba(244,175,37,0.85), rgba(251,146,60,0.85))'
-              : 'rgba(40,30,15,0.18)',
-            transition: 'background 200ms ease',
-            cursor: 'pointer',
-            flexShrink: 0,
-          }}
-        >
-          <span
-            aria-hidden
-            style={{
-              position: 'absolute',
-              top: 2,
-              left: showAdvanced ? 16 : 2,
-              width: 12,
-              height: 12,
-              borderRadius: 999,
-              background: 'white',
-              boxShadow: '0 2px 6px rgba(40,30,15,0.20)',
-              transition: 'left 200ms ease',
-            }}
-          />
-        </span>
-      </label>
-    </div>
+      {sectionsWithCats.map(({ section, cats }) => {
+        const open = section.id === activeSectionId;
+        return (
+          <div key={section.id} style={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+            <button
+              type="button"
+              onClick={() => onPick(cats[0].id)}
+              aria-expanded={open}
+              title={section.blurb}
+              style={{
+                minHeight: rowH,
+                display: 'flex',
+                alignItems: 'center',
+                padding: '0 var(--ph-space-2, 8px)',
+                borderRadius: 'var(--ph-radius-s, 6px)',
+                border: 'none',
+                background: 'transparent',
+                color: open
+                  ? 'var(--ph-color-ink, #1C1F23)'
+                  : 'var(--ph-color-ink-muted, #5A5F66)',
+                cursor: 'pointer',
+                fontSize: 'var(--ph-type-micro-size, 10.5px)',
+                fontWeight: 600,
+                letterSpacing: '0.06em',
+                textTransform: 'uppercase',
+                textAlign: 'left',
+              }}
+            >
+              {section.label}
+            </button>
+            {open &&
+              cats.map((cat) => {
+                const active = cat.id === activeCategoryId;
+                const danger = cat.id === DANGER_CATEGORY_ID;
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    onClick={() => onPick(cat.id)}
+                    aria-current={active ? 'true' : undefined}
+                    style={{
+                      minHeight: rowH,
+                      display: 'flex',
+                      alignItems: 'center',
+                      padding: '0 var(--ph-space-2, 8px) 0 var(--ph-space-4, 16px)',
+                      borderRadius: 'var(--ph-radius-s, 6px)',
+                      border: 'none',
+                      background: active
+                        ? 'color-mix(in srgb, var(--ph-color-accent, #C77B21) 14%, transparent)'
+                        : 'transparent',
+                      color: danger
+                        ? 'var(--ph-color-danger, #C7373D)'
+                        : active
+                          ? 'var(--ph-color-ink, #1C1F23)'
+                          : 'var(--ph-color-ink-muted, #5A5F66)',
+                      cursor: 'pointer',
+                      fontSize: 'var(--ph-type-caption-size, 12.5px)',
+                      fontWeight: active ? 600 : 400,
+                      textAlign: 'left',
+                    }}
+                  >
+                    <span
+                      style={{
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {cat.label}
+                    </span>
+                  </button>
+                );
+              })}
+          </div>
+        );
+      })}
+    </nav>
   );
 }
 
-/* ─── Setting row ────────────────────────────────────────────────────── */
+function NavChip({
+  label,
+  active,
+  subtle = false,
+  rowH,
+  onClick,
+}: {
+  label: string;
+  active: boolean;
+  subtle?: boolean;
+  rowH: number;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-current={active ? 'true' : undefined}
+      style={{
+        minHeight: Math.max(rowH, subtle ? 24 : 28),
+        padding: '0 var(--ph-space-3, 12px)',
+        borderRadius: 'var(--ph-radius-pill, 999px)',
+        border: `var(--ph-stroke-thin, 1px) solid ${
+          active ? 'var(--ph-color-accent, #C77B21)' : 'var(--ph-color-border, #D8D2C6)'
+        }`,
+        background: active
+          ? 'color-mix(in srgb, var(--ph-color-accent, #C77B21) 12%, transparent)'
+          : 'transparent',
+        color: active
+          ? 'var(--ph-color-ink, #1C1F23)'
+          : 'var(--ph-color-ink-muted, #5A5F66)',
+        cursor: 'pointer',
+        fontSize: subtle
+          ? 'var(--ph-type-micro-size, 10.5px)'
+          : 'var(--ph-type-caption-size, 12.5px)',
+        fontWeight: active ? 600 : 400,
+        whiteSpace: 'nowrap',
+        flexShrink: 0,
+      }}
+    >
+      {label}
+    </button>
+  );
+}
 
+/* ─── Результати глобального пошуку ────────────────────────────────────── */
+
+function SearchResults({
+  hits,
+  query,
+  values,
+  dirty,
+  onChange,
+  onJump,
+}: {
+  hits: SettingsSearchHit[];
+  query: string;
+  values: Record<string, unknown>;
+  dirty: Set<string>;
+  onChange: (key: string, v: unknown) => void;
+  onJump: (categoryId: string) => void;
+}) {
+  if (hits.length === 0) {
+    return (
+      <div
+        style={{
+          padding: 'var(--ph-space-4, 16px)',
+          color: 'var(--ph-color-ink-muted, #5A5F66)',
+          fontSize: 'var(--ph-type-caption-size, 12.5px)',
+        }}
+      >
+        Нічого не знайдено за «{query.trim()}». Пошук дивиться в назви,
+        пояснення і ключі всіх розділів.
+      </div>
+    );
+  }
+  return (
+    <>
+      <div
+        style={{
+          fontSize: 'var(--ph-type-micro-size, 10.5px)',
+          fontWeight: 500,
+          letterSpacing: '0.05em',
+          textTransform: 'uppercase',
+          color: 'var(--ph-color-ink-faint, #9A958B)',
+        }}
+      >
+        Знайдено: {hits.length}
+      </div>
+      {hits.map(({ def, category, section }) => (
+        <div key={def.key} style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <button
+            type="button"
+            onClick={() => onJump(category.id)}
+            title={`Відкрити ${section.label} › ${category.label}`}
+            style={{
+              alignSelf: 'flex-start',
+              border: 'none',
+              background: 'transparent',
+              padding: 0,
+              cursor: 'pointer',
+              fontSize: 'var(--ph-type-micro-size, 10.5px)',
+              color: 'var(--ph-color-accent, #C77B21)',
+            }}
+          >
+            {section.label} › {category.label}
+          </button>
+          {def.key in DEDICATED_CONTROL_KEYS ? (
+            /* Ключ із власним контролом: не редактор, а двері до нього. */
+            <button
+              type="button"
+              onClick={() => onJump(category.id)}
+              style={{
+                textAlign: 'left',
+                padding: 'var(--ph-space-2, 8px) var(--ph-space-3, 12px)',
+                borderRadius: 'var(--ph-radius-m, 10px)',
+                border:
+                  'var(--ph-stroke-thin, 1px) solid var(--ph-color-border, #D8D2C6)',
+                background: 'transparent',
+                color: 'var(--ph-color-ink, #1C1F23)',
+                cursor: 'pointer',
+                fontSize: 'var(--ph-type-caption-size, 12.5px)',
+              }}
+            >
+              {def.label} — налаштовується у «{category.label}»
+            </button>
+          ) : (
+            <SettingRow
+              def={def}
+              value={values[def.key]}
+              dirty={dirty.has(def.key)}
+              onChange={(v) => onChange(def.key, v)}
+            />
+          )}
+        </div>
+      ))}
+    </>
+  );
+}
+
+/* ─── Вміст підрозділу (категорії) ─────────────────────────────────────── */
+
+function CategoryContent({
+  category,
+  allCategories,
+  values,
+  dirty,
+  query,
+  showAdvanced,
+  accordionState,
+  setAccordionState,
+  onChange,
+  onAfterReset,
+}: {
+  category: SettingsCategory;
+  allCategories: SettingsCategory[];
+  values: Record<string, unknown>;
+  dirty: Set<string>;
+  query: string;
+  showAdvanced: boolean;
+  accordionState: Record<string, Record<string, boolean>>;
+  setAccordionState: React.Dispatch<
+    React.SetStateAction<Record<string, Record<string, boolean>>>
+  >;
+  onChange: (key: string, v: unknown) => void;
+  onAfterReset: () => Promise<unknown>;
+}) {
+  /* Bespoke-панелі підрозділів. */
+  if (category.id === DANGER_CATEGORY_ID) {
+    return (
+      <DangerZonePanel
+        categories={allCategories.filter((c) => c.settings.length > 0)}
+        onAfterReset={onAfterReset}
+      />
+    );
+  }
+  if (category.id === 'mobile') return <MobilePairing />;
+  if (category.id === 'vault') return <VaultPanel />;
+  if (category.id === 'desktop') return <DesktopShellGroup />;
+  if (category.id === 'polis_keys') return <KeyVaultPanel />;
+  if (category.id === 'license') return <LicenseGroup />;
+  if (category.id === 'api_keys') return <ApiKeysTab />;
+  if (category.id === 'members') return <MembersTab />;
+  if (category.id === 'about') {
+    return (
+      <>
+        <AboutSection />
+        <div style={{ marginTop: 'var(--ph-space-4, 16px)' }}>
+          <BackupRestoreCard />
+        </div>
+      </>
+    );
+  }
+
+  const visible = filterVisibleDefs(category.settings, { query, showAdvanced });
+  const groups = groupByInferredSubgroup(category.id, visible);
+  const stateForCategory =
+    accordionState[category.id] ??
+    (() => {
+      const stored = readAccordionState(category.id);
+      if (stored) return stored;
+      const seed: Record<string, boolean> = {};
+      groups.forEach((g, idx) => {
+        seed[g.bucket.id] = idx === 0;
+      });
+      return seed;
+    })();
+
+  const rows =
+    groups.length <= 1
+      ? groups[0]?.items.map((def) => (
+          <SettingRow
+            key={def.key}
+            def={def}
+            value={values[def.key]}
+            dirty={dirty.has(def.key)}
+            onChange={(v) => onChange(def.key, v)}
+          />
+        ))
+      : groups.map((g) => {
+          const open = stateForCategory[g.bucket.id] ?? false;
+          const dirtyCount = g.items.filter((d) => dirty.has(d.key)).length;
+          return (
+            <SettingsAccordion
+              key={g.bucket.id}
+              id={g.bucket.id}
+              label={g.bucket.label}
+              count={g.items.length}
+              dirtyCount={dirtyCount}
+              open={open}
+              onToggle={() => {
+                const nextForCategory = {
+                  ...stateForCategory,
+                  [g.bucket.id]: !open,
+                };
+                setAccordionState((curr) => ({
+                  ...curr,
+                  [category.id]: nextForCategory,
+                }));
+                writeAccordionState(category.id, nextForCategory);
+              }}
+            >
+              {g.items.map((def) => (
+                <SettingRow
+                  key={def.key}
+                  def={def}
+                  value={values[def.key]}
+                  dirty={dirty.has(def.key)}
+                  onChange={(v) => onChange(def.key, v)}
+                />
+              ))}
+            </SettingsAccordion>
+          );
+        });
+
+  return (
+    <>
+      {category.id === 'theme' && (
+        <>
+          <ThemePicker values={values} />
+          <LanguagePicker />
+        </>
+      )}
+      {category.id === 'ai' && <AIProviderDiagnostics />}
+      {category.id === 'voice' && <NPUDiagnostics />}
+      {category.id === 'agent' && (
+        <>
+          <AgentLimitsGroup values={values} onChange={onChange} />
+          <AgentLayoutGroup values={values} onChange={onChange} />
+        </>
+      )}
+      {(category.id === 'profile' || category.id === 'personality') && (
+        <>
+          <FamiliarControlSection />
+          <ProfileManagementSection />
+        </>
+      )}
+      {rows}
+      {visible.length === 0 && category.settings.length > 0 && (
+        <div
+          style={{
+            fontSize: 'var(--ph-type-caption-size, 12.5px)',
+            color: 'var(--ph-color-ink-muted, #5A5F66)',
+          }}
+        >
+          Усі значення цього підрозділу — експертні. Увімкни «Експертні»
+          в шапці, щоб їх побачити.
+        </div>
+      )}
+      {category.settings.length === 0 &&
+        category.id !== 'theme' &&
+        category.id !== 'profile' &&
+        category.id !== 'personality' && (
+          <div
+            style={{
+              fontSize: 'var(--ph-type-caption-size, 12.5px)',
+              color: 'var(--ph-color-ink-muted, #5A5F66)',
+              fontStyle: 'italic',
+            }}
+          >
+            У цьому підрозділі поки нема налаштувань.
+          </div>
+        )}
+    </>
+  );
+}
+
+/* ─── Рядок налаштування ────────────────────────────────────────────────
+ *
+ * Чесність рядка: назва + людське пояснення видимі завжди (не тільки
+ * в title). «Ще не діє» і «потребує перезапуску» — словом, не кольором.
+ */
 function SettingRow({
   def,
   value,
@@ -1051,129 +1042,117 @@ function SettingRow({
   dirty: boolean;
   onChange: (v: unknown) => void;
 }) {
-  // Phase 22-F — density pass. Was: 52px minHeight + 10/12 padding +
-  // 3-row stack (label / mono key / description). With 50+ rows on
-  // a 600px-tall display that ate the whole viewport. Now: 36px
-  // minHeight + 5/10 padding + single-row label + mono key inlined
-  // right before control + description on hover/title only. Saves
-  // ~16px per row × ~50 rows = ~800px of recovered scroll surface.
+  const description = resolveDescription(def);
   return (
     <div
+      data-testid={`setting-row-${def.key}`}
+      title={def.key}
       style={{
-        position: 'relative',
-        padding: '5px 10px',
-        borderRadius: 10,
-        background: 'rgba(255,255,255,0.50)',
-        border: dirty
-          ? '1px solid rgba(244,175,37,0.40)'
-          : '1px solid rgba(255,255,255,0.50)',
+        padding: 'var(--ph-space-2, 8px) var(--ph-space-3, 12px)',
+        borderRadius: 'var(--ph-radius-m, 10px)',
+        background: 'var(--ph-color-surface-raised, #fff)',
+        border: `var(--ph-stroke-thin, 1px) solid ${
+          dirty
+            ? 'color-mix(in srgb, var(--ph-color-accent, #C77B21) 45%, transparent)'
+            : 'var(--ph-color-border, #D8D2C6)'
+        }`,
         display: 'flex',
         alignItems: 'center',
-        gap: 10,
-        minHeight: 36,
+        gap: 'var(--ph-space-3, 12px)',
+        minHeight: 'var(--set-control-min, 36px)',
       }}
-      title={def.description || undefined}
     >
-      <Tune
-        size={14}
-        strokeWidth={1.75}
-        style={{ color: '#b07a10', flexShrink: 0 }}
-      />
       <div
         style={{
           flex: 1,
           minWidth: 0,
           display: 'flex',
-          alignItems: 'center',
-          gap: 8,
+          flexDirection: 'column',
+          gap: 2,
         }}
       >
-        <span
-          style={{
-            fontSize: 13,
-            fontWeight: 600,
-            color: 'var(--ink-primary)',
-            overflow: 'hidden',
-            textOverflow: 'ellipsis',
-            whiteSpace: 'nowrap',
-            flexShrink: 1,
-          }}
-        >
-          {def.label}
-        </span>
-        {/* Phase 22 — replaces the legacy " [soon]" label suffix the
-            backend used to bake in. */}
-        {def.unimplemented && (
-          <span
-            title="Підсистема ще не запущена — значення зберігається, але ефекту нема"
-            style={{
-              fontSize: 8,
-              padding: '1px 5px',
-              borderRadius: 4,
-              background: 'rgba(122,140,170,0.20)',
-              color: '#3e4a63',
-              fontWeight: 700,
-              letterSpacing: '0.10em',
-              flexShrink: 0,
-            }}
-          >
-            СКОРО
-          </span>
-        )}
-        {dirty && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 8, minWidth: 0 }}>
           <span
             style={{
-              fontSize: 8,
-              padding: '1px 5px',
-              borderRadius: 4,
-              background: 'rgba(244,175,37,0.22)',
-              color: '#8a5e0a',
-              fontWeight: 700,
-              letterSpacing: '0.10em',
-              flexShrink: 0,
-            }}
-          >
-            ЗМІНЕНО
-          </span>
-        )}
-        {/* Показуємо пояснення, а не системний ключ: system_hostname
-            нічого не каже тому, хто просто налаштовує пристрій. Ключ
-            лишається в title і в пошуку. */}
-        {def.description && (
-          <span
-            style={{
-              fontSize: 10,
-              color: 'var(--ink-muted)',
-              marginLeft: 'auto',
-              paddingLeft: 12,
+              fontSize: 'var(--ph-type-caption-size, 12.5px)',
+              fontWeight: 600,
+              color: 'var(--ph-color-ink, #1C1F23)',
               overflow: 'hidden',
               textOverflow: 'ellipsis',
               whiteSpace: 'nowrap',
-              flexShrink: 1,
-              minWidth: 0,
             }}
           >
-            {def.description}
+            {def.label}
+          </span>
+          {def.unimplemented && (
+            <span
+              title="Підсистема ще не запущена — значення збережеться, ефекту поки нема"
+              style={{
+                fontSize: 'var(--ph-type-micro-size, 10.5px)',
+                padding: '0 5px',
+                borderRadius: 'var(--ph-radius-s, 6px)',
+                background:
+                  'color-mix(in srgb, var(--ph-color-info, #2270C4) 14%, transparent)',
+                color: 'var(--ph-color-info, #2270C4)',
+                fontWeight: 600,
+                flexShrink: 0,
+              }}
+            >
+              ще не діє
+            </span>
+          )}
+          {dirty && (
+            <span
+              style={{
+                fontSize: 'var(--ph-type-micro-size, 10.5px)',
+                padding: '0 5px',
+                borderRadius: 'var(--ph-radius-s, 6px)',
+                background:
+                  'color-mix(in srgb, var(--ph-color-accent, #C77B21) 16%, transparent)',
+                color: 'var(--ph-color-accent-warm, #A8541C)',
+                fontWeight: 600,
+                flexShrink: 0,
+              }}
+            >
+              змінено
+            </span>
+          )}
+        </div>
+        {(description || def.requires_restart) && (
+          <span
+            style={{
+              fontSize: 'var(--ph-type-micro-size, 10.5px)',
+              lineHeight: 1.35,
+              color: 'var(--ph-color-ink-muted, #5A5F66)',
+              display: '-webkit-box',
+              WebkitLineClamp: 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+            }}
+            title={description}
+          >
+            {description}
+            {def.requires_restart && (
+              <span style={{ color: 'var(--ph-color-accent-warm, #A8541C)' }}>
+                {description ? ' ' : ''}Потребує перезапуску.
+              </span>
+            )}
           </span>
         )}
       </div>
-      <div style={{ flexShrink: 0, minWidth: 180 }}>
+      <div style={{ flexShrink: 0, minWidth: 170, maxWidth: '45%' }}>
         <ValueEditor def={def} value={value} onChange={onChange} />
       </div>
     </div>
   );
 }
 
-/* ─── Value editor ───────────────────────────────────────────────────── */
+/* ─── Редактор значення ─────────────────────────────────────────────────── */
 
 /**
- * Phase 22 — custom editor registry. The backend stamps `editor: "Name"`
- * on `SettingDefinitionOut` for keys that warrant a bespoke widget
- * (auto-detect dropdown, chip input, host:port validator, …). The FE
- * looks the name up here and falls through to the generic
- * type-based editor when nothing matches. Keeping the registry FE-side
- * means the backend stays a thin metadata source — adding a new editor
- * is one map entry + one component, no schema migration needed.
+ * Реєстр кастомних редакторів: бекенд ставить `editor: "Name"` на
+ * ключі, що заслуговують окремого віджета; невідоме імʼя чесно падає
+ * в генеричний редактор за типом.
  */
 const KEY_EDITORS: Record<
   string,
@@ -1194,6 +1173,19 @@ const KEY_EDITORS: Record<
   ),
 };
 
+const FIELD_STYLE: React.CSSProperties = {
+  minHeight: 'var(--set-control-min, 36px)',
+  width: '100%',
+  padding: '0 var(--ph-space-3, 12px)',
+  borderRadius: 'var(--ph-radius-s, 6px)',
+  color: 'var(--ph-color-ink, #1C1F23)',
+  background: 'var(--ph-color-surface, #fff)',
+  border: 'var(--ph-stroke-thin, 1px) solid var(--ph-color-border, #D8D2C6)',
+  fontFamily: 'var(--ph-font-mono, monospace)',
+  fontSize: 'var(--ph-type-caption-size, 12.5px)',
+  outline: 'none',
+};
+
 function ValueEditor({
   def,
   value,
@@ -1203,10 +1195,6 @@ function ValueEditor({
   value: unknown;
   onChange: (v: unknown) => void;
 }) {
-  // Prefer the backend-declared editor when present + we have a
-  // matching component. Anything unknown falls through to the generic
-  // editors below — keeps FE forward-compatible if the backend ever
-  // ships an editor name we don't implement yet.
   if (def.editor && KEY_EDITORS[def.editor]) {
     const Editor = KEY_EDITORS[def.editor];
     return <Editor def={def} value={value} onChange={onChange} />;
@@ -1214,22 +1202,23 @@ function ValueEditor({
 
   if (def.type === 'boolean') {
     const on = !!value;
-    // 44×44 hit area is the transparent button; the visible pill is a
-    // compact 40×22 track so the switch reads as a switch, not a slab.
+    // Хіт-зона — прозора кнопка (44 на тачі через --set-control-min);
+    // видимий перемикач компактний, щоб читатись перемикачем.
     return (
       <button
         type="button"
         onClick={() => onChange(!on)}
         aria-pressed={on}
         style={{
-          minHeight: 44,
-          minWidth: 44,
+          minHeight: 'var(--set-control-min, 36px)',
+          minWidth: 'var(--set-control-min, 36px)',
           padding: 0,
           border: 'none',
           background: 'transparent',
           display: 'inline-flex',
           alignItems: 'center',
-          justifyContent: 'center',
+          justifyContent: 'flex-end',
+          width: '100%',
           cursor: 'pointer',
         }}
       >
@@ -1238,29 +1227,28 @@ function ValueEditor({
           style={{
             position: 'relative',
             display: 'inline-block',
-            width: 40,
-            height: 22,
-            borderRadius: 9999,
+            width: 36,
+            height: 20,
+            borderRadius: 'var(--ph-radius-pill, 999px)',
             background: on
-              ? 'linear-gradient(135deg,#f4af25,#fb923c)'
-              : 'rgba(0,0,0,0.12)',
-            boxShadow: on
-              ? '0 0 0 1px rgba(244,175,37,0.50), inset 0 0 8px rgba(255,255,255,0.30)'
-              : 'inset 0 0 0 1px rgba(0,0,0,0.06)',
-            transition: 'background 200ms ease',
+              ? 'var(--ph-color-accent, #C77B21)'
+              : 'var(--ph-color-border, #D8D2C6)',
+            transition:
+              'background var(--ph-motion-base, 200ms) var(--ph-ease-standard, ease)',
           }}
         >
           <span
             style={{
               position: 'absolute',
               top: 2,
-              left: on ? 20 : 2,
-              width: 18,
-              height: 18,
-              borderRadius: 9999,
-              background: 'white',
-              boxShadow: '0 1px 4px rgba(0,0,0,0.20)',
-              transition: 'left 200ms ease',
+              left: on ? 18 : 2,
+              width: 16,
+              height: 16,
+              borderRadius: 'var(--ph-radius-pill, 999px)',
+              background: 'var(--ph-color-surface, #fff)',
+              boxShadow: 'var(--ph-shadow-1, 0 1px 2px rgba(0,0,0,0.25))',
+              transition:
+                'left var(--ph-motion-base, 200ms) var(--ph-ease-standard, ease)',
             }}
           />
         </span>
@@ -1273,18 +1261,7 @@ function ValueEditor({
       <select
         value={String(value ?? '')}
         onChange={(e) => onChange(e.target.value)}
-        style={{
-          minHeight: 44,
-          width: '100%',
-          padding: '0 12px',
-          borderRadius: 10,
-          color: 'var(--ink-primary)',
-          background: 'rgba(255,255,255,0.60)',
-          border: '1px solid rgba(0,0,0,0.06)',
-          fontFamily: 'var(--font-display)',
-          fontSize: 13,
-          outline: 'none',
-        }}
+        style={{ ...FIELD_STYLE, fontFamily: 'var(--ph-font-ui, system-ui)' }}
       >
         {def.options.map((opt) => (
           <option key={opt.value} value={opt.value}>
@@ -1304,19 +1281,8 @@ function ValueEditor({
           const n = e.target.value === '' ? 0 : Number(e.target.value);
           onChange(Number.isFinite(n) ? n : 0);
         }}
-        className="tabular"
-        style={{
-          minHeight: 44,
-          width: '100%',
-          padding: '0 12px',
-          borderRadius: 10,
-          color: 'var(--ink-primary)',
-          background: 'rgba(255,255,255,0.60)',
-          border: '1px solid rgba(0,0,0,0.06)',
-          fontFamily: 'var(--font-mono)',
-          fontSize: 13,
-          outline: 'none',
-        }}
+        className="tabular-nums"
+        style={FIELD_STYLE}
       />
     );
   }
@@ -1328,18 +1294,7 @@ function ValueEditor({
         placeholder="••••••••"
         value={String(value ?? '')}
         onChange={(e) => onChange(e.target.value)}
-        style={{
-          minHeight: 44,
-          width: '100%',
-          padding: '0 12px',
-          borderRadius: 10,
-          color: 'var(--ink-primary)',
-          background: 'rgba(255,255,255,0.60)',
-          border: '1px solid rgba(0,0,0,0.06)',
-          fontFamily: 'var(--font-mono)',
-          fontSize: 13,
-          outline: 'none',
-        }}
+        style={FIELD_STYLE}
       />
     );
   }
@@ -1349,34 +1304,20 @@ function ValueEditor({
       type="text"
       value={String(value ?? '')}
       onChange={(e) => onChange(e.target.value)}
-      style={{
-        minHeight: 44,
-        width: '100%',
-        padding: '0 12px',
-        borderRadius: 10,
-        color: 'var(--ink-primary)',
-        background: 'rgba(255,255,255,0.60)',
-        border: '1px solid rgba(0,0,0,0.06)',
-        fontFamily: 'var(--font-mono)',
-        fontSize: 13,
-        outline: 'none',
-      }}
+      style={FIELD_STYLE}
     />
   );
 }
 
-/* ─── Theme picker tiles ─────────────────────────────────────────────── */
+/* ─── Плитки вибору теми ────────────────────────────────────────────────── */
 
 interface ThemePickerProps {
   values: Record<string, unknown>;
 }
 
 function ThemePicker({ values }: ThemePickerProps) {
-  // The canonical active-theme key is `ui_theme` (THEME_SETTING_KEY) — the
-  // one config.py registers, settingsBootstrap reads at first paint, and
-  // settingsStore.setTheme persists. (A stale `theme_active` key used to
-  // live here; it was never read back, so a picked theme silently reverted
-  // on reload.) Fall back to the live <html> attribute, then sunrise-warm.
+  // Канонічний ключ активної теми — `ui_theme` (THEME_SETTING_KEY):
+  // його реєструє config.py, читає bootstrap, персистить setTheme.
   const active: ThemeId =
     (values[THEME_SETTING_KEY] as ThemeId) ??
     ((document.documentElement.getAttribute('data-theme') as ThemeId) ||
@@ -1391,43 +1332,36 @@ function ThemePicker({ values }: ThemePickerProps) {
     {
       id: 'sunrise-warm',
       label: 'Sunrise',
-      swatch:
-        'linear-gradient(135deg,#fdf6e9 0%, #f4af25 50%, #fb923c 100%)',
+      // Свотчі — це дані про палітру теми, не хром: лишаються літералами.
+      swatch: 'linear-gradient(135deg,#fdf6e9 0%, #f4af25 50%, #fb923c 100%)',
       icon: <Sun size={14} strokeWidth={2} />,
     },
     {
       id: 'amber-night',
       label: 'Amber',
-      swatch:
-        'linear-gradient(135deg,#221c10 0%, #b07a10 60%, #f4af25 100%)',
+      swatch: 'linear-gradient(135deg,#221c10 0%, #b07a10 60%, #f4af25 100%)',
       icon: <Moon size={14} strokeWidth={2} />,
     },
     {
       id: 'cyberdeck-cold',
       label: 'Cyberdeck',
-      swatch:
-        'linear-gradient(135deg,#020617 0%, #0891b2 60%, #22d3ee 100%)',
+      swatch: 'linear-gradient(135deg,#020617 0%, #0891b2 60%, #22d3ee 100%)',
       icon: <Cog size={14} strokeWidth={2} />,
     },
   ];
 
   const handleSelect = (id: ThemeId) => {
-    // setTheme is the single source of truth: it applies to the <html>
-    // attribute instantly (operator sees it next frame), caches to
-    // localStorage for the pre-network first paint, and persists to the
-    // backend under `ui_theme` — the exact key bootstrap reads back. So the
-    // choice survives reload with no Save-click, no key drift.
+    // setTheme — єдине джерело правди: DOM одразу, localStorage для
+    // першого кадру, бекенд під `ui_theme`. Без окремого «Зберегти».
     void useSettingsStore.getState().setTheme(id);
   };
 
-  // Phase 22-G — tiles 60→44, swatch 36→26, padding 8/10→4/8.
-  // Was 180px for 3 tiles on a 348px scrollable list (~52%); now ~132px.
   return (
     <div
       style={{
         display: 'grid',
-        gridTemplateColumns: 'repeat(3, 1fr)',
-        gap: 8,
+        gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+        gap: 'var(--ph-space-2, 8px)',
       }}
     >
       {tiles.map((t) => {
@@ -1439,22 +1373,18 @@ function ThemePicker({ values }: ThemePickerProps) {
             onClick={() => handleSelect(t.id)}
             aria-pressed={selected}
             style={{
-              minHeight: 44,
-              padding: '4px 8px',
-              borderRadius: 10,
-              background: 'rgba(255,255,255,0.55)',
-              border: selected
-                ? '2px solid #f4af25'
-                : '1px solid rgba(255,255,255,0.55)',
-              boxShadow: selected
-                ? '0 4px 14px rgba(244,175,37,0.30)'
-                : 'var(--shadow-md)',
+              minHeight: 'var(--set-control-min, 36px)',
+              padding: '4px var(--ph-space-2, 8px)',
+              borderRadius: 'var(--ph-radius-m, 10px)',
+              background: 'var(--ph-color-surface-raised, #fff)',
+              border: `var(--ph-stroke-bold, 2px) solid ${
+                selected ? 'var(--ph-color-accent, #C77B21)' : 'var(--ph-color-border, #D8D2C6)'
+              }`,
               cursor: 'pointer',
               display: 'flex',
               alignItems: 'center',
               gap: 8,
               textAlign: 'left',
-              position: 'relative',
             }}
           >
             <div
@@ -1462,9 +1392,8 @@ function ThemePicker({ values }: ThemePickerProps) {
               style={{
                 width: 26,
                 height: 26,
-                borderRadius: 7,
+                borderRadius: 'var(--ph-radius-s, 6px)',
                 background: t.swatch,
-                boxShadow: 'inset 0 0 0 1px rgba(0,0,0,0.06)',
                 flexShrink: 0,
               }}
             />
@@ -1473,7 +1402,7 @@ function ThemePicker({ values }: ThemePickerProps) {
                 display: 'flex',
                 alignItems: 'center',
                 gap: 6,
-                color: '#b07a10',
+                color: 'var(--ph-color-accent, #C77B21)',
                 flex: 1,
                 minWidth: 0,
               }}
@@ -1481,10 +1410,9 @@ function ThemePicker({ values }: ThemePickerProps) {
               {t.icon}
               <span
                 style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: 'var(--ink-primary)',
-                  letterSpacing: '0.02em',
+                  fontSize: 'var(--ph-type-caption-size, 12.5px)',
+                  fontWeight: 600,
+                  color: 'var(--ph-color-ink, #1C1F23)',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
@@ -1493,19 +1421,6 @@ function ThemePicker({ values }: ThemePickerProps) {
                 {t.label}
               </span>
             </div>
-            {selected && (
-              <span
-                aria-hidden
-                style={{
-                  width: 6,
-                  height: 6,
-                  borderRadius: 999,
-                  background: '#f4af25',
-                  boxShadow: '0 0 6px rgba(244,175,37,0.55)',
-                  flexShrink: 0,
-                }}
-              />
-            )}
           </button>
         );
       })}
@@ -1513,31 +1428,33 @@ function ThemePicker({ values }: ThemePickerProps) {
   );
 }
 
-/* ─── Language picker ────────────────────────────────────────────────── */
+/* ─── Вибір мови ────────────────────────────────────────────────────────── */
 
 function LanguagePicker() {
   const { t, locale } = useTranslation();
-  // Same contract as ThemePicker: the store action owns DOM + cache +
-  // backend, so the choice applies instantly and survives reload without a
-  // Save click. The generic `ui_language` row is filtered out above so
-  // there's exactly one control writing this key.
   const handleSelect = (next: Locale) => {
     void useSettingsStore.getState().setLanguage(next);
   };
 
   return (
-    <div style={{ marginTop: 16 }}>
+    <div style={{ marginTop: 'var(--ph-space-3, 12px)' }}>
       <div
-        className="micro-label"
-        style={{ marginBottom: 6, color: 'var(--ink-secondary)' }}
+        style={{
+          marginBottom: 6,
+          fontSize: 'var(--ph-type-micro-size, 10.5px)',
+          fontWeight: 500,
+          letterSpacing: '0.05em',
+          textTransform: 'uppercase',
+          color: 'var(--ph-color-ink-muted, #5A5F66)',
+        }}
       >
         {t('settings.language.label')}
       </div>
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: `repeat(${LOCALES.length}, 1fr)`,
-          gap: 8,
+          gridTemplateColumns: `repeat(auto-fit, minmax(120px, 1fr))`,
+          gap: 'var(--ph-space-2, 8px)',
         }}
       >
         {LOCALES.map((id) => {
@@ -1550,16 +1467,15 @@ function LanguagePicker() {
               aria-pressed={selected}
               lang={id}
               style={{
-                minHeight: 44,
-                padding: '4px 10px',
-                borderRadius: 10,
-                background: 'rgba(255,255,255,0.55)',
-                border: selected
-                  ? '2px solid var(--accent)'
-                  : '1px solid rgba(255,255,255,0.55)',
-                boxShadow: selected
-                  ? '0 4px 14px color-mix(in srgb, var(--accent) 30%, transparent)'
-                  : 'var(--shadow-md)',
+                minHeight: 'var(--set-control-min, 36px)',
+                padding: '4px var(--ph-space-2, 8px)',
+                borderRadius: 'var(--ph-radius-m, 10px)',
+                background: 'var(--ph-color-surface-raised, #fff)',
+                border: `var(--ph-stroke-bold, 2px) solid ${
+                  selected
+                    ? 'var(--ph-color-accent, #C77B21)'
+                    : 'var(--ph-color-border, #D8D2C6)'
+                }`,
                 cursor: 'pointer',
                 display: 'flex',
                 alignItems: 'center',
@@ -1571,14 +1487,13 @@ function LanguagePicker() {
                 size={14}
                 strokeWidth={2}
                 aria-hidden
-                style={{ color: 'var(--accent)', flexShrink: 0 }}
+                style={{ color: 'var(--ph-color-accent, #C77B21)', flexShrink: 0 }}
               />
               <span
                 style={{
-                  fontSize: 12,
-                  fontWeight: 700,
-                  color: 'var(--ink-primary)',
-                  letterSpacing: '0.02em',
+                  fontSize: 'var(--ph-type-caption-size, 12.5px)',
+                  fontWeight: 600,
+                  color: 'var(--ph-color-ink, #1C1F23)',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
                   whiteSpace: 'nowrap',
@@ -1593,9 +1508,8 @@ function LanguagePicker() {
       <div
         style={{
           marginTop: 6,
-          fontFamily: 'var(--font-display)',
-          fontSize: 11,
-          color: 'var(--ink-tertiary)',
+          fontSize: 'var(--ph-type-micro-size, 10.5px)',
+          color: 'var(--ph-color-ink-faint, #9A958B)',
         }}
       >
         {t('settings.language.hint')}
@@ -1604,7 +1518,7 @@ function LanguagePicker() {
   );
 }
 
-/* ─── Status pill ────────────────────────────────────────────────────── */
+/* ─── Пігулка статусу ───────────────────────────────────────────────────── */
 
 function StatusPill({
   status,
@@ -1614,31 +1528,31 @@ function StatusPill({
   if (status.kind === 'idle' || status.kind === 'loading') return null;
   const color =
     status.kind === 'saved'
-      ? 'var(--signal-ok)'
+      ? 'var(--ph-color-success, #1F9D62)'
       : status.kind === 'error'
-        ? 'var(--signal-alert)'
-        : 'var(--accent)';
+        ? 'var(--ph-color-alert, #D93B26)'
+        : 'var(--ph-color-accent, #C77B21)';
   const label =
     status.kind === 'saving'
-      ? 'Saving…'
+      ? 'Зберігаю…'
       : status.kind === 'saved'
-        ? 'Saved'
+        ? 'Збережено'
         : status.kind === 'error'
-          ? 'Error'
+          ? 'Помилка'
           : '';
   return (
     <span
-      className="tabular"
+      title={status.msg}
       style={{
-        padding: '4px 10px',
-        borderRadius: 999,
+        padding: '2px 8px',
+        borderRadius: 'var(--ph-radius-pill, 999px)',
         background: `color-mix(in srgb, ${color} 14%, transparent)`,
         color,
-        border: `1px solid ${color}`,
-        fontFamily: 'var(--font-display)',
-        fontSize: 10,
-        letterSpacing: '0.14em',
+        border: `var(--ph-stroke-thin, 1px) solid ${color}`,
+        fontSize: 'var(--ph-type-micro-size, 10.5px)',
+        letterSpacing: '0.06em',
         textTransform: 'uppercase',
+        flexShrink: 0,
       }}
     >
       {label}
@@ -1646,7 +1560,7 @@ function StatusPill({
   );
 }
 
-/* ─── AI diagnostics ─────────────────────────────────────────────────── */
+/* ─── Діагностика ШІ ────────────────────────────────────────────────────── */
 
 function AIProviderDiagnostics() {
   const [state, setState] = useState<{
@@ -1671,7 +1585,7 @@ function AIProviderDiagnostics() {
             ok: false,
             provider,
             latency_ms: 0,
-            error: err instanceof Error ? err.message : 'Request failed',
+            error: err instanceof Error ? err.message : 'Запит не вдався',
           },
         },
       }));
@@ -1682,39 +1596,45 @@ function AIProviderDiagnostics() {
     setState((s) => ({ ...s, running: 'reset' }));
     try {
       await aiApi.reset();
-      // Clear results to encourage re-testing
       setState({ running: null, result: { ollama: null, gemini: null } });
-    } catch (err) {
+    } catch {
       setState((s) => ({ ...s, running: null }));
     }
   }, []);
 
-  // Phase 22-F — was a column-stacked sub-glass: eyebrow row + test
-  // button row, padding 12/14, gap 10. Now a single-row pill — eyebrow
-  // inlined with the buttons. Saves ~30px.
   return (
     <div
-      className="sub-glass"
       style={{
         padding: '6px 10px',
         display: 'flex',
         alignItems: 'center',
         flexWrap: 'wrap',
         gap: 8,
-        borderRadius: 12,
+        borderRadius: 'var(--ph-radius-m, 10px)',
+        border: 'var(--ph-stroke-thin, 1px) solid var(--ph-color-border, #D8D2C6)',
+        background: 'var(--ph-color-surface-raised, #fff)',
       }}
     >
-      <div className="eyebrow-amber" style={{ marginRight: 4 }}>
-        Connectivity
-      </div>
+      <span
+        style={{
+          fontSize: 'var(--ph-type-micro-size, 10.5px)',
+          fontWeight: 600,
+          letterSpacing: '0.06em',
+          textTransform: 'uppercase',
+          color: 'var(--ph-color-ink-muted, #5A5F66)',
+          marginRight: 4,
+        }}
+      >
+        Звʼязок
+      </span>
       <ProviderTestButton
-        label="Test Ollama"
+        label="Тест Ollama"
         onClick={() => run('ollama')}
         busy={state.running === 'ollama'}
         result={state.result.ollama}
       />
       <ProviderTestButton
-        label="Test Gemini"
+        label="Тест Gemini"
         onClick={() => run('gemini')}
         busy={state.running === 'gemini'}
         result={state.result.gemini}
@@ -1724,14 +1644,13 @@ function AIProviderDiagnostics() {
         onClick={runReset}
         disabled={state.running === 'reset'}
         style={{
-          minHeight: 44,
-          padding: '0 14px',
-          background: 'rgba(0,0,0,0.05)',
-          color: 'var(--ink-muted)',
-          border: '1px solid rgba(0,0,0,0.1)',
-          borderRadius: 9999,
-          fontFamily: 'var(--font-display)',
-          fontSize: 10,
+          minHeight: 'var(--set-control-min, 36px)',
+          padding: '0 12px',
+          background: 'transparent',
+          color: 'var(--ph-color-ink-muted, #5A5F66)',
+          border: 'var(--ph-stroke-thin, 1px) solid var(--ph-color-border, #D8D2C6)',
+          borderRadius: 'var(--ph-radius-pill, 999px)',
+          fontSize: 'var(--ph-type-micro-size, 10.5px)',
           letterSpacing: '0.05em',
           textTransform: 'uppercase',
           opacity: state.running === 'reset' ? 0.6 : 1,
@@ -1747,7 +1666,7 @@ function AIProviderDiagnostics() {
         ) : (
           <RotateCcw size={12} />
         )}
-        Force Reset AI
+        Перезапустити ШІ
       </button>
     </div>
   );
@@ -1767,15 +1686,15 @@ function ProviderTestButton({
   const tone = result == null ? 'idle' : result.ok ? 'ok' : 'err';
   const color =
     tone === 'ok'
-      ? 'var(--signal-ok)'
+      ? 'var(--ph-color-success, #1F9D62)'
       : tone === 'err'
-        ? 'var(--signal-alert)'
-        : 'var(--accent)';
+        ? 'var(--ph-color-alert, #D93B26)'
+        : 'var(--ph-color-accent, #C77B21)';
   const summary = result
     ? result.ok
-      ? `Connected · ${result.latency_ms}ms`
-      : `Failed: ${result.error ?? 'unknown'}`
-    : 'Not tested';
+      ? `Зʼєднано · ${result.latency_ms} мс`
+      : `Провал: ${result.error ?? 'невідомо'}`
+    : 'Не перевірено';
 
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
@@ -1784,15 +1703,13 @@ function ProviderTestButton({
         onClick={onClick}
         disabled={busy}
         style={{
-          minHeight: 44,
-          padding: '0 14px',
-          background: `color-mix(in srgb, ${color} 14%, transparent)`,
+          minHeight: 'var(--set-control-min, 36px)',
+          padding: '0 12px',
+          background: `color-mix(in srgb, ${color} 12%, transparent)`,
           color,
-          border: `1px solid color-mix(in srgb, ${color} 50%, transparent)`,
-          borderRadius: 9999,
-          fontFamily: 'var(--font-display)',
-          fontSize: 12,
-          letterSpacing: '0.05em',
+          border: `var(--ph-stroke-thin, 1px) solid color-mix(in srgb, ${color} 50%, transparent)`,
+          borderRadius: 'var(--ph-radius-pill, 999px)',
+          fontSize: 'var(--ph-type-caption-size, 12.5px)',
           opacity: busy ? 0.6 : 1,
           cursor: busy ? 'default' : 'pointer',
           display: 'inline-flex',
@@ -1813,10 +1730,10 @@ function ProviderTestButton({
         {label}
       </button>
       <span
-        className="mono"
         style={{
-          fontSize: 11,
-          color: 'var(--ink-muted)',
+          fontFamily: 'var(--ph-font-mono, monospace)',
+          fontSize: 'var(--ph-type-micro-size, 10.5px)',
+          color: 'var(--ph-color-ink-muted, #5A5F66)',
           maxWidth: 340,
           overflow: 'hidden',
           textOverflow: 'ellipsis',
@@ -1853,13 +1770,13 @@ function OllamaModelEditor({
           setOfflineMessage(null);
         } else {
           setModels([]);
-          setOfflineMessage('Ollama offline, enter manually');
+          setOfflineMessage('Ollama офлайн — впиши вручну');
         }
       })
       .catch(() => {
         if (cancelled) return;
         setModels([]);
-        setOfflineMessage('Ollama unreachable, enter manually');
+        setOfflineMessage('Ollama недосяжна — впиши вручну');
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
@@ -1876,57 +1793,36 @@ function OllamaModelEditor({
     return (
       <div
         style={{
-          minHeight: 44,
-          padding: '0 12px',
-          borderRadius: 10,
-          background: 'rgba(255,255,255,0.60)',
-          border: '1px solid rgba(0,0,0,0.06)',
-          color: 'var(--ink-muted)',
-          fontFamily: 'var(--font-mono)',
-          fontSize: 13,
+          ...FIELD_STYLE,
           display: 'inline-flex',
           alignItems: 'center',
           gap: 6,
+          color: 'var(--ph-color-ink-muted, #5A5F66)',
         }}
       >
         <Loader2 size={12} strokeWidth={1.75} className="animate-spin" />
-        Loading models…
+        Читаю моделі…
       </div>
     );
   }
 
   if (!showDropdown) {
     return (
-      <div
-        style={{ display: 'flex', flexDirection: 'column', gap: 4 }}
-      >
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
         <input
           type="text"
           value={current}
           onChange={(e) => onChange(e.target.value)}
-          placeholder="e.g. llama3.2:3b"
-          style={{
-            minHeight: 44,
-            width: '100%',
-            padding: '0 12px',
-            borderRadius: 10,
-            color: 'var(--ink-primary)',
-            background: 'rgba(255,255,255,0.60)',
-            border: '1px solid rgba(0,0,0,0.06)',
-            fontFamily: 'var(--font-mono)',
-            fontSize: 13,
-            outline: 'none',
-          }}
+          placeholder="напр. llama3.2:3b"
+          style={FIELD_STYLE}
         />
         <span
           style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 10,
-            color: 'var(--signal-warn)',
-            letterSpacing: '0.05em',
+            fontSize: 'var(--ph-type-micro-size, 10.5px)',
+            color: 'var(--ph-color-accent-warm, #A8541C)',
           }}
         >
-          {offlineMessage ?? 'No models installed — run `ollama pull <name>`'}
+          {offlineMessage ?? 'Моделей нема — виконай `ollama pull <name>`'}
         </span>
       </div>
     );
@@ -1937,21 +1833,10 @@ function OllamaModelEditor({
     <select
       value={current}
       onChange={(e) => onChange(e.target.value)}
-      style={{
-        minHeight: 44,
-        width: '100%',
-        padding: '0 12px',
-        borderRadius: 10,
-        color: 'var(--ink-primary)',
-        background: 'rgba(255,255,255,0.60)',
-        border: '1px solid rgba(0,0,0,0.06)',
-        fontFamily: 'var(--font-mono)',
-        fontSize: 13,
-        outline: 'none',
-      }}
+      style={FIELD_STYLE}
     >
       {!hasCurrent && current && (
-        <option value={current}>{current} (not installed)</option>
+        <option value={current}>{current} (не встановлена)</option>
       )}
       {models!.map((m) => (
         <option key={m.name} value={m.name}>
@@ -1964,13 +1849,9 @@ function OllamaModelEditor({
   );
 }
 
-/* ─── Phase 22 — host:port editor ───────────────────────────────────────
- *
- * Used for `ai_ollama_host` (and any future `host:port` knob). Validates
- * the URL/host format inline so the operator gets feedback before save
- * — bad value paints the border coral and surfaces a hint underneath.
- * Persists the raw string value (no normalization) so the operator
- * remains in control of trailing slashes, scheme, and port literals.
+/**
+ * host:port редактор (`ai_ollama_host` тощо): валідація форми ДО
+ * збереження, значення персиститься сирим рядком.
  */
 function HostPortEditor({
   value,
@@ -1980,12 +1861,9 @@ function HostPortEditor({
   onChange: (v: unknown) => void;
 }) {
   const current = String(value ?? '');
-  // Accept either a bare host[:port] or a full http(s) URL. We don't
-  // ping the host — that's the AI provider's job at startup. This is
-  // pure shape validation so typos surface before save.
   const ok = useMemo(() => {
     const trimmed = current.trim();
-    if (trimmed.length === 0) return true; // empty is "use default"
+    if (trimmed.length === 0) return true; // порожньо = типове
     if (/^https?:\/\/[^\s/]+(?:\/.*)?$/i.test(trimmed)) return true;
     if (/^[A-Za-z0-9_.-]+(?::\d{1,5})?$/.test(trimmed)) return true;
     return false;
@@ -2000,27 +1878,17 @@ function HostPortEditor({
         placeholder="http://localhost:11434"
         spellCheck={false}
         style={{
-          minHeight: 44,
-          width: '100%',
-          padding: '0 12px',
-          borderRadius: 10,
-          color: 'var(--ink-primary)',
-          background: 'rgba(255,255,255,0.60)',
+          ...FIELD_STYLE,
           border: ok
-            ? '1px solid rgba(0,0,0,0.06)'
-            : '1px solid rgba(244,99,99,0.55)',
-          fontFamily: 'var(--font-mono)',
-          fontSize: 13,
-          outline: 'none',
+            ? FIELD_STYLE.border
+            : 'var(--ph-stroke-thin, 1px) solid var(--ph-color-alert, #D93B26)',
         }}
       />
       {!ok && (
         <span
           style={{
-            fontFamily: 'var(--font-display)',
-            fontSize: 10,
-            color: 'var(--signal-warn, #b85c00)',
-            letterSpacing: '0.05em',
+            fontSize: 'var(--ph-type-micro-size, 10.5px)',
+            color: 'var(--ph-color-accent-warm, #A8541C)',
           }}
         >
           Очікується host[:port] або http(s)://host[:port]
@@ -2030,13 +1898,9 @@ function HostPortEditor({
   );
 }
 
-/* ─── Phase 22 — chip-input editor ──────────────────────────────────────
- *
- * Used for `list[str]` settings (e.g. `security_trusted_proxies`). The
- * backend returns the value as a JSON array; the FE renders each item
- * as a removable chip and surfaces a single text input that turns
- * comma- or Enter-terminated tokens into new chips. Persists the value
- * as `string[]` so the backend Pydantic coercion just works.
+/**
+ * Chip-input для list[str] (наприклад `security_trusted_proxies`):
+ * кома/Enter творить чип, Backspace на порожньому знімає останній.
  */
 function ChipInputEditor({
   value,
@@ -2045,9 +1909,6 @@ function ChipInputEditor({
   value: unknown;
   onChange: (v: unknown) => void;
 }) {
-  // Tolerate legacy string blobs ("a,b,c") + the canonical list form.
-  // Settings imported from older builds may still arrive as strings —
-  // normalize on render so the operator never sees a stringified array.
   const items = useMemo<string[]>(() => {
     if (Array.isArray(value)) {
       return value.map((v) => String(v).trim()).filter(Boolean);
@@ -2089,12 +1950,12 @@ function ChipInputEditor({
         flexWrap: 'wrap',
         gap: 6,
         alignItems: 'center',
-        minHeight: 44,
+        minHeight: 'var(--set-control-min, 36px)',
         width: '100%',
-        padding: '6px 8px',
-        borderRadius: 10,
-        background: 'rgba(255,255,255,0.60)',
-        border: '1px solid rgba(0,0,0,0.06)',
+        padding: '4px 8px',
+        borderRadius: 'var(--ph-radius-s, 6px)',
+        background: 'var(--ph-color-surface, #fff)',
+        border: 'var(--ph-stroke-thin, 1px) solid var(--ph-color-border, #D8D2C6)',
       }}
     >
       {items.map((token, idx) => (
@@ -2105,12 +1966,12 @@ function ChipInputEditor({
             alignItems: 'center',
             gap: 4,
             padding: '2px 4px 2px 8px',
-            borderRadius: 999,
-            background: 'rgba(244,175,37,0.18)',
-            color: '#8a5e0a',
-            fontFamily: 'var(--font-mono)',
-            fontSize: 11,
-            letterSpacing: '0.02em',
+            borderRadius: 'var(--ph-radius-pill, 999px)',
+            background:
+              'color-mix(in srgb, var(--ph-color-accent, #C77B21) 16%, transparent)',
+            color: 'var(--ph-color-accent-warm, #A8541C)',
+            fontFamily: 'var(--ph-font-mono, monospace)',
+            fontSize: 'var(--ph-type-micro-size, 10.5px)',
           }}
         >
           {token}
@@ -2124,10 +1985,10 @@ function ChipInputEditor({
               justifyContent: 'center',
               width: 18,
               height: 18,
-              borderRadius: 999,
+              borderRadius: 'var(--ph-radius-pill, 999px)',
               border: 'none',
-              background: 'rgba(40,30,15,0.10)',
-              color: '#8a5e0a',
+              background: 'var(--ph-color-glass, rgba(0,0,0,0.08))',
+              color: 'var(--ph-color-accent-warm, #A8541C)',
               cursor: 'pointer',
               padding: 0,
             }}
@@ -2141,8 +2002,6 @@ function ChipInputEditor({
         value={draft}
         onChange={(e) => {
           const v = e.currentTarget.value;
-          // Comma or whitespace acts as a commit terminator — the chip
-          // appears immediately so the operator sees the boundary.
           if (/[,\s]/.test(v)) {
             const parts = v.split(/[,\s]+/).filter(Boolean);
             for (const p of parts) addToken(p);
@@ -2167,9 +2026,9 @@ function ChipInputEditor({
           background: 'transparent',
           border: 'none',
           outline: 'none',
-          color: 'var(--ink-primary)',
-          fontFamily: 'var(--font-mono)',
-          fontSize: 12,
+          color: 'var(--ph-color-ink, #1C1F23)',
+          fontFamily: 'var(--ph-font-mono, monospace)',
+          fontSize: 'var(--ph-type-caption-size, 12.5px)',
           padding: '4px 2px',
         }}
       />
@@ -2177,7 +2036,7 @@ function ChipInputEditor({
   );
 }
 
-/* ─── NPU diagnostics (Phase 15) ─────────────────────────────────────── */
+/* ─── Діагностика NPU ───────────────────────────────────────────────────── */
 
 function NPUDiagnostics() {
   const [state, setState] = useState<{
@@ -2194,7 +2053,7 @@ function NPUDiagnostics() {
     } catch (err) {
       setState({
         loading: false,
-        error: err instanceof Error ? err.message : 'voice/status failed',
+        error: err instanceof Error ? err.message : 'voice/status не відповів',
         status: null,
       });
     }
@@ -2219,37 +2078,36 @@ function NPUDiagnostics() {
       summary = `Активний · encoder на QNN HTP · ${status.stt_engine}`;
     } else if (status.npu_active) {
       tone = 'warn';
-      summary =
-        'Провайдер активний, encoder на CPU (QNN session не піднявся)';
+      summary = 'Провайдер активний, encoder на CPU (QNN session не піднявся)';
     } else if (status.npu_available) {
       tone = 'ok';
       summary = `Готовий · поточний engine: ${status.stt_engine}`;
     } else {
       tone = 'warn';
-      summary =
-        'Bundle або EP плагін не доступні — система впаде на faster-whisper';
+      summary = 'Bundle або EP плагін недоступні — впаде на faster-whisper';
     }
   } else if (state.loading) {
-    summary = 'Перевіряємо стан…';
+    summary = 'Перевіряю стан…';
   }
 
   const color =
     tone === 'ok'
-      ? 'var(--signal-ok)'
+      ? 'var(--ph-color-success, #1F9D62)'
       : tone === 'warn'
-        ? 'var(--signal-warn)'
+        ? 'var(--ph-color-accent-warm, #A8541C)'
         : tone === 'err'
-          ? 'var(--signal-alert)'
+          ? 'var(--ph-color-alert, #D93B26)'
           : tone === 'off'
-            ? 'var(--ink-muted)'
-            : 'var(--accent)';
+            ? 'var(--ph-color-ink-faint, #9A958B)'
+            : 'var(--ph-color-accent, #C77B21)';
 
   return (
     <details
-      className="sub-glass"
       style={{
         padding: '6px 10px',
-        borderRadius: 12,
+        borderRadius: 'var(--ph-radius-m, 10px)',
+        border: 'var(--ph-stroke-thin, 1px) solid var(--ph-color-border, #D8D2C6)',
+        background: 'var(--ph-color-surface-raised, #fff)',
       }}
     >
       <summary
@@ -2266,41 +2124,46 @@ function NPUDiagnostics() {
         <Cpu
           size={13}
           strokeWidth={1.75}
-          style={{ color: 'var(--ink-muted)', flexShrink: 0 }}
+          style={{ color: 'var(--ph-color-ink-faint, #9A958B)', flexShrink: 0 }}
         />
         <span
-          className="eyebrow-amber"
-          style={{ flexShrink: 0 }}
+          style={{
+            fontSize: 'var(--ph-type-micro-size, 10.5px)',
+            fontWeight: 600,
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            color: 'var(--ph-color-ink-muted, #5A5F66)',
+            flexShrink: 0,
+          }}
         >
           NPU · HTP
         </span>
         <span
-          className="micro-label"
           style={{
             padding: '1px 7px',
-            borderRadius: 999,
+            borderRadius: 'var(--ph-radius-pill, 999px)',
             background: `color-mix(in srgb, ${color} 18%, transparent)`,
             color,
-            border: `1px solid color-mix(in srgb, ${color} 50%, transparent)`,
+            border: `var(--ph-stroke-thin, 1px) solid color-mix(in srgb, ${color} 50%, transparent)`,
+            fontSize: 'var(--ph-type-micro-size, 10.5px)',
             flexShrink: 0,
           }}
         >
           {tone === 'ok'
             ? 'OK'
             : tone === 'warn'
-              ? 'Warn'
+              ? 'Увага'
               : tone === 'err'
-                ? 'Error'
+                ? 'Помилка'
                 : tone === 'off'
-                  ? 'Off'
+                  ? 'Вимк.'
                   : '…'}
         </span>
         <span
           style={{
             flex: 1,
-            fontFamily: 'var(--font-display)',
-            fontSize: 11,
-            color: 'var(--ink-secondary)',
+            fontSize: 'var(--ph-type-micro-size, 10.5px)',
+            color: 'var(--ph-color-ink-muted, #5A5F66)',
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             whiteSpace: 'nowrap',
@@ -2320,23 +2183,21 @@ function NPUDiagnostics() {
           style={{
             minHeight: 24,
             padding: '0 8px',
-            borderRadius: 9999,
-            background: 'rgba(255,255,255,0.60)',
-            color: 'var(--ink-secondary)',
-            border: '1px solid rgba(0,0,0,0.06)',
-            fontFamily: 'var(--font-display)',
-            fontSize: 9,
-            letterSpacing: '0.05em',
+            borderRadius: 'var(--ph-radius-pill, 999px)',
+            background: 'transparent',
+            color: 'var(--ph-color-ink-muted, #5A5F66)',
+            border: 'var(--ph-stroke-thin, 1px) solid var(--ph-color-border, #D8D2C6)',
+            fontSize: 'var(--ph-type-micro-size, 10.5px)',
             cursor: state.loading ? 'default' : 'pointer',
             opacity: state.loading ? 0.5 : 1,
             flexShrink: 0,
           }}
-          title="Re-check /voice/status"
+          title="Перечитати /voice/status"
         >
           {state.loading ? (
             <Loader2 size={10} strokeWidth={1.75} className="animate-spin" />
           ) : (
-            'Refresh'
+            'Оновити'
           )}
         </button>
       </summary>
@@ -2349,40 +2210,40 @@ function NPUDiagnostics() {
             gridTemplateColumns: '110px 1fr',
             rowGap: 3,
             columnGap: 10,
-            fontFamily: 'var(--font-mono)',
-            fontSize: 10,
-            color: 'var(--ink-muted)',
+            fontFamily: 'var(--ph-font-mono, monospace)',
+            fontSize: 'var(--ph-type-micro-size, 10.5px)',
+            color: 'var(--ph-color-ink-muted, #5A5F66)',
           }}
         >
           <span>Bundle</span>
-          <span style={{ color: 'var(--ink-primary)' }}>
+          <span style={{ color: 'var(--ph-color-ink, #1C1F23)' }}>
             {status.npu_model_path || '—'}
           </span>
           <span>Compute</span>
-          <span style={{ color: 'var(--ink-primary)' }}>
+          <span style={{ color: 'var(--ph-color-ink, #1C1F23)' }}>
             {status.npu_compute || '—'}
           </span>
           <span>Encoder · QNN</span>
           <span
             style={{
               color: status.npu_encoder_loaded
-                ? 'var(--signal-ok)'
-                : 'var(--ink-primary)',
+                ? 'var(--ph-color-success, #1F9D62)'
+                : 'var(--ph-color-ink, #1C1F23)',
             }}
           >
-            {status.npu_encoder_loaded ? 'loaded' : 'not loaded'}
+            {status.npu_encoder_loaded ? 'завантажений' : 'не завантажений'}
           </span>
           <span>Providers</span>
           <span
             style={{
-              color: 'var(--ink-primary)',
+              color: 'var(--ph-color-ink, #1C1F23)',
               overflowWrap: 'anywhere',
             }}
           >
-            {status.npu_providers || 'unknown'}
+            {status.npu_providers || 'невідомо'}
           </span>
-          <span>Active engine</span>
-          <span style={{ color: 'var(--ink-primary)' }}>
+          <span>Активний engine</span>
+          <span style={{ color: 'var(--ph-color-ink, #1C1F23)' }}>
             {status.stt_engine}
           </span>
         </div>
@@ -2391,57 +2252,42 @@ function NPUDiagnostics() {
   );
 }
 
-/* ─── About ──────────────────────────────────────────────────────────── */
+/* ─── Про систему ───────────────────────────────────────────────────────── */
 
 function AboutSection() {
   return (
     <div
-      className="sub-glass"
       style={{
-        borderRadius: 12,
+        borderRadius: 'var(--ph-radius-m, 10px)',
+        border: 'var(--ph-stroke-thin, 1px) solid var(--ph-color-border, #D8D2C6)',
+        background: 'var(--ph-color-surface-raised, #fff)',
         padding: '10px 12px',
         display: 'flex',
         flexDirection: 'column',
         gap: 8,
       }}
     >
-      <div
-        style={{
-          display: 'flex',
-          alignItems: 'baseline',
-          gap: 8,
-        }}
-      >
+      <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
         <span
           style={{
-            fontSize: 14,
+            fontSize: 'var(--ph-type-body-size, 15px)',
             fontWeight: 700,
-            color: 'var(--ink-primary)',
+            color: 'var(--ph-color-ink, #1C1F23)',
             letterSpacing: '-0.01em',
           }}
         >
           PHANTOM OS
         </span>
-        <span
-          className="tabular"
-          style={{
-            fontSize: 11,
-            fontWeight: 700,
-            padding: '1px 7px',
-            borderRadius: 999,
-            background: 'rgba(244,175,37,0.18)',
-            color: '#8a5e0a',
-            letterSpacing: '0.04em',
-          }}
-        >
-          0.6 · PHASE 06
-        </span>
         <span style={{ flex: 1 }} />
         <span
-          className="micro-label"
-          style={{ color: 'var(--ink-muted)' }}
+          style={{
+            fontSize: 'var(--ph-type-micro-size, 10.5px)',
+            letterSpacing: '0.06em',
+            textTransform: 'uppercase',
+            color: 'var(--ph-color-ink-faint, #9A958B)',
+          }}
         >
-          DUAL-NODE · RADXA + ESP32-S3
+          Десктоп · ESP32 опційно
         </span>
       </div>
       <div
@@ -2450,25 +2296,25 @@ function AboutSection() {
           gridTemplateColumns: '70px 1fr',
           rowGap: 3,
           columnGap: 10,
-          fontFamily: 'var(--font-mono)',
-          fontSize: 11,
-          color: 'var(--ink-muted)',
+          fontFamily: 'var(--ph-font-mono, monospace)',
+          fontSize: 'var(--ph-type-micro-size, 10.5px)',
+          color: 'var(--ph-color-ink-muted, #5A5F66)',
         }}
       >
         <span>Frontend</span>
-        <span style={{ color: 'var(--ink-primary)' }}>
+        <span style={{ color: 'var(--ph-color-ink, #1C1F23)' }}>
           React 18 · Vite 5 · Tailwind 3
         </span>
         <span>Backend</span>
-        <span style={{ color: 'var(--ink-primary)' }}>
+        <span style={{ color: 'var(--ph-color-ink, #1C1F23)' }}>
           FastAPI · SQLite · ChromaDB
         </span>
         <span>AI</span>
-        <span style={{ color: 'var(--ink-primary)' }}>
+        <span style={{ color: 'var(--ph-color-ink, #1C1F23)' }}>
           Gemini router → Ollama fallback
         </span>
         <span>Voice</span>
-        <span style={{ color: 'var(--ink-primary)' }}>
+        <span style={{ color: 'var(--ph-color-ink, #1C1F23)' }}>
           Whisper / Vosk / NPU STT · Piper TTS
         </span>
       </div>
@@ -2476,16 +2322,11 @@ function AboutSection() {
   );
 }
 
-/* ─── Familiar control (Phase-5 R1-FAMILIAR-1) ───────────────────────────
+/* ─── Familiar (Phase-5 R1-FAMILIAR-1) ──────────────────────────────────
  *
- * Embedded inside the Profile / Personality category. Lets the operator:
- *   - pick how often the Familiar appears (off / rare / normal / often)
- *   - test-summon the creature on demand (bypasses the rarity gate)
- *
- * The rarity is mirrored into localStorage so the choice survives a hard
- * refresh; the familiarStore reads it back on next bootstrap. We keep the
- * persistence inside this component because the wisp is a pure-FE feature
- * — there's no backend setting row to mirror. */
+ * Вбудований у Профіль/Характер. Рідкість переживає перезавантаження
+ * через localStorage — чисто фронтендна фіча, бекендового ключа нема.
+ */
 
 const FAMILIAR_RARITY_LS_KEY = 'phantom-familiar-rarity';
 
@@ -2516,7 +2357,6 @@ function FamiliarControlSection() {
   const setRarity = useFamiliarStore((s) => s.setRarity);
   const manifest = useFamiliarStore((s) => s.manifest);
 
-  // Hydrate from localStorage on first mount.
   useEffect(() => {
     const stored = loadFamiliarRarity();
     if (stored !== rarity) setRarity(stored);
@@ -2525,10 +2365,10 @@ function FamiliarControlSection() {
   }, []);
 
   const options: Array<{ id: FamiliarRarity; label: string; blurb: string }> = [
-    { id: 'off', label: 'Вимк.', blurb: 'Familiar dormant.' },
-    { id: 'rare', label: 'Рідко', blurb: '~1 in 8 attempts.' },
-    { id: 'normal', label: 'Звичайно', blurb: '~1 in 3 attempts.' },
-    { id: 'often', label: 'Часто', blurb: '~2 in 3 attempts.' },
+    { id: 'off', label: 'Вимк.', blurb: 'Familiar спить.' },
+    { id: 'rare', label: 'Рідко', blurb: '~1 із 8 спроб.' },
+    { id: 'normal', label: 'Звичайно', blurb: '~1 із 3 спроб.' },
+    { id: 'often', label: 'Часто', blurb: '~2 із 3 спроб.' },
   ];
 
   const handleSelect = (r: FamiliarRarity) => {
@@ -2542,13 +2382,14 @@ function FamiliarControlSection() {
 
   return (
     <div
-      className="sub-glass"
       style={{
         padding: '8px 10px',
         display: 'flex',
         alignItems: 'center',
         gap: 8,
-        borderRadius: 12,
+        borderRadius: 'var(--ph-radius-m, 10px)',
+        border: 'var(--ph-stroke-thin, 1px) solid var(--ph-color-border, #D8D2C6)',
+        background: 'var(--ph-color-surface-raised, #fff)',
         flexWrap: 'wrap',
       }}
       data-testid="familiar-control"
@@ -2558,31 +2399,36 @@ function FamiliarControlSection() {
         style={{
           width: 10,
           height: 10,
-          borderRadius: 999,
+          borderRadius: 'var(--ph-radius-pill, 999px)',
           background:
-            'radial-gradient(circle at 30% 30%, #ffffff, #f4af25 70%)',
-          boxShadow: '0 0 10px rgba(244,175,37,0.55)',
+            'radial-gradient(circle at 30% 30%, var(--ph-color-surface, #fff), var(--ph-color-accent, #C77B21) 70%)',
           flexShrink: 0,
         }}
       />
       <span
-        className="eyebrow-amber"
-        title="A small wisp that occasionally appears, points at things, and waves."
-        style={{ flexShrink: 0 }}
+        title="Маленький вогник, що зрідка зʼявляється, показує на речі й махає."
+        style={{
+          fontSize: 'var(--ph-type-micro-size, 10.5px)',
+          fontWeight: 600,
+          letterSpacing: '0.06em',
+          textTransform: 'uppercase',
+          color: 'var(--ph-color-ink-muted, #5A5F66)',
+          flexShrink: 0,
+        }}
       >
         Familiar
       </span>
 
       <div
         role="group"
-        aria-label="Familiar rarity"
+        aria-label="Частота появи Familiar"
         style={{
           display: 'inline-flex',
           alignItems: 'stretch',
           padding: 2,
-          borderRadius: 999,
-          background: 'rgba(40,30,15,0.06)',
-          border: '1px solid rgba(40,30,15,0.08)',
+          borderRadius: 'var(--ph-radius-pill, 999px)',
+          background: 'var(--ph-color-glass, rgba(0,0,0,0.05))',
+          border: 'var(--ph-stroke-thin, 1px) solid var(--ph-color-border, #D8D2C6)',
           gap: 2,
         }}
       >
@@ -2596,22 +2442,19 @@ function FamiliarControlSection() {
               aria-pressed={selected}
               title={opt.blurb}
               style={{
-                minHeight: 28,
+                minHeight: 'var(--ph-control-min, 28px)',
                 padding: '0 10px',
-                borderRadius: 999,
+                borderRadius: 'var(--ph-radius-pill, 999px)',
                 border: 'none',
                 background: selected
-                  ? 'linear-gradient(135deg,#f4af25,#fb923c)'
+                  ? 'var(--ph-color-accent, #C77B21)'
                   : 'transparent',
-                color: selected ? 'white' : 'var(--ink-secondary)',
+                color: selected
+                  ? 'var(--ph-color-surface, #fff)'
+                  : 'var(--ph-color-ink-muted, #5A5F66)',
                 cursor: 'pointer',
-                fontFamily: 'var(--font-display)',
-                fontSize: 11,
+                fontSize: 'var(--ph-type-micro-size, 10.5px)',
                 fontWeight: selected ? 700 : 500,
-                letterSpacing: '0.02em',
-                boxShadow: selected
-                  ? '0 2px 6px rgba(244,175,37,0.35)'
-                  : 'none',
               }}
             >
               {opt.label}
@@ -2626,22 +2469,22 @@ function FamiliarControlSection() {
         type="button"
         onClick={handleTestSummon}
         style={{
-          minHeight: 28,
+          minHeight: 'var(--ph-control-min, 28px)',
           padding: '0 12px',
-          borderRadius: 9999,
+          borderRadius: 'var(--ph-radius-pill, 999px)',
           background: 'transparent',
-          color: '#8a5e0a',
-          border: '1px solid rgba(244,175,37,0.55)',
+          color: 'var(--ph-color-accent-warm, #A8541C)',
+          border:
+            'var(--ph-stroke-thin, 1px) solid color-mix(in srgb, var(--ph-color-accent, #C77B21) 55%, transparent)',
           cursor: 'pointer',
-          fontFamily: 'var(--font-display)',
-          fontSize: 10,
+          fontSize: 'var(--ph-type-micro-size, 10.5px)',
           fontWeight: 700,
           letterSpacing: '0.06em',
           textTransform: 'uppercase',
         }}
-        title="Force-summon the Familiar (bypasses rarity gate)"
+        title="Прикликати Familiar примусово (повз рідкість)"
       >
-        Summon
+        Прикликати
       </button>
     </div>
   );

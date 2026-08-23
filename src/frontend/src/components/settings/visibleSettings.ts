@@ -23,11 +23,20 @@ export const DEDICATED_CONTROL_KEYS: Readonly<Record<string, string>> = {
   // LanguagePicker (категорія theme) — миттєвий <html lang> фліп;
   // генеричний рядок писав би ключ без DOM-ефекту.
   ui_language: 'LanguagePicker',
+  // ThemePicker (категорія theme) — та сама причина: setTheme фарбує
+  // <html data-theme> одразу; другий генеричний select писав би ключ
+  // повз цей шлях. Один ключ — один контрол.
+  ui_theme: 'ThemePicker',
 };
 
 export interface VisibilityOptions {
   query: string;
   showAdvanced: boolean;
+  /**
+   * Пошук має право бачити й ключі з власним контролом — вони
+   * рендеряться не редактором, а стрибком до свого підрозділу.
+   */
+  includeDedicated?: boolean;
 }
 
 /**
@@ -39,11 +48,11 @@ export interface VisibilityOptions {
  */
 export function filterVisibleDefs(
   defs: readonly SettingDefinition[],
-  { query, showAdvanced }: VisibilityOptions
+  { query, showAdvanced, includeDedicated = false }: VisibilityOptions
 ): SettingDefinition[] {
   const q = query.trim().toLowerCase();
   return defs.filter((def) => {
-    if (def.key in DEDICATED_CONTROL_KEYS) return false;
+    if (!includeDedicated && def.key in DEDICATED_CONTROL_KEYS) return false;
     if (def.tier === 'advanced' && !showAdvanced && !q) return false;
     if (q) {
       const haystack =
@@ -77,6 +86,7 @@ export function searchAllSettings(
     for (const def of filterVisibleDefs(category.settings, {
       query,
       showAdvanced: true,
+      includeDedicated: true,
     })) {
       hits.push({ def, category, section: sectionForCategory(category.id) });
     }

@@ -177,9 +177,13 @@ def test_service_key_comes_only_from_env(monkeypatch):
 async def test_reader_accepts_letters_and_stamps_them(monkeypatch):
     accepted: list = []
 
-    async def fake_accept(session, keys, owner, frame, peer_node_id=None, *, reply_address=None):
+    async def fake_accept(
+        session, keys, owner, frame, peer_node_id=None, *, reply_address=None, road="relay"
+    ):
         if frame == b"\xba\xad":
             raise ValueError("кадр не розшифровується")
+        # Лист чекав у скриньці — дорога має доїхати до рядка разом із ним.
+        assert road == "mailbox"
         accepted.append((frame, peer_node_id, reply_address))
         return None
 

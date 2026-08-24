@@ -41,7 +41,9 @@ async def test_a_letter_from_the_mailbox_lands_in_the_feed(auth_root_client):
 
     assert row is not None
     assert unseal(me, bytes.fromhex(row.ciphertext), aad=row.id.encode()) == text
-    assert row.transport == "relay"
+    # Дорога записана як «скринька»: лист чекав, поки канал був мертвий, і
+    # точка з такого листа не має права вдягати живий бейдж.
+    assert row.transport == "mailbox"
 
 
 @pytest.mark.anyio

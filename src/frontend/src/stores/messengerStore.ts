@@ -23,7 +23,9 @@ import type {
   PersonaSphere,
   MessageReplyInfo,
   SecureMedia,
+  GeoPoint,
 } from '../types/messenger';
+import { geoPointBody } from '../services/messengerGeo';
 import {
   initialChats,
   currentUser as defaultUser,
@@ -107,6 +109,8 @@ export interface MessengerState {
     onProgress?: (percent: number) => void,
     caption?: string,
   ) => Promise<void>;
+  /** Надсилає разову точку «я тут». Час у тілі — час ВИМІРУ, не відправки. */
+  sendGeoPoint: (point: GeoPoint) => Promise<void>;
   sendVoiceMessage: (duration: number, transcript: string) => void;
   addCustomMessage: (message: Message) => void;
   editMessage: (messageId: string, newText: string) => void;
@@ -714,6 +718,69 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
       } catch (err) {
         console.warn('[messenger] вузол не прийняв вкладення:', err);
         markStatus('failed');
+      }
+    },
+
+    sendGeoPoint: async (point) => {
+      const state = get();
+      const chatId = state.activeChatId;
+      if (!chatId) return;
+
+      const clientId = `c_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      const newMsg: Message = {
+        id: clientId,
+        senderId: state.currentUser.id,
+        senderName: state.currentUser.name,
+        senderAvatar: state.currentUser.avatar,
+        // Підпис бульбашки — час виміру, а не час натискання кнопки.
+        timestamp: new Date(point.atMs).toLocaleTimeString('uk-UA', {
+          hour: '2-digit',
+          minute: '2-digit',
+        }),
+        sentAt: new Date(point.atMs).toISOString(),
+        type: 'geo:point',
+        geoPoint: point,
+        isSelf: true,
+        status: 'sending',
+      };
+
+      soundFx.playSend();
+      set((s) => ({
+        chats: s.chats.map((c) =>
+          c.id === chatId
+            ? {
+                ...c,
+                messages: [...c.messages, newMsg],
+                lastKind: 'geo:point',
+                lastAuthor: 'Я',
+                lastAt: new Date().toISOString(),
+              }
+            : c,
+        ),
+      }));
+
+      const markStatus = (status: Message['status']) =>
+        set((s) => ({
+          chats: s.chats.map((c) =>
+            c.id === chatId
+              ? { ...c, messages: c.messages.map((m) => (m.id === clientId ? { ...m, status } : m)) }
+              : c,
+          ),
+        }));
+
+      try {
+        const row = await messengerApi.appendMessage(chatId, {
+          client_id: clientId,
+          author_id: state.currentUser.id,
+          author_name: state.currentUser.name,
+          kind: 'geo:point',
+          body: geoPointBody(point),
+        });
+        markStatus(deliveryStatus(row.delivery ?? row.delivery_state));
+      } catch (err) {
+        console.warn('[messenger] вузол не прийняв точку:', err);
+        markStatus('failed');
+        throw err;
       }
     },
 

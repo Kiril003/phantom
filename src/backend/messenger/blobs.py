@@ -103,7 +103,12 @@ GROUP_TOKEN_LIMIT = 48
 #: стрічку воно не лягає, як і 'delete', — воно ВИКОНУЄТЬСЯ. Решти групових
 #: типів (member/leave/rename) тут навмисне немає: їх ще не написано, а
 #: оголосити тип, який вузол не виконує, означало б обіцяти неіснуюче.
-WIRE_KINDS = ("text", "image", "file", "delete", "radio", "group:invite")
+#:
+#: 'geo:point' — разова точка {lat, lon, at, acc?, label?}. Їде наявними
+#: дорогами і тією ж сесією, що й текст: 30 байтів пролазять там, де фото вже
+#: неможливе. Решти гео-типів (share/tick/stop/meet/mark) тут поки немає — це
+#: наступні хвилі контракту.
+WIRE_KINDS = ("text", "image", "file", "delete", "radio", "group:invite", "geo:point")
 
 
 def wrap_frame(kind: str, body: str, origin_id: str = "", group: str = "") -> str:

@@ -153,6 +153,7 @@ const kindPreview: Record<string, { icon: typeof Table2; label: string }> = {
   voice: { icon: Mic, label: 'Голосове' },
   image: { icon: ImageIcon, label: 'Фото' },
   location: { icon: MapPin, label: 'Локація' },
+  'geo:point': { icon: MapPin, label: 'Місце' },
   poll: { icon: Vote, label: 'Опитування' },
   event: { icon: Calendar, label: 'Подія' },
   code: { icon: Code, label: 'Код' },

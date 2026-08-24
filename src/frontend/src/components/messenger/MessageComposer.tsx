@@ -98,9 +98,53 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     total: number;
   } | null>(null);
   const [uploadError, setUploadError] = useState<string | null>(null);
+  const [geoBusy, setGeoBusy] = useState(false);
+  const [geoError, setGeoError] = useState<string | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sendAttachment = useMessengerStore((st) => st.sendAttachment);
+  const sendGeoPoint = useMessengerStore((st) => st.sendGeoPoint);
+
+  /**
+   * «Моє місце»: одна точка з браузера, з часом ВИМІРУ в тілі кадру.
+   *
+   * Тут не вигадується нічого: немає дозволу, немає координат, не встиг
+   * пристрій — так і кажемо, замість останньої відомої або нуля на екваторі.
+   */
+  const shareMyPlace = () => {
+    setShowAttachMenu(false);
+    setGeoError(null);
+    if (!navigator.geolocation) {
+      setGeoError('Цей браузер не вміє визначати місце — надсилати нічого');
+      return;
+    }
+    setGeoBusy(true);
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        setGeoBusy(false);
+        void sendGeoPoint({
+          lat: pos.coords.latitude,
+          lon: pos.coords.longitude,
+          // Час виміру бере сам пристрій — саме він поїде в кадрі.
+          atMs: pos.timestamp || Date.now(),
+          ...(Number.isFinite(pos.coords.accuracy)
+            ? { accuracyM: Math.round(pos.coords.accuracy) }
+            : {}),
+        }).catch(() => setGeoError('Вузол не прийняв точку — вона нікуди не поїхала'));
+      },
+      (err) => {
+        setGeoBusy(false);
+        setGeoError(
+          err.code === err.PERMISSION_DENIED
+            ? 'Дозвіл на місце не дано — точка не поїде'
+            : err.code === err.TIMEOUT
+            ? 'Пристрій не визначив місце за 15 секунд'
+            : 'Координат немає: пристрій не бачить свого місця',
+        );
+      },
+      { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
+    );
+  };
 
   /**
    * Кілька файлів — послідовні надсилання, по одному, з чесною чергою.
@@ -560,12 +604,23 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
         </div>
       )}
 
-      {uploadError && (
+      {geoBusy && (
+        <div className="mb-2 px-3 py-2 bg-[#FDF4EC] border border-[#EBC7AE] rounded-xl">
+          <span className="text-[11.5px] text-[#A9603A]">
+            Питаю пристрій про місце…
+          </span>
+        </div>
+      )}
+
+      {(uploadError || geoError) && (
         <div className="mb-2 px-3 py-2 bg-[#FBEBE6] border border-[#E9BFAE] rounded-xl flex items-center justify-between gap-2">
-          <span className="text-[11.5px] text-[#8C3B22]">{uploadError}</span>
+          <span className="text-[11.5px] text-[#8C3B22]">{uploadError || geoError}</span>
           <button
             type="button"
-            onClick={() => setUploadError(null)}
+            onClick={() => {
+              setUploadError(null);
+              setGeoError(null);
+            }}
             className="text-[#8C3B22] hover:opacity-70 shrink-0"
             aria-label="Сховати помилку"
           >
@@ -636,11 +691,12 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                       {MEDIA_LIMIT_LABEL}
                     </span>
                   </div>
-                  {/* Фото і Файл працюють. Голосове й Локація чесно позначені
+                  {/* Фото, Файл і Моє місце працюють. Голосове чесно позначене
                       «скоро» — мертвий пункт гірший за відсутній. */}
                   {[
                     { icon: ImageIcon, label: 'Фото', pick: () => photoInputRef.current?.click() },
                     { icon: FileIcon, label: 'Файл', pick: () => fileInputRef.current?.click() },
+                    { icon: MapPin, label: 'Моє місце', pick: shareMyPlace },
                   ].map(({ icon: Icon, label, pick }) => (
                     <button
                       key={label}
@@ -655,10 +711,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                       <span className="flex-1 font-semibold">{label}</span>
                     </button>
                   ))}
-                  {[
-                    { icon: Mic, label: 'Голосове' },
-                    { icon: MapPin, label: 'Локація' },
-                  ].map(({ icon: Icon, label }) => (
+                  {[{ icon: Mic, label: 'Голосове' }].map(({ icon: Icon, label }) => (
                     <button
                       key={label}
                       type="button"

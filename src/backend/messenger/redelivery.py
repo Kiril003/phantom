@@ -243,6 +243,7 @@ async def read_supabase_mailbox(
                         bytes.fromhex(frame_hex),
                         envelope.get("from_node_id"),
                         reply_address=envelope.get("reply_address"),
+                        road="mailbox",
                     )
                     accepted += 1
             except Exception as exc:  # noqa: BLE001

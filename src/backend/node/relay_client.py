@@ -268,6 +268,7 @@ async def _accept_mailbox(message: dict[str, Any]) -> None:
                 bytes.fromhex(frame_hex),
                 message.get("from_node_id"),
                 reply_address=message.get("reply_address"),
+                road="mailbox",
             )
     except Exception as exc:  # noqa: BLE001 — чужий лист не має валити зʼєднання
         logger.info("лист зі скриньки не прийнявся: %s", exc)

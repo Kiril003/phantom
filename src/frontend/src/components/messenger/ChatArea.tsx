@@ -52,6 +52,7 @@ import { MultiQuoteEmbed } from './MultiQuoteEmbed';
 import { FormattedMessageText } from './FormattedMessageText';
 import { HighlightedText } from './HighlightedText';
 import { SecureMediaBubble } from './SecureMediaBubble';
+import { GeoPointBubble } from './GeoPointBubble';
 import { ReactionPickerModal } from './ReactionPickerModal';
 import { MessageDetailsModal } from './MessageDetailsModal';
 import { DeleteMessageModal } from './DeleteMessageModal';
@@ -1840,6 +1841,15 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
                         </div>
                       </div>
                     </div>
+                  )}
+
+                  {/* 9b. ТОЧКА «Я ТУТ» — вимір із пристрою, не картка місця */}
+                  {msg.type === 'geo:point' && msg.geoPoint && (
+                    <GeoPointBubble
+                      point={msg.geoPoint}
+                      viaMailbox={msg.transport === 'mailbox'}
+                      isSelf={isSelf}
+                    />
                   )}
 
                   {/* 10. CODE MESSAGE */}

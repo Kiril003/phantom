@@ -4,10 +4,24 @@
  * власне сховище вузла і транспорт P2P / WebRTC.
  */
 
+/**
+ * Точка «я тут» із кадру geo:point. `atMs` — час ВИМІРУ на вузлі відправника,
+ * не час доставки: на ньому тримається чесний вік (див. messengerGeo.ts).
+ */
+export interface GeoPoint {
+  lat: number;
+  lon: number;
+  atMs: number;
+  accuracyM?: number;
+  label?: string;
+}
+
 export type MessageType =
   | 'text'
   | 'voice'
   | 'location'
+  /** Разова точка «я тут» — вимір із пристрою, не картка місця. */
+  | 'geo:point'
   | 'poll'
   | 'event'
   | 'split-bill'
@@ -276,6 +290,8 @@ export interface Message {
   aiSummary?: string;
   voiceData?: VoiceData;
   locationData?: LocationData;
+  /** Точка з кадру geo:point — координати і час ВИМІРУ. */
+  geoPoint?: GeoPoint;
   pollData?: PollData;
   eventData?: EventData;
   splitBillData?: SplitBillData;
@@ -324,7 +340,11 @@ export interface Message {
    */
   attachmentState?: string;
   scheduledTime?: string;
-  transport?: 'server' | 'p2p' | 'relay';
+  /**
+   * Дорога, якою кадр приїхав. 'mailbox' — не прикраса: точка з листа, що
+   * чекав у скриньці, застаріла за законом №3, хоч би що казав її час виміру.
+   */
+  transport?: 'server' | 'p2p' | 'relay' | 'direct' | 'mailbox';
   p2pMeta?: {
     latencyMs?: number;
     peerFingerprint?: string;

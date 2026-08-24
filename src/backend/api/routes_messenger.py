@@ -39,6 +39,7 @@ from messenger.crypto.keys import KeyStore, PublicBundle, UntrustedBundle
 from messenger.crypto.safety import format_safety_number, safety_number
 from messenger.crypto.session import Session
 from messenger.blobs import wrap_frame
+from messenger.geo import parse_point
 from messenger.guard import GuardRejected, inbox_guard
 from messenger.inbox import InboxError, RadioFrame, accept_frame
 from messenger.outbox import OutboxError, prepare_frame
@@ -768,6 +769,12 @@ async def append_message(
                 status_code=400, detail="ви ще не в цій групі — запрошення не прийнято"
             )
 
+    if payload.kind == "geo:point" and parse_point(payload.body or "") is None:
+        raise HTTPException(
+            status_code=400,
+            detail="точка без координат або без часу виміру — везти нічого",
+        )
+
     # Повтор після обриву — не помилка. Віддаємо те, що вже лежить, і мовчимо.
     existing = (
         await session.execute(
@@ -1323,6 +1330,8 @@ async def receive_frame(
             raw,
             payload.from_node_id,
             reply_address=payload.reply_address,
+            # Сюди штовхає сам вузол-відправник: канал між нами живий зараз.
+            road="direct",
         )
     except InboxError as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc

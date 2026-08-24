@@ -37,6 +37,7 @@ from messenger.crypto.at_rest import seal
 from messenger.crypto.keys import KeyStore
 from messenger.crypto.safety import safety_number
 from messenger.crypto.session import Session
+from messenger.geo import parse_point
 from messenger.purge import find_by_origin, tombstone
 
 __all__ = ["InboxError", "RadioFrame", "accept_frame", "conversation_for"]
@@ -177,6 +178,7 @@ async def accept_frame(
     peer_node_id: Optional[str] = None,
     *,
     reply_address: Optional[str] = None,
+    road: str = "relay",
 ) -> Optional[Union[MessengerMessage, RadioFrame]]:
     """Розшифровує кадр і кладе повідомлення у стрічку власника.
 
@@ -187,6 +189,10 @@ async def accept_frame(
     наприклад, видалення приїхало на те, чого в нас ніколи не було. Це не
     помилка, тож і 400 у відповідь бути не може — інакше відправник вічно
     повторював би кадр, який уже зробив свою роботу.
+
+    `road` — якою дорогою кадр приїхав: direct | relay | mailbox. Це не
+    прикраса: точка, що чекала у скриньці, народжується застарілою навіть коли
+    доїхала за секунду після виміру, і без назви дороги сказати це нічим.
     """
     contact = (
         await _contact_for(session, owner_user_id, peer_node_id) if peer_node_id else None
@@ -275,6 +281,12 @@ async def accept_frame(
         await session.refresh(target)
         return target
 
+    if kind == "geo:point" and parse_point(body) is None:
+        # Тіло без координат — не точка. Показати її нічим, а храповик уже
+        # зрушено вище: стан треба зберегти, інакше наступний кадр не відкриється.
+        await session.commit()
+        return None
+
     # Ім'я з вузла-відправника під префіксом: воно єдине спільне для двох
     # вузлів, і саме за ним потім приїде видалення. Немає origin (старий
     # кадр) — лишаємось із власним випадковим, але видалити таке ззовні
@@ -296,7 +308,7 @@ async def accept_frame(
         author_id=contact.peer_node_id,
         author_name=contact.display_name,
         kind=kind,
-        transport="relay",
+        transport=road,
         sent_at=_now(),
     )
     row.ciphertext = seal(keys, body, aad=row.id.encode()).hex()

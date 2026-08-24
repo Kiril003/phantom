@@ -4,6 +4,7 @@
 
 import { BASE, request } from './api';
 import type { Chat, Message, SecureMedia } from '../types/messenger';
+import { parseGeoPoint } from './messengerGeo';
 import { readToken } from './tokenStore';
 
 export interface NodeConversation {
@@ -319,7 +320,12 @@ export function messageFromNode(row: NodeMessage, selfId: string, peerNodeId?: s
   // Показова стрічка везе складний вміст як JSON — розбираємо його тут, щоб
   // таблиці, графіки й реакції жили тим самим шляхом, що й звичайний текст.
   let rich: Record<string, unknown> = {};
-  if (row.kind !== 'text' && row.body) {
+  if (row.kind === 'geo:point') {
+    // Точка розбирається окремо: у неї свої числа і свій час виміру, і
+    // непрочитане тіло краще лишити порожнім, ніж намалювати пів-точки.
+    const point = parseGeoPoint(row.body);
+    rich = point ? { geoPoint: point } : {};
+  } else if (row.kind !== 'text' && row.body) {
     try {
       const parsed = JSON.parse(row.body);
       // Вкладення з наскрізним ключем упізнається за самим описом, а не за

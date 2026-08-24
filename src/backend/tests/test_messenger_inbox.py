@@ -117,7 +117,8 @@ async def test_inbox_route_accepts_a_real_frame(auth_root_client):
 
     assert resp.status_code == 200
     assert resp.json()["body"] == "з іншого вузла"
-    assert resp.json()["transport"] == "relay"
+    # Сюди штовхнув сам вузол-відправник: дорога пряма, і рядок каже саме це.
+    assert resp.json()["transport"] == "direct"
 
 
 @pytest.mark.anyio

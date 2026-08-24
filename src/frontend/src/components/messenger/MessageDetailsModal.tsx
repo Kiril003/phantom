@@ -15,6 +15,8 @@ const transportLabel: Record<NonNullable<Message['transport']>, string> = {
   p2p: 'WebRTC DataChannel (DTLS)',
   server: 'Через вузол (WebSocket)',
   relay: 'Через релей-вузол',
+  direct: 'Напряму від вузла відправника',
+  mailbox: 'Зі скриньки — лист чекав, поки канал був мертвий',
 };
 
 interface MessageDetailsModalProps {

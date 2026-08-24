@@ -81,6 +81,7 @@ export const authApi = {
   loginPin: (username: string, pin: string) =>
     request<AuthResponse>('POST', '/auth/login/pin', { username, pin }),
   refresh: () => request<{ token: string; expires_at: string }>('POST', '/auth/refresh'),
+  door: (ticket: string) => request<AuthResponse>('POST', '/auth/door', { ticket }),
   me: () => request<User>('GET', '/auth/me'),
   logout: () => request<{ ok: boolean }>('POST', '/auth/logout'),
   config: () =>

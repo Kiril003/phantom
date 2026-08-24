@@ -17,7 +17,30 @@ import { networkEngine } from '../../services/messengerNetworkEngine';
 import { TransportProtocol } from '../../types/messenger';
 import { notificationPrefs } from '../../services/notificationPrefs';
 import { messengerFontScale } from '../../services/messengerFontScale';
+import { messengerAccent, MESSENGER_ACCENTS } from '../../services/messengerAccent';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
+import { messengerApi, type NodeConversation } from '../../services/messengerApi';
+import { useMessengerStore } from '../../stores/messengerStore';
+
+// Доказові розмови позначки не мають — їх створювали звичайним API. Тому не
+// вгадуємо мовчки: за назвою лише ПРОПОНУЄМО, а викреслює власник.
+const PROOF_TITLE = /(доказ|proof|qa-|тест|test|перевірка)/i;
+
+interface Candidate {
+  id: string;
+  title: string;
+  reason: string;
+}
+
+function candidatesOf(list: NodeConversation[]): Candidate[] {
+  return list
+    .filter((c) => c.is_demo || PROOF_TITLE.test(c.title))
+    .map((c) => ({
+      id: c.id,
+      title: c.title,
+      reason: c.is_demo ? 'показова' : 'схоже на доказову',
+    }));
+}
 
 // Стан дозволу словами. Це єдине, що тут можна чесно пообіцяти.
 const NOTIF_NOTE: Record<string, string> = {
@@ -47,19 +70,66 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onOpenP2PNetworkModal,
 }) => {
   const [activeTab, setActiveTab] = useState<'appearance' | 'network' | 'notifications' | 'privacy' | 'data'>('appearance');
-  const [accentColor, setAccentColor] = useState<'terracotta' | 'sage' | 'chestnut' | 'amber'>('terracotta');
-  // Кегль живе у власному сховищі: він мусить пережити закриття модалки і F5,
-  // інакше це знову напис на кнопці замість пікселів.
+  // Відтінок і кегль живуть у власних сховищах: вибір мусить пережити
+  // закриття модалки і F5, інакше це знову напис на кнопці замість пікселів.
+  const accentColor = useSyncExternalStore(messengerAccent.subscribe, messengerAccent.getSnapshot);
   const fontSize = useSyncExternalStore(messengerFontScale.subscribe, messengerFontScale.getSnapshot);
-  const [readReceipts, setReadReceipts] = useState(true);
-  const [lastSeenVisible, setLastSeenVisible] = useState(true);
   const [transportMode, setTransportMode] = useState<TransportProtocol>(networkEngine.getTransportMode());
   const notifs = useSyncExternalStore(notificationPrefs.subscribe, notificationPrefs.getSnapshot);
+
+  const [candidates, setCandidates] = useState<Candidate[] | null>(null);
+  const [picked, setPicked] = useState<Set<string>>(new Set());
+  const [sweeping, setSweeping] = useState(false);
+  const [sweepNote, setSweepNote] = useState<string | null>(null);
+  const hydrateFromNode = useMessengerStore((s) => s.hydrateFromNode);
 
   // Дозвіл могли змінити в налаштуваннях сайту, поки вкладка стояла відкритою.
   useEffect(() => {
     if (isOpen) notificationPrefs.sync();
   }, [isOpen]);
+
+  useEffect(() => {
+    if (!isOpen || activeTab !== 'data') return;
+    let alive = true;
+    void messengerApi
+      .listConversations()
+      .then((list) => {
+        if (!alive) return;
+        const found = candidatesOf(list);
+        setCandidates(found);
+        setPicked(new Set(found.map((c) => c.id)));
+      })
+      .catch(() => {
+        if (alive) setCandidates([]);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [isOpen, activeTab]);
+
+  const sweepDemos = async () => {
+    if (!candidates || picked.size === 0) return;
+    setSweeping(true);
+    setSweepNote(null);
+    let gone = 0;
+    let failed = 0;
+    for (const id of picked) {
+      try {
+        await messengerApi.deleteConversation(id);
+        gone += 1;
+      } catch {
+        failed += 1;
+      }
+    }
+    await hydrateFromNode().catch(() => undefined);
+    const left = candidates.filter((c) => !picked.has(c.id));
+    setCandidates(left);
+    setPicked(new Set(left.map((c) => c.id)));
+    setSweeping(false);
+    setSweepNote(
+      failed === 0 ? `Прибрано ${gone}.` : `Прибрано ${gone}, не вдалося ${failed}.`
+    );
+  };
 
   // Escape виводить із шару так само, як хрестик.
   useEscapeClose(isOpen, onClose);
@@ -138,17 +208,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   Акцентний природний відтінок
                 </label>
                 <div className="grid grid-cols-4 gap-2">
-                  {[
-                    { id: 'terracotta', label: 'Теракота', color: '#E87A42' },
-                    { id: 'sage', label: 'Шавлія', color: '#5B8C67' },
-                    { id: 'chestnut', label: 'Каштан', color: '#8A5333' },
-                    { id: 'amber', label: 'Бурштин', color: '#D97706' },
-                  ].map((c) => (
+                  {MESSENGER_ACCENTS.map((c) => (
                     <button
                       key={c.id}
+                      data-accent={c.id}
                       onClick={() => {
                         soundFx.playTap();
-                        setAccentColor(c.id as any);
+                        messengerAccent.set(c.id);
                       }}
                       className={`p-2.5 rounded-2xl border text-center transition-all ${
                         accentColor === c.id
@@ -378,50 +444,32 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           )}
 
           {/* TAB 4: PRIVACY */}
+          {/* Тут стояли перемикачі «звіти про прочитання» і «був у мережі».
+              Обидва обіцяли керувати чужим екраном, а керувати не було чим:
+              позначка прочитаного нікуди не їде, присутності вузол не публікує.
+              Замість вимикача без дроту — те, що справді відбувається. */}
           {activeTab === 'privacy' && (
             <div className="space-y-3">
-              <div className="flex items-center justify-between p-3.5 bg-white border border-[#DFD6C5] rounded-2xl">
-                <div>
-                  <p className="font-bold text-xs text-[#1E2521]">Звіти про прочитання</p>
-                  <p className="text-[11px] text-[#7A8479]">Повідомляти співрозмовників про перегляд</p>
-                </div>
-                <button
-                  onClick={() => {
-                    soundFx.playTap();
-                    setReadReceipts(!readReceipts);
-                  }}
-                  className={`w-12 h-6 rounded-full transition-colors relative p-0.5 ${
-                    readReceipts ? 'bg-[#E87A42]' : 'bg-[#D6CDC0]'
-                  }`}
-                >
-                  <div
-                    className={`w-5 h-5 rounded-full bg-white transition-transform ${
-                      readReceipts ? 'translate-x-6' : 'translate-x-0'
-                    }`}
-                  />
-                </button>
+              <div className="p-3.5 bg-[#F4F1E8] rounded-2xl border border-[#E0D5C2] space-y-1.5">
+                <span className="text-[11px] font-bold text-[#4A5548] flex items-center gap-1.5">
+                  <Shield className="w-3.5 h-3.5 text-[#4C8A55]" strokeWidth={1.75} />
+                  <span>Прочитане й присутність з вузла не виходять</span>
+                </span>
+                <span className="text-[10.5px] text-[#7A6A55] block leading-relaxed">
+                  Позначка прочитаного лишається тут: вона гасить лічильник
+                  непрочитаних у вашому списку і співрозмовнику не надсилається.
+                  Час останньої активності вузол теж нікому не показує. Тому тут
+                  і немає вимикачів — обидва звіти мовчать самою будовою, а не
+                  за налаштуванням.
+                </span>
               </div>
 
-              <div className="flex items-center justify-between p-3.5 bg-white border border-[#DFD6C5] rounded-2xl">
-                <div>
-                  <p className="font-bold text-xs text-[#1E2521]">Статус "Був у мережі"</p>
-                  <p className="text-[11px] text-[#7A8479]">Відображати час останньої активності</p>
-                </div>
-                <button
-                  onClick={() => {
-                    soundFx.playTap();
-                    setLastSeenVisible(!lastSeenVisible);
-                  }}
-                  className={`w-12 h-6 rounded-full transition-colors relative p-0.5 ${
-                    lastSeenVisible ? 'bg-[#E87A42]' : 'bg-[#D6CDC0]'
-                  }`}
-                >
-                  <div
-                    className={`w-5 h-5 rounded-full bg-white transition-transform ${
-                      lastSeenVisible ? 'translate-x-6' : 'translate-x-0'
-                    }`}
-                  />
-                </button>
+              <div className="p-3.5 bg-white border border-[#DFD6C5] rounded-2xl space-y-1.5">
+                <p className="font-bold text-xs text-[#1E2521]">Хто на тому кінці</p>
+                <p className="text-[11px] text-[#7A8479] leading-relaxed">
+                  Шифр каже лише, що канал запечатаний. Що це саме та людина —
+                  каже звірене число безпеки в картці співрозмовника.
+                </p>
               </div>
             </div>
           )}
@@ -444,6 +492,64 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                   <Download className="w-4 h-4" strokeWidth={1.75} />
                   <span>Експортувати повний бекап (.json)</span>
                 </button>
+              </div>
+
+              <div className="p-4 bg-white border border-[#DFD6C5] rounded-2xl space-y-2 shadow-2xs">
+                <p className="font-bold text-xs text-[#1E2521]">Прибрати показові розмови</p>
+                {candidates === null && (
+                  <p className="text-[11px] text-[#7A8479]">Дивлюся стрічку…</p>
+                )}
+                {candidates?.length === 0 && (
+                  <p className="text-[11px] text-[#7A8479]">
+                    {sweepNote ?? 'Показових і доказових розмов у стрічці немає.'}
+                  </p>
+                )}
+                {candidates && candidates.length > 0 && (
+                  <>
+                    <p className="text-[11px] text-[#7A8479]">
+                      Знайдено {candidates.length}. Зніміть галочку з тієї, що потрібна —
+                      решту приберемо. Нічого не зникає без цієї кнопки.
+                    </p>
+                    <div className="max-h-44 overflow-y-auto space-y-1 pt-1">
+                      {candidates.map((c) => (
+                        <label
+                          key={c.id}
+                          className="flex items-center gap-2 px-2 py-1.5 rounded-xl hover:bg-[#F9F7F1] cursor-pointer"
+                        >
+                          <input
+                            type="checkbox"
+                            checked={picked.has(c.id)}
+                            onChange={() => {
+                              const next = new Set(picked);
+                              if (next.has(c.id)) next.delete(c.id);
+                              else next.add(c.id);
+                              setPicked(next);
+                            }}
+                            className="accent-[#E87A42]"
+                          />
+                          <span className="text-[11.5px] text-[#1E2521] truncate flex-1">
+                            {c.title}
+                          </span>
+                          <span className="text-[10px] text-[#7A8479] shrink-0">{c.reason}</span>
+                        </label>
+                      ))}
+                    </div>
+                    <button
+                      disabled={sweeping || picked.size === 0}
+                      onClick={() => {
+                        soundFx.playTap();
+                        if (confirm(`Прибрати ${picked.size} розмов(и)? Це не скасувати.`)) {
+                          void sweepDemos();
+                        }
+                      }}
+                      className="px-3.5 py-2 bg-[#FCE7D8] hover:bg-[#F9CCA8] disabled:opacity-50 text-[#8C461A] font-bold rounded-xl text-xs flex items-center gap-2 transition-colors"
+                    >
+                      <Trash2 className="w-4 h-4" strokeWidth={1.75} />
+                      <span>{sweeping ? 'Прибираю…' : `Прибрати обрані (${picked.size})`}</span>
+                    </button>
+                    {sweepNote && <p className="text-[11px] text-[#7A8479]">{sweepNote}</p>}
+                  </>
+                )}
               </div>
 
               {onClearHistory && (

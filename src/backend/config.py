@@ -103,6 +103,12 @@ class PhantomConfig(BaseSettings):
     database_url: str = Field(
         default_factory=lambda: f"sqlite+aiosqlite:///{__import__('paths').resolve_data_dir('sqlite') / 'phantom.db'}"
     )
+    #: Луна SQL. Раніше висіла на `debug`, а DEBUG=true стоїть у кожному
+    #: робочому .env — звідси десятки МБ логів за годину простою.
+    db_echo: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("db_echo", "DB_ECHO", "PHANTOM_DB_ECHO"),
+    )
 
     # ── ChromaDB ──────────────────────────────────────────────────────────────
     chroma_path: str = Field(

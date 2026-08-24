@@ -3,6 +3,8 @@ import type { User } from '@shared/types';
 import { ApiError, authApi } from '../services/api';
 import { bootstrapSettings } from '../services/settingsBootstrap';
 import { useSystemStore } from './systemStore';
+import { clearToken, readToken, readTokenExpiry, writeToken } from '../services/tokenStore';
+import { takeDoorTicket } from '../services/doorTicket';
 
 /**
  * Стан сесії на старті. Раніше його не було: поки перевірка токена летіла,
@@ -44,15 +46,14 @@ interface AuthStoreState {
 
 export const useAuthStore = create<AuthStoreState>((set, get) => ({
   user: null,
-  token: localStorage.getItem('phantom_token'),
-  expiresAt: localStorage.getItem('phantom_token_expires'),
+  token: readToken(),
+  expiresAt: readTokenExpiry(),
   loginAttempts: 0,
   lockedUntil: null,
   sessionPhase: 'checking',
 
   setUser: (user, token, expiresAt) => {
-    localStorage.setItem('phantom_token', token);
-    localStorage.setItem('phantom_token_expires', expiresAt);
+    writeToken(token, expiresAt);
     set({ user, token, expiresAt, loginAttempts: 0, lockedUntil: null, sessionPhase: 'in' });
     // Audit D-H6 — bootstrap is gated on a token, so it has to retrigger
     // here once auth succeeds. settingsBootstrap dedupes a rapid-fire
@@ -61,8 +62,7 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
   },
 
   clearAuth: () => {
-    localStorage.removeItem('phantom_token');
-    localStorage.removeItem('phantom_token_expires');
+    clearToken();
     set({ user: null, token: null, expiresAt: null, sessionPhase: 'out' });
   },
 
@@ -84,6 +84,20 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
    * Returns true if session is valid, false otherwise.
    */
   autoLogin: async () => {
+    // Квиток із адреси має перевагу над збереженою сесією: власник щойно
+    // попросив свіжий вхід зі скрипта запуску.
+    const ticket = takeDoorTicket();
+    if (ticket) {
+      try {
+        const res = await authApi.door(ticket);
+        get().setUser(res.user, res.token, res.expires_at);
+        useSystemStore.getState().setAuthenticated(true);
+        return true;
+      } catch {
+        // квиток згорів або протух — далі звичайним шляхом
+      }
+    }
+
     const { token, expiresAt } = get();
     // Тільки в dev: сервер розробки віддає локальні дані входу з диска,
     // тож у бандлі їх немає й у прод-збірці ця гілка згортається геть.
@@ -113,8 +127,7 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
         // Try refresh
         try {
           const res = await authApi.refresh();
-          localStorage.setItem('phantom_token', res.token);
-          localStorage.setItem('phantom_token_expires', res.expires_at);
+          writeToken(res.token, res.expires_at);
           set({ token: res.token, expiresAt: res.expires_at });
         } catch (err) {
           if (!coreRefused(err)) {
@@ -156,8 +169,7 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
   refreshToken: async () => {
     try {
       const res = await authApi.refresh();
-      localStorage.setItem('phantom_token', res.token);
-      localStorage.setItem('phantom_token_expires', res.expires_at);
+      writeToken(res.token, res.expires_at);
       set({ token: res.token, expiresAt: res.expires_at });
       return true;
     } catch {

@@ -14,6 +14,10 @@ from typing import AsyncGenerator
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
 
+#: Читається тут, а не в lifespan: найдорожче — `import onnxruntime` у
+#: голосовому модулі, і воно платиться вже на імпорті маршрутів.
+MESSENGER_ONLY = os.environ.get("PHANTOM_MESSENGER_ONLY") == "1"
+
 from config import config
 from db.database import close_db, init_db
 from api.websocket_hub import hub
@@ -31,7 +35,11 @@ from api.routes_license import router as license_router
 from licensing.enforcement import install_enforcement
 from api.routes_files import router as files_router
 from api.routes_voice import router as voice_router
-from api.routes_voice_stream import register_voice_ws
+if MESSENGER_ONLY:
+    # `voice.vad` тягне onnxruntime на рівні модуля — найдорожчий імпорт вузла.
+    register_voice_ws = None  # type: ignore[assignment]
+else:
+    from api.routes_voice_stream import register_voice_ws
 from api.routes_ai import router as ai_router
 from api.routes_face import router as face_router
 from api.routes_agent import router as agent_router
@@ -480,6 +488,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     async with get_session() as db:
         await ensure_default_user(db)
 
+    # Вхідні двері для `scripts/phantom-messenger`. Без PHANTOM_DOOR_KEY_FILE
+    # маршрутів /auth/door* просто не існує — див. security/door.py.
+    try:
+        from security import door
+        door.install_key()
+    except Exception as exc:
+        logger.warning("двері: ключ не встановлено — %s", exc)
+
     # Day-4 Wave-2 V-5 (ADR-RTP-001) — five independent warmup lanes
     # (MiniLM, Chroma eager, Chroma janitor, CPU sampler, voice preload)
     # collapse into one ``asyncio.gather`` orchestration. Each lane wraps
@@ -551,206 +567,220 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
     except Exception as exc:
         logger.warning("dispatch state_broadcaster wiring failed: %s", exc)
 
-    # Start serial bridge (non-blocking, will retry on error).
-    # Skipped on dev machines via PHANTOM_SERIAL_ENABLED=false.
-    if config.serial_enabled:
-        await _start_serial_bridge()
-    else:
-        logger.info("Serial bridge disabled (PHANTOM_SERIAL_ENABLED=false)")
-
-    # Phase 9.4b — wire the default LocalizationSource chain before the
-    # context loop starts so the first tick can already publish provenance.
-    try:
-        from agent.localization.lifecycle import wire_default_sources
-        wire_default_sources()
-    except Exception as exc:
-        logger.warning("Localization source wiring failed: %s", exc)
-
-    # Phase 9.4b — LocationHistory writer + reverse-geocode enricher.
+    # PHANTOM_MESSENGER_ONLY=1 пропускає все, що листу не потрібне. База,
+    # TLS-слухач, ретранслятор і черга перевідправки — нижче, поза цією гілкою.
     history_writer_obj = None
     history_enricher_obj = None
-    if config.agent_location_history_enabled:
-        try:
-            from agent.localization.history_writer import get_writer, get_enricher
-            history_writer_obj = get_writer()
-            await history_writer_obj.start()
-            history_enricher_obj = get_enricher()
-            await history_enricher_obj.start()
-            logger.info("LocationHistory writer + enricher started")
-        except Exception as exc:
-            logger.warning("LocationHistory setup failed: %s", exc)
-
-    # Start tick loop for time-driven context updates. Supervised (P1-4):
-    # if the loop ever raises out it restarts with exponential backoff and
-    # quarantines after repeated failures, instead of dying silently or
-    # (via its internal bare-except) spinning an error every 500ms forever.
-    from core.supervisor import supervisor
-    loop_task = supervisor.spawn("context_loop", _context_loop)
-
-    # Audit-2026-04-29 — tactical memory janitor (promotes expired facts
-    # to strategic memory + prunes stale rows, once per hour).
-    janitor_task = supervisor.spawn(
-        "tactical_memory_janitor", _tactical_memory_janitor_loop,
-    )
-
-    # Start OLED face animator (Phase 08). It self-gates on
-    # oled_animation_enabled inside its loop so a setting flip is picked up
-    # without restarting the task.
-    from vision.oled_animator import oled_animator
-    await oled_animator.start()
-
-    # Phase 09.1 — agent cognitive layer
     emotion_stop_event: asyncio.Event | None = None
     emotion_task: asyncio.Task | None = None
-    # Phase 9.3b — proactive loop + standing orders runner (both start lazily
-    # when their respective config flag is truthy).
     proactive_loop_obj = None
     standing_orders_runner_obj = None
-    if config.agent_enabled:
+    if MESSENGER_ONLY:
+        logger.info(
+            "Режим «лише месенджер»: зір, голос, гео-опитувачі, агентські "
+            "петлі та прогрів моделей не піднімаються (PHANTOM_MESSENGER_ONLY=1)"
+        )
+    else:
+        # Start serial bridge (non-blocking, will retry on error).
+        # Skipped on dev machines via PHANTOM_SERIAL_ENABLED=false.
+        if config.serial_enabled:
+            await _start_serial_bridge()
+        else:
+            logger.info("Serial bridge disabled (PHANTOM_SERIAL_ENABLED=false)")
+
+        # Phase 9.4b — wire the default LocalizationSource chain before the
+        # context loop starts so the first tick can already publish provenance.
         try:
-            from agent.kernel.runtime import ensure_workspace
-            from agent.kernel.audit import mark_orphans_paused
-            ensure_workspace()
-            orphans = await mark_orphans_paused("uvicorn_restart")
-            if orphans:
-                logger.info("Agent: marked %d orphaned task(s) as paused", orphans)
+            from agent.localization.lifecycle import wire_default_sources
+            wire_default_sources()
         except Exception as exc:
-            logger.error("Agent startup hook failed: %s", exc)
+            logger.warning("Localization source wiring failed: %s", exc)
 
-        # Block A-1 — resume any task/mission that was live when the daemon died.
-        try:
-            from agent.kernel.runtime import agent_runtime
-            resume_counts = await agent_runtime.resume_live_tasks_on_boot()
-            if any(resume_counts.values()):
-                logger.info(
-                    "Agent: resumed tasks on boot — foreground=%d background=%d "
-                    "mission_resumes=%d",
-                    resume_counts.get("foreground", 0),
-                    resume_counts.get("background", 0),
-                    resume_counts.get("mission_resumes", 0),
-                )
-        except Exception:
-            logger.exception("resume_live_tasks_on_boot failed — fresh start")
+        # Phase 9.4b — LocationHistory writer + reverse-geocode enricher.
+        history_writer_obj = None
+        history_enricher_obj = None
+        if config.agent_location_history_enabled:
+            try:
+                from agent.localization.history_writer import get_writer, get_enricher
+                history_writer_obj = get_writer()
+                await history_writer_obj.start()
+                history_enricher_obj = get_enricher()
+                await history_enricher_obj.start()
+                logger.info("LocationHistory writer + enricher started")
+            except Exception as exc:
+                logger.warning("LocationHistory setup failed: %s", exc)
 
-        # Phase 9.3a — emotion decay loop drifts the foreground task's
-        # EmotionVector toward baseline every `agent_emotion_decay_interval_s`.
-        if config.agent_emotion_enabled:
+        # Start tick loop for time-driven context updates. Supervised (P1-4):
+        # if the loop ever raises out it restarts with exponential backoff and
+        # quarantines after repeated failures, instead of dying silently or
+        # (via its internal bare-except) spinning an error every 500ms forever.
+        from core.supervisor import supervisor
+        loop_task = supervisor.spawn("context_loop", _context_loop)
+
+        # Audit-2026-04-29 — tactical memory janitor (promotes expired facts
+        # to strategic memory + prunes stale rows, once per hour).
+        janitor_task = supervisor.spawn(
+            "tactical_memory_janitor", _tactical_memory_janitor_loop,
+        )
+
+        # Start OLED face animator (Phase 08). It self-gates on
+        # oled_animation_enabled inside its loop so a setting flip is picked up
+        # without restarting the task.
+        from vision.oled_animator import oled_animator
+        await oled_animator.start()
+
+        # Phase 09.1 — agent cognitive layer
+        emotion_stop_event: asyncio.Event | None = None
+        emotion_task: asyncio.Task | None = None
+        # Phase 9.3b — proactive loop + standing orders runner (both start lazily
+        # when their respective config flag is truthy).
+        proactive_loop_obj = None
+        standing_orders_runner_obj = None
+        if config.agent_enabled:
+            try:
+                from agent.kernel.runtime import ensure_workspace
+                from agent.kernel.audit import mark_orphans_paused
+                ensure_workspace()
+                orphans = await mark_orphans_paused("uvicorn_restart")
+                if orphans:
+                    logger.info("Agent: marked %d orphaned task(s) as paused", orphans)
+            except Exception as exc:
+                logger.error("Agent startup hook failed: %s", exc)
+
+            # Block A-1 — resume any task/mission that was live when the daemon died.
             try:
                 from agent.kernel.runtime import agent_runtime
-                from agent.cognition.emotion import decay_loop
-                emotion_stop_event = asyncio.Event()
-                emotion_task = asyncio.create_task(
-                    decay_loop(agent_runtime, emotion_stop_event),
-                    name="agent_emotion_decay",
-                )
-            except Exception as exc:
-                logger.warning("Emotion decay loop failed to start: %s", exc)
+                resume_counts = await agent_runtime.resume_live_tasks_on_boot()
+                if any(resume_counts.values()):
+                    logger.info(
+                        "Agent: resumed tasks on boot — foreground=%d background=%d "
+                        "mission_resumes=%d",
+                        resume_counts.get("foreground", 0),
+                        resume_counts.get("background", 0),
+                        resume_counts.get("mission_resumes", 0),
+                    )
+            except Exception:
+                logger.exception("resume_live_tasks_on_boot failed — fresh start")
 
-        # Phase 9.3b — proactive loop. Always construct the singleton (hooks
-        # rely on get_loop() returning non-None to push triggers); start the
-        # actual background task only when enabled.
-        try:
-            from agent.kernel.runtime import agent_runtime
-            from agent.cognition.proactive.loop import ProactiveLoop, set_loop
-            proactive_loop_obj = ProactiveLoop(agent_runtime)
-            set_loop(proactive_loop_obj)
-            if config.agent_proactive_enabled:
-                await proactive_loop_obj.start()
-                logger.info("Proactive loop started (initiative active)")
-            else:
-                logger.info(
-                    "Proactive loop singleton constructed; background task "
-                    "disabled (agent_proactive_enabled=False). Flip the flag "
-                    "via Settings UI or sqlite to enable."
-                )
-        except Exception as exc:
-            logger.warning("Proactive loop setup failed: %s", exc)
+            # Phase 9.3a — emotion decay loop drifts the foreground task's
+            # EmotionVector toward baseline every `agent_emotion_decay_interval_s`.
+            if config.agent_emotion_enabled:
+                try:
+                    from agent.kernel.runtime import agent_runtime
+                    from agent.cognition.emotion import decay_loop
+                    emotion_stop_event = asyncio.Event()
+                    emotion_task = asyncio.create_task(
+                        decay_loop(agent_runtime, emotion_stop_event),
+                        name="agent_emotion_decay",
+                    )
+                except Exception as exc:
+                    logger.warning("Emotion decay loop failed to start: %s", exc)
 
-        # Phase 9.3b — standing orders runner.
-        if config.agent_standing_orders_enabled:
+            # Phase 9.3b — proactive loop. Always construct the singleton (hooks
+            # rely on get_loop() returning non-None to push triggers); start the
+            # actual background task only when enabled.
             try:
-                from agent.operations.standing_orders.runner import StandingOrderRunner
-                standing_orders_runner_obj = StandingOrderRunner(agent_runtime)
-                await standing_orders_runner_obj.start()
-                logger.info("Standing orders runner started")
+                from agent.kernel.runtime import agent_runtime
+                from agent.cognition.proactive.loop import ProactiveLoop, set_loop
+                proactive_loop_obj = ProactiveLoop(agent_runtime)
+                set_loop(proactive_loop_obj)
+                if config.agent_proactive_enabled:
+                    await proactive_loop_obj.start()
+                    logger.info("Proactive loop started (initiative active)")
+                else:
+                    logger.info(
+                        "Proactive loop singleton constructed; background task "
+                        "disabled (agent_proactive_enabled=False). Flip the flag "
+                        "via Settings UI or sqlite to enable."
+                    )
             except Exception as exc:
-                logger.warning("Standing orders runner setup failed: %s", exc)
+                logger.warning("Proactive loop setup failed: %s", exc)
 
-    # PHANTOM STREAM — background consciousness tick.
-    try:
-        from agent.consciousness_stream import consciousness_stream
-        consciousness_stream.start()
-        logger.info("ConsciousnessStream started")
-    except Exception as exc:
-        logger.warning("ConsciousnessStream startup failed: %s", exc)
+            # Phase 9.3b — standing orders runner.
+            if config.agent_standing_orders_enabled:
+                try:
+                    from agent.operations.standing_orders.runner import StandingOrderRunner
+                    standing_orders_runner_obj = StandingOrderRunner(agent_runtime)
+                    await standing_orders_runner_obj.start()
+                    logger.info("Standing orders runner started")
+                except Exception as exc:
+                    logger.warning("Standing orders runner setup failed: %s", exc)
 
-    # Ambient Guardian — watch environment/system/body, warn the user proactively.
-    try:
-        from agent.cognition.ambient import ambient_guardian
-        ambient_guardian.start()
-    except Exception as exc:
-        logger.warning("AmbientGuardian startup failed: %s", exc)
-
-    # ПОЛІС — resume unfinished mission graphs after reboot + load population.
-    try:
-        from agent.fabric.service import get_polis
-        from agent.fabric.citizens import get_population
-        await get_population().load()
-        await get_polis().rehydrate()
-    except Exception as exc:
-        logger.warning("Polis rehydrate failed: %s", exc)
-
-    # Drives — restore persisted motivational state so satisfaction earned by
-    # the will (reward on goal completion) survives restarts.
-    try:
-        from agent.cognition.will.drives import drive_system
-        await drive_system.load()
-    except Exception as exc:
-        logger.warning("drive system load failed: %s", exc)
-
-    # Will Engine — unified conductor of intent (sub-project A). Default off.
-    try:
-        from agent.will.engine import will_engine
-        await will_engine.start()
-    except Exception as exc:
-        logger.warning("will engine start failed: %s", exc)
-
-    # Phase 09.2 — episodic memory backfill (only when ChromaDB is behind)
-    # Temporarily disabled by Gemini CLI to bypass boot block
-    # if config.agent_enabled and config.agent_episodic_memory_enabled:
-    #    try:
-    #        from agent.cognition.memory.backfill import backfill_if_behind
-    #        stats = await backfill_if_behind()
-    #        if stats:
-    #            logger.info(
-    #                "Episodic memory: backfilled %d/%d seeds (skipped %d)",
-    #                stats["written"], stats["seeds_total"], stats["skipped"],
-    #            )
-    #    except Exception as exc:
-    #        logger.warning("Episodic memory backfill skipped: %s", exc)
-
-    # Phase 09.2 — MCP discovery (no servers active by default)
-    if config.agent_enabled and config.agent_mcp_servers:
+        # PHANTOM STREAM — background consciousness tick.
         try:
-            from agent.mcp.discovery import discover_all
-            counts = await discover_all()
-            for sn, n in counts.items():
-                logger.info("MCP %s: %d tools registered", sn, n)
+            from agent.consciousness_stream import consciousness_stream
+            consciousness_stream.start()
+            logger.info("ConsciousnessStream started")
         except Exception as exc:
-            logger.warning("MCP discovery skipped: %s", exc)
+            logger.warning("ConsciousnessStream startup failed: %s", exc)
 
-    # Phase 24-F — live OmniMap tasker (alarms_ua + later DeepStateMap /
-    # Ukrenergo). Each adapter polls on its manifest's interval and
-    # broadcasts diffs onto the `"map"` WebSocket channel. Failures are
-    # caught + back-off-ed inside the tasker so a downed upstream never
-    # leaks into the lifespan.
-    try:
-        from geo.live_tasker import setup_default_tasks
-        live_tasker = await setup_default_tasks()
-        await live_tasker.start()
-        logger.info("Live tasker: %d task(s) running", len(live_tasker.names))
-    except Exception as exc:
-        logger.warning("Live tasker setup skipped: %s", exc)
+        # Ambient Guardian — watch environment/system/body, warn the user proactively.
+        try:
+            from agent.cognition.ambient import ambient_guardian
+            ambient_guardian.start()
+        except Exception as exc:
+            logger.warning("AmbientGuardian startup failed: %s", exc)
+
+        # ПОЛІС — resume unfinished mission graphs after reboot + load population.
+        try:
+            from agent.fabric.service import get_polis
+            from agent.fabric.citizens import get_population
+            await get_population().load()
+            await get_polis().rehydrate()
+        except Exception as exc:
+            logger.warning("Polis rehydrate failed: %s", exc)
+
+        # Drives — restore persisted motivational state so satisfaction earned by
+        # the will (reward on goal completion) survives restarts.
+        try:
+            from agent.cognition.will.drives import drive_system
+            await drive_system.load()
+        except Exception as exc:
+            logger.warning("drive system load failed: %s", exc)
+
+        # Will Engine — unified conductor of intent (sub-project A). Default off.
+        try:
+            from agent.will.engine import will_engine
+            await will_engine.start()
+        except Exception as exc:
+            logger.warning("will engine start failed: %s", exc)
+
+        # Phase 09.2 — episodic memory backfill (only when ChromaDB is behind)
+        # Temporarily disabled by Gemini CLI to bypass boot block
+        # if config.agent_enabled and config.agent_episodic_memory_enabled:
+        #    try:
+        #        from agent.cognition.memory.backfill import backfill_if_behind
+        #        stats = await backfill_if_behind()
+        #        if stats:
+        #            logger.info(
+        #                "Episodic memory: backfilled %d/%d seeds (skipped %d)",
+        #                stats["written"], stats["seeds_total"], stats["skipped"],
+        #            )
+        #    except Exception as exc:
+        #        logger.warning("Episodic memory backfill skipped: %s", exc)
+
+        # Phase 09.2 — MCP discovery (no servers active by default)
+        if config.agent_enabled and config.agent_mcp_servers:
+            try:
+                from agent.mcp.discovery import discover_all
+                counts = await discover_all()
+                for sn, n in counts.items():
+                    logger.info("MCP %s: %d tools registered", sn, n)
+            except Exception as exc:
+                logger.warning("MCP discovery skipped: %s", exc)
+
+        # Phase 24-F — live OmniMap tasker (alarms_ua + later DeepStateMap /
+        # Ukrenergo). Each adapter polls on its manifest's interval and
+        # broadcasts diffs onto the `"map"` WebSocket channel. Failures are
+        # caught + back-off-ed inside the tasker so a downed upstream never
+        # leaks into the lifespan.
+        try:
+            from geo.live_tasker import setup_default_tasks
+            live_tasker = await setup_default_tasks()
+            await live_tasker.start()
+            logger.info("Live tasker: %d task(s) running", len(live_tasker.names))
+        except Exception as exc:
+            logger.warning("Live tasker setup skipped: %s", exc)
 
     try:
         from security.tls_listener import start_tls_listener
@@ -849,7 +879,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         from core.system_monitor import system_monitor
         await system_monitor.stop()
 
-    await oled_animator.stop()
+    # Локальний імпорт: у режимі «лише месенджер» аніматор не піднімався, і
+    # ім'я з блоку старту сюди не доїхало б.
+    with contextlib.suppress(Exception):
+        from vision.oled_animator import oled_animator
+        await oled_animator.stop()
 
     # Phase 09.1 — best-effort agent shutdown: stop running task + close browser
     if config.agent_enabled:
@@ -1122,7 +1156,8 @@ def create_app() -> FastAPI:
     app.include_router(node_router)
 
     _register_ws(app)
-    register_voice_ws(app)
+    if register_voice_ws is not None:
+        register_voice_ws(app)
     _register_health(app)
 
     # Phase 18 (audit-2026-04-28 Block E) — productisation observability:

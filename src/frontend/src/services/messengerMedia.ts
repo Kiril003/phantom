@@ -14,6 +14,7 @@
  */
 
 import type { SecureMedia } from '../types/messenger';
+import { readToken } from './tokenStore';
 
 /** Стеля вузла — та сама, що в messenger/blobs.py. Міряє ШИФРОТЕКСТ. */
 export const MEDIA_LIMIT_BYTES = 25 * 1024 * 1024;
@@ -106,7 +107,7 @@ export async function encryptForUpload(
 }
 
 async function fetchAndDecrypt(media: SecureMedia): Promise<string> {
-  const token = localStorage.getItem('phantom_token');
+  const token = readToken();
   const res = await fetch(`/api/v1/messenger/files/${media.blobId}`, {
     headers: token ? { Authorization: `Bearer ${token}` } : {},
     credentials: 'include',

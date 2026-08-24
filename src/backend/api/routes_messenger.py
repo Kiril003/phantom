@@ -131,6 +131,150 @@ async def get_relay_status(
     return RelayStatus(**client.status())
 
 
+# ── Правдива картина доріг ───────────────────────────────────────────────────
+#
+# «Чотири дороги» — проєктна спроможність, а не стан вузла: relay_url,
+# supabase_* і r2_* порожні за замовчуванням. Секрети сюди не потрапляють —
+# назовні їде тільки хост.
+
+
+def _host_only(url: str) -> str:
+    """`https://user:pass@host:8787/path?token=…` → `host:8787`."""
+    from urllib.parse import urlsplit
+
+    raw = (url or "").strip()
+    if not raw:
+        return ""
+    if "://" not in raw:
+        raw = f"//{raw}"
+    try:
+        parsed = urlsplit(raw)
+    except ValueError:
+        return ""
+    return parsed.netloc.rsplit("@", 1)[-1] or ""
+
+
+class Road(BaseModel):
+    id: str  # direct | relay | mailbox | blobs
+    title: str
+    configured: bool
+    #: Жива — не те саме, що налаштована. None: вузол живості не перевіряє.
+    live: Optional[bool] = None
+    #: Значок у панелі. Окремо від `configured`, бо пряма дорога без своєї
+    #: адреси працює назовні й не працює всередину — «немає» тут збрехало б.
+    state: str
+    detail: str
+    #: Що вписати, щоб дорога зʼявилася. Порожньо — вже є.
+    howto: str = ""
+
+
+class RoadsReport(BaseModel):
+    roads: list[Road]
+    configured: int
+    total: int
+
+
+@router.get("/roads", response_model=RoadsReport)
+async def get_roads(
+    request: Request,
+    _user: User = Depends(get_user_or_device_user),
+) -> RoadsReport:
+    from messenger.r2 import r2_road
+
+    address = (getattr(config, "messenger_public_address", "") or "").strip()
+    relay_on = bool(getattr(config, "relay_enabled", False))
+    relay_url = (getattr(config, "relay_url", "") or "").strip()
+    sb_url, _sb_key = supabase_road(config)
+    blobs = r2_road(config)
+    client = getattr(request.app.state, "relay_client", None)
+    relay_live: Optional[bool] = None
+    if relay_on and relay_url:
+        relay_live = bool(client.status().get("connected")) if client else False
+
+    roads = [
+        Road(
+            id="direct",
+            title="Пряма",
+            configured=bool(address),
+            state="є" if address else "лише назовні",
+            detail=(
+                f"цей вузол відповідає на {address}"
+                if address
+                else "писати тому, чия адреса вже відома, можна завжди; "
+                "своєї адреси вузол не має, тож знайти його першим не вийде"
+            ),
+            howto=(
+                ""
+                if address
+                else "MESSENGER_PUBLIC_ADDRESS=https://<адреса вузла>:8443 у .env вузла"
+            ),
+        ),
+        Road(
+            id="relay",
+            title="Ретранслятор",
+            configured=bool(relay_on and relay_url),
+            live=relay_live,
+            state=(
+                ("є" if relay_live else "не відповідає")
+                if (relay_on and relay_url)
+                else "немає"
+            ),
+            detail=(
+                (
+                    f"{_host_only(relay_url)} — {'на звʼязку' if relay_live else 'не відповідає'}"
+                )
+                if (relay_on and relay_url)
+                else (
+                    "вимкнено в налаштуваннях вузла"
+                    if not relay_on
+                    else "адреси точки зустрічі немає"
+                )
+            ),
+            howto=(
+                "" if (relay_on and relay_url) else "RELAY_URL=wss://<ваш ретранслятор> у .env вузла"
+            ),
+        ),
+        Road(
+            id="mailbox",
+            title="Скринька Supabase",
+            configured=bool(sb_url),
+            state="є" if sb_url else "немає",
+            detail=(
+                f"{_host_only(sb_url)} — лист лягає в чужу скриньку зашифрованим"
+                if sb_url
+                else "скриньки немає"
+            ),
+            howto=(
+                ""
+                if sb_url
+                else "SUPABASE_MAILBOX_URL + SUPABASE_ANON_KEY у .env вузла "
+                "(ключ publishable, RLS пускає його лише на запис)"
+            ),
+        ),
+        Road(
+            id="blobs",
+            title="Вкладення R2",
+            configured=blobs is not None,
+            state="є" if blobs is not None else "немає",
+            detail=(
+                f"бакет {blobs.bucket} на {_host_only(blobs.endpoint)}"
+                if blobs is not None
+                else "вкладення чекають у черзі, поки немає прямої дороги"
+            ),
+            howto=(
+                ""
+                if blobs is not None
+                else "R2_ENDPOINT, R2_BUCKET, R2_ACCESS_KEY, R2_SECRET_KEY у .env вузла"
+            ),
+        ),
+    ]
+    return RoadsReport(
+        roads=roads,
+        configured=sum(1 for r in roads if r.configured),
+        total=len(roads),
+    )
+
+
 # ── Дороги для медіа ─────────────────────────────────────────────────────────
 
 

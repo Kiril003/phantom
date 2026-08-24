@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { messengerNetworkEngine } from '../services/messengerNetworkEngine';
 import { chatApi } from '../services/api';
 import { messengerApi, chatFromNode, messageFromNode, deliveryStatus } from '../services/messengerApi';
-import type { NodeMessage } from '../services/messengerApi';
+import type { NodeConversation, NodeMessage } from '../services/messengerApi';
 import { useUIStore } from './uiStore';
 import { soundFx } from '../utils/messengerSound';
 import {
@@ -212,6 +212,52 @@ const withFreshPreview = (chat: Chat): Chat => {
   return { ...chat, lastKind: 'text', lastSnippet: 'Повідомлення видалено' };
 };
 
+/** Поля розмови, які веде вузол — решта в рядку списку просто не приїжджає. */
+const NODE_OWNED: (keyof Chat)[] = [
+  'title', 'handle', 'avatar', 'type', 'circle', 'contactVerified', 'isDemo',
+  'peerNodeId', 'unreadCount', 'lastKind', 'lastSnippet', 'lastAuthor', 'lastAt',
+];
+
+/**
+ * Накладає на відому розмову те, що про неї знає вузол.
+ *
+ * Стрічка лишається при собі: у списку розмов повідомлень немає, і перечитати
+ * їх звідти нічим. Закріплення, тиша й архів теж лишаються місцевими — вузол
+ * їх не приймає (PATCH знає лише назву), тож забирати їх звідти означало б
+ * відкріплювати розмову на кожному оновленні списку.
+ */
+const withNodeFields = (local: Chat, row: NodeConversation, activeChatId: string): Chat => {
+  const node = chatFromNode(row);
+  // Прев'ю могло щойно змінити власне надіслане, якого вузол ще не порахував:
+  // тоді свіжіше саме місцеве, і відкочувати його назад нема за що.
+  const nodeSawLast = !local.lastAt || (node.lastAt ?? '') >= local.lastAt;
+  const merged: Chat = {
+    ...local,
+    title: node.title,
+    handle: node.handle,
+    // Порожня обкладинка з вузла — це «не зберігаю», а не «зітри».
+    avatar: node.avatar || local.avatar,
+    type: node.type,
+    circle: node.circle,
+    contactVerified: node.contactVerified,
+    isDemo: node.isDemo,
+    peerNodeId: node.peerNodeId ?? local.peerNodeId,
+    // Відкриту розмову клієнт уже розчитав, а markRead міг ще не доїхати —
+    // інакше значок непрочитаного вертався б просто від оновлення списку.
+    unreadCount: local.id === activeChatId ? 0 : node.unreadCount,
+    ...(nodeSawLast
+      ? {
+          lastKind: node.lastKind,
+          lastSnippet: node.lastSnippet,
+          lastAuthor: node.lastAuthor,
+          lastAt: node.lastAt,
+        }
+      : {}),
+  };
+  // Незмінене повертаємо тим самим обʼєктом — список не перемальовується дарма.
+  return NODE_OWNED.some((k) => merged[k] !== local[k]) ? merged : local;
+};
+
 export const useMessengerStore = create<MessengerState>((set, get) => {
   // Connect network engine listeners
   messengerNetworkEngine.onMessage((chatId, msg) => {
@@ -368,14 +414,28 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
       return hydrationInFlight;
     },
 
-    /** Дотягує розмови, яких клієнт ще не бачив — не чіпаючи вже завантажені стрічки. */
+    /**
+     * Звіряє список із вузлом: дотягує розмови, яких клієнт ще не бачив, і
+     * оновлює те, що вузол знає про вже відомі — не чіпаючи завантажені стрічки.
+     *
+     * Раніше нове імʼя, записане на вузлі, було видно лише після F5: людина
+     * вписувала «Марта», вузол уже віддавав «Марта», а в шапці лишався «Вузол
+     * 86a15538» — тобто на вигляд її напис просто викидали.
+     */
     refreshConversations: async () => {
       try {
         const rows = await messengerApi.listConversations();
         set((s2) => {
+          const byId = new Map(rows.map((r) => [r.id, r]));
           const known = new Set(s2.chats.map((c) => c.id));
           const fresh = rows.filter((r) => !known.has(r.id)).map(chatFromNode);
-          return fresh.length ? { chats: [...fresh, ...s2.chats] } : {};
+          const merged = s2.chats.map((c) => {
+            const row = byId.get(c.id);
+            return row ? withNodeFields(c, row, s2.activeChatId) : c;
+          });
+          const touched = merged.some((c, i) => c !== s2.chats[i]);
+          if (!fresh.length && !touched) return {};
+          return { chats: [...fresh, ...merged] };
         });
       } catch (err) {
         console.warn('[messenger] список розмов не оновився:', err);

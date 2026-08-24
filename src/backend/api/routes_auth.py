@@ -341,6 +341,90 @@ async def refresh(
     return RefreshResponse(token=new_token, expires_at=expires_at)
 
 
+# ── Вхідні двері (механіка — security/door.py) ────────────────────────────────
+
+
+class DoorTicketRequest(BaseModel):
+    ticket: str = Field(..., min_length=8, max_length=128)
+
+
+class DoorIssueResponse(BaseModel):
+    ticket: str
+    expires_in: int
+
+
+def _door_or_404() -> None:
+    from security import door
+
+    if not door.enabled():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not Found")
+
+
+@router.post("/door/issue", response_model=DoorIssueResponse)
+async def issue_door_ticket(request: Request) -> DoorIssueResponse:
+    """Скрипт запуску міняє ключ дверей на одноразовий квиток."""
+    from security import door
+
+    _door_or_404()
+    client_host = _resolve_client_ip(request)
+    # Тільки заголовок: у рядку запиту ключ осів би в логах доступу.
+    presented = request.headers.get("X-Phantom-Door-Key", "")
+    if not is_loopback_host(client_host) or not door.key_matches(presented):
+        logger.warning("двері: відмовлено у квитку для %r", client_host)
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+    return DoorIssueResponse(
+        ticket=door.issue_ticket(), expires_in=door.TICKET_TTL_S
+    )
+
+
+@router.post("/door", response_model=AuthResponse)
+async def enter_by_door(
+    req: DoorTicketRequest,
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> AuthResponse:
+    """Обміняти квиток на сесію власника. Квиток згорає тут-таки."""
+    from security import door
+    from security import login_lockout
+
+    _door_or_404()
+    ip_key = _ip_key(request)
+    locked, remaining = login_lockout.is_locked(ip_key)
+    if locked:
+        raise _lockout_response(remaining)
+
+    client_host = _resolve_client_ip(request)
+    if not is_loopback_host(client_host) or not door.redeem_ticket(req.ticket):
+        login_lockout.register_failure(ip_key)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Door ticket is not valid",
+            headers={"X-Error-Code": "DOOR_TICKET_INVALID"},
+        )
+    login_lockout.register_success(ip_key)
+
+    # Тільки до власника — найстарішого ROOT, не до випадкового гостя.
+    result = await db.execute(
+        select(User).where(User.role == "ROOT").order_by(User.created_at)
+    )
+    user = result.scalars().first()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Node has no owner yet",
+        )
+    token, expires_at = create_token(user.id, user.username, user.role)
+    await _touch_last_seen(db, user)
+    response.set_cookie(
+        "phantom_token", token,
+        httponly=True, samesite="lax",
+        max_age=config_session_timeout_s(),
+    )
+    logger.info("двері: впущено власника %s", user.username)
+    return AuthResponse(user=_user_to_dict(user), token=token, expires_at=expires_at)
+
+
 @router.get("/config")
 async def get_auth_config() -> dict:
     """Return public auth config (limits) needed by the login screen before auth."""

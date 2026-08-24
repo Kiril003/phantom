@@ -43,8 +43,8 @@ import { ApiError as FakeApiError } from '../../services/api';
 const TOKEN = 'live-token';
 
 function seedSession() {
-  localStorage.setItem('phantom_token', TOKEN);
-  localStorage.setItem('phantom_token_expires', new Date(Date.now() + 3_600_000).toISOString());
+  sessionStorage.setItem('phantom_token', TOKEN);
+  sessionStorage.setItem('phantom_token_expires', new Date(Date.now() + 3_600_000).toISOString());
   useAuthStore.setState({
     token: TOKEN,
     expiresAt: new Date(Date.now() + 3_600_000).toISOString(),
@@ -57,7 +57,7 @@ describe('autoLogin — ядро мовчить проти ядро відмов
   beforeEach(() => {
     me.mockReset();
     refresh.mockReset();
-    localStorage.clear();
+    sessionStorage.clear();
   });
 
   it('мережева помилка лишає токен на місці', async () => {
@@ -69,7 +69,7 @@ describe('autoLogin — ядро мовчить проти ядро відмов
     expect(ok).toBe(false);
     expect(useAuthStore.getState().sessionPhase).toBe('unreachable');
     expect(useAuthStore.getState().token).toBe(TOKEN);
-    expect(localStorage.getItem('phantom_token')).toBe(TOKEN);
+    expect(sessionStorage.getItem('phantom_token')).toBe(TOKEN);
   });
 
   it('401 від ядра стирає токен', async () => {
@@ -81,7 +81,7 @@ describe('autoLogin — ядро мовчить проти ядро відмов
     expect(ok).toBe(false);
     expect(useAuthStore.getState().sessionPhase).toBe('out');
     expect(useAuthStore.getState().token).toBeNull();
-    expect(localStorage.getItem('phantom_token')).toBeNull();
+    expect(sessionStorage.getItem('phantom_token')).toBeNull();
   });
 
   it('500 від ядра — теж не привід стирати ключ', async () => {
@@ -91,7 +91,7 @@ describe('autoLogin — ядро мовчить проти ядро відмов
     await useAuthStore.getState().autoLogin();
 
     expect(useAuthStore.getState().sessionPhase).toBe('unreachable');
-    expect(localStorage.getItem('phantom_token')).toBe(TOKEN);
+    expect(sessionStorage.getItem('phantom_token')).toBe(TOKEN);
   });
 
   it('успіх переводить сесію в «in»', async () => {
@@ -106,7 +106,7 @@ describe('autoLogin — ядро мовчить проти ядро відмов
   });
 
   it('без токена сесія одразу «out», ядро не смикаємо', async () => {
-    localStorage.clear();
+    sessionStorage.clear();
     useAuthStore.setState({ token: null, expiresAt: null, sessionPhase: 'checking' });
 
     const ok = await useAuthStore.getState().autoLogin();
@@ -117,8 +117,8 @@ describe('autoLogin — ядро мовчить проти ядро відмов
   });
 
   it('прострочений токен + мертве оновлення = «unreachable», ключ цілий', async () => {
-    localStorage.setItem('phantom_token', TOKEN);
-    localStorage.setItem('phantom_token_expires', new Date(Date.now() - 1000).toISOString());
+    sessionStorage.setItem('phantom_token', TOKEN);
+    sessionStorage.setItem('phantom_token_expires', new Date(Date.now() - 1000).toISOString());
     useAuthStore.setState({
       token: TOKEN,
       expiresAt: new Date(Date.now() - 1000).toISOString(),
@@ -129,7 +129,7 @@ describe('autoLogin — ядро мовчить проти ядро відмов
     await useAuthStore.getState().autoLogin();
 
     expect(useAuthStore.getState().sessionPhase).toBe('unreachable');
-    expect(localStorage.getItem('phantom_token')).toBe(TOKEN);
+    expect(sessionStorage.getItem('phantom_token')).toBe(TOKEN);
     expect(me).not.toHaveBeenCalled();
   });
 });

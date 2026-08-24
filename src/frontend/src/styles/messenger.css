@@ -59,9 +59,12 @@
  * писалися під десктоп і фіксовану висоту не мали — на 375×812 вони просто
  * тікали під нижній край, і кнопки підтвердження діставав лише той, хто знав,
  * що вони там є. Стеля висоти + власний скрол усередині вирішують це один раз
- * для всіх сімнадцяти, а не в кожній окремо. */
+ * для всіх сімнадцяти, а не в кожній окремо.
+ *
+ * Ширину тут не чіпаємо: max-width скасовував би max-w-md/lg/xl самих панелей,
+ * і на десктопі модалка розтягувалась на весь екран. Її і так тримає власний
+ * w-full кожної панелі. */
 .phantom-scrim > * {
-  max-width: 100%;
   max-height: 100%;
   overflow-y: auto;
   overscroll-behavior: contain;
@@ -116,15 +119,15 @@
 @keyframes map-pulse {
   0% {
     transform: scale(0.95);
-    box-shadow: 0 0 0 0 rgba(232, 122, 66, 0.5);
+    box-shadow: 0 0 0 0 rgb(var(--msg-accent-rgb) / 0.5);
   }
   70% {
     transform: scale(1.05);
-    box-shadow: 0 0 0 12px rgba(232, 122, 66, 0);
+    box-shadow: 0 0 0 12px rgb(var(--msg-accent-rgb) / 0);
   }
   100% {
     transform: scale(0.95);
-    box-shadow: 0 0 0 0 rgba(232, 122, 66, 0);
+    box-shadow: 0 0 0 0 rgb(var(--msg-accent-rgb) / 0);
   }
 }
 
@@ -459,4 +462,132 @@
     min-width: 0;
     min-height: 0;
   }
+}
+
+/* ─── Акцентний відтінок (Налаштування › Оформлення) ──────────────────────
+   Палітра месенджера записана шістнадцятковим числом просто в розмітці —
+   #E87A42 стоїть у ~350 місцях тридцяти файлів. Перебирати їх заради
+   перемикача означало б правку в тридцяти файлах, тож вибір чіпляє атрибут на
+   <html>, а тут перевизначаються ті самі утиліти Tailwind. Питомість
+   :root[data-msg-accent] .x (0,3,0) вища за .x і за .focus\:x:focus, тож
+   !important не потрібен. Теракота атрибута не ставить — типовий вигляд
+   лишається байт-у-байт тим самим.
+
+   Контраст перевірено: у кожній палітрі текст на підкладці ≥4.7:1, а сам
+   акцент на кремі не темніший за теракоту (2.8:1 — базова лінія макета). */
+:root {
+  --msg-accent: #E87A42;
+  --msg-accent-rgb: 232 122 66;
+  --msg-accent-soft: #FCE7D8;        /* підкладка чіпа */
+  --msg-accent-soft-hover: #F9CCA8;
+  --msg-accent-ink: #8C461A;         /* текст на підкладці */
+}
+
+:root[data-msg-accent='sage'] {
+  --msg-accent: #5B8C67;
+  --msg-accent-rgb: 91 140 103;
+  --msg-accent-soft: #E2EFE4;
+  --msg-accent-soft-hover: #CBE2D1;
+  --msg-accent-ink: #2F5A3A;
+}
+
+:root[data-msg-accent='chestnut'] {
+  --msg-accent: #8A5333;
+  --msg-accent-rgb: 138 83 51;
+  --msg-accent-soft: #F0E3D8;
+  --msg-accent-soft-hover: #E4CEBC;
+  --msg-accent-ink: #5E3418;
+}
+
+:root[data-msg-accent='amber'] {
+  --msg-accent: #D97706;
+  --msg-accent-rgb: 217 119 6;
+  --msg-accent-soft: #FCEBCF;
+  --msg-accent-soft-hover: #F8D9A3;
+  --msg-accent-ink: #8A4B04;
+}
+
+:root[data-msg-accent] .text-\[\#E87A42\],
+:root[data-msg-accent] .hover\:text-\[\#E87A42\]:hover,
+:root[data-msg-accent] .group:hover .group-hover\:text-\[\#E87A42\] {
+  color: var(--msg-accent);
+}
+
+:root[data-msg-accent] .bg-\[\#E87A42\] {
+  background-color: var(--msg-accent);
+}
+
+:root[data-msg-accent] .bg-\[\#E87A42\]\/15 {
+  background-color: rgb(var(--msg-accent-rgb) / 0.15);
+}
+
+:root[data-msg-accent] .bg-\[\#E87A42\]\/20 {
+  background-color: rgb(var(--msg-accent-rgb) / 0.2);
+}
+
+:root[data-msg-accent] .border-\[\#E87A42\],
+:root[data-msg-accent] .hover\:border-\[\#E87A42\]:hover,
+:root[data-msg-accent] .focus\:border-\[\#E87A42\]:focus {
+  border-color: var(--msg-accent);
+}
+
+:root[data-msg-accent] .border-\[\#E87A42\]\/40 {
+  border-color: rgb(var(--msg-accent-rgb) / 0.4);
+}
+
+:root[data-msg-accent] .border-\[\#E87A42\]\/60 {
+  border-color: rgb(var(--msg-accent-rgb) / 0.6);
+}
+
+:root[data-msg-accent] .ring-\[\#E87A42\],
+:root[data-msg-accent] .focus\:ring-\[\#E87A42\]:focus {
+  --tw-ring-color: var(--msg-accent);
+}
+
+:root[data-msg-accent] .ring-\[\#E87A42\]\/10 {
+  --tw-ring-color: rgb(var(--msg-accent-rgb) / 0.1);
+}
+
+:root[data-msg-accent] .ring-\[\#E87A42\]\/20 {
+  --tw-ring-color: rgb(var(--msg-accent-rgb) / 0.2);
+}
+
+:root[data-msg-accent] .ring-\[\#E87A42\]\/30,
+:root[data-msg-accent] .focus\:ring-\[\#E87A42\]\/30:focus {
+  --tw-ring-color: rgb(var(--msg-accent-rgb) / 0.3);
+}
+
+:root[data-msg-accent] .ring-\[\#E87A42\]\/40 {
+  --tw-ring-color: rgb(var(--msg-accent-rgb) / 0.4);
+}
+
+/* Градієнт лишає власні --tw-gradient-stops: якщо в класі є ще й via-,
+   перевизначення двох кінців його не ламає. */
+:root[data-msg-accent] .from-\[\#E87A42\] {
+  --tw-gradient-from: var(--msg-accent) var(--tw-gradient-from-position);
+  --tw-gradient-to: rgb(var(--msg-accent-rgb) / 0) var(--tw-gradient-to-position);
+}
+
+:root[data-msg-accent] .accent-\[\#E87A42\] {
+  accent-color: var(--msg-accent);
+}
+
+/* Тепла пара «підкладка + текст на ній»: без неї кнопка експорту лишалась би
+   персиковою поруч із шавлієвим акцентом. Кольори тек і категорій — це дані
+   власника, їх ніхто тут не чіпає. */
+:root[data-msg-accent] .bg-\[\#FCE7D8\],
+:root[data-msg-accent] .hover\:bg-\[\#FCE7D8\]:hover {
+  background-color: var(--msg-accent-soft);
+}
+
+:root[data-msg-accent] .hover\:bg-\[\#F9CCA8\]:hover {
+  background-color: var(--msg-accent-soft-hover);
+}
+
+:root[data-msg-accent] .text-\[\#8C461A\] {
+  color: var(--msg-accent-ink);
+}
+
+:root[data-msg-accent] .bg-\[\#8C461A\] {
+  background-color: var(--msg-accent-ink);
 }

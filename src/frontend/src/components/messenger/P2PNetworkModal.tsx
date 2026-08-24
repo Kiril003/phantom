@@ -22,6 +22,7 @@ import {
   NetworkDiagnostics
 } from '../../types/messenger';
 import { networkEngine } from '../../services/messengerNetworkEngine';
+import { messengerApi, type RoadsReport } from '../../services/messengerApi';
 import { callEngine } from '../../services/callEngine';
 import { soundFx } from '../../utils/messengerSound';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
@@ -57,6 +58,7 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
   // Дороги для медіа беремо у вузла, а не з константи: TURN то є, то немає,
   // і екран мусить казати те, що зараз, а не те, що було на час збірки.
   const [ice, setIce] = useState<{ turn: boolean; ttl: number; urls: string[] } | null>(null);
+  const [roads, setRoads] = useState<RoadsReport | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -77,6 +79,15 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
     });
 
     let alive = true;
+    void messengerApi
+      .roads()
+      .then((r) => {
+        if (alive) setRoads(r);
+      })
+      .catch(() => {
+        if (alive) setRoads(null);
+      });
+
     void callEngine
       .iceInfo()
       .then((info) => {
@@ -236,6 +247,81 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
           {/* TAB 1: OVERVIEW & MODE SWITCHER */}
           {activeTab === 'overview' && (
             <div className="space-y-5">
+              {/* Дороги листа — стан вузла, а не проєктна спроможність. */}
+              <div>
+                <div className="flex items-baseline justify-between mb-2">
+                  <label className="block text-xs font-bold text-[#7A8479] uppercase tracking-wider">
+                    Дороги листа
+                  </label>
+                  {roads && (
+                    <span className={`text-[11px] font-bold ${
+                      roads.configured <= 1 ? 'text-[#C98A2E]' : 'text-[#4C8A55]'
+                    }`}>
+                      налаштовано {roads.configured} з {roads.total}
+                    </span>
+                  )}
+                </div>
+
+                {!roads && (
+                  <div className="p-3 rounded-2xl border border-[#DFD6C4] bg-white/60 text-[11.5px] text-[#7A8479]">
+                    Вузол не відповів — стан доріг невідомий.
+                  </div>
+                )}
+
+                {roads && (
+                  <div className="space-y-1.5">
+                    {roads.roads.map((r) => (
+                      <div
+                        key={r.id}
+                        className={`p-3 rounded-2xl border ${
+                          r.configured
+                            ? 'bg-white border-[#DDD4C4]'
+                            : 'bg-[#F9F7F1]/70 border-[#E6DFD3]'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2">
+                          <span className={`w-2 h-2 rounded-full shrink-0 ${
+                            !r.configured
+                              ? 'bg-[#C3BCAE]'
+                              : r.live === false
+                              ? 'bg-[#C98A2E]'
+                              : 'bg-[#4C8A55]'
+                          }`} />
+                          <h4 className={`font-extrabold text-[13px] ${
+                            r.configured ? 'text-[#1E2521]' : 'text-[#7A8479]'
+                          }`}>
+                            {r.title}
+                          </h4>
+                          <span className="ml-auto text-[10.5px] font-bold uppercase tracking-wide text-[#7A8479]">
+                            {r.state}
+                          </span>
+                        </div>
+                        <p className="mt-1 text-[11.5px] text-[#637268] leading-relaxed">
+                          {r.detail}
+                        </p>
+                        {r.howto && (
+                          <p className="mt-1.5 pt-1.5 border-t border-[#F2ECE0] text-[10.5px] text-[#7A8479] font-mono break-all">
+                            {r.howto}
+                          </p>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                )}
+
+                {roads && roads.configured === 0 && (
+                  <p className="mt-2 text-[11px] text-[#C98A2E] leading-relaxed">
+                    Налаштованих доріг немає. Лист іде лише прямо — до того, чия
+                    адреса вже відома, — і чекає в черзі, поки той мовчить.
+                  </p>
+                )}
+                {roads && roads.configured === 1 && (
+                  <p className="mt-2 text-[11px] text-[#C98A2E] leading-relaxed">
+                    Дорога одна. Обхідної немає: якщо вона мовчить, лист чекає в черзі.
+                  </p>
+                )}
+              </div>
+
               <div>
                 <label className="block text-xs font-bold text-[#7A8479] mb-2 uppercase tracking-wider">
                   Виберіть спосіб доставки повідомлень

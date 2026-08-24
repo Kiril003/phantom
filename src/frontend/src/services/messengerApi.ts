@@ -82,8 +82,26 @@ export interface NodeContact {
   created_at: string;
 }
 
+export interface Road {
+  id: 'direct' | 'relay' | 'mailbox' | 'blobs';
+  title: string;
+  configured: boolean;
+  live: boolean | null;
+  state: string;
+  detail: string;
+  howto: string;
+}
+
+export interface RoadsReport {
+  roads: Road[];
+  configured: number;
+  total: number;
+}
+
 export const messengerApi = {
   identity: () => request<NodeIdentity>('GET', '/messenger/identity'),
+
+  roads: () => request<RoadsReport>('GET', '/messenger/roads'),
 
   listContacts: () => request<NodeContact[]>('GET', '/messenger/contacts'),
 

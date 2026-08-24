@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { useMessengerStore } from '../../stores/messengerStore';
 import { phantomRelayService } from '../../services/phantomRelayService';
 import { wsClient } from '../../services/websocket';
@@ -6,7 +6,7 @@ import { messengerNetworkEngine } from '../../services/messengerNetworkEngine';
 import type { NetworkDiagnostics } from '../../types/messenger';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
-import { ChatArea } from './ChatArea';
+import { ChatArea, type ChatAreaHandle } from './ChatArea';
 import { MessageComposer } from './MessageComposer';
 import { MultiSelectBar } from './MultiSelectBar';
 
@@ -43,6 +43,8 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
   const store = useMessengerStore();
   const activeChat = store.getActiveChat();
   const [isSearchingInChat, setIsSearchingInChat] = useState(false);
+  // Закладка закріпленого живе в шапці, а стрічка — в ChatArea: тримаємо ручку.
+  const chatAreaRef = useRef<ChatAreaHandle>(null);
   const [editingSmartFolder, setEditingSmartFolder] = useState<SmartFolder | null>(null);
   const [activeFolderInsights, setActiveFolderInsights] = useState<SmartFolder | null>(null);
   const [activeShareFolder, setActiveShareFolder] = useState<SmartFolder | null>(null);
@@ -181,6 +183,7 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
             isSearching={isSearchingInChat}
             onToggleSearch={() => setIsSearchingInChat(!isSearchingInChat)}
             pinnedCount={activeChat.messages.filter((m) => m.isPinned).length}
+            onScrollToPinned={() => chatAreaRef.current?.scrollToPinned()}
             onOpenP2PNetworkModal={() => store.setP2PModalOpen(true)}
             onBack={() => store.setActiveChat('')}
           />
@@ -188,6 +191,7 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
           {/* Messages Feed */}
           <div className="flex-1 min-h-0 relative">
             <ChatArea
+              ref={chatAreaRef}
               currentChat={activeChat}
               messages={activeChat.messages}
               currentUserId={store.currentUser.id}

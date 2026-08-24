@@ -52,7 +52,7 @@ from messenger.blobs import (
     request_from_peer,
     store_bytes,
 )
-from security.auth import get_current_user
+from security.device_auth import get_user_or_device_user
 
 logger = logging.getLogger(__name__)
 
@@ -126,7 +126,7 @@ async def _owned_blob(
 async def upload_blob(
     conversation_id: str = Form(...),
     blob: UploadFile = File(...),
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_user_or_device_user),
     session: AsyncSession = Depends(get_db),
 ) -> BlobOut:
     """Приймає ВЖЕ зашифрований браузером файл і везе його співрозмовнику.
@@ -330,7 +330,7 @@ async def resend_blob(
 @router.get("/{blob_id}/status", response_model=BlobOut)
 async def blob_status(
     blob_id: str,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_user_or_device_user),
     session: AsyncSession = Depends(get_db),
 ) -> BlobOut:
     row = await _owned_blob(blob_id, user, session)
@@ -342,7 +342,7 @@ async def blob_status(
 @router.post("/{blob_id}/request", response_model=BlobOut)
 async def ask_again(
     blob_id: str,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_user_or_device_user),
     session: AsyncSession = Depends(get_db),
 ) -> BlobOut:
     """«Запитати ще раз»: спершу хмара, потім вузол відправника.
@@ -411,7 +411,7 @@ async def ask_again(
 @router.get("/{blob_id}")
 async def fetch_blob(
     blob_id: str,
-    user: User = Depends(get_current_user),
+    user: User = Depends(get_user_or_device_user),
     session: AsyncSession = Depends(get_db),
 ) -> Response:
     """Віддає шифротекст браузеру власника. Розшифрує його браузер, не вузол."""

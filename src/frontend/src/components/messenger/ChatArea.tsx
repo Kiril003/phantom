@@ -171,6 +171,7 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
   const [savedMessages, setSavedMessages] = useState<Record<string, boolean>>({});
   const [toastNotification, setToastNotification] = useState<string | null>(null);
   const [isCanvasSplitOpen, setIsCanvasSplitOpen] = useState(false);
+  const [canvasWidthMode, setCanvasWidthMode] = useState<'half' | 'wide' | 'full'>('half');
 
   // Floating text selection snippet for quick partial quoting
   const [selectedTextSnippet, setSelectedTextSnippet] = useState<{
@@ -2398,10 +2399,21 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
 
         {/* Canvas Split Side Panel */}
         {isCanvasSplitOpen && (
-          <div className="w-[420px] xl:w-[480px] h-full shrink-0 border-l border-white/10 z-20">
+          <div
+            className={`h-full shrink-0 border-l border-[#E5DEC9] dark:border-white/10 z-20 transition-all duration-300 ${
+              canvasWidthMode === 'full'
+                ? 'w-full absolute inset-0 z-30'
+                : canvasWidthMode === 'wide'
+                ? 'w-[65%] min-w-[520px]'
+                : 'w-[480px] xl:w-1/2 min-w-[400px]'
+            }`}
+          >
             <CanvasSplitView
               chatTitle={currentChat?.title || 'Бесіда'}
+              chatId={currentChat?.id}
               messages={messages}
+              widthMode={canvasWidthMode}
+              onToggleWidthMode={setCanvasWidthMode}
               onClose={() => setIsCanvasSplitOpen(false)}
             />
           </div>

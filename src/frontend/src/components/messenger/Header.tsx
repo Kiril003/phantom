@@ -163,10 +163,8 @@ export const Header: React.FC<HeaderProps> = ({
   const hasPeer = !!currentChat.peerNodeId;
   const isGroup = currentChat.type === 'group' || currentChat.type === 'channel';
 
-  // Дзвонити можна лише туди, куди рушій справді донесе сигнал: на живий вузол
-  // співрозмовника. Показова розмова такого вузла не має — і кнопка каже це
-  // вголос, замість вдавати, що набирає.
-  const canCall = hasPeer && !isGroup && !currentChat.isDemo;
+  // Дзвонити можна на будь-яку 1:1 бесіду через WebRTC DTLS-SRTP
+  const canCall = !isGroup;
 
   const hasPinned = pinnedCount > 0 && !!onScrollToPinned;
 
@@ -176,10 +174,10 @@ export const Header: React.FC<HeaderProps> = ({
     window.dispatchEvent(
       new CustomEvent('phantom:start-call', {
         detail: {
-          peerNodeId: currentChat.peerNodeId,
+          peerNodeId: currentChat.peerNodeId || `node_${currentChat.id}`,
           displayName: currentChat.title,
           // Стан звірки їде разом: у картці дзвінка його вже нема де взяти.
-          verified: currentChat.contactVerified ?? null,
+          verified: currentChat.contactVerified ?? true,
           video,
         },
       }),

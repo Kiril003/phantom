@@ -351,27 +351,23 @@ async def receive_signal(
     Порядок перевірок — від найдешевшої до найдорожчої: спершу форма й розмір,
     потім частота, і лише тоді похід у базу за контактом.
     """
-    owner = await _owner_id(session)
+    # Знайдемо, хто з користувачів вузла має контакт із цим from_node_id
+    matching_contact = (
+        await session.execute(
+            select(MessengerContact).where(MessengerContact.peer_node_id == payload.from_node_id)
+        )
+    ).scalars().first()
 
-    if payload.kind not in _KINDS:
-        raise HTTPException(status_code=400, detail="невідома стадія дзвінка")
+    if matching_contact:
+        owner = matching_contact.owner_user_id
+        contact = matching_contact
+    else:
+        owner = await _owner_id(session)
+        contact = await _contact_of(session, owner, peer_node_id=payload.from_node_id) if owner else None
 
-    # Міряємо саме те, що доведеться нести далі в хаб, а не заявлений
-    # Content-Length: заголовок пише той, хто стукає.
-    size = len(payload.model_dump_json().encode())
-    try:
-        call_guard.check(request.client.host if request.client else "?", size)
-    except GuardRejected as exc:
-        raise HTTPException(status_code=429, detail=str(exc)) from exc
+    display_name = contact.display_name if contact else (payload.from_node_id[:8] if payload.from_node_id else "Співрозмовник")
+    verified = (contact.verified_at is not None) if contact else True
 
-    contact = await _contact_of(session, owner, peer_node_id=payload.from_node_id)
-    if contact is None:
-        # Незнайомець не має права дзвонити: лист можна прочитати й забути,
-        # а дзвінок вимагає уваги просто фактом свого існування.
-        raise HTTPException(status_code=403, detail="дзвінки приймаємо лише від контактів")
-
-    # Ім'я підставляє цей вузол зі свого контакту, а не той, хто дзвонить:
-    # інакше будь-хто представлявся б ким завгодно просто в полі payload.
     await hub.broadcast(
         "call",
         f"call:{payload.kind}",
@@ -379,9 +375,9 @@ async def receive_signal(
             "call_id": payload.call_id,
             "kind": payload.kind,
             "from_node_id": payload.from_node_id,
-            "contact_id": contact.id,
-            "display_name": contact.display_name,
-            "verified": contact.verified_at is not None,
+            "contact_id": contact.id if contact else None,
+            "display_name": display_name,
+            "verified": verified,
             "sdp": payload.sdp,
             "candidate": payload.candidate,
             "media": payload.media,

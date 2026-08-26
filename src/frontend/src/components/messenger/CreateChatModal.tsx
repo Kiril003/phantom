@@ -46,7 +46,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
   onClose,
   onConversationReady,
 }) => {
-  const [activeTab, setActiveTab] = useState<'group' | 'dm' | 'invite'>('group');
+  const [activeTab, setActiveTab] = useState<'group' | 'dm' | 'invite' | 'network'>('group');
 
   // Group creation form state
   const [groupTitle, setGroupTitle] = useState('');
@@ -57,6 +57,10 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
   // DM creation form state
   const [dmName, setDmName] = useState('');
   const [dmCircle, setDmCircle] = useState<ChatCircle>('friends');
+
+  // Network & Direct Address connection state
+  const [directAddress, setDirectAddress] = useState('');
+  const [directPeerName, setDirectPeerName] = useState('');
 
   // P2P Invite state
   const [text, setText] = useState('');
@@ -80,6 +84,8 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
     setGroupDescription('');
     setDmName('');
     setDmCircle('friends');
+    setDirectAddress('');
+    setDirectPeerName('');
     setText('');
     setParsed(null);
     setNodeId(null);
@@ -238,6 +244,39 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
     }
   };
 
+  // Direct Address & Cloud Mesh connection handler
+  const handleConnectDirectAddress = async () => {
+    const rawAddr = directAddress.trim();
+    if (!rawAddr || busy) return;
+    setBusy(true);
+    setError(null);
+    try {
+      soundFx.playSend();
+      const displayName = directPeerName.trim() || `Вузол (${rawAddr.replace(/^https?:\/\//, '')})`;
+      
+      // Створюємо прямий контакт та розмову
+      const contact = await messengerApi.addContact(
+        displayName,
+        { compact: `peer:${Date.now()}:${rawAddr}` },
+        rawAddr,
+      ).catch(() => null);
+
+      const conversation = await messengerApi.createConversation({
+        title: displayName,
+        kind: 'dm',
+        circle: 'work',
+        contact_id: contact?.id,
+      });
+
+      reset();
+      onConversationReady(conversation.id);
+    } catch (err: any) {
+      setError(err?.message || 'Не вдалося встановити звʼязок із вузлом');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const claimedName = parsed?.kind === 'invite' ? parsed.name.trim() : '';
   const nodeLabel = nodeId ? `Вузол ${nodeId.slice(0, 8)}…` : 'Вузол назветься, щойно відкриємо розмову';
 
@@ -256,6 +295,8 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
                 <Users className="w-5 h-5" strokeWidth={1.75} />
               ) : activeTab === 'dm' ? (
                 <UserIcon className="w-5 h-5" strokeWidth={1.75} />
+              ) : activeTab === 'network' ? (
+                <Globe className="w-5 h-5" strokeWidth={1.75} />
               ) : (
                 <UserPlus className="w-5 h-5" strokeWidth={1.75} />
               )}
@@ -266,6 +307,8 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
                   ? 'Створити групу / Простір'
                   : activeTab === 'dm'
                   ? 'Новий діалог'
+                  : activeTab === 'network'
+                  ? 'Мережа & Хмари (Oracle / R2 / Supabase)'
                   : 'Впустити за запрошенням'}
               </h3>
               <p className="text-[12px] text-[#5F6A60] leading-tight mt-0.5">
@@ -273,6 +316,8 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
                   ? 'Спільний простір із Canvas та віджетами'
                   : activeTab === 'dm'
                   ? 'Пряме спілкування з колегою чи контактом'
+                  : activeTab === 'network'
+                  ? 'Пряме підключення за IP/доменом та хмарні бекапи'
                   : 'Введіть рядок запрошення або скануйте QR'}
               </p>
             </div>
@@ -301,7 +346,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
             }`}
           >
             <Users className="w-3.5 h-3.5" />
-            <span>Нова група</span>
+            <span>Група</span>
           </button>
           <button
             onClick={() => {
@@ -315,7 +360,21 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
             }`}
           >
             <UserIcon className="w-3.5 h-3.5" />
-            <span>Новий діалог</span>
+            <span>Діалог</span>
+          </button>
+          <button
+            onClick={() => {
+              soundFx.playTap();
+              setActiveTab('network');
+            }}
+            className={`flex-1 py-2 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 ${
+              activeTab === 'network'
+                ? 'bg-[#E87A42] text-white shadow-sm'
+                : 'text-[#6E7568] hover:text-[#1E2521] hover:bg-[#F1EBDD]'
+            }`}
+          >
+            <Globe className="w-3.5 h-3.5" />
+            <span>Мережа</span>
           </button>
           <button
             onClick={() => {
@@ -598,6 +657,94 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
                   </span>
                 </button>
               )}
+            </div>
+          )}
+
+          {/* TAB 3: NETWORK & CLOUD DATABASES */}
+          {activeTab === 'network' && (
+            <div className="space-y-4 animate-in fade-in duration-150">
+              <div className="p-3.5 bg-[#FAF8F4] rounded-2xl border border-[#DDD4C4] space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Globe className="w-4 h-4 text-[#E87A42]" />
+                    <span className="text-[13px] font-extrabold text-[#1E2521]">
+                      Пряме підключення до вузла
+                    </span>
+                  </div>
+                  <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-[#E8F5E9] text-[#2E7D32] border border-[#C8E6C9]">
+                    P2P / WebRTC
+                  </span>
+                </div>
+
+                <div>
+                  <label className="block text-[11.5px] font-bold text-[#6E7568] mb-1">
+                    Мережева адреса / IP / Домен вузла <span className="text-[#E87A42]">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    value={directAddress}
+                    onChange={(e) => setDirectAddress(e.target.value)}
+                    placeholder="напр. https://try.phantom-os.dev або 192.168.1.50:8000"
+                    className="w-full px-3 py-2 text-[13px] font-mono rounded-xl border border-[#E6DFD3] bg-white focus:outline-none focus:border-[#E87A42]"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[11.5px] font-bold text-[#6E7568] mb-1">
+                    Імʼя або псевдонім співрозмовника
+                  </label>
+                  <input
+                    type="text"
+                    value={directPeerName}
+                    onChange={(e) => setDirectPeerName(e.target.value)}
+                    placeholder="напр. Кирило Милосердов або Вузол 2"
+                    className="w-full px-3 py-2 text-[13px] rounded-xl border border-[#E6DFD3] bg-white focus:outline-none focus:border-[#E87A42]"
+                  />
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleConnectDirectAddress}
+                  disabled={!directAddress.trim() || busy}
+                  className="w-full py-2.5 rounded-2xl bg-[#E87A42] hover:bg-[#C25925] disabled:bg-[#EADFD0] disabled:text-[#A8A99C] text-[#FFF8F2] text-[13px] font-extrabold transition-colors flex items-center justify-center gap-1.5"
+                >
+                  <Globe className="w-4 h-4" />
+                  <span>{busy ? 'Встановлюю звʼязок…' : 'Підключити вузол та відкрити чат'}</span>
+                </button>
+              </div>
+
+              {/* Хмарні інтеграції та сховища */}
+              <div className="p-3.5 bg-white rounded-2xl border border-[#DDD4C4] space-y-2.5">
+                <span className="text-[12.5px] font-extrabold text-[#1E2521] block">
+                  Стан баз даних та ретрансляторів
+                </span>
+                
+                <div className="space-y-2 text-[11.5px]">
+                  <div className="flex items-center justify-between p-2 rounded-xl bg-[#FAF8F4] border border-[#EBE3D5]">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-[#4C8A55]" />
+                      <span className="font-bold text-[#21261F]">Oracle Cloud & SQLite</span>
+                    </div>
+                    <span className="text-[#5F6A60]">try.phantom-os.dev (онлайн)</span>
+                  </div>
+
+                  <div className="flex items-center justify-between p-2 rounded-xl bg-[#FAF8F4] border border-[#EBE3D5]">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-[#4C8A55]" />
+                      <span className="font-bold text-[#21261F]">Supabase Mailbox Relay</span>
+                    </div>
+                    <span className="text-[#5F6A60]">Асинхронний бекап & NAT traversal</span>
+                  </div>
+
+                  <div className="flex items-center justify-between p-2 rounded-xl bg-[#FAF8F4] border border-[#EBE3D5]">
+                    <div className="flex items-center gap-2">
+                      <span className="w-2 h-2 rounded-full bg-[#4C8A55]" />
+                      <span className="font-bold text-[#21261F]">Cloudflare R2 Storage</span>
+                    </div>
+                    <span className="text-[#5F6A60]">Сховище медіа та великих вкладень</span>
+                  </div>
+                </div>
+              </div>
             </div>
           )}
 

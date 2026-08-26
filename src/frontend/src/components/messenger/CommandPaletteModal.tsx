@@ -594,6 +594,17 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
       },
     },
     {
+      id: 'act_physical',
+      category: 'Дії',
+      title: 'WebSerial, Offline GIS, WebGPU & Dead Man',
+      subtitle: 'Апаратне налагодження, OpenStreetMap, WGSL шейдери та дипломи W3C',
+      icon: Cpu,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-physical'));
+        onClose();
+      },
+    },
+    {
       id: 'act_huddle',
       category: 'Дії',
       title: 'Розпочати Team Huddle',

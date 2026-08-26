@@ -86,6 +86,7 @@ import { CanvasPresentationSpeakerMatrixModal } from './CanvasPresentationSpeake
 import { LiveSpotlightMicroBountiesModal } from './LiveSpotlightMicroBountiesModal';
 import { PhantomArchitectureBlueprintModal } from './PhantomArchitectureBlueprintModal';
 import { AgenticWorkspaceVirtualizationModal } from './AgenticWorkspaceVirtualizationModal';
+import { PhysicalComputingGisCanvasModal } from './PhysicalComputingGisCanvasModal';
 import { callEngine } from '../../services/callEngine';
 import { useCallAlerts } from '../../hooks/useCallAlerts';
 import { soundFx } from '../../utils/messengerSound';
@@ -159,6 +160,7 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
   const [isSpotlightBountiesOpen, setIsSpotlightBountiesOpen] = useState(false);
   const [isBlueprintOpen, setIsBlueprintOpen] = useState(false);
   const [isAgenticRuntimeOpen, setIsAgenticRuntimeOpen] = useState(false);
+  const [isPhysicalComputingOpen, setIsPhysicalComputingOpen] = useState(false);
   const [focusMode, setFocusMode] = useState<FocusModeType>('available');
   const [isHuddleActive, setIsHuddleActive] = useState(false);
 
@@ -303,6 +305,7 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
     const onOpenSpotlight = () => setIsSpotlightBountiesOpen(true);
     const onOpenBlueprint = () => setIsBlueprintOpen(true);
     const onOpenAgentic = () => setIsAgenticRuntimeOpen(true);
+    const onOpenPhysical = () => setIsPhysicalComputingOpen(true);
 
     window.addEventListener('phantom:open-automations', onOpenAut);
     window.addEventListener('phantom:open-datagrid', onOpenGrid);
@@ -350,6 +353,7 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
     window.addEventListener('phantom:open-spotlight', onOpenSpotlight);
     window.addEventListener('phantom:open-blueprint', onOpenBlueprint);
     window.addEventListener('phantom:open-agentic', onOpenAgentic);
+    window.addEventListener('phantom:open-physical', onOpenPhysical);
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
@@ -399,6 +403,7 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
       window.removeEventListener('phantom:open-spotlight', onOpenSpotlight);
       window.removeEventListener('phantom:open-blueprint', onOpenBlueprint);
       window.removeEventListener('phantom:open-agentic', onOpenAgentic);
+      window.removeEventListener('phantom:open-physical', onOpenPhysical);
     };
   }, []);
 
@@ -1144,6 +1149,12 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
         isOpen={isAgenticRuntimeOpen}
         onClose={() => setIsAgenticRuntimeOpen(false)}
         chatTitle={activeChat?.title || 'Agentic Workspace'}
+      />
+
+      <PhysicalComputingGisCanvasModal
+        isOpen={isPhysicalComputingOpen}
+        onClose={() => setIsPhysicalComputingOpen(false)}
+        chatTitle={activeChat?.title || 'Інженерний простір'}
       />
 
       <CallOverlay />

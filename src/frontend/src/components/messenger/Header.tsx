@@ -736,6 +736,17 @@ export const Header: React.FC<HeaderProps> = ({
                 <span className="truncate">Agentic Runtime & Нейроергономіка</span>
               </button>
 
+              <button
+                onClick={() => {
+                  closeMenu();
+                  window.dispatchEvent(new CustomEvent('phantom:open-physical'));
+                }}
+                className={MENU_ITEM}
+              >
+                <Cpu className="w-4 h-4 text-[#6E7568] shrink-0" strokeWidth={1.75} />
+                <span className="truncate">Physical Computing, GIS & WebGPU</span>
+              </button>
+
               {onOpenScheduledMessages && (
                 <button
                   onClick={() => {

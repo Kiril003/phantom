@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-"""PHANTOM OS — Dev CLI (`phantomctl` / `phantom-cli`).
+"""PHANTOM OS Work OS Developer CLI.
 
-Allows terminal control of workspaces, piping logs directly into messenger,
-sending interactive micro-widgets, and triggering webhooks.
+Allows sending messages, triggering digests, posting micro-widgets,
+and querying the local knowledge base directly from your terminal.
 
 Usage:
-  phantom_cli.py send "Deploying backend v1.4"
-  phantom_cli.py widget --type voting --title "Ready for prod?"
-  tail -f /var/log/syslog | phantom_cli.py pipe --title "Server Logs"
-  phantom_cli.py webhook --event push --repo "phantom-os"
+  python3 phantom_cli.py send --chat <id> --text "Hello Team"
+  python3 phantom_cli.py kanban --chat <id> --title "Sprint 15"
+  python3 phantom_cli.py digest --chat <id>
+  python3 phantom_cli.py search --query "architecture"
+  python3 phantom_cli.py webhook --token <wh_token> --title "CI/CD Pass"
 """
 import argparse
 import sys
-import time
 import json
 import urllib.request
 import urllib.error
@@ -25,161 +25,98 @@ def post_json(endpoint: str, data: dict):
     req = urllib.request.Request(
         url,
         data=json.dumps(data).encode("utf-8"),
-        headers={"Content-Type": "application/json", "User-Agent": "PhantomCLI/1.0"},
+        headers={"Content-Type": "application/json"},
     )
     try:
-        with urllib.request.urlopen(req, timeout=5) as response:
-            res = response.read().decode("utf-8")
-            return json.loads(res)
-    except urllib.error.URLError as e:
-        print(f"❌ [phantom-cli] Connection error to {url}: {e}", file=sys.stderr)
-        return None
-
-
-def cmd_send(args):
-    data = {
-        "conversation_id": args.channel,
-        "text": args.text,
-        "kind": "text",
-    }
-    res = post_json("/cli/send", data)
-    if res and res.get("status") == "ok":
-        print(f"✨ [phantom-cli] Sent to {args.channel}: {args.text}")
-    else:
-        print("⚠️ [phantom-cli] Failed to send message")
-
-
-def cmd_widget(args):
-    payload = {}
-    if args.type == "voting":
-        payload = {
-            "id": f"poll_{int(time.time())}",
-            "question": args.title or "Командне голосування",
-            "options": [
-                {"id": "1", "text": "Погоджено (+1)", "votes": 0, "voters": []},
-                {"id": "2", "text": "Потрібні правки (-1)", "votes": 0, "voters": []},
-            ],
-            "totalVotes": 0,
-        }
-    elif args.type == "kanban":
-        payload = {
-            "id": f"k_{int(time.time())}",
-            "title": args.title or "Спринт завдання",
-            "columns": [
-                {"id": "1", "title": "To Do", "items": [{"id": "t1", "title": "CLI Task", "priority": "high"}]},
-                {"id": "2", "title": "In Progress", "items": []},
-                {"id": "3", "title": "Done", "items": []},
-            ],
-        }
-    elif args.type == "raci":
-        payload = {
-            "id": f"r_{int(time.time())}",
-            "title": args.title or "Матриця завдань",
-            "roles": ["DevOps", "Backend", "Frontend"],
-            "rows": [
-                {"id": "r1", "task": "Деплой сервісу", "r": "DevOps", "a": "Lead", "c": "Backend", "i": "Team"}
-            ]
-        }
-
-    data = {
-        "conversation_id": args.channel,
-        "kind": f"widget:{args.type}",
-        "widget_type": args.type,
-        "payload": payload,
-    }
-    res = post_json("/cli/send", data)
-    if res and res.get("status") == "ok":
-        print(f"✨ [phantom-cli] Created widget [{args.type}] in {args.channel}")
-    else:
-        print("⚠️ [phantom-cli] Failed to send widget")
-
-
-def cmd_pipe(args):
-    print(f"📡 [phantom-cli] Streaming stdin to {args.channel}... (Ctrl+C to stop)")
-    buffer = []
-    last_flush = time.time()
-
-    try:
-        for line in sys.stdin:
-            buffer.append(line.rstrip())
-            if len(buffer) >= 5 or (time.time() - last_flush > 2.0 and len(buffer) > 0):
-                chunk = "\n".join(buffer)
-                post_json("/cli/send", {
-                    "conversation_id": args.channel,
-                    "text": f"```\n{chunk}\n```",
-                    "kind": "text"
-                })
-                buffer = []
-                last_flush = time.time()
-    except KeyboardInterrupt:
-        pass
-
-    if buffer:
-        post_json("/cli/send", {
-            "conversation_id": args.channel,
-            "text": f"```\n" + "\n".join(buffer) + "\n```",
-            "kind": "text"
-        })
-    print("🛑 [phantom-cli] Pipe closed.")
-
-
-def cmd_webhook(args):
-    payload = {
-        "repository": {"name": args.repo or "phantom-work-os"},
-        "sender": {"login": "cli_admin"},
-        "commits": [{"id": "a1b2c3d4e5", "message": args.message or "Update core engine", "url": "https://git.local"}],
-        "ref": "refs/heads/main"
-    }
-    url = f"{BASE_URL}/webhooks/default_token"
-    req = urllib.request.Request(
-        url,
-        data=json.dumps(payload).encode("utf-8"),
-        headers={"Content-Type": "application/json", "X-GitHub-Event": args.event},
-    )
-    try:
-        with urllib.request.urlopen(req, timeout=5) as resp:
-            print(f"✨ [phantom-cli] Webhook [{args.event}] dispatched: {resp.status}")
+        with urllib.request.urlopen(req) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except urllib.error.HTTPError as e:
+        print(f"Error {e.code}: {e.read().decode('utf-8')}", file=sys.stderr)
+        sys.exit(1)
     except Exception as e:
-        print(f"❌ [phantom-cli] Webhook error: {e}", file=sys.stderr)
+        print(f"Network error: {e}", file=sys.stderr)
+        sys.exit(1)
+
+
+def get_json(endpoint: str):
+    url = f"{BASE_URL}{endpoint}"
+    try:
+        with urllib.request.urlopen(url) as resp:
+            return json.loads(resp.read().decode("utf-8"))
+    except Exception as e:
+        print(f"Error: {e}", file=sys.stderr)
+        sys.exit(1)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Phantom OS Work OS CLI Controller")
-    subparsers = parser.add_subparsers(dest="command")
+    parser = argparse.ArgumentParser(description="Phantom OS Work OS Developer CLI")
+    subparsers = parser.add_subparsers(dest="command", required=True)
 
-    # send
-    p_send = subparsers.add_parser("send", help="Send text message to channel")
-    p_send.add_argument("text", type=str, help="Text content")
-    p_send.add_argument("--channel", type=str, default="general", help="Target channel ID")
+    # Command: send
+    send_parser = subparsers.add_parser("send", help="Send a message to a workspace conversation")
+    send_parser.add_argument("--chat", required=True, help="Conversation ID")
+    send_parser.add_argument("--text", required=True, help="Message text")
 
-    # widget
-    p_widget = subparsers.add_parser("widget", help="Send micro-widget (kanban, voting, raci)")
-    p_widget.add_argument("--type", choices=["kanban", "voting", "raci"], default="voting", help="Widget type")
-    p_widget.add_argument("--title", type=str, default="Interactive Widget", help="Title")
-    p_widget.add_argument("--channel", type=str, default="general", help="Target channel ID")
+    # Command: kanban
+    kb_parser = subparsers.add_parser("kanban", help="Post an interactive Kanban board widget")
+    kb_parser.add_argument("--chat", required=True, help="Conversation ID")
+    kb_parser.add_argument("--title", default="Sprint Tasks", help="Kanban Title")
 
-    # pipe
-    p_pipe = subparsers.add_parser("pipe", help="Pipe stdin logs to channel")
-    p_pipe.add_argument("--channel", type=str, default="general", help="Target channel ID")
-    p_pipe.add_argument("--title", type=str, default="Piped Logs", help="Title")
+    # Command: digest
+    dg_parser = subparsers.add_parser("digest", help="Get or generate a Smart Digest")
+    dg_parser.add_argument("--chat", required=True, help="Conversation ID")
 
-    # webhook
-    p_wh = subparsers.add_parser("webhook", help="Trigger simulated webhook event")
-    p_wh.add_argument("--event", choices=["push", "pull_request", "build"], default="push", help="Event type")
-    p_wh.add_argument("--repo", type=str, default="phantom-os", help="Repository name")
-    p_wh.add_argument("--message", type=str, default="CI build finished successfully", help="Message")
+    # Command: search
+    sr_parser = subparsers.add_parser("search", help="Semantic knowledge base search")
+    sr_parser.add_argument("--query", required=True, help="Search query")
+
+    # Command: webhook
+    wh_parser = subparsers.add_parser("webhook", help="Send test webhook event")
+    wh_parser.add_argument("--token", required=True, help="Webhook channel token")
+    wh_parser.add_argument("--title", required=True, help="Event title")
+    wh_parser.add_argument("--desc", default="", help="Event description")
 
     args = parser.parse_args()
+
     if args.command == "send":
-        cmd_send(args)
-    elif args.command == "widget":
-        cmd_widget(args)
-    elif args.command == "pipe":
-        cmd_pipe(args)
+        res = post_json("/cli/send", {"conversation_id": args.chat, "text": args.text, "kind": "text"})
+        print(f"✓ Message sent! ID: {res.get('message_id')}")
+
+    elif args.command == "kanban":
+        res = post_json(
+            "/cli/send",
+            {
+                "conversation_id": args.chat,
+                "kind": "widget:kanban",
+                "widget_type": "kanban",
+                "payload": {
+                    "id": f"kb_{args.title}",
+                    "title": args.title,
+                    "columns": [
+                        {"id": "c1", "title": "To Do", "items": [{"id": "t1", "title": "Initial Task"}]},
+                        {"id": "c2", "title": "In Progress", "items": []},
+                        {"id": "c3", "title": "Done", "items": []},
+                    ],
+                },
+            },
+        )
+        print(f"✓ Kanban Board posted! ID: {res.get('message_id')}")
+
+    elif args.command == "digest":
+        res = post_json("/digest", {"conversation_id": args.chat, "period": "daily"})
+        print(json.dumps(res, indent=2, ensure_ascii=False))
+
+    elif args.command == "search":
+        import urllib.parse
+        res = get_json(f"/knowledge-search?q={urllib.parse.quote(args.query)}")
+        print(f"Found {res.get('count', 0)} matching artifacts:")
+        for item in res.get("results", []):
+            print(f" • [{item['type'].upper()}] {item['title']} (Score: {item['score']}%)")
+            print(f"   {item['snippet']}")
+
     elif args.command == "webhook":
-        cmd_webhook(args)
-    else:
-        parser.print_help()
+        res = post_json(f"/webhooks/{args.token}", {"title": args.title, "description": args.desc, "source": "cli"})
+        print(f"✓ Webhook delivered: {res.get('status')}")
 
 
 if __name__ == "__main__":

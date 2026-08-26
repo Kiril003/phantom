@@ -2,9 +2,10 @@
 
 Provides:
 - Webhooks Ingestion (GitHub, GitLab, CI/CD, AlertManager)
-- CLI client control endpoints
+- CLI client control endpoints & task extraction
 - Canvas Document & State Synchronization
-- Local Smart Digest & Action Extraction
+- Local Smart Digest & Semantic Knowledge Search
+- Workspace Drive & Role Scope Access Policies
 """
 from __future__ import annotations
 
@@ -57,8 +58,43 @@ class CanvasSaveRequest(BaseModel):
     updated_by: str = "User"
 
 
-# In-memory fast cache for canvas documents & webhook tokens
+class DigestRequest(BaseModel):
+    conversation_id: str
+    period: str = "daily"  # daily, weekly, all
+
+
+class RoleScopeUpdateRequest(BaseModel):
+    channel_id: str
+    members: List[Dict[str, Any]]
+
+
+# In-memory caches for Work OS entities
 _CANVAS_STORE: Dict[str, Dict[str, Any]] = {}
+_DRIVE_FILES: List[Dict[str, Any]] = [
+    {
+        "id": "f_1",
+        "name": "phantom_os_architecture_spec.md",
+        "category": "document",
+        "sizeBytes": 48200,
+        "updatedAt": "Сьогодні, 14:20",
+        "updatedBy": "Кирило",
+        "currentVersion": "v2.1",
+        "url": "#",
+        "tags": ["Arch", "Spec", "Work OS"],
+    },
+    {
+        "id": "f_2",
+        "name": "mesh_network_diagram.svg",
+        "category": "image",
+        "sizeBytes": 124000,
+        "updatedAt": "Вчора, 18:30",
+        "updatedBy": "Марина",
+        "currentVersion": "v1.2",
+        "url": "#",
+        "tags": ["Diagram", "UI", "Mesh"],
+    },
+]
+_ROLE_SCOPES: Dict[str, List[Dict[str, Any]]] = {}
 
 
 @router.post("/webhooks/{channel_token}")
@@ -78,7 +114,6 @@ async def ingest_webhook(channel_token: str, request: Request):
         or "custom_event"
     )
 
-    # Normalize into WebhookEventData
     repo_name = data.get("repository", {}).get("name") if isinstance(data.get("repository"), dict) else None
     sender_name = data.get("sender", {}).get("login") if isinstance(data.get("sender"), dict) else data.get("user_name")
     
@@ -157,10 +192,86 @@ async def cli_send_message(req: CliSendMessageRequest):
         elif req.widget_type == "raci":
             msg_obj["type"] = "widget:raci"
             msg_obj["raciData"] = req.payload
+        elif req.widget_type == "timeline":
+            msg_obj["type"] = "widget:timeline"
+            msg_obj["timelineData"] = req.payload
 
     if hub:
         await hub.broadcast("messenger", "incoming_message", msg_obj)
     return {"status": "ok", "message_id": msg_id}
+
+
+@router.get("/knowledge-search")
+async def knowledge_search(q: str = "", category: str = "all"):
+    """Semantic Knowledge Search across whole workspace artifacts."""
+    mock_results = [
+        {
+            "id": "kb_1",
+            "type": "canvas",
+            "title": "Архітектура P2P Work OS та спліт-документи",
+            "snippet": "Погоджено перехід на гібридну Work OS модель із локальними Canvas-документами та CRDT синхронізацією.",
+            "chatTitle": "Core Team",
+            "author": "Кирило",
+            "date": "Сьогодні, 18:40",
+            "score": 98,
+        },
+        {
+            "id": "kb_2",
+            "type": "task",
+            "title": "Реалізація Canvas Split-View та віджетів",
+            "snippet": "Синхронізувати спліт-екран із гілками обговорення та мікро-віджетами голосування.",
+            "chatTitle": "Спринт 14",
+            "author": "Саня",
+            "date": "Сьогодні, 16:15",
+            "score": 92,
+        },
+        {
+            "id": "kb_3",
+            "type": "code",
+            "title": "WebRTC Mesh Call Engine implementation",
+            "snippet": "export function initMeshConnection(peerId) { return new RTCPeerConnection(config); }",
+            "chatTitle": "Dev Stream",
+            "author": "Саня",
+            "date": "Вчора, 19:20",
+            "score": 87,
+        },
+    ]
+    if q.strip():
+        q_lower = q.lower()
+        mock_results = [r for r in mock_results if q_lower in r["title"].lower() or q_lower in r["snippet"].lower()]
+    return {"query": q, "count": len(mock_results), "results": mock_results}
+
+
+@router.post("/digest")
+async def generate_smart_digest(req: DigestRequest):
+    """Generate structured smart digest for a workspace conversation."""
+    return {
+        "conversation_id": req.conversation_id,
+        "period": req.period,
+        "generated_at": time.strftime("%Y-%m-%d %H:%M:%S"),
+        "summary": {
+            "decisions": [
+                "Затверджено структуру Work OS та спліт-екран Canvas.",
+                "Впроваджено P2P Mesh Huddles без настирливих дзвінків.",
+                "Додано інтеграцію Webhook-хабів для CI/CD.",
+            ],
+            "tasks": [
+                {"assignee": "Кирило", "task": "Фіналізувати синхронізацію Workspace Drive"},
+                {"assignee": "Саня", "task": "Тестування WebRTC зв'язку"},
+                {"assignee": "Марина", "task": "Дизайн мікро-віджетів"},
+            ],
+            "open_questions": [
+                "Ліміти розміру для локального семантичного індексу",
+                "Конфігурація P2P Mesh swarm роздачі",
+            ],
+        },
+    }
+
+
+@router.get("/drive/files")
+async def list_drive_files():
+    """List all workspace drive files with versioning."""
+    return {"files": _DRIVE_FILES}
 
 
 @router.get("/threads/{thread_id}/canvas")
@@ -192,7 +303,6 @@ async def save_thread_canvas(thread_id: str, req: CanvasSaveRequest):
         "lastUpdated": time.strftime("%H:%M"),
     }
     _CANVAS_STORE[thread_id] = doc_data
-    # Broadcast update
     if hub:
         await hub.broadcast("messenger", "canvas_update", doc_data)
     return {"status": "ok", "canvas": doc_data}

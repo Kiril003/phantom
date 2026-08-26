@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { RACIData, RACIRow } from '../../../types/messenger';
 import { soundFx } from '../../../utils/messengerSound';
-import { ShieldCheck, Plus, Trash2 } from 'lucide-react';
+import { ShieldCheck, Plus, Trash2, Layers } from 'lucide-react';
+import { useMessengerStore } from '../../../stores/messengerStore';
 
 interface RACIWidgetEmbedProps {
   data: RACIData;
@@ -17,10 +18,11 @@ export const RACIWidgetEmbed: React.FC<RACIWidgetEmbedProps> = ({
   const [matrix, setMatrix] = useState<RACIData>(data);
   const [isAdding, setIsAdding] = useState(false);
   const [newTask, setNewTask] = useState('');
-  const [newR, setNewR] = useState('');
-  const [newA, setNewA] = useState('');
-  const [newC, setNewC] = useState('');
-  const [newI, setNewI] = useState('');
+  const [newR, setNewR] = useState('Frontend');
+  const [newA, setNewA] = useState('Тімлід');
+  const [newC, setNewC] = useState('Backend');
+  const [newI, setNewI] = useState('Всі');
+  const [exported, setExported] = useState(false);
 
   const handleAddRow = () => {
     if (!newTask.trim()) {
@@ -42,15 +44,12 @@ export const RACIWidgetEmbed: React.FC<RACIWidgetEmbedProps> = ({
     };
     setMatrix(updated);
     setNewTask('');
-    setNewR('');
-    setNewA('');
-    setNewC('');
-    setNewI('');
     setIsAdding(false);
     onUpdate?.(updated);
   };
 
   const handleDeleteRow = (rowId: string) => {
+    soundFx.playTap();
     const updated = {
       ...matrix,
       rows: matrix.rows.filter((r) => r.id !== rowId),
@@ -59,119 +58,199 @@ export const RACIWidgetEmbed: React.FC<RACIWidgetEmbedProps> = ({
     onUpdate?.(updated);
   };
 
+  const exportToCanvas = () => {
+    soundFx.playSend();
+    const store = useMessengerStore.getState();
+    const mdTable =
+      `### 🛡️ Матриця RACI: ${matrix.title}\n\n` +
+      `| Завдання / Сфера | R (Виконавець) | A (Відповідальний) | C (Консультант) | I (Інформований) |\n` +
+      `|---|---|---|---|---|\n` +
+      matrix.rows.map((r) => `| ${r.task} | ${r.r} | ${r.a} | ${r.c} | ${r.i} |`).join('\n');
+
+    store.addCustomMessage({
+      id: `msg_raci_canvas_${Date.now()}`,
+      senderId: store.currentUser.id,
+      senderName: store.currentUser.name,
+      senderAvatar: store.currentUser.avatar,
+      timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
+      type: 'widget:canvas',
+      isSelf: true,
+      canvasData: {
+        id: `canvas_raci_${Date.now()}`,
+        threadId: 'root',
+        conversationId: 'current',
+        title: `RACI Матриця: ${matrix.title}`,
+        rawMarkdown: mdTable,
+        decisionsCount: matrix.rows.length,
+        openQuestionsCount: 0,
+        updatedBy: store.currentUser.name,
+        blocks: matrix.rows.map((r, idx) => ({
+          id: `r_blk_${idx}`,
+          type: 'decision',
+          content: `RACI [${r.task}]: R=${r.r}, A=${r.a}, C=${r.c}, I=${r.i}`,
+          updatedAt: 'щойно',
+        })),
+        lastUpdated: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
+      },
+    });
+    setExported(true);
+    setTimeout(() => setExported(false), 2000);
+  };
+
   return (
-    <div className="w-full max-w-2xl bg-black/40 border border-white/15 rounded-2xl p-4 backdrop-blur-md shadow-lg space-y-3">
+    <div className="w-full max-w-[620px] rounded-2xl bg-[#FAF7F0] border border-[#E5DEC9] overflow-hidden shadow-sm hover:shadow-md transition-all text-[#21261F]">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-white/10 pb-2.5">
+      <div className="p-3.5 bg-[#F7F4EC] border-b border-[#E5DEC9] flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <ShieldCheck className="w-4 h-4 text-purple-400" />
-          <h3 className="text-sm font-bold text-white tracking-tight">{matrix.title || 'Матриця RACI'}</h3>
-          <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded-full bg-purple-500/20 text-purple-300 border border-purple-500/30">
-            Governance
-          </span>
+          <div className="w-7 h-7 rounded-lg bg-[#FDF5ED] border border-[#EADCC8] flex items-center justify-center text-[#D96C35]">
+            <ShieldCheck className="w-4 h-4" />
+          </div>
+          <div>
+            <h4 className="text-[13px] font-bold text-[#21261F]">{matrix.title}</h4>
+            <p className="text-[10.5px] text-[#6E7568]">
+              {matrix.rows.length} зон відповідальності • R, A, C, I модель
+            </p>
+          </div>
         </div>
-        <span className="text-xs text-white/40">{matrix.rows.length} завдань</span>
+
+        <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#FDF5ED] text-[#D96C35] border border-[#EADCC8]">
+          RACI Governance
+        </span>
       </div>
 
-      {/* RACI Table */}
-      <div className="overflow-x-auto">
+      {/* Table */}
+      <div className="p-3 overflow-x-auto">
         <table className="w-full text-left text-xs border-collapse">
           <thead>
-            <tr className="border-b border-white/10 text-[11px] text-white/40 font-mono">
-              <th className="pb-2 font-medium">Завдання</th>
-              <th className="pb-2 font-medium text-center text-amber-400 w-16" title="Responsible (Виконавець)">R</th>
-              <th className="pb-2 font-medium text-center text-red-400 w-16" title="Accountable (Затверджувач)">A</th>
-              <th className="pb-2 font-medium text-center text-blue-400 w-16" title="Consulted (Консультант)">C</th>
-              <th className="pb-2 font-medium text-center text-emerald-400 w-16" title="Informed (Поінформований)">I</th>
-              <th className="pb-2 w-8"></th>
+            <tr className="border-b border-[#E5DEC9] text-[11px] font-bold text-[#6E7568]">
+              <th className="p-2">Завдання</th>
+              <th className="p-2 text-center text-emerald-800">R (Responsible)</th>
+              <th className="p-2 text-center text-[#D96C35]">A (Accountable)</th>
+              <th className="p-2 text-center text-blue-800">C (Consulted)</th>
+              <th className="p-2 text-center text-slate-700">I (Informed)</th>
+              <th className="p-2 w-8"></th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-white/5">
+          <tbody className="divide-y divide-[#EAE4D7]">
             {matrix.rows.map((row) => (
-              <tr key={row.id} className="group hover:bg-white/[0.02] transition-colors">
-                <td className="py-2.5 pr-2 font-medium text-white/90">{row.task}</td>
-                <td className="py-2.5 text-center font-mono text-[11px] text-amber-300 bg-amber-500/5">{row.r}</td>
-                <td className="py-2.5 text-center font-mono text-[11px] text-red-300 bg-red-500/5">{row.a}</td>
-                <td className="py-2.5 text-center font-mono text-[11px] text-blue-300 bg-blue-500/5">{row.c}</td>
-                <td className="py-2.5 text-center font-mono text-[11px] text-emerald-300 bg-emerald-500/5">{row.i}</td>
-                <td className="py-2.5 text-right">
+              <tr key={row.id} className="hover:bg-[#FDFCF9] group transition-colors">
+                <td className="p-2 font-semibold text-[#21261F]">{row.task}</td>
+                <td className="p-2 text-center">
+                  <span className="px-2 py-0.5 rounded-md bg-emerald-50 text-emerald-800 border border-emerald-200 font-bold text-[11px]">
+                    {row.r}
+                  </span>
+                </td>
+                <td className="p-2 text-center">
+                  <span className="px-2 py-0.5 rounded-md bg-[#FDF5ED] text-[#D96C35] border border-[#EADCC8] font-bold text-[11px]">
+                    {row.a}
+                  </span>
+                </td>
+                <td className="p-2 text-center">
+                  <span className="px-2 py-0.5 rounded-md bg-blue-50 text-blue-800 border border-blue-200 font-medium text-[11px]">
+                    {row.c}
+                  </span>
+                </td>
+                <td className="p-2 text-center">
+                  <span className="px-2 py-0.5 rounded-md bg-slate-100 text-slate-700 border border-slate-200 font-medium text-[11px]">
+                    {row.i}
+                  </span>
+                </td>
+                <td className="p-2 text-right">
                   <button
                     onClick={() => handleDeleteRow(row.id)}
-                    className="opacity-0 group-hover:opacity-100 text-white/30 hover:text-red-400 p-1"
+                    className="opacity-0 group-hover:opacity-100 p-1 hover:bg-red-50 text-red-500 rounded transition-opacity"
+                    title="Видалити рядок"
                   >
-                    <Trash2 className="w-3 h-3" />
+                    <Trash2 className="w-3.5 h-3.5" />
                   </button>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
+
+        {isAdding ? (
+          <div className="mt-3 p-3 rounded-xl bg-white border border-[#D96C35] space-y-2 shadow-xs">
+            <input
+              type="text"
+              value={newTask}
+              onChange={(e) => setNewTask(e.target.value)}
+              placeholder="Назва завдання чи напрямку..."
+              className="w-full text-xs p-2 bg-[#FAF7F0] border border-[#E5DEC9] rounded-lg focus:outline-none focus:border-[#D96C35]"
+              autoFocus
+            />
+            <div className="grid grid-cols-4 gap-2 text-xs">
+              <div>
+                <label className="text-[10px] font-bold text-emerald-800">R (Виконує)</label>
+                <input
+                  type="text"
+                  value={newR}
+                  onChange={(e) => setNewR(e.target.value)}
+                  className="w-full p-1 border border-[#E5DEC9] rounded"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-[#D96C35]">A (Відповідає)</label>
+                <input
+                  type="text"
+                  value={newA}
+                  onChange={(e) => setNewA(e.target.value)}
+                  className="w-full p-1 border border-[#E5DEC9] rounded"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-blue-800">C (Консультує)</label>
+                <input
+                  type="text"
+                  value={newC}
+                  onChange={(e) => setNewC(e.target.value)}
+                  className="w-full p-1 border border-[#E5DEC9] rounded"
+                />
+              </div>
+              <div>
+                <label className="text-[10px] font-bold text-slate-700">I (Інформується)</label>
+                <input
+                  type="text"
+                  value={newI}
+                  onChange={(e) => setNewI(e.target.value)}
+                  className="w-full p-1 border border-[#E5DEC9] rounded"
+                />
+              </div>
+            </div>
+            <div className="flex items-center justify-end gap-2 pt-1">
+              <button onClick={() => setIsAdding(false)} className="text-xs text-[#6E7568]">
+                Скасувати
+              </button>
+              <button
+                onClick={handleAddRow}
+                className="px-3 py-1 rounded bg-[#D96C35] text-white text-xs font-bold"
+              >
+                + Додати в матрицю
+              </button>
+            </div>
+          </div>
+        ) : (
+          <button
+            onClick={() => setIsAdding(true)}
+            className="w-full mt-2 py-2 border border-dashed border-[#E5DEC9] hover:border-[#D96C35] rounded-xl text-xs font-semibold text-[#6E7568] hover:text-[#D96C35] transition-colors flex items-center justify-center gap-1"
+          >
+            <Plus className="w-3.5 h-3.5" />
+            <span>Додати новий рядок RACI</span>
+          </button>
+        )}
       </div>
 
-      {/* Add Row */}
-      {isAdding ? (
-        <div className="bg-black/60 border border-purple-500/30 rounded-xl p-3 space-y-2 animate-in fade-in">
-          <input
-            type="text"
-            value={newTask}
-            onChange={(e) => setNewTask(e.target.value)}
-            placeholder="Назва завдання..."
-            className="w-full bg-white/5 border border-white/10 rounded px-2.5 py-1.5 text-xs text-white placeholder-white/30 focus:outline-none"
-          />
-          <div className="grid grid-cols-4 gap-2">
-            <input
-              type="text"
-              value={newR}
-              onChange={(e) => setNewR(e.target.value)}
-              placeholder="R (хто робить)"
-              className="bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-white placeholder-white/30 text-center"
-            />
-            <input
-              type="text"
-              value={newA}
-              onChange={(e) => setNewA(e.target.value)}
-              placeholder="A (хто приймає)"
-              className="bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-white placeholder-white/30 text-center"
-            />
-            <input
-              type="text"
-              value={newC}
-              onChange={(e) => setNewC(e.target.value)}
-              placeholder="C (консультант)"
-              className="bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-white placeholder-white/30 text-center"
-            />
-            <input
-              type="text"
-              value={newI}
-              onChange={(e) => setNewI(e.target.value)}
-              placeholder="I (поінформований)"
-              className="bg-white/5 border border-white/10 rounded px-2 py-1 text-xs text-white placeholder-white/30 text-center"
-            />
-          </div>
-          <div className="flex justify-end gap-2 pt-1">
-            <button
-              onClick={() => setIsAdding(false)}
-              className="text-xs text-white/50 hover:text-white px-2"
-            >
-              Скасувати
-            </button>
-            <button
-              onClick={handleAddRow}
-              className="text-xs bg-purple-500 hover:bg-purple-400 text-white font-semibold px-3 py-1 rounded"
-            >
-              Додати
-            </button>
-          </div>
-        </div>
-      ) : (
+      {/* Footer */}
+      <div className="p-3 bg-[#F7F4EC] border-t border-[#E5DEC9] flex items-center justify-between text-xs text-[#6E7568]">
+        <span>Вимога: рівно 1 особа з роллю Accountable на кожне завдання</span>
         <button
-          onClick={() => setIsAdding(true)}
-          className="w-full py-1.5 border border-dashed border-white/10 hover:border-purple-500/30 rounded-lg text-xs text-white/40 hover:text-purple-300 transition-colors flex items-center justify-center gap-1.5"
+          onClick={exportToCanvas}
+          className="flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-[#FDF5ED] border border-[#E5DEC9] rounded-lg text-[#D96C35] font-bold shadow-2xs transition-all"
         >
-          <Plus className="w-3.5 h-3.5" />
-          <span>Додати рядок матриці</span>
+          <Layers className="w-3.5 h-3.5" />
+          <span>{exported ? 'Експортовано в Canvas ✓' : 'Експорт у Canvas'}</span>
         </button>
-      )}
+      </div>
     </div>
   );
 };

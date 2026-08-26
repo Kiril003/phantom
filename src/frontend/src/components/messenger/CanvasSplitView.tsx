@@ -1,21 +1,17 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   X,
   Plus,
-  CheckCircle2,
   Copy,
   Check,
-  Edit3,
   Trash2,
-  Layers,
-  Maximize2,
-  Minimize2,
   ChevronUp,
   ChevronDown,
-  FileText,
+  Maximize2,
+  Minimize2,
   Sparkles,
-  FileDown,
   Send,
+  RotateCcw,
 } from 'lucide-react';
 import { CanvasDocument, CanvasBlock, Message } from '../../types/messenger';
 import { useMessengerStore } from '../../stores/messengerStore';
@@ -33,752 +29,450 @@ interface CanvasSplitViewProps {
   onToggleWidthMode?: (mode: 'half' | 'wide' | 'full') => void;
 }
 
-type TabMode = 'blocks' | 'markdown' | 'summary';
+export type ExtendedBlockType =
+  | 'heading'
+  | 'text'
+  | 'decision'
+  | 'action-item'
+  | 'code'
+  | 'callout';
+
+export interface ExtendedCanvasBlock extends Omit<CanvasBlock, 'type'> {
+  type: ExtendedBlockType;
+  priority?: 'urgent' | 'high' | 'med' | 'low';
+  assignee?: string;
+  dueDate?: string;
+  status?: 'draft' | 'in_review' | 'approved' | 'rejected';
+  language?: string;
+}
 
 export const CanvasSplitView: React.FC<CanvasSplitViewProps> = ({
   chatTitle,
   chatId = 'current_chat',
   threadId = 'root_thread',
-  messages = [],
+  messages: _messages = [],
   initialDoc,
   onClose,
-  onSave,
+  onSave: _onSave,
   widthMode = 'half',
   onToggleWidthMode,
 }) => {
-  const [activeTab, setActiveTab] = useState<TabMode>('blocks');
+  const [docTitle, setDocTitle] = useState(initialDoc?.title || `${chatTitle} — Документ`);
   const [copied, setCopied] = useState(false);
   const [published, setPublished] = useState(false);
-  const [editingBlockId, setEditingBlockId] = useState<string | null>(null);
-  const [editContent, setEditContent] = useState('');
-  const [newBlockType, setNewBlockType] = useState<CanvasBlock['type']>('decision');
-  const [newBlockContent, setNewBlockContent] = useState('');
-  const [isAddingBlock, setIsAddingBlock] = useState(false);
-  const [rawMarkdownText, setRawMarkdownText] = useState('');
+  const [history, setHistory] = useState<ExtendedCanvasBlock[][]>([]);
+  const [historyIdx, setHistoryIdx] = useState(0);
 
-  const storageKey = `phantom_canvas_${chatId}_${threadId}`;
+  const storageKey = `phantom_canvas_v3_${chatId}_${threadId}`;
 
-  // Initialize document with persistence
-  const [doc, setDoc] = useState<CanvasDocument>(() => {
-    if (initialDoc) return initialDoc;
+  // Default clean blocks without corporate jargon
+  const defaultBlocks: ExtendedCanvasBlock[] = [
+    {
+      id: 'b1',
+      type: 'heading',
+      content: 'Фінальні домовленості та архітектура',
+      updatedAt: 'щойно',
+    },
+    {
+      id: 'b2',
+      type: 'text',
+      content: 'Документ фіксує узгоджені рішення з обговорення в чаті для швидкого доступу команди без гортання стрічки.',
+      updatedAt: 'щойно',
+    },
+    {
+      id: 'b3',
+      type: 'decision',
+      content: 'Перехід на гібридну модель: розгортання будь-якої гілки в спліт-екран із живим документом рішень.',
+      status: 'approved',
+      updatedAt: 'щойно',
+    },
+    {
+      id: 'b4',
+      type: 'action-item',
+      content: 'Синхронізація спліт-екрана та віджетів',
+      assignee: 'Кирило',
+      checked: true,
+      updatedAt: 'щойно',
+    },
+    {
+      id: 'b5',
+      type: 'action-item',
+      content: 'Тестування P2P звʼязку на мобільних пристроях',
+      assignee: 'Саня',
+      checked: false,
+      updatedAt: 'щойно',
+    },
+    {
+      id: 'b6',
+      type: 'code',
+      content: `// P2P DataChannel Mesh Sync\nexport function syncMesh(payload) {\n  peers.forEach(p => p.send(payload));\n}`,
+      language: 'typescript',
+      updatedAt: 'щойно',
+    },
+  ];
+
+  const [blocks, setBlocks] = useState<ExtendedCanvasBlock[]>(() => {
+    if (initialDoc && initialDoc.blocks) return initialDoc.blocks as ExtendedCanvasBlock[];
     try {
       const saved = localStorage.getItem(storageKey);
       if (saved) return JSON.parse(saved);
-    } catch {
-      // ignore
-    }
-
-    return {
-      id: `canvas_${Date.now()}`,
-      threadId,
-      conversationId: chatId,
-      title: `${chatTitle} — Робочий Canvas рішень`,
-      rawMarkdown: '',
-      decisionsCount: 1,
-      openQuestionsCount: 0,
-      lastUpdated: 'щойно',
-      updatedBy: 'Ви',
-      blocks: [
-        {
-          id: 'b1',
-          type: 'heading',
-          content: `${chatTitle} — Спільний простір рішень`,
-          updatedAt: 'щойно',
-        },
-        {
-          id: 'b2',
-          type: 'decision',
-          content: 'Погоджено перехід на гібридну Work OS модель із живими Canvas-документами.',
-          authorName: 'Команда',
-          updatedAt: 'щойно',
-        },
-        {
-          id: 'b3',
-          type: 'action-item',
-          content: 'Синхронізувати спліт-екран із гілками обговорення та віджетами',
-          authorName: 'Ви',
-          checked: false,
-          updatedAt: 'щойно',
-        },
-      ],
-    };
+    } catch {}
+    return defaultBlocks;
   });
 
-  // Save to local storage whenever doc changes
-  useEffect(() => {
+  const pushHistory = (newBlocks: ExtendedCanvasBlock[]) => {
+    const updated = history.slice(0, historyIdx + 1);
+    updated.push(newBlocks);
+    setHistory(updated);
+    setHistoryIdx(updated.length - 1);
+    setBlocks(newBlocks);
     try {
-      localStorage.setItem(storageKey, JSON.stringify(doc));
-    } catch {
-      // ignore
+      localStorage.setItem(storageKey, JSON.stringify(newBlocks));
+    } catch {}
+  };
+
+  const undo = () => {
+    if (historyIdx > 0) {
+      soundFx.playTap();
+      const prev = history[historyIdx - 1];
+      setHistoryIdx(historyIdx - 1);
+      setBlocks(prev);
     }
-  }, [doc, storageKey]);
-
-  // Sync raw markdown on doc changes
-  useEffect(() => {
-    const md = doc.blocks
-      .map((b) => {
-        if (b.type === 'heading') return `## ${b.content}`;
-        if (b.type === 'decision') return `> 🎯 **РІШЕННЯ:** ${b.content}`;
-        if (b.type === 'action-item') return `- [${b.checked ? 'x' : ' '}] ${b.content}${b.authorName ? ` (@${b.authorName})` : ''}`;
-        if (b.type === 'code') return `\`\`\`\n${b.content}\n\`\`\``;
-        return b.content;
-      })
-      .join('\n\n');
-    setRawMarkdownText(md);
-  }, [doc.blocks]);
-
-  const updateDoc = (newDoc: CanvasDocument) => {
-    setDoc(newDoc);
-    onSave?.(newDoc);
   };
 
-  const toggleChecklist = (blockId: string) => {
+  const updateBlock = (id: string, updates: Partial<ExtendedCanvasBlock>) => {
+    const next = blocks.map((b) => (b.id === id ? { ...b, ...updates, updatedAt: 'щойно' } : b));
+    pushHistory(next);
+  };
+
+  const deleteBlock = (id: string) => {
     soundFx.playTap();
-    const updatedBlocks = doc.blocks.map((b) =>
-      b.id === blockId ? { ...b, checked: !b.checked } : b
-    );
-    updateDoc({ ...doc, blocks: updatedBlocks, lastUpdated: 'щойно' });
+    const next = blocks.filter((b) => b.id !== id);
+    pushHistory(next);
   };
 
-  const handleStartEdit = (block: CanvasBlock) => {
-    setEditingBlockId(block.id);
-    setEditContent(block.content);
-  };
-
-  const handleSaveEdit = (blockId: string) => {
+  const moveBlock = (index: number, direction: 'up' | 'down') => {
     soundFx.playTap();
-    const updatedBlocks = doc.blocks.map((b) =>
-      b.id === blockId ? { ...b, content: editContent.trim() || b.content } : b
-    );
-    setEditingBlockId(null);
-    updateDoc({ ...doc, blocks: updatedBlocks, lastUpdated: 'щойно' });
+    const targetIdx = direction === 'up' ? index - 1 : index + 1;
+    if (targetIdx < 0 || targetIdx >= blocks.length) return;
+    const next = [...blocks];
+    const [moved] = next.splice(index, 1);
+    next.splice(targetIdx, 0, moved);
+    pushHistory(next);
   };
 
-  const handleAddBlock = () => {
-    if (!newBlockContent.trim()) {
-      setIsAddingBlock(false);
-      return;
-    }
-    soundFx.playSend();
-    const newBlock: CanvasBlock = {
-      id: `block_${Date.now()}`,
-      type: newBlockType,
-      content: newBlockContent.trim(),
-      authorName: 'Ви',
+  const addBlock = (type: ExtendedBlockType, afterIdx?: number) => {
+    soundFx.playTap();
+    const newB: ExtendedCanvasBlock = {
+      id: `b_${Date.now()}_${Math.random().toString(36).substr(2, 4)}`,
+      type,
+      content:
+        type === 'heading'
+          ? 'Новий заголовок'
+          : type === 'decision'
+          ? 'Ухвалене рішення...'
+          : type === 'action-item'
+          ? 'Нове завдання'
+          : type === 'code'
+          ? '// Код...'
+          : type === 'callout'
+          ? 'Примітка або зауваження...'
+          : 'Текст...',
+      assignee: type === 'action-item' ? 'Ви' : undefined,
       checked: false,
       updatedAt: 'щойно',
     };
-    const updatedBlocks = [...doc.blocks, newBlock];
-    const decisionsCount = updatedBlocks.filter((b) => b.type === 'decision').length;
-    updateDoc({
-      ...doc,
-      blocks: updatedBlocks,
-      decisionsCount,
-      lastUpdated: 'щойно',
-    });
-    setNewBlockContent('');
-    setIsAddingBlock(false);
+
+    const next = [...blocks];
+    if (afterIdx !== undefined && afterIdx >= 0) {
+      next.splice(afterIdx + 1, 0, newB);
+    } else {
+      next.push(newB);
+    }
+    pushHistory(next);
   };
 
-  const handleDeleteBlock = (blockId: string) => {
-    soundFx.playTap();
-    const updatedBlocks = doc.blocks.filter((b) => b.id !== blockId);
-    const decisionsCount = updatedBlocks.filter((b) => b.type === 'decision').length;
-    updateDoc({
-      ...doc,
-      blocks: updatedBlocks,
-      decisionsCount,
-      lastUpdated: 'щойно',
-    });
+  const runAiSynthesis = () => {
+    soundFx.playSend();
+    const aiBlock: ExtendedCanvasBlock = {
+      id: `ai_${Date.now()}`,
+      type: 'decision',
+      content: 'AI Підсумок: Зафіксовано ключові рішення бесіди та розподілено завдання між учасниками.',
+      updatedAt: 'щойно',
+    };
+    pushHistory([...blocks, aiBlock]);
   };
 
-  const handleMoveBlock = (index: number, direction: 'up' | 'down') => {
-    const targetIndex = direction === 'up' ? index - 1 : index + 1;
-    if (targetIndex < 0 || targetIndex >= doc.blocks.length) return;
-    soundFx.playTap();
-    const newBlocks = [...doc.blocks];
-    const temp = newBlocks[index];
-    newBlocks[index] = newBlocks[targetIndex];
-    newBlocks[targetIndex] = temp;
-    updateDoc({ ...doc, blocks: newBlocks, lastUpdated: 'щойно' });
-  };
-
-  // Publish / Share Canvas card directly to the active chat
   const handlePublishToChat = () => {
     soundFx.playSend();
     const store = useMessengerStore.getState();
-    const activeChatId = store.activeChatId || chatId;
-    if (!activeChatId) return;
+    const md = blocks.map((b) => b.content).join('\n\n');
 
-    const clientId = `c_${Date.now()}_canvas`;
-    const message: Message = {
-      id: clientId,
+    store.addCustomMessage({
+      id: `msg_canvas_${Date.now()}`,
       senderId: store.currentUser.id,
       senderName: store.currentUser.name,
       senderAvatar: store.currentUser.avatar,
       timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
       type: 'widget:canvas',
-      text: `📄 Опубліковано живий Canvas: ${doc.title}`,
-      canvasData: doc,
       isSelf: true,
-      status: 'sent',
-    };
-
-    // Add to chat messages in store
-    store.addCustomMessage(message);
-    setPublished(true);
-    setTimeout(() => setPublished(false), 2500);
-  };
-
-  // Smart AI extraction from chat messages
-  const handleExtractFromMessages = () => {
-    soundFx.playSend();
-    const textMsgs = messages.filter((m) => m.text && !m.isDeleted && m.type === 'text');
-    if (!textMsgs.length) return;
-
-    const extractedBlocks: CanvasBlock[] = [];
-
-    textMsgs.forEach((m, idx) => {
-      const txt = m.text || '';
-      const lower = txt.toLowerCase();
-
-      // Check for decisions
-      if (
-        lower.includes('вирішили') ||
-        lower.includes('погодили') ||
-        lower.includes('прийнято') ||
-        lower.includes('робимо так') ||
-        lower.includes('рішення:')
-      ) {
-        extractedBlocks.push({
-          id: `ai_dec_${Date.now()}_${idx}`,
-          type: 'decision',
-          content: txt.replace(/^(вирішили|погодили|рішення:)\s*/i, ''),
-          authorName: m.senderName,
-          updatedAt: 'щойно',
-        });
-      }
-      // Check for tasks
-      else if (
-        lower.includes('треба ') ||
-        lower.includes('потрібно ') ||
-        lower.includes('зробити') ||
-        lower.includes('todo') ||
-        lower.includes('завдання:') ||
-        txt.includes('- [ ]')
-      ) {
-        extractedBlocks.push({
-          id: `ai_task_${Date.now()}_${idx}`,
-          type: 'action-item',
-          content: txt.replace(/^(\-\s*\[\s*\]|todo:|завдання:)\s*/i, ''),
-          authorName: m.senderName,
-          checked: false,
-          updatedAt: 'щойно',
-        });
-      }
-      // Check for code / configs
-      else if (txt.includes('```') || txt.includes('function') || txt.includes('const ') || txt.includes('import ')) {
-        extractedBlocks.push({
-          id: `ai_code_${Date.now()}_${idx}`,
-          type: 'code',
-          content: txt.replace(/```[a-z]*\n?/g, '').trim(),
-          authorName: m.senderName,
-          updatedAt: 'щойно',
-        });
-      }
+      canvasData: {
+        id: `canvas_${Date.now()}`,
+        threadId,
+        conversationId: chatId,
+        title: docTitle,
+        rawMarkdown: md,
+        decisionsCount: blocks.filter((b) => b.type === 'decision').length,
+        openQuestionsCount: 0,
+        updatedBy: store.currentUser.name,
+        blocks: blocks.map((b) => ({
+          id: b.id,
+          type: b.type === 'heading' ? 'heading' : b.type === 'decision' ? 'decision' : b.type === 'action-item' ? 'action-item' : b.type === 'code' ? 'code' : 'text',
+          content: b.content,
+          checked: b.checked,
+          updatedAt: b.updatedAt,
+        })),
+        lastUpdated: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
+      },
     });
 
-    if (extractedBlocks.length > 0) {
-      const merged = [...doc.blocks, ...extractedBlocks];
-      const decisionsCount = merged.filter((b) => b.type === 'decision').length;
-      updateDoc({
-        ...doc,
-        blocks: merged,
-        decisionsCount,
-        lastUpdated: 'щойно (AI синтез)',
-      });
-    }
+    setPublished(true);
+    setTimeout(() => setPublished(false), 2000);
   };
 
-  const handleCopyMarkdown = () => {
-    navigator.clipboard.writeText(rawMarkdownText);
-    setCopied(true);
+  const copyMarkdown = () => {
     soundFx.playTap();
+    const md = blocks.map((b) => b.content).join('\n\n');
+    navigator.clipboard.writeText(md);
+    setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
-  const handleDownload = () => {
-    const blob = new Blob([rawMarkdownText], { type: 'text/markdown;charset=utf-8' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `${doc.title.replace(/[\s/\\:]+/g, '_')}.md`;
-    a.click();
-    URL.revokeObjectURL(url);
-  };
-
-  const decisionsList = doc.blocks.filter((b) => b.type === 'decision');
-  const actionItemsList = doc.blocks.filter((b) => b.type === 'action-item');
-
   return (
-    <div
-      className="flex flex-col h-full bg-[#FAF7F0] text-[#21261F] border-l border-[#E5DEC9] shadow-xl transition-all select-text"
-      style={{ fontFamily: 'var(--font-sans, system-ui, sans-serif)' }}
-    >
-      {/* ── Header ────────────────────────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-5 py-3.5 border-b border-[#E5DEC9] bg-[#F7F4EC] shrink-0">
-        <div className="flex items-center gap-3 min-w-0">
-          <div className="w-8 h-8 rounded-xl bg-[#FDF5ED] border border-[#EADCC8] flex items-center justify-center text-[#D96C35] shrink-0 shadow-sm">
-            <Layers className="w-4 h-4" />
-          </div>
-          <div className="min-w-0">
-            <div className="flex items-center gap-2">
-              <h2 className="text-[14px] font-bold tracking-tight text-[#21261F] truncate">
-                {doc.title}
-              </h2>
-              <span className="text-[10px] font-bold uppercase tracking-wider px-2 py-0.5 rounded-full bg-[#FDF5ED] text-[#D96C35] border border-[#EADCC8] shrink-0">
-                Work OS Canvas
-              </span>
-            </div>
-            <p className="text-[11px] text-[#6E7568] truncate mt-0.5">
-              Синхронізовано з бесідою • Змінено: {doc.lastUpdated}
-            </p>
-          </div>
+    <div className="flex flex-col h-full bg-[#FAF7F0] border-l border-[#E5DEC9] text-[#21261F] select-text shadow-xl relative overflow-hidden">
+      {/* 1. Header Toolbar — Clean & Uncluttered */}
+      <div className="px-5 py-3.5 bg-[#FAF7F0] border-b border-[#E8E1D3] flex items-center justify-between gap-3 shrink-0">
+        <div className="min-w-0 flex-1">
+          <input
+            type="text"
+            value={docTitle}
+            onChange={(e) => setDocTitle(e.target.value)}
+            className="w-full bg-transparent font-bold text-sm text-[#21261F] focus:outline-none border-b border-transparent focus:border-[#D96C35]/50 pb-0.5 truncate"
+            placeholder="Назва документу..."
+          />
         </div>
 
-        {/* Action Controls */}
-        <div className="flex items-center gap-2 shrink-0 ml-2">
-          {/* Publish to Chat Button */}
+        <div className="flex items-center gap-1.5 shrink-0">
           <button
-            onClick={handlePublishToChat}
-            title="Опублікувати цей Canvas прямо в чат для всіх співрозмовників"
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-bold shadow-sm transition-all ${
-              published
-                ? 'bg-emerald-600 text-white'
-                : 'bg-[#D96C35] hover:bg-[#B85425] text-white'
-            }`}
+            onClick={undo}
+            disabled={historyIdx === 0}
+            className="p-1.5 hover:bg-[#EFE9DC] rounded-lg text-[#6E7568] disabled:opacity-25 transition-colors"
+            title="Скасувати (Undo)"
           >
-            {published ? <Check className="w-3.5 h-3.5" /> : <Send className="w-3.5 h-3.5" />}
-            <span>{published ? 'Опубліковано ✓' : 'Надіслати в чат 🚀'}</span>
+            <RotateCcw className="w-3.5 h-3.5" />
           </button>
 
-          {/* AI Extract */}
           <button
-            onClick={handleExtractFromMessages}
-            title="Автоматично витягти рішення та завдання з розмови"
-            className="flex items-center gap-1.5 px-2.5 py-1.5 rounded-lg bg-[#FDF5ED] hover:bg-[#FBE8D6] border border-[#EADCC8] text-[#D96C35] text-[11.5px] font-semibold transition-colors"
+            onClick={runAiSynthesis}
+            className="flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-[#FDF5ED] border border-[#E5DEC9] rounded-lg text-xs font-semibold text-[#D96C35] transition-all"
+            title="AI аналіз рішень з чату"
           >
             <Sparkles className="w-3.5 h-3.5" />
-            <span className="hidden sm:inline">AI Синтез</span>
+            <span>AI</span>
           </button>
 
-          {/* Width Mode Toggle */}
+          <button
+            onClick={copyMarkdown}
+            className="p-1.5 hover:bg-[#EFE9DC] rounded-lg text-[#6E7568] transition-colors"
+            title="Копіювати Markdown"
+          >
+            {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
+          </button>
+
+          <button
+            onClick={handlePublishToChat}
+            className="flex items-center gap-1 px-3 py-1 bg-[#D96C35] hover:bg-[#B85425] text-white rounded-lg text-xs font-semibold shadow-2xs transition-all"
+            title="Поділитися в чаті"
+          >
+            <Send className="w-3 h-3" />
+            <span>{published ? 'Надіслано ✓' : 'У чат'}</span>
+          </button>
+
           {onToggleWidthMode && (
             <button
-              onClick={() => onToggleWidthMode(widthMode === 'half' ? 'wide' : widthMode === 'wide' ? 'full' : 'half')}
-              title={widthMode === 'half' ? 'Розширити на 65%' : widthMode === 'wide' ? 'Повноекранний Canvas' : 'Спліт 50%'}
-              className="p-1.5 rounded-lg hover:bg-[#EAE4D7] text-[#6E7568] transition-colors"
+              onClick={() => onToggleWidthMode(widthMode === 'half' ? 'full' : 'half')}
+              className="p-1.5 hover:bg-[#EFE9DC] rounded-lg text-[#6E7568] transition-colors"
+              title={widthMode === 'half' ? 'Розгорнути' : 'Згорнути'}
             >
-              {widthMode === 'full' ? <Minimize2 className="w-4 h-4" /> : <Maximize2 className="w-4 h-4" />}
+              {widthMode === 'half' ? <Maximize2 className="w-3.5 h-3.5" /> : <Minimize2 className="w-3.5 h-3.5" />}
             </button>
           )}
 
-          {/* Copy Markdown */}
-          <button
-            onClick={handleCopyMarkdown}
-            title="Копіювати весь Markdown"
-            className="p-1.5 rounded-lg hover:bg-[#EAE4D7] text-[#6E7568] transition-colors"
-          >
-            {copied ? <Check className="w-4 h-4 text-emerald-600" /> : <Copy className="w-4 h-4" />}
-          </button>
-
-          {/* Download File */}
-          <button
-            onClick={handleDownload}
-            title="Експорт у файл .md"
-            className="p-1.5 rounded-lg hover:bg-[#EAE4D7] text-[#6E7568] transition-colors"
-          >
-            <FileDown className="w-4 h-4" />
-          </button>
-
-          {/* Close Panel */}
           <button
             onClick={onClose}
-            title="Закрити спліт-екран"
-            className="p-1.5 rounded-lg hover:bg-red-500/10 hover:text-red-600 text-[#6E7568] transition-colors ml-0.5"
+            className="p-1.5 hover:bg-[#EFE9DC] rounded-lg text-[#6E7568] transition-colors ml-1"
+            title="Закрити"
           >
             <X className="w-4 h-4" />
           </button>
         </div>
       </div>
 
-      {/* ── Subheader Tabs & Vitals ────────────────────────────────────────── */}
-      <div className="flex items-center justify-between px-5 py-2.5 border-b border-[#E5DEC9] bg-[#FAF7F0] shrink-0">
-        <div className="flex items-center gap-1 bg-[#EAE4D7] p-0.5 rounded-lg border border-[#DDD5C5]">
-          <button
-            onClick={() => setActiveTab('blocks')}
-            className={`flex items-center gap-1.5 px-3 py-1 text-[11.5px] font-semibold rounded-md transition-all ${
-              activeTab === 'blocks'
-                ? 'bg-[#FDFCF9] text-[#21261F] shadow-sm'
-                : 'text-[#6E7568] hover:text-[#21261F]'
-            }`}
+      {/* 2. Document Canvas Body (Notion / Craft style) */}
+      <div className="flex-1 min-h-0 p-6 md:p-8 overflow-y-auto custom-scrollbar space-y-4 max-w-3xl mx-auto w-full">
+        {blocks.map((block, idx) => (
+          <div
+            key={block.id}
+            className="group relative flex items-start gap-2 transition-all -ml-6 pl-6 rounded-lg hover:bg-[#F3EDE0]/50 py-1"
           >
-            <Layers className="w-3.5 h-3.5 text-[#D96C35]" />
-            <span>Живі блоки</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('markdown')}
-            className={`flex items-center gap-1.5 px-3 py-1 text-[11.5px] font-semibold rounded-md transition-all ${
-              activeTab === 'markdown'
-                ? 'bg-[#FDFCF9] text-[#21261F] shadow-sm'
-                : 'text-[#6E7568] hover:text-[#21261F]'
-            }`}
-          >
-            <FileText className="w-3.5 h-3.5" />
-            <span>Markdown</span>
-          </button>
-
-          <button
-            onClick={() => setActiveTab('summary')}
-            className={`flex items-center gap-1.5 px-3 py-1 text-[11.5px] font-semibold rounded-md transition-all ${
-              activeTab === 'summary'
-                ? 'bg-[#FDFCF9] text-[#21261F] shadow-sm'
-                : 'text-[#6E7568] hover:text-[#21261F]'
-            }`}
-          >
-            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-            <span>Підсумок</span>
-          </button>
-        </div>
-
-        {/* Counters */}
-        <div className="flex items-center gap-3 text-[11.5px] font-medium text-[#6E7568]">
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-[#D96C35]" />
-            <b className="text-[#21261F]">{decisionsList.length}</b> рішень
-          </span>
-          <span className="flex items-center gap-1">
-            <span className="w-2 h-2 rounded-full bg-indigo-500" />
-            <b className="text-[#21261F]">{actionItemsList.length}</b> завдань
-          </span>
-        </div>
-      </div>
-
-      {/* ── Document Body ─────────────────────────────────────────────────── */}
-      <div className="flex-1 overflow-y-auto px-5 py-4 space-y-3.5 custom-scrollbar">
-        {/* TAB: Blocks */}
-        {activeTab === 'blocks' && (
-          <div className="space-y-3">
-            {doc.blocks.map((block, index) => (
-              <div
-                key={block.id}
-                className={`group relative p-4 rounded-xl border transition-all ${
-                  block.type === 'decision'
-                    ? 'bg-[#FDF9F3] border-[#EADCC8] hover:border-[#D96C35]'
-                    : block.type === 'action-item'
-                    ? 'bg-[#FDFCF9] border-[#E5DEC9] hover:border-indigo-400/50'
-                    : block.type === 'heading'
-                    ? 'bg-[#F7F4EC] border-[#E5DEC9]'
-                    : 'bg-[#FDFCF9] border-[#E5DEC9] hover:border-[#D96C35]/40'
-                }`}
-              >
-                {/* Block Controls (Move, Edit, Delete) */}
-                <div className="absolute top-3 right-3 opacity-0 group-hover:opacity-100 flex items-center gap-1 bg-[#F7F4EC] p-1 rounded-lg border border-[#E5DEC9] shadow-sm transition-opacity">
-                  <button
-                    onClick={() => handleMoveBlock(index, 'up')}
-                    disabled={index === 0}
-                    title="Перемістити вгору"
-                    className="p-1 hover:bg-[#EAE4D7] rounded disabled:opacity-30 text-[#6E7568]"
-                  >
-                    <ChevronUp className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => handleMoveBlock(index, 'down')}
-                    disabled={index === doc.blocks.length - 1}
-                    title="Перемістити вниз"
-                    className="p-1 hover:bg-[#EAE4D7] rounded disabled:opacity-30 text-[#6E7568]"
-                  >
-                    <ChevronDown className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => handleStartEdit(block)}
-                    title="Редагувати"
-                    className="p-1 hover:bg-[#EAE4D7] rounded text-[#6E7568]"
-                  >
-                    <Edit3 className="w-3.5 h-3.5" />
-                  </button>
-                  <button
-                    onClick={() => handleDeleteBlock(block.id)}
-                    title="Видалити блок"
-                    className="p-1 hover:bg-red-500/10 hover:text-red-600 rounded text-[#6E7568]"
-                  >
-                    <Trash2 className="w-3.5 h-3.5" />
-                  </button>
-                </div>
-
-                {/* Inline Editing Form */}
-                {editingBlockId === block.id ? (
-                  <div className="space-y-2">
-                    <textarea
-                      value={editContent}
-                      onChange={(e) => setEditContent(e.target.value)}
-                      className="w-full min-h-[70px] p-2.5 bg-white border border-[#D96C35] rounded-lg text-[13px] text-[#21261F] focus:outline-none resize-none leading-relaxed"
-                      autoFocus
-                    />
-                    <div className="flex justify-end gap-2">
-                      <button
-                        onClick={() => setEditingBlockId(null)}
-                        className="px-3 py-1 text-xs text-[#6E7568] hover:text-[#21261F]"
-                      >
-                        Скасувати
-                      </button>
-                      <button
-                        onClick={() => handleSaveEdit(block.id)}
-                        className="px-3 py-1 rounded-md bg-[#D96C35] hover:bg-[#B85425] text-white text-xs font-semibold"
-                      >
-                        Зберегти
-                      </button>
-                    </div>
-                  </div>
-                ) : (
-                  <>
-                    {/* HEADING BLOCK */}
-                    {block.type === 'heading' && (
-                      <h3
-                        onClick={() => handleStartEdit(block)}
-                        className="text-[15px] font-bold text-[#21261F] tracking-tight flex items-center gap-2.5 cursor-pointer"
-                      >
-                        <span className="w-1.5 h-4 bg-[#D96C35] rounded-full shrink-0" />
-                        <span>{block.content}</span>
-                      </h3>
-                    )}
-
-                    {/* DECISION BLOCK */}
-                    {block.type === 'decision' && (
-                      <div>
-                        <div className="flex items-center gap-2 mb-2">
-                          <span className="flex items-center gap-1.5 text-[11px] font-bold uppercase tracking-wider text-[#D96C35] bg-[#FDF5ED] px-2.5 py-0.5 rounded-full border border-[#EADCC8]">
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            Ухвалене рішення
-                          </span>
-                          {block.authorName && (
-                            <span className="text-[11px] text-[#6E7568]">
-                              • {block.authorName}
-                            </span>
-                          )}
-                        </div>
-                        <p
-                          onClick={() => handleStartEdit(block)}
-                          className="text-[13px] text-[#21261F] leading-relaxed font-medium pl-1 cursor-pointer hover:opacity-90"
-                        >
-                          {block.content}
-                        </p>
-                      </div>
-                    )}
-
-                    {/* ACTION ITEM / TASK BLOCK */}
-                    {block.type === 'action-item' && (
-                      <div className="flex items-start gap-3">
-                        <button
-                          onClick={() => toggleChecklist(block.id)}
-                          className={`mt-0.5 w-4 h-4 rounded border flex items-center justify-center transition-all shrink-0 ${
-                            block.checked
-                              ? 'bg-emerald-600 border-emerald-600 text-white'
-                              : 'border-[#CCC4B5] hover:border-indigo-500 bg-white'
-                          }`}
-                        >
-                          {block.checked && <Check className="w-3 h-3 stroke-[3]" />}
-                        </button>
-                        <div className="flex-1 min-w-0">
-                          <p
-                            onClick={() => handleStartEdit(block)}
-                            className={`text-[13px] leading-relaxed cursor-pointer ${
-                              block.checked
-                                ? 'text-[#8A9186] line-through'
-                                : 'text-[#21261F] font-medium'
-                            }`}
-                          >
-                            {block.content}
-                          </p>
-                          {block.authorName && (
-                            <span className="text-[10.5px] text-[#8A9186] mt-1 block">
-                              Відповідальний: <b>{block.authorName}</b>
-                            </span>
-                          )}
-                        </div>
-                      </div>
-                    )}
-
-                    {/* CODE BLOCK */}
-                    {block.type === 'code' && (
-                      <div className="space-y-1">
-                        <div className="flex items-center justify-between text-[10.5px] text-[#6E7568] px-1 font-mono">
-                          <span>Код / Конфігурація</span>
-                          <button
-                            onClick={() => navigator.clipboard.writeText(block.content)}
-                            className="hover:text-[#D96C35]"
-                          >
-                            Копіювати
-                          </button>
-                        </div>
-                        <pre
-                          onClick={() => handleStartEdit(block)}
-                          className="p-3 bg-[#F4EFE6] rounded-xl border border-[#E5DEC9] font-mono text-[12px] text-[#21261F] overflow-x-auto cursor-pointer leading-relaxed"
-                        >
-                          {block.content}
-                        </pre>
-                      </div>
-                    )}
-
-                    {/* REGULAR TEXT BLOCK */}
-                    {block.type === 'text' && (
-                      <p
-                        onClick={() => handleStartEdit(block)}
-                        className="text-[13px] text-[#21261F] leading-relaxed cursor-pointer"
-                      >
-                        {block.content}
-                      </p>
-                    )}
-                  </>
-                )}
-              </div>
-            ))}
-
-            {/* Add New Block Composer */}
-            {isAddingBlock ? (
-              <div className="p-4 rounded-xl border border-[#D96C35] bg-[#FDF9F3] space-y-3 animate-in fade-in duration-150 shadow-md">
-                <div className="flex items-center justify-between">
-                  <span className="text-[12px] font-bold text-[#21261F] flex items-center gap-1.5">
-                    <Plus className="w-3.5 h-3.5 text-[#D96C35]" />
-                    Новий блок у Canvas
-                  </span>
-                  <select
-                    value={newBlockType}
-                    onChange={(e) => setNewBlockType(e.target.value as CanvasBlock['type'])}
-                    className="bg-white border border-[#E5DEC9] text-xs rounded-lg px-2.5 py-1 text-[#21261F] focus:outline-none focus:border-[#D96C35]"
-                  >
-                    <option value="decision">🎯 Рішення (Decision)</option>
-                    <option value="action-item">✅ Завдання (Action Item)</option>
-                    <option value="heading">📌 Заголовок (Heading)</option>
-                    <option value="text">📝 Текст (Note)</option>
-                    <option value="code">💻 Код (Code / Spec)</option>
-                  </select>
-                </div>
-
-                <textarea
-                  value={newBlockContent}
-                  onChange={(e) => setNewBlockContent(e.target.value)}
-                  placeholder={
-                    newBlockType === 'decision'
-                      ? 'Опишіть ухвалене командою рішення…'
-                      : newBlockType === 'action-item'
-                      ? 'Опишіть завдання або дію…'
-                      : newBlockType === 'heading'
-                      ? 'Введіть заголовок розділу…'
-                      : 'Введіть вміст блоку…'
-                  }
-                  className="w-full h-24 p-3 bg-white border border-[#E5DEC9] rounded-xl text-[13px] text-[#21261F] placeholder-[#8A9186] focus:outline-none focus:border-[#D96C35] resize-none"
-                  autoFocus
-                />
-
-                <div className="flex items-center justify-end gap-2">
-                  <button
-                    onClick={() => setIsAddingBlock(false)}
-                    className="px-3 py-1.5 text-xs text-[#6E7568] hover:text-[#21261F]"
-                  >
-                    Скасувати
-                  </button>
-                  <button
-                    onClick={handleAddBlock}
-                    className="px-4 py-1.5 rounded-lg bg-[#D96C35] hover:bg-[#B85425] text-white text-xs font-bold transition-all shadow-sm"
-                  >
-                    Додати до Canvas
-                  </button>
-                </div>
-              </div>
-            ) : (
+            {/* Hover Actions (Reorder / Add / Delete) */}
+            <div className="absolute left-0 top-1.5 opacity-0 group-hover:opacity-100 flex items-center gap-0.5 transition-opacity select-none">
               <button
-                onClick={() => setIsAddingBlock(true)}
-                className="w-full py-3 border-2 border-dashed border-[#E5DEC9] hover:border-[#D96C35] rounded-xl text-xs font-semibold text-[#6E7568] hover:text-[#D96C35] hover:bg-[#FDF5ED] transition-all flex items-center justify-center gap-2"
+                onClick={() => moveBlock(idx, 'up')}
+                disabled={idx === 0}
+                className="p-0.5 hover:bg-white rounded text-[#8A9186] hover:text-[#21261F] disabled:opacity-20"
+                title="Вгору"
               >
-                <Plus className="w-4 h-4" />
-                <span>Додати блок до Canvas (+ Рішення, Завдання, Код)</span>
+                <ChevronUp className="w-3 h-3" />
               </button>
-            )}
-          </div>
-        )}
-
-        {/* TAB: Markdown Raw Editor */}
-        {activeTab === 'markdown' && (
-          <div className="h-full flex flex-col space-y-2">
-            <div className="flex items-center justify-between text-[11px] text-[#6E7568] px-1">
-              <span>Редактор Markdown (живе оновлення)</span>
-              <span>GitHub Flavored Markdown</span>
+              <button
+                onClick={() => moveBlock(idx, 'down')}
+                disabled={idx === blocks.length - 1}
+                className="p-0.5 hover:bg-white rounded text-[#8A9186] hover:text-[#21261F] disabled:opacity-20"
+                title="Вниз"
+              >
+                <ChevronDown className="w-3 h-3" />
+              </button>
+              <button
+                onClick={() => addBlock('text', idx)}
+                className="p-0.5 hover:bg-white rounded text-[#D96C35]"
+                title="Додати рядок"
+              >
+                <Plus className="w-3 h-3" />
+              </button>
+              <button
+                onClick={() => deleteBlock(block.id)}
+                className="p-0.5 hover:bg-red-50 rounded text-red-500"
+                title="Видалити"
+              >
+                <Trash2 className="w-3 h-3" />
+              </button>
             </div>
-            <textarea
-              value={rawMarkdownText}
-              onChange={(e) => setRawMarkdownText(e.target.value)}
-              className="w-full h-full min-h-[420px] p-4 font-mono text-[12.5px] text-[#21261F] bg-[#FAF7F0] rounded-xl border border-[#E5DEC9] resize-none focus:outline-none focus:border-[#D96C35] leading-relaxed select-text"
-            />
-          </div>
-        )}
 
-        {/* TAB: Executive Summary */}
-        {activeTab === 'summary' && (
-          <div className="space-y-4">
-            <div className="p-4 rounded-xl bg-[#FDF9F3] border border-[#EADCC8]">
-              <h4 className="text-[13px] font-bold text-[#D96C35] flex items-center gap-2 mb-2">
-                <CheckCircle2 className="w-4 h-4" />
-                Реєстр ухвалених рішень ({decisionsList.length})
-              </h4>
-              {decisionsList.length === 0 ? (
-                <p className="text-xs text-[#8A9186]">Ще немає зафіксованих рішень.</p>
+            {/* Block Body */}
+            <div className="w-full">
+              {block.type === 'heading' ? (
+                <input
+                  type="text"
+                  value={block.content}
+                  onChange={(e) => updateBlock(block.id, { content: e.target.value })}
+                  placeholder="Заголовок..."
+                  className="w-full bg-transparent font-bold text-base md:text-lg text-[#21261F] focus:outline-none border-b border-transparent focus:border-[#D96C35]/40 py-1"
+                />
+              ) : block.type === 'decision' ? (
+                <div className="border-l-2 border-[#D96C35] pl-3 py-1 bg-[#FDF5ED]/60 rounded-r-lg">
+                  <textarea
+                    value={block.content}
+                    onChange={(e) => updateBlock(block.id, { content: e.target.value })}
+                    rows={2}
+                    className="w-full bg-transparent font-medium text-xs md:text-[13px] text-[#1C241B] focus:outline-none leading-relaxed resize-none"
+                    placeholder="Ухвалене рішення..."
+                  />
+                </div>
+              ) : block.type === 'action-item' ? (
+                <div className="flex items-center gap-2.5 py-0.5">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(block.checked)}
+                    onChange={(e) => updateBlock(block.id, { checked: e.target.checked })}
+                    className="w-4 h-4 accent-[#D96C35] rounded cursor-pointer shrink-0"
+                  />
+                  <input
+                    type="text"
+                    value={block.content}
+                    onChange={(e) => updateBlock(block.id, { content: e.target.value })}
+                    placeholder="Завдання..."
+                    className={`flex-1 bg-transparent text-xs md:text-[13px] focus:outline-none ${
+                      block.checked ? 'line-through text-[#8A9186]' : 'text-[#21261F]'
+                    }`}
+                  />
+                  {block.assignee && (
+                    <span className="text-[11px] text-[#6E7568] px-1.5 py-0.5 rounded bg-[#EFE8DA] font-medium shrink-0">
+                      @{block.assignee}
+                    </span>
+                  )}
+                </div>
+              ) : block.type === 'code' ? (
+                <div className="w-full rounded-xl bg-[#1C1F1B] p-3 text-emerald-400 font-mono text-xs overflow-x-auto shadow-2xs my-1">
+                  <textarea
+                    value={block.content}
+                    onChange={(e) => updateBlock(block.id, { content: e.target.value })}
+                    rows={4}
+                    className="w-full bg-transparent font-mono text-xs text-emerald-400 focus:outline-none leading-relaxed resize-y"
+                  />
+                </div>
+              ) : block.type === 'callout' ? (
+                <div className="p-3 rounded-xl bg-white border border-[#E5DEC9] text-xs text-[#5F6A60] leading-relaxed">
+                  <textarea
+                    value={block.content}
+                    onChange={(e) => updateBlock(block.id, { content: e.target.value })}
+                    rows={2}
+                    className="w-full bg-transparent focus:outline-none resize-none"
+                  />
+                </div>
               ) : (
-                <ul className="space-y-2">
-                  {decisionsList.map((d, i) => (
-                    <li key={i} className="text-xs leading-relaxed text-[#21261F] flex items-start gap-2">
-                      <span className="text-[#D96C35] font-bold shrink-0">{i + 1}.</span>
-                      <span>{d.content}</span>
-                    </li>
-                  ))}
-                </ul>
+                <textarea
+                  value={block.content}
+                  onChange={(e) => updateBlock(block.id, { content: e.target.value })}
+                  rows={2}
+                  className="w-full bg-transparent text-xs md:text-[13px] text-[#21261F] focus:outline-none leading-relaxed resize-none py-0.5"
+                  placeholder="Введіть текст або натисніть + для нового блоку..."
+                />
               )}
             </div>
-
-            <div className="p-4 rounded-xl bg-[#FAF7F0] border border-[#E5DEC9]">
-              <h4 className="text-[13px] font-bold text-[#21261F] flex items-center gap-2 mb-2">
-                <CheckCircle2 className="w-4 h-4 text-indigo-500" />
-                Список відкритих завдань ({actionItemsList.filter((a) => !a.checked).length})
-              </h4>
-              {actionItemsList.length === 0 ? (
-                <p className="text-xs text-[#8A9186]">Усі завдання виконано або список порожній.</p>
-              ) : (
-                <ul className="space-y-2">
-                  {actionItemsList.map((a, i) => (
-                    <li key={i} className="text-xs flex items-center justify-between gap-2">
-                      <span className={a.checked ? 'line-through text-[#8A9186]' : 'text-[#21261F]'}>
-                        {a.content}
-                      </span>
-                      {a.authorName && (
-                        <span className="text-[10px] text-[#8A9186] shrink-0 font-mono">@{a.authorName}</span>
-                      )}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
           </div>
-        )}
+        ))}
+
+        {/* Minimalist Bottom Inserter */}
+        <div className="pt-4 flex items-center justify-center gap-2 text-xs text-[#6E7568] border-t border-[#EAE3D5]">
+          <span className="text-[11px] font-medium">+ Додати:</span>
+          <button
+            onClick={() => addBlock('text')}
+            className="px-2 py-1 rounded hover:bg-[#EFE8DA] text-[#21261F] font-medium"
+          >
+            Текст
+          </button>
+          <button
+            onClick={() => addBlock('decision')}
+            className="px-2 py-1 rounded hover:bg-[#FDF5ED] text-[#D96C35] font-semibold"
+          >
+            Рішення
+          </button>
+          <button
+            onClick={() => addBlock('action-item')}
+            className="px-2 py-1 rounded hover:bg-[#EFE8DA] text-[#21261F] font-medium"
+          >
+            Завдання
+          </button>
+          <button
+            onClick={() => addBlock('code')}
+            className="px-2 py-1 rounded hover:bg-[#EFE8DA] text-[#21261F] font-medium"
+          >
+            Код
+          </button>
+          <button
+            onClick={() => addBlock('heading')}
+            className="px-2 py-1 rounded hover:bg-[#EFE8DA] text-[#21261F] font-medium"
+          >
+            Заголовок
+          </button>
+        </div>
       </div>
 
-      {/* ── Footer Vitals ─────────────────────────────────────────────────── */}
-      <div className="px-5 py-3 border-t border-[#E5DEC9] bg-[#F7F4EC] flex items-center justify-between text-[11px] text-[#6E7568] shrink-0">
-        <span className="flex items-center gap-1.5">
-          <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
-          Автозбереження (Local-first CRDT)
-        </span>
-        <span>{doc.blocks.length} блоків</span>
+      {/* 3. Subtle Status Footer */}
+      <div className="px-5 py-2 bg-[#FAF7F0] border-t border-[#E8E1D3] flex items-center justify-between text-[11px] text-[#8A9186]">
+        <span>{blocks.length} блоків</span>
+        <span>Збережено</span>
       </div>
     </div>
   );

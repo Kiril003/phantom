@@ -22,7 +22,9 @@ import {
   ShieldCheck,
   Terminal,
   Network,
-  GitCommit
+  GitCommit,
+  Calendar,
+  Video
 } from 'lucide-react';
 import { Message, ChatMember, MessageReplyInfo } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
@@ -291,6 +293,83 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
         filename: 'src/core/router.ts',
         oldCode: `export function route(req) {\n  return handleClassicChat(req);\n}`,
         newCode: `export function route(req) {\n  // Work OS: hybrid thread to canvas & micro-widgets\n  return handleWorkOS(req);\n}`,
+      },
+    });
+  };
+
+  const sendTimelineWidget = () => {
+    setShowAttachMenu(false);
+    const currentUser = useMessengerStore.getState().currentUser;
+    useMessengerStore.getState().addCustomMessage({
+      id: `msg_timeline_${Date.now()}`,
+      senderId: currentUser.id,
+      senderName: currentUser.name,
+      senderAvatar: currentUser.avatar,
+      timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
+      type: 'widget:timeline',
+      isSelf: true,
+      timelineData: {
+        id: `tl_${Date.now()}`,
+        title: 'План розгортання Work OS v1.0',
+        milestones: [
+          { id: 'm1', title: 'Гібридні гілки (Threads → Canvas)', status: 'completed', progress: 100, dueDate: '26 сер', assignee: 'Кирило' },
+          { id: 'm2', title: 'Мікро-віджети (Kanban, RACI, Timeline)', status: 'in_progress', progress: 85, dueDate: '27 сер', assignee: 'Саня' },
+          { id: 'm3', title: 'Workspace Drive & P2P Swarm', status: 'in_progress', progress: 70, dueDate: '28 сер', assignee: 'Марина' },
+          { id: 'm4', title: 'Локальний Webhook-хаб & CLI клієнт', status: 'pending', progress: 40, dueDate: '30 сер', assignee: 'Кирило' },
+        ],
+      },
+    });
+  };
+
+  const sendAsyncSnippetWidget = () => {
+    setShowAttachMenu(false);
+    const currentUser = useMessengerStore.getState().currentUser;
+    useMessengerStore.getState().addCustomMessage({
+      id: `msg_snippet_${Date.now()}`,
+      senderId: currentUser.id,
+      senderName: currentUser.name,
+      senderAvatar: currentUser.avatar,
+      timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
+      type: 'snippet:async',
+      isSelf: true,
+      asyncSnippetData: {
+        id: `snip_${Date.now()}`,
+        title: 'Огляд архітектури Canvas та автономних віджетів',
+        durationSeconds: 145,
+        authorName: currentUser.name,
+        summary: 'Пояснення механіки переходу з лінійного чату у спліт-екран для документування фінальних рішень.',
+        transcripts: [
+          { timestamp: '0:00', timeSeconds: 0, text: 'Привіт команді! Сьогодні коротко пройдуся по гібридних гілках.' },
+          { timestamp: '0:35', timeSeconds: 35, text: 'Будь-яка гілка тепер відкривається в Canvas спліт праворуч.' },
+          { timestamp: '1:12', timeSeconds: 72, text: 'Всі картки та віджети зберігають свій стан у локальному CRDT.' },
+        ],
+      },
+    });
+  };
+
+  const sendSvgPreviewWidget = () => {
+    setShowAttachMenu(false);
+    const currentUser = useMessengerStore.getState().currentUser;
+    useMessengerStore.getState().addCustomMessage({
+      id: `msg_svg_${Date.now()}`,
+      senderId: currentUser.id,
+      senderName: currentUser.name,
+      senderAvatar: currentUser.avatar,
+      timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
+      type: 'embed:svg',
+      isSelf: true,
+      svgPreviewData: {
+        title: 'Векторна схема вузла Phantom OS',
+        svgContent: `<svg width="280" height="140" viewBox="0 0 280 140" fill="none" xmlns="http://www.w3.org/2000/svg">
+<rect width="280" height="140" rx="16" fill="#FAF7F0"/>
+<rect x="20" y="30" width="70" height="80" rx="10" fill="#FDF5ED" stroke="#D96C35" stroke-width="2"/>
+<text x="35" y="75" font-family="sans-serif" font-size="12" font-weight="bold" fill="#21261F">Клієнт</text>
+<rect x="190" y="30" width="70" height="80" rx="10" fill="#FDF5ED" stroke="#D96C35" stroke-width="2"/>
+<text x="208" y="75" font-family="sans-serif" font-size="12" font-weight="bold" fill="#21261F">Вузол</text>
+<path d="M100 70H180" stroke="#D96C35" stroke-width="2" stroke-dasharray="4 4"/>
+<circle cx="140" cy="70" r="14" fill="#D96C35"/>
+<text x="135" y="74" font-family="sans-serif" font-size="11" font-weight="bold" fill="#FFFFFF">P2P</text>
+</svg>`,
       },
     });
   };
@@ -870,8 +949,11 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                   {[
                     { icon: Columns, label: 'Kanban Спринт', pick: sendKanbanWidget, color: 'text-amber-500' },
                     { icon: BarChart2, label: 'Голосування', pick: sendVotingWidget, color: 'text-emerald-500' },
+                    { icon: Calendar, label: 'Timeline / Gantt', pick: sendTimelineWidget, color: 'text-[#D96C35]' },
                     { icon: ShieldCheck, label: 'Матриця RACI', pick: sendRACIWidget, color: 'text-purple-500' },
                     { icon: Terminal, label: 'Code Runner', pick: sendCodeRunnerWidget, color: 'text-cyan-500' },
+                    { icon: Video, label: 'Async Video сніпет', pick: sendAsyncSnippetWidget, color: 'text-rose-500' },
+                    { icon: ImageIcon, label: 'SVG векторний макет', pick: sendSvgPreviewWidget, color: 'text-amber-600' },
                     { icon: Network, label: 'Mermaid Схема', pick: sendMermaidWidget, color: 'text-indigo-500' },
                     { icon: GitCommit, label: 'Git Diff код', pick: sendDiffWidget, color: 'text-emerald-500' },
                   ].map(({ icon: Icon, label, pick, color }) => (

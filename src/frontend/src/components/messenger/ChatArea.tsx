@@ -65,6 +65,9 @@ import { RACIWidgetEmbed } from './widgets/RACIWidgetEmbed';
 import { CodeRunnerWidgetEmbed } from './widgets/CodeRunnerWidgetEmbed';
 import { MermaidEmbed } from './embeds/MermaidEmbed';
 import { CodeDiffEmbed } from './embeds/CodeDiffEmbed';
+import { TimelineWidgetEmbed } from './widgets/TimelineWidgetEmbed';
+import { AsyncSnippetBubble } from './embeds/AsyncSnippetBubble';
+import { SvgPreviewEmbed } from './embeds/SvgPreviewEmbed';
 import { WebhookEventEmbed } from './embeds/WebhookEventEmbed';
 import { ActionItemChip } from './ActionItemChip';
 import { Layers } from 'lucide-react';
@@ -1589,6 +1592,7 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
                     <ActionItemChip
                       text={msg.text}
                       senderName={msg.senderName}
+                      chatId={currentChat?.id}
                       onCreateTask={(taskTitle) => {
                         showToast(`Завдання додано: ${taskTitle}`);
                       }}
@@ -2005,6 +2009,33 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
                   {msg.type === 'webhook:event' && msg.webhookEventData && (
                     <div className="w-full max-w-full min-w-0 overflow-hidden pt-1">
                       <WebhookEventEmbed data={msg.webhookEventData} />
+                    </div>
+                  )}
+
+                  {/* 10h. WORK OS: TIMELINE / GANTT WIDGET */}
+                  {msg.type === 'widget:timeline' && msg.timelineData && (
+                    <div className="w-full max-w-full min-w-0 overflow-hidden pt-1">
+                      <TimelineWidgetEmbed
+                        data={msg.timelineData}
+                        isSelf={isSelf}
+                        onUpdate={(updated) => {
+                          useMessengerStore.getState().updateMessage(msg.id, { timelineData: updated });
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  {/* 10i. WORK OS: ASYNC VIDEO SNIPPET */}
+                  {msg.type === 'snippet:async' && msg.asyncSnippetData && (
+                    <div className="w-full max-w-full min-w-0 overflow-hidden pt-1">
+                      <AsyncSnippetBubble data={msg.asyncSnippetData} isSelf={isSelf} />
+                    </div>
+                  )}
+
+                  {/* 10j. WORK OS: SVG PREVIEW EMBED */}
+                  {msg.type === 'embed:svg' && msg.svgPreviewData && (
+                    <div className="w-full max-w-full min-w-0 overflow-hidden pt-1">
+                      <SvgPreviewEmbed data={msg.svgPreviewData} />
                     </div>
                   )}
 

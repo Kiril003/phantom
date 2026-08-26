@@ -30,10 +30,15 @@ import { ShareFolderModal } from './ShareFolderModal';
 import { SmartFolderModal } from './SmartFolderModal';
 import { UserProfileModal } from './UserProfileModal';
 import { CallOverlay } from './CallOverlay';
+import { RoleScopesModal } from './RoleScopesModal';
+import { WorkspaceDriveModal } from './WorkspaceDriveModal';
+import { KnowledgeSearchModal } from './KnowledgeSearchModal';
+import { P2PFileSwarmModal } from './P2PFileSwarmModal';
+import { WebhooksManagerModal } from './WebhooksManagerModal';
 import { callEngine } from '../../services/callEngine';
 import { useCallAlerts } from '../../hooks/useCallAlerts';
 import { soundFx } from '../../utils/messengerSound';
-import type { Message, SmartFolder } from '../../types/messenger';
+import type { Message, SmartFolder, FocusModeType } from '../../types/messenger';
 
 interface MessengerRootProps {
   className?: string;
@@ -46,8 +51,14 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
   // Закладка закріпленого живе в шапці, а стрічка — в ChatArea: тримаємо ручку.
   const chatAreaRef = useRef<ChatAreaHandle>(null);
   const [editingSmartFolder, setEditingSmartFolder] = useState<SmartFolder | null>(null);
-  const [activeFolderInsights, setActiveFolderInsights] = useState<SmartFolder | null>(null);
-  const [activeShareFolder, setActiveShareFolder] = useState<SmartFolder | null>(null);
+  // Work OS Super-App States
+  const [isRoleScopesOpen, setIsRoleScopesOpen] = useState(false);
+  const [isWorkspaceDriveOpen, setIsWorkspaceDriveOpen] = useState(false);
+  const [isKnowledgeSearchOpen, setIsKnowledgeSearchOpen] = useState(false);
+  const [isP2PSwarmOpen, setIsP2PSwarmOpen] = useState(false);
+  const [isWebhooksOpen, setIsWebhooksOpen] = useState(false);
+  const [focusMode, setFocusMode] = useState<FocusModeType>('available');
+  const [isHuddleActive, setIsHuddleActive] = useState(false);
 
   // Sound settings
   const [isSoundEnabled, setIsSoundEnabled] = useState(true);
@@ -185,6 +196,16 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
             pinnedCount={activeChat.messages.filter((m) => m.isPinned).length}
             onScrollToPinned={() => chatAreaRef.current?.scrollToPinned()}
             onOpenP2PNetworkModal={() => store.setP2PModalOpen(true)}
+            onOpenKnowledgeSearch={() => setIsKnowledgeSearchOpen(true)}
+            onOpenWorkspaceDrive={() => setIsWorkspaceDriveOpen(true)}
+            onOpenRoleScopes={() => setIsRoleScopesOpen(true)}
+            onOpenP2PSwarm={() => setIsP2PSwarmOpen(true)}
+            onOpenWebhooks={() => setIsWebhooksOpen(true)}
+            focusMode={focusMode}
+            onFocusModeChange={setFocusMode}
+            isHuddleActive={isHuddleActive}
+            onStartHuddle={() => setIsHuddleActive(true)}
+            onLeaveHuddle={() => setIsHuddleActive(false)}
             onBack={() => store.setActiveChat('')}
           />
 
@@ -347,28 +368,21 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
         onDeleteFolder={(folderId) => store.deleteFolder(folderId)}
       />
 
-      {activeFolderInsights && (
-        <FolderInsightsModal
-          isOpen={store.isFolderInsightsOpen}
-          onClose={() => {
-            store.setFolderInsightsOpen(false);
-            setActiveFolderInsights(null);
-          }}
-          folder={activeFolderInsights}
-          chats={store.chats}
-        />
-      )}
-
-      {activeShareFolder && (
-        <ShareFolderModal
-          isOpen={store.isShareFolderOpen}
-          onClose={() => {
-            store.setShareFolderOpen(false);
-            setActiveShareFolder(null);
-          }}
-          folder={activeShareFolder}
-          chats={store.chats}
-        />
+      {store.smartFolders.length > 0 && (
+        <>
+          <FolderInsightsModal
+            isOpen={store.isFolderInsightsOpen}
+            onClose={() => store.setFolderInsightsOpen(false)}
+            folder={store.smartFolders[0]}
+            chats={store.chats}
+          />
+          <ShareFolderModal
+            isOpen={store.isShareFolderOpen}
+            onClose={() => store.setShareFolderOpen(false)}
+            folder={store.smartFolders[0]}
+            chats={store.chats}
+          />
+        </>
       )}
 
       {activeChat && (
@@ -491,6 +505,57 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
           store.closeReactionPicker();
         }}
       />
+
+      {/* WORK OS MODALS */}
+      <RoleScopesModal
+        isOpen={isRoleScopesOpen}
+        onClose={() => setIsRoleScopesOpen(false)}
+        channelTitle={activeChat?.title || 'Простір'}
+      />
+
+      <WorkspaceDriveModal
+        isOpen={isWorkspaceDriveOpen}
+        onClose={() => setIsWorkspaceDriveOpen(false)}
+        workspaceTitle={activeChat?.title || 'Простір'}
+      />
+
+      <KnowledgeSearchModal
+        isOpen={isKnowledgeSearchOpen}
+        onClose={() => setIsKnowledgeSearchOpen(false)}
+      />
+
+      <P2PFileSwarmModal
+        isOpen={isP2PSwarmOpen}
+        onClose={() => setIsP2PSwarmOpen(false)}
+      />
+
+      <WebhooksManagerModal
+        isOpen={isWebhooksOpen}
+        onClose={() => setIsWebhooksOpen(false)}
+        onSendTestWebhook={(wh) => {
+          store.addCustomMessage({
+            id: `msg_wh_${Date.now()}`,
+            senderId: 'bot_ci',
+            senderName: 'CI/CD Bot',
+            senderAvatar: 'https://images.unsplash.com/photo-1618401471353-b98afee0b2eb?w=200&auto=format&fit=crop&q=80',
+            timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
+            type: 'webhook:event',
+            isSelf: false,
+            webhookEventData: {
+              source: wh.source === 'docker' ? 'ci' : wh.source,
+              eventType: 'push',
+              repository: 'phantom-companion',
+              sender: 'github-actions[bot]',
+              title: `[${wh.name}] Build & Test Pipeline Succeeded`,
+              description: 'Atomic sprint test passed on aarch64 & x86_64 target nodes.',
+              status: 'success',
+              commitHash: '054253e',
+              timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
+            },
+          });
+        }}
+      />
+
       <CallOverlay />
     </div>
   );

@@ -38,7 +38,9 @@ export type MessageType =
   | 'widget:kanban'
   | 'widget:voting'
   | 'widget:raci'
+  | 'widget:timeline'
   | 'widget:code-runner'
+  | 'snippet:async'
   | 'embed:mermaid'
   | 'embed:diff'
   | 'embed:svg'
@@ -405,6 +407,105 @@ export interface WebhookEventData {
   timestamp: string;
 }
 
+export interface TimelineMilestone {
+  id: string;
+  title: string;
+  description?: string;
+  assignee?: string;
+  status: 'pending' | 'in_progress' | 'completed' | 'blocked';
+  progress: number; // 0..100
+  dueDate?: string;
+  tags?: string[];
+}
+
+export interface TimelineData {
+  id: string;
+  title: string;
+  milestones: TimelineMilestone[];
+  startDate?: string;
+  targetDate?: string;
+}
+
+export interface AsyncSnippetTranscript {
+  timestamp: string;
+  timeSeconds: number;
+  text: string;
+}
+
+export interface AsyncSnippetData {
+  id: string;
+  title: string;
+  durationSeconds: number;
+  videoUrl?: string;
+  audioUrl?: string;
+  thumbnailUrl?: string;
+  transcripts: AsyncSnippetTranscript[];
+  summary?: string;
+  authorName: string;
+}
+
+export interface RoleScope {
+  userId: string;
+  role: 'owner' | 'admin' | 'contributor' | 'observer';
+  canEditCanvas: boolean;
+  canPostWidgets: boolean;
+  canDeleteMessages: boolean;
+  canAccessDrive: boolean;
+  canStartHuddle: boolean;
+}
+
+export type FocusModeType = 'available' | 'deep_focus' | 'in_huddle' | 'async_only' | 'dnd';
+
+export interface FocusMode {
+  type: FocusModeType;
+  label: string;
+  statusMessage?: string;
+  until?: string;
+  allowVipPings: boolean;
+}
+
+export interface WorkspaceFileVersion {
+  version: string;
+  updatedAt: string;
+  updatedBy: string;
+  sizeBytes: number;
+  changeNote?: string;
+  url: string;
+  sha256?: string;
+}
+
+export interface WorkspaceDriveFile {
+  id: string;
+  name: string;
+  category: 'code' | 'image' | 'document' | 'archive' | 'media' | 'canvas';
+  sizeBytes: number;
+  updatedAt: string;
+  updatedBy: string;
+  currentVersion: string;
+  versions: WorkspaceFileVersion[];
+  url: string;
+  tags?: string[];
+  isLocked?: boolean;
+}
+
+export interface HuddleParticipant {
+  userId: string;
+  name: string;
+  avatar: string;
+  isMuted: boolean;
+  isSpeaking: boolean;
+  isScreenSharing: boolean;
+  joinedAt: string;
+}
+
+export interface HuddleRoom {
+  chatId: string;
+  isActive: boolean;
+  topic: string;
+  startedAt: string;
+  participants: HuddleParticipant[];
+}
+
 export interface Message {
   id: string;
   senderId: string;
@@ -436,6 +537,8 @@ export interface Message {
   kanbanData?: KanbanData;
   votingData?: VotingData;
   raciData?: RACIData;
+  timelineData?: TimelineData;
+  asyncSnippetData?: AsyncSnippetData;
   codeRunnerData?: CodeRunnerData;
   mermaidData?: MermaidData;
   codeDiffData?: CodeDiffData;

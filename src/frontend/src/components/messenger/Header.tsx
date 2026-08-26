@@ -15,8 +15,15 @@ import {
   Radio,
   ChevronLeft,
   ShieldCheck,
-  Hash
+  Hash,
+  FolderTree,
+  Shield,
+  Share2,
+  Webhook,
+  Sparkles,
 } from 'lucide-react';
+import { FocusModeSelector } from './FocusModeSelector';
+import { TeamHuddleBar } from './TeamHuddleBar';
 import { Chat, UserProfile, ActiveTransportStatus, TransportProtocol } from '../../types/messenger';
 import { Avatar } from './Avatar';
 import { soundFx } from '../../utils/messengerSound';
@@ -40,6 +47,16 @@ interface HeaderProps {
   pinnedCount?: number;
   onScrollToPinned?: () => void;
   onOpenP2PNetworkModal?: () => void;
+  onOpenKnowledgeSearch?: () => void;
+  onOpenWorkspaceDrive?: () => void;
+  onOpenRoleScopes?: () => void;
+  onOpenP2PSwarm?: () => void;
+  onOpenWebhooks?: () => void;
+  focusMode?: any;
+  onFocusModeChange?: (mode: any) => void;
+  isHuddleActive?: boolean;
+  onStartHuddle?: () => void;
+  onLeaveHuddle?: () => void;
   onBack?: () => void;
   activeTransportStatus?: ActiveTransportStatus;
   transportMode?: TransportProtocol;
@@ -84,6 +101,16 @@ export const Header: React.FC<HeaderProps> = ({
   pinnedCount = 0,
   onScrollToPinned,
   onOpenP2PNetworkModal,
+  onOpenKnowledgeSearch,
+  onOpenWorkspaceDrive,
+  onOpenRoleScopes,
+  onOpenP2PSwarm,
+  onOpenWebhooks,
+  focusMode,
+  onFocusModeChange,
+  isHuddleActive,
+  onStartHuddle,
+  onLeaveHuddle,
   onBack,
   activeTransportStatus = 'offline',
   transportMode: _transportMode = 'auto',
@@ -283,7 +310,37 @@ export const Header: React.FC<HeaderProps> = ({
       </div>
 
       {/* 2. Right Action Controls */}
-      <div className="flex items-center gap-0.5 shrink-0">
+      <div className="flex items-center gap-1 shrink-0">
+        {/* Focus Mode Pill */}
+        <div className="hidden lg:block">
+          <FocusModeSelector
+            currentMode={focusMode}
+            onModeChange={onFocusModeChange}
+          />
+        </div>
+
+        {/* Team Huddle Bar Trigger */}
+        <TeamHuddleBar
+          chatTitle={currentChat.title}
+          isHuddleActive={Boolean(isHuddleActive)}
+          onStartHuddle={onStartHuddle}
+          onLeaveHuddle={onLeaveHuddle}
+        />
+
+        {/* Omni-Search across entire Workspace */}
+        {onOpenKnowledgeSearch && (
+          <button
+            onClick={() => {
+              soundFx.playTap();
+              onOpenKnowledgeSearch();
+            }}
+            className={`hidden sm:flex ${ICON_BTN} ${ICON_BTN_IDLE}`}
+            title="Семантичний пошук рішень та документів (Omni-search)"
+          >
+            <Sparkles className="w-[18px] h-[18px] text-[#D96C35]" strokeWidth={1.75} />
+          </button>
+        )}
+
         {/* Thread / Digest Comments */}
         <button
           onClick={() => {
@@ -291,7 +348,7 @@ export const Header: React.FC<HeaderProps> = ({
             onOpenDigest();
           }}
           className={`hidden sm:flex ${ICON_BTN} ${ICON_BTN_IDLE}`}
-          title="Підсумок та коментарі бесіди"
+          title="Smart Digest та підсумок активності"
         >
           <MessageSquare className="w-[18px] h-[18px]" strokeWidth={1.75} />
         </button>
@@ -422,6 +479,59 @@ export const Header: React.FC<HeaderProps> = ({
                 <MessageSquare className="w-4 h-4 text-[#6E7568] shrink-0" strokeWidth={1.75} />
                 <span className="truncate">Конспект бесіди</span>
               </button>
+
+              {/* WORK OS ECOSYSTEM ACTIONS */}
+              {onOpenWorkspaceDrive && (
+                <button
+                  onClick={() => {
+                    closeMenu();
+                    onOpenWorkspaceDrive();
+                  }}
+                  className={MENU_ITEM}
+                >
+                  <FolderTree className="w-4 h-4 text-[#D96C35] shrink-0" strokeWidth={1.75} />
+                  <span className="truncate">Сховище Workspace Drive</span>
+                </button>
+              )}
+
+              {onOpenRoleScopes && (
+                <button
+                  onClick={() => {
+                    closeMenu();
+                    onOpenRoleScopes();
+                  }}
+                  className={MENU_ITEM}
+                >
+                  <Shield className="w-4 h-4 text-[#6E7568] shrink-0" strokeWidth={1.75} />
+                  <span className="truncate">Контекстні ролі (Scopes)</span>
+                </button>
+              )}
+
+              {onOpenWebhooks && (
+                <button
+                  onClick={() => {
+                    closeMenu();
+                    onOpenWebhooks();
+                  }}
+                  className={MENU_ITEM}
+                >
+                  <Webhook className="w-4 h-4 text-[#6E7568] shrink-0" strokeWidth={1.75} />
+                  <span className="truncate">Вхідні Webhook-хаби (CI/CD)</span>
+                </button>
+              )}
+
+              {onOpenP2PSwarm && (
+                <button
+                  onClick={() => {
+                    closeMenu();
+                    onOpenP2PSwarm();
+                  }}
+                  className={MENU_ITEM}
+                >
+                  <Share2 className="w-4 h-4 text-[#6E7568] shrink-0" strokeWidth={1.75} />
+                  <span className="truncate">P2P Swarm роздача</span>
+                </button>
+              )}
 
               {onOpenP2PNetworkModal && (
                 <button

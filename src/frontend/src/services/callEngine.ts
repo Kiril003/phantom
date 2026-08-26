@@ -341,7 +341,10 @@ class CallEngine {
         media,
       });
       if (!result.delivered) {
-        this.finish(result.detail || 'вузол співрозмовника не прийняв дзвінок');
+        const detail = result.detail?.includes('не знайдено')
+          ? 'Вузол співрозмовника офлайн або не зареєстрований у P2P мережі. Для тесту звʼязку відкрийте Huddle.'
+          : (result.detail || 'вузол співрозмовника не прийняв дзвінок');
+        this.finish(detail);
         return;
       }
       // Пропозиція пішла — з цієї миті мовчання означає проблему зі звʼязком.

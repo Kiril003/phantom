@@ -55,6 +55,10 @@ import { ZeroLeakSecurityModal } from './ZeroLeakSecurityModal';
 import { WasmAppSandboxModal } from './WasmAppSandboxModal';
 import { P2PComputeSharingModal } from './P2PComputeSharingModal';
 import { AmbientContextModal } from './AmbientContextModal';
+import { UniversalBridgeModal } from './UniversalBridgeModal';
+import { ProtocolDrivenSchemaModal } from './ProtocolDrivenSchemaModal';
+import { NeuroErgonomicsModal } from './NeuroErgonomicsModal';
+import { LoRaWalkieTalkieModal } from './LoRaWalkieTalkieModal';
 import { callEngine } from '../../services/callEngine';
 import { useCallAlerts } from '../../hooks/useCallAlerts';
 import { soundFx } from '../../utils/messengerSound';
@@ -97,6 +101,10 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
   const [isWasmSandboxOpen, setIsWasmSandboxOpen] = useState(false);
   const [isP2PComputeOpen, setIsP2PComputeOpen] = useState(false);
   const [isAmbientContextOpen, setIsAmbientContextOpen] = useState(false);
+  const [isUniversalBridgeOpen, setIsUniversalBridgeOpen] = useState(false);
+  const [isProtocolSchemaOpen, setIsProtocolSchemaOpen] = useState(false);
+  const [isNeuroErgonomicsOpen, setIsNeuroErgonomicsOpen] = useState(false);
+  const [isLoRaWalkieOpen, setIsLoRaWalkieOpen] = useState(false);
   const [focusMode, setFocusMode] = useState<FocusModeType>('available');
   const [isHuddleActive, setIsHuddleActive] = useState(false);
 
@@ -210,6 +218,10 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
     const onOpenWasm = () => setIsWasmSandboxOpen(true);
     const onOpenP2PComp = () => setIsP2PComputeOpen(true);
     const onOpenAmb = () => setIsAmbientContextOpen(true);
+    const onOpenBridge = () => setIsUniversalBridgeOpen(true);
+    const onOpenSchema = () => setIsProtocolSchemaOpen(true);
+    const onOpenNeuro = () => setIsNeuroErgonomicsOpen(true);
+    const onOpenLoRa = () => setIsLoRaWalkieOpen(true);
 
     window.addEventListener('phantom:open-automations', onOpenAut);
     window.addEventListener('phantom:open-datagrid', onOpenGrid);
@@ -226,6 +238,10 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
     window.addEventListener('phantom:open-wasm', onOpenWasm);
     window.addEventListener('phantom:open-p2pcompute', onOpenP2PComp);
     window.addEventListener('phantom:open-ambient', onOpenAmb);
+    window.addEventListener('phantom:open-bridge', onOpenBridge);
+    window.addEventListener('phantom:open-schema', onOpenSchema);
+    window.addEventListener('phantom:open-neuro', onOpenNeuro);
+    window.addEventListener('phantom:open-lora', onOpenLoRa);
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
@@ -244,6 +260,10 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
       window.removeEventListener('phantom:open-wasm', onOpenWasm);
       window.removeEventListener('phantom:open-p2pcompute', onOpenP2PComp);
       window.removeEventListener('phantom:open-ambient', onOpenAmb);
+      window.removeEventListener('phantom:open-bridge', onOpenBridge);
+      window.removeEventListener('phantom:open-schema', onOpenSchema);
+      window.removeEventListener('phantom:open-neuro', onOpenNeuro);
+      window.removeEventListener('phantom:open-lora', onOpenLoRa);
     };
   }, []);
 
@@ -802,6 +822,30 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
       <AmbientContextModal
         isOpen={isAmbientContextOpen}
         onClose={() => setIsAmbientContextOpen(false)}
+        chatTitle={activeChat?.title || 'Бесіда'}
+      />
+
+      <UniversalBridgeModal
+        isOpen={isUniversalBridgeOpen}
+        onClose={() => setIsUniversalBridgeOpen(false)}
+        chatTitle={activeChat?.title || 'Бесіда'}
+      />
+
+      <ProtocolDrivenSchemaModal
+        isOpen={isProtocolSchemaOpen}
+        onClose={() => setIsProtocolSchemaOpen(false)}
+        chatTitle={activeChat?.title || 'Простір'}
+      />
+
+      <NeuroErgonomicsModal
+        isOpen={isNeuroErgonomicsOpen}
+        onClose={() => setIsNeuroErgonomicsOpen(false)}
+        chatTitle={activeChat?.title || 'Бесіда'}
+      />
+
+      <LoRaWalkieTalkieModal
+        isOpen={isLoRaWalkieOpen}
+        onClose={() => setIsLoRaWalkieOpen(false)}
         chatTitle={activeChat?.title || 'Бесіда'}
       />
 

@@ -24,6 +24,7 @@ import {
   Boxes,
   Wifi,
   ShieldAlert,
+  Brain,
 } from 'lucide-react';
 import { useMessengerStore } from '../../stores/messengerStore';
 import { soundFx } from '../../utils/messengerSound';
@@ -229,6 +230,50 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
       icon: Wifi,
       action: () => {
         window.dispatchEvent(new CustomEvent('phantom:open-ambient'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_bridge',
+      category: 'Дії',
+      title: 'Universal Bridge Core & Puppeting',
+      subtitle: 'Шлюзи Matrix, Nostr, ActivityPub та безсерверний TG/Signal',
+      icon: Network,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-bridge'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_schema',
+      category: 'Дії',
+      title: 'Кастомні схеми просторів & Віджети',
+      subtitle: 'Динамічні форми та Zero-Code Mini Views',
+      icon: SlidersHorizontal,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-schema'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_neuro',
+      category: 'Дії',
+      title: 'Нейро-ергономіка & Focus Decay',
+      subtitle: 'Градієнти шуму та Intent-Based маршрутизація',
+      icon: Brain,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-neuro'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_lora',
+      category: 'Дії',
+      title: 'LoRa SX1262 Mesh & P2P Рація',
+      subtitle: 'Позамережевий радіоканал 868MHz та прямий голосовий ефір',
+      icon: Radio,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-lora'));
         onClose();
       },
     },

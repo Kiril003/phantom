@@ -262,6 +262,23 @@ export const messengerApi = {
    */
   requestBlob: (blobId: string) =>
     request<NodeBlob>('POST', `/messenger/files/${blobId}/request`),
+
+  /** Отримує список користувачів для швидкого пошуку та зв'язку за ніком (@username) */
+  listDirectoryUsers: (query?: string) =>
+    request<
+      Array<{
+        id: string;
+        username: string;
+        display_name: string;
+        role: string;
+        avatar?: string;
+        is_online: boolean;
+      }>
+    >('GET', `/messenger/directory/users${query ? `?query=${encodeURIComponent(query)}` : ''}`),
+
+  /** Розпочинає реальну бесіду з користувачем за його ніком (@username) */
+  startChatByUsername: (username: string, circle: string = 'friends') =>
+    request<NodeConversation>('POST', '/messenger/directory/start-chat', { username, circle }),
 };
 
 const timeLabel = (iso: string): string => {

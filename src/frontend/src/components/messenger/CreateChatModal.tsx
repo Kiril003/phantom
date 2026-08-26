@@ -54,9 +54,20 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
   const [groupDescription, setGroupDescription] = useState('');
   const [groupAvatar, setGroupAvatar] = useState(PRESET_GROUP_AVATARS[0]);
 
-  // DM creation form state
+  // DM creation form state & Directory users
   const [dmName, setDmName] = useState('');
   const [dmCircle, setDmCircle] = useState<ChatCircle>('friends');
+  const [directoryUsers, setDirectoryUsers] = useState<
+    Array<{
+      id: string;
+      username: string;
+      display_name: string;
+      role: string;
+      avatar?: string;
+      is_online: boolean;
+    }>
+  >([]);
+  const [loadingDirectory, setLoadingDirectory] = useState(false);
 
   // Network & Direct Address connection state
   const [directAddress, setDirectAddress] = useState('');
@@ -101,6 +112,28 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     let alive = true;
+    setLoadingDirectory(true);
+    messengerApi
+      .listDirectoryUsers()
+      .then((users) => {
+        if (alive) setDirectoryUsers(users);
+      })
+      .catch(() => {
+        // Fallback default users if offline
+        if (alive) {
+          setDirectoryUsers([
+            { id: 'u_kiril', username: 'kiril', display_name: 'Kiril (Lead)', role: 'ROOT', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80', is_online: true },
+            { id: 'u_alex', username: 'alex', display_name: 'Alex (Backend)', role: 'OPERATOR', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=80', is_online: true },
+            { id: 'u_kyrylo', username: 'kyrylo', display_name: 'Kyrylo', role: 'OPERATOR', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80', is_online: true },
+            { id: 'u_maryna', username: 'maryna', display_name: 'Maryna (QA)', role: 'OPERATOR', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&auto=format&fit=crop&q=80', is_online: true },
+            { id: 'u_phantom', username: 'phantom', display_name: 'PHANTOM Autonomous Node', role: 'ROOT', avatar: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200&auto=format&fit=crop&q=80', is_online: true },
+          ]);
+        }
+      })
+      .finally(() => {
+        if (alive) setLoadingDirectory(false);
+      });
+
     void inviteInClipboard().then((found) => {
       if (alive && found) setClipboardInvite(found);
     });
@@ -187,23 +220,29 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
     }
   };
 
-  // DM submit handler
-  const handleCreateDM = async () => {
-    if (!dmName.trim() || busy) return;
+  // DM submit handler (by username or directory user)
+  const handleStartChatWithUser = async (username: string) => {
+    if (busy) return;
     setBusy(true);
     setError(null);
     try {
       soundFx.playSend();
-      const newChatId = await useMessengerStore
-        .getState()
-        .createDirectMessage(dmName.trim(), dmCircle);
+      const conv = await messengerApi.startChatByUsername(username, dmCircle);
+      await useMessengerStore.getState().refreshConversations();
       reset();
-      onConversationReady(newChatId);
+      onConversationReady(conv.id);
     } catch (err: any) {
-      setError(err?.message || 'Не вдалося створити діалог');
+      setError(err?.message || `Не вдалося почати діалог із @${username}`);
     } finally {
       setBusy(false);
     }
+  };
+
+  const handleCreateDM = async () => {
+    const raw = dmName.trim();
+    if (!raw || busy) return;
+    const cleanUsername = raw.replace(/^@/, '');
+    await handleStartChatWithUser(cleanUsername);
   };
 
   // P2P Invite submit handler
@@ -487,21 +526,83 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
             </div>
           )}
 
-          {/* TAB 2: DIRECT MESSAGE */}
+          {/* TAB 2: DIRECT MESSAGE & DIRECTORY USERS */}
           {activeTab === 'dm' && (
             <div className="space-y-4 animate-in fade-in duration-150">
               <div>
                 <label className="block text-xs font-extrabold text-[#1E2521] mb-1.5">
-                  Ім'я співрозмовника <span className="text-[#E87A42]">*</span>
+                  Пошук за нікнеймом (@username) або імʼям <span className="text-[#E87A42]">*</span>
                 </label>
                 <input
                   type="text"
                   value={dmName}
                   onChange={(e) => setDmName(e.target.value)}
-                  placeholder="напр. Олександр або Марія (Frontend Lead)"
+                  placeholder="напр. @kiril, @alex, @kyrylo, @maryna..."
                   autoFocus
                   className="w-full px-3.5 py-2.5 text-sm rounded-2xl border border-[#DDD4C4] bg-white focus:outline-none focus:border-[#E87A42] font-semibold"
                 />
+              </div>
+
+              {/* Список зареєстрованих користувачів */}
+              <div className="space-y-1.5">
+                <span className="text-[11.5px] font-extrabold text-[#6E7568] uppercase tracking-wider block">
+                  Користувачі вузла ({directoryUsers.length})
+                </span>
+
+                {loadingDirectory ? (
+                  <div className="p-4 text-center text-xs text-[#5F6A60]">Завантаження списку…</div>
+                ) : (
+                  <div className="max-h-[180px] overflow-y-auto space-y-1.5 pr-1">
+                    {directoryUsers
+                      .filter((u) => {
+                        if (!dmName.trim()) return true;
+                        const q = dmName.trim().toLowerCase().replace(/^@/, '');
+                        return (
+                          u.username.toLowerCase().includes(q) ||
+                          u.display_name.toLowerCase().includes(q)
+                        );
+                      })
+                      .map((u) => (
+                        <div
+                          key={u.id}
+                          onClick={() => handleStartChatWithUser(u.username)}
+                          className="p-2.5 rounded-2xl bg-white border border-[#E6DFD3] hover:border-[#E87A42] hover:bg-[#FAF8F4] flex items-center justify-between cursor-pointer transition-all group"
+                        >
+                          <div className="flex items-center gap-2.5 min-w-0">
+                            <div className="relative shrink-0">
+                              <img
+                                src={u.avatar || `https://api.dicebear.com/7.x/bottts/svg?seed=${u.username}`}
+                                alt={u.username}
+                                className="w-8 h-8 rounded-full object-cover border border-[#DDD4C4]"
+                              />
+                              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-[#4C8A55] rounded-full ring-2 ring-white" />
+                            </div>
+                            <div className="min-w-0">
+                              <div className="flex items-center gap-1.5">
+                                <span className="font-bold text-[13px] text-[#1E2521] group-hover:text-[#E87A42] transition-colors truncate">
+                                  {u.display_name}
+                                </span>
+                                <span className="text-[11px] font-mono text-[#8C5A1A] bg-[#FDF6EC] px-1.5 py-0.2 rounded-md">
+                                  @{u.username}
+                                </span>
+                              </div>
+                              <span className="text-[11px] text-[#5F6A60] block truncate">
+                                {u.role === 'ROOT' ? '👑 Власник вузла' : '👤 Оператор вузла'}
+                              </span>
+                            </div>
+                          </div>
+
+                          <button
+                            type="button"
+                            disabled={busy}
+                            className="px-3 py-1 rounded-xl bg-[#FAF6EE] group-hover:bg-[#E87A42] text-[#8C5A1A] group-hover:text-white text-xs font-bold transition-all shrink-0"
+                          >
+                            Почати чат
+                          </button>
+                        </div>
+                      ))}
+                  </div>
+                )}
               </div>
 
               <div>
@@ -538,7 +639,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
                 disabled={!dmName.trim() || busy}
                 className="w-full py-3 rounded-2xl bg-[#E87A42] hover:bg-[#C25925] disabled:bg-[#EADFD0] disabled:text-[#A8A99C] text-white text-sm font-extrabold transition-all shadow-md active:scale-98"
               >
-                {busy ? 'Відкриваю діалог…' : 'Почати діалог'}
+                {busy ? 'Відкриваю діалог…' : `Почати діалог ${dmName.trim() ? `з ${dmName.trim().startsWith('@') ? dmName.trim() : `@${dmName.trim()}`}` : ''}`}
               </button>
             </div>
           )}

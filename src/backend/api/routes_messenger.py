@@ -1074,6 +1074,159 @@ async def verify_contact(
     return _contact_out(row)
 
 
+# ── Директорія користувачів та пошук за ніком ────────────────────────────────
+
+class DirectoryUserOut(BaseModel):
+    id: str
+    username: str
+    display_name: str
+    role: str
+    avatar: Optional[str] = None
+    is_online: bool = True
+
+
+class StartChatByUsernameIn(BaseModel):
+    username: str
+    circle: Optional[str] = "friends"
+
+
+@router.get("/directory/users", response_model=list[DirectoryUserOut])
+async def list_directory_users(
+    query: Optional[str] = None,
+    user: User = Depends(get_user_or_device_user),
+    session: AsyncSession = Depends(get_db),
+) -> list[DirectoryUserOut]:
+    """Повертає список реальних користувачів вузла для швидкого пошуку та зв'язку."""
+    stmt = select(User).where(User.id != user.id)
+    if query:
+        q = f"%{query.strip().lstrip('@')}%"
+        stmt = stmt.where(User.username.ilike(q))
+    
+    users = (await session.execute(stmt.order_by(User.username))).scalars().all()
+    
+    avatars = {
+        "phantom": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200&auto=format&fit=crop&q=80",
+        "kiril": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80",
+        "alex": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=80",
+        "kyrylo": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80",
+        "maryna": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&auto=format&fit=crop&q=80",
+        "baffledgame": "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=200&auto=format&fit=crop&q=80",
+    }
+    
+    return [
+        DirectoryUserOut(
+            id=u.id,
+            username=u.username,
+            display_name=u.username.capitalize(),
+            role=u.role or "OPERATOR",
+            avatar=avatars.get(u.username.lower(), f"https://api.dicebear.com/7.x/bottts/svg?seed={u.username}"),
+            is_online=True,
+        )
+        for u in users
+    ]
+
+
+@router.post("/directory/start-chat", response_model=ConversationOut)
+async def start_chat_by_username(
+    payload: StartChatByUsernameIn,
+    user: User = Depends(get_user_or_device_user),
+    session: AsyncSession = Depends(get_db),
+) -> ConversationOut:
+    """Миттєво створює зв'язаний контакт та бесіду з користувачем за його ніком."""
+    raw_uname = payload.username.strip().lstrip('@').lower()
+    target_user = (
+        await session.execute(select(User).where(func.lower(User.username) == raw_uname))
+    ).scalars().first()
+    
+    if target_user is None:
+        raise HTTPException(status_code=404, detail=f"Користувача @{raw_uname} не знайдено в системі")
+    
+    if target_user.id == user.id:
+        raise HTTPException(status_code=400, detail="Не можна розпочати діалог із самим собою")
+    
+    keys = _keys()
+    peer_node_id = f"node_{target_user.username}"
+    
+    # 1. Знаходимо або створюємо контакт для поточного користувача
+    contact = (
+        await session.execute(
+            select(MessengerContact).where(
+                MessengerContact.owner_user_id == user.id,
+                MessengerContact.peer_node_id == peer_node_id,
+            )
+        )
+    ).scalar_one_or_none()
+    
+    if contact is None:
+        contact = MessengerContact(
+            owner_user_id=user.id,
+            peer_node_id=peer_node_id,
+            display_name=f"@{target_user.username}",
+            peer_address="",
+            safety_number=safety_number(keys.identity_ed_public, keys.identity_dh_public, keys.identity_ed_public, keys.identity_dh_public),
+            session_blob=b"".hex(),
+            created_at=_now(),
+            updated_at=_now(),
+            verified_at=_now(),
+        )
+        session.add(contact)
+        await session.commit()
+        await session.refresh(contact)
+    
+    # 2. Знаходимо або створюємо зворотний контакт для цільового користувача
+    my_node_id = f"node_{user.username}" if hasattr(user, "username") and user.username else keys.node_id
+    reverse_contact = (
+        await session.execute(
+            select(MessengerContact).where(
+                MessengerContact.owner_user_id == target_user.id,
+                MessengerContact.peer_node_id == my_node_id,
+            )
+        )
+    ).scalar_one_or_none()
+    
+    if reverse_contact is None:
+        reverse_contact = MessengerContact(
+            owner_user_id=target_user.id,
+            peer_node_id=my_node_id,
+            display_name=f"@{user.username}" if hasattr(user, "username") and user.username else "Власник",
+            peer_address="",
+            safety_number=safety_number(keys.identity_ed_public, keys.identity_dh_public, keys.identity_ed_public, keys.identity_dh_public),
+            session_blob=b"".hex(),
+            created_at=_now(),
+            updated_at=_now(),
+            verified_at=_now(),
+        )
+        session.add(reverse_contact)
+        await session.commit()
+    
+    # 3. Знаходимо або створюємо бесіду
+    existing_conv = (
+        await session.execute(
+            select(MessengerConversation).where(
+                MessengerConversation.contact_id == contact.id
+            )
+        )
+    ).scalar_one_or_none()
+    
+    if existing_conv is not None:
+        return _conversation_out(existing_conv)
+    
+    conv = MessengerConversation(
+        title=f"@{target_user.username}",
+        kind="dm",
+        circle=payload.circle or "friends",
+        contact_id=contact.id,
+        next_seq=0,
+        last_read_seq=-1,
+        created_at=_now(),
+        updated_at=_now(),
+    )
+    session.add(conv)
+    await session.commit()
+    await session.refresh(conv)
+    return _conversation_out(conv)
+
+
 # ── Групи ────────────────────────────────────────────────────────────────────
 
 

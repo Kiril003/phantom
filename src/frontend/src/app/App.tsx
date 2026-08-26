@@ -12,7 +12,7 @@ import { ToastRail } from '../components/core/ToastRail';
 
 /* ─── Lazy views ─────────────────────────────────────────────────────────── */
 
-const QuickJoinScreen = React.lazy(() => import('../components/auth/QuickJoinScreen'));
+const LoginScreen = React.lazy(() => import('../components/auth/LoginScreen'));
 const MessengerLayout = React.lazy(() => import('../layouts/MessengerLayout'));
 
 export function StateSurface() {
@@ -27,7 +27,7 @@ function MainRouter() {
     if (sessionPhase === 'checking') return <PhantomLoader />;
     return (
       <React.Suspense fallback={<PhantomLoader />}>
-        <QuickJoinScreen />
+        <LoginScreen />
       </React.Suspense>
     );
   }

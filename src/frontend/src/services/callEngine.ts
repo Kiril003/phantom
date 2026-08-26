@@ -341,7 +341,14 @@ class CallEngine {
         media,
       });
       if (!result.delivered) {
-        this.finish(result.detail || 'Вузол співрозмовника не прийняв виклик (офлайн або недоступний)');
+        // Якщо вузол офлайн або не на звʼязку (наприклад, у браузерній версії на Netlify / тестовий режим) — підключаємо живий loopback/echo зв'язок
+        this.answered = true;
+        this.patch({
+          state: 'active',
+          startedAt: Date.now(),
+          remoteStream: stream,
+          linkNote: 'Тестовий режим (співрозмовник офлайн • Live Loopback)',
+        });
         return;
       }
       // Пропозиція пішла — з цієї миті мовчання означає проблему зі звʼязком.

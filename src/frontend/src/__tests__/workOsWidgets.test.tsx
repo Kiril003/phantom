@@ -1,4 +1,3 @@
-import React from 'react';
 import { describe, it, expect, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
 import { CanvasSplitView } from '../components/messenger/CanvasSplitView';
@@ -19,9 +18,9 @@ describe('Work OS & Super-App Primitives', () => {
         onClose={onClose}
       />
     );
-    expect(screen.getByText('Живий Canvas Рішень')).toBeDefined();
-    expect(screen.getByText('Структура блоків')).toBeDefined();
-    expect(screen.getByText('Markdown Raw')).toBeDefined();
+    expect(screen.getByDisplayValue('Фінальні домовленості та архітектура')).toBeDefined();
+    expect(screen.getByText('Додати блок:')).toBeDefined();
+    expect(screen.getByText('Документ')).toBeDefined();
   });
 
   it('renders KanbanWidgetEmbed and allows adding cards', () => {
@@ -79,7 +78,7 @@ describe('Work OS & Super-App Primitives', () => {
     };
     render(<CodeRunnerWidgetEmbed data={code} />);
     expect(screen.getByText('JS Test')).toBeDefined();
-    expect(screen.getByText('Запустити')).toBeDefined();
+    expect(screen.getByText('Run')).toBeDefined();
   });
 
   it('renders MermaidEmbed and CodeDiffEmbed', () => {
@@ -114,8 +113,8 @@ describe('Work OS & Super-App Primitives', () => {
         onCreateTask={onCreate}
       />
     );
-    expect(screen.getByText('AI: Створити завдання в 1 клік')).toBeDefined();
-    fireEvent.click(screen.getByText('AI: Створити завдання в 1 клік'));
+    expect(screen.getByText('AI: Доручення в 1 клік')).toBeDefined();
+    fireEvent.click(screen.getByText('AI: Доручення в 1 клік'));
     expect(onCreate).toHaveBeenCalled();
   });
 });

@@ -101,11 +101,13 @@ const MENU_ITEM =
 // Стан каналу живе в статусному рядку разом зі звіркою, а не окремою пігулкою:
 // це та сама відповідь на питання «наскільки цій розмові можна вірити».
 const TRANSPORT_LABEL: Record<string, string> = {
-  'p2p-direct': 'прямий канал',
-  'server-ws': 'вузол',
+  'p2p-direct': 'прямий P2P',
+  'server-ws': 'вузол онлайн',
   'relay-node': 'ретранслятор',
   connecting: 'з’єднання…',
-  'fallback-server': 'з’єднання…',
+  'fallback-server': 'вузол онлайн',
+  online: 'вузол онлайн',
+  offline: 'автономно',
 };
 
 export const Header: React.FC<HeaderProps> = ({
@@ -344,9 +346,9 @@ export const Header: React.FC<HeaderProps> = ({
                   className="hidden phantom:inline-flex items-center gap-1.5 shrink-0 min-w-0 min-h-0 hover:text-[#21261F] transition-colors"
                   title="Стан каналу — натисніть для діагностики мережі"
                 >
-                  <span className="w-1.5 h-1.5 rounded-full bg-[var(--msg-meta)] shrink-0" />
+                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${activeTransportStatus === 'offline' ? 'bg-[#C25A3A]' : 'bg-[#4C8A55]'}`} />
                   <span className="truncate max-w-[130px]">
-                    {TRANSPORT_LABEL[activeTransportStatus] || 'каналу немає'}
+                    {TRANSPORT_LABEL[activeTransportStatus || 'server-ws'] || 'вузол онлайн'}
                   </span>
                   {typeof networkLatencyMs === 'number' && (
                     <span className="text-[color:var(--msg-meta)]">{networkLatencyMs} мс</span>

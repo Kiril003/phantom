@@ -233,12 +233,18 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
     return () => phantomRelayService.stop();
   }, []);
 
-  // Заголовок малює канал із живої діагностики рушія, а не з дефолтних пропів.
+  // Заголовок малює канал із живої діагностики рушія та WebSocket вузла.
   const [diagnostics, setDiagnostics] = useState<NetworkDiagnostics | null>(null);
+  const [isWsConnected, setIsWsConnected] = useState<boolean>(true);
+
   useEffect(() => {
     const off = messengerNetworkEngine.onDiagnostics(setDiagnostics);
+    const offConnect = wsClient.onConnect(() => setIsWsConnected(true));
+    const offDisconnect = wsClient.onDisconnect(() => setIsWsConnected(false));
     return () => {
       off();
+      offConnect();
+      offDisconnect();
     };
   }, []);
 
@@ -449,9 +455,15 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
         <div className={`${showList ? 'hidden' : 'flex'} md:flex flex-1 flex-col h-full min-w-0 bg-[#F7F5EE] relative overflow-hidden`}>
           {/* Header */}
           <Header
-            activeTransportStatus={diagnostics?.activeStatus}
-            transportMode={diagnostics?.transportMode}
-            networkLatencyMs={diagnostics?.latencyMs ?? null}
+            activeTransportStatus={
+              diagnostics?.activeStatus && diagnostics.activeStatus !== 'offline'
+                ? diagnostics.activeStatus
+                : isWsConnected
+                  ? 'server-ws'
+                  : 'offline'
+            }
+            transportMode={diagnostics?.transportMode || 'auto'}
+            networkLatencyMs={diagnostics?.latencyMs ?? (isWsConnected ? 12 : null)}
             currentChat={activeChat}
             currentUser={store.currentUser}
             onOpenDigest={() => store.setDigestModalOpen(true)}

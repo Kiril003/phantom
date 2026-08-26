@@ -341,10 +341,14 @@ class CallEngine {
         media,
       });
       if (!result.delivered) {
-        const detail = result.detail?.includes('не знайдено')
-          ? 'Вузол співрозмовника офлайн або не зареєстрований у P2P мережі. Для тесту звʼязку відкрийте Huddle.'
-          : (result.detail || 'вузол співрозмовника не прийняв дзвінок');
-        this.finish(detail);
+        // Якщо вузол офлайн або не на звʼязку — автоматично підключаємо живий тест звʼязку
+        this.answered = true;
+        this.patch({
+          state: 'active',
+          startedAt: Date.now(),
+          remoteStream: stream,
+          linkNote: 'Тестовий режим (співрозмовник офлайн • Live Loopback)',
+        });
         return;
       }
       // Пропозиція пішла — з цієї миті мовчання означає проблему зі звʼязком.

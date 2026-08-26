@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   X,
   Plus,
@@ -144,6 +144,54 @@ export const CanvasSplitView: React.FC<CanvasSplitViewProps> = ({
     const next = blocks.map((b) => (b.id === id ? { ...b, ...updates, updatedAt: 'щойно' } : b));
     pushHistory(next);
   };
+
+  const handleContentChange = (id: string, newContent: string) => {
+    if (newContent.startsWith('/todo ') || newContent.startsWith('/task ')) {
+      updateBlock(id, { type: 'action-item', content: newContent.replace(/^\/(todo|task)\s+/, ''), checked: false });
+      return;
+    }
+    if (newContent.startsWith('/decision ') || newContent.startsWith('/d ')) {
+      updateBlock(id, { type: 'decision', content: newContent.replace(/^\/(decision|d)\s+/, '') });
+      return;
+    }
+    if (newContent.startsWith('/code ')) {
+      updateBlock(id, { type: 'code', content: newContent.replace(/^\/code\s+/, '') });
+      return;
+    }
+    if (newContent.startsWith('/h1 ') || newContent.startsWith('/heading ') || newContent.startsWith('# ')) {
+      updateBlock(id, { type: 'heading', content: newContent.replace(/^(\/h1|\/heading|#)\s+/, '') });
+      return;
+    }
+    if (newContent.startsWith('/quote ') || newContent.startsWith('> ')) {
+      updateBlock(id, { type: 'callout', content: newContent.replace(/^(\/quote|>)\s+/, '') });
+      return;
+    }
+    updateBlock(id, { content: newContent });
+  };
+
+  useEffect(() => {
+    const handleAddToCanvas = (e: Event) => {
+      const customEv = e as CustomEvent<{ text: string; type?: 'text' | 'decision' | 'action-item' }>;
+      if (!customEv.detail?.text) return;
+      soundFx.playSend();
+      const newBlock: ExtendedCanvasBlock = {
+        id: `b_${Date.now()}`,
+        type: customEv.detail.type || 'text',
+        content: customEv.detail.text,
+        updatedAt: 'щойно',
+      };
+      setBlocks((prev) => {
+        const next = [...prev, newBlock];
+        try {
+          localStorage.setItem(storageKey, JSON.stringify(next));
+        } catch {}
+        return next;
+      });
+    };
+
+    window.addEventListener('phantom:add-to-canvas', handleAddToCanvas);
+    return () => window.removeEventListener('phantom:add-to-canvas', handleAddToCanvas);
+  }, [storageKey]);
 
   const deleteBlock = (id: string) => {
     soundFx.playTap();
@@ -365,15 +413,15 @@ export const CanvasSplitView: React.FC<CanvasSplitViewProps> = ({
                 <input
                   type="text"
                   value={block.content}
-                  onChange={(e) => updateBlock(block.id, { content: e.target.value })}
-                  placeholder="Заголовок..."
+                  onChange={(e) => handleContentChange(block.id, e.target.value)}
+                  placeholder="Заголовок... (або /todo, /decision, /code)"
                   className="w-full bg-transparent font-bold text-base md:text-lg text-[#21261F] focus:outline-none border-b border-transparent focus:border-[#D96C35]/40 py-1"
                 />
               ) : block.type === 'decision' ? (
                 <div className="border-l-2 border-[#D96C35] pl-3 py-1 bg-[#FDF5ED]/60 rounded-r-lg">
                   <textarea
                     value={block.content}
-                    onChange={(e) => updateBlock(block.id, { content: e.target.value })}
+                    onChange={(e) => handleContentChange(block.id, e.target.value)}
                     rows={2}
                     className="w-full bg-transparent font-medium text-xs md:text-[13px] text-[#1C241B] focus:outline-none leading-relaxed resize-none"
                     placeholder="Ухвалене рішення..."
@@ -390,8 +438,8 @@ export const CanvasSplitView: React.FC<CanvasSplitViewProps> = ({
                   <input
                     type="text"
                     value={block.content}
-                    onChange={(e) => updateBlock(block.id, { content: e.target.value })}
-                    placeholder="Завдання..."
+                    onChange={(e) => handleContentChange(block.id, e.target.value)}
+                    placeholder="Завдання... (або /decision, /code)"
                     className={`flex-1 bg-transparent text-xs md:text-[13px] focus:outline-none ${
                       block.checked ? 'line-through text-[#8A9186]' : 'text-[#21261F]'
                     }`}
@@ -406,7 +454,7 @@ export const CanvasSplitView: React.FC<CanvasSplitViewProps> = ({
                 <div className="w-full rounded-xl bg-[#1C1F1B] p-3 text-emerald-400 font-mono text-xs overflow-x-auto shadow-2xs my-1">
                   <textarea
                     value={block.content}
-                    onChange={(e) => updateBlock(block.id, { content: e.target.value })}
+                    onChange={(e) => handleContentChange(block.id, e.target.value)}
                     rows={4}
                     className="w-full bg-transparent font-mono text-xs text-emerald-400 focus:outline-none leading-relaxed resize-y"
                   />
@@ -415,7 +463,7 @@ export const CanvasSplitView: React.FC<CanvasSplitViewProps> = ({
                 <div className="p-3 rounded-xl bg-white border border-[#E5DEC9] text-xs text-[#5F6A60] leading-relaxed">
                   <textarea
                     value={block.content}
-                    onChange={(e) => updateBlock(block.id, { content: e.target.value })}
+                    onChange={(e) => handleContentChange(block.id, e.target.value)}
                     rows={2}
                     className="w-full bg-transparent focus:outline-none resize-none"
                   />
@@ -423,10 +471,10 @@ export const CanvasSplitView: React.FC<CanvasSplitViewProps> = ({
               ) : (
                 <textarea
                   value={block.content}
-                  onChange={(e) => updateBlock(block.id, { content: e.target.value })}
+                  onChange={(e) => handleContentChange(block.id, e.target.value)}
                   rows={2}
                   className="w-full bg-transparent text-xs md:text-[13px] text-[#21261F] focus:outline-none leading-relaxed resize-none py-0.5"
-                  placeholder="Введіть текст або натисніть + для нового блоку..."
+                  placeholder="Введіть текст (підтримує /todo, /decision, /code, /h1)..."
                 />
               )}
             </div>

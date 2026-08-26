@@ -1057,7 +1057,7 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
             data-testid="messages-scroller"
             className="flex-1 overflow-y-auto px-3 sm:px-6"
           >
-            <div ref={contentRef} className="msg-column max-w-[760px] mx-auto w-full py-3 sm:py-4">
+            <div ref={contentRef} className="msg-column max-w-[720px] mx-auto w-full py-3 sm:py-4">
         {/* Порожня розмова — не пустка: та сама картка, що й у порожньому пошуку. */}
         {(messages || []).length === 0 && (
           <div className="flex-1 flex flex-col items-center justify-center text-center gap-2 px-6 py-12">
@@ -2514,7 +2514,7 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
         </div>
       )}
 
-      {/* Floating Quoting Tooltip for Selected Message Text */}
+      {/* Floating Quoting & Add-to-Canvas Tooltip for Selected Message Text */}
       {selectedTextSnippet && (
         <div
           style={{
@@ -2523,21 +2523,41 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
             top: `${selectedTextSnippet.y}px`,
             transform: 'translate(-50%, -100%)',
           }}
-          className="z-50 bg-[#FDFCF9] text-[#21261F] px-3 py-1.5 rounded-[10px] border border-[#E8E1D3] shadow-[0_1px_2px_rgba(60,44,24,0.05)] flex items-center gap-2 text-[12.5px] animate-in fade-in duration-150 cursor-pointer hover:bg-[#F3EEE3] transition-colors select-none"
-          onClick={(e) => {
-            e.stopPropagation();
-            soundFx.playTap();
-            onReplyMessage(selectedTextSnippet.msg, selectedTextSnippet.text);
-            window.getSelection()?.removeAllRanges();
-            setSelectedTextSnippet(null);
-            showToast('Цитату фрагмента додано до відповіді');
-          }}
+          className="z-50 bg-[#FDFCF9] text-[#21261F] p-1 rounded-[10px] border border-[#E8E1D3] shadow-lg flex items-center gap-1 text-[12.5px] animate-in fade-in duration-150 select-none"
         >
-          <Quote className="w-3.5 h-3.5 text-[#6E7568] shrink-0" strokeWidth={1.75} />
-          <span>Цитувати виділене</span>
-          <span className="text-[11.5px] text-[#6E7568] truncate max-w-[120px]">
-            «{selectedTextSnippet.text}»
-          </span>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              soundFx.playTap();
+              onReplyMessage(selectedTextSnippet.msg, selectedTextSnippet.text);
+              window.getSelection()?.removeAllRanges();
+              setSelectedTextSnippet(null);
+              showToast('Цитату фрагмента додано до відповіді');
+            }}
+            className="px-2 py-1 hover:bg-[#F3EEE3] rounded-lg flex items-center gap-1.5 transition-colors"
+          >
+            <Quote className="w-3.5 h-3.5 text-[#6E7568] shrink-0" strokeWidth={1.75} />
+            <span>Цитувати</span>
+          </button>
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              soundFx.playTap();
+              setIsCanvasSplitOpen(true);
+              window.dispatchEvent(
+                new CustomEvent('phantom:add-to-canvas', {
+                  detail: { text: selectedTextSnippet.text, type: 'text' },
+                })
+              );
+              window.getSelection()?.removeAllRanges();
+              setSelectedTextSnippet(null);
+              showToast('Фрагмент додано в Canvas');
+            }}
+            className="px-2 py-1 hover:bg-[#FDF5ED] rounded-lg flex items-center gap-1.5 text-[#D96C35] font-semibold transition-colors"
+          >
+            <FileText className="w-3.5 h-3.5 text-[#D96C35] shrink-0" strokeWidth={1.75} />
+            <span>У Canvas</span>
+          </button>
         </div>
       )}
 
@@ -2662,6 +2682,27 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
                 >
                   <Quote className="w-4 h-4 text-[#E87A42] shrink-0" strokeWidth={1.75} />
                   <span className="truncate">Цитувати</span>
+                </button>
+              )}
+
+              {/* Add to Canvas */}
+              {contextMenuMsg.text && (
+                <button
+                  onClick={() => {
+                    soundFx.playTap();
+                    setIsCanvasSplitOpen(true);
+                    window.dispatchEvent(
+                      new CustomEvent('phantom:add-to-canvas', {
+                        detail: { text: contextMenuMsg.text, type: 'text' },
+                      })
+                    );
+                    setContextMenuMsg(null);
+                    showToast('Повідомлення додано в Canvas');
+                  }}
+                  className="p-2.5 bg-[#FDFCF9] hover:bg-[#FDF5ED] border border-[#E6DFD3] hover:border-[#D96C35]/40 rounded-xl flex items-center gap-2 transition-all text-left shadow-sm hover:text-[#D96C35]"
+                >
+                  <FileText className="w-4 h-4 text-[#D96C35] shrink-0" strokeWidth={1.75} />
+                  <span className="truncate font-semibold">До Canvas</span>
                 </button>
               )}
 

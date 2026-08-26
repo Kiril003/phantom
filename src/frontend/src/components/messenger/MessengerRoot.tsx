@@ -77,6 +77,9 @@ import { HumanCentricBioContextModal } from './HumanCentricBioContextModal';
 import { InteractiveVisualization3DModal } from './InteractiveVisualization3DModal';
 import { CollaborativeWhiteboardPlaygroundModal } from './CollaborativeWhiteboardPlaygroundModal';
 import { PlanningPokerGanttWidgetsModal } from './PlanningPokerGanttWidgetsModal';
+import { SpatialMultiPaneWorkspaceModal } from './SpatialMultiPaneWorkspaceModal';
+import { InteractiveMediaAnnotationModal } from './InteractiveMediaAnnotationModal';
+import { SmartBreadcrumbsContextPeekModal } from './SmartBreadcrumbsContextPeekModal';
 import { callEngine } from '../../services/callEngine';
 import { useCallAlerts } from '../../hooks/useCallAlerts';
 import { soundFx } from '../../utils/messengerSound';
@@ -141,6 +144,9 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
   const [isInteractiveVis3DOpen, setIsInteractiveVis3DOpen] = useState(false);
   const [isCollaborativeWhiteboardOpen, setIsCollaborativeWhiteboardOpen] = useState(false);
   const [isPlanningPokerGanttOpen, setIsPlanningPokerGanttOpen] = useState(false);
+  const [isSpatialMultiPaneOpen, setIsSpatialMultiPaneOpen] = useState(false);
+  const [isMediaAnnotationOpen, setIsMediaAnnotationOpen] = useState(false);
+  const [isBreadcrumbsPeekOpen, setIsBreadcrumbsPeekOpen] = useState(false);
   const [focusMode, setFocusMode] = useState<FocusModeType>('available');
   const [isHuddleActive, setIsHuddleActive] = useState(false);
 
@@ -276,6 +282,9 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
     const onOpenVis3D = () => setIsInteractiveVis3DOpen(true);
     const onOpenWhiteboard = () => setIsCollaborativeWhiteboardOpen(true);
     const onOpenPoker = () => setIsPlanningPokerGanttOpen(true);
+    const onOpenMultiPane = () => setIsSpatialMultiPaneOpen(true);
+    const onOpenMediaAnnot = () => setIsMediaAnnotationOpen(true);
+    const onOpenBreadcrumbs = () => setIsBreadcrumbsPeekOpen(true);
 
     window.addEventListener('phantom:open-automations', onOpenAut);
     window.addEventListener('phantom:open-datagrid', onOpenGrid);
@@ -314,6 +323,9 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
     window.addEventListener('phantom:open-vis3d', onOpenVis3D);
     window.addEventListener('phantom:open-whiteboard', onOpenWhiteboard);
     window.addEventListener('phantom:open-poker', onOpenPoker);
+    window.addEventListener('phantom:open-multipane', onOpenMultiPane);
+    window.addEventListener('phantom:open-mediaannotation', onOpenMediaAnnot);
+    window.addEventListener('phantom:open-breadcrumbs', onOpenBreadcrumbs);
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
@@ -354,6 +366,9 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
       window.removeEventListener('phantom:open-vis3d', onOpenVis3D);
       window.removeEventListener('phantom:open-whiteboard', onOpenWhiteboard);
       window.removeEventListener('phantom:open-poker', onOpenPoker);
+      window.removeEventListener('phantom:open-multipane', onOpenMultiPane);
+      window.removeEventListener('phantom:open-mediaannotation', onOpenMediaAnnot);
+      window.removeEventListener('phantom:open-breadcrumbs', onOpenBreadcrumbs);
     };
   }, []);
 
@@ -1045,6 +1060,24 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
         isOpen={isPlanningPokerGanttOpen}
         onClose={() => setIsPlanningPokerGanttOpen(false)}
         chatTitle={activeChat?.title || 'Командне планування'}
+      />
+
+      <SpatialMultiPaneWorkspaceModal
+        isOpen={isSpatialMultiPaneOpen}
+        onClose={() => setIsSpatialMultiPaneOpen(false)}
+        chatTitle={activeChat?.title || 'Робочий простір'}
+      />
+
+      <InteractiveMediaAnnotationModal
+        isOpen={isMediaAnnotationOpen}
+        onClose={() => setIsMediaAnnotationOpen(false)}
+        chatTitle={activeChat?.title || 'Інтерактивні медіа'}
+      />
+
+      <SmartBreadcrumbsContextPeekModal
+        isOpen={isBreadcrumbsPeekOpen}
+        onClose={() => setIsBreadcrumbsPeekOpen(false)}
+        chatTitle={activeChat?.title || 'Контекстна навігація'}
       />
 
       <CallOverlay />

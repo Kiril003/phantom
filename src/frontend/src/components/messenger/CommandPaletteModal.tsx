@@ -37,6 +37,8 @@ import {
   BarChart3,
   PenTool,
   Kanban,
+  LayoutGrid,
+  Split,
 } from 'lucide-react';
 import { useMessengerStore } from '../../stores/messengerStore';
 import { soundFx } from '../../utils/messengerSound';
@@ -484,6 +486,39 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
       icon: Kanban,
       action: () => {
         window.dispatchEvent(new CustomEvent('phantom:open-poker'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_multipane',
+      category: 'Дії',
+      title: 'Spatial Multi-Pane Workspace & Grid',
+      subtitle: '4-віконний тайлінг, Focus Workspace та Activity Heatmaps',
+      icon: LayoutGrid,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-multipane'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_mediaannot',
+      category: 'Дії',
+      title: 'Waveform Scrubber & Before/After Slider',
+      subtitle: 'Аудіо-таймкоди, слайдер дизайнів та PDF анотації',
+      icon: Split,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-mediaannotation'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_breadcrumbs',
+      category: 'Дії',
+      title: 'Smart Breadcrumbs & Context Peek',
+      subtitle: 'Хлібні крихти, плаваючий перегляд та закріплена лінія',
+      icon: Compass,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-breadcrumbs'));
         onClose();
       },
     },

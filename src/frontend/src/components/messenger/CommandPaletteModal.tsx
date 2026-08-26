@@ -32,6 +32,8 @@ import {
   ShoppingBag,
   Server,
   Compass,
+  Flame,
+  Moon,
 } from 'lucide-react';
 import { useMessengerStore } from '../../stores/messengerStore';
 import { soundFx } from '../../utils/messengerSound';
@@ -402,6 +404,50 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
       icon: Compass,
       action: () => {
         window.dispatchEvent(new CustomEvent('phantom:open-research'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_vfs',
+      category: 'Дії',
+      title: 'Phantom Runtime & POSIX VFS',
+      subtitle: 'Монтована файлова система та Wasm Marketplace',
+      icon: Cpu,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-vfs'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_disaster',
+      category: 'Дії',
+      title: 'Disaster Recovery & P2P DTN Mesh',
+      subtitle: 'Multi-transport failover (Wi-Fi/BLE/LoRa) та кур\'єри даних',
+      icon: Radio,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-disaster'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_warroom',
+      category: 'Дії',
+      title: 'Autonomous Ops & War Room',
+      subtitle: 'Прогностичний аналіз ризиків дедлайну та диспетчер аварій',
+      icon: Flame,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-warroom'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_biocontext',
+      category: 'Дії',
+      title: 'Cognitive Fatigue & Neural Voice Masking',
+      subtitle: 'Захист від вигорання та нейроакустика Huddle дзвінків',
+      icon: Moon,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-biocontext'));
         onClose();
       },
     },

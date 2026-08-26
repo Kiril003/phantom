@@ -70,6 +70,10 @@ import { HeadlessInfrastructureModal } from './HeadlessInfrastructureModal';
 import { LocalErpEscrowModal } from './LocalErpEscrowModal';
 import { SecOpsComplianceModal } from './SecOpsComplianceModal';
 import { AdvancedResearchMeshModal } from './AdvancedResearchMeshModal';
+import { PhantomRuntimeVfsModal } from './PhantomRuntimeVfsModal';
+import { DisasterMeshDtnModal } from './DisasterMeshDtnModal';
+import { AutonomousOpsWarRoomModal } from './AutonomousOpsWarRoomModal';
+import { HumanCentricBioContextModal } from './HumanCentricBioContextModal';
 import { callEngine } from '../../services/callEngine';
 import { useCallAlerts } from '../../hooks/useCallAlerts';
 import { soundFx } from '../../utils/messengerSound';
@@ -127,6 +131,10 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
   const [isLocalErpEscrowOpen, setIsLocalErpEscrowOpen] = useState(false);
   const [isSecOpsComplianceOpen, setIsSecOpsComplianceOpen] = useState(false);
   const [isAdvancedResearchOpen, setIsAdvancedResearchOpen] = useState(false);
+  const [isPhantomRuntimeOpen, setIsPhantomRuntimeOpen] = useState(false);
+  const [isDisasterMeshOpen, setIsDisasterMeshOpen] = useState(false);
+  const [isAutonomousOpsOpen, setIsAutonomousOpsOpen] = useState(false);
+  const [isHumanCentricBioOpen, setIsHumanCentricBioOpen] = useState(false);
   const [focusMode, setFocusMode] = useState<FocusModeType>('available');
   const [isHuddleActive, setIsHuddleActive] = useState(false);
 
@@ -255,6 +263,10 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
     const onOpenErp = () => setIsLocalErpEscrowOpen(true);
     const onOpenSecOps = () => setIsSecOpsComplianceOpen(true);
     const onOpenResearch = () => setIsAdvancedResearchOpen(true);
+    const onOpenVfs = () => setIsPhantomRuntimeOpen(true);
+    const onOpenDisaster = () => setIsDisasterMeshOpen(true);
+    const onOpenWarRoom = () => setIsAutonomousOpsOpen(true);
+    const onOpenBio = () => setIsHumanCentricBioOpen(true);
 
     window.addEventListener('phantom:open-automations', onOpenAut);
     window.addEventListener('phantom:open-datagrid', onOpenGrid);
@@ -286,6 +298,10 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
     window.addEventListener('phantom:open-erp', onOpenErp);
     window.addEventListener('phantom:open-secops', onOpenSecOps);
     window.addEventListener('phantom:open-research', onOpenResearch);
+    window.addEventListener('phantom:open-vfs', onOpenVfs);
+    window.addEventListener('phantom:open-disaster', onOpenDisaster);
+    window.addEventListener('phantom:open-warroom', onOpenWarRoom);
+    window.addEventListener('phantom:open-biocontext', onOpenBio);
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
@@ -319,6 +335,10 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
       window.removeEventListener('phantom:open-erp', onOpenErp);
       window.removeEventListener('phantom:open-secops', onOpenSecOps);
       window.removeEventListener('phantom:open-research', onOpenResearch);
+      window.removeEventListener('phantom:open-vfs', onOpenVfs);
+      window.removeEventListener('phantom:open-disaster', onOpenDisaster);
+      window.removeEventListener('phantom:open-warroom', onOpenWarRoom);
+      window.removeEventListener('phantom:open-biocontext', onOpenBio);
     };
   }, []);
 
@@ -968,6 +988,30 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
         isOpen={isAdvancedResearchOpen}
         onClose={() => setIsAdvancedResearchOpen(false)}
         chatTitle={activeChat?.title || 'Науково-дослідний простір'}
+      />
+
+      <PhantomRuntimeVfsModal
+        isOpen={isPhantomRuntimeOpen}
+        onClose={() => setIsPhantomRuntimeOpen(false)}
+        chatTitle={activeChat?.title || 'Робочий простір'}
+      />
+
+      <DisasterMeshDtnModal
+        isOpen={isDisasterMeshOpen}
+        onClose={() => setIsDisasterMeshOpen(false)}
+        chatTitle={activeChat?.title || 'Мережа стійкості'}
+      />
+
+      <AutonomousOpsWarRoomModal
+        isOpen={isAutonomousOpsOpen}
+        onClose={() => setIsAutonomousOpsOpen(false)}
+        chatTitle={activeChat?.title || 'Автономний менеджмент'}
+      />
+
+      <HumanCentricBioContextModal
+        isOpen={isHumanCentricBioOpen}
+        onClose={() => setIsHumanCentricBioOpen(false)}
+        chatTitle={activeChat?.title || 'Особистий простір'}
       />
 
       <CallOverlay />

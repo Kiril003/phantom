@@ -50,6 +50,11 @@ import { FamilyHubModal } from './FamilyHubModal';
 import { CreativeStudioModal } from './CreativeStudioModal';
 import { PersonalWellnessModal } from './PersonalWellnessModal';
 import { CommunityClubModal } from './CommunityClubModal';
+import { DataLifecyclePruningModal } from './DataLifecyclePruningModal';
+import { ZeroLeakSecurityModal } from './ZeroLeakSecurityModal';
+import { WasmAppSandboxModal } from './WasmAppSandboxModal';
+import { P2PComputeSharingModal } from './P2PComputeSharingModal';
+import { AmbientContextModal } from './AmbientContextModal';
 import { callEngine } from '../../services/callEngine';
 import { useCallAlerts } from '../../hooks/useCallAlerts';
 import { soundFx } from '../../utils/messengerSound';
@@ -87,6 +92,11 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
   const [isCreativeStudioOpen, setIsCreativeStudioOpen] = useState(false);
   const [isPersonalWellnessOpen, setIsPersonalWellnessOpen] = useState(false);
   const [isCommunityClubOpen, setIsCommunityClubOpen] = useState(false);
+  const [isDataLifecycleOpen, setIsDataLifecycleOpen] = useState(false);
+  const [isZeroLeakSecurityOpen, setIsZeroLeakSecurityOpen] = useState(false);
+  const [isWasmSandboxOpen, setIsWasmSandboxOpen] = useState(false);
+  const [isP2PComputeOpen, setIsP2PComputeOpen] = useState(false);
+  const [isAmbientContextOpen, setIsAmbientContextOpen] = useState(false);
   const [focusMode, setFocusMode] = useState<FocusModeType>('available');
   const [isHuddleActive, setIsHuddleActive] = useState(false);
 
@@ -195,6 +205,11 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
     const onOpenCreat = () => setIsCreativeStudioOpen(true);
     const onOpenPers = () => setIsPersonalWellnessOpen(true);
     const onOpenComm = () => setIsCommunityClubOpen(true);
+    const onOpenLife = () => setIsDataLifecycleOpen(true);
+    const onOpenLeak = () => setIsZeroLeakSecurityOpen(true);
+    const onOpenWasm = () => setIsWasmSandboxOpen(true);
+    const onOpenP2PComp = () => setIsP2PComputeOpen(true);
+    const onOpenAmb = () => setIsAmbientContextOpen(true);
 
     window.addEventListener('phantom:open-automations', onOpenAut);
     window.addEventListener('phantom:open-datagrid', onOpenGrid);
@@ -206,6 +221,11 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
     window.addEventListener('phantom:open-creative', onOpenCreat);
     window.addEventListener('phantom:open-personal', onOpenPers);
     window.addEventListener('phantom:open-community', onOpenComm);
+    window.addEventListener('phantom:open-lifecycle', onOpenLife);
+    window.addEventListener('phantom:open-zeroleak', onOpenLeak);
+    window.addEventListener('phantom:open-wasm', onOpenWasm);
+    window.addEventListener('phantom:open-p2pcompute', onOpenP2PComp);
+    window.addEventListener('phantom:open-ambient', onOpenAmb);
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
@@ -219,6 +239,11 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
       window.removeEventListener('phantom:open-creative', onOpenCreat);
       window.removeEventListener('phantom:open-personal', onOpenPers);
       window.removeEventListener('phantom:open-community', onOpenComm);
+      window.removeEventListener('phantom:open-lifecycle', onOpenLife);
+      window.removeEventListener('phantom:open-zeroleak', onOpenLeak);
+      window.removeEventListener('phantom:open-wasm', onOpenWasm);
+      window.removeEventListener('phantom:open-p2pcompute', onOpenP2PComp);
+      window.removeEventListener('phantom:open-ambient', onOpenAmb);
     };
   }, []);
 
@@ -748,6 +773,36 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
         isOpen={isCommunityClubOpen}
         onClose={() => setIsCommunityClubOpen(false)}
         chatTitle={activeChat?.title || 'Міська спільнота & Клуб'}
+      />
+
+      <DataLifecyclePruningModal
+        isOpen={isDataLifecycleOpen}
+        onClose={() => setIsDataLifecycleOpen(false)}
+        chatTitle={activeChat?.title || 'Бесіда'}
+      />
+
+      <ZeroLeakSecurityModal
+        isOpen={isZeroLeakSecurityOpen}
+        onClose={() => setIsZeroLeakSecurityOpen(false)}
+        chatTitle={activeChat?.title || 'Бесіда'}
+      />
+
+      <WasmAppSandboxModal
+        isOpen={isWasmSandboxOpen}
+        onClose={() => setIsWasmSandboxOpen(false)}
+        chatTitle={activeChat?.title || 'Бесіда'}
+      />
+
+      <P2PComputeSharingModal
+        isOpen={isP2PComputeOpen}
+        onClose={() => setIsP2PComputeOpen(false)}
+        chatTitle={activeChat?.title || 'Бесіда'}
+      />
+
+      <AmbientContextModal
+        isOpen={isAmbientContextOpen}
+        onClose={() => setIsAmbientContextOpen(false)}
+        chatTitle={activeChat?.title || 'Бесіда'}
       />
 
       <CallOverlay />

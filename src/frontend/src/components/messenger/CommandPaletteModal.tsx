@@ -21,6 +21,9 @@ import {
   Heart,
   Palette,
   Users,
+  Boxes,
+  Wifi,
+  ShieldAlert,
 } from 'lucide-react';
 import { useMessengerStore } from '../../stores/messengerStore';
 import { soundFx } from '../../utils/messengerSound';
@@ -171,6 +174,61 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
       icon: Cpu,
       action: () => {
         window.dispatchEvent(new CustomEvent('phantom:open-iot'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_lifecycle',
+      category: 'Дії',
+      title: 'Living Spec & Кристалізація знань',
+      subtitle: 'Стиснення 48h історії в живий документ та Auto-Pruning',
+      icon: Sparkles,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-lifecycle'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_zeroleak',
+      category: 'Дії',
+      title: 'True Zero-Leak Security & Duress PIN',
+      subtitle: 'Фізична ізоляція баз даних та Persona Routing',
+      icon: ShieldAlert,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-zeroleak'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_wasm',
+      category: 'Дії',
+      title: 'Embedded WASM Apps & FUSE Drive',
+      subtitle: '3D GLTF Viewer, симуляції та монтування диска ОС',
+      icon: Boxes,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-wasm'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_p2pcompute',
+      category: 'Дії',
+      title: 'P2P Compute Pool & Shamir Backup',
+      subtitle: 'Шеринг GPU/NPU та розподілені шарди бекапу',
+      icon: HardDrive,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-p2pcompute'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_ambient',
+      category: 'Дії',
+      title: 'Ambient Computing & Attention Budgeting',
+      subtitle: 'Wi-Fi/Гео тригери сфер та пакетування сповіщень',
+      icon: Wifi,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-ambient'));
         onClose();
       },
     },

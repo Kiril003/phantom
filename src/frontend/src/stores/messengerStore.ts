@@ -993,11 +993,21 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
           transport: transport ?? null,
           reply_to_id: newMsg.replyTo?.id ?? null,
         })
-        // Вузол сам каже, чи доїхало до людини. queued — записано, але не
-        // доставлено; малювати галочку «надіслано» в цьому разі означало б
-        // повторити те, з чим борюся весь цей час. 'local' (розмова ні з ким)
-        // не дає галочки взагалі — так само, як після перезавантаження.
-        .then((row) => markStatus(deliveryStatus(row.delivery ?? row.delivery_state) || 'sent'))
+        .then((row) => {
+          const status = deliveryStatus(row.delivery ?? row.delivery_state) || 'sent';
+          set((s) => ({
+            chats: s.chats.map((c) =>
+              c.id === chatId
+                ? {
+                    ...c,
+                    messages: c.messages.map((m) =>
+                      m.id === clientId ? { ...m, id: row.id || clientId, status } : m
+                    ),
+                  }
+                : c,
+            ),
+          }));
+        })
         .catch((err) => {
           console.warn('[messenger] вузол не прийняв повідомлення:', err);
           markStatus('failed');
@@ -1206,13 +1216,7 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
       set({ isDeleteModalOpen: false, activeDeleteMessage: null });
       if (!chat) return;
 
-      try {
-        await messengerApi.deleteMessage(chat.id, messageId, forEveryone);
-      } catch (err) {
-        console.warn('[messenger] вузол не видалив повідомлення:', err);
-        return;
-      }
-
+      // Optimistically delete locally
       set((state) => ({
         chats: state.chats.map((c) =>
           c.id !== chat.id
@@ -1225,6 +1229,12 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
               }),
         ),
       }));
+
+      try {
+        await messengerApi.deleteMessage(chat.id, messageId, forEveryone);
+      } catch (err) {
+        console.warn('[messenger] вузол не видалив повідомлення:', err);
+      }
     },
 
     /** Надгробок приїхав від вузла: своє видалення з іншої вкладки або чуже. */
@@ -1235,7 +1245,9 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
             ? c
             : withFreshPreview({
                 ...c,
-                messages: c.messages.map((m) => (m.id === row.id ? asTombstone(m) : m)),
+                messages: c.messages.map((m) =>
+                  m.id === row.id || (row.client_id && m.id === row.client_id) ? asTombstone(m) : m
+                ),
               }),
         ),
       }));

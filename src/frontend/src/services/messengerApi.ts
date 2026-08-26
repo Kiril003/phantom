@@ -147,7 +147,7 @@ export const messengerApi = {
    * його взяв, 'queued' — чекає в черзі (адресат офлайн і видалить пізніше),
    * 'local' — везти нікуди, розмова ні з ким.
    */
-  deleteMessage: (conversationId: string, messageId: string, forEveryone: boolean) =>
+  deleteMessage: (conversationId: string, messageId: string, forEveryone: boolean = false) =>
     request<{ deleted: boolean; for_everyone: boolean; blobs: number; frame?: string }>(
       'DELETE',
       `/messenger/conversations/${conversationId}/messages/${messageId}`

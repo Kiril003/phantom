@@ -886,6 +886,9 @@ async def append_message(
                 reply_address=config.messenger_public_address,
             )
             tried = bool(address or relay or sb_url)
+            if not delivered and not address and not relay and not sb_url:
+                # Standalone/shared node with active local web hub
+                delivered = True
             out.delivery = 'sent' if delivered else 'queued'
             row.delivery_state = out.delivery
             row.delivery_attempts = 1 if tried else 0
@@ -1500,7 +1503,7 @@ async def delete_message(
         await session.execute(
             select(MessengerMessage).where(
                 MessengerMessage.conversation_id == conversation_id,
-                MessengerMessage.id == message_id,
+                (MessengerMessage.id == message_id) | (MessengerMessage.client_id == message_id),
             )
         )
     ).scalar_one_or_none()
@@ -1522,8 +1525,13 @@ async def delete_message(
     if not for_everyone:
         # Локальне видалення: рядок іде цілком, байти — з нашого диска.
         dropped = await wipe_message(session, _keys(), row)
+        del_id = row.id
+        del_client_id = row.client_id
         await session.delete(row)
         await session.commit()
+        await hub.broadcast(
+            "messenger", "message:deleted", {"id": del_id, "client_id": del_client_id, "conversation_id": conversation_id}
+        )
         return {"deleted": True, "for_everyone": False, "blobs": dropped}
 
     # Кадр треба зашифрувати ДО того, як ми зітремо тіло: сам кадр везе лише

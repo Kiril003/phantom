@@ -35,6 +35,11 @@ import { WorkspaceDriveModal } from './WorkspaceDriveModal';
 import { KnowledgeSearchModal } from './KnowledgeSearchModal';
 import { P2PFileSwarmModal } from './P2PFileSwarmModal';
 import { WebhooksManagerModal } from './WebhooksManagerModal';
+import { CommandPaletteModal } from './CommandPaletteModal';
+import { LiveTerminalModal } from './LiveTerminalModal';
+import { ProjectMemoryGraphModal } from './ProjectMemoryGraphModal';
+import { NodeDashboardModal } from './NodeDashboardModal';
+import { SpaceVaultModal } from './SpaceVaultModal';
 import { callEngine } from '../../services/callEngine';
 import { useCallAlerts } from '../../hooks/useCallAlerts';
 import { soundFx } from '../../utils/messengerSound';
@@ -57,6 +62,11 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
   const [isKnowledgeSearchOpen, setIsKnowledgeSearchOpen] = useState(false);
   const [isP2PSwarmOpen, setIsP2PSwarmOpen] = useState(false);
   const [isWebhooksOpen, setIsWebhooksOpen] = useState(false);
+  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
+  const [isLiveTerminalOpen, setIsLiveTerminalOpen] = useState(false);
+  const [isMemoryGraphOpen, setIsMemoryGraphOpen] = useState(false);
+  const [isNodeDashboardOpen, setIsNodeDashboardOpen] = useState(false);
+  const [isSpaceVaultOpen, setIsSpaceVaultOpen] = useState(false);
   const [focusMode, setFocusMode] = useState<FocusModeType>('available');
   const [isHuddleActive, setIsHuddleActive] = useState(false);
 
@@ -142,9 +152,15 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
 
   useEffect(() => {
     const handleKeyDown = (e: KeyboardEvent) => {
-      if ((e.metaKey || e.ctrlKey) && (e.key === '\\' || e.key === '|')) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
+        e.preventDefault();
+        setIsCommandPaletteOpen((prev) => !prev);
+      } else if ((e.metaKey || e.ctrlKey) && (e.key === '\\' || e.key === '|')) {
         e.preventDefault();
         setIsSidebarCollapsed((prev) => !prev);
+      } else if ((e.metaKey || e.ctrlKey) && e.key === '`') {
+        e.preventDefault();
+        setIsLiveTerminalOpen((prev) => !prev);
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -216,6 +232,11 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
             onOpenRoleScopes={() => setIsRoleScopesOpen(true)}
             onOpenP2PSwarm={() => setIsP2PSwarmOpen(true)}
             onOpenWebhooks={() => setIsWebhooksOpen(true)}
+            onOpenTerminal={() => setIsLiveTerminalOpen(true)}
+            onOpenMemoryGraph={() => setIsMemoryGraphOpen(true)}
+            onOpenNodeDashboard={() => setIsNodeDashboardOpen(true)}
+            onOpenSpaceVault={() => setIsSpaceVaultOpen(true)}
+            onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
             focusMode={focusMode}
             onFocusModeChange={setFocusMode}
             isHuddleActive={isHuddleActive}
@@ -571,6 +592,41 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
             },
           });
         }}
+      />
+
+      <CommandPaletteModal
+        isOpen={isCommandPaletteOpen}
+        onClose={() => setIsCommandPaletteOpen(false)}
+        onOpenCanvas={() => {
+          window.dispatchEvent(new CustomEvent('phantom:open-canvas'));
+        }}
+        onOpenTerminal={() => setIsLiveTerminalOpen(true)}
+        onOpenNodeDashboard={() => setIsNodeDashboardOpen(true)}
+        onOpenSpaceVault={() => setIsSpaceVaultOpen(true)}
+      />
+
+      <LiveTerminalModal
+        isOpen={isLiveTerminalOpen}
+        onClose={() => setIsLiveTerminalOpen(false)}
+        chatTitle={activeChat?.title || 'Бесіда'}
+        chatId={activeChat?.id}
+      />
+
+      <ProjectMemoryGraphModal
+        isOpen={isMemoryGraphOpen}
+        onClose={() => setIsMemoryGraphOpen(false)}
+        chatTitle={activeChat?.title || 'Бесіда'}
+      />
+
+      <NodeDashboardModal
+        isOpen={isNodeDashboardOpen}
+        onClose={() => setIsNodeDashboardOpen(false)}
+      />
+
+      <SpaceVaultModal
+        isOpen={isSpaceVaultOpen}
+        onClose={() => setIsSpaceVaultOpen(false)}
+        chatTitle={activeChat?.title || 'Бесіда'}
       />
 
       <CallOverlay />

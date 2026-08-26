@@ -23,6 +23,10 @@ import {
   Sparkles,
   PanelLeftClose,
   PanelLeftOpen,
+  Terminal,
+  HardDrive,
+  Coins,
+  Network,
 } from 'lucide-react';
 import { FocusModeSelector } from './FocusModeSelector';
 import { TeamHuddleBar } from './TeamHuddleBar';
@@ -54,6 +58,11 @@ interface HeaderProps {
   onOpenRoleScopes?: () => void;
   onOpenP2PSwarm?: () => void;
   onOpenWebhooks?: () => void;
+  onOpenTerminal?: () => void;
+  onOpenMemoryGraph?: () => void;
+  onOpenNodeDashboard?: () => void;
+  onOpenSpaceVault?: () => void;
+  onOpenCommandPalette?: () => void;
   focusMode?: any;
   onFocusModeChange?: (mode: any) => void;
   isHuddleActive?: boolean;
@@ -110,6 +119,11 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenRoleScopes,
   onOpenP2PSwarm,
   onOpenWebhooks,
+  onOpenTerminal,
+  onOpenMemoryGraph,
+  onOpenNodeDashboard,
+  onOpenSpaceVault,
+  onOpenCommandPalette: _onOpenCommandPalette,
   focusMode,
   onFocusModeChange,
   isHuddleActive,
@@ -554,6 +568,58 @@ export const Header: React.FC<HeaderProps> = ({
                 >
                   <Share2 className="w-4 h-4 text-[#6E7568] shrink-0" strokeWidth={1.75} />
                   <span className="truncate">P2P Swarm роздача</span>
+                </button>
+              )}
+
+              {onOpenTerminal && (
+                <button
+                  onClick={() => {
+                    closeMenu();
+                    onOpenTerminal();
+                  }}
+                  className={MENU_ITEM}
+                >
+                  <Terminal className="w-4 h-4 text-[#D96C35] shrink-0" strokeWidth={1.75} />
+                  <span className="truncate">Shared Terminal & Runner</span>
+                </button>
+              )}
+
+              {onOpenMemoryGraph && (
+                <button
+                  onClick={() => {
+                    closeMenu();
+                    onOpenMemoryGraph();
+                  }}
+                  className={MENU_ITEM}
+                >
+                  <Network className="w-4 h-4 text-[#6E7568] shrink-0" strokeWidth={1.75} />
+                  <span className="truncate">Project Memory Graph</span>
+                </button>
+              )}
+
+              {onOpenSpaceVault && (
+                <button
+                  onClick={() => {
+                    closeMenu();
+                    onOpenSpaceVault();
+                  }}
+                  className={MENU_ITEM}
+                >
+                  <Coins className="w-4 h-4 text-[#D96C35] shrink-0" strokeWidth={1.75} />
+                  <span className="truncate">Скарбниця (Multi-sig Vault)</span>
+                </button>
+              )}
+
+              {onOpenNodeDashboard && (
+                <button
+                  onClick={() => {
+                    closeMenu();
+                    onOpenNodeDashboard();
+                  }}
+                  className={MENU_ITEM}
+                >
+                  <HardDrive className="w-4 h-4 text-[#6E7568] shrink-0" strokeWidth={1.75} />
+                  <span className="truncate">Моніторинг вузла</span>
                 </button>
               )}
 

@@ -27,6 +27,10 @@ import {
   HardDrive,
   Coins,
   Network,
+  Database,
+  History,
+  Lock,
+  Cpu,
 } from 'lucide-react';
 import { FocusModeSelector } from './FocusModeSelector';
 import { TeamHuddleBar } from './TeamHuddleBar';
@@ -63,6 +67,11 @@ interface HeaderProps {
   onOpenNodeDashboard?: () => void;
   onOpenSpaceVault?: () => void;
   onOpenCommandPalette?: () => void;
+  onOpenAutomations?: () => void;
+  onOpenDataGrid?: () => void;
+  onOpenTimeMachine?: () => void;
+  onOpenZeroTrace?: () => void;
+  onOpenIoTTelemetry?: () => void;
   focusMode?: any;
   onFocusModeChange?: (mode: any) => void;
   isHuddleActive?: boolean;
@@ -124,6 +133,11 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenNodeDashboard,
   onOpenSpaceVault,
   onOpenCommandPalette: _onOpenCommandPalette,
+  onOpenAutomations,
+  onOpenDataGrid,
+  onOpenTimeMachine,
+  onOpenZeroTrace,
+  onOpenIoTTelemetry,
   focusMode,
   onFocusModeChange,
   isHuddleActive,
@@ -620,6 +634,71 @@ export const Header: React.FC<HeaderProps> = ({
                 >
                   <HardDrive className="w-4 h-4 text-[#6E7568] shrink-0" strokeWidth={1.75} />
                   <span className="truncate">Моніторинг вузла</span>
+                </button>
+              )}
+
+              {onOpenAutomations && (
+                <button
+                  onClick={() => {
+                    closeMenu();
+                    onOpenAutomations();
+                  }}
+                  className={MENU_ITEM}
+                >
+                  <Zap className="w-4 h-4 text-[#D96C35] shrink-0" strokeWidth={1.75} />
+                  <span className="truncate">Автоматизації (IFTTT & Cron)</span>
+                </button>
+              )}
+
+              {onOpenDataGrid && (
+                <button
+                  onClick={() => {
+                    closeMenu();
+                    onOpenDataGrid();
+                  }}
+                  className={MENU_ITEM}
+                >
+                  <Database className="w-4 h-4 text-[#6E7568] shrink-0" strokeWidth={1.75} />
+                  <span className="truncate">Реляційна база (Data Grid)</span>
+                </button>
+              )}
+
+              {onOpenTimeMachine && (
+                <button
+                  onClick={() => {
+                    closeMenu();
+                    onOpenTimeMachine();
+                  }}
+                  className={MENU_ITEM}
+                >
+                  <History className="w-4 h-4 text-[#6E7568] shrink-0" strokeWidth={1.75} />
+                  <span className="truncate">CRDT Time Machine (Снапшоти)</span>
+                </button>
+              )}
+
+              {onOpenZeroTrace && (
+                <button
+                  onClick={() => {
+                    closeMenu();
+                    onOpenZeroTrace();
+                  }}
+                  className={MENU_ITEM}
+                >
+                  <Lock className="w-4 h-4 text-[#D96C35] shrink-0" strokeWidth={1.75} />
+                  <span className="truncate">Zero-Trace, Підпис & Air-Gap</span>
+                </button>
+              )}
+
+              {onOpenIoTTelemetry && (
+                <button
+                  onClick={() => {
+                    closeMenu();
+                    onOpenIoTTelemetry();
+                  }}
+                  className={MENU_ITEM}
+                >
+                  <Cpu className="w-4 h-4 text-[#6E7568] shrink-0" strokeWidth={1.75} />
+                  <span className="truncate">IoT Сенсори & YubiKey</span>
                 </button>
               )}
 

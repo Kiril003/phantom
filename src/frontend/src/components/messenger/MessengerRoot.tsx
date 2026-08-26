@@ -40,6 +40,11 @@ import { LiveTerminalModal } from './LiveTerminalModal';
 import { ProjectMemoryGraphModal } from './ProjectMemoryGraphModal';
 import { NodeDashboardModal } from './NodeDashboardModal';
 import { SpaceVaultModal } from './SpaceVaultModal';
+import { AutomationPipelineModal } from './AutomationPipelineModal';
+import { RelationalDataGridModal } from './RelationalDataGridModal';
+import { TimeMachineSnapshotModal } from './TimeMachineSnapshotModal';
+import { ZeroTraceAirGapModal } from './ZeroTraceAirGapModal';
+import { IoTEqsTelemetryModal } from './IoTEqsTelemetryModal';
 import { callEngine } from '../../services/callEngine';
 import { useCallAlerts } from '../../hooks/useCallAlerts';
 import { soundFx } from '../../utils/messengerSound';
@@ -67,6 +72,11 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
   const [isMemoryGraphOpen, setIsMemoryGraphOpen] = useState(false);
   const [isNodeDashboardOpen, setIsNodeDashboardOpen] = useState(false);
   const [isSpaceVaultOpen, setIsSpaceVaultOpen] = useState(false);
+  const [isAutomationsOpen, setIsAutomationsOpen] = useState(false);
+  const [isDataGridOpen, setIsDataGridOpen] = useState(false);
+  const [isTimeMachineOpen, setIsTimeMachineOpen] = useState(false);
+  const [isZeroTraceOpen, setIsZeroTraceOpen] = useState(false);
+  const [isIoTTelemetryOpen, setIsIoTTelemetryOpen] = useState(false);
   const [focusMode, setFocusMode] = useState<FocusModeType>('available');
   const [isHuddleActive, setIsHuddleActive] = useState(false);
 
@@ -164,7 +174,27 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
       }
     };
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener('keydown', handleKeyDown);
+
+    const onOpenAut = () => setIsAutomationsOpen(true);
+    const onOpenGrid = () => setIsDataGridOpen(true);
+    const onOpenTime = () => setIsTimeMachineOpen(true);
+    const onOpenZero = () => setIsZeroTraceOpen(true);
+    const onOpenIoT = () => setIsIoTTelemetryOpen(true);
+
+    window.addEventListener('phantom:open-automations', onOpenAut);
+    window.addEventListener('phantom:open-datagrid', onOpenGrid);
+    window.addEventListener('phantom:open-timemachine', onOpenTime);
+    window.addEventListener('phantom:open-zerotrace', onOpenZero);
+    window.addEventListener('phantom:open-iot', onOpenIoT);
+
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('phantom:open-automations', onOpenAut);
+      window.removeEventListener('phantom:open-datagrid', onOpenGrid);
+      window.removeEventListener('phantom:open-timemachine', onOpenTime);
+      window.removeEventListener('phantom:open-zerotrace', onOpenZero);
+      window.removeEventListener('phantom:open-iot', onOpenIoT);
+    };
   }, []);
 
   // Вужче за 768 колонка одна: показуємо або список, або відкриту розмову.
@@ -237,6 +267,11 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
             onOpenNodeDashboard={() => setIsNodeDashboardOpen(true)}
             onOpenSpaceVault={() => setIsSpaceVaultOpen(true)}
             onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
+            onOpenAutomations={() => setIsAutomationsOpen(true)}
+            onOpenDataGrid={() => setIsDataGridOpen(true)}
+            onOpenTimeMachine={() => setIsTimeMachineOpen(true)}
+            onOpenZeroTrace={() => setIsZeroTraceOpen(true)}
+            onOpenIoTTelemetry={() => setIsIoTTelemetryOpen(true)}
             focusMode={focusMode}
             onFocusModeChange={setFocusMode}
             isHuddleActive={isHuddleActive}
@@ -626,6 +661,37 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
       <SpaceVaultModal
         isOpen={isSpaceVaultOpen}
         onClose={() => setIsSpaceVaultOpen(false)}
+        chatTitle={activeChat?.title || 'Бесіда'}
+      />
+
+      <AutomationPipelineModal
+        isOpen={isAutomationsOpen}
+        onClose={() => setIsAutomationsOpen(false)}
+        chatTitle={activeChat?.title || 'Бесіда'}
+        chatId={activeChat?.id}
+      />
+
+      <RelationalDataGridModal
+        isOpen={isDataGridOpen}
+        onClose={() => setIsDataGridOpen(false)}
+        chatTitle={activeChat?.title || 'Бесіда'}
+      />
+
+      <TimeMachineSnapshotModal
+        isOpen={isTimeMachineOpen}
+        onClose={() => setIsTimeMachineOpen(false)}
+        chatTitle={activeChat?.title || 'Бесіда'}
+      />
+
+      <ZeroTraceAirGapModal
+        isOpen={isZeroTraceOpen}
+        onClose={() => setIsZeroTraceOpen(false)}
+        chatTitle={activeChat?.title || 'Бесіда'}
+      />
+
+      <IoTEqsTelemetryModal
+        isOpen={isIoTTelemetryOpen}
+        onClose={() => setIsIoTTelemetryOpen(false)}
         chatTitle={activeChat?.title || 'Бесіда'}
       />
 

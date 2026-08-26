@@ -13,6 +13,11 @@ import {
   CheckCircle2,
   HardDrive,
   Coins,
+  Database,
+  Zap,
+  History,
+  Lock,
+  Cpu,
 } from 'lucide-react';
 import { useMessengerStore } from '../../stores/messengerStore';
 import { soundFx } from '../../utils/messengerSound';
@@ -108,6 +113,61 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
       icon: Coins,
       action: () => {
         onOpenSpaceVault?.();
+        onClose();
+      },
+    },
+    {
+      id: 'act_automations',
+      category: 'Дії',
+      title: 'Локальні автоматизації (IFTTT & Stand-ups)',
+      subtitle: 'Правила подій, щоденні чекаути та Smart Forms',
+      icon: Zap,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-automations'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_datagrid',
+      category: 'Дії',
+      title: 'Реляційна база даних (Data Grid)',
+      subtitle: 'Таблиці, Канбан, Timeline Gantt та Галерея',
+      icon: Database,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-datagrid'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_timemachine',
+      category: 'Дії',
+      title: 'CRDT Time Machine (Снапшоти)',
+      subtitle: 'Відмотування стану простору на будь-яку дату',
+      icon: History,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-timemachine'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_zerotrace',
+      category: 'Дії',
+      title: 'Zero-Trace, Підпис Ed25519 & Air-Gap USB',
+      subtitle: 'Ефемерна RAM-сесія та фізична синхронізація',
+      icon: Lock,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-zerotrace'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_iot',
+      category: 'Дії',
+      title: 'IoT & Edge Телеметрія + YubiKey',
+      subtitle: 'Живий потік сенсорів та апаратні ключі FIDO2',
+      icon: Cpu,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-iot'));
         onClose();
       },
     },

@@ -72,20 +72,34 @@ const VideoPane: React.FC<{
     const el = ref.current;
     if (!el) return;
     el.srcObject = stream;
-    if (stream) void el.play().catch(() => undefined);
+    if (stream) {
+      el.setAttribute('playsinline', 'true');
+      el.setAttribute('webkit-playsinline', 'true');
+      const p = el.play();
+      if (p !== undefined) {
+        p.catch(() => {
+          if (!muted) {
+            el.muted = true;
+            el.play().then(() => {
+              el.muted = false;
+            }).catch(() => undefined);
+          }
+        });
+      }
+    }
 
     const refresh = () => setHasVideo((stream?.getVideoTracks() ?? []).some((t) => t.enabled));
     refresh();
     if (!stream) return;
     stream.addEventListener('addtrack', refresh);
     stream.addEventListener('removetrack', refresh);
-    const id = setInterval(refresh, 1000);
+    const id = setInterval(refresh, 500);
     return () => {
       stream.removeEventListener('addtrack', refresh);
       stream.removeEventListener('removetrack', refresh);
       clearInterval(id);
     };
-  }, [stream]);
+  }, [stream, muted]);
 
   const show = hasVideo && enabled !== false;
 

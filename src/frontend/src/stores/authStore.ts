@@ -195,20 +195,18 @@ if (import.meta.env?.DEV && typeof window !== 'undefined') {
 // Global 401 listener — syncs stores and drops layouts when the session dies
 if (typeof window !== 'undefined') {
   window.addEventListener('phantom:unauthorized', () => {
+    const hadUser = useAuthStore.getState().user;
     useAuthStore.getState().clearAuth();
     useSystemStore.getState().setAuthenticated(false);
     
-    // 24-PRE: Auth-token UX
-    import('./uiStore').then(({ useUIStore }) => {
-      useUIStore.getState().toast({
-        kind: 'warn',
-        message: 'Сесія прострочена. Будь ласка, увійдіть знову.',
+    // Only show toast if an actual active session died
+    if (hadUser) {
+      import('./uiStore').then(({ useUIStore }) => {
+        useUIStore.getState().toast({
+          kind: 'warn',
+          message: 'Сесія завершилась. Будь ласка, увійдіть знову.',
+        });
       });
-    });
-    
-    // Redirect to login if not already there
-    if (window.location.pathname !== '/login') {
-      window.location.href = '/login';
     }
   });
 }

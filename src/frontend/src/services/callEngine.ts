@@ -553,17 +553,45 @@ class CallEngine {
     }
   }
 
-  /* ── нутрощі ────────────────────────────────────────────────────────── */
-
   private async grabMedia(media: CallMedia): Promise<MediaStream> {
-    const stream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
-      video: media === 'video',
-    });
-    this.localStream = stream;
-    const hasCamera = stream.getVideoTracks().length > 0;
-    this.patch({ localStream: stream, hasCamera, cameraOn: hasCamera, micOn: true });
-    return stream;
+    const isVideo = media === 'video';
+    const constraints: MediaStreamConstraints = {
+      audio: {
+        echoCancellation: true,
+        noiseSuppression: true,
+        autoGainControl: true,
+      },
+      video: isVideo
+        ? {
+            facingMode: 'user',
+            width: { ideal: 640 },
+            height: { ideal: 480 },
+          }
+        : false,
+    };
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia(constraints);
+      this.localStream = stream;
+      const hasCamera = stream.getVideoTracks().length > 0;
+      this.patch({ localStream: stream, hasCamera, cameraOn: hasCamera, micOn: true });
+      return stream;
+    } catch (err) {
+      if (isVideo) {
+        try {
+          const fallbackStream = await navigator.mediaDevices.getUserMedia({
+            audio: true,
+            video: true,
+          });
+          this.localStream = fallbackStream;
+          const hasCamera = fallbackStream.getVideoTracks().length > 0;
+          this.patch({ localStream: fallbackStream, hasCamera, cameraOn: hasCamera, micOn: true });
+          return fallbackStream;
+        } catch {
+          throw err;
+        }
+      }
+      throw err;
+    }
   }
 
   /**
@@ -632,9 +660,16 @@ class CallEngine {
     };
 
     pc.ontrack = (event) => {
-      event.streams[0]?.getTracks().forEach((t) => {
-        if (!remote.getTrackById(t.id)) remote.addTrack(t);
-      });
+      if (event.track) {
+        if (!remote.getTrackById(event.track.id)) {
+          remote.addTrack(event.track);
+        }
+      }
+      if (event.streams && event.streams[0]) {
+        event.streams[0].getTracks().forEach((t) => {
+          if (!remote.getTrackById(t.id)) remote.addTrack(t);
+        });
+      }
       // Той самий обʼєкт, але React має побачити зміну.
       this.patch({ remoteStream: remote });
     };

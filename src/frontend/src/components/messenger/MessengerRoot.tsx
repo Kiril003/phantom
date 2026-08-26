@@ -45,6 +45,11 @@ import { RelationalDataGridModal } from './RelationalDataGridModal';
 import { TimeMachineSnapshotModal } from './TimeMachineSnapshotModal';
 import { ZeroTraceAirGapModal } from './ZeroTraceAirGapModal';
 import { IoTEqsTelemetryModal } from './IoTEqsTelemetryModal';
+import { AcademyHubModal } from './AcademyHubModal';
+import { FamilyHubModal } from './FamilyHubModal';
+import { CreativeStudioModal } from './CreativeStudioModal';
+import { PersonalWellnessModal } from './PersonalWellnessModal';
+import { CommunityClubModal } from './CommunityClubModal';
 import { callEngine } from '../../services/callEngine';
 import { useCallAlerts } from '../../hooks/useCallAlerts';
 import { soundFx } from '../../utils/messengerSound';
@@ -77,6 +82,11 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
   const [isTimeMachineOpen, setIsTimeMachineOpen] = useState(false);
   const [isZeroTraceOpen, setIsZeroTraceOpen] = useState(false);
   const [isIoTTelemetryOpen, setIsIoTTelemetryOpen] = useState(false);
+  const [isAcademyHubOpen, setIsAcademyHubOpen] = useState(false);
+  const [isFamilyHubOpen, setIsFamilyHubOpen] = useState(false);
+  const [isCreativeStudioOpen, setIsCreativeStudioOpen] = useState(false);
+  const [isPersonalWellnessOpen, setIsPersonalWellnessOpen] = useState(false);
+  const [isCommunityClubOpen, setIsCommunityClubOpen] = useState(false);
   const [focusMode, setFocusMode] = useState<FocusModeType>('available');
   const [isHuddleActive, setIsHuddleActive] = useState(false);
 
@@ -180,12 +190,22 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
     const onOpenTime = () => setIsTimeMachineOpen(true);
     const onOpenZero = () => setIsZeroTraceOpen(true);
     const onOpenIoT = () => setIsIoTTelemetryOpen(true);
+    const onOpenAcad = () => setIsAcademyHubOpen(true);
+    const onOpenFam = () => setIsFamilyHubOpen(true);
+    const onOpenCreat = () => setIsCreativeStudioOpen(true);
+    const onOpenPers = () => setIsPersonalWellnessOpen(true);
+    const onOpenComm = () => setIsCommunityClubOpen(true);
 
     window.addEventListener('phantom:open-automations', onOpenAut);
     window.addEventListener('phantom:open-datagrid', onOpenGrid);
     window.addEventListener('phantom:open-timemachine', onOpenTime);
     window.addEventListener('phantom:open-zerotrace', onOpenZero);
     window.addEventListener('phantom:open-iot', onOpenIoT);
+    window.addEventListener('phantom:open-academy', onOpenAcad);
+    window.addEventListener('phantom:open-family', onOpenFam);
+    window.addEventListener('phantom:open-creative', onOpenCreat);
+    window.addEventListener('phantom:open-personal', onOpenPers);
+    window.addEventListener('phantom:open-community', onOpenComm);
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
@@ -194,6 +214,11 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
       window.removeEventListener('phantom:open-timemachine', onOpenTime);
       window.removeEventListener('phantom:open-zerotrace', onOpenZero);
       window.removeEventListener('phantom:open-iot', onOpenIoT);
+      window.removeEventListener('phantom:open-academy', onOpenAcad);
+      window.removeEventListener('phantom:open-family', onOpenFam);
+      window.removeEventListener('phantom:open-creative', onOpenCreat);
+      window.removeEventListener('phantom:open-personal', onOpenPers);
+      window.removeEventListener('phantom:open-community', onOpenComm);
     };
   }, []);
 
@@ -693,6 +718,36 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
         isOpen={isIoTTelemetryOpen}
         onClose={() => setIsIoTTelemetryOpen(false)}
         chatTitle={activeChat?.title || 'Бесіда'}
+      />
+
+      <AcademyHubModal
+        isOpen={isAcademyHubOpen}
+        onClose={() => setIsAcademyHubOpen(false)}
+        chatTitle={activeChat?.title || 'Академічна група'}
+      />
+
+      <FamilyHubModal
+        isOpen={isFamilyHubOpen}
+        onClose={() => setIsFamilyHubOpen(false)}
+        chatTitle={activeChat?.title || 'Родина & Дім'}
+      />
+
+      <CreativeStudioModal
+        isOpen={isCreativeStudioOpen}
+        onClose={() => setIsCreativeStudioOpen(false)}
+        chatTitle={activeChat?.title || 'Креативна студія'}
+      />
+
+      <PersonalWellnessModal
+        isOpen={isPersonalWellnessOpen}
+        onClose={() => setIsPersonalWellnessOpen(false)}
+        chatTitle={activeChat?.title || 'Особистий простір'}
+      />
+
+      <CommunityClubModal
+        isOpen={isCommunityClubOpen}
+        onClose={() => setIsCommunityClubOpen(false)}
+        chatTitle={activeChat?.title || 'Міська спільнота & Клуб'}
       />
 
       <CallOverlay />

@@ -644,7 +644,7 @@ export interface SharedLinkItem {
   senderName: string;
 }
 
-export type PersonaSphere = 'work' | 'personal' | 'creative' | 'family';
+export type PersonaSphere = 'work' | 'academy' | 'family' | 'creative' | 'personal' | 'community';
 
 export interface UserProfilePersona {
   id: PersonaSphere;

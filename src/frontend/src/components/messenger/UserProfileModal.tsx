@@ -18,7 +18,9 @@ import {
   Smartphone,
   Globe,
   Trash2,
-  HardDrive
+  HardDrive,
+  GraduationCap,
+  Users
 } from 'lucide-react';
 import { ChatMember, PersonaSphere, UserProfile, UserProfilePersona } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
@@ -36,9 +38,11 @@ interface UserProfileModalProps {
 
 const sphereMeta: Record<PersonaSphere, { label: string; icon: any; color: string; bg: string; border: string }> = {
   work: { label: 'Робота & Продукт', icon: Briefcase, color: '#E87A42', bg: '#FCE7D8', border: '#F4C8AB' },
-  personal: { label: 'Особистий простір', icon: User, color: '#528A4B', bg: '#E3EFE1', border: '#C5DEC1' },
-  creative: { label: 'Творчість & Арт', icon: Palette, color: '#8C461A', bg: '#F6E7DE', border: '#E7C8B7' },
+  academy: { label: 'Навчання & Академія', icon: GraduationCap, color: '#2563EB', bg: '#EFF6FF', border: '#BFDBFE' },
   family: { label: 'Родина & Дім', icon: Home, color: '#D99026', bg: '#FEF3D6', border: '#F8DF9E' },
+  creative: { label: 'Творчість & Арт', icon: Palette, color: '#8C461A', bg: '#F6E7DE', border: '#E7C8B7' },
+  personal: { label: 'Особистий простір', icon: User, color: '#528A4B', bg: '#E3EFE1', border: '#C5DEC1' },
+  community: { label: 'Спільноти & Клуби', icon: Users, color: '#7C3AED', bg: '#F5F3FF', border: '#DDD6FE' },
 };
 
 export const UserProfileModal: React.FC<UserProfileModalProps> = ({
@@ -289,8 +293,8 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                   </span>
                 </div>
 
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                  {(['work', 'personal', 'creative', 'family'] as PersonaSphere[]).map((sphere) => {
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2">
+                  {(['work', 'academy', 'family', 'creative', 'personal', 'community'] as PersonaSphere[]).map((sphere) => {
                     const meta = sphereMeta[sphere];
                     const Icon = meta.icon;
                     const isSelected = selectedSphere === sphere;

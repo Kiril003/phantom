@@ -171,9 +171,11 @@ const displayTitle = (title: string): string => {
 
 const sphereLabels: Record<PersonaSphere, { label: string; emoji: string; color: string; bg: string }> = {
   work: { label: 'Робота', emoji: '⚡', color: '#8C461A', bg: '#FCE7D8' },
-  personal: { label: 'Особисте', emoji: '🌿', color: '#2E6B27', bg: '#E3EFE1' },
+  academy: { label: 'Академія', emoji: '🎓', color: '#2563EB', bg: '#EFF6FF' },
+  family: { label: 'Сімʼя та Дім', emoji: '🏡', color: '#B37418', bg: '#FEF3D6' },
   creative: { label: 'Творчість', emoji: '🎨', color: '#8C461A', bg: '#F6E7DE' },
-  family: { label: 'Родина', emoji: '🏡', color: '#B37418', bg: '#FEF3D6' },
+  personal: { label: 'Особисте', emoji: '🌿', color: '#2E6B27', bg: '#E3EFE1' },
+  community: { label: 'Спільнота', emoji: '🌐', color: '#7C3AED', bg: '#F5F3FF' },
 };
 
 const colorPalette = [
@@ -2315,7 +2317,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             <div className="px-2 py-1 text-[10px] font-extrabold text-[#5F6A60] uppercase tracking-wider">
               Перемкнути активну ідентичність
             </div>
-            {(['work', 'personal', 'creative', 'family'] as PersonaSphere[]).map((sphere) => {
+            {(['work', 'academy', 'family', 'creative', 'personal', 'community'] as PersonaSphere[]).map((sphere) => {
               const meta = sphereLabels[sphere];
               const isSelected = activeSphere === sphere;
               return (

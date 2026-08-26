@@ -6,9 +6,7 @@ import {
   Network,
   Sparkles,
   Terminal,
-  Shield,
   Radio,
-  User,
   SlidersHorizontal,
   CheckCircle2,
   HardDrive,
@@ -18,6 +16,11 @@ import {
   History,
   Lock,
   Cpu,
+  GraduationCap,
+  Home,
+  Heart,
+  Palette,
+  Users,
 } from 'lucide-react';
 import { useMessengerStore } from '../../stores/messengerStore';
 import { soundFx } from '../../utils/messengerSound';
@@ -215,7 +218,7 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
       id: 'sphere_work',
       category: 'Сфери',
       title: 'Сфера: Робота та проекти',
-      subtitle: 'Робочі простори, ключі розробника',
+      subtitle: 'Робочі простори, Work OS, спліти, термінали',
       icon: LayoutDashboard,
       action: () => {
         store.switchPersonaSphere('work');
@@ -223,24 +226,62 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
       },
     },
     {
-      id: 'sphere_personal',
+      id: 'sphere_academy',
       category: 'Сфери',
-      title: 'Сфера: Особисте життя',
-      subtitle: 'Приватні контакти та сімʼя',
-      icon: User,
+      title: 'Сфера: Навчання & Академія',
+      subtitle: 'LaTeX конспекти, дедлайни сесії, Anki flashcards',
+      icon: GraduationCap,
       action: () => {
-        store.switchPersonaSphere('personal');
+        store.switchPersonaSphere('academy');
+        window.dispatchEvent(new CustomEvent('phantom:open-academy'));
+        onClose();
+      },
+    },
+    {
+      id: 'sphere_family',
+      category: 'Сфери',
+      title: 'Сфера: Сімʼя & Побут',
+      subtitle: 'Спільні списки покупок, сімейний календар, Family Vault',
+      icon: Home,
+      action: () => {
+        store.switchPersonaSphere('family');
+        window.dispatchEvent(new CustomEvent('phantom:open-family'));
         onClose();
       },
     },
     {
       id: 'sphere_creative',
       category: 'Сфери',
-      title: 'Сфера: Творчість та R&D (Creative)',
-      subtitle: 'Експерименти, лабораторії та прототипи',
-      icon: Shield,
+      title: 'Сфера: Творчість, Медіа & Дизайн',
+      subtitle: 'Мудборди, таймкодні ревʼю аудіо/відео, P2P портфоліо',
+      icon: Palette,
       action: () => {
         store.switchPersonaSphere('creative');
+        window.dispatchEvent(new CustomEvent('phantom:open-creative'));
+        onClose();
+      },
+    },
+    {
+      id: 'sphere_personal',
+      category: 'Сфери',
+      title: 'Сфера: Особистий простір & Здоровʼя',
+      subtitle: 'Зашифрований щоденник роздумів, трекер звичок, воркаут',
+      icon: Heart,
+      action: () => {
+        store.switchPersonaSphere('personal');
+        window.dispatchEvent(new CustomEvent('phantom:open-personal'));
+        onClose();
+      },
+    },
+    {
+      id: 'sphere_community',
+      category: 'Сфери',
+      title: 'Сфера: Спільноти, Хобі & Клуби',
+      subtitle: 'Discourse форум, івенти з RSVP, демократичний консенсус',
+      icon: Users,
+      action: () => {
+        store.switchPersonaSphere('community');
+        window.dispatchEvent(new CustomEvent('phantom:open-community'));
         onClose();
       },
     },

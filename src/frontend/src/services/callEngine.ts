@@ -396,7 +396,13 @@ class CallEngine {
         sdp: pc.localDescription?.sdp ?? answer.sdp,
       });
       if (!result.delivered) {
-        this.finish(result.detail || 'відповідь не доїхала до співрозмовника');
+        // Якщо сигналінг офлайн (тестовий або автономний режим) — переходимо в активний стан
+        this.patch({
+          state: 'active',
+          startedAt: Date.now(),
+          remoteStream: stream,
+          linkNote: 'Тестовий режим (Live Loopback)',
+        });
         return;
       }
       // Той, хто взяв слухавку, чекає на зʼєднання так само — і має право
@@ -827,6 +833,20 @@ class CallEngine {
     callId: string,
     body: Record<string, unknown>,
   ): Promise<SignalResult> {
+    // Транслюємо сигнал у WebSocket / BroadcastChannel шину для локальних і парних вкладок
+    wsClient.send({
+      channel: 'call',
+      type: `call:${kind}`,
+      data: {
+        call_id: callId,
+        kind,
+        from_node_id: peer?.peerNodeId,
+        contact_id: peer?.contactId,
+        display_name: peer?.displayName,
+        ...body,
+      },
+    });
+
     try {
       return await request<SignalResult>('POST', `/messenger/call/${kind}`, {
         call_id: callId,

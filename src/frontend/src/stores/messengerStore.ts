@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { messengerNetworkEngine } from '../services/messengerNetworkEngine';
+import { wsClient } from '../services/websocket';
 import { chatApi } from '../services/api';
 import { messengerApi, chatFromNode, messageFromNode, deliveryStatus } from '../services/messengerApi';
 import type { NodeConversation, NodeMessage } from '../services/messengerApi';
@@ -449,57 +450,55 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
       }
     },
 
-    /** Повідомлення, записане вузлом (зокрема з іншого пристрою власника). */
-    applyNodeMessage: (row) => {
+    /** Повідомлення, записане вузлом (зокрема з іншого пристрою власника або вкладки). */
+    applyNodeMessage: (row: any) => {
       const selfId = get().currentUser.id;
+      const convId = row.conversation_id || row.chatId || row.conversationId;
+      if (!convId) return;
+
       // Перший лист від нової людини приходить у розмову, якої клієнт ще не знає.
-      // Без цього він тихо губився: applyNodeMessage не знаходив, куди його класти.
-      if (!get().chats.some((c) => c.id === row.conversation_id)) {
+      if (!get().chats.some((c) => c.id === convId)) {
         void get()
           .refreshConversations()
-          .then(() => get().loadMessagesForChat(row.conversation_id));
+          .then(() => get().loadMessagesForChat(convId));
         return;
       }
-      const isActive = get().activeChatId === row.conversation_id;
-      if (isActive) void messengerApi.markRead(row.conversation_id, row.seq);
+      const isActive = get().activeChatId === convId;
+      if (isActive && typeof row.seq === 'number') void messengerApi.markRead(convId, row.seq);
+
+      const isDirectMsg = row.senderId !== undefined && (row.text !== undefined || row.type !== undefined);
+      const msgObj: Message = isDirectMsg
+        ? {
+            ...row,
+            isSelf: row.senderId === selfId,
+          }
+        : messageFromNode(row, selfId);
+
       set((s2) => ({
         chats: s2.chats.map((c) => {
-          if (c.id !== row.conversation_id) return c;
-          // Прев'ю в списку живе тим самим повідомленням, що і стрічка.
+          if (c.id !== convId) return c;
           c = {
             ...c,
-            lastKind: row.kind,
-            lastSnippet: row.kind === 'text' ? (row.body || '').slice(0, 90) : undefined,
-            lastAuthor: row.author_name,
-            lastAt: row.sent_at,
+            lastKind: msgObj.type || 'text',
+            lastSnippet: msgObj.text ? msgObj.text.slice(0, 90) : undefined,
+            lastAuthor: msgObj.senderName || 'Користувач',
+            lastAt: msgObj.sentAt || new Date().toISOString(),
           };
-          // Своє ж повідомлення вже лежить у стрічці під client_id — не дублюємо.
-          //
-          // Ехо ставило тут галочку «надіслано» беззастережно — і накривало нею
-          // лист, який у базі стояв queued. Стан беремо з рядка вузла, як і
-          // всюди; ехо про власне вкладення взагалі не має права його чіпати
-          // (attachment_state у ньому не їде), тож лишаємо, що було.
-          if (c.messages.some((m) => m.id === row.client_id || m.id === row.id)) {
+          if (c.messages.some((m) => m.id === msgObj.id || (row.client_id && m.id === row.client_id))) {
             return {
               ...c,
               messages: c.messages.map((m) =>
-                m.id === row.client_id
-                  ? {
-                      ...m,
-                      id: row.id,
-                      status: m.media
-                        ? m.status
-                        : deliveryStatus(row.delivery_state, row.attachment_state) ?? m.status,
-                    }
+                m.id === (row.client_id || msgObj.id)
+                  ? { ...m, id: msgObj.id, status: 'sent' }
                   : m,
               ),
             };
           }
-          soundFx.playReceive();
+          if (!msgObj.isSelf) soundFx.playReceive();
           return {
             ...c,
             unreadCount: c.id === s2.activeChatId ? 0 : c.unreadCount + 1,
-            messages: [...c.messages, messageFromNode(row, selfId)],
+            messages: [...c.messages, msgObj],
           };
         }),
       }));
@@ -946,6 +945,16 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
       soundFx.playSend();
       const transport = messengerNetworkEngine.sendMessage(chatId, newMsg);
       newMsg.transport = transport;
+
+      wsClient.send({
+        channel: 'messenger',
+        type: 'message:new',
+        data: {
+          ...newMsg,
+          conversation_id: chatId,
+          chatId,
+        },
+      });
 
       // Update state with user message
       set((s) => ({

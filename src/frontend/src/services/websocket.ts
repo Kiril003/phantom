@@ -112,6 +112,24 @@ class WebSocketClient {
   private connectHandlers: ConnectHandler[] = [];
   private disconnectHandlers: DisconnectHandler[] = [];
   private channelHandlers = new Map<WSChannel, ChannelHandler[]>();
+  private broadcast: BroadcastChannel | null =
+    typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('phantom_mesh_bus') : null;
+
+  constructor() {
+    if (this.broadcast) {
+      this.broadcast.onmessage = (event: MessageEvent<WSMessage>) => {
+        try {
+          const msg = event.data;
+          if (msg && msg.channel) {
+            const handlers = this.channelHandlers.get(msg.channel) ?? [];
+            handlers.forEach((h) => h(msg));
+          }
+        } catch {
+          /* ignore */
+        }
+      };
+    }
+  }
 
   connect(token?: string): void {
     this.token = token;
@@ -177,6 +195,13 @@ class WebSocketClient {
   send(msg: WSMessage | WSControlMessage): void {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ ...msg, ts: msg.ts ?? Date.now() }));
+    }
+    if (this.broadcast && 'channel' in msg) {
+      try {
+        this.broadcast.postMessage({ ...msg, ts: msg.ts ?? Date.now() });
+      } catch {
+        /* ignore */
+      }
     }
   }
 

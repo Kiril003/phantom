@@ -1,98 +1,22 @@
 import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { AnimatePresence, motion } from 'framer-motion';
+import { AnimatePresence } from 'framer-motion';
 import { Providers } from './providers';
 import { StateTransitionController } from './StateTransitionController';
 import { ViewportFrame } from './ViewportFrame';
 import { ErrorBoundary } from '../components/core/ErrorBoundary';
 import { Overlays } from '../components/core/Overlays';
-import { VoiceAlwaysOnGate } from '../components/chat/VoiceAlwaysOnGate';
-import { SystemState } from '@shared/types';
 import { useSystemStore } from '../stores/systemStore';
-import { geolocationService, BrowserGeolocationService } from '../services/geolocation';
-import { ToolsOverlay } from '../components/tools/ToolsOverlay';
-// Lazy: WillPanel statically pulls recharts (~170 kB gz). It's mounted at
-// App root but only rendered when willOpen — lazy keeps the charts vendor
-// chunk out of the initial load.
-const WillPanel = React.lazy(() =>
-  import('../components/agent/workspace/WillPanel').then((m) => ({ default: m.WillPanel })),
-);
-import { IntelligenceHub } from '../components/intelligence/IntelligenceHub';
-import { useUIStore } from '../stores/uiStore';
-import { useFamiliarTriggers } from '../hooks/useFamiliarTriggers';
 import { useAuthStore } from '../stores/authStore';
-import { FamiliarReactor } from '../components/familiar/FamiliarReactor';
-// Lazy: PhantomFamiliar is the ONLY consumer of three.js/@react-three at
-// App root — eager-importing it pulled the whole 3D stack (~600 kB) into
-// the entry chunk. Lazy + Suspense(null) defers it to an async chunk so
-// first paint never pays for the familiar.
-const PhantomFamiliar = React.lazy(() => import('../components/familiar/PhantomFamiliar'));
 import { ToastRail } from '../components/core/ToastRail';
-import { PhantomIcon } from '../components/core/PhantomIcon';
 
-function GlobalGeolocationManager() {
-  const authenticated = useSystemStore((s) => s.authenticated);
+/* ─── Lazy views ─────────────────────────────────────────────────────────── */
 
-  useEffect(() => {
-    if (authenticated && BrowserGeolocationService.isSupported()) {
-      geolocationService.start();
-    }
-    return () => {
-      geolocationService.stop();
-    };
-  }, [authenticated]);
-
-  return null;
-}
-
-/* ─── Lazy layouts ────────────────────────────────────────────────────────── */
-
-const ShadowLayout = React.lazy(() => import('../layouts/ShadowLayout'));
-const AnalyticsOverview = React.lazy(() => import('../pages/Dashboard/AnalyticsOverview'));
-const LoginScreen = React.lazy(() => import('../components/auth/LoginScreen'));
-const CoreDownWall = React.lazy(() =>
-  import('../components/auth/LoginScreen').then((m) => ({ default: m.CoreDownWall })),
-);
-const SettingsPanel = React.lazy(() => import('../components/settings/SettingsPanel'));
-const MapLayout = React.lazy(() => import('../layouts/MapLayout'));
-const SunriseWorkspace = React.lazy(() => import('../layouts/SunriseWorkspace'));
-const AgentFoundryLayout = React.lazy(() => import('../layouts/AgentFoundryLayout'));
-
-const DashboardLayout = React.lazy(() => import('../layouts/DashboardLayout'));
-const GhostLayout = React.lazy(() => import('../layouts/GhostLayout'));
-const DreamLayout = React.lazy(() => import('../layouts/DreamLayout'));
-const DialogueLayout = React.lazy(() => import('../layouts/DialogueLayout'));
+const QuickJoinScreen = React.lazy(() => import('../components/auth/QuickJoinScreen'));
 const MessengerLayout = React.lazy(() => import('../layouts/MessengerLayout'));
-const FocusLayout = React.lazy(() => import('../layouts/FocusLayout'));
-const SentinelLayout = React.lazy(() => import('../layouts/SentinelLayout'));
 
-
-// «/» належить станові, а не одному екрану. Кнопки дока (Головна, Діалог,
-// Фокус, Вартовий, Привид) міняють SystemState і йдуть сюди — поки тут
-// висів дашборд, стан мінявся, а екран лишався той самий, і кнопки
-// виглядали мертвими.
-// OPERATOR — не кнопка, а стан: ядро саме входить у нього, коли стартує
-// передній план агента (agent/kernel/runtime.py:738 і :878 шлють transition
-// у WS). Кейса тут не було, тож стан приходив, плашка ставала «Оператор», а
-// під нею лишалась головна. Веде на ту саму майстерню, що й /operator.
 export function StateSurface() {
-  const state = useSystemStore((s) => s.state);
-  switch (state) {
-    case SystemState.DIALOGUE:
-      return <DialogueLayout />;
-    case SystemState.FOCUS:
-      return <FocusLayout />;
-    case SystemState.SENTINEL:
-      return <SentinelLayout />;
-    case SystemState.GHOST:
-      return <GhostLayout />;
-    case SystemState.DREAM:
-      return <DreamLayout />;
-    case SystemState.OPERATOR:
-      return <AgentFoundryLayout />;
-    default:
-      return <ShadowLayout />;
-  }
+  return <MessengerLayout />;
 }
 
 function MainRouter() {
@@ -100,12 +24,10 @@ function MainRouter() {
   const sessionPhase = useAuthStore((s) => s.sessionPhase);
 
   if (!authenticated) {
-    // Поки токен перевіряється, екран входу показувати не можна: власник
-    // нікуди не виходив, а форма блимала йому в обличчя щоразу на старті.
     if (sessionPhase === 'checking') return <PhantomLoader />;
     return (
       <React.Suspense fallback={<PhantomLoader />}>
-        {sessionPhase === 'unreachable' ? <CoreDownWall /> : <LoginScreen />}
+        <QuickJoinScreen />
       </React.Suspense>
     );
   }
@@ -114,32 +36,16 @@ function MainRouter() {
     <React.Suspense fallback={<PhantomLoader />}>
       <AnimatePresence mode="wait">
         <Routes>
-          <Route path="/" element={<DashboardLayout />}>
-            <Route index element={<StateSurface />} />
-            <Route path="analytics" element={<AnalyticsOverview />} />
-            <Route path="map" element={<MapLayout />} />
-            <Route path="polis" element={<SunriseWorkspace />} />
-            <Route path="chat" element={<DialogueLayout />} />
-            <Route path="messenger" element={<MessengerLayout />} />
-            <Route path="operator" element={<AgentFoundryLayout />} />
-            <Route path="foundry" element={<AgentFoundryLayout />} />
-            <Route path="system" element={<FocusLayout />} />
-            <Route path="sentinel" element={<SentinelLayout />} />
-            <Route path="settings/:categoryId?" element={<SettingsPanel />} />
-            <Route path="*" element={<ShadowLayout />} />
-          </Route>
+          <Route path="/" element={<MessengerLayout />} />
+          <Route path="/messenger" element={<MessengerLayout />} />
+          <Route path="/chat" element={<MessengerLayout />} />
+          <Route path="*" element={<MessengerLayout />} />
         </Routes>
       </AnimatePresence>
     </React.Suspense>
   );
 }
 
-/**
- * Заставка на час, поки ядро не озвалось. Тут крутився сірий обідок і напис
- * «PHANTOM OS» — і висів так само і півсекунди, і півхвилини, ніяк не
- * зізнаючись, що щось не так. Тепер підпис іде за прожитим часом: це не
- * вигаданий поступ, а чесна відповідь на питання «скільки вже?».
- */
 function PhantomLoader() {
   const [elapsed, setElapsed] = React.useState(0);
   React.useEffect(() => {
@@ -194,17 +100,6 @@ function PhantomLoader() {
   );
 }
 
-function GlobalAlwaysOnGate() {
-  const authenticated = useSystemStore((s) => s.authenticated);
-  if (!authenticated) return null;
-  return <VoiceAlwaysOnGate />;
-}
-
-function FamiliarTriggers() {
-  useFamiliarTriggers();
-  return null;
-}
-
 function AutoLoginManager() {
   const autoLogin = useAuthStore((s) => s.autoLogin);
   useEffect(() => {
@@ -221,77 +116,19 @@ export function App() {
       <AutoLoginManager />
       <BrowserRouter>
         <StateTransitionController />
-        <GlobalAlwaysOnGate />
-        <GlobalGeolocationManager />
         <ViewportFrame>
           <ErrorBoundary>
-          <div
-            className="w-full h-full min-h-screen overflow-hidden relative flex"
-            style={{ background: 'var(--surface-base)' }}
-          >
-            <MainRouter />
-            <Overlays />
-            <ToastRail />
-            <FamiliarTriggers />
-            <FamiliarReactor />
-            <React.Suspense fallback={null}>
-              <PhantomFamiliar />
-            </React.Suspense>
-            <ToolsOverlayMount />
-            <WillPanelMount />
-            <IntelligenceHubMount />
-          </div>
+            <div
+              className="w-full h-full min-h-screen overflow-hidden relative flex flex-col"
+              style={{ background: 'var(--surface-base)' }}
+            >
+              <MainRouter />
+              <Overlays />
+              <ToastRail />
+            </div>
           </ErrorBoundary>
         </ViewportFrame>
       </BrowserRouter>
     </Providers>
   );
-}
-
-function WillPanelMount() {
-  const open = useUIStore((s) => s.willOpen);
-  const setOpen = useUIStore((s) => s.setWillOpen);
-
-  return (
-    <AnimatePresence>
-      {open && (
-        <motion.div
-          initial={{ opacity: 0, x: 100 }}
-          animate={{ opacity: 1, x: 0 }}
-          exit={{ opacity: 0, x: 100 }}
-          transition={{ duration: 0.3, ease: 'easeOut' }}
-          className="absolute right-4 top-[84px] bottom-[84px] w-[360px] z-[100]"
-        >
-          <React.Suspense fallback={null}>
-            <WillPanel />
-          </React.Suspense>
-          <button
-            onClick={() => setOpen(false)}
-            className="absolute top-4 right-4 p-2 hover:bg-black/5 rounded-full transition-colors z-10"
-          >
-            <PhantomIcon name="close" className="text-ink-muted" />
-          </button>
-        </motion.div>
-      )}
-    </AnimatePresence>
-  );
-}
-
-function ToolsOverlayMount() {
-  const open = useUIStore((s) => s.toolsOverlayOpen);
-  const setOpen = useUIStore((s) => s.setToolsOverlayOpen);
-  const initialTab = useUIStore((s) => s.toolsInitialTab);
-  return (
-    <ToolsOverlay
-      open={open}
-      initialTab={initialTab}
-      onClose={() => setOpen(false)}
-    />
-  );
-}
-
-function IntelligenceHubMount() {
-  const open = useUIStore((s) => s.intelligenceHubOpen);
-  const setOpen = useUIStore((s) => s.setIntelligenceHubOpen);
-  return <IntelligenceHub isOpen={open} onClose={() => setOpen(false)} />;
 }

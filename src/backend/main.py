@@ -1201,9 +1201,21 @@ def create_app() -> FastAPI:
     
     _dist_path = str(resolve_data_dir("frontend_dist"))
     if _os.path.isdir(_dist_path):
+        class SPAStaticFiles(StaticFiles):
+            async def get_response(self, path: str, scope):
+                try:
+                    response = await super().get_response(path, scope)
+                    if response.status_code == 404 and not path.startswith(("api", "ws", "healthz", "metrics")):
+                        return await super().get_response("index.html", scope)
+                    return response
+                except Exception:
+                    if not path.startswith(("api", "ws", "healthz", "metrics")):
+                        return await super().get_response("index.html", scope)
+                    raise
+
         app.mount(
             "/",
-            StaticFiles(directory=_dist_path, html=True),
+            SPAStaticFiles(directory=_dist_path, html=True),
             name="frontend",
         )
 

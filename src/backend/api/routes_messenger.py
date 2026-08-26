@@ -1308,10 +1308,6 @@ async def receive_frame(
     Кадр рації теж не стає рядком: він іде тим самим каналом, що й сигнали
     дзвінка, бо слухає його дзвінок, а не стрічка.
     """
-    owner = (await session.execute(select(User.id).order_by(User.id))).scalars().first()
-    if owner is None:
-        raise HTTPException(status_code=503, detail="вузол ще не має власника")
-
     try:
         raw = bytes.fromhex(payload.frame)
     except ValueError as exc:
@@ -1324,19 +1320,45 @@ async def receive_frame(
     except GuardRejected as exc:
         raise HTTPException(status_code=429, detail=str(exc)) from exc
 
-    try:
-        row = await accept_frame(
-            session,
-            _keys(),
-            owner,
-            raw,
-            payload.from_node_id,
-            reply_address=payload.reply_address,
-            # Сюди штовхає сам вузол-відправник: канал між нами живий зараз.
-            road="direct",
+    # Знайдемо всіх можливих отримувачів: спершу тих, у кого є контакт із цим from_node_id
+    matching_contacts = (
+        await session.execute(
+            select(MessengerContact).where(MessengerContact.peer_node_id == payload.from_node_id)
         )
-    except InboxError as exc:
-        raise HTTPException(status_code=400, detail=str(exc)) from exc
+    ).scalars().all()
+    
+    candidate_owners = [c.owner_user_id for c in matching_contacts]
+    if not candidate_owners:
+        candidate_owners = (await session.execute(select(User.id).order_by(User.id))).scalars().all()
+
+    if not candidate_owners:
+        raise HTTPException(status_code=503, detail="вузол ще не має власника")
+
+    row = None
+    target_owner = None
+    last_exc = None
+    for cand in candidate_owners:
+        try:
+            row = await accept_frame(
+                session,
+                _keys(),
+                cand,
+                raw,
+                payload.from_node_id,
+                reply_address=payload.reply_address,
+                road="direct",
+            )
+            if row is not None:
+                target_owner = cand
+                break
+        except InboxError as exc:
+            last_exc = exc
+            continue
+
+    if row is None and last_exc is not None and not matching_contacts:
+        raise HTTPException(status_code=400, detail=str(last_exc)) from last_exc
+
+    owner = target_owner or candidate_owners[0]
 
     if row is None:
         return {"accepted": True}

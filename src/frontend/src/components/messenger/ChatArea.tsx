@@ -2469,12 +2469,12 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
 
         {/* Canvas Split Side Panel */}
         {isCanvasSplitOpen && (
-          <div className="flex h-full shrink-0 relative z-20">
-            {/* Resizing Drag Divider */}
+          <div className="fixed inset-0 z-40 md:relative md:inset-auto md:z-20 flex h-full max-w-full shrink-0">
+            {/* Resizing Drag Divider (Desktop only) */}
             {canvasWidthMode !== 'full' && (
               <div
                 onMouseDown={startDragSplit}
-                className={`w-1 hover:w-1.5 hover:bg-[#D96C35]/60 cursor-col-resize transition-all shrink-0 select-none ${
+                className={`hidden md:block w-1 hover:w-1.5 hover:bg-[#D96C35]/60 cursor-col-resize transition-all shrink-0 select-none ${
                   isDraggingSplit ? 'bg-[#D96C35] w-1.5' : 'bg-[#E5DEC9]'
                 }`}
                 title="Перетягніть для регулювання ширини Canvas"
@@ -2487,9 +2487,12 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
                     ? '100%'
                     : canvasWidthMode === 'wide'
                     ? '65vw'
+                    : typeof window !== 'undefined' && window.innerWidth < 768
+                    ? '100vw'
                     : `${splitWidth}px`,
+                maxWidth: '100vw',
               }}
-              className={`h-full bg-white transition-all ${
+              className={`h-full w-full md:w-auto bg-white transition-all overflow-hidden ${
                 canvasWidthMode === 'full' ? 'fixed inset-0 z-40' : ''
               }`}
             >

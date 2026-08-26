@@ -62,6 +62,10 @@ import { LoRaWalkieTalkieModal } from './LoRaWalkieTalkieModal';
 import { SemanticBusPipesModal } from './SemanticBusPipesModal';
 import { SpatialProjectionsModal } from './SpatialProjectionsModal';
 import { ResourceGovernanceModal } from './ResourceGovernanceModal';
+import { GitNativeDevOpsModal } from './GitNativeDevOpsModal';
+import { AcademicLmsHubModal } from './AcademicLmsHubModal';
+import { CorporateHROpsModal } from './CorporateHROpsModal';
+import { CommerceMicroAppsModal } from './CommerceMicroAppsModal';
 import { callEngine } from '../../services/callEngine';
 import { useCallAlerts } from '../../hooks/useCallAlerts';
 import { soundFx } from '../../utils/messengerSound';
@@ -111,6 +115,10 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
   const [isSemanticBusOpen, setIsSemanticBusOpen] = useState(false);
   const [isSpatialProjectionsOpen, setIsSpatialProjectionsOpen] = useState(false);
   const [isResourceGovernanceOpen, setIsResourceGovernanceOpen] = useState(false);
+  const [isGitDevOpsOpen, setIsGitDevOpsOpen] = useState(false);
+  const [isAcademicLmsOpen, setIsAcademicLmsOpen] = useState(false);
+  const [isCorporateHROpen, setIsCorporateHROpen] = useState(false);
+  const [isCommerceMicroAppsOpen, setIsCommerceMicroAppsOpen] = useState(false);
   const [focusMode, setFocusMode] = useState<FocusModeType>('available');
   const [isHuddleActive, setIsHuddleActive] = useState(false);
 
@@ -231,6 +239,10 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
     const onOpenBus = () => setIsSemanticBusOpen(true);
     const onOpenProj = () => setIsSpatialProjectionsOpen(true);
     const onOpenGov = () => setIsResourceGovernanceOpen(true);
+    const onOpenGit = () => setIsGitDevOpsOpen(true);
+    const onOpenLms = () => setIsAcademicLmsOpen(true);
+    const onOpenHr = () => setIsCorporateHROpen(true);
+    const onOpenCommApp = () => setIsCommerceMicroAppsOpen(true);
 
     window.addEventListener('phantom:open-automations', onOpenAut);
     window.addEventListener('phantom:open-datagrid', onOpenGrid);
@@ -254,6 +266,10 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
     window.addEventListener('phantom:open-semanticbus', onOpenBus);
     window.addEventListener('phantom:open-projections', onOpenProj);
     window.addEventListener('phantom:open-governance', onOpenGov);
+    window.addEventListener('phantom:open-gitdevops', onOpenGit);
+    window.addEventListener('phantom:open-academiclms', onOpenLms);
+    window.addEventListener('phantom:open-corporatehr', onOpenHr);
+    window.addEventListener('phantom:open-commerce', onOpenCommApp);
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
@@ -279,6 +295,10 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
       window.removeEventListener('phantom:open-semanticbus', onOpenBus);
       window.removeEventListener('phantom:open-projections', onOpenProj);
       window.removeEventListener('phantom:open-governance', onOpenGov);
+      window.removeEventListener('phantom:open-gitdevops', onOpenGit);
+      window.removeEventListener('phantom:open-academiclms', onOpenLms);
+      window.removeEventListener('phantom:open-corporatehr', onOpenHr);
+      window.removeEventListener('phantom:open-commerce', onOpenCommApp);
     };
   }, []);
 
@@ -880,6 +900,30 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
         isOpen={isResourceGovernanceOpen}
         onClose={() => setIsResourceGovernanceOpen(false)}
         chatTitle={activeChat?.title || 'Система'}
+      />
+
+      <GitNativeDevOpsModal
+        isOpen={isGitDevOpsOpen}
+        onClose={() => setIsGitDevOpsOpen(false)}
+        chatTitle={activeChat?.title || 'Інженерний простір'}
+      />
+
+      <AcademicLmsHubModal
+        isOpen={isAcademicLmsOpen}
+        onClose={() => setIsAcademicLmsOpen(false)}
+        chatTitle={activeChat?.title || 'Академічна група'}
+      />
+
+      <CorporateHROpsModal
+        isOpen={isCorporateHROpen}
+        onClose={() => setIsCorporateHROpen(false)}
+        chatTitle={activeChat?.title || 'Корпоративний простір'}
+      />
+
+      <CommerceMicroAppsModal
+        isOpen={isCommerceMicroAppsOpen}
+        onClose={() => setIsCommerceMicroAppsOpen(false)}
+        chatTitle={activeChat?.title || 'Комерційний простір'}
       />
 
       <CallOverlay />

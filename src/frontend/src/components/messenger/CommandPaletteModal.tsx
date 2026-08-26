@@ -28,6 +28,8 @@ import {
   Activity,
   BatteryCharging,
   Layers,
+  GitBranch,
+  ShoppingBag,
 } from 'lucide-react';
 import { useMessengerStore } from '../../stores/messengerStore';
 import { soundFx } from '../../utils/messengerSound';
@@ -310,6 +312,50 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
       icon: BatteryCharging,
       action: () => {
         window.dispatchEvent(new CustomEvent('phantom:open-governance'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_gitdevops',
+      category: 'Дії',
+      title: 'Git-Native DevOps & Code Review',
+      subtitle: 'Pull requests, 1-click commit suggestions та CI/CD',
+      icon: GitBranch,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-gitdevops'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_academiclms',
+      category: 'Дії',
+      title: 'Full Academic LMS & Autograder',
+      subtitle: 'Здача робіт з автотестами та жива черга захисту',
+      icon: GraduationCap,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-academiclms'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_corporatehr',
+      category: 'Дії',
+      title: 'Корпоративний HR & Skill Matrix',
+      subtitle: 'Онбординг роадмап та пошук внутрішніх експертів',
+      icon: Users,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-corporatehr'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_commerce',
+      category: 'Дії',
+      title: 'E-Commerce Вітрина & Sovereign CRM',
+      subtitle: 'Каталог, інвойси, оплата та internal tool builder',
+      icon: ShoppingBag,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-commerce'));
         onClose();
       },
     },

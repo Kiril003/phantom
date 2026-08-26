@@ -59,6 +59,9 @@ import { UniversalBridgeModal } from './UniversalBridgeModal';
 import { ProtocolDrivenSchemaModal } from './ProtocolDrivenSchemaModal';
 import { NeuroErgonomicsModal } from './NeuroErgonomicsModal';
 import { LoRaWalkieTalkieModal } from './LoRaWalkieTalkieModal';
+import { SemanticBusPipesModal } from './SemanticBusPipesModal';
+import { SpatialProjectionsModal } from './SpatialProjectionsModal';
+import { ResourceGovernanceModal } from './ResourceGovernanceModal';
 import { callEngine } from '../../services/callEngine';
 import { useCallAlerts } from '../../hooks/useCallAlerts';
 import { soundFx } from '../../utils/messengerSound';
@@ -105,6 +108,9 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
   const [isProtocolSchemaOpen, setIsProtocolSchemaOpen] = useState(false);
   const [isNeuroErgonomicsOpen, setIsNeuroErgonomicsOpen] = useState(false);
   const [isLoRaWalkieOpen, setIsLoRaWalkieOpen] = useState(false);
+  const [isSemanticBusOpen, setIsSemanticBusOpen] = useState(false);
+  const [isSpatialProjectionsOpen, setIsSpatialProjectionsOpen] = useState(false);
+  const [isResourceGovernanceOpen, setIsResourceGovernanceOpen] = useState(false);
   const [focusMode, setFocusMode] = useState<FocusModeType>('available');
   const [isHuddleActive, setIsHuddleActive] = useState(false);
 
@@ -222,6 +228,9 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
     const onOpenSchema = () => setIsProtocolSchemaOpen(true);
     const onOpenNeuro = () => setIsNeuroErgonomicsOpen(true);
     const onOpenLoRa = () => setIsLoRaWalkieOpen(true);
+    const onOpenBus = () => setIsSemanticBusOpen(true);
+    const onOpenProj = () => setIsSpatialProjectionsOpen(true);
+    const onOpenGov = () => setIsResourceGovernanceOpen(true);
 
     window.addEventListener('phantom:open-automations', onOpenAut);
     window.addEventListener('phantom:open-datagrid', onOpenGrid);
@@ -242,6 +251,9 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
     window.addEventListener('phantom:open-schema', onOpenSchema);
     window.addEventListener('phantom:open-neuro', onOpenNeuro);
     window.addEventListener('phantom:open-lora', onOpenLoRa);
+    window.addEventListener('phantom:open-semanticbus', onOpenBus);
+    window.addEventListener('phantom:open-projections', onOpenProj);
+    window.addEventListener('phantom:open-governance', onOpenGov);
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
@@ -264,6 +276,9 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
       window.removeEventListener('phantom:open-schema', onOpenSchema);
       window.removeEventListener('phantom:open-neuro', onOpenNeuro);
       window.removeEventListener('phantom:open-lora', onOpenLoRa);
+      window.removeEventListener('phantom:open-semanticbus', onOpenBus);
+      window.removeEventListener('phantom:open-projections', onOpenProj);
+      window.removeEventListener('phantom:open-governance', onOpenGov);
     };
   }, []);
 
@@ -847,6 +862,24 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
         isOpen={isLoRaWalkieOpen}
         onClose={() => setIsLoRaWalkieOpen(false)}
         chatTitle={activeChat?.title || 'Бесіда'}
+      />
+
+      <SemanticBusPipesModal
+        isOpen={isSemanticBusOpen}
+        onClose={() => setIsSemanticBusOpen(false)}
+        chatTitle={activeChat?.title || 'Простір'}
+      />
+
+      <SpatialProjectionsModal
+        isOpen={isSpatialProjectionsOpen}
+        onClose={() => setIsSpatialProjectionsOpen(false)}
+        chatTitle={activeChat?.title || 'Простір'}
+      />
+
+      <ResourceGovernanceModal
+        isOpen={isResourceGovernanceOpen}
+        onClose={() => setIsResourceGovernanceOpen(false)}
+        chatTitle={activeChat?.title || 'Система'}
       />
 
       <CallOverlay />

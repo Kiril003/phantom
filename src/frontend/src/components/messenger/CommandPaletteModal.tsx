@@ -25,6 +25,9 @@ import {
   Wifi,
   ShieldAlert,
   Brain,
+  Activity,
+  BatteryCharging,
+  Layers,
 } from 'lucide-react';
 import { useMessengerStore } from '../../stores/messengerStore';
 import { soundFx } from '../../utils/messengerSound';
@@ -274,6 +277,39 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
       icon: Radio,
       action: () => {
         window.dispatchEvent(new CustomEvent('phantom:open-lora'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_semanticbus',
+      category: 'Дії',
+      title: 'Semantic Bus (Live Pipes & RPC)',
+      subtitle: 'Пайпи процесів у Canvas та віддалені RPC виклики',
+      icon: Activity,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-semanticbus'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_projections',
+      category: 'Дії',
+      title: 'Проекційні шари & Semantic Zoom',
+      subtitle: 'Інженерний, менеджерський, клієнтський вигляд та зум',
+      icon: Layers,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-projections'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_governance',
+      category: 'Дії',
+      title: 'Енергоефективність & Binary Diffing',
+      subtitle: 'Battery throttling та ізоляція памʼяті воркерів',
+      icon: BatteryCharging,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-governance'));
         onClose();
       },
     },

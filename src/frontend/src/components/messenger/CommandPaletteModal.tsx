@@ -43,6 +43,7 @@ import {
   Code2,
   Presentation,
   Target,
+  Bot,
 } from 'lucide-react';
 import { useMessengerStore } from '../../stores/messengerStore';
 import { soundFx } from '../../utils/messengerSound';
@@ -578,6 +579,17 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
       icon: Layers,
       action: () => {
         window.dispatchEvent(new CustomEvent('phantom:open-blueprint'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_agentic',
+      category: 'Дії',
+      title: 'Agentic Runtime, Wasm Sandbox & Shamir ZK',
+      subtitle: 'Security Sentinel, Wasm тести, 3D Spatial Audio, Deep Work та бекап',
+      icon: Bot,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-agentic'));
         onClose();
       },
     },

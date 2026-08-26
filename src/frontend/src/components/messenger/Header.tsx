@@ -31,6 +31,7 @@ import {
   History,
   Lock,
   Cpu,
+  Bot,
 } from 'lucide-react';
 import { FocusModeSelector } from './FocusModeSelector';
 import { TeamHuddleBar } from './TeamHuddleBar';
@@ -722,6 +723,17 @@ export const Header: React.FC<HeaderProps> = ({
               >
                 <Zap className="w-4 h-4 text-[#6E7568] shrink-0" strokeWidth={1.75} />
                 <span className="truncate">Студія карток</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  closeMenu();
+                  window.dispatchEvent(new CustomEvent('phantom:open-agentic'));
+                }}
+                className={MENU_ITEM}
+              >
+                <Bot className="w-4 h-4 text-[#D96C35] shrink-0" strokeWidth={1.75} />
+                <span className="truncate">Agentic Runtime & Нейроергономіка</span>
               </button>
 
               {onOpenScheduledMessages && (

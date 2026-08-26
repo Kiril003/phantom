@@ -66,6 +66,10 @@ import { GitNativeDevOpsModal } from './GitNativeDevOpsModal';
 import { AcademicLmsHubModal } from './AcademicLmsHubModal';
 import { CorporateHROpsModal } from './CorporateHROpsModal';
 import { CommerceMicroAppsModal } from './CommerceMicroAppsModal';
+import { HeadlessInfrastructureModal } from './HeadlessInfrastructureModal';
+import { LocalErpEscrowModal } from './LocalErpEscrowModal';
+import { SecOpsComplianceModal } from './SecOpsComplianceModal';
+import { AdvancedResearchMeshModal } from './AdvancedResearchMeshModal';
 import { callEngine } from '../../services/callEngine';
 import { useCallAlerts } from '../../hooks/useCallAlerts';
 import { soundFx } from '../../utils/messengerSound';
@@ -119,6 +123,10 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
   const [isAcademicLmsOpen, setIsAcademicLmsOpen] = useState(false);
   const [isCorporateHROpen, setIsCorporateHROpen] = useState(false);
   const [isCommerceMicroAppsOpen, setIsCommerceMicroAppsOpen] = useState(false);
+  const [isHeadlessInfraOpen, setIsHeadlessInfraOpen] = useState(false);
+  const [isLocalErpEscrowOpen, setIsLocalErpEscrowOpen] = useState(false);
+  const [isSecOpsComplianceOpen, setIsSecOpsComplianceOpen] = useState(false);
+  const [isAdvancedResearchOpen, setIsAdvancedResearchOpen] = useState(false);
   const [focusMode, setFocusMode] = useState<FocusModeType>('available');
   const [isHuddleActive, setIsHuddleActive] = useState(false);
 
@@ -243,6 +251,10 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
     const onOpenLms = () => setIsAcademicLmsOpen(true);
     const onOpenHr = () => setIsCorporateHROpen(true);
     const onOpenCommApp = () => setIsCommerceMicroAppsOpen(true);
+    const onOpenHeadless = () => setIsHeadlessInfraOpen(true);
+    const onOpenErp = () => setIsLocalErpEscrowOpen(true);
+    const onOpenSecOps = () => setIsSecOpsComplianceOpen(true);
+    const onOpenResearch = () => setIsAdvancedResearchOpen(true);
 
     window.addEventListener('phantom:open-automations', onOpenAut);
     window.addEventListener('phantom:open-datagrid', onOpenGrid);
@@ -270,6 +282,10 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
     window.addEventListener('phantom:open-academiclms', onOpenLms);
     window.addEventListener('phantom:open-corporatehr', onOpenHr);
     window.addEventListener('phantom:open-commerce', onOpenCommApp);
+    window.addEventListener('phantom:open-headless', onOpenHeadless);
+    window.addEventListener('phantom:open-erp', onOpenErp);
+    window.addEventListener('phantom:open-secops', onOpenSecOps);
+    window.addEventListener('phantom:open-research', onOpenResearch);
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
@@ -299,6 +315,10 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
       window.removeEventListener('phantom:open-academiclms', onOpenLms);
       window.removeEventListener('phantom:open-corporatehr', onOpenHr);
       window.removeEventListener('phantom:open-commerce', onOpenCommApp);
+      window.removeEventListener('phantom:open-headless', onOpenHeadless);
+      window.removeEventListener('phantom:open-erp', onOpenErp);
+      window.removeEventListener('phantom:open-secops', onOpenSecOps);
+      window.removeEventListener('phantom:open-research', onOpenResearch);
     };
   }, []);
 
@@ -924,6 +944,30 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
         isOpen={isCommerceMicroAppsOpen}
         onClose={() => setIsCommerceMicroAppsOpen(false)}
         chatTitle={activeChat?.title || 'Комерційний простір'}
+      />
+
+      <HeadlessInfrastructureModal
+        isOpen={isHeadlessInfraOpen}
+        onClose={() => setIsHeadlessInfraOpen(false)}
+        chatTitle={activeChat?.title || 'Інфраструктура'}
+      />
+
+      <LocalErpEscrowModal
+        isOpen={isLocalErpEscrowOpen}
+        onClose={() => setIsLocalErpEscrowOpen(false)}
+        chatTitle={activeChat?.title || 'Комерційний простір'}
+      />
+
+      <SecOpsComplianceModal
+        isOpen={isSecOpsComplianceOpen}
+        onClose={() => setIsSecOpsComplianceOpen(false)}
+        chatTitle={activeChat?.title || 'Безпека простору'}
+      />
+
+      <AdvancedResearchMeshModal
+        isOpen={isAdvancedResearchOpen}
+        onClose={() => setIsAdvancedResearchOpen(false)}
+        chatTitle={activeChat?.title || 'Науково-дослідний простір'}
       />
 
       <CallOverlay />

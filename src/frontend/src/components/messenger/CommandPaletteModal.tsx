@@ -30,6 +30,8 @@ import {
   Layers,
   GitBranch,
   ShoppingBag,
+  Server,
+  Compass,
 } from 'lucide-react';
 import { useMessengerStore } from '../../stores/messengerStore';
 import { soundFx } from '../../utils/messengerSound';
@@ -356,6 +358,50 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
       icon: ShoppingBag,
       action: () => {
         window.dispatchEvent(new CustomEvent('phantom:open-commerce'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_headless',
+      category: 'Дії',
+      title: 'Headless Демон & P2P WireGuard Mesh',
+      subtitle: 'Фоновий systemd демон та спільний E2EE буфер обміну',
+      icon: Server,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-headless'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_erp',
+      category: 'Дії',
+      title: 'Local ERP, Склад & Escrow Угоди',
+      subtitle: 'SKU інвентар, податкові відомості та смарт-контракти',
+      icon: Boxes,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-erp'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_secops',
+      category: 'Дії',
+      title: 'SecOps, Merkle-Аудит & DLP',
+      subtitle: 'Захист від витоку даних, водяні знаки та Key Ratchet',
+      icon: ShieldAlert,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-secops'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_research',
+      category: 'Дії',
+      title: 'Семантичний Атлас & Scientific Notebooks',
+      subtitle: '3D Граф знань кафедри та спільні обчислення в просторі',
+      icon: Compass,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-research'));
         onClose();
       },
     },

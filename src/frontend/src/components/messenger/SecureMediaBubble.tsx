@@ -242,7 +242,7 @@ export const SecureMediaBubble: React.FC<Props> = ({ msg, isSelf, onOpenLightbox
               soundFx.playTap();
               onOpenLightbox?.(url, media.name);
             }}
-            className="rounded-[16px] max-w-full sm:max-w-[360px] max-h-[360px] w-auto object-contain cursor-pointer hover:opacity-95 transition-opacity"
+            className="rounded-xl max-w-full sm:max-w-[320px] max-h-[260px] w-auto object-contain cursor-pointer hover:opacity-95 transition-opacity"
           />
           <button
             type="button"

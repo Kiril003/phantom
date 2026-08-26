@@ -2384,27 +2384,23 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </button>
         </div>
 
-        {/* Козир видно ЗАВЖДИ, а не лише в біді: панелі раунду 2 показали, що
-            рядок, який ховається при порожній черзі, мовчить про офлайн-доставку
-            рівно тоді, коли продукт має нею пишатися. */}
-        <button
-          onClick={() => {
-            soundFx.playTap();
-            if (onOpenP2PNetworkModal) onOpenP2PNetworkModal();
-          }}
-          className="mt-1.5 w-full px-2 py-1.5 rounded-[10px] flex items-center gap-2 text-left text-[11.5px] text-[#6E7568] border border-transparent hover:bg-[#F1EBDD]/60 hover:border-[#E8E1D3] transition-colors"
-          title="Ваш вузол приймає і доставляє повідомлення навіть коли співрозмовник офлайн"
-        >
-          <span
-            className={`w-1.5 h-1.5 rounded-full shrink-0 ${queuedCount > 0 ? 'bg-[#C98A2E]' : 'bg-[#4C8A55]'}`}
-          />
-          <Inbox className="w-3.5 h-3.5 text-[color:var(--msg-meta)] shrink-0" strokeWidth={1.75} />
-          <span className="truncate">
-            {queuedCount > 0
-              ? `${queuedCount} ${queuedCount === 1 ? 'повідомлення чекає' : queuedCount < 5 ? 'повідомлення чекають' : 'повідомлень чекають'} на зв'язок`
-              : 'Скринька на вашому вузлі · черга порожня'}
-          </span>
-        </button>
+        {/* Mailbox bar only shown when messages are queued */}
+        {queuedCount > 0 && (
+          <button
+            onClick={() => {
+              soundFx.playTap();
+              if (onOpenP2PNetworkModal) onOpenP2PNetworkModal();
+            }}
+            className="mt-1.5 w-full px-2 py-1 rounded-lg flex items-center gap-2 text-left text-[11px] text-amber-800 bg-amber-50/80 border border-amber-200/80 transition-colors"
+            title="Повідомлення в черзі доставки"
+          >
+            <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-[#C98A2E] animate-pulse" />
+            <Inbox className="w-3.5 h-3.5 text-amber-700 shrink-0" strokeWidth={1.75} />
+            <span className="truncate font-medium">
+              {`${queuedCount} ${queuedCount === 1 ? 'повідомлення чекає' : queuedCount < 5 ? 'повідомлення чекають' : 'повідомлень чекають'} зв'язку`}
+            </span>
+          </button>
+        )}
       </div>
       </div>
     </aside>

@@ -1009,23 +1009,21 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
       {/* 3. Messages Feed & Work OS Canvas Split Container */}
       <div className="relative flex-1 min-h-0 flex flex-row overflow-hidden">
         {/* Floating Quick Action: Canvas Split Toggle */}
-        <div className="absolute top-3 right-4 z-20">
-          <button
-            onClick={() => {
-              soundFx.playTap();
-              setIsCanvasSplitOpen(!isCanvasSplitOpen);
-            }}
-            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold shadow-md transition-all border ${
-              isCanvasSplitOpen
-                ? 'bg-amber-500 text-black border-amber-400 font-bold'
-                : 'bg-[#FDFCF9]/90 hover:bg-[#F3EEE3] text-[#21261F] border-[#E8E1D3] backdrop-blur-md'
-            }`}
-            title="Перемкнути спліт-екран Canvas (Markdown/Рішення)"
-          >
-            <Layers className="w-3.5 h-3.5" />
-            <span>{isCanvasSplitOpen ? 'Сховати Canvas' : 'Живий Canvas'}</span>
-          </button>
-        </div>
+        {!isCanvasSplitOpen && (
+          <div className="absolute top-3 right-4 z-20">
+            <button
+              onClick={() => {
+                soundFx.playTap();
+                setIsCanvasSplitOpen(true);
+              }}
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-[#6E7568] hover:text-[#21261F] bg-[#FAF7F0]/90 hover:bg-[#F3EDE0] border border-[#E5DEC9] backdrop-blur-sm shadow-2xs transition-all"
+              title="Відкрити спліт-документ"
+            >
+              <Layers className="w-3.5 h-3.5 text-[#D96C35]" />
+              <span>Документ</span>
+            </button>
+          </div>
+        )}
 
         {/* Main Messages Stream */}
         <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden">
@@ -1035,7 +1033,7 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
             data-testid="messages-scroller"
             className="flex-1 overflow-y-auto px-3 sm:px-6"
           >
-            <div ref={contentRef} className="msg-column py-3 sm:py-4">
+            <div ref={contentRef} className="msg-column max-w-[760px] mx-auto w-full py-3 sm:py-4">
         {/* Порожня розмова — не пустка: та сама картка, що й у порожньому пошуку. */}
         {(messages || []).length === 0 && (
           <div className="flex-1 flex flex-col items-center justify-center text-center gap-2 px-6 py-12">

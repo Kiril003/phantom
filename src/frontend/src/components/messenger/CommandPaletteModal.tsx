@@ -39,6 +39,10 @@ import {
   Kanban,
   LayoutGrid,
   Split,
+  Workflow,
+  Code2,
+  Presentation,
+  Target,
 } from 'lucide-react';
 import { useMessengerStore } from '../../stores/messengerStore';
 import { soundFx } from '../../utils/messengerSound';
@@ -519,6 +523,50 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
       icon: Compass,
       action: () => {
         window.dispatchEvent(new CustomEvent('phantom:open-breadcrumbs'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_statemachine',
+      category: 'Дії',
+      title: 'Visual State Machines & Pipeline Tracing',
+      subtitle: 'Кінцеві автомати процесів та покрокові таймлайни',
+      icon: Workflow,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-statemachine'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_codediff',
+      category: 'Дії',
+      title: 'Side-by-Side Code Diff & Math Canvas',
+      subtitle: 'Візуальне порівняння коду, формули та Hex Inspector',
+      icon: Code2,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-codediff'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_presentation',
+      category: 'Дії',
+      title: 'Canvas-to-Slides & Speaker Audio Matrix',
+      subtitle: 'Слайд-презентації з Canvas та матриця блокерів',
+      icon: Presentation,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-presentation'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_spotlight',
+      category: 'Дії',
+      title: 'Live Spotlight & Micro-Bounties',
+      subtitle: 'Слідування за ведучим та нагороди за PR блокерів',
+      icon: Target,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-spotlight'));
         onClose();
       },
     },

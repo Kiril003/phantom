@@ -80,6 +80,10 @@ import { PlanningPokerGanttWidgetsModal } from './PlanningPokerGanttWidgetsModal
 import { SpatialMultiPaneWorkspaceModal } from './SpatialMultiPaneWorkspaceModal';
 import { InteractiveMediaAnnotationModal } from './InteractiveMediaAnnotationModal';
 import { SmartBreadcrumbsContextPeekModal } from './SmartBreadcrumbsContextPeekModal';
+import { VisualStateMachinePipelineModal } from './VisualStateMachinePipelineModal';
+import { CodeDiffMathHexInspectorModal } from './CodeDiffMathHexInspectorModal';
+import { CanvasPresentationSpeakerMatrixModal } from './CanvasPresentationSpeakerMatrixModal';
+import { LiveSpotlightMicroBountiesModal } from './LiveSpotlightMicroBountiesModal';
 import { callEngine } from '../../services/callEngine';
 import { useCallAlerts } from '../../hooks/useCallAlerts';
 import { soundFx } from '../../utils/messengerSound';
@@ -147,6 +151,10 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
   const [isSpatialMultiPaneOpen, setIsSpatialMultiPaneOpen] = useState(false);
   const [isMediaAnnotationOpen, setIsMediaAnnotationOpen] = useState(false);
   const [isBreadcrumbsPeekOpen, setIsBreadcrumbsPeekOpen] = useState(false);
+  const [isStateMachinePipelineOpen, setIsStateMachinePipelineOpen] = useState(false);
+  const [isCodeDiffMathHexOpen, setIsCodeDiffMathHexOpen] = useState(false);
+  const [isCanvasPresentationOpen, setIsCanvasPresentationOpen] = useState(false);
+  const [isSpotlightBountiesOpen, setIsSpotlightBountiesOpen] = useState(false);
   const [focusMode, setFocusMode] = useState<FocusModeType>('available');
   const [isHuddleActive, setIsHuddleActive] = useState(false);
 
@@ -285,6 +293,10 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
     const onOpenMultiPane = () => setIsSpatialMultiPaneOpen(true);
     const onOpenMediaAnnot = () => setIsMediaAnnotationOpen(true);
     const onOpenBreadcrumbs = () => setIsBreadcrumbsPeekOpen(true);
+    const onOpenStateMachine = () => setIsStateMachinePipelineOpen(true);
+    const onOpenCodeDiff = () => setIsCodeDiffMathHexOpen(true);
+    const onOpenPresentation = () => setIsCanvasPresentationOpen(true);
+    const onOpenSpotlight = () => setIsSpotlightBountiesOpen(true);
 
     window.addEventListener('phantom:open-automations', onOpenAut);
     window.addEventListener('phantom:open-datagrid', onOpenGrid);
@@ -326,6 +338,10 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
     window.addEventListener('phantom:open-multipane', onOpenMultiPane);
     window.addEventListener('phantom:open-mediaannotation', onOpenMediaAnnot);
     window.addEventListener('phantom:open-breadcrumbs', onOpenBreadcrumbs);
+    window.addEventListener('phantom:open-statemachine', onOpenStateMachine);
+    window.addEventListener('phantom:open-codediff', onOpenCodeDiff);
+    window.addEventListener('phantom:open-presentation', onOpenPresentation);
+    window.addEventListener('phantom:open-spotlight', onOpenSpotlight);
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
@@ -369,6 +385,10 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
       window.removeEventListener('phantom:open-multipane', onOpenMultiPane);
       window.removeEventListener('phantom:open-mediaannotation', onOpenMediaAnnot);
       window.removeEventListener('phantom:open-breadcrumbs', onOpenBreadcrumbs);
+      window.removeEventListener('phantom:open-statemachine', onOpenStateMachine);
+      window.removeEventListener('phantom:open-codediff', onOpenCodeDiff);
+      window.removeEventListener('phantom:open-presentation', onOpenPresentation);
+      window.removeEventListener('phantom:open-spotlight', onOpenSpotlight);
     };
   }, []);
 
@@ -1078,6 +1098,30 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
         isOpen={isBreadcrumbsPeekOpen}
         onClose={() => setIsBreadcrumbsPeekOpen(false)}
         chatTitle={activeChat?.title || 'Контекстна навігація'}
+      />
+
+      <VisualStateMachinePipelineModal
+        isOpen={isStateMachinePipelineOpen}
+        onClose={() => setIsStateMachinePipelineOpen(false)}
+        chatTitle={activeChat?.title || 'Робочий процес'}
+      />
+
+      <CodeDiffMathHexInspectorModal
+        isOpen={isCodeDiffMathHexOpen}
+        onClose={() => setIsCodeDiffMathHexOpen(false)}
+        chatTitle={activeChat?.title || 'Код, математика та двійкові дані'}
+      />
+
+      <CanvasPresentationSpeakerMatrixModal
+        isOpen={isCanvasPresentationOpen}
+        onClose={() => setIsCanvasPresentationOpen(false)}
+        chatTitle={activeChat?.title || 'Презентація & Аналітика'}
+      />
+
+      <LiveSpotlightMicroBountiesModal
+        isOpen={isSpotlightBountiesOpen}
+        onClose={() => setIsSpotlightBountiesOpen(false)}
+        chatTitle={activeChat?.title || 'Інтерактивна взаємодія'}
       />
 
       <CallOverlay />

@@ -34,6 +34,9 @@ import {
   Compass,
   Flame,
   Moon,
+  BarChart3,
+  PenTool,
+  Kanban,
 } from 'lucide-react';
 import { useMessengerStore } from '../../stores/messengerStore';
 import { soundFx } from '../../utils/messengerSound';
@@ -448,6 +451,39 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
       icon: Moon,
       action: () => {
         window.dispatchEvent(new CustomEvent('phantom:open-biocontext'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_vis3d',
+      category: 'Дії',
+      title: 'Data-to-Graph & 3D CAD В\'ювер',
+      subtitle: 'Інтерактивні графіки, Mermaid схеми та 3D моделі',
+      icon: BarChart3,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-vis3d'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_whiteboard',
+      category: 'Дії',
+      title: 'Multiplayer Whiteboard & Code Runner',
+      subtitle: 'Спільні стікери, курсори колег та Wasm Playground',
+      icon: PenTool,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-whiteboard'));
+        onClose();
+      },
+    },
+    {
+      id: 'act_poker',
+      category: 'Дії',
+      title: 'Planning Poker & Шкала Ганта',
+      subtitle: 'Оцінювання складності задач, таймлайни та віджети',
+      icon: Kanban,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-poker'));
         onClose();
       },
     },

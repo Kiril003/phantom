@@ -74,6 +74,9 @@ import { PhantomRuntimeVfsModal } from './PhantomRuntimeVfsModal';
 import { DisasterMeshDtnModal } from './DisasterMeshDtnModal';
 import { AutonomousOpsWarRoomModal } from './AutonomousOpsWarRoomModal';
 import { HumanCentricBioContextModal } from './HumanCentricBioContextModal';
+import { InteractiveVisualization3DModal } from './InteractiveVisualization3DModal';
+import { CollaborativeWhiteboardPlaygroundModal } from './CollaborativeWhiteboardPlaygroundModal';
+import { PlanningPokerGanttWidgetsModal } from './PlanningPokerGanttWidgetsModal';
 import { callEngine } from '../../services/callEngine';
 import { useCallAlerts } from '../../hooks/useCallAlerts';
 import { soundFx } from '../../utils/messengerSound';
@@ -135,6 +138,9 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
   const [isDisasterMeshOpen, setIsDisasterMeshOpen] = useState(false);
   const [isAutonomousOpsOpen, setIsAutonomousOpsOpen] = useState(false);
   const [isHumanCentricBioOpen, setIsHumanCentricBioOpen] = useState(false);
+  const [isInteractiveVis3DOpen, setIsInteractiveVis3DOpen] = useState(false);
+  const [isCollaborativeWhiteboardOpen, setIsCollaborativeWhiteboardOpen] = useState(false);
+  const [isPlanningPokerGanttOpen, setIsPlanningPokerGanttOpen] = useState(false);
   const [focusMode, setFocusMode] = useState<FocusModeType>('available');
   const [isHuddleActive, setIsHuddleActive] = useState(false);
 
@@ -267,6 +273,9 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
     const onOpenDisaster = () => setIsDisasterMeshOpen(true);
     const onOpenWarRoom = () => setIsAutonomousOpsOpen(true);
     const onOpenBio = () => setIsHumanCentricBioOpen(true);
+    const onOpenVis3D = () => setIsInteractiveVis3DOpen(true);
+    const onOpenWhiteboard = () => setIsCollaborativeWhiteboardOpen(true);
+    const onOpenPoker = () => setIsPlanningPokerGanttOpen(true);
 
     window.addEventListener('phantom:open-automations', onOpenAut);
     window.addEventListener('phantom:open-datagrid', onOpenGrid);
@@ -302,6 +311,9 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
     window.addEventListener('phantom:open-disaster', onOpenDisaster);
     window.addEventListener('phantom:open-warroom', onOpenWarRoom);
     window.addEventListener('phantom:open-biocontext', onOpenBio);
+    window.addEventListener('phantom:open-vis3d', onOpenVis3D);
+    window.addEventListener('phantom:open-whiteboard', onOpenWhiteboard);
+    window.addEventListener('phantom:open-poker', onOpenPoker);
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
@@ -339,6 +351,9 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
       window.removeEventListener('phantom:open-disaster', onOpenDisaster);
       window.removeEventListener('phantom:open-warroom', onOpenWarRoom);
       window.removeEventListener('phantom:open-biocontext', onOpenBio);
+      window.removeEventListener('phantom:open-vis3d', onOpenVis3D);
+      window.removeEventListener('phantom:open-whiteboard', onOpenWhiteboard);
+      window.removeEventListener('phantom:open-poker', onOpenPoker);
     };
   }, []);
 
@@ -1012,6 +1027,24 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
         isOpen={isHumanCentricBioOpen}
         onClose={() => setIsHumanCentricBioOpen(false)}
         chatTitle={activeChat?.title || 'Особистий простір'}
+      />
+
+      <InteractiveVisualization3DModal
+        isOpen={isInteractiveVis3DOpen}
+        onClose={() => setIsInteractiveVis3DOpen(false)}
+        chatTitle={activeChat?.title || 'Візуалізація даних'}
+      />
+
+      <CollaborativeWhiteboardPlaygroundModal
+        isOpen={isCollaborativeWhiteboardOpen}
+        onClose={() => setIsCollaborativeWhiteboardOpen(false)}
+        chatTitle={activeChat?.title || 'Мультиплеєрний простір'}
+      />
+
+      <PlanningPokerGanttWidgetsModal
+        isOpen={isPlanningPokerGanttOpen}
+        onClose={() => setIsPlanningPokerGanttOpen(false)}
+        chatTitle={activeChat?.title || 'Командне планування'}
       />
 
       <CallOverlay />

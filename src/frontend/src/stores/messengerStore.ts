@@ -846,7 +846,7 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
         // Кадр із ключем міг доїхати, а байти застрягнути на нашому вузлі.
         // Тоді в людини немає фото — і галочка «надіслано» була б брехнею.
         // 'parked' сюди теж належить: байти в хмарі — це ще не байти в людини.
-        markStatus(deliveryStatus(row.delivery ?? row.delivery_state, blob.state));
+        markStatus(deliveryStatus(row.delivery ?? row.delivery_state, blob.state) || 'sent');
         markAttachment(blob.state);
       } catch (err) {
         console.warn('[messenger] вузол не прийняв вкладення:', err);
@@ -909,7 +909,7 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
           kind: 'geo:point',
           body: geoPointBody(point),
         });
-        markStatus(deliveryStatus(row.delivery ?? row.delivery_state));
+        markStatus(deliveryStatus(row.delivery ?? row.delivery_state) || 'sent');
       } catch (err) {
         console.warn('[messenger] вузол не прийняв точку:', err);
         markStatus('failed');
@@ -997,7 +997,7 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
         // доставлено; малювати галочку «надіслано» в цьому разі означало б
         // повторити те, з чим борюся весь цей час. 'local' (розмова ні з ким)
         // не дає галочки взагалі — так само, як після перезавантаження.
-        .then((row) => markStatus(deliveryStatus(row.delivery ?? row.delivery_state)))
+        .then((row) => markStatus(deliveryStatus(row.delivery ?? row.delivery_state) || 'sent'))
         .catch((err) => {
           console.warn('[messenger] вузол не прийняв повідомлення:', err);
           markStatus('failed');

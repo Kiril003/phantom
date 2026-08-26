@@ -895,10 +895,9 @@ async def append_message(
             row.outbound_frame = None if delivered else prepared.frame.hex()
             await session.commit()
 
-    # Інші пристрої власника мають побачити повідомлення без опитування —
-    # телефон і ПК уже висять на цьому ж хабі, іншого каналу вигадувати не треба.
+    # Інші пристрої та учасники мають побачити повідомлення без опитування
     await hub.broadcast(
-        "messenger", "message:new", out.model_dump(mode="json"), user_id=user.id
+        "messenger", "message:new", out.model_dump(mode="json")
     )
     return out
 
@@ -1366,7 +1365,7 @@ async def receive_frame(
     # вкладка одержувача замінила бульбашку надгробком, а не додала рядок.
     event = "message:deleted" if row.deleted_at else "message:new"
     await hub.broadcast(
-        "messenger", event, out.model_dump(mode="json"), user_id=owner
+        "messenger", event, out.model_dump(mode="json")
     )
     return out.model_dump(mode="json")
 
@@ -1573,7 +1572,7 @@ async def delete_message(
 
     out = _message_out(row)
     await hub.broadcast(
-        "messenger", "message:deleted", out.model_dump(mode="json"), user_id=user.id
+        "messenger", "message:deleted", out.model_dump(mode="json")
     )
     return {
         "deleted": True,

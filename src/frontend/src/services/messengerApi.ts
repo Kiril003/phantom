@@ -310,10 +310,10 @@ export function deliveryStatus(
   if (attachmentState && attachmentState !== 'sent' && attachmentState !== 'stored') {
     return 'queued';
   }
-  if (deliveryState === 'sent') return 'sent';
   if (deliveryState === 'queued') return 'queued';
+  if (deliveryState === 'failed') return 'failed';
   if (deliveryState === 'sending') return 'sending';
-  return undefined;
+  return 'sent';
 }
 
 export function messageFromNode(row: NodeMessage, selfId: string, peerNodeId?: string): Message {

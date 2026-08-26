@@ -84,6 +84,7 @@ import { VisualStateMachinePipelineModal } from './VisualStateMachinePipelineMod
 import { CodeDiffMathHexInspectorModal } from './CodeDiffMathHexInspectorModal';
 import { CanvasPresentationSpeakerMatrixModal } from './CanvasPresentationSpeakerMatrixModal';
 import { LiveSpotlightMicroBountiesModal } from './LiveSpotlightMicroBountiesModal';
+import { PhantomArchitectureBlueprintModal } from './PhantomArchitectureBlueprintModal';
 import { callEngine } from '../../services/callEngine';
 import { useCallAlerts } from '../../hooks/useCallAlerts';
 import { soundFx } from '../../utils/messengerSound';
@@ -155,6 +156,7 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
   const [isCodeDiffMathHexOpen, setIsCodeDiffMathHexOpen] = useState(false);
   const [isCanvasPresentationOpen, setIsCanvasPresentationOpen] = useState(false);
   const [isSpotlightBountiesOpen, setIsSpotlightBountiesOpen] = useState(false);
+  const [isBlueprintOpen, setIsBlueprintOpen] = useState(false);
   const [focusMode, setFocusMode] = useState<FocusModeType>('available');
   const [isHuddleActive, setIsHuddleActive] = useState(false);
 
@@ -297,6 +299,7 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
     const onOpenCodeDiff = () => setIsCodeDiffMathHexOpen(true);
     const onOpenPresentation = () => setIsCanvasPresentationOpen(true);
     const onOpenSpotlight = () => setIsSpotlightBountiesOpen(true);
+    const onOpenBlueprint = () => setIsBlueprintOpen(true);
 
     window.addEventListener('phantom:open-automations', onOpenAut);
     window.addEventListener('phantom:open-datagrid', onOpenGrid);
@@ -342,6 +345,7 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
     window.addEventListener('phantom:open-codediff', onOpenCodeDiff);
     window.addEventListener('phantom:open-presentation', onOpenPresentation);
     window.addEventListener('phantom:open-spotlight', onOpenSpotlight);
+    window.addEventListener('phantom:open-blueprint', onOpenBlueprint);
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
@@ -389,6 +393,7 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
       window.removeEventListener('phantom:open-codediff', onOpenCodeDiff);
       window.removeEventListener('phantom:open-presentation', onOpenPresentation);
       window.removeEventListener('phantom:open-spotlight', onOpenSpotlight);
+      window.removeEventListener('phantom:open-blueprint', onOpenBlueprint);
     };
   }, []);
 
@@ -1122,6 +1127,12 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
         isOpen={isSpotlightBountiesOpen}
         onClose={() => setIsSpotlightBountiesOpen(false)}
         chatTitle={activeChat?.title || 'Інтерактивна взаємодія'}
+      />
+
+      <PhantomArchitectureBlueprintModal
+        isOpen={isBlueprintOpen}
+        onClose={() => setIsBlueprintOpen(false)}
+        chatTitle={activeChat?.title || 'Архітектурна специфікація'}
       />
 
       <CallOverlay />

@@ -571,6 +571,17 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
       },
     },
     {
+      id: 'act_blueprint',
+      category: 'Дії',
+      title: 'Phantom OS Architecture Blueprint',
+      subtitle: 'Повна специфікація: Block-Node, GitOps, LMS, ERP, Mesh',
+      icon: Layers,
+      action: () => {
+        window.dispatchEvent(new CustomEvent('phantom:open-blueprint'));
+        onClose();
+      },
+    },
+    {
       id: 'act_huddle',
       category: 'Дії',
       title: 'Розпочати Team Huddle',

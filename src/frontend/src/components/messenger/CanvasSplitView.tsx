@@ -17,6 +17,10 @@ import {
   Network,
   User,
   GitBranch,
+  Code2,
+  CheckSquare,
+  Heading,
+  Calculator,
 } from 'lucide-react';
 import { CanvasDocument, CanvasBlock, Message } from '../../types/messenger';
 import { useMessengerStore } from '../../stores/messengerStore';
@@ -40,7 +44,8 @@ export type ExtendedBlockType =
   | 'decision'
   | 'action-item'
   | 'code'
-  | 'callout';
+  | 'callout'
+  | 'math';
 
 export interface ExtendedCanvasBlock extends Omit<CanvasBlock, 'type'> {
   type: ExtendedBlockType;
@@ -73,7 +78,7 @@ export const CanvasSplitView: React.FC<CanvasSplitViewProps> = ({
 
   const storageKey = `phantom_canvas_v3_${chatId}_${threadId}`;
 
-  // Default clean blocks without corporate jargon
+  // Default clean blocks
   const defaultBlocks: ExtendedCanvasBlock[] = [
     {
       id: 'b1',
@@ -104,17 +109,17 @@ export const CanvasSplitView: React.FC<CanvasSplitViewProps> = ({
     },
     {
       id: 'b5',
-      type: 'action-item',
-      content: 'Тестування P2P звʼязку на мобільних пристроях',
-      assignee: 'Саня',
-      checked: false,
+      type: 'code',
+      content: `// P2P DataChannel Mesh Sync\nexport function syncMesh(payload) {\n  peers.forEach(p => p.send(payload));\n}`,
+      language: 'typescript',
       updatedAt: 'щойно',
     },
     {
       id: 'b6',
-      type: 'code',
-      content: `// P2P DataChannel Mesh Sync\nexport function syncMesh(payload) {\n  peers.forEach(p => p.send(payload));\n}`,
-      language: 'typescript',
+      type: 'action-item',
+      content: 'Тестування P2P звʼязку на мобільних пристроях',
+      assignee: 'Саня',
+      checked: false,
       updatedAt: 'щойно',
     },
   ];
@@ -172,6 +177,10 @@ export const CanvasSplitView: React.FC<CanvasSplitViewProps> = ({
     }
     if (newContent.startsWith('/quote ') || newContent.startsWith('> ')) {
       updateBlock(id, { type: 'callout', content: newContent.replace(/^(\/quote|>)\s+/, '') });
+      return;
+    }
+    if (newContent.startsWith('/math ') || newContent.startsWith('$$ ')) {
+      updateBlock(id, { type: 'math', content: newContent.replace(/^(\/math|\$\$)\s+/, '') });
       return;
     }
     updateBlock(id, { content: newContent });
@@ -233,7 +242,9 @@ export const CanvasSplitView: React.FC<CanvasSplitViewProps> = ({
           ? '// Код...'
           : type === 'callout'
           ? 'Примітка або зауваження...'
-          : 'Текст...',
+          : type === 'math'
+          ? 'f(x) = a \\cdot \\sin(bx + c)'
+          : '',
       assignee: type === 'action-item' ? 'Ви' : undefined,
       checked: false,
       updatedAt: 'щойно',
@@ -313,65 +324,70 @@ export const CanvasSplitView: React.FC<CanvasSplitViewProps> = ({
   ];
 
   return (
-    <div className="flex flex-col h-full bg-white text-[#21261F] select-text shadow-xl relative overflow-hidden">
-      {/* 1. Header Toolbar — Clean, Unified, Multi-View */}
-      <div className="px-4 py-3 bg-[#FAF8F5] border-b border-[#E8E1D3] flex items-center justify-between gap-3 shrink-0">
-        <div className="min-w-0 flex-1 flex items-center gap-2">
+    <div className="flex flex-col h-full bg-[#FCFBF8] text-[#21261F] select-text shadow-xl relative overflow-hidden">
+      {/* 1. Header Toolbar — Responsive, Polished, Zero-Overlap */}
+      <div className="px-3 sm:px-4 py-2.5 bg-[#FAF8F5] border-b border-[#E8E1D3] flex flex-wrap items-center justify-between gap-2 shrink-0">
+        {/* Left: Document Title */}
+        <div className="min-w-0 flex items-center gap-2 flex-1 max-w-[280px]">
+          <div className="p-1 rounded-md bg-[#FDF5ED] text-[#D96C35] border border-[#E5DEC9] shrink-0">
+            <FileText className="w-3.5 h-3.5" />
+          </div>
           <input
             type="text"
             value={docTitle}
             onChange={(e) => setDocTitle(e.target.value)}
-            className="w-full max-w-[200px] sm:max-w-xs bg-transparent font-bold text-sm text-[#21261F] focus:outline-none border-b border-transparent focus:border-[#D96C35]/50 pb-0.5 truncate"
-            placeholder="Назва простору..."
+            className="w-full bg-transparent font-bold text-xs sm:text-sm text-[#21261F] focus:outline-none border-b border-transparent focus:border-[#D96C35]/50 pb-0.5 truncate"
+            placeholder="Назва документа..."
           />
-
-          {/* Segmented View Switcher: Doc / Board / Whiteboard */}
-          <div className="flex items-center bg-[#EFE9DC] p-0.5 rounded-lg text-xs font-medium text-[#6E7568]">
-            <button
-              onClick={() => {
-                soundFx.playTap();
-                setViewMode('doc');
-              }}
-              className={`flex items-center gap-1 px-2 py-0.5 rounded-md transition-all ${
-                viewMode === 'doc' ? 'bg-white text-[#21261F] font-semibold shadow-2xs' : 'hover:text-[#21261F]'
-              }`}
-              title="Документ (Notion / Craft)"
-            >
-              <FileText className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Документ</span>
-            </button>
-
-            <button
-              onClick={() => {
-                soundFx.playTap();
-                setViewMode('board');
-              }}
-              className={`flex items-center gap-1 px-2 py-0.5 rounded-md transition-all ${
-                viewMode === 'board' ? 'bg-white text-[#21261F] font-semibold shadow-2xs' : 'hover:text-[#21261F]'
-              }`}
-              title="Канбан-дошка задач"
-            >
-              <LayoutDashboard className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Канбан</span>
-            </button>
-
-            <button
-              onClick={() => {
-                soundFx.playTap();
-                setViewMode('whiteboard');
-              }}
-              className={`flex items-center gap-1 px-2 py-0.5 rounded-md transition-all ${
-                viewMode === 'whiteboard' ? 'bg-white text-[#21261F] font-semibold shadow-2xs' : 'hover:text-[#21261F]'
-              }`}
-              title="Схема / Майндмеп"
-            >
-              <Network className="w-3.5 h-3.5" />
-              <span className="hidden sm:inline">Схема</span>
-            </button>
-          </div>
         </div>
 
-        <div className="flex items-center gap-1.5 shrink-0">
+        {/* Center: View Switcher (Doc / Board / Whiteboard) */}
+        <div className="flex items-center bg-[#EFE9DC] p-0.5 rounded-lg text-xs font-medium text-[#6E7568] shrink-0">
+          <button
+            onClick={() => {
+              soundFx.playTap();
+              setViewMode('doc');
+            }}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-md transition-all ${
+              viewMode === 'doc' ? 'bg-white text-[#21261F] font-bold shadow-2xs' : 'hover:text-[#21261F]'
+            }`}
+            title="Документ"
+          >
+            <FileText className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">Документ</span>
+          </button>
+
+          <button
+            onClick={() => {
+              soundFx.playTap();
+              setViewMode('board');
+            }}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-md transition-all ${
+              viewMode === 'board' ? 'bg-white text-[#21261F] font-bold shadow-2xs' : 'hover:text-[#21261F]'
+            }`}
+            title="Канбан-дошка"
+          >
+            <LayoutDashboard className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">Канбан</span>
+          </button>
+
+          <button
+            onClick={() => {
+              soundFx.playTap();
+              setViewMode('whiteboard');
+            }}
+            className={`flex items-center gap-1 px-2.5 py-1 rounded-md transition-all ${
+              viewMode === 'whiteboard' ? 'bg-white text-[#21261F] font-bold shadow-2xs' : 'hover:text-[#21261F]'
+            }`}
+            title="Схема"
+          >
+            <Network className="w-3.5 h-3.5" />
+            <span className="hidden md:inline">Схема</span>
+          </button>
+        </div>
+
+        {/* Right: Quick Action Controls */}
+        <div className="flex items-center gap-1 shrink-0">
           <button
             onClick={undo}
             disabled={historyIdx === 0}
@@ -383,7 +399,7 @@ export const CanvasSplitView: React.FC<CanvasSplitViewProps> = ({
 
           <button
             onClick={runAiSynthesis}
-            className="flex items-center gap-1 px-2.5 py-1 bg-white hover:bg-[#FDF5ED] border border-[#E5DEC9] rounded-lg text-xs font-semibold text-[#D96C35] transition-all"
+            className="flex items-center gap-1 px-2 py-1 bg-white hover:bg-[#FDF5ED] border border-[#E5DEC9] rounded-lg text-xs font-semibold text-[#D96C35] transition-all shadow-2xs"
             title="AI аналіз рішень з чату"
           >
             <Sparkles className="w-3.5 h-3.5" />
@@ -400,7 +416,7 @@ export const CanvasSplitView: React.FC<CanvasSplitViewProps> = ({
 
           <button
             onClick={handlePublishToChat}
-            className="flex items-center gap-1 px-3 py-1 bg-[#D96C35] hover:bg-[#B85425] text-white rounded-lg text-xs font-semibold shadow-2xs transition-all"
+            className="flex items-center gap-1 px-2.5 py-1 bg-[#D96C35] hover:bg-[#B85425] text-white rounded-lg text-xs font-semibold shadow-xs transition-all"
             title="Поділитися в чаті"
           >
             <Send className="w-3 h-3" />
@@ -429,20 +445,20 @@ export const CanvasSplitView: React.FC<CanvasSplitViewProps> = ({
 
       {/* 2. Multi-View Body */}
 
-      {/* A) DOC MODE (Typography Document) */}
+      {/* A) DOC MODE (Structured Block Document) */}
       {viewMode === 'doc' && (
-        <div className="flex-1 min-h-0 p-6 md:p-8 overflow-y-auto custom-scrollbar space-y-4 max-w-3xl mx-auto w-full">
+        <div className="flex-1 min-h-0 p-4 sm:p-6 md:p-8 overflow-y-auto custom-scrollbar space-y-3 max-w-3xl mx-auto w-full">
           {blocks.map((block, idx) => (
             <div
               key={block.id}
-              className="group relative flex items-start gap-2 transition-all -ml-6 pl-6 rounded-lg hover:bg-[#FAF8F2] py-1"
+              className="group relative flex items-start gap-2 transition-all p-1.5 rounded-xl hover:bg-white border border-transparent hover:border-[#EAE3D5] hover:shadow-2xs"
             >
-              {/* Hover Actions (Reorder / Add / Delete) */}
-              <div className="absolute left-0 top-1.5 opacity-0 group-hover:opacity-100 flex items-center gap-0.5 transition-opacity select-none">
+              {/* Drag / Action Controls (Left gutter, always visible on hover inside card) */}
+              <div className="opacity-0 group-hover:opacity-100 flex items-center gap-0.5 transition-opacity select-none pt-1 shrink-0">
                 <button
                   onClick={() => moveBlock(idx, 'up')}
                   disabled={idx === 0}
-                  className="p-0.5 hover:bg-white rounded text-[#8A9186] hover:text-[#21261F] disabled:opacity-20"
+                  className="p-0.5 hover:bg-[#EFE8DA] rounded text-[#8A9186] hover:text-[#21261F] disabled:opacity-20"
                   title="Вгору"
                 >
                   <ChevronUp className="w-3 h-3" />
@@ -450,49 +466,45 @@ export const CanvasSplitView: React.FC<CanvasSplitViewProps> = ({
                 <button
                   onClick={() => moveBlock(idx, 'down')}
                   disabled={idx === blocks.length - 1}
-                  className="p-0.5 hover:bg-white rounded text-[#8A9186] hover:text-[#21261F] disabled:opacity-20"
+                  className="p-0.5 hover:bg-[#EFE8DA] rounded text-[#8A9186] hover:text-[#21261F] disabled:opacity-20"
                   title="Вниз"
                 >
                   <ChevronDown className="w-3 h-3" />
                 </button>
                 <button
-                  onClick={() => addBlock('text', idx)}
-                  className="p-0.5 hover:bg-white rounded text-[#D96C35]"
-                  title="Додати рядок"
-                >
-                  <Plus className="w-3 h-3" />
-                </button>
-                <button
                   onClick={() => deleteBlock(block.id)}
-                  className="p-0.5 hover:bg-red-50 rounded text-red-500"
-                  title="Видалити"
+                  className="p-0.5 hover:bg-red-50 rounded text-red-400 hover:text-red-600"
+                  title="Видалити блок"
                 >
                   <Trash2 className="w-3 h-3" />
                 </button>
               </div>
 
-              {/* Block Body */}
-              <div className="w-full">
+              {/* Block Content Container */}
+              <div className="flex-1 min-w-0">
                 {block.type === 'heading' ? (
                   <input
                     type="text"
                     value={block.content}
                     onChange={(e) => handleContentChange(block.id, e.target.value)}
-                    placeholder="Заголовок... (або /todo, /decision, /code)"
+                    placeholder="Введіть заголовок..."
                     className="w-full bg-transparent font-bold text-base md:text-lg text-[#21261F] focus:outline-none border-b border-transparent focus:border-[#D96C35]/40 py-1"
                   />
                 ) : block.type === 'decision' ? (
-                  <div className="border-l-2 border-[#D96C35] pl-3 py-1 bg-[#FDF5ED]/60 rounded-r-lg">
+                  <div className="border-l-3 border-[#D96C35] pl-3 py-2 bg-[#FDF5ED] rounded-r-xl border border-r-[#E5DEC9] border-y-[#E5DEC9]">
+                    <span className="text-[10px] uppercase font-bold text-[#D96C35] block pb-0.5">
+                      ✓ Ухвалене рішення
+                    </span>
                     <textarea
                       value={block.content}
                       onChange={(e) => handleContentChange(block.id, e.target.value)}
                       rows={2}
                       className="w-full bg-transparent font-medium text-xs md:text-[13px] text-[#1C241B] focus:outline-none leading-relaxed resize-none"
-                      placeholder="Ухвалене рішення..."
+                      placeholder="Опишіть зафіксоване рішення..."
                     />
                   </div>
                 ) : block.type === 'action-item' ? (
-                  <div className="flex items-center gap-2.5 py-0.5">
+                  <div className="flex items-center gap-2.5 py-1 px-2 rounded-lg bg-white border border-[#E8E1D3]/70">
                     <input
                       type="checkbox"
                       checked={Boolean(block.checked || block.status === 'done')}
@@ -506,81 +518,121 @@ export const CanvasSplitView: React.FC<CanvasSplitViewProps> = ({
                       type="text"
                       value={block.content}
                       onChange={(e) => handleContentChange(block.id, e.target.value)}
-                      placeholder="Завдання... (або /decision, /code)"
+                      placeholder="Введіть завдання..."
                       className={`flex-1 bg-transparent text-xs md:text-[13px] focus:outline-none ${
-                        block.checked || block.status === 'done' ? 'line-through text-[#8A9186]' : 'text-[#21261F]'
+                        block.checked || block.status === 'done' ? 'line-through text-[#8A9186]' : 'text-[#21261F] font-medium'
                       }`}
                     />
                     {block.assignee && (
-                      <span className="text-[11px] text-[#6E7568] px-1.5 py-0.5 rounded bg-[#EFE8DA] font-medium shrink-0">
+                      <span className="text-[11px] font-semibold text-[#D96C35] px-2 py-0.5 rounded-full bg-[#FDF5ED] border border-[#E5DEC9] shrink-0">
                         @{block.assignee}
                       </span>
                     )}
                   </div>
                 ) : block.type === 'code' ? (
-                  <div className="w-full rounded-xl bg-[#1C1F1B] p-3 text-emerald-400 font-mono text-xs overflow-x-auto shadow-2xs my-1">
+                  <div className="w-full rounded-xl bg-[#1C211D] border border-[#2F3830] p-3 text-emerald-400 font-mono text-xs overflow-hidden shadow-2xs my-1">
+                    <div className="flex justify-between items-center pb-2 border-b border-[#2C332D] text-[10px] text-[#8A9186]">
+                      <span>{block.language || 'typescript'}</span>
+                      <span className="text-emerald-500 font-bold">Wasm Live Code</span>
+                    </div>
                     <textarea
                       value={block.content}
                       onChange={(e) => handleContentChange(block.id, e.target.value)}
                       rows={4}
-                      className="w-full bg-transparent font-mono text-xs text-emerald-400 focus:outline-none leading-relaxed resize-y"
+                      className="w-full bg-transparent font-mono text-xs text-emerald-400 focus:outline-none leading-relaxed resize-none pt-2 custom-scrollbar"
+                      placeholder="// Введіть код..."
                     />
                   </div>
                 ) : block.type === 'callout' ? (
-                  <div className="p-3 rounded-xl bg-white border border-[#E5DEC9] text-xs text-[#5F6A60] leading-relaxed">
+                  <div className="p-3 rounded-xl bg-white border border-[#E5DEC9] text-xs text-[#5F6A60] leading-relaxed shadow-2xs">
                     <textarea
                       value={block.content}
                       onChange={(e) => handleContentChange(block.id, e.target.value)}
                       rows={2}
                       className="w-full bg-transparent focus:outline-none resize-none"
+                      placeholder="Примітка або коментар..."
+                    />
+                  </div>
+                ) : block.type === 'math' ? (
+                  <div className="p-3 rounded-xl bg-[#F4F1EA] border border-[#E5DEC9] text-xs font-mono text-indigo-900 leading-relaxed">
+                    <div className="text-[10px] text-indigo-700 font-bold pb-1">$$ LaTeX Формула $$</div>
+                    <textarea
+                      value={block.content}
+                      onChange={(e) => handleContentChange(block.id, e.target.value)}
+                      rows={2}
+                      className="w-full bg-transparent font-mono text-xs text-indigo-950 focus:outline-none resize-none"
+                      placeholder="f(x) = ..."
                     />
                   </div>
                 ) : (
                   <textarea
                     value={block.content}
                     onChange={(e) => handleContentChange(block.id, e.target.value)}
-                    rows={2}
-                    className="w-full bg-transparent text-xs md:text-[13px] text-[#21261F] focus:outline-none leading-relaxed resize-none py-0.5"
-                    placeholder="Введіть текст (підтримує /todo, /decision, /code, /h1)..."
+                    rows={Math.max(1, Math.ceil((block.content.length || 1) / 60))}
+                    className="w-full bg-transparent text-xs md:text-[13px] text-[#21261F] focus:outline-none leading-relaxed resize-none py-1 placeholder:text-[#A0A69D]"
+                    placeholder="Введіть текст (підтримує /todo, /decision, /code, /h1, /math)..."
                   />
                 )}
               </div>
             </div>
           ))}
 
-          {/* Minimalist Bottom Inserter */}
-          <div className="pt-4 flex items-center justify-center gap-2 text-xs text-[#6E7568] border-t border-[#EAE3D5]">
-            <span className="text-[11px] font-medium">+ Додати:</span>
-            <button
-              onClick={() => addBlock('text')}
-              className="px-2 py-1 rounded hover:bg-[#EFE8DA] text-[#21261F] font-medium"
-            >
-              Текст
-            </button>
-            <button
-              onClick={() => addBlock('decision')}
-              className="px-2 py-1 rounded hover:bg-[#FDF5ED] text-[#D96C35] font-semibold"
-            >
-              Рішення
-            </button>
-            <button
-              onClick={() => addBlock('action-item')}
-              className="px-2 py-1 rounded hover:bg-[#EFE8DA] text-[#21261F] font-medium"
-            >
-              Завдання
-            </button>
-            <button
-              onClick={() => addBlock('code')}
-              className="px-2 py-1 rounded hover:bg-[#EFE8DA] text-[#21261F] font-medium"
-            >
-              Код
-            </button>
-            <button
-              onClick={() => addBlock('heading')}
-              className="px-2 py-1 rounded hover:bg-[#EFE8DA] text-[#21261F] font-medium"
-            >
-              Заголовок
-            </button>
+          {/* Clean Modular Bottom Inserter Bar */}
+          <div className="pt-6 border-t border-[#EAE3D5]">
+            <div className="p-2 bg-white border border-[#E5DEC9] rounded-xl shadow-2xs flex flex-wrap items-center justify-center gap-1.5 text-xs text-[#6E7568]">
+              <span className="text-[11px] font-bold text-[#21261F] pr-1.5 flex items-center gap-1">
+                <Plus className="w-3.5 h-3.5 text-[#D96C35]" />
+                Додати блок:
+              </span>
+
+              <button
+                onClick={() => addBlock('text')}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg hover:bg-[#FAF8F5] border border-transparent hover:border-[#E8E1D3] text-[#21261F] font-medium transition-all"
+              >
+                <FileText className="w-3 h-3 text-[#8A9186]" />
+                <span>Текст</span>
+              </button>
+
+              <button
+                onClick={() => addBlock('decision')}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg bg-[#FDF5ED] hover:bg-[#FAEAD9] border border-[#E5DEC9] text-[#D96C35] font-bold transition-all"
+              >
+                <Check className="w-3 h-3 text-[#D96C35]" />
+                <span>Рішення</span>
+              </button>
+
+              <button
+                onClick={() => addBlock('action-item')}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg hover:bg-[#FAF8F5] border border-transparent hover:border-[#E8E1D3] text-[#21261F] font-medium transition-all"
+              >
+                <CheckSquare className="w-3 h-3 text-emerald-600" />
+                <span>Завдання</span>
+              </button>
+
+              <button
+                onClick={() => addBlock('code')}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg hover:bg-[#FAF8F5] border border-transparent hover:border-[#E8E1D3] text-[#21261F] font-medium transition-all"
+              >
+                <Code2 className="w-3 h-3 text-indigo-600" />
+                <span>Код</span>
+              </button>
+
+              <button
+                onClick={() => addBlock('heading')}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg hover:bg-[#FAF8F5] border border-transparent hover:border-[#E8E1D3] text-[#21261F] font-medium transition-all"
+              >
+                <Heading className="w-3 h-3 text-[#8A9186]" />
+                <span>Заголовок</span>
+              </button>
+
+              <button
+                onClick={() => addBlock('math')}
+                className="flex items-center gap-1 px-2.5 py-1 rounded-lg hover:bg-[#FAF8F5] border border-transparent hover:border-[#E8E1D3] text-[#21261F] font-medium transition-all"
+              >
+                <Calculator className="w-3 h-3 text-amber-600" />
+                <span>Формула</span>
+              </button>
+            </div>
           </div>
         </div>
       )}
@@ -644,7 +696,7 @@ export const CanvasSplitView: React.FC<CanvasSplitViewProps> = ({
                         />
 
                         <div className="flex items-center justify-between pt-1 border-t border-[#F5EFE3] text-[10px] text-[#6E7568]">
-                          <span className="flex items-center gap-1">
+                          <span className="flex items-center gap-1 font-medium">
                             <User className="w-3 h-3 text-[#D96C35]" />
                             {b.assignee || 'Всі'}
                           </span>
@@ -741,7 +793,7 @@ export const CanvasSplitView: React.FC<CanvasSplitViewProps> = ({
       )}
 
       {/* 3. Subtle Status Footer */}
-      <div className="px-5 py-2 bg-[#FAF8F5] border-t border-[#E8E1D3] flex items-center justify-between text-[11px] text-[#8A9186]">
+      <div className="px-4 py-2 bg-[#FAF8F5] border-t border-[#E8E1D3] flex items-center justify-between text-[11px] text-[#8A9186]">
         <span>{blocks.length} блоків</span>
         <span className="flex items-center gap-1.5">
           <span className="w-1.5 h-1.5 rounded-full bg-emerald-500" />

@@ -1134,62 +1134,6 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
             ),
           }));
         }
-      } else if (activeChat?.isDemo || activeChat?.type === 'dm' || chatId.startsWith('chat_1') || chatId.startsWith('chat_2') || chatId.startsWith('chat_3')) {
-        // Direct peer response simulation in demo / offline contacts
-        const peerResponses: Record<string, string[]> = {
-          Саня: [
-            'Прийняв, зараз гляну у коді!',
-            'Погоджено. Оновлюю гілку на сервері.',
-            'Супер, перевірив логіку — все чисто.',
-          ],
-          Марина: [
-            'Чудово, оновлюю макети та UI токени!',
-            'Так, перевірила на мобільному — виглядає чудово.',
-            'Добре, додаю це до дизайн-специфікації.',
-          ],
-          Олександр: [
-            'Зрозумів, моніторю метрики кластера.',
-            'Вузол працює штатно, логи чисті.',
-            'Прийнято, синхронізація завершена.',
-          ],
-        };
-
-        const peerName = activeChat?.title?.split(' ')[0] || 'Співрозмовник';
-        const replies = peerResponses[peerName] || [
-          `Прийнято: «${text.trim().slice(0, 30)}...»`,
-          'Погоджено, опрацьовую!',
-          'Зрозумів, все на звʼязку.',
-        ];
-        const replyText = replies[Math.floor(Math.random() * replies.length)];
-
-        setTimeout(() => {
-          soundFx.playReceive();
-          const peerMsgId = `msg_peer_${Date.now()}`;
-          const peerMsg: Message = {
-            id: peerMsgId,
-            senderId: activeChat?.id || 'peer_user',
-            senderName: activeChat?.title || 'Співрозмовник',
-            senderAvatar: activeChat?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
-            timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
-            type: 'text',
-            text: replyText,
-            isSelf: false,
-          };
-          set((s) => ({
-            chats: s.chats.map((c) =>
-              c.id === chatId
-                ? {
-                    ...c,
-                    messages: [...c.messages, peerMsg],
-                    lastKind: 'text',
-                    lastSnippet: replyText.slice(0, 90),
-                    lastAuthor: activeChat?.title || 'Співрозмовник',
-                    lastAt: new Date().toISOString(),
-                  }
-                : c
-            ),
-          }));
-        }, 1200);
       }
     },
 

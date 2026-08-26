@@ -153,15 +153,6 @@ async def _send(
         contact_id=payload.contact_id,
         peer_node_id=payload.peer_node_id,
     )
-    if contact is None:
-        raise HTTPException(status_code=404, detail="контакт не знайдено")
-    if not contact.peer_address:
-        # Ретранслятор возить листи у скриньку — з нього дзвінок не збереш:
-        # він асинхронний за задумом. Тож кажемо прямо, а не «спробуйте пізніше».
-        raise HTTPException(
-            status_code=409, detail="у контакта немає прямої адреси вузла — дзвінок неможливий"
-        )
-
     from api.routes_messenger import _keys
 
     body = {
@@ -173,7 +164,54 @@ async def _send(
         "media": payload.media,
         "reason": payload.reason,
     }
-    delivered = await _post_signal(contact.peer_address, body)
+
+    delivered = False
+    if contact and contact.peer_address:
+        delivered = await _post_signal(contact.peer_address, body)
+
+    if not delivered:
+        # Якщо прямої адреси немає або це парні акаунти на одному сервері — транслюємо через WebSocket хаб
+        from db.models import MessengerContact as MC
+        target_owner_id = None
+        if contact:
+            # Шукаємо парний контакт у іншого користувача
+            reverse = (
+                await session.execute(
+                    select(MC).where(MC.owner_user_id != user.id, MC.peer_node_id == _keys().node_id)
+                )
+            ).scalars().first()
+            if reverse:
+                target_owner_id = reverse.owner_user_id
+        
+        if not target_owner_id and payload.peer_node_id:
+            target_user = (
+                await session.execute(
+                    select(User).where(User.username == payload.peer_node_id.replace("node_", ""))
+                )
+            ).scalars().first()
+            if target_user:
+                target_owner_id = target_user.id
+
+        if target_owner_id or not contact:
+            await hub.broadcast(
+                "call",
+                f"call:{kind}",
+                {
+                    "call_id": payload.call_id,
+                    "kind": kind,
+                    "from_node_id": _keys().node_id,
+                    "contact_id": payload.contact_id or (contact.id if contact else None),
+                    "display_name": user.username or (contact.display_name if contact else "Співрозмовник"),
+                    "verified": (contact.verified_at is not None) if contact else True,
+                    "sdp": payload.sdp,
+                    "candidate": payload.candidate,
+                    "media": payload.media,
+                    "reason": payload.reason,
+                },
+                user_id=target_owner_id,
+            )
+            delivered = True
+
     return SignalResult(
         delivered=delivered,
         call_id=payload.call_id,

@@ -16,8 +16,13 @@ import {
   Code,
   Image as ImageIcon,
   File as FileIcon,
-  Mic,
-  MapPin
+  MapPin,
+  Columns,
+  BarChart2,
+  ShieldCheck,
+  Terminal,
+  Network,
+  GitCommit
 } from 'lucide-react';
 import { Message, ChatMember, MessageReplyInfo } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
@@ -144,6 +149,150 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
       },
       { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 },
     );
+  };
+
+  const sendKanbanWidget = () => {
+    setShowAttachMenu(false);
+    const currentUser = useMessengerStore.getState().currentUser;
+    useMessengerStore.getState().addCustomMessage({
+      id: `msg_kanban_${Date.now()}`,
+      senderId: currentUser.id,
+      senderName: currentUser.name,
+      senderAvatar: currentUser.avatar,
+      timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
+      type: 'widget:kanban',
+      isSelf: true,
+      kanbanData: {
+        id: `k_${Date.now()}`,
+        title: 'Командний Спринт & Завдання',
+        columns: [
+          {
+            id: 'c1',
+            title: 'Черга (To Do)',
+            items: [{ id: 'i1', title: 'Архітектурний огляд Phase 1', priority: 'high' }],
+          },
+          {
+            id: 'c2',
+            title: 'В роботі (In Progress)',
+            items: [{ id: 'i2', title: 'Реалізація Canvas Split-View', priority: 'urgent', assignee: 'Ви' }],
+          },
+          {
+            id: 'c3',
+            title: 'Завершено (Done)',
+            items: [{ id: 'i3', title: 'Підготовка середовища', priority: 'med' }],
+          },
+        ],
+      },
+    });
+  };
+
+  const sendVotingWidget = () => {
+    setShowAttachMenu(false);
+    const currentUser = useMessengerStore.getState().currentUser;
+    useMessengerStore.getState().addCustomMessage({
+      id: `msg_voting_${Date.now()}`,
+      senderId: currentUser.id,
+      senderName: currentUser.name,
+      senderAvatar: currentUser.avatar,
+      timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
+      type: 'widget:voting',
+      isSelf: true,
+      votingData: {
+        id: `v_${Date.now()}`,
+        question: 'Затвердження релізу Work OS (v1.0)',
+        options: [
+          { id: 'o1', text: 'Затвердити та викатити у продакшн', votes: 1, voters: [currentUser.id] },
+          { id: 'o2', text: 'Потрібно більше тестів', votes: 0, voters: [] },
+          { id: 'o3', text: 'Доопрацювати UI деталі', votes: 0, voters: [] },
+        ],
+        totalVotes: 1,
+        winningOptionId: 'o1',
+        deadline: 'до кінця дня',
+      },
+    });
+  };
+
+  const sendRACIWidget = () => {
+    setShowAttachMenu(false);
+    const currentUser = useMessengerStore.getState().currentUser;
+    useMessengerStore.getState().addCustomMessage({
+      id: `msg_raci_${Date.now()}`,
+      senderId: currentUser.id,
+      senderName: currentUser.name,
+      senderAvatar: currentUser.avatar,
+      timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
+      type: 'widget:raci',
+      isSelf: true,
+      raciData: {
+        id: `raci_${Date.now()}`,
+        title: 'Матриця відповідальності релізу',
+        roles: ['Тімлід', 'Frontend', 'Backend', 'DevOps'],
+        rows: [
+          { id: 'r1', task: 'Розгортання вузла Phantom OS', r: 'DevOps', a: 'Тімлід', c: 'Backend', i: 'Frontend' },
+          { id: 'r2', task: 'Інтеграція Canvas & Віджетів', r: 'Frontend', a: 'Тімлід', c: 'Дизайн', i: 'Всі' },
+          { id: 'r3', task: 'P2P Swarm & Cloudflare R2 міст', r: 'Backend', a: 'Тімлід', c: 'DevOps', i: 'Frontend' },
+        ],
+      },
+    });
+  };
+
+  const sendCodeRunnerWidget = () => {
+    setShowAttachMenu(false);
+    const currentUser = useMessengerStore.getState().currentUser;
+    useMessengerStore.getState().addCustomMessage({
+      id: `msg_coderunner_${Date.now()}`,
+      senderId: currentUser.id,
+      senderName: currentUser.name,
+      senderAvatar: currentUser.avatar,
+      timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
+      type: 'widget:code-runner',
+      isSelf: true,
+      codeRunnerData: {
+        id: `cr_${Date.now()}`,
+        title: 'Тестовий запуск сніпету',
+        language: 'javascript',
+        code: `// Розрахунок метрик простору\nconst nodes = 8;\nconst throughputMbps = 940;\nconsole.log("P2P Mesh Throughput:", nodes * throughputMbps, "Mbps");`,
+        status: 'idle',
+      },
+    });
+  };
+
+  const sendMermaidWidget = () => {
+    setShowAttachMenu(false);
+    const currentUser = useMessengerStore.getState().currentUser;
+    useMessengerStore.getState().addCustomMessage({
+      id: `msg_mermaid_${Date.now()}`,
+      senderId: currentUser.id,
+      senderName: currentUser.name,
+      senderAvatar: currentUser.avatar,
+      timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
+      type: 'embed:mermaid',
+      isSelf: true,
+      mermaidData: {
+        title: 'Архітектура P2P Work OS',
+        code: `graph TD\nClient[Phantom Client] -->|E2EE Encrypted| Relay[Phantom Relay]\nRelay -->|P2P Mesh| Sibling[Peer Node]\nClient -->|Local Blobs| R2[Cloudflare R2 Bucket]`,
+        caption: 'Топологія передачі шифроблобів та синхронізації',
+      },
+    });
+  };
+
+  const sendDiffWidget = () => {
+    setShowAttachMenu(false);
+    const currentUser = useMessengerStore.getState().currentUser;
+    useMessengerStore.getState().addCustomMessage({
+      id: `msg_diff_${Date.now()}`,
+      senderId: currentUser.id,
+      senderName: currentUser.name,
+      senderAvatar: currentUser.avatar,
+      timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
+      type: 'embed:diff',
+      isSelf: true,
+      codeDiffData: {
+        filename: 'src/core/router.ts',
+        oldCode: `export function route(req) {\n  return handleClassicChat(req);\n}`,
+        newCode: `export function route(req) {\n  // Work OS: hybrid thread to canvas & micro-widgets\n  return handleWorkOS(req);\n}`,
+      },
+    });
   };
 
   /**
@@ -711,19 +860,32 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
                       <span className="flex-1 font-semibold">{label}</span>
                     </button>
                   ))}
-                  {[{ icon: Mic, label: 'Голосове' }].map(({ icon: Icon, label }) => (
+
+                  <div className="px-2 py-1 border-t border-[#F1EBDD] mt-1 pt-1">
+                    <span className="text-[10px] font-extrabold text-[#6E7568] uppercase tracking-wide">
+                      Work OS Віджети
+                    </span>
+                  </div>
+
+                  {[
+                    { icon: Columns, label: 'Kanban Спринт', pick: sendKanbanWidget, color: 'text-amber-500' },
+                    { icon: BarChart2, label: 'Голосування', pick: sendVotingWidget, color: 'text-emerald-500' },
+                    { icon: ShieldCheck, label: 'Матриця RACI', pick: sendRACIWidget, color: 'text-purple-500' },
+                    { icon: Terminal, label: 'Code Runner', pick: sendCodeRunnerWidget, color: 'text-cyan-500' },
+                    { icon: Network, label: 'Mermaid Схема', pick: sendMermaidWidget, color: 'text-indigo-500' },
+                    { icon: GitCommit, label: 'Git Diff код', pick: sendDiffWidget, color: 'text-emerald-500' },
+                  ].map(({ icon: Icon, label, pick, color }) => (
                     <button
                       key={label}
                       type="button"
-                      disabled
-                      className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl text-left text-xs text-[color:var(--msg-meta)] cursor-not-allowed"
-                      title="Скоро"
+                      onClick={() => {
+                        soundFx.playTap();
+                        pick();
+                      }}
+                      className="w-full flex items-center gap-2.5 px-2.5 py-1.5 rounded-xl text-left text-xs text-[#21261F] hover:bg-[#F1EBDD] transition-colors"
                     >
-                      <Icon className="w-4 h-4 shrink-0" strokeWidth={1.75} />
+                      <Icon className={`w-4 h-4 shrink-0 ${color}`} strokeWidth={1.75} />
                       <span className="flex-1 font-semibold">{label}</span>
-                      <span className="text-[9.5px] font-bold uppercase tracking-wide bg-[#F1EBDD] text-[#6E7568] px-1.5 py-0.5 rounded-full">
-                        скоро
-                      </span>
                     </button>
                   ))}
                 </div>

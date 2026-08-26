@@ -32,7 +32,16 @@ export type MessageType =
   | 'task-list'
   | 'multi-quote'
   | 'file'
-  | 'system';
+  | 'system'
+  | 'canvas-doc'
+  | 'widget:kanban'
+  | 'widget:voting'
+  | 'widget:raci'
+  | 'widget:code-runner'
+  | 'embed:mermaid'
+  | 'embed:diff'
+  | 'embed:svg'
+  | 'webhook:event';
 
 export type ChatCircle = 'all' | 'work' | 'family' | 'friends' | 'study' | 'communities' | 'saved';
 
@@ -275,6 +284,126 @@ export interface ThinkingStage {
   durationMs?: number;
 }
 
+export interface CanvasBlock {
+  id: string;
+  type: 'heading' | 'text' | 'decision' | 'action-item' | 'code' | 'checklist';
+  content: string;
+  authorId?: string;
+  authorName?: string;
+  updatedAt: string;
+  checked?: boolean;
+}
+
+export interface CanvasDocument {
+  id: string;
+  threadId: string;
+  conversationId: string;
+  title: string;
+  blocks: CanvasBlock[];
+  rawMarkdown: string;
+  decisionsCount: number;
+  openQuestionsCount: number;
+  lastUpdated: string;
+  updatedBy: string;
+}
+
+export interface KanbanCard {
+  id: string;
+  title: string;
+  description?: string;
+  assignee?: string;
+  priority?: 'low' | 'med' | 'high' | 'urgent';
+  tags?: string[];
+}
+
+export interface KanbanColumn {
+  id: string;
+  title: string;
+  color?: string;
+  items: KanbanCard[];
+}
+
+export interface KanbanData {
+  id: string;
+  title: string;
+  columns: KanbanColumn[];
+}
+
+export interface VotingOption {
+  id: string;
+  text: string;
+  votes: number;
+  voters: string[];
+}
+
+export interface VotingData {
+  id: string;
+  question: string;
+  options: VotingOption[];
+  deadline?: string;
+  isClosed?: boolean;
+  totalVotes: number;
+  winningOptionId?: string;
+  allowMultiple?: boolean;
+}
+
+export interface RACIRow {
+  id: string;
+  task: string;
+  r: string; // Responsible
+  a: string; // Accountable
+  c: string; // Consulted
+  i: string; // Informed
+}
+
+export interface RACIData {
+  id: string;
+  title: string;
+  roles: string[];
+  rows: RACIRow[];
+}
+
+export interface CodeRunnerData {
+  id: string;
+  title?: string;
+  language: 'javascript' | 'typescript' | 'python' | 'shell';
+  code: string;
+  lastOutput?: string;
+  status?: 'idle' | 'running' | 'success' | 'error';
+}
+
+export interface MermaidData {
+  code: string;
+  title?: string;
+  caption?: string;
+}
+
+export interface CodeDiffData {
+  filename: string;
+  oldCode: string;
+  newCode: string;
+  language?: string;
+}
+
+export interface SvgPreviewData {
+  svgContent: string;
+  title?: string;
+  viewBox?: string;
+}
+
+export interface WebhookEventData {
+  source: 'github' | 'gitlab' | 'gitea' | 'ci' | 'sentry' | 'custom';
+  eventType: string;
+  repository?: string;
+  sender?: string;
+  title: string;
+  description?: string;
+  url?: string;
+  status?: 'success' | 'failure' | 'pending' | 'neutral';
+  commitHash?: string;
+  timestamp: string;
+}
+
 export interface Message {
   id: string;
   senderId: string;
@@ -302,6 +431,15 @@ export interface Message {
   taskListData?: TaskListData;
   multiQuoteData?: MultiQuoteData;
   fileData?: FileData;
+  canvasData?: CanvasDocument;
+  kanbanData?: KanbanData;
+  votingData?: VotingData;
+  raciData?: RACIData;
+  codeRunnerData?: CodeRunnerData;
+  mermaidData?: MermaidData;
+  codeDiffData?: CodeDiffData;
+  svgPreviewData?: SvgPreviewData;
+  webhookEventData?: WebhookEventData;
   /** Фото або файл із наскрізним ключем — див. SecureMedia. */
   media?: SecureMedia;
   ephemeral?: {

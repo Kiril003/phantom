@@ -57,6 +57,16 @@ import { ReactionPickerModal } from './ReactionPickerModal';
 import { MessageDetailsModal } from './MessageDetailsModal';
 import { DeleteMessageModal } from './DeleteMessageModal';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
+import { CanvasSplitView } from './CanvasSplitView';
+import { KanbanWidgetEmbed } from './widgets/KanbanWidgetEmbed';
+import { VotingWidgetEmbed } from './widgets/VotingWidgetEmbed';
+import { RACIWidgetEmbed } from './widgets/RACIWidgetEmbed';
+import { CodeRunnerWidgetEmbed } from './widgets/CodeRunnerWidgetEmbed';
+import { MermaidEmbed } from './embeds/MermaidEmbed';
+import { CodeDiffEmbed } from './embeds/CodeDiffEmbed';
+import { WebhookEventEmbed } from './embeds/WebhookEventEmbed';
+import { ActionItemChip } from './ActionItemChip';
+import { Layers } from 'lucide-react';
 
 interface ChatAreaProps {
   currentChat?: Chat;
@@ -160,6 +170,7 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
   const [agentTask, setAgentTask] = useState<{ msgId: string; label: string } | null>(null);
   const [savedMessages, setSavedMessages] = useState<Record<string, boolean>>({});
   const [toastNotification, setToastNotification] = useState<string | null>(null);
+  const [isCanvasSplitOpen, setIsCanvasSplitOpen] = useState(false);
 
   // Floating text selection snippet for quick partial quoting
   const [selectedTextSnippet, setSelectedTextSnippet] = useState<{
@@ -990,18 +1001,36 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
         </div>
       )}
 
-      {/* 3. Messages Feed */}
-      {/* Вертикальні відступи лише на самих повідомленнях (10px між групами,
-          3px усередині групи): space-y на скролері перебивав їх специфічністю
-          і робив рівномірні дірки по всій стрічці. */}
-      <div className="relative flex-1 min-h-0 flex flex-col">
-      <div
-        ref={messagesContainerRef}
-        onScroll={handleScroll}
-        data-testid="messages-scroller"
-        className="flex-1 overflow-y-auto px-3 sm:px-6"
-      >
-        <div ref={contentRef} className="msg-column py-3 sm:py-4">
+      {/* 3. Messages Feed & Work OS Canvas Split Container */}
+      <div className="relative flex-1 min-h-0 flex flex-row overflow-hidden">
+        {/* Floating Quick Action: Canvas Split Toggle */}
+        <div className="absolute top-3 right-4 z-20">
+          <button
+            onClick={() => {
+              soundFx.playTap();
+              setIsCanvasSplitOpen(!isCanvasSplitOpen);
+            }}
+            className={`flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold shadow-md transition-all border ${
+              isCanvasSplitOpen
+                ? 'bg-amber-500 text-black border-amber-400 font-bold'
+                : 'bg-[#FDFCF9]/90 hover:bg-[#F3EEE3] text-[#21261F] border-[#E8E1D3] backdrop-blur-md'
+            }`}
+            title="Перемкнути спліт-екран Canvas (Markdown/Рішення)"
+          >
+            <Layers className="w-3.5 h-3.5" />
+            <span>{isCanvasSplitOpen ? 'Сховати Canvas' : 'Живий Canvas'}</span>
+          </button>
+        </div>
+
+        {/* Main Messages Stream */}
+        <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden">
+          <div
+            ref={messagesContainerRef}
+            onScroll={handleScroll}
+            data-testid="messages-scroller"
+            className="flex-1 overflow-y-auto px-3 sm:px-6"
+          >
+            <div ref={contentRef} className="msg-column py-3 sm:py-4">
         {/* Порожня розмова — не пустка: та сама картка, що й у порожньому пошуку. */}
         {(messages || []).length === 0 && (
           <div className="flex-1 flex flex-col items-center justify-center text-center gap-2 px-6 py-12">
@@ -1553,6 +1582,17 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
                     </div>
                   )}
 
+                  {/* AI 1-Click Action Item Detection */}
+                  {msg.text && (
+                    <ActionItemChip
+                      text={msg.text}
+                      senderName={msg.senderName}
+                      onCreateTask={(taskTitle) => {
+                        showToast(`Завдання додано: ${taskTitle}`);
+                      }}
+                    />
+                  )}
+
                   {/* 2. TABLE MESSAGE */}
                   {msg.type === 'table' && msg.tableData && (
                     <div className="w-full max-w-full min-w-0 overflow-hidden">
@@ -1873,6 +1913,80 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
                       <pre className="p-3 bg-[#F1EDE3] text-[#2C4A34] border border-[#E6DFD3] font-mono text-xs rounded-2xl overflow-x-auto select-text">
                         <code>{msg.codeData.code}</code>
                       </pre>
+                    </div>
+                  )}
+
+                  {/* 10a. WORK OS: KANBAN WIDGET */}
+                  {msg.type === 'widget:kanban' && msg.kanbanData && (
+                    <div className="w-full max-w-full min-w-0 overflow-hidden pt-1">
+                      <KanbanWidgetEmbed
+                        data={msg.kanbanData}
+                        isSelf={isSelf}
+                        onUpdate={(updated) => {
+                          useMessengerStore.getState().updateMessage(msg.id, { kanbanData: updated });
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  {/* 10b. WORK OS: VOTING WIDGET */}
+                  {msg.type === 'widget:voting' && msg.votingData && (
+                    <div className="w-full max-w-full min-w-0 overflow-hidden pt-1">
+                      <VotingWidgetEmbed
+                        data={msg.votingData}
+                        isSelf={isSelf}
+                        currentUserId={currentUserId}
+                        onUpdate={(updated) => {
+                          useMessengerStore.getState().updateMessage(msg.id, { votingData: updated });
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  {/* 10c. WORK OS: RACI MATRIX WIDGET */}
+                  {msg.type === 'widget:raci' && msg.raciData && (
+                    <div className="w-full max-w-full min-w-0 overflow-hidden pt-1">
+                      <RACIWidgetEmbed
+                        data={msg.raciData}
+                        isSelf={isSelf}
+                        onUpdate={(updated) => {
+                          useMessengerStore.getState().updateMessage(msg.id, { raciData: updated });
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  {/* 10d. WORK OS: CODE RUNNER WIDGET */}
+                  {msg.type === 'widget:code-runner' && msg.codeRunnerData && (
+                    <div className="w-full max-w-full min-w-0 overflow-hidden pt-1">
+                      <CodeRunnerWidgetEmbed
+                        data={msg.codeRunnerData}
+                        isSelf={isSelf}
+                        onUpdate={(updated) => {
+                          useMessengerStore.getState().updateMessage(msg.id, { codeRunnerData: updated });
+                        }}
+                      />
+                    </div>
+                  )}
+
+                  {/* 10e. WORK OS: MERMAID DIAGRAM EMBED */}
+                  {msg.type === 'embed:mermaid' && msg.mermaidData && (
+                    <div className="w-full max-w-full min-w-0 overflow-hidden pt-1">
+                      <MermaidEmbed data={msg.mermaidData} />
+                    </div>
+                  )}
+
+                  {/* 10f. WORK OS: CODE DIFF EMBED */}
+                  {msg.type === 'embed:diff' && msg.codeDiffData && (
+                    <div className="w-full max-w-full min-w-0 overflow-hidden pt-1">
+                      <CodeDiffEmbed data={msg.codeDiffData} />
+                    </div>
+                  )}
+
+                  {/* 10g. WORK OS: WEBHOOK EVENT EMBED */}
+                  {msg.type === 'webhook:event' && msg.webhookEventData && (
+                    <div className="w-full max-w-full min-w-0 overflow-hidden pt-1">
+                      <WebhookEventEmbed data={msg.webhookEventData} />
                     </div>
                   )}
 
@@ -2280,6 +2394,18 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
           </button>
         )
       )}
+        </div>
+
+        {/* Canvas Split Side Panel */}
+        {isCanvasSplitOpen && (
+          <div className="w-[420px] xl:w-[480px] h-full shrink-0 border-l border-white/10 z-20">
+            <CanvasSplitView
+              chatTitle={currentChat?.title || 'Бесіда'}
+              messages={messages}
+              onClose={() => setIsCanvasSplitOpen(false)}
+            />
+          </div>
+        )}
       </div>
 
       {/* Toast Notification Banner */}

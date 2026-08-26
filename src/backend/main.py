@@ -72,6 +72,7 @@ from api.routes_api_keys import router as api_keys_router
 from api.routes_analytics import router as analytics_router
 from api.routes_members import router as members_router
 from api.routes_marketplace import router as marketplace_router
+from api.routes_work_os import router as work_os_router
 from api.stream import router as stream_router
 
 logging.basicConfig(
@@ -1076,6 +1077,7 @@ def create_app() -> FastAPI:
     app.include_router(messenger_router, prefix=prefix)
     app.include_router(messenger_files_router, prefix=prefix)
     app.include_router(calls_router, prefix=prefix)
+    app.include_router(work_os_router, prefix=prefix)
     # Day-4 FACTS-1 (ADR-FCT-001..004): /api/v1/users/{id}/facts CRUD.
     # ROOT-only writes; self-or-ROOT reads. Plaintext NEVER persisted —
     # values pass through security.crypto.encrypt_pii (Fernet).

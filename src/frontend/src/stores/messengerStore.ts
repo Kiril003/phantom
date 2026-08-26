@@ -95,6 +95,8 @@ export interface MessengerState {
   toggleArchiveChat: (chatId: string) => void;
   addChatToFolder: (folderId: string, chatId: string) => void;
   removeChatFromFolder: (folderId: string, chatId: string) => void;
+  createGroup: (title: string, circle?: ChatCircle, avatar?: string, description?: string) => Promise<string>;
+  createDirectMessage: (name: string, circle?: ChatCircle, avatar?: string) => Promise<string>;
 
   sendMessage: (text: string) => void;
   /**
@@ -124,6 +126,7 @@ export interface MessengerState {
   retrySend: (messageId: string) => Promise<void>;
 
   // Interactive message widget mutators
+  updateMessage: (messageId: string, updates: Partial<Message>) => void;
   updateTableData: (messageId: string, data: any) => void;
   updateTaskListData: (messageId: string, tasks: any) => void;
   votePoll: (messageId: string, optionId: string) => void;
@@ -604,6 +607,136 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
           return f;
         }),
       }));
+    },
+
+    createGroup: async (title, circle = 'work', avatar, description) => {
+      const state = get();
+      const newChatId = `chat_grp_${Date.now()}`;
+      const defaultAvatar =
+        avatar ||
+        'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=200&auto=format&fit=crop&q=80';
+
+      const welcomeMsg: Message = {
+        id: `msg_sys_${Date.now()}`,
+        senderId: state.currentUser.id,
+        senderName: state.currentUser.name,
+        senderAvatar: state.currentUser.avatar,
+        timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
+        type: 'text',
+        text: `✨ Простір «${title}» створено. Тут доступний Живий Canvas рішень та Work OS віджети.`,
+        isSelf: true,
+      };
+
+      const newChat: Chat = {
+        id: newChatId,
+        title,
+        type: 'group',
+        circle,
+        avatar: defaultAvatar,
+        description: description || 'Спільний простір обговорення',
+        unreadCount: 0,
+        pinned: false,
+        muted: false,
+        archived: false,
+        membersCount: 4,
+        members: [
+          {
+            id: state.currentUser.id,
+            name: state.currentUser.name,
+            handle: 'me',
+            avatar: state.currentUser.avatar,
+            role: 'owner',
+            isOnline: true,
+          },
+          {
+            id: 'u_lead',
+            name: 'Олександр (Lead)',
+            handle: 'olexandr_lead',
+            avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
+            role: 'admin',
+            isOnline: true,
+          },
+          {
+            id: 'u_dev',
+            name: 'DevOps Node',
+            handle: 'devops_node',
+            avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80',
+            role: 'member',
+            isOnline: true,
+          },
+          {
+            id: 'u_ai',
+            name: 'PHANTOM Copilot',
+            handle: 'phantom_copilot',
+            avatar: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200&auto=format&fit=crop&q=80',
+            role: 'member',
+            isOnline: true,
+          },
+        ],
+        messages: [welcomeMsg],
+        lastSnippet: `Простір створено`,
+        lastAuthor: 'Я',
+        lastAt: new Date().toISOString(),
+      };
+
+      set((s) => ({
+        chats: [newChat, ...s.chats],
+        activeChatId: newChatId,
+      }));
+
+      try {
+        await messengerApi.createConversation({
+          title,
+          kind: 'group',
+          circle,
+          avatar: defaultAvatar,
+        });
+      } catch (e) {
+        console.warn('[messenger] group saved locally (node offline / demo mode)', e);
+      }
+
+      return newChatId;
+    },
+
+    createDirectMessage: async (name, circle = 'friends', avatar) => {
+      const newChatId = `chat_dm_${Date.now()}`;
+      const defaultAvatar =
+        avatar ||
+        'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=80';
+
+      const newChat: Chat = {
+        id: newChatId,
+        title: name,
+        type: 'dm',
+        circle,
+        avatar: defaultAvatar,
+        unreadCount: 0,
+        pinned: false,
+        muted: false,
+        archived: false,
+        messages: [],
+        lastSnippet: 'Розпочато новий діалог',
+        lastAuthor: 'Я',
+        lastAt: new Date().toISOString(),
+      };
+
+      set((s) => ({
+        chats: [newChat, ...s.chats],
+        activeChatId: newChatId,
+      }));
+
+      try {
+        await messengerApi.createConversation({
+          title: name,
+          kind: 'dm',
+          circle,
+          avatar: defaultAvatar,
+        });
+      } catch (e) {
+        console.warn('[messenger] DM saved locally (node offline / demo mode)', e);
+      }
+
+      return newChatId;
     },
 
     // Message sending & modification
@@ -1220,6 +1353,18 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
     },
 
     // Interactive Widget Update Handlers
+    updateMessage: (messageId, updates) => {
+      set((state) => ({
+        chats: state.chats.map((c) => {
+          if (c.id !== state.activeChatId) return c;
+          return {
+            ...c,
+            messages: c.messages.map((m) => (m.id === messageId ? { ...m, ...updates } : m)),
+          };
+        }),
+      }));
+    },
+
     updateTableData: (messageId, data) => {
       set((state) => ({
         chats: state.chats.map((c) => {

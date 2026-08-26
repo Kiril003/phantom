@@ -34,6 +34,7 @@ export type MessageType =
   | 'file'
   | 'system'
   | 'canvas-doc'
+  | 'widget:canvas'
   | 'widget:kanban'
   | 'widget:voting'
   | 'widget:raci'

@@ -58,6 +58,7 @@ import { MessageDetailsModal } from './MessageDetailsModal';
 import { DeleteMessageModal } from './DeleteMessageModal';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { CanvasSplitView } from './CanvasSplitView';
+import { CanvasCardEmbed } from './widgets/CanvasCardEmbed';
 import { KanbanWidgetEmbed } from './widgets/KanbanWidgetEmbed';
 import { VotingWidgetEmbed } from './widgets/VotingWidgetEmbed';
 import { RACIWidgetEmbed } from './widgets/RACIWidgetEmbed';
@@ -1914,6 +1915,22 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
                       <pre className="p-3 bg-[#F1EDE3] text-[#2C4A34] border border-[#E6DFD3] font-mono text-xs rounded-2xl overflow-x-auto select-text">
                         <code>{msg.codeData.code}</code>
                       </pre>
+                    </div>
+                  )}
+
+                  {/* 10. WORK OS: LIVE CANVAS EMBED */}
+                  {(msg.type === 'widget:canvas' || msg.canvasData) && msg.canvasData && (
+                    <div className="w-full max-w-full min-w-0 overflow-hidden pt-1">
+                      <CanvasCardEmbed
+                        data={msg.canvasData}
+                        isSelf={isSelf}
+                        onOpenSplit={(_doc) => {
+                          setIsCanvasSplitOpen(true);
+                        }}
+                        onUpdate={(updated) => {
+                          useMessengerStore.getState().updateMessage(msg.id, { canvasData: updated });
+                        }}
+                      />
                     </div>
                   )}
 

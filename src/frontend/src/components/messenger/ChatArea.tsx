@@ -176,6 +176,30 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
   const [toastNotification, setToastNotification] = useState<string | null>(null);
   const [isCanvasSplitOpen, setIsCanvasSplitOpen] = useState(false);
   const [canvasWidthMode, setCanvasWidthMode] = useState<'half' | 'wide' | 'full'>('half');
+  const [splitWidth, setSplitWidth] = useState(460);
+  const [isDraggingSplit, setIsDraggingSplit] = useState(false);
+
+  const startDragSplit = (e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsDraggingSplit(true);
+    const startX = e.clientX;
+    const startWidth = splitWidth;
+
+    const onMouseMove = (moveEvent: MouseEvent) => {
+      const delta = startX - moveEvent.clientX;
+      const newWidth = Math.max(340, Math.min(window.innerWidth - 360, startWidth + delta));
+      setSplitWidth(newWidth);
+    };
+
+    const onMouseUp = () => {
+      setIsDraggingSplit(false);
+      window.removeEventListener('mousemove', onMouseMove);
+      window.removeEventListener('mouseup', onMouseUp);
+    };
+
+    window.addEventListener('mousemove', onMouseMove);
+    window.addEventListener('mouseup', onMouseUp);
+  };
 
   // Floating text selection snippet for quick partial quoting
   const [selectedTextSnippet, setSelectedTextSnippet] = useState<{
@@ -2445,23 +2469,39 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
 
         {/* Canvas Split Side Panel */}
         {isCanvasSplitOpen && (
-          <div
-            className={`h-full shrink-0 border-l border-[#E5DEC9] dark:border-white/10 z-20 transition-all duration-300 ${
-              canvasWidthMode === 'full'
-                ? 'w-full absolute inset-0 z-30'
-                : canvasWidthMode === 'wide'
-                ? 'w-[65%] min-w-[520px]'
-                : 'w-[480px] xl:w-1/2 min-w-[400px]'
-            }`}
-          >
-            <CanvasSplitView
-              chatTitle={currentChat?.title || 'Бесіда'}
-              chatId={currentChat?.id}
-              messages={messages}
-              widthMode={canvasWidthMode}
-              onToggleWidthMode={setCanvasWidthMode}
-              onClose={() => setIsCanvasSplitOpen(false)}
-            />
+          <div className="flex h-full shrink-0 relative z-20">
+            {/* Resizing Drag Divider */}
+            {canvasWidthMode !== 'full' && (
+              <div
+                onMouseDown={startDragSplit}
+                className={`w-1 hover:w-1.5 hover:bg-[#D96C35]/60 cursor-col-resize transition-all shrink-0 select-none ${
+                  isDraggingSplit ? 'bg-[#D96C35] w-1.5' : 'bg-[#E5DEC9]'
+                }`}
+                title="Перетягніть для регулювання ширини Canvas"
+              />
+            )}
+            <div
+              style={{
+                width:
+                  canvasWidthMode === 'full'
+                    ? '100%'
+                    : canvasWidthMode === 'wide'
+                    ? '65vw'
+                    : `${splitWidth}px`,
+              }}
+              className={`h-full bg-white transition-all ${
+                canvasWidthMode === 'full' ? 'fixed inset-0 z-40' : ''
+              }`}
+            >
+              <CanvasSplitView
+                chatTitle={currentChat?.title || 'Бесіда'}
+                chatId={currentChat?.id}
+                messages={messages}
+                widthMode={canvasWidthMode}
+                onToggleWidthMode={setCanvasWidthMode}
+                onClose={() => setIsCanvasSplitOpen(false)}
+              />
+            </div>
           </div>
         )}
       </div>

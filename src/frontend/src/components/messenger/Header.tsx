@@ -21,6 +21,8 @@ import {
   Share2,
   Webhook,
   Sparkles,
+  PanelLeftClose,
+  PanelLeftOpen,
 } from 'lucide-react';
 import { FocusModeSelector } from './FocusModeSelector';
 import { TeamHuddleBar } from './TeamHuddleBar';
@@ -58,6 +60,8 @@ interface HeaderProps {
   onStartHuddle?: () => void;
   onLeaveHuddle?: () => void;
   onBack?: () => void;
+  onToggleSidebar?: () => void;
+  isSidebarCollapsed?: boolean;
   activeTransportStatus?: ActiveTransportStatus;
   transportMode?: TransportProtocol;
   networkLatencyMs?: number | null;
@@ -112,6 +116,8 @@ export const Header: React.FC<HeaderProps> = ({
   onStartHuddle,
   onLeaveHuddle,
   onBack,
+  onToggleSidebar,
+  isSidebarCollapsed,
   activeTransportStatus = 'offline',
   transportMode: _transportMode = 'auto',
   networkLatencyMs = null,
@@ -216,6 +222,24 @@ export const Header: React.FC<HeaderProps> = ({
             aria-label="Назад"
           >
             <ChevronLeft className="w-[18px] h-[18px]" strokeWidth={1.75} />
+          </button>
+        )}
+
+        {onToggleSidebar && (
+          <button
+            onClick={() => {
+              soundFx.playTap();
+              onToggleSidebar();
+            }}
+            className={`hidden md:flex ${ICON_BTN} ${ICON_BTN_IDLE} -ml-1`}
+            title={isSidebarCollapsed ? "Показати список чатів (Ctrl+\\)" : "Сховати список чатів (Ctrl+\\)"}
+            aria-label="Перемкнути бічну панель"
+          >
+            {isSidebarCollapsed ? (
+              <PanelLeftOpen className="w-[18px] h-[18px]" strokeWidth={1.75} />
+            ) : (
+              <PanelLeftClose className="w-[18px] h-[18px]" strokeWidth={1.75} />
+            )}
           </button>
         )}
 

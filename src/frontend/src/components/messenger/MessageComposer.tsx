@@ -1,19 +1,12 @@
 import React, { useState, useRef, useEffect, useLayoutEffect } from 'react';
 import {
   Send,
-  Smile,
   X,
   Plus,
   Clock,
   Check,
   Layers,
-  AtSign,
   Reply,
-  Sparkles,
-  Type,
-  Bold,
-  Italic,
-  Code,
   Image as ImageIcon,
   File as FileIcon,
   MapPin,
@@ -28,7 +21,6 @@ import {
 } from 'lucide-react';
 import { Message, ChatMember, MessageReplyInfo } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
-import { chatApi } from '../../services/api';
 import { useMessengerStore } from '../../stores/messengerStore';
 import { MEDIA_LIMIT_LABEL } from '../../services/messengerMedia';
 
@@ -56,17 +48,6 @@ interface MessageComposerProps {
   onDraftChange?: (chatId: string, draftText: string) => void;
 }
 
-const emojiList = ['✨', '🌱', '☕', '❤️', '👍', '🔥', '👏', '🙌', '💡', '📌', '🎯', '🚀', '🌿', '🤝', '😊', '👌', '🤩', '🫡', '🎉', '🏆'];
-
-const stylePresets = [
-  { id: 'concise', label: 'Лаконічно', desc: 'Прибрати зайве та виділити суть', prompt: 'Перепиши текст стисло, зберігши зміст.' },
-  { id: 'warm', label: 'Тепло і дружньо', desc: 'Тепліший, дружній тон', prompt: 'Перепиши текст теплішим, дружнім тоном.' },
-  { id: 'business', label: 'Діловий тон', desc: 'Стриманий робочий тон', prompt: 'Перепиши текст стриманим діловим тоном.' },
-  { id: 'polite', label: 'Ввічливо і м’яко', desc: 'Делікатніше формулювання', prompt: 'Перепиши текст ввічливіше й делікатніше.' },
-  { id: 'translate_en', label: 'Перекласти англійською', desc: 'Переклад тексту англійською', prompt: 'Переклади текст англійською.' },
-  { id: 'fix_grammar', label: 'Виправити граматику', desc: 'Правопис і пунктуація', prompt: 'Виправ орфографію та пунктуацію, не змінюючи змісту й тону.' },
-];
-
 export const MessageComposer: React.FC<MessageComposerProps> = ({
   onSendMessage,
   onSendVoiceMessage: _onSendVoiceMessage,
@@ -91,9 +72,6 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   onDraftChange,
 }) => {
   const [text, setText] = useState(initialDraft);
-  const [showEmojiPicker, setShowEmojiPicker] = useState(false);
-  const [showStyleMenu, setShowStyleMenu] = useState(false);
-  const [showFormattingBar, setShowFormattingBar] = useState(false);
   const [showAttachMenu, setShowAttachMenu] = useState(false);
   // Смуга завантаження живе тут, бо саме тут людина натиснула «+». Відсоток
   // приходить з XHR — це справжні надіслані байти, а не анімація очікування.
@@ -411,8 +389,6 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     setUpload(null);
     if (failed.length) setUploadError(failed.join('; '));
   };
-  const [styleBusyId, setStyleBusyId] = useState<string | null>(null);
-  const [styleError, setStyleError] = useState<string | null>(null);
   const [multiQuoteTitle, setMultiQuoteTitle] = useState('Зведена цитата домовленостей');
 
   // Mention autocomplete state
@@ -430,9 +406,6 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
       // Switching to another chat: load this chat's initial draft
       prevChatIdRef.current = chatId;
       setText(initialDraft || '');
-      setShowEmojiPicker(false);
-      setShowStyleMenu(false);
-      setShowFormattingBar(false);
       setShowAttachMenu(false);
       setMentionQuery(null);
     }
@@ -502,28 +475,6 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     }, 50);
   };
 
-  const insertFormatting = (prefix: string, suffix: string = prefix) => {
-    soundFx.playTap();
-    if (!textareaRef.current) return;
-    const start = textareaRef.current.selectionStart;
-    const end = textareaRef.current.selectionEnd;
-    const selected = text.slice(start, end);
-
-    const newText = text.slice(0, start) + prefix + selected + suffix + text.slice(end);
-    setText(newText);
-    if (chatId && !editingMessage && onDraftChangeRef.current) {
-      onDraftChangeRef.current(chatId, newText);
-    }
-
-    setTimeout(() => {
-      if (textareaRef.current) {
-        textareaRef.current.focus();
-        const newCursor = start + prefix.length + selected.length;
-        textareaRef.current.setSelectionRange(newCursor, newCursor);
-      }
-    }, 50);
-  };
-
   const handleSend = () => {
     if (editingMessage) {
       if (text.trim()) {
@@ -553,43 +504,12 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
       onDraftChangeRef.current(chatId, '');
     }
     setMentionQuery(null);
-    setShowFormattingBar(false);
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
       handleSend();
-    }
-  };
-
-  const applyStyle = async (styleId: string) => {
-    soundFx.playTap();
-    const source = text.trim();
-    const preset = stylePresets.find((s) => s.id === styleId);
-    if (!source || !preset || styleBusyId) return;
-
-    setStyleBusyId(styleId);
-    setStyleError(null);
-    try {
-      const res = await chatApi.sendMessage({
-        content: `${preset.prompt} У відповідь дай лише готовий текст, без коментарів.\n\n${source}`,
-        input_method: 'text',
-      });
-      const newText = (res?.message?.content || '').trim();
-      if (!newText) {
-        setStyleError('Локальний агент не повернув тексту');
-        return;
-      }
-      setText(newText);
-      if (chatId && !editingMessage && onDraftChangeRef.current) {
-        onDraftChangeRef.current(chatId, newText);
-      }
-      setShowStyleMenu(false);
-    } catch {
-      setStyleError('Локальний агент недоступний');
-    } finally {
-      setStyleBusyId(null);
     }
   };
 
@@ -887,10 +807,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
             <button
               onClick={() => {
                 soundFx.playTap();
-                setShowAttachMenu((v) => !v);
-                setShowEmojiPicker(false);
-                setShowStyleMenu(false);
-                setShowFormattingBar(false);
+                setShowAttachMenu((v: boolean) => !v);
               }}
               className={`w-[34px] h-[34px] min-w-0 min-h-0 mb-[5px] border border-[#E8E1D3] rounded-full transition-colors flex items-center justify-center ${
                 showAttachMenu ? 'bg-[#F1EBDD] text-[#21261F]' : 'bg-transparent text-[#6E7568] hover:bg-[#F1EBDD] hover:text-[#21261F]'
@@ -995,161 +912,6 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
               className="flex-1 min-w-0 max-h-[140px] min-h-[28px] py-[5px] bg-transparent text-[13px] text-[#21261F] placeholder-[#6E7568] resize-none focus:outline-none select-text leading-[18px]"
             />
 
-            {/* Праві іконки поля — одна група з власним проміжком, щоб не злипались */}
-            <div className="flex items-center gap-0.5 shrink-0">
-              {/* Переписування чернетки локальним агентом */}
-              <div className="relative">
-                <button
-                  type="button"
-                  onClick={() => {
-                    soundFx.playTap();
-                    setShowStyleMenu(!showStyleMenu);
-                    setStyleError(null);
-                    setShowEmojiPicker(false);
-                    setShowFormattingBar(false);
-                  }}
-                  className={`w-[28px] h-[28px] min-w-0 min-h-0 rounded-[8px] flex items-center justify-center transition-colors ${
-                    showStyleMenu ? 'text-[#21261F] bg-[#F1EBDD]' : 'text-[#6E7568] hover:text-[#21261F] hover:bg-[#F1EBDD]'
-                  }`}
-                  title="Переписати чернетку локальним агентом"
-                >
-                  <Sparkles className={`w-[18px] h-[18px] ${styleBusyId ? 'animate-pulse' : ''}`} strokeWidth={1.75} />
-                </button>
-
-                {showStyleMenu && (
-                  <div className="absolute bottom-12 right-0 bg-[#FDFCF9]/[0.97] backdrop-blur-2xl border border-[#E8E1D3] rounded-2xl p-2 shadow-[0_12px_32px_rgba(60,44,24,0.14)] w-64 z-30 space-y-1 animate-in fade-in select-none text-[#21261F]">
-                    <div className="px-2 py-1 text-[11px] font-extrabold text-[#6E7568] uppercase tracking-wide border-b border-[#F1EBDD]">
-                      Переписати локальним агентом
-                    </div>
-                    {stylePresets.map((s) => (
-                      <button
-                        key={s.id}
-                        type="button"
-                        disabled={!text.trim() || !!styleBusyId}
-                        onClick={() => applyStyle(s.id)}
-                        className="w-full text-left px-2.5 py-1.5 rounded-xl hover:bg-[#F1EBDD] text-xs flex flex-col transition-colors disabled:opacity-40 disabled:hover:bg-transparent"
-                      >
-                        <span className="font-bold text-[#21261F]">{s.label}</span>
-                        <span className="text-[10px] text-[#6E7568]">
-                          {styleBusyId === s.id ? 'Опрацьовую…' : s.desc}
-                        </span>
-                      </button>
-                    ))}
-                    {styleError && (
-                      <div className="px-2.5 py-1.5 text-[10px] text-red-300 border-t border-[#F1EBDD]">
-                        {styleError}
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Inline Formatting Menu. На телефоні згорнуто: чотири значки
-                  лишали полю вводу 116 px, а те саме розмітка дає набором
-                  (**жирний**) — на відміну від переписування чи емодзі. */}
-              <div className="relative hidden sm:block">
-                <button
-                  type="button"
-                  onClick={() => {
-                    soundFx.playTap();
-                    setShowFormattingBar(!showFormattingBar);
-                    setShowStyleMenu(false);
-                    setShowEmojiPicker(false);
-                  }}
-                  className={`w-[28px] h-[28px] min-w-0 min-h-0 rounded-[8px] flex items-center justify-center transition-colors ${
-                    showFormattingBar ? 'text-[#21261F] bg-[#F1EBDD]' : 'text-[#6E7568] hover:text-[#21261F] hover:bg-[#F1EBDD]'
-                  }`}
-                  title="Форматування тексту (Markdown)"
-                >
-                  <Type className="w-[18px] h-[18px]" strokeWidth={1.75} />
-                </button>
-
-                {showFormattingBar && (
-                  <div className="absolute bottom-12 right-0 bg-[#FDFCF9]/[0.97] backdrop-blur-2xl border border-[#E8E1D3] rounded-2xl p-1.5 shadow-[0_12px_32px_rgba(60,44,24,0.14)] flex items-center gap-1 z-30 animate-in fade-in select-none text-[#21261F]">
-                    <button
-                      type="button"
-                      onClick={() => insertFormatting('**')}
-                      className="p-1.5 hover:bg-[#F1EBDD] rounded-lg text-xs font-bold"
-                      title="Жирний (**текст**)"
-                    >
-                      <Bold className="w-3.5 h-3.5" strokeWidth={1.75} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => insertFormatting('*')}
-                      className="p-1.5 hover:bg-[#F1EBDD] rounded-lg text-xs font-bold"
-                      title="Курсив (*текст*)"
-                    >
-                      <Italic className="w-3.5 h-3.5" strokeWidth={1.75} />
-                    </button>
-                    <button
-                      type="button"
-                      onClick={() => insertFormatting('`')}
-                      className="p-1.5 hover:bg-[#F1EBDD] rounded-lg text-xs font-bold"
-                      title="Код (`код`)"
-                    >
-                      <Code className="w-3.5 h-3.5" strokeWidth={1.75} />
-                    </button>
-                  </div>
-                )}
-              </div>
-
-              {/* Inline Emoji Picker Button */}
-              <div className="relative">
-                <button
-                  onClick={() => {
-                    soundFx.playTap();
-                    setShowEmojiPicker(!showEmojiPicker);
-                    setShowStyleMenu(false);
-                    setShowFormattingBar(false);
-                  }}
-                  className={`w-[28px] h-[28px] min-w-0 min-h-0 rounded-[8px] flex items-center justify-center transition-colors ${
-                    showEmojiPicker ? 'text-[#21261F] bg-[#F1EBDD]' : 'text-[#6E7568] hover:text-[#21261F] hover:bg-[#F1EBDD]'
-                  }`}
-                  title="Емодзі"
-                >
-                  <Smile className="w-[18px] h-[18px]" strokeWidth={1.75} />
-                </button>
-
-                {showEmojiPicker && (
-                  <div className="absolute bottom-12 right-0 bg-[#FDFCF9]/[0.97] backdrop-blur-2xl border border-[#E8E1D3] rounded-2xl p-2.5 shadow-[0_12px_32px_rgba(60,44,24,0.14)] grid grid-cols-5 gap-1.5 w-56 z-30 animate-in fade-in">
-                    {emojiList.map((e) => (
-                      <button
-                        key={e}
-                        onClick={() => {
-                          soundFx.playTap();
-                          const newText = text + e;
-                          setText(newText);
-                          if (chatId && !editingMessage && onDraftChangeRef.current) {
-                            onDraftChangeRef.current(chatId, newText);
-                          }
-                          setShowEmojiPicker(false);
-                        }}
-                        className="p-1 text-base hover:scale-125 transition-transform"
-                      >
-                        {e}
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
-
-              {/* Inline @ Mention Button */}
-              <button
-                onClick={() => {
-                  soundFx.playTap();
-                  const newText = text + '@';
-                  setText(newText);
-                  setMentionQuery('');
-                  setMentionCursorPos(newText.length);
-                  textareaRef.current?.focus();
-                }}
-                className="hidden sm:flex w-[28px] h-[28px] min-w-0 min-h-0 rounded-[8px] items-center justify-center text-[#6E7568] hover:text-[#21261F] hover:bg-[#F1EBDD] transition-colors"
-                title="Згадати учасника (@)"
-              >
-                <AtSign className="w-[18px] h-[18px]" strokeWidth={1.75} />
-              </button>
-            </div>
           </div>
 
           {/* Send Button */}

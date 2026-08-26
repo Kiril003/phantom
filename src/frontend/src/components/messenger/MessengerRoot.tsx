@@ -138,6 +138,19 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
     };
   }, []);
 
+  const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === '\\' || e.key === '|')) {
+        e.preventDefault();
+        setIsSidebarCollapsed((prev) => !prev);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
+
   // Вужче за 768 колонка одна: показуємо або список, або відкриту розмову.
   // Пошук завжди повертає до списку — шукають саме в ньому.
   const showList = !activeChat || !!store.searchQuery;
@@ -145,8 +158,9 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
   return (
     <div className={`messenger-scale flex w-full h-full bg-[#F7F5EE] text-[#1E2521] overflow-hidden select-none relative font-sans ${className}`}>
       {/* 1. Left Sidebar (Workspaces, Folders, Circles, Chats) */}
-      <div className={`${showList ? 'flex' : 'hidden'} md:flex w-full md:w-auto h-full shrink-0`}>
-        <Sidebar
+      {!isSidebarCollapsed && (
+        <div className={`${showList ? 'flex' : 'hidden'} md:flex w-full md:w-auto h-full shrink-0 transition-all duration-200`}>
+          <Sidebar
           currentUser={store.currentUser}
           chats={store.chats}
           activeChatId={store.activeChatId}
@@ -171,7 +185,8 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
           onOpenP2PNetworkModal={() => store.setP2PModalOpen(true)}
           onSwitchPersonaSphere={(sphere) => store.switchPersonaSphere(sphere)}
         />
-      </div>
+        </div>
+      )}
 
       {/* 2. Main Chat Area */}
       {activeChat ? (
@@ -207,6 +222,8 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
             onStartHuddle={() => setIsHuddleActive(true)}
             onLeaveHuddle={() => setIsHuddleActive(false)}
             onBack={() => store.setActiveChat('')}
+            onToggleSidebar={() => setIsSidebarCollapsed(!isSidebarCollapsed)}
+            isSidebarCollapsed={isSidebarCollapsed}
           />
 
           {/* Messages Feed */}

@@ -7,6 +7,7 @@ import {
   Trash2,
   ChevronUp,
   ChevronDown,
+  ChevronLeft,
   Maximize2,
   Minimize2,
   Sparkles,
@@ -327,8 +328,15 @@ export const CanvasSplitView: React.FC<CanvasSplitViewProps> = ({
     <div className="flex flex-col h-full bg-[#FCFBF8] text-[#21261F] select-text shadow-xl relative overflow-hidden">
       {/* 1. Header Toolbar — Responsive, Polished, Zero-Overlap */}
       <div className="px-3 sm:px-4 py-2.5 bg-[#FAF8F5] border-b border-[#E8E1D3] flex flex-wrap items-center justify-between gap-2 shrink-0">
-        {/* Left: Document Title */}
-        <div className="min-w-0 flex items-center gap-2 flex-1 max-w-[280px]">
+        {/* Left: Document Title & Mobile Back Button */}
+        <div className="min-w-0 flex items-center gap-1.5 sm:gap-2 flex-1 max-w-[280px]">
+          <button
+            onClick={onClose}
+            className="md:hidden p-1 -ml-1 hover:bg-[#EFE9DC] rounded-lg text-[#6E7568] hover:text-[#21261F] transition-colors shrink-0"
+            title="Назад до чату"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </button>
           <div className="p-1 rounded-md bg-[#FDF5ED] text-[#D96C35] border border-[#E5DEC9] shrink-0">
             <FileText className="w-3.5 h-3.5" />
           </div>

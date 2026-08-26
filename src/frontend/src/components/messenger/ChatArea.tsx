@@ -1050,7 +1050,7 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
         )}
 
         {/* Main Messages Stream */}
-        <div className="flex-1 min-w-0 flex flex-col h-full overflow-hidden">
+        <div className={`flex-1 min-w-0 flex-col h-full overflow-hidden ${isCanvasSplitOpen ? 'hidden md:flex' : 'flex'}`}>
           <div
             ref={messagesContainerRef}
             onScroll={handleScroll}
@@ -2469,7 +2469,7 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
 
         {/* Canvas Split Side Panel */}
         {isCanvasSplitOpen && (
-          <div className="fixed inset-0 z-40 md:relative md:inset-auto md:z-20 flex h-full max-w-full shrink-0">
+          <div className="flex-1 md:flex-initial flex h-full max-w-full relative z-20 overflow-hidden">
             {/* Resizing Drag Divider (Desktop only) */}
             {canvasWidthMode !== 'full' && (
               <div
@@ -2488,11 +2488,11 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
                     : canvasWidthMode === 'wide'
                     ? '65vw'
                     : typeof window !== 'undefined' && window.innerWidth < 768
-                    ? '100vw'
+                    ? '100%'
                     : `${splitWidth}px`,
                 maxWidth: '100vw',
               }}
-              className={`h-full w-full md:w-auto bg-white transition-all overflow-hidden ${
+              className={`h-full w-full bg-white transition-all overflow-hidden ${
                 canvasWidthMode === 'full' ? 'fixed inset-0 z-40' : ''
               }`}
             >

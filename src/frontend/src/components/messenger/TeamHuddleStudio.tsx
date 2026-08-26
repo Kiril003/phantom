@@ -8,6 +8,7 @@ import {
   Radio,
   Share2,
   Check,
+  X,
 } from 'lucide-react';
 import { soundFx } from '../../utils/messengerSound';
 
@@ -224,34 +225,40 @@ export const TeamHuddleStudio: React.FC<TeamHuddleStudioProps> = ({
   if (!isOpen) return null;
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-md animate-in fade-in duration-200">
-      <div className="w-full max-w-5xl h-[88vh] bg-[#FDFCF9] border border-[#E5DEC9] rounded-3xl shadow-2xl overflow-hidden flex flex-col text-[#21261F]">
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-6 bg-black/60 backdrop-blur-md animate-in fade-in duration-200"
+      onClick={onClose}
+    >
+      <div
+        className="w-full max-w-4xl max-h-[85vh] bg-[#FDFCF9] border border-[#E5DEC9] rounded-2xl shadow-2xl overflow-hidden flex flex-col text-[#21261F] animate-in zoom-in-95 duration-150 select-text"
+        onClick={(e) => e.stopPropagation()}
+      >
         {/* Top Bar */}
-        <div className="p-4 bg-[#F7F4EC] border-b border-[#E5DEC9] flex items-center justify-between">
-          <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-emerald-50 border border-emerald-300 flex items-center justify-center text-emerald-700 shadow-sm">
-              <Radio className="w-5 h-5 animate-pulse" />
+        <div className="px-4 py-3 bg-[#F7F4EC] border-b border-[#E5DEC9] flex items-center justify-between gap-2 shrink-0">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div className="w-8 h-8 rounded-xl bg-emerald-50 border border-emerald-300 flex items-center justify-center text-emerald-700 shadow-xs shrink-0">
+              <Radio className="w-4 h-4 animate-pulse" />
             </div>
-            <div>
+            <div className="min-w-0">
               <div className="flex items-center gap-2">
-                <h3 className="text-base font-bold text-[#21261F]">Huddle: {chatTitle}</h3>
-                <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[11px] font-bold font-mono">
+                <h3 className="text-sm font-bold text-[#21261F] truncate">Huddle: {chatTitle}</h3>
+                <span className="px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-800 text-[10px] font-bold font-mono shrink-0">
                   ● LIVE {formatTime(secondsActive)}
                 </span>
               </div>
-              <p className="text-xs text-[#6E7568] mt-0.5">
-                P2P Mesh аудіо/відео простір • Швидка синхронізація без дзвінків
+              <p className="text-[11px] text-[#6E7568] truncate">
+                P2P Mesh аудіо/відео простір • Швидка синхронізація
               </p>
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1.5 shrink-0">
             <button
               onClick={copyP2PLink}
-              className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl bg-white border border-[#E5DEC9] hover:bg-[#FDF5ED] text-xs font-semibold text-[#21261F] transition-all shadow-xs"
+              className="flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white border border-[#E5DEC9] hover:bg-[#FDF5ED] text-xs font-semibold text-[#21261F] transition-all shadow-2xs"
             >
               {copiedLink ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Share2 className="w-3.5 h-3.5 text-[#D96C35]" />}
-              <span>{copiedLink ? 'Скопійовано!' : 'Запросити піра'}</span>
+              <span className="hidden sm:inline">{copiedLink ? 'Скопійовано!' : 'Запросити'}</span>
             </button>
 
             <button
@@ -259,16 +266,24 @@ export const TeamHuddleStudio: React.FC<TeamHuddleStudioProps> = ({
                 soundFx.playChime();
                 onClose();
               }}
-              className="flex items-center gap-1.5 px-4 py-1.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-sm transition-all"
+              className="flex items-center gap-1 px-3 py-1.5 rounded-lg bg-red-600 hover:bg-red-700 text-white text-xs font-bold shadow-xs transition-all"
             >
-              <PhoneOff className="w-4 h-4" />
-              <span>Покинути Huddle</span>
+              <PhoneOff className="w-3.5 h-3.5" />
+              <span>Покинути</span>
+            </button>
+
+            <button
+              onClick={onClose}
+              className="p-1.5 hover:bg-[#EFE9DC] rounded-lg text-[#6E7568] hover:text-[#21261F] transition-colors ml-1"
+              title="Закрити вікно"
+            >
+              <X className="w-4 h-4" />
             </button>
           </div>
         </div>
 
         {/* Main Workspace: Screen Share or Grid */}
-        <div className="flex-1 min-h-0 p-5 bg-[#FAF7F0] overflow-y-auto flex flex-col gap-4">
+        <div className="flex-1 min-h-0 p-4 sm:p-5 bg-[#FAF7F0] overflow-y-auto custom-scrollbar flex flex-col gap-3">
           {/* Active Screen Sharing Display */}
           {isScreenSharing && (
             <div className="relative w-full aspect-video max-h-[50vh] bg-[#111] rounded-2xl overflow-hidden border border-[#E5DEC9] shadow-lg flex items-center justify-center">
@@ -361,53 +376,53 @@ export const TeamHuddleStudio: React.FC<TeamHuddleStudioProps> = ({
         </div>
 
         {/* Bottom Control Dock */}
-        <div className="p-4 bg-[#F7F4EC] border-t border-[#E5DEC9] flex items-center justify-between">
-          <div className="flex items-center gap-2">
+        <div className="p-3 sm:p-4 bg-[#F7F4EC] border-t border-[#E5DEC9] flex flex-wrap items-center justify-between gap-2 shrink-0">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={toggleMic}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl font-bold text-xs shadow-xs transition-all ${
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold text-xs shadow-xs transition-all ${
                 isMuted
                   ? 'bg-red-50 text-red-700 border border-red-300'
                   : 'bg-[#D96C35] hover:bg-[#B85425] text-white'
               }`}
             >
-              {isMuted ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-              <span>{isMuted ? 'Мікрофон вимкнено' : 'Мікрофон ON'}</span>
+              {isMuted ? <MicOff className="w-3.5 h-3.5" /> : <Mic className="w-3.5 h-3.5" />}
+              <span>{isMuted ? 'Мікрофон OFF' : 'Мікрофон ON'}</span>
             </button>
 
             <button
               onClick={toggleScreenShare}
-              className={`flex items-center gap-2 px-4 py-2.5 rounded-2xl font-bold text-xs border transition-all ${
+              className={`flex items-center gap-1.5 px-3.5 py-2 rounded-xl font-bold text-xs border transition-all ${
                 isScreenSharing
                   ? 'bg-indigo-50 text-indigo-700 border-indigo-300'
                   : 'bg-white hover:bg-[#FDF5ED] text-[#21261F] border-[#E5DEC9]'
               }`}
             >
-              <Monitor className="w-4 h-4 text-indigo-600" />
-              <span>{isScreenSharing ? 'Зупинити екран' : 'Поділитися екраном'}</span>
+              <Monitor className="w-3.5 h-3.5 text-indigo-600" />
+              <span>{isScreenSharing ? 'Зупинити' : 'Екран'}</span>
             </button>
 
             <button
               onClick={toggleHand}
-              className={`flex items-center gap-1.5 px-3 py-2.5 rounded-2xl font-bold text-xs border transition-all ${
+              className={`flex items-center gap-1.5 px-3 py-2 rounded-xl font-bold text-xs border transition-all ${
                 isHandRaised
                   ? 'bg-amber-100 text-amber-900 border-amber-300'
                   : 'bg-white hover:bg-[#FDF5ED] text-[#6E7568] border-[#E5DEC9]'
               }`}
               title="Підняти руку"
             >
-              <Hand className="w-4 h-4" />
-              <span>{isHandRaised ? 'Руку піднято' : 'Підняти руку'}</span>
+              <Hand className="w-3.5 h-3.5" />
+              <span>{isHandRaised ? 'Рука' : 'Підняти'}</span>
             </button>
           </div>
 
           {/* Quick Reaction Bar */}
-          <div className="flex items-center gap-1.5 bg-white border border-[#E5DEC9] p-1.5 rounded-2xl">
+          <div className="flex items-center gap-1 bg-white border border-[#E5DEC9] p-1 rounded-xl">
             {['🔥', '👏', '💡', '🚀', '❤️', '👍'].map((emoji) => (
               <button
                 key={emoji}
                 onClick={() => sendReaction(emoji)}
-                className="w-8 h-8 rounded-xl hover:bg-[#FAF7F0] text-base flex items-center justify-center transition-transform hover:scale-125"
+                className="w-7 h-7 rounded-lg hover:bg-[#FAF7F0] text-sm flex items-center justify-center transition-transform hover:scale-125"
               >
                 {emoji}
               </button>

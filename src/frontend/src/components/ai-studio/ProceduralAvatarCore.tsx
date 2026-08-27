@@ -83,6 +83,14 @@ const PALETTES: Record<ComputeState, StatePalette> = {
     speed: 0.07,
     particles: 50,
   },
+  debating: {
+    primary: '#7C3AED', // Multi-agent debate purple
+    glow: 'rgba(124, 58, 237, 0.55)',
+    accent: '#E11D48',
+    ring: 'rgba(225, 29, 72, 0.5)',
+    speed: 0.065,
+    particles: 52,
+  },
 };
 
 export const ProceduralAvatarCore: React.FC<ProceduralAvatarCoreProps> = ({

@@ -1,7 +1,10 @@
 /**
  * PHANTOM OS — Dynamic Artifact Studio (Canvas & Live Interactive Mini-Apps)
- * Центральний когнітивний простір артефактів: рендеринг коду, інтерактивні
- * React-додатки на льоту, діаграми Mermaid, таблиці та версіонування.
+ * Центральний когнітивний простір артефактів:
+ * - Живий React/Tailwind рендерер (Focus Pomodoro, Travel Budget, Exam Roadmap).
+ * - 3D Параметричне математичне полотно з обертанням.
+ * - Спліт-редактор коду.
+ * - Версіонування та форки.
  */
 
 import React, { useState, useEffect } from 'react';
@@ -16,8 +19,10 @@ import {
   CheckCircle2,
   DollarSign,
   RotateCcw,
+  Sliders,
 } from 'lucide-react';
 import { useAISynthesisStore, DynamicArtifact } from '../../stores/aiSynthesisStore';
+import { InteractiveParametricMathCanvas } from './InteractiveParametricMathCanvas';
 import { soundFx } from '../../utils/messengerSound';
 
 interface DynamicArtifactStudioProps {
@@ -251,6 +256,8 @@ export const DynamicArtifactStudio: React.FC<DynamicArtifactStudioProps> = ({
     forkArtifact,
     revertArtifactVersion,
     runCodeSandbox,
+    activeCanvasTab,
+    setActiveCanvasTab,
   } = useAISynthesisStore();
 
   const currentSession = sessions.find((s) => s.id === activeSessionId);
@@ -260,7 +267,6 @@ export const DynamicArtifactStudio: React.FC<DynamicArtifactStudioProps> = ({
     currentSession?.artifacts[0] ||
     null;
 
-  const [activeTab, setActiveTab] = useState<'preview' | 'code' | 'history'>('preview');
   const [copied, setCopied] = useState(false);
   const [isEditing, setIsEditing] = useState(false);
   const [editableCode, setEditableCode] = useState(activeArt?.content || '');
@@ -271,7 +277,7 @@ export const DynamicArtifactStudio: React.FC<DynamicArtifactStudioProps> = ({
     }
   }, [activeArt]);
 
-  if (!activeArt) {
+  if (!activeArt && activeCanvasTab !== 'math') {
     return (
       <div className="flex-1 flex flex-col items-center justify-center p-8 text-center bg-[#FAF7F0] border-l border-[#E0D7C6]">
         <div className="w-16 h-16 rounded-3xl bg-[#F2ECE1] border border-[#DDD3BF] flex items-center justify-center text-[#8A9186] mb-3">
@@ -287,25 +293,26 @@ export const DynamicArtifactStudio: React.FC<DynamicArtifactStudioProps> = ({
 
   const handleCopy = () => {
     soundFx.playSend();
-    navigator.clipboard.writeText(activeArt.content);
+    if (activeArt) navigator.clipboard.writeText(activeArt.content);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
   const handleRunInSandbox = () => {
     soundFx.playChime();
-    runCodeSandbox(activeArt.content, activeArt.language);
+    if (activeArt) runCodeSandbox(activeArt.content, activeArt.language);
     if (onOpenSandbox) onOpenSandbox();
   };
 
   const handleSaveEdit = () => {
     soundFx.playSend();
-    updateArtifactContent(activeArt.id, editableCode);
+    if (activeArt) updateArtifactContent(activeArt.id, editableCode);
     setIsEditing(false);
   };
 
   // Safe and rich interactive component switcher
   const renderLiveApp = () => {
+    if (!activeArt) return null;
     const isBudget = /бюджет|калькулятор|гроші|travel/i.test(activeArt.title + activeArt.content);
     const isExam = /іспит|roadmap|дедлайн|timeline/i.test(activeArt.title + activeArt.content);
     const isPomodoro = /pomodoro|фокус|таймер/i.test(activeArt.title + activeArt.content);
@@ -349,11 +356,11 @@ export const DynamicArtifactStudio: React.FC<DynamicArtifactStudioProps> = ({
             <FileCode className="w-4 h-4" />
           </div>
           <div className="min-w-0">
-            <h3 className="font-bold text-xs text-[#1E2521] truncate">{activeArt.title}</h3>
+            <h3 className="font-bold text-xs text-[#1E2521] truncate">{activeArt?.title || '3D Math Canvas'}</h3>
             <div className="flex items-center gap-2 text-[10.5px] text-[#8A9186]">
-              <span>v{activeArt.version}</span>
+              <span>v{activeArt?.version || 1}</span>
               <span>·</span>
-              <span className="uppercase font-semibold">{activeArt.language || 'tsx'}</span>
+              <span className="uppercase font-semibold">{activeArt?.language || 'tsx'}</span>
             </div>
           </div>
         </div>
@@ -361,62 +368,81 @@ export const DynamicArtifactStudio: React.FC<DynamicArtifactStudioProps> = ({
         {/* Tab switcher */}
         <div className="flex items-center gap-1 bg-[#F2ECE1] p-0.5 rounded-xl border border-[#E0D7C6]">
           <button
-            onClick={() => setActiveTab('preview')}
+            onClick={() => setActiveCanvasTab('preview')}
             className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-              activeTab === 'preview' ? 'bg-white text-[#1E2521] shadow-2xs' : 'text-[#6E7568] hover:text-[#1E2521]'
+              activeCanvasTab === 'preview' ? 'bg-white text-[#1E2521] shadow-2xs' : 'text-[#6E7568] hover:text-[#1E2521]'
             }`}
           >
             Живий віджет
           </button>
           <button
-            onClick={() => setActiveTab('code')}
+            onClick={() => setActiveCanvasTab('math')}
+            className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all flex items-center gap-1 ${
+              activeCanvasTab === 'math' ? 'bg-white text-[#1E2521] shadow-2xs' : 'text-[#6E7568] hover:text-[#1E2521]'
+            }`}
+          >
+            <Sliders className="w-3 h-3 text-[#C25925]" />
+            <span>3D Математика</span>
+          </button>
+          <button
+            onClick={() => setActiveCanvasTab('code')}
             className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-              activeTab === 'code' ? 'bg-white text-[#1E2521] shadow-2xs' : 'text-[#6E7568] hover:text-[#1E2521]'
+              activeCanvasTab === 'code' ? 'bg-white text-[#1E2521] shadow-2xs' : 'text-[#6E7568] hover:text-[#1E2521]'
             }`}
           >
             Код
           </button>
           <button
-            onClick={() => setActiveTab('history')}
+            onClick={() => setActiveCanvasTab('history')}
             className={`px-2.5 py-1 rounded-lg text-xs font-bold transition-all ${
-              activeTab === 'history' ? 'bg-white text-[#1E2521] shadow-2xs' : 'text-[#6E7568] hover:text-[#1E2521]'
+              activeCanvasTab === 'history' ? 'bg-white text-[#1E2521] shadow-2xs' : 'text-[#6E7568] hover:text-[#1E2521]'
             }`}
           >
-            Історія ({activeArt.history.length})
+            Історія ({activeArt?.history.length || 0})
           </button>
         </div>
 
         {/* Toolbar actions */}
         <div className="flex items-center gap-1.5">
-          <button
-            onClick={() => forkArtifact(activeArt.id)}
-            title="Форкнути копію"
-            className="p-1.5 bg-white hover:bg-[#F2ECE1] border border-[#DDD3BF] rounded-lg text-[#1E2521] text-xs font-bold transition-colors"
-          >
-            <GitFork className="w-3.5 h-3.5" />
-          </button>
-          <button
-            onClick={handleCopy}
-            title="Скопіювати код"
-            className="p-1.5 bg-white hover:bg-[#F2ECE1] border border-[#DDD3BF] rounded-lg text-[#1E2521] text-xs font-bold transition-colors"
-          >
-            {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5" />}
-          </button>
-          <button
-            onClick={handleRunInSandbox}
-            className="px-2.5 py-1.5 bg-[#C25925] hover:bg-[#AA491A] text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-2xs transition-colors"
-          >
-            <Play className="w-3 h-3 fill-current" />
-            <span className="hidden sm:inline">Запустити</span>
-          </button>
+          {activeArt && (
+            <>
+              <button
+                onClick={() => forkArtifact(activeArt.id)}
+                title="Форкнути копію"
+                className="p-1.5 bg-white hover:bg-[#F2ECE1] border border-[#DDD3BF] rounded-lg text-[#1E2521] text-xs font-bold transition-colors"
+              >
+                <GitFork className="w-3.5 h-3.5" />
+              </button>
+              <button
+                onClick={handleCopy}
+                title="Скопіювати код"
+                className="p-1.5 bg-white hover:bg-[#F2ECE1] border border-[#DDD3BF] rounded-lg text-[#1E2521] text-xs font-bold transition-colors"
+              >
+                {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-[#8A9186]" />}
+              </button>
+              <button
+                onClick={handleRunInSandbox}
+                className="px-2.5 py-1.5 bg-[#C25925] hover:bg-[#AA491A] text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-2xs transition-colors"
+              >
+                <Play className="w-3 h-3 fill-current" />
+                <span className="hidden sm:inline">Запустити</span>
+              </button>
+            </>
+          )}
         </div>
       </div>
 
       {/* Main Canvas Body */}
       <div className="flex-1 overflow-y-auto p-4">
-        {activeTab === 'preview' && renderLiveApp()}
+        {activeCanvasTab === 'preview' && renderLiveApp()}
 
-        {activeTab === 'code' && (
+        {activeCanvasTab === 'math' && (
+          <div className="h-full rounded-2xl overflow-hidden shadow-2xs">
+            <InteractiveParametricMathCanvas />
+          </div>
+        )}
+
+        {activeCanvasTab === 'code' && activeArt && (
           <div className="h-full flex flex-col space-y-2">
             <div className="flex items-center justify-between text-xs">
               <span className="text-[#6E7568] font-mono">Вихідний код артефакту</span>
@@ -459,7 +485,7 @@ export const DynamicArtifactStudio: React.FC<DynamicArtifactStudioProps> = ({
           </div>
         )}
 
-        {activeTab === 'history' && (
+        {activeCanvasTab === 'history' && activeArt && (
           <div className="space-y-3">
             <h4 className="font-bold text-xs text-[#1E2521]">Історія правок артефакту</h4>
             {activeArt.history.length === 0 ? (

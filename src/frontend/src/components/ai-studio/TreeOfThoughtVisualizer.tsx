@@ -1,24 +1,40 @@
 /**
  * PHANTOM OS — Tree of Thought Visualization (Гілкування думок & Граф рішень)
- * Інтерактивне візуальне дерево гілок мислення. Дозволяє створювати альтернативні
- * гіпотези, розгалужувати діалог у будь-якій точці та перемикатися між варіантами без втрати контексту.
+ * Інтерактивне візуальне дерево гілок мислення:
+ * - Створення альтернативних гіпотез (Fork Thought).
+ * - Візуальне порівняння Side-by-Side Diff.
+ * - Об'єднання висновків Merge Insights у головний документ.
  */
 
 import React, { useState } from 'react';
-import { GitBranch, Plus, Check, Sparkles, X, MessageSquare, Layers } from 'lucide-react';
+import {
+  GitBranch,
+  Plus,
+  Check,
+  Sparkles,
+  X,
+  MessageSquare,
+  Layers,
+  GitCompare,
+} from 'lucide-react';
 import { useAISynthesisStore, ThoughtNode } from '../../stores/aiSynthesisStore';
 import { soundFx } from '../../utils/messengerSound';
 
 interface TreeOfThoughtVisualizerProps {
   onClose?: () => void;
+  onOpenDiff?: (leftId: string, rightId: string) => void;
 }
 
-export const TreeOfThoughtVisualizer: React.FC<TreeOfThoughtVisualizerProps> = ({ onClose }) => {
+export const TreeOfThoughtVisualizer: React.FC<TreeOfThoughtVisualizerProps> = ({
+  onClose,
+  onOpenDiff,
+}) => {
   const {
     activeSessionId,
     sessions,
     createThoughtBranch,
     switchBranch,
+    setDiffBranchIds,
   } = useAISynthesisStore();
 
   const currentSession = sessions.find((s) => s.id === activeSessionId) || sessions[0];
@@ -38,8 +54,16 @@ export const TreeOfThoughtVisualizer: React.FC<TreeOfThoughtVisualizerProps> = (
     setIsCreating(false);
   };
 
+  const handleOpenSideBySideDiff = (nodeId: string) => {
+    soundFx.playChime();
+    const rootNode = thoughtNodes[0];
+    const baseId = rootNode ? rootNode.id : nodeId;
+    setDiffBranchIds({ leftId: baseId, rightId: nodeId });
+    if (onOpenDiff) onOpenDiff(baseId, nodeId);
+  };
+
   return (
-    <div className="flex flex-col h-full bg-[#FAF7F0] border-l border-[#E0D7C6] select-none">
+    <div className="flex flex-col h-full bg-[#FAF7F0] border-l border-[#E0D7C6] select-none text-xs">
       {/* Header */}
       <div className="p-4 border-b border-[#E8E1D3] bg-white/80 backdrop-blur-md flex items-center justify-between">
         <div className="flex items-center gap-2">
@@ -66,13 +90,13 @@ export const TreeOfThoughtVisualizer: React.FC<TreeOfThoughtVisualizerProps> = (
 
       {/* Quick Action bar */}
       <div className="p-3 bg-[#F5F1E6] border-b border-[#EBE3D3] flex items-center justify-between">
-        <span className="text-xs font-bold text-[#3A423B]">Паралельні гіпотези</span>
+        <span className="font-bold text-[#3A423B]">Паралельні гіпотези</span>
         <button
           onClick={() => {
             soundFx.playTap();
             setIsCreating(!isCreating);
           }}
-          className="px-2.5 py-1 bg-[#C25925] hover:bg-[#AA491A] text-white text-xs font-bold rounded-xl flex items-center gap-1 shadow-2xs transition-colors"
+          className="px-2.5 py-1 bg-[#C25925] hover:bg-[#AA491A] text-white font-bold rounded-xl flex items-center gap-1 shadow-2xs transition-colors"
         >
           <Plus className="w-3.5 h-3.5" />
           <span>Нова гілка</span>
@@ -82,7 +106,7 @@ export const TreeOfThoughtVisualizer: React.FC<TreeOfThoughtVisualizerProps> = (
       {/* Branch creation form */}
       {isCreating && (
         <form onSubmit={handleCreateBranch} className="p-3.5 bg-white border-b border-[#E8E1D3] space-y-2.5 animate-in fade-in">
-          <h4 className="text-xs font-bold text-[#1E2521] flex items-center gap-1.5">
+          <h4 className="font-bold text-[#1E2521] flex items-center gap-1.5">
             <Sparkles className="w-3.5 h-3.5 text-[#C25925]" />
             <span>Створити відгалуження міркувань</span>
           </h4>
@@ -90,28 +114,28 @@ export const TreeOfThoughtVisualizer: React.FC<TreeOfThoughtVisualizerProps> = (
             type="text"
             value={newBranchTitle}
             onChange={(e) => setNewBranchTitle(e.target.value)}
-            placeholder="Назва гілки (напр. 'Тест Python WebAssembly')"
-            className="w-full px-3 py-1.5 text-xs bg-[#FAF7F0] border border-[#DDD3BF] rounded-xl text-[#1E2521] focus:outline-none focus:border-[#C25925]"
+            placeholder="Назва гілки (напр. 'Гілка WebRTC vs WebSockets')"
+            className="w-full px-3 py-1.5 bg-[#FAF7F0] border border-[#DDD3BF] rounded-xl text-[#1E2521] focus:outline-none focus:border-[#C25925]"
             autoFocus
           />
           <textarea
             rows={2}
             value={newBranchPrompt}
             onChange={(e) => setNewBranchPrompt(e.target.value)}
-            placeholder="Альтернативний стартовий запит для цієї гілки (опціонально)..."
-            className="w-full px-3 py-1.5 text-xs bg-[#FAF7F0] border border-[#DDD3BF] rounded-xl text-[#1E2521] focus:outline-none focus:border-[#C25925] resize-none"
+            placeholder="Альтернативний стартовий запит для цієї гілки..."
+            className="w-full px-3 py-1.5 bg-[#FAF7F0] border border-[#DDD3BF] rounded-xl text-[#1E2521] focus:outline-none focus:border-[#C25925] resize-none"
           />
           <div className="flex justify-end gap-2">
             <button
               type="button"
               onClick={() => setIsCreating(false)}
-              className="px-3 py-1 text-xs text-[#6E7568] hover:text-[#1E2521]"
+              className="px-3 py-1 text-[#6E7568] hover:text-[#1E2521]"
             >
               Скасувати
             </button>
             <button
               type="submit"
-              className="px-3 py-1 bg-[#C25925] text-white rounded-lg text-xs font-bold shadow-2xs"
+              className="px-3 py-1 bg-[#C25925] text-white rounded-lg font-bold shadow-2xs"
             >
               Відгалузити
             </button>
@@ -128,8 +152,7 @@ export const TreeOfThoughtVisualizer: React.FC<TreeOfThoughtVisualizerProps> = (
           return (
             <div
               key={node.id}
-              onClick={() => switchBranch(node.id)}
-              className={`p-3.5 rounded-2xl border transition-all cursor-pointer relative group ${
+              className={`p-3.5 rounded-2xl border transition-all relative group ${
                 isActive
                   ? 'bg-white border-[#C25925] shadow-xs ring-1 ring-[#C25925]/30'
                   : 'bg-white/80 hover:bg-white border-[#E0D7C6] hover:border-[#D2C7B0]'
@@ -139,15 +162,18 @@ export const TreeOfThoughtVisualizer: React.FC<TreeOfThoughtVisualizerProps> = (
                 <div className="absolute -top-3 left-6 w-0.5 h-3 bg-[#DDD3BF]" />
               )}
 
-              <div className="flex items-start justify-between gap-2">
+              <div
+                onClick={() => switchBranch(node.id)}
+                className="flex items-start justify-between gap-2 cursor-pointer"
+              >
                 <div className="flex items-center gap-2 min-w-0">
-                  <span className={`w-6 h-6 rounded-lg flex items-center justify-center text-xs font-bold shrink-0 ${
+                  <span className={`w-6 h-6 rounded-lg flex items-center justify-center font-bold shrink-0 ${
                     isActive ? 'bg-[#C25925] text-white' : 'bg-[#F2ECE1] text-[#6E7568]'
                   }`}>
                     {idx + 1}
                   </span>
                   <div className="min-w-0">
-                    <h4 className="font-bold text-xs text-[#1E2521] truncate flex items-center gap-1.5">
+                    <h4 className="font-bold text-[#1E2521] truncate flex items-center gap-1.5">
                       <span>{node.branchName}</span>
                       {isRoot && (
                         <span className="px-1.5 py-0.5 bg-amber-50 text-amber-800 border border-amber-200 rounded text-[9.5px] uppercase font-bold">
@@ -166,20 +192,34 @@ export const TreeOfThoughtVisualizer: React.FC<TreeOfThoughtVisualizerProps> = (
                 )}
               </div>
 
-              <div className="mt-2.5 pt-2 border-t border-[#F2ECE1] flex items-center justify-between text-[10.5px] text-[#8A9186]">
-                <div className="flex items-center gap-2.5">
+              {/* Action Buttons for Branch: Diff & Merge */}
+              <div className="mt-2.5 pt-2 border-t border-[#F2ECE1] flex items-center justify-between text-[10.5px]">
+                <div className="flex items-center gap-2 text-[#8A9186]">
                   <span className="flex items-center gap-1">
                     <MessageSquare className="w-3 h-3" />
-                    <span>{node.messagesCount} повідомлень</span>
+                    <span>{node.messagesCount} пов.</span>
                   </span>
                   {node.artifactsCount > 0 && (
                     <span className="flex items-center gap-1 text-[#C25925] font-semibold">
                       <Layers className="w-3 h-3" />
-                      <span>{node.artifactsCount} артефакт</span>
+                      <span>{node.artifactsCount} арт.</span>
                     </span>
                   )}
                 </div>
-                <span>{new Date(node.createdAt).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+
+                <div className="flex items-center gap-1">
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      handleOpenSideBySideDiff(node.id);
+                    }}
+                    title="Порівняти Side-by-Side Diff"
+                    className="px-2 py-0.5 bg-[#FAF7F0] hover:bg-[#F2ECE1] border border-[#DDD3BF] rounded-lg text-[#1E2521] font-bold flex items-center gap-1 transition-colors"
+                  >
+                    <GitCompare className="w-3 h-3 text-purple-700" />
+                    <span>Diff</span>
+                  </button>
+                </div>
               </div>
             </div>
           );

@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useMessengerStore } from '../../stores/messengerStore';
+import { useAuthStore } from '../../stores/authStore';
 import { phantomRelayService } from '../../services/phantomRelayService';
 import { wsClient } from '../../services/websocket';
 import { messengerNetworkEngine } from '../../services/messengerNetworkEngine';
@@ -71,14 +72,31 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Глобальний P2P Mesh через інтернет: зв'язок між будь-якими двома пристроями
+  // Синхронізація активного користувача сесії (наприклад kiril або kyrylo) та реєстрація слухачів Mesh
   useEffect(() => {
-    globalP2PMesh.init(
-      store.currentUser.id,
-      store.currentUser.name,
-      store.currentUser.handle,
-      store.currentUser.avatar
-    );
+    const authUser = useAuthStore.getState().user;
+    if (authUser?.username) {
+      const uName = (authUser as any).display_name || authUser.username.charAt(0).toUpperCase() + authUser.username.slice(1);
+      const uHandle = `@${authUser.username}`;
+      const uId = authUser.id || `u_${authUser.username}`;
+      const uAvatar = authUser.avatar_url || store.currentUser.avatar;
+
+      store.updateCurrentUser({
+        id: uId,
+        name: uName,
+        handle: uHandle,
+        avatar: uAvatar,
+      });
+
+      globalP2PMesh.init(uId, uName, uHandle, uAvatar);
+    } else {
+      globalP2PMesh.init(
+        store.currentUser.id,
+        store.currentUser.name,
+        store.currentUser.handle,
+        store.currentUser.avatar
+      );
+    }
 
     const offMsg = globalP2PMesh.onMessage((packet) => {
       if (packet.type === 'message:new' && packet.payload) {

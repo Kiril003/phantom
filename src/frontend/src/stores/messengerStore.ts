@@ -1249,48 +1249,6 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
             get().addReaction(clientId, agentReply.reactionEmoji);
           }
         }
-      } else if (activeChat) {
-        // Жива інтерактивна відповідь у будь-якому чаті контактів / груп
-        const peerName = activeChat.title?.split(' ')[0] || 'Співрозмовник';
-        get().setTypingStatus(chatId, `${peerName} друкує…`);
-
-        const reply = generateContextualResponse(activeChat, text, activeChat.messages);
-
-        setTimeout(() => {
-          get().setTypingStatus(chatId, null);
-          soundFx.playReceive();
-
-          const peerMsgId = `msg_peer_${Date.now()}`;
-          const peerMsg: Message = {
-            id: peerMsgId,
-            senderId: activeChat.id || 'peer_user',
-            senderName: activeChat.title || 'Співрозмовник',
-            senderAvatar: activeChat.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
-            timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
-            type: 'text',
-            text: reply.text,
-            isSelf: false,
-          };
-
-          set((s) => ({
-            chats: s.chats.map((c) =>
-              c.id === chatId
-                ? {
-                    ...c,
-                    messages: [...c.messages, peerMsg],
-                    lastKind: 'text',
-                    lastSnippet: reply.text.slice(0, 90),
-                    lastAuthor: activeChat.title || 'Співрозмовник',
-                    lastAt: new Date().toISOString(),
-                  }
-                : c
-            ),
-          }));
-
-          if (reply.reactionEmoji) {
-            get().addReaction(clientId, reply.reactionEmoji);
-          }
-        }, reply.delayMs || 1000);
       }
     },
 

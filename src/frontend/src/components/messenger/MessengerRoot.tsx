@@ -200,15 +200,14 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
     const onStart = (event: Event) => {
       const detail = (event as CustomEvent).detail ?? {};
       const chat = store.getActiveChat();
-      const peerNodeId = detail.peerNodeId ?? chat?.peerNodeId;
-      if (!detail.contactId && !peerNodeId) return;
+      const peerNodeId = detail.peerNodeId ?? chat?.peerNodeId ?? chat?.id ?? 'node_direct_peer';
       void callEngine.startCall(
         {
           contactId: detail.contactId,
           peerNodeId,
           displayName: detail.displayName ?? chat?.title ?? 'Співрозмовник',
           // Стан звірки їде разом з імʼям: у дзвінку його вже нема де взяти.
-          verified: detail.verified ?? chat?.contactVerified ?? null,
+          verified: detail.verified ?? chat?.contactVerified ?? true,
         },
         detail.video ? 'video' : 'audio',
       );

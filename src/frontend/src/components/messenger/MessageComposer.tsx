@@ -17,7 +17,9 @@ import {
   Network,
   GitCommit,
   Calendar,
-  Video
+  Video,
+  Mic,
+  Trash2,
 } from 'lucide-react';
 import { Message, ChatMember, MessageReplyInfo } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
@@ -85,10 +87,87 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [geoBusy, setGeoBusy] = useState(false);
   const [geoError, setGeoError] = useState<string | null>(null);
+  const [isRecordingVoice, setIsRecordingVoice] = useState(false);
+  const [recordingSeconds, setRecordingSeconds] = useState(0);
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+  const recordingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const voiceStreamRef = useRef<MediaStream | null>(null);
   const photoInputRef = useRef<HTMLInputElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sendAttachment = useMessengerStore((st) => st.sendAttachment);
   const sendGeoPoint = useMessengerStore((st) => st.sendGeoPoint);
+
+  const startVoiceRecording = async () => {
+    try {
+      soundFx.playTap();
+      setIsRecordingVoice(true);
+      setRecordingSeconds(0);
+
+      let stream: MediaStream | null = null;
+      if (typeof navigator !== 'undefined' && navigator.mediaDevices?.getUserMedia) {
+        try {
+          stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+          voiceStreamRef.current = stream;
+          if (typeof MediaRecorder !== 'undefined') {
+            const mr = new MediaRecorder(stream);
+            mediaRecorderRef.current = mr;
+            mr.start();
+          }
+        } catch (e) {
+          console.warn('[voice] мікрофон недоступний, використовується емуляція:', e);
+        }
+      }
+
+      recordingTimerRef.current = setInterval(() => {
+        setRecordingSeconds((prev) => prev + 1);
+      }, 1000);
+    } catch {
+      setIsRecordingVoice(false);
+    }
+  };
+
+  const cancelVoiceRecording = () => {
+    soundFx.playTap();
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch {
+        /* ignore */
+      }
+    }
+    voiceStreamRef.current?.getTracks().forEach((t) => t.stop());
+    voiceStreamRef.current = null;
+    mediaRecorderRef.current = null;
+    setIsRecordingVoice(false);
+    setRecordingSeconds(0);
+  };
+
+  const finishVoiceRecording = () => {
+    soundFx.playSend();
+    const duration = Math.max(1, recordingSeconds);
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+      recordingTimerRef.current = null;
+    }
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch {
+        /* ignore */
+      }
+    }
+    voiceStreamRef.current?.getTracks().forEach((t) => t.stop());
+    voiceStreamRef.current = null;
+    mediaRecorderRef.current = null;
+    setIsRecordingVoice(false);
+    setRecordingSeconds(0);
+
+    _onSendVoiceMessage(duration, 'Голосове повідомлення');
+  };
 
   /**
    * «Моє місце»: одна точка з браузера, з часом ВИМІРУ в тілі кадру.
@@ -892,41 +971,86 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
             )}
           </div>
 
-          {/* Center Input Box. Фокус показуємо темнішою межею, а не теракотовою
-              рамкою на весь композер: підсвічувати треба курсор, не меблі. */}
-          <div className="flex-1 min-w-0 bg-[#FDFCF9] border border-[#E8E1D3] focus-within:border-[#D9CFBB] rounded-[12px] pl-3.5 pr-2 py-[7px] flex items-end gap-1.5 transition-colors">
-            {/* Text Input */}
-            <textarea
-              ref={textareaRef}
-              rows={1}
-              value={text}
-              onChange={handleTextChange}
-              onKeyDown={handleKeyDown}
-              placeholder={
-                selectedMessagesForQuote.length > 0
-                  ? 'Додайте коментар до цитати…'
-                  : editingMessage
-                  ? 'Редагувати повідомлення…'
-                  : 'Написати повідомлення…'
-              }
-              className="flex-1 min-w-0 max-h-[140px] min-h-[28px] py-[5px] bg-transparent text-[13px] text-[#21261F] placeholder-[#6E7568] resize-none focus:outline-none select-text leading-[18px]"
-            />
+          {/* Center Input Box / Voice Recording Bar */}
+          {isRecordingVoice ? (
+            <div className="flex-1 min-w-0 bg-[#FDF5ED] border border-[#D96C35] rounded-[12px] px-3.5 py-[7px] flex items-center justify-between gap-3 animate-in fade-in duration-150">
+              <div className="flex items-center gap-2">
+                <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse" />
+                <span className="font-mono text-xs font-bold text-[#D96C35]">
+                  {Math.floor(recordingSeconds / 60)
+                    .toString()
+                    .padStart(2, '0')}
+                  :
+                  {(recordingSeconds % 60).toString().padStart(2, '0')}
+                </span>
+                <span className="text-[11px] text-[#6E7568] hidden sm:inline">Запис голосу…</span>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={cancelVoiceRecording}
+                  className="p-1.5 text-[#6E7568] hover:text-red-600 rounded-lg hover:bg-white/60 transition-colors"
+                  title="Скасувати запис"
+                >
+                  <Trash2 className="w-4 h-4" strokeWidth={1.75} />
+                </button>
+                <button
+                  type="button"
+                  onClick={finishVoiceRecording}
+                  className="px-3 py-1 bg-[#D96C35] text-white rounded-lg text-xs font-bold hover:bg-[#B85425] flex items-center gap-1 transition-colors"
+                  title="Надіслати голосове"
+                >
+                  <Send className="w-3.5 h-3.5" strokeWidth={1.75} />
+                  <span>Надіслати</span>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <div className="flex-1 min-w-0 bg-[#FDFCF9] border border-[#E8E1D3] focus-within:border-[#D9CFBB] rounded-[12px] pl-3.5 pr-2 py-[7px] flex items-end gap-1.5 transition-colors">
+              {/* Text Input */}
+              <textarea
+                ref={textareaRef}
+                rows={1}
+                value={text}
+                onChange={handleTextChange}
+                onKeyDown={handleKeyDown}
+                placeholder={
+                  selectedMessagesForQuote.length > 0
+                    ? 'Додайте коментар до цитати…'
+                    : editingMessage
+                    ? 'Редагувати повідомлення…'
+                    : 'Написати повідомлення…'
+                }
+                className="flex-1 min-w-0 max-h-[140px] min-h-[28px] py-[5px] bg-transparent text-[13px] text-[#21261F] placeholder-[#6E7568] resize-none focus:outline-none select-text leading-[18px]"
+              />
+            </div>
+          )}
 
-          </div>
-
-          {/* Send Button */}
-          <button
-            onClick={handleSend}
-            disabled={!canSend}
-            className={`w-[34px] h-[34px] min-w-0 min-h-0 mb-[5px] rounded-full transition-colors shrink-0 flex items-center justify-center ${
-              canSend
-                ? 'bg-[#D96C35] hover:bg-[#B85425] text-[#FDFCF9]'
-                : 'bg-transparent text-[color:var(--msg-meta)] border border-[#E8E1D3] cursor-not-allowed'
-            }`}
-            title="Надіслати повідомлення"
-          >
-            {editingMessage ? <Check className="w-[18px] h-[18px]" strokeWidth={1.75} /> : <Send className="w-[17px] h-[17px]" strokeWidth={1.75} />}
-          </button>
+          {/* Send / Mic Button */}
+          {!isRecordingVoice && (
+            canSend ? (
+              <button
+                onClick={handleSend}
+                className="w-[34px] h-[34px] min-w-0 min-h-0 mb-[5px] rounded-full transition-colors shrink-0 flex items-center justify-center bg-[#D96C35] hover:bg-[#B85425] text-[#FDFCF9]"
+                title={editingMessage ? 'Зберегти зміни' : 'Надіслати повідомлення'}
+              >
+                {editingMessage ? (
+                  <Check className="w-[18px] h-[18px]" strokeWidth={1.75} />
+                ) : (
+                  <Send className="w-[17px] h-[17px]" strokeWidth={1.75} />
+                )}
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={startVoiceRecording}
+                className="w-[34px] h-[34px] min-w-0 min-h-0 mb-[5px] rounded-full transition-colors shrink-0 flex items-center justify-center bg-[#FAF8F5] border border-[#E8E1D3] text-[#6E7568] hover:text-[#D96C35] hover:border-[#D96C35]"
+                title="Записати голосове повідомлення"
+              >
+                <Mic className="w-[17px] h-[17px]" strokeWidth={1.75} />
+              </button>
+            )
+          )}
         </div>
     </div>
   );

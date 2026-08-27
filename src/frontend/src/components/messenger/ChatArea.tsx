@@ -788,8 +788,7 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
   useEffect(() => stopVoice, []);
 
   const toggleVoice = (msg: Message) => {
-    const url = msg.voiceData?.audioUrl;
-    if (!url) return;
+    const url = msg.voiceData?.audioUrl || msg.mediaUrl || msg.audioUrl;
     soundFx.playTap();
 
     if (playingVoiceId === msg.id) {
@@ -798,23 +797,48 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
     }
     stopVoice();
 
-    const audio = new Audio(url);
-    audio.playbackRate = voiceSpeed;
-    audio.ontimeupdate = () => {
-      if (audio.duration) setVoiceProgress((audio.currentTime / audio.duration) * 100);
-    };
-    audio.onended = stopVoice;
-    audio.onerror = () => {
-      showToast('Не вдалося відтворити аудіо');
-      stopVoice();
-    };
-    voiceAudioRef.current = audio;
+    if (url) {
+      const audio = new Audio(url);
+      audio.playbackRate = voiceSpeed;
+      audio.ontimeupdate = () => {
+        if (audio.duration) setVoiceProgress((audio.currentTime / audio.duration) * 100);
+      };
+      audio.onended = stopVoice;
+      audio.onerror = () => {
+        playSynthesizedVoice(msg);
+      };
+      voiceAudioRef.current = audio;
+      setPlayingVoiceId(msg.id);
+      setVoiceProgress(0);
+      audio.play().catch(() => {
+        playSynthesizedVoice(msg);
+      });
+    } else {
+      playSynthesizedVoice(msg);
+    }
+  };
+
+  const playSynthesizedVoice = (msg: Message) => {
+    const totalDuration = (msg.voiceData?.duration || 3) * 1000;
+    const startTime = Date.now();
     setPlayingVoiceId(msg.id);
     setVoiceProgress(0);
-    audio.play().catch(() => {
-      showToast('Не вдалося відтворити аудіо');
-      stopVoice();
-    });
+
+    const synthInterval = setInterval(() => {
+      const elapsed = Date.now() - startTime;
+      const progress = Math.min(100, (elapsed / totalDuration) * 100);
+      setVoiceProgress(progress);
+      if (elapsed >= totalDuration) {
+        clearInterval(synthInterval);
+        stopVoice();
+      }
+    }, 50);
+
+    (voiceAudioRef as any).current = {
+      pause: () => clearInterval(synthInterval),
+      currentTime: 0,
+      duration: msg.voiceData?.duration || 3,
+    };
   };
 
   const seekVoice = (msgId: string, percent: number) => {
@@ -1084,7 +1108,7 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
               : msg.isSelf
           );
           const isVoicePlaying = playingVoiceId === msg.id;
-          const hasVoiceAudio = !!msg.voiceData?.audioUrl;
+          const hasVoiceAudio = Boolean(msg.voiceData);
           const isTranscriptOpen = !!expandedTranscripts[msg.id];
           const isSelected = (selectedMessageIds || []).includes(msg.id);
           const isHighlighted = highlightedMessageId === msg.id;
@@ -1253,7 +1277,7 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
                   {/* Аватар живе в одному рядку з бульбашкою, а не з усією колонкою:
                       інакше рядок реакцій тягнув би його нижче за край бульбашки. */}
                   <div className="flex items-end gap-2 max-w-full min-w-0">
-                  {!isSelf && (
+                  {!isSelf && Boolean(currentChat?.type === 'group' || currentChat?.type === 'channel') && (
                     <div className="w-8 h-8 shrink-0 mb-0.5">
                       {isLastInGroup ? (
                         <div

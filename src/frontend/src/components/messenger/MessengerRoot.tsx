@@ -485,8 +485,8 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
                 store.sendMessage(text);
               }
             }}
-            onSendVoiceMessage={(dur, transcript) => {
-              store.sendVoiceMessage(dur, transcript);
+            onSendVoiceMessage={(dur, transcript, audioUrl) => {
+              store.sendVoiceMessage(dur, transcript, audioUrl);
             }}
             onOpenActions={() => store.setActionHubOpen(true)}
             onOpenScheduler={() => store.setScheduleModalOpen(true)}

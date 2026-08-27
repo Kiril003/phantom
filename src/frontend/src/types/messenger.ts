@@ -546,6 +546,10 @@ export interface Message {
   webhookEventData?: WebhookEventData;
   /** Фото або файл із наскрізним ключем — див. SecureMedia. */
   media?: SecureMedia;
+  mediaUrl?: string;
+  audioUrl?: string;
+  fileName?: string;
+  fileSize?: number;
   ephemeral?: {
     expiresAt: number;
     durationSeconds: number;

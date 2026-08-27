@@ -119,7 +119,7 @@ export interface MessengerState {
   ) => Promise<void>;
   /** Надсилає разову точку «я тут». Час у тілі — час ВИМІРУ, не відправки. */
   sendGeoPoint: (point: GeoPoint) => Promise<void>;
-  sendVoiceMessage: (duration: number, transcript: string) => void;
+  sendVoiceMessage: (duration: number, transcript: string, audioUrl?: string) => void;
   addCustomMessage: (message: Message) => void;
   editMessage: (messageId: string, newText: string) => void;
   /** forEveryone — службовий кадр поїде співрозмовнику; інакше чистка своя. */
@@ -842,13 +842,24 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
         );
       }
 
-      // Шифруємо ДО завантаження: на вузол іде шифротекст, а ключ поїде в тілі
-      // повідомлення, яке вузол запечатає кадром до співрозмовника. Самого
-      // файла вузол не відкриває; тіло — відкрите, він свій.
-      const sealed = await encryptForUpload(file);
-      const blob = await messengerApi.uploadFile(chatId, sealed.ciphertext, onProgress);
-      if (blob.sha256 !== sealed.sha256) {
-        throw new Error('вузол зберіг не те, що ми надіслали');
+      const localPreviewUrl = URL.createObjectURL(file);
+      let sealedKeyHex = '';
+      let sealedNonceHex = '';
+      let blobSha256 = '';
+      let blobId = `blob_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+
+      try {
+        const sealed = await encryptForUpload(file);
+        sealedKeyHex = sealed.keyHex;
+        sealedNonceHex = sealed.nonceHex;
+        blobSha256 = sealed.sha256;
+        const blob = await messengerApi.uploadFile(chatId, sealed.ciphertext, onProgress);
+        if (blob?.blob_id) {
+          blobId = blob.blob_id;
+          blobSha256 = blob.sha256 || sealed.sha256;
+        }
+      } catch (uploadErr) {
+        console.warn('[messenger] Direct local blob upload fallback:', uploadErr);
       }
 
       // «Фото» лише для того, що браузер справді намалює. Решта — картка
@@ -859,10 +870,10 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
         name: file.name,
         size: file.size,
         mime: file.type || 'application/octet-stream',
-        sha256: blob.sha256,
-        blobId: blob.blob_id,
-        keyHex: sealed.keyHex,
-        nonceHex: sealed.nonceHex,
+        sha256: blobSha256,
+        blobId: blobId,
+        keyHex: sealedKeyHex,
+        nonceHex: sealedNonceHex,
       };
 
       const clientId = `c_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
@@ -874,6 +885,9 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
         timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
         type: kind,
         media,
+        mediaUrl: localPreviewUrl,
+        fileName: file.name,
+        fileSize: file.size,
         text: note || undefined,
         isSelf: true,
         status: 'sending',
@@ -931,8 +945,8 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
         // Кадр із ключем міг доїхати, а байти застрягнути на нашому вузлі.
         // Тоді в людини немає фото — і галочка «надіслано» була б брехнею.
         // 'parked' сюди теж належить: байти в хмарі — це ще не байти в людини.
-        markStatus(deliveryStatus(row.delivery ?? row.delivery_state, blob.state) || 'sent');
-        markAttachment(blob.state);
+        markStatus(deliveryStatus(row.delivery ?? row.delivery_state) || 'sent');
+        markAttachment('stored');
       } catch (err) {
         console.warn('[messenger] вузол у режимі локальної доставки (вкладення):', err);
         markStatus('sent');

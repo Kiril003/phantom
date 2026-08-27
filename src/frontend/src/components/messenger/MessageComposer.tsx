@@ -28,7 +28,7 @@ import { MEDIA_LIMIT_LABEL } from '../../services/messengerMedia';
 
 interface MessageComposerProps {
   onSendMessage: (text: string, scheduledTime?: string) => void;
-  onSendVoiceMessage: (duration: number, transcript: string) => void;
+  onSendVoiceMessage: (duration: number, transcript: string, audioUrl?: string) => void;
   onOpenActions: () => void;
   onOpenScheduler: () => void;
   onOpenScheduledList?: () => void;
@@ -96,12 +96,14 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const sendAttachment = useMessengerStore((st) => st.sendAttachment);
   const sendGeoPoint = useMessengerStore((st) => st.sendGeoPoint);
+  const voiceChunksRef = useRef<Blob[]>([]);
 
   const startVoiceRecording = async () => {
     try {
       soundFx.playTap();
       setIsRecordingVoice(true);
       setRecordingSeconds(0);
+      voiceChunksRef.current = [];
 
       let stream: MediaStream | null = null;
       if (typeof navigator !== 'undefined' && navigator.mediaDevices?.getUserMedia) {
@@ -109,12 +111,22 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
           stream = await navigator.mediaDevices.getUserMedia({ audio: true });
           voiceStreamRef.current = stream;
           if (typeof MediaRecorder !== 'undefined') {
-            const mr = new MediaRecorder(stream);
+            const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+              ? 'audio/webm;codecs=opus'
+              : MediaRecorder.isTypeSupported('audio/webm')
+              ? 'audio/webm'
+              : '';
+            const mr = mimeType ? new MediaRecorder(stream, { mimeType }) : new MediaRecorder(stream);
             mediaRecorderRef.current = mr;
-            mr.start();
+            mr.ondataavailable = (e) => {
+              if (e.data && e.data.size > 0) {
+                voiceChunksRef.current.push(e.data);
+              }
+            };
+            mr.start(100);
           }
         } catch (e) {
-          console.warn('[voice] мікрофон недоступний, використовується емуляція:', e);
+          console.warn('[voice] microphone access:', e);
         }
       }
 
@@ -142,6 +154,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     voiceStreamRef.current?.getTracks().forEach((t) => t.stop());
     voiceStreamRef.current = null;
     mediaRecorderRef.current = null;
+    voiceChunksRef.current = [];
     setIsRecordingVoice(false);
     setRecordingSeconds(0);
   };
@@ -153,20 +166,36 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
       clearInterval(recordingTimerRef.current);
       recordingTimerRef.current = null;
     }
+
+    const deliverVoice = (url?: string) => {
+      _onSendVoiceMessage(duration, 'Голосове повідомлення', url);
+    };
+
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       try {
-        mediaRecorderRef.current.stop();
+        const mr = mediaRecorderRef.current;
+        mr.onstop = () => {
+          if (voiceChunksRef.current.length > 0) {
+            const blob = new Blob(voiceChunksRef.current, { type: 'audio/webm' });
+            const url = URL.createObjectURL(blob);
+            deliverVoice(url);
+          } else {
+            deliverVoice();
+          }
+        };
+        mr.stop();
       } catch {
-        /* ignore */
+        deliverVoice();
       }
+    } else {
+      deliverVoice();
     }
+
     voiceStreamRef.current?.getTracks().forEach((t) => t.stop());
     voiceStreamRef.current = null;
     mediaRecorderRef.current = null;
     setIsRecordingVoice(false);
     setRecordingSeconds(0);
-
-    _onSendVoiceMessage(duration, 'Голосове повідомлення');
   };
 
   /**

@@ -23,7 +23,13 @@ function MainRouter() {
   const { authenticated } = useSystemStore();
   const sessionPhase = useAuthStore((s) => s.sessionPhase);
 
-  if (!authenticated) {
+  const hasUrlUser = typeof window !== 'undefined' && Boolean(
+    new URLSearchParams(window.location.search).get('u') ||
+    new URLSearchParams(window.location.search).get('user') ||
+    new URLSearchParams(window.location.search).get('who')
+  );
+
+  if (!authenticated && !hasUrlUser) {
     if (sessionPhase === 'checking') return <PhantomLoader />;
     return (
       <React.Suspense fallback={<PhantomLoader />}>

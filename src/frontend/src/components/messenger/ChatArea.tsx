@@ -430,7 +430,11 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
     if (Math.abs(diffX) > 16) {
       clearTimeout(longPressTimerRef.current);
       isTouchSwipingRef.current = true;
-      const isSelf = msg.senderId === currentUserId || msg.isSelf;
+      const isSelf = Boolean(
+        msg.senderId && currentUserId
+          ? msg.senderId === currentUserId
+          : msg.isSelf
+      );
       // Clamp swipe offset
       const clampedOffset = isSelf
         ? Math.min(0, Math.max(-75, diffX))
@@ -1074,7 +1078,11 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
         )}
         {(messages || []).map((msg, index) => {
           if (!msg) return null;
-          const isSelf = msg.senderId === currentUserId || msg.isSelf;
+          const isSelf = Boolean(
+            msg.senderId && currentUserId
+              ? msg.senderId === currentUserId
+              : msg.isSelf
+          );
           const isVoicePlaying = playingVoiceId === msg.id;
           const hasVoiceAudio = !!msg.voiceData?.audioUrl;
           const isTranscriptOpen = !!expandedTranscripts[msg.id];

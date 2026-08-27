@@ -800,6 +800,37 @@ export const initialChats: Chat[] = [
       },
     ],
   },
+  // 7. DIRECT P2P CHATS
+  {
+    id: 'chat_dm_kyrylo',
+    title: 'Kyrylo',
+    handle: '@kyrylo',
+    avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80',
+    type: 'dm',
+    circle: 'friends',
+    badge: 'P2P Mesh',
+    unreadCount: 0,
+    isOnline: true,
+    peerNodeId: 'node_kyrylo',
+    customVibe: 'Прямий шифрований P2P канал звʼязку',
+    description: 'Прямий децентралізований діалог через протокол PHANTOM Mesh.',
+    messages: [],
+  },
+  {
+    id: 'chat_dm_kiril',
+    title: 'Kiril',
+    handle: '@kiril',
+    avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
+    type: 'dm',
+    circle: 'friends',
+    badge: 'P2P Mesh',
+    unreadCount: 0,
+    isOnline: true,
+    peerNodeId: 'node_kiril',
+    customVibe: 'Прямий шифрований P2P канал звʼязку',
+    description: 'Прямий децентралізований діалог через протокол PHANTOM Mesh.',
+    messages: [],
+  },
 ];
 
 export const initialSmartFolders: SmartFolder[] = [

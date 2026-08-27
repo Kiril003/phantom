@@ -71,7 +71,10 @@ class GlobalP2PMeshService {
   }
 
   private normalizeHandle(handle: string): string {
-    return handle.replace(/^@+/, '').trim().toLowerCase().replace(/[^a-z0-9_\u0400-\u04ff-]/g, '_') || 'anonymous';
+    if (!handle) return 'anonymous';
+    const parenMatch = handle.match(/\(([^)]+)\)/);
+    const raw = parenMatch ? parenMatch[1] : handle;
+    return raw.replace(/^@+/, '').trim().toLowerCase().replace(/[^a-z0-9_\u0400-\u04ff-]/g, '_') || 'anonymous';
   }
 
   /**
@@ -167,11 +170,15 @@ class GlobalP2PMeshService {
       case 2: // CONNACK (0x20)
         this.isConnected = true;
         this.startPing();
+        console.log(`[GlobalMesh] Connected to MQTT broker as @${this.currentHandle}`);
         
         // Підписуємося на власну скриньку та глобальні події
-        this.subscribe('phantom/mesh/global/presence');
+        this.subscribedTopics.add('phantom/mesh/global/presence');
         if (this.currentHandle) {
-          this.subscribe(`phantom/mesh/user/${this.currentHandle}`);
+          this.subscribedTopics.add(`phantom/mesh/user/${this.currentHandle}`);
+        }
+        for (const topic of this.subscribedTopics) {
+          this.sendSubscribePacket(topic);
         }
         this.announcePresence();
         break;
@@ -201,7 +208,15 @@ class GlobalP2PMeshService {
 
       // Topic length
       const topicLen = (data[index] << 8) | data[index + 1];
-      index += 2 + topicLen;
+      index += 2;
+      const topicName = new TextDecoder().decode(data.subarray(index, index + topicLen));
+      index += topicLen;
+
+      // If QoS > 0, skip 2-byte packet identifier
+      const qos = (data[0] >> 1) & 0x03;
+      if (qos > 0) {
+        index += 2;
+      }
 
       // Payload
       const payloadBytes = data.subarray(index);
@@ -212,6 +227,8 @@ class GlobalP2PMeshService {
       if (packet.senderId === this.currentUserId && packet.senderHandle === this.currentHandle) {
         return;
       }
+
+      console.log(`[GlobalMesh] Received on ${topicName}:`, packet.type, packet.senderHandle);
 
       // Обробка подій
       if (packet.type === 'presence:ping') {
@@ -232,30 +249,46 @@ class GlobalP2PMeshService {
   }
 
   public subscribe(topic: string) {
-    if (!this.isConnected || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      this.subscribedTopics.add(topic);
-      return;
-    }
-
     this.subscribedTopics.add(topic);
-    const topicBytes = new TextEncoder().encode(topic);
-    const packetId = 1;
+    if (this.isConnected && this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.sendSubscribePacket(topic);
+    }
+  }
 
-    const payload = new Uint8Array(2 + 2 + topicBytes.length + 1);
-    payload[0] = (packetId >> 8) & 0xff;
-    payload[1] = packetId & 0xff;
-    payload[2] = (topicBytes.length >> 8) & 0xff;
-    payload[3] = topicBytes.length & 0xff;
-    payload.set(topicBytes, 4);
-    payload[4 + topicBytes.length] = 0x00; // QoS 0
+  private sendSubscribePacket(topic: string) {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    try {
+      const topicBytes = new TextEncoder().encode(topic);
+      const packetId = Math.floor(Math.random() * 60000) + 1;
 
-    const remLen = payload.length;
-    const packet = new Uint8Array(2 + remLen);
-    packet[0] = 0x82; // SUBSCRIBE (QoS 1)
-    packet[1] = remLen;
-    packet.set(payload, 2);
+      const payload = new Uint8Array(2 + 2 + topicBytes.length + 1);
+      payload[0] = (packetId >> 8) & 0xff;
+      payload[1] = packetId & 0xff;
+      payload[2] = (topicBytes.length >> 8) & 0xff;
+      payload[3] = topicBytes.length & 0xff;
+      payload.set(topicBytes, 4);
+      payload[4 + topicBytes.length] = 0x00; // QoS 0
 
-    this.ws.send(packet);
+      const remLen = payload.length;
+      const lenBytes: number[] = [];
+      let l = remLen;
+      do {
+        let byte = l % 128;
+        l = Math.floor(l / 128);
+        if (l > 0) byte |= 0x80;
+        lenBytes.push(byte);
+      } while (l > 0);
+
+      const packet = new Uint8Array(1 + lenBytes.length + remLen);
+      packet[0] = 0x82; // SUBSCRIBE (QoS 1)
+      packet.set(new Uint8Array(lenBytes), 1);
+      packet.set(payload, 1 + lenBytes.length);
+
+      this.ws.send(packet);
+      console.log(`[GlobalMesh] Subscribed to topic: ${topic}`);
+    } catch (err) {
+      console.warn('[GlobalMesh] Subscribe error:', err);
+    }
   }
 
   public unsubscribe(topic: string) {
@@ -405,3 +438,7 @@ class GlobalP2PMeshService {
 }
 
 export const globalP2PMesh = new GlobalP2PMeshService();
+
+if (typeof window !== 'undefined') {
+  (window as any).__phantom_p2p_mesh = globalP2PMesh;
+}

@@ -471,55 +471,74 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
     /** Повідомлення, записане вузлом (зокрема з іншого пристрою власника або вкладки). */
     applyNodeMessage: (row: any) => {
       const selfId = get().currentUser.id;
-      const selfHandle = get().currentUser.handle?.toLowerCase();
+      const selfHandle = (get().currentUser.handle || '').toLowerCase().replace(/^@/, '');
       const convId = row.conversation_id || row.chatId || row.conversationId;
       if (!convId && !row.senderId) return;
 
-      const isDirectMsg = row.senderId !== undefined && (row.text !== undefined || row.type !== undefined);
-      const isSelf = row.senderId === selfId || (selfHandle && row.senderHandle?.toLowerCase() === selfHandle);
+      const sHandle = (row.senderHandle || '').toLowerCase().replace(/^@/, '');
+      const sId = row.senderId || row.author_id;
+
+      // Визначаємо чи повідомлення дійсно від нас самих
+      const isSelf = Boolean(
+        (sId && sId === selfId) ||
+        (selfHandle && sHandle && sHandle === selfHandle)
+      );
+
+      const isDirectMsg = row.senderId !== undefined && (row.text !== undefined || row.type !== undefined || row.body !== undefined);
       const msgObj: Message = isDirectMsg
         ? {
             ...row,
+            id: row.id || row.client_id || `msg_${Date.now()}_${Math.random().toString(36).slice(2, 6)}`,
+            text: row.text || row.body || '',
+            type: row.type || row.kind || 'text',
+            senderId: sId,
+            senderName: row.senderName || row.author_name || 'Співрозмовник',
+            senderAvatar: row.senderAvatar || '',
             isSelf,
+            status: isSelf ? (row.status || 'sent') : undefined,
           }
-        : messageFromNode(row, selfId);
+        : {
+            ...messageFromNode(row, selfId),
+            isSelf,
+          };
 
-      // Якщо повідомлення від нас самих — не дублюємо отримання
+      // Якщо повідомлення від нас самих і вже є в стрічці — не дублюємо
       if (isSelf && get().chats.some((c) => c.messages.some((m) => m.id === msgObj.id || (row.client_id && m.id === row.client_id)))) {
         return;
       }
 
-      // Знаходимо цільову розмову: за ID або за співрозмовником (handle / name / peerNodeId)
-      let targetChat = get().chats.find((c) => c.id === convId);
-      if (!targetChat && row.senderName) {
-        const sName = row.senderName.toLowerCase();
-        const sHandle = row.senderHandle ? row.senderHandle.toLowerCase().replace(/^@/, '') : '';
-        targetChat = get().chats.find((c) => {
-          const cTitle = c.title.toLowerCase();
-          const cHandle = c.handle ? c.handle.toLowerCase().replace(/^@/, '') : '';
-          return (
-            (sHandle && cHandle === sHandle) ||
-            cTitle.includes(sName) ||
-            sName.includes(cTitle) ||
-            c.peerNodeId === row.senderId ||
-            c.peerNodeId === `node_${sHandle}` ||
-            c.id === `chat_dm_${sHandle}`
-          );
-        });
-      }
+      // Знаходимо цільову розмову: для вхідного DM шукаємо чат з цим відправником
+      let targetChat = get().chats.find((c) => {
+        const cHandle = (c.handle || '').toLowerCase().replace(/^@/, '');
+        const cTitle = (c.title || '').toLowerCase();
+        const cPeer = (c.peerNodeId || '').toLowerCase().replace(/^node_/, '');
+        const cId = c.id.toLowerCase();
+
+        if (!isSelf && sHandle) {
+          if (cHandle === sHandle || cPeer === sHandle || cId === `chat_dm_${sHandle}` || cTitle === sHandle) {
+            return true;
+          }
+        }
+
+        return (
+          c.id === convId ||
+          (sHandle && (cHandle === sHandle || cPeer === sHandle || cId === `chat_dm_${sHandle}` || cTitle === sHandle)) ||
+          (row.senderName && (cTitle === row.senderName.toLowerCase() || cTitle.includes(row.senderName.toLowerCase()) || row.senderName.toLowerCase().includes(cTitle)))
+        );
+      });
 
       // Якщо бесіди ще немає в списку чатів отримувача — створюємо її автоматично
       if (!targetChat) {
-        const newChatId = convId || `chat_dm_${row.senderId || Date.now()}`;
+        const newChatId = `chat_dm_${sHandle || sId || Date.now()}`;
         const newChat: Chat = {
           id: newChatId,
-          title: row.senderName || 'Співрозмовник',
-          handle: row.senderHandle || (row.senderName ? `@${row.senderName.toLowerCase()}` : undefined),
+          title: row.senderName || (sHandle ? `@${sHandle}` : 'Співрозмовник'),
+          handle: sHandle ? `@${sHandle}` : undefined,
           avatar: row.senderAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
           type: 'dm',
           circle: 'friends',
           isOnline: true,
-          peerNodeId: row.senderId || `node_${row.senderName?.toLowerCase() || 'peer'}`,
+          peerNodeId: sId || `node_${sHandle || 'peer'}`,
           unreadCount: 1,
           messages: [msgObj],
           lastKind: msgObj.type || 'text',
@@ -571,17 +590,20 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
     loadMessagesForChat: async (chatId) => {
       try {
         const rows = await messengerApi.listMessages(chatId);
-        const selfId = get().currentUser.id;
-        const peer = get().chats.find((c) => c.id === chatId)?.peerNodeId;
-        set((s2) => ({
-          chats: s2.chats.map((c) =>
-            c.id === chatId
-              ? { ...c, unreadCount: 0, messages: rows.map((r) => messageFromNode(r, selfId, peer)) }
-              : c,
-          ),
-        }));
-        const last = rows[rows.length - 1];
-        if (last) void messengerApi.markRead(chatId, last.seq);
+        if (rows && rows.length > 0) {
+          const selfId = get().currentUser.id;
+          const peer = get().chats.find((c) => c.id === chatId)?.peerNodeId;
+          const loadedMsgs = rows.map((r) => messageFromNode(r, selfId, peer));
+          set((s2) => ({
+            chats: s2.chats.map((c) => {
+              if (c.id !== chatId) return c;
+              const existingP2P = c.messages.filter((m) => m.transport === 'p2p' && !rows.some((r) => r.id === m.id || r.client_id === m.id));
+              return { ...c, unreadCount: 0, messages: [...loadedMsgs, ...existingP2P] };
+            }),
+          }));
+          const last = rows[rows.length - 1];
+          if (last) void messengerApi.markRead(chatId, last.seq);
+        }
       } catch (err) {
         console.warn('[messenger] історію розмови не отримано:', err);
       }
@@ -1029,8 +1051,14 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
       });
 
       // Передаємо повідомлення у глобальний P2P Mesh для віддалених користувачів
-      if (activeChat?.handle || activeChat?.title) {
-        globalP2PMesh.sendDirectMessage(activeChat.handle || activeChat.title, newMsg, chatId);
+      const targetHandle =
+        activeChat?.handle ||
+        (activeChat?.peerNodeId?.startsWith('node_') ? activeChat.peerNodeId.replace(/^node_/, '') : undefined) ||
+        (activeChat?.id?.startsWith('chat_dm_') ? activeChat.id.replace(/^chat_dm_/, '') : undefined) ||
+        activeChat?.title;
+
+      if (targetHandle) {
+        globalP2PMesh.sendDirectMessage(targetHandle, newMsg, chatId);
       }
 
       // Update state with user message

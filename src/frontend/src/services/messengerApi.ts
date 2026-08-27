@@ -363,9 +363,9 @@ export function messageFromNode(row: NodeMessage, selfId: string, peerNodeId?: s
   return {
     ...rich,
     id: row.id,
-    senderId: row.author_id,
-    senderName: row.author_name,
-    senderAvatar: '',
+    senderId: row.author_id || (row as any).senderId,
+    senderName: row.author_name || (row as any).senderName,
+    senderAvatar: (row as any).senderAvatar || (row as any).author_avatar || '',
     timestamp: timeLabel(row.sent_at),
     sentAt: row.sent_at,
     type: (row.kind as Message['type']) || 'text',

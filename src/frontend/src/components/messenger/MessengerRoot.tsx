@@ -74,43 +74,58 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
 
   // Синхронізація активного користувача сесії (наприклад kiril або kyrylo) та реєстрація слухачів Mesh
   useEffect(() => {
+    // Check URL parameters for explicit user identity (e.g. ?u=kyrylo or ?u=kiril)
+    let urlUser: string | null = null;
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      urlUser = params.get('u') || params.get('user') || params.get('who');
+    }
+
     const authUser = useAuthStore.getState().user;
-    if (authUser?.username) {
-      const uName = (authUser as any).display_name || authUser.username.charAt(0).toUpperCase() + authUser.username.slice(1);
-      const uHandle = `@${authUser.username}`;
-      const uId = authUser.id || `u_${authUser.username}`;
-      const uAvatar = authUser.avatar_url || store.currentUser.avatar;
+    const effectiveUsername = urlUser || authUser?.username || store.currentUser.handle?.replace(/^@/, '') || 'kiril';
+    const isKyrylo = effectiveUsername.toLowerCase() === 'kyrylo';
 
-      store.updateCurrentUser({
-        id: uId,
-        name: uName,
-        handle: uHandle,
-        avatar: uAvatar,
-      });
+    const uName = isKyrylo ? 'Кирило (Kyrylo)' : (authUser as any)?.display_name || (effectiveUsername.charAt(0).toUpperCase() + effectiveUsername.slice(1));
+    const uHandle = `@${effectiveUsername.toLowerCase()}`;
+    const uId = `u_${effectiveUsername.toLowerCase()}`;
+    const uAvatar = isKyrylo
+      ? 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80'
+      : (authUser?.avatar_url || store.currentUser.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80');
 
-      globalP2PMesh.init(uId, uName, uHandle, uAvatar);
-    } else {
-      globalP2PMesh.init(
-        store.currentUser.id,
-        store.currentUser.name,
-        store.currentUser.handle,
-        store.currentUser.avatar
-      );
+    store.updateCurrentUser({
+      id: uId,
+      name: uName,
+      handle: uHandle,
+      avatar: uAvatar,
+    });
+
+    globalP2PMesh.init(uId, uName, uHandle, uAvatar);
+
+    // Auto-select peer chat if opening as specific user
+    if (urlUser) {
+      const targetPeerChatId = isKyrylo ? 'chat_dm_kiril' : 'chat_dm_kyrylo';
+      const existing = store.chats.find((c) => c.id === targetPeerChatId);
+      if (existing) {
+        store.setActiveChat(targetPeerChatId);
+      }
     }
 
     const offMsg = globalP2PMesh.onMessage((packet) => {
       if (packet.type === 'message:new' && packet.payload) {
         const msg = packet.payload;
+        const recipientConvId = packet.senderHandle ? `chat_dm_${packet.senderHandle}` : (packet.chatId || 'chat_dm_peer');
         store.applyNodeMessage({
-          id: msg.id,
-          conversation_id: packet.chatId || `chat_dm_${packet.senderHandle}`,
+          ...msg,
+          id: msg.id || `msg_${Date.now()}`,
+          conversation_id: recipientConvId,
           client_id: msg.id,
           seq: Date.now(),
           author_id: packet.senderId,
           author_name: packet.senderName,
           kind: msg.type || 'text',
+          type: msg.type || 'text',
           body: msg.text || '',
-          ciphertext: null,
+          text: msg.text || '',
           transport: 'p2p',
           sent_at: new Date(packet.timestamp).toISOString(),
           edited_at: null,
@@ -121,7 +136,6 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
           senderHandle: packet.senderHandle,
           senderAvatar: packet.senderAvatar,
         } as any);
-        soundFx.playReceive();
       }
     });
 

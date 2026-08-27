@@ -102,9 +102,24 @@ class StoragePersistence {
   private loadChatsFromLocalStorage(): Chat[] | null {
     try {
       const raw = localStorage.getItem('phantom_chats_backup');
-      if (raw) return JSON.parse(raw);
+      if (raw) {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      }
     } catch {}
     return null;
+  }
+
+  public clearStorage(): void {
+    try {
+      localStorage.removeItem('phantom_chats_backup');
+      localStorage.removeItem('phantom_user_profile');
+      if (this.db) {
+        const tx = this.db.transaction(['chats', 'messages'], 'readwrite');
+        tx.objectStore('chats').clear();
+        tx.objectStore('messages').clear();
+      }
+    } catch {}
   }
 
   /* ─── Профіль користувача ─────────────────────────────────────────────── */

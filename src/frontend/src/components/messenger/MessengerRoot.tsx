@@ -3,6 +3,7 @@ import { useMessengerStore } from '../../stores/messengerStore';
 import { phantomRelayService } from '../../services/phantomRelayService';
 import { wsClient } from '../../services/websocket';
 import { messengerNetworkEngine } from '../../services/messengerNetworkEngine';
+import { globalP2PMesh } from '../../services/globalP2PMesh';
 import type { NetworkDiagnostics } from '../../types/messenger';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
@@ -70,21 +71,54 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // Живі повідомлення з вузла: те, що надіслали з телефона, приходить сюди.
+  // Глобальний P2P Mesh через інтернет: зв'язок між будь-якими двома пристроями
   useEffect(() => {
-    wsClient.send({ control: 'subscribe', channels: ['messenger', 'call'] });
-    const off = wsClient.on('messenger', (msg: any) => {
-      if (msg?.type === 'message:new' && msg?.data) store.applyNodeMessage(msg.data);
-      // Видалення — не нове повідомлення: бульбашку треба замінити надгробком,
-      // а не дописати рядок. Приїхати може і від співрозмовника, і з іншої
-      // вкладки власника, тож слухаємо тим самим каналом.
-      if (msg?.type === 'message:deleted' && msg?.data) store.applyNodeDelete(msg.data);
+    globalP2PMesh.init(
+      store.currentUser.id,
+      store.currentUser.name,
+      store.currentUser.handle,
+      store.currentUser.avatar
+    );
+
+    const offMsg = globalP2PMesh.onMessage((packet) => {
+      if (packet.type === 'message:new' && packet.payload) {
+        const msg = packet.payload;
+        store.applyNodeMessage({
+          id: msg.id,
+          conversation_id: packet.chatId || `chat_dm_${packet.senderHandle}`,
+          client_id: msg.id,
+          seq: Date.now(),
+          author_id: packet.senderId,
+          author_name: packet.senderName,
+          kind: msg.type || 'text',
+          body: msg.text || '',
+          ciphertext: null,
+          transport: 'p2p',
+          sent_at: new Date(packet.timestamp).toISOString(),
+          edited_at: null,
+          deleted_at: null,
+          delivery: 'sent',
+          senderId: packet.senderId,
+          senderName: packet.senderName,
+          senderHandle: packet.senderHandle,
+          senderAvatar: packet.senderAvatar,
+        } as any);
+        soundFx.playReceive();
+      }
     });
+
+    const offCall = globalP2PMesh.onCallSignal((signal) => {
+      if (signal) {
+        void callEngine.onSignal(signal);
+      }
+    });
+
     return () => {
-      off();
+      offMsg();
+      offCall();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [store.currentUser.handle, store.currentUser.id]);
 
   // Дзвінки: рушій слухає сигнали вузла, поки месенджер відкритий. Кнопки
   // слухавки в шапці кидають сюди 'phantom:start-call'.

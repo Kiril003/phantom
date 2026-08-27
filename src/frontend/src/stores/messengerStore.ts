@@ -34,6 +34,7 @@ import {
   scheduledMessages as defaultScheduled,
 } from '../data/messengerInitialData';
 import { generateContextualResponse } from '../services/conversationalAgent';
+import { globalP2PMesh } from '../services/globalP2PMesh';
 
 export interface MessengerState {
   // Current session & persona
@@ -1018,6 +1019,11 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
         },
       });
 
+      // Передаємо повідомлення у глобальний P2P Mesh для віддалених користувачів
+      if (activeChat?.handle || activeChat?.title) {
+        globalP2PMesh.sendDirectMessage(activeChat.handle || activeChat.title, newMsg, chatId);
+      }
+
       // Update state with user message
       set((s) => ({
         chats: s.chats.map((c) => {
@@ -1276,6 +1282,9 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
 
       soundFx.playSend();
       messengerNetworkEngine.sendMessage(chatId, newMsg);
+      if (activeChat?.handle || activeChat?.title) {
+        globalP2PMesh.sendDirectMessage(activeChat.handle || activeChat.title, newMsg, chatId);
+      }
 
       set((s) => ({
         chats: s.chats.map((c) =>

@@ -38,6 +38,7 @@ import { OpusLadder } from './callLadder';
 import type { LadderStep } from './callLadder';
 import { RadioLink } from './callRadio';
 import type { RadioTally } from './callRadio';
+import { globalP2PMesh } from './globalP2PMesh';
 
 const STATS_PERIOD_MS = 2000;
 /** Скільки триматися на екрані після завершення, перш ніж зникнути. */
@@ -445,8 +446,8 @@ class CallEngine {
 
   /* ── сигнали з вузла ────────────────────────────────────────────────── */
 
-  private async onSignal(msg: CallFrame): Promise<void> {
-    const data = msg?.data;
+  public async onSignal(msg: any): Promise<void> {
+    const data = msg?.data || msg;
     const kind = data?.kind ?? msg?.type?.replace('call:', '');
     const callId = data?.call_id;
     if (!kind || !callId) return;
@@ -828,18 +829,25 @@ class CallEngine {
     body: Record<string, unknown>,
   ): Promise<SignalResult> {
     // Транслюємо сигнал у WebSocket / BroadcastChannel шину для локальних і парних вкладок
+    const signalData = {
+      call_id: callId,
+      kind,
+      from_node_id: peer?.peerNodeId,
+      contact_id: peer?.contactId,
+      display_name: peer?.displayName,
+      ...body,
+    };
+
     wsClient.send({
       channel: 'call',
       type: `call:${kind}`,
-      data: {
-        call_id: callId,
-        kind,
-        from_node_id: peer?.peerNodeId,
-        contact_id: peer?.contactId,
-        display_name: peer?.displayName,
-        ...body,
-      },
+      data: signalData,
     });
+
+    // Транслюємо сигнал виклику через глобальний P2P Mesh для віддалених пристроїв через інтернет
+    if (peer?.displayName || peer?.contactId || peer?.peerNodeId) {
+      globalP2PMesh.sendCallSignal(peer.displayName || peer.contactId || peer.peerNodeId || '', signalData);
+    }
 
     try {
       return await request<SignalResult>('POST', `/messenger/call/${kind}`, {

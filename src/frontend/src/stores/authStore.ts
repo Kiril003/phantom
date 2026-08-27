@@ -55,9 +55,25 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
   setUser: (user, token, expiresAt) => {
     writeToken(token, expiresAt);
     set({ user, token, expiresAt, loginAttempts: 0, lockedUntil: null, sessionPhase: 'in' });
-    // Audit D-H6 — bootstrap is gated on a token, so it has to retrigger
-    // here once auth succeeds. settingsBootstrap dedupes a rapid-fire
-    // second call, so this is safe even if providers also triggered it.
+    
+    try {
+      // Dynamic sync with messengerStore currentUser
+      const messengerModule = (window as any).__phantom_messenger_store;
+      if (messengerModule) {
+        messengerModule.setState((s: any) => ({
+          currentUser: {
+            ...s.currentUser,
+            id: user.id || `u_${user.username}`,
+            name: (user as any).display_name || user.username.charAt(0).toUpperCase() + user.username.slice(1),
+            handle: `@${user.username}`,
+            avatar: user.avatar_url || s.currentUser.avatar,
+          },
+        }));
+      }
+    } catch {
+      /* ignore */
+    }
+
     void bootstrapSettings().catch(() => undefined);
   },
 

@@ -122,4 +122,36 @@ describe('Messenger Store & Real Messaging / Calling Actions', () => {
     callEngine.hangup();
     expect(callEngine.getSnapshot().state).toBe('idle');
   });
+
+  it('routes incoming message from another user (kiril to kyrylo) and auto-creates chat', () => {
+    // Current user in this tab is kyrylo
+    useMessengerStore.setState({
+      currentUser: {
+        ...useMessengerStore.getState().currentUser,
+        id: 'u_kyrylo',
+        name: 'Kyrylo',
+        handle: '@kyrylo',
+      },
+      chats: [],
+    });
+
+    const store = useMessengerStore.getState();
+    store.applyNodeMessage({
+      id: 'msg_cross_1',
+      senderId: 'u_kiril',
+      senderName: 'Kiril',
+      senderHandle: '@kiril',
+      senderAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200',
+      timestamp: '14:00',
+      type: 'text',
+      text: 'Привіт, Кирило! Як перевірка звʼязку?',
+    } as any);
+
+    const chats = useMessengerStore.getState().chats;
+    expect(chats.length).toBe(1);
+    expect(chats[0].title).toBe('Kiril');
+    expect(chats[0].messages.length).toBe(1);
+    expect(chats[0].messages[0].text).toBe('Привіт, Кирило! Як перевірка звʼязку?');
+    expect(chats[0].messages[0].isSelf).toBe(false);
+  });
 });

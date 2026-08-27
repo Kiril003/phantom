@@ -453,30 +453,77 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
     /** Повідомлення, записане вузлом (зокрема з іншого пристрою власника або вкладки). */
     applyNodeMessage: (row: any) => {
       const selfId = get().currentUser.id;
+      const selfHandle = get().currentUser.handle?.toLowerCase();
       const convId = row.conversation_id || row.chatId || row.conversationId;
-      if (!convId) return;
-
-      // Перший лист від нової людини приходить у розмову, якої клієнт ще не знає.
-      if (!get().chats.some((c) => c.id === convId)) {
-        void get()
-          .refreshConversations()
-          .then(() => get().loadMessagesForChat(convId));
-        return;
-      }
-      const isActive = get().activeChatId === convId;
-      if (isActive && typeof row.seq === 'number') void messengerApi.markRead(convId, row.seq);
+      if (!convId && !row.senderId) return;
 
       const isDirectMsg = row.senderId !== undefined && (row.text !== undefined || row.type !== undefined);
+      const isSelf = row.senderId === selfId || (selfHandle && row.senderHandle?.toLowerCase() === selfHandle);
       const msgObj: Message = isDirectMsg
         ? {
             ...row,
-            isSelf: row.senderId === selfId,
+            isSelf,
           }
         : messageFromNode(row, selfId);
 
+      // Якщо повідомлення від нас самих — не дублюємо отримання
+      if (isSelf && get().chats.some((c) => c.messages.some((m) => m.id === msgObj.id || (row.client_id && m.id === row.client_id)))) {
+        return;
+      }
+
+      // Знаходимо цільову розмову: за ID або за співрозмовником (handle / name / peerNodeId)
+      let targetChat = get().chats.find((c) => c.id === convId);
+      if (!targetChat && row.senderName) {
+        const sName = row.senderName.toLowerCase();
+        const sHandle = row.senderHandle ? row.senderHandle.toLowerCase().replace(/^@/, '') : '';
+        targetChat = get().chats.find((c) => {
+          const cTitle = c.title.toLowerCase();
+          const cHandle = c.handle ? c.handle.toLowerCase().replace(/^@/, '') : '';
+          return (
+            (sHandle && cHandle === sHandle) ||
+            cTitle.includes(sName) ||
+            sName.includes(cTitle) ||
+            c.peerNodeId === row.senderId ||
+            c.peerNodeId === `node_${sHandle}` ||
+            c.id === `chat_dm_${sHandle}`
+          );
+        });
+      }
+
+      // Якщо бесіди ще немає в списку чатів отримувача — створюємо її автоматично
+      if (!targetChat) {
+        const newChatId = convId || `chat_dm_${row.senderId || Date.now()}`;
+        const newChat: Chat = {
+          id: newChatId,
+          title: row.senderName || 'Співрозмовник',
+          handle: row.senderHandle || (row.senderName ? `@${row.senderName.toLowerCase()}` : undefined),
+          avatar: row.senderAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
+          type: 'dm',
+          circle: 'friends',
+          isOnline: true,
+          peerNodeId: row.senderId || `node_${row.senderName?.toLowerCase() || 'peer'}`,
+          unreadCount: 1,
+          messages: [msgObj],
+          lastKind: msgObj.type || 'text',
+          lastSnippet: msgObj.text ? msgObj.text.slice(0, 90) : undefined,
+          lastAuthor: msgObj.senderName || 'Співрозмовник',
+          lastAt: msgObj.sentAt || new Date().toISOString(),
+        };
+
+        if (!isSelf) soundFx.playReceive();
+        set((s) => ({ chats: [newChat, ...s.chats] }));
+        return;
+      }
+
+      const targetId = targetChat.id;
+      const isActive = get().activeChatId === targetId;
+      if (isActive && typeof row.seq === 'number') void messengerApi.markRead(targetId, row.seq);
+
+      if (!isSelf) soundFx.playReceive();
+
       set((s2) => ({
         chats: s2.chats.map((c) => {
-          if (c.id !== convId) return c;
+          if (c.id !== targetId) return c;
           c = {
             ...c,
             lastKind: msgObj.type || 'text',
@@ -494,7 +541,6 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
               ),
             };
           }
-          if (!msgObj.isSelf) soundFx.playReceive();
           return {
             ...c,
             unreadCount: c.id === s2.activeChatId ? 0 : c.unreadCount + 1,
@@ -953,6 +999,13 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
           ...newMsg,
           conversation_id: chatId,
           chatId,
+          senderId: state.currentUser.id,
+          senderName: state.currentUser.name,
+          senderHandle: state.currentUser.handle,
+          senderAvatar: state.currentUser.avatar,
+          targetChatTitle: activeChat?.title,
+          targetChatHandle: activeChat?.handle,
+          targetPeerNodeId: activeChat?.peerNodeId,
         },
       });
 
@@ -1678,3 +1731,7 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
     closeReactionPicker: () => set({ reactionPickerState: null }),
   };
 });
+
+if (typeof window !== 'undefined') {
+  (window as any).__phantom_messenger_store = useMessengerStore;
+}

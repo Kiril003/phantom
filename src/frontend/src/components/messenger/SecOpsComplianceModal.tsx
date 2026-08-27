@@ -6,6 +6,7 @@ import {
   Fingerprint,
 } from 'lucide-react';
 import { soundFx } from '../../utils/messengerSound';
+import { useUIStore } from '../../stores/uiStore';
 
 interface AuditLogEntry {
   id: string;
@@ -79,7 +80,7 @@ export const SecOpsComplianceModal: React.FC<SecOpsComplianceModalProps> = ({
     setDevices(
       devices.map((d) => (d.id === id ? { ...d, status: 'Revoked' } : d))
     );
-    alert('Сертифікат відкликано. Групові ключі шифрування простору перегенеровано (Key Ratchet Step +1) ✓');
+    useUIStore.getState().toast({ kind: 'success', message: 'Сертифікат відкликано. Групові ключі шифрування простору перегенеровано' });
   };
 
   return (

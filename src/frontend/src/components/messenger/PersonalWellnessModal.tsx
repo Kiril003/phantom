@@ -7,6 +7,7 @@ import {
   Timer,
 } from 'lucide-react';
 import { soundFx } from '../../utils/messengerSound';
+import { useUIStore } from '../../stores/uiStore';
 
 interface Habit {
   id: string;
@@ -196,9 +197,9 @@ export const PersonalWellnessModal: React.FC<PersonalWellnessModalProps> = ({
                 <button
                   onClick={() => {
                     soundFx.playSend();
-                    alert('Запис зашифровано та збережено у вашому локальному сховищі.');
+                    useUIStore.getState().toast({ kind: 'success', message: 'Запис зашифровано та збережено у вашому локальному сховищі' });
                   }}
-                  className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs"
+                  className="px-4 py-2 bg-emerald-700 hover:bg-emerald-800 text-white rounded-xl text-xs font-bold transition-all shadow-xs cursor-pointer"
                 >
                   Зберегти в зашифрований Vault
                 </button>

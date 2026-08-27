@@ -5,6 +5,7 @@ import {
   X,
 } from 'lucide-react';
 import { soundFx } from '../../utils/messengerSound';
+import { useUIStore } from '../../stores/uiStore';
 
 interface VfsMount {
   path: string;
@@ -182,9 +183,9 @@ export const PhantomRuntimeVfsModal: React.FC<PhantomRuntimeVfsModalProps> = ({
                       <button
                         onClick={() => {
                           soundFx.playTap();
-                          alert(`Wasm додаток ${app.name} розгорнуто у повному екрані`);
+                          useUIStore.getState().toast({ kind: 'info', message: `Wasm додаток ${app.name} розгорнуто` });
                         }}
-                        className="px-3 py-1 bg-[#21261F] hover:bg-[#3E453A] text-white rounded-lg text-xs font-bold transition-all shadow-xs"
+                        className="px-3 py-1 bg-[#21261F] hover:bg-[#3E453A] text-white rounded-lg text-xs font-bold transition-all shadow-xs cursor-pointer"
                       >
                         Відкрити вікно
                       </button>

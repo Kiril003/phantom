@@ -26,6 +26,7 @@ import { ChatMember, PersonaSphere, UserProfile, UserProfilePersona } from '../.
 import { soundFx } from '../../utils/messengerSound';
 import { Avatar } from './Avatar';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
+import { callEngine } from '../../services/callEngine';
 
 interface UserProfileModalProps {
   isOpen: boolean;
@@ -240,9 +241,18 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 <button
                   onClick={() => {
                     soundFx.playChime();
-                    alert(`Аудіодзвінок для ${viewingMember.name}`);
+                    callEngine.startCall(
+                      {
+                        contactId: viewingMember.id,
+                        displayName: viewingMember.name,
+                        verified: null,
+                      },
+                      'audio'
+                    );
+                    onClose();
                   }}
-                  className="p-2.5 bg-white hover:bg-[#FAF6EE] text-[#7A8479] border border-[#DFD6C5] rounded-2xl flex flex-col items-center gap-1 font-bold text-xs transition-colors shadow-2xs"
+                  className="p-2.5 bg-white hover:bg-[#FAF6EE] text-[#7A8479] border border-[#DFD6C5] rounded-2xl flex flex-col items-center gap-1 font-bold text-xs transition-colors shadow-2xs cursor-pointer"
+                  title="Розпочати аудіодзвінок"
                 >
                   <Phone className="w-4 h-4 text-[#528A4B]" strokeWidth={1.75} />
                   <span>Дзвінок</span>
@@ -251,9 +261,18 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 <button
                   onClick={() => {
                     soundFx.playTap();
-                    alert(`Відеозв’язок для ${viewingMember.name}`);
+                    callEngine.startCall(
+                      {
+                        contactId: viewingMember.id,
+                        displayName: viewingMember.name,
+                        verified: null,
+                      },
+                      'video'
+                    );
+                    onClose();
                   }}
-                  className="p-2.5 bg-white hover:bg-[#FAF6EE] text-[#7A8479] border border-[#DFD6C5] rounded-2xl flex flex-col items-center gap-1 font-bold text-xs transition-colors shadow-2xs"
+                  className="p-2.5 bg-white hover:bg-[#FAF6EE] text-[#7A8479] border border-[#DFD6C5] rounded-2xl flex flex-col items-center gap-1 font-bold text-xs transition-colors shadow-2xs cursor-pointer"
+                  title="Розпочати відеозв'язок"
                 >
                   <Video className="w-4 h-4 text-[#8C461A]" strokeWidth={1.75} />
                   <span>Відео</span>

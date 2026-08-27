@@ -18,6 +18,7 @@ import {
 import { LocationData } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
+import { useUIStore } from '../../stores/uiStore';
 
 interface LocationSheetModalProps {
   location: LocationData | null;
@@ -97,9 +98,12 @@ export const LocationSheetModal: React.FC<LocationSheetModalProps> = ({
               id="route-action-btn"
               onClick={() => {
                 soundFx.playChime();
-                alert(`Побудовано пішохідний та автомобільний маршрут до: ${location.name} (${location.address})`);
+                useUIStore.getState().toast({ kind: 'info', message: `Маршрут до «${location.name}» побудовано` });
+                if (location.coords?.lat && location.coords?.lng) {
+                  window.open(`https://www.openstreetmap.org/directions?engine=fossgis_osrm_car&route=${encodeURIComponent(location.coords.lat)},${encodeURIComponent(location.coords.lng)}`, '_blank');
+                }
               }}
-              className="col-span-2 py-3 px-4 bg-[#E87A42] hover:bg-[#C25925] active:scale-[0.98] text-[#F7F5EE] font-bold text-sm rounded-2xl flex items-center justify-center gap-2 transition-all shadow-sm"
+              className="col-span-2 py-3 px-4 bg-[#E87A42] hover:bg-[#C25925] active:scale-[0.98] text-[#F7F5EE] font-bold text-sm rounded-2xl flex items-center justify-center gap-2 transition-all shadow-sm cursor-pointer"
             >
               <Navigation className="w-4 h-4 fill-current" strokeWidth={1.75} />
               <span>Маршрут</span>
@@ -110,9 +114,9 @@ export const LocationSheetModal: React.FC<LocationSheetModalProps> = ({
               id="via-action-btn"
               onClick={() => {
                 soundFx.playTap();
-                alert('Додано як проміжну точку маршруту');
+                useUIStore.getState().toast({ kind: 'info', message: `Точку «${location.name}» додано до маршруту` });
               }}
-              className="py-2.5 px-2 bg-[#FDFCF9] hover:bg-[#F9F7F1] text-[#5F6A60] hover:text-[#1E2521] text-xs font-semibold rounded-2xl flex flex-col items-center justify-center gap-1 border border-[#E6DFD3] transition-colors"
+              className="py-2.5 px-2 bg-[#FDFCF9] hover:bg-[#F9F7F1] text-[#5F6A60] hover:text-[#1E2521] text-xs font-semibold rounded-2xl flex flex-col items-center justify-center gap-1 border border-[#E6DFD3] transition-colors cursor-pointer"
             >
               <GitFork className="w-4 h-4 text-[#E87A42]" strokeWidth={1.75} />
               <span>Через</span>

@@ -35,6 +35,7 @@ import {
 } from '../data/messengerInitialData';
 import { generateContextualResponse } from '../services/conversationalAgent';
 import { globalP2PMesh } from '../services/globalP2PMesh';
+import { storagePersistence } from '../services/storagePersistence';
 
 export interface MessengerState {
   // Current session & persona
@@ -313,14 +314,22 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
     });
   });
 
+  const persistedUser = storagePersistence.loadSetting<UserProfile | null>('phantom_user_profile', null);
+  const persistedChats = storagePersistence.loadSetting<Chat[] | null>('phantom_chats_backup', null);
+  const persistedScheduled = storagePersistence.loadSetting<ScheduledMessage[] | null>('phantom_scheduled_messages', null);
+
+  const activeUser = persistedUser || defaultUser;
+  const activeChats = persistedChats && persistedChats.length > 0 ? persistedChats : initialChats;
+  const activeScheduled = persistedScheduled || defaultScheduled;
+
   return {
-    currentUser: defaultUser,
-    chats: initialChats,
-    activeChatId: initialChats[0]?.id || 'chat_aura_design',
+    currentUser: activeUser,
+    chats: activeChats,
+    activeChatId: activeChats[0]?.id || 'chat_aura_design',
     activeCircle: 'all',
     activeFolderId: null,
     smartFolders: defaultFolders,
-    scheduledMessages: defaultScheduled,
+    scheduledMessages: activeScheduled,
     searchQuery: '',
 
     multiSelectMode: false,
@@ -1046,6 +1055,8 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
         ),
       }));
 
+      storagePersistence.saveChats(get().chats);
+
       // Галочка ставиться тільки після того, як вузол підтвердив запис.
       const markStatus = (status: Message['status']) =>
         set((s) => ({
@@ -1357,14 +1368,16 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
     },
 
     editMessage: (messageId, newText) => {
-      set((state) => ({
-        chats: state.chats.map((c) => ({
+      set((state) => {
+        const nextChats = state.chats.map((c) => ({
           ...c,
           messages: c.messages.map((m) =>
             m.id === messageId ? { ...m, text: newText, isEdited: true } : m
           ),
-        })),
-      }));
+        }));
+        storagePersistence.saveChats(nextChats);
+        return { chats: nextChats };
+      });
     },
 
     /**
@@ -1385,8 +1398,8 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
       if (!chat) return;
 
       // Optimistically delete locally
-      set((state) => ({
-        chats: state.chats.map((c) =>
+      set((state) => {
+        const nextChats = state.chats.map((c) =>
           c.id !== chat.id
             ? c
             : withFreshPreview({
@@ -1395,8 +1408,10 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
                   ? c.messages.map((m) => (m.id === messageId ? asTombstone(m) : m))
                   : c.messages.filter((m) => m.id !== messageId),
               }),
-        ),
-      }));
+        );
+        storagePersistence.saveChats(nextChats);
+        return { chats: nextChats };
+      });
 
       try {
         await messengerApi.deleteMessage(chat.id, messageId, forEveryone);
@@ -1646,17 +1661,21 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
         scheduledTime: timeStr,
         createdAt: new Date().toISOString(),
       };
-      set((s) => ({
-        scheduledMessages: [...s.scheduledMessages, newScheduled],
+      const nextList = [...state.scheduledMessages, newScheduled];
+      storagePersistence.saveScheduledMessages(nextList);
+      set({
+        scheduledMessages: nextList,
         isScheduleModalOpen: false,
-      }));
+      });
     },
 
     deleteScheduledMessage: (id) => {
       soundFx.playTap();
-      set((state) => ({
-        scheduledMessages: state.scheduledMessages.filter((s) => s.id !== id),
-      }));
+      set((state) => {
+        const nextList = state.scheduledMessages.filter((s) => s.id !== id);
+        storagePersistence.saveScheduledMessages(nextList);
+        return { scheduledMessages: nextList };
+      });
     },
 
     cancelScheduledMessage: (id) => {
@@ -1708,24 +1727,26 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
     // User profile & personas
     updateCurrentUser: (updates) => {
       soundFx.playTap();
-      set((state) => ({
-        currentUser: { ...state.currentUser, ...updates },
-      }));
+      set((state) => {
+        const next = { ...state.currentUser, ...updates };
+        storagePersistence.saveUserProfile(next);
+        return { currentUser: next };
+      });
     },
 
     switchPersonaSphere: (sphere) => {
       soundFx.playTap();
       set((state) => {
         const persona = state.currentUser.personas?.[sphere];
-        return {
-          currentUser: {
-            ...state.currentUser,
-            activePersonaSphere: sphere,
-            status: persona?.statusText || state.currentUser.status,
-            statusEmoji: persona?.statusEmoji || state.currentUser.statusEmoji,
-            bio: persona?.bio || state.currentUser.bio,
-          },
+        const next = {
+          ...state.currentUser,
+          activePersonaSphere: sphere,
+          status: persona?.statusText || state.currentUser.status,
+          statusEmoji: persona?.statusEmoji || state.currentUser.statusEmoji,
+          bio: persona?.bio || state.currentUser.bio,
         };
+        storagePersistence.saveUserProfile(next);
+        return { currentUser: next };
       });
     },
 

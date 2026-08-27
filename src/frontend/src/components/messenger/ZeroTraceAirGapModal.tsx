@@ -10,6 +10,7 @@ import {
   Lock,
 } from 'lucide-react';
 import { soundFx } from '../../utils/messengerSound';
+import { useUIStore } from '../../stores/uiStore';
 
 interface ZeroTraceAirGapModalProps {
   isOpen: boolean;
@@ -227,7 +228,7 @@ export const ZeroTraceAirGapModal: React.FC<ZeroTraceAirGapModalProps> = ({
                 <button
                   onClick={() => {
                     soundFx.playTap();
-                    alert('Для імпорту виберіть .phantom контейнер з USB-носія');
+                    useUIStore.getState().toast({ kind: 'info', message: 'Для імпорту виберіть .phantom контейнер з носія' });
                   }}
                   className="p-4 bg-white hover:bg-[#FAF8F5] border border-[#E5DEC9] rounded-xl flex flex-col items-center justify-center gap-2 text-center transition-all group"
                 >

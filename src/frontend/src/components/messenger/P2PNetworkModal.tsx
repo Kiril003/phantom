@@ -26,6 +26,7 @@ import { messengerApi, type RoadsReport } from '../../services/messengerApi';
 import { callEngine } from '../../services/callEngine';
 import { soundFx } from '../../utils/messengerSound';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
+import { useUIStore } from '../../stores/uiStore';
 
 /** Адреса без схеми й хвоста запиту — те, що людині корисно бачити. */
 const hostOf = (url: string): string => url.replace(/^\w+:/, '').split('?')[0];
@@ -152,7 +153,7 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
     soundFx.playSend();
     const sent = await networkEngine.sendP2PFile(file);
     if (!sent) {
-      alert('Немає активних P2P каналів. Перейдіть у режим Auto або підключіть хоча б один вузол.');
+      useUIStore.getState().toast({ kind: 'warn', message: 'Немає активних P2P каналів. Підключіть хоча б один вузол.' });
     }
     if (fileInputRef.current) fileInputRef.current.value = '';
   };

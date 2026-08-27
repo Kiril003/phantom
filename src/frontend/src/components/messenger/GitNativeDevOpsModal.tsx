@@ -9,6 +9,7 @@ import {
 } from 'lucide-react';
 import { soundFx } from '../../utils/messengerSound';
 import { useMessengerStore } from '../../stores/messengerStore';
+import { useUIStore } from '../../stores/uiStore';
 
 interface PullRequest {
   id: string;
@@ -308,9 +309,9 @@ export const GitNativeDevOpsModal: React.FC<GitNativeDevOpsModalProps> = ({
                 <button
                   onClick={() => {
                     soundFx.playSend();
-                    alert('Сесія P2P SSH підключена до radxa-dev-01.pht (Node ID: #8491)');
+                    useUIStore.getState().toast({ kind: 'info', message: 'Сесія P2P SSH підключена до radxa-dev-01.pht' });
                   }}
-                  className="w-full mt-2 py-2 bg-[#21261F] hover:bg-[#3E453A] text-white rounded-xl text-xs font-bold transition-all"
+                  className="w-full mt-2 py-2 bg-[#21261F] hover:bg-[#3E453A] text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
                 >
                   Підключити спільну термінальну P2P-сесію
                 </button>

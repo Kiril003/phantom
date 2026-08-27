@@ -5,6 +5,7 @@ import {
   MousePointer,
 } from 'lucide-react';
 import { soundFx } from '../../utils/messengerSound';
+import { useUIStore } from '../../stores/uiStore';
 
 interface MicroBounty {
   id: string;
@@ -43,7 +44,7 @@ export const LiveSpotlightMicroBountiesModal: React.FC<LiveSpotlightMicroBountie
         b.id === id ? { ...b, status: 'Claimed & Paid', claimedBy: 'Ви (@Кирило)' } : b
       )
     );
-    alert('🎉 Мікро-нагороду зараховано на баланс простору після валідації PR!');
+    useUIStore.getState().toast({ kind: 'success', message: 'Мікро-нагороду зараховано на баланс простору після валідації PR' });
   };
 
   return (

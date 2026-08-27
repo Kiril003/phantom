@@ -7,6 +7,7 @@ import {
   AlertOctagon,
 } from 'lucide-react';
 import { soundFx } from '../../utils/messengerSound';
+import { useUIStore } from '../../stores/uiStore';
 
 interface Slide {
   title: string;
@@ -227,7 +228,7 @@ export const CanvasPresentationSpeakerMatrixModal: React.FC<CanvasPresentationSp
                       key={i}
                       onClick={() => {
                         soundFx.playTap();
-                        alert(`Перемотано до репліки: ${seg.speaker} (${seg.snippet})`);
+                        useUIStore.getState().toast({ kind: 'info', message: `Перемотано до репліки: ${seg.speaker}` });
                       }}
                       className="p-2.5 bg-[#FAF8F5] hover:bg-[#F3EDE2] border border-[#E8E1D3] rounded-lg text-xs flex justify-between items-center cursor-pointer transition-colors"
                     >

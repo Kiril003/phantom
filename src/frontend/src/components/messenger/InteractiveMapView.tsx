@@ -10,6 +10,7 @@ import {
 } from 'lucide-react';
 import { LocationData, UserProfile } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
+import { useUIStore } from '../../stores/uiStore';
 
 interface InteractiveMapViewProps {
   onSelectLocation: (loc: LocationData) => void;
@@ -261,9 +262,9 @@ export const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
         <button
           onClick={() => {
             soundFx.playTap();
-            alert('Режим автомобільної навігації увімкнено');
+            useUIStore.getState().toast({ kind: 'info', message: 'Режим автомобільної навігації увімкнено' });
           }}
-          className="p-2.5 text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F1EDE3] rounded-xl transition-colors"
+          className="p-2.5 text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F1EDE3] rounded-xl transition-colors cursor-pointer"
           title="Автомобільний маршрут"
         >
           <Car className="w-5 h-5" strokeWidth={1.75} />

@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { soundFx } from '../../utils/messengerSound';
 import { useMessengerStore } from '../../stores/messengerStore';
+import { useUIStore } from '../../stores/uiStore';
 
 interface SkuInventoryItem {
   sku: string;
@@ -93,7 +94,7 @@ export const LocalErpEscrowModal: React.FC<LocalErpEscrowModalProps> = ({
 
   const handleExportCsv = () => {
     soundFx.playTap();
-    alert('Податковий звіт та складська відомість (CSV) успішно згенеровані у vault/reports/');
+    useUIStore.getState().toast({ kind: 'success', message: 'Податковий звіт та складська відомість (CSV) згенеровані у vault/reports/' });
   };
 
   return (

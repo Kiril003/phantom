@@ -120,6 +120,25 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [store.currentUser.handle, store.currentUser.id]);
 
+  // Диспетчер запланованих повідомлень: перевіряє чергу кожні 10 секунд
+  useEffect(() => {
+    const timer = setInterval(() => {
+      const state = useMessengerStore.getState();
+      const now = new Date();
+      const curH = String(now.getHours()).padStart(2, '0');
+      const curM = String(now.getMinutes()).padStart(2, '0');
+      const curTime = `${curH}:${curM}`;
+
+      state.scheduledMessages.forEach((sched) => {
+        if (sched.scheduledTime === curTime && sched.text) {
+          state.sendScheduledNow(sched.id);
+        }
+      });
+    }, 10000);
+
+    return () => clearInterval(timer);
+  }, []);
+
   // Дзвінки: рушій слухає сигнали вузла, поки месенджер відкритий. Кнопки
   // слухавки в шапці кидають сюди 'phantom:start-call'.
   useEffect(() => {

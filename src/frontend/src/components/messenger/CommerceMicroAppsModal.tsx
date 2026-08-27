@@ -7,6 +7,7 @@ import {
 } from 'lucide-react';
 import { soundFx } from '../../utils/messengerSound';
 import { useMessengerStore } from '../../stores/messengerStore';
+import { useUIStore } from '../../stores/uiStore';
 
 interface ProductItem {
   id: string;
@@ -228,9 +229,9 @@ export const CommerceMicroAppsModal: React.FC<CommerceMicroAppsModalProps> = ({
                     <button
                       onClick={() => {
                         soundFx.playTap();
-                        alert('Автоматичне замовлення партії постачальнику сформовано.');
+                        useUIStore.getState().toast({ kind: 'success', message: 'Автоматичне замовлення партії постачальнику сформовано' });
                       }}
-                      className="mt-1 px-2.5 py-1 bg-white border border-[#E5DEC9] rounded text-[10px] font-bold text-[#21261F]"
+                      className="mt-1 px-2.5 py-1 bg-white hover:bg-[#FAF8F5] border border-[#E5DEC9] rounded text-[10px] font-bold text-[#21261F] cursor-pointer"
                     >
                       Автозамовлення
                     </button>

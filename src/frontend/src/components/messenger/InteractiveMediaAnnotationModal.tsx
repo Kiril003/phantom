@@ -6,6 +6,7 @@ import {
   Highlighter,
 } from 'lucide-react';
 import { soundFx } from '../../utils/messengerSound';
+import { useUIStore } from '../../stores/uiStore';
 
 interface AudioMarker {
   timeSec: number;
@@ -240,9 +241,9 @@ export const InteractiveMediaAnnotationModal: React.FC<InteractiveMediaAnnotatio
                   <button
                     onClick={() => {
                       soundFx.playTap();
-                      alert('Виноску додано до списку завдань Canvas ✓');
+                      useUIStore.getState().toast({ kind: 'success', message: 'Виноску додано до списку завдань' });
                     }}
-                    className="px-2 py-0.5 bg-amber-800 text-white rounded text-[10px] font-bold"
+                    className="px-2 py-0.5 bg-amber-800 hover:bg-amber-900 text-white rounded text-[10px] font-bold cursor-pointer"
                   >
                     В задачі
                   </button>

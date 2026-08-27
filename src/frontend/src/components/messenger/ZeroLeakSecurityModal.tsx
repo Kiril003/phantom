@@ -6,6 +6,7 @@ import {
   AlertTriangle,
 } from 'lucide-react';
 import { soundFx } from '../../utils/messengerSound';
+import { useUIStore } from '../../stores/uiStore';
 
 interface DbIsolationRecord {
   sphere: string;
@@ -208,7 +209,7 @@ export const ZeroLeakSecurityModal: React.FC<ZeroLeakSecurityModalProps> = ({
                 <button
                   onClick={() => {
                     soundFx.playTap();
-                    alert('Duress режим налаштовано. Введення цього PIN у вікні блокування активує decoy-простір.');
+                    useUIStore.getState().toast({ kind: 'info', message: 'Duress режим налаштовано. Введення цього PIN у вікні блокування активує decoy-простір.' });
                   }}
                   className="w-full py-2 bg-red-600 hover:bg-red-700 text-white rounded-xl text-xs font-bold transition-all shadow-xs"
                 >

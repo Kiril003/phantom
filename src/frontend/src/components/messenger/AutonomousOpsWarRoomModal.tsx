@@ -6,6 +6,7 @@ import {
   X,
 } from 'lucide-react';
 import { soundFx } from '../../utils/messengerSound';
+import { useUIStore } from '../../stores/uiStore';
 
 interface IncidentWarRoom {
   id: string;
@@ -67,7 +68,7 @@ export const AutonomousOpsWarRoomModal: React.FC<AutonomousOpsWarRoomModalProps>
     setIncidents(
       incidents.map((inc) => (inc.id === id ? { ...inc, status: 'Resolved' } : inc))
     );
-    alert('Інцидент закрито. Автоматичний Post-Mortem звіт збережено у vault/postmortems/inc-404.md ✓');
+    useUIStore.getState().toast({ kind: 'success', message: 'Інцидент закрито. Автоматичний Post-Mortem звіт збережено у vault/postmortems/inc-404.md' });
   };
 
   return (

@@ -5,6 +5,7 @@ import {
   X,
 } from 'lucide-react';
 import { soundFx } from '../../utils/messengerSound';
+import { useUIStore } from '../../stores/uiStore';
 
 interface IoTEqsTelemetryModalProps {
   isOpen: boolean;
@@ -166,9 +167,9 @@ export const IoTEqsTelemetryModal: React.FC<IoTEqsTelemetryModalProps> = ({
                 <button
                   onClick={() => {
                     soundFx.playSend();
-                    alert('Апаратний виклик YubiKey: торкніться сенсорної кнопки на ключі...');
+                    useUIStore.getState().toast({ kind: 'info', message: 'Апаратний виклик YubiKey: торкніться сенсорної кнопки на ключі...' });
                   }}
-                  className="w-full py-2 bg-[#21261F] hover:bg-[#3E453A] text-white rounded-xl text-xs font-bold transition-all"
+                  className="w-full py-2 bg-[#21261F] hover:bg-[#3E453A] text-white rounded-xl text-xs font-bold transition-all cursor-pointer"
                 >
                   Тест апаратного підпису (FIDO2 Challenge)
                 </button>

@@ -314,7 +314,7 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
     });
   });
 
-  const persistedUser = storagePersistence.loadSetting<UserProfile | null>('phantom_user_profile', null);
+  const persistedUser = storagePersistence.getUserProfileSync();
   const persistedChats = storagePersistence.loadSetting<Chat[] | null>('phantom_chats_backup', null);
   const persistedScheduled = storagePersistence.loadSetting<ScheduledMessage[] | null>('phantom_scheduled_messages', null);
 

@@ -56,17 +56,18 @@ class GlobalP2PMeshService {
 
   public updateIdentity(handle: string, name?: string, avatar?: string) {
     const clean = this.normalizeHandle(handle);
-    if (clean !== this.currentHandle) {
-      if (this.currentHandle) {
-        this.unsubscribe(`phantom/mesh/user/${this.currentHandle}`);
-      }
-      this.currentHandle = clean;
-      if (name) this.currentUserName = name;
-      if (avatar) this.currentUserAvatar = avatar;
-      if (this.isConnected) {
+    const handleChanged = clean !== this.currentHandle;
+    if (handleChanged && this.currentHandle) {
+      this.unsubscribe(`phantom/mesh/user/${this.currentHandle}`);
+    }
+    this.currentHandle = clean;
+    if (name) this.currentUserName = name;
+    if (avatar) this.currentUserAvatar = avatar;
+    if (this.isConnected) {
+      if (handleChanged) {
         this.subscribe(`phantom/mesh/user/${clean}`);
-        this.announcePresence();
       }
+      this.announcePresence();
     }
   }
 

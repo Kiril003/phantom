@@ -5,6 +5,7 @@ import { phantomRelayService } from '../../services/phantomRelayService';
 import { wsClient } from '../../services/websocket';
 import { messengerNetworkEngine } from '../../services/messengerNetworkEngine';
 import { globalP2PMesh } from '../../services/globalP2PMesh';
+import { storagePersistence } from '../../services/storagePersistence';
 import type { NetworkDiagnostics } from '../../types/messenger';
 import { Sidebar } from './Sidebar';
 import { Header } from './Header';
@@ -31,6 +32,7 @@ import { SettingsModal } from './SettingsModal';
 import { ShareFolderModal } from './ShareFolderModal';
 import { SmartFolderModal } from './SmartFolderModal';
 import { UserProfileModal } from './UserProfileModal';
+import { AISynthesisStudioModal } from '../ai-studio/AISynthesisStudioModal';
 import { CallOverlay } from './CallOverlay';
 import { ModalHost } from './modals/ModalHost';
 import { useModalStore } from '../../stores/modalStore';
@@ -85,18 +87,38 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
     const effectiveUsername = urlUser || authUser?.username || store.currentUser.handle?.replace(/^@/, '') || 'kiril';
     const isKyrylo = effectiveUsername.toLowerCase() === 'kyrylo';
 
-    const uName = isKyrylo ? 'Кирило (Kyrylo)' : (authUser as any)?.display_name || (effectiveUsername.charAt(0).toUpperCase() + effectiveUsername.slice(1));
     const uHandle = `@${effectiveUsername.toLowerCase()}`;
     const uId = `u_${effectiveUsername.toLowerCase()}`;
-    const uAvatar = isKyrylo
-      ? 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80'
-      : (authUser?.avatar_url || store.currentUser.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80');
+
+    const savedProfile = storagePersistence.getUserProfileSync();
+    const hasMatchingSavedProfile = savedProfile && savedProfile.handle?.toLowerCase() === uHandle.toLowerCase();
+
+    const uName = hasMatchingSavedProfile && savedProfile.name
+      ? savedProfile.name
+      : (isKyrylo ? 'Кирило (Kyrylo)' : (authUser as any)?.display_name || (effectiveUsername.charAt(0).toUpperCase() + effectiveUsername.slice(1)));
+
+    const uAvatar = hasMatchingSavedProfile && savedProfile.avatar
+      ? savedProfile.avatar
+      : (isKyrylo
+        ? 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80'
+        : (authUser?.avatar_url || store.currentUser.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80'));
+
+    const uStatus = hasMatchingSavedProfile && savedProfile.status ? savedProfile.status : store.currentUser.status;
+    const uStatusEmoji = hasMatchingSavedProfile && savedProfile.statusEmoji ? savedProfile.statusEmoji : store.currentUser.statusEmoji;
+    const uBio = hasMatchingSavedProfile && savedProfile.bio ? savedProfile.bio : store.currentUser.bio;
+    const uLocation = hasMatchingSavedProfile && savedProfile.locationName ? savedProfile.locationName : store.currentUser.locationName;
+    const uPhone = hasMatchingSavedProfile && savedProfile.phone ? savedProfile.phone : store.currentUser.phone;
 
     store.updateCurrentUser({
       id: uId,
       name: uName,
       handle: uHandle,
       avatar: uAvatar,
+      status: uStatus,
+      statusEmoji: uStatusEmoji,
+      bio: uBio,
+      locationName: uLocation,
+      phone: uPhone,
     });
 
     globalP2PMesh.init(uId, uName, uHandle, uAvatar);
@@ -696,6 +718,9 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
 
       {/* Dynamic Super-App & Work OS Domain Modals */}
       <ModalHost />
+
+      {/* AI Synthesis Lab & Companion Studio Modal */}
+      <AISynthesisStudioModal />
 
       <CallOverlay />
     </div>

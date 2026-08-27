@@ -10,7 +10,6 @@ import {
   Radio,
   Sparkles,
   ChevronDown,
-  FolderPlus,
   FolderEdit,
   Folder,
   GripVertical,
@@ -61,6 +60,7 @@ import { soundFx } from '../../utils/messengerSound';
 import { networkEngine } from '../../services/messengerNetworkEngine';
 import { messengerApi } from '../../services/messengerApi';
 import { useMessengerStore } from '../../stores/messengerStore';
+import { useAISynthesisStore } from '../../stores/aiSynthesisStore';
 import { ShareFolderModal } from './ShareFolderModal';
 import { FolderInsightsModal } from './FolderInsightsModal';
 import { FolderIconPickerModal } from './FolderIconPickerModal';
@@ -945,6 +945,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
               </div>
             </button>
 
+            {/* AI Synthesis Studio Launch Button */}
+            <button
+              onClick={() => {
+                soundFx.playChime();
+                useAISynthesisStore.getState().setStudioOpen(true);
+              }}
+              className="flex items-center justify-center w-full min-h-0"
+              title="PHANTOM AI Synthesis Lab (Когнітивний полігон)"
+            >
+              <div
+                className="w-[36px] h-[36px] rounded-[10px] flex items-center justify-center transition-colors bg-amber-100/60 text-[#C25925] hover:bg-amber-100 hover:scale-105"
+              >
+                <Sparkles className="w-[18px] h-[18px]" strokeWidth={1.75} />
+              </div>
+            </button>
+
             {/* Smart Folders — «Усі» вже має власну кнопку вище, другий раз її не малюємо */}
             {smartFolders
               .filter((f) => !f.isArchived && f.id !== 'all')
@@ -1401,13 +1417,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
           <button
             onClick={() => {
-              soundFx.playTap();
-              onOpenCreateFolder();
+              soundFx.playChime();
+              useAISynthesisStore.getState().setStudioOpen(true);
             }}
-            className="flex flex-col items-center gap-1 text-[11px] font-medium text-[#6E7568] hover:text-[#21261F] transition-colors active:scale-95"
+            className="flex flex-col items-center gap-1 text-[11px] font-medium text-[#C25925] hover:text-[#AA491A] transition-colors active:scale-95"
           >
-            <FolderPlus className="w-[18px] h-[18px]" strokeWidth={1.75} />
-            <span>Простори</span>
+            <Sparkles className="w-[18px] h-[18px]" strokeWidth={1.75} />
+            <span>AI Студія</span>
           </button>
 
           {onOpenP2PNetworkModal && (
@@ -1422,6 +1438,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <span>Мережа</span>
             </button>
           )}
+
+          <button
+            onClick={() => {
+              soundFx.playTap();
+              onOpenUserProfile();
+            }}
+            className="flex flex-col items-center gap-1 text-[11px] font-medium text-[#6E7568] hover:text-[#21261F] transition-colors active:scale-95"
+          >
+            <div className="relative">
+              <Avatar src={currentUser.avatar} name={currentUser.name} className="w-[18px] h-[18px] rounded-full" />
+            </div>
+            <span>Профіль</span>
+          </button>
 
           <button
             onClick={() => {
@@ -2310,7 +2339,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       )}
 
       {/* 8. Bottom Multi-Sphere Persona Panel */}
-      <div className="p-2 border-t border-[#E8E1D3] bg-[#F7F5EF] relative">
+      <div className="hidden md:block p-2 border-t border-[#E8E1D3] bg-[#F7F5EF] relative">
         {/* Persona quick switcher popup */}
         {isPersonaMenuOpen && onSwitchPersonaSphere && (
           <div className="absolute bottom-full left-2 right-2 mb-2 p-2 bg-[#FDFCF9]/[0.97] backdrop-blur-2xl border border-[#DDD4C4] rounded-2xl shadow-2xl z-30 space-y-1 animate-in fade-in zoom-in-95 duration-100 text-[#1E2521]">

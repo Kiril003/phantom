@@ -138,12 +138,16 @@ class StoragePersistence {
     }
   }
 
-  public async loadUserProfile(): Promise<UserProfile | null> {
+  public getUserProfileSync(): UserProfile | null {
     try {
       const raw = localStorage.getItem('phantom_user_profile');
       if (raw) return JSON.parse(raw);
     } catch {}
     return null;
+  }
+
+  public async loadUserProfile(): Promise<UserProfile | null> {
+    return this.getUserProfileSync();
   }
 
   /* ─── Заплановані повідомлення ────────────────────────────────────────── */

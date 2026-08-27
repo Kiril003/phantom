@@ -39,6 +39,7 @@ import { Chat, UserProfile, ActiveTransportStatus, TransportProtocol } from '../
 import { Avatar } from './Avatar';
 import { soundFx } from '../../utils/messengerSound';
 import { useMessengerStore } from '../../stores/messengerStore';
+import { useAISynthesisStore } from '../../stores/aiSynthesisStore';
 import { ContactSheet } from './VerifyContact';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 
@@ -373,12 +374,14 @@ export const Header: React.FC<HeaderProps> = ({
         </div>
 
         {/* Team Huddle Bar Trigger */}
-        <TeamHuddleBar
-          chatTitle={currentChat.title}
-          isHuddleActive={Boolean(isHuddleActive)}
-          onStartHuddle={onStartHuddle}
-          onLeaveHuddle={onLeaveHuddle}
-        />
+        <div className="hidden md:block">
+          <TeamHuddleBar
+            chatTitle={currentChat.title}
+            isHuddleActive={Boolean(isHuddleActive)}
+            onStartHuddle={onStartHuddle}
+            onLeaveHuddle={onLeaveHuddle}
+          />
+        </div>
 
         {/* Omni-Search across entire Workspace */}
         {onOpenKnowledgeSearch && (
@@ -406,9 +409,8 @@ export const Header: React.FC<HeaderProps> = ({
           <MessageSquare className="w-[18px] h-[18px]" strokeWidth={1.75} />
         </button>
 
-        {/* Закріплене: веде до першого закріпленого в стрічці. Обгортка — заради
-            підказки: у вимкненої кнопки браузер власний title не показує. */}
-        <span title={hasPinned ? undefined : NO_PINNED_NOTE} className="flex">
+        {/* Закріплене: веде до першого закріпленого в стрічці */}
+        <span title={hasPinned ? undefined : NO_PINNED_NOTE} className="hidden sm:flex">
           <button
             onClick={() => {
               if (!hasPinned) return;
@@ -429,8 +431,20 @@ export const Header: React.FC<HeaderProps> = ({
           </button>
         </span>
 
-        {/* Дзвінок: аудіо і відео. Обгортка існує лише заради підказки —
-            у вимкненої кнопки браузер власний title не показує. */}
+        {/* AI Synthesis Studio Launch Button */}
+        <button
+          onClick={() => {
+            soundFx.playChime();
+            useAISynthesisStore.getState().setStudioOpen(true);
+          }}
+          className="px-2.5 h-[32px] rounded-full flex items-center gap-1.5 text-xs font-bold bg-[#FAF7F0] hover:bg-[#F2ECE1] text-[#C25925] border border-[#DDD3BF] shadow-2xs transition-colors shrink-0"
+          title="Відкрити когнітивний полігон PHANTOM AI Studio"
+        >
+          <Sparkles className="w-3.5 h-3.5" />
+          <span className="hidden md:inline">AI Studio</span>
+        </button>
+
+        {/* Дзвінок: аудіо і відео */}
         <span
           className="flex items-center gap-0.5"
           title={canCall ? undefined : NO_CALL_NOTE}
@@ -450,7 +464,7 @@ export const Header: React.FC<HeaderProps> = ({
             onClick={() => startCall(true)}
             disabled={!canCall}
             data-call-start="video"
-            className={`${ICON_BTN} ${canCall ? ICON_BTN_IDLE : ICON_BTN_OFF}`}
+            className={`hidden sm:flex ${ICON_BTN} ${canCall ? ICON_BTN_IDLE : ICON_BTN_OFF}`}
             title={canCall ? `Відеодзвінок: ${currentChat.title}` : NO_CALL_NOTE}
             aria-label="Відеодзвінок"
           >

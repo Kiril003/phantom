@@ -26,7 +26,20 @@ export function generateContextualResponse(
   const title = chat.title || '';
   const cleanTitle = title.toLowerCase();
 
-  // 1. PHANTOM AI CORE
+  // 1. AI SPECIALIZED COGNITIVE AGENTS
+  if (cleanTitle.includes('architect') || chat.id === 'chat_ai_architect') {
+    return generateArchitectResponse(text, userMessage);
+  }
+
+  if (cleanTitle.includes('programmer') || cleanTitle.includes('coder') || chat.id === 'chat_ai_coder') {
+    return generateCoderResponse(text, userMessage);
+  }
+
+  if (cleanTitle.includes('app') || cleanTitle.includes('maker') || chat.id === 'chat_ai_app_maker') {
+    return generateAppMakerResponse(text, userMessage);
+  }
+
+  // 1.1 PHANTOM AI CORE
   if (
     cleanTitle.includes('phantom') ||
     chat.handle?.toLowerCase().includes('phantom') ||
@@ -268,6 +281,33 @@ function generateFriendsResponse(text: string, raw: string): AgentReply {
   };
 }
 
+function generateArchitectResponse(_text: string, raw: string): AgentReply {
+  return {
+    text: `🏛️ **Сократівський аналіз гіпотези**: «${raw.trim()}»\n\n1. **Критичне припущення**: Чи враховуємо ми крайові стани при розриві P2P звʼязку?\n2. **Матриця ризиків**: Потенційна розсинхронізація локального Vault та віддаленого вузла.\n3. **Пропозиція**: Зафіксувати це рішення як CRDT-гілку у Tree of Thought для стрес-тесту.`,
+    reactionEmoji: '🏛️',
+    delayMs: 900,
+    authorName: 'Thought Architect',
+  };
+}
+
+function generateCoderResponse(_text: string, raw: string): AgentReply {
+  return {
+    text: `💻 **Когнітивний аналіз коду & AST**: «${raw.trim()}»\n\n* Складність: O(1) вибірка з локального IndexedDB кешу.\n* Перевірка типів TypeScript: 100% покриття без \`any\`.\n* Пісочниця WebAssembly: готовий до виконання та заміру затримки (ms) у Canvas.`,
+    reactionEmoji: '💻',
+    delayMs: 800,
+    authorName: 'Pair Programmer',
+  };
+}
+
+function generateAppMakerResponse(_text: string, raw: string): AgentReply {
+  return {
+    text: `🎨 **Генератор інтерактивних додатків**:\n\nЯ створив новий інтерактивний React-віджет під запит: «${raw.trim()}». Відкрий **Dynamic Artifact Studio** у правому Canvas, щоб випробувати його наживо!`,
+    reactionEmoji: '🎨',
+    delayMs: 850,
+    authorName: 'App Studio',
+  };
+}
+
 function generateGenericPeerResponse(title: string, _text: string, raw: string): AgentReply {
   const shortName = title.split(' ')[0] || 'Співрозмовник';
   const replies = [
@@ -284,3 +324,4 @@ function generateGenericPeerResponse(title: string, _text: string, raw: string):
     authorName: shortName,
   };
 }
+

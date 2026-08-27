@@ -4,20 +4,12 @@ import {
   Mic,
   Signal,
   X,
-  Volume2,
   Send,
+  Activity,
 } from 'lucide-react';
 import { soundFx } from '../../utils/messengerSound';
 import { useMessengerStore } from '../../stores/messengerStore';
-
-interface LoRaNode {
-  id: string;
-  callsign: string;
-  snr: string;
-  distanceKm: number;
-  battery: string;
-  lastHeard: string;
-}
+import { useMeshStore } from '../../stores/meshStore';
 
 interface LoRaWalkieTalkieModalProps {
   isOpen: boolean;
@@ -34,27 +26,25 @@ export const LoRaWalkieTalkieModal: React.FC<LoRaWalkieTalkieModalProps> = ({
   const [isPttPressed, setIsPttPressed] = useState(false);
   const [loraText, setLoraText] = useState('');
 
-  const [loraNodes] = useState<LoRaNode[]>([
-    { id: 'l1', callsign: 'PHANTOM-NODE-PODIL', snr: '+9.2 dB', distanceKm: 1.4, battery: '94%', lastHeard: '15 сек тому' },
-    { id: 'l2', callsign: 'MESHTASTIC-RELAY-04', snr: '+4.5 dB', distanceKm: 4.8, battery: '82%', lastHeard: '1 хв тому' },
-    { id: 'l3', callsign: 'RADXA-BASE-SX1262', snr: '+12.0 dB', distanceKm: 0.3, battery: 'Mains', lastHeard: 'Щойно' },
-  ]);
+  const { loraTelemetry, broadcastLoraPacket, nodes } = useMeshStore();
 
   if (!isOpen) return null;
 
   const handleSendLoraText = () => {
     if (!loraText.trim()) return;
     soundFx.playSend();
+    const packet = broadcastLoraPacket(loraText.trim());
+
     const store = useMessengerStore.getState();
     store.addCustomMessage({
-      id: `msg_lora_${Date.now()}`,
+      id: `msg_lora_${packet.id}`,
       senderId: store.currentUser.id,
       senderName: 'LoRa 868MHz Mesh',
       senderAvatar: store.currentUser.avatar,
       timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
       type: 'text',
       isSelf: true,
-      text: `📡 **[LoRa SX1262 Mesh Packet / 868.1 MHz]**\n${loraText}\n\n*(Передано через апаратний радіомодем без інтернету)*`,
+      text: `📡 **[LoRa SX1262 Mesh Packet / 868.1 MHz]**\n${loraText}\n\n*(SNR: +9.2 dB | RSSI: -74 dBm | Без інтернету)*`,
     });
     setLoraText('');
     onClose();
@@ -101,127 +91,107 @@ export const LoRaWalkieTalkieModal: React.FC<LoRaWalkieTalkieModalProps> = ({
                   activeTab === 'walkietalkie' ? 'bg-white text-[#21261F] font-bold shadow-2xs' : 'hover:text-[#21261F]'
                 }`}
               >
-                P2P Рація (PTT)
+                PTT Walkie-Talkie
               </button>
             </div>
 
             <button
               onClick={onClose}
-              className="p-1.5 hover:bg-[#EFE9DC] rounded-lg text-[#6E7568] hover:text-[#21261F] transition-colors"
+              className="p-1.5 rounded-lg text-[#6E7568] hover:text-[#21261F] hover:bg-[#F1EBDD] transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        {/* Body */}
-        <div className="p-6 flex-1 overflow-y-auto custom-scrollbar space-y-4">
-          {/* TAB 1: LoRa SX1262 Mesh */}
-          {activeTab === 'lora' && (
+        {/* Content */}
+        <div className="p-5 overflow-y-auto flex-1 space-y-4">
+          {/* Telemetry Strip */}
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+            <div className="p-3 bg-[#FAF8F5] border border-[#E8E1D3] rounded-xl">
+              <span className="text-[10px] text-[#8A8577] uppercase font-bold">Частота</span>
+              <div className="text-sm font-bold text-[#21261F] mt-0.5">{loraTelemetry.frequencyMhz} MHz</div>
+            </div>
+            <div className="p-3 bg-[#FAF8F5] border border-[#E8E1D3] rounded-xl">
+              <span className="text-[10px] text-[#8A8577] uppercase font-bold">SNR / Сигнал</span>
+              <div className="text-sm font-bold text-emerald-700 mt-0.5">{loraTelemetry.snrDb} dB ({loraTelemetry.rssiDbm} dBm)</div>
+            </div>
+            <div className="p-3 bg-[#FAF8F5] border border-[#E8E1D3] rounded-xl">
+              <span className="text-[10px] text-[#8A8577] uppercase font-bold">Пакетів надіслано</span>
+              <div className="text-sm font-bold text-[#21261F] mt-0.5">{loraTelemetry.packetsSent}</div>
+            </div>
+            <div className="p-3 bg-[#FAF8F5] border border-[#E8E1D3] rounded-xl">
+              <span className="text-[10px] text-[#8A8577] uppercase font-bold">Активні радіовузли</span>
+              <div className="text-sm font-bold text-[#D96C35] mt-0.5">{nodes.length} в радіусі дії</div>
+            </div>
+          </div>
+
+          {activeTab === 'lora' ? (
             <div className="space-y-4">
-              <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2 text-xs text-emerald-950">
-                <div className="flex items-center gap-2 font-bold text-emerald-900">
-                  <Signal className="w-4 h-4 text-emerald-600" />
-                  <span>Позамережевий радіозв'язок (Off-Grid LoRa SX1262)</span>
-                </div>
-                <p className="leading-relaxed">
-                  Передача зашифрованих текстових повідомлень і GPS-координат на відстань до 15 км при повному блекауті, відсутності мобільного зв'язку та оптоволокна.
-                </p>
-              </div>
-
-              {/* Node list */}
-              <div className="space-y-2.5">
-                {loraNodes.map((node) => (
-                  <div key={node.id} className="p-3.5 bg-white border border-[#E5DEC9] rounded-xl flex items-center justify-between shadow-2xs">
-                    <div className="space-y-0.5">
-                      <div className="flex items-center gap-2">
-                        <span className="font-bold font-mono text-xs text-[#21261F]">{node.callsign}</span>
-                        <span className="text-[10px] font-mono text-emerald-800 bg-emerald-50 px-1.5 py-0.2 rounded border border-emerald-200">
-                          SNR: {node.snr}
-                        </span>
-                      </div>
-                      <p className="text-[11px] text-[#6E7568]">Дистанція: ~{node.distanceKm} км · Батарея: {node.battery}</p>
-                    </div>
-
-                    <span className="text-[10px] text-[#8A9186] font-mono">{node.lastHeard}</span>
-                  </div>
-                ))}
-              </div>
-
-              {/* Send LoRa Packet */}
-              <div className="flex gap-2">
-                <input
-                  type="text"
-                  placeholder="Введіть екстрений радіопакет..."
+              <div className="p-4 bg-white border border-[#E8E1D3] rounded-xl space-y-3">
+                <h4 className="font-bold text-xs text-[#21261F] flex items-center gap-1.5">
+                  <Signal className="w-4 h-4 text-[#D96C35]" /> Надіслати LoRa-повідомлення в ефір
+                </h4>
+                <textarea
                   value={loraText}
                   onChange={(e) => setLoraText(e.target.value)}
-                  className="flex-1 p-2.5 bg-[#FAF8F5] border border-[#E5DEC9] rounded-xl text-xs text-[#21261F] focus:outline-none"
+                  placeholder="Введіть текст для широкомовної радіопередачі (без інтернету)..."
+                  rows={3}
+                  className="w-full p-3 border border-[#E8E1D3] rounded-lg text-xs outline-none focus:border-[#D96C35] resize-none"
                 />
-                <button
-                  onClick={handleSendLoraText}
-                  className="px-4 py-2.5 bg-[#D96C35] hover:bg-[#B85425] text-white rounded-xl text-xs font-bold transition-all flex items-center gap-1.5 shadow-xs"
-                >
-                  <Send className="w-3.5 h-3.5" />
-                  <span>Transmit</span>
-                </button>
+                <div className="flex justify-between items-center">
+                  <span className="text-[11px] text-[#8A8577]">Макс. 240 байт / пакет · SF7 / BW 125kHz</span>
+                  <button
+                    onClick={handleSendLoraText}
+                    disabled={!loraText.trim()}
+                    className="px-4 py-1.5 bg-[#D96C35] text-white font-bold text-xs rounded-lg hover:bg-[#C25B27] disabled:opacity-50 transition-all flex items-center gap-1.5"
+                  >
+                    <Send className="w-3.5 h-3.5" /> В ефір
+                  </button>
+                </div>
               </div>
             </div>
-          )}
-
-          {/* TAB 2: P2P Walkie-Talkie */}
-          {activeTab === 'walkietalkie' && (
-            <div className="space-y-4 flex flex-col items-center justify-center p-4 text-center">
-              <div className="p-4 bg-amber-50 border border-amber-200 rounded-xl space-y-1 text-xs text-amber-950 max-w-md">
-                <span className="font-bold text-amber-900 flex items-center justify-center gap-1.5">
-                  <Volume2 className="w-4 h-4 text-[#D96C35]" />
-                  Direct Ad-Hoc Audio Loop (0 ms Latency)
-                </span>
-                <p className="text-[11px]">
-                  Пряма передача сирого PCM-аудіопотоку поверх локального Wi-Fi Direct або Bluetooth LE у зоні прямої видимості.
-                </p>
-              </div>
-
-              <div className="py-6 flex flex-col items-center gap-3">
-                <button
-                  onMouseDown={() => {
-                    soundFx.playSend();
-                    setIsPttPressed(true);
-                  }}
-                  onMouseUp={() => {
-                    soundFx.playTap();
-                    setIsPttPressed(false);
-                  }}
-                  onTouchStart={() => {
-                    soundFx.playSend();
-                    setIsPttPressed(true);
-                  }}
-                  onTouchEnd={() => {
-                    soundFx.playTap();
-                    setIsPttPressed(false);
-                  }}
-                  className={`w-32 h-32 rounded-full flex flex-col items-center justify-center gap-2 border-4 transition-all ${
-                    isPttPressed
-                      ? 'bg-red-600 border-red-400 text-white scale-105 shadow-xl shadow-red-500/20 animate-pulse'
-                      : 'bg-[#FAF8F5] border-[#D96C35] text-[#D96C35] hover:bg-[#FDF5ED]'
-                  }`}
-                >
-                  <Mic className={`w-10 h-10 ${isPttPressed ? 'animate-bounce' : ''}`} />
-                  <span className="font-bold text-xs uppercase tracking-wider">
-                    {isPttPressed ? 'Ефір (PTT ON)' : 'Утримуй (PTT)'}
-                  </span>
-                </button>
-                <span className="text-[11px] text-[#8A9186]">
-                  {isPttPressed ? '🔴 Передача аудіо в ефір...' : 'Натисніть та утримуйте кнопку для передачі голосу'}
-                </span>
-              </div>
+          ) : (
+            <div className="flex flex-col items-center justify-center p-8 bg-[#FAF8F5] border border-[#E8E1D3] rounded-xl text-center space-y-4">
+              <button
+                onMouseDown={() => {
+                  soundFx.playTap();
+                  setIsPttPressed(true);
+                }}
+                onMouseUp={() => setIsPttPressed(false)}
+                onTouchStart={() => {
+                  soundFx.playTap();
+                  setIsPttPressed(true);
+                }}
+                onTouchEnd={() => setIsPttPressed(false)}
+                className={`w-28 h-28 rounded-full border-4 flex flex-col items-center justify-center transition-all ${
+                  isPttPressed
+                    ? 'bg-red-500 border-red-300 text-white scale-95 shadow-lg animate-pulse'
+                    : 'bg-[#D96C35] border-[#FDF5ED] text-white hover:scale-105 shadow-md'
+                }`}
+              >
+                <Mic className="w-8 h-8" />
+                <span className="text-[11px] font-bold mt-1">{isPttPressed ? 'ЕФІР...' : 'ТРИМАЙТЕ (PTT)'}</span>
+              </button>
+              <p className="text-xs text-[#6E7568] max-w-sm">
+                Пряма передача голосових семплів через WebRTC DataChannel (Opus Codec 16kbps) без центрального сервера
+              </p>
             </div>
           )}
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-2.5 bg-[#FAF8F5] border-t border-[#E8E1D3] flex items-center justify-between text-[11px] text-[#8A9186]">
-          <span>Bare-Metal Radio Protocol</span>
-          <span className="font-mono">LoRa SX1262 / BLE Direct</span>
+        <div className="px-5 py-3 bg-[#FAF8F5] border-t border-[#E8E1D3] flex items-center justify-between text-xs text-[#6E7568]">
+          <div className="flex items-center gap-1.5">
+            <Activity className="w-4 h-4 text-emerald-600" />
+            <span>Апаратний міст SX1262 активний @ GPIO PIN 19/21</span>
+          </div>
+          <button
+            onClick={onClose}
+            className="px-3 py-1.5 bg-[#EFE9DC] text-[#21261F] font-medium rounded-lg hover:bg-[#E5DEC9] transition-colors"
+          >
+            Закрити
+          </button>
         </div>
       </div>
     </div>

@@ -1,18 +1,8 @@
-import React, { useState, useEffect } from 'react';
-import { Share2, Play, Pause, X, Wifi, ShieldCheck } from 'lucide-react';
+import React, { useState } from 'react';
+import { Share2, X, ShieldCheck, Plus } from 'lucide-react';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { soundFx } from '../../utils/messengerSound';
-
-interface P2PSwarmTransfer {
-  id: string;
-  name: string;
-  totalSizeBytes: number;
-  transferredBytes: number;
-  speedMbps: number;
-  peersCount: number;
-  status: 'seeding' | 'downloading' | 'paused' | 'completed';
-  sha256: string;
-}
+import { useMeshStore } from '../../stores/meshStore';
 
 interface P2PFileSwarmModalProps {
   isOpen: boolean;
@@ -25,47 +15,11 @@ export const P2PFileSwarmModal: React.FC<P2PFileSwarmModalProps> = ({
 }) => {
   useEscapeClose(isOpen, onClose);
 
-  const [transfers, setTransfers] = useState<P2PSwarmTransfer[]>([
-    {
-      id: 'sw_1',
-      name: 'radxa_rock5b_phantom_os_img_v1.4.img.xz',
-      totalSizeBytes: 3420000000,
-      transferredBytes: 2840000000,
-      speedMbps: 48.2,
-      peersCount: 5,
-      status: 'downloading',
-      sha256: '9a8b7c6d5e4f3a2b1c0d9e8f7a6b5c4d3e2f1a0b',
-    },
-    {
-      id: 'sw_2',
-      name: 'phantom_companion_dataset_onnx_models.tar.gz',
-      totalSizeBytes: 890000000,
-      transferredBytes: 890000000,
-      speedMbps: 0,
-      peersCount: 8,
-      status: 'seeding',
-      sha256: '1f2e3d4c5b6a7f8e9d0c1b2a3f4e5d6c7b8a9f0e',
-    },
-  ]);
+  const [isAdding, setIsAdding] = useState(false);
+  const [newFileName, setNewFileName] = useState('');
+  const [newFileSizeMB, setNewFileSizeMB] = useState('120');
 
-  useEffect(() => {
-    if (!isOpen) return;
-    const interval = setInterval(() => {
-      setTransfers((prev) =>
-        prev.map((t) => {
-          if (t.status !== 'downloading') return t;
-          const chunk = 1024 * 1024 * (t.speedMbps / 8);
-          const next = Math.min(t.totalSizeBytes, t.transferredBytes + chunk);
-          return {
-            ...t,
-            transferredBytes: next,
-            status: next >= t.totalSizeBytes ? 'completed' : 'downloading',
-          };
-        })
-      );
-    }, 1000);
-    return () => clearInterval(interval);
-  }, [isOpen]);
+  const { swarmFiles, seedSwarmFile } = useMeshStore();
 
   if (!isOpen) return null;
 
@@ -75,18 +29,14 @@ export const P2PFileSwarmModal: React.FC<P2PFileSwarmModalProps> = ({
     return `${(bytes / (1024 * 1024 * 1024)).toFixed(2)} GB`;
   };
 
-  const togglePause = (id: string) => {
-    soundFx.playTap();
-    setTransfers((prev) =>
-      prev.map((t) =>
-        t.id === id
-          ? {
-              ...t,
-              status: t.status === 'paused' ? 'downloading' : 'paused',
-            }
-          : t
-      )
-    );
+  const handleSeed = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newFileName.trim()) return;
+    soundFx.playSend();
+    const sizeBytes = (parseFloat(newFileSizeMB) || 10) * 1024 * 1024;
+    seedSwarmFile(newFileName.trim(), sizeBytes);
+    setNewFileName('');
+    setIsAdding(false);
   };
 
   return (
@@ -98,121 +48,139 @@ export const P2PFileSwarmModal: React.FC<P2PFileSwarmModalProps> = ({
         className="w-full max-w-2xl bg-[#FDFCF9] border border-[#E5DEC9] rounded-3xl shadow-2xl overflow-hidden animate-in zoom-in-95 duration-150 text-[#21261F]"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="p-5 bg-[#F7F4EC] border-b border-[#E5DEC9] flex items-center justify-between">
+        {/* Header */}
+        <div className="px-6 py-5 bg-[#FAF8F5] border-b border-[#E8E1D3] flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-2xl bg-[#FDF5ED] border border-[#EADCC8] flex items-center justify-center text-[#D96C35] shadow-sm">
+            <div className="w-10 h-10 rounded-2xl bg-[#FDF5ED] border border-[#E5DEC9] flex items-center justify-center text-[#D96C35]">
               <Share2 className="w-5 h-5" />
             </div>
             <div>
-              <h3 className="text-base font-bold text-[#21261F]">
-                P2P Swarm Hub (Пряма роздача гігабайтних файлів)
-              </h3>
-              <p className="text-xs text-[#6E7568] mt-0.5">
-                Torrent-like обмін через WebRTC DataChannels без посередництва сторонніх серверів
+              <h3 className="font-bold text-base text-[#21261F]">P2P File Swarm (BitTorrent Mesh)</h3>
+              <p className="text-xs text-[#6E7568]">
+                Безсерверна роздача великих бінарних файлів та моделей без лімітів розміру
               </p>
             </div>
           </div>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setIsAdding(!isAdding)}
+              className="px-3 py-1.5 bg-[#D96C35] text-white rounded-lg text-xs font-bold hover:bg-[#C25B27] flex items-center gap-1"
+            >
+              <Plus className="w-3.5 h-3.5" /> Роздати файл
+            </button>
+            <button
+              onClick={onClose}
+              className="p-2 text-[#6E7568] hover:text-[#21261F] hover:bg-[#EFE9DC] rounded-xl transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+        </div>
 
+        {/* Content */}
+        <div className="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
+          {isAdding && (
+            <form onSubmit={handleSeed} className="p-4 bg-white border border-[#D96C35] rounded-2xl space-y-3">
+              <h4 className="font-bold text-xs text-[#D96C35]">Роздача нового файлу в Swarm</h4>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  placeholder="Назва файлу (напр. model.onnx)..."
+                  value={newFileName}
+                  onChange={(e) => setNewFileName(e.target.value)}
+                  className="flex-1 px-3 py-1.5 border border-[#E8E1D3] rounded-lg text-xs"
+                />
+                <input
+                  type="number"
+                  placeholder="Розмір (MB)..."
+                  value={newFileSizeMB}
+                  onChange={(e) => setNewFileSizeMB(e.target.value)}
+                  className="w-24 px-3 py-1.5 border border-[#E8E1D3] rounded-lg text-xs"
+                />
+              </div>
+              <div className="flex justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAdding(false)}
+                  className="px-2.5 py-1 text-xs text-[#6E7568]"
+                >
+                  Скасувати
+                </button>
+                <button
+                  type="submit"
+                  className="px-3 py-1 bg-[#D96C35] text-white font-bold text-xs rounded-lg"
+                >
+                  Почати сідинг
+                </button>
+              </div>
+            </form>
+          )}
+
+          <div className="space-y-3">
+            {swarmFiles.map((transfer) => {
+              const progress = Math.round((transfer.chunksAvailable / transfer.chunksTotal) * 100) || 100;
+              return (
+                <div
+                  key={transfer.id}
+                  className="p-4 bg-white border border-[#E8E1D3] rounded-2xl space-y-3"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="space-y-1 min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-xs text-[#21261F] truncate">
+                          {transfer.name}
+                        </span>
+                        <span
+                          className={`px-2 py-0.5 rounded-md text-[10px] font-bold uppercase ${
+                            transfer.isSeeding
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-indigo-100 text-indigo-800'
+                          }`}
+                        >
+                          {transfer.isSeeding ? 'seeding' : 'leeching'}
+                        </span>
+                      </div>
+                      <div className="text-[11px] text-[#6E7568] flex items-center gap-3">
+                        <span>{formatSize(transfer.sizeBytes)}</span>
+                        <span>•</span>
+                        <span>{transfer.seedersCount} сідерів · {transfer.chunksAvailable}/{transfer.chunksTotal} чанків</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Progress Bar */}
+                  <div className="space-y-1">
+                    <div className="w-full h-1.5 bg-[#F1EBDD] rounded-full overflow-hidden">
+                      <div
+                        className={`h-full transition-all duration-300 ${
+                          transfer.isSeeding ? 'bg-emerald-500' : 'bg-[#D96C35]'
+                        }`}
+                        style={{ width: `${progress}%` }}
+                      />
+                    </div>
+                    <div className="flex justify-between text-[10px] text-[#8A8577]">
+                      <span>{progress}% доступно</span>
+                      <span className="font-mono text-[10px]">SHA-256: {transfer.hashSha256.substring(0, 16)}...</span>
+                    </div>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="px-6 py-4 bg-[#FAF8F5] border-t border-[#E8E1D3] flex items-center justify-between text-xs text-[#6E7568]">
+          <div className="flex items-center gap-2">
+            <ShieldCheck className="w-4 h-4 text-emerald-600" />
+            <span>Chunk-level verification & BitTorrent Merkle Tree</span>
+          </div>
           <button
             onClick={onClose}
-            className="p-1.5 hover:bg-[#EAE4D7] rounded-xl text-[#6E7568] transition-colors"
+            className="px-4 py-2 bg-[#EFE9DC] text-[#21261F] font-medium rounded-xl hover:bg-[#E5DEC9] transition-colors"
           >
-            <X className="w-4 h-4" />
+            Закрити
           </button>
-        </div>
-
-        <div className="p-5 space-y-4 max-h-[440px] overflow-y-auto custom-scrollbar">
-          {transfers.map((item) => {
-            const progress = Math.round((item.transferredBytes / item.totalSizeBytes) * 100);
-            return (
-              <div
-                key={item.id}
-                className="p-4 rounded-2xl bg-[#FAF7F0] border border-[#E5DEC9] space-y-3 hover:border-[#D96C35]/50 transition-all"
-              >
-                <div className="flex items-start justify-between gap-2">
-                  <div className="min-w-0">
-                    <h4 className="text-[13.5px] font-bold text-[#21261F] truncate">{item.name}</h4>
-                    <p className="text-[11px] text-[#6E7568] font-mono mt-0.5">
-                      SHA256: {item.sha256.slice(0, 16)}…{item.sha256.slice(-8)}
-                    </p>
-                  </div>
-
-                  <span
-                    className={`text-[10.5px] font-bold uppercase tracking-wider px-2.5 py-0.5 rounded-full border shrink-0 ${
-                      item.status === 'completed' || item.status === 'seeding'
-                        ? 'bg-emerald-50 text-emerald-700 border-emerald-300'
-                        : item.status === 'downloading'
-                        ? 'bg-amber-50 text-amber-800 border-amber-300'
-                        : 'bg-[#EAE4D7] text-[#6E7568] border-[#DDD5C5]'
-                    }`}
-                  >
-                    {item.status === 'seeding'
-                      ? '🌱 Роздача (Seeding)'
-                      : item.status === 'completed'
-                      ? 'Завершено ✓'
-                      : item.status === 'downloading'
-                      ? `⬇ Завантаження (${item.speedMbps} MB/s)`
-                      : 'Пауза'}
-                  </span>
-                </div>
-
-                <div className="space-y-1">
-                  <div className="w-full bg-[#E5DEC9] h-2 rounded-full overflow-hidden">
-                    <div
-                      className={`h-full transition-all duration-300 ${
-                        item.status === 'completed' || item.status === 'seeding'
-                          ? 'bg-emerald-600'
-                          : 'bg-[#D96C35]'
-                      }`}
-                      style={{ width: `${progress}%` }}
-                    />
-                  </div>
-                  <div className="flex items-center justify-between text-[11px] text-[#6E7568]">
-                    <span>
-                      {formatSize(item.transferredBytes)} із {formatSize(item.totalSizeBytes)} ({progress}%)
-                    </span>
-                    <span className="flex items-center gap-1 font-medium">
-                      <Wifi className="w-3 h-3 text-[#D96C35]" />
-                      <span>{item.peersCount} активних пірів у мережі</span>
-                    </span>
-                  </div>
-                </div>
-
-                <div className="flex items-center justify-end gap-2 pt-1 border-t border-[#EAE4D7]">
-                  {item.status !== 'completed' && item.status !== 'seeding' && (
-                    <button
-                      onClick={() => togglePause(item.id)}
-                      className="px-3 py-1 bg-white hover:bg-[#FDF5ED] border border-[#E5DEC9] rounded-lg text-xs font-semibold text-[#21261F] flex items-center gap-1"
-                    >
-                      {item.status === 'paused' ? (
-                        <>
-                          <Play className="w-3 h-3 text-emerald-600" /> Відновити
-                        </>
-                      ) : (
-                        <>
-                          <Pause className="w-3 h-3 text-amber-600" /> Призупинити
-                        </>
-                      )}
-                    </button>
-                  )}
-                  <button
-                    onClick={() => soundFx.playTap()}
-                    className="px-3 py-1 bg-[#D96C35] hover:bg-[#B85425] text-white rounded-lg text-xs font-bold shadow-sm flex items-center gap-1"
-                  >
-                    <Share2 className="w-3 h-3" /> Поділитися магнет-лінком
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-
-        <div className="p-4 bg-[#F7F4EC] border-t border-[#E5DEC9] flex items-center justify-between text-xs text-[#6E7568]">
-          <span className="flex items-center gap-1.5">
-            <ShieldCheck className="w-4 h-4 text-emerald-600" />
-            Пряме E2E шифрування чанків без посередників
-          </span>
-          <span>Загальний P2P трафік: 3.73 GB</span>
         </div>
       </div>
     </div>

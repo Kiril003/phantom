@@ -87,6 +87,7 @@ interface WorkOsState {
   webhooks: WebhookEndpoint[];
   addWebhook: (wh: Omit<WebhookEndpoint, 'id' | 'createdAt'>) => WebhookEndpoint;
   deleteWebhook: (id: string) => void;
+  toggleWebhook: (id: string) => void;
 
   // DataGrid
   tables: DataGridTable[];
@@ -301,6 +302,12 @@ export const useWorkOsStore = create<WorkOsState>()(
 
       deleteWebhook: (id) => {
         set((s) => ({ webhooks: s.webhooks.filter((w) => w.id !== id) }));
+      },
+
+      toggleWebhook: (id) => {
+        set((s) => ({
+          webhooks: s.webhooks.map((w) => (w.id === id ? { ...w, enabled: !w.enabled } : w)),
+        }));
       },
 
       tables: [

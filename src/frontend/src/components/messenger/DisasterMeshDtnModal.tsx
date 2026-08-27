@@ -2,26 +2,12 @@ import React, { useState } from 'react';
 import {
   Radio,
   X,
-  Smartphone,
+  Clock,
+  ShieldCheck,
+  Send,
 } from 'lucide-react';
 import { soundFx } from '../../utils/messengerSound';
-
-interface TransportLayer {
-  name: string;
-  type: 'Internet (STUN/TURN)' | 'Wi-Fi Direct' | 'Bluetooth LE Mesh' | 'LoRa 868MHz Radio';
-  status: 'Active' | 'Standby' | 'Offline';
-  bandwidth: string;
-  latency: string;
-}
-
-interface DtnCapsule {
-  id: string;
-  courierDevice: string;
-  sourceNode: string;
-  targetNode: string;
-  payloadSize: string;
-  status: 'In Transit' | 'Delivered';
-}
+import { useMeshStore } from '../../stores/meshStore';
 
 interface DisasterMeshDtnModalProps {
   isOpen: boolean;
@@ -35,30 +21,36 @@ export const DisasterMeshDtnModal: React.FC<DisasterMeshDtnModalProps> = ({
   chatTitle = 'Мережа стійкості',
 }) => {
   const [activeTab, setActiveTab] = useState<'transports' | 'dtn'>('transports');
-  const [isSimulationActive, setIsSimulationActive] = useState(false);
+  const [newPayload, setNewPayload] = useState('');
 
-  const [transports] = useState<TransportLayer[]>([
+  const { dtnQueue, enqueueDtnPacket, flushDtnQueue } = useMeshStore();
+
+  if (!isOpen) return null;
+
+  const handleQueueMessage = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newPayload.trim()) return;
+    soundFx.playSend();
+    enqueueDtnPacket({
+      sourceNodeId: 'node_alpha_radxa',
+      targetNodeId: 'node_field_agent',
+      payload: newPayload.trim(),
+      ttlSeconds: 86400,
+    });
+    setNewPayload('');
+  };
+
+  const handleDeliverAll = () => {
+    soundFx.playTap();
+    flushDtnQueue();
+  };
+
+  const transports = [
     { name: 'Основний Інтернет (P2P / STUN)', type: 'Internet (STUN/TURN)', status: 'Active', bandwidth: '100 Mbps', latency: '12 ms' },
     { name: 'Локальний Wi-Fi / Wi-Fi Direct', type: 'Wi-Fi Direct', status: 'Standby', bandwidth: '54 Mbps', latency: '4 ms' },
     { name: 'Bluetooth LE Mesh 5.3', type: 'Bluetooth LE Mesh', status: 'Standby', bandwidth: '2 Mbps', latency: '45 ms' },
     { name: 'LoRa SX1262 868MHz (USB Модем)', type: 'LoRa 868MHz Radio', status: 'Standby', bandwidth: '19.2 kbps', latency: '180 ms' },
-  ]);
-
-  const [dtnCapsules] = useState<DtnCapsule[]>([
-    { id: 'cap-901', courierDevice: 'Pixel 8 Pro (Кирило)', sourceNode: 'Бункер Node A (Офлайн)', targetNode: 'Штаб Radxa (Онлайн)', payloadSize: '240 KB', status: 'In Transit' },
-    { id: 'cap-902', courierDevice: 'ThinkPad X1 (Саня)', sourceNode: 'Польовий сенсор LoRa', targetNode: 'Сервер бази даних', payloadSize: '18 KB', status: 'Delivered' },
-  ]);
-
-  if (!isOpen) return null;
-
-  const handleSimulateBlackout = () => {
-    soundFx.playSend();
-    setIsSimulationActive(true);
-    setTimeout(() => {
-      setIsSimulationActive(false);
-      alert('⚡ [Симуляція блекауту завершена]: Трафік успішно перемикнуто на Wi-Fi Direct та LoRa 868MHz без втрати сесії!');
-    }, 1200);
-  };
+  ];
 
   return (
     <div
@@ -101,103 +93,95 @@ export const DisasterMeshDtnModal: React.FC<DisasterMeshDtnModalProps> = ({
                   activeTab === 'dtn' ? 'bg-white text-[#21261F] font-bold shadow-2xs' : 'hover:text-[#21261F]'
                 }`}
               >
-                DTN «На ногах»
+                DTN Капсули ({dtnQueue.length})
               </button>
             </div>
 
             <button
               onClick={onClose}
-              className="p-1.5 hover:bg-[#EFE9DC] rounded-lg text-[#6E7568] hover:text-[#21261F] transition-colors"
+              className="p-1.5 rounded-lg text-[#6E7568] hover:text-[#21261F] hover:bg-[#F1EBDD] transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        {/* Body */}
-        <div className="p-6 flex-1 overflow-y-auto custom-scrollbar space-y-4">
-          {/* TAB 1: Multi-Transport Failover */}
-          {activeTab === 'transports' && (
-            <div className="space-y-4">
-              <div className="p-3.5 bg-emerald-50 border border-emerald-200 rounded-xl text-xs text-emerald-950 flex items-center justify-between">
-                <div className="space-y-0.5">
-                  <span className="font-bold text-emerald-900">Безшовне перемикання фізичних каналів (0% Drop Rate)</span>
-                  <p className="text-[11px]">
-                    При зникненні інтернету зв'язок миттєво падає на Wi-Fi Direct, потім BLE Mesh і радіоканал LoRa.
-                  </p>
-                </div>
-
-                <button
-                  onClick={handleSimulateBlackout}
-                  disabled={isSimulationActive}
-                  className="px-3 py-1.5 bg-emerald-800 hover:bg-emerald-900 text-white rounded-lg text-xs font-bold transition-all shadow-xs"
-                >
-                  {isSimulationActive ? 'Тестування...' : 'Симуляція аварії мережі'}
-                </button>
-              </div>
-
-              <div className="space-y-2.5">
-                {transports.map((t) => (
-                  <div key={t.name} className="p-3.5 bg-white border border-[#E5DEC9] rounded-xl flex items-center justify-between shadow-2xs">
-                    <div>
-                      <h5 className="font-bold text-xs text-[#21261F]">{t.name}</h5>
-                      <p className="text-[11px] text-[#6E7568]">
-                        Швидкість: {t.bandwidth} · Затримка: {t.latency}
-                      </p>
+        {/* Content */}
+        <div className="p-5 overflow-y-auto flex-1 space-y-4">
+          {activeTab === 'transports' ? (
+            <div className="space-y-3">
+              <h4 className="font-bold text-xs text-[#6E7568] uppercase tracking-wider">Доступні канали передачі</h4>
+              {transports.map((tr) => (
+                <div key={tr.name} className="p-3.5 bg-white border border-[#E8E1D3] rounded-xl flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <div className="p-2 rounded-lg bg-[#FAF8F5] border border-[#E8E1D3] text-[#D96C35]">
+                      <Radio className="w-4 h-4" />
                     </div>
-
-                    <span
-                      className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                        t.status === 'Active'
-                          ? 'bg-emerald-100 text-emerald-800'
-                          : 'bg-indigo-50 text-indigo-800 border border-indigo-200'
-                      }`}
-                    >
-                      {t.status}
+                    <div>
+                      <h5 className="font-bold text-xs text-[#21261F]">{tr.name}</h5>
+                      <p className="text-[10px] text-[#8A8577]">{tr.type} · Пропускна здатність: {tr.bandwidth}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    <span className="text-[11px] font-mono text-[#6E7568]">{tr.latency}</span>
+                    <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                      tr.status === 'Active' ? 'bg-emerald-100 text-emerald-800' : 'bg-slate-100 text-slate-700'
+                    }`}>
+                      {tr.status}
                     </span>
                   </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* TAB 2: Delay-Tolerant Networking (DTN) */}
-          {activeTab === 'dtn' && (
-            <div className="space-y-4">
-              <div className="p-4 bg-indigo-50 border border-indigo-200 rounded-xl space-y-1 text-xs text-indigo-950">
-                <div className="flex items-center gap-2 font-bold text-indigo-900">
-                  <Smartphone className="w-4 h-4 text-indigo-600" />
-                  <span>Delay-Tolerant Networking: Смартфон як фізичний кур'єр</span>
                 </div>
-                <p className="leading-relaxed">
-                  Зашифрована капсула отримується смартфоном у зоні недосяжності інтернету і автоматично скидається на сервер при фізичному наближенні без розкриття змісту.
-                </p>
-              </div>
+              ))}
+            </div>
+          ) : (
+            <div className="space-y-4">
+              <form onSubmit={handleQueueMessage} className="p-4 bg-white border border-[#E8E1D3] rounded-xl space-y-3">
+                <h4 className="font-bold text-xs text-[#21261F]">Додати офлайн-повідомлення в DTN-чергу</h4>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    placeholder="Вміст повідомлення для кур'єрської доставки..."
+                    value={newPayload}
+                    onChange={(e) => setNewPayload(e.target.value)}
+                    className="flex-1 px-3 py-1.5 border border-[#E8E1D3] rounded-lg text-xs"
+                  />
+                  <button
+                    type="submit"
+                    className="px-3 py-1.5 bg-[#D96C35] text-white font-bold text-xs rounded-lg flex items-center gap-1"
+                  >
+                    <Send className="w-3.5 h-3.5" /> В чергу
+                  </button>
+                </div>
+              </form>
 
-              <div className="space-y-2.5">
-                {dtnCapsules.map((cap) => (
-                  <div key={cap.id} className="p-4 bg-white border border-[#E5DEC9] rounded-xl space-y-2 shadow-2xs">
-                    <div className="flex items-center justify-between">
-                      <div>
-                        <span className="font-mono text-xs font-bold text-[#D96C35]">{cap.id}</span>
-                        <h5 className="font-bold text-xs text-[#21261F]">Кур'єр: {cap.courierDevice}</h5>
+              <div className="space-y-2">
+                <div className="flex items-center justify-between">
+                  <h4 className="font-bold text-xs text-[#6E7568] uppercase tracking-wider">Черга DTN Капсул</h4>
+                  {dtnQueue.length > 0 && (
+                    <button
+                      onClick={handleDeliverAll}
+                      className="text-xs text-[#D96C35] font-bold hover:underline"
+                    >
+                      Синхронізувати всі ({dtnQueue.length})
+                    </button>
+                  )}
+                </div>
+                {dtnQueue.map((c) => (
+                  <div key={c.id} className="p-3.5 bg-white border border-[#E8E1D3] rounded-xl flex items-center justify-between">
+                    <div>
+                      <div className="flex items-center gap-2">
+                        <span className="font-bold text-xs text-[#21261F]">{c.payload}</span>
+                        <span className="px-1.5 py-0.5 bg-amber-100 text-amber-800 rounded text-[10px] font-bold">
+                          {c.hops} хопів
+                        </span>
                       </div>
-
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                          cap.status === 'In Transit'
-                            ? 'bg-amber-100 text-amber-800 animate-pulse'
-                            : 'bg-emerald-100 text-emerald-800'
-                        }`}
-                      >
-                        {cap.status}
-                      </span>
+                      <p className="text-[10px] text-[#8A8577] mt-0.5">
+                        {c.sourceNodeId} ➔ {c.targetNodeId} · TTL: {c.ttlSeconds}s
+                      </p>
                     </div>
-
-                    <div className="p-2 bg-[#FAF8F5] border border-[#E8E1D3] rounded-lg text-[11px] font-mono text-[#21261F] flex justify-between">
-                      <span>{cap.sourceNode} → {cap.targetNode}</span>
-                      <span>Об'єм: {cap.payloadSize}</span>
-                    </div>
+                    <span className="flex items-center gap-1 text-[10px] text-amber-700 font-medium">
+                      <Clock className="w-3.5 h-3.5" /> В дорозі
+                    </span>
                   </div>
                 ))}
               </div>
@@ -206,9 +190,17 @@ export const DisasterMeshDtnModal: React.FC<DisasterMeshDtnModalProps> = ({
         </div>
 
         {/* Footer */}
-        <div className="px-5 py-2.5 bg-[#FAF8F5] border-t border-[#E8E1D3] flex items-center justify-between text-[11px] text-[#8A9186]">
-          <span>Disaster Recovery & DTN Protocol</span>
-          <span className="font-mono">LoRa/BLE Failover v4.8</span>
+        <div className="px-5 py-3 bg-[#FAF8F5] border-t border-[#E8E1D3] flex items-center justify-between text-xs text-[#6E7568]">
+          <div className="flex items-center gap-1.5">
+            <ShieldCheck className="w-4 h-4 text-emerald-600" />
+            <span>Store-and-Forward шифрування пакета на кожному хопі</span>
+          </div>
+          <button
+            onClick={onClose}
+            className="px-3 py-1.5 bg-[#EFE9DC] text-[#21261F] font-medium rounded-lg hover:bg-[#E5DEC9] transition-colors"
+          >
+            Закрити
+          </button>
         </div>
       </div>
     </div>

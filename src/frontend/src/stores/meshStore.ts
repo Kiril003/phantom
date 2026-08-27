@@ -24,6 +24,16 @@ export interface SwarmFile {
   isSeeding: boolean;
 }
 
+export interface DtnPacket {
+  id: string;
+  sourceNodeId: string;
+  targetNodeId: string;
+  payload: any;
+  ttlSeconds: number;
+  hops: number;
+  queuedAt: string;
+}
+
 export interface MeshNodeInfo {
   nodeId: string;
   name: string;
@@ -35,19 +45,30 @@ export interface MeshNodeInfo {
   computeShares: number;
 }
 
+export interface LoRaTelemetry {
+  frequencyMhz: number;
+  snrDb: number;
+  rssiDbm: number;
+  packetsSent: number;
+  packetsReceived: number;
+}
+
 interface MeshState {
   nodes: MeshNodeInfo[];
   computeTasks: ComputeTask[];
   swarmFiles: SwarmFile[];
-  dtnQueue: Array<{ id: string; targetNodeId: string; payload: any; queuedAt: string }>;
+  dtnQueue: DtnPacket[];
   isLoRaBridgeActive: boolean;
+  loraTelemetry: LoRaTelemetry;
 
   addComputeTask: (task: Omit<ComputeTask, 'id' | 'status' | 'createdAt'>) => ComputeTask;
   runComputeTask: (taskId: string) => Promise<void>;
   addSwarmFile: (file: Omit<SwarmFile, 'id'>) => SwarmFile;
+  seedSwarmFile: (name: string, sizeBytes: number) => SwarmFile;
   toggleSeeding: (fileId: string) => void;
-  queueDtnMessage: (targetNodeId: string, payload: any) => void;
-  drainDtnQueue: () => void;
+  enqueueDtnPacket: (packet: Omit<DtnPacket, 'id' | 'hops' | 'queuedAt'>) => void;
+  flushDtnQueue: () => void;
+  broadcastLoraPacket: (payload: string) => { id: string; timestamp: string };
   toggleLoRaBridge: () => void;
 }
 
@@ -96,59 +117,120 @@ export const useMeshStore = create<MeshState>()(
           resultSummary: '14.8 MH/s verified across 8 cores',
           createdAt: new Date().toISOString(),
         },
+        {
+          id: 'task_c2',
+          name: 'Neural Embeddings Quantization',
+          type: 'nlp_embed',
+          status: 'queued',
+          assignedNodeId: 'node_alpha_radxa',
+          createdAt: new Date().toISOString(),
+        },
       ],
 
       swarmFiles: [
         {
-          id: 'sf_1',
-          name: 'phantom-companion-debug.apk',
-          sizeBytes: 48500200,
-          hashSha256: '9a8d7f6c5b4e3d2a10f9e8d7c6b5a4',
+          id: 'sw_1',
+          name: 'phantom_os_radxa_rootfs_v2.img.xz',
+          sizeBytes: 1024 * 1024 * 650,
+          hashSha256: '4f8b9e1c2d3a4b5c6e7f8a9b0c1d2e3f4a5b6c7d8e9f0a1b2c3d4e5f6a7b8c9d',
           seedersCount: 4,
           leechersCount: 1,
-          chunksTotal: 128,
-          chunksAvailable: 128,
+          chunksTotal: 100,
+          chunksAvailable: 100,
+          isSeeding: true,
+        },
+        {
+          id: 'sw_2',
+          name: 'style_tts2_ukrainian_voice_model.onnx',
+          sizeBytes: 1024 * 1024 * 85,
+          hashSha256: '7c8d9e0f1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d',
+          seedersCount: 6,
+          leechersCount: 0,
+          chunksTotal: 85,
+          chunksAvailable: 85,
           isSeeding: true,
         },
       ],
 
-      dtnQueue: [],
-      isLoRaBridgeActive: false,
+      dtnQueue: [
+        {
+          id: 'dtn_1',
+          sourceNodeId: 'node_alpha_radxa',
+          targetNodeId: 'node_beta_mobile',
+          payload: { type: 'vault_sync', block: 1042 },
+          ttlSeconds: 86400,
+          hops: 1,
+          queuedAt: new Date().toISOString(),
+        },
+      ],
+
+      isLoRaBridgeActive: true,
+
+      loraTelemetry: {
+        frequencyMhz: 868.1,
+        snrDb: 9.2,
+        rssiDbm: -74,
+        packetsSent: 38,
+        packetsReceived: 142,
+      },
 
       addComputeTask: (task) => {
         const newTask: ComputeTask = {
-          ...task,
-          id: `ct_${Date.now()}`,
+          id: `task_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`,
           status: 'queued',
           createdAt: new Date().toISOString(),
+          ...task,
         };
-        set((s) => ({ computeTasks: [newTask, ...s.computeTasks] }));
+        set((state) => ({ computeTasks: [newTask, ...state.computeTasks] }));
         return newTask;
       },
 
       runComputeTask: async (taskId) => {
-        set((s) => ({
-          computeTasks: s.computeTasks.map((t) =>
+        set((state) => ({
+          computeTasks: state.computeTasks.map((t) =>
             t.id === taskId ? { ...t, status: 'running' } : t
           ),
         }));
 
-        // Real in-browser WebAssembly / WebWorker math execution
-        const start = performance.now();
-        let ops = 0;
-        for (let i = 0; i < 5000000; i++) {
-          ops += Math.sqrt(i) * Math.sin(i);
-        }
-        const duration = Math.round(performance.now() - start);
+        const startTime = performance.now();
 
-        set((s) => ({
-          computeTasks: s.computeTasks.map((t) =>
+        // Run real in-browser math matrix workload
+        await new Promise<void>((resolve) => {
+          setTimeout(() => {
+            const size = 150;
+            const a = new Float64Array(size * size);
+            const b = new Float64Array(size * size);
+            const c = new Float64Array(size * size);
+
+            for (let i = 0; i < a.length; i++) {
+              a[i] = Math.random();
+              b[i] = Math.random();
+            }
+
+            for (let i = 0; i < size; i++) {
+              for (let j = 0; j < size; j++) {
+                let sum = 0;
+                for (let k = 0; k < size; k++) {
+                  sum += a[i * size + k] * b[k * size + j];
+                }
+                c[i * size + j] = sum;
+              }
+            }
+
+            resolve();
+          }, 300);
+        });
+
+        const durationMs = Math.round(performance.now() - startTime);
+
+        set((state) => ({
+          computeTasks: state.computeTasks.map((t) =>
             t.id === taskId
               ? {
                   ...t,
                   status: 'completed',
-                  durationMs: duration,
-                  resultSummary: `Успішно виконано 5,000,000 обчислень за ${duration}ms (checksum: ${Math.round(ops)})`,
+                  durationMs,
+                  resultSummary: `150x150 Float64 Matrix Mult completed in ${durationMs}ms`,
                 }
               : t
           ),
@@ -157,41 +239,65 @@ export const useMeshStore = create<MeshState>()(
 
       addSwarmFile: (file) => {
         const newFile: SwarmFile = {
+          id: `swarm_${Date.now()}`,
           ...file,
-          id: `sf_${Date.now()}`,
         };
-        set((s) => ({ swarmFiles: [...s.swarmFiles, newFile] }));
+        set((state) => ({ swarmFiles: [newFile, ...state.swarmFiles] }));
+        return newFile;
+      },
+
+      seedSwarmFile: (name, sizeBytes) => {
+        const newFile: SwarmFile = {
+          id: `swarm_${Date.now()}`,
+          name,
+          sizeBytes,
+          hashSha256: Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join(''),
+          seedersCount: 1,
+          leechersCount: 0,
+          chunksTotal: Math.ceil(sizeBytes / (1024 * 1024)),
+          chunksAvailable: Math.ceil(sizeBytes / (1024 * 1024)),
+          isSeeding: true,
+        };
+        set((state) => ({ swarmFiles: [newFile, ...state.swarmFiles] }));
         return newFile;
       },
 
       toggleSeeding: (fileId) => {
-        set((s) => ({
-          swarmFiles: s.swarmFiles.map((f) =>
+        set((state) => ({
+          swarmFiles: state.swarmFiles.map((f) =>
             f.id === fileId ? { ...f, isSeeding: !f.isSeeding } : f
           ),
         }));
       },
 
-      queueDtnMessage: (targetNodeId, payload) => {
-        set((s) => ({
-          dtnQueue: [
-            ...s.dtnQueue,
-            {
-              id: `dtn_${Date.now()}`,
-              targetNodeId,
-              payload,
-              queuedAt: new Date().toISOString(),
-            },
-          ],
-        }));
+      enqueueDtnPacket: (packet) => {
+        const newPacket: DtnPacket = {
+          id: `dtn_${Date.now()}`,
+          hops: 0,
+          queuedAt: new Date().toISOString(),
+          ...packet,
+        };
+        set((state) => ({ dtnQueue: [newPacket, ...state.dtnQueue] }));
       },
 
-      drainDtnQueue: () => {
+      flushDtnQueue: () => {
         set({ dtnQueue: [] });
       },
 
+      broadcastLoraPacket: (_payload) => {
+        const id = `lora_pkt_${Date.now()}`;
+        const timestamp = new Date().toISOString();
+        set((state) => ({
+          loraTelemetry: {
+            ...state.loraTelemetry,
+            packetsSent: state.loraTelemetry.packetsSent + 1,
+          },
+        }));
+        return { id, timestamp };
+      },
+
       toggleLoRaBridge: () => {
-        set((s) => ({ isLoRaBridgeActive: !s.isLoRaBridgeActive }));
+        set((state) => ({ isLoRaBridgeActive: !state.isLoRaBridgeActive }));
       },
     }),
     {

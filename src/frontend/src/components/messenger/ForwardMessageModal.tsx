@@ -34,7 +34,7 @@ export const ForwardMessageModal: React.FC<ForwardMessageModalProps> = ({
   // це вітрина, а не людина на тому кінці.
   const targetChats = chats
     .filter((c) => c.id !== currentChatId && c.title.toLowerCase().includes(search.toLowerCase()))
-    .sort((a, b) => Number(a.isDemo ?? false) - Number(b.isDemo ?? false));
+    .sort((a, b) => (b.pinned ? 1 : 0) - (a.pinned ? 1 : 0));
 
   const handleForward = (chatId: string) => {
     soundFx.playSend();
@@ -102,11 +102,6 @@ export const ForwardMessageModal: React.FC<ForwardMessageModalProps> = ({
                   <div className="min-w-0">
                     <div className="flex items-center gap-1.5 min-w-0">
                       <p className="font-bold text-xs text-[#1E2521] truncate group-hover:text-[#E87A42] transition-colors">{chat.title}</p>
-                      {chat.isDemo && (
-                        <span className="px-1 py-px rounded-[4px] border border-[#E8E1D3] text-[color:var(--msg-meta)] text-[10px] shrink-0 leading-[13px]">
-                          демо
-                        </span>
-                      )}
                     </div>
                     <p className="text-[10px] text-[#5F6A60] truncate">{chat.circle}</p>
                   </div>

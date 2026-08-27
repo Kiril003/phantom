@@ -54,7 +54,7 @@ import {
   LayoutGrid
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { Chat, ChatCircle, PersonaSphere, SmartFolder, UserProfile } from '../../types/messenger';
+import { Chat, PersonaSphere, SmartFolder, UserProfile } from '../../types/messenger';
 import { Avatar } from './Avatar';
 import { soundFx } from '../../utils/messengerSound';
 import { networkEngine } from '../../services/messengerNetworkEngine';
@@ -91,15 +91,6 @@ interface SidebarProps {
   onOpenP2PNetworkModal?: () => void;
   onSwitchPersonaSphere?: (sphere: PersonaSphere) => void;
 }
-
-const circleTabs: { id: ChatCircle; label: string }[] = [
-  { id: 'work', label: 'Робота' },
-  { id: 'family', label: 'Сім’я' },
-  { id: 'friends', label: 'Друзі' },
-  { id: 'study', label: 'Навчання' },
-  { id: 'communities', label: 'Спільноти' },
-  { id: 'saved', label: 'Збережене' },
-];
 
 // Рейка папок: іконку виводимо зі змісту папки (кола → сенс), емодзі лишається лише в даних.
 const folderIcon = (folder: SmartFolder): typeof Table2 => {
@@ -243,6 +234,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   const [searchQuery, setSearchQuery] = useState('');
   const [showOnlyUnread, setShowOnlyUnread] = useState(false);
+  const [activeCategory, setActiveCategory] = useState<'all' | 'direct' | 'group' | 'channel' | 'ai' | 'saved'>('all');
   const [isPersonaMenuOpen, setIsPersonaMenuOpen] = useState(false);
 
   // Drag-and-Drop state
@@ -413,10 +405,17 @@ export const Sidebar: React.FC<SidebarProps> = ({
     };
   };
 
-  // Filter chats by Active Smart Folder, Circle, Search Query & Unread status
+  // Filter chats by Active Smart Folder, Category, Circle, Search Query & Unread status
   const filteredChats = chats.filter((c) => {
     const matchesFolder = isChatInFolder(c, currentFolder);
     const matchesCircle = activeCircle === 'all' || c.circle === activeCircle;
+    const matchesCategory =
+      activeCategory === 'all' ||
+      (activeCategory === 'direct' && (c.type === 'direct' || c.type === 'dm' || c.type === 'p2p')) ||
+      (activeCategory === 'group' && c.type === 'group') ||
+      (activeCategory === 'channel' && c.type === 'channel') ||
+      (activeCategory === 'ai' && (c.type === 'phantom' || c.type === 'ai')) ||
+      (activeCategory === 'saved' && (c.circle === 'saved' || c.id === 'chat_saved_notes'));
     const matchesUnread = !showOnlyUnread || c.unreadCount > 0;
     const q = searchQuery.toLowerCase();
     const matchesSearch =
@@ -431,7 +430,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
       (c.publicHandle && c.publicHandle.toLowerCase().includes(q)) ||
       (c.aiSecretarySummary && c.aiSecretarySummary.toLowerCase().includes(q));
 
-    return matchesFolder && matchesCircle && matchesUnread && matchesSearch;
+    return matchesFolder && matchesCircle && matchesCategory && matchesUnread && matchesSearch;
   });
 
   const totalUnread = chats.reduce((acc, c) => acc + c.unreadCount, 0);
@@ -1175,22 +1174,35 @@ export const Sidebar: React.FC<SidebarProps> = ({
             )}
           </div>
 
-          {/* Кола: показуємо лише ті, у яких справді є бесіди — решта була б мертвим фільтром. */}
+          {/* Категорії чатів: Всі, Особисті, Групи, Канали, AI Простори, Збережене */}
           <div className="msg-strip gap-1.5 -mx-0.5 px-0.5 pt-0.5 pb-1">
-            <button
-              onClick={() => {
-                soundFx.playTap();
-                setShowOnlyUnread(false);
-                setActiveCircle('all');
-              }}
-              className={`shrink-0 h-[26px] min-h-0 min-w-0 px-2.5 rounded-[10px] text-[12px] font-medium border transition-colors flex items-center ${
-                activeCircle === 'all' && !showOnlyUnread
-                  ? 'bg-[#F1EBDD] text-[#21261F] border-[#E0D7C4]'
-                  : 'bg-transparent text-[#6E7568] border-[#E8E1D3] hover:text-[#21261F] hover:bg-[#F7F5EF]'
-              }`}
-            >
-              Всі
-            </button>
+            {[
+              { id: 'all' as const, label: 'Всі' },
+              { id: 'direct' as const, label: 'Особисті' },
+              { id: 'group' as const, label: 'Групи' },
+              { id: 'channel' as const, label: 'Канали' },
+              { id: 'ai' as const, label: 'AI Простори' },
+              { id: 'saved' as const, label: 'Збережене' },
+            ].map((cat) => {
+              const isActive = activeCategory === cat.id && !showOnlyUnread;
+              return (
+                <button
+                  key={cat.id}
+                  onClick={() => {
+                    soundFx.playTap();
+                    setShowOnlyUnread(false);
+                    setActiveCategory(cat.id);
+                  }}
+                  className={`shrink-0 h-[26px] min-h-0 min-w-0 px-2.5 rounded-[10px] text-[12px] font-medium border transition-colors flex items-center ${
+                    isActive
+                      ? 'bg-[#F1EBDD] text-[#21261F] border-[#E0D7C4]'
+                      : 'bg-transparent text-[#6E7568] border-[#E8E1D3] hover:text-[#21261F] hover:bg-[#F7F5EF]'
+                  }`}
+                >
+                  {cat.label}
+                </button>
+              );
+            })}
 
             {totalUnread > 0 && (
               <button
@@ -1208,29 +1220,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 <span className="text-[#D96C35] font-semibold">{totalUnread}</span>
               </button>
             )}
-
-            {circleTabs
-              .filter((circle) => chats.some((c) => c.circle === circle.id))
-              .map((circle) => {
-                const isActive = activeCircle === circle.id && !showOnlyUnread;
-                return (
-                  <button
-                    key={circle.id}
-                    onClick={() => {
-                      soundFx.playTap();
-                      setShowOnlyUnread(false);
-                      setActiveCircle(isActive ? 'all' : circle.id);
-                    }}
-                    className={`shrink-0 h-[26px] min-h-0 min-w-0 px-2.5 rounded-[10px] text-[12px] font-medium border transition-colors flex items-center ${
-                      isActive
-                        ? 'bg-[#F1EBDD] text-[#21261F] border-[#E0D7C4]'
-                        : 'bg-transparent text-[#6E7568] border-[#E8E1D3] hover:text-[#21261F] hover:bg-[#F7F5EF]'
-                    }`}
-                  >
-                    {circle.label}
-                  </button>
-                );
-              })}
           </div>
         </div>
 
@@ -1248,11 +1237,12 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 ? 'Непрочитаних немає'
                 : 'Тут поки порожньо'}
             </p>
-            {(searchQuery || showOnlyUnread || activeCircle !== 'all' || currentFolder.id !== 'all') && (
+            {(searchQuery || showOnlyUnread || activeCategory !== 'all' || activeCircle !== 'all' || currentFolder.id !== 'all') && (
               <button
                 onClick={() => {
                   setSearchQuery('');
                   setShowOnlyUnread(false);
+                  setActiveCategory('all');
                   setActiveCircle('all');
                   onSelectFolder('all');
                 }}
@@ -1305,16 +1295,32 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </div>
 
                 <div className="flex-1 min-w-0">
-                  {/* Лінія 1: назва + час */}
+                  {/* Лінія 1: назва + тип/час */}
                   <div className="flex items-baseline justify-between gap-2">
                     <div className="flex items-center gap-1.5 min-w-0">
                       <h3 className="font-semibold text-[13.5px] text-[#21261F] truncate leading-tight">
                         {displayTitle(chat.title)}
                       </h3>
                       {chat.pinned && <Pin className="w-3 h-3 text-[color:var(--msg-meta)] shrink-0" strokeWidth={1.75} />}
-                      {chat.isDemo && (
-                        <span className="px-1 py-px rounded-[4px] border border-[#E8E1D3] text-[color:var(--msg-meta)] text-[10px] shrink-0 leading-[13px]">
-                          демо
+                      {chat.type === 'phantom' || chat.type === 'ai' ? (
+                        <span className="px-1.5 py-0.2 bg-purple-50 text-purple-800 border border-purple-200 rounded text-[9.5px] font-bold uppercase tracking-wider shrink-0">
+                          AI
+                        </span>
+                      ) : chat.type === 'channel' ? (
+                        <span className="px-1.5 py-0.2 bg-blue-50 text-blue-800 border border-blue-200 rounded text-[9.5px] font-bold uppercase tracking-wider shrink-0">
+                          Канал
+                        </span>
+                      ) : chat.type === 'group' ? (
+                        <span className="px-1.5 py-0.2 bg-amber-50 text-[#8C461A] border border-amber-200 rounded text-[9.5px] font-bold uppercase tracking-wider shrink-0">
+                          Група
+                        </span>
+                      ) : chat.circle === 'saved' || chat.id === 'chat_saved_notes' ? (
+                        <span className="px-1.5 py-0.2 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded text-[9.5px] font-bold uppercase tracking-wider shrink-0">
+                          Vault
+                        </span>
+                      ) : (
+                        <span className="px-1.5 py-0.2 bg-[#F1EBDD] text-[#6E7568] border border-[#E0D7C4] rounded text-[9.5px] font-medium shrink-0">
+                          E2EE
                         </span>
                       )}
                     </div>

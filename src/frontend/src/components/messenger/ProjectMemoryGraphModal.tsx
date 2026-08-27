@@ -3,22 +3,12 @@ import {
   Network,
   X,
   Sparkles,
-  CheckCircle2,
-  AlertTriangle,
-  User,
+  Plus,
+  Trash2,
   Search,
 } from 'lucide-react';
-
-interface MemoryNode {
-  id: string;
-  type: 'decision' | 'blocker' | 'task' | 'person' | 'artifact';
-  label: string;
-  detail: string;
-  assignee?: string;
-  status?: 'active' | 'resolved' | 'blocked';
-  x: number;
-  y: number;
-}
+import { soundFx } from '../../utils/messengerSound';
+import { useAgenticStore, MemoryNode } from '../../stores/agenticStore';
 
 interface ProjectMemoryGraphModalProps {
   isOpen: boolean;
@@ -31,76 +21,46 @@ export const ProjectMemoryGraphModal: React.FC<ProjectMemoryGraphModalProps> = (
   onClose,
   chatTitle = 'Бесіда',
 }) => {
-  const [filterType, setFilterType] = useState<string>('all');
+  const [filterCategory, setFilterCategory] = useState<string>('all');
   const [search, setSearch] = useState('');
+  const [selectedNode, setSelectedNode] = useState<MemoryNode | null>(null);
+  const [isAdding, setIsAdding] = useState(false);
+  const [newTitle, setNewTitle] = useState('');
+  const [newContent, setNewContent] = useState('');
+  const [newCategory, setNewCategory] = useState<MemoryNode['category']>('insight');
 
-  const nodes: MemoryNode[] = [
-    {
-      id: 'n1',
-      type: 'decision',
-      label: 'Гібридна Work OS Модель',
-      detail: 'Спліт-екран із живим Canvas та підтримкою P2P',
-      status: 'resolved',
-      x: 120,
-      y: 80,
-    },
-    {
-      id: 'n2',
-      type: 'task',
-      label: 'P2P DataChannel Mesh Sync',
-      detail: 'Прямий обмін повідомленнями через WebRTC без серверів',
-      assignee: 'Саня',
-      status: 'active',
-      x: 380,
-      y: 70,
-    },
-    {
-      id: 'n3',
-      type: 'blocker',
-      label: 'NAT Traversal на симетричних мережах',
-      detail: 'Потрібен автоматичний STUN/TURN fallback через релей',
-      status: 'blocked',
-      assignee: 'Кирило',
-      x: 380,
-      y: 220,
-    },
-    {
-      id: 'n4',
-      type: 'person',
-      label: 'Кирило (ROOT Trust)',
-      detail: 'Головний архітектор та криптографія',
-      status: 'active',
-      x: 120,
-      y: 240,
-    },
-    {
-      id: 'n5',
-      type: 'artifact',
-      label: 'SQLCipher Vault Schema',
-      detail: 'Локальне зашифроване сховище ключів та історії',
-      status: 'resolved',
-      x: 250,
-      y: 350,
-    },
-    {
-      id: 'n6',
-      type: 'task',
-      label: 'Vim Navigation Mode',
-      detail: 'Повна підтримка j/k, i, Tab без миші',
-      assignee: 'Марина',
-      status: 'active',
-      x: 520,
-      y: 150,
-    },
-  ];
+  const { memoryNodes, addMemoryNode, deleteMemoryNode } = useAgenticStore();
 
   if (!isOpen) return null;
 
-  const filteredNodes = nodes.filter((n) => {
-    if (filterType !== 'all' && n.type !== filterType) return false;
-    if (search && !n.label.toLowerCase().includes(search.toLowerCase())) return false;
+  const filteredNodes = memoryNodes.filter((n) => {
+    if (filterCategory !== 'all' && n.category !== filterCategory) return false;
+    if (
+      search &&
+      !n.title.toLowerCase().includes(search.toLowerCase()) &&
+      !n.content.toLowerCase().includes(search.toLowerCase())
+    ) {
+      return false;
+    }
     return true;
   });
+
+  const handleCreateNode = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newTitle.trim()) return;
+    soundFx.playSend();
+    const created = addMemoryNode({
+      title: newTitle.trim(),
+      content: newContent.trim(),
+      category: newCategory,
+      tags: ['manual', newCategory],
+      connections: [],
+    });
+    setSelectedNode(created);
+    setNewTitle('');
+    setNewContent('');
+    setIsAdding(false);
+  };
 
   return (
     <div
@@ -108,141 +68,189 @@ export const ProjectMemoryGraphModal: React.FC<ProjectMemoryGraphModalProps> = (
       onClick={onClose}
     >
       <div
-        className="bg-white border border-[#E5DEC9] text-[#21261F] rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col h-[82vh] animate-in zoom-in-95 duration-150"
+        className="bg-white border border-[#E5DEC9] text-[#21261F] rounded-2xl w-full max-w-4xl shadow-2xl overflow-hidden flex flex-col max-h-[88vh] animate-in zoom-in-95 duration-150 select-text"
         onClick={(e) => e.stopPropagation()}
       >
         {/* Header */}
-        <div className="px-5 py-3.5 bg-[#FAF8F5] border-b border-[#E8E1D3] flex items-center justify-between gap-3 shrink-0">
-          <div className="flex items-center gap-2">
-            <div className="p-1.5 rounded-lg bg-[#FDF5ED] text-[#D96C35] border border-[#E5DEC9]">
-              <Network className="w-4 h-4" />
+        <div className="px-5 py-4 bg-[#FAF8F5] border-b border-[#E8E1D3] flex items-center justify-between gap-3 shrink-0">
+          <div className="flex items-center gap-2.5">
+            <div className="p-2 rounded-xl bg-[#FDF5ED] text-[#D96C35] border border-[#E5DEC9]">
+              <Network className="w-5 h-5" />
             </div>
             <div>
               <h3 className="font-bold text-sm text-[#21261F]">
-                Project Memory Graph · {chatTitle}
+                Project Memory Graph (Семантична памʼять проєкту)
               </h3>
               <p className="text-[11px] text-[#6E7568]">
-                Автономна карта рішень, блокерів та звʼязків простору
+                {chatTitle} · Граф знань, архітектурних рішень та контекстних зв'язків
               </p>
             </div>
           </div>
 
           <div className="flex items-center gap-2">
-            {/* Search */}
-            <div className="flex items-center gap-1.5 px-2.5 py-1 bg-white border border-[#E5DEC9] rounded-lg text-xs">
-              <Search className="w-3.5 h-3.5 text-[#8A9186]" />
-              <input
-                type="text"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                placeholder="Пошук у памʼяті..."
-                className="w-28 sm:w-36 bg-transparent focus:outline-none text-xs"
-              />
-            </div>
-
-            {/* Filter */}
-            <select
-              value={filterType}
-              onChange={(e) => setFilterType(e.target.value)}
-              className="px-2 py-1 bg-white border border-[#E5DEC9] rounded-lg text-xs text-[#21261F] focus:outline-none font-medium"
+            <button
+              onClick={() => {
+                soundFx.playTap();
+                setIsAdding(!isAdding);
+              }}
+              className="px-3 py-1.5 bg-[#D96C35] text-white rounded-lg text-xs font-bold hover:bg-[#C25B27] transition-all flex items-center gap-1.5"
             >
-              <option value="all">Усі звʼязки</option>
-              <option value="decision">Рішення</option>
-              <option value="task">Завдання</option>
-              <option value="blocker">Блокери</option>
-              <option value="person">Учасники</option>
-            </select>
-
+              <Plus className="w-3.5 h-3.5" /> Додати вузол
+            </button>
             <button
               onClick={onClose}
-              className="p-1.5 hover:bg-[#EFE9DC] rounded-lg text-[#6E7568] hover:text-[#21261F] transition-colors"
+              className="p-1.5 rounded-lg text-[#6E7568] hover:text-[#21261F] hover:bg-[#F1EBDD] transition-colors"
             >
               <X className="w-4 h-4" />
             </button>
           </div>
         </div>
 
-        {/* Interactive Graph Canvas */}
-        <div className="flex-1 min-h-0 relative overflow-hidden bg-[#FAF8F5] bg-[radial-gradient(#D9CFBB_1px,transparent_1px)] [background-size:16px_16px]">
-          <div className="absolute inset-0 p-6 overflow-auto custom-scrollbar">
-            {/* SVG Connecting Edges */}
-            <svg className="absolute inset-0 w-[1200px] h-[900px] pointer-events-none stroke-[#D96C35]/30 stroke-2">
-              <line x1="220" y1="120" x2="380" y2="100" />
-              <line x1="220" y1="120" x2="380" y2="240" strokeDasharray="4 4" stroke="#DC2626" />
-              <line x1="220" y1="260" x2="380" y2="240" />
-              <line x1="220" y1="260" x2="250" y2="350" />
-              <line x1="380" y1="100" x2="520" y2="170" />
-            </svg>
+        {/* Toolbar */}
+        <div className="px-5 py-2.5 bg-[#FDFCF9] border-b border-[#E8E1D3] flex items-center justify-between gap-3 shrink-0">
+          <div className="relative flex-1 max-w-xs">
+            <Search className="w-3.5 h-3.5 text-[#8A8577] absolute left-3 top-1/2 -translate-y-1/2" />
+            <input
+              type="text"
+              placeholder="Пошук у графі памʼяті..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              className="w-full pl-8 pr-3 py-1.5 bg-[#F7F5EE] border border-[#E8E1D3] rounded-lg text-xs outline-none focus:border-[#D96C35]"
+            />
+          </div>
 
-            {/* Nodes */}
-            {filteredNodes.map((n) => (
-              <div
-                key={n.id}
-                style={{
-                  position: 'absolute',
-                  left: `${n.x}px`,
-                  top: `${n.y}px`,
-                  width: '210px',
-                }}
-                className={`bg-white border-2 rounded-xl p-3 shadow-md space-y-1.5 transition-all select-none hover:scale-105 z-10 ${
-                  n.type === 'blocker'
-                    ? 'border-red-400 bg-red-50/20'
-                    : n.type === 'decision'
-                    ? 'border-[#D96C35] bg-[#FDF5ED]/40'
-                    : n.type === 'person'
-                    ? 'border-indigo-400'
-                    : 'border-[#E5DEC9]'
+          <div className="flex items-center gap-1">
+            {(['all', 'architecture', 'decision', 'task', 'insight'] as const).map((cat) => (
+              <button
+                key={cat}
+                onClick={() => setFilterCategory(cat)}
+                className={`px-2.5 py-1 rounded-md text-xs font-medium transition-all ${
+                  filterCategory === cat
+                    ? 'bg-[#21261F] text-white font-bold'
+                    : 'text-[#6E7568] hover:bg-[#EFE9DC]'
                 }`}
               >
-                <div className="flex items-center justify-between text-[10px] pb-1 border-b border-[#F5EFE3]">
-                  <span className={`font-bold uppercase flex items-center gap-1 ${
-                    n.type === 'blocker'
-                      ? 'text-red-600'
-                      : n.type === 'decision'
-                      ? 'text-[#D96C35]'
-                      : 'text-[#6E7568]'
-                  }`}>
-                    {n.type === 'blocker' && <AlertTriangle className="w-3 h-3 text-red-500" />}
-                    {n.type === 'decision' && <CheckCircle2 className="w-3 h-3 text-[#D96C35]" />}
-                    {n.type === 'person' && <User className="w-3 h-3 text-indigo-500" />}
-                    {n.type}
-                  </span>
-                  <span className={`px-1.5 py-0.2 rounded-full text-[9px] font-semibold ${
-                    n.status === 'resolved'
-                      ? 'bg-emerald-100 text-emerald-800'
-                      : n.status === 'blocked'
-                      ? 'bg-red-100 text-red-800'
-                      : 'bg-[#EFE9DC] text-[#6E7568]'
-                  }`}>
-                    {n.status}
-                  </span>
-                </div>
-
-                <p className="font-bold text-xs text-[#21261F] leading-tight">
-                  {n.label}
-                </p>
-                <p className="text-[11px] text-[#6E7568] leading-snug line-clamp-2">
-                  {n.detail}
-                </p>
-
-                {n.assignee && (
-                  <div className="flex items-center gap-1 pt-1 text-[10px] text-[#D96C35] font-semibold">
-                    <User className="w-3 h-3" />
-                    <span>@{n.assignee}</span>
-                  </div>
-                )}
-              </div>
+                {cat === 'all' ? 'Всі' : cat}
+              </button>
             ))}
           </div>
         </div>
 
-        {/* Footer */}
-        <div className="px-5 py-2.5 bg-[#FAF8F5] border-t border-[#E8E1D3] flex items-center justify-between text-[11px] text-[#8A9186]">
-          <span>{filteredNodes.length} активних вузлів памʼяті</span>
-          <span className="flex items-center gap-1 text-[#D96C35] font-semibold">
-            <Sparkles className="w-3.5 h-3.5" />
-            <span>Local AI Chronicler Active</span>
-          </span>
+        {/* Content */}
+        <div className="flex-1 overflow-hidden flex flex-col md:flex-row">
+          {/* Node List / Grid */}
+          <div className="flex-1 p-5 overflow-y-auto space-y-3 bg-[#FAF8F5]">
+            {isAdding && (
+              <form onSubmit={handleCreateNode} className="p-4 bg-white border border-[#D96C35] rounded-xl space-y-3">
+                <h4 className="font-bold text-xs text-[#D96C35]">Новий вузол графу</h4>
+                <input
+                  type="text"
+                  placeholder="Заголовок знання..."
+                  value={newTitle}
+                  onChange={(e) => setNewTitle(e.target.value)}
+                  className="w-full px-3 py-1.5 border border-[#E8E1D3] rounded-lg text-xs"
+                />
+                <textarea
+                  placeholder="Опис / контекст..."
+                  rows={3}
+                  value={newContent}
+                  onChange={(e) => setNewContent(e.target.value)}
+                  className="w-full px-3 py-1.5 border border-[#E8E1D3] rounded-lg text-xs"
+                />
+                <div className="flex items-center justify-between">
+                  <select
+                    value={newCategory}
+                    onChange={(e) => setNewCategory(e.target.value as any)}
+                    className="px-2 py-1 border border-[#E8E1D3] rounded text-xs"
+                  >
+                    <option value="architecture">architecture</option>
+                    <option value="decision">decision</option>
+                    <option value="task">task</option>
+                    <option value="insight">insight</option>
+                  </select>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setIsAdding(false)}
+                      className="px-2.5 py-1 text-xs text-[#6E7568]"
+                    >
+                      Скасувати
+                    </button>
+                    <button
+                      type="submit"
+                      className="px-3 py-1 bg-[#D96C35] text-white font-bold text-xs rounded-lg"
+                    >
+                      Зберегти
+                    </button>
+                  </div>
+                </div>
+              </form>
+            )}
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+              {filteredNodes.map((node) => (
+                <div
+                  key={node.id}
+                  onClick={() => setSelectedNode(node)}
+                  className={`p-4 rounded-xl border cursor-pointer transition-all ${
+                    selectedNode?.id === node.id
+                      ? 'bg-white border-[#D96C35] shadow-md ring-1 ring-[#D96C35]'
+                      : 'bg-white border-[#E8E1D3] hover:border-[#D96C35]/50'
+                  }`}
+                >
+                  <div className="flex items-center justify-between mb-1.5">
+                    <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-[#F7F5EE] text-[#6E7568]">
+                      {node.category}
+                    </span>
+                    <span className="text-[10px] text-[#8A8577]">{new Date(node.createdAt).toLocaleDateString()}</span>
+                  </div>
+                  <h4 className="font-bold text-xs text-[#21261F] mb-1">{node.title}</h4>
+                  <p className="text-[11px] text-[#6E7568] line-clamp-2 leading-relaxed">{node.content}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Details Sidebar */}
+          {selectedNode && (
+            <div className="w-full md:w-80 p-5 bg-white border-t md:border-t-0 md:border-l border-[#E8E1D3] flex flex-col justify-between">
+              <div className="space-y-3">
+                <div className="flex items-center justify-between">
+                  <span className="px-2 py-0.5 rounded text-[10px] font-bold uppercase bg-[#FDF5ED] text-[#D96C35]">
+                    {selectedNode.category}
+                  </span>
+                  <button
+                    onClick={() => {
+                      soundFx.playTap();
+                      deleteMemoryNode(selectedNode.id);
+                      setSelectedNode(null);
+                    }}
+                    className="text-red-500 hover:text-red-700 p-1"
+                    title="Видалити вузол"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
+                <h4 className="font-bold text-sm text-[#21261F]">{selectedNode.title}</h4>
+                <p className="text-xs text-[#4A5043] leading-relaxed whitespace-pre-wrap">{selectedNode.content}</p>
+                <div className="pt-2">
+                  <span className="text-[11px] font-bold text-[#8A8577]">Зв'язки ({selectedNode.connections.length})</span>
+                  <div className="flex flex-wrap gap-1 mt-1">
+                    {selectedNode.connections.map((cId) => (
+                      <span key={cId} className="px-2 py-0.5 bg-[#F7F5EE] border border-[#E8E1D3] rounded text-[10px] text-[#21261F]">
+                        #{cId}
+                      </span>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="pt-4 border-t border-[#E8E1D3] flex items-center gap-1.5 text-[11px] text-[#8A8577]">
+                <Sparkles className="w-3.5 h-3.5 text-[#D96C35]" />
+                <span>Автоматично індексується AIRouter</span>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </div>

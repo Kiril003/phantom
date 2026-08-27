@@ -30,63 +30,8 @@ import { ShareFolderModal } from './ShareFolderModal';
 import { SmartFolderModal } from './SmartFolderModal';
 import { UserProfileModal } from './UserProfileModal';
 import { CallOverlay } from './CallOverlay';
-import { RoleScopesModal } from './RoleScopesModal';
-import { WorkspaceDriveModal } from './WorkspaceDriveModal';
-import { KnowledgeSearchModal } from './KnowledgeSearchModal';
-import { P2PFileSwarmModal } from './P2PFileSwarmModal';
-import { WebhooksManagerModal } from './WebhooksManagerModal';
-import { CommandPaletteModal } from './CommandPaletteModal';
-import { LiveTerminalModal } from './LiveTerminalModal';
-import { ProjectMemoryGraphModal } from './ProjectMemoryGraphModal';
-import { NodeDashboardModal } from './NodeDashboardModal';
-import { SpaceVaultModal } from './SpaceVaultModal';
-import { AutomationPipelineModal } from './AutomationPipelineModal';
-import { RelationalDataGridModal } from './RelationalDataGridModal';
-import { TimeMachineSnapshotModal } from './TimeMachineSnapshotModal';
-import { ZeroTraceAirGapModal } from './ZeroTraceAirGapModal';
-import { IoTEqsTelemetryModal } from './IoTEqsTelemetryModal';
-import { AcademyHubModal } from './AcademyHubModal';
-import { FamilyHubModal } from './FamilyHubModal';
-import { CreativeStudioModal } from './CreativeStudioModal';
-import { PersonalWellnessModal } from './PersonalWellnessModal';
-import { CommunityClubModal } from './CommunityClubModal';
-import { DataLifecyclePruningModal } from './DataLifecyclePruningModal';
-import { ZeroLeakSecurityModal } from './ZeroLeakSecurityModal';
-import { WasmAppSandboxModal } from './WasmAppSandboxModal';
-import { P2PComputeSharingModal } from './P2PComputeSharingModal';
-import { AmbientContextModal } from './AmbientContextModal';
-import { UniversalBridgeModal } from './UniversalBridgeModal';
-import { ProtocolDrivenSchemaModal } from './ProtocolDrivenSchemaModal';
-import { NeuroErgonomicsModal } from './NeuroErgonomicsModal';
-import { LoRaWalkieTalkieModal } from './LoRaWalkieTalkieModal';
-import { SemanticBusPipesModal } from './SemanticBusPipesModal';
-import { SpatialProjectionsModal } from './SpatialProjectionsModal';
-import { ResourceGovernanceModal } from './ResourceGovernanceModal';
-import { GitNativeDevOpsModal } from './GitNativeDevOpsModal';
-import { AcademicLmsHubModal } from './AcademicLmsHubModal';
-import { CorporateHROpsModal } from './CorporateHROpsModal';
-import { CommerceMicroAppsModal } from './CommerceMicroAppsModal';
-import { HeadlessInfrastructureModal } from './HeadlessInfrastructureModal';
-import { LocalErpEscrowModal } from './LocalErpEscrowModal';
-import { SecOpsComplianceModal } from './SecOpsComplianceModal';
-import { AdvancedResearchMeshModal } from './AdvancedResearchMeshModal';
-import { PhantomRuntimeVfsModal } from './PhantomRuntimeVfsModal';
-import { DisasterMeshDtnModal } from './DisasterMeshDtnModal';
-import { AutonomousOpsWarRoomModal } from './AutonomousOpsWarRoomModal';
-import { HumanCentricBioContextModal } from './HumanCentricBioContextModal';
-import { InteractiveVisualization3DModal } from './InteractiveVisualization3DModal';
-import { CollaborativeWhiteboardPlaygroundModal } from './CollaborativeWhiteboardPlaygroundModal';
-import { PlanningPokerGanttWidgetsModal } from './PlanningPokerGanttWidgetsModal';
-import { SpatialMultiPaneWorkspaceModal } from './SpatialMultiPaneWorkspaceModal';
-import { InteractiveMediaAnnotationModal } from './InteractiveMediaAnnotationModal';
-import { SmartBreadcrumbsContextPeekModal } from './SmartBreadcrumbsContextPeekModal';
-import { VisualStateMachinePipelineModal } from './VisualStateMachinePipelineModal';
-import { CodeDiffMathHexInspectorModal } from './CodeDiffMathHexInspectorModal';
-import { CanvasPresentationSpeakerMatrixModal } from './CanvasPresentationSpeakerMatrixModal';
-import { LiveSpotlightMicroBountiesModal } from './LiveSpotlightMicroBountiesModal';
-import { PhantomArchitectureBlueprintModal } from './PhantomArchitectureBlueprintModal';
-import { AgenticWorkspaceVirtualizationModal } from './AgenticWorkspaceVirtualizationModal';
-import { PhysicalComputingGisCanvasModal } from './PhysicalComputingGisCanvasModal';
+import { ModalHost } from './modals/ModalHost';
+import { useModalStore } from '../../stores/modalStore';
 import { callEngine } from '../../services/callEngine';
 import { useCallAlerts } from '../../hooks/useCallAlerts';
 import { soundFx } from '../../utils/messengerSound';
@@ -103,64 +48,6 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
   // Закладка закріпленого живе в шапці, а стрічка — в ChatArea: тримаємо ручку.
   const chatAreaRef = useRef<ChatAreaHandle>(null);
   const [editingSmartFolder, setEditingSmartFolder] = useState<SmartFolder | null>(null);
-  // Work OS Super-App States
-  const [isRoleScopesOpen, setIsRoleScopesOpen] = useState(false);
-  const [isWorkspaceDriveOpen, setIsWorkspaceDriveOpen] = useState(false);
-  const [isKnowledgeSearchOpen, setIsKnowledgeSearchOpen] = useState(false);
-  const [isP2PSwarmOpen, setIsP2PSwarmOpen] = useState(false);
-  const [isWebhooksOpen, setIsWebhooksOpen] = useState(false);
-  const [isCommandPaletteOpen, setIsCommandPaletteOpen] = useState(false);
-  const [isLiveTerminalOpen, setIsLiveTerminalOpen] = useState(false);
-  const [isMemoryGraphOpen, setIsMemoryGraphOpen] = useState(false);
-  const [isNodeDashboardOpen, setIsNodeDashboardOpen] = useState(false);
-  const [isSpaceVaultOpen, setIsSpaceVaultOpen] = useState(false);
-  const [isAutomationsOpen, setIsAutomationsOpen] = useState(false);
-  const [isDataGridOpen, setIsDataGridOpen] = useState(false);
-  const [isTimeMachineOpen, setIsTimeMachineOpen] = useState(false);
-  const [isZeroTraceOpen, setIsZeroTraceOpen] = useState(false);
-  const [isIoTTelemetryOpen, setIsIoTTelemetryOpen] = useState(false);
-  const [isAcademyHubOpen, setIsAcademyHubOpen] = useState(false);
-  const [isFamilyHubOpen, setIsFamilyHubOpen] = useState(false);
-  const [isCreativeStudioOpen, setIsCreativeStudioOpen] = useState(false);
-  const [isPersonalWellnessOpen, setIsPersonalWellnessOpen] = useState(false);
-  const [isCommunityClubOpen, setIsCommunityClubOpen] = useState(false);
-  const [isDataLifecycleOpen, setIsDataLifecycleOpen] = useState(false);
-  const [isZeroLeakSecurityOpen, setIsZeroLeakSecurityOpen] = useState(false);
-  const [isWasmSandboxOpen, setIsWasmSandboxOpen] = useState(false);
-  const [isP2PComputeOpen, setIsP2PComputeOpen] = useState(false);
-  const [isAmbientContextOpen, setIsAmbientContextOpen] = useState(false);
-  const [isUniversalBridgeOpen, setIsUniversalBridgeOpen] = useState(false);
-  const [isProtocolSchemaOpen, setIsProtocolSchemaOpen] = useState(false);
-  const [isNeuroErgonomicsOpen, setIsNeuroErgonomicsOpen] = useState(false);
-  const [isLoRaWalkieOpen, setIsLoRaWalkieOpen] = useState(false);
-  const [isSemanticBusOpen, setIsSemanticBusOpen] = useState(false);
-  const [isSpatialProjectionsOpen, setIsSpatialProjectionsOpen] = useState(false);
-  const [isResourceGovernanceOpen, setIsResourceGovernanceOpen] = useState(false);
-  const [isGitDevOpsOpen, setIsGitDevOpsOpen] = useState(false);
-  const [isAcademicLmsOpen, setIsAcademicLmsOpen] = useState(false);
-  const [isCorporateHROpen, setIsCorporateHROpen] = useState(false);
-  const [isCommerceMicroAppsOpen, setIsCommerceMicroAppsOpen] = useState(false);
-  const [isHeadlessInfraOpen, setIsHeadlessInfraOpen] = useState(false);
-  const [isLocalErpEscrowOpen, setIsLocalErpEscrowOpen] = useState(false);
-  const [isSecOpsComplianceOpen, setIsSecOpsComplianceOpen] = useState(false);
-  const [isAdvancedResearchOpen, setIsAdvancedResearchOpen] = useState(false);
-  const [isPhantomRuntimeOpen, setIsPhantomRuntimeOpen] = useState(false);
-  const [isDisasterMeshOpen, setIsDisasterMeshOpen] = useState(false);
-  const [isAutonomousOpsOpen, setIsAutonomousOpsOpen] = useState(false);
-  const [isHumanCentricBioOpen, setIsHumanCentricBioOpen] = useState(false);
-  const [isInteractiveVis3DOpen, setIsInteractiveVis3DOpen] = useState(false);
-  const [isCollaborativeWhiteboardOpen, setIsCollaborativeWhiteboardOpen] = useState(false);
-  const [isPlanningPokerGanttOpen, setIsPlanningPokerGanttOpen] = useState(false);
-  const [isSpatialMultiPaneOpen, setIsSpatialMultiPaneOpen] = useState(false);
-  const [isMediaAnnotationOpen, setIsMediaAnnotationOpen] = useState(false);
-  const [isBreadcrumbsPeekOpen, setIsBreadcrumbsPeekOpen] = useState(false);
-  const [isStateMachinePipelineOpen, setIsStateMachinePipelineOpen] = useState(false);
-  const [isCodeDiffMathHexOpen, setIsCodeDiffMathHexOpen] = useState(false);
-  const [isCanvasPresentationOpen, setIsCanvasPresentationOpen] = useState(false);
-  const [isSpotlightBountiesOpen, setIsSpotlightBountiesOpen] = useState(false);
-  const [isBlueprintOpen, setIsBlueprintOpen] = useState(false);
-  const [isAgenticRuntimeOpen, setIsAgenticRuntimeOpen] = useState(false);
-  const [isPhysicalComputingOpen, setIsPhysicalComputingOpen] = useState(false);
   const [focusMode, setFocusMode] = useState<FocusModeType>('available');
   const [isHuddleActive, setIsHuddleActive] = useState(false);
 
@@ -254,162 +141,83 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
     const handleKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === 'k') {
         e.preventDefault();
-        setIsCommandPaletteOpen((prev) => !prev);
+        useModalStore.getState().openModal('commandPalette');
       } else if ((e.metaKey || e.ctrlKey) && (e.key === '\\' || e.key === '|')) {
         e.preventDefault();
         setIsSidebarCollapsed((prev) => !prev);
       } else if ((e.metaKey || e.ctrlKey) && e.key === '`') {
         e.preventDefault();
-        setIsLiveTerminalOpen((prev) => !prev);
+        useModalStore.getState().openModal('liveTerminal');
       }
     };
     window.addEventListener('keydown', handleKeyDown);
 
-    const onOpenAut = () => setIsAutomationsOpen(true);
-    const onOpenGrid = () => setIsDataGridOpen(true);
-    const onOpenTime = () => setIsTimeMachineOpen(true);
-    const onOpenZero = () => setIsZeroTraceOpen(true);
-    const onOpenIoT = () => setIsIoTTelemetryOpen(true);
-    const onOpenAcad = () => setIsAcademyHubOpen(true);
-    const onOpenFam = () => setIsFamilyHubOpen(true);
-    const onOpenCreat = () => setIsCreativeStudioOpen(true);
-    const onOpenPers = () => setIsPersonalWellnessOpen(true);
-    const onOpenComm = () => setIsCommunityClubOpen(true);
-    const onOpenLife = () => setIsDataLifecycleOpen(true);
-    const onOpenLeak = () => setIsZeroLeakSecurityOpen(true);
-    const onOpenWasm = () => setIsWasmSandboxOpen(true);
-    const onOpenP2PComp = () => setIsP2PComputeOpen(true);
-    const onOpenAmb = () => setIsAmbientContextOpen(true);
-    const onOpenBridge = () => setIsUniversalBridgeOpen(true);
-    const onOpenSchema = () => setIsProtocolSchemaOpen(true);
-    const onOpenNeuro = () => setIsNeuroErgonomicsOpen(true);
-    const onOpenLoRa = () => setIsLoRaWalkieOpen(true);
-    const onOpenBus = () => setIsSemanticBusOpen(true);
-    const onOpenProj = () => setIsSpatialProjectionsOpen(true);
-    const onOpenGov = () => setIsResourceGovernanceOpen(true);
-    const onOpenGit = () => setIsGitDevOpsOpen(true);
-    const onOpenLms = () => setIsAcademicLmsOpen(true);
-    const onOpenHr = () => setIsCorporateHROpen(true);
-    const onOpenCommApp = () => setIsCommerceMicroAppsOpen(true);
-    const onOpenHeadless = () => setIsHeadlessInfraOpen(true);
-    const onOpenErp = () => setIsLocalErpEscrowOpen(true);
-    const onOpenSecOps = () => setIsSecOpsComplianceOpen(true);
-    const onOpenResearch = () => setIsAdvancedResearchOpen(true);
-    const onOpenVfs = () => setIsPhantomRuntimeOpen(true);
-    const onOpenDisaster = () => setIsDisasterMeshOpen(true);
-    const onOpenWarRoom = () => setIsAutonomousOpsOpen(true);
-    const onOpenBio = () => setIsHumanCentricBioOpen(true);
-    const onOpenVis3D = () => setIsInteractiveVis3DOpen(true);
-    const onOpenWhiteboard = () => setIsCollaborativeWhiteboardOpen(true);
-    const onOpenPoker = () => setIsPlanningPokerGanttOpen(true);
-    const onOpenMultiPane = () => setIsSpatialMultiPaneOpen(true);
-    const onOpenMediaAnnot = () => setIsMediaAnnotationOpen(true);
-    const onOpenBreadcrumbs = () => setIsBreadcrumbsPeekOpen(true);
-    const onOpenStateMachine = () => setIsStateMachinePipelineOpen(true);
-    const onOpenCodeDiff = () => setIsCodeDiffMathHexOpen(true);
-    const onOpenPresentation = () => setIsCanvasPresentationOpen(true);
-    const onOpenSpotlight = () => setIsSpotlightBountiesOpen(true);
-    const onOpenBlueprint = () => setIsBlueprintOpen(true);
-    const onOpenAgentic = () => setIsAgenticRuntimeOpen(true);
-    const onOpenPhysical = () => setIsPhysicalComputingOpen(true);
+    const eventMap: Record<string, any> = {
+      'phantom:open-automations': 'automations',
+      'phantom:open-datagrid': 'dataGrid',
+      'phantom:open-timemachine': 'timeMachine',
+      'phantom:open-zerotrace': 'zeroTrace',
+      'phantom:open-iot': 'iotTelemetry',
+      'phantom:open-academy': 'academyHub',
+      'phantom:open-family': 'familyHub',
+      'phantom:open-creative': 'creativeStudio',
+      'phantom:open-personal': 'personalWellness',
+      'phantom:open-community': 'communityClub',
+      'phantom:open-lifecycle': 'dataLifecycle',
+      'phantom:open-zeroleak': 'zeroLeakSecurity',
+      'phantom:open-wasm': 'wasmSandbox',
+      'phantom:open-p2pcompute': 'p2pCompute',
+      'phantom:open-ambient': 'ambientContext',
+      'phantom:open-bridge': 'universalBridge',
+      'phantom:open-schema': 'protocolSchema',
+      'phantom:open-neuro': 'neuroErgonomics',
+      'phantom:open-lora': 'loRaWalkie',
+      'phantom:open-semanticbus': 'semanticBus',
+      'phantom:open-projections': 'spatialProjections',
+      'phantom:open-governance': 'resourceGovernance',
+      'phantom:open-gitdevops': 'gitDevOps',
+      'phantom:open-academiclms': 'academicLms',
+      'phantom:open-corporatehr': 'corporateHR',
+      'phantom:open-commerce': 'commerceMicroApps',
+      'phantom:open-headless': 'headlessInfra',
+      'phantom:open-erp': 'localErpEscrow',
+      'phantom:open-secops': 'secOpsCompliance',
+      'phantom:open-research': 'advancedResearch',
+      'phantom:open-vfs': 'phantomRuntime',
+      'phantom:open-disaster': 'disasterMesh',
+      'phantom:open-warroom': 'autonomousOps',
+      'phantom:open-biocontext': 'humanCentricBio',
+      'phantom:open-vis3d': 'interactiveVis3D',
+      'phantom:open-whiteboard': 'collaborativeWhiteboard',
+      'phantom:open-poker': 'planningPokerGantt',
+      'phantom:open-multipane': 'spatialMultiPane',
+      'phantom:open-mediaannotation': 'mediaAnnotation',
+      'phantom:open-breadcrumbs': 'breadcrumbsPeek',
+      'phantom:open-statemachine': 'stateMachinePipeline',
+      'phantom:open-codediff': 'codeDiffMathHex',
+      'phantom:open-presentation': 'canvasPresentation',
+      'phantom:open-spotlight': 'spotlightBounties',
+      'phantom:open-blueprint': 'blueprint',
+      'phantom:open-agentic': 'agenticRuntime',
+      'phantom:open-physical': 'physicalComputing',
+    };
 
-    window.addEventListener('phantom:open-automations', onOpenAut);
-    window.addEventListener('phantom:open-datagrid', onOpenGrid);
-    window.addEventListener('phantom:open-timemachine', onOpenTime);
-    window.addEventListener('phantom:open-zerotrace', onOpenZero);
-    window.addEventListener('phantom:open-iot', onOpenIoT);
-    window.addEventListener('phantom:open-academy', onOpenAcad);
-    window.addEventListener('phantom:open-family', onOpenFam);
-    window.addEventListener('phantom:open-creative', onOpenCreat);
-    window.addEventListener('phantom:open-personal', onOpenPers);
-    window.addEventListener('phantom:open-community', onOpenComm);
-    window.addEventListener('phantom:open-lifecycle', onOpenLife);
-    window.addEventListener('phantom:open-zeroleak', onOpenLeak);
-    window.addEventListener('phantom:open-wasm', onOpenWasm);
-    window.addEventListener('phantom:open-p2pcompute', onOpenP2PComp);
-    window.addEventListener('phantom:open-ambient', onOpenAmb);
-    window.addEventListener('phantom:open-bridge', onOpenBridge);
-    window.addEventListener('phantom:open-schema', onOpenSchema);
-    window.addEventListener('phantom:open-neuro', onOpenNeuro);
-    window.addEventListener('phantom:open-lora', onOpenLoRa);
-    window.addEventListener('phantom:open-semanticbus', onOpenBus);
-    window.addEventListener('phantom:open-projections', onOpenProj);
-    window.addEventListener('phantom:open-governance', onOpenGov);
-    window.addEventListener('phantom:open-gitdevops', onOpenGit);
-    window.addEventListener('phantom:open-academiclms', onOpenLms);
-    window.addEventListener('phantom:open-corporatehr', onOpenHr);
-    window.addEventListener('phantom:open-commerce', onOpenCommApp);
-    window.addEventListener('phantom:open-headless', onOpenHeadless);
-    window.addEventListener('phantom:open-erp', onOpenErp);
-    window.addEventListener('phantom:open-secops', onOpenSecOps);
-    window.addEventListener('phantom:open-research', onOpenResearch);
-    window.addEventListener('phantom:open-vfs', onOpenVfs);
-    window.addEventListener('phantom:open-disaster', onOpenDisaster);
-    window.addEventListener('phantom:open-warroom', onOpenWarRoom);
-    window.addEventListener('phantom:open-biocontext', onOpenBio);
-    window.addEventListener('phantom:open-vis3d', onOpenVis3D);
-    window.addEventListener('phantom:open-whiteboard', onOpenWhiteboard);
-    window.addEventListener('phantom:open-poker', onOpenPoker);
-    window.addEventListener('phantom:open-multipane', onOpenMultiPane);
-    window.addEventListener('phantom:open-mediaannotation', onOpenMediaAnnot);
-    window.addEventListener('phantom:open-breadcrumbs', onOpenBreadcrumbs);
-    window.addEventListener('phantom:open-statemachine', onOpenStateMachine);
-    window.addEventListener('phantom:open-codediff', onOpenCodeDiff);
-    window.addEventListener('phantom:open-presentation', onOpenPresentation);
-    window.addEventListener('phantom:open-spotlight', onOpenSpotlight);
-    window.addEventListener('phantom:open-blueprint', onOpenBlueprint);
-    window.addEventListener('phantom:open-agentic', onOpenAgentic);
-    window.addEventListener('phantom:open-physical', onOpenPhysical);
+    const listeners: Array<{ name: string; fn: (e: any) => void }> = [];
+    Object.entries(eventMap).forEach(([eventName, modalType]) => {
+      const fn = (e: any) => useModalStore.getState().openModal(modalType, e?.detail);
+      window.addEventListener(eventName, fn);
+      listeners.push({ name: eventName, fn });
+    });
+
+    const onDirectOpen = (e: any) => {
+      if (e?.detail?.type) useModalStore.getState().openModal(e.detail.type, e.detail.props);
+    };
+    window.addEventListener('phantom:open-modal', onDirectOpen);
 
     return () => {
       window.removeEventListener('keydown', handleKeyDown);
-      window.removeEventListener('phantom:open-automations', onOpenAut);
-      window.removeEventListener('phantom:open-datagrid', onOpenGrid);
-      window.removeEventListener('phantom:open-timemachine', onOpenTime);
-      window.removeEventListener('phantom:open-zerotrace', onOpenZero);
-      window.removeEventListener('phantom:open-iot', onOpenIoT);
-      window.removeEventListener('phantom:open-academy', onOpenAcad);
-      window.removeEventListener('phantom:open-family', onOpenFam);
-      window.removeEventListener('phantom:open-creative', onOpenCreat);
-      window.removeEventListener('phantom:open-personal', onOpenPers);
-      window.removeEventListener('phantom:open-community', onOpenComm);
-      window.removeEventListener('phantom:open-lifecycle', onOpenLife);
-      window.removeEventListener('phantom:open-zeroleak', onOpenLeak);
-      window.removeEventListener('phantom:open-wasm', onOpenWasm);
-      window.removeEventListener('phantom:open-p2pcompute', onOpenP2PComp);
-      window.removeEventListener('phantom:open-ambient', onOpenAmb);
-      window.removeEventListener('phantom:open-bridge', onOpenBridge);
-      window.removeEventListener('phantom:open-schema', onOpenSchema);
-      window.removeEventListener('phantom:open-neuro', onOpenNeuro);
-      window.removeEventListener('phantom:open-lora', onOpenLoRa);
-      window.removeEventListener('phantom:open-semanticbus', onOpenBus);
-      window.removeEventListener('phantom:open-projections', onOpenProj);
-      window.removeEventListener('phantom:open-governance', onOpenGov);
-      window.removeEventListener('phantom:open-gitdevops', onOpenGit);
-      window.removeEventListener('phantom:open-academiclms', onOpenLms);
-      window.removeEventListener('phantom:open-corporatehr', onOpenHr);
-      window.removeEventListener('phantom:open-commerce', onOpenCommApp);
-      window.removeEventListener('phantom:open-headless', onOpenHeadless);
-      window.removeEventListener('phantom:open-erp', onOpenErp);
-      window.removeEventListener('phantom:open-secops', onOpenSecOps);
-      window.removeEventListener('phantom:open-research', onOpenResearch);
-      window.removeEventListener('phantom:open-vfs', onOpenVfs);
-      window.removeEventListener('phantom:open-disaster', onOpenDisaster);
-      window.removeEventListener('phantom:open-warroom', onOpenWarRoom);
-      window.removeEventListener('phantom:open-biocontext', onOpenBio);
-      window.removeEventListener('phantom:open-vis3d', onOpenVis3D);
-      window.removeEventListener('phantom:open-whiteboard', onOpenWhiteboard);
-      window.removeEventListener('phantom:open-poker', onOpenPoker);
-      window.removeEventListener('phantom:open-multipane', onOpenMultiPane);
-      window.removeEventListener('phantom:open-mediaannotation', onOpenMediaAnnot);
-      window.removeEventListener('phantom:open-breadcrumbs', onOpenBreadcrumbs);
-      window.removeEventListener('phantom:open-statemachine', onOpenStateMachine);
-      window.removeEventListener('phantom:open-codediff', onOpenCodeDiff);
-      window.removeEventListener('phantom:open-presentation', onOpenPresentation);
-      window.removeEventListener('phantom:open-spotlight', onOpenSpotlight);
-      window.removeEventListener('phantom:open-blueprint', onOpenBlueprint);
-      window.removeEventListener('phantom:open-agentic', onOpenAgentic);
-      window.removeEventListener('phantom:open-physical', onOpenPhysical);
+      window.removeEventListener('phantom:open-modal', onDirectOpen);
+      listeners.forEach(({ name, fn }) => window.removeEventListener(name, fn));
     };
   }, []);
 
@@ -479,21 +287,21 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
             pinnedCount={activeChat.messages.filter((m) => m.isPinned).length}
             onScrollToPinned={() => chatAreaRef.current?.scrollToPinned()}
             onOpenP2PNetworkModal={() => store.setP2PModalOpen(true)}
-            onOpenKnowledgeSearch={() => setIsKnowledgeSearchOpen(true)}
-            onOpenWorkspaceDrive={() => setIsWorkspaceDriveOpen(true)}
-            onOpenRoleScopes={() => setIsRoleScopesOpen(true)}
-            onOpenP2PSwarm={() => setIsP2PSwarmOpen(true)}
-            onOpenWebhooks={() => setIsWebhooksOpen(true)}
-            onOpenTerminal={() => setIsLiveTerminalOpen(true)}
-            onOpenMemoryGraph={() => setIsMemoryGraphOpen(true)}
-            onOpenNodeDashboard={() => setIsNodeDashboardOpen(true)}
-            onOpenSpaceVault={() => setIsSpaceVaultOpen(true)}
-            onOpenCommandPalette={() => setIsCommandPaletteOpen(true)}
-            onOpenAutomations={() => setIsAutomationsOpen(true)}
-            onOpenDataGrid={() => setIsDataGridOpen(true)}
-            onOpenTimeMachine={() => setIsTimeMachineOpen(true)}
-            onOpenZeroTrace={() => setIsZeroTraceOpen(true)}
-            onOpenIoTTelemetry={() => setIsIoTTelemetryOpen(true)}
+            onOpenKnowledgeSearch={() => useModalStore.getState().openModal('knowledgeSearch')}
+            onOpenWorkspaceDrive={() => useModalStore.getState().openModal('workspaceDrive')}
+            onOpenRoleScopes={() => useModalStore.getState().openModal('roleScopes')}
+            onOpenP2PSwarm={() => useModalStore.getState().openModal('p2pSwarm')}
+            onOpenWebhooks={() => useModalStore.getState().openModal('webhooks')}
+            onOpenTerminal={() => useModalStore.getState().openModal('liveTerminal')}
+            onOpenMemoryGraph={() => useModalStore.getState().openModal('memoryGraph')}
+            onOpenNodeDashboard={() => useModalStore.getState().openModal('nodeDashboard')}
+            onOpenSpaceVault={() => useModalStore.getState().openModal('spaceVault')}
+            onOpenCommandPalette={() => useModalStore.getState().openModal('commandPalette')}
+            onOpenAutomations={() => useModalStore.getState().openModal('automations')}
+            onOpenDataGrid={() => useModalStore.getState().openModal('dataGrid')}
+            onOpenTimeMachine={() => useModalStore.getState().openModal('timeMachine')}
+            onOpenZeroTrace={() => useModalStore.getState().openModal('zeroTrace')}
+            onOpenIoTTelemetry={() => useModalStore.getState().openModal('iotTelemetry')}
             focusMode={focusMode}
             onFocusModeChange={setFocusMode}
             isHuddleActive={isHuddleActive}
@@ -801,373 +609,8 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
         }}
       />
 
-      {/* WORK OS MODALS */}
-      <RoleScopesModal
-        isOpen={isRoleScopesOpen}
-        onClose={() => setIsRoleScopesOpen(false)}
-        channelTitle={activeChat?.title || 'Простір'}
-      />
-
-      <WorkspaceDriveModal
-        isOpen={isWorkspaceDriveOpen}
-        onClose={() => setIsWorkspaceDriveOpen(false)}
-        workspaceTitle={activeChat?.title || 'Простір'}
-      />
-
-      <KnowledgeSearchModal
-        isOpen={isKnowledgeSearchOpen}
-        onClose={() => setIsKnowledgeSearchOpen(false)}
-      />
-
-      <P2PFileSwarmModal
-        isOpen={isP2PSwarmOpen}
-        onClose={() => setIsP2PSwarmOpen(false)}
-      />
-
-      <WebhooksManagerModal
-        isOpen={isWebhooksOpen}
-        onClose={() => setIsWebhooksOpen(false)}
-        onSendTestWebhook={(wh) => {
-          store.addCustomMessage({
-            id: `msg_wh_${Date.now()}`,
-            senderId: 'bot_ci',
-            senderName: 'CI/CD Bot',
-            senderAvatar: 'https://images.unsplash.com/photo-1618401471353-b98afee0b2eb?w=200&auto=format&fit=crop&q=80',
-            timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
-            type: 'webhook:event',
-            isSelf: false,
-            webhookEventData: {
-              source: wh.source === 'docker' ? 'ci' : wh.source,
-              eventType: 'push',
-              repository: 'phantom-companion',
-              sender: 'github-actions[bot]',
-              title: `[${wh.name}] Build & Test Pipeline Succeeded`,
-              description: 'Atomic sprint test passed on aarch64 & x86_64 target nodes.',
-              status: 'success',
-              commitHash: '054253e',
-              timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
-            },
-          });
-        }}
-      />
-
-      <CommandPaletteModal
-        isOpen={isCommandPaletteOpen}
-        onClose={() => setIsCommandPaletteOpen(false)}
-        onOpenCanvas={() => {
-          window.dispatchEvent(new CustomEvent('phantom:open-canvas'));
-        }}
-        onOpenTerminal={() => setIsLiveTerminalOpen(true)}
-        onOpenNodeDashboard={() => setIsNodeDashboardOpen(true)}
-        onOpenSpaceVault={() => setIsSpaceVaultOpen(true)}
-      />
-
-      <LiveTerminalModal
-        isOpen={isLiveTerminalOpen}
-        onClose={() => setIsLiveTerminalOpen(false)}
-        chatTitle={activeChat?.title || 'Бесіда'}
-        chatId={activeChat?.id}
-      />
-
-      <ProjectMemoryGraphModal
-        isOpen={isMemoryGraphOpen}
-        onClose={() => setIsMemoryGraphOpen(false)}
-        chatTitle={activeChat?.title || 'Бесіда'}
-      />
-
-      <NodeDashboardModal
-        isOpen={isNodeDashboardOpen}
-        onClose={() => setIsNodeDashboardOpen(false)}
-      />
-
-      <SpaceVaultModal
-        isOpen={isSpaceVaultOpen}
-        onClose={() => setIsSpaceVaultOpen(false)}
-        chatTitle={activeChat?.title || 'Бесіда'}
-      />
-
-      <AutomationPipelineModal
-        isOpen={isAutomationsOpen}
-        onClose={() => setIsAutomationsOpen(false)}
-        chatTitle={activeChat?.title || 'Бесіда'}
-        chatId={activeChat?.id}
-      />
-
-      <RelationalDataGridModal
-        isOpen={isDataGridOpen}
-        onClose={() => setIsDataGridOpen(false)}
-        chatTitle={activeChat?.title || 'Бесіда'}
-      />
-
-      <TimeMachineSnapshotModal
-        isOpen={isTimeMachineOpen}
-        onClose={() => setIsTimeMachineOpen(false)}
-        chatTitle={activeChat?.title || 'Бесіда'}
-      />
-
-      <ZeroTraceAirGapModal
-        isOpen={isZeroTraceOpen}
-        onClose={() => setIsZeroTraceOpen(false)}
-        chatTitle={activeChat?.title || 'Бесіда'}
-      />
-
-      <IoTEqsTelemetryModal
-        isOpen={isIoTTelemetryOpen}
-        onClose={() => setIsIoTTelemetryOpen(false)}
-        chatTitle={activeChat?.title || 'Бесіда'}
-      />
-
-      <AcademyHubModal
-        isOpen={isAcademyHubOpen}
-        onClose={() => setIsAcademyHubOpen(false)}
-        chatTitle={activeChat?.title || 'Академічна група'}
-      />
-
-      <FamilyHubModal
-        isOpen={isFamilyHubOpen}
-        onClose={() => setIsFamilyHubOpen(false)}
-        chatTitle={activeChat?.title || 'Родина & Дім'}
-      />
-
-      <CreativeStudioModal
-        isOpen={isCreativeStudioOpen}
-        onClose={() => setIsCreativeStudioOpen(false)}
-        chatTitle={activeChat?.title || 'Креативна студія'}
-      />
-
-      <PersonalWellnessModal
-        isOpen={isPersonalWellnessOpen}
-        onClose={() => setIsPersonalWellnessOpen(false)}
-        chatTitle={activeChat?.title || 'Особистий простір'}
-      />
-
-      <CommunityClubModal
-        isOpen={isCommunityClubOpen}
-        onClose={() => setIsCommunityClubOpen(false)}
-        chatTitle={activeChat?.title || 'Міська спільнота & Клуб'}
-      />
-
-      <DataLifecyclePruningModal
-        isOpen={isDataLifecycleOpen}
-        onClose={() => setIsDataLifecycleOpen(false)}
-        chatTitle={activeChat?.title || 'Бесіда'}
-      />
-
-      <ZeroLeakSecurityModal
-        isOpen={isZeroLeakSecurityOpen}
-        onClose={() => setIsZeroLeakSecurityOpen(false)}
-        chatTitle={activeChat?.title || 'Бесіда'}
-      />
-
-      <WasmAppSandboxModal
-        isOpen={isWasmSandboxOpen}
-        onClose={() => setIsWasmSandboxOpen(false)}
-        chatTitle={activeChat?.title || 'Бесіда'}
-      />
-
-      <P2PComputeSharingModal
-        isOpen={isP2PComputeOpen}
-        onClose={() => setIsP2PComputeOpen(false)}
-        chatTitle={activeChat?.title || 'Бесіда'}
-      />
-
-      <AmbientContextModal
-        isOpen={isAmbientContextOpen}
-        onClose={() => setIsAmbientContextOpen(false)}
-        chatTitle={activeChat?.title || 'Бесіда'}
-      />
-
-      <UniversalBridgeModal
-        isOpen={isUniversalBridgeOpen}
-        onClose={() => setIsUniversalBridgeOpen(false)}
-        chatTitle={activeChat?.title || 'Бесіда'}
-      />
-
-      <ProtocolDrivenSchemaModal
-        isOpen={isProtocolSchemaOpen}
-        onClose={() => setIsProtocolSchemaOpen(false)}
-        chatTitle={activeChat?.title || 'Простір'}
-      />
-
-      <NeuroErgonomicsModal
-        isOpen={isNeuroErgonomicsOpen}
-        onClose={() => setIsNeuroErgonomicsOpen(false)}
-        chatTitle={activeChat?.title || 'Бесіда'}
-      />
-
-      <LoRaWalkieTalkieModal
-        isOpen={isLoRaWalkieOpen}
-        onClose={() => setIsLoRaWalkieOpen(false)}
-        chatTitle={activeChat?.title || 'Бесіда'}
-      />
-
-      <SemanticBusPipesModal
-        isOpen={isSemanticBusOpen}
-        onClose={() => setIsSemanticBusOpen(false)}
-        chatTitle={activeChat?.title || 'Простір'}
-      />
-
-      <SpatialProjectionsModal
-        isOpen={isSpatialProjectionsOpen}
-        onClose={() => setIsSpatialProjectionsOpen(false)}
-        chatTitle={activeChat?.title || 'Простір'}
-      />
-
-      <ResourceGovernanceModal
-        isOpen={isResourceGovernanceOpen}
-        onClose={() => setIsResourceGovernanceOpen(false)}
-        chatTitle={activeChat?.title || 'Система'}
-      />
-
-      <GitNativeDevOpsModal
-        isOpen={isGitDevOpsOpen}
-        onClose={() => setIsGitDevOpsOpen(false)}
-        chatTitle={activeChat?.title || 'Інженерний простір'}
-      />
-
-      <AcademicLmsHubModal
-        isOpen={isAcademicLmsOpen}
-        onClose={() => setIsAcademicLmsOpen(false)}
-        chatTitle={activeChat?.title || 'Академічна група'}
-      />
-
-      <CorporateHROpsModal
-        isOpen={isCorporateHROpen}
-        onClose={() => setIsCorporateHROpen(false)}
-        chatTitle={activeChat?.title || 'Корпоративний простір'}
-      />
-
-      <CommerceMicroAppsModal
-        isOpen={isCommerceMicroAppsOpen}
-        onClose={() => setIsCommerceMicroAppsOpen(false)}
-        chatTitle={activeChat?.title || 'Комерційний простір'}
-      />
-
-      <HeadlessInfrastructureModal
-        isOpen={isHeadlessInfraOpen}
-        onClose={() => setIsHeadlessInfraOpen(false)}
-        chatTitle={activeChat?.title || 'Інфраструктура'}
-      />
-
-      <LocalErpEscrowModal
-        isOpen={isLocalErpEscrowOpen}
-        onClose={() => setIsLocalErpEscrowOpen(false)}
-        chatTitle={activeChat?.title || 'Комерційний простір'}
-      />
-
-      <SecOpsComplianceModal
-        isOpen={isSecOpsComplianceOpen}
-        onClose={() => setIsSecOpsComplianceOpen(false)}
-        chatTitle={activeChat?.title || 'Безпека простору'}
-      />
-
-      <AdvancedResearchMeshModal
-        isOpen={isAdvancedResearchOpen}
-        onClose={() => setIsAdvancedResearchOpen(false)}
-        chatTitle={activeChat?.title || 'Науково-дослідний простір'}
-      />
-
-      <PhantomRuntimeVfsModal
-        isOpen={isPhantomRuntimeOpen}
-        onClose={() => setIsPhantomRuntimeOpen(false)}
-        chatTitle={activeChat?.title || 'Робочий простір'}
-      />
-
-      <DisasterMeshDtnModal
-        isOpen={isDisasterMeshOpen}
-        onClose={() => setIsDisasterMeshOpen(false)}
-        chatTitle={activeChat?.title || 'Мережа стійкості'}
-      />
-
-      <AutonomousOpsWarRoomModal
-        isOpen={isAutonomousOpsOpen}
-        onClose={() => setIsAutonomousOpsOpen(false)}
-        chatTitle={activeChat?.title || 'Автономний менеджмент'}
-      />
-
-      <HumanCentricBioContextModal
-        isOpen={isHumanCentricBioOpen}
-        onClose={() => setIsHumanCentricBioOpen(false)}
-        chatTitle={activeChat?.title || 'Особистий простір'}
-      />
-
-      <InteractiveVisualization3DModal
-        isOpen={isInteractiveVis3DOpen}
-        onClose={() => setIsInteractiveVis3DOpen(false)}
-        chatTitle={activeChat?.title || 'Візуалізація даних'}
-      />
-
-      <CollaborativeWhiteboardPlaygroundModal
-        isOpen={isCollaborativeWhiteboardOpen}
-        onClose={() => setIsCollaborativeWhiteboardOpen(false)}
-        chatTitle={activeChat?.title || 'Мультиплеєрний простір'}
-      />
-
-      <PlanningPokerGanttWidgetsModal
-        isOpen={isPlanningPokerGanttOpen}
-        onClose={() => setIsPlanningPokerGanttOpen(false)}
-        chatTitle={activeChat?.title || 'Командне планування'}
-      />
-
-      <SpatialMultiPaneWorkspaceModal
-        isOpen={isSpatialMultiPaneOpen}
-        onClose={() => setIsSpatialMultiPaneOpen(false)}
-        chatTitle={activeChat?.title || 'Робочий простір'}
-      />
-
-      <InteractiveMediaAnnotationModal
-        isOpen={isMediaAnnotationOpen}
-        onClose={() => setIsMediaAnnotationOpen(false)}
-        chatTitle={activeChat?.title || 'Інтерактивні медіа'}
-      />
-
-      <SmartBreadcrumbsContextPeekModal
-        isOpen={isBreadcrumbsPeekOpen}
-        onClose={() => setIsBreadcrumbsPeekOpen(false)}
-        chatTitle={activeChat?.title || 'Контекстна навігація'}
-      />
-
-      <VisualStateMachinePipelineModal
-        isOpen={isStateMachinePipelineOpen}
-        onClose={() => setIsStateMachinePipelineOpen(false)}
-        chatTitle={activeChat?.title || 'Робочий процес'}
-      />
-
-      <CodeDiffMathHexInspectorModal
-        isOpen={isCodeDiffMathHexOpen}
-        onClose={() => setIsCodeDiffMathHexOpen(false)}
-        chatTitle={activeChat?.title || 'Код, математика та двійкові дані'}
-      />
-
-      <CanvasPresentationSpeakerMatrixModal
-        isOpen={isCanvasPresentationOpen}
-        onClose={() => setIsCanvasPresentationOpen(false)}
-        chatTitle={activeChat?.title || 'Презентація & Аналітика'}
-      />
-
-      <LiveSpotlightMicroBountiesModal
-        isOpen={isSpotlightBountiesOpen}
-        onClose={() => setIsSpotlightBountiesOpen(false)}
-        chatTitle={activeChat?.title || 'Інтерактивна взаємодія'}
-      />
-
-      <PhantomArchitectureBlueprintModal
-        isOpen={isBlueprintOpen}
-        onClose={() => setIsBlueprintOpen(false)}
-        chatTitle={activeChat?.title || 'Архітектурна специфікація'}
-      />
-
-      <AgenticWorkspaceVirtualizationModal
-        isOpen={isAgenticRuntimeOpen}
-        onClose={() => setIsAgenticRuntimeOpen(false)}
-        chatTitle={activeChat?.title || 'Agentic Workspace'}
-      />
-
-      <PhysicalComputingGisCanvasModal
-        isOpen={isPhysicalComputingOpen}
-        onClose={() => setIsPhysicalComputingOpen(false)}
-        chatTitle={activeChat?.title || 'Інженерний простір'}
-      />
+      {/* Dynamic Super-App & Work OS Domain Modals */}
+      <ModalHost />
 
       <CallOverlay />
     </div>

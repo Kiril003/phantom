@@ -154,6 +154,8 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
   const [copiedCodeId, setCopiedCodeId] = useState<string | null>(null);
   const [hoveredMessageId, setHoveredMessageId] = useState<string | null>(null);
   const [contextMenuMsg, setContextMenuMsg] = useState<Message | null>(null);
+  const typingStatus = useMessengerStore((s) => s.typingStatus);
+  const currentTyping = typingStatus[currentChat?.id || ''];
 
   // Довгий тап відкриває шторку дій, а вона кладе заслінку на весь екран.
   // Escape її не закривав — і телефон стояв мертвий, доки людина не здогадається
@@ -2422,14 +2424,14 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
         })}
 
         {/* Live Typing / Thinking Indicator */}
-        {isAiTyping && (
-          <div className="mt-[10px] flex items-center gap-2 text-[12.5px] text-[#6E7568] bg-white px-3 py-2 rounded-[12px] w-fit border border-[#E8E1D3]">
+        {(isAiTyping || currentTyping) && (
+          <div className="mt-[10px] flex items-center gap-2 text-[12.5px] text-[#2C302B] bg-white/95 backdrop-blur-md px-3 py-2 rounded-[12px] w-fit border border-[#E8E1D3] shadow-sm animate-in fade-in duration-200">
             <div className="flex items-center gap-1">
-              <span className="w-1.5 h-1.5 bg-[var(--msg-meta)] rounded-full animate-bounce" />
-              <span className="w-1.5 h-1.5 bg-[var(--msg-meta)] rounded-full animate-bounce [animation-delay:0.2s]" />
-              <span className="w-1.5 h-1.5 bg-[var(--msg-meta)] rounded-full animate-bounce [animation-delay:0.4s]" />
+              <span className="w-1.5 h-1.5 bg-[#D96C35] rounded-full animate-bounce" />
+              <span className="w-1.5 h-1.5 bg-[#D96C35] rounded-full animate-bounce [animation-delay:0.2s]" />
+              <span className="w-1.5 h-1.5 bg-[#D96C35] rounded-full animate-bounce [animation-delay:0.4s]" />
             </div>
-            <span>Локальний агент формує відповідь…</span>
+            <span className="font-medium">{currentTyping || 'Співрозмовник друкує…'}</span>
           </div>
         )}
 

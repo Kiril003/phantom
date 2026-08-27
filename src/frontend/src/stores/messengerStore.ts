@@ -33,6 +33,7 @@ import {
   smartFolders as defaultFolders,
   scheduledMessages as defaultScheduled,
 } from '../data/messengerInitialData';
+import { generateContextualResponse } from '../services/conversationalAgent';
 
 export interface MessengerState {
   // Current session & persona
@@ -78,6 +79,8 @@ export interface MessengerState {
   // Drafts & Typing
   drafts: Record<string, string>;
   typingUsers: Record<string, { userId: string; userName: string; timestamp: number }>;
+  typingStatus: Record<string, string | null>;
+  setTypingStatus: (chatId: string, status: string | null) => void;
 
   // Getters & Selectors
   getActiveChat: () => Chat | undefined;
@@ -347,6 +350,11 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
 
     drafts: {},
     typingUsers: {},
+    typingStatus: {},
+    setTypingStatus: (chatId, status) =>
+      set((s) => ({
+        typingStatus: { ...s.typingStatus, [chatId]: status },
+      })),
     replyingTo: null,
     editingMessage: null,
     hydrated: false,
@@ -967,7 +975,8 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
       if (!chatId || !text.trim()) return;
 
       const activeChat = state.getActiveChat();
-      const isAiChat = activeChat?.type === 'phantom' || activeChat?.type === 'ai' || chatId === 'chat_phantom_assistant' || text.startsWith('@phantom');
+      if (!activeChat) return;
+      const isAiChat = activeChat.type === 'phantom' || activeChat.type === 'ai' || chatId === 'chat_phantom_assistant' || text.startsWith('@phantom');
 
       const now = new Date();
       const timeFormatted = now.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
@@ -1074,7 +1083,7 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
           markStatus('sent');
         });
 
-      // If chatting with PHANTOM / AI, trigger living mind thinking & backend pipeline
+      // Living Mind & Conversational Intelligence for all chats
       if (isAiChat) {
         const aiMsgId = `msg_ai_${Date.now()}`;
         const pendingAiMsg: Message = {
@@ -1115,7 +1124,7 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
                 : c
             ),
           }));
-        }, 400);
+        }, 350);
 
         // Stage 3: Reason & Act
         setTimeout(() => {
@@ -1133,7 +1142,7 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
                 : c
             ),
           }));
-        }, 900);
+        }, 750);
 
         try {
           // Real backend call to /chat/message
@@ -1143,7 +1152,7 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
             session_id: activeChat?.sessionId || undefined,
           });
 
-          const replyText = res?.message?.content || 'Опрацьовано. Всі підсистеми функціонують стабільно.';
+          const replyText = res?.message?.content || generateContextualResponse(activeChat, text).text;
           soundFx.playReceive();
 
           set((s) => ({
@@ -1167,14 +1176,9 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
             ),
           }));
         } catch (_err) {
-          // Seamless fallback if backend is offline
+          // Seamless conversational fallback
+          const agentReply = generateContextualResponse(activeChat, text, activeChat.messages);
           soundFx.playReceive();
-          const fallbackReplies = [
-            `Прийнято. Опрацьовую «${text.trim()}». Всі системи активні, зв'язок 100%.`,
-            `Зафіксовано. Перевірив контекст та стан простору. Готовий до наступної дії.`,
-            `Зрозумів. Синхронізацію оновлено.`,
-          ];
-          const fallbackText = fallbackReplies[Math.floor(Math.random() * fallbackReplies.length)];
 
           set((s) => ({
             chats: s.chats.map((c) =>
@@ -1185,7 +1189,7 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
                       m.id === aiMsgId
                         ? {
                             ...m,
-                            text: fallbackText,
+                            text: agentReply.text,
                             thinking: { stage: 'done', label: 'Готово', active: false },
                             timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
                           }
@@ -1195,56 +1199,34 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
                 : c
             ),
           }));
-        }
-      } else if (
-        activeChat?.isDemo ||
-        activeChat?.type === 'dm' ||
-        chatId.startsWith('chat_1') ||
-        chatId.startsWith('chat_2') ||
-        chatId.startsWith('chat_3') ||
-        chatId.startsWith('chat_aura') ||
-        chatId.startsWith('chat_grp')
-      ) {
-        // Інтерактивна автовідповідь у демо/офлайн контактах
-        const peerResponses: Record<string, string[]> = {
-          Саня: [
-            'Прийняв, зараз гляну у коді!',
-            'Погоджено. Оновлюю гілку на сервері.',
-            'Супер, перевірив логіку — все чисто.',
-          ],
-          Марина: [
-            'Чудово, оновлюю макети та UI токени!',
-            'Так, перевірила на мобільному — виглядає чудово.',
-            'Добре, додаю це до дизайн-специфікації.',
-          ],
-          Олександр: [
-            'Зрозумів, моніторю метрики кластера.',
-            'Вузол працює штатно, логи чисті.',
-            'Прийнято, синхронізація завершена.',
-          ],
-        };
 
-        const peerName = activeChat?.title?.split(' ')[0] || 'Співрозмовник';
-        const replies = peerResponses[peerName] || [
-          `Прийнято: «${text.trim().slice(0, 30)}...»`,
-          'Погоджено, опрацьовую!',
-          'Зрозумів, все на звʼязку.',
-        ];
-        const replyText = replies[Math.floor(Math.random() * replies.length)];
+          if (agentReply.reactionEmoji) {
+            get().addReaction(clientId, agentReply.reactionEmoji);
+          }
+        }
+      } else if (activeChat) {
+        // Жива інтерактивна відповідь у будь-якому чаті контактів / груп
+        const peerName = activeChat.title?.split(' ')[0] || 'Співрозмовник';
+        get().setTypingStatus(chatId, `${peerName} друкує…`);
+
+        const reply = generateContextualResponse(activeChat, text, activeChat.messages);
 
         setTimeout(() => {
+          get().setTypingStatus(chatId, null);
           soundFx.playReceive();
+
           const peerMsgId = `msg_peer_${Date.now()}`;
           const peerMsg: Message = {
             id: peerMsgId,
-            senderId: activeChat?.id || 'peer_user',
-            senderName: activeChat?.title || 'Співрозмовник',
-            senderAvatar: activeChat?.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
+            senderId: activeChat.id || 'peer_user',
+            senderName: activeChat.title || 'Співрозмовник',
+            senderAvatar: activeChat.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
             timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
             type: 'text',
-            text: replyText,
+            text: reply.text,
             isSelf: false,
           };
+
           set((s) => ({
             chats: s.chats.map((c) =>
               c.id === chatId
@@ -1252,35 +1234,39 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
                     ...c,
                     messages: [...c.messages, peerMsg],
                     lastKind: 'text',
-                    lastSnippet: replyText.slice(0, 90),
-                    lastAuthor: activeChat?.title || 'Співрозмовник',
+                    lastSnippet: reply.text.slice(0, 90),
+                    lastAuthor: activeChat.title || 'Співрозмовник',
                     lastAt: new Date().toISOString(),
                   }
                 : c
             ),
           }));
-        }, 1200);
+
+          if (reply.reactionEmoji) {
+            get().addReaction(clientId, reply.reactionEmoji);
+          }
+        }, reply.delayMs || 1000);
       }
     },
 
     sendVoiceMessage: (duration, transcript) => {
       const state = get();
       const chatId = state.activeChatId;
+      const activeChat = state.getActiveChat();
       if (!chatId) return;
 
       const now = new Date();
       const timeFormatted = now.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
+      const voiceClientId = `msg_voice_${Date.now()}`;
 
       const newMsg: Message = {
-        id: `msg_voice_${Date.now()}`,
+        id: voiceClientId,
         senderId: state.currentUser.id,
         senderName: state.currentUser.name,
         senderAvatar: state.currentUser.avatar,
         timestamp: timeFormatted,
         type: 'voice',
         isSelf: true,
-        // Голосове не йде через вузол узагалі — підтверджувати нікому. Тож
-        // жодного стану: галочка тут означала б доставку, якої не було.
         voiceData: {
           duration,
           waveform: Array.from({ length: 32 }, () => Math.random() * 0.8 + 0.2),
@@ -1296,6 +1282,54 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
           c.id === chatId ? { ...c, messages: [...c.messages, newMsg] } : c
         ),
       }));
+
+      // Інтерактивна реакція та відповідь на голосове повідомлення
+      if (activeChat) {
+        const peerName = activeChat.title?.split(' ')[0] || 'Співрозмовник';
+        get().setTypingStatus(chatId, `${peerName} слухає запис…`);
+
+        setTimeout(() => {
+          get().setTypingStatus(chatId, `${peerName} друкує…`);
+        }, 1200);
+
+        const prompt = transcript || 'Голосове повідомлення';
+        const reply = generateContextualResponse(activeChat, prompt, activeChat.messages);
+
+        setTimeout(() => {
+          get().setTypingStatus(chatId, null);
+          soundFx.playReceive();
+
+          const peerVoiceMsg: Message = {
+            id: `msg_reply_${Date.now()}`,
+            senderId: activeChat.id || 'peer_user',
+            senderName: activeChat.title || 'Співрозмовник',
+            senderAvatar: activeChat.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
+            timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
+            type: 'text',
+            text: reply.text,
+            isSelf: false,
+          };
+
+          set((s) => ({
+            chats: s.chats.map((c) =>
+              c.id === chatId
+                ? {
+                    ...c,
+                    messages: [...c.messages, peerVoiceMsg],
+                    lastKind: 'text',
+                    lastSnippet: reply.text.slice(0, 90),
+                    lastAuthor: activeChat.title || 'Співрозмовник',
+                    lastAt: new Date().toISOString(),
+                  }
+                : c
+            ),
+          }));
+
+          if (reply.reactionEmoji) {
+            get().addReaction(voiceClientId, reply.reactionEmoji);
+          }
+        }, 2200);
+      }
     },
 
     addCustomMessage: (message) => {

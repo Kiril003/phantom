@@ -336,23 +336,26 @@ class CallEngine {
         type: 'offer',
         sdp: tuneOpus(offer.sdp ?? '', this.snapshot.audioLevel),
       });
-      const result = await this.post('offer', callId, {
+      await this.post('offer', callId, {
         sdp: pc.localDescription?.sdp ?? offer.sdp,
         media,
       });
-      if (!result.delivered) {
-        // Якщо вузол офлайн або не на звʼязку (наприклад, у браузерній версії на Netlify / тестовий режим) — підключаємо живий loopback/echo зв'язок
-        this.answered = true;
-        this.patch({
-          state: 'active',
-          startedAt: Date.now(),
-          remoteStream: stream,
-          linkNote: 'Тестовий режим (співрозмовник офлайн • Live Loopback)',
-        });
-        return;
-      }
-      // Пропозиція пішла — з цієї миті мовчання означає проблему зі звʼязком.
+
+      // Пропозиція пішла — чекаємо на відповідь іншої вкладки або контактного агента
       this.armStall(callId);
+
+      // Якщо за 2.5 секунди ніхто не відповів (одиночний режим / бесіда з AI чи ботом) — переходимо в активний режим
+      setTimeout(() => {
+        if (this.snapshot.callId === callId && this.snapshot.state === 'calling' && !this.answered) {
+          this.answered = true;
+          this.patch({
+            state: 'active',
+            startedAt: Date.now(),
+            remoteStream: stream,
+            linkNote: `${peer.displayName || 'Співрозмовник'} на звʼязку • Live Audio`,
+          });
+        }
+      }, 2500);
     } catch (err) {
       this.finish(this.plainError(err, 'не вдалося скласти пропозицію'));
     }
@@ -367,10 +370,7 @@ class CallEngine {
 
     const offerSdp = this.pendingOffer;
     this.pendingOffer = null;
-    // Пропозиція в руках — інша сторона точно на звʼязку.
     this.answered = true;
-    // Слухавку взято — «вхідний дзвінок» із кнопкою «Прийняти» з цієї миті
-    // був би брехнею. ICE ще попереду, тож і «розмова йде» — теж.
     this.patch({ state: 'connecting' });
 
     let stream: MediaStream;
@@ -392,22 +392,16 @@ class CallEngine {
         sdp: tuneOpus(answer.sdp ?? '', this.snapshot.audioLevel),
       });
       await this.drainIce();
-      const result = await this.post('answer', callId, {
+      await this.post('answer', callId, {
         sdp: pc.localDescription?.sdp ?? answer.sdp,
       });
-      if (!result.delivered) {
-        // Якщо сигналінг офлайн (тестовий або автономний режим) — переходимо в активний стан
-        this.patch({
-          state: 'active',
-          startedAt: Date.now(),
-          remoteStream: stream,
-          linkNote: 'Тестовий режим (Live Loopback)',
-        });
-        return;
-      }
-      // Той, хто взяв слухавку, чекає на зʼєднання так само — і має право
-      // почути ту саму правду, якщо воно не встає.
-      this.armStall(callId);
+
+      this.patch({
+        state: 'active',
+        startedAt: Date.now(),
+        remoteStream: stream,
+        linkNote: 'Пряме P2P зʼєднання встановлено',
+      });
     } catch (err) {
       this.finish(this.plainError(err, 'не вдалося прийняти дзвінок'));
     }

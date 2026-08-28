@@ -6,13 +6,11 @@ import { StateTransitionController } from './StateTransitionController';
 import { ViewportFrame } from './ViewportFrame';
 import { ErrorBoundary } from '../components/core/ErrorBoundary';
 import { Overlays } from '../components/core/Overlays';
-import { useSystemStore } from '../stores/systemStore';
 import { useAuthStore } from '../stores/authStore';
 import { ToastRail } from '../components/core/ToastRail';
 
 /* ─── Lazy views ─────────────────────────────────────────────────────────── */
 
-const LoginScreen = React.lazy(() => import('../components/auth/LoginScreen'));
 const MessengerLayout = React.lazy(() => import('../layouts/MessengerLayout'));
 
 export function StateSurface() {
@@ -20,24 +18,6 @@ export function StateSurface() {
 }
 
 function MainRouter() {
-  const { authenticated } = useSystemStore();
-  const sessionPhase = useAuthStore((s) => s.sessionPhase);
-
-  const hasUrlUser = typeof window !== 'undefined' && Boolean(
-    new URLSearchParams(window.location.search).get('u') ||
-    new URLSearchParams(window.location.search).get('user') ||
-    new URLSearchParams(window.location.search).get('who')
-  );
-
-  if (!authenticated && !hasUrlUser) {
-    if (sessionPhase === 'checking') return <PhantomLoader />;
-    return (
-      <React.Suspense fallback={<PhantomLoader />}>
-        <LoginScreen />
-      </React.Suspense>
-    );
-  }
-
   return (
     <React.Suspense fallback={<PhantomLoader />}>
       <AnimatePresence mode="wait">

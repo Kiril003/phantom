@@ -788,7 +788,7 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
   useEffect(() => stopVoice, []);
 
   const toggleVoice = (msg: Message) => {
-    const url = msg.voiceData?.audioUrl || msg.mediaUrl || msg.audioUrl;
+    const url = msg.voiceData?.audioUrl || (msg as any).mediaUrl || (msg as any).audioUrl || (msg.type === 'voice' ? msg.text : undefined);
     soundFx.playTap();
 
     if (playingVoiceId === msg.id) {

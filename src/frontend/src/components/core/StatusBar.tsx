@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useLocation, useNavigate } from 'react-router-dom';
 import { useSystemStore } from '../../stores/systemStore';
 import { useAuthStore } from '../../stores/authStore';
 import { useAgentStore } from '../../stores/agentStore';
@@ -70,6 +70,7 @@ export function StatusBar() {
   const { state, wsConnected, context, esp32 } = useSystemStore();
   const { user } = useAuthStore();
   const navigate = useNavigate();
+  const location = useLocation();
   const [now, setNow] = useState(() => new Date());
 
   useEffect(() => {
@@ -110,6 +111,13 @@ export function StatusBar() {
   const tone = stateTone(state);
   const operatorName = user?.username ?? 'оператор';
 
+  // «Тихий режим» месенджера. Телеметрія ОС — «ТІНЬ», Gemini, ESP32, голі
+  // відсотки ЦП/ОЗП, безпідписні гліфи — у листуванні читається як чужа
+  // приладова дошка і підриває довіру до самої розмови. Ховаємо за
+  // маршрутом, а не вирізаємо компоненти: на /, /map, /chat це робочі
+  // прилади, і видалення забрало б їх звідти назавжди.
+  const quiet = location.pathname.startsWith('/messenger');
+
 
   if (collapsed) {
     return (
@@ -128,14 +136,16 @@ export function StatusBar() {
           opacity: 'var(--ui-opacity)',
         }}
       >
-        <span
-          className={`status-pill ${tone === 'coral' ? 'coral' : tone === 'green' ? 'green' : ''} ${isPro ? 'rounded-none' : ''}`}
-          style={{ height: 18, fontSize: 9, padding: '1px 6px' }}
-          title={`Стан: ${STATE_LABELS[state]}`}
-        >
-          <span className="dot" aria-hidden />
-          {STATE_LABELS[state].toUpperCase()}
-        </span>
+        {!quiet && (
+          <span
+            className={`status-pill ${tone === 'coral' ? 'coral' : tone === 'green' ? 'green' : ''} ${isPro ? 'rounded-none' : ''}`}
+            style={{ height: 18, fontSize: 9, padding: '1px 6px' }}
+            title={`Стан: ${STATE_LABELS[state]}`}
+          >
+            <span className="dot" aria-hidden />
+            {STATE_LABELS[state].toUpperCase()}
+          </span>
+        )}
         <span
           className="tabular"
           style={{
@@ -198,91 +208,95 @@ export function StatusBar() {
         opacity: 'var(--ui-opacity)',
       }}
     >
-      <span
-        className={`status-pill ${tone === 'coral' ? 'coral' : tone === 'green' ? 'green' : ''} ${isPro ? 'rounded-none border border-white/10' : ''}`}
-        style={{ height: 26 }}
-        title={`Стан: ${STATE_LABELS[state]}`}
-      >
-        <span className="dot" aria-hidden />
-        {STATE_LABELS[state].toUpperCase()}
-      </span>
-
-      <Divider />
-
-      <span 
-        className="inline-flex items-center cursor-pointer hover:opacity-80 transition-opacity active:scale-[0.98]" 
-        style={{ gap: 8 }}
-        onClick={() => navigate('/settings/profile')}
-        title="Відкрити налаштування профілю"
-      >
-        <span
-          aria-hidden
-          style={{
-            width: 22,
-            height: 22,
-            borderRadius: isPro ? 2 : 999,
-            background: isPro ? 'var(--ink-faint)' : 'linear-gradient(135deg,#f4af25,#fb923c)',
-            boxShadow: isPro ? 'none' : 'inset 0 0 0 1px rgba(255,255,255,0.55), 0 0 8px rgba(244,175,37,0.35)',
-            border: isPro ? '1px solid var(--white/10)' : 'none'
-          }}
-        />
-        <span
-          style={{
-            fontFamily: 'var(--font-mono)',
-            fontSize: 12,
-            fontWeight: 600,
-            color: 'var(--ink-primary)',
-          }}
-        >
-          {operatorName.toUpperCase()}
-        </span>
-      </span>
-
-      <Divider />
-
-      {/* Мертвий датчик — не «—» на 80 пікселів, а порожнє місце. */}
-      {bpm != null && (
-        <SensorChip
-          icon="favorite"
-          value={`${bpm}`}
-          unit="вд/хв"
-          accent={isPro ? 'var(--primary)' : '#b07a10'}
-        />
-      )}
-      {tempC != null && (
-        <SensorChip
-          icon="device_thermostat"
-          value={tempC.toFixed(1)}
-          unit="°C"
-          accent={isPro ? 'var(--primary)' : '#b07a10'}
-        />
-      )}
-      <SensorChip
-        icon="memory"
-        value={ram != null ? `${Math.round(ram)}` : '—'}
-        unit="%"
-        accent={pctTone(ram)}
-      />
-      <SensorChip
-        icon="developer_board"
-        value={cpu != null ? `${Math.round(cpu)}` : '—'}
-        unit="%"
-        accent={pctTone(cpu)}
-      />
-
-      {esp32Effective !== 'unknown' && (
+      {!quiet && (
         <>
+          <span
+            className={`status-pill ${tone === 'coral' ? 'coral' : tone === 'green' ? 'green' : ''} ${isPro ? 'rounded-none border border-white/10' : ''}`}
+            style={{ height: 26 }}
+            title={`Стан: ${STATE_LABELS[state]}`}
+          >
+            <span className="dot" aria-hidden />
+            {STATE_LABELS[state].toUpperCase()}
+          </span>
+
           <Divider />
-          <Esp32Pill status={esp32Effective} />
+
+          <span
+            className="inline-flex items-center cursor-pointer hover:opacity-80 transition-opacity active:scale-[0.98]"
+            style={{ gap: 8 }}
+            onClick={() => navigate('/settings/profile')}
+            title="Відкрити налаштування профілю"
+          >
+            <span
+              aria-hidden
+              style={{
+                width: 22,
+                height: 22,
+                borderRadius: isPro ? 2 : 999,
+                background: isPro ? 'var(--ink-faint)' : 'linear-gradient(135deg,#f4af25,#fb923c)',
+                boxShadow: isPro ? 'none' : 'inset 0 0 0 1px rgba(255,255,255,0.55), 0 0 8px rgba(244,175,37,0.35)',
+                border: isPro ? '1px solid var(--white/10)' : 'none'
+              }}
+            />
+            <span
+              style={{
+                fontFamily: 'var(--font-mono)',
+                fontSize: 12,
+                fontWeight: 600,
+                color: 'var(--ink-primary)',
+              }}
+            >
+              {operatorName.toUpperCase()}
+            </span>
+          </span>
+
+          <Divider />
+
+          {/* Мертвий датчик — не «—» на 80 пікселів, а порожнє місце. */}
+          {bpm != null && (
+            <SensorChip
+              icon="favorite"
+              value={`${bpm}`}
+              unit="вд/хв"
+              accent={isPro ? 'var(--primary)' : '#b07a10'}
+            />
+          )}
+          {tempC != null && (
+            <SensorChip
+              icon="device_thermostat"
+              value={tempC.toFixed(1)}
+              unit="°C"
+              accent={isPro ? 'var(--primary)' : '#b07a10'}
+            />
+          )}
+          <SensorChip
+            icon="memory"
+            value={ram != null ? `${Math.round(ram)}` : '—'}
+            unit="%"
+            accent={pctTone(ram)}
+          />
+          <SensorChip
+            icon="developer_board"
+            value={cpu != null ? `${Math.round(cpu)}` : '—'}
+            unit="%"
+            accent={pctTone(cpu)}
+          />
+
+          {esp32Effective !== 'unknown' && (
+            <>
+              <Divider />
+              <Esp32Pill status={esp32Effective} />
+            </>
+          )}
+
+          <Divider />
+          <ProviderBadge provider={provider} routerState={routerState} />
+          <Divider />
+          <ProactiveIndicator />
+          <BackgroundTrackSection />
+          <OledEyePreview />
         </>
       )}
-
-      <Divider />
-      <ProviderBadge provider={provider} routerState={routerState} />
-      <Divider />
-      <ProactiveIndicator />
-      <BackgroundTrackSection />
-      <OledEyePreview />
 
       <span style={{ flex: 1 }} />
 

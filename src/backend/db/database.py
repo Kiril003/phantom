@@ -23,7 +23,8 @@ class Base(DeclarativeBase):
 
 engine = create_async_engine(
     config.database_url,
-    echo=config.debug,
+    # Не `config.debug`: DEBUG=true не має означати «пиши кожен SELECT на диск».
+    echo=config.db_echo,
     # Phase 10 — `timeout=60.0` bumps SQLite's BUSY wait from 5s.
     # connect_args: PRAGMA journal_mode=WAL is applied in `engine.begin()` 
     # below during init_db for persistence, but we can also set it per-connection.

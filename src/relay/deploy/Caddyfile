@@ -8,6 +8,12 @@ relay.phantom-os.dev {
 		flush_interval -1
 	}
 
+	# Скринька публічна, тож тіло ріжемо ще на краю: кадр — 64 КБ, решта на конверт.
+	request_body /relay/mailbox/* {
+		max_size 160KB
+	}
+	reverse_proxy /relay/mailbox/* 127.0.0.1:8787
+
 	reverse_proxy /relay/health 127.0.0.1:8787
 
 	respond 404

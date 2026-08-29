@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { DownloadCloud, UploadCloud, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
+import { readToken } from '../../services/tokenStore';
 
 export function BackupRestoreCard() {
   const [downloading, setDownloading] = useState(false);
@@ -15,7 +16,7 @@ export function BackupRestoreCard() {
     setSuccess(null);
     try {
       // In a real browser environment, we'd use a link or Blob creation.
-      const token = localStorage.getItem('phantom_token');
+      const token = readToken();
       const resp = await fetch('/api/v1/admin/backup/download', {
         method: 'GET',
         headers: {
@@ -66,7 +67,7 @@ export function BackupRestoreCard() {
       formData.append('file', fileToRestore);
 
       // fetchApi with FormData usually needs careful handling or native fetch
-      const token = localStorage.getItem('phantom_token');
+      const token = readToken();
       const resp = await fetch('/api/v1/admin/backup/upload', {
         method: 'POST',
         headers: {

@@ -35,6 +35,10 @@ class PhantomConfig(BaseSettings):
     # ставить HOST=0.0.0.0 у env — і паринг-екран чесно показує наслідки.
     host: str = "127.0.0.1"
     port: int = 8000
+    #: Адреса, за якою цей вузол досяжний іншим людям. Порожньо — значить
+    #: співрозмовник, якому ми пишемо першими, не зможе відповісти прямо:
+    #: він отримає наш ключ, але не знатиме, куди нести відповідь.
+    messenger_public_address: str = ""
     debug: bool = False
     log_level: Literal["DEBUG", "INFO", "WARNING", "ERROR"] = "INFO"
     # Rebuild P0 (master-plan §2 S-2): local origins ONLY. Never bake a
@@ -81,10 +85,35 @@ class PhantomConfig(BaseSettings):
     # IP-адресу. Поки свого не розгорнуто — зовнішнього шляху просто немає.
     relay_enabled: bool = True
     relay_url: str = ""
+    # Supabase-скринька — четверта дорога листа, коли мовчать і пряма, і
+    # ретранслятор. Ключ тут publishable: RLS пускає його лише на insert,
+    # читає скриньку тільки службовий ключ адресата (env SUPABASE_SERVICE_KEY,
+    # у конфіг і код він не потрапляє ніколи). Порожні поля — дороги немає.
+    supabase_mailbox_url: str = ""
+    supabase_anon_key: str = ""
+    # R2 — дорога для вкладень, коли прямої адреси немає, а ретранслятор
+    # возить кадри, не файли. У бакет лягає шифротекст, ключ до якого їде в
+    # тілі повідомлення, тож хмара бачить непрозорі байти.
+    #
+    # Значень «про запас» тут немає навмисно: вписаний ключ означав би, що
+    # вузол мовчки понесе байти власника в чужий бакет. Порожнє поле —
+    # дороги немає, і блоб чесно лишається в черзі. Обидва ключі приходять
+    # з env вузла (R2_ACCESS_KEY / R2_SECRET_KEY) і в репозиторій не
+    # потрапляють ніколи.
+    r2_endpoint: str = ""
+    r2_bucket: str = ""
+    r2_access_key: str = ""
+    r2_secret_key: str = ""
 
     # ── Database ──────────────────────────────────────────────────────────────
     database_url: str = Field(
         default_factory=lambda: f"sqlite+aiosqlite:///{__import__('paths').resolve_data_dir('sqlite') / 'phantom.db'}"
+    )
+    #: Луна SQL. Раніше висіла на `debug`, а DEBUG=true стоїть у кожному
+    #: робочому .env — звідси десятки МБ логів за годину простою.
+    db_echo: bool = Field(
+        default=False,
+        validation_alias=AliasChoices("db_echo", "DB_ECHO", "PHANTOM_DB_ECHO"),
     )
 
     # ── ChromaDB ──────────────────────────────────────────────────────────────

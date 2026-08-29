@@ -1,4 +1,6 @@
 import type { ContextSnapshot, SystemState, ChatMessage, StateTransition } from '@shared/types';
+import { readToken } from './tokenStore';
+import { BEARER_SUBPROTOCOL } from './wsAuth';
 
 /* ─── Message types ───────────────────────────────────────────────────────── */
 
@@ -36,6 +38,12 @@ export type WSChannel =
   | 'vision'
   // ПОЛІС — mission fabric deltas: node/mission status, gates, keys, waves.
   | 'polis'
+  // Месенджер — нове повідомлення, записане вузлом. Сюди приходить те, що
+  // надіслав інший пристрій власника, тож телефон і ПК бачать одну стрічку.
+  | 'messenger'
+  // Дзвінок 1:1 — SDP і ICE-кандидати від вузла співрозмовника. Медіа сюди
+  // не заходить: воно йде між браузерами напряму. Див. services/callEngine.ts.
+  | 'call'
   | '_meta';
 
 export interface WSMessage {
@@ -104,6 +112,24 @@ class WebSocketClient {
   private connectHandlers: ConnectHandler[] = [];
   private disconnectHandlers: DisconnectHandler[] = [];
   private channelHandlers = new Map<WSChannel, ChannelHandler[]>();
+  private broadcast: BroadcastChannel | null =
+    typeof BroadcastChannel !== 'undefined' ? new BroadcastChannel('phantom_mesh_bus') : null;
+
+  constructor() {
+    if (this.broadcast) {
+      this.broadcast.onmessage = (event: MessageEvent<WSMessage>) => {
+        try {
+          const msg = event.data;
+          if (msg && msg.channel) {
+            const handlers = this.channelHandlers.get(msg.channel) ?? [];
+            handlers.forEach((h) => h(msg));
+          }
+        } catch {
+          /* ignore */
+        }
+      };
+    }
+  }
 
   connect(token?: string): void {
     this.token = token;
@@ -170,6 +196,13 @@ class WebSocketClient {
     if (this.ws?.readyState === WebSocket.OPEN) {
       this.ws.send(JSON.stringify({ ...msg, ts: msg.ts ?? Date.now() }));
     }
+    if (this.broadcast && 'channel' in msg) {
+      try {
+        this.broadcast.postMessage({ ...msg, ts: msg.ts ?? Date.now() });
+      } catch {
+        /* ignore */
+      }
+    }
   }
 
   onConnect(handler: ConnectHandler): () => void {
@@ -215,17 +248,21 @@ class WebSocketClient {
     // expire). A reconnect on the stale/expired token authenticates as
     // user=None on the backend, which then filters this client out of all
     // user-scoped broadcasts — so chat replies silently never arrive.
-    const liveToken =
-      (typeof localStorage !== 'undefined' && localStorage.getItem('phantom_token')) ||
-      this.token;
+    const liveToken = readToken() || this.token;
     if (liveToken) {
       this.token = liveToken;
-      url.searchParams.set('token', liveToken);
     }
 
     let ws: WebSocket;
     try {
-      ws = new WebSocket(url.toString());
+      // Раунд-4 П4: токен їде під-протоколом, а не в `?token=`. Адресний
+      // рядок uvicorn пише в лог дослівно — панель нарахувала 25 повних
+      // JWT у логах вузла за один прогін. Заголовок рукостискання в лог
+      // не потрапляє. Вузол підтверджує маркер у відповіді, інакше
+      // браузер розірве зʼєднання.
+      ws = liveToken
+        ? new WebSocket(url.toString(), [BEARER_SUBPROTOCOL, liveToken])
+        : new WebSocket(url.toString());
     } catch {
       this._scheduleReconnect();
       return;

@@ -1,0 +1,212 @@
+import React, { useState } from 'react';
+import {
+  AlertTriangle,
+  X,
+  Shield,
+  Layers,
+} from 'lucide-react';
+import { Chat, SmartFolder } from '../../types/messenger';
+import { soundFx } from '../../utils/messengerSound';
+import { Avatar } from './Avatar';
+import { useEscapeClose } from '../../hooks/useEscapeClose';
+
+interface ShareFolderModalProps {
+  isOpen: boolean;
+  onClose: () => void;
+  folder: SmartFolder | null;
+  chats: Chat[];
+}
+
+export const ShareFolderModal: React.FC<ShareFolderModalProps> = ({
+  isOpen,
+  onClose,
+  folder,
+  chats,
+}) => {
+  const [allowJoinAll, setAllowJoinAll] = useState(true);
+  const [autoSyncTopics, setAutoSyncTopics] = useState(true);
+  
+
+  // Escape виводить із шару так само, як хрестик.
+  useEscapeClose(isOpen, onClose);
+
+  if (!isOpen || !folder) return null;
+
+  // Filter chats belonging to this folder
+  const folderChats = chats.filter((c) => {
+    if (folder.id === 'all') return true;
+    if (folder.chatIds && folder.chatIds.includes(c.id)) return true;
+    if (
+      folder.filterRules?.includeCircles &&
+      folder.filterRules.includeCircles.includes(c.circle)
+    ) {
+      return true;
+    }
+    return false;
+  });
+
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 phantom-scrim animate-in fade-in duration-150">
+      <div
+        className="w-full max-w-md bg-[#FDFCF9] border border-[#DDD4C4] rounded-3xl shadow-2xl overflow-hidden flex flex-col max-h-[90vh] text-[#1E2521] animate-in zoom-in-95 duration-150"
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* Modal Header */}
+        <div className="p-4 border-b border-[#E6DFD3] bg-[#FDFCF9] flex items-center justify-between">
+          <div className="flex items-center gap-2.5 min-w-0">
+            <div
+              className="w-10 h-10 rounded-2xl flex items-center justify-center text-lg shadow-2xs shrink-0 bg-[#F9F7F1] border border-[#DDD4C4]"
+            >
+              <span>{folder.emoji}</span>
+            </div>
+            <div className="min-w-0">
+              <div className="flex items-center gap-2">
+                <h3 className="font-extrabold text-sm text-[#1E2521] truncate">
+                  {folder.name}
+                </h3>
+                <span className="text-[10px] px-2 py-0.5 bg-[#F9F7F1] text-[#E87A42] font-bold rounded-full border border-[#DDD4C4]">
+                  Поділитися
+                </span>
+              </div>
+              <p className="text-[11px] text-[#5F6A60] truncate">
+                {folder.vibe || 'Спільна структура чатів та каналів'}
+              </p>
+            </div>
+          </div>
+
+          <button
+            onClick={() => {
+              soundFx.playTap();
+              onClose();
+            }}
+            className="p-1.5 hover:bg-[#F1EDE3] rounded-xl text-[#5F6A60] hover:text-[#1E2521] transition-colors"
+            title="Закрити"
+          >
+            <X className="w-5 h-5" strokeWidth={1.75} />
+          </button>
+        </div>
+
+        {/* Modal Body */}
+        <div className="p-4 space-y-4 overflow-y-auto flex-1 text-xs">
+          {/* Посилання-запрошення тут не було чим підкріпити: домену aura.chat не
+              існує, токен генерувався через Math.random, а QR був сіткою 6×6 за
+              формулою i % 2 === 0 && i % 3 === 0 — його неможливо відсканувати.
+              Спільного каталогу просторів немає, тож і посилання бути не може. */}
+          <div className="p-3 bg-[#FDF6EC] border border-[#EBD9BE] rounded-2xl space-y-1.5">
+            <div className="flex items-center gap-2 font-bold text-[#C98A2E]">
+              <AlertTriangle className="w-4 h-4" strokeWidth={1.75} />
+              <span>Посилань-запрошень поки немає</span>
+            </div>
+            <span className="text-[11px] text-[#B9A88C] block leading-relaxed">
+              Спільного каталогу просторів не існує, тож посилання не було б куди вести.
+              Щоб хтось зміг вам написати, дайте йому ключ вашого вузла — він у
+              налаштуваннях, розділ «Мережа &amp; P2P».
+            </span>
+          </div>
+
+          {/* Чати у структурі */}
+          <div className="space-y-1.5">
+            <div className="flex items-center justify-between">
+              <label className="text-[11px] font-bold text-[#5F6A60] uppercase tracking-wider flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-[#E87A42]" strokeWidth={1.75} />
+                <span>Чати у структурі ({folderChats.length})</span>
+              </label>
+              <span className="text-[10px] text-[#5F6A60]">
+                Всі учасники отримають доступ
+              </span>
+            </div>
+
+            <div className="bg-[#FDFCF9] border border-[#E6DFD3] rounded-2xl p-2 max-h-36 overflow-y-auto space-y-1 shadow-sm">
+              {folderChats.length === 0 ? (
+                <div className="py-3 text-center text-[#5F6A60] text-[11px]">
+                  У цій папці поки немає чатів
+                </div>
+              ) : (
+                folderChats.map((chat) => (
+                  <div
+                    key={chat.id}
+                    className="p-1.5 rounded-xl hover:bg-[#F9F7F1] flex items-center justify-between gap-2 transition-colors border border-transparent hover:border-[#E6DFD3]"
+                  >
+                    <div className="flex items-center gap-2 min-w-0">
+                      <Avatar src={chat.avatar} name={chat.title} className="w-6 h-6 shrink-0" radius="rounded-lg" />
+                      <div className="min-w-0">
+                        <h4 className="font-bold text-xs text-[#1E2521] truncate">
+                          {chat.title}
+                        </h4>
+                        <span className="text-[9px] text-[#5F6A60] truncate block">
+                          {chat.topic || chat.customVibe || 'Чат спільноти'}
+                        </span>
+                      </div>
+                    </div>
+
+                    <span className="text-[10px] px-1.5 py-0.5 bg-[#F7F5EE] border border-[#E6DFD3] text-[#E87A42] rounded font-medium shrink-0">
+                      {chat.type === 'dm' || chat.type === 'direct' ? 'Особистий' : 'Група'}
+                    </span>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
+
+          {/* 4. Permissions & Rules */}
+          <div className="bg-[#FDFCF9] border border-[#E6DFD3] rounded-2xl p-3 space-y-2.5 shadow-sm">
+            <div className="text-[11px] font-bold text-[#5F6A60] uppercase tracking-wider flex items-center gap-1.5">
+              <Shield className="w-3.5 h-3.5 text-[#E87A42]" strokeWidth={1.75} />
+              <span>Параметри запрошення</span>
+            </div>
+
+            <label className="flex items-start gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={allowJoinAll}
+                onChange={(e) => setAllowJoinAll(e.target.checked)}
+                className="mt-0.5 rounded text-[#E87A42] focus:ring-[#E87A42] bg-[#F7F5EE] border-[#DDD4C4]"
+              />
+              <div>
+                <span className="font-bold text-xs text-[#1E2521] block">
+                  Автоматичний вступ до всіх чатів папки
+                </span>
+                <span className="text-[10px] text-[#5F6A60]">
+                  Усі користувачі за посиланням одразу додаються до списку учасників.
+                </span>
+              </div>
+            </label>
+
+            <label className="flex items-start gap-2.5 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={autoSyncTopics}
+                onChange={(e) => setAutoSyncTopics(e.target.checked)}
+                className="mt-0.5 rounded text-[#E87A42] focus:ring-[#E87A42] bg-[#F7F5EE] border-[#DDD4C4]"
+              />
+              <div>
+                <span className="font-bold text-xs text-[#1E2521] block">
+                  Синхронізація майбутніх тем & каналів
+                </span>
+                <span className="text-[10px] text-[#5F6A60]">
+                  Нові чати, додані у цю папку пізніше, автоматично зʼявляться у підписників.
+                </span>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        {/* Modal Footer */}
+        <div className="p-3.5 border-t border-[#E6DFD3] bg-[#FDFCF9] flex items-center justify-between gap-2">
+          <div className="flex items-center gap-2 ml-auto">
+            <button
+              onClick={() => {
+                soundFx.playTap();
+                onClose();
+              }}
+              className="px-3.5 py-2 hover:bg-[#F1EDE3] text-[#5F6A60] hover:text-[#1E2521] rounded-xl font-bold text-xs transition-colors"
+            >
+              Закрити
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+};

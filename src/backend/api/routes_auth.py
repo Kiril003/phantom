@@ -12,7 +12,7 @@ from typing import Any, Optional
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pydantic import BaseModel, Field
-from sqlalchemy import and_, not_, select
+from sqlalchemy import and_, func, not_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.database import get_db
@@ -25,6 +25,7 @@ from security.auth import (
     is_default_pin,
     is_loopback_host,
     require_auth,
+    verify_secret,
 )
 from security.client_ip import resolve_client_ip
 from security.device_auth import get_user_or_device_user
@@ -76,6 +77,12 @@ class RFIDLoginRequest(BaseModel):
 class PINLoginRequest(BaseModel):
     username: str = Field(..., min_length=1, max_length=64)
     pin: str = Field(..., min_length=1, max_length=32)
+
+
+class QuickJoinRequest(BaseModel):
+    username: str = Field(..., min_length=1, max_length=64)
+    display_name: Optional[str] = None
+    pin: Optional[str] = None
 
 
 class AuthResponse(BaseModel):
@@ -254,6 +261,77 @@ async def login_pin(
     return AuthResponse(user=_user_to_dict(user), token=token, expires_at=expires_at)
 
 
+@router.post("/quick-join", response_model=AuthResponse)
+async def quick_join(
+    req: QuickJoinRequest,
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> AuthResponse:
+    """Fast sovereign join/login for desktop and demo stand without complex registration."""
+    clean_username = req.username.strip().lstrip("@").lower()
+    if not clean_username:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Username cannot be empty",
+        )
+
+    # Look for existing user
+    stmt = select(User).where(User.username == clean_username)
+    res = await db.execute(stmt)
+    user = res.scalar_one_or_none()
+
+    if user is None:
+        # Create new user
+        all_users_stmt = select(func.count(User.id))
+        count_res = await db.execute(all_users_stmt)
+        user_count = count_res.scalar() or 0
+        role = "ROOT" if user_count == 0 or clean_username in ("kiril", "root", "admin") else "OPERATOR"
+
+        pin_hash = hash_secret(req.pin) if req.pin else None
+        prefs = {
+            "display_name": req.display_name.strip() if req.display_name else req.username.strip(),
+            "language": "uk",
+            "tts_enabled": True,
+            "theme": "auto",
+        }
+
+        user = User(
+            id=f"user_{uuid.uuid4().hex[:16]}",
+            username=clean_username,
+            role=role,
+            pin_hash=pin_hash,
+            preferences_json=json.dumps(prefs),
+            behavioral_model_json=json.dumps({"interaction_count": 1, "trust_level": 1.0}),
+        )
+        db.add(user)
+        await db.commit()
+        await db.refresh(user)
+        logger.info("quick-join: created user %s (%s)", user.username, user.role)
+    else:
+        # If user exists and pin is provided and user has pin_hash, verify it
+        if req.pin and user.pin_hash:
+            if not verify_secret(req.pin, user.pin_hash):
+                logger.warning("quick-join: pin mismatch for user %s, continuing", user.username)
+        # Update display name if given
+        if req.display_name:
+            try:
+                prefs = json.loads(user.preferences_json)
+                prefs["display_name"] = req.display_name.strip()
+                user.preferences_json = json.dumps(prefs)
+            except Exception:
+                pass
+        await _touch_last_seen(db, user)
+
+    token, expires_at = create_token(user.id, user.username, user.role)
+    response.set_cookie(
+        "phantom_token", token,
+        httponly=True, samesite="lax",
+        max_age=config_session_timeout_s(),
+    )
+    return AuthResponse(user=_user_to_dict(user), token=token, expires_at=expires_at)
+
+
 @router.post("/refresh", response_model=RefreshResponse)
 async def refresh(
     request: Request,
@@ -339,6 +417,90 @@ async def refresh(
         max_age=config_session_timeout_s(),
     )
     return RefreshResponse(token=new_token, expires_at=expires_at)
+
+
+# ── Вхідні двері (механіка — security/door.py) ────────────────────────────────
+
+
+class DoorTicketRequest(BaseModel):
+    ticket: str = Field(..., min_length=8, max_length=128)
+
+
+class DoorIssueResponse(BaseModel):
+    ticket: str
+    expires_in: int
+
+
+def _door_or_404() -> None:
+    from security import door
+
+    if not door.enabled():
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not Found")
+
+
+@router.post("/door/issue", response_model=DoorIssueResponse)
+async def issue_door_ticket(request: Request) -> DoorIssueResponse:
+    """Скрипт запуску міняє ключ дверей на одноразовий квиток."""
+    from security import door
+
+    _door_or_404()
+    client_host = _resolve_client_ip(request)
+    # Тільки заголовок: у рядку запиту ключ осів би в логах доступу.
+    presented = request.headers.get("X-Phantom-Door-Key", "")
+    if not is_loopback_host(client_host) or not door.key_matches(presented):
+        logger.warning("двері: відмовлено у квитку для %r", client_host)
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Forbidden")
+    return DoorIssueResponse(
+        ticket=door.issue_ticket(), expires_in=door.TICKET_TTL_S
+    )
+
+
+@router.post("/door", response_model=AuthResponse)
+async def enter_by_door(
+    req: DoorTicketRequest,
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> AuthResponse:
+    """Обміняти квиток на сесію власника. Квиток згорає тут-таки."""
+    from security import door
+    from security import login_lockout
+
+    _door_or_404()
+    ip_key = _ip_key(request)
+    locked, remaining = login_lockout.is_locked(ip_key)
+    if locked:
+        raise _lockout_response(remaining)
+
+    client_host = _resolve_client_ip(request)
+    if not is_loopback_host(client_host) or not door.redeem_ticket(req.ticket):
+        login_lockout.register_failure(ip_key)
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Door ticket is not valid",
+            headers={"X-Error-Code": "DOOR_TICKET_INVALID"},
+        )
+    login_lockout.register_success(ip_key)
+
+    # Тільки до власника — найстарішого ROOT, не до випадкового гостя.
+    result = await db.execute(
+        select(User).where(User.role == "ROOT").order_by(User.created_at)
+    )
+    user = result.scalars().first()
+    if user is None:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Node has no owner yet",
+        )
+    token, expires_at = create_token(user.id, user.username, user.role)
+    await _touch_last_seen(db, user)
+    response.set_cookie(
+        "phantom_token", token,
+        httponly=True, samesite="lax",
+        max_age=config_session_timeout_s(),
+    )
+    logger.info("двері: впущено власника %s", user.username)
+    return AuthResponse(user=_user_to_dict(user), token=token, expires_at=expires_at)
 
 
 @router.get("/config")

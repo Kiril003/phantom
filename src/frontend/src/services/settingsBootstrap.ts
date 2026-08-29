@@ -17,6 +17,7 @@ import {
 import { useFaceStore } from '../stores/faceStore';
 import { DEFAULT_LOCALE, isLocale, type Locale } from '../i18n/locales';
 import { isThemeId, type ThemeId } from '@shared/types';
+import { readToken } from './tokenStore';
 
 const DEFAULT_FONT_SIZE = 14; // matches config.ui_font_size default
 
@@ -102,7 +103,7 @@ export async function bootstrapSettings(): Promise<void> {
   // successful auth, `authStore.setUser` / `authStore.autoLogin` call
   // this again, so the gate is "skip if no token *yet*", not "skip
   // forever".
-  if (typeof localStorage !== 'undefined' && !localStorage.getItem('phantom_token')) {
+  if (!readToken()) {
     return;
   }
   if (inFlight) return inFlight;

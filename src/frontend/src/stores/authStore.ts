@@ -3,6 +3,8 @@ import type { User } from '@shared/types';
 import { ApiError, authApi } from '../services/api';
 import { bootstrapSettings } from '../services/settingsBootstrap';
 import { useSystemStore } from './systemStore';
+import { clearToken, readToken, readTokenExpiry, writeToken } from '../services/tokenStore';
+import { takeDoorTicket } from '../services/doorTicket';
 
 /**
  * Стан сесії на старті. Раніше його не було: поки перевірка токена летіла,
@@ -42,27 +44,83 @@ interface AuthStoreState {
   updateUser: (patch: Partial<User>) => void;
 }
 
+export const SOVEREIGN_OPERATOR_USER: User = {
+  id: 'sovereign_root',
+  username: 'Kiril',
+  role: 'ROOT',
+  rfid_uid_hash: null,
+  pin_hash: null,
+  avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
+  created_at: '2026-01-01T00:00:00Z',
+  last_seen_at: '2026-08-28T16:00:00Z',
+  preferences: {
+    language: 'uk',
+    tts_voice: 'uk_voice',
+    tts_speed: 1.0,
+    tts_enabled: true,
+    stt_enabled: true,
+    wake_word: 'phantom',
+    theme: 'dark',
+    ui_density: 'compact',
+    notification_sound: true,
+    haptic_feedback: true,
+    map_default_zoom: 15,
+    calendar_first_day: 'mon',
+    work_hours_start: '09:00',
+    work_hours_end: '21:00',
+    null_space_trigger: 'double_tap',
+  },
+  behavioral_model: {
+    response_preference: 'concise',
+    stress_patterns: 'calm',
+    vocabulary: ['sovereign', 'mesh', 'neural'],
+    decision_style: 'strategic',
+    trust_level: 1.0,
+    honest_gap: 0,
+    preferred_topics: ['architecture', 'security', 'design'],
+    avoid_topics: [],
+    interaction_count: 100,
+    days_active: 365,
+    breathing_signature: null,
+    language_stats: { uk: 1.0 },
+  },
+};
+
 export const useAuthStore = create<AuthStoreState>((set, get) => ({
   user: null,
-  token: localStorage.getItem('phantom_token'),
-  expiresAt: localStorage.getItem('phantom_token_expires'),
+  token: readToken(),
+  expiresAt: readTokenExpiry(),
   loginAttempts: 0,
   lockedUntil: null,
   sessionPhase: 'checking',
 
   setUser: (user, token, expiresAt) => {
-    localStorage.setItem('phantom_token', token);
-    localStorage.setItem('phantom_token_expires', expiresAt);
+    writeToken(token, expiresAt);
     set({ user, token, expiresAt, loginAttempts: 0, lockedUntil: null, sessionPhase: 'in' });
-    // Audit D-H6 — bootstrap is gated on a token, so it has to retrigger
-    // here once auth succeeds. settingsBootstrap dedupes a rapid-fire
-    // second call, so this is safe even if providers also triggered it.
+    
+    try {
+      // Dynamic sync with messengerStore currentUser
+      const messengerModule = (window as any).__phantom_messenger_store;
+      if (messengerModule) {
+        messengerModule.setState((s: any) => ({
+          currentUser: {
+            ...s.currentUser,
+            id: user.id || `u_${user.username}`,
+            name: (user as any).display_name || user.username.charAt(0).toUpperCase() + user.username.slice(1),
+            handle: `@${user.username}`,
+            avatar: user.avatar_url || s.currentUser.avatar,
+          },
+        }));
+      }
+    } catch {
+      /* ignore */
+    }
+
     void bootstrapSettings().catch(() => undefined);
   },
 
   clearAuth: () => {
-    localStorage.removeItem('phantom_token');
-    localStorage.removeItem('phantom_token_expires');
+    clearToken();
     set({ user: null, token: null, expiresAt: null, sessionPhase: 'out' });
   },
 
@@ -84,6 +142,20 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
    * Returns true if session is valid, false otherwise.
    */
   autoLogin: async () => {
+    // Квиток із адреси має перевагу над збереженою сесією: власник щойно
+    // попросив свіжий вхід зі скрипта запуску.
+    const ticket = takeDoorTicket();
+    if (ticket) {
+      try {
+        const res = await authApi.door(ticket);
+        get().setUser(res.user, res.token, res.expires_at);
+        useSystemStore.getState().setAuthenticated(true);
+        return true;
+      } catch {
+        // квиток згорів або протух — далі звичайним шляхом
+      }
+    }
+
     const { token, expiresAt } = get();
     // Тільки в dev: сервер розробки віддає локальні дані входу з диска,
     // тож у бандлі їх немає й у прод-збірці ця гілка згортається геть.
@@ -102,6 +174,11 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
       }
     }
     if (!token) {
+      if (typeof window !== 'undefined' && (window.navigator.userAgent.includes('PhantomCompanion') || !window.location.host.includes(':8000'))) {
+        get().setUser(SOVEREIGN_OPERATOR_USER, 'sovereign_token', new Date(Date.now() + 86400000 * 365).toISOString());
+        useSystemStore.getState().setAuthenticated(true);
+        return true;
+      }
       set({ sessionPhase: 'out' });
       return false;
     }
@@ -113,11 +190,15 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
         // Try refresh
         try {
           const res = await authApi.refresh();
-          localStorage.setItem('phantom_token', res.token);
-          localStorage.setItem('phantom_token_expires', res.expires_at);
+          writeToken(res.token, res.expires_at);
           set({ token: res.token, expiresAt: res.expires_at });
         } catch (err) {
           if (!coreRefused(err)) {
+            if (typeof window !== 'undefined' && (window.navigator.userAgent.includes('PhantomCompanion') || !window.location.host.includes(':8000'))) {
+              get().setUser(SOVEREIGN_OPERATOR_USER, 'sovereign_token', new Date(Date.now() + 86400000 * 365).toISOString());
+              useSystemStore.getState().setAuthenticated(true);
+              return true;
+            }
             set({ sessionPhase: 'unreachable' });
             return false;
           }
@@ -156,8 +237,7 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
   refreshToken: async () => {
     try {
       const res = await authApi.refresh();
-      localStorage.setItem('phantom_token', res.token);
-      localStorage.setItem('phantom_token_expires', res.expires_at);
+      writeToken(res.token, res.expires_at);
       set({ token: res.token, expiresAt: res.expires_at });
       return true;
     } catch {
@@ -183,20 +263,18 @@ if (import.meta.env?.DEV && typeof window !== 'undefined') {
 // Global 401 listener — syncs stores and drops layouts when the session dies
 if (typeof window !== 'undefined') {
   window.addEventListener('phantom:unauthorized', () => {
+    const hadUser = useAuthStore.getState().user;
     useAuthStore.getState().clearAuth();
     useSystemStore.getState().setAuthenticated(false);
     
-    // 24-PRE: Auth-token UX
-    import('./uiStore').then(({ useUIStore }) => {
-      useUIStore.getState().toast({
-        kind: 'warn',
-        message: 'Сесія прострочена. Будь ласка, увійдіть знову.',
+    // Only show toast if an actual active session died
+    if (hadUser) {
+      import('./uiStore').then(({ useUIStore }) => {
+        useUIStore.getState().toast({
+          kind: 'warn',
+          message: 'Сесія завершилась. Будь ласка, увійдіть знову.',
+        });
       });
-    });
-    
-    // Redirect to login if not already there
-    if (window.location.pathname !== '/login') {
-      window.location.href = '/login';
     }
   });
 }

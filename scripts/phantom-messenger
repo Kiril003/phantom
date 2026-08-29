@@ -1,0 +1,199 @@
+#!/usr/bin/env bash
+# Месенджер PHANTOM однією командою.
+#
+#   scripts/phantom-messenger          підняти й відчинити браузер залогіненим
+#   scripts/phantom-messenger door     свіжа залогінена вкладка на живий вузол
+#   scripts/phantom-messenger status   що зараз живе
+#   scripts/phantom-messenger stop     зупинити
+#   scripts/phantom-messenger logs     хвіст логів
+#
+# --no-browser   не відкривати браузер, надрукувати посилання
+# PHANTOM_FULL=1 підняти вузол цілком (зір, голос, гео, агент)
+set -euo pipefail
+
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
+BACKEND="$ROOT/src/backend"
+FRONTEND="$ROOT/src/frontend"
+DATA="${PHANTOM_DATA_DIR:-$ROOT/.phantom-data}"
+RUN="$DATA/run"
+LOGS="$DATA/logs"
+API_PORT="${PHANTOM_HTTP_PORT:-8000}"
+UI_PORT="${PHANTOM_UI_PORT:-5173}"
+# 127.0.0.1, а не 0.0.0.0: dev-сервер віддає /__dev/login з PIN власника.
+UI_HOST="${PHANTOM_UI_HOST:-127.0.0.1}"
+NODE_LOG="$LOGS/node.log"
+UI_LOG="$LOGS/ui.log"
+NODE_PID="$RUN/node.pid"
+UI_PID="$RUN/ui.pid"
+DOOR_KEY="$RUN/door.key"
+
+B=$'\033[1m'; DIM=$'\033[2m'; GRN=$'\033[32m'; RED=$'\033[31m'; YEL=$'\033[33m'; N=$'\033[0m'
+say()  { printf '%s\n' "$*"; }
+ok()   { printf '  %s✓%s %s\n' "$GRN" "$N" "$*"; }
+bad()  { printf '  %s✗%s %s\n' "$RED" "$N" "$*"; }
+warn() { printf '  %s!%s %s\n' "$YEL" "$N" "$*"; }
+die()  { printf '\n%s✗%s %s\n\n' "$RED" "$N" "$*" >&2; exit 1; }
+
+alive() { [[ -f "$1" ]] && kill -0 "$(cat "$1" 2>/dev/null)" 2>/dev/null; }
+# setsid перевтілюється, тож $! — не той процес. Питаємо власника порту.
+port_pid() { ss -ltnp 2>/dev/null | grep -m1 ":$1 " | sed -n 's/.*pid=\([0-9]*\).*/\1/p'; }
+api_up() { curl -fsS --max-time 2 "http://127.0.0.1:$API_PORT/health" >/dev/null 2>&1; }
+ui_up()  { curl -fs  --max-time 2 -o /dev/null "http://127.0.0.1:$UI_PORT/" 2>/dev/null; }
+
+preflight() {
+  [[ -x "$BACKEND/.venv/bin/uvicorn" ]] || die "Немає віртуального оточення вузла.
+   Полагодити:  python3 -m venv $BACKEND/.venv && $BACKEND/.venv/bin/pip install -r $BACKEND/requirements.txt"
+  [[ -d "$FRONTEND/node_modules" ]] || die "Не встановлені залежності вікна.
+   Полагодити:  (cd $FRONTEND && npm install)"
+  command -v curl >/dev/null || die "Потрібен curl."
+  mkdir -p "$RUN" "$LOGS"
+  chmod 700 "$RUN" 2>/dev/null || true
+}
+
+start_node() {
+  if api_up; then ok "вузол уже на звʼязку — не чіпаю"; return; fi
+  rm -f "$DOOR_KEY"
+  local env=(
+    "PHANTOM_DOOR_KEY_FILE=$DOOR_KEY"
+    "PHANTOM_DATA_DIR=$DATA"
+  )
+  if [[ "${PHANTOM_FULL:-0}" != "1" ]]; then
+    env+=("PHANTOM_MESSENGER_ONLY=1" "PHANTOM_SKIP_G2_WARMUP=1")
+  fi
+  ( cd "$BACKEND" && setsid env "${env[@]}" \
+      .venv/bin/uvicorn main:app --host 127.0.0.1 --port "$API_PORT" \
+      >>"$NODE_LOG" 2>&1 </dev/null & )
+  printf '  … вузол піднімається'
+  for _ in $(seq 1 120); do
+    if api_up; then
+      port_pid "$API_PORT" >"$NODE_PID"
+      printf '\r'; ok "вузол на звʼязку   http://127.0.0.1:$API_PORT        "; return
+    fi
+    printf '.'; sleep 1
+  done
+  printf '\r'; die "Вузол не відповів за 120 с. Лог: $NODE_LOG"
+}
+
+start_ui() {
+  if ui_up; then ok "вікно вже відкрите — не чіпаю"; return; fi
+  ( cd "$FRONTEND" && setsid npm run dev -- \
+      --host "$UI_HOST" --port "$UI_PORT" --strictPort \
+      >>"$UI_LOG" 2>&1 </dev/null & )
+  printf '  … вікно збирається'
+  for _ in $(seq 1 90); do
+    if ui_up; then
+      port_pid "$UI_PORT" >"$UI_PID"
+      printf '\r'; ok "вікно зібране      http://127.0.0.1:$UI_PORT           "; return
+    fi
+    printf '.'; sleep 1
+  done
+  printf '\r'; die "Vite не піднявся за 90 с. Лог: $UI_LOG"
+}
+
+# Ключ дверей → одноразовий квиток. У stdout квиток не друкуємо ніколи.
+mint_ticket() {
+  local key ticket
+  for _ in $(seq 1 30); do [[ -s "$DOOR_KEY" ]] && break; sleep 1; done
+  [[ -s "$DOOR_KEY" ]] || return 1
+  key="$(cat "$DOOR_KEY")"
+  ticket="$(curl -fsS --max-time 5 -X POST \
+    -H "X-Phantom-Door-Key: $key" \
+    "http://127.0.0.1:$API_PORT/api/v1/auth/door/issue" 2>/dev/null \
+    | sed -n 's/.*"ticket"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')" || return 1
+  [[ -n "$ticket" ]] || return 1
+  printf '%s' "$ticket"
+}
+
+open_door() {
+  local url ticket
+  if ! ticket="$(mint_ticket)"; then
+    warn "квиток не видали — доведеться ввести PIN руками"
+    say  "  ${DIM}вузол міг стартувати без PHANTOM_DOOR_KEY_FILE; спробуйте stop і ще раз${N}"
+    return 1
+  fi
+  url="http://127.0.0.1:$UI_PORT/messenger#door=$ticket"
+  if [[ "${NO_BROWSER:-0}" == "1" ]] || [[ -z "${DISPLAY:-}${WAYLAND_DISPLAY:-}" ]] \
+     || ! command -v xdg-open >/dev/null; then
+    say  "  ${B}одноразове посилання (3 хв, згорає при першому відкритті):${N}"
+    say  "  $url"
+  else
+    setsid xdg-open "$url" >/dev/null 2>&1 &
+    ok "браузер відкривається — ви вже всередині"
+  fi
+}
+
+cmd_start() {
+  preflight
+  say ""
+  say "${B}PHANTOM месенджер${N}"
+  start_node
+  start_ui
+  open_door || true
+  say ""
+  say "  ${B}Месенджер:${N} http://127.0.0.1:$UI_PORT/messenger"
+  say "  ${DIM}логи   $NODE_LOG${N}"
+  say "  ${DIM}стоп   scripts/phantom-messenger stop${N}"
+  say ""
+}
+
+cmd_door() {
+  api_up || die "Вузол не піднято. Спершу: scripts/phantom-messenger"
+  ui_up  || die "Вікно не піднято. Спершу: scripts/phantom-messenger"
+  say ""
+  open_door || true
+  say ""
+}
+
+kill_pidfile() {
+  local file="$1" name="$2" pid
+  alive "$file" || { rm -f "$file"; return; }
+  pid="$(cat "$file")"
+  kill -TERM -- "-$pid" 2>/dev/null || kill -TERM "$pid" 2>/dev/null || true
+  for _ in $(seq 1 10); do kill -0 "$pid" 2>/dev/null || break; sleep 1; done
+  kill -KILL -- "-$pid" 2>/dev/null || kill -KILL "$pid" 2>/dev/null || true
+  rm -f "$file"
+  ok "$name зупинено"
+}
+
+cmd_stop() {
+  say ""
+  kill_pidfile "$UI_PID" "вікно"
+  kill_pidfile "$NODE_PID" "вузол"
+  rm -f "$DOOR_KEY"
+  api_up && warn "на :$API_PORT ще щось слухає — це не наш процес" || true
+  say ""
+}
+
+cmd_status() {
+  say ""
+  say "${B}PHANTOM месенджер${N}"
+  api_up && ok "вузол  http://127.0.0.1:$API_PORT" || bad "вузол мовчить на :$API_PORT"
+  ui_up  && ok "вікно  http://127.0.0.1:$UI_PORT/messenger" || bad "вікно мовчить на :$UI_PORT"
+  if alive "$NODE_PID"; then
+    local pid rss
+    pid="$(cat "$NODE_PID")"
+    rss="$(awk '/VmRSS/{printf "%.0f", $2/1024}' "/proc/$pid/status" 2>/dev/null || echo '?')"
+    say "  ${DIM}памʼять вузла ${rss} МБ, лог $(du -h "$NODE_LOG" 2>/dev/null | cut -f1)${N}"
+  fi
+  say ""
+}
+
+NO_BROWSER=0
+ARGS=()
+for a in "$@"; do
+  case "$a" in
+    --no-browser) NO_BROWSER=1 ;;
+    *) ARGS+=("$a") ;;
+  esac
+done
+export NO_BROWSER
+
+case "${ARGS[0]:-start}" in
+  start|"") cmd_start ;;
+  door)     cmd_door ;;
+  stop)     cmd_stop ;;
+  restart)  cmd_stop; cmd_start ;;
+  status)   cmd_status ;;
+  logs)     tail -n 60 -f "$NODE_LOG" ;;
+  *) die "Не знаю команди «${ARGS[0]}». Є: start, door, stop, restart, status, logs." ;;
+esac

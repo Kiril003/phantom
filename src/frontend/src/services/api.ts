@@ -13,6 +13,7 @@ import type {
   CliffScreeFeature,
   CliffScreeKind,
 } from '@shared/types';
+import { clearToken, readToken } from './tokenStore';
 
 export const BASE = '/api/v1';
 
@@ -32,7 +33,7 @@ export async function request<T>(
   path: string,
   body?: unknown
 ): Promise<T> {
-  const token = localStorage.getItem('phantom_token');
+  const token = readToken();
   const headers: Record<string, string> = {
     'Content-Type': 'application/json',
   };
@@ -50,10 +51,9 @@ export async function request<T>(
     // navigation hits the login screen instead of silently 401-ing again.
     // authApi.me() is the existing auto-login probe — excluded so it
     // can still fail-normal when no valid token exists.
-    if (res.status === 401 && path !== '/auth/me') {
+    if (res.status === 401 && !path.startsWith('/auth/')) {
       try {
-        localStorage.removeItem('phantom_token');
-        localStorage.removeItem('phantom_token_expires');
+        clearToken();
         window.dispatchEvent(new CustomEvent('phantom:unauthorized'));
       } catch {
         /* SSR / restricted storage: ignore */
@@ -81,6 +81,7 @@ export const authApi = {
   loginPin: (username: string, pin: string) =>
     request<AuthResponse>('POST', '/auth/login/pin', { username, pin }),
   refresh: () => request<{ token: string; expires_at: string }>('POST', '/auth/refresh'),
+  door: (ticket: string) => request<AuthResponse>('POST', '/auth/door', { ticket }),
   me: () => request<User>('GET', '/auth/me'),
   logout: () => request<{ ok: boolean }>('POST', '/auth/logout'),
   config: () =>
@@ -88,6 +89,8 @@ export const authApi = {
       'GET',
       '/auth/config'
     ),
+  quickJoin: (username: string, display_name?: string, pin?: string) =>
+    request<AuthResponse>('POST', '/auth/quick-join', { username, display_name, pin }),
   // Day-4 Wave-2 IDB-3 (ADR-IDB-003): pre-PinPad picker tiles. Public —
   // safe to call WITHOUT a bearer token. Whitelist contract pinned at
   // backend tests/test_phase_idb2_shared_pin_picker.py.

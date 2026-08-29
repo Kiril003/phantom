@@ -7,10 +7,12 @@
  * Plus a helper to toggle exclude_from_prompts via the agent action surface.
  */
 
+import { readToken } from './tokenStore';
+
 const BASE = '/api/v1';
 
 function _authHeader(): Record<string, string> {
-  const token = localStorage.getItem('phantom_token');
+  const token = readToken();
   return token ? { Authorization: `Bearer ${token}` } : {};
 }
 

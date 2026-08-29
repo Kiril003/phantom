@@ -25,7 +25,13 @@ use std::sync::Mutex;
 use futures_util::StreamExt;
 use serde::Deserialize;
 use tauri::WebviewWindow;
+use tokio_tungstenite::tungstenite::client::ClientRequestBuilder;
+use tokio_tungstenite::tungstenite::http::Uri;
 use tokio_tungstenite::tungstenite::Message;
+
+/// Маркер під-протоколу автентифікації. Дзеркалить `BEARER_SUBPROTOCOL`
+/// у `src/backend/security/ws_auth.py` і `src/frontend/src/services/wsAuth.ts`.
+const BEARER_SUBPROTOCOL: &str = "phantom.bearer.v1";
 
 pub struct AskState {
     client: reqwest::Client,
@@ -172,16 +178,18 @@ impl AskState {
             .map_err(|e| format!("ask unreachable: {e}"))
     }
 
-    /// Map the HTTP api base onto its WebSocket origin and append the auth
-    /// query. JWTs are URL-safe base64url with `.` separators, so the raw token
-    /// is a valid query value with no escaping needed.
-    fn ws_url(&self, token: &str) -> String {
+    /// Map the HTTP api base onto its WebSocket origin. The auth token is
+    /// deliberately NOT appended here: round-4 panel P4 counted full JWTs in
+    /// the node's access log, because uvicorn writes the request path
+    /// verbatim. The token rides the `phantom.bearer.v1` subprotocol instead
+    /// (see `security/ws_auth.py`), which handshake headers keep out of logs.
+    fn ws_url(&self) -> String {
         let origin = self
             .api_base
             .trim_end_matches('/')
             .replacen("https://", "wss://", 1)
             .replacen("http://", "ws://", 1);
-        format!("{origin}/ws?token={token}")
+        format!("{origin}/ws")
     }
 
     /// Open a per-ask WebSocket to the hub and pump this user's `chat/stream`
@@ -195,9 +203,17 @@ impl AskState {
         window: WebviewWindow,
         token: String,
     ) -> tauri::async_runtime::JoinHandle<()> {
-        let url = self.ws_url(&token);
+        let url = self.ws_url();
         tauri::async_runtime::spawn(async move {
-            let Ok((mut ws, _resp)) = tokio_tungstenite::connect_async(url).await else {
+            // Маркер і одразу за ним токен — рівно те, що читає бекенд у
+            // `extract_ws_token`. Вузол мусить підтвердити маркер у відповіді.
+            let Ok(uri) = url.parse::<Uri>() else {
+                return;
+            };
+            let request = ClientRequestBuilder::new(uri)
+                .with_sub_protocol(BEARER_SUBPROTOCOL)
+                .with_sub_protocol(token);
+            let Ok((mut ws, _resp)) = tokio_tungstenite::connect_async(request).await else {
                 return;
             };
             // Default subscription is every channel, so `chat` arrives without

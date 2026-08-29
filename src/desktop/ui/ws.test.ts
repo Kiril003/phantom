@@ -1,20 +1,26 @@
 import { describe, expect, it } from 'vitest';
 
-import { nextDelayMs, socketUrl } from './ws';
+import { BEARER_SUBPROTOCOL, bearerProtocols, nextDelayMs, socketUrl } from './ws';
 
 describe('socketUrl', () => {
-  it('opens the token into the query the hub reads', () => {
+  it('keeps the token out of the address even when there is one', () => {
     expect(socketUrl('ws://127.0.0.1:8000/ws', 'abc.def.ghi')).toBe(
-      'ws://127.0.0.1:8000/ws?token=abc.def.ghi',
+      'ws://127.0.0.1:8000/ws',
     );
   });
 
   it('stays anonymous when there is no session', () => {
     expect(socketUrl('ws://127.0.0.1:8000/ws', null)).toBe('ws://127.0.0.1:8000/ws');
   });
+});
 
-  it('escapes a token so a stray character cannot forge query params', () => {
-    expect(socketUrl('ws://x/ws', 'a&b=c')).toBe('ws://x/ws?token=a%26b%3Dc');
+describe('bearerProtocols', () => {
+  it('carries the token as the second subprotocol', () => {
+    expect(bearerProtocols('abc.def.ghi')).toEqual([BEARER_SUBPROTOCOL, 'abc.def.ghi']);
+  });
+
+  it('offers no subprotocol without a session', () => {
+    expect(bearerProtocols(null)).toBeUndefined();
   });
 });
 

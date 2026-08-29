@@ -45,6 +45,14 @@ applyBootstrapLanguage();
 // (tests, alternate entry points).
 void ensureCapabilityProbed();
 
+import { useMessengerStore } from './stores/messengerStore';
+import { globalP2PMesh } from './services/globalP2PMesh';
+
+if (typeof window !== 'undefined') {
+  (window as any).__phantom_messenger_store = useMessengerStore;
+  (window as any).__phantom_p2p_mesh = globalP2PMesh;
+}
+
 ReactDOM.createRoot(document.getElementById('root')!).render(
   <React.StrictMode>
     <App />

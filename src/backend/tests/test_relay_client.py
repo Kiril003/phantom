@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import socket
 import sys
 import threading
@@ -169,3 +170,70 @@ async def test_a_dead_relay_does_not_kill_the_node(echo) -> None:
         assert client.status()["last_error"]
     finally:
         await client.stop()
+
+
+class _OneShotWs:
+    """Сокет, що видихає готовий перелік рядків і замовкає."""
+
+    def __init__(self, frames: list[str]) -> None:
+        self._frames = list(frames)
+
+    def __aiter__(self) -> "_OneShotWs":
+        return self
+
+    async def __anext__(self) -> str:
+        if not self._frames:
+            raise StopAsyncIteration
+        return self._frames.pop(0)
+
+
+async def test_a_mailbox_letter_is_held_until_it_lands(monkeypatch) -> None:
+    """Задачу листа тримає сам вузол — інакше збирач сміття зʼїсть її на льоту."""
+    import gc
+    import json
+
+    import node.relay_client as relay_client
+
+    delivered = asyncio.Event()
+    seen: list[dict] = []
+
+    async def slow_accept(message: dict) -> None:
+        await asyncio.sleep(0.05)
+        seen.append(message)
+        delivered.set()
+
+    monkeypatch.setattr(relay_client, "_accept_mailbox", slow_accept)
+
+    client = RelayClient("ws://unused", lambda: None)
+    await client._serve(_OneShotWs([json.dumps({"t": "mailbox", "frame": "0a0b"})]))
+
+    assert len(client._mailbox) == 1
+    gc.collect()
+
+    await asyncio.wait_for(delivered.wait(), 5)
+    assert seen == [{"t": "mailbox", "frame": "0a0b"}]
+    await asyncio.sleep(0)
+    assert client._mailbox == set()
+
+
+async def test_stopping_the_node_lets_go_of_pending_letters(monkeypatch) -> None:
+    """Зупинка вузла не лишає по собі підвішених задач зі скриньки."""
+    import json
+
+    import node.relay_client as relay_client
+
+    async def never_ending(message: dict) -> None:
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(relay_client, "_accept_mailbox", never_ending)
+
+    client = RelayClient("ws://unused", lambda: None)
+    await client._serve(_OneShotWs([json.dumps({"t": "mailbox", "frame": "ff"})]))
+    letter = next(iter(client._mailbox))
+
+    await client.stop()
+    with contextlib.suppress(asyncio.CancelledError):
+        await letter
+    await asyncio.sleep(0)
+    assert letter.cancelled()
+    assert client._mailbox == set()

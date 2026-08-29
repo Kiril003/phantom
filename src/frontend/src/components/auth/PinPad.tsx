@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { AnimatePresence, motion } from 'framer-motion';
 import { Delete, RotateCcw } from 'lucide-react';
 
@@ -24,7 +24,7 @@ export default function PinPad({
 }: PinPadProps) {
   const [pin, setPin] = useState('');
 
-  const handleKey = (key: string) => {
+  const handleKey = useCallback((key: string) => {
     if (disabled) return;
     if (key === 'CLEAR') {
       setPin('');
@@ -41,7 +41,21 @@ export default function PinPad({
       onSubmit(next);
       setPin('');
     }
-  };
+  }, [disabled, maxLength, onSubmit, pin]);
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (/^[0-9]$/.test(e.key)) {
+        handleKey(e.key);
+      } else if (e.key === 'Backspace') {
+        handleKey('DEL');
+      } else if (e.key === 'Escape') {
+        handleKey('CLEAR');
+      }
+    };
+    window.addEventListener('keydown', onKeyDown);
+    return () => window.removeEventListener('keydown', onKeyDown);
+  }, [handleKey]);
 
   return (
     <div className="flex flex-col items-center gap-6 select-none">

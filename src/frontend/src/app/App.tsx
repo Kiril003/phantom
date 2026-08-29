@@ -57,6 +57,13 @@ const CoreDownWall = React.lazy(() =>
 const SunriseWorkspace = React.lazy(() => import('../layouts/SunriseWorkspace'));
 const AgentFoundryLayout = React.lazy(() => import('../layouts/AgentFoundryLayout'));
 
+// Злиття 29.08: месенджер приїхав окремою гілкою, де він володів «/» і «*».
+// Тут «/» належить активному столу, тож месенджер сидить на власному шляху.
+// Це не пониження: у гілці месенджера «*» ковтав /map, /settings, /polis,
+// /foundry, /analytics — вісім місць коду вели туди, де маршруту не було,
+// і малювався месенджер. Тепер ці шляхи вперше ведуть куди написано.
+const MessengerLayout = React.lazy(() => import('../layouts/MessengerLayout'));
+
 const DashboardLayout = React.lazy(() => import('../layouts/DashboardLayout'));
 const GhostLayout = React.lazy(() => import('../layouts/GhostLayout'));
 const DreamLayout = React.lazy(() => import('../layouts/DreamLayout'));
@@ -172,6 +179,11 @@ function MainRouter() {
             {/* К4: старі шляхи ведуть у відповідний стіл/пейн. */}
             <Route path="map" element={<GoDesk desk="theatre" />} />
             <Route path="chat" element={<GoDesk desk="theatre" />} />
+            {/* Вхід у месенджер з оболонки: після злиття він більше не
+                показується самопливом на «/». Кнопка «Повернутися до
+                PHANTOM» у його лівій рейці веде на «/» і нарешті означає
+                те, що на ній написано. */}
+            <Route path="messenger" element={<MessengerLayout />} />
             <Route path="analytics" element={<GoDesk desk="cockpit" />} />
             <Route path="operator" element={<GoDesk desk="company" />} />
             <Route path="foundry" element={<GoDesk desk="company" />} />

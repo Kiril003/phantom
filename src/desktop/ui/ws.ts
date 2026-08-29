@@ -18,8 +18,22 @@ export function nextDelayMs(attempt: number, random: () => number = Math.random)
   return Math.round(base + jitter);
 }
 
-export function socketUrl(base: string, token: string | null): string {
-  return token ? `${base}?token=${encodeURIComponent(token)}` : base;
+/**
+ * Раунд-4 П4: токен більше не їде в адресі. uvicorn пише повний шлях
+ * запиту в access-лог, тож `?token=` означав повний JWT на диску при
+ * кожному підключенні Плівки. Тепер URL чистий, а токен — у під-протоколі
+ * рукостискання (`bearerProtocols`), який у лог не потрапляє.
+ */
+export function socketUrl(base: string, _token?: string | null): string {
+  return base;
+}
+
+/** Маркер під-протоколу; вузол мусить підтвердити його у відповіді. */
+export const BEARER_SUBPROTOCOL = 'phantom.bearer.v1';
+
+/** Аргумент `protocols` конструктора WebSocket: маркер і одразу за ним токен. */
+export function bearerProtocols(token: string | null): string[] | undefined {
+  return token ? [BEARER_SUBPROTOCOL, token] : undefined;
 }
 
 /**
@@ -65,7 +79,9 @@ export class HubClient {
 
   private open(): void {
     this.opts.onStatus(this.attempt === 0 ? 'connecting' : 'absent');
-    const ws = new WebSocket(socketUrl(this.opts.url, this.opts.token?.() ?? null));
+    const protocols = bearerProtocols(this.opts.token?.() ?? null);
+    const target = socketUrl(this.opts.url);
+    const ws = protocols ? new WebSocket(target, protocols) : new WebSocket(target);
     this.ws = ws;
 
     ws.onopen = () => {

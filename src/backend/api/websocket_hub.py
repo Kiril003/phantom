@@ -102,8 +102,12 @@ class WebSocketHub:
         client_id: str,
         user_id: str | None = None,
         profile_id: str | None = None,
+        subprotocol: str | None = None,
     ) -> WSClient:
-        await ws.accept()
+        # `subprotocol` треба підтвердити дослівно: браузер рве зʼєднання,
+        # якщо сервер не обрав жодного із запропонованих ним. None — це
+        # старий шлях (`?token=` або зовсім без токена).
+        await ws.accept(subprotocol=subprotocol)
         client = WSClient(ws, client_id, user_id, profile_id)
         async with self._lock:
             self._clients[client_id] = client

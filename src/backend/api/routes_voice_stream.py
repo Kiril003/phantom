@@ -1,7 +1,9 @@
 """
 Voice streaming WebSocket — Phase 11b always-on pipeline.
 
-Endpoint: ``/ws/voice?token=<jwt>``
+Endpoint: ``/ws/voice``. Токен їде під-протоколом рукостискання
+(``phantom.bearer.v1``, див. ``security/ws_auth.py``); застарілий
+``?token=<jwt>`` ще приймається заради старих клієнтів.
 
 Contract
 --------
@@ -78,6 +80,12 @@ async def _accept_authenticated(
     """Accept the WS iff token is present and verifies. Returns the
     authenticated user_id or None on rejection (caller should already
     have closed the socket)."""
+    # Раунд-4 П4: токен везе під-протокол `phantom.bearer.v1`, а не
+    # query string — інакше повний JWT лягає в access-лог uvicorn.
+    from security.ws_auth import extract_ws_token
+
+    token, accept_subprotocol = extract_ws_token(ws, token)
+
     if not token:
         await ws.close(code=WS_CODE_UNAUTHORIZED, reason="token required")
         return None
@@ -89,7 +97,7 @@ async def _accept_authenticated(
         logger.info("voice WS rejected: token invalid: %s", exc)
         await ws.close(code=WS_CODE_UNAUTHORIZED, reason="token invalid")
         return None
-    await ws.accept()
+    await ws.accept(subprotocol=accept_subprotocol)
     return payload.user_id
 
 

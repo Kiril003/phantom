@@ -49,6 +49,7 @@ class RelayClient:
         self._local_target = local_target
         self._task: Optional[asyncio.Task] = None
         self._sessions: set[asyncio.Task] = set()
+        self._mailbox: set[asyncio.Task] = set()
         self._connected = False
         self._stopping = False
         self._last_error = ""
@@ -82,7 +83,7 @@ class RelayClient:
 
     async def stop(self) -> None:
         self._stopping = True
-        for task in list(self._sessions):
+        for task in list(self._sessions) + list(self._mailbox):
             task.cancel()
         if self._task is not None:
             self._task.cancel()
@@ -156,7 +157,20 @@ class RelayClient:
                 message = json.loads(raw)
             except (TypeError, ValueError):
                 continue
-            if message.get("t") != "open":
+            kind = message.get("t")
+            if kind == "mailbox":
+                # Лист, який ретранслятор притримав, поки нас не було в мережі.
+                # Розбирати його тут нічим: вміст зашифрований, і ретранслятор
+                # його теж не бачив. Просто передаємо в приймальню месенджера.
+                # Посилання тримаємо самі: цикл подій тримає задачі слабко,
+                # і збирач сміття здатен зжерти лист до того, як він ляже.
+                letter = asyncio.create_task(
+                    _accept_mailbox(message), name="relay_mailbox"
+                )
+                self._mailbox.add(letter)
+                letter.add_done_callback(self._mailbox.discard)
+                continue
+            if kind != "open":
                 continue
             ticket = str(message.get("ticket", ""))
             if not ticket or len(self._sessions) >= _MAX_SESSIONS:
@@ -226,6 +240,38 @@ _client: Optional[RelayClient] = None
 
 def current() -> Optional[RelayClient]:
     return _client
+
+
+async def _accept_mailbox(message: dict[str, Any]) -> None:
+    """Кладе лист зі скриньки ретранслятора у стрічку власника."""
+    frame_hex = str(message.get("frame", ""))
+    if not frame_hex:
+        return
+    try:
+        from sqlalchemy import select
+
+        from api.routes_messenger import _keys
+        from db.database import AsyncSessionLocal
+        from db.models import User
+        from messenger.inbox import accept_frame
+
+        async with AsyncSessionLocal() as session:
+            owner = (
+                await session.execute(select(User.id).order_by(User.id))
+            ).scalars().first()
+            if owner is None:
+                return
+            await accept_frame(
+                session,
+                _keys(),
+                owner,
+                bytes.fromhex(frame_hex),
+                message.get("from_node_id"),
+                reply_address=message.get("reply_address"),
+                road="mailbox",
+            )
+    except Exception as exc:  # noqa: BLE001 — чужий лист не має валити зʼєднання
+        logger.info("лист зі скриньки не прийнявся: %s", exc)
 
 
 async def start_relay_client(app: Any) -> Optional[RelayClient]:

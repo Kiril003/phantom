@@ -50,6 +50,10 @@ G2_LANE_TIMEOUT_S = float(os.environ.get("PHANTOM_G2_LANE_TIMEOUT_S", "30"))
 #: side effect the daemon (and the test suite) depends on, and must always run.
 _PURE_WARMUP_LANES = frozenset({"minilm", "voice_preload"})
 
+#: Що лишається при PHANTOM_MESSENGER_ONLY=1 — тільки смуги з побічним
+#: ефектом, потрібним самому вузлу. Моделей і Chroma месенджер не імпортує.
+_MESSENGER_LANES = frozenset({"cpu_sampler", "home_tenant"})
+
 
 # ──────────────────────────────────────────────────────────────────── lanes ──
 
@@ -301,7 +305,13 @@ async def run_g2_parallel() -> None:
     ``phantom_lifespan_g2_failures_total{lane=...}``.
     """
     lanes = _G2_LANES
-    if os.environ.get("PHANTOM_SKIP_G2_WARMUP") == "1":
+    if os.environ.get("PHANTOM_MESSENGER_ONLY") == "1":
+        lanes = tuple((n, fn) for n, fn in lanes if n in _MESSENGER_LANES)
+        logger.info(
+            "G2: режим «лише месенджер» — лишилися смуги %s",
+            ", ".join(n for n, _ in lanes) or "жодної",
+        )
+    elif os.environ.get("PHANTOM_SKIP_G2_WARMUP") == "1":
         # Only the model-loading lanes are skippable. The rest carry real side
         # effects — cpu_sampler starts a background sampler, home_tenant
         # provisions a row, chroma_eager runs a collection migration, janitor

@@ -75,7 +75,7 @@ beforeEach(() => {
     connect(t: unknown) { return t; }
     disconnect() {}
   };
-  window.localStorage.setItem('phantom_token', 'test-token');
+  window.sessionStorage.setItem('phantom_token', 'test-token');
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   (navigator as any).mediaDevices = {
     getUserMedia: () =>

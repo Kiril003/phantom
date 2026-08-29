@@ -1,6 +1,11 @@
 node_modules/
 dist/
 build/
+# Ф6: вихід збірки sidecar. `build/` вище не покриває ні `.build/` (крапка),
+# ні теку, куди Tauri чекає `externalBin`. Обидві важать гігабайти —
+# середовище збірки саме по собі під 2 ГБ, дист PyInstaller більше.
+.build/
+src/frontend/src-tauri/binaries/
 __pycache__/
 *.pyc
 *.pyo

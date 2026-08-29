@@ -37,10 +37,22 @@ that is what we use.
 from __future__ import annotations
 
 import logging
+import os
 from pathlib import Path
 from typing import Any
 
 logger = logging.getLogger(__name__)
+
+
+class EmbeddingModelMissing(RuntimeError):
+    """Моделі ембедингів немає на диску, а в мережу ми не ходимо.
+
+    Окремий тип, а не голий ``RuntimeError``: виклик сидить під
+    ``strategic_memory._get_ef()``, тобто на шляху звичайного запису в
+    пам'ять. Той, хто це ловить, має вміти відрізнити «немає моделі» від
+    «зламався Chroma» — інакше єдиною реакцією буде broad-except, і ми
+    повернемось рівно до тієї мовчанки, від якої тут і йдемо.
+    """
 
 # Filename of the fingerprint dropped next to the Chroma store.
 FINGERPRINT_FILE = ".embedding_model"
@@ -98,17 +110,44 @@ def build_embedding_function(model_name: str, *, device: str = "cpu") -> Any:
     # the stall lands on ordinary memory writes.
     #
     # Chroma forwards **kwargs straight to SentenceTransformer, so
-    # `local_files_only` reaches the loader. First run still needs the network
-    # to fetch the model, hence the fallback.
+    # `local_files_only` reaches the loader.
+    #
+    # Тут раніше стояв мовчазний фолбек: не знайшли модель локально — пішли
+    # по неї в мережу, лишивши в журналі рядок рівня INFO. Це порушувало
+    # головну обіцянку продукту в найгіршій формі — тихо. Машина користувача
+    # ходила до huggingface.co під час звичайного запису в пам'ять, і
+    # дізнатись про це можна було лише з логів, яких ніхто не читає.
+    #
+    # Тепер за замовчуванням мережі немає взагалі: немає моделі на диску —
+    # чесна помилка з назвою моделі й місцями, де її шукали. Завантаження
+    # лишається можливим, але тільки як свідомий крок оператора
+    # (`PHANTOM_ALLOW_MODEL_DOWNLOAD=1`), і воно кричить у журнал, а не шепоче.
     try:
         base = _ef.SentenceTransformerEmbeddingFunction(
             model_name=model_name, device=device, local_files_only=True
         )
-    except Exception as exc:  # not cached yet — let it download
-        logger.info(
-            "embedding model %r not in the local cache (%s) — fetching it; "
-            "subsequent loads stay offline.",
-            model_name, type(exc).__name__,
+    except Exception as exc:
+        if os.environ.get("PHANTOM_ALLOW_MODEL_DOWNLOAD") not in ("1", "true", "yes"):
+            searched = ", ".join(
+                f"{var}={os.environ[var]}"
+                for var in (
+                    "SENTENCE_TRANSFORMERS_HOME",
+                    "HF_HOME",
+                    "HUGGINGFACE_HUB_CACHE",
+                )
+                if os.environ.get(var)
+            ) or "(жодного кешу не задано — типові шляхи huggingface_hub)"
+            raise EmbeddingModelMissing(
+                f"Модель ембедингів {model_name!r} не знайдена локально "
+                f"({type(exc).__name__}). Шукав тут: {searched}. "
+                "У мережу по неї не пішов: PHANTOM не ходить назовні сам. "
+                "Постав модель поруч або дозволь завантаження явно — "
+                "PHANTOM_ALLOW_MODEL_DOWNLOAD=1."
+            ) from exc
+        logger.warning(
+            "МЕРЕЖА: тягну модель ембедингів %r з huggingface.co — "
+            "дозволено через PHANTOM_ALLOW_MODEL_DOWNLOAD.",
+            model_name,
         )
         base = _ef.SentenceTransformerEmbeddingFunction(
             model_name=model_name, device=device

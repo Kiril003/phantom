@@ -1,0 +1,75 @@
+# PHANTOM OS — залежності ДЛЯ БАНДЛА (Ф6, AppImage).
+#
+# `requirements.txt` — це середовище розробника: там є чим ганяти тести і
+# чим водити браузер. Тут — рівно те, що має поїхати користувачеві.
+#
+# Виміряно 29.08.2026 на робочому venv (6,0 ГБ) — саме тому цей файл існує:
+#
+#   nvidia/*      2,7 ГБ   CUDA-рантайм, притягнутий торчем
+#   torch         1,2 ГБ   збірка 2.13.0+cu130
+#   triton        691 МБ   компілятор ядер GPU
+#   playwright    137 МБ   драйвер браузера для e2e
+#   ────────────────────────────────────────────
+#                ~4,7 ГБ   з шести — усе це в продукті не потрібне
+#
+# ЧОМУ CPU-ТОРЧ, А НЕ «ГЕТЬ ТОРЧ». Спокуса викинути його цілком велика:
+# в коді застосунку `import torch` не зустрічається жодного разу поза
+# `generate_embeddings.py` (окремий утилітарний скрипт, не частина app).
+# Але це хибний слід: `memory/embedding_fn.py:104` бере
+# `SentenceTransformerEmbeddingFunction`, а та тягне `sentence_transformers`
+# ліниво, вже всередині chromadb. Тобто торч потрібен стратегічній пам'яті —
+# просто через дві непрямі ланки, яких grep по застосунку не бачить.
+# Рахунок після заміни: CPU-колесо замість cu130 + зникають nvidia/* і triton.
+#
+# Ембединги рахуються на CPU за замовчуванням (`build_embedding_function`,
+# `device: str = "cpu"`), тож CUDA-збірка не давала нічого й на робочій машині.
+
+--extra-index-url https://download.pytorch.org/whl/cpu
+torch==2.13.0+cpu
+
+fastapi==0.111.1
+uvicorn[standard]==0.30.6
+websockets==13.0.1
+python-multipart==0.0.9
+pydantic==2.8.2
+pydantic-settings==2.4.0
+sqlalchemy==2.0.32
+aiosqlite==0.20.0
+alembic==1.13.2
+chromadb==0.5.5
+sentence-transformers==3.0.1
+google-genai>=1.0.0
+ollama==0.3.1
+faster-whisper==1.0.3
+vosk==0.3.45
+soundfile==0.14.0
+supertonic==1.3.1
+piper-tts==1.4.2
+pyserial-asyncio==0.6
+opencv-python-headless==4.10.0.84
+python-jose[cryptography]==3.3.0
+passlib[bcrypt]==1.7.4
+cryptography==43.0.0
+segno==1.6.1
+zeroconf>=0.148,<1.0
+psutil==6.0.0
+platformdirs==4.3.6
+croniter==6.2.2
+anyio==4.4.0
+httpx==0.27.0
+cachetools==7.0.6
+PyYAML==6.0.2
+shapely==2.0.5
+markdown==3.7
+reportlab==4.2.5
+
+# НЕ включено навмисно, і кожне — з причиною:
+#   playwright        драйвер браузера для e2e; у продукті нікому не потрібен
+#   pytest*           тестовий рантайм
+# Моделі (Vosk, Piper, whisper-чекпойнти, ембединг-модель) у бандл не їдуть
+# узагалі — вони не пакети, а ваговиті блоби, і про них окреме рішення.
+# Ембединг-модель `intfloat/multilingual-e5-small` (471 МБ у кеші HF) —
+# єдина з них, без якої стратегічна пам'ять на чистій машині піде в мережу
+# при першому ж записі: `embedding_fn.py` пробує `local_files_only=True`,
+# ловить виняток і тягне модель. Це прямо суперечить воротам «працює
+# офлайн», якщо пам'ять обіцяна офлайн. Рішення за власником.

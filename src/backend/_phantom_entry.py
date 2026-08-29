@@ -67,7 +67,60 @@ def _bootstrap_env() -> Path:
     os.environ.setdefault("TOKENIZERS_PARALLELISM", "false")
     os.environ.setdefault("OMP_NUM_THREADS", "4")
     os.environ.setdefault("MKL_NUM_THREADS", "4")
+
+    # Другий замок на телеметрію Chroma. Код бекенда своє робить чесно:
+    # кожен `PersistentClient` відкривається з `anonymized_telemetry=False`,
+    # і на це навіть стоїть тест, що обходить AST і валиться на будь-якому
+    # конструкторі без `settings=`. Але в зібраному бандлі 29.08 у журналі
+    # все одно з'явилось `Failed to send telemetry event ClientStartEvent` —
+    # тобто бібліотека пробує відправити подію повз наш прапорець, і не
+    # відправила лише тому, що в неї розійшлась сигнатура posthog. Покладатись
+    # на чужу поламану залежність як на заслін приватності не можна.
+    # Chroma читає й змінну середовища — ставимо і її, до першого імпорту.
+    os.environ.setdefault("ANONYMIZED_TELEMETRY", "False")
+
     return root
+
+
+def _force_utf8_locale() -> None:
+    """Не дати чистій машині вбити старт на кодуванні.
+
+    Знайдено 29.08 на розпакованому AppImage, запущеному з порожнім
+    оточенням (`env -i`, без LANG і LC_ALL) — тобто рівно так, як його
+    запустить systemd-юніт, контейнер або кіоск:
+
+        configparser … encoding="locale" → encodings/ascii.py
+        UnicodeDecodeError: 'ascii' codec can't decode byte 0xe2
+
+    Без локалі Python вважає кодуванням ASCII, а `alembic.ini` містить
+    тире «—» (U+2014) у коментарях першого рядка. Alembic читає його з
+    `encoding="locale"`, давиться на першому ж не-ASCII байті, і застосунок
+    помирає на міграціях ще до першого запиту. На машині розробника, де
+    LANG=…UTF-8, цього не побачити ніколи.
+
+    Лікуємо не файл, а клас: один коментар можна переписати на дефіс, але
+    наступний не-ASCII рядок у будь-якому конфізі поверне ту саму смерть.
+    `PYTHONUTF8=1` тут не поможе — його читають ДО старту інтерпретатора, а
+    ми вже всередині; перезапускати ж себе в onefile-бандлі означає ще раз
+    розпакувати 567 МБ. Тому просто ставимо LC_CTYPE: `locale.getencoding()`
+    питає поточну локаль, тож наступні читання підуть у UTF-8.
+    """
+    import locale
+
+    for candidate in ("C.UTF-8", "en_US.UTF-8", "uk_UA.UTF-8"):
+        try:
+            locale.setlocale(locale.LC_CTYPE, candidate)
+            os.environ.setdefault("LC_CTYPE", candidate)
+            return
+        except locale.Error:
+            continue
+    # Жодної UTF-8 локалі в системі. Не падаємо — але й не мовчимо:
+    # далі можливий саме той UnicodeDecodeError, заради якого це написано.
+    print(
+        "[phantom] УВАГА: не знайшов UTF-8 локалі (C.UTF-8/en_US/uk_UA). "
+        "Читання конфігів може впасти на не-ASCII символах.",
+        file=sys.stderr,
+    )
 
 
 def main() -> None:
@@ -82,6 +135,7 @@ def main() -> None:
         except RuntimeError:
             pass  # already set by an earlier import
 
+    _force_utf8_locale()
     _bootstrap_env()
 
     # Make backend package layout (api, core, ai, ...) importable as
@@ -89,6 +143,15 @@ def main() -> None:
     backend_dir = Path(__file__).resolve().parent
     if str(backend_dir) not in sys.path:
         sys.path.insert(0, str(backend_dir))
+
+    # Телеметрія Chroma — глушимо ДО того, як хтось підніме перший клієнт,
+    # але вже ПІСЛЯ того, як шлях до пакетів бекенда став видимий (інакше
+    # імпорт не знайде `memory`). `ANONYMIZED_TELEMETRY=False` вище цього не
+    # робить: виміряно, що chromadb 0.5.5 пробує відправити ClientStartEvent
+    # повз обидва штатні важелі. Подробиці й доказ — у самому модулі.
+    from memory.chroma_telemetry_off import silence
+
+    silence()
 
     # Lazy imports AFTER env bootstrap so config picks up our paths.
     import uvicorn

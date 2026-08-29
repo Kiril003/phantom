@@ -36,6 +36,7 @@ import {
 import { generateContextualResponse } from '../services/conversationalAgent';
 import { globalP2PMesh } from '../services/globalP2PMesh';
 import { storagePersistence } from '../services/storagePersistence';
+import { aiEngineService, type ChatHistoryItem } from '../services/aiEngineService';
 
 export interface MessengerState {
   // Current session & persona
@@ -1204,14 +1205,55 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
         }, 750);
 
         try {
-          // Real backend call to /chat/message
-          const res = await chatApi.sendMessage({
-            content: text.trim(),
-            input_method: 'text',
-            session_id: activeChat?.sessionId || undefined,
-          });
+          let replyText = '';
 
-          const replyText = res?.message?.content || generateContextualResponse(activeChat, text).text;
+          if (aiEngineService.hasApiKey()) {
+            const history: ChatHistoryItem[] = (activeChat?.messages || [])
+              .slice(-10)
+              .filter((m) => m.id !== aiMsgId)
+              .map((m) => ({
+                role: m.isSelf ? 'user' : 'model',
+                content: m.text || '',
+              }));
+
+            let specificSystemPrompt: string | undefined = undefined;
+            const chatTitleLower = (activeChat?.title || '').toLowerCase();
+
+            if (chatTitleLower.includes('thought architect') || chatId === 'chat_thought_architect') {
+              specificSystemPrompt =
+                'Ти Thought Architect — сократівський мислитель і системний аналітик PHANTOM OS. Твоя мета — піддавати ідеї глибокому критичному розбору, аналізувати компроміси, архітектурні ризики та пропонувати альтернативні шляхи. Відповідай виключно українською мовою, структуровано, пунктами.';
+            } else if (chatTitleLower.includes('pair programmer') || chatId === 'chat_pair_programmer') {
+              specificSystemPrompt =
+                'Ти Pair Programmer — провідний системний інженер PHANTOM OS (Kotlin, TypeScript, React, Rust, Python, Linux, WebGPU). Надавай робочий, компільований та оптимізований код без зайвих заглушок та пояснюй ключові інженерні рішення українською мовою.';
+            } else if (chatTitleLower.includes('mini-apps') || chatId === 'chat_app_generator') {
+              specificSystemPrompt =
+                'Ти Interactive Mini-Apps Generator для PHANTOM OS. Твоє завдання — генерувати інтерактивні віджети, мікро-додатки та інструменти для автоматизації оператора.';
+            }
+
+            replyText = await aiEngineService.generateReply({
+              prompt: text.trim(),
+              history,
+              systemInstruction: specificSystemPrompt,
+            });
+          } else {
+            // Спроба викликати бекенд вузла, якщо локальний API ключ ще не введено
+            try {
+              const res = await chatApi.sendMessage({
+                content: text.trim(),
+                input_method: 'text',
+                session_id: activeChat?.sessionId || undefined,
+              });
+              replyText = res?.message?.content || '';
+            } catch {
+              replyText = '';
+            }
+
+            if (!replyText) {
+              const agentFallback = generateContextualResponse(activeChat, text, activeChat?.messages);
+              replyText = `${agentFallback.text}\n\n> 💡 *Порада: Введіть свій Google Gemini або OpenAI API ключ у **Налаштуваннях ⚙️ -> Нейромережа & API** для безлімітного прямого зв'язку з потужними моделями.*`;
+            }
+          }
+
           soundFx.playReceive();
 
           set((s) => ({
@@ -1219,7 +1261,6 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
               c.id === chatId
                 ? {
                     ...c,
-                    sessionId: res?.session_id || c.sessionId,
                     messages: c.messages.map((m) =>
                       m.id === aiMsgId
                         ? {
@@ -1234,10 +1275,10 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
                 : c
             ),
           }));
-        } catch (_err) {
-          // Seamless conversational fallback
-          const agentReply = generateContextualResponse(activeChat, text, activeChat.messages);
+        } catch (err: any) {
+          console.error('[messenger] AI generation error:', err);
           soundFx.playReceive();
+          const errMessage = err?.message || 'Не вдалося отримати відповідь від AI.';
 
           set((s) => ({
             chats: s.chats.map((c) =>
@@ -1248,8 +1289,8 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
                       m.id === aiMsgId
                         ? {
                             ...m,
-                            text: agentReply.text,
-                            thinking: { stage: 'done', label: 'Готово', active: false },
+                            text: `⚠️ **Помилка AI**: ${errMessage}\n\nБудь ласка, перевірте правильність ключа або ліміти в **Налаштуваннях ⚙️ -> Нейромережа & API**.`,
+                            thinking: { stage: 'done', label: 'Помилка', active: false },
                             timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
                           }
                         : m
@@ -1258,10 +1299,6 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
                 : c
             ),
           }));
-
-          if (agentReply.reactionEmoji) {
-            get().addReaction(clientId, agentReply.reactionEmoji);
-          }
         }
       }
     },

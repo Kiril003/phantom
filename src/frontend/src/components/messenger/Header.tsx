@@ -90,14 +90,14 @@ interface HeaderProps {
 // Кругла кнопка-іконка — єдина форма для всієї правої групи шапки.
 const ICON_BTN =
   'w-[32px] h-[32px] min-w-0 min-h-0 rounded-full flex items-center justify-center shrink-0 transition-colors';
-const ICON_BTN_IDLE = 'text-[#6E7568] hover:text-[#21261F] hover:bg-[#F1EBDD]';
-const ICON_BTN_OFF = 'text-[#C6C8BF] cursor-not-allowed';
+const ICON_BTN_IDLE = 'text-[#8EA093] hover:text-white hover:bg-[#18231C]';
+const ICON_BTN_OFF = 'text-[#475569] cursor-not-allowed';
 // Чому кнопка не натискається — сказано словами, а не сірим кольором.
 const NO_CALL_NOTE = 'Дзвінки лише зі звіреними вузловими контактами';
 const NO_PINNED_NOTE = 'Немає закріплених';
 // Рядок випадного меню: фіксовані 36px, іконка + один рядок тексту.
 const MENU_ITEM =
-  'w-full h-[36px] min-h-0 px-2.5 rounded-[10px] text-left text-[13px] font-medium text-[#21261F] flex items-center gap-2.5 hover:bg-[#F1EBDD] transition-colors';
+  'w-full h-[36px] min-h-0 px-2.5 rounded-[10px] text-left text-[13px] font-medium text-[#F8FAF8] flex items-center gap-2.5 hover:bg-[#18231C] transition-colors';
 
 // Стан каналу живе в статусному рядку разом зі звіркою, а не окремою пігулкою:
 // це та сама відповідь на питання «наскільки цій розмові можна вірити».
@@ -217,28 +217,22 @@ export const Header: React.FC<HeaderProps> = ({
     const btn = moreBtnRef.current?.getBoundingClientRect();
     const bar = headerRef.current?.getBoundingClientRect();
     if (!btn || !bar) return;
-    // Вертикаль беремо від нижньої межі шапки, а не від кнопки: інакше меню
-    // наповзає на власну шапку.
     setMenuAnchor({ top: bar.bottom + 6, right: Math.max(8, window.innerWidth - btn.right) });
   };
 
-  // Прив'язка порахована один раз — при зміні розмірів вікна вона стає брехнею.
   useEffect(() => {
     if (!menuAnchor) return;
     window.addEventListener('resize', closeMenu);
     return () => window.removeEventListener('resize', closeMenu);
   }, [menuAnchor, closeMenu]);
 
-  // Меню «⋮» кладе на екран заслінку на весь екран. Escape його не закривав —
-  // і поки воно висіло, жоден клік у стрічці не проходив.
   useEscapeClose(!!menuAnchor, closeMenu);
 
   const subtitle = currentChat.topic || currentChat.customVibe || currentChat.description || '';
-  // «all» — це не коло, а вся стрічка: чіп із написом ALL нічого не повідомляє.
   const circleLabel = currentChat.circle && currentChat.circle !== 'all' ? currentChat.circle : null;
 
   return (
-    <header ref={headerRef} className="h-[60px] px-3 sm:px-5 bg-[#FDFCF9]/95 backdrop-blur-xl border-b border-[#E8E1D3] flex items-center justify-between gap-2 sm:gap-3 select-none shrink-0 z-30">
+    <header ref={headerRef} className="h-[46px] px-2.5 sm:px-4 bg-[#0E1410] border-b border-[rgba(255,255,255,0.07)] flex items-center justify-between gap-2 select-none shrink-0 z-30 text-white">
       {/* 1. Left Chat Identity & Mobile Back Button */}
       <div className="flex items-center gap-1 sm:gap-2 min-w-0 flex-1">
         {onBack && (
@@ -247,11 +241,11 @@ export const Header: React.FC<HeaderProps> = ({
               soundFx.playTap();
               onBack();
             }}
-            className={`md:hidden -ml-1.5 ${ICON_BTN} ${ICON_BTN_IDLE}`}
+            className={`md:hidden -ml-1 ${ICON_BTN} ${ICON_BTN_IDLE}`}
             title="Назад до списку бесід"
             aria-label="Назад"
           >
-            <ChevronLeft className="w-[18px] h-[18px]" strokeWidth={1.75} />
+            <ChevronLeft className="w-[18px] h-[18px]" strokeWidth={2} />
           </button>
         )}
 
@@ -275,30 +269,29 @@ export const Header: React.FC<HeaderProps> = ({
 
         <div
           onClick={(e) => {
-            // Людина — відкриваємо її картку; група — деталі простору.
             if (hasPeer) openSheet(e.currentTarget as HTMLElement);
             else {
               soundFx.playTap();
               onOpenGroupDetails();
             }
           }}
-          className="flex items-center gap-2.5 min-w-0 cursor-pointer group flex-1"
+          className="flex items-center gap-2 min-w-0 cursor-pointer group flex-1"
           title={hasPeer ? 'Картка співрозмовника: звірка, дії з розмовою' : 'Переглянути деталі бесіди, учасників та медіа'}
         >
           <div className="relative shrink-0">
-            <Avatar src={currentChat.avatar} name={currentChat.title} className="w-9 h-9" />
+            <Avatar src={currentChat.avatar} name={currentChat.title} className="w-8 h-8" />
             {currentChat.isOnline && (
-              <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-[#4C8A55] rounded-full ring-2 ring-[#FDFCF9]" />
+              <span className="absolute -bottom-0.5 -right-0.5 w-2 h-2 bg-[#F4AF25] rounded-full ring-2 ring-[#0E1410]" />
             )}
           </div>
 
           <div className="min-w-0 flex-1 leading-tight">
-            <div className="flex items-center gap-2">
-              <h2 className="font-semibold text-[15px] text-[#21261F] truncate">
+            <div className="flex items-center gap-1.5">
+              <h2 className="font-bold text-[13.5px] text-[#F8FAF8] truncate">
                 {currentChat.title}
               </h2>
               {circleLabel && (
-                <span className="hidden phantom:inline-block text-[11.5px] text-[color:var(--msg-meta)] shrink-0">
+                <span className="hidden phantom:inline-block text-[10px] text-[#8EA093] shrink-0">
                   {circleLabel}
                 </span>
               )}

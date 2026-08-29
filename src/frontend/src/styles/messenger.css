@@ -8,44 +8,45 @@
 
 /* Токени месенджера: колір метаданих і заслінка модалок. Значення живуть тут,
  * щоб контраст і теплота заслінки правились в одному місці, а не в 17 файлах. */
+/* PHANTOM Messenger V2: Dark Obsidian & Amber Gold (Alien Elegance) */
 :root {
-  --msg-meta: #656C5E;        /* час, бейджі, підписи на кремі — ≈5.0:1 */
-  --msg-meta-self: #7A6248;   /* те саме в своїй бульбашці — ≈4.7:1 */
-  --msg-scrim: rgba(60, 44, 24, 0.38);
-  --msg-scrim-blur: 4px;
+  --msg-meta: #8EA093;        /* час, бейджі, підписи */
+  --msg-meta-self: #FFB340;   /* час у своїй бульбашці */
+  --msg-scrim: rgba(0, 0, 0, 0.75);
+  --msg-scrim-blur: 8px;
 
-  /* Безпечні зони телефона. Класи на кшталт pt-[calc(var(--sat)+0.65rem)] вже
-     стояли в розмітці, але змінних ніхто не оголосив — і весь calc() мовчки
-     ставав недійсним, забираючи разом із собою верхній відступ. */
   --sat: env(safe-area-inset-top, 0px);
   --sab: env(safe-area-inset-bottom, 0px);
 
-  /* Шкала кеглів: шість щаблів на весь месенджер. Розсип 9/10/10.5/11/11.5/
-     12/12.5/13/14/14.5/15/16 читався як складений із чужих деталей. */
-  --t-micro: 11px;    /* бейджі, лічильники */
-  --t-meta: 12.5px;   /* час, підписи, другий рядок */
-  --t-body: 14px;     /* тіло списків і кнопок */
-  --t-read: 15.5px;   /* текст повідомлення й назва бесіди */
-  --t-title: 18px;    /* заголовок модалки */
-  --t-display: 22px;  /* єдиний великий заголовок екрана */
+  /* Шкала кеглів під мобільний екран */
+  --t-micro: 10px;    /* бейджі, лічильники */
+  --t-meta: 11.5px;   /* час, підписи, другий рядок */
+  --t-body: 13px;     /* тіло списків і кнопок */
+  --t-read: 14px;     /* текст повідомлення й назва бесіди */
+  --t-title: 16px;    /* заголовок модалки */
+  --t-display: 18px;  /* головний заголовок */
 
-  /* Радіуси: чотири значення. 6 — шов усередині групи, 10 — контрол,
-     16 — картка й модалка, коло — аватар і кругла кнопка. */
+  /* Радіуси */
   --r-seam: 6px;
   --r-control: 10px;
-  --r-card: 16px;
+  --r-card: 14px;
 
-  /* Три креми замість шести майже однакових. */
-  --c-canvas: #F7F5EE;  /* полотно під стрічкою */
-  --c-panel: #FDFCF9;   /* панелі, картки, шапки */
-  --c-sunk: #F1EBDD;    /* заглиблення: наведення, активний чіп */
-  --c-line: #E8E1D3;    /* єдина лінія-волосина */
+  /* Phantom Obsidian Theme Tokens */
+  --c-canvas: #0C110D;  /* полотно під стрічкою */
+  --c-panel: #121A15;   /* панелі, картки, шапки */
+  --c-sunk: #18221C;    /* заглиблення, наведення */
+  --c-line: rgba(255, 255, 255, 0.08); /* тонка лінія-волосина */
 
-  /* Система руху: 120 — відгук контрола, 200 — поява шару, 280 — перехід
-     цілого екрана. Більше швидкостей не потрібно. */
-  --m-tap: 120ms;
-  --m-layer: 200ms;
-  --m-screen: 280ms;
+  --msg-accent: #F4AF25;
+  --msg-accent-rgb: 244 175 37;
+  --msg-accent-soft: rgba(244, 175, 37, 0.15);
+  --msg-accent-soft-hover: rgba(244, 175, 37, 0.25);
+  --msg-accent-ink: #F4AF25;
+
+  /* Швидкості анімацій */
+  --m-tap: 100ms;
+  --m-layer: 180ms;
+  --m-screen: 240ms;
 }
 
 /* Теплий серпанок під модалкою: полотно лишається впізнаваним і теплим. */
@@ -262,41 +263,40 @@
 }
 
 .msg-read-more-fade-self {
-  background: linear-gradient(to top, rgba(246, 231, 218, 0.98) 0%, rgba(246, 231, 218, 0.75) 55%, rgba(246, 231, 218, 0) 100%);
+  background: linear-gradient(to top, rgba(20, 28, 22, 0.98) 0%, rgba(20, 28, 22, 0.75) 55%, rgba(20, 28, 22, 0) 100%);
 }
 
 .msg-read-more-fade-other {
-  background: linear-gradient(to top, rgba(255, 255, 255, 0.98) 0%, rgba(255, 255, 255, 0.75) 55%, rgba(255, 255, 255, 0) 100%);
+  background: linear-gradient(to top, rgba(18, 26, 21, 0.98) 0%, rgba(18, 26, 21, 0.75) 55%, rgba(18, 26, 21, 0) 100%);
 }
 
 /* 5. Rich Card density (Table, Chart, Tasks, Poll, Split-bill, Map, etc.) */
 .msg-density-card {
-  padding: 0.6rem 0.75rem 0.5rem 0.75rem;
+  padding: 0.5rem 0.65rem 0.45rem 0.65rem;
   width: 100%;
   max-width: min(520px, 100%);
 }
 
 /* 6. Media / Image / File Density */
 .msg-density-media {
-  padding: 0.35rem 0.4rem 0.4rem 0.35rem;
+  padding: 0.25rem 0.3rem 0.3rem 0.25rem;
   width: fit-content;
-  max-width: min(380px, 100%);
+  max-width: min(340px, 100%);
 }
 
-/* Дві бульбашки однієї родини на теплому полотні: чужа — біла картка, своя —
- * світло-теракотова. Тінь одна і мінімальна, hairline замість жирної межі. */
+/* Бульбашки Phantom Alien Elegance: своя — темний янтар, чужа — темний обсидіан */
 .msg-bubble-self {
-  background-color: #F6E7DA;
-  color: #21261F;
-  border: 1px solid #EAD6C4;
-  box-shadow: 0 1px 2px rgba(60, 44, 24, 0.05);
+  background: linear-gradient(135deg, rgba(244, 175, 37, 0.18) 0%, rgba(232, 122, 66, 0.12) 100%);
+  color: #FFFDF7;
+  border: 1px solid rgba(244, 175, 37, 0.35);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 .msg-bubble-other {
-  background-color: #FFFFFF;
-  color: #21261F;
-  border: 1px solid #E8E1D3;
-  box-shadow: 0 1px 2px rgba(60, 44, 24, 0.05);
+  background-color: #141D17;
+  color: #E8F0EA;
+  border: 1px solid rgba(255, 255, 255, 0.09);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
 
 /* Рядок метаданих (час, галочки) — правий нижній кут бульбашки. */
@@ -590,4 +590,159 @@
 
 :root[data-msg-accent] .bg-\[\#8C461A\] {
   background-color: var(--msg-accent-ink);
+}
+
+/* =========================================================
+   UNIVERSAL PHANTOM OBSIDIAN & AMBER GOLD THEME OVERRIDES
+   ========================================================= */
+
+body, html, #root {
+  background-color: #0C110D !important;
+  color: #F8FAF8;
+}
+
+/* Light surfaces remapped to Obsidian cards and panels
+ *
+ * `.bg-white` тут не випадково і не «для повноти». Ця тема перекриває
+ * ПЕРЕЛІЧЕНІ світлі класи, а `bg-white` у переліку не було — тож будь-який
+ * елемент на ньому лишався білим, а текст на ньому (`.text-[#21261F]` нижче)
+ * ставав майже білим. Заміряно 29.08.2026 у картці мосту: rgb(248,250,248)
+ * на rgb(255,255,255), контраст 1.02:1 — напис фізично невидимий, при тому
+ * що в DOM він є, tsc мовчить і жоден тест цього не бачить.
+ *
+ * У дереві 761 входження `bg-white` у 130 файлах, тож обходити їх поштучно —
+ * тиждень і гарантовані пропуски. Один рядок закриває клас.
+ */
+.bg-white,
+.bg-\[\#FDFCF9\],
+.bg-\[\#F7F5EE\],
+.bg-\[\#F7F5EF\],
+.bg-\[\#FAF7F0\],
+.bg-\[\#F9F7F1\],
+.bg-\[\#FAF8F5\],
+.bg-\[\#FDF5ED\],
+.bg-\[\#FDF4EC\],
+.bg-\[\#FBEBE6\],
+.bg-\[\#F4F1E8\] {
+  background-color: #0E1410 !important;
+  color: #F8FAF8;
+}
+
+.bg-\[\#FDFCF9\]\/95,
+.bg-\[\#FDFCF9\]\/\[0\.97\],
+.bg-\[\#F9F7F1\]\/95 {
+  background-color: rgba(14, 20, 16, 0.96) !important;
+  color: #F8FAF8;
+}
+
+.bg-\[\#F3EEE3\],
+.bg-\[\#F1EBDD\],
+.bg-\[\#F3ECE0\],
+.bg-\[\#F2ECE1\],
+.bg-\[\#E8DFD1\]\/60 {
+  background-color: #141C16 !important;
+  color: #F8FAF8;
+}
+
+.hover\:bg-\[\#F1EBDD\]:hover,
+.hover\:bg-\[\#F7F5EF\]:hover,
+.hover\:bg-\[\#F9F7F1\]:hover,
+.hover\:bg-\[\#F4F1E8\]:hover {
+  background-color: #18231C !important;
+  color: #FFFFFF !important;
+}
+
+/* Hairline borders */
+.border-\[\#E8E1D3\],
+.border-\[\#E6DFD3\],
+.border-\[\#DFD6C5\],
+.border-\[\#E0D5C2\],
+.border-\[\#E0D7C4\],
+.border-\[\#DDD4C4\],
+.border-\[\#DDD3BF\],
+.border-\[\#EFEBE0\] {
+  border-color: rgba(255, 255, 255, 0.08) !important;
+}
+
+/* High-contrast crisp typography */
+.text-\[\#21261F\],
+.text-\[\#1E2521\],
+.text-\[\#171B18\] {
+  color: #F8FAF8 !important;
+}
+
+/* `#64748B` — slate-500 із чужої палітри, що затесалась у другорядні підписи
+   («Ще немає повідомлень» у списку чатів). На обсидіані дає 4.01:1 — трохи
+   нижче за поріг, тобто саме той випадок, який очима не ловиться, а очі
+   втомлює. Родина та сама, тож і місце те саме. */
+.text-\[\#64748B\],
+.text-\[\#6E7568\],
+.text-\[\#5F6A60\],
+.text-\[\#8A9186\],
+.text-\[\#8C988E\],
+.text-\[\#7A8479\] {
+  color: #8EA093 !important;
+}
+
+/* PHANTOM Amber Gold Accents */
+.bg-\[\#D96C35\],
+.bg-\[\#C25925\],
+.bg-\[\#E87A42\] {
+  background-color: #F4AF25 !important;
+  color: #0C110D !important;
+}
+
+.hover\:bg-\[\#B85425\]:hover,
+.hover\:bg-\[\#AA491A\]:hover {
+  background-color: #FFB340 !important;
+  color: #0C110D !important;
+}
+
+.text-\[\#D96C35\],
+.text-\[\#C25925\],
+.text-\[\#E87A42\],
+.text-\[\#C98A2E\],
+.text-\[\#A9603A\] {
+  color: #F4AF25 !important;
+}
+
+.border-\[\#D96C35\],
+.border-\[\#C25925\],
+.border-\[\#E87A42\],
+.border-\[\#C98A2E\],
+.border-\[\#EBC7AE\],
+.border-\[\#E9BFAE\] {
+  border-color: #F4AF25 !important;
+}
+
+.border-l-\[\#D96C35\],
+.border-l-\[\#C25925\],
+.border-l-\[\#C98A2E\] {
+  border-left-color: #F4AF25 !important;
+}
+
+/* Inputs & Form Controls inside Modals */
+input[type="text"],
+input[type="search"],
+textarea {
+  background-color: #141C16 !important;
+  color: #F8FAF8 !important;
+  border-color: rgba(255, 255, 255, 0.1) !important;
+}
+
+input[type="text"]:focus,
+input[type="search"]:focus,
+textarea:focus {
+  border-color: rgba(244, 175, 37, 0.6) !important;
+  outline: none !important;
+}
+
+/* Modals and Drawers */
+[role="dialog"],
+.modal-content,
+.drawer-content {
+  background-color: #0E1410 !important;
+  border: 1px solid rgba(255, 255, 255, 0.1) !important;
+  color: #F8FAF8 !important;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.8) !important;
 }

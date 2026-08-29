@@ -12,7 +12,6 @@ import {
   ChevronDown,
   FolderEdit,
   Folder,
-  GripVertical,
   MoreVertical,
   Check,
   MoveRight,
@@ -229,7 +228,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   // Кола та перейменування живуть у сторі — сюди беремо їх напряму, бо пропів на них немає.
   const activeCircle = useMessengerStore((s) => s.activeCircle);
-  const setActiveCircle = useMessengerStore((s) => s.setActiveCircle);
   const updateChat = useMessengerStore((s) => s.updateChat);
 
   const [searchQuery, setSearchQuery] = useState('');
@@ -833,7 +831,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setActiveMenuChatId(null);
   };
 
-  // Find most recent active chat and its latest 3 messages in a folder
   const getMostRecentChatInFolder = (folder: SmartFolder): { chat: Chat; lastMessages: any[] } | null => {
     const matchingChats = chats.filter((c) => isChatInFolder(c, folder));
     if (matchingChats.length === 0) return null;
@@ -878,17 +875,19 @@ export const Sidebar: React.FC<SidebarProps> = ({
     soundFx.playTap();
   };
 
+  const isCompanion = typeof window !== 'undefined' && window.navigator.userAgent.includes('PhantomCompanion');
+
   return (
-    <aside className="flex h-full w-full md:w-auto bg-[#F9F7F1] border-r border-[#E6DFD3] select-none shrink-0 overflow-hidden relative">
+    <aside className="flex h-full w-full md:w-auto bg-[#0C110D] border-r border-[rgba(255,255,255,0.07)] select-none shrink-0 overflow-hidden relative">
       {/* Toast Notification Banner */}
       {toastMessage && (
-        <div className="absolute top-4 left-4 right-4 z-50 bg-[#F9F7F1]/95 border border-[#E6DFD3] text-[#E87A42] px-3 py-2 rounded-xl text-xs font-bold shadow-2xl text-center animate-in fade-in">
+        <div className="absolute top-4 left-4 right-4 z-50 bg-[#162219]/95 border border-[#F4AF25]/40 text-[#F4AF25] px-3 py-2 rounded-xl text-xs font-bold shadow-2xl text-center animate-in fade-in">
           {toastMessage}
         </div>
       )}
 
       {/* 0. Left Organic Dark Workspace / Folder Rail (Desktop & Tablet) */}
-      <div className="hidden md:flex w-14 sm:w-16 bg-[#F7F5EF] flex-col items-center py-3 border-r border-[#E8E1D3] shrink-0 justify-between select-none z-10">
+      <div className="hidden md:flex w-14 sm:w-16 bg-[#0E1410] flex-col items-center py-3 border-r border-[rgba(255,255,255,0.07)] shrink-0 justify-between select-none z-10">
         {/* Top: Current User Avatar & Workspace Folders */}
         <div className="flex flex-col items-center gap-3 w-full">
           <button
@@ -896,14 +895,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
               soundFx.playTap();
               navigate('/');
             }}
-            className="w-[36px] h-[36px] min-h-0 min-w-0 rounded-[10px] text-[#6E7568] hover:bg-[#F1EBDD]/60 hover:text-[#21261F] flex items-center justify-center transition-colors shrink-0"
+            className="w-[36px] h-[36px] min-h-0 min-w-0 rounded-[10px] text-[#8EA093] hover:bg-[#18231C] hover:text-white flex items-center justify-center transition-colors shrink-0"
             title="Повернутися до PHANTOM"
             aria-label="Повернутися до PHANTOM"
           >
             <LayoutGrid className="w-[18px] h-[18px]" strokeWidth={1.75} />
           </button>
 
-          <div className="w-7 h-px bg-[#E8E1D3]" />
+          <div className="w-7 h-px bg-[rgba(255,255,255,0.07)]" />
 
           <div
             onClick={onOpenUserProfile}
@@ -911,10 +910,10 @@ export const Sidebar: React.FC<SidebarProps> = ({
             title={`${currentUser.name} (${currentUser.circleRole || 'Користувач'}) — Профіль`}
           >
             <Avatar src={currentUser.avatar} name={currentUser.name} className="w-9 h-9" />
-            <span className="absolute bottom-0 right-0 w-1.5 h-1.5 bg-[#4C8A55] rounded-full ring-2 ring-[#F7F5EF]" />
+            <span className="absolute bottom-0 right-0 w-2 h-2 bg-[#F4AF25] rounded-full ring-2 ring-[#0E1410]" />
           </div>
 
-          <div className="w-7 h-px bg-[#E8E1D3]" />
+          <div className="w-7 h-px bg-[rgba(255,255,255,0.07)]" />
 
           {/* Smart Folders List */}
           <div className="flex flex-col items-center gap-1 w-full overflow-y-auto no-scrollbar max-h-[calc(100vh-210px)] py-0.5">
@@ -936,8 +935,8 @@ export const Sidebar: React.FC<SidebarProps> = ({
               <div
                 className={`w-[36px] h-[36px] rounded-[10px] flex items-center justify-center transition-colors ${
                   activeFolderId === 'all'
-                    ? 'bg-[#F1EBDD] text-[#21261F]'
-                    : 'text-[#6E7568] hover:bg-[#F1EBDD]/60 hover:text-[#21261F]'
+                    ? 'bg-[#F4AF25]/20 text-[#F4AF25] ring-1 ring-[#F4AF25]/40'
+                    : 'text-[#8EA093] hover:bg-[#18231C] hover:text-white'
                 }`}
               >
                 <MessagesSquare className="w-[18px] h-[18px]" strokeWidth={1.75} />
@@ -954,13 +953,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
               title="PHANTOM AI Synthesis Lab (Когнітивний полігон)"
             >
               <div
-                className="w-[36px] h-[36px] rounded-[10px] flex items-center justify-center transition-colors bg-amber-100/60 text-[#C25925] hover:bg-amber-100 hover:scale-105"
+                className="w-[36px] h-[36px] rounded-[10px] flex items-center justify-center transition-colors bg-[#F4AF25]/15 text-[#F4AF25] hover:bg-[#F4AF25]/25 hover:scale-105"
               >
                 <Sparkles className="w-[18px] h-[18px]" strokeWidth={1.75} />
               </div>
             </button>
 
-            {/* Smart Folders — «Усі» вже має власну кнопку вище, другий раз її не малюємо */}
+            {/* Smart Folders */}
             {smartFolders
               .filter((f) => !f.isArchived && f.id !== 'all')
               .map((folder) => {
@@ -990,15 +989,15 @@ export const Sidebar: React.FC<SidebarProps> = ({
                     <div
                       className={`w-[36px] h-[36px] rounded-[10px] flex items-center justify-center transition-colors relative ${
                         isDragTarget
-                          ? 'ring-1 ring-[#D96C35] bg-[#F1EBDD] text-[#21261F]'
+                          ? 'ring-1 ring-[#F4AF25] bg-[#18231C] text-[#F4AF25]'
                           : isActive
-                          ? 'bg-[#F1EBDD] text-[#21261F]'
-                          : 'text-[#6E7568] hover:bg-[#F1EBDD]/60 hover:text-[#21261F]'
+                          ? 'bg-[#F4AF25]/20 text-[#F4AF25] ring-1 ring-[#F4AF25]/40'
+                          : 'text-[#8EA093] hover:bg-[#18231C] hover:text-white'
                       }`}
                     >
                       <FolderGlyph className="w-[18px] h-[18px]" strokeWidth={1.75} />
                       {folderUnread > 0 && (
-                        <span className="absolute -top-0.5 -right-0.5 min-w-[15px] h-[15px] px-1 bg-[#D96C35] text-[#FDFCF9] text-[10px] font-semibold rounded-full ring-2 ring-[#F7F5EF] flex items-center justify-center leading-none">
+                        <span className="absolute -top-0.5 -right-0.5 min-w-[15px] h-[15px] px-1 bg-[#F4AF25] text-[#0C110D] text-[10px] font-bold rounded-full ring-2 ring-[#0E1410] flex items-center justify-center leading-none">
                           {folderUnread}
                         </span>
                       )}
@@ -1013,7 +1012,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 soundFx.playTap();
                 onOpenCreateFolder();
               }}
-              className="w-[36px] h-[36px] min-h-0 min-w-0 rounded-[10px] text-[#6E7568] hover:bg-[#F1EBDD]/60 hover:text-[#21261F] flex items-center justify-center transition-colors"
+              className="w-[36px] h-[36px] min-h-0 min-w-0 rounded-[10px] text-[#8EA093] hover:bg-[#18231C] hover:text-white flex items-center justify-center transition-colors"
               title="Створити нову папку / простір (+)"
             >
               <Plus className="w-[18px] h-[18px]" strokeWidth={1.75} />
@@ -1022,13 +1021,13 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
 
         {/* Bottom: Settings */}
-        <div className="flex flex-col items-center gap-2 pt-2 border-t border-[#E8E1D3] w-full">
+        <div className="flex flex-col items-center gap-2 pt-2 border-t border-[rgba(255,255,255,0.07)] w-full">
           <button
             onClick={() => {
               soundFx.playTap();
               onOpenSettings();
             }}
-            className="w-[36px] h-[36px] min-h-0 min-w-0 rounded-[10px] text-[#6E7568] hover:bg-[#F1EBDD]/60 hover:text-[#21261F] flex items-center justify-center transition-colors"
+            className="w-[36px] h-[36px] min-h-0 min-w-0 rounded-[10px] text-[#8EA093] hover:bg-[#18231C] hover:text-white flex items-center justify-center transition-colors"
             title="Налаштування застосунку"
           >
             <Settings className="w-[18px] h-[18px]" strokeWidth={1.75} />
@@ -1036,83 +1035,79 @@ export const Sidebar: React.FC<SidebarProps> = ({
         </div>
       </div>
 
-      {/* Main Chat List Container. На планшеті (768–1024) список вужчий, щоб
-          розмова поруч лишалася читабельною; lg:w-84 тут був мертвим класом —
-          такої сходинки в шкалі немає, тож ширина мовчки лишалась 320. */}
-      <div className="w-full md:w-[264px] phantom:w-[320px] flex flex-col h-full bg-[#FDFCF9] min-w-0 overflow-hidden relative">
+      {/* Main Chat List Container */}
+      <div className="w-full md:w-[280px] phantom:w-[320px] flex flex-col h-full bg-[#0C110D] min-w-0 overflow-hidden relative">
         {/* Mobile Top Brand & Quick Actions Header */}
-        <div className="md:hidden px-3 pt-[calc(var(--sat)+0.65rem)] pb-2.5 bg-[#F7F5EE] text-[#1E2521] flex items-center justify-between gap-2 shrink-0 shadow-sm border-b border-[#E6DFD3]">
+        <div className="md:hidden px-3 py-2 bg-[#0E1410] text-white flex items-center justify-between gap-2 shrink-0 shadow-sm border-b border-[rgba(255,255,255,0.07)]">
           <div className="flex items-center gap-2 min-w-0">
-            {/* Вихід із месенджера. На телефоні рейки немає, а разом з нею
-                зникала єдина дорога назад до PHANTOM — глухий кут. */}
-            <button
-              onClick={() => {
-                soundFx.playTap();
-                navigate('/');
-              }}
-              className="w-[34px] h-[34px] min-h-0 min-w-0 shrink-0 -ml-1 rounded-[10px] text-[#6E7568] hover:text-[#21261F] hover:bg-[#F1EBDD] flex items-center justify-center transition-colors"
-              title="Повернутися до PHANTOM"
-              aria-label="Повернутися до PHANTOM"
-            >
-              <LayoutGrid className="w-[18px] h-[18px]" strokeWidth={1.75} />
-            </button>
             <div
               onClick={onOpenUserProfile}
               className="relative cursor-pointer shrink-0 active:scale-95 transition-transform"
               title={`${currentUser.name} — Профіль`}
             >
-              <Avatar src={currentUser.avatar} name={currentUser.name} className="w-9 h-9" />
-              <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-[#4C8A55] rounded-full ring-2 ring-[#F7F5EE]" />
+              <Avatar src={currentUser.avatar} name={currentUser.name} className="w-8 h-8" />
+              <span className="absolute bottom-0 right-0 w-2 h-2 bg-[#F4AF25] rounded-full ring-2 ring-[#0E1410]" />
             </div>
             <div className="min-w-0">
               <div className="flex items-center gap-1.5">
-                <h1 className="font-semibold text-[15.5px] tracking-tight text-[#1E2521] flex items-center gap-1">
+                <h1 className="font-bold text-[14px] tracking-tight text-[#F8FAF8] flex items-center gap-1">
                   <span>PHANTOM</span>
-                  <Sparkles className="w-3.5 h-3.5 text-[#E87A42]" strokeWidth={1.75} />
+                  <Sparkles className="w-3.5 h-3.5 text-[#F4AF25]" strokeWidth={2} />
                 </h1>
               </div>
-              <p className="text-[11px] text-[color:var(--msg-meta)] flex items-center gap-1 leading-none mt-0.5 truncate">
-                <span className="w-1.5 h-1.5 rounded-full bg-[#4C8A55]" />
-                <span>{networkEngine.getTransportMode() === 'p2p' ? 'прямий канал' : 'авто'}</span>
+              <p className="text-[10px] text-[#8EA093] flex items-center gap-1 leading-none mt-0.5 truncate">
+                <span className="w-1.5 h-1.5 rounded-full bg-[#F4AF25] animate-pulse" />
+                <span>{networkEngine.getTransportMode() === 'p2p' ? 'P2P Mesh' : 'Sovereign Relay'}</span>
               </p>
             </div>
           </div>
 
-          {/* P2P звідси прибрано навмисне: він і так стоїть у нижній навігації
-              окремою кнопкою, а на 375 px четвертий значок з'їдав назву. */}
           <div className="flex items-center gap-1 shrink-0">
+            {onOpenP2PNetworkModal && (
+              <button
+                onClick={() => {
+                  soundFx.playTap();
+                  onOpenP2PNetworkModal();
+                }}
+                className="w-[32px] h-[32px] min-h-0 min-w-0 rounded-lg text-[#8EA093] hover:text-white hover:bg-[#18231C] flex items-center justify-center transition-colors active:scale-95"
+                title="P2P Протоколи"
+                aria-label="P2P Протоколи"
+              >
+                <Radio className="w-4 h-4 text-[#F4AF25]" strokeWidth={1.75} />
+              </button>
+            )}
             <button
               onClick={() => {
                 soundFx.playTap();
                 onOpenSettings();
               }}
-              className="w-[34px] h-[34px] min-h-0 min-w-0 rounded-[10px] text-[#6E7568] hover:text-[#21261F] hover:bg-[#F1EBDD] flex items-center justify-center transition-colors active:scale-95"
+              className="w-[32px] h-[32px] min-h-0 min-w-0 rounded-lg text-[#8EA093] hover:text-white hover:bg-[#18231C] flex items-center justify-center transition-colors active:scale-95"
               title="Налаштування"
               aria-label="Налаштування"
             >
-              <Settings className="w-[18px] h-[18px]" strokeWidth={1.75} />
+              <Settings className="w-4 h-4" strokeWidth={1.75} />
             </button>
             <button
               onClick={() => {
                 soundFx.playTap();
                 onNewChat();
               }}
-              className="w-[34px] h-[34px] min-h-0 min-w-0 rounded-[10px] bg-[#D96C35] text-[#FDFCF9] hover:bg-[#B85425] flex items-center justify-center transition-colors active:scale-95"
+              className="w-[32px] h-[32px] min-h-0 min-w-0 rounded-lg bg-[#F4AF25] text-[#0C110D] hover:bg-[#FFB340] flex items-center justify-center transition-colors active:scale-95 shadow-md font-bold"
               title="Новий діалог"
               aria-label="Створити новий діалог"
             >
-              <Plus className="w-[18px] h-[18px]" strokeWidth={1.75} />
+              <Plus className="w-4 h-4" strokeWidth={2.5} />
             </button>
           </div>
         </div>
 
         {/* 1. Folder Header and Action (Desktop) */}
-        <div className="hidden md:flex px-3.5 py-2.5 border-b border-[#E8E1D3] items-center justify-between gap-2 bg-[#FDFCF9]">
+        <div className="hidden md:flex px-3.5 py-2.5 border-b border-[rgba(255,255,255,0.07)] items-center justify-between gap-2 bg-[#0E1410]">
           <div className="flex items-baseline gap-1.5 min-w-0">
-            <h2 className="font-semibold text-[13px] text-[#21261F] truncate">
+            <h2 className="font-bold text-[13px] text-[#F8FAF8] truncate">
               {currentFolder.name}
             </h2>
-            <p className="text-[11.5px] text-[#6E7568] truncate">
+            <p className="text-[11.5px] text-[#8EA093] truncate">
               · {filteredChats.length} {filteredChats.length === 1 ? 'чат' : filteredChats.length < 5 ? 'чати' : 'чатів'}
               {totalUnread > 0 && ` · ${totalUnread} нових`}
             </p>
@@ -1122,7 +1117,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
             {currentFolder.id !== 'all' && !currentFolder.isBuiltIn && (
               <button
                 onClick={() => onOpenEditFolder(currentFolder)}
-                className="w-[30px] h-[30px] min-h-0 min-w-0 flex items-center justify-center text-[#6E7568] hover:text-[#21261F] hover:bg-[#F7F5EF] rounded-[10px] transition-colors"
+                className="w-[30px] h-[30px] min-h-0 min-w-0 flex items-center justify-center text-[#8EA093] hover:text-white hover:bg-[#18231C] rounded-[10px] transition-colors"
                 title="Налаштувати папку"
               >
                 <SlidersHorizontal className="w-4 h-4" strokeWidth={1.75} />
@@ -1133,41 +1128,30 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 soundFx.playTap();
                 onNewChat();
               }}
-              className="h-[30px] min-h-0 min-w-0 px-2.5 text-[#21261F] bg-transparent border border-[#E8E1D3] hover:bg-[#F7F5EF] rounded-[10px] transition-colors flex items-center gap-1.5 text-[12px] font-medium"
+              className="h-[30px] min-h-0 min-w-0 px-2.5 text-[#0C110D] bg-[#F4AF25] hover:bg-[#FFB340] rounded-[10px] transition-colors flex items-center gap-1.5 text-[12px] font-bold shadow-md"
               title="Новий діалог"
             >
-              <Plus className="w-[16px] h-[16px]" strokeWidth={1.75} />
+              <Plus className="w-[16px] h-[16px]" strokeWidth={2} />
               <span className="hidden sm:inline">Новий</span>
             </button>
           </div>
         </div>
 
-        {/* Drag-and-drop helper tip */}
-        {draggedChatId && (
-          <div className="bg-[#F7F5EF] border-b border-[#E8E1D3] text-[#6E7568] px-3 py-1.5 text-[11.5px] flex items-center justify-between">
-            <div className="flex items-center gap-1.5">
-              <GripVertical className="w-3.5 h-3.5" strokeWidth={1.75} />
-              <span>Перетягніть у потрібну папку на лівій панелі</span>
-            </div>
-            <span className="text-[11px] text-[color:var(--msg-meta)]">Відпустіть для додавання</span>
-          </div>
-        )}
-
         {/* 2. Search & Quick Filters */}
-        <div className="px-3 pt-2.5 pb-2 space-y-2 border-b border-[#E8E1D3] bg-[#FDFCF9]">
+        <div className="px-3 pt-2 pb-2 space-y-1.5 border-b border-[rgba(255,255,255,0.07)] bg-[#0C110D]">
           <div className="relative">
-            <Search className="w-[16px] h-[16px] text-[color:var(--msg-meta)] absolute left-2.5 top-1/2 -translate-y-1/2" strokeWidth={1.75} />
+            <Search className="w-[15px] h-[15px] text-[#64748B] absolute left-2.5 top-1/2 -translate-y-1/2" strokeWidth={1.75} />
             <input
               type="text"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Пошук людей, тем, повідомлень…"
-              className="w-full h-[32px] min-h-0 min-w-0 pl-8 pr-8 bg-transparent border border-[#E8E1D3] rounded-[10px] text-[13px] text-[#21261F] placeholder-[var(--msg-meta)] focus:outline-none focus:border-[#D2C8B4] transition-colors"
+              className="w-full h-[32px] min-h-0 min-w-0 pl-8 pr-8 bg-[#141C16] border border-[rgba(255,255,255,0.09)] rounded-[10px] text-[13px] text-[#F8FAF8] placeholder-[#64748B] focus:outline-none focus:border-[#F4AF25]/50 transition-colors"
             />
             {searchQuery && (
               <button
                 onClick={() => setSearchQuery('')}
-                className="absolute right-2.5 top-1/2 -translate-y-1/2 min-h-0 min-w-0 text-[color:var(--msg-meta)] hover:text-[#21261F]"
+                className="absolute right-2.5 top-1/2 -translate-y-1/2 min-h-0 min-w-0 text-[#8EA093] hover:text-white"
               >
                 <X className="w-3.5 h-3.5" strokeWidth={1.75} />
               </button>
@@ -1175,7 +1159,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
           </div>
 
           {/* Категорії чатів: Всі, Особисті, Групи, Канали, AI Простори, Збережене */}
-          <div className="msg-strip gap-1.5 -mx-0.5 px-0.5 pt-0.5 pb-1">
+          <div className="msg-strip gap-1 -mx-0.5 px-0.5 pt-0.5 pb-0.5">
             {[
               { id: 'all' as const, label: 'Всі' },
               { id: 'direct' as const, label: 'Особисті' },
@@ -1183,292 +1167,196 @@ export const Sidebar: React.FC<SidebarProps> = ({
               { id: 'channel' as const, label: 'Канали' },
               { id: 'ai' as const, label: 'AI Простори' },
               { id: 'saved' as const, label: 'Збережене' },
-            ].map((cat) => {
-              const isActive = activeCategory === cat.id && !showOnlyUnread;
+            ].map(({ id, label }) => {
+              const active = activeCategory === id;
               return (
                 <button
-                  key={cat.id}
+                  key={id}
                   onClick={() => {
                     soundFx.playTap();
-                    setShowOnlyUnread(false);
-                    setActiveCategory(cat.id);
+                    setActiveCategory(id);
                   }}
-                  className={`shrink-0 h-[26px] min-h-0 min-w-0 px-2.5 rounded-[10px] text-[12px] font-medium border transition-colors flex items-center ${
-                    isActive
-                      ? 'bg-[#F1EBDD] text-[#21261F] border-[#E0D7C4]'
-                      : 'bg-transparent text-[#6E7568] border-[#E8E1D3] hover:text-[#21261F] hover:bg-[#F7F5EF]'
+                  className={`h-[26px] min-h-0 min-w-0 px-2.5 rounded-full text-[11px] transition-all flex items-center gap-1 shrink-0 ${
+                    active
+                      ? 'bg-[#F4AF25]/20 text-[#F4AF25] border border-[#F4AF25]/40 font-bold shadow-[0_0_10px_rgba(244,175,37,0.15)]'
+                      : 'bg-[#141C16] text-[#8EA093] border border-[rgba(255,255,255,0.06)] hover:text-white hover:bg-[#18231C]'
                   }`}
                 >
-                  {cat.label}
+                  <span>{label}</span>
                 </button>
               );
             })}
-
-            {totalUnread > 0 && (
-              <button
-                onClick={() => {
-                  soundFx.playTap();
-                  setShowOnlyUnread(!showOnlyUnread);
-                }}
-                className={`shrink-0 h-[26px] min-h-0 min-w-0 px-2.5 rounded-[10px] text-[12px] font-medium border transition-colors flex items-center gap-1 ${
-                  showOnlyUnread
-                    ? 'bg-[#F1EBDD] text-[#21261F] border-[#E0D7C4]'
-                    : 'bg-transparent text-[#6E7568] border-[#E8E1D3] hover:text-[#21261F] hover:bg-[#F7F5EF]'
-                }`}
-              >
-                <span>Непрочитані</span>
-                <span className="text-[#D96C35] font-semibold">{totalUnread}</span>
-              </button>
-            )}
           </div>
         </div>
 
-        {/* 3. Chats List */}
-        <div className="flex-1 min-h-0 overflow-y-auto px-2 py-2 space-y-1">
-        {filteredChats.length === 0 ? (
-          <div className="py-12 text-center space-y-2 px-4">
-            <div className="w-9 h-9 rounded-[10px] text-[color:var(--msg-meta)] flex items-center justify-center mx-auto border border-[#E8E1D3]">
-              {React.createElement(folderIcon(currentFolder), { className: 'w-[18px] h-[18px]', strokeWidth: 1.75 })}
+        {/* 3. Chats Stream List */}
+        <div className="flex-1 overflow-y-auto no-scrollbar p-1.5 space-y-0.5 bg-[#0C110D]">
+          {filteredChats.length === 0 ? (
+            <div className="py-12 px-4 text-center">
+              <p className="text-xs text-[#8EA093] font-medium">Бесід не знайдено</p>
             </div>
-            <p className="text-[13px] font-semibold text-[#21261F]">
-              {searchQuery
-                ? 'Нічого не знайдено'
-                : showOnlyUnread
-                ? 'Непрочитаних немає'
-                : 'Тут поки порожньо'}
-            </p>
-            {(searchQuery || showOnlyUnread || activeCategory !== 'all' || activeCircle !== 'all' || currentFolder.id !== 'all') && (
-              <button
-                onClick={() => {
-                  setSearchQuery('');
-                  setShowOnlyUnread(false);
-                  setActiveCategory('all');
-                  setActiveCircle('all');
-                  onSelectFolder('all');
-                }}
-                className="text-[12.5px] min-h-0 min-w-0 text-[#6E7568] hover:text-[#21261F] transition-colors"
-              >
-                Показати всі бесіди
-              </button>
-            )}
-          </div>
-        ) : (
-          filteredChats.map((chat) => {
-            const isSelected = chat.id === activeChatId;
-            const msgs = chat.messages || [];
-            const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1] : undefined;
-            const isDraggingThis = draggedChatId === chat.id;
+          ) : (
+            filteredChats.map((chat) => {
+              const isSelected = activeChatId === chat.id;
+              const lastMsg = chat.messages && chat.messages.length > 0 ? chat.messages[chat.messages.length - 1] : null;
+              const lastKind = chat.lastKind || lastMsg?.type;
+              const lastSnippet = chat.lastSnippet || lastMsg?.text;
+              const lastAuthor = chat.lastAuthor || (lastMsg ? (lastMsg.isSelf ? 'Ви' : lastMsg.senderName?.split(' ')[0]) : '');
+              const timeLabel = chatTimeLabel(chat.lastAt || lastMsg?.sentAt);
+              const hasHistory = Boolean(lastKind || lastSnippet);
 
-            // Зведення з вузла — джерело правди; завантажена стрічка лише підстраховує.
-            const lastKind = chat.lastKind || lastMsg?.type;
-            const lastSnippet = chat.lastSnippet || lastMsg?.text;
-            const lastAuthor = chat.lastAuthor || lastMsg?.senderName;
-            const timeLabel = chatTimeLabel(chat.lastAt || lastMsg?.sentAt);
-            const hasHistory = Boolean(lastKind || lastSnippet);
-
-            return (
-              <div
-                key={chat.id}
-                id={`chat-item-${chat.id}`}
-                draggable={true}
-                onDragStart={(e) => handleDragStart(e, chat.id)}
-                onDragEnd={handleDragEnd}
-                onClick={() => {
-                  soundFx.playTap();
-                  onSelectChat(chat.id);
-                  setActiveMenuChatId(null);
-                }}
-                className={`group px-2.5 py-2.5 rounded-[10px] cursor-pointer transition-colors flex items-center gap-2.5 relative border ${
-                  isDraggingThis
-                    ? 'opacity-40 border-dashed border-[#D96C35] bg-[#F1EBDD]'
-                    : isSelected
-                    ? 'bg-[#F1EBDD] border-[#E0D7C4]'
-                    : 'bg-transparent border-transparent hover:bg-[#F7F5EF]'
-                }`}
-              >
-                {/* Avatar (40px) with Status Indicator */}
-                <div className="relative shrink-0">
-                  <Avatar src={chat.avatar} name={chat.title} className="w-10 h-10" />
-                  {chat.isOnline && (
-                    <span className="absolute -bottom-0.5 -right-0.5 w-1.5 h-1.5 bg-[#4C8A55] rounded-full ring-2 ring-[#FDFCF9]" />
-                  )}
-                </div>
-
-                <div className="flex-1 min-w-0">
-                  {/* Лінія 1: назва + тип/час */}
-                  <div className="flex items-baseline justify-between gap-2">
-                    <div className="flex items-center gap-1.5 min-w-0">
-                      <h3 className="font-semibold text-[13.5px] text-[#21261F] truncate leading-tight">
-                        {displayTitle(chat.title)}
-                      </h3>
-                      {chat.pinned && <Pin className="w-3 h-3 text-[color:var(--msg-meta)] shrink-0" strokeWidth={1.75} />}
-                      {chat.type === 'phantom' || chat.type === 'ai' ? (
-                        <span className="px-1.5 py-0.2 bg-purple-50 text-purple-800 border border-purple-200 rounded text-[9.5px] font-bold uppercase tracking-wider shrink-0">
-                          AI
-                        </span>
-                      ) : chat.type === 'channel' ? (
-                        <span className="px-1.5 py-0.2 bg-blue-50 text-blue-800 border border-blue-200 rounded text-[9.5px] font-bold uppercase tracking-wider shrink-0">
-                          Канал
-                        </span>
-                      ) : chat.type === 'group' ? (
-                        <span className="px-1.5 py-0.2 bg-amber-50 text-[#8C461A] border border-amber-200 rounded text-[9.5px] font-bold uppercase tracking-wider shrink-0">
-                          Група
-                        </span>
-                      ) : chat.circle === 'saved' || chat.id === 'chat_saved_notes' ? (
-                        <span className="px-1.5 py-0.2 bg-emerald-50 text-emerald-800 border border-emerald-200 rounded text-[9.5px] font-bold uppercase tracking-wider shrink-0">
-                          Vault
-                        </span>
-                      ) : (
-                        <span className="px-1.5 py-0.2 bg-[#F1EBDD] text-[#6E7568] border border-[#E0D7C4] rounded text-[9.5px] font-medium shrink-0">
-                          E2EE
-                        </span>
-                      )}
-                    </div>
-                    {timeLabel && (
-                      /* На ховері звільняємо кут під кнопку дій — інакше час ріжеться навпіл */
-                      <span
-                        className={`text-[11.5px] text-[color:var(--msg-meta)] shrink-0 leading-tight transition-opacity ${
-                          activeMenuChatId === chat.id ? 'opacity-0' : 'group-hover:opacity-0'
-                        }`}
-                      >
-                        {timeLabel}
-                      </span>
-                    )}
-                  </div>
-
-                  {/* Лінія 2: прев'ю + непрочитані */}
-                  <div className="flex items-center justify-between gap-2 mt-0.5">
-                    <div className="text-[12.5px] truncate leading-tight min-w-0 flex-1 flex items-center gap-1">
-                      {chat.draft ? (
-                        <span className="truncate">
-                          <span className="text-[#D96C35]">Чернетка: </span>
-                          <span className="text-[#6E7568]">{chat.draft}</span>
-                        </span>
-                      ) : !hasHistory ? (
-                        <span className="text-[color:var(--msg-meta)] truncate">Ще немає повідомлень</span>
-                      ) : lastKind && lastKind !== 'text' ? (
-                        <>
-                          {React.createElement(kindPreview[lastKind]?.icon || Paperclip, {
-                            className: 'w-3.5 h-3.5 text-[color:var(--msg-meta)] shrink-0',
-                            strokeWidth: 1.75,
-                          })}
-                          <span className="text-[#6E7568] truncate">
-                            {kindPreview[lastKind]?.label || 'Вкладення'}
-                          </span>
-                        </>
-                      ) : (
-                        <span className="text-[#6E7568] truncate">
-                          {lastAuthor ? `${lastAuthor}: ` : ''}
-                          {lastSnippet}
-                        </span>
-                      )}
-                    </div>
-
-                    {chat.unreadCount > 0 && (
-                      <span className="px-1.5 min-w-[18px] text-center bg-[#D96C35] text-[#FDFCF9] text-[10.5px] font-semibold rounded-full shrink-0 leading-[16px]">
-                        {chat.unreadCount}
-                      </span>
-                    )}
-                  </div>
-                </div>
-
-                {/* Три крапки: зʼявляються поверх часу, щоб не красти ширину в рядка */}
-                <button
-                  type="button"
-                  data-chat-menu-trigger
-                  onClick={(e) => {
-                    e.stopPropagation();
+              return (
+                <div
+                  key={chat.id}
+                  draggable={true}
+                  onDragStart={(e) => handleDragStart(e, chat.id)}
+                  onDragEnd={handleDragEnd}
+                  onClick={() => {
                     soundFx.playTap();
-                    if (activeMenuChatId === chat.id) {
-                      setActiveMenuChatId(null);
-                      return;
-                    }
-                    const r = e.currentTarget.getBoundingClientRect();
-                    setChatMenuPos({
-                      x: Math.min(Math.max(r.right - 224, 12), window.innerWidth - 236),
-                      y: Math.min(r.bottom + 6, window.innerHeight - 332),
-                    });
-                    setActiveMenuChatId(chat.id);
+                    onSelectChat(chat.id);
+                    setActiveMenuChatId(null);
                   }}
-                  className={`absolute right-1.5 top-1.5 w-[22px] h-[22px] min-h-0 min-w-0 flex items-center justify-center rounded-[6px] bg-[#F1EBDD] text-[#6E7568] hover:text-[#21261F] transition-opacity ${
-                    activeMenuChatId === chat.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                  className={`group relative flex items-center gap-2.5 p-2 rounded-xl cursor-pointer transition-all ${
+                    isSelected
+                      ? 'bg-[#18241D] border border-[#F4AF25]/30 shadow-sm'
+                      : 'hover:bg-[#141C16] border border-transparent'
                   }`}
-                  title="Дії з бесідою"
                 >
-                  <MoreVertical className="w-3.5 h-3.5" strokeWidth={1.75} />
-                </button>
-              </div>
-            );
-          })
-        )}
+                  <div className="relative shrink-0">
+                    <Avatar src={chat.avatar} name={chat.title} className="w-10 h-10" />
+                    {chat.isOnline && (
+                      <span className="absolute bottom-0 right-0 w-2.5 h-2.5 bg-[#F4AF25] rounded-full ring-2 ring-[#0C110D]" />
+                    )}
+                  </div>
+
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center justify-between gap-1.5">
+                      <div className="flex items-center gap-1.5 min-w-0">
+                        <h3 className="font-semibold text-[13px] text-[#F8FAF8] truncate leading-tight">
+                          {displayTitle(chat.title)}
+                        </h3>
+                        {chat.pinned && <Pin className="w-3 h-3 text-[#F4AF25] shrink-0" strokeWidth={2} />}
+                        {chat.type === 'phantom' || chat.type === 'ai' ? (
+                          <span className="px-1.5 py-0.2 bg-purple-950/80 text-purple-300 border border-purple-800/60 rounded text-[9px] font-bold uppercase tracking-wider shrink-0">
+                            AI
+                          </span>
+                        ) : chat.type === 'channel' ? (
+                          <span className="px-1.5 py-0.2 bg-blue-950/80 text-blue-300 border border-blue-800/60 rounded text-[9px] font-bold uppercase tracking-wider shrink-0">
+                            Канал
+                          </span>
+                        ) : chat.type === 'group' ? (
+                          <span className="px-1.5 py-0.2 bg-amber-950/80 text-amber-300 border border-amber-800/60 rounded text-[9px] font-bold uppercase tracking-wider shrink-0">
+                            Група
+                          </span>
+                        ) : chat.circle === 'saved' || chat.id === 'chat_saved_notes' ? (
+                          <span className="px-1.5 py-0.2 bg-emerald-950/80 text-emerald-300 border border-emerald-800/60 rounded text-[9px] font-bold uppercase tracking-wider shrink-0">
+                            Vault
+                          </span>
+                        ) : (
+                          <span className="px-1.5 py-0.2 bg-[#18231C] text-[#8EA093] border border-[rgba(255,255,255,0.06)] rounded text-[9px] font-medium shrink-0">
+                            E2EE
+                          </span>
+                        )}
+                      </div>
+                      {timeLabel && (
+                        <span className={`text-[11px] text-[#64748B] shrink-0 leading-tight transition-opacity ${
+                          activeMenuChatId === chat.id ? 'opacity-0' : 'group-hover:opacity-0'
+                        }`}>
+                          {timeLabel}
+                        </span>
+                      )}
+                    </div>
+
+                    <div className="flex items-center justify-between gap-2 mt-0.5">
+                      <div className="text-[12px] truncate leading-tight min-w-0 flex-1 flex items-center gap-1">
+                        {chat.draft ? (
+                          <span className="truncate">
+                            <span className="text-[#F4AF25]">Чернетка: </span>
+                            <span className="text-[#8EA093]">{chat.draft}</span>
+                          </span>
+                        ) : !hasHistory ? (
+                          <span className="text-[#64748B] truncate">Ще немає повідомлень</span>
+                        ) : lastKind && lastKind !== 'text' && kindPreview[lastKind] ? (
+                          <span className="text-[#8EA093] truncate flex items-center gap-1">
+                            {React.createElement(kindPreview[lastKind].icon, { className: 'w-3 h-3 text-[#F4AF25] shrink-0' })}
+                            <span>{kindPreview[lastKind].label}</span>
+                          </span>
+                        ) : (
+                          <span className="text-[#8EA093] truncate">
+                            {lastAuthor ? `${lastAuthor}: ` : ''}
+                            {lastSnippet}
+                          </span>
+                        )}
+                      </div>
+
+                      {chat.unreadCount > 0 && (
+                        <span className="px-1.5 min-w-[18px] text-center bg-[#F4AF25] text-[#0C110D] text-[10px] font-bold rounded-full shrink-0 leading-[16px] shadow-sm">
+                          {chat.unreadCount}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Action Menu (3 dots) */}
+                  <button
+                    type="button"
+                    data-chat-menu-trigger
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      soundFx.playTap();
+                      if (activeMenuChatId === chat.id) {
+                        setActiveMenuChatId(null);
+                        return;
+                      }
+                      const r = e.currentTarget.getBoundingClientRect();
+                      setChatMenuPos({
+                        x: Math.min(Math.max(r.right - 224, 12), window.innerWidth - 236),
+                        y: Math.min(r.bottom + 6, window.innerHeight - 332),
+                      });
+                      setActiveMenuChatId(chat.id);
+                    }}
+                    className={`absolute right-1.5 top-1.5 w-[22px] h-[22px] min-h-0 min-w-0 flex items-center justify-center rounded-[6px] bg-[#18231C] text-[#8EA093] hover:text-white transition-opacity ${
+                      activeMenuChatId === chat.id ? 'opacity-100' : 'opacity-0 group-hover:opacity-100'
+                    }`}
+                    title="Дії з бесідою"
+                  >
+                    <MoreVertical className="w-3.5 h-3.5" strokeWidth={1.75} />
+                  </button>
+                </div>
+              );
+            })
+          )}
         </div>
 
-        {/* Mobile Bottom Navigation Bar. Плаваючої кнопки «+» тут більше немає:
-            її класи (bottom-18, w-13, z-25) не існують у шкалі, тож вона
-            падала в потік десь посеред списку — а те саме «Новий діалог» уже
-            стоїть у шапці списку. */}
-        <nav className="md:hidden border-t border-[#E6DFD3] bg-[#FDFCF9] px-3 pt-2 pb-[calc(var(--sab)+0.5rem)] flex items-center justify-around shrink-0 z-10">
-          <button
-            onClick={() => {
-              soundFx.playTap();
-              onSelectFolder('all');
-            }}
-            className={`flex flex-col items-center gap-1 text-[11px] font-medium transition-colors active:scale-95 ${
-              activeFolderId === 'all' ? 'text-[#C25925]' : 'text-[#6E7568] hover:text-[#21261F]'
-            }`}
-          >
-            <MessagesSquare className="w-[18px] h-[18px]" strokeWidth={1.75} />
-            <span>Чати</span>
-          </button>
-
-          <button
-            onClick={() => {
-              soundFx.playChime();
-              useAISynthesisStore.getState().setStudioOpen(true);
-            }}
-            className="flex flex-col items-center gap-1 text-[11px] font-medium text-[#C25925] hover:text-[#AA491A] transition-colors active:scale-95"
-          >
-            <Sparkles className="w-[18px] h-[18px]" strokeWidth={1.75} />
-            <span>AI Студія</span>
-          </button>
-
-          {onOpenP2PNetworkModal && (
+        {/* Mobile Bottom Navigation Bar (Hidden in Companion) */}
+        {!isCompanion && (
+          <nav className="md:hidden border-t border-[rgba(255,255,255,0.07)] bg-[#0E1410] px-3 pt-2 pb-[calc(var(--sab)+0.5rem)] flex items-center justify-around shrink-0 z-10">
             <button
               onClick={() => {
                 soundFx.playTap();
-                onOpenP2PNetworkModal();
+                onSelectFolder('all');
               }}
-              className="flex flex-col items-center gap-1 text-[11px] font-medium text-[#6E7568] hover:text-[#21261F] transition-colors active:scale-95"
+              className={`flex flex-col items-center gap-1 text-[11px] font-medium transition-colors active:scale-95 ${
+                activeFolderId === 'all' ? 'text-[#F4AF25]' : 'text-[#8EA093] hover:text-white'
+              }`}
             >
-              <Radio className="w-[18px] h-[18px]" strokeWidth={1.75} />
-              <span>Мережа</span>
+              <MessagesSquare className="w-[18px] h-[18px]" strokeWidth={1.75} />
+              <span>Чати</span>
             </button>
-          )}
 
-          <button
-            onClick={() => {
-              soundFx.playTap();
-              onOpenUserProfile();
-            }}
-            className="flex flex-col items-center gap-1 text-[11px] font-medium text-[#6E7568] hover:text-[#21261F] transition-colors active:scale-95"
-          >
-            <div className="relative">
-              <Avatar src={currentUser.avatar} name={currentUser.name} className="w-[18px] h-[18px] rounded-full" />
-            </div>
-            <span>Профіль</span>
-          </button>
-
-          <button
-            onClick={() => {
-              soundFx.playTap();
-              onOpenSettings();
-            }}
-            className="flex flex-col items-center gap-1 text-[11px] font-medium text-[#6E7568] hover:text-[#21261F] transition-colors active:scale-95"
-          >
-            <Settings className="w-[18px] h-[18px]" strokeWidth={1.75} />
-            <span>Параметри</span>
-          </button>
-        </nav>
+            <button
+              onClick={() => {
+                soundFx.playChime();
+                useAISynthesisStore.getState().setStudioOpen(true);
+              }}
+              className="flex flex-col items-center gap-1 text-[11px] font-medium text-[#F4AF25] hover:text-[#FFB340] transition-colors active:scale-95"
+            >
+              <Sparkles className="w-[18px] h-[18px]" strokeWidth={1.75} />
+              <span>AI Студія</span>
+            </button>
+          </nav>
+        )}
+      </div>
 
       {/* 5.5 Меню бесіди (три крапки) — fixed, щоб його не різав скрол списку */}
       {menuChat && chatMenuPos && (
@@ -2438,7 +2326,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
             </span>
           </button>
         )}
-      </div>
       </div>
     </aside>
   );

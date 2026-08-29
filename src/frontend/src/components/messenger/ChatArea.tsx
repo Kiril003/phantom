@@ -920,26 +920,26 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
   let lastDateLabel = '';
 
   return (
-    <div className="flex-1 flex flex-col h-full bg-[#FDFCF9] relative overflow-hidden select-none">
+    <div className="flex-1 flex flex-col h-full bg-[#0C110D] relative overflow-hidden select-none">
       {/* 1. Pinned Messages Banner */}
       {pinnedMessages.length > 0 && (() => {
         const pinnedMsg = pinnedMessages[currentPinnedIndex] || pinnedMessages[0];
         if (!pinnedMsg) return null;
         return (
-          <div className="px-4 py-2 bg-[#FDFCF9] border-b border-[#E8E1D3] flex items-center justify-between gap-3 shrink-0 z-10 text-[#21261F]">
+          <div className="px-3.5 py-1.5 bg-[#0E1410] border-b border-[rgba(255,255,255,0.07)] flex items-center justify-between gap-3 shrink-0 z-10 text-[#F8FAF8]">
             <div
               onClick={() => scrollToMessage(pinnedMsg.id)}
-              className="flex items-center gap-2.5 min-w-0 cursor-pointer group flex-1"
+              className="flex items-center gap-2 min-w-0 cursor-pointer group flex-1"
             >
-              <Pin className="w-4 h-4 text-[#6E7568] shrink-0" strokeWidth={1.75} />
+              <Pin className="w-3.5 h-3.5 text-[#F4AF25] shrink-0" strokeWidth={2} />
               <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-1.5 text-[13px] font-semibold text-[#21261F]">
+                <div className="flex items-center gap-1.5 text-[12px] font-bold text-[#F8FAF8]">
                   <span>Закріплене ({Math.min(currentPinnedIndex + 1, pinnedMessages.length)} з {pinnedMessages.length})</span>
-                  <span className="text-[11.5px] text-[#6E7568] font-normal">
+                  <span className="text-[10.5px] text-[#8EA093] font-normal">
                     від {pinnedMsg.senderName}
                   </span>
                 </div>
-                <p className="text-[12.5px] text-[#6E7568] truncate">
+                <p className="text-[11.5px] text-[#8EA093] truncate">
                   {pinnedMsg.text || pinnedMsg.tableData?.title || pinnedMsg.type}
                 </p>
               </div>
@@ -954,7 +954,7 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
                         (prev) => (prev - 1 + pinnedMessages.length) % pinnedMessages.length
                       )
                     }
-                    className="p-1 hover:bg-[#F9F7F1] rounded-lg text-[#5F6A60] hover:text-[#1E2521] transition-colors"
+                    className="p-1 hover:bg-[#18231C] rounded-lg text-[#8EA093] hover:text-white transition-colors"
                     title="Попереднє закріплене"
                   >
                     <ChevronLeft className="w-3.5 h-3.5" strokeWidth={1.75} />
@@ -963,7 +963,7 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
                     onClick={() =>
                       setCurrentPinnedIndex((prev) => (prev + 1) % pinnedMessages.length)
                     }
-                    className="p-1 hover:bg-[#F9F7F1] rounded-lg text-[#5F6A60] hover:text-[#1E2521] transition-colors"
+                    className="p-1 hover:bg-[#18231C] rounded-lg text-[#8EA093] hover:text-white transition-colors"
                     title="Наступне закріплене"
                   >
                     <ChevronRight className="w-3.5 h-3.5" strokeWidth={1.75} />
@@ -973,7 +973,7 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
 
               <button
                 onClick={() => onTogglePinMessage?.(pinnedMsg.id)}
-                className="p-1 text-[#5F6A60] hover:text-[#E87A42] hover:bg-[#F9F7F1] rounded-lg transition-colors"
+                className="p-1 text-[#8EA093] hover:text-[#F4AF25] hover:bg-[#18231C] rounded-lg transition-colors"
                 title="Відкріпити"
               >
                 <X className="w-3.5 h-3.5" strokeWidth={1.75} />
@@ -985,7 +985,7 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
 
       {/* 2. In-Chat Search Bar Strip */}
       {isSearching && (
-        <div className="px-4 py-2 bg-[#F3ECE0] border-b border-[#DFD6C5] flex items-center justify-between gap-3 shrink-0 z-10">
+        <div className="px-3.5 py-1.5 bg-[#141C16] border-b border-[rgba(255,255,255,0.07)] flex items-center justify-between gap-3 shrink-0 z-10 text-white">
           <div className="flex items-center gap-2 flex-1 max-w-md">
             <Search className="w-4 h-4 text-[#8C988E]" strokeWidth={1.75} />
             <input
@@ -1062,18 +1062,18 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
 
       {/* 3. Messages Feed & Work OS Canvas Split Container */}
       <div className="relative flex-1 min-h-0 flex flex-row overflow-hidden">
-        {/* Floating Quick Action: Canvas Split Toggle */}
+        {/* Floating Quick Action: Canvas Split Toggle (Desktop Only) */}
         {!isCanvasSplitOpen && (
-          <div className="absolute top-3 right-4 z-20">
+          <div className="hidden md:block absolute top-3 right-4 z-20">
             <button
               onClick={() => {
                 soundFx.playTap();
                 setIsCanvasSplitOpen(true);
               }}
-              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-[#6E7568] hover:text-[#21261F] bg-[#FAF7F0]/90 hover:bg-[#F3EDE0] border border-[#E5DEC9] backdrop-blur-sm shadow-2xs transition-all"
+              className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg text-xs font-semibold text-[#8EA093] hover:text-[#F8FAF8] bg-[#141C16]/90 hover:bg-[#18231C] border border-[rgba(255,255,255,0.08)] backdrop-blur-sm shadow-md transition-all"
               title="Відкрити спліт-документ"
             >
-              <Layers className="w-3.5 h-3.5 text-[#D96C35]" />
+              <Layers className="w-3.5 h-3.5 text-[#F4AF25]" />
               <span>Документ</span>
             </button>
           </div>

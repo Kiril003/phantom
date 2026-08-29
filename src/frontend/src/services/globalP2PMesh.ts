@@ -5,6 +5,28 @@
 
 import { Message } from '../types/messenger';
 
+/**
+ * Адреса брокера НЕ живе в коді, і шлях закритий, поки її не задали.
+ *
+ * Так було: тут стояв зашитий `wss://broker.emqx.io:8084/mqtt` — безкоштовний
+ * ЧУЖИЙ публічний брокер. У теми `phantom/mesh/user/<нік>` летів цілий об'єкт
+ * Message відкритим текстом, разом з іменем, ніком і аватаркою; тема містила
+ * справжній нік. Будь-хто у світі, підписавшись на `phantom/mesh/#`, читав це.
+ *
+ * І це не було теорією: з ЦЬОГО джерела зібрано веб-бандл, що лежить у git
+ * телефона, і 29.08 logcat живого пристрою показав рядок
+ * «[GlobalMesh] Connected to MQTT broker as @kiril» з підпискою на
+ * `phantom/mesh/user/kiril`. Тобто присутність власника публікувалась у чужий
+ * брокер з його ж телефона.
+ *
+ * Тому дефолт — ВИМКНЕНО. Порожня змінна означає «дороги немає», а не «спробуй
+ * якийсь брокер»: тихий запасний варіант тут і був причиною витоку.
+ */
+const BROKER_URL = String(import.meta.env?.VITE_MESH_BROKER_URL ?? '').trim();
+
+/** Чи є в цієї збірки взагалі шлях у глобальну пошту. */
+export const meshBrokerConfigured = (): boolean => BROKER_URL !== '';
+
 export interface RemoteMeshPacket {
   version: number;
   type: 'message:new' | 'message:reaction' | 'message:typing' | 'call:signal' | 'presence:ping' | 'presence:pong';
@@ -79,18 +101,35 @@ class GlobalP2PMeshService {
   }
 
   /**
-   * Підключення до глобального публічного WSS MQTT брокера
+   * Стан глобальної пошти — рівно те, що можна чесно написати в UI.
+   * `enabled: false` означає, що ця збірка НЕ має шляху назовні взагалі.
+   */
+  public status(): { enabled: boolean; connected: boolean; broker: string } {
+    return {
+      enabled: BROKER_URL !== '',
+      connected: this.isConnected,
+      // Назовні віддаємо лише хост, без токенів і шляху.
+      broker: BROKER_URL ? BROKER_URL.replace(/^\w+:\/\//, '').split('/')[0] : '',
+    };
+  }
+
+  /**
+   * Підключення до брокера, заданого VITE_MESH_BROKER_URL. Без нього — no-op.
    */
   public connect() {
     if (typeof WebSocket === 'undefined') return;
+    // Брокера не задано — дороги немає. Мовчазної спроби кудись підключитись
+    // тут бути не може: саме вона й виносила текст назовні.
+    if (!BROKER_URL) {
+      this.isConnected = false;
+      return;
+    }
     if (this.ws && (this.ws.readyState === WebSocket.OPEN || this.ws.readyState === WebSocket.CONNECTING)) {
       return;
     }
 
     try {
-      // Підключаємось до глобального надійного WSS-брокера
-      const wsUrl = 'wss://broker.emqx.io:8084/mqtt';
-      const ws = new WebSocket(wsUrl, ['mqtt']);
+      const ws = new WebSocket(BROKER_URL, ['mqtt']);
       ws.binaryType = 'arraybuffer';
       this.ws = ws;
 
@@ -297,6 +336,10 @@ class GlobalP2PMeshService {
   }
 
   public publish(topic: string, data: any) {
+    // Вузьке місце всього виходу назовні: якщо брокера не задано, звідси не
+    // йде жоден байт. Перевірка стоїть тут, а не лише у викликачів, щоб нова
+    // гілка коду не могла обійти її, не помітивши.
+    if (!BROKER_URL) return;
     if (!this.isConnected || !this.ws || this.ws.readyState !== WebSocket.OPEN) {
       return;
     }

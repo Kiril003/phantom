@@ -9,7 +9,12 @@ import {
   Check,
   Radio,
   Globe,
-  Zap
+  Zap,
+  Sparkles,
+  Key,
+  Eye,
+  EyeOff,
+  ExternalLink,
 } from 'lucide-react';
 import { soundFx } from '../../utils/messengerSound';
 import { IdentityPanel } from './IdentityPanel';
@@ -21,6 +26,7 @@ import { messengerAccent, MESSENGER_ACCENTS } from '../../services/messengerAcce
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { messengerApi, type NodeConversation } from '../../services/messengerApi';
 import { useMessengerStore } from '../../stores/messengerStore';
+import { aiEngineService, type AIProvider } from '../../services/aiEngineService';
 
 // Доказові розмови позначки не мають — їх створювали звичайним API. Тому не
 // вгадуємо мовчки: за назвою лише ПРОПОНУЄМО, а викреслює власник.
@@ -69,7 +75,14 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClearHistory,
   onOpenP2PNetworkModal,
 }) => {
-  const [activeTab, setActiveTab] = useState<'appearance' | 'network' | 'notifications' | 'privacy' | 'data'>('appearance');
+  const [activeTab, setActiveTab] = useState<'appearance' | 'ai' | 'network' | 'notifications' | 'privacy' | 'data'>('appearance');
+  // AI Settings state
+  const [aiConfig, setAiConfig] = useState(aiEngineService.getConfig());
+  const [showApiKey, setShowApiKey] = useState(false);
+  const [isTestingAi, setIsTestingAi] = useState(false);
+  const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
+  const [isSavedAi, setIsSavedAi] = useState(false);
+
   // Відтінок і кегль живуть у власних сховищах: вибір мусить пережити
   // закриття модалки і F5, інакше це знову напис на кнопці замість пікселів.
   const accentColor = useSyncExternalStore(messengerAccent.subscribe, messengerAccent.getSnapshot);
@@ -85,7 +98,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   // Дозвіл могли змінити в налаштуваннях сайту, поки вкладка стояла відкритою.
   useEffect(() => {
-    if (isOpen) notificationPrefs.sync();
+    if (isOpen) {
+      notificationPrefs.sync();
+      setAiConfig(aiEngineService.getConfig());
+      setTestResult(null);
+    }
   }, [isOpen]);
 
   useEffect(() => {
@@ -106,6 +123,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       alive = false;
     };
   }, [isOpen, activeTab]);
+
+  const handleSaveAi = () => {
+    soundFx.playTap();
+    aiEngineService.saveConfig(aiConfig);
+    setIsSavedAi(true);
+    setTimeout(() => setIsSavedAi(false), 2500);
+  };
+
+  const handleTestAi = async () => {
+    soundFx.playTap();
+    setIsTestingAi(true);
+    setTestResult(null);
+    aiEngineService.saveConfig(aiConfig);
+    const res = await aiEngineService.testConnection();
+    setIsTestingAi(false);
+    setTestResult(res);
+  };
 
   const sweepDemos = async () => {
     if (!candidates || picked.size === 0) return;
@@ -143,17 +177,25 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 phantom-scrim flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150">
-      <div className="bg-[#FDFCF9] border-t sm:border border-[#DDD4C4] rounded-t-3xl sm:rounded-3xl w-full max-w-lg max-h-[92dvh] sm:max-h-[85vh] flex flex-col shadow-2xl overflow-hidden select-none animate-in slide-in-from-bottom sm:zoom-in-95 duration-150 pb-[var(--sab)] sm:pb-0 text-[#1E2521]">
+    <div
+      onClick={(e) => {
+        if (e.target === e.currentTarget) {
+          soundFx.playTap();
+          onClose();
+        }
+      }}
+      className="fixed inset-0 z-50 phantom-scrim flex items-end sm:items-center justify-center p-0 sm:p-4 animate-in fade-in duration-150"
+    >
+      <div className="bg-[#0E1410] border-t sm:border border-[rgba(255,255,255,0.09)] rounded-t-3xl sm:rounded-3xl w-full max-w-lg max-h-[92dvh] sm:max-h-[85vh] flex flex-col shadow-2xl overflow-hidden select-none animate-in slide-in-from-bottom sm:zoom-in-95 duration-150 pb-[var(--sab)] sm:pb-0 text-[#F8FAF8]">
         {/* Mobile Pull Indicator */}
-        <div className="sm:hidden pt-2.5 pb-1 flex justify-center bg-[#FDFCF9]">
-          <div className="w-12 h-1 bg-[#F1EDE3] rounded-full" />
+        <div className="sm:hidden pt-2.5 pb-1 flex justify-center bg-[#0E1410]">
+          <div className="w-12 h-1 bg-white/20 rounded-full" />
         </div>
 
         {/* Header */}
-        <div className="px-4 sm:px-5 py-3.5 sm:py-4 border-b border-[#E6DFD3] flex items-center justify-between bg-[#FDFCF9]">
+        <div className="px-4 sm:px-5 py-3.5 sm:py-4 border-b border-[rgba(255,255,255,0.07)] flex items-center justify-between bg-[#0E1410]">
           <div className="flex items-center gap-2.5">
-            <h3 className="font-extrabold text-base text-[#1E2521]">Налаштування месенджера</h3>
+            <h3 className="font-extrabold text-base text-[#F8FAF8]">Налаштування месенджера</h3>
           </div>
 
           <button
@@ -161,18 +203,19 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               soundFx.playTap();
               onClose();
             }}
-            className="p-1.5 text-[#5F6A60] hover:text-[#1E2521] hover:bg-[#F1EDE3] rounded-xl transition-colors"
+            className="p-1.5 text-[#8EA093] hover:text-white hover:bg-[#18231C] rounded-xl transition-colors"
           >
             <X className="w-5 h-5" strokeWidth={1.75} />
           </button>
         </div>
 
         {/* Tab Selection */}
-        <div className="msg-strip px-4 pt-2 pb-1.5 bg-[#F7F5EE] border-b border-[#E6DFD3] gap-1.5 shrink-0">
+        <div className="msg-strip px-4 pt-2 pb-1.5 bg-[#0C110D] border-b border-[rgba(255,255,255,0.07)] gap-1.5 shrink-0">
           {[
             { id: 'appearance', label: 'Оформлення', icon: Palette },
+            { id: 'ai', label: 'Нейромережа & API', icon: Sparkles },
             { id: 'network', label: 'Мережа & P2P', icon: Radio },
-            { id: 'notifications', label: 'Сповіщення & Звук', icon: Bell },
+            { id: 'notifications', label: 'Сповіщення', icon: Bell },
             { id: 'privacy', label: 'Приватність', icon: Shield },
             { id: 'data', label: 'Дані & Резерв', icon: Download },
           ].map((t) => {
@@ -187,8 +230,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 }}
                 className={`px-3 py-1.5 rounded-xl text-xs font-semibold flex items-center gap-1.5 whitespace-nowrap shrink-0 transition-all ${
                   isActive
-                    ? 'bg-[#F9F7F1] text-[#E87A42] border border-[#DDD4C4] shadow-sm'
-                    : 'bg-[#FDFCF9] hover:bg-[#F9F7F1] text-[#5F6A60] hover:text-[#1E2521] border border-[#E6DFD3]'
+                    ? 'bg-[#18231C] text-[#F4AF25] border border-[#F4AF25]/40 shadow-sm'
+                    : 'bg-[#141C16] hover:bg-[#18231C] text-[#8EA093] hover:text-white border border-[rgba(255,255,255,0.06)]'
                 }`}
               >
                 <Icon className="w-3.5 h-3.5" />
@@ -268,6 +311,201 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     <span className="text-[11px] text-[#7A8479]">Стрічка й список бесід разом</span>
                   </button>
                 </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: AI & LLM ENGINES */}
+          {activeTab === 'ai' && (
+            <div className="space-y-4">
+              {/* Provider selection card */}
+              <div className="p-4 bg-[#141C16] rounded-2xl border border-[rgba(255,255,255,0.08)] space-y-3">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-lg bg-[#F4AF25]/15 text-[#F4AF25] flex items-center justify-center">
+                      <Sparkles className="w-4 h-4" />
+                    </div>
+                    <div>
+                      <h4 className="font-bold text-xs text-[#F8FAF8]">Провайдер штучного інтелекту</h4>
+                      <p className="text-[10.5px] text-[#8EA093]">Оберіть LLM рушій для розмов та агентів</p>
+                    </div>
+                  </div>
+                  <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-[#F4AF25]/20 text-[#F4AF25] border border-[#F4AF25]/30 uppercase">
+                    {aiConfig.provider}
+                  </span>
+                </div>
+
+                <div className="grid grid-cols-2 sm:grid-cols-3 gap-2 pt-1">
+                  {[
+                    { id: 'gemini' as AIProvider, name: 'Google Gemini', desc: 'Gemini 2.5 Flash / Pro', badge: 'Швидкий & Free' },
+                    { id: 'openai' as AIProvider, name: 'OpenAI', desc: 'GPT-4o, GPT-4o-mini', badge: 'GPT-4o' },
+                    { id: 'groq' as AIProvider, name: 'Groq Cloud', desc: 'Llama 3.3, DeepSeek R1', badge: 'Ультрашвидкість' },
+                    { id: 'anthropic' as AIProvider, name: 'Anthropic', desc: 'Claude 3.5 Sonnet', badge: 'Sonnet' },
+                    { id: 'custom' as AIProvider, name: 'Локальний / Ollama', desc: 'vLLM, Ollama, LM Studio', badge: 'Self-hosted' },
+                  ].map((p) => {
+                    const isSelected = aiConfig.provider === p.id;
+                    return (
+                      <button
+                        key={p.id}
+                        type="button"
+                        onClick={() => {
+                          soundFx.playTap();
+                          const defaultModel =
+                            p.id === 'gemini' ? 'gemini-2.5-flash' :
+                            p.id === 'openai' ? 'gpt-4o' :
+                            p.id === 'groq' ? 'llama-3.3-70b-versatile' :
+                            p.id === 'anthropic' ? 'claude-3-5-sonnet-20241022' : 'llama3';
+                          setAiConfig({ ...aiConfig, provider: p.id, model: defaultModel });
+                          setTestResult(null);
+                        }}
+                        className={`p-2.5 rounded-xl border text-left transition-all ${
+                          isSelected
+                            ? 'bg-[#18231C] border-[#F4AF25] shadow-sm'
+                            : 'bg-[#0E1410] border-[rgba(255,255,255,0.06)] hover:bg-[#141C16]'
+                        }`}
+                      >
+                        <div className="flex items-center justify-between gap-1 mb-1">
+                          <span className="font-bold text-[12px] text-[#F8FAF8] truncate">{p.name}</span>
+                          {isSelected && <span className="w-1.5 h-1.5 rounded-full bg-[#F4AF25]" />}
+                        </div>
+                        <p className="text-[10px] text-[#8EA093] truncate">{p.desc}</p>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+
+              {/* API Key Input */}
+              <div className="p-4 bg-[#141C16] rounded-2xl border border-[rgba(255,255,255,0.08)] space-y-3">
+                <div className="flex items-center justify-between">
+                  <label className="flex items-center gap-1.5 text-xs font-bold text-[#8EA093]">
+                    <Key className="w-3.5 h-3.5 text-[#F4AF25]" />
+                    <span>API Ключ ({aiConfig.provider.toUpperCase()})</span>
+                  </label>
+                  {aiConfig.provider === 'gemini' && (
+                    <a
+                      href="https://aistudio.google.com/app/apikey"
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="text-[11px] font-bold text-[#F4AF25] hover:underline flex items-center gap-1"
+                    >
+                      <span>Отримати ключ Gemini в AI Studio</span>
+                      <ExternalLink className="w-3 h-3" />
+                    </a>
+                  )}
+                </div>
+
+                <div className="relative">
+                  <input
+                    type={showApiKey ? 'text' : 'password'}
+                    value={aiConfig.apiKey}
+                    onChange={(e) => {
+                      setAiConfig({ ...aiConfig, apiKey: e.target.value });
+                      setTestResult(null);
+                    }}
+                    placeholder={
+                      aiConfig.provider === 'gemini'
+                        ? 'Вставте AIzaSy... (Gemini API Key)'
+                        : aiConfig.provider === 'openai'
+                        ? 'sk-proj-... (OpenAI API Key)'
+                        : aiConfig.provider === 'anthropic'
+                        ? 'sk-ant-... (Anthropic API Key)'
+                        : 'Вставте ваш API Ключ'
+                    }
+                    className="w-full h-[40px] pl-3 pr-20 bg-[#0E1410] border border-[rgba(255,255,255,0.09)] rounded-xl text-[13px] text-[#F8FAF8] placeholder-[#64748B] focus:outline-none focus:border-[#F4AF25]"
+                  />
+                  <div className="absolute right-2 top-1/2 -translate-y-1/2 flex items-center gap-1">
+                    <button
+                      type="button"
+                      onClick={() => setShowApiKey(!showApiKey)}
+                      className="p-1.5 text-[#8EA093] hover:text-white rounded-lg"
+                      title={showApiKey ? 'Сховати' : 'Показати'}
+                    >
+                      {showApiKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                {/* Model selection */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 pt-1">
+                  <div>
+                    <label className="block text-[11px] font-bold text-[#8EA093] mb-1">
+                      Модель
+                    </label>
+                    <input
+                      type="text"
+                      value={aiConfig.model}
+                      onChange={(e) => setAiConfig({ ...aiConfig, model: e.target.value })}
+                      placeholder="gemini-2.5-flash"
+                      className="w-full h-[36px] px-3 bg-[#0E1410] border border-[rgba(255,255,255,0.09)] rounded-xl text-[12px] text-[#F8FAF8] focus:outline-none focus:border-[#F4AF25]"
+                    />
+                  </div>
+
+                  {aiConfig.provider === 'custom' && (
+                    <div>
+                      <label className="block text-[11px] font-bold text-[#8EA093] mb-1">
+                        Endpoint URL
+                      </label>
+                      <input
+                        type="text"
+                        value={aiConfig.baseUrl || ''}
+                        onChange={(e) => setAiConfig({ ...aiConfig, baseUrl: e.target.value })}
+                        placeholder="http://localhost:11434"
+                        className="w-full h-[36px] px-3 bg-[#0E1410] border border-[rgba(255,255,255,0.09)] rounded-xl text-[12px] text-[#F8FAF8] focus:outline-none focus:border-[#F4AF25]"
+                      />
+                    </div>
+                  )}
+                </div>
+
+                {/* Test Result Feedback */}
+                {testResult && (
+                  <div
+                    className={`p-3 rounded-xl border text-xs font-semibold flex items-center gap-2 ${
+                      testResult.ok
+                        ? 'bg-emerald-950/40 border-emerald-500/40 text-emerald-400'
+                        : 'bg-red-950/40 border-red-500/40 text-red-400'
+                    }`}
+                  >
+                    {testResult.ok ? <Check className="w-4 h-4 shrink-0" /> : <X className="w-4 h-4 shrink-0" />}
+                    <span className="flex-1">{testResult.message}</span>
+                  </div>
+                )}
+
+                {/* Action Buttons */}
+                <div className="flex items-center gap-2 pt-2">
+                  <button
+                    type="button"
+                    disabled={isTestingAi}
+                    onClick={handleTestAi}
+                    className="flex-1 h-[38px] px-3 bg-[#18231C] hover:bg-[#202E25] text-[#F8FAF8] border border-[rgba(255,255,255,0.1)] rounded-xl text-xs font-bold transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50"
+                  >
+                    <Zap className="w-3.5 h-3.5 text-[#F4AF25]" />
+                    <span>{isTestingAi ? 'Тестування…' : 'Перевірити зв\'язок'}</span>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={handleSaveAi}
+                    className="flex-1 h-[38px] px-3 bg-[#F4AF25] hover:bg-[#FFB340] text-[#0C110D] rounded-xl text-xs font-extrabold transition-colors flex items-center justify-center gap-1.5 shadow-md"
+                  >
+                    {isSavedAi ? <Check className="w-4 h-4" /> : <Sparkles className="w-4 h-4" />}
+                    <span>{isSavedAi ? 'Збережено!' : 'Зберегти ключ'}</span>
+                  </button>
+                </div>
+              </div>
+
+              {/* System Instruction Persona */}
+              <div className="p-4 bg-[#141C16] rounded-2xl border border-[rgba(255,255,255,0.08)] space-y-2">
+                <label className="block text-xs font-bold text-[#8EA093]">
+                  Системна інструкція цифрового симбіонта
+                </label>
+                <textarea
+                  rows={3}
+                  value={aiConfig.systemInstruction}
+                  onChange={(e) => setAiConfig({ ...aiConfig, systemInstruction: e.target.value })}
+                  placeholder="Вкажіть правила поведінки агента..."
+                  className="w-full p-2.5 bg-[#0E1410] border border-[rgba(255,255,255,0.09)] rounded-xl text-[12px] text-[#F8FAF8] focus:outline-none focus:border-[#F4AF25]"
+                />
               </div>
             </div>
           )}

@@ -119,10 +119,10 @@ export const AISynthesisStudioModal: React.FC = () => {
   };
 
   return (
-    <div className="fixed inset-0 z-50 bg-black/65 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 select-none animate-in fade-in">
-      <div className="w-full h-full max-w-[1720px] max-h-[980px] bg-[#FAF7F0] border border-[#E0D7C6] rounded-3xl shadow-2xl flex flex-col overflow-hidden text-[#1E2521]">
+    <div className="fixed inset-0 z-50 bg-black/80 backdrop-blur-md flex items-center justify-center p-2 sm:p-4 select-none animate-in fade-in">
+      <div className="w-full h-full max-w-[1720px] max-h-[980px] bg-[#0C110D] border border-[rgba(255,255,255,0.09)] rounded-3xl shadow-2xl flex flex-col overflow-hidden text-[#F8FAF8]">
         {/* Top Master Header */}
-        <div className="px-4 py-3 bg-white/95 backdrop-blur-md border-b border-[#E8E1D3] flex items-center justify-between gap-3 shrink-0">
+        <div className="px-4 py-3 bg-[#0E1410] border-b border-[rgba(255,255,255,0.07)] flex items-center justify-between gap-3 shrink-0">
           {/* Left: Avatar Core & Studio Brand */}
           <div className="flex items-center gap-3">
             <ProceduralAvatarCore
@@ -133,14 +133,14 @@ export const AISynthesisStudioModal: React.FC = () => {
             />
             <div>
               <div className="flex items-center gap-2">
-                <h2 className="font-extrabold text-sm text-[#1E2521] tracking-tight">
+                <h2 className="font-extrabold text-sm text-[#F8FAF8] tracking-tight">
                   PHANTOM AI Synthesis Lab
                 </h2>
-                <span className="px-2 py-0.5 bg-amber-50 text-[#C25925] border border-amber-200 rounded-full text-[10px] font-bold uppercase tracking-wider">
+                <span className="px-2 py-0.5 bg-[#F4AF25]/15 text-[#F4AF25] border border-[#F4AF25]/40 rounded-full text-[10px] font-bold uppercase tracking-wider">
                   Cognitive Polygon
                 </span>
               </div>
-              <p className="text-[11px] text-[#6E7568] truncate max-w-xs">
+              <p className="text-[11px] text-[#8EA093] truncate max-w-xs">
                 {currentSession?.title || 'Персональний когнітивний полігон'}
               </p>
             </div>
@@ -156,15 +156,15 @@ export const AISynthesisStudioModal: React.FC = () => {
                   setIsPersonaDropdownOpen(!isPersonaDropdownOpen);
                   setIsModelDropdownOpen(false);
                 }}
-                className="px-3 py-1.5 bg-[#FAF7F0] hover:bg-[#F2ECE1] border border-[#DDD3BF] rounded-2xl flex items-center gap-2 text-xs font-bold text-[#1E2521] transition-colors"
+                className="px-3 py-1.5 bg-[#141C16] hover:bg-[#18231C] border border-[rgba(255,255,255,0.09)] rounded-2xl flex items-center gap-2 text-xs font-bold text-[#F8FAF8] transition-colors"
               >
                 <span>{PERSONA_LABELS[activePersona]?.icon || '🏛️'}</span>
                 <span>{PERSONA_LABELS[activePersona]?.name || 'Thought Architect'}</span>
-                <ChevronDown className="w-3.5 h-3.5 text-[#8A9186]" />
+                <ChevronDown className="w-3.5 h-3.5 text-[#8EA093]" />
               </button>
 
               {isPersonaDropdownOpen && (
-                <div className="absolute top-full mt-1 left-0 w-64 bg-white border border-[#E0D7C6] rounded-2xl shadow-xl p-1.5 z-50 space-y-1">
+                <div className="absolute top-full mt-1 left-0 w-64 bg-[#141C16] border border-[rgba(255,255,255,0.1)] rounded-2xl shadow-2xl p-1.5 z-50 space-y-1">
                   {(Object.keys(PERSONA_LABELS) as CognitivePersona[]).map((pKey) => (
                     <button
                       key={pKey}
@@ -178,13 +178,13 @@ export const AISynthesisStudioModal: React.FC = () => {
                         setIsPersonaDropdownOpen(false);
                       }}
                       className={`w-full p-2 rounded-xl text-left flex items-start gap-2 text-xs transition-colors ${
-                        activePersona === pKey ? 'bg-[#FAF7F0] border border-[#DDD3BF] font-bold' : 'hover:bg-[#F5F1E6]'
+                        activePersona === pKey ? 'bg-[#18231C] border border-[#F4AF25]/40 text-[#F4AF25] font-bold' : 'hover:bg-[#18231C] text-[#F8FAF8]'
                       }`}
                     >
                       <span className="text-base">{PERSONA_LABELS[pKey].icon}</span>
                       <div>
-                        <div className="font-bold text-[#1E2521]">{PERSONA_LABELS[pKey].name}</div>
-                        <div className="text-[10px] text-[#6E7568]">{PERSONA_LABELS[pKey].vibe}</div>
+                        <div className="font-bold">{PERSONA_LABELS[pKey].name}</div>
+                        <div className="text-[10px] text-[#8EA093]">{PERSONA_LABELS[pKey].vibe}</div>
                       </div>
                     </button>
                   ))}
@@ -200,17 +200,17 @@ export const AISynthesisStudioModal: React.FC = () => {
                   setIsModelDropdownOpen(!isModelDropdownOpen);
                   setIsPersonaDropdownOpen(false);
                 }}
-                className="px-3 py-1.5 bg-[#FAF7F0] hover:bg-[#F2ECE1] border border-[#DDD3BF] rounded-2xl flex items-center gap-2 text-xs font-bold text-[#1E2521] transition-colors"
+                className="px-3 py-1.5 bg-[#141C16] hover:bg-[#18231C] border border-[rgba(255,255,255,0.09)] rounded-2xl flex items-center gap-2 text-xs font-bold text-[#F8FAF8] transition-colors"
               >
-                <Cpu className="w-3.5 h-3.5 text-[#C25925]" />
+                <Cpu className="w-3.5 h-3.5 text-[#F4AF25]" />
                 <span className="truncate max-w-[140px]">{activeModelObj.name}</span>
-                <span className="text-[10px] text-[#8A9186]">({activeModelObj.latencyAvgMs}ms)</span>
-                <ChevronDown className="w-3.5 h-3.5 text-[#8A9186]" />
+                <span className="text-[10px] text-[#8EA093]">({activeModelObj.latencyAvgMs}ms)</span>
+                <ChevronDown className="w-3.5 h-3.5 text-[#8EA093]" />
               </button>
 
               {isModelDropdownOpen && (
-                <div className="absolute top-full mt-1 right-0 w-80 bg-white border border-[#E0D7C6] rounded-2xl shadow-xl p-2 z-50 space-y-1.5">
-                  <div className="px-2 py-1 text-[10.5px] font-bold text-[#8A9186] uppercase tracking-wider">
+                <div className="absolute top-full mt-1 right-0 w-80 bg-[#141C16] border border-[rgba(255,255,255,0.1)] rounded-2xl shadow-2xl p-2 z-50 space-y-1.5">
+                  <div className="px-2 py-1 text-[10.5px] font-bold text-[#8EA093] uppercase tracking-wider">
                     Матриця нейрорушіїв (Model Matrix)
                   </div>
                   {AVAILABLE_MODELS.map((model) => (
@@ -221,16 +221,16 @@ export const AISynthesisStudioModal: React.FC = () => {
                         setIsModelDropdownOpen(false);
                       }}
                       className={`w-full p-2.5 rounded-xl text-left flex flex-col gap-1 transition-colors ${
-                        activeModel === model.id ? 'bg-[#FAF7F0] border border-[#DDD3BF]' : 'hover:bg-[#F5F1E6]'
+                        activeModel === model.id ? 'bg-[#18231C] border border-[#F4AF25]/40 text-[#F4AF25]' : 'hover:bg-[#18231C] text-[#F8FAF8]'
                       }`}
                     >
                       <div className="flex items-center justify-between w-full">
-                        <span className="font-bold text-xs text-[#1E2521]">{model.name}</span>
-                        <span className="text-[10px] font-mono px-1.5 py-0.5 bg-amber-50 text-amber-900 rounded font-bold">
+                        <span className="font-bold text-xs">{model.name}</span>
+                        <span className="text-[10px] font-mono px-1.5 py-0.5 bg-[#0E1410] text-[#F4AF25] border border-[#F4AF25]/30 rounded font-bold">
                           {model.latencyAvgMs}ms
                         </span>
                       </div>
-                      <p className="text-[10.5px] text-[#6E7568] line-clamp-1">{model.description}</p>
+                      <p className="text-[10.5px] text-[#8EA093] line-clamp-1">{model.description}</p>
                     </button>
                   ))}
                 </div>
@@ -248,11 +248,11 @@ export const AISynthesisStudioModal: React.FC = () => {
               }}
               className={`px-3 py-1.5 rounded-2xl border text-xs font-bold flex items-center gap-1.5 transition-all ${
                 layoutMode === 'round_table'
-                  ? 'bg-purple-100 text-purple-900 border-purple-300 shadow-2xs'
-                  : 'bg-[#FAF7F0] hover:bg-[#F2ECE1] text-[#1E2521] border-[#DDD3BF]'
+                  ? 'bg-[#F4AF25] text-[#0C110D] border-[#F4AF25]'
+                  : 'bg-[#141C16] hover:bg-[#18231C] text-[#F8FAF8] border-[rgba(255,255,255,0.08)]'
               }`}
             >
-              <Users className="w-3.5 h-3.5 text-purple-700" />
+              <Users className="w-3.5 h-3.5" />
               <span className="hidden sm:inline">Круглий стіл</span>
             </button>
 
@@ -261,13 +261,13 @@ export const AISynthesisStudioModal: React.FC = () => {
               onClick={() => setTreeOfThoughtOpen(!isTreeOfThoughtOpen)}
               className={`px-3 py-1.5 rounded-2xl border text-xs font-bold flex items-center gap-1.5 transition-all ${
                 isTreeOfThoughtOpen
-                  ? 'bg-purple-100 text-purple-900 border-purple-300 shadow-2xs'
-                  : 'bg-[#FAF7F0] hover:bg-[#F2ECE1] text-[#1E2521] border-[#DDD3BF]'
+                  ? 'bg-purple-950/80 text-purple-300 border-purple-800'
+                  : 'bg-[#141C16] hover:bg-[#18231C] text-[#F8FAF8] border-[rgba(255,255,255,0.08)]'
               }`}
             >
-              <GitBranch className="w-3.5 h-3.5 text-purple-700" />
+              <GitBranch className="w-3.5 h-3.5 text-[#F4AF25]" />
               <span className="hidden sm:inline">Дерево думок</span>
-              <span className="w-4 h-4 rounded-full bg-purple-200 text-purple-900 text-[10px] flex items-center justify-center font-bold">
+              <span className="w-4 h-4 rounded-full bg-[#18231C] text-[#F4AF25] border border-[#F4AF25]/30 text-[10px] flex items-center justify-center font-bold">
                 {currentSession?.thoughtNodes.length || 1}
               </span>
             </button>
@@ -277,8 +277,8 @@ export const AISynthesisStudioModal: React.FC = () => {
               onClick={() => setToolsDrawerOpen(!isToolsDrawerOpen)}
               className={`p-2 rounded-2xl border text-xs font-bold transition-all ${
                 isToolsDrawerOpen
-                  ? 'bg-amber-100 text-amber-900 border-amber-300 shadow-2xs'
-                  : 'bg-[#FAF7F0] hover:bg-[#F2ECE1] text-[#1E2521] border-[#DDD3BF]'
+                  ? 'bg-[#F4AF25]/20 text-[#F4AF25] border-[#F4AF25]/40'
+                  : 'bg-[#141C16] hover:bg-[#18231C] text-[#8EA093] border-[rgba(255,255,255,0.08)]'
               }`}
               title="Локальні інструменти MCP (Файли, SQL, P2P)"
             >
@@ -290,8 +290,8 @@ export const AISynthesisStudioModal: React.FC = () => {
               onClick={() => setMediaInspectorOpen(!isMediaInspectorOpen)}
               className={`p-2 rounded-2xl border text-xs font-bold transition-all ${
                 isMediaInspectorOpen
-                  ? 'bg-orange-100 text-orange-900 border-orange-300 shadow-2xs'
-                  : 'bg-[#FAF7F0] hover:bg-[#F2ECE1] text-[#1E2521] border-[#DDD3BF]'
+                  ? 'bg-[#F4AF25]/20 text-[#F4AF25] border-[#F4AF25]/40'
+                  : 'bg-[#141C16] hover:bg-[#18231C] text-[#8EA093] border-[rgba(255,255,255,0.08)]'
               }`}
               title="Мультимодальний інспектор медіа"
             >
@@ -301,7 +301,7 @@ export const AISynthesisStudioModal: React.FC = () => {
             {/* Voice Mode */}
             <button
               onClick={() => setVoiceModeActive(true)}
-              className="px-3 py-1.5 bg-[#C25925] hover:bg-[#AA491A] text-white rounded-2xl text-xs font-bold flex items-center gap-1.5 shadow-2xs transition-colors"
+              className="px-3 py-1.5 bg-[#F4AF25] hover:bg-[#FFB340] text-[#0C110D] font-bold rounded-2xl text-xs flex items-center gap-1.5 shadow-md transition-colors"
             >
               <Mic className="w-3.5 h-3.5" />
               <span className="hidden md:inline">Голос</span>
@@ -310,7 +310,7 @@ export const AISynthesisStudioModal: React.FC = () => {
             {/* Close Studio Button */}
             <button
               onClick={() => setStudioOpen(false)}
-              className="w-8 h-8 rounded-2xl bg-[#F2ECE1] hover:bg-[#EAE3D3] text-[#1E2521] flex items-center justify-center transition-colors ml-1"
+              className="w-8 h-8 rounded-2xl bg-[#141C16] hover:bg-[#18231C] text-[#8EA093] hover:text-white flex items-center justify-center transition-colors ml-1"
             >
               <X className="w-4 h-4" />
             </button>
@@ -325,15 +325,15 @@ export const AISynthesisStudioModal: React.FC = () => {
           ) : (
             <>
               {/* LEFT PANE: Dialogue & Reasoning Stream */}
-              <div className="flex-1 flex flex-col min-w-0 bg-[#FAF7F0] h-full">
+              <div className="flex-1 flex flex-col min-w-0 bg-[#0C110D] h-full">
                 {/* RAG Context Banner */}
-                <div className="px-4 py-1.5 bg-[#F5F1E6] border-b border-[#EBE3D3] flex items-center justify-between text-[11px] text-[#6E7568]">
+                <div className="px-4 py-1.5 bg-[#0E1410] border-b border-[rgba(255,255,255,0.07)] flex items-center justify-between text-[11px] text-[#8EA093]">
                   <div className="flex items-center gap-2">
-                    <Database className="w-3 h-3 text-[#C25925]" />
-                    <span className="font-semibold text-[#1E2521]">RAG Контекст:</span>
+                    <Database className="w-3 h-3 text-[#F4AF25]" />
+                    <span className="font-semibold text-[#F8FAF8]">RAG Контекст:</span>
                     <span className="truncate max-w-xs">3 простори підключено (Aura Architecture, Vault, CS Theory)</span>
                   </div>
-                  <span className="text-[10px] text-emerald-800 font-bold bg-emerald-100/80 px-2 py-0.5 rounded-full">
+                  <span className="text-[10px] text-emerald-400 font-bold bg-emerald-950/80 border border-emerald-800/60 px-2 py-0.5 rounded-full">
                     Zero-Leak Privacy
                   </span>
                 </div>
@@ -346,7 +346,7 @@ export const AISynthesisStudioModal: React.FC = () => {
 
                     if (isSystem) {
                       return (
-                        <div key={msg.id} className="p-2.5 bg-amber-50/70 border border-amber-200/80 rounded-2xl text-center text-xs text-amber-900 max-w-lg mx-auto font-medium">
+                        <div key={msg.id} className="p-2.5 bg-[#18241D] border border-[#F4AF25]/30 rounded-2xl text-center text-xs text-[#F4AF25] max-w-lg mx-auto font-medium">
                           {msg.content}
                         </div>
                       );
@@ -360,12 +360,12 @@ export const AISynthesisStudioModal: React.FC = () => {
                         }`}
                       >
                         {/* Message Header */}
-                        <div className="flex items-center gap-1.5 text-[10.5px] text-[#8A9186] mb-1 px-1">
-                          <span className="font-bold text-[#1E2521]">{isUser ? 'Кирило (Оператор)' : 'PHANTOM AI Core'}</span>
+                        <div className="flex items-center gap-1.5 text-[10.5px] text-[#8EA093] mb-1 px-1">
+                          <span className="font-bold text-[#F8FAF8]">{isUser ? 'Кирило (Оператор)' : 'PHANTOM AI Core'}</span>
                           <span>·</span>
                           <span>{msg.timestamp}</span>
                           {msg.modelUsed && (
-                            <span className="px-1.5 py-0.2 bg-[#F2ECE1] rounded text-[9.5px] text-[#6E7568] font-mono">
+                            <span className="px-1.5 py-0.2 bg-[#141C16] border border-[rgba(255,255,255,0.06)] rounded text-[9.5px] text-[#8EA093] font-mono">
                               {msg.modelUsed}
                             </span>
                           )}
@@ -373,28 +373,28 @@ export const AISynthesisStudioModal: React.FC = () => {
 
                         {/* Step-by-Step Chain-of-Thought (Accordion for Assistant) */}
                         {!isUser && msg.thoughtSteps && msg.thoughtSteps.length > 0 && (
-                          <div className="w-full mb-2 bg-purple-50/50 border border-purple-200/70 rounded-2xl overflow-hidden text-xs">
+                          <div className="w-full mb-2 bg-purple-950/60 border border-purple-800/60 rounded-2xl overflow-hidden text-xs">
                             <button
                               onClick={() => toggleThoughtAccordion(msg.id)}
-                              className="w-full p-2.5 flex items-center justify-between text-purple-900 font-bold hover:bg-purple-100/50 transition-colors"
+                              className="w-full p-2.5 flex items-center justify-between text-purple-300 font-bold hover:bg-purple-900/40 transition-colors"
                             >
                               <div className="flex items-center gap-2">
-                                <Brain className="w-4 h-4 text-purple-700" />
+                                <Brain className="w-4 h-4 text-purple-400" />
                                 <span>Процес мислення (Chain-of-Thought) · {msg.thinkingDurationMs}ms</span>
                               </div>
                               <ChevronDown className={`w-3.5 h-3.5 transition-transform ${expandedThoughts[msg.id] ? 'rotate-180' : ''}`} />
                             </button>
 
                             {expandedThoughts[msg.id] && (
-                              <div className="p-3 bg-white/70 border-t border-purple-100 space-y-2 text-xs">
+                              <div className="p-3 bg-[#0E1410] border-t border-purple-900/40 space-y-2 text-xs">
                                 {msg.thoughtSteps.map((step) => (
                                   <div key={step.id} className="flex items-start gap-2">
-                                    <span className="w-4 h-4 rounded-full bg-purple-200 text-purple-900 text-[10px] flex items-center justify-center font-bold shrink-0 mt-0.5">
+                                    <span className="w-4 h-4 rounded-full bg-purple-900 text-purple-200 text-[10px] flex items-center justify-center font-bold shrink-0 mt-0.5">
                                       ✓
                                     </span>
                                     <div>
-                                      <div className="font-bold text-[#1E2521]">{step.title}</div>
-                                      <div className="text-[11px] text-[#6E7568]">{step.detail}</div>
+                                      <div className="font-bold text-[#F8FAF8]">{step.title}</div>
+                                      <div className="text-[11px] text-[#8EA093]">{step.detail}</div>
                                     </div>
                                   </div>
                                 ))}
@@ -407,8 +407,8 @@ export const AISynthesisStudioModal: React.FC = () => {
                         <div
                           className={`p-4 rounded-3xl text-xs leading-relaxed ${
                             isUser
-                              ? 'bg-[#C25925] text-white shadow-xs rounded-br-xs'
-                              : 'bg-white text-[#1E2521] border border-[#E0D7C6] shadow-2xs rounded-bl-xs'
+                              ? 'bg-[#F4AF25] text-[#0C110D] font-medium shadow-md rounded-br-xs'
+                              : 'bg-[#141C16] text-[#F8FAF8] border border-[rgba(255,255,255,0.08)] shadow-md rounded-bl-xs'
                           }`}
                         >
                           <div className="whitespace-pre-wrap">{msg.content}</div>
@@ -421,9 +421,9 @@ export const AISynthesisStudioModal: React.FC = () => {
                               <button
                                 key={opt.branchId}
                                 onClick={() => handleQuickBranch(msg.id, opt.title, opt.prompt)}
-                                className="px-2.5 py-1 bg-white hover:bg-[#F2ECE1] border border-[#DDD3BF] rounded-xl text-[11px] font-semibold text-[#1E2521] flex items-center gap-1 shadow-2xs transition-colors"
+                                className="px-2.5 py-1 bg-[#141C16] hover:bg-[#18231C] border border-[rgba(255,255,255,0.08)] rounded-xl text-[11px] font-semibold text-[#F8FAF8] flex items-center gap-1 shadow-sm transition-colors"
                               >
-                                <GitBranch className="w-3 h-3 text-[#C25925]" />
+                                <GitBranch className="w-3 h-3 text-[#F4AF25]" />
                                 <span>{opt.title}</span>
                               </button>
                             ))}
@@ -434,9 +434,9 @@ export const AISynthesisStudioModal: React.FC = () => {
                   })}
 
                   {computeState === 'thinking' && (
-                    <div className="flex items-center gap-2 p-3 bg-white border border-[#E0D7C6] rounded-2xl max-w-xs shadow-2xs text-xs">
-                      <Sparkles className="w-4 h-4 text-[#8A58D6] animate-spin" />
-                      <span className="font-bold text-[#1E2521]">Нейроінференс у процесі...</span>
+                    <div className="flex items-center gap-2 p-3 bg-[#141C16] border border-[#F4AF25]/30 rounded-2xl max-w-xs shadow-md text-xs">
+                      <Sparkles className="w-4 h-4 text-[#F4AF25] animate-spin" />
+                      <span className="font-bold text-[#F8FAF8]">Нейроінференс у процесі...</span>
                     </div>
                   )}
 
@@ -444,12 +444,12 @@ export const AISynthesisStudioModal: React.FC = () => {
                 </div>
 
                 {/* Input Composer Box */}
-                <form onSubmit={handleSend} className="p-3 bg-white border-t border-[#E8E1D3] flex items-center gap-2">
+                <form onSubmit={handleSend} className="p-3 bg-[#0E1410] border-t border-[rgba(255,255,255,0.07)] flex items-center gap-2">
                   <button
                     type="button"
                     onClick={() => setMediaInspectorOpen(true)}
-                    className="p-2 bg-[#FAF7F0] hover:bg-[#F2ECE1] border border-[#DDD3BF] rounded-2xl text-[#6E7568] transition-colors"
-                    title="Додати медіа для аналізу"
+                    className="p-2 bg-[#141C16] hover:bg-[#18231C] border border-[rgba(255,255,255,0.08)] text-[#8EA093] hover:text-[#F4AF25] rounded-xl transition-colors shrink-0"
+                    title="Прикріпити медіа або контекст"
                   >
                     <Paperclip className="w-4 h-4" />
                   </button>
@@ -458,16 +458,17 @@ export const AISynthesisStudioModal: React.FC = () => {
                     type="text"
                     value={inputPrompt}
                     onChange={(e) => setInputPrompt(e.target.value)}
-                    placeholder="Запитай що завгодно: напиши код, створи інтерактивний додаток, випробуй гіпотезу..."
-                    className="flex-1 px-4 py-2.5 text-xs bg-[#FAF7F0] border border-[#DDD3BF] rounded-2xl text-[#1E2521] focus:outline-none focus:border-[#C25925]"
+                    placeholder="Запитай що завгодно: напиши код, створи віджет, запусти симуляцію…"
+                    className="flex-1 bg-[#141C16] border border-[rgba(255,255,255,0.09)] rounded-2xl px-4 py-2.5 text-xs text-[#F8FAF8] placeholder-[#64748B] focus:outline-none focus:border-[#F4AF25]/50 transition-colors"
                   />
 
                   <button
                     type="submit"
                     disabled={!inputPrompt.trim()}
-                    className="p-2.5 bg-[#C25925] hover:bg-[#AA491A] text-white rounded-2xl transition-colors disabled:opacity-40 shadow-xs"
+                    className="p-2.5 bg-[#F4AF25] hover:bg-[#FFB340] disabled:opacity-40 disabled:hover:bg-[#F4AF25] text-[#0C110D] font-bold rounded-2xl transition-colors shrink-0 shadow-md"
+                    title="Надіслати"
                   >
-                    <Send className="w-4 h-4" />
+                    <Send className="w-4 h-4" strokeWidth={2.5} />
                   </button>
                 </form>
               </div>

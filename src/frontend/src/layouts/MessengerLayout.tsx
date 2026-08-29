@@ -12,16 +12,13 @@ export default function MessengerLayout() {
     // — за краєм. Ширину диктує екран, а не ця обгортка.
     <motion.div
       className="w-full h-full min-w-0 min-h-full relative overflow-hidden"
-      style={{ background: '#FDFCF9' }}
+      style={{ background: '#0C110D' }}
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
       transition={{ duration: 0.35, ease: EASE_PHANTOM as unknown as number[] }}
     >
-      {/* Дока на цьому маршруті більше немає (FloatingToolbar), тож резерв у
-          74px під нього перетворився б на смугу порожнечі під композером.
-          Лишаємо 8px повітря, щоб поле вводу не злипалося з краєм екрана. */}
-      <div className="w-full h-full" style={{ paddingBottom: 8 }}>
+      <div className="w-full h-full">
         <MessengerRoot className="w-full h-full" />
       </div>
     </motion.div>

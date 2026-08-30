@@ -123,10 +123,17 @@ export const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
   const [activeLayer, setActiveLayer] = useState<'streets' | 'satellite' | 'vibes'>('streets');
   const [selectedSpotId, setSelectedSpotId] = useState<string>('spot_b_fresh');
 
-  const friendsApproaching = [
-    { name: 'Марта', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=150&auto=format&fit=crop&q=80', status: 'На місці', x: 49, y: 39 },
-    { name: 'Тарас', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=150&auto=format&fit=crop&q=80', status: '3 хв', x: 44, y: 30 },
-  ];
+  // Тут стояли ДВІ ВИГАДАНІ ЛЮДИНИ на мапі: «Марта» зі статусом «На місці» і
+  // «Тарас» — «3 хв», обидва з фотографіями з чужого сервера і з позиціями.
+  //
+  // Прибрано 29.08.2026 цілком — не замінено локальною заглушкою, бо проблема
+  // не у фотографії. Список вигаданих контактів іще можна прийняти за приклад
+  // наповнення; позначка людини на мапі читається як РОЗВІДКА: ось хто, ось
+  // де, ось коли буде. Продукт відмовляється малювати шар присутності саме
+  // тому, що він робить людей мішенню — і малював його сам.
+  //
+  // Порожнеча тут не вада, яку треба прикрити. Коли з'явиться справжня
+  // присутність, вона прийде з даних і матиме згоду тих, кого показує.
 
   return (
     <div className="relative w-full h-full bg-[#E5E0D5] overflow-hidden select-none flex flex-col">
@@ -231,26 +238,7 @@ export const InteractiveMapView: React.FC<InteractiveMapViewProps> = ({
           );
         })}
 
-        {/* Live Friends Pins Approaching */}
-        {friendsApproaching.map((friend, idx) => (
-          <div
-            key={idx}
-            style={{ left: `${friend.x}%`, top: `${friend.y}%` }}
-            className="absolute -translate-x-1/2 -translate-y-1/2 z-20 pointer-events-none flex flex-col items-center"
-          >
-            <div className="relative">
-              <img
-                src={friend.avatar}
-                alt={friend.name}
-                className="w-7 h-7 rounded-full object-cover ring-2 ring-[#E87A42] shadow-md"
-              />
-              <span className="absolute -bottom-1 -right-1 w-2.5 h-2.5 bg-[#E87A42] rounded-full ring-1 ring-[#F7F5EE]" />
-            </div>
-            <span className="mt-0.5 px-1.5 py-0.5 bg-[#FDFCF9] border border-[#F1EDE3] text-[#1E2521] text-[9px] font-semibold rounded-md shadow-sm">
-              {friend.name} ({friend.status})
-            </span>
-          </div>
-        ))}
+        {/* Шару присутності тут немає навмисно — див. коментар вище. */}
       </div>
 
       {/* Floating Right Control Pill */}

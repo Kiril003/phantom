@@ -1,5 +1,6 @@
 import React, { Suspense, lazy } from 'react';
 import { useModalStore } from '../../../stores/modalStore';
+import { HIDDEN_UNTIL_WIRED } from './hiddenModals';
 
 // Lazy-load domain modals to keep initial bundle compact & modular
 const AcademicLmsHubModal = lazy(() => import('../AcademicLmsHubModal').then(m => ({ default: m.AcademicLmsHubModal })));
@@ -60,14 +61,18 @@ const WorkspaceDriveModal = lazy(() => import('../WorkspaceDriveModal').then(m =
 const ZeroLeakSecurityModal = lazy(() => import('../ZeroLeakSecurityModal').then(m => ({ default: m.ZeroLeakSecurityModal })));
 const ZeroTraceAirGapModal = lazy(() => import('../ZeroTraceAirGapModal').then(m => ({ default: m.ZeroTraceAirGapModal })));
 
+
+
 export const ModalHost: React.FC = () => {
   const { activeModal, modalProps, closeModal } = useModalStore();
+
+  const shownModal = activeModal && !HIDDEN_UNTIL_WIRED.has(activeModal) ? activeModal : null;
 
   if (!activeModal) return null;
 
   return (
     <Suspense fallback={null}>
-      {activeModal === 'roleScopes' && (
+      {shownModal === 'roleScopes' && (
         <RoleScopesModal
           isOpen={true}
           onClose={closeModal}
@@ -75,7 +80,7 @@ export const ModalHost: React.FC = () => {
           {...modalProps}
         />
       )}
-      {activeModal === 'workspaceDrive' && (
+      {shownModal === 'workspaceDrive' && (
         <WorkspaceDriveModal
           isOpen={true}
           onClose={closeModal}
@@ -83,61 +88,61 @@ export const ModalHost: React.FC = () => {
           {...modalProps}
         />
       )}
-      {activeModal === 'knowledgeSearch' && <KnowledgeSearchModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'p2pSwarm' && <P2PFileSwarmModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'webhooks' && <WebhooksManagerModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'commandPalette' && <CommandPaletteModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'liveTerminal' && <LiveTerminalModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'memoryGraph' && <ProjectMemoryGraphModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'nodeDashboard' && <NodeDashboardModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'spaceVault' && <SpaceVaultModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'automations' && <AutomationPipelineModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'dataGrid' && <RelationalDataGridModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'timeMachine' && <TimeMachineSnapshotModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'zeroTrace' && <ZeroTraceAirGapModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'iotTelemetry' && <IoTEqsTelemetryModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'academyHub' && <AcademyHubModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'familyHub' && <FamilyHubModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'creativeStudio' && <CreativeStudioModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'personalWellness' && <PersonalWellnessModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'communityClub' && <CommunityClubModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'dataLifecycle' && <DataLifecyclePruningModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'zeroLeakSecurity' && <ZeroLeakSecurityModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'wasmSandbox' && <WasmAppSandboxModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'p2pCompute' && <P2PComputeSharingModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'ambientContext' && <AmbientContextModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'universalBridge' && <UniversalBridgeModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'protocolSchema' && <ProtocolDrivenSchemaModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'neuroErgonomics' && <NeuroErgonomicsModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'loRaWalkie' && <LoRaWalkieTalkieModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'semanticBus' && <SemanticBusPipesModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'spatialProjections' && <SpatialProjectionsModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'resourceGovernance' && <ResourceGovernanceModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'gitDevOps' && <GitNativeDevOpsModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'academicLms' && <AcademicLmsHubModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'corporateHR' && <CorporateHROpsModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'commerceMicroApps' && <CommerceMicroAppsModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'headlessInfra' && <HeadlessInfrastructureModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'localErpEscrow' && <LocalErpEscrowModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'secOpsCompliance' && <SecOpsComplianceModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'advancedResearch' && <AdvancedResearchMeshModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'phantomRuntime' && <PhantomRuntimeVfsModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'disasterMesh' && <DisasterMeshDtnModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'autonomousOps' && <AutonomousOpsWarRoomModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'humanCentricBio' && <HumanCentricBioContextModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'interactiveVis3D' && <InteractiveVisualization3DModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'collaborativeWhiteboard' && <CollaborativeWhiteboardPlaygroundModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'planningPokerGantt' && <PlanningPokerGanttWidgetsModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'spatialMultiPane' && <SpatialMultiPaneWorkspaceModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'mediaAnnotation' && <InteractiveMediaAnnotationModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'breadcrumbsPeek' && <SmartBreadcrumbsContextPeekModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'stateMachinePipeline' && <VisualStateMachinePipelineModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'codeDiffMathHex' && <CodeDiffMathHexInspectorModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'canvasPresentation' && <CanvasPresentationSpeakerMatrixModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'spotlightBounties' && <LiveSpotlightMicroBountiesModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'blueprint' && <PhantomArchitectureBlueprintModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'agenticRuntime' && <AgenticWorkspaceVirtualizationModal isOpen={true} onClose={closeModal} {...modalProps} />}
-      {activeModal === 'physicalComputing' && <PhysicalComputingGisCanvasModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'knowledgeSearch' && <KnowledgeSearchModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'p2pSwarm' && <P2PFileSwarmModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'webhooks' && <WebhooksManagerModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'commandPalette' && <CommandPaletteModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'liveTerminal' && <LiveTerminalModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'memoryGraph' && <ProjectMemoryGraphModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'nodeDashboard' && <NodeDashboardModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'spaceVault' && <SpaceVaultModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'automations' && <AutomationPipelineModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'dataGrid' && <RelationalDataGridModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'timeMachine' && <TimeMachineSnapshotModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'zeroTrace' && <ZeroTraceAirGapModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'iotTelemetry' && <IoTEqsTelemetryModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'academyHub' && <AcademyHubModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'familyHub' && <FamilyHubModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'creativeStudio' && <CreativeStudioModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'personalWellness' && <PersonalWellnessModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'communityClub' && <CommunityClubModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'dataLifecycle' && <DataLifecyclePruningModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'zeroLeakSecurity' && <ZeroLeakSecurityModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'wasmSandbox' && <WasmAppSandboxModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'p2pCompute' && <P2PComputeSharingModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'ambientContext' && <AmbientContextModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'universalBridge' && <UniversalBridgeModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'protocolSchema' && <ProtocolDrivenSchemaModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'neuroErgonomics' && <NeuroErgonomicsModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'loRaWalkie' && <LoRaWalkieTalkieModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'semanticBus' && <SemanticBusPipesModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'spatialProjections' && <SpatialProjectionsModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'resourceGovernance' && <ResourceGovernanceModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'gitDevOps' && <GitNativeDevOpsModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'academicLms' && <AcademicLmsHubModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'corporateHR' && <CorporateHROpsModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'commerceMicroApps' && <CommerceMicroAppsModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'headlessInfra' && <HeadlessInfrastructureModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'localErpEscrow' && <LocalErpEscrowModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'secOpsCompliance' && <SecOpsComplianceModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'advancedResearch' && <AdvancedResearchMeshModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'phantomRuntime' && <PhantomRuntimeVfsModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'disasterMesh' && <DisasterMeshDtnModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'autonomousOps' && <AutonomousOpsWarRoomModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'humanCentricBio' && <HumanCentricBioContextModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'interactiveVis3D' && <InteractiveVisualization3DModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'collaborativeWhiteboard' && <CollaborativeWhiteboardPlaygroundModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'planningPokerGantt' && <PlanningPokerGanttWidgetsModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'spatialMultiPane' && <SpatialMultiPaneWorkspaceModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'mediaAnnotation' && <InteractiveMediaAnnotationModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'breadcrumbsPeek' && <SmartBreadcrumbsContextPeekModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'stateMachinePipeline' && <VisualStateMachinePipelineModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'codeDiffMathHex' && <CodeDiffMathHexInspectorModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'canvasPresentation' && <CanvasPresentationSpeakerMatrixModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'spotlightBounties' && <LiveSpotlightMicroBountiesModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'blueprint' && <PhantomArchitectureBlueprintModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'agenticRuntime' && <AgenticWorkspaceVirtualizationModal isOpen={true} onClose={closeModal} {...modalProps} />}
+      {shownModal === 'physicalComputing' && <PhysicalComputingGisCanvasModal isOpen={true} onClose={closeModal} {...modalProps} />}
     </Suspense>
   );
 };

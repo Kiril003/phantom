@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { HIDDEN_COMMAND_IDS } from './modals/hiddenModals';
 import {
   Search,
   FileText,
@@ -741,7 +742,10 @@ export const CommandPaletteModal: React.FC<CommandPaletteModalProps> = ({
     },
   ];
 
-  const filtered = commands.filter((c) =>
+  // Пункти, що ведуть у зачинені екрани, з переліку зникають. Лишити їх
+  // означало б проміняти брехню на мертву кнопку: людина тисне й не отримує
+  // нічого. З 58 записів палітри 45 вели саме туди.
+  const filtered = commands.filter((c) => !HIDDEN_COMMAND_IDS.has(c.id)).filter((c) =>
     c.title.toLowerCase().includes(query.toLowerCase()) ||
     c.category.toLowerCase().includes(query.toLowerCase()) ||
     (c.subtitle && c.subtitle.toLowerCase().includes(query.toLowerCase()))

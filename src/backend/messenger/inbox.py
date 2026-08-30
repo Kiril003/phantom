@@ -76,12 +76,28 @@ async def _contact_for(
 async def conversation_for(
     session: AsyncSession, owner_user_id: str, contact: MessengerContact
 ) -> MessengerConversation:
+    # ДВІ РОЗМОВИ НА ОДИН КОНТАКТ ВАЛИЛИ ВУЗОЛ. Виправлено 30.08.2026.
+    #
+    # Тут стояв `scalar_one_or_none()`, який на другому рядку **кидає**
+    # `MultipleResultsFound`. А дві розмови з однією людиною завести легко:
+    # `POST /messenger/conversations` з тим самим `contact_id` дублікату не
+    # перевіряв. Наслідок виміряний на двох живих вузлах: кожен вхідний лист
+    # від цієї людини діставав **500**, відправник лишався з `queued` і
+    # повторював вічно, а отримувач не бачив нічого. Єдиний слід — стек у
+    # журналі, бо виняток був необробленим.
+    #
+    # Беремо найранішу: вона та, у якій уже лежить листування. Порядок
+    # детермінований навмисно — інакше кадри тієї самої людини лягали б у
+    # різні розмови залежно від того, як база поверне рядки.
     row = (
         await session.execute(
-            select(MessengerConversation).where(
+            select(MessengerConversation)
+            .where(
                 MessengerConversation.owner_user_id == owner_user_id,
                 MessengerConversation.contact_id == contact.id,
             )
+            .order_by(MessengerConversation.created_at, MessengerConversation.id)
+            .limit(1)
         )
     ).scalar_one_or_none()
     if row is not None:
@@ -202,8 +218,32 @@ async def accept_frame(
         peer_session = Session.restore(keys, bytes.fromhex(contact.session_blob))
         try:
             plaintext = peer_session.decrypt(frame)
-        except Exception as exc:  # noqa: BLE001 — будь-який збій тега рівнозначний відмові
-            raise InboxError(f"кадр не розшифровується сесією: {exc}") from exc
+        except Exception as restore_exc:  # noqa: BLE001
+            # ДВОЄ, ЩО ДОДАЛИ ОДНЕ ОДНОГО, НЕ МОГЛИ ГОВОРИТИ. Виправлено 30.08.2026.
+            #
+            # Тут був глухий кут: наявна сесія не розшифрувала — відмова. Але
+            # людина, яка завела наш контакт із бандла, тримає ВЛАСНУ вихідну
+            # сесію й пише саме нею, тобто надсилає ПОЧАТКОВИЙ кадр X3DH. Наша
+            # сесія його розібрати не може за побудовою: ключі виводили двоє
+            # незалежно, і храповики не збіглися.
+            #
+            # Виміряно на двох живих вузлах:
+            #   * обидва додали одне одного → «тег не зійшовся», лист не доходив
+            #     НІКОЛИ, скільки б повторів не було;
+            #   * лише відправник додав отримувача → дійшло за 2 с.
+            # Тобто ламало саме взаємне знайомство — те, що двоє людей роблять
+            # природно, обмінявшись запрошеннями в обидва боки.
+            #
+            # Тому початковий кадр має право перезаснувати сесію. Це не
+            # послаблення: `Session.accept` вимагає справжньої X3DH з нашим
+            # бандлом, і сміття крізь неї не проходить — перевірено кадром
+            # `de`*200, який дає відмову.
+            try:
+                peer_session, plaintext = Session.accept(keys, frame)
+            except Exception:  # noqa: BLE001
+                raise InboxError(
+                    f"кадр не розшифровується сесією: {restore_exc}"
+                ) from restore_exc
     else:
         # Перший кадр від незнайомця: сесію відкриваємо з нього ж.
         try:
@@ -239,6 +279,19 @@ async def accept_frame(
     # Тип приїхав у самому кадрі. Старий кадр без конверта лишається текстом,
     # тож уже зведені сесії від цього нічого не помічають.
     kind, body, origin, group = unwrap_frame(plaintext.decode())
+
+    # Порожній тип — умовний знак від `unwrap_frame`: приїхав СЛУЖБОВИЙ кадр
+    # невідомого типу. Такий не лишає у стрічці нічого — ні рядка, ні
+    # порожньої бульбашки, ні місця під неї. Без цієї гілки він став би
+    # текстом «ця версія не вміє показати» просто посеред розмови, і для
+    # реакції чи іншої тихої дії це сміття, гірше за відсутність можливості.
+    #
+    # Стан храповика вже зрушено вище — його треба зберегти в БУДЬ-ЯКОМУ разі,
+    # інакше наступний кадр від цієї людини не розшифрується.
+    if not kind:
+        await session.commit()
+        return None
+
     group_id = group.partition(":")[0]
 
     if group_id or kind == "group:invite":

@@ -44,6 +44,7 @@ from messenger.geo import parse_point
 from messenger.guard import GuardRejected, inbox_guard
 from messenger.inbox import InboxError, RadioFrame, accept_frame
 from messenger.outbox import OutboxError, prepare_frame
+from messenger.reactions import apply_reaction
 from messenger.purge import (
     blob_ids_of,
     origin_of,
@@ -987,7 +988,7 @@ async def toggle_reaction(
     тихого ігнорування. Це рішення про протокол, і воно за двома боками
     разом, а не за мною одним.
     """
-    await _owned_conversation(conversation_id, user, session)
+    conversation = await _owned_conversation(conversation_id, user, session)
     row = await session.get(MessengerMessage, message_id)
     if row is None or row.conversation_id != conversation_id:
         raise HTTPException(status_code=404, detail="повідомлення не знайдено")
@@ -1001,29 +1002,47 @@ async def toggle_reaction(
         raise HTTPException(status_code=422, detail="порожня позначка")
 
     me = _keys().node_id
-    existing = (
-        await session.execute(
-            select(MessengerReaction).where(
-                MessengerReaction.message_id == message_id,
-                MessengerReaction.actor_node_id == me,
-                MessengerReaction.emoji == emoji,
-            )
-        )
-    ).scalar_one_or_none()
-
-    if existing is not None:
-        await session.delete(existing)
-    else:
-        session.add(
-            MessengerReaction(
-                message_id=message_id,
-                actor_node_id=me,
-                actor_name=user.username or "Я",
-                emoji=emoji,
-                created_at=_now(),
-            )
-        )
+    # Перемикач через спільний модуль: той самий код застосовує позначку й
+    # тоді, коли вона приїжджає кадром від співрозмовника. Дві копії однієї
+    # угоди в різних файлах сьогодні вже коштували нам двічі.
+    now_on = await apply_reaction(
+        session,
+        message_id=message_id,
+        actor_node_id=me,
+        actor_name=user.username or "Я",
+        emoji=emoji,
+    )
     await session.commit()
+
+    # Веземо співрозмовнику НАМІР, а не дію: кадр може приїхати вдруге
+    # (повтор доставки), і перемикач на тому боці зняв би позначку, яку
+    # людина ставила один раз.
+    try:
+        prepared = await prepare_frame(
+            session, _keys(), conversation,
+            wrap_frame(
+                "reaction",
+                json.dumps(
+                    {"origin": row.client_id, "emoji": emoji, "on": now_on},
+                    ensure_ascii=False,
+                ),
+                row.client_id,
+            ),
+        )
+    except OutboxError:
+        prepared = None
+    if prepared is not None:
+        contact = await session.get(MessengerContact, conversation.contact_id)
+        await deliver(
+            prepared.frame,
+            peer_node_id=prepared.peer_node_id,
+            from_node_id=me,
+            peer_address=(contact.peer_address if contact else "") or "",
+            relay=(config.relay_url or "") if config.relay_enabled else "",
+            supabase_url=supabase_road(config)[0],
+            supabase_key=supabase_road(config)[1],
+            reply_address=config.messenger_public_address,
+        )
 
     reactions = await _reactions_for(session, [message_id], me)
     attachments = await _attachment_states(session, [row])

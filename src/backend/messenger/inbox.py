@@ -23,6 +23,8 @@ verified_at лишається порожнім: те, що людина вмі�
 """
 from __future__ import annotations
 
+import json
+
 import uuid
 from dataclasses import dataclass
 from datetime import datetime, timezone
@@ -39,6 +41,7 @@ from messenger.crypto.safety import safety_number
 from messenger.crypto.session import Session
 from messenger.geo import parse_point
 from messenger.purge import find_by_origin, tombstone
+from messenger.reactions import apply_reaction
 
 __all__ = ["InboxError", "RadioFrame", "accept_frame", "conversation_for"]
 
@@ -319,6 +322,40 @@ async def accept_frame(
         # хоч голос, хоч текст — уже не розшифрується.
         await session.commit()
         return RadioFrame(peer_node_id=contact.peer_node_id, body=body)
+
+    if kind == "reaction":
+        # Позначка на НАШОМУ листі, поставлена співрозмовником. Рядка не
+        # додає — лише міняє наявний, тож повертаємо той самий лист, як і
+        # `delete`. Стан храповика вже зрушено вище: зберігаємо в будь-якому
+        # разі, інакше наступний кадр від цієї людини не розшифрується.
+        try:
+            mark = json.loads(body)
+            origin = str(mark["origin"]).strip()
+            emoji = str(mark["emoji"]).strip()[:32]
+            on = bool(mark.get("on", True))
+        except (ValueError, KeyError, TypeError):
+            # Зіпсований кадр позначки. Не вигадуємо ні листа, ні емодзі:
+            # краще без позначки, ніж із придуманою.
+            await session.commit()
+            return None
+        target = await find_by_origin(session, conversation.id, origin)
+        if target is None or not emoji:
+            # Позначка на лист, якого в нас немає (або вже видалений). Це
+            # прийнято й виконано — повторювати відправнику нема сенсу.
+            await session.commit()
+            return None
+        await apply_reaction(
+            session,
+            message_id=target.id,
+            actor_node_id=contact.peer_node_id,
+            actor_name=contact.display_name or contact.peer_node_id[:8],
+            emoji=emoji,
+            on=on,
+        )
+        conversation.updated_at = _now()
+        await session.commit()
+        await session.refresh(target)
+        return target
 
     if kind == "delete":
         # Службовий кадр: ніякого нового рядка, лише робота над наявним.

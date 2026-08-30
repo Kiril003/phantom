@@ -12,6 +12,7 @@ import {
   NetworkDiagnostics,
 } from '../types/messenger';
 import { phantomRelayService } from './phantomRelayService';
+import { wsUrl } from './backendOrigin';
 
 type MessageListener = (chatId: string, message: Message, transport: 'server' | 'p2p' | 'relay') => void;
 type TypingListener = (chatId: string, userId: string, userName: string, isTyping: boolean) => void;
@@ -41,8 +42,10 @@ class MessengerNetworkEngine {
   private pingInterval: any = null;
   private currentUserId: string = 'user_me';
   private currentUserName: string = 'Кирило Милосердов';
-  private currentUserAvatar: string =
-    'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80';
+  //: Порожньо, доки вузол не назве власника. Тут стояло фото незнайомця з
+  //: `images.unsplash.com`, і воно їхало у КОЖНОМУ вихідному повідомленні як
+  //: аватарка відправника — тобто чуже обличчя розсилалось співрозмовникам.
+  private currentUserAvatar: string = '';
   private activeChatId: string = 'chat_aura_design';
 
   private transportMode: TransportProtocol = 'auto';
@@ -175,10 +178,12 @@ class MessengerNetworkEngine {
     if (typeof window === 'undefined') return;
 
     try {
-      const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-      const wsUrl = `${protocol}//${window.location.host}/ws`;
-
-      this.ws = new WebSocket(wsUrl);
+      // Адреса приходить із єдиного джерела, а не будується від
+      // `window.location`. У запакованому AppImage фронт віддається
+      // asset-протоколом Tauri, тож `location.host` — це НЕ sidecar:
+      // сокет ішов у нікуди, смуга організму казала «канал обрив» при
+      // живому HTTP, а в діалозі вилазив сирий DOMException англійською.
+      this.ws = new WebSocket(wsUrl('/ws'));
 
       this.ws.onopen = () => {
         this.activeStatus = 'server-ws';

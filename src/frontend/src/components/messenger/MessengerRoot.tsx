@@ -99,9 +99,16 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
 
     const uAvatar = hasMatchingSavedProfile && savedProfile.avatar
       ? savedProfile.avatar
-      : (isKyrylo
-        ? 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80'
-        : (authUser?.avatar_url || store.currentUser.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80'));
+      // ВЛАСНЕ ОБЛИЧЧЯ ЛЮДИНИ ПІДМІНЯЛОСЬ ФОТО НЕЗНАЙОМЦЯ. Прибрано 30.08.2026.
+      //
+      // Тут стояли два посилання на `images.unsplash.com` — знімки чужих
+      // людей, які ставали аватаркою власника, якщо він своєї не поставив.
+      // Дві біди в одному рядку: чуже обличчя видавалось за твоє, і продукт,
+      // який обіцяє працювати без інфраструктури, **ходив по картинку на
+      // чужий сервер** при кожному відкритті.
+      //
+      // Порожньо — чесно: `Avatar` малює ініціали, і це справді ти.
+      : (authUser?.avatar_url || store.currentUser.avatar || '');
 
     const uStatus = hasMatchingSavedProfile && savedProfile.status ? savedProfile.status : store.currentUser.status;
     const uStatusEmoji = hasMatchingSavedProfile && savedProfile.statusEmoji ? savedProfile.statusEmoji : store.currentUser.statusEmoji;
@@ -381,7 +388,19 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
             currentChat={activeChat}
             currentUser={store.currentUser}
             onOpenDigest={() => store.setDigestModalOpen(true)}
-            onOpenActions={() => store.setActionHubOpen(true)}
+            onOpenActions={/* «Хаб дій» сховано з бети 30.08.2026.
+               Дев'ять типів дій, і жоден не доїжджає: дріт несе сім ІНШИХ
+               типів (WIRE_KINDS у messenger/blobs.py), а тутешні на тому
+               кінці вироджувались би в текст. Два, які МОЖУТЬ бути
+               справжніми — файл і точка на мапі, — уже є в композері поруч
+               (скріпка й геоточка), причому через звичайний шлях доставки
+               зі станами і скринькою вихідних.
+               Тобто хаб не додавав жодної спроможності, зате додавав
+               чотирьох вигаданих людей і дії, що зникали при перезавантаженні:
+               вставка йшла через `addCustomMessage`, а той лише міняв
+               локальний стан. Код лишається; повернемо разом із протокольною
+               правкою, коли типи можна буде звірити з обох боків. */
+            undefined}
             onOpenScheduledMessages={() => store.setScheduledDrawerOpen(true)}
             scheduledMessagesCount={store.getScheduledForActiveChat().length}
             onOpenSettings={() => store.setSettingsModalOpen(true)}
@@ -395,7 +414,14 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
             onOpenP2PNetworkModal={() => store.setP2PModalOpen(true)}
             onOpenKnowledgeSearch={() => useModalStore.getState().openModal('knowledgeSearch')}
             onOpenWorkspaceDrive={() => useModalStore.getState().openModal('workspaceDrive')}
-            onOpenRoleScopes={() => useModalStore.getState().openModal('roleScopes')}
+            // «Контекстні ролі» сховано з бети 29.08.2026: екран не звертався
+            // до вузла жодного разу, а вся команда в ньому була вигадана —
+            // «Кирило», «Саня (Lead Dev)», «Марина (Designer)», «Олександр
+            // (Client/QA)» з фотографіями з чужого сервера. Прибрати вигаданих
+            // означало б лишити порожню кімнату, а двері в порожню кімнату в
+            // беті бути не може. Код лишається на місці; повернемо, коли ролі
+            // прийдуть із вузла.
+            onOpenRoleScopes={undefined}
             onOpenP2PSwarm={() => useModalStore.getState().openModal('p2pSwarm')}
             onOpenWebhooks={() => useModalStore.getState().openModal('webhooks')}
             onOpenTerminal={() => useModalStore.getState().openModal('liveTerminal')}
@@ -485,10 +511,22 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
                 store.sendMessage(text);
               }
             }}
-            onSendVoiceMessage={(dur, transcript, audioUrl) => {
-              store.sendVoiceMessage(dur, transcript, audioUrl);
+            onSendVoiceMessage={(dur, transcript, audioUrl, waveform) => {
+              store.sendVoiceMessage(dur, transcript, audioUrl, waveform);
             }}
-            onOpenActions={() => store.setActionHubOpen(true)}
+            onOpenActions={/* «Хаб дій» сховано з бети 30.08.2026.
+               Дев'ять типів дій, і жоден не доїжджає: дріт несе сім ІНШИХ
+               типів (WIRE_KINDS у messenger/blobs.py), а тутешні на тому
+               кінці вироджувались би в текст. Два, які МОЖУТЬ бути
+               справжніми — файл і точка на мапі, — уже є в композері поруч
+               (скріпка й геоточка), причому через звичайний шлях доставки
+               зі станами і скринькою вихідних.
+               Тобто хаб не додавав жодної спроможності, зате додавав
+               чотирьох вигаданих людей і дії, що зникали при перезавантаженні:
+               вставка йшла через `addCustomMessage`, а той лише міняв
+               локальний стан. Код лишається; повернемо разом із протокольною
+               правкою, коли типи можна буде звірити з обох боків. */
+            undefined}
             onOpenScheduler={() => store.setScheduleModalOpen(true)}
             onOpenScheduledList={() => store.setScheduledDrawerOpen(true)}
             scheduledCountInCurrentChat={store.getScheduledForActiveChat().length}

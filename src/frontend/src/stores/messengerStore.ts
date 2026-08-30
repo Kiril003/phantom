@@ -33,9 +33,15 @@ import {
   smartFolders as defaultFolders,
   scheduledMessages as defaultScheduled,
 } from '../data/messengerInitialData';
-import { generateContextualResponse } from '../services/conversationalAgent';
+// `services/conversationalAgent` більше не викликається звідси — жодного разу.
+// Сам файл лишено на місці свідомо: він живе ще у двох деревах, і рішення про
+// його долю не моє. Але жодного викликача в месенджері в нього немає, і якщо
+// хтось захоче повернути — хай спершу прочитає, що саме він вигадував:
+// телеметрію безпеки («наскрізне шифрування активне»), листи від матері
+// власника на його ім'я і рапорти про RTT від людей, які нічого не писали.
 import { globalP2PMesh } from '../services/globalP2PMesh';
 import { storagePersistence } from '../services/storagePersistence';
+import type { OutboxEntry } from '../services/storagePersistence';
 import { aiEngineService, type ChatHistoryItem } from '../services/aiEngineService';
 
 export interface MessengerState {
@@ -102,7 +108,21 @@ export interface MessengerState {
   toggleArchiveChat: (chatId: string) => void;
   addChatToFolder: (folderId: string, chatId: string) => void;
   removeChatFromFolder: (folderId: string, chatId: string) => void;
-  createGroup: (title: string, circle?: ChatCircle, avatar?: string, description?: string) => Promise<string>;
+  /**
+   * Заводить СПРАВЖНЮ групу на вузлі: `POST /messenger/groups`.
+   *
+   * `contactIds` — лише наявні контакти, і це не забаганка API: щоб
+   * зашифрувати людині, потрібен її ключ, а він береться з контакту. Вузол
+   * робить окремий кадр кожному учаснику своєю попарною сесією; кому ключа
+   * немає — кадр НЕ вигадується, учасник іде в `skipped`.
+   */
+  createGroup: (
+    title: string,
+    contactIds: string[],
+    circle?: ChatCircle,
+    avatar?: string,
+    description?: string,
+  ) => Promise<string>;
   createDirectMessage: (name: string, circle?: ChatCircle, avatar?: string) => Promise<string>;
 
   sendMessage: (text: string) => void;
@@ -120,7 +140,12 @@ export interface MessengerState {
   ) => Promise<void>;
   /** Надсилає разову точку «я тут». Час у тілі — час ВИМІРУ, не відправки. */
   sendGeoPoint: (point: GeoPoint) => Promise<void>;
-  sendVoiceMessage: (duration: number, transcript: string, audioUrl?: string) => void;
+  sendVoiceMessage: (
+    duration: number,
+    transcript: string,
+    audioUrl?: string,
+    waveform?: number[],
+  ) => void;
   addCustomMessage: (message: Message) => void;
   editMessage: (messageId: string, newText: string) => void;
   /** forEveryone — службовий кадр поїде співрозмовнику; інакше чистка своя. */
@@ -272,6 +297,26 @@ const withNodeFields = (local: Chat, row: NodeConversation, activeChatId: string
   return NODE_OWNED.some((k) => merged[k] !== local[k]) ? merged : local;
 };
 
+/**
+ * Повертає листи зі скриньки вихідних на їхні місця в чатах.
+ *
+ * Винесено окремо навмисно: «написане не зникає» — обіцянка, яку треба вміти
+ * ДОВЕСТИ, а не переказати. Всередині ініціалізації сторе її не перевірити.
+ *
+ * Двічі один лист не з'являється: якщо він уже є в чаті (історія підвантажилась
+ * із вузла), лишається той, що в чаті.
+ */
+export function restoreOutboxInto(chats: Chat[], pending: OutboxEntry[]): Chat[] {
+  if (pending.length === 0) return chats;
+  return chats.map((chat) => {
+    const mine = pending.filter((e) => e.chatId === chat.id);
+    if (mine.length === 0) return chat;
+    const known = new Set(chat.messages.map((m) => m.id));
+    const restored = mine.filter((e) => !known.has(e.id)).map((e) => e.message);
+    return restored.length ? { ...chat, messages: [...chat.messages, ...restored] } : chat;
+  });
+}
+
 export const useMessengerStore = create<MessengerState>((set, get) => {
   // Connect network engine listeners
   messengerNetworkEngine.onMessage((chatId, msg) => {
@@ -320,7 +365,12 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
   const persistedScheduled = storagePersistence.loadSetting<ScheduledMessage[] | null>('phantom_scheduled_messages', null);
 
   const activeUser = persistedUser || defaultUser;
-  const activeChats = persistedChats && persistedChats.length > 0 ? persistedChats : initialChats;
+  let activeChats = persistedChats && persistedChats.length > 0 ? persistedChats : initialChats;
+
+  // Листи, яких вузол не взяв, повертаються на свої місця після перезапуску.
+  // Читаємо синхронно (дзеркало в localStorage), щоб перший кадр уже показав
+  // їх із позначкою «не пішло», а не з'явив за мить.
+  activeChats = restoreOutboxInto(activeChats, storagePersistence.loadOutboxSync());
   const activeScheduled = persistedScheduled || defaultScheduled;
 
   return {
@@ -535,10 +585,16 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
           id: newChatId,
           title: row.senderName || (sHandle ? `@${sHandle}` : 'Співрозмовник'),
           handle: sHandle ? `@${sHandle}` : undefined,
-          avatar: row.senderAvatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
+          // Аватарка — лише та, що приїхала з повідомленням. Раніше на її
+          // місце ставало фото незнайомої людини з чужого сервера, і воно
+          // ставало «обличчям» співрозмовника назавжди.
+          avatar: row.senderAvatar || '',
           type: 'dm',
           circle: 'friends',
-          isOnline: true,
+          // Присутність вузол не знає, і це поле більше ніхто не оновлює —
+          // тобто `true` тут лишалось би назавжди, зокрема й тоді, коли
+          // людина давно вимкнула пристрій.
+          isOnline: false,
           peerNodeId: sId || `node_${sHandle || 'peer'}`,
           unreadCount: 1,
           messages: [msgObj],
@@ -695,100 +751,78 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
       }));
     },
 
-    createGroup: async (title, circle = 'work', avatar, description) => {
+    createGroup: async (title, contactIds, circle = 'work', avatar, description) => {
       const state = get();
-      const newChatId = `chat_grp_${Date.now()}`;
-      const defaultAvatar =
-        avatar ||
-        'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=200&auto=format&fit=crop&q=80';
 
-      const welcomeMsg: Message = {
-        id: `msg_sys_${Date.now()}`,
-        senderId: state.currentUser.id,
-        senderName: state.currentUser.name,
-        senderAvatar: state.currentUser.avatar,
-        timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
-        type: 'text',
-        text: `✨ Простір «${title}» створено. Тут доступний Живий Canvas рішень та Work OS віджети.`,
-        isSelf: true,
-      };
+      // ГРУПА ЗАВОДИТЬСЯ НА ВУЗЛІ, а не малюється тут.
+      //
+      // Було: цей метод вигадував трьох учасників («Олександр (Lead)»,
+      // «DevOps Node», «PHANTOM Copilot»), ставив `membersCount: 4` і кликав
+      // `createConversation({kind:'group'})` — маршрут, який `group_id`
+      // НЕ ставить ніколи. Через це умова віяра на бекенді не спрацьовувала
+      // жодного разу, і лист у «простір» лишався в локальній стрічці цієї
+      // машини. 801 рядок робочого групового меша не викликався ніким.
+      //
+      // Тепер кличеться `POST /messenger/groups`: вузол заводить групу з
+      // НАЯВНИХ контактів, розсилає запрошення й повертає справжній склад.
+      // Якщо вузол не зміг — групи немає. Намалювати її тут означало б
+      // показати простір, у який нічого не піде.
+      const group = await messengerApi.createGroup(
+        title,
+        contactIds,
+        state.currentUser.name,
+      );
 
       const newChat: Chat = {
-        id: newChatId,
-        title,
+        id: group.conversation_id,
         type: 'group',
+        title: group.title,
         circle,
-        avatar: defaultAvatar,
-        description: description || 'Спільний простір обговорення',
+        avatar: avatar ?? '',
+        description,
         unreadCount: 0,
         pinned: false,
         muted: false,
         archived: false,
-        membersCount: 4,
-        members: [
-          {
-            id: state.currentUser.id,
-            name: state.currentUser.name,
-            handle: 'me',
-            avatar: state.currentUser.avatar,
-            role: 'owner',
-            isOnline: true,
-          },
-          {
-            id: 'u_lead',
-            name: 'Олександр (Lead)',
-            handle: 'olexandr_lead',
-            avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
-            role: 'admin',
-            isOnline: true,
-          },
-          {
-            id: 'u_dev',
-            name: 'DevOps Node',
-            handle: 'devops_node',
-            avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80',
-            role: 'member',
-            isOnline: true,
-          },
-          {
-            id: 'u_ai',
-            name: 'PHANTOM Copilot',
-            handle: 'phantom_copilot',
-            avatar: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200&auto=format&fit=crop&q=80',
-            role: 'member',
-            isOnline: true,
-          },
-        ],
-        messages: [welcomeMsg],
-        lastSnippet: `Простір створено`,
-        lastAuthor: 'Я',
+        membersCount: group.member_count,
+        // Склад — з вузла. Кожен рядок відповідає справжньому контакту, і
+        // `session_ready: false` означає «ключа для цієї людини ще немає»,
+        // тобто кадр їй не поїде — це видно, а не приховано.
+        members: group.members.map((m) => ({
+          id: m.node_id,
+          name: m.display_name,
+          handle: m.node_id.slice(0, 8),
+          avatar: '',
+          role: (m.role === 'creator' ? 'owner' : 'member') as 'owner' | 'member',
+          // Присутності вузол не публікує — і ми її не вигадуємо. Замість
+          // «в мережі» показуємо те, що справді знаємо: чи є ключ, яким цій
+          // людині можна зашифрувати. Без ключа кадр їй не поїде, і це має
+          // бути видно, а не приховано.
+          isOnline: false,
+          statusText: m.session_ready
+            ? (m.verified ? 'ключ звірено' : 'ключ є, звірка не проводилась')
+            : 'ключа ще немає — кадр не поїде',
+        })),
+        messages: [],
+        lastSnippet: '',
+        lastAuthor: '',
         lastAt: new Date().toISOString(),
       };
 
       set((s) => ({
         chats: [newChat, ...s.chats],
-        activeChatId: newChatId,
+        activeChatId: newChat.id,
       }));
 
-      try {
-        await messengerApi.createConversation({
-          title,
-          kind: 'group',
-          circle,
-          avatar: defaultAvatar,
-        });
-      } catch (e) {
-        console.warn('[messenger] group saved locally (node offline / demo mode)', e);
-      }
-
-      return newChatId;
+      return newChat.id;
     },
 
     createDirectMessage: async (name, circle = 'friends', avatar) => {
       const newChatId = `chat_dm_${Date.now()}`;
-      const defaultAvatar =
-        avatar ||
-        'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=80';
+      // Обличчя співрозмовника беремо лише те, що дали. Раніше на його місце
+      // ставало фото незнайомця з чужого сервера — і ставало обличчям цієї
+      // людини назавжди.
+      const defaultAvatar = avatar || '';
 
       const newChat: Chat = {
         id: newChatId,
@@ -847,7 +881,11 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
       let sealedKeyHex = '';
       let sealedNonceHex = '';
       let blobSha256 = '';
+      // Тимчасове ім'я лише для локального показу, доки вузол не назве
+      // справжнє. Якщо вивантаження впаде, це ім'я НЕ можна віддавати як
+      // справжнє: адресат попросить за ним байти й дістане 404.
       let blobId = `blob_${Date.now()}_${Math.random().toString(36).substring(2, 7)}`;
+      let bytesLeftTheMachine = false;
 
       try {
         const sealed = await encryptForUpload(file);
@@ -858,9 +896,14 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
         if (blob?.blob_id) {
           blobId = blob.blob_id;
           blobSha256 = blob.sha256 || sealed.sha256;
+          bytesLeftTheMachine = true;
         }
       } catch (uploadErr) {
-        console.warn('[messenger] Direct local blob upload fallback:', uploadErr);
+        // Байти НЕ вийшли з машини. Раніше тут був лише `console.warn`, і лист
+        // летів далі з ВИГАДАНИМ `blobId` — відправник бачив галочку
+        // «надіслано» на файл, якого не існує ніде, а адресат на запит байтів
+        // діставав 404. Та сама брехня про дію, що й галочка при 401.
+        console.warn('[messenger] вузол не взяв байти вкладення:', uploadErr);
       }
 
       // «Фото» лише для того, що браузер справді намалює. Решта — картка
@@ -935,6 +978,22 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
         ...(note ? { caption: note } : {}),
       });
 
+      // Байти не вийшли — лист не йде. Надіслати картку файла, чиїх байтів не
+      // існує, означало б дати галочку на порожнечу: адресат попросить їх за
+      // `blob_id` і дістане 404, а відправник цього не побачить ніколи.
+      if (!bytesLeftTheMachine) {
+        markStatus('failed');
+        markAttachment('missing');
+        void storagePersistence.saveOutbox({
+          id: clientId,
+          chatId,
+          message: { ...newMsg, status: 'failed' },
+          savedAt: Date.now(),
+          attempts: 1,
+        });
+        return;
+      }
+
       try {
         const row = await messengerApi.appendMessage(chatId, {
           client_id: clientId,
@@ -948,9 +1007,25 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
         // 'parked' сюди теж належить: байти в хмарі — це ще не байти в людини.
         markStatus(deliveryStatus(row.delivery ?? row.delivery_state) || 'sent');
         markAttachment('stored');
+        void storagePersistence.dropOutbox(clientId);
       } catch (err) {
-        console.warn('[messenger] вузол у режимі локальної доставки (вкладення):', err);
-        markStatus('sent');
+        // Сервер НЕ взяв лист. Позначати його «надісланим» — брехня про
+        // дію користувача, а не про стан: людина бачить галочку, йде, і
+        // листа не існує. Шлях повтору (`resendMessage`) уже робив тут
+        // `failed` — решта трьох ставили `sent`, і саме це розходження
+        // ховало дефект: один випадок був чесний, три ні.
+        // Черги тут немає: запит не дійшов, тож ніде нічого не лежить.
+        console.warn('[messenger] вузол не взяв вкладення:', err);
+        markStatus('failed');
+        // Написане не зникає — і вкладення тим паче: рядок людина набере
+        // заново, а знімок у тому ж місці й часі — ні.
+        void storagePersistence.saveOutbox({
+          id: clientId,
+          chatId,
+          message: { ...newMsg, status: 'failed' },
+          savedAt: Date.now(),
+          attempts: 1,
+        });
       }
     },
 
@@ -1010,9 +1085,25 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
           body: geoPointBody(point),
         });
         markStatus(deliveryStatus(row.delivery ?? row.delivery_state) || 'sent');
+  void storagePersistence.dropOutbox(clientId);
       } catch (err) {
-        console.warn('[messenger] вузол у режимі локальної доставки (точка):', err);
-        markStatus('sent');
+        // Сервер НЕ взяв лист. Позначати його «надісланим» — брехня про
+        // дію користувача, а не про стан: людина бачить галочку, йде, і
+        // листа не існує. Шлях повтору (`resendMessage`) уже робив тут
+        // `failed` — решта трьох ставили `sent`, і саме це розходження
+        // ховало дефект: один випадок був чесний, три ні.
+        // Черги тут немає: запит не дійшов, тож ніде нічого не лежить.
+        console.warn('[messenger] вузол не взяв точку:', err);
+        markStatus('failed');
+        // Написане не зникає — і точку тим паче: рядок людина набере
+        // заново, а точку в тому ж місці й часі — ні.
+        void storagePersistence.saveOutbox({
+          id: clientId,
+          chatId,
+          message: { ...newMsg, status: 'failed' },
+          savedAt: Date.now(),
+          attempts: 1,
+        });
       }
     },
 
@@ -1124,6 +1215,8 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
           reply_to_id: newMsg.replyTo?.id ?? null,
         })
         .then((row) => {
+          // Дійшло — у скриньці вихідних йому більше не місце.
+          void storagePersistence.dropOutbox(clientId);
           const status = deliveryStatus(row.delivery ?? row.delivery_state) || 'sent';
           set((s) => ({
             chats: s.chats.map((c) =>
@@ -1139,8 +1232,25 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
           }));
         })
         .catch((err) => {
-          console.warn('[messenger] вузол у режимі локальної доставки:', err);
-          markStatus('sent');
+          // Сервер НЕ взяв лист. Позначати його «надісланим» — брехня про
+          // дію користувача, а не про стан: людина бачить галочку, йде, і
+          // листа не існує. Шлях повтору (`resendMessage`) уже робив тут
+          // `failed` — решта трьох ставили `sent`, і саме це розходження
+          // ховало дефект: один випадок був чесний, три ні.
+          // Черги тут немає: запит не дійшов, тож ніде нічого не лежить.
+          console.warn('[messenger] вузол не взяв лист:', err);
+          markStatus('failed');
+          // Написане не зникає. Доти лист жив лише в пам'яті вкладки: людина
+          // бачила «не пішло» — чесно, — але після перезапуску написаного не
+          // було взагалі. Тепер він переживає перезапуск, і його видно з
+          // кнопкою повтору.
+          void storagePersistence.saveOutbox({
+            id: clientId,
+            chatId,
+            message: { ...newMsg, status: 'failed' },
+            savedAt: Date.now(),
+            attempts: 1,
+          });
         });
 
       // Living Mind & Conversational Intelligence for all chats
@@ -1150,7 +1260,7 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
           id: aiMsgId,
           senderId: 'assistant_phantom',
           senderName: 'PHANTOM',
-          senderAvatar: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200&auto=format&fit=crop&q=80',
+          senderAvatar: '',
           timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
           type: 'text',
           text: '',
@@ -1248,9 +1358,21 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
               replyText = '';
             }
 
+            // Вузол не відповів — так і кажемо.
+            //
+            // Було: `generateContextualResponse` вигадував відповідь, і людина
+            // НЕ МОГЛА відрізнити її від справжньої. Серед заготовок був і
+            // «Системний статус: GHOST L5… наскрізне шифрування активне,
+            // затримка вузла 12 мс» — тобто вигадана телеметрія БЕЗПЕКИ, яку
+            // читають як доказ, що шифрування працює.
+            //
+            // Мовчання вузла й відповідь помічника — різні події, і плутати їх
+            // не можна навіть заради того, щоб екран не був порожнім.
             if (!replyText) {
-              const agentFallback = generateContextualResponse(activeChat, text, activeChat?.messages);
-              replyText = `${agentFallback.text}\n\n> 💡 *Порада: Введіть свій Google Gemini або OpenAI API ключ у **Налаштуваннях ⚙️ -> Нейромережа & API** для безлімітного прямого зв'язку з потужними моделями.*`;
+              replyText =
+                'Помічник зараз не відповідає: вузол не повернув відповіді. ' +
+                'Це не відмова — просто зв’язку з моделлю немає. Ключ Gemini або ' +
+                'OpenAI можна ввести в Налаштуваннях → Нейромережа & API.';
             }
           }
 
@@ -1303,7 +1425,7 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
       }
     },
 
-    sendVoiceMessage: (duration, transcript) => {
+    sendVoiceMessage: (duration, transcript, audioUrl, waveform) => {
       const state = get();
       const chatId = state.activeChatId;
       const activeChat = state.getActiveChat();
@@ -1323,7 +1445,13 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
         isSelf: true,
         voiceData: {
           duration,
-          waveform: Array.from({ length: 32 }, () => Math.random() * 0.8 + 0.2),
+          // Виміряні піки мікрофона. Було `Math.random()` — 32 випадкових
+          // стовпчики, однаково жваві для крику й для тиші, і НОВІ при
+          // кожному записі того самого голосу. Якщо мікрофона чи WebAudio
+          // не було, приходить порожньо, і рендерер малює нуль смужок:
+          // краще без хвилі, ніж із намальованою.
+          waveform: waveform ?? [],
+          audioUrl,
           transcript,
         },
       };
@@ -1334,59 +1462,47 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
         globalP2PMesh.sendDirectMessage(activeChat.handle || activeChat.title, newMsg, chatId);
       }
 
+      // ГОЛОСОВЕ НІКУДИ НЕ ЙДЕ, і до 30.08.2026 це ніяк не показувалось.
+      //
+      // Виміряно, а не припущено:
+      //  * `voice` НЕМАЄ в `WIRE_KINDS` (messenger/blobs.py:111) — дріт несе
+      //    text, image, file, delete, radio, group:invite, geo:point. Кадру
+      //    для голосу не існує, `wrap_frame` на нього кидає ValueError;
+      //  * шлях вище шле у вебсокет `chat:send_message`, а grep по ВСЬОМУ
+      //    бекенду на цей рядок дає НУЛЬ збігів — його не приймає ніхто.
+      //
+      // Тобто запис лишається на цьому вузлі. Раніше повідомлення малювалось
+      // геть без значка (`isSelf && msg.status` — а статусу не ставили), тож
+      // від доставленого воно не відрізнялось нічим. Ставимо чесний стан:
+      // людина мусить знати, що її не почули, ПЕРШ НІЖ чекати відповіді.
+      //
+      // Прибрати цей рядок можна лише разом із появою голосу на дроті — а
+      // для цього обидва боки спершу мають уміти сказати «не вмію показати»
+      // (правило в unwrap_frame). Телефонну половину ставить Чат 3.
+      newMsg.status = 'failed';
+
       set((s) => ({
         chats: s.chats.map((c) =>
           c.id === chatId ? { ...c, messages: [...c.messages, newMsg] } : c
         ),
       }));
 
-      // Інтерактивна реакція та відповідь на голосове повідомлення
-      if (activeChat) {
-        const peerName = activeChat.title?.split(' ')[0] || 'Співрозмовник';
-        get().setTypingStatus(chatId, `${peerName} слухає запис…`);
-
-        setTimeout(() => {
-          get().setTypingStatus(chatId, `${peerName} друкує…`);
-        }, 1200);
-
-        const prompt = transcript || 'Голосове повідомлення';
-        const reply = generateContextualResponse(activeChat, prompt, activeChat.messages);
-
-        setTimeout(() => {
-          get().setTypingStatus(chatId, null);
-          soundFx.playReceive();
-
-          const peerVoiceMsg: Message = {
-            id: `msg_reply_${Date.now()}`,
-            senderId: activeChat.id || 'peer_user',
-            senderName: activeChat.title || 'Співрозмовник',
-            senderAvatar: activeChat.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
-            timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
-            type: 'text',
-            text: reply.text,
-            isSelf: false,
-          };
-
-          set((s) => ({
-            chats: s.chats.map((c) =>
-              c.id === chatId
-                ? {
-                    ...c,
-                    messages: [...c.messages, peerVoiceMsg],
-                    lastKind: 'text',
-                    lastSnippet: reply.text.slice(0, 90),
-                    lastAuthor: activeChat.title || 'Співрозмовник',
-                    lastAt: new Date().toISOString(),
-                  }
-                : c
-            ),
-          }));
-
-          if (reply.reactionEmoji) {
-            get().addReaction(voiceClientId, reply.reactionEmoji);
-          }
-        }, 2200);
-      }
+      // ТУТ ЗАСТОСУНОК ПИСАВ ВІД ІМЕНІ СПІВРОЗМОВНИКА. Прибрано 30.08.2026.
+      //
+      // Було: після голосового `generateContextualResponse` вигадував текст, і
+      // той лягав у бесіду як `peerVoiceMsg` — з ІМЕНЕМ співрозмовника, його
+      // аватаркою і `isSelf: false`. Плюс «{Ім'я} слухає запис…» і «{Ім'я}
+      // друкує…», хоч ніхто нічого не слухав і не друкував.
+      //
+      // Це не брехня про стан і навіть не брехня про дію користувача. Це
+      // слова, вкладені в чужі вуста, у власній бесіді цієї людини. Гірше за
+      // все, що знайдено в месенджері за два дні: вигаданого друга в списку
+      // можна прийняти за приклад, а вигадану відповідь від матері —
+      // не можна ніяк.
+      //
+      // Нічого не підставляємо: голосове надіслано (або чесно не надіслано —
+      // стан і скринька вже це показують), а відповідь прийде тоді, коли її
+      // справді напише людина.
     },
 
     addCustomMessage: (message) => {
@@ -1578,6 +1694,7 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
           reply_to_id: msg.replyTo?.id ?? null,
         });
         markStatus(deliveryStatus(row.delivery ?? row.delivery_state));
+        void storagePersistence.dropOutbox(messageId);
       } catch (err) {
         console.warn('[messenger] повтор надсилання не вдався:', err);
         markStatus('failed');

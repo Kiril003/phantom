@@ -45,6 +45,8 @@ import { soundFx } from '../../utils/messengerSound';
 import { chatApi } from '../../services/api';
 import { messengerApi } from '../../services/messengerApi';
 import { useMessengerStore } from '../../stores/messengerStore';
+import { queueLabel } from '../../utils/queueLabel';
+import type { QueueInfo } from '../../utils/queueLabel';
 import { DataTableViewer } from './DataTableViewer';
 import { ChartEmbed } from './ChartEmbed';
 import { TaskListEmbed } from './TaskListEmbed';
@@ -262,7 +264,7 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
   // Картка «шлях листа» — клік по статусу власного повідомлення відкриває, де
   // лист лежить зараз і що з ним далі. Раніше галочка була мертвим <span>.
   const [pathCardMsgId, setPathCardMsgId] = useState<string | null>(null);
-  const [queueInfo, setQueueInfo] = useState<{ queued: number } | null>(null);
+  const [queueInfo, setQueueInfo] = useState<QueueInfo | null>(null);
   const [flushing, setFlushing] = useState(false);
 
   // Картка теж кладе заслінку (z-30) — виходити з неї треба тим самим Escape.
@@ -278,9 +280,16 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
     return st === 'parked' ? 'parked' : 'queued';
   };
 
+  // Голос не має типу на дроті, тож «не пішло» звучало б як збій мережі —
+  // а це не збій: ця версія просто не вміє відправляти голос. Різниця
+  // важлива: перше пропонує спробувати ще раз, друге — ні.
+  const voiceStaysHere = (msg?: Message): boolean =>
+    msg?.type === 'voice' && msg?.status === 'failed';
+
   const statusLabel = (status?: Message['status'], msg?: Message): string => {
     // Вкладення застрягло — кажемо саме про нього. «У черзі» звучало б так,
     // ніби чекає текст, а насправді в людини немає файла.
+    if (voiceStaysHere(msg)) return 'Запис лишився на цьому вузлі';
     const stuck = status === 'queued' ? stuckAttachment(msg) : null;
     if (stuck) {
       return stuck === 'parked'
@@ -301,6 +310,7 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
   // важити вісім пікселів. Для доставленого підпису немає — це тиша за
   // замовчуванням, а не приховане попередження.
   const statusNote = (status?: Message['status'], msg?: Message): string => {
+    if (voiceStaysHere(msg)) return 'лишилось тут';
     const stuck = status === 'queued' ? stuckAttachment(msg) : null;
     if (stuck) return stuck === 'parked' ? 'у дорозі через хмару' : 'чекає передачі';
     switch (status) {
@@ -754,12 +764,21 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
     : [];
 
   // Auto-jump to first search match when typing
+  //
+  // У залежностях стоїть `firstMatchId`, а не сам `searchMatchingIds`: масив
+  // перераховується щорендеру, тож його тотожність міняється завжди — з ним
+  // у списку ефект стріляв би кожен кадр і намертво тримав курсор пошуку на
+  // першому збігу, вбиваючи кнопки «далі/назад». Рядок id стабільний.
+  // Заразом лікується й тихіша біда: раніше ефект залежав лише від запиту,
+  // тож коли листи доходили ПІСЛЯ набору (довга історія, повільна мережа),
+  // перший збіг не підсвічувався взагалі — тепер поява збігу сама його веде.
+  const firstMatchId = searchMatchingIds[0];
   useEffect(() => {
-    if (isSearching && chatSearchQuery.trim() && searchMatchingIds.length > 0) {
+    if (isSearching && chatSearchQuery.trim() && firstMatchId) {
       setSearchMatchIndex(0);
-      scrollToMessage(searchMatchingIds[0]);
+      scrollToMessage(firstMatchId);
     }
-  }, [chatSearchQuery, isSearching]);
+  }, [chatSearchQuery, isSearching, firstMatchId]);
 
   const handleNextSearchMatch = () => {
     if (searchMatchingIds.length === 0) return;
@@ -2316,9 +2335,7 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
                                       : stuckAttachment(msg)
                                         ? 'Вкладення лежить на вашому вузлі. Повеземо, щойно вузол співрозмовника обізветься.'
                                         : "Повідомлення чекає на вашому вузлі. Надішлемо, щойно співрозмовник з'явиться в мережі."}
-                                    {queueInfo && queueInfo.queued > 1
-                                      ? ` Разом у черзі: ${queueInfo.queued}.`
-                                      : ''}
+                                    {queueLabel(queueInfo)}
                                   </p>
                                   <button
                                     onClick={handleFlushQueue}
@@ -2330,18 +2347,35 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
                                 </div>
                               )}
 
+                              {/* Повтор пропонуємо лише там, де він МОЖЕ
+                                  спрацювати. Якщо обрив стався до того, як
+                                  байти вкладення дійшли до вузла (`blobId`
+                                  порожній), повторювати нічого: кнопка була б
+                                  елементом, який існує й не виконує
+                                  обіцяного, — а це гірше за її відсутність. */}
                               {msg.status === 'failed' && (
-                                <div className="mt-2">
-                                  <p className="text-[11.5px] text-[#6E7568] leading-relaxed mb-2">
-                                    Вузол не прийняв лист. Можна повторити спробу.
-                                  </p>
-                                  <button
-                                    onClick={() => useMessengerStore.getState().retrySend(msg.id)}
-                                    className="w-full py-1.5 rounded-[10px] bg-[#D96C35] hover:bg-[#B85425] text-[#FDFCF9] text-[12px] font-bold transition-colors"
-                                  >
-                                    Повторити
-                                  </button>
-                                </div>
+                                msg.media && !msg.media.blobId ? (
+                                  <div className="mt-2">
+                                    <p className="text-[11.5px] text-[#6E7568] leading-relaxed">
+                                      Файл не встиг вивантажитись на вузол, тож
+                                      повторювати нічого — оберіть його знову
+                                      через скріпку внизу. Текст листа при цьому
+                                      не втрачено.
+                                    </p>
+                                  </div>
+                                ) : (
+                                  <div className="mt-2">
+                                    <p className="text-[11.5px] text-[#6E7568] leading-relaxed mb-2">
+                                      Вузол не прийняв лист. Можна повторити спробу.
+                                    </p>
+                                    <button
+                                      onClick={() => useMessengerStore.getState().retrySend(msg.id)}
+                                      className="w-full py-1.5 rounded-[10px] bg-[#D96C35] hover:bg-[#B85425] text-[#FDFCF9] text-[12px] font-bold transition-colors"
+                                    >
+                                      Повторити
+                                    </button>
+                                  </div>
+                                )
                               )}
                             </div>
                           </>

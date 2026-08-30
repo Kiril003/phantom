@@ -11,6 +11,7 @@ import {
   BookOpen,
   Globe,
   Layers,
+  Check,
 } from 'lucide-react';
 import { QrScanner } from './QrScanner';
 import { InviteCard } from './InviteCard';
@@ -33,13 +34,17 @@ interface CreateChatModalProps {
   onConversationReady: (conversationId: string) => void;
 }
 
-const PRESET_GROUP_AVATARS = [
-  'https://images.unsplash.com/photo-1522071820081-009f0129c71c?w=200&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1556761175-5973dc0f32e7?w=200&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?w=200&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1531482615713-2afd69097998?w=200&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=200&auto=format&fit=crop&q=80',
-];
+/** Позначки для групи — місцеві, не з мережі.
+ *
+ *  Тут лежали п'ять посилань на `images.unsplash.com`: фотографії незнайомих
+ *  людей і чужих інтер'єрів, які пропонувались як обличчя вашої групи. Дві
+ *  біди в одному переліку. Перша — обличчя: група власника отримувала знімок
+ *  сторонньої людини. Друга гірша: **застосунок, який обіцяє працювати без
+ *  інфраструктури, ходив по кожну з цих картинок на чужий сервер** — при
+ *  кожному відкритті вікна, з IP власника.
+ *
+ *  Емодзі малює шрифт. Нічого не завантажується, нічого не витікає. */
+const PRESET_GROUP_AVATARS = ['🛡️', '🧭', '📡', '🏔️', '🔥', '⚓'];
 
 export const CreateChatModal: React.FC<CreateChatModalProps> = ({
   isOpen,
@@ -68,6 +73,15 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
     }>
   >([]);
   const [loadingDirectory, setLoadingDirectory] = useState(false);
+  /** Контакти вузла — саме з них можна зібрати групу: щоб зашифрувати
+   *  людині, потрібен її ключ, а він береться з контакту. */
+  const [contacts, setContacts] = useState<
+    Array<{ id: string; display_name: string; session_ready: boolean; verified: boolean }>
+  >([]);
+  const [contactsState, setContactsState] = useState<'loading' | 'ready' | 'failed'>('loading');
+  const [groupContactIds, setGroupContactIds] = useState<string[]>([]);
+  /** Вузол не відповів на запит списку. Порожньо ≠ «нікого немає». */
+  const [directoryFailed, setDirectoryFailed] = useState(false);
 
   // Network & Direct Address connection state
   const [directAddress, setDirectAddress] = useState('');
@@ -93,6 +107,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
     setGroupTitle('');
     setGroupCircle('work');
     setGroupDescription('');
+    setGroupContactIds([]);
     setDmName('');
     setDmCircle('friends');
     setDirectAddress('');
@@ -113,21 +128,32 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
     if (!isOpen) return;
     let alive = true;
     setLoadingDirectory(true);
+    setDirectoryFailed(false);
+    setContactsState('loading');
+    messengerApi
+      .listContacts()
+      .then((rows) => { if (alive) { setContacts(rows); setContactsState('ready'); } })
+      .catch(() => { if (alive) { setContacts([]); setContactsState('failed'); } });
     messengerApi
       .listDirectoryUsers()
       .then((users) => {
         if (alive) setDirectoryUsers(users);
       })
       .catch(() => {
-        // Fallback default users if offline
+        // Тут `catch` ВИГАДУВАВ п'ятьох людей — Kiril (Lead), Alex (Backend),
+        // Kyrylo, Maryna (QA), PHANTOM — усіх із фотографіями з чужого
+        // сервера і з `is_online: true`.
+        //
+        // Тобто саме тоді, коли вузол недосяжний, людина бачила п'ятьох
+        // колег «у мережі» й не розуміла, чому написати їм не виходить.
+        // Помилка ковталась, а порожнеча прикривалась вигадкою — той самий
+        // мотив, що й люди на мапі, і що й привітний список на екрані входу
+        // при мертвому ядрі.
+        //
+        // Тепер: нікого не вигадуємо і кажемо, що сталось.
         if (alive) {
-          setDirectoryUsers([
-            { id: 'u_kiril', username: 'kiril', display_name: 'Kiril (Lead)', role: 'ROOT', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80', is_online: true },
-            { id: 'u_alex', username: 'alex', display_name: 'Alex (Backend)', role: 'OPERATOR', avatar: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=80', is_online: true },
-            { id: 'u_kyrylo', username: 'kyrylo', display_name: 'Kyrylo', role: 'OPERATOR', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80', is_online: true },
-            { id: 'u_maryna', username: 'maryna', display_name: 'Maryna (QA)', role: 'OPERATOR', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&auto=format&fit=crop&q=80', is_online: true },
-            { id: 'u_phantom', username: 'phantom', display_name: 'PHANTOM Autonomous Node', role: 'ROOT', avatar: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200&auto=format&fit=crop&q=80', is_online: true },
-          ]);
+          setDirectoryUsers([]);
+          setDirectoryFailed(true);
         }
       })
       .finally(() => {
@@ -210,7 +236,7 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
       soundFx.playSend();
       const newChatId = await useMessengerStore
         .getState()
-        .createGroup(groupTitle.trim(), groupCircle, groupAvatar, groupDescription.trim());
+        .createGroup(groupTitle.trim(), groupContactIds, groupCircle, groupAvatar, groupDescription.trim());
       reset();
       onConversationReady(newChatId);
     } catch (err: any) {
@@ -232,44 +258,38 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
       reset();
       onConversationReady(conv.id);
     } catch {
-      // Local fallback for standalone web / offline mode
-      const clean = username.replace(/^@/, '');
+      // ТУТ ВИГАДУВАВСЯ СПІВРОЗМОВНИК. Прибрано 30.08.2026.
+      //
+      // Було підписано «Local fallback for standalone web / offline mode», а
+      // насправді при недосяжному вузлі створювалась розмова з:
+      //   * `peerNodeId: node_<нік>` — вигаданим ідентифікатором вузла. Він
+      //     не відповідає жодному справжньому; писати в таку розмову можна,
+      //     дійти воно не може НІКОЛИ;
+      //   * `isOnline: true` — станом, якого вузол не знає навіть для
+      //     справжніх контактів;
+      //   * фотографією незнайомої людини з чужого сервера як аватаркою.
+      //
+      // Тобто відмова маскувалась під успіх, і людина отримувала глухий кут,
+      // що виглядав як жива розмова. Співрозмовник з'являється лише двома
+      // чесними шляхами: через вузол (гілка вище) або через запрошення, де
+      // ідентифікатор приходить від самої людини, а не вигадується з нікнейму.
       const existing = useMessengerStore
         .getState()
         .chats.find(
           (c) =>
-            c.handle?.toLowerCase() === `@${clean.toLowerCase()}` ||
-            c.id === `chat_dm_${clean.toLowerCase()}` ||
-            c.title.toLowerCase() === clean.toLowerCase(),
+            c.handle?.toLowerCase() === `@${username.replace(/^@/, '').toLowerCase()}` ||
+            c.title.toLowerCase() === username.replace(/^@/, '').toLowerCase(),
         );
-
       if (existing) {
         reset();
         onConversationReady(existing.id);
         return;
       }
-
-      const newChatId = `chat_dm_${clean.toLowerCase()}`;
-      const newChat = {
-        id: newChatId,
-        title: clean.charAt(0).toUpperCase() + clean.slice(1),
-        handle: `@${clean.toLowerCase()}`,
-        avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
-        type: 'dm' as const,
-        circle: dmCircle,
-        isOnline: true,
-        peerNodeId: `node_${clean.toLowerCase()}`,
-        unreadCount: 0,
-        messages: [],
-      };
-
-      useMessengerStore.setState((s) => ({
-        chats: [newChat, ...s.chats],
-        activeChatId: newChatId,
-      }));
-
-      reset();
-      onConversationReady(newChatId);
+      setError(
+        `Вузол не відповів на запит про «${username.replace(/^@/, '')}». ` +
+          'Розмову не створено: без ідентифікатора вузла лист нікуди не піде. ' +
+          'Додайте людину через запрошення — там ідентифікатор приходить від неї.',
+      );
     } finally {
       setBusy(false);
     }
@@ -533,16 +553,20 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
                   Аватар простору
                 </label>
                 <div className="flex items-center gap-2 overflow-x-auto pb-1">
-                  {PRESET_GROUP_AVATARS.map((url, idx) => (
-                    <img
-                      key={idx}
-                      src={url}
-                      alt="Avatar preset"
-                      onClick={() => setGroupAvatar(url)}
-                      className={`w-10 h-10 rounded-2xl object-cover cursor-pointer border-2 transition-transform hover:scale-105 ${
-                        groupAvatar === url ? 'border-[#E87A42] shadow-md scale-105' : 'border-transparent opacity-70'
+                  {PRESET_GROUP_AVATARS.map((mark) => (
+                    <button
+                      key={mark}
+                      type="button"
+                      aria-label={`Позначка ${mark}`}
+                      onClick={() => setGroupAvatar(mark)}
+                      className={`w-10 h-10 rounded-2xl text-xl leading-none flex items-center justify-center cursor-pointer border-2 bg-[#F7F3EA] transition-transform hover:scale-105 ${
+                        groupAvatar === mark
+                          ? 'border-[#E87A42] shadow-md scale-105'
+                          : 'border-transparent opacity-70'
                       }`}
-                    />
+                    >
+                      {mark}
+                    </button>
                   ))}
                 </div>
               </div>
@@ -552,10 +576,74 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
                 <span>Група автоматично отримує <b>Живий Canvas</b> та підтримку <b>мікро-віджетів</b>.</span>
               </div>
 
+              {/* Склад беремо з НАЯВНИХ контактів вузла, а не вигадуємо.
+                  Досі цей екран вписував трьох неіснуючих людей і кликав
+                  маршрут, який груп не заводить. */}
+              <div className="space-y-1.5">
+                <span className="text-[11.5px] font-extrabold text-[#6E7568] uppercase tracking-wider block">
+                  Кого кличемо ({groupContactIds.length})
+                </span>
+
+                {contactsState === 'loading' ? (
+                  <div className="p-4 text-center text-xs text-[#5F6A60]">Питаю вузол про контакти…</div>
+                ) : contactsState === 'failed' ? (
+                  <div className="p-4 text-center text-xs text-[#5F6A60] leading-relaxed">
+                    Вузол не відповів на запит контактів. Без списку зібрати
+                    групу не можна: щоб зашифрувати людині, потрібен її ключ.
+                  </div>
+                ) : contacts.length === 0 ? (
+                  <div className="p-4 text-center text-xs text-[#5F6A60] leading-relaxed">
+                    Контактів ще немає. Спершу додайте людину через запрошення —
+                    групу можна зібрати лише з тих, чий ключ у вас уже є.
+                  </div>
+                ) : (
+                  <div className="max-h-[180px] overflow-y-auto space-y-1.5 pr-1">
+                    {contacts.map((c) => {
+                      const picked = groupContactIds.includes(c.id);
+                      return (
+                        <button
+                          key={c.id}
+                          type="button"
+                          onClick={() => {
+                            soundFx.playTap();
+                            setGroupContactIds((prev) =>
+                              prev.includes(c.id) ? prev.filter((x) => x !== c.id) : [...prev, c.id],
+                            );
+                          }}
+                          className={`w-full p-2.5 rounded-xl border text-left transition-colors ${
+                            picked
+                              ? 'bg-[#F1EBDD] border-[#D96C35]'
+                              : 'bg-[#FDFCF9] border-[#E5DEC9] hover:border-[#DDD4C4]'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between gap-2">
+                            <span className="font-bold text-xs text-[#21261F] truncate">
+                              {c.display_name}
+                            </span>
+                            {picked && <Check className="w-3.5 h-3.5 text-[#D96C35] shrink-0" />}
+                          </div>
+                          {/* Показуємо не «в мережі», а те, що справді знаємо:
+                              чи є ключ. Без нього вузол кадр не вигадає — він
+                              чесно пропустить цю людину. */}
+                          <span className="text-[10px] text-[#8A9186]">
+                            {c.session_ready
+                              ? c.verified
+                                ? 'ключ звірено'
+                                : 'ключ є, звірка не проводилась'
+                              : 'ключа ще немає — лист їй не поїде'}
+                          </span>
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+
               <button
                 type="button"
+                data-testid="create-group-submit"
                 onClick={handleCreateGroup}
-                disabled={!groupTitle.trim() || busy}
+                disabled={!groupTitle.trim() || groupContactIds.length === 0 || busy}
                 className="w-full py-3 rounded-2xl bg-[#E87A42] hover:bg-[#C25925] disabled:bg-[#EADFD0] disabled:text-[#A8A99C] text-white text-sm font-extrabold transition-all shadow-md active:scale-98"
               >
                 {busy ? 'Створюю групу…' : '✨ Створити групу'}
@@ -588,6 +676,17 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
 
                 {loadingDirectory ? (
                   <div className="p-4 text-center text-xs text-[#5F6A60]">Завантаження списку…</div>
+                ) : directoryFailed ? (
+                  // Порожньо і «не змогли спитати» — різні речі, і плутати їх
+                  // означає показувати самотність там, де насправді обрив.
+                  <div className="p-4 text-center text-xs text-[#5F6A60] leading-relaxed">
+                    Вузол не відповів на запит списку. Хто на ньому є — зараз
+                    невідомо; це не означає, що там нікого немає.
+                  </div>
+                ) : directoryUsers.length === 0 ? (
+                  <div className="p-4 text-center text-xs text-[#5F6A60]">
+                    На цьому вузлі поки немає інших користувачів.
+                  </div>
                 ) : (
                   <div className="max-h-[180px] overflow-y-auto space-y-1.5 pr-1">
                     {directoryUsers

@@ -28,8 +28,13 @@ import { MEDIA_LIMIT_LABEL } from '../../services/messengerMedia';
 
 interface MessageComposerProps {
   onSendMessage: (text: string, scheduledTime?: string) => void;
-  onSendVoiceMessage: (duration: number, transcript: string, audioUrl?: string) => void;
-  onOpenActions: () => void;
+  onSendVoiceMessage: (
+    duration: number,
+    transcript: string,
+    audioUrl?: string,
+    waveform?: number[],
+  ) => void;
+  onOpenActions?: () => void;
   onOpenScheduler: () => void;
   onOpenScheduledList?: () => void;
   scheduledCountInCurrentChat?: number;
@@ -97,6 +102,11 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
   const sendAttachment = useMessengerStore((st) => st.sendAttachment);
   const sendGeoPoint = useMessengerStore((st) => st.sendGeoPoint);
   const voiceChunksRef = useRef<Blob[]>([]);
+  /** Справжні піки мікрофона. Досі хвиля бралася з `Math.random()` —
+   *  малюнок був однаково жвавий і для крику, і для тиші. */
+  const voicePeaksRef = useRef<number[]>([]);
+  const voiceAudioCtxRef = useRef<AudioContext | null>(null);
+  const voiceRafRef = useRef<number | null>(null);
 
   const startVoiceRecording = async () => {
     try {
@@ -104,6 +114,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
       setIsRecordingVoice(true);
       setRecordingSeconds(0);
       voiceChunksRef.current = [];
+      voicePeaksRef.current = [];
 
       let stream: MediaStream | null = null;
       if (typeof navigator !== 'undefined' && navigator.mediaDevices?.getUserMedia) {
@@ -124,6 +135,42 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
               }
             };
             mr.start(100);
+
+            // RMS сигналу, зцентрованого на 128, ~20 разів на секунду.
+            // Той самий розрахунок, що вже робить useVoiceRecorder для
+            // пульсації сфери — тут ми його не викидаємо, а зберігаємо.
+            try {
+              const AudioCtx =
+                window.AudioContext ||
+                (window as unknown as { webkitAudioContext: typeof AudioContext })
+                  .webkitAudioContext;
+              if (AudioCtx) {
+                const ctx = new AudioCtx();
+                voiceAudioCtxRef.current = ctx;
+                const analyser = ctx.createAnalyser();
+                analyser.fftSize = 512;
+                ctx.createMediaStreamSource(stream).connect(analyser);
+                const buf = new Uint8Array(analyser.fftSize);
+                let lastTick = 0;
+                const sample = () => {
+                  const now = performance.now();
+                  if (now - lastTick >= 50) {
+                    lastTick = now;
+                    analyser.getByteTimeDomainData(buf);
+                    let sum = 0;
+                    for (const v of buf) {
+                      const d = (v - 128) / 128;
+                      sum += d * d;
+                    }
+                    voicePeaksRef.current.push(Math.min(1, Math.sqrt(sum / buf.length) * 3));
+                  }
+                  voiceRafRef.current = requestAnimationFrame(sample);
+                };
+                voiceRafRef.current = requestAnimationFrame(sample);
+              }
+            } catch {
+              // Немає WebAudio — хвилі не буде. Не вигадуємо її.
+            }
           }
         } catch (e) {
           console.warn('[voice] microphone access:', e);
@@ -136,6 +183,42 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
     } catch {
       setIsRecordingVoice(false);
     }
+  };
+
+  /** Зупиняє замір і віддає 32 стовпчики зі справжніх піків. Якщо мікрофон
+   *  чи WebAudio недоступні — порожньо: рендерер малює нуль смужок. */
+  const harvestVoicePeaks = (): number[] => {
+    if (voiceRafRef.current != null) {
+      cancelAnimationFrame(voiceRafRef.current);
+      voiceRafRef.current = null;
+    }
+    if (voiceAudioCtxRef.current) {
+      try {
+        void voiceAudioCtxRef.current.close();
+      } catch {
+        /* ignore */
+      }
+      voiceAudioCtxRef.current = null;
+    }
+    const raw = voicePeaksRef.current;
+    voicePeaksRef.current = [];
+    if (raw.length === 0) return [];
+
+    const BARS = 32;
+    const out: number[] = [];
+    for (let i = 0; i < BARS; i += 1) {
+      const from = Math.floor((i * raw.length) / BARS);
+      const to = Math.max(from + 1, Math.floor(((i + 1) * raw.length) / BARS));
+      let peak = 0;
+      for (let j = from; j < to && j < raw.length; j += 1) {
+        if (raw[j] > peak) peak = raw[j];
+      }
+      out.push(peak);
+    }
+    // Нормуємо до найгучнішого стовпчика, щоб тиха, але справжня хвиля
+    // читалась. Форма лишається виміряною — міняється лише масштаб.
+    const loudest = Math.max(...out);
+    return loudest > 0.02 ? out.map((v) => Math.max(0.04, v / loudest)) : out;
   };
 
   const cancelVoiceRecording = () => {
@@ -151,6 +234,7 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
         /* ignore */
       }
     }
+    harvestVoicePeaks();
     voiceStreamRef.current?.getTracks().forEach((t) => t.stop());
     voiceStreamRef.current = null;
     mediaRecorderRef.current = null;
@@ -167,8 +251,9 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
       recordingTimerRef.current = null;
     }
 
+    const waveform = harvestVoicePeaks();
     const deliverVoice = (url?: string) => {
-      _onSendVoiceMessage(duration, 'Голосове повідомлення', url);
+      _onSendVoiceMessage(duration, 'Голосове повідомлення', url, waveform);
     };
 
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {

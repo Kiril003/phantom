@@ -78,6 +78,11 @@ export const CanvasSplitView: React.FC<CanvasSplitViewProps> = ({
   const [historyIdx, setHistoryIdx] = useState(0);
 
   const storageKey = `phantom_canvas_v3_${chatId}_${threadId}`;
+  /** Полотно живе ЛИШЕ в localStorage цієї вкладки — на вузол воно не їде.
+   *  Якщо сховище відмовляє (приватне вікно, вичерпана квота), правки
+   *  зникають при перезавантаженні. Три `catch {}` ковтали цю відмову
+   *  мовчки, тож людина дізнавалась про втрату вже після неї. */
+  const [notSaved, setNotSaved] = useState(false);
 
   // Default clean blocks
   const defaultBlocks: ExtendedCanvasBlock[] = [
@@ -130,7 +135,10 @@ export const CanvasSplitView: React.FC<CanvasSplitViewProps> = ({
     try {
       const saved = localStorage.getItem(storageKey);
       if (saved) return JSON.parse(saved);
-    } catch {}
+    } catch {
+      // Читання не вдалось — нижче підуть початкові блоки. Це не втрата
+      // написаного: якщо запис колись пройшов, він лишається в сховищі.
+    }
     return defaultBlocks;
   });
 
@@ -140,9 +148,6 @@ export const CanvasSplitView: React.FC<CanvasSplitViewProps> = ({
     setHistory(updated);
     setHistoryIdx(updated.length - 1);
     setBlocks(newBlocks);
-    try {
-      localStorage.setItem(storageKey, JSON.stringify(newBlocks));
-    } catch {}
   };
 
   const undo = () => {
@@ -198,18 +203,25 @@ export const CanvasSplitView: React.FC<CanvasSplitViewProps> = ({
         content: customEv.detail.text,
         updatedAt: 'щойно',
       };
-      setBlocks((prev) => {
-        const next = [...prev, newBlock];
-        try {
-          localStorage.setItem(storageKey, JSON.stringify(next));
-        } catch {}
-        return next;
-      });
+      setBlocks((prev) => [...prev, newBlock]);
     };
 
     window.addEventListener('phantom:add-to-canvas', handleAddToCanvas);
     return () => window.removeEventListener('phantom:add-to-canvas', handleAddToCanvas);
   }, [storageKey]);
+
+  // Один запис на кожну зміну блоків, і одне місце, де відмова стає видимою.
+  // Раніше запис жив у двох гілках із `catch {}` у кожній, а спроба світити
+  // прапорець ЗСЕРЕДИНИ оновлювача стану була ще й неправильною: оновлювач
+  // мусить лишатись чистим, інакше React має право викликати його двічі.
+  useEffect(() => {
+    try {
+      localStorage.setItem(storageKey, JSON.stringify(blocks));
+      setNotSaved(false);
+    } catch {
+      setNotSaved(true);
+    }
+  }, [blocks, storageKey]);
 
   const deleteBlock = (id: string) => {
     soundFx.playTap();
@@ -326,6 +338,19 @@ export const CanvasSplitView: React.FC<CanvasSplitViewProps> = ({
 
   return (
     <div className="flex flex-col h-full bg-[#FCFBF8] text-[#21261F] select-text shadow-xl relative overflow-hidden">
+      {/* Відмова сховища більше не безшумна. Полотно живе лише в цій вкладці,
+          тож невдалий запис означає, що написане зникне при перезавантаженні —
+          і сказати про це треба ДО того, як людина закриє вкладку. */}
+      {notSaved && (
+        <div
+          data-testid="canvas-not-saved"
+          className="px-3 sm:px-4 py-1.5 bg-[#FBEFE9] border-b border-[#E8C7B6] text-[11.5px] font-semibold text-[#A5502F] shrink-0"
+        >
+          Сховище вкладки не приймає запис — написане тут зникне після
+          перезавантаження. Скопіюйте важливе.
+        </div>
+      )}
+
       {/* 1. Header Toolbar — Responsive, Polished, Zero-Overlap */}
       <div className="px-3 sm:px-4 py-2.5 bg-[#FAF8F5] border-b border-[#E8E1D3] flex flex-wrap items-center justify-between gap-2 shrink-0">
         {/* Left: Document Title & Mobile Back Button */}

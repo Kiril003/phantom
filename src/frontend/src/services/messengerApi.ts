@@ -71,6 +71,53 @@ export interface NodeIdentity {
   compact: string;
 }
 
+
+/** Учасник групи очима вузла. `session_ready` — чи є ключ, яким йому можна
+ *  зашифрувати; без нього вузол НЕ вигадує кадр, а чесно пропускає. */
+export interface SearchHit {
+  message_id: string;
+  conversation_id: string;
+  conversation_title: string;
+  seq: number;
+  author_name: string;
+  kind: string;
+  snippet: string;
+  sent_at: string;
+}
+
+export interface SearchResult {
+  hits: SearchHit[];
+  /** Скільки рядків вузол справді переглянув. */
+  scanned: number;
+  /** Чи впертись у стелю обходу — клієнт МУСИТЬ це показати, інакше
+   *  обрізання прочитається як «такого немає». */
+  truncated: boolean;
+}
+
+export interface NodeGroupMember {
+  node_id: string;
+  display_name: string;
+  role: string;
+  state: string;
+  verified: boolean;
+  session_ready: boolean;
+  undeliverable: boolean;
+}
+
+export interface NodeGroup {
+  conversation_id: string;
+  group_id: string;
+  title: string;
+  epoch: number;
+  fingerprint: string;
+  creator_node_id: string;
+  own_node_id: string;
+  own_state: string;
+  verified_pairs: number;
+  member_count: number;
+  members: NodeGroupMember[];
+}
+
 export interface NodeContact {
   id: string;
   peer_node_id: string;
@@ -105,6 +152,16 @@ export const messengerApi = {
   roads: () => request<RoadsReport>('GET', '/messenger/roads'),
 
   listContacts: () => request<NodeContact[]>('GET', '/messenger/contacts'),
+
+  /** Склад групи, як його бачить вузол. Одного числа звірки на групу не
+   *  існує: спільного секрету немає, є N попарних сесій. */
+   
+  createGroup: (title: string, contactIds: string[], displayName: string) =>
+    request<NodeGroup>('POST', '/messenger/groups', {
+      title,
+      contact_ids: contactIds,
+      display_name: displayName,
+    }),
 
   addContact: (
     display_name: string,
@@ -155,7 +212,18 @@ export const messengerApi = {
     ),
 
   /** Скільки листів чекають на зв'язок — головний козир черги, зроблений видимим. */
-  queueStatus: () => request<{ queued: number }>('GET', '/messenger/queue/status'),
+  /** Стан черги вузла.
+   *
+   *  ДВА числа, і друге не оздоба. Груповий лист лежить у черзі ОКРЕМИМ
+   *  рядком на кожного отримувача: одне повідомлення на 31 людину — це 31
+   *  рядок. Вузол рахує їх окремо саме тому, що показати «1» означало б
+   *  применшити борг; клієнт же типізував лише `queued` і друге число
+   *  мовчки викидав. */
+  queueStatus: () =>
+    request<{ queued: number; group_frames_queued?: number }>(
+      'GET',
+      '/messenger/queue/status',
+    ),
 
   listConversations: () => request<NodeConversation[]>('GET', '/messenger/conversations'),
 
@@ -185,6 +253,18 @@ export const messengerApi = {
     /** Без нього розмова ні з ким: лист нікуди не поїде. */
     contact_id?: string | null;
   }) => request<NodeConversation>('POST', '/messenger/conversations', body),
+
+  /** Пошук по ВСІЙ історії вузла.
+   *
+   *  Мусить жити на вузлі, а не у вкладці: тіла лежать запечатаними
+   *  (`ciphertext`), і ключі at-rest є лише у вузла. Клієнт має в пам'яті
+   *  щонайбільше останні 200 листів відкритої розмови — доти пошук у бічній
+   *  панелі звірявся лише з `lastSnippet`, тобто з ОСТАННІМ рядком чату. */
+  searchMessages: (query: string, limit = 40) =>
+    request<SearchResult>(
+      'GET',
+      `/messenger/search?q=${encodeURIComponent(query)}&limit=${limit}`,
+    ),
 
   listMessages: (conversationId: string, afterSeq = 0) =>
     request<NodeMessage[]>(
@@ -333,6 +413,17 @@ export function deliveryStatus(
   return 'sent';
 }
 
+/** Чи це наш власний лист.
+ *
+ *  Виділено в окремий предикат, бо ця умова потрібна двічі — для `isSelf` і
+ *  для стану доставки, — а дві копії однієї умови розходяться тихо. Саме так
+ *  стан доставки й загубився для груп: `isSelf` умів обходитись без
+ *  `peerNodeId`, а розрахунок стану — ні.
+ */
+function isSelfMessage(row: NodeMessage, selfId: string, peerNodeId?: string): boolean {
+  return peerNodeId ? row.author_id !== peerNodeId : row.author_id === selfId;
+}
+
 export function messageFromNode(row: NodeMessage, selfId: string, peerNodeId?: string): Message {
   // Показова стрічка везе складний вміст як JSON — розбираємо його тут, щоб
   // таблиці, графіки й реакції жили тим самим шляхом, що й звичайний текст.
@@ -370,12 +461,27 @@ export function messageFromNode(row: NodeMessage, selfId: string, peerNodeId?: s
     sentAt: row.sent_at,
     type: (row.kind as Message['type']) || 'text',
     text: row.kind === 'text' ? row.body ?? undefined : (rich.text as string | undefined),
-    isSelf: peerNodeId ? row.author_id !== peerNodeId : row.author_id === selfId,
+    isSelf: isSelfMessage(row, selfId, peerNodeId),
     // Стан доставки — з бази вузла, тож галочки переживають перезавантаження.
-    status:
-      peerNodeId && row.author_id !== peerNodeId
-        ? deliveryStatus(row.delivery_state, row.attachment_state)
-        : undefined,
+    //
+    // Умова тут була `peerNodeId && row.author_id !== peerNodeId`, тобто стан
+    // рахувався ЛИШЕ для розмови один-на-один. У ГРУПИ `peerNodeId` немає за
+    // побудовою: віяр робить окремий кадр кожному учаснику його попарною
+    // сесією, тож єдиного співрозмовника не існує.
+    //
+    // Наслідок був виміряний на живому вузлі: лист у групу з двома учасниками
+    // за мертвою адресою повертався з `delivery_state: 'queued'` — вузол знав
+    // правду й казав її, — а бульбашка малювалась БЕЗ ЖОДНОГО значка, бо
+    // значок вимагає `msg.status`. Тобто від доставленого вона не
+    // відрізнялась нічим. Той самий клас, що голосове й `is_demo`: правду
+    // несли всі шари, крім останнього.
+    //
+    // Тепер стан рахується для будь-якого НАШОГО листа. Для нотаток самому
+    // собі вузол віддає `delivery_state: 'local'`, і це чесно означає
+    // «надіслано»: везти нікуди.
+    status: isSelfMessage(row, selfId, peerNodeId)
+      ? deliveryStatus(row.delivery_state, row.attachment_state)
+      : undefined,
     // Підстава під підписом бульбашки: «очікує передачі» проти «у дорозі
     // через хмару» — різні речі, і крапка одного кольору їх не розрізняє.
     attachmentState: row.attachment_state ?? undefined,

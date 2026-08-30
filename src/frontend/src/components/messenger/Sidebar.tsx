@@ -58,6 +58,7 @@ import { Avatar } from './Avatar';
 import { soundFx } from '../../utils/messengerSound';
 import { networkEngine } from '../../services/messengerNetworkEngine';
 import { messengerApi } from '../../services/messengerApi';
+import type { SearchHit } from '../../services/messengerApi';
 import { useMessengerStore } from '../../stores/messengerStore';
 import { useAISynthesisStore } from '../../stores/aiSynthesisStore';
 import { ShareFolderModal } from './ShareFolderModal';
@@ -231,6 +232,14 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const updateChat = useMessengerStore((s) => s.updateChat);
 
   const [searchQuery, setSearchQuery] = useState('');
+  /** Влучання від вузла. Фільтр нижче звіряється лише з полями чату
+   *  (заголовок, ОСТАННІЙ рядок, автор останнього) — тобто повідомлення в
+   *  глибині історії він не бачить у принципі: клієнт їх не має, вони лежать
+   *  запечатані на вузлі. Виміряно на склі: «№5» (останній рядок) знаходився,
+   *  «№2» і «№9» з тих самих розмов — ні, хоч плейсхолдер обіцяв повідомлення. */
+  const [hits, setHits] = useState<SearchHit[]>([]);
+  const [hitsState, setHitsState] = useState<'idle' | 'looking' | 'done' | 'failed'>('idle');
+  const [hitsTruncated, setHitsTruncated] = useState(false);
   const [showOnlyUnread, setShowOnlyUnread] = useState(false);
   const [activeCategory, setActiveCategory] = useState<'all' | 'direct' | 'group' | 'channel' | 'ai' | 'saved'>('all');
   const [isPersonaMenuOpen, setIsPersonaMenuOpen] = useState(false);
@@ -261,6 +270,9 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   // Inline Title Renaming state
   const [inlineEditingFolderId, setInlineEditingFolderId] = useState<string | null>(null);
+  /** Координати меню на мить натискання «Перейменувати»: сам обробник меню
+   *  закриває, тож без цього поле ніде поставити. */
+  const [inlineRenameAt, setInlineRenameAt] = useState<{ x: number; y: number } | null>(null);
   const [inlineFolderName, setInlineFolderName] = useState<string>('');
 
   // Hover Statistics Tooltip state
@@ -430,6 +442,38 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
     return matchesFolder && matchesCircle && matchesCategory && matchesUnread && matchesSearch;
   });
+
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (q.length < 2) {
+      setHits([]);
+      setHitsState('idle');
+      setHitsTruncated(false);
+      return;
+    }
+    let alive = true;
+    setHitsState('looking');
+    // Пауза: кожна літера — це обхід із розпечатуванням тіл на вузлі.
+    const timer = setTimeout(() => {
+      messengerApi
+        .searchMessages(q)
+        .then((result) => {
+          if (!alive) return;
+          setHits(result.hits);
+          setHitsTruncated(result.truncated);
+          setHitsState('done');
+        })
+        .catch(() => {
+          if (!alive) return;
+          setHits([]);
+          setHitsState('failed');
+        });
+    }, 250);
+    return () => {
+      alive = false;
+      clearTimeout(timer);
+    };
+  }, [searchQuery]);
 
   const totalUnread = chats.reduce((acc, c) => acc + c.unreadCount, 0);
   const activeSphere = currentUser.activePersonaSphere || 'work';
@@ -731,6 +775,7 @@ export const Sidebar: React.FC<SidebarProps> = ({
 
   // Inline Folder Renaming Handlers
   const handleStartRename = (folder: SmartFolder) => {
+    if (folderContextMenu) setInlineRenameAt({ x: folderContextMenu.x, y: folderContextMenu.y });
     setFolderContextMenu(null);
     setInlineEditingFolderId(folder.id);
     setInlineFolderName(folder.name);
@@ -753,13 +798,6 @@ export const Sidebar: React.FC<SidebarProps> = ({
   const handleCancelRename = () => {
     setInlineEditingFolderId(null);
   };
-
-  // Keep references active
-  if (inlineEditingFolderId && false) {
-    handleStartRename(smartFolders[0]);
-    handleSaveRename('test');
-    handleCancelRename();
-  }
 
   // Перейменування — інлайн у меню (нативного prompt у WebView немає).
   const startRenameChat = (chat: Chat) => {
@@ -1158,6 +1196,68 @@ export const Sidebar: React.FC<SidebarProps> = ({
             )}
           </div>
 
+          {/* ВЛУЧАННЯ З ВУЗЛА.
+              Список чатів нижче фільтрується по полях самого чату — заголовку
+              й ОСТАННЬОМУ рядку. Повідомлення в глибині історії він не бачить
+              у принципі: у вкладці їх немає, вони лежать запечатані на вузлі.
+              Тому тут окрема секція, і вона єдина відповідає на обіцянку
+              плейсхолдера «…повідомлень». */}
+          {searchQuery.trim().length >= 2 && (
+            <div className="space-y-1" data-testid="search-hits">
+              <div className="flex items-center justify-between px-0.5">
+                <span className="text-[10px] font-extrabold text-[#64748B] uppercase tracking-wider">
+                  {hitsState === 'looking' ? 'Шукаю у вузлі…' : `У повідомленнях · ${hits.length}`}
+                </span>
+              </div>
+
+              {hitsState === 'failed' && (
+                <div className="px-2 py-1.5 text-[11px] text-[#C98A6A] leading-relaxed">
+                  Вузол не відповів на пошук. Знайдене нижче — лише те, що вже
+                  є у вкладці, тобто далеко не вся історія.
+                </div>
+              )}
+
+              {hitsState === 'done' && hits.length === 0 && (
+                <div className="px-2 py-1.5 text-[11px] text-[#8EA093] leading-relaxed">
+                  У повідомленнях нічого не знайшлось.
+                </div>
+              )}
+
+              {hits.slice(0, 8).map((hit) => (
+                <button
+                  key={hit.message_id}
+                  onClick={() => {
+                    soundFx.playTap();
+                    onSelectChat(hit.conversation_id);
+                  }}
+                  className="w-full text-left px-2 py-1.5 rounded-lg hover:bg-[#182019] transition-colors"
+                >
+                  <div className="flex items-center gap-1.5 min-w-0">
+                    <span className="text-[11px] font-bold text-[#CBD5C6] truncate">
+                      {hit.conversation_title}
+                    </span>
+                    <span className="text-[10px] text-[#64748B] shrink-0">{hit.author_name}</span>
+                  </div>
+                  <span className="block text-[11px] text-[#8EA093] truncate">{hit.snippet}</span>
+                </button>
+              ))}
+
+              {/* Обрізання мусить бути видимим. Мовчазна стеля читається як
+                  «такого немає» — рівно та неправда, від якої ця секція. */}
+              {hitsTruncated && (
+                <div className="px-2 py-1 text-[10px] text-[#C98A2E] leading-relaxed">
+                  Переглянуто лише найсвіжішу частину історії — глибші листи не
+                  перевірялись.
+                </div>
+              )}
+              {hits.length > 8 && (
+                <div className="px-2 py-1 text-[10px] text-[#64748B]">
+                  Показано 8 із {hits.length}.
+                </div>
+              )}
+            </div>
+          )}
+
           {/* Категорії чатів: Всі, Особисті, Групи, Канали, AI Простори, Збережене */}
           <div className="msg-strip gap-1 -mx-0.5 px-0.5 pt-0.5 pb-0.5">
             {[
@@ -1236,7 +1336,25 @@ export const Sidebar: React.FC<SidebarProps> = ({
                           {displayTitle(chat.title)}
                         </h3>
                         {chat.pinned && <Pin className="w-3 h-3 text-[#F4AF25] shrink-0" strokeWidth={2} />}
-                        {chat.type === 'phantom' || chat.type === 'ai' ? (
+                        {/* ПОКАЗОВА РОЗМОВА — це має бути видно.
+                            `is_demo` існує наскрізно: колонка в базі, міграція
+                            `b8d31f0a72c5`, поле у схемі, значення у відповіді
+                            вузла, `isDemo` у сторі. І ЖОДНОГО малювання в
+                            месенджері — у списку, стрічці й шапці нуль згадок;
+                            прапорець читав лише екран прибирання в
+                            налаштуваннях. Тобто вітрину позначили скрізь, крім
+                            єдиного місця, де на позначку дивиться людина. На
+                            живому вузлі це 2 розмови з 4, і від справжніх вони
+                            не відрізнялись нічим. */}
+                        {chat.isDemo ? (
+                          <span
+                            data-testid="demo-badge"
+                            title="Показова розмова: її стрічку склали ми, а не люди."
+                            className="px-1.5 py-0.2 bg-[#2A2417] text-[#C9A227] border border-[#5C4A16] rounded text-[9px] font-bold uppercase tracking-wider shrink-0"
+                          >
+                            Показова
+                          </span>
+                        ) : chat.type === 'phantom' || chat.type === 'ai' ? (
                           <span className="px-1.5 py-0.2 bg-purple-950/80 text-purple-300 border border-purple-800/60 rounded text-[9px] font-bold uppercase tracking-wider shrink-0">
                             AI
                           </span>
@@ -1563,6 +1681,51 @@ export const Sidebar: React.FC<SidebarProps> = ({
                 </span>
               )}
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* 7a. ІНЛАЙН-ПЕРЕЙМЕНУВАННЯ ПАПКИ.
+           Пункт меню «Перейменувати» був на місці й кликав `handleStartRename`,
+           а той ставив `inlineEditingFolderId` — на який НІЩО не дивилось.
+           `handleSaveRename` і `handleCancelRename` не кликались узагалі: їх
+           тримав живими блок `if (inlineEditingFolderId && false)` з підписом
+           «Keep references active», тобто написаний, щоб замовк компілятор.
+           Наслідок на склі: людина тисне «Перейменувати», меню зникає — і не
+           стається нічого, а стан лишається ввімкненим і глушить підказки
+           над папками. Знайдено лінтером (no-constant-condition), який у
+           цьому дереві ніколи не бігав. */}
+      {inlineEditingFolderId && (
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="fixed z-50 w-64 bg-[#FDFCF9]/[0.97] backdrop-blur-md border border-[#DDD4C4] rounded-2xl shadow-2xl p-1.5 space-y-1.5 text-[#1E2521] select-none"
+          style={{ top: inlineRenameAt?.y ?? 80, left: inlineRenameAt?.x ?? 80 }}
+        >
+          <input
+            autoFocus
+            data-testid="folder-rename-input"
+            value={inlineFolderName}
+            onChange={(e) => setInlineFolderName(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') handleSaveRename(inlineEditingFolderId);
+              if (e.key === 'Escape') handleCancelRename();
+            }}
+            className="w-full px-2 py-1.5 text-xs rounded-lg border border-[#E0D5C2] bg-white focus:outline-none focus:border-[#E87A42]"
+          />
+          <div className="flex items-center gap-2">
+            <button
+              data-testid="folder-rename-save"
+              onClick={() => handleSaveRename(inlineEditingFolderId)}
+              className="px-3 py-1.5 rounded-lg bg-[#E87A42] text-[#1E2521] text-[11px] font-bold active:scale-95 transition-transform"
+            >
+              Зберегти
+            </button>
+            <button
+              onClick={handleCancelRename}
+              className="px-3 py-1.5 rounded-lg text-[11px] font-semibold text-[#5F6A60] hover:bg-[#F1EBDD] transition-colors"
+            >
+              Скасувати
+            </button>
           </div>
         </div>
       )}

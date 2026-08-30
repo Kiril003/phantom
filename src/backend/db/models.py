@@ -1629,6 +1629,39 @@ class MessengerGroupMember(Base):
     failed_attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
 
 
+class MessengerReaction(Base):
+    """Реакція однієї людини на одне повідомлення.
+
+    Окрема таблиця, а не поле в листі. Реакція — вчинок ІНШОЇ людини над
+    твоїм рядком, і приходить вона окремим кадром у довільний момент. У полі
+    листа це означало б переписувати рядок щоразу, коли хтось тисне емодзі, і
+    губити реакції при будь-якій гонці двох кадрів.
+
+    Унікальність по (повідомлення, хто, емодзі): одна людина ставить одну
+    реакцію одного роду один раз. Повторне натискання її ЗНІМАЄ, а не додає
+    другу — інакше лічильник ріс би від подвійного кліку.
+    """
+
+    __tablename__ = "messenger_reactions"
+    __table_args__ = (
+        UniqueConstraint(
+            "message_id", "actor_node_id", "emoji", name="uq_messenger_reaction"
+        ),
+        Index("ix_messenger_reactions_message", "message_id"),
+    )
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True, default=_uuid)
+    message_id: Mapped[str] = mapped_column(
+        ForeignKey("messenger_messages.id", ondelete="CASCADE"), nullable=False
+    )
+    #: Наш node_id для своїх, peer_node_id для чужих — одне поле на обох.
+    actor_node_id: Mapped[str] = mapped_column(String(64), nullable=False)
+    #: Підпис їде разом із реакцією: вузол не має довідника людей.
+    actor_name: Mapped[str] = mapped_column(String(120), default="", nullable=False)
+    emoji: Mapped[str] = mapped_column(String(32), nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=_now, nullable=False)
+
+
 class MessengerGroupDelivery(Base):
     """Один кадр одному учаснику — рядок черги віяра.
 

@@ -216,8 +216,16 @@ async def deliver(
     supabase_url: str = "",
     supabase_key: str = "",
     reply_address: str = "",
-) -> bool:
+) -> str:
     """Дороги по черзі: пряма, ретранслятор, Supabase-скринька.
+
+    ПОВЕРТАЄ ІМ'Я ДОРОГИ, а не `True`. Досі функція знала, яка з трьох гілок
+    спрацювала, і викидала це знання — тож у вихідного листа поле `transport`
+    лишалось порожнім назавжди, хоч у вхідного воно заповнюється (`direct`
+    для прямої дороги, `mailbox` для скриньки). Виміряно на живій базі: 34
+    рядки без транспорту проти двох із ним.
+    Порожній рядок означає «не поїхало» і лишається хибним значенням, тож усі
+    наявні `if await deliver(...)` працюють без правок.
 
     Пряма швидша й нікому не показує метаданих, тож пробуємо її першою. Але
     вона є рідко: більшість людей за NAT або в мобільній мережі, де прямої
@@ -230,16 +238,17 @@ async def deliver(
             peer_address, peer_node_id, frame,
             from_node_id=from_node_id, reply_address=reply_address,
         ):
-            return True
+            return "direct"
     if relay:
         if await deliver_via_relay(
             relay, peer_node_id, frame,
             from_node_id=from_node_id, reply_address=reply_address,
         ):
-            return True
+            return "relay"
     if supabase_url and supabase_key:
-        return await deliver_via_supabase(
+        parked = await deliver_via_supabase(
             supabase_url, supabase_key, peer_node_id, frame,
             from_node_id=from_node_id, reply_address=reply_address,
         )
-    return False
+        return "cloud" if parked else ""
+    return ""

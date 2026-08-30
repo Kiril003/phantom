@@ -32,6 +32,7 @@ from db.models import (
     MessengerContact,
     MessengerConversation,
     MessengerMessage,
+    MessengerReaction,
     User,
 )
 from messenger.crypto.at_rest import AtRestError, seal, unseal
@@ -448,6 +449,39 @@ async def list_conversations(
     return await _conversations_for(user, session)
 
 
+def _seed_messages(
+    session: AsyncSession, row: MessengerConversation, seeds: list[SeedMessage]
+) -> None:
+    """Готова стрічка лягає в базу тим самим шляхом, що й справжня — інакше
+    вітрина жила б окремим життям і розходилась із дійсністю.
+
+    Винесено у спільного помічника 29.08.2026, і причина конкретна: поле
+    `ConversationIn.messages` читав лише `/bootstrap`, а `/conversations`
+    приймав його, віддавав 201 і мовчки викидав. Одна схема, два маршрути,
+    дві різні поведінки під одним ім'ям. Доки засівання жило двома копіями,
+    така розбіжність була питанням часу; тепер вона структурно неможлива.
+    """
+    for m in seeds:
+        msg = MessengerMessage(
+            id=str(uuid.uuid4()),
+            conversation_id=row.id,
+            client_id=m.client_id,
+            seq=row.next_seq,
+            author_id=m.author_id,
+            author_name=m.author_name,
+            kind=m.kind,
+            transport=None,
+            delivery_state="local",
+            sent_at=_now(),
+        )
+        if m.body is not None:
+            msg.ciphertext = seal(_keys(), m.body, aad=msg.id.encode()).hex()
+        row.next_seq += 1
+        session.add(msg)
+    if seeds:
+        row.last_read_seq = row.next_seq - 1
+
+
 class BootstrapIn(BaseModel):
     conversations: list[ConversationIn]
 
@@ -491,26 +525,7 @@ async def bootstrap_conversations(
         session.add(row)
         await session.flush()
         rows.append(row)
-        # Показова стрічка лягає в базу тим самим шляхом, що й справжня —
-        # інакше вітрина жила б окремим життям і розходилась із дійсністю.
-        for m in c.messages:
-            msg = MessengerMessage(
-                id=str(uuid.uuid4()),
-                conversation_id=row.id,
-                client_id=m.client_id,
-                seq=row.next_seq,
-                author_id=m.author_id,
-                author_name=m.author_name,
-                kind=m.kind,
-                transport=None,
-                delivery_state="local",
-                sent_at=_now(),
-            )
-            if m.body is not None:
-                msg.ciphertext = seal(_keys(), m.body, aad=msg.id.encode()).hex()
-            row.next_seq += 1
-            session.add(msg)
-        row.last_read_seq = row.next_seq - 1
+        _seed_messages(session, row, c.messages)
     await session.commit()
     # Віддаємо тим самим порядком, що й /conversations: інакше повторний виклик
     # поверне ті самі розмови інакше перемішаними, і клієнт вирішить, що щось змінилось.
@@ -525,6 +540,29 @@ async def create_conversation(
     user: User = Depends(get_user_or_device_user),
     session: AsyncSession = Depends(get_db),
 ) -> ConversationOut:
+    # Друга розмова з тією самою людиною — не зручність, а поломка. Виміряно
+    # 30.08.2026: маршрут дублікату не перевіряв, і вхідний шлях
+    # (`inbox.conversation_for`) на двох рядках кидав `MultipleResultsFound`.
+    # Кожен лист від цієї людини діставав 500, відправник вічно повторював, а
+    # отримувач не бачив нічого.
+    #
+    # Тепер повертаємо ту, що вже є: розмова з людиною одна, і зайвої дороги
+    # для листів не з'являється.
+    if payload.contact_id:
+        existing = (
+            await session.execute(
+                select(MessengerConversation)
+                .where(
+                    MessengerConversation.owner_user_id == user.id,
+                    MessengerConversation.contact_id == payload.contact_id,
+                )
+                .order_by(MessengerConversation.created_at, MessengerConversation.id)
+                .limit(1)
+            )
+        ).scalar_one_or_none()
+        if existing is not None:
+            return _conversation_out(existing)
+
     row = MessengerConversation(
         owner_user_id=user.id,
         title=payload.title,
@@ -538,6 +576,11 @@ async def create_conversation(
         updated_at=_now(),
     )
     session.add(row)
+    # Схема приймає `messages` — отже маршрут мусить їх покласти. Доти він
+    # віддавав 201 і викидав поле мовчки: клієнт бачив успіх і порожню
+    # стрічку, і жоден код відповіді про це не казав.
+    await session.flush()
+    _seed_messages(session, row, payload.messages)
     await session.commit()
     await session.refresh(row)
     return _conversation_out(row)
@@ -637,6 +680,9 @@ class MessageOut(BaseModel):
     #: missing. Кадр із ключем міг доїхати, а байти — ні, і тоді галочка
     #: «надіслано» на бульбашці була б брехнею: у людини немає фото.
     attachment_state: Optional[str] = None
+    #: Позначки на цьому листі. Порожній список означає «жодної», а не
+    #: «не знаємо»: вузол завжди знає власні реакції.
+    reactions: list["ReactionOut"] = []
     sent_at: datetime
     edited_at: Optional[datetime]
     deleted_at: Optional[datetime]
@@ -644,6 +690,59 @@ class MessageOut(BaseModel):
     #: queued — кадр зашифровано, але транспорту до вузла співрозмовника немає.
     #: sent — віддано транспорту.
     delivery: str = 'local'
+
+
+class ReactionOut(BaseModel):
+    """Одна позначка на листі, згорнута для показу.
+
+    `mine` — чи ставили ЦЕ ми: без нього клієнт не знає, що показати
+    натиснутим, і мусив би вгадувати за іменем.
+    """
+
+    emoji: str
+    count: int
+    actors: list[str]
+    mine: bool
+
+
+class ReactionIn(BaseModel):
+    emoji: str = Field(min_length=1, max_length=32)
+
+
+async def _reactions_for(
+    session: AsyncSession, message_ids: list[str], self_node_id: str
+) -> dict[str, list[ReactionOut]]:
+    """Реакції для пачки листів одним запитом.
+
+    Пачкою навмисно: на стрічку в 200 листів окремий запит на кожен дав би
+    200 звернень до бази й перетворив би відкриття розмови на очікування.
+    """
+    if not message_ids:
+        return {}
+    rows = (
+        await session.execute(
+            select(MessengerReaction)
+            .where(MessengerReaction.message_id.in_(message_ids))
+            .order_by(MessengerReaction.created_at)
+        )
+    ).scalars().all()
+
+    grouped: dict[str, dict[str, ReactionOut]] = {}
+    for row in rows:
+        per_message = grouped.setdefault(row.message_id, {})
+        item = per_message.get(row.emoji)
+        if item is None:
+            per_message[row.emoji] = ReactionOut(
+                emoji=row.emoji,
+                count=1,
+                actors=[row.actor_name or row.actor_node_id[:8]],
+                mine=row.actor_node_id == self_node_id,
+            )
+        else:
+            item.count += 1
+            item.actors.append(row.actor_name or row.actor_node_id[:8])
+            item.mine = item.mine or row.actor_node_id == self_node_id
+    return {mid: list(items.values()) for mid, items in grouped.items()}
 
 
 def _body_of(row: MessengerMessage) -> Optional[str]:
@@ -658,7 +757,9 @@ def _body_of(row: MessengerMessage) -> Optional[str]:
 
 
 def _message_out(
-    row: MessengerMessage, attachment_state: Optional[str] = None
+    row: MessengerMessage,
+    attachment_state: Optional[str] = None,
+    reactions: Optional[list["ReactionOut"]] = None,
 ) -> MessageOut:
     return MessageOut(
         id=row.id,
@@ -677,6 +778,7 @@ def _message_out(
         reply_to_id=row.reply_to_id,
         delivery_state=row.delivery_state,
         attachment_state=attachment_state,
+        reactions=reactions or [],
         sent_at=row.sent_at,
         edited_at=row.edited_at,
         deleted_at=row.deleted_at,
@@ -715,6 +817,117 @@ async def _attachment_states(
     return out
 
 
+class SearchHit(BaseModel):
+    """Одне влучання. Несе достатньо, щоб клієнт стрибнув у потрібне місце."""
+
+    message_id: str
+    conversation_id: str
+    conversation_title: str
+    seq: int
+    author_name: str
+    kind: str
+    #: Уривок навколо збігу — щоб людина впізнала лист, не відкриваючи його.
+    snippet: str
+    sent_at: datetime
+
+
+class SearchOut(BaseModel):
+    hits: list[SearchHit]
+    #: Скільки рядків справді переглянуто. Без цього «нічого не знайдено»
+    #: не відрізнити від «далі я не дивився», а це різні відповіді.
+    scanned: int
+    #: Чи впертись у стелю. Клієнт МУСИТЬ це показати: мовчазне обрізання
+    #: читається як «такого немає», і саме так пошук брехав досі.
+    truncated: bool
+
+
+#: Стеля обходу. Тіла лежать запечатаними, тож кожен рядок треба розкрити —
+#: безлімітний обхід на великій історії підвісив би вузол на кожен запит.
+SEARCH_SCAN_LIMIT = 5000
+
+
+@router.get("/search", response_model=SearchOut)
+async def search_messages(
+    q: str,
+    limit: int = 50,
+    user: User = Depends(get_user_or_device_user),
+    session: AsyncSession = Depends(get_db),
+) -> SearchOut:
+    """Шукає по ВСІЙ історії цього вузла, а не по завантаженому у вкладку.
+
+    Навіщо взагалі маршрут. Тіла повідомлень лежать запечатаними
+    (`ciphertext`), і на живому вузлі рядків з відкритим `body` — нуль. Тобто
+    знайти слово може лише той, хто має ключі at-rest, а це вузол. Клієнт має
+    в пам'яті щонайбільше останні 200 листів ТІЄЇ розмови, яку відкривали, —
+    і доти пошук у бічній панелі звірявся лише з `lastSnippet`, тобто з
+    ОСТАННІМ рядком кожного чату. Виміряно на склі: «№5» (останній рядок)
+    знаходився, «№2» і «№9» із тих самих розмов — ні. Людина робила з цього
+    висновок, що листа не існує.
+
+    Чого цей маршрут НЕ робить: не будує індексу і не вміє шукати в
+    наскрізно шифрованих кадрах чужих вузлів. Він відкриває рівно те, що цей
+    вузол і так уміє відкрити, коли малює стрічку.
+    """
+    needle = (q or "").strip().lower()
+    if not needle:
+        return SearchOut(hits=[], scanned=0, truncated=False)
+
+    titles = {
+        row.id: row.title
+        for row in (
+            await session.execute(
+                select(MessengerConversation).where(
+                    MessengerConversation.owner_user_id == user.id
+                )
+            )
+        ).scalars()
+    }
+    if not titles:
+        return SearchOut(hits=[], scanned=0, truncated=False)
+
+    rows = (
+        await session.execute(
+            select(MessengerMessage)
+            .where(
+                MessengerMessage.conversation_id.in_(titles.keys()),
+                MessengerMessage.deleted_at.is_(None),
+            )
+            .order_by(MessengerMessage.sent_at.desc())
+            .limit(SEARCH_SCAN_LIMIT + 1)
+        )
+    ).scalars().all()
+
+    truncated = len(rows) > SEARCH_SCAN_LIMIT
+    rows = rows[:SEARCH_SCAN_LIMIT]
+
+    hits: list[SearchHit] = []
+    for row in rows:
+        if len(hits) >= max(1, min(limit, 200)):
+            break
+        body = _body_of(row)
+        haystack = f"{body or ''}\n{row.author_name}"
+        at = haystack.lower().find(needle)
+        if at < 0:
+            continue
+        text = body or row.author_name
+        start = max(0, at - 40)
+        snippet = ("…" if start else "") + text[start : at + len(needle) + 60].strip()
+        hits.append(
+            SearchHit(
+                message_id=row.id,
+                conversation_id=row.conversation_id,
+                conversation_title=titles.get(row.conversation_id, ""),
+                seq=row.seq,
+                author_name=row.author_name,
+                kind=row.kind,
+                snippet=snippet,
+                sent_at=row.sent_at,
+            )
+        )
+
+    return SearchOut(hits=hits, scanned=len(rows), truncated=truncated)
+
+
 @router.get("/conversations/{conversation_id}/messages", response_model=list[MessageOut])
 async def list_messages(
     conversation_id: str,
@@ -736,7 +949,88 @@ async def list_messages(
         )
     ).scalars().all()
     attachments = await _attachment_states(session, list(rows))
-    return [_message_out(r, attachments.get(r.id)) for r in rows]
+    # Реакції — одним запитом на всю стрічку. Окремий запит на кожен лист
+    # перетворив би відкриття розмови на 200 звернень до бази.
+    reactions = await _reactions_for(session, [r.id for r in rows], _keys().node_id)
+    return [
+        _message_out(r, attachments.get(r.id), reactions.get(r.id)) for r in rows
+    ]
+
+
+@router.post(
+    "/conversations/{conversation_id}/messages/{message_id}/reactions",
+    response_model=MessageOut,
+)
+async def toggle_reaction(
+    conversation_id: str,
+    message_id: str,
+    payload: ReactionIn,
+    user: User = Depends(get_user_or_device_user),
+    session: AsyncSession = Depends(get_db),
+) -> MessageOut:
+    """Ставить або знімає позначку на листі. Один виклик на обидві дії.
+
+    Перемикач, а не пара «додати/прибрати», і причина не в зручності: людина
+    тисне ту саму кнопку, і два різні маршрути означали б, що клієнт мусить
+    ЗНАТИ поточний стан, перш ніж діяти. На повільному звʼязку він його не
+    знає — і подвійний тап давав би дві реакції там, де людина хотіла нуль.
+
+    Повертає ВЕСЬ лист із перерахованими реакціями, а не саму реакцію: інакше
+    клієнт складав би підсумок сам, і два клієнти рахували б по-різному.
+
+    Чого цей маршрут поки НЕ робить — і це сказано вголос, щоб не здалося
+    зробленим: він **не везе позначку співрозмовнику**. Для цього потрібен
+    новий тип на дроті, а правило дому (`unwrap_frame`) вимагає, щоб обидва
+    боки спершу вміли сказати «не вмію показати». Телефонна половина цього
+    вже вміє; але на старій збірці кадр реакції став би ТЕКСТОВИМ рядком
+    «ця версія не вміє показати» просто в стрічці — тобто сміттям замість
+    тихого ігнорування. Це рішення про протокол, і воно за двома боками
+    разом, а не за мною одним.
+    """
+    await _owned_conversation(conversation_id, user, session)
+    row = await session.get(MessengerMessage, message_id)
+    if row is None or row.conversation_id != conversation_id:
+        raise HTTPException(status_code=404, detail="повідомлення не знайдено")
+    if row.deleted_at is not None:
+        # На надгробку позначок не ставлять: тексту немає, і реакція
+        # виглядала б відповіддю на порожнечу.
+        raise HTTPException(status_code=409, detail="повідомлення видалено")
+
+    emoji = payload.emoji.strip()
+    if not emoji:
+        raise HTTPException(status_code=422, detail="порожня позначка")
+
+    me = _keys().node_id
+    existing = (
+        await session.execute(
+            select(MessengerReaction).where(
+                MessengerReaction.message_id == message_id,
+                MessengerReaction.actor_node_id == me,
+                MessengerReaction.emoji == emoji,
+            )
+        )
+    ).scalar_one_or_none()
+
+    if existing is not None:
+        await session.delete(existing)
+    else:
+        session.add(
+            MessengerReaction(
+                message_id=message_id,
+                actor_node_id=me,
+                actor_name=user.username or "Я",
+                emoji=emoji,
+                created_at=_now(),
+            )
+        )
+    await session.commit()
+
+    reactions = await _reactions_for(session, [message_id], me)
+    attachments = await _attachment_states(session, [row])
+    out = _message_out(row, attachments.get(row.id), reactions.get(message_id))
+    # Інші вікна того самого вузла мусять побачити позначку без опитування.
+    await hub.broadcast("messenger", "message:reaction", out.model_dump(mode="json"))
+    return out
 
 
 @router.post("/conversations/{conversation_id}/messages", response_model=MessageOut)
@@ -773,6 +1067,21 @@ async def append_message(
         raise HTTPException(
             status_code=400,
             detail="точка без координат або без часу виміру — везти нічого",
+        )
+
+    # Схема приймає `ciphertext`, але цей маршрут не може його вшанувати:
+    # історія пломбується ключем СПОКОЮ вузла з id рядка в AAD, а клієнт того
+    # ключа не має. Покласти чуже як є — означало б рядок, який ніхто потім не
+    # відкриє. Доти поле мовчки ігнорувалось: лист без `body` лягав ПОРОЖНІМ,
+    # і клієнт бачив 200.
+    # Поле навмисно НЕ прибране зі схеми: Pydantic викидає невідомі поля
+    # мовчки, тож видалення повернуло б рівно ту саму тишу. Хай краще відмова.
+    if payload.ciphertext is not None:
+        raise HTTPException(
+            status.HTTP_400_BAD_REQUEST,
+            "Цей маршрут пломбує історію сам і приймає `body`. Готовий "
+            "шифротекст покласти не можна: він запечатаний не тим ключем, "
+            "і прочитати його вузол не зможе.",
         )
 
     # Повтор після обриву — не помилка. Віддаємо те, що вже лежить, і мовчимо.
@@ -888,9 +1197,22 @@ async def append_message(
             tried = bool(address or relay or sb_url)
             if not delivered and not address and not relay and not sb_url:
                 # Standalone/shared node with active local web hub
-                delivered = True
+                delivered = "local-hub"
             out.delivery = 'sent' if delivered else 'queued'
             row.delivery_state = out.delivery
+            # Дорога, якою лист СПРАВДІ поїхав. Досі вихідні листи не мали
+            # транспорту взагалі: `deliver` знав, яка з трьох гілок спрацювала,
+            # і повертав лише «так». Вхідні його мали (`direct`/`mailbox`), і
+            # через це поле виглядало напівживим — на живій базі 34 рядки без
+            # транспорту проти двох із ним.
+            # Пишемо лише СПРАВЖНЮ назву дороги. `deliver` тепер повертає
+            # рядок, але підміни в тестах і будь-який старий викликач можуть
+            # віддати `True` — і тоді в текстову колонку ліг би булевий, а
+            # клієнт побачив би «true» замість «напряму». Краще без
+            # транспорту, ніж із вигаданим.
+            if isinstance(delivered, str) and delivered:
+                row.transport = delivered
+                out.transport = delivered
             row.delivery_attempts = 1 if tried else 0
             row.last_attempt_at = _now() if tried else None
             # Не доїхало — кадр лишається при повідомленні, щоб повтор віз
@@ -1508,7 +1830,31 @@ async def receive_frame(
             last_exc = exc
             continue
 
-    if row is None and last_exc is not None and not matching_contacts:
+    # НАЙГІРША ТИША, ЯКУ ТУТ МОЖНА БУЛО ЗРОБИТИ. Виправлено 30.08.2026.
+    #
+    # Було: `... and not matching_contacts`. Тобто помилка розшифрування
+    # ковталась саме тоді, коли відправник ВІДОМИЙ — у звичайному випадку між
+    # двома людьми, — і нижче поверталось `{"accepted": True}` з кодом 200.
+    #
+    # Виміряно на двох живих вузлах: той самий нечитабельний кадр від
+    # НЕВІДОМОГО давав 400 із чесною причиною, а від ВІДОМОГО контакту — 200
+    # «прийнято». Відправник по 200 ставив листу «надіслано», отримувач не
+    # заводив ані розмови, ані рядка, у журнал не писалось нічого. Лист зникав,
+    # і жодна зі сторін не мала способу про це дізнатись.
+    #
+    # Умова тепер по суті справи, а не по знайомству: якщо кожен кандидат
+    # ВПАВ З ПОМИЛКОЮ — ми кадру не прочитали, і казати «прийнято» не можна.
+    # Відмова лишає лист у черзі відправника, і повтор має шанс; «прийнято»
+    # не лишає нічого.
+    #
+    # Порожній `row` БЕЗ помилки — інша річ і лишається успіхом: службовий
+    # `delete` на те, чого в нас не було, чи кадр про невідому групу. Там ми
+    # кадр прочитали й свідомо не завели рядка.
+    if row is None and last_exc is not None:
+        logger.warning(
+            "inbox: кадр від %s не розшифрувався жодним з %d власників: %s",
+            str(payload.from_node_id or "?")[:16], len(candidate_owners), last_exc,
+        )
         raise HTTPException(status_code=400, detail=str(last_exc)) from last_exc
 
     owner = target_owner or candidate_owners[0]
@@ -1607,7 +1953,9 @@ async def queue_flush(
     from messenger.blobs import flush_blob_queue
     from messenger.groups import flush_group_queue
 
-    delivered = await flush_queue(session, _keys().node_id)
+    # Ключі йдуть разом: без них прохід не зшиє кадр листові, написаному
+    # до появи сесії, і той лишиться в черзі назавжди.
+    delivered = await flush_queue(session, _keys().node_id, keys=_keys())
     blobs = await flush_blob_queue(session, _keys().node_id)
     group = await flush_group_queue(session, _keys().node_id)
     return {"delivered": delivered, "blobs": blobs, "group_frames": group}

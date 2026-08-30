@@ -21,6 +21,10 @@ from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import MessengerContact, MessengerConversation, MessengerMessage
+from messenger.blobs import BLOB_KINDS, wrap_frame
+from messenger.crypto.keys import KeyStore
+from messenger.outbox import OutboxError, prepare_frame
+from messenger.purge import _open_body
 from messenger.blobs import flush_blob_queue
 from messenger.r2 import R2Road, drop_object, fetch_object, object_key, r2_road
 from messenger.transport import deliver, supabase_mailbox_endpoint, supabase_road
@@ -45,15 +49,29 @@ def _now() -> datetime:
 
 
 async def flush_queue(
-    session: AsyncSession, own_node_id: str, *, limit: int = 50
+    session: AsyncSession,
+    own_node_id: str,
+    *,
+    limit: int = 50,
+    keys: Optional[KeyStore] = None,
 ) -> int:
-    """Пробує довезти те, що чекає. Повертає кількість доставлених."""
+    """Пробує довезти те, що чекає. Повертає кількість доставлених.
+
+    `keys` потрібні, щоб зшити кадр листові, написаному ДО появи ключа: такий
+    лист лежить без кадру, і без ключів вузла його не зашифрувати. Без них
+    прохід поводиться як раніше — везе лише готові кадри.
+    """
     rows = (
         await session.execute(
             select(MessengerMessage)
             .where(
                 MessengerMessage.delivery_state == "queued",
-                MessengerMessage.outbound_frame.is_not(None),
+                # Кадру може ще НЕ БУТИ: лист, написаний до появи ключа,
+                # зберігається без нього. Раніше умова була
+                # `outbound_frame IS NOT NULL`, і такий лист не потрапляв сюди
+                # НІКОЛИ — він лишався «у черзі» назавжди, навіть коли ключ
+                # з'являвся. «У черзі» означає «чекає й поїде»; насправді він
+                # чекав вічно, і жодна зі сторін не могла про це дізнатись.
                 MessengerMessage.delivery_attempts < MAX_ATTEMPTS,
             )
             .order_by(MessengerMessage.sent_at)
@@ -78,6 +96,24 @@ async def flush_queue(
             # Жодної дороги — спроба нічого не дасть,
             # і лічильник псувати не варто.
             continue
+
+        # Кадру немає — спробуємо зшити його зараз. Якщо ключ уже з'явився,
+        # лист поїде; якщо ще ні, `prepare_frame` чесно відмовиться, і ми
+        # навіть не псуємо лічильник спроб.
+        if row.outbound_frame is None:
+            body = _open_body(keys, row) if keys is not None else None
+            if body is None:
+                continue
+            try:
+                prepared = await prepare_frame(
+                    session, keys, conversation,
+                    wrap_frame(row.kind, body, row.client_id),
+                )
+            except OutboxError:
+                continue
+            if prepared is None:
+                continue
+            row.outbound_frame = prepared.frame.hex()
 
         row.delivery_attempts += 1
         row.last_attempt_at = _now()
@@ -140,7 +176,7 @@ async def fetch_parked_blobs(
             )
             .where(
                 MessengerConversation.owner_user_id == owner_user_id,
-                MessengerMessage.kind.in_(("image", "file")),
+                MessengerMessage.kind.in_(BLOB_KINDS),
                 MessengerMessage.deleted_at.is_(None),
                 MessengerMessage.author_id != keys.node_id,
             )
@@ -281,7 +317,7 @@ async def redelivery_loop(interval_s: float = 45.0) -> None:
             from api.routes_messenger import _keys
 
             async with AsyncSessionLocal() as session:
-                delivered = await flush_queue(session, _keys().node_id)
+                delivered = await flush_queue(session, _keys().node_id, keys=_keys())
                 # Вкладення їдуть тією ж смугою: фото, яке не доїхало, не має
                 # чекати, поки людина згадає про нього руками.
                 blobs = await flush_blob_queue(session, _keys().node_id)

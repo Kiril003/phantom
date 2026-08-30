@@ -25,6 +25,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from db.models import MessengerBlob, MessengerMessage
 from messenger.blobs import delete_bytes
+from messenger.blobs import BLOB_KINDS
 from messenger.crypto.at_rest import AtRestError, unseal
 from messenger.crypto.keys import KeyStore
 
@@ -62,7 +63,7 @@ def blob_ids_of(keys: KeyStore, row: MessengerMessage) -> list[str]:
     а наслідок того, що вузол не має читати листування: щоб дізнатись, який
     файл прибрати, потрібні ключі самого вузла.
     """
-    if row.kind not in ("image", "file"):
+    if row.kind not in BLOB_KINDS:
         return []
     body = _open_body(keys, row)
     if not body:

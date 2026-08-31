@@ -1292,8 +1292,56 @@ export const Sidebar: React.FC<SidebarProps> = ({
         {/* 3. Chats Stream List */}
         <div className="flex-1 overflow-y-auto no-scrollbar p-1.5 space-y-0.5 bg-[#0C110D]">
           {filteredChats.length === 0 ? (
-            <div className="py-12 px-4 text-center">
-              <p className="text-xs text-[#8EA093] font-medium">Бесід не знайдено</p>
+            // Три різні порожнечі виглядали однаково: «Бесід не знайдено».
+            // Людина на новому вузлі читала це як несправність, а не як
+            // «ще нікого не додано», і не мала звідси жодного виходу.
+            <div className="py-10 px-5 text-center flex flex-col items-center gap-3">
+              {chats.length === 0 ? (
+                <>
+                  <div className="w-11 h-11 rounded-2xl bg-[#141C16] border border-white/10 flex items-center justify-center">
+                    <MessagesSquare className="w-5 h-5 text-[#8EA093]" strokeWidth={1.75} />
+                  </div>
+                  <div className="space-y-1">
+                    <p className="text-[13px] font-bold text-[#F8FAF8]">Ще жодної розмови</p>
+                    {/* Кажемо, що саме потрібно: без ключа співрозмовника вузол
+                        не зможе ані зашифрувати, ані доставити. */}
+                    <p className="text-[11.5px] leading-[1.5] text-[#8EA093]">
+                      Щоб почати, обміняйтесь ключами: покажіть свій код або
+                      додайте чужий. Без ключа лист нікуди не поїде.
+                    </p>
+                  </div>
+                  <button
+                    onClick={() => { soundFx.playTap(); onNewChat(); }}
+                    className="mt-1 px-3.5 py-2 rounded-xl bg-[#18231C] border border-white/10 text-[12px] font-bold text-[#F8FAF8] hover:bg-[#1E2A21] transition-colors"
+                  >
+                    Додати співрозмовника
+                  </button>
+                </>
+              ) : searchQuery.trim() ? (
+                <>
+                  <p className="text-[13px] font-bold text-[#F8FAF8]">Нічого не знайшлося</p>
+                  {/* Показуємо, ЩО саме шукали: інакше людина не знає, чи то
+                      немає такого, чи то вона помилилась у слові. */}
+                  <p className="text-[11.5px] text-[#8EA093] break-words max-w-[220px]">
+                    За запитом «{searchQuery.trim()}» немає жодної розмови
+                  </p>
+                  <button
+                    onClick={() => { soundFx.playTap(); setSearchQuery(''); }}
+                    className="px-3 py-1.5 rounded-lg bg-[#141C16] border border-white/10 text-[11.5px] font-bold text-[#F8FAF8] hover:bg-[#18231C] transition-colors"
+                  >
+                    Очистити пошук
+                  </button>
+                </>
+              ) : (
+                <>
+                  <p className="text-[13px] font-bold text-[#F8FAF8]">Тут порожньо</p>
+                  {/* Розмови є, але їх сховав добір — це третій випадок, і
+                      плутати його з першими двома означає збити людину. */}
+                  <p className="text-[11.5px] text-[#8EA093] max-w-[220px]">
+                    Розмови є, але жодна не підходить під обраний добір
+                  </p>
+                </>
+              )}
             </div>
           ) : (
             filteredChats.map((chat) => {

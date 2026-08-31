@@ -36,6 +36,7 @@ import { UserProfileModal } from './UserProfileModal';
 import { AISynthesisStudioModal } from '../ai-studio/AISynthesisStudioModal';
 import { CallOverlay } from './CallOverlay';
 import { SpaceNavigator } from './SpaceNavigator';
+import { ThreadPanel } from './ThreadPanel';
 import { ModalHost } from './modals/ModalHost';
 import { useModalStore } from '../../stores/modalStore';
 import { callEngine } from '../../services/callEngine';
@@ -490,8 +491,23 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
             <MultiSelectBar
               selectedCount={store.selectedMessageIds.length}
               onClearSelection={store.clearSelection}
-              onSynthesize={() => {}}
-              onCreateMultiQuote={() => {}}
+              onSynthesize={() => {
+                // Зведення обраних листів робить ШІ, а месенджер до нього не
+                // під'єднаний: жодного шляху від цієї кнопки до моделі немає.
+                useUIStore.getState().toast({
+                  kind: 'error',
+                  message: 'Зведення листів ще не під’єднане — поруч працює «Копіювати всі»',
+                });
+              }}
+              onCreateMultiQuote={() => {
+                // Багатоцитати немає в сторі як поняття: композер отримує
+                // назавжди порожній перелік. Домальовувати кнопку, що нічого
+                // не змінює, гірше за відсутню.
+                useUIStore.getState().toast({
+                  kind: 'error',
+                  message: 'Кілька цитат одним листом поки не вміємо',
+                });
+              }}
               onCopyAll={() => {
                 const selectedMsgs = activeChat.messages.filter((m) =>
                   store.selectedMessageIds.includes(m.id)
@@ -821,6 +837,7 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
       {/* AI Synthesis Lab & Companion Studio Modal */}
       <AISynthesisStudioModal />
 
+      <ThreadPanel me={store.currentUser.id} />
       <CallOverlay />
     </div>
   );

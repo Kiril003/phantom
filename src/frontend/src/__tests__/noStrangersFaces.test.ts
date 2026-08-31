@@ -34,12 +34,27 @@ const OUTSIDE = /https?:\/\/(images\.unsplash\.com|source\.unsplash\.com|i\.prav
 /** Екрани за замком `hiddenModals` — код цілий, вхід зачинено, мережі немає.
  *  Перелік тут короткий навмисно: кожне ім'я має зникнути звідси разом із
  *  поверненням екрана, і тоді сторож почервоніє й нагадає прибрати посилання. */
-const BEHIND_THE_LOCK = new Set([
-  'AcademyHubModal.tsx',
-  'ActionHubModal.tsx',
-  'AutomationPipelineModal.tsx',
-  'RoleScopesModal.tsx',
-]);
+// Перелік «за замком» ВИВОДИМО з реального замка, а не пишемо рукою.
+//
+// Рукою написаний перелік збрехав: `ActionHubModal.tsx` стояв тут як
+// замкнений, а в `hiddenModals.ts` його немає — тобто модал відкривається, і
+// сторож роками пропускав би на ньому чужі обличчя. Ворота, що звільняють
+// файл за власним твердженням про замок, — це ворота без шляху до червоного.
+const LOCK_SOURCE = readFileSync(
+  join(ROOT, 'components/messenger/modals/hiddenModals.ts'),
+  'utf8',
+);
+
+/** `AcademyHubModal.tsx` → `academyHub`: угода про імена в цьому дереві. */
+function lockKeyOf(fileName: string): string {
+  const base = fileName.replace(/Modal\.tsx$/, '').replace(/\.tsx?$/, '');
+  return base.charAt(0).toLowerCase() + base.slice(1);
+}
+
+function isLocked(fileName: string): boolean {
+  const key = lockKeyOf(fileName);
+  return new RegExp(`['"\`]${key}['"\`]`).test(LOCK_SOURCE);
+}
 
 function walk(dir: string, out: string[] = []): string[] {
   for (const entry of readdirSync(dir)) {
@@ -65,15 +80,24 @@ describe('чужих облич і чужих серверів немає', () =
   it('жоден ДОСЯЖНИЙ екран не тягне картинку ззовні', () => {
     const offenders = walk(ROOT)
       .filter((f) => liveHits(f).length > 0)
-      .filter((f) => !BEHIND_THE_LOCK.has(f.split('/').pop() as string))
+      .filter((f) => !isLocked(f.split('/').pop() as string))
       .map((f) => f.slice(ROOT.length + 1));
 
     expect(offenders).toEqual([]);
   });
 
-  it('перелік за замком не розростається', () => {
-    // Якщо сюди щось додали, значить у дереві з'явився новий екран із чужими
-    // картинками — і його сховали замість того, щоб прибрати посилання.
-    expect(BEHIND_THE_LOCK.size).toBeLessThanOrEqual(4);
+  it('звільнення від перевірки дає лише СПРАВЖНІЙ замок', () => {
+    // Раніше тут стояв рукописний перелік, і саме він збрехав: `ActionHubModal`
+    // значився замкненим, не будучи ним. Тепер перевіряємо протилежне —
+    // що кожне звільнення підтверджене `hiddenModals.ts`, тобто ворота не
+    // можуть звільнити файл власним твердженням.
+    const freed = walk(ROOT)
+      .filter((f) => liveHits(f).length > 0)
+      .map((f) => f.split('/').pop() as string)
+      .filter((name) => isLocked(name));
+
+    for (const name of freed) {
+      expect(LOCK_SOURCE).toMatch(new RegExp(lockKeyOf(name)));
+    }
   });
 });

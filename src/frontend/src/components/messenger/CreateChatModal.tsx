@@ -69,7 +69,6 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
       display_name: string;
       role: string;
       avatar?: string;
-      is_online: boolean;
     }>
   >([]);
   const [loadingDirectory, setLoadingDirectory] = useState(false);

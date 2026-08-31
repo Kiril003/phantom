@@ -1,4 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useCallback, useState, useEffect } from 'react';
+import { useUIStore } from '../../stores/uiStore';
 import {
   X,
   FileSpreadsheet,
@@ -142,38 +143,12 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
   const [fileName, setFileName] = useState('Документ.pdf');
   const [fileSize, setFileSize] = useState('3.4 МБ');
 
-  // Intelligent Context Extraction on Open
-  useEffect(() => {
-    if (isOpen) {
-      if (defaultTab) {
-        setActiveTab(defaultTab);
-      }
-
-      // Pre-select all chat members
-      if (chat?.members && chat.members.length > 0) {
-        setSelectedAttendeeIds(chat.members.map((m) => m.id));
-      } else {
-        setSelectedAttendeeIds(['user_1', 'user_2']);
-      }
-
-      // If initialMessage or selectedMessages are passed, parse context
-      let rawTextToParse = '';
-      if (initialMessage && initialMessage.text) {
-        rawTextToParse = initialMessage.text;
-      } else if (selectedMessages && selectedMessages.length > 0) {
-        rawTextToParse = selectedMessages
-          .filter((m) => m.text)
-          .map((m) => m.text)
-          .join(' ');
-      }
-
-      if (rawTextToParse) {
-        parseContextAndFillEvent(rawTextToParse);
-      }
-    }
-  }, [isOpen, initialMessage, selectedMessages, chat, defaultTab]);
-
-  const parseContextAndFillEvent = (text: string) => {
+  // Підняте над ефектом і загорнуте в useCallback навмисно. У списку
+  // залежностей ефекту нижче ім'я обчислюється ПІД ЧАС рендеру, а не при
+  // спрацюванні — оголошене `const` після ефекту, воно там впало б у
+  // тимчасову мертву зону. Читає ця функція лише `chat?.title`, тож і
+  // тримається за нього.
+  const parseContextAndFillEvent = useCallback((text: string) => {
     setExtractedSourceSnippet(text);
     const lower = text.toLowerCase();
 
@@ -236,7 +211,38 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
     }
 
     setEventDescription(`З повідомлення: «${text.slice(0, 120)}${text.length > 120 ? '...' : ''}»`);
-  };
+  }, [chat?.title]);
+
+  // Intelligent Context Extraction on Open
+  useEffect(() => {
+    if (isOpen) {
+      if (defaultTab) {
+        setActiveTab(defaultTab);
+      }
+
+      // Pre-select all chat members
+      if (chat?.members && chat.members.length > 0) {
+        setSelectedAttendeeIds(chat.members.map((m) => m.id));
+      } else {
+        setSelectedAttendeeIds(['user_1', 'user_2']);
+      }
+
+      // If initialMessage or selectedMessages are passed, parse context
+      let rawTextToParse = '';
+      if (initialMessage && initialMessage.text) {
+        rawTextToParse = initialMessage.text;
+      } else if (selectedMessages && selectedMessages.length > 0) {
+        rawTextToParse = selectedMessages
+          .filter((m) => m.text)
+          .map((m) => m.text)
+          .join(' ');
+      }
+
+      if (rawTextToParse) {
+        parseContextAndFillEvent(rawTextToParse);
+      }
+    }
+  }, [isOpen, initialMessage, selectedMessages, chat, defaultTab, parseContextAndFillEvent]);
 
   // Escape виводить із шару так само, як хрестик.
   useEscapeClose(isOpen, onClose);
@@ -254,10 +260,14 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
   const handleInsertCalendarEvent = () => {
     soundFx.playSend();
 
-    const membersList: ChatMember[] = chat?.members || [
-      { id: 'u_kirill', name: 'Кирило', handle: '@kirill', role: 'owner', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop&crop=faces', isOnline: true },
-      { id: 'u_marta', name: 'Марта', handle: '@marta', role: 'member', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop&crop=faces', isOnline: true },
-    ];
+    // Запасний склад ВИГАДУВАВ людей: «Кирило», «Марта», «Олексій» — із
+    // фотографіями сторонніх людей із фотобанку й `isOnline: true`. Не
+    // силует, не заглушка — обличчя чужої людини під іменем твого
+    // співрозмовника, на модалі, який НЕ під замком.
+    //
+    // Немає складу — значить немає складу. Порожній список чесний: він каже,
+    // що запросити нікого, а не малює трьох незнайомців.
+    const membersList: ChatMember[] = chat?.members || [];
 
     const attendeeDetails: EventAttendee[] = membersList
       .filter((m) => selectedAttendeeIds.includes(m.id))
@@ -373,11 +383,17 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
   // Insert Split Bill
   const handleInsertBill = () => {
     soundFx.playTap();
-    const members = chat?.members || [
-      { id: '1', name: 'Кирило', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop&crop=faces' },
-      { id: '2', name: 'Марта', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop&crop=faces' },
-      { id: '3', name: 'Олексій', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=faces' },
-    ];
+    // Той самий вигаданий склад із чужими обличчями, що й вище. Немає складу
+    // — рахунок ділити нема між ким, і сказати це чесніше, ніж поділити між
+    // трьома незнайомцями з фотобанку.
+    const members = chat?.members || [];
+    if (!members.length) {
+      useUIStore.getState().toast({
+        kind: 'error',
+        message: 'У цій розмові немає складу — рахунок нема між ким ділити',
+      });
+      return;
+    }
     const total = parseFloat(billTotal) || 600;
     const share = Math.round(total / members.length);
 
@@ -450,11 +466,14 @@ export const ActionHubModal: React.FC<ActionHubModalProps> = ({
     onClose();
   };
 
-  const membersList: ChatMember[] = chat?.members || [
-    { id: 'u_kirill', name: 'Кирило', handle: '@kirill', role: 'owner', avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=100&h=100&fit=crop&crop=faces', isOnline: true },
-    { id: 'u_marta', name: 'Марта', handle: '@marta', role: 'member', avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=100&h=100&fit=crop&crop=faces', isOnline: true },
-    { id: 'u_oleksiy', name: 'Олексій', handle: '@oleksiy', role: 'member', avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=100&h=100&fit=crop&crop=faces', isOnline: false },
-  ];
+  // Запасний склад ВИГАДУВАВ людей: «Кирило», «Марта», «Олексій» — із
+  // фотографіями сторонніх людей із фотобанку й `isOnline: true`. Не
+  // силует, не заглушка — обличчя чужої людини під іменем твого
+  // співрозмовника, на модалі, який НЕ під замком.
+  //
+  // Немає складу — значить немає складу. Порожній список чесний: він каже,
+  // що запросити нікого, а не малює трьох незнайомців.
+  const membersList: ChatMember[] = chat?.members || [];
 
   return (
     // Заслінка мусить закривати шар: інакше вихід звідси — це знайти хрестик

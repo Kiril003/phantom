@@ -120,7 +120,9 @@ export const AutomationPipelineModal: React.FC<AutomationPipelineModalProps> = (
       id: `msg_standup_${Date.now()}`,
       senderId: 'bot_standup',
       senderName: 'Async Stand-up Bot',
-      senderAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
+      // Обличчя з фотобанку під іменем бота — чужа людина в ролі нашого
+      // складника. Знак генерується з імені й нікого не вдає.
+      senderAvatar: 'https://api.dicebear.com/7.x/bottts/svg?seed=standup',
       timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
       type: 'text',
       isSelf: false,

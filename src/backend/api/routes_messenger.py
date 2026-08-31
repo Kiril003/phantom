@@ -1509,7 +1509,11 @@ class DirectoryUserOut(BaseModel):
     display_name: str
     role: str
     avatar: Optional[str] = None
-    is_online: bool = True
+    # `is_online` тут БУЛО — і завжди `True`. Вузол про присутність не знає
+    # нічого: ані поля в схемі, ані кадру на дроті, ані згадки `last_seen`.
+    # Тобто довідник стверджував, що ВСІ ЗАВЖДИ в мережі, і людина вирішувала
+    # за цим, чи писати. Поля більше немає: чого не знаємо — про те мовчимо,
+    # а не вигадуємо ствердну відповідь.
 
 
 class StartChatByUsernameIn(BaseModel):
@@ -1531,23 +1535,19 @@ async def list_directory_users(
     
     users = (await session.execute(stmt.order_by(User.username))).scalars().all()
     
-    avatars = {
-        "phantom": "https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200&auto=format&fit=crop&q=80",
-        "kiril": "https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80",
-        "alex": "https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=80",
-        "kyrylo": "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80",
-        "maryna": "https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&auto=format&fit=crop&q=80",
-        "baffledgame": "https://images.unsplash.com/photo-1570295999919-56ceb5ecca61?w=200&auto=format&fit=crop&q=80",
-    }
-    
+    # Тут стояла таблиця «ім'я → фотографія з Unsplash»: справжнім людям вузла
+    # роздавались обличчя ЧУЖИХ людей із фотобанку. Не заглушка, не силует —
+    # фотографія сторонньої людини під іменем твого співрозмовника.
+    #
+    # Лишається згенерований знак за іменем: він очевидно синтетичний і нікого
+    # не вдає.
     return [
         DirectoryUserOut(
             id=u.id,
             username=u.username,
             display_name=u.username.capitalize(),
             role=u.role or "OPERATOR",
-            avatar=avatars.get(u.username.lower(), f"https://api.dicebear.com/7.x/bottts/svg?seed={u.username}"),
-            is_online=True,
+            avatar=f"https://api.dicebear.com/7.x/bottts/svg?seed={u.username}",
         )
         for u in users
     ]

@@ -31,13 +31,13 @@ import {
   History,
   Lock,
   Cpu,
-  Bot,
 } from 'lucide-react';
 import { FocusModeSelector } from './FocusModeSelector';
 import { TeamHuddleBar } from './TeamHuddleBar';
 import { Chat, UserProfile, ActiveTransportStatus, TransportProtocol } from '../../types/messenger';
 import { Avatar } from './Avatar';
 import { soundFx } from '../../utils/messengerSound';
+import { meshBrokerConfigured } from '../../services/globalP2PMesh';
 import { useMessengerStore } from '../../stores/messengerStore';
 import { useAISynthesisStore } from '../../stores/aiSynthesisStore';
 import { ContactSheet } from './VerifyContact';
@@ -47,7 +47,7 @@ interface HeaderProps {
   currentChat: Chat;
   currentUser: UserProfile;
   onOpenDigest: () => void;
-  onOpenActions: () => void;
+  onOpenActions?: () => void;
   onOpenScheduledMessages?: () => void;
   scheduledMessagesCount?: number;
   onOpenSettings: () => void;
@@ -94,6 +94,8 @@ const ICON_BTN_IDLE = 'text-[#8EA093] hover:text-white hover:bg-[#18231C]';
 const ICON_BTN_OFF = 'text-[#475569] cursor-not-allowed';
 // Чому кнопка не натискається — сказано словами, а не сірим кольором.
 const NO_CALL_NOTE = 'Дзвінки лише зі звіреними вузловими контактами';
+/** Дороги немає взагалі — це інша причина, ніж «не той тип бесіди». */
+const NO_MESH_NOTE = 'Дзвінки вимкнені: цій збірці не задано вузол звʼязку';
 const NO_PINNED_NOTE = 'Немає закріплених';
 // Рядок випадного меню: фіксовані 36px, іконка + один рядок тексту.
 const MENU_ITEM =
@@ -101,14 +103,20 @@ const MENU_ITEM =
 
 // Стан каналу живе в статусному рядку разом зі звіркою, а не окремою пігулкою:
 // це та сама відповідь на питання «наскільки цій розмові можна вірити».
+//
+// «вузол онлайн» казало правду про НАШ вузол — і читалось як про
+// співрозмовника. Це найтихіша форма брехні: слово чесне, адресат підмінений.
+// Про присутність другої людини вузол не знає НІЧОГО (ані поля, ані кадру),
+// тож жоден напис тут не сміє про неї натякати. Тепер кожен рядок називає,
+// ЧИЙ це стан.
 const TRANSPORT_LABEL: Record<string, string> = {
   'p2p-direct': 'прямий P2P',
-  'server-ws': 'вузол онлайн',
+  'server-ws': 'мій вузол на звʼязку',
   'relay-node': 'ретранслятор',
   connecting: 'з’єднання…',
-  'fallback-server': 'вузол онлайн',
-  online: 'вузол онлайн',
-  offline: 'автономно',
+  'fallback-server': 'мій вузол на звʼязку',
+  online: 'мій вузол на звʼязку',
+  offline: 'мій вузол автономно',
 };
 
 export const Header: React.FC<HeaderProps> = ({
@@ -167,8 +175,24 @@ export const Header: React.FC<HeaderProps> = ({
   const hasPeer = !!currentChat.peerNodeId;
   const isGroup = currentChat.type === 'group' || currentChat.type === 'channel';
 
-  // Дзвонити можна на будь-яку 1:1 бесіду через WebRTC DTLS-SRTP
-  const canCall = !isGroup;
+  // Дзвонити можна на будь-яку 1:1 бесіду через WebRTC DTLS-SRTP —
+  // але ЛИШЕ якщо цій збірці задано вузол звʼязку.
+  //
+  // Було: `const canCall = !isGroup;` — умова питала про ФОРМУ розмови й
+  // жодного разу про наявність ДОРОГИ. Наслідок на пакунку: тап по
+  // слухавці давав звук, накладку дзвінка й гудки без кінця, бо
+  // `globalP2PMesh.publish` мовчки виходить першим рядком, коли брокера
+  // немає (`if (!BROKER_URL) return;`). Жоден байт нікуди не йшов, і
+  // жодного слова про причину.
+  //
+  // Найгірше: функція, що відповідає рівно на це питання, була написана
+  // й **не викликана ніким**. Один рядок відстані між справним захистом і
+  // найгучнішою обіцянкою продукту, яку він не може виконати.
+  const hasMesh = meshBrokerConfigured();
+  const canCall = !isGroup && hasMesh;
+  // Причину називаємо ТУ, ЩО СПРАЦЮВАЛА: «не та бесіда» і «немає дороги» —
+  // різні речі, і людина мусить бачити свою.
+  const noCallNote = !hasMesh ? NO_MESH_NOTE : NO_CALL_NOTE;
 
   const hasPinned = pinnedCount > 0 && !!onScrollToPinned;
 
@@ -440,14 +464,14 @@ export const Header: React.FC<HeaderProps> = ({
         {/* Дзвінок: аудіо і відео */}
         <span
           className="flex items-center gap-0.5"
-          title={canCall ? undefined : NO_CALL_NOTE}
+          title={canCall ? undefined : noCallNote}
         >
           <button
             onClick={() => startCall(false)}
             disabled={!canCall}
             data-call-start="audio"
             className={`${ICON_BTN} ${canCall ? ICON_BTN_IDLE : ICON_BTN_OFF}`}
-            title={canCall ? `Аудіодзвінок: ${currentChat.title}` : NO_CALL_NOTE}
+            title={canCall ? `Аудіодзвінок: ${currentChat.title}` : noCallNote}
             aria-label="Аудіодзвінок"
           >
             <Phone className="w-[18px] h-[18px]" strokeWidth={1.75} />
@@ -458,7 +482,7 @@ export const Header: React.FC<HeaderProps> = ({
             disabled={!canCall}
             data-call-start="video"
             className={`hidden sm:flex ${ICON_BTN} ${canCall ? ICON_BTN_IDLE : ICON_BTN_OFF}`}
-            title={canCall ? `Відеодзвінок: ${currentChat.title}` : NO_CALL_NOTE}
+            title={canCall ? `Відеодзвінок: ${currentChat.title}` : noCallNote}
             aria-label="Відеодзвінок"
           >
             <Video className="w-[18px] h-[18px]" strokeWidth={1.75} />
@@ -723,6 +747,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </button>
               )}
 
+              {onOpenActions && (
               <button
                 onClick={() => {
                   closeMenu();
@@ -733,28 +758,15 @@ export const Header: React.FC<HeaderProps> = ({
                 <Zap className="w-4 h-4 text-[#6E7568] shrink-0" strokeWidth={1.75} />
                 <span className="truncate">Студія карток</span>
               </button>
+              )}
 
-              <button
-                onClick={() => {
-                  closeMenu();
-                  window.dispatchEvent(new CustomEvent('phantom:open-agentic'));
-                }}
-                className={MENU_ITEM}
-              >
-                <Bot className="w-4 h-4 text-[#D96C35] shrink-0" strokeWidth={1.75} />
-                <span className="truncate">Agentic Runtime & Нейроергономіка</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  closeMenu();
-                  window.dispatchEvent(new CustomEvent('phantom:open-physical'));
-                }}
-                className={MENU_ITEM}
-              >
-                <Cpu className="w-4 h-4 text-[#6E7568] shrink-0" strokeWidth={1.75} />
-                <span className="truncate">Physical Computing, GIS & WebGPU</span>
-              </button>
+              {/* «Agentic Runtime & Нейроергономіка» і «Physical Computing,
+                  GIS & WebGPU» прибрано з меню 30.08.2026 разом із замком на
+                  самих екранах (див. `modals/hiddenModals.ts`). Обидва
+                  вигадували стан роботи й не мали джерела даних. Лишити пункт
+                  при зачиненому екрані означало б проміняти брехню на мертву
+                  кнопку — та сама родина дефектів. Повернуться разом із
+                  дротом, одним рядком у переліку. */}
 
               {onOpenScheduledMessages && (
                 <button

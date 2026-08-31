@@ -360,7 +360,6 @@ export const messengerApi = {
         display_name: string;
         role: string;
         avatar?: string;
-        is_online: boolean;
       }>
     >('GET', `/messenger/directory/users${query ? `?query=${encodeURIComponent(query)}` : ''}`),
 

@@ -3,10 +3,47 @@
  * Забезпечує збереження чатів, повідомлень, профілів та налаштувань між сесіями.
  */
 
-import { Chat, UserProfile, ScheduledMessage } from '../types/messenger';
+import { Chat, Message, UserProfile, ScheduledMessage } from '../types/messenger';
+
+/** Лист, якого вузол не взяв, і чат, до якого він належить. */
+export interface OutboxEntry {
+  /** `client_id` листа — він же ключ ідемпотентності на сервері. */
+  id: string;
+  chatId: string;
+  message: Message;
+  savedAt: number;
+  attempts: number;
+}
+
+/**
+ * Сказати вголос, що сховище відмовило — і що саме через це не сталось.
+ *
+ * Тут було шість блоків `} catch {}`. Поведінку вони давали правильну
+ * (читання повертає запасне значення, а не валить екран), але **відмову
+ * не чув ніхто**: зіпсований запис і його відсутність виглядали однаково,
+ * а невдалий ЗАПИС узагалі минав без сліду — інтерфейс вважав, що зберіг.
+ *
+ * Це той самий механізм, що сьогодні в домі ховав `ImportError` у скані
+ * радіо й телеметрію Chroma: відмова, якої ніхто не чує. У сусідній сесії
+ * така сама трійка в полотні **втрачала написане людиною**.
+ *
+ * Навмисно не кидаємо далі: запасне значення — правильна поведінка для
+ * читання, і ламати екран через недоступний localStorage (приватний режим,
+ * переповнена квота) було б гірше. Але тиша перестала бути безкоштовною.
+ */
+function noteStorageFailure(what: string, err: unknown): void {
+  const reason = err instanceof Error ? `${err.name}: ${err.message}` : String(err);
+  console.warn(`[сховище] ${what} не вдалось — ${reason}`);
+}
 
 const DB_NAME = 'phantom_messenger_vault';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
+
+export interface ChatFlags {
+  pinned?: boolean;
+  muted?: boolean;
+  archived?: boolean;
+}
 
 class StoragePersistence {
   private db: IDBDatabase | null = null;
@@ -36,6 +73,12 @@ class StoragePersistence {
         }
         if (!db.objectStoreNames.contains('scheduled')) {
           db.createObjectStore('scheduled', { keyPath: 'id' });
+        }
+        // Скринька вихідних: листи, яких вузол не взяв. Головна вимога до
+        // месенджера — написане не зникає, тож вони мусять пережити
+        // перезапуск, а не жити лише в пам'яті вкладки.
+        if (!db.objectStoreNames.contains('outbox')) {
+          db.createObjectStore('outbox', { keyPath: 'id' });
         }
       };
 
@@ -106,7 +149,9 @@ class StoragePersistence {
         const parsed = JSON.parse(raw);
         if (Array.isArray(parsed) && parsed.length > 0) return parsed;
       }
-    } catch {}
+    } catch (err) {
+      noteStorageFailure('читання резервної копії чатів', err);
+    }
     return null;
   }
 
@@ -119,7 +164,9 @@ class StoragePersistence {
         tx.objectStore('chats').clear();
         tx.objectStore('messages').clear();
       }
-    } catch {}
+    } catch (err) {
+      noteStorageFailure('очищення локального сховища', err);
+    }
   }
 
   /* ─── Профіль користувача ─────────────────────────────────────────────── */
@@ -142,7 +189,9 @@ class StoragePersistence {
     try {
       const raw = localStorage.getItem('phantom_user_profile');
       if (raw) return JSON.parse(raw);
-    } catch {}
+    } catch (err) {
+      noteStorageFailure('читання профілю власника', err);
+    }
     return null;
   }
 
@@ -173,8 +222,88 @@ class StoragePersistence {
     try {
       const raw = localStorage.getItem('phantom_scheduled_messages');
       if (raw) return JSON.parse(raw);
-    } catch {}
+    } catch (err) {
+      noteStorageFailure('читання відкладених листів', err);
+    }
     return null;
+  }
+
+  /* ─── Закріплено / тиша / архів ───────────────────────────────────────── */
+  //
+  // Ці три прапорці жили ЛИШЕ в пам'яті вкладки: жоден із перемикачів не
+  // зберігав нічого, а `loadChats` не викликався взагалі. Тобто людина
+  // закріплювала розмову, закривала вкладку — і закріплення зникало.
+  //
+  // Тримаємо їх окремою мапою, а не всередині розмов, бо список розмов
+  // приходить із вузла й перебудовується: прапорці мусять пережити цю
+  // перебудову й прикластись назад за ідентифікатором.
+  //
+  // Пристрій свій. У вузла для них немає полів узагалі, тож закріплене на ПК
+  // на телефоні не з'явиться — і вдавати протилежне ми не будемо.
+
+  public async saveChatFlags(flags: Record<string, ChatFlags>): Promise<void> {
+    try {
+      localStorage.setItem('phantom_chat_flags', JSON.stringify(flags));
+    } catch (err) {
+      noteStorageFailure('збереження прапорців розмов', err);
+    }
+  }
+
+  public loadChatFlags(): Record<string, ChatFlags> {
+    try {
+      const raw = localStorage.getItem('phantom_chat_flags');
+      if (raw) return JSON.parse(raw) as Record<string, ChatFlags>;
+    } catch (err) {
+      noteStorageFailure('читання прапорців розмов', err);
+    }
+    return {};
+  }
+
+  /* ─── Скринька вихідних ───────────────────────────────────────────────── */
+  //
+  // Сюди лягає лист, якого сервер НЕ взяв. Доти він жив лише в пам'яті вкладки:
+  // людина бачила «не пішло» (це вже чесно), але після перезапуску написане
+  // зникало — а месенджер від іграшки відрізняє саме те, що написане не
+  // зникає.
+  //
+  // Дзеркало в localStorage навмисне: IndexedDB відкривається асинхронно, і
+  // перший кадр після запуску має показати чергу ВІДРАЗУ, а не за мить.
+
+  public async saveOutbox(entry: OutboxEntry): Promise<void> {
+    try {
+      const list = this.loadOutboxSync().filter((e) => e.id !== entry.id);
+      list.push(entry);
+      localStorage.setItem('phantom_outbox', JSON.stringify(list));
+      await this.ensureReady();
+      if (!this.db) return;
+      this.db.transaction('outbox', 'readwrite').objectStore('outbox').put(entry);
+    } catch (e) {
+      console.warn('[Storage] Не вдалося зберегти лист у черзі:', e);
+    }
+  }
+
+  public async dropOutbox(id: string): Promise<void> {
+    try {
+      const list = this.loadOutboxSync().filter((e) => e.id !== id);
+      localStorage.setItem('phantom_outbox', JSON.stringify(list));
+      await this.ensureReady();
+      if (!this.db) return;
+      this.db.transaction('outbox', 'readwrite').objectStore('outbox').delete(id);
+    } catch (e) {
+      console.warn('[Storage] Не вдалося прибрати лист із черги:', e);
+    }
+  }
+
+  /** Синхронно — щоб перший кадр уже знав про чергу. */
+  public loadOutboxSync(): OutboxEntry[] {
+    try {
+      const raw = localStorage.getItem('phantom_outbox');
+      if (!raw) return [];
+      const parsed = JSON.parse(raw);
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
   }
 
   /* ─── Загальні налаштування ────────────────────────────────────────────── */
@@ -182,14 +311,18 @@ class StoragePersistence {
   public saveSetting(key: string, value: any): void {
     try {
       localStorage.setItem(`phantom_setting_${key}`, JSON.stringify(value));
-    } catch {}
+    } catch (err) {
+      noteStorageFailure('запис налаштування', err);
+    }
   }
 
   public loadSetting<T>(key: string, defaultValue: T): T {
     try {
       const raw = localStorage.getItem(`phantom_setting_${key}`);
       if (raw !== null) return JSON.parse(raw);
-    } catch {}
+    } catch (err) {
+      noteStorageFailure('читання налаштування', err);
+    }
     return defaultValue;
   }
 }

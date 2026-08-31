@@ -40,6 +40,7 @@ import {
 // телеметрію безпеки («наскрізне шифрування активне»), листи від матері
 // власника на його ім'я і рапорти про RTT від людей, які нічого не писали.
 import { globalP2PMesh } from '../services/globalP2PMesh';
+import type { ChatFlags } from '../services/storagePersistence';
 import { storagePersistence } from '../services/storagePersistence';
 import type { OutboxEntry } from '../services/storagePersistence';
 import { aiEngineService, type ChatHistoryItem } from '../services/aiEngineService';
@@ -320,6 +321,25 @@ export function restoreOutboxInto(chats: Chat[], pending: OutboxEntry[]): Chat[]
   });
 }
 
+/** Запам'ятовує прапорці розмов на цьому пристрої й повертає новий стан. */
+function rememberFlags(chats: Chat[]): { chats: Chat[] } {
+  const flags: Record<string, ChatFlags> = {};
+  for (const c of chats) {
+    if (c.pinned || c.muted || c.archived) {
+      flags[c.id] = { pinned: c.pinned, muted: c.muted, archived: c.archived };
+    }
+  }
+  void storagePersistence.saveChatFlags(flags);
+  return { chats };
+}
+
+/** Прикладає збережені прапорці до розмови, що прийшла з вузла. */
+function withSavedFlags(chat: Chat, flags: Record<string, ChatFlags>): Chat {
+  const saved = flags[chat.id];
+  if (!saved) return chat;
+  return { ...chat, pinned: saved.pinned, muted: saved.muted, archived: saved.archived };
+}
+
 export const useMessengerStore = create<MessengerState>((set, get) => {
   // Connect network engine listeners
   messengerNetworkEngine.onMessage((chatId, msg) => {
@@ -508,7 +528,13 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
         set((s2) => {
           const byId = new Map(rows.map((r) => [r.id, r]));
           const known = new Set(s2.chats.map((c) => c.id));
-          const fresh = rows.filter((r) => !known.has(r.id)).map(chatFromNode);
+          // Прапорці — на цьому пристрої, а список приходить із вузла й
+          // перебудовується. Без цього рядка закріплення зникало б при
+          // кожному оновленні списку, не лише при перезавантаженні.
+          const savedFlags = storagePersistence.loadChatFlags();
+          const fresh = rows
+            .filter((r) => !known.has(r.id))
+            .map((r) => withSavedFlags(chatFromNode(r), savedFlags));
           const merged = s2.chats.map((c) => {
             const row = byId.get(c.id);
             return row ? withNodeFields(c, row, s2.activeChatId) : c;
@@ -702,25 +728,33 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
       }));
     },
 
+    // Три прапорці жили ЛИШЕ в пам'яті вкладки. Жоден перемикач нічого не
+    // зберігав, `loadChats` не викликався взагалі — тобто людина закріплювала
+    // розмову, закривала вкладку, і закріплення зникало. Не «не синхронізовано
+    // між пристроями», а не пережило власного вікна.
+    //
+    // Пристрій свій, і це сказано вголос: у вузла для них немає полів узагалі.
+    // Закріплене на ПК на телефоні не з'явиться, і вдавати протилежне не
+    // будемо, доки на вузлі не буде де це тримати.
     togglePinChat: (chatId) => {
       soundFx.playTap();
-      set((state) => ({
-        chats: state.chats.map((c) => (c.id === chatId ? { ...c, pinned: !c.pinned } : c)),
-      }));
+      set((state) => rememberFlags(state.chats.map(
+        (c) => (c.id === chatId ? { ...c, pinned: !c.pinned } : c),
+      )));
     },
 
     toggleMuteChat: (chatId) => {
       soundFx.playTap();
-      set((state) => ({
-        chats: state.chats.map((c) => (c.id === chatId ? { ...c, muted: !c.muted } : c)),
-      }));
+      set((state) => rememberFlags(state.chats.map(
+        (c) => (c.id === chatId ? { ...c, muted: !c.muted } : c),
+      )));
     },
 
     toggleArchiveChat: (chatId) => {
       soundFx.playTap();
-      set((state) => ({
-        chats: state.chats.map((c) => (c.id === chatId ? { ...c, archived: !c.archived } : c)),
-      }));
+      set((state) => rememberFlags(state.chats.map(
+        (c) => (c.id === chatId ? { ...c, archived: !c.archived } : c),
+      )));
     },
 
     addChatToFolder: (folderId, chatId) => {

@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import select
+from tests.conftest import owner_of
 
 from db.database import AsyncSessionLocal
 from db.models import MessengerContact, MessengerConversation, MessengerMessage, User
@@ -11,10 +11,6 @@ from messenger.crypto.keys import KeyStore
 from messenger.crypto.safety import safety_number
 from messenger.crypto.session import Session
 from messenger.redelivery import MAX_ATTEMPTS, flush_queue
-
-
-async def _owner_id(session) -> str:
-    return (await session.execute(select(User.id))).scalars().first()
 
 
 async def _queued_message(session, owner: str, *, address: str | None, frame: str = "aabb"):
@@ -58,7 +54,7 @@ async def test_a_queued_message_is_delivered_on_retry(auth_root_client, monkeypa
     monkeypatch.setattr(redelivery, "deliver", _ok)
 
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = owner_of(auth_root_client)
         row = await _queued_message(session, owner, address="peer.local")
         row_id = row.id
 
@@ -79,7 +75,7 @@ async def test_a_failed_retry_keeps_the_message_and_the_frame(auth_root_client, 
     monkeypatch.setattr(redelivery, "deliver", _fail)
 
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = owner_of(auth_root_client)
         row = await _queued_message(session, owner, address="peer.local")
         row_id = row.id
 
@@ -94,7 +90,7 @@ async def test_a_failed_retry_keeps_the_message_and_the_frame(auth_root_client, 
 @pytest.mark.anyio
 async def test_without_an_address_no_attempt_is_wasted(auth_root_client):
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = owner_of(auth_root_client)
         row = await _queued_message(session, owner, address=None)
         row_id = row.id
 
@@ -114,7 +110,7 @@ async def test_the_node_stops_hammering_a_wall(auth_root_client, monkeypatch):
     monkeypatch.setattr(redelivery, "deliver", _fail)
 
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = owner_of(auth_root_client)
         row = await _queued_message(session, owner, address="peer.local")
         row.delivery_attempts = MAX_ATTEMPTS
         await session.flush()

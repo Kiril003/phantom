@@ -10,10 +10,9 @@ import json
 import time
 
 import pytest
-from sqlalchemy import select
+from tests.conftest import owner_of
 
 from db.database import AsyncSessionLocal
-from db.models import User
 from messenger.blobs import WIRE_KINDS, unwrap_frame, wrap_frame
 from messenger.crypto.at_rest import unseal
 from messenger.crypto.keys import KeyStore
@@ -26,10 +25,6 @@ def _body(**over) -> str:
     point = {"lat": 50.4501, "lon": 30.5234, "at": int(time.time() * 1000), "acc": 12.5}
     point.update(over)
     return json.dumps(point)
-
-
-async def _owner_id(session) -> str:
-    return (await session.execute(select(User.id))).scalars().first()
 
 
 def test_the_kind_survives_the_envelope():
@@ -78,7 +73,7 @@ async def test_a_point_from_another_node_lands_in_the_feed(auth_root_client):
     body = _body(label="я тут")
 
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = owner_of(auth_root_client)
         frame = Session.initiate(peer, me.publish_bundle()).encrypt(
             wrap_frame("geo:point", body, "c_geo_1").encode()
         )
@@ -101,7 +96,7 @@ async def test_a_point_from_the_mailbox_is_marked_as_such(auth_root_client):
     peer = KeyStore.generate(one_time_count=4)
 
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = owner_of(auth_root_client)
         frame = Session.initiate(peer, me.publish_bundle()).encrypt(
             wrap_frame("geo:point", _body(), "c_geo_2").encode()
         )
@@ -119,7 +114,7 @@ async def test_a_point_without_coordinates_never_reaches_the_feed(auth_root_clie
     peer = KeyStore.generate(one_time_count=4)
 
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = owner_of(auth_root_client)
         frame = Session.initiate(peer, me.publish_bundle()).encrypt(
             wrap_frame("geo:point", json.dumps({"label": "десь"}), "c_geo_3").encode()
         )

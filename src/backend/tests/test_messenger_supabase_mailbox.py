@@ -135,7 +135,9 @@ async def test_supabase_stays_silent_when_the_relay_delivers(monkeypatch):
         peer_address="peer.local", relay="relay.local",
         supabase_url=SB_URL, supabase_key=SB_KEY,
     )
-    assert ok is True
+    # `deliver` більше не каже «так/ні», а НАЗИВАЄ дорогу: саме її потім
+    # показують людині в стрічці. Порожній рядок — жодної дороги.
+    assert ok == "relay"
     assert order == ["direct", "relay"]
 
 
@@ -147,7 +149,9 @@ async def test_supabase_catches_what_both_roads_dropped(monkeypatch):
         peer_address="peer.local", relay="relay.local",
         supabase_url=SB_URL, supabase_key=SB_KEY,
     )
-    assert ok is True
+    # `deliver` більше не каже «так/ні», а НАЗИВАЄ дорогу: саме її потім
+    # показують людині в стрічці. Порожній рядок — жодної дороги.
+    assert ok == "cloud"
     assert order == ["direct", "relay", "supabase"]
 
 
@@ -159,7 +163,7 @@ async def test_without_url_or_key_the_road_does_not_exist(monkeypatch):
         peer_address="peer.local", relay="relay.local",
         supabase_url=SB_URL, supabase_key="",
     )
-    assert ok is False
+    assert ok == "", "жодна дорога не взяла — назвати нічого"
     assert order == ["direct", "relay"]
 
 

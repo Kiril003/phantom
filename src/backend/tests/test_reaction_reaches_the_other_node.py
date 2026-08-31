@@ -23,6 +23,7 @@ from messenger.blobs import SERVICE_TOKEN, wrap_frame
 from messenger.crypto.keys import KeyStore
 from messenger.crypto.session import Session
 from messenger.inbox import accept_frame
+from tests.conftest import owner_of
 
 API = "/api/v1/messenger"
 
@@ -36,24 +37,6 @@ def _cid(tag: str) -> str:
     зіткненням стендів. Та сама пастка вже коштувала мені години на пошуку.
     """
     return f"{tag}_{uuid4().hex[:8]}"
-
-
-def _owner_id(client) -> str:
-    """Власник — саме той, ким автентифікований клієнт.
-
-    Тут стояло «перший користувач бази за id». Ідентифікатори — випадкові
-    uuid, а користувачів у базі більше одного, тож приблизно кожен третій
-    прогін давав ІНШОГО власника: `conversation_for` не знаходив розмову з
-    цим контактом, заводив порожню, і позначці не було на що лягти.
-    Виглядало це хиткістю дроту, а було хибним власником у стенді.
-
-    Той самий капкан уже описано в `test_messenger_delete.py`; я наступив у
-    нього вдруге, тож тепер id береться з того ж токена, яким клієнт стукає.
-    """
-    from jose import jwt as _jwt
-
-    token = client.headers["Authorization"].split(" ", 1)[1]
-    return _jwt.get_unverified_claims(token)["sub"]
 
 
 def _mark_frame(client_id: str, emoji: str, on: bool) -> str:
@@ -126,7 +109,7 @@ async def test_a_mark_from_the_other_node_lands_on_our_letter(auth_root_client, 
     theirs = Session.initiate(peer, ours.publish_bundle())
     frame = theirs.encrypt(_mark_frame(cid, "👍", True).encode())
 
-    owner = _owner_id(auth_root_client)
+    owner = owner_of(auth_root_client)
     async with AsyncSessionLocal() as session:
         row = await accept_frame(session, ours, owner, frame, None, road="direct")
         await session.commit()
@@ -155,7 +138,7 @@ async def test_the_same_frame_twice_does_not_undo_the_mark(auth_root_client, mon
     )
     ours = _keys()
     theirs = Session.initiate(peer, ours.publish_bundle())
-    owner = _owner_id(auth_root_client)
+    owner = owner_of(auth_root_client)
 
     async with AsyncSessionLocal() as session:
         # Другий кадр іде вже НАЯВНОЮ сесією: без `from_node_id` приймальня
@@ -195,7 +178,7 @@ async def test_an_explicit_off_removes_it(auth_root_client, monkeypatch):
     ours = _keys()
     theirs = Session.initiate(peer, ours.publish_bundle())
 
-    owner = _owner_id(auth_root_client)
+    owner = owner_of(auth_root_client)
     async with AsyncSessionLocal() as session:
         await accept_frame(
             session, ours, owner,
@@ -237,7 +220,7 @@ async def test_a_mark_for_a_letter_we_never_had_is_accepted_and_dropped(auth_roo
     theirs = Session.initiate(peer, ours.publish_bundle())
     frame = theirs.encrypt(_mark_frame("c_ніколи_не_існував", "👍", True).encode())
 
-    owner = _owner_id(auth_root_client)
+    owner = owner_of(auth_root_client)
     async with AsyncSessionLocal() as session:
         row = await accept_frame(session, ours, owner, frame, None, road="direct")
         await session.commit()
@@ -260,7 +243,7 @@ async def test_a_broken_mark_invents_nothing(auth_root_client, monkeypatch):
     # Тіло не JSON: ані листа, ані емодзі вигадувати не можна.
     frame = theirs.encrypt(wrap_frame("reaction", "не json", cid).encode())
 
-    owner = _owner_id(auth_root_client)
+    owner = owner_of(auth_root_client)
     async with AsyncSessionLocal() as session:
         row = await accept_frame(session, ours, owner, frame, None, road="direct")
         await session.commit()

@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 
 import pytest
+
+from tests.conftest import NoStandIdentity
 from sqlalchemy import select
 
 from db.database import AsyncSessionLocal
@@ -40,7 +42,13 @@ async def _owner_id(session, conversation_id: str = "") -> str:
         conversation = await session.get(MessengerConversation, conversation_id)
         if conversation is not None:
             return conversation.owner_user_id
-    return (await session.execute(select(User.id).order_by(User.id))).scalars().first()
+    # Запасної гілки «перший-ліпший» тут більше немає. Вона мовчки давала
+    # ЧУЖОГО власника, і тест падав із «не знайдено» замість того, щоб сказати,
+    # що стенд не знає, з чиєї розмови працює. Краще гучна відмова.
+    raise NoStandIdentity(
+        "не передано conversation_id: власника беруть із розмови або з токена, "
+        "а не з першого рядка таблиці User"
+    )
 
 
 def _add_contact(client, keys: KeyStore, name: str, address: str = "http://127.0.0.1:9") -> str:

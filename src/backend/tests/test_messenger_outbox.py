@@ -2,17 +2,13 @@
 from __future__ import annotations
 
 import pytest
-from sqlalchemy import select
+from tests.conftest import owner_of
 
 from db.database import AsyncSessionLocal
 from db.models import MessengerContact, MessengerConversation, User
 from messenger.crypto.keys import KeyStore
 from messenger.crypto.session import Session
 from messenger.outbox import OutboxError, prepare_frame
-
-
-async def _owner_id(session) -> str:
-    return (await session.execute(select(User.id))).scalars().first()
 
 
 async def _linked_conversation(session, owner: str, me: KeyStore, peer: KeyStore):
@@ -47,7 +43,7 @@ async def test_frame_is_ciphertext_that_the_peer_can_read(auth_root_client):
     secret = "буду о шостій"
 
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = owner_of(auth_root_client)
         conversation = await _linked_conversation(session, owner, me, peer)
         out = await prepare_frame(session, me, conversation, secret)
 
@@ -66,7 +62,7 @@ async def test_conversation_without_a_contact_produces_nothing(auth_root_client)
     me = KeyStore.generate(one_time_count=2)
 
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = owner_of(auth_root_client)
         conversation = MessengerConversation(owner_user_id=owner, title="Нотатки")
         session.add(conversation)
         await session.flush()
@@ -79,7 +75,7 @@ async def test_contact_without_a_session_is_an_explicit_error(auth_root_client):
     me, peer = KeyStore.generate(one_time_count=2), KeyStore.generate(one_time_count=2)
 
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = owner_of(auth_root_client)
         contact = MessengerContact(
             owner_user_id=owner, peer_node_id=peer.node_id, display_name="Хтось",
             bundle_json="", safety_number="0" * 60,
@@ -101,7 +97,7 @@ async def test_ratchet_moves_so_two_frames_never_share_a_key(auth_root_client):
     me, peer = KeyStore.generate(one_time_count=4), KeyStore.generate(one_time_count=4)
 
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = owner_of(auth_root_client)
         conversation = await _linked_conversation(session, owner, me, peer)
         first = await prepare_frame(session, me, conversation, "однакове")
         second = await prepare_frame(session, me, conversation, "однакове")

@@ -139,7 +139,9 @@ async def test_direct_is_tried_first_and_the_relay_is_left_alone(monkeypatch):
         peer_address="peer.local", relay="relay.local",
     )
 
-    assert ok is True
+    # `deliver` більше не каже «так/ні», а НАЗИВАЄ дорогу: саме її потім
+    # показують людині в стрічці. Порожній рядок — жодної дороги.
+    assert ok == "direct"
     assert calls == ["direct"]
 
 
@@ -165,7 +167,9 @@ async def test_the_relay_catches_what_the_direct_road_dropped(monkeypatch):
         peer_address="peer.local", relay="relay.local",
     )
 
-    assert ok is True
+    # `deliver` більше не каже «так/ні», а НАЗИВАЄ дорогу: саме її потім
+    # показують людині в стрічці. Порожній рядок — жодної дороги.
+    assert ok == "relay"
     assert calls == ["direct", "relay"]
 
 
@@ -186,7 +190,9 @@ async def test_without_an_address_the_relay_carries_it_alone(monkeypatch):
         b"\x01", peer_node_id="PEER", from_node_id="ME", relay="relay.local"
     )
 
-    assert ok is True
+    # `deliver` більше не каже «так/ні», а НАЗИВАЄ дорогу: саме її потім
+    # показують людині в стрічці. Порожній рядок — жодної дороги.
+    assert ok == "relay"
     assert calls == ["relay"]
 
 
@@ -194,4 +200,4 @@ async def test_without_an_address_the_relay_carries_it_alone(monkeypatch):
 async def test_with_no_road_at_all_nothing_is_pretended():
     from messenger import transport
 
-    assert await transport.deliver(b"\x01", peer_node_id="P", from_node_id="M") is False
+    assert await transport.deliver(b"\x01", peer_node_id="P", from_node_id="M") == ""

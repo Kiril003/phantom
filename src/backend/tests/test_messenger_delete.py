@@ -28,6 +28,7 @@ from db.models import (
     MessengerMessage,
     User,
 )
+from tests.conftest import owner_of
 from messenger.blobs import blob_path, new_blob_id, store_bytes, wrap_frame
 from messenger.crypto.keys import KeyStore
 from messenger.crypto.safety import safety_number
@@ -36,21 +37,6 @@ from messenger.inbox import accept_frame
 from messenger.purge import blob_ids_of, purge_conversation_blobs, tombstone
 
 PNG = b"\x89PNG\r\n\x1a\n" + b"phantom-test-bytes" * 4
-
-
-def _client_owner(client) -> str:
-    """Власник — саме той, ким автентифікований клієнт.
-
-    Раніше власника брали як «першого-ліпшого» користувача бази: варто було
-    сусідньому тесту лишити ще один рядок User, і розмова народжувалась під
-    чужим власником. Вузол чесно відповідав «conversation not found» — падав
-    тест, а не продукт. Тепер id дістаємо з того самого токена, яким клієнт
-    стукає у вузол.
-    """
-    from jose import jwt as _jwt
-
-    token = client.headers["Authorization"].split(" ", 1)[1]
-    return _jwt.get_unverified_claims(token)["sub"]
 
 
 def _seal_file(plain: bytes) -> tuple[bytes, bytes, bytes, str]:
@@ -222,7 +208,7 @@ async def test_a_delete_frame_wipes_the_message_on_the_receiving_node(auth_root_
     store_bytes(blob_id, ct)
 
     async with AsyncSessionLocal() as session:
-        owner = _client_owner(auth_root_client)
+        owner = owner_of(auth_root_client)
 
         # Співрозмовник шле фото — тим самим шляхом, що й у житті.
         frame = peer_session.encrypt(
@@ -245,7 +231,7 @@ async def test_a_delete_frame_wipes_the_message_on_the_receiving_node(auth_root_
 
     # А тепер службовий кадр — тією ж сесією, тією ж дорогою.
     async with AsyncSessionLocal() as session:
-        owner = _client_owner(auth_root_client)
+        owner = owner_of(auth_root_client)
         killed = await accept_frame(
             session, me, owner,
             peer_session.encrypt(wrap_frame("delete", "c_orig").encode()),
@@ -284,13 +270,13 @@ async def test_a_delete_frame_for_something_we_never_had_is_still_accepted(auth_
     peer_session = Session.initiate(peer, me.publish_bundle())
 
     async with AsyncSessionLocal() as session:
-        owner = _client_owner(auth_root_client)
+        owner = owner_of(auth_root_client)
         # Спершу звичайний кадр, щоб зʼявилась сесія й розмова.
         first = await accept_frame(session, me, owner, peer_session.encrypt(b"hi"))
         assert first is not None
 
     async with AsyncSessionLocal() as session:
-        owner = _client_owner(auth_root_client)
+        owner = owner_of(auth_root_client)
         nothing = await accept_frame(
             session, me, owner,
             peer_session.encrypt(wrap_frame("delete", "c_never_existed").encode()),
@@ -302,7 +288,7 @@ async def test_a_delete_frame_for_something_we_never_had_is_still_accepted(auth_
 
     # Головне: сесія вціліла, і наступне повідомлення читається.
     async with AsyncSessionLocal() as session:
-        owner = _client_owner(auth_root_client)
+        owner = owner_of(auth_root_client)
         after = await accept_frame(
             session, me, owner, peer_session.encrypt("а тепер далі".encode()),
             peer_node_id=peer.node_id,
@@ -324,7 +310,7 @@ async def test_the_route_carries_the_delete_frame_to_the_other_node(auth_root_cl
     peer = KeyStore.generate(one_time_count=8)
 
     async with AsyncSessionLocal() as session:
-        owner = _client_owner(auth_root_client)
+        owner = owner_of(auth_root_client)
         peer_bundle = peer.publish_bundle()
         my_side = Session.initiate(me, peer_bundle, expected_node_id=peer.node_id)
         contact = MessengerContact(
@@ -402,7 +388,7 @@ async def test_a_delete_for_an_offline_peer_waits_in_the_queue(auth_root_client,
     peer = KeyStore.generate(one_time_count=8)
 
     async with AsyncSessionLocal() as session:
-        owner = _client_owner(auth_root_client)
+        owner = owner_of(auth_root_client)
         peer_bundle = peer.publish_bundle()
         my_side = Session.initiate(me, peer_bundle, expected_node_id=peer.node_id)
         contact = MessengerContact(
@@ -460,12 +446,28 @@ async def test_a_delete_for_an_offline_peer_waits_in_the_queue(auth_root_client,
     async with AsyncSessionLocal() as session:
         delivered = await flush_queue(session, me.node_id)
 
-    assert delivered == 1
+    # Черга ОДНА на весь процес, тож глобальне число тут — розтяжка для
+    # кожного, хто прийде після: досить сусідньому тесту завести контакт із
+    # погашеним співрозмовником, і цей рядок падає в чужому файлі. Так уже
+    # сталось 31.08 — тест реакцій лишив вісім листів, і тут вийшло `9 == 1`.
+    # Питання ж стоїть не «скільки всього вивезли», а «чи вивезли МІЙ кадр».
+    assert delivered >= 1
     from messenger.blobs import unwrap_frame
 
-    peer_side, plain = Session.accept(peer, carried[0])
-    kind, body, _origin, _group = unwrap_frame(plain.decode())
-    assert (kind, body) == ("delete", "c_off")
+    mine = None
+    for frame in carried:
+        try:
+            _peer_side, plain = Session.accept(peer, frame)
+        except Exception:
+            # Кадр іншої людини: наш співрозмовник його не відкриє, і це
+            # правильно. Пропускаємо, а не оголошуємо дефектом.
+            continue
+        kind, body, _origin, _group = unwrap_frame(plain.decode())
+        if kind == "delete":
+            mine = (kind, body)
+            break
+
+    assert mine == ("delete", "c_off"), "кадру видалення не було серед вивезених"
 
     async with AsyncSessionLocal() as session:
         row = await session.get(MessengerMessage, msg["id"])

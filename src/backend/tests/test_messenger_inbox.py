@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import pytest
+from tests.conftest import owner_of
 from sqlalchemy import select
 
 from db.database import AsyncSessionLocal
@@ -9,10 +10,6 @@ from db.models import MessengerContact, MessengerConversation, MessengerMessage,
 from messenger.crypto.keys import KeyStore
 from messenger.crypto.session import Session
 from messenger.inbox import InboxError, accept_frame
-
-
-async def _owner_id(session) -> str:
-    return (await session.execute(select(User.id))).scalars().first()
 
 
 @pytest.mark.anyio
@@ -23,7 +20,7 @@ async def test_first_frame_from_a_stranger_opens_a_conversation(auth_root_client
     frame = Session.initiate(stranger, me.publish_bundle()).encrypt("привіт".encode())
 
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = owner_of(auth_root_client)
         row = await accept_frame(session, me, owner, frame)
 
         contact = (
@@ -49,7 +46,7 @@ async def test_delivered_text_is_readable_and_sealed(auth_root_client):
     frame = Session.initiate(peer, me.publish_bundle()).encrypt(secret.encode())
 
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = owner_of(auth_root_client)
         row = await accept_frame(session, me, owner, frame)
 
     from messenger.crypto.at_rest import unseal
@@ -64,7 +61,7 @@ async def test_garbage_frame_is_refused(auth_root_client):
     me = KeyStore.generate(one_time_count=4)
 
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = owner_of(auth_root_client)
         with pytest.raises(InboxError):
             await accept_frame(session, me, owner, b"PHM1" + b"\x02" + b"\x00" * 80)
 
@@ -78,7 +75,7 @@ async def test_frame_meant_for_another_node_is_refused(auth_root_client):
     frame = Session.initiate(peer, someone_else.publish_bundle()).encrypt(b"not yours")
 
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = owner_of(auth_root_client)
         with pytest.raises(InboxError):
             await accept_frame(session, me, owner, frame)
 
@@ -90,7 +87,7 @@ async def test_second_frame_continues_the_same_conversation(auth_root_client):
     peer_session = Session.initiate(peer, me.publish_bundle())
 
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = owner_of(auth_root_client)
         first = await accept_frame(session, me, owner, peer_session.encrypt("перше".encode()))
         second = await accept_frame(
             session, me, owner, peer_session.encrypt("друге".encode()),
@@ -138,7 +135,7 @@ async def test_the_first_letter_tells_where_to_reply(auth_root_client):
     frame = Session.initiate(peer, me.publish_bundle()).encrypt(b"hi")
 
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = owner_of(auth_root_client)
         await accept_frame(
             session, me, owner, frame, reply_address="http://192.168.1.9:8000"
         )
@@ -160,7 +157,7 @@ async def test_an_address_set_by_hand_is_not_overwritten(auth_root_client):
     peer_session = Session.initiate(peer, me.publish_bundle())
 
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = owner_of(auth_root_client)
         await accept_frame(
             session, me, owner, peer_session.encrypt(b"one"), reply_address="chosen.local"
         )

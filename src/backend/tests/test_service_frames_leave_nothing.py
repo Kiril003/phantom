@@ -23,6 +23,8 @@ from __future__ import annotations
 
 import pytest
 
+from tests.conftest import owner_of
+
 from messenger import blobs
 from messenger.blobs import SERVICE_KINDS, SERVICE_TOKEN, unwrap_frame, wrap_frame
 
@@ -124,11 +126,8 @@ async def test_the_thread_does_not_change_after_an_unknown_service_frame(
         k for k in blobs.WIRE_KINDS if k != "reaction"
     ))
 
+    owner = owner_of(auth_root_client)
     async with AsyncSessionLocal() as session:
-        from sqlalchemy import select
-        from db.models import User
-
-        owner = (await session.execute(select(User.id).order_by(User.id))).scalars().first()
         row = await accept_frame(session, ours, owner, frame, None, road="direct")
         await session.commit()
 

@@ -15,8 +15,8 @@ import os
 
 import httpx
 import pytest
+from tests.conftest import owner_of
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from sqlalchemy import select
 
 from db.database import AsyncSessionLocal
 from db.models import MessengerBlob, User
@@ -33,10 +33,6 @@ ROAD = R2Road(
     access_key="R2_ACCESS_KEY_FOR_TESTS",
     secret_key="R2_SECRET_KEY_FOR_TESTS_do_not_log_me",
 )
-
-
-async def _owner_id(session) -> str:
-    return (await session.execute(select(User.id))).scalars().first()
 
 
 @pytest.mark.anyio
@@ -64,7 +60,7 @@ async def test_the_recipient_takes_its_blob_and_sweeps_the_cloud(auth_root_clien
     })
 
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = owner_of(auth_root_client)
         frame = Session.initiate(marta, kyrylo.publish_bundle()).encrypt(
             wrap_frame("image", body).encode()
         )
@@ -104,7 +100,7 @@ async def test_an_empty_cloud_changes_nothing(auth_root_client):
 
     body = json.dumps({"blob_id": blob_id, "name": "файл.bin", "size": 3})
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = owner_of(auth_root_client)
         frame = Session.initiate(marta, kyrylo.publish_bundle()).encrypt(
             wrap_frame("file", body).encode()
         )
@@ -129,7 +125,7 @@ async def test_without_credentials_the_recipient_asks_no_one(auth_root_client, m
     monkeypatch.setattr(redelivery, "fetch_object", _never)
 
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = owner_of(auth_root_client)
         keys = KeyStore.generate(one_time_count=2)
         assert await fetch_parked_blobs(session, keys, owner) == 0
 
@@ -185,7 +181,7 @@ async def test_a_photo_crosses_a_real_bucket_and_stays_unreadable_there(auth_roo
     })
 
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = owner_of(auth_root_client)
         frame = Session.initiate(marta, kyrylo.publish_bundle()).encrypt(
             wrap_frame("image", body).encode()
         )

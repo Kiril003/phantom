@@ -25,6 +25,7 @@
 from __future__ import annotations
 
 import pytest
+from tests.conftest import owner_of
 
 from messenger.crypto.keys import KeyStore
 from messenger.crypto.session import Session
@@ -39,14 +40,6 @@ def _plaintext(row):
     from api.routes_messenger import _body_of
 
     return _body_of(row)
-
-
-async def _owner_id(session) -> str:
-    from sqlalchemy import select
-
-    from db.models import User
-
-    return (await session.execute(select(User.id).order_by(User.id))).scalars().first()
 
 
 @pytest.mark.anyio
@@ -81,7 +74,7 @@ async def test_an_initial_frame_is_accepted_even_when_we_already_hold_a_session(
     frame = theirs.encrypt(wrap_frame("text", "я теж тебе додав").encode())
 
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = owner_of(auth_root_client)
         row = await accept_frame(
             session, ours, owner, frame, contact["peer_node_id"], road="direct"
         )
@@ -116,7 +109,7 @@ async def test_garbage_still_cannot_reset_a_session(auth_root_client):
     peer_node_id = added.json()["peer_node_id"]
 
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = owner_of(auth_root_client)
         with pytest.raises(InboxError):
             await accept_frame(
                 session, _keys(), owner, b"\xde" * 200, peer_node_id, road="direct"
@@ -134,7 +127,7 @@ async def test_an_ordinary_frame_on_a_live_session_still_works(auth_root_client)
     theirs = Session.initiate(peer, ours.publish_bundle())
 
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = owner_of(auth_root_client)
         first = await accept_frame(
             session, ours, owner, theirs.encrypt(wrap_frame("text", "перший").encode()),
             None, road="direct",

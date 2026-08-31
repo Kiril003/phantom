@@ -9,6 +9,8 @@ from __future__ import annotations
 import uuid
 
 import pytest
+
+from tests.conftest import owner_of
 from sqlalchemy import select
 
 from api import routes_calls
@@ -18,16 +20,9 @@ from messenger.crypto.keys import KeyStore
 from messenger.guard import InboxGuard
 
 
-async def _owner_id() -> str:
-    async with AsyncSessionLocal() as session:
-        return (
-            await session.execute(select(User.id).order_by(User.id))
-        ).scalars().first()
-
-
-async def _make_contact(peer_node_id: str, *, address: str | None) -> str:
+async def _make_contact(client, peer_node_id: str, *, address: str | None) -> str:
     """Контакт кладемо власнику вузла — саме його шукає вхід для чужих сигналів."""
-    owner = await _owner_id()
+    owner = owner_of(client)
     async with AsyncSessionLocal() as session:
         contact = MessengerContact(
             id=str(uuid.uuid4()),
@@ -76,7 +71,7 @@ async def test_offer_from_a_contact_reaches_the_hub(
     auth_root_client, captured_broadcasts, fresh_guard
 ):
     peer = KeyStore.generate(one_time_count=2)
-    contact_id = await _make_contact(peer.node_id, address="http://127.0.0.1:8001")
+    contact_id = await _make_contact(auth_root_client, peer.node_id, address="http://127.0.0.1:8001")
 
     resp = auth_root_client.post(
         "/api/v1/messenger/call/inbound",
@@ -94,7 +89,7 @@ async def test_offer_from_a_contact_reaches_the_hub(
 
     channel, type_, data, user_id = captured_broadcasts[-1]
     assert (channel, type_) == ("call", "call:offer")
-    assert user_id == await _owner_id()
+    assert user_id == owner_of(auth_root_client)
     assert data["call_id"] == "c-1"
     assert data["from_node_id"] == peer.node_id
     assert data["contact_id"] == contact_id
@@ -110,7 +105,7 @@ async def test_every_stage_travels_the_same_way(
 ):
     """Відповідь, кандидат і кінець дзвінка їдуть тим самим входом."""
     peer = KeyStore.generate(one_time_count=2)
-    await _make_contact(peer.node_id, address=None)
+    await _make_contact(auth_root_client, peer.node_id, address=None)
 
     for kind, extra in (
         ("answer", {"sdp": "v=0\r\n"}),
@@ -149,7 +144,7 @@ async def test_a_stranger_may_not_call(auth_root_client, captured_broadcasts, fr
 @pytest.mark.anyio
 async def test_an_unknown_stage_is_refused(auth_root_client, captured_broadcasts, fresh_guard):
     peer = KeyStore.generate(one_time_count=2)
-    await _make_contact(peer.node_id, address=None)
+    await _make_contact(auth_root_client, peer.node_id, address=None)
 
     resp = auth_root_client.post(
         "/api/v1/messenger/call/inbound",
@@ -166,7 +161,7 @@ async def test_an_oversized_signal_is_cut_off_by_the_guard(
 ):
     """SDP — це кілобайти. Мегабайт означає, що це вже не сигнал."""
     peer = KeyStore.generate(one_time_count=2)
-    await _make_contact(peer.node_id, address=None)
+    await _make_contact(auth_root_client, peer.node_id, address=None)
 
     resp = auth_root_client.post(
         "/api/v1/messenger/call/inbound",
@@ -187,7 +182,7 @@ async def test_a_flood_of_signals_is_cut_off_by_the_guard(
     auth_root_client, captured_broadcasts, fresh_guard
 ):
     peer = KeyStore.generate(one_time_count=2)
-    await _make_contact(peer.node_id, address=None)
+    await _make_contact(auth_root_client, peer.node_id, address=None)
     body = {"kind": "ice", "call_id": "c-6", "from_node_id": peer.node_id}
 
     codes = [

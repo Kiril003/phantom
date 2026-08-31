@@ -23,6 +23,8 @@ from types import SimpleNamespace
 
 import httpx
 import pytest
+
+from tests.conftest import owner_of
 from sqlalchemy import select
 
 from db.database import AsyncSessionLocal
@@ -247,16 +249,12 @@ async def test_neither_key_nor_signature_reaches_the_journal(caplog):
 # ── Порядок доріг ────────────────────────────────────────────────────────────
 
 
-async def _owner_id(session) -> str:
-    return (await session.execute(select(User.id))).scalars().first()
-
-
-async def _queued_blob(session, *, address, peer_node_id, payload):
+async def _queued_blob(session, client, *, address, peer_node_id, payload):
     """Рядок черги з тими самими звʼязками, що й після справжнього надсилання."""
     from db.models import MessengerConversation
     from messenger.crypto.safety import safety_number
 
-    owner = await _owner_id(session)
+    owner = owner_of(client)
     me = KeyStore.generate(one_time_count=2)
     peer_keys = KeyStore.generate(one_time_count=2)
     contact = MessengerContact(
@@ -294,8 +292,7 @@ async def test_the_cloud_stays_silent_while_the_direct_road_works(
     peer_node_id = os.urandom(32).hex()  # два прогони (asyncio/trio) ділять одну базу
     payload = os.urandom(256)
     async with AsyncSessionLocal() as session:
-        blob_id, me, contact = await _queued_blob(
-            session, address="http://127.0.0.1:9/", peer_node_id=peer_node_id,
+        blob_id, me, contact = await _queued_blob(session, auth_root_client, address="http://127.0.0.1:9/", peer_node_id=peer_node_id,
             payload=payload,
         )
 
@@ -331,8 +328,7 @@ async def test_a_blob_with_no_address_goes_to_the_cloud(auth_root_client, monkey
         raise AssertionError("прямої адреси немає — пуш не має навіть пробувати")
 
     async with AsyncSessionLocal() as session:
-        blob_id, me, contact = await _queued_blob(
-            session, address=None, peer_node_id=peer_node_id, payload=payload
+        blob_id, me, contact = await _queued_blob(session, auth_root_client, address=None, peer_node_id=peer_node_id, payload=payload
         )
         monkeypatch.setattr(blobs, "push_blob", _no_direct)
         monkeypatch.setattr(blobs, "r2_road", lambda config: ROAD)
@@ -366,8 +362,7 @@ async def test_a_dead_direct_road_falls_through_to_the_cloud(
         return True
 
     async with AsyncSessionLocal() as session:
-        blob_id, me, contact = await _queued_blob(
-            session, address="http://127.0.0.1:9/", peer_node_id=peer_node_id,
+        blob_id, me, contact = await _queued_blob(session, auth_root_client, address="http://127.0.0.1:9/", peer_node_id=peer_node_id,
             payload=payload,
         )
         monkeypatch.setattr(blobs, "push_blob", _direct_fails)
@@ -391,8 +386,7 @@ async def test_without_credentials_the_blob_waits_honestly(auth_root_client, mon
         raise AssertionError("без креденшелів у мережу не ходять")
 
     async with AsyncSessionLocal() as session:
-        blob_id, me, contact = await _queued_blob(
-            session, address=None, peer_node_id=peer_node_id, payload=payload
+        blob_id, me, contact = await _queued_blob(session, auth_root_client, address=None, peer_node_id=peer_node_id, payload=payload
         )
         monkeypatch.setattr(blobs, "r2_road", lambda config: None)
         monkeypatch.setattr(blobs, "park_object", _never)
@@ -426,8 +420,7 @@ async def test_a_parked_blob_still_takes_the_direct_road_when_it_opens(
         return True
 
     async with AsyncSessionLocal() as session:
-        blob_id, me, contact = await _queued_blob(
-            session, address=None, peer_node_id=peer_node_id, payload=payload
+        blob_id, me, contact = await _queued_blob(session, auth_root_client, address=None, peer_node_id=peer_node_id, payload=payload
         )
         monkeypatch.setattr(blobs, "r2_road", lambda config: ROAD)
         monkeypatch.setattr(blobs, "park_object", _park)

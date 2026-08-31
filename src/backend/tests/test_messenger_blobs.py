@@ -11,8 +11,8 @@ import hashlib
 import os
 
 import pytest
+from tests.conftest import owner_of
 from cryptography.hazmat.primitives.ciphers.aead import AESGCM
-from sqlalchemy import select
 
 from db.database import AsyncSessionLocal
 from db.models import MessengerBlob, MessengerContact, MessengerConversation, User
@@ -43,10 +43,6 @@ PNG = (
     b"\x00\x00\x00\x0cIDATx\x9cc```\x00\x00\x00\x04\x00\x01\xf6\x178U"
     b"\x00\x00\x00\x00IEND\xaeB`\x82"
 )
-
-
-async def _owner_id(session) -> str:
-    return (await session.execute(select(User.id))).scalars().first()
 
 
 def _seal_file(plain: bytes) -> tuple[bytes, bytes, bytes, str]:
@@ -88,7 +84,7 @@ async def test_photo_reaches_the_other_node_and_stays_unreadable_there(auth_root
     })
 
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = owner_of(auth_root_client)
         frame = Session.initiate(marta, kyrylo.publish_bundle()).encrypt(
             wrap_frame("image", body).encode()
         )
@@ -136,7 +132,7 @@ async def test_a_known_peer_gets_through_but_an_oversize_blob_does_not(auth_root
     me = KeyStore.generate(one_time_count=2)
 
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = owner_of(auth_root_client)
         session.add(MessengerContact(
             owner_user_id=owner,
             peer_node_id=peer.node_id,
@@ -209,7 +205,7 @@ async def test_a_blob_with_nowhere_to_go_waits_honestly(auth_root_client, monkey
     digest = store_bytes(blob_id, payload)
 
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = owner_of(auth_root_client)
         contact = MessengerContact(
             owner_user_id=owner,
             peer_node_id=peer.node_id,
@@ -270,7 +266,7 @@ async def test_missing_bytes_are_reported_not_invented(auth_root_client):
     blob_id = new_blob_id()
 
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = owner_of(auth_root_client)
         contact = MessengerContact(
             owner_user_id=owner, peer_node_id=peer.node_id, display_name="Марта",
             peer_address="http://127.0.0.1:9/", bundle_json="",

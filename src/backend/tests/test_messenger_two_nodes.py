@@ -6,6 +6,7 @@
 from __future__ import annotations
 
 import pytest
+from tests.conftest import owner_of
 from sqlalchemy import select
 
 from db.database import AsyncSessionLocal
@@ -17,17 +18,13 @@ from messenger.inbox import accept_frame
 from messenger.outbox import prepare_frame
 
 
-async def _owner_id(session) -> str:
-    return (await session.execute(select(User.id))).scalars().first()
-
-
 @pytest.mark.anyio
 async def test_two_nodes_hold_a_conversation(auth_root_client):
     kyrylo = KeyStore.generate(one_time_count=8)
     marta = KeyStore.generate(one_time_count=8)
 
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = owner_of(auth_root_client)
 
         # Марта пише перша — Кирило її ще не знає.
         from messenger.crypto.session import Session
@@ -68,7 +65,7 @@ async def test_safety_numbers_match_on_both_sides(auth_root_client):
     marta = KeyStore.generate(one_time_count=4)
 
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = owner_of(auth_root_client)
         from messenger.crypto.session import Session
 
         frame = Session.initiate(marta, kyrylo.publish_bundle()).encrypt(b"hi")
@@ -96,7 +93,7 @@ async def test_an_impostor_gets_a_different_number(auth_root_client):
     impostor = KeyStore.generate(one_time_count=4)
 
     async with AsyncSessionLocal() as session:
-        owner = await _owner_id(session)
+        owner = owner_of(auth_root_client)
         from messenger.crypto.session import Session
 
         # Пише самозванець, видаючи себе за Марту.

@@ -170,7 +170,8 @@ export interface MessengerState {
   addScheduledMessage: (timeStr: string, text: string) => void;
   deleteScheduledMessage: (id: string) => void;
   cancelScheduledMessage: (id: string) => void;
-  sendScheduledNow: (id: string) => void;
+  /** Іде до вузла, і саме в ту розмову, для якої складено чернетку. */
+  sendScheduledNow: (id: string) => Promise<void>;
 
   // Smart Folders
   createFolder: (folderData: Partial<SmartFolder>) => void;
@@ -1889,6 +1890,17 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
     },
 
     // Scheduled messages handlers
+    // Чернетка з нагадуванням про час — НЕ відкладена відправка.
+    //
+    // Вузол про відкладені листи не знає нічого: ані таблиці, ані маршруту.
+    // Диспетчер живе у вкладці (`MessengerRoot`, кожні 10 с, збіг `HH:MM`),
+    // тож лист іде лише поки месенджер ВІДКРИТИЙ, а пропущена хвилина
+    // пропущена назавжди — надолуження немає. Слово «черга ... до відправки»
+    // обіцяло самостійне надсилання, якого вкладка виконати не може.
+    //
+    // Справжня відкладена відправка потребує вузла: рядок у базі й гілка в
+    // смузі `redelivery_loop`, яка вже цокає й уже доставляє. Доки цього
+    // немає — не обіцяємо.
     addScheduledMessage: (timeStr, text) => {
       soundFx.playChime();
       const state = get();
@@ -1907,6 +1919,10 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
         scheduledMessages: nextList,
         isScheduleModalOpen: false,
       });
+      useUIStore.getState().toast({
+        kind: 'info',
+        message: `Чернетку збережено на ${timeStr} — надішлете дотиком`,
+      });
     },
 
     deleteScheduledMessage: (id) => {
@@ -1922,11 +1938,75 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
       get().deleteScheduledMessage(id);
     },
 
-    sendScheduledNow: (id) => {
-      const scheduled = get().scheduledMessages.find((s) => s.id === id);
-      if (scheduled && scheduled.text) {
-        get().sendMessage(scheduled.text);
+    // Надсилає чернетку В ТУ РОЗМОВУ, для якої її склали.
+    //
+    // Тут стояло `sendMessage(scheduled.text)`, а `sendMessage` шле в
+    // АКТИВНИЙ чат. Диспетчер (`MessengerRoot`, кожні 10 с) кличе саме цю
+    // дію, коли збігається час, — тобто відкладений лист для Марти йшов у
+    // ту розмову, яка випадково відкрита о тій хвилині. Не «не надіслався»,
+    // а надіслався НЕ ТІЙ ЛЮДИНІ, і відправник цього не бачив.
+    sendScheduledNow: async (id) => {
+      const state = get();
+      const scheduled = state.scheduledMessages.find((s) => s.id === id);
+      const body = (scheduled?.text ?? '').trim();
+      if (!scheduled || !body) return;
+
+      const target = scheduled.chatId;
+      const chat = state.chats.find((c) => c.id === target);
+      if (!target || !chat) {
+        // Розмови вже немає. Мовчки кинути в іншу — саме та вада, що вище.
+        useUIStore.getState().toast({
+          kind: 'error',
+          message: 'Розмови для цієї чернетки більше немає',
+        });
+        return;
+      }
+
+      const clientId = `c_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
+      try {
+        const row = await messengerApi.appendMessage(target, {
+          client_id: clientId,
+          author_id: state.currentUser.id,
+          author_name: state.currentUser.name,
+          kind: 'text',
+          body,
+          transport: null,
+          reply_to_id: null,
+        });
+        set((s) => ({
+          chats: s.chats.map((c) =>
+            c.id !== target
+              ? c
+              : {
+                  ...c,
+                  messages: [
+                    ...c.messages,
+                    {
+                      id: clientId,
+                      senderId: state.currentUser.id,
+                      senderName: state.currentUser.name,
+                      senderAvatar: state.currentUser.avatar,
+                      timestamp: new Date().toLocaleTimeString([], {
+                        hour: '2-digit',
+                        minute: '2-digit',
+                      }),
+                      type: 'text',
+                      text: body,
+                      isSelf: true,
+                      status: deliveryStatus(row.delivery ?? row.delivery_state),
+                    } as Message,
+                  ],
+                },
+          ),
+        }));
         get().deleteScheduledMessage(id);
+      } catch (err) {
+        console.warn('[messenger] чернетку не надіслано:', err);
+        // Чернетку НЕ прибираємо: інакше вона зникла б, не поїхавши.
+        useUIStore.getState().toast({
+          kind: 'error',
+          message: `Не надіслалось у «${chat.title}» — чернетка лишилась`,
+        });
       }
     },
 

@@ -192,7 +192,7 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
 
       state.scheduledMessages.forEach((sched) => {
         if (sched.scheduledTime === curTime && sched.text) {
-          state.sendScheduledNow(sched.id);
+          void state.sendScheduledNow(sched.id);
         }
       });
     }, 10000);
@@ -690,7 +690,7 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
         scheduledMessages={store.scheduledMessages}
         currentChatId={activeChat?.id || ''}
         chats={store.chats}
-        onSendNow={(id) => store.sendScheduledNow(id)}
+        onSendNow={(id) => void store.sendScheduledNow(id)}
         onDeleteScheduled={(id) => store.cancelScheduledMessage(id)}
         onUpdateScheduled={(_id, _updated) => {}}
         onCreateScheduled={(newSched) => store.addScheduledMessage(newSched.scheduledTime, newSched.text || '')}

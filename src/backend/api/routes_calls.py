@@ -49,6 +49,10 @@ _TIMEOUT_S = 6.0
 CALL_FRAME_LIMIT_BYTES = 32 * 1024
 call_guard = InboxGuard(max_per_window=240, frame_limit=CALL_FRAME_LIMIT_BYTES)
 
+#: Етапи дзвінка, які вузол уміє. Усе інше — не наш протокол, і пускати його
+#: в широкомовлення означало б віддати інтерфейсу поле, якого він не чекає.
+CALL_KINDS = ("offer", "answer", "ice", "hangup", "radio")
+
 #: Чотири стадії, і жодної п'ятої: пропозиція, відповідь, кандидат, кінець.
 _KINDS = ("offer", "answer", "ice", "hangup")
 
@@ -153,6 +157,18 @@ async def _send(
         contact_id=payload.contact_id,
         peer_node_id=payload.peer_node_id,
     )
+    # Обидві відмови були відсутні: дзвінок невідомому й дзвінок туди, куди
+    # немає дороги, повертали 200. Тобто інтерфейс піднімав екран виклику, а
+    # сигнал не їхав нікуди — та сама «скажи, чи дійде», лише в дзвінках.
+    if contact is None:
+        raise HTTPException(status_code=404, detail="контакт не знайдено")
+    if not contact.peer_address:
+        # Ретранслятор асинхронний за задумом: він довозить листи, але дзвінка
+        # з нього не зібрати. Обіцяти виклик без прямої адреси — брехня.
+        raise HTTPException(
+            status_code=409, detail="немає прямої адреси — дзвінок не зібрати"
+        )
+
     from api.routes_messenger import _keys
 
     body = {
@@ -351,6 +367,27 @@ async def receive_signal(
     Порядок перевірок — від найдешевшої до найдорожчої: спершу форма й розмір,
     потім частота, і лише тоді похід у базу за контактом.
     """
+    # ЖОДНОЇ перевірки тут не було до 31.08.2026, і це коштувало трьох дір
+    # одразу: незнайомець міг подзвонити, міг слати без обмежень, і — найгірше
+    # — діставав у інтерфейсі позначку `verified: true`. Тобто вузол не просто
+    # пускав чужого, він СТВЕРДЖУВАВ, що чужий перевірений.
+    #
+    # Порядок навмисний і збігається з тим, що обіцяє docstring: спершу форма,
+    # потім частота й розмір, і лише тоді похід у базу. Сміття від незнайомця
+    # не має коштувати нам запиту до диска.
+    if payload.kind not in CALL_KINDS:
+        raise HTTPException(status_code=400, detail="невідомий етап дзвінка")
+
+    # Сторож був створений на рядку 50 і не викликався НІ РАЗУ — написаний,
+    # покритий тестами й нікому не потрібен. Класика цього дому.
+    try:
+        call_guard.check(
+            payload.from_node_id or "?",
+            len(payload.model_dump_json().encode("utf-8")),
+        )
+    except GuardRejected as exc:
+        raise HTTPException(status_code=429, detail=str(exc)) from exc
+
     # Знайдемо, хто з користувачів вузла має контакт із цим from_node_id
     matching_contact = (
         await session.execute(
@@ -365,8 +402,15 @@ async def receive_signal(
         owner = await _owner_id(session)
         contact = await _contact_of(session, owner, peer_node_id=payload.from_node_id) if owner else None
 
-    display_name = contact.display_name if contact else (payload.from_node_id[:8] if payload.from_node_id else "Співрозмовник")
-    verified = (contact.verified_at is not None) if contact else True
+    if contact is None:
+        # Дзвонити може лише той, кого власник сам додав. Без цього будь-який
+        # вузол мережі підіймав би дзвінок на пристрої людини.
+        raise HTTPException(status_code=403, detail="дзвінки приймаємо лише від відомих співрозмовників")
+
+    display_name = contact.display_name
+    # `verified` тепер НЕ МОЖЕ бути правдою без контакту: раніше гілка `else`
+    # ставила True саме для невідомого, тобто значок довіри діставався чужому.
+    verified = contact.verified_at is not None
 
     await hub.broadcast(
         "call",

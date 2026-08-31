@@ -1322,8 +1322,12 @@ async def append_message(
             await session.commit()
 
     # Інші пристрої та учасники мають побачити повідомлення без опитування
+    # Адресно. Без `user_id` хаб розсилає ВСІМ під'єднаним, тобто на вузлі з
+    # кількома людьми оголошення про новий лист — разом із тілом — полетіло б
+    # і чужим сесіям. Сусідні розсилки цього файлу вже іменують адресата;
+    # саме ця його загубила.
     await hub.broadcast(
-        "messenger", "message:new", out.model_dump(mode="json")
+        "messenger", "message:new", out.model_dump(mode="json"), user_id=user.id
     )
     return out
 

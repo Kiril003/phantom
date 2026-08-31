@@ -364,10 +364,33 @@ export const Header: React.FC<HeaderProps> = ({
                   className="hidden phantom:inline-flex items-center gap-1.5 shrink-0 min-w-0 min-h-0 hover:text-[#21261F] transition-colors"
                   title="Стан каналу — натисніть для діагностики мережі"
                 >
-                  <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${activeTransportStatus === 'offline' ? 'bg-[#C25A3A]' : 'bg-[#4C8A55]'}`} />
-                  <span className="truncate max-w-[130px]">
-                    {TRANSPORT_LABEL[activeTransportStatus || 'server-ws'] || 'вузол онлайн'}
-                  </span>
+                  {/*
+                    Правда про доставку НАПЕРЕД, а не після невдачі.
+
+                    `roadAhead` порожній означає, що дороги до цієї людини
+                    немає жодної: пряма потребує відомої адреси (тобто дому чи
+                    спільної мережі), ретранслятор і хмара не налаштовані. Лист
+                    ляже в чергу й лежатиме. Побачити це «в дорозі», написавши
+                    важливе й чекаючи відповіді, — найдорожчий спосіб дізнатись.
+
+                    Тому напис про канал поступається місцем прямій відмові:
+                    коли дороги немає, стан каналу вже не має значення.
+                  */}
+                  {currentChat.roadAhead === '' ? (
+                    <>
+                      <span className="w-1.5 h-1.5 rounded-full shrink-0 bg-[#C25A3A]" />
+                      <span className="truncate max-w-[190px]" title="Пряма адреса невідома, ретранслятор і хмара не налаштовані. Лист збережеться і поїде, щойно дорога зʼявиться.">
+                        дороги немає — лист чекатиме
+                      </span>
+                    </>
+                  ) : (
+                    <>
+                      <span className={`w-1.5 h-1.5 rounded-full shrink-0 ${activeTransportStatus === 'offline' ? 'bg-[#C25A3A]' : 'bg-[#4C8A55]'}`} />
+                      <span className="truncate max-w-[130px]">
+                        {TRANSPORT_LABEL[activeTransportStatus || 'server-ws'] || 'мій вузол на звʼязку'}
+                      </span>
+                    </>
+                  )}
                   {typeof networkLatencyMs === 'number' && (
                     <span className="text-[color:var(--msg-meta)]">{networkLatencyMs} мс</span>
                   )}

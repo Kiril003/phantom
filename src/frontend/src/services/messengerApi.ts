@@ -8,6 +8,8 @@ import { parseGeoPoint } from './messengerGeo';
 import { readToken } from './tokenStore';
 
 export interface NodeConversation {
+  /** Яка дорога до цієї людини є ПРЯМО ЗАРАЗ. Порожньо — жодної. */
+  road_ahead?: string;
   id: string;
   title: string;
   kind: string;
@@ -501,6 +503,7 @@ export function messageFromNode(row: NodeMessage, selfId: string, peerNodeId?: s
 export function chatFromNode(row: NodeConversation): Chat {
   return {
     contactVerified: row.contact_verified ?? null,
+    roadAhead: row.road_ahead ?? '',
     id: row.id,
     title: row.title,
     handle: row.handle ?? undefined,

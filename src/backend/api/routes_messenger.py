@@ -368,6 +368,34 @@ class ConversationOut(BaseModel):
     last_snippet: Optional[str] = None
     last_author: Optional[str] = None
     last_at: Optional[datetime] = None
+    #: Чи є взагалі дорога до цієї людини — і ЯКА. Порожній рядок означає, що
+    #: дороги немає жодної: лист ляже в чергу й лежатиме, поки дорога не
+    #: зʼявиться.
+    #:
+    #: Це відповідь НАПЕРЕД, а не після невдачі. Пряма дорога є лише тоді, коли
+    #: відома адреса вузла — тобто вдома або в тій самій мережі. У чужій мережі
+    #: чи за NAT її немає, і людина мусить знати це ДО того, як напише, а не
+    #: побачити «у черзі» й гадати, коли воно поїде.
+    road_ahead: str = ""
+
+
+def road_to(contact: Optional[MessengerContact]) -> str:
+    """Яка дорога до цієї людини існує ПРЯМО ЗАРАЗ. Порожньо — жодної.
+
+    Порядок той самий, що в `transport.deliver()`, і це навмисно: якщо вони
+    розійдуться, напис почне обіцяти не те, що станеться. Тримати їх поруч
+    очима — єдине, що в нас є, доки дороги обираються в двох місцях.
+    """
+    if contact is None:
+        return "self"
+    if contact.peer_address:
+        return "direct"
+    if config.relay_enabled and (config.relay_url or "").strip():
+        return "relay"
+    sb_url, sb_key = supabase_road(config)
+    if sb_url and sb_key:
+        return "cloud"
+    return ""
 
 
 def _conversation_out(
@@ -384,6 +412,7 @@ def _conversation_out(
         body = _body_of(last)
         snippet = (body or "")[:90] or None
     return ConversationOut(
+        road_ahead=road_to(contact),
         id=row.id,
         title=row.title,
         kind=row.kind,
@@ -563,7 +592,11 @@ async def create_conversation(
             )
         ).scalar_one_or_none()
         if existing is not None:
-            return _conversation_out(existing)
+            return _conversation_out(
+            existing,
+            await session.get(MessengerContact, existing.contact_id)
+            if existing.contact_id else None,
+        )
 
     row = MessengerConversation(
         owner_user_id=user.id,
@@ -585,7 +618,10 @@ async def create_conversation(
     _seed_messages(session, row, payload.messages)
     await session.commit()
     await session.refresh(row)
-    return _conversation_out(row)
+    return _conversation_out(
+        row,
+        await session.get(MessengerContact, row.contact_id) if row.contact_id else None,
+    )
 
 
 class ReadIn(BaseModel):
@@ -1636,7 +1672,11 @@ async def start_chat_by_username(
     ).scalar_one_or_none()
     
     if existing_conv is not None:
-        return _conversation_out(existing_conv)
+        return _conversation_out(
+            existing_conv,
+            await session.get(MessengerContact, existing_conv.contact_id)
+            if existing_conv.contact_id else None,
+        )
     
     conv = MessengerConversation(
         title=f"@{target_user.username}",
@@ -1651,7 +1691,10 @@ async def start_chat_by_username(
     session.add(conv)
     await session.commit()
     await session.refresh(conv)
-    return _conversation_out(conv)
+    return _conversation_out(
+        conv,
+        await session.get(MessengerContact, conv.contact_id) if conv.contact_id else None,
+    )
 
 
 # ── Групи ────────────────────────────────────────────────────────────────────

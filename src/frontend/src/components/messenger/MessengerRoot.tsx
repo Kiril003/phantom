@@ -35,6 +35,7 @@ import { SmartFolderModal } from './SmartFolderModal';
 import { UserProfileModal } from './UserProfileModal';
 import { AISynthesisStudioModal } from '../ai-studio/AISynthesisStudioModal';
 import { CallOverlay } from './CallOverlay';
+import { SpaceNavigator } from './SpaceNavigator';
 import { ModalHost } from './modals/ModalHost';
 import { useModalStore } from '../../stores/modalStore';
 import { callEngine } from '../../services/callEngine';
@@ -341,6 +342,12 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
 
   return (
     <div className={`messenger-scale flex w-full h-full bg-[#F7F5EE] text-[#1E2521] overflow-hidden select-none relative font-sans ${className}`}>
+      {/* Рейка просторів: список → простір → топік. Стоїть ПЕРЕД списком,
+          бо простір — рівень вище за розмову. */}
+      <div className={`${showList ? 'flex' : 'hidden'} md:flex h-full shrink-0`}>
+        <SpaceNavigator me={store.currentUser.id} />
+      </div>
+
       {/* 1. Left Sidebar (Workspaces, Folders, Circles, Chats) */}
       {!isSidebarCollapsed && (
         <div className={`${showList ? 'flex' : 'hidden'} md:flex w-full md:w-auto h-full shrink-0 transition-all duration-200`}>
@@ -656,7 +663,15 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
           onClose={() => store.setGroupDetailsOpen(false)}
           chat={activeChat}
           onSelectMember={(_m) => {}}
-          onAddMember={() => {}}
+          onAddMember={() => {
+            // Складу групи вузол після створення не міняє: маршруту немає, а
+            // кожен учасник має свій шифрований кадр, тож додати його тихо в
+            // інтерфейсі означало б показати людину, якій нічого не доїде.
+            useUIStore.getState().toast({
+              kind: 'error',
+              message: 'Склад групи задається при створенні — змінити його вузол поки не вміє',
+            });
+          }}
           onTogglePinChat={(chatId) => store.togglePinChat(chatId)}
           onOpenImageLightbox={(url, title) => store.openLightbox(url, title)}
           onUpdateChatSettings={(chatId, updated) => store.updateChat(chatId, updated)}
@@ -681,7 +696,44 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
         onClose={() => store.setSettingsModalOpen(false)}
         isSoundEnabled={isSoundEnabled}
         onToggleSound={() => setIsSoundEnabled(!isSoundEnabled)}
-        onExportAllData={() => {}}
+        onExportAllData={() => {
+          // Забрати своє — це те, що відрізняє власника даних від гостя.
+          // Вивантажуємо РІВНО те, що є на цьому пристрої, нічого не
+          // добираючи з вигадки: чого не знаємо, того й не пишемо.
+          const store = useMessengerStore.getState();
+          const dump = {
+            exported_at: new Date().toISOString(),
+            note: 'Вивантажено з цього пристрою. Те, що не доїхало, сюди не потрапило.',
+            conversations: store.chats.map((c) => ({
+              id: c.id,
+              title: c.title,
+              kind: c.type,
+              peer_node_id: c.peerNodeId ?? null,
+              messages: (c.messages ?? []).map((m) => ({
+                id: m.id,
+                author: m.isSelf ? 'я' : m.senderName,
+                at: m.sentAt ?? m.timestamp ?? null,
+                kind: m.type,
+                text: m.text ?? null,
+                status: m.status ?? null,
+              })),
+            })),
+          };
+          const blob = new Blob([JSON.stringify(dump, null, 2)], {
+            type: 'application/json',
+          });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `phantom-messenger-${new Date().toISOString().slice(0, 10)}.json`;
+          a.click();
+          URL.revokeObjectURL(url);
+          const count = dump.conversations.reduce((n, c) => n + c.messages.length, 0);
+          useUIStore.getState().toast({
+            kind: 'success',
+            message: `Вивантажено ${dump.conversations.length} розмов, ${count} листів`,
+          });
+        }}
         onOpenP2PNetworkModal={() => store.setP2PModalOpen(true)}
       />
 

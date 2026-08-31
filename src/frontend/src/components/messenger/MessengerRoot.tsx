@@ -724,7 +724,7 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
         messagesToForward={store.activeForwardMessage ? [store.activeForwardMessage] : []}
         onConfirmForward={(targetChatId) => {
           if (store.activeForwardMessage) {
-            store.forwardMessage(store.activeForwardMessage, targetChatId);
+            void store.forwardMessage(store.activeForwardMessage, targetChatId);
           }
         }}
       />

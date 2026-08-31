@@ -153,7 +153,8 @@ export interface MessengerState {
   togglePinMessage: (messageId: string) => void;
   toggleReaction: (messageId: string, emoji: string) => void;
   addReaction: (messageId: string, emoji: string) => void;
-  forwardMessage: (msg: Message, targetChatId: string) => void;
+  /** Іде до вузла тією ж дорогою, що й звичайний лист. */
+  forwardMessage: (msg: Message, targetChatId: string) => Promise<void>;
   /** Повторна спроба надіслати лист, що впав або застряг у черзі. */
   retrySend: (messageId: string) => Promise<void>;
 
@@ -1639,21 +1640,46 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
       get().toggleReaction(messageId, emoji);
     },
 
-    forwardMessage: (msg, targetChatId) => {
-      soundFx.playSend();
+    // Пересилання — це звичайне надсилання в ІНШУ розмову, тож іде тією самою
+    // дорогою, що й лист: `appendMessage`. Раніше тут будувався рядок у сторі,
+    // грав звук відправки й показувався тост «Переслано» — а до вузла не
+    // йшло НІЧОГО. На перезавантаженні пересланого листа не було. Тобто
+    // людині казали, що доїхало, знаючи, що воно навіть не виїжджало.
+    forwardMessage: async (msg, targetChatId) => {
       const state = get();
       const targetTitle = state.chats.find((c) => c.id === targetChatId)?.title || 'чат';
+      const ui = useUIStore.getState();
+
+      // Вміст, який ми НЕ вміємо перевезти чесно. Файл довелося б покласти в
+      // сховок наново, опитування — завести з новим складом голосів; ні того,
+      // ні того вузол зараз не робить. Копія у сторі виглядала б як успіх і
+      // зникла б при перезавантаженні, тому кажемо прямо.
+      const body = (msg.text ?? '').trim();
+      if (!body) {
+        ui.toast({
+          kind: 'error',
+          message: msg.type === 'text'
+            ? 'Порожнє повідомлення не пересилаємо'
+            : 'Поки вміємо пересилати лише текст',
+        });
+        set(() => ({ isForwardModalOpen: false, activeForwardMessage: null }));
+        return;
+      }
+
+      const clientId = `c_${Date.now()}_${Math.random().toString(36).substring(2, 9)}`;
       const forwarded: Message = {
         ...msg,
-        id: `msg_fwd_${Date.now()}`,
+        id: clientId,
         senderId: state.currentUser.id,
         senderName: state.currentUser.name,
         senderAvatar: state.currentUser.avatar,
         timestamp: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         forwardFrom: { chatTitle: state.getActiveChat()?.title || 'Чат', senderName: msg.senderName },
         isSelf: true,
+        status: 'sending',
       };
 
+      soundFx.playSend();
       set((s) => ({
         chats: s.chats.map((c) =>
           c.id === targetChatId ? { ...c, messages: [...c.messages, forwarded] } : c
@@ -1661,8 +1687,34 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
         isForwardModalOpen: false,
         activeForwardMessage: null,
       }));
-      // Модалка зникає миттєво — тост лишається єдиним підтвердженням, куди поїхало.
-      useUIStore.getState().toast({ kind: 'success', message: `Переслано в «${targetTitle}»` });
+
+      const markStatus = (status: Message['status']) =>
+        set((s) => ({
+          chats: s.chats.map((c) =>
+            c.id === targetChatId
+              ? { ...c, messages: c.messages.map((m) => (m.id === clientId ? { ...m, status } : m)) }
+              : c,
+          ),
+        }));
+
+      try {
+        const row = await messengerApi.appendMessage(targetChatId, {
+          client_id: clientId,
+          author_id: state.currentUser.id,
+          author_name: state.currentUser.name,
+          kind: 'text',
+          body,
+          transport: null,
+          reply_to_id: null,
+        });
+        markStatus(deliveryStatus(row.delivery ?? row.delivery_state));
+        // Тост лише ПІСЛЯ відповіді вузла: до неї казати «переслано» нема підстав.
+        ui.toast({ kind: 'success', message: `Переслано в «${targetTitle}»` });
+      } catch (err) {
+        console.warn('[messenger] пересилання не вдалось:', err);
+        markStatus('failed');
+        ui.toast({ kind: 'error', message: `Не переслалось у «${targetTitle}»` });
+      }
     },
 
     // Лист упав або застряг у черзі — повторюємо той самий client_id, тож вузол

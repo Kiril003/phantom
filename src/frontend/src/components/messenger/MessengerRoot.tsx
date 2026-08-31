@@ -1,5 +1,6 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { useMessengerStore } from '../../stores/messengerStore';
+import { useUIStore } from '../../stores/uiStore';
 import { useAuthStore } from '../../stores/authStore';
 import { phantomRelayService } from '../../services/phantomRelayService';
 import { wsClient } from '../../services/websocket';
@@ -580,6 +581,15 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
               ...actionPayload,
             };
             store.addCustomMessage(completeMsg);
+            // Вузол таких типів не возить: у `WIRE_KINDS` немає ані `poll`,
+            // ані `event`, ані `split-bill`. Рядок лягає лише в наш стор,
+            // тобто співрозмовник не побачить його НІКОЛИ. Мовчати про це
+            // означало б, що людина складе опитування, чекатиме голосів і не
+            // дізнається, що його ніхто не отримав.
+            useUIStore.getState().toast({
+              kind: 'info',
+              message: 'Лишається на цьому пристрої — вузол таких карток ще не возить',
+            });
           }
         }}
       />

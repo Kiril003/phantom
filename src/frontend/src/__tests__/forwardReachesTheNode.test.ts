@@ -111,7 +111,7 @@ describe('пересилання', () => {
     // Копія у сторі виглядала б як успіх і зникла б при перезавантаженні.
     await useMessengerStore
       .getState()
-      .forwardMessage({ ...LETTER, type: 'file', text: '' } as never, 'conv_to');
+      .forwardMessage({ ...(LETTER as object), type: 'file', text: '' } as never, 'conv_to');
 
     expect(spy).not.toHaveBeenCalled();
     const target = useMessengerStore

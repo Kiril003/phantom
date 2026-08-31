@@ -204,6 +204,14 @@ export const messengerApi = {
    * його взяв, 'queued' — чекає в черзі (адресат офлайн і видалить пізніше),
    * 'local' — везти нікуди, розмова ні з ким.
    */
+  /** Виправляє текст власного листа. Вузол везе правку співрозмовнику сам. */
+  editMessage: (conversationId: string, messageId: string, body: string) =>
+    request<NodeMessage>(
+      'PATCH',
+      `/messenger/conversations/${conversationId}/messages/${messageId}`,
+      { body },
+    ),
+
   deleteMessage: (conversationId: string, messageId: string, forEveryone: boolean = false) =>
     request<{ deleted: boolean; for_everyone: boolean; blobs: number; frame?: string }>(
       'DELETE',

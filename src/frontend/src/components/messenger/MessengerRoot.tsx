@@ -535,7 +535,7 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
             editingMessage={store.editingMessage}
             onCancelEdit={() => store.cancelEdit()}
             onSaveEdit={(msgId, newText) => {
-              store.editMessage(msgId, newText);
+              void store.editMessage(msgId, newText);
               store.cancelEdit();
             }}
             selectedMessagesForQuote={[]}

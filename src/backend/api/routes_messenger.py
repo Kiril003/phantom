@@ -39,6 +39,7 @@ from messenger.crypto.at_rest import AtRestError, seal, unseal
 from messenger.crypto.keys import KeyStore, PublicBundle, UntrustedBundle
 from messenger.crypto.safety import format_safety_number, safety_number
 from messenger.crypto.session import Session
+from messenger.edits import EDIT_MAX_CHARS, apply_edit
 from messenger.blobs import wrap_frame
 from messenger.geo import parse_point
 from messenger.guard import GuardRejected, inbox_guard
@@ -958,6 +959,91 @@ async def list_messages(
     ]
 
 
+class EditIn(BaseModel):
+    body: str = Field(min_length=1, max_length=EDIT_MAX_CHARS)
+
+
+@router.patch(
+    "/conversations/{conversation_id}/messages/{message_id}",
+    response_model=MessageOut,
+)
+async def edit_message(
+    conversation_id: str,
+    message_id: str,
+    payload: EditIn,
+    user: User = Depends(get_user_or_device_user),
+    session: AsyncSession = Depends(get_db),
+) -> MessageOut:
+    """Виправляє текст власного листа — і везе виправлення співрозмовнику.
+
+    Поле `edited_at` жило в схемі з першої міграції і віддавалось назовні, але
+    його не ставив НІХТО: маршруту правки не існувало взагалі. Жест на екрані
+    був, поле в базі було, посередині — порожньо.
+
+    Три межі, і кожна закриває свій спосіб збрехати.
+
+    **Тільки свій лист.** Інакше маршрут переписував би чужі слова в нашій
+    стрічці, і виглядало б це так, ніби людина сама так написала.
+
+    **Не надгробок.** У видаленого листа тексту немає; правка воскресила б
+    його вміст після того, як його прибрали для всіх.
+
+    **Не порожньо.** Порожня правка стерла б лист, не лишивши надгробка, —
+    тобто видалення під виглядом виправлення, без сліду для співрозмовника.
+
+    По дроту їде ЦІЛЕ нове тіло, а не різниця: кадр може приїхати вдруге, і
+    застосування різниці подвоїло б правку.
+    """
+    conversation = await _owned_conversation(conversation_id, user, session)
+    row = await session.get(MessengerMessage, message_id)
+    if row is None or row.conversation_id != conversation_id:
+        raise HTTPException(status_code=404, detail="повідомлення не знайдено")
+    if row.deleted_at is not None:
+        raise HTTPException(status_code=409, detail="повідомлення видалено")
+
+    me = _keys().node_id
+    # «Свій» — це той, кого вузол записав автором при надсиланні. Порівнюємо
+    # з вузлом, а не з іменем: імена збігаються легко, вузли — ні.
+    if row.author_id not in ("me", me, user.id):
+        raise HTTPException(status_code=403, detail="можна правити лише свій лист")
+
+    body = payload.body.strip()
+    if not body:
+        raise HTTPException(status_code=422, detail="порожня правка")
+
+    apply_edit(_keys(), row, body)
+    await session.commit()
+
+    try:
+        prepared = await prepare_frame(
+            session, _keys(), conversation,
+            wrap_frame(
+                "edit",
+                json.dumps({"origin": row.client_id, "body": body}, ensure_ascii=False),
+                row.client_id,
+            ),
+        )
+    except OutboxError:
+        prepared = None
+    if prepared is not None:
+        contact = await session.get(MessengerContact, conversation.contact_id)
+        await deliver(
+            prepared.frame,
+            peer_node_id=prepared.peer_node_id,
+            from_node_id=me,
+            peer_address=(contact.peer_address if contact else "") or "",
+            relay=(config.relay_url or "") if config.relay_enabled else "",
+            supabase_url=supabase_road(config)[0],
+            supabase_key=supabase_road(config)[1],
+            reply_address=config.messenger_public_address,
+        )
+
+    await session.refresh(row)
+    reactions = await _reactions_for(session, [message_id], me)
+    attachments = await _attachment_states(session, [row])
+    return _message_out(row, attachments.get(row.id), reactions.get(message_id))
+
+
 @router.post(
     "/conversations/{conversation_id}/messages/{message_id}/reactions",
     response_model=MessageOut,
@@ -979,14 +1065,10 @@ async def toggle_reaction(
     Повертає ВЕСЬ лист із перерахованими реакціями, а не саму реакцію: інакше
     клієнт складав би підсумок сам, і два клієнти рахували б по-різному.
 
-    Чого цей маршрут поки НЕ робить — і це сказано вголос, щоб не здалося
-    зробленим: він **не везе позначку співрозмовнику**. Для цього потрібен
-    новий тип на дроті, а правило дому (`unwrap_frame`) вимагає, щоб обидва
-    боки спершу вміли сказати «не вмію показати». Телефонна половина цього
-    вже вміє; але на старій збірці кадр реакції став би ТЕКСТОВИМ рядком
-    «ця версія не вміє показати» просто в стрічці — тобто сміттям замість
-    тихого ігнорування. Це рішення про протокол, і воно за двома боками
-    разом, а не за мною одним.
+    Позначку ВЕЗЕ співрозмовнику кадром `reaction` (31.08.2026). По дроту
+    їде намір (`on: true/false`), а не дія «перемкни»: кадр може приїхати
+    вдруге, і перемикач на тому боці зняв би позначку, яку людина ставила
+    один раз.
     """
     conversation = await _owned_conversation(conversation_id, user, session)
     row = await session.get(MessengerMessage, message_id)

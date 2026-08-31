@@ -1,5 +1,6 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { useMessengerStore } from '../stores/messengerStore';
+import { messengerApi } from '../services/messengerApi';
 import { callEngine } from '../services/callEngine';
 
 describe('Messenger Store & Real Messaging / Calling Actions', () => {
@@ -46,10 +47,20 @@ describe('Messenger Store & Real Messaging / Calling Actions', () => {
     expect(updated?.messages[1].isSelf).toBe(true);
   });
 
-  it('edits existing message text cleanly', () => {
-    const store = useMessengerStore.getState();
-    store.editMessage('m1', 'Оновлений текст повідомлення');
+  it('edits existing message text cleanly', async () => {
+    // Правка тепер ходить до вузла й міняє стрічку лише після відповіді.
+    // Раніше цей тест проходив на чистій мутації стора — тобто стеріг саме
+    // ту поведінку, через яку співрозмовник назавжди лишався з першою
+    // редакцією. Мок тут не послаблення: без нього тест доводив би, що ми
+    // вміємо міняти текст у себе в памʼяті, а питання стоїть інше.
+    const spy = vi
+      .spyOn(messengerApi, 'editMessage')
+      .mockResolvedValue({ id: 'm1', body: 'Оновлений текст повідомлення' } as never);
 
+    const store = useMessengerStore.getState();
+    await store.editMessage('m1', 'Оновлений текст повідомлення');
+
+    expect(spy).toHaveBeenCalledTimes(1);
     const updated = useMessengerStore.getState().getActiveChat();
     const editedMsg = updated?.messages.find((m) => m.id === 'm1');
     expect(editedMsg?.text).toBe('Оновлений текст повідомлення');

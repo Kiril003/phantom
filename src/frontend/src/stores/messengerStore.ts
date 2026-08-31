@@ -147,7 +147,8 @@ export interface MessengerState {
     waveform?: number[],
   ) => void;
   addCustomMessage: (message: Message) => void;
-  editMessage: (messageId: string, newText: string) => void;
+  /** Іде до вузла; стрічка міняється лише після його відповіді. */
+  editMessage: (messageId: string, newText: string) => Promise<void>;
   /** forEveryone — службовий кадр поїде співрозмовнику; інакше чистка своя. */
   deleteMessage: (messageId: string, forEveryone?: boolean) => Promise<void>;
   togglePinMessage: (messageId: string) => void;
@@ -1521,17 +1522,50 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
       }));
     },
 
-    editMessage: (messageId, newText) => {
-      set((state) => {
-        const nextChats = state.chats.map((c) => ({
-          ...c,
-          messages: c.messages.map((m) =>
-            m.id === messageId ? { ...m, text: newText, isEdited: true } : m
-          ),
-        }));
-        storagePersistence.saveChats(nextChats);
-        return { chats: nextChats };
-      });
+    // Правка живе у вузлі, а не в памʼяті вкладки.
+    //
+    // Тут стояла чиста мутація стора: текст мінявся на екрані, зберігався в
+    // локальне сховище — і до вузла не йшло НІЧОГО. Співрозмовник назавжди
+    // лишався з першою редакцією, а на іншому вікні того самого вузла лист
+    // теж був старий. `edited_at` при цьому вже існував у схемі й чесно
+    // віддавався назовні; ставити його було нікому.
+    //
+    // Стрічку міняємо ПІСЛЯ відповіді вузла: показати новий текст одразу
+    // означало б показати власний намір замість стану системи.
+    editMessage: async (messageId, newText) => {
+      const state = get();
+      const chat = state.chats.find((c) => c.messages.some((m) => m.id === messageId));
+      const body = newText.trim();
+      if (!chat) return;
+      if (!body) {
+        useUIStore.getState().toast({ kind: 'error', message: 'Порожня правка стерла б лист' });
+        return;
+      }
+
+      try {
+        const row = await messengerApi.editMessage(chat.id, messageId, body);
+        set((s) => {
+          const nextChats = s.chats.map((c) =>
+            c.id !== chat.id
+              ? c
+              : {
+                  ...c,
+                  messages: c.messages.map((m) =>
+                    m.id === messageId
+                      ? { ...m, text: row.body ?? body, isEdited: true }
+                      : m,
+                  ),
+                },
+          );
+          storagePersistence.saveChats(nextChats);
+          return { chats: nextChats };
+        });
+      } catch (err) {
+        console.warn('[messenger] правка не доїхала:', err);
+        // Стрічку не чіпаємо: старий текст — це те, що зараз бачить
+        // співрозмовник, і показати інше означало б розійтися з ним.
+        useUIStore.getState().toast({ kind: 'error', message: 'Правку не збережено' });
+      }
     },
 
     /**

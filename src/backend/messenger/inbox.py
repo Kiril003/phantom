@@ -36,6 +36,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from db.models import MessengerContact, MessengerConversation, MessengerMessage
 from messenger.blobs import ORIGIN_LIMIT, unwrap_frame
 from messenger.crypto.at_rest import seal
+from messenger.edits import EDIT_MAX_CHARS, apply_edit
 from messenger.crypto.keys import KeyStore
 from messenger.crypto.safety import safety_number
 from messenger.crypto.session import Session
@@ -352,6 +353,45 @@ async def accept_frame(
             emoji=emoji,
             on=on,
         )
+        conversation.updated_at = _now()
+        await session.commit()
+        await session.refresh(target)
+        return target
+
+    if kind == "edit":
+        # Виправлений текст наявного листа. Рядка не додає — інакше в стрічці
+        # лежали б обидві редакції, і людина бачила б, як співрозмовник ніби
+        # написав двічі.
+        try:
+            patch = json.loads(body)
+            origin = str(patch["origin"]).strip()
+            fixed = str(patch["body"])
+        except (ValueError, KeyError, TypeError):
+            # Зіпсоване тіло. Стан храповика вже зрушено вище і його треба
+            # зберегти, інакше наступний кадр від цієї людини не відкриється.
+            await session.commit()
+            return None
+        target = await find_by_origin(session, conversation.id, origin)
+        if target is None or target.deleted_at is not None:
+            # Правка листа, якого в нас немає або який уже знесено. Приймаємо
+            # й тихо відкидаємо: повторювати відправнику нема сенсу, ми його
+            # виконали настільки, наскільки можливо. Та сама межа, що в
+            # службового `delete` на неіснуючий рядок.
+            await session.commit()
+            return None
+        if not fixed.strip() or len(fixed) > EDIT_MAX_CHARS:
+            # Порожня правка стерла б лист, не лишивши надгробка, — це
+            # видалення під виглядом виправлення. Завелика — обхід тієї самої
+            # стелі, що діє на надсиланні.
+            await session.commit()
+            return None
+        # Автор правки мусить бути автором листа. Інакше співрозмовник міг би
+        # переписати НАШ власний лист у нашій же стрічці, і виглядало б це
+        # так, ніби ми самі це написали.
+        if target.author_id != contact.peer_node_id:
+            await session.commit()
+            return None
+        apply_edit(keys, target, fixed)
         conversation.updated_at = _now()
         await session.commit()
         await session.refresh(target)

@@ -340,6 +340,17 @@ function withSavedFlags(chat: Chat, flags: Record<string, ChatFlags>): Chat {
   return { ...chat, pinned: saved.pinned, muted: saved.muted, archived: saved.archived };
 }
 
+/** Запамʼятовує теки на цьому пристрої й повертає новий стан.
+ *
+ * Одне місце на всі п'ять дій. Окремі виклики збереження в кожній із них
+ * розійшлися б при першій же правці — саме так `deleteFolder` і опинився
+ * несхожим на решту.
+ */
+function rememberFolders(smartFolders: SmartFolder[]): { smartFolders: SmartFolder[] } {
+  void storagePersistence.saveSmartFolders(smartFolders);
+  return { smartFolders };
+}
+
 export const useMessengerStore = create<MessengerState>((set, get) => {
   // Connect network engine listeners
   messengerNetworkEngine.onMessage((chatId, msg) => {
@@ -402,7 +413,17 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
     activeChatId: activeChats[0]?.id || 'chat_aura_design',
     activeCircle: 'all',
     activeFolderId: null,
-    smartFolders: defaultFolders,
+    // Збережене на цьому пристрої має старшинство над початковим набором.
+    //
+    // Без цього рядка збереження було б безглуздим: стор щоразу починав би з
+    // `defaultFolders`, і людина поверталась би до тек, яких не заводила, а
+    // свої не бачила. Саме так виглядала стара поведінка — з тією різницею,
+    // що тоді нічого й не зберігалось.
+    //
+    // `?? defaultFolders`, а не `|| `: порожній масив — це законний стан
+    // «я видалив усі теки», і підміняти його початковим набором означало б
+    // воскресити видалене.
+    smartFolders: storagePersistence.loadSmartFolders() ?? defaultFolders,
     scheduledMessages: activeScheduled,
     searchQuery: '',
 
@@ -759,8 +780,7 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
 
     addChatToFolder: (folderId, chatId) => {
       soundFx.playTap();
-      set((state) => ({
-        smartFolders: state.smartFolders.map((f) => {
+      set((state) => rememberFolders(state.smartFolders.map((f) => {
           if (f.id === folderId) {
             const currentChatIds = f.chatIds || [];
             return {
@@ -769,14 +789,12 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
             };
           }
           return f;
-        }),
-      }));
+        })));
     },
 
     removeChatFromFolder: (folderId, chatId) => {
       soundFx.playTap();
-      set((state) => ({
-        smartFolders: state.smartFolders.map((f) => {
+      set((state) => rememberFolders(state.smartFolders.map((f) => {
           if (f.id === folderId) {
             return {
               ...f,
@@ -784,8 +802,7 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
             };
           }
           return f;
-        }),
-      }));
+        })));
     },
 
     createGroup: async (title, contactIds, circle = 'work', avatar, description) => {
@@ -2065,24 +2082,22 @@ export const useMessengerStore = create<MessengerState>((set, get) => {
         ...folderData,
       };
       set((state) => ({
-        smartFolders: [...state.smartFolders, newFolder],
+        ...rememberFolders([...state.smartFolders, newFolder]),
         isSmartFolderModalOpen: false,
       }));
     },
 
     updateFolder: (folderId, updates) => {
       soundFx.playTap();
-      set((state) => ({
-        smartFolders: state.smartFolders.map((f) =>
+      set((state) => rememberFolders(state.smartFolders.map((f) =>
           f.id === folderId ? { ...f, ...updates } : f
-        ),
-      }));
+        )));
     },
 
     deleteFolder: (folderId) => {
       soundFx.playTap();
       set((state) => ({
-        smartFolders: state.smartFolders.filter((f) => f.id !== folderId),
+        ...rememberFolders(state.smartFolders.filter((f) => f.id !== folderId)),
         activeFolderId: state.activeFolderId === folderId ? null : state.activeFolderId,
       }));
     },

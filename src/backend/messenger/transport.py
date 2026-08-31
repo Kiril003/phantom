@@ -1,9 +1,11 @@
 """Хто фізично несе кадр до вузла співрозмовника.
 
 Дороги за порядком чесності: пряма адреса (та сама мережа, власний домен,
-тунель), ретранслятор PHANTOM (сирий тунель, ним їде звичайний HTTP), і
-остання — Supabase-скринька: чужа хмара, якій ми довіряємо лише непрозорий
-конверт, коли перші дві дороги мовчать.
+тунель), ретранслятор PHANTOM (сирий тунель, ним їде звичайний HTTP),
+Supabase-скринька (чужа хмара, якій ми довіряємо лише непрозорий конверт) —
+і остання, сховок PH5: єдина дорога, розгорнута й увімкнена за
+замовчуванням. Їй ми показуємо ще менше, ніж хмарі, — 43-символьну адресу,
+яку вміють скласти лише двоє, і шифротекст сталої довжини.
 
 Тут навмисно немає жодного «як правило, дійшло». Функція повертає True лише
 коли вузол-адресат відповів 200; усе інше — False, і повідомлення лишається
@@ -11,19 +13,30 @@
 """
 from __future__ import annotations
 
+import base64
 import json
 import logging
+import time
 from typing import Any, Optional
 
 import httpx
+from cryptography.hazmat.primitives import serialization
+
+from messenger.crypto.keys import PublicBundle
+from node import peer_channel
+from node import peer_relay as pr
+from node.relay_courier import Held, RelayCourier
 
 logger = logging.getLogger(__name__)
 
 __all__ = [
     "deliver",
     "deliver_direct",
+    "deliver_via_drop",
     "deliver_via_relay",
     "deliver_via_supabase",
+    "drop_pair_key",
+    "drop_road",
     "inbox_url",
     "mailbox_url",
     "supabase_mailbox_endpoint",
@@ -206,6 +219,105 @@ async def deliver_via_supabase(
             await http.aclose()
 
 
+# ── Сховок PH5 ───────────────────────────────────────────────────────────────
+
+
+def drop_road(config: Any) -> str:
+    """Адреса сховка PH5; «» — дороги немає.
+
+    Обидва поля конфігу мусять сказати «так»: вимкнений прапорець із
+    заповненою адресою — це «не ходи», а не «спробуй про всяк випадок».
+    """
+    if not getattr(config, "relay_store_enabled", False):
+        return ""
+    return (getattr(config, "relay_store_url", "") or "").strip()
+
+
+def drop_pair_key(keys: Any, bundle_json: str) -> bytes:
+    """Ключ пари для адрес сховка; b"" — ключа не скласти, дороги немає.
+
+    Той самий рецепт, яким телефон рахує pairKey для PH5 (PeerChannel.kt,
+    переписаний у `node/peer_channel.py`): ECDH довготривалих identity-X25519
+    обох вузлів → HKDF із сіллю з упорядкованих імен. Кожен бік складає його
+    з того, що вже має — свій приватний ключ і bundle співрозмовника, — не
+    домовляючись. Тому адресат, рахуючи адреси СВОЇХ скриньок, назве саме ту,
+    під яку ми поклали лист.
+
+    Це навмисно НЕ ключ храповика: стан сесії їде вперед із кожним кадром, а
+    адреса скриньки мусить стояти на місці, інакше сторони розійдуться мовчки.
+    """
+    try:
+        bundle = PublicBundle.from_json(bundle_json or "")
+        my_raw = keys.identity_dh_private.private_bytes(
+            serialization.Encoding.Raw,
+            serialization.PrivateFormat.Raw,
+            serialization.NoEncryption(),
+        )
+        their_b64 = base64.b64encode(bundle.identity_dh).decode("ascii")
+        pair = peer_channel.channel_key(my_raw, their_b64, keys.node_id, bundle.node_id)
+    except Exception as exc:  # noqa: BLE001 — кривий bundle не має валити відправку
+        # Гучно, а не мовчки: без цього ключа дороги просто «немає», і ніхто
+        # не дізнався б, чому листи саме цього контакта не їдуть у сховок.
+        logger.warning("ключ пари для сховка не склався: %s", exc)
+        return b""
+    return pair or b""
+
+
+async def deliver_via_drop(
+    store_url: str,
+    pair_key: bytes,
+    peer_node_id: str,
+    frame: bytes,
+    *,
+    from_node_id: str,
+    reply_address: str = "",
+    now_ms: Optional[int] = None,
+    client: Optional[httpx.AsyncClient] = None,
+) -> bool:
+    """Кладе конверт у сховок PH5.
+
+    Сховок бачить менше за всіх: 43-символьну адресу, яку вміють скласти лише
+    двоє, і шифротекст сталої довжини. Ні імен вузлів, ні напрямку, ні
+    справжнього розміру листа. Усередині конверта — той самий JSON, що їде в
+    скриньку ретранслятора і в Supabase: адресат розбирає всі дороги одним
+    кодом.
+
+    True означає «сховок прийняв і назвав строк зберігання» (Held), а не
+    «людина отримала»: по лист адресат прийде сам, за адресою, яку зможе
+    скласти лише він.
+    """
+    relay_key = pr.relay_key(pair_key, from_node_id, peer_node_id)
+    if relay_key is None:
+        logger.info("ключ сховка для %s не вивівся", peer_node_id)
+        return False
+    epoch = pr.epoch_of(int(time.time() * 1000) if now_ms is None else now_ms)
+    tag = pr.msg_tag(relay_key, from_node_id, peer_node_id, epoch)
+    if tag is None:
+        logger.info("адреса скриньки у сховку для %s не склалась", peer_node_id)
+        return False
+    envelope: dict[str, str] = {"frame": frame.hex(), "from_node_id": from_node_id}
+    if reply_address:
+        envelope["reply_address"] = reply_address
+    wrapped = pr.wrap(json.dumps(envelope, separators=(",", ":")), relay_key, tag)
+    if wrapped is None:
+        # Не вліз навіть у найбільшу корзину — чесніше не нести зовсім, ніж
+        # згодувати сховку конверт, який він однаково відкине.
+        logger.info("лист для %s завеликий для сховка", peer_node_id)
+        return False
+    try:
+        outcome = await RelayCourier(store_url, client=client).drop(tag, wrapped.blob)
+    except Exception as exc:  # noqa: BLE001 — мережа падає як завгодно
+        logger.info("до сховка не достукались: %s", exc)
+        return False
+    if isinstance(outcome, Held):
+        return True
+    # Кожна відмова названа (Busy/Full/Refused/Offline) — і жодна не доставка.
+    logger.info(
+        "сховок не взяв лист для %s: %s", peer_node_id, outcome.__class__.__name__
+    )
+    return False
+
+
 async def deliver(
     frame: bytes,
     *,
@@ -216,8 +328,10 @@ async def deliver(
     supabase_url: str = "",
     supabase_key: str = "",
     reply_address: str = "",
+    drop_url: str = "",
+    drop_key: bytes = b"",
 ) -> str:
-    """Дороги по черзі: пряма, ретранслятор, Supabase-скринька.
+    """Дороги по черзі: пряма, ретранслятор, Supabase-скринька, сховок PH5.
 
     ПОВЕРТАЄ ІМ'Я ДОРОГИ, а не `True`. Досі функція знала, яка з трьох гілок
     спрацювала, і викидала це знання — тож у вихідного листа поле `transport`
@@ -232,6 +346,12 @@ async def deliver(
     адреси просто немає. Тоді лист лягає в скриньку на ретрансляторі — він
     возить непрозорі байти і вмісту не бачить. Коли мовчить і ретранслятор,
     лишається чужа хмара — Supabase-скринька з тим самим непрозорим конвертом.
+
+    Сховок PH5 — остання дорога, але в розгорнутій конфігурації ЄДИНА:
+    `relay_url` порожній навмисно (WS-тунелю немає на сервері), Supabase
+    порожній, тож без прямої адреси лист досі не мав жодної дороги і лягав у
+    чергу назавжди. `drop_key` тут — ключ ПАРИ (див. `drop_pair_key`), а не
+    ключ конверта: адресу скриньки і ключ конверта дорога виводить сама.
     """
     if peer_address:
         if await deliver_direct(
@@ -250,5 +370,14 @@ async def deliver(
             supabase_url, supabase_key, peer_node_id, frame,
             from_node_id=from_node_id, reply_address=reply_address,
         )
-        return "cloud" if parked else ""
+        if parked:
+            return "cloud"
+        # Хмара мовчить — це ще не кінець: лишається сховок. Досі тут стояло
+        # `return ""`, і будь-яка дорога після хмари була б недосяжною.
+    if drop_url and drop_key:
+        if await deliver_via_drop(
+            drop_url, drop_key, peer_node_id, frame,
+            from_node_id=from_node_id, reply_address=reply_address,
+        ):
+            return "drop"
     return ""

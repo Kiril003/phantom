@@ -1,3 +1,4 @@
+import type { SmartFolder } from '../types/messenger';
 /**
  * PHANTOM OS — Unified Local Storage & IndexedDB Persistence Layer
  * Забезпечує збереження чатів, повідомлень, профілів та налаштувань між сесіями.
@@ -224,6 +225,38 @@ class StoragePersistence {
       if (raw) return JSON.parse(raw);
     } catch (err) {
       noteStorageFailure('читання відкладених листів', err);
+    }
+    return null;
+  }
+
+  /* ─── Розумні теки ─────────────────────────────────────────────────────── */
+  //
+  // Теки жили ЛИШЕ в памʼяті вкладки: `createFolder`, `updateFolder`,
+  // `addChatToFolder`, `removeChatFromFolder` не зберігали нічого. Людина
+  // розкладала розмови по теках, закривала вікно — і поверталась до жодної.
+  //
+  // Найгірше було не це, а розбіжність: `deleteFolder` теж нічого не зберігав,
+  // тож після перезавантаження поверталися СТАРІ теки з початкового набору —
+  // тобто видалена тека «воскресала», а створена зникала. Дві протилежні
+  // несподіванки з однієї причини.
+  //
+  // Теки — стан ЦЬОГО пристрою: у вузла для них немає ані таблиці, ані
+  // маршруту, і обіцяти спільність між ПК і телефоном ми не будемо.
+
+  public async saveSmartFolders(folders: SmartFolder[]): Promise<void> {
+    try {
+      localStorage.setItem('phantom_smart_folders', JSON.stringify(folders));
+    } catch (err) {
+      noteStorageFailure('збереження тек', err);
+    }
+  }
+
+  public loadSmartFolders(): SmartFolder[] | null {
+    try {
+      const raw = localStorage.getItem('phantom_smart_folders');
+      if (raw) return JSON.parse(raw) as SmartFolder[];
+    } catch (err) {
+      noteStorageFailure('читання тек', err);
     }
     return null;
   }

@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { ProfileManagementSection } from './ProfileManagement';
 import { MobilePairing } from './MobilePairing';
+import { SymbiotePanel } from './SymbiotePanel';
 import { VaultPanel } from './VaultPanel';
 import { BackupRestoreCard } from './BackupRestoreCard';
 import {
@@ -42,7 +43,6 @@ import {
   writeAccordionState,
 } from './SettingsAccordion';
 import { AgentLimitsGroup } from './AgentLimitsGroup';
-import { AgentLayoutGroup } from './AgentLayoutGroup';
 import { DesktopShellGroup } from './DesktopShellGroup';
 import { KeyVaultPanel } from './KeyVaultPanel';
 import { LicenseGroup } from './LicenseGroup';
@@ -59,6 +59,7 @@ import { resolveDescription } from './settingDescriptions';
 import {
   filterVisibleDefs,
   searchAllSettings,
+  resolveUnimplemented,
   DEDICATED_CONTROL_KEYS,
   type SettingsSearchHit,
 } from './visibleSettings';
@@ -895,7 +896,23 @@ function CategoryContent({
       />
     );
   }
-  if (category.id === 'mobile') return <MobilePairing />;
+  if (category.id === 'mobile') {
+    // Симбіот стоїть НАД паруванням: спершу організм — що ПК може
+    // попросити в телефона й що телефон каже про себе, — і лише потім
+    // механіка приєднання.
+    //
+    // Панель загубилась при зшиванні гілок: труба симбіозу на бекенді
+    // ціла на всю довжину, а голови в цьому дереві не було взагалі, тож
+    // команду не мав хто надіслати. Повернуто з `phantom-os-agentsys`,
+    // де вона й лишалась змонтованою.
+    return (
+      <>
+        <SymbiotePanel />
+        <div style={{ height: 12 }} />
+        <MobilePairing />
+      </>
+    );
+  }
   if (category.id === 'vault') return <VaultPanel />;
   if (category.id === 'desktop') return <DesktopShellGroup />;
   if (category.id === 'polis_keys') return <KeyVaultPanel />;
@@ -984,12 +1001,7 @@ function CategoryContent({
       )}
       {category.id === 'ai' && <AIProviderDiagnostics />}
       {category.id === 'voice' && <NPUDiagnostics />}
-      {category.id === 'agent' && (
-        <>
-          <AgentLimitsGroup values={values} onChange={onChange} />
-          <AgentLayoutGroup values={values} onChange={onChange} />
-        </>
-      )}
+      {category.id === 'agent' && <AgentLimitsGroup values={values} onChange={onChange} />}
       {(category.id === 'profile' || category.id === 'personality') && (
         <>
           <FamiliarControlSection />
@@ -1043,6 +1055,11 @@ function SettingRow({
   onChange: (v: unknown) => void;
 }) {
   const description = resolveDescription(def);
+  // Прапорця бекенда самого по собі не досить: реєстр ховає власні
+  // UNIMPLEMENTED_KEYS ще на сервері, тож `def.unimplemented` не приходив
+  // ніколи — значок не мав ЖОДНОГО шляху зʼявитись. Причину дає той
+  // самий розбір, що й сторож: фронтова мапа, далі прапорець.
+  const deadReason = resolveUnimplemented(def);
   return (
     <div
       data-testid={`setting-row-${def.key}`}
@@ -1084,9 +1101,9 @@ function SettingRow({
           >
             {def.label}
           </span>
-          {def.unimplemented && (
+          {deadReason && (
             <span
-              title="Підсистема ще не запущена — значення збережеться, ефекту поки нема"
+              title={deadReason}
               style={{
                 fontSize: 'var(--ph-type-micro-size, 10.5px)',
                 padding: '0 5px',

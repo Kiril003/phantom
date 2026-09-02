@@ -29,6 +29,62 @@ export const DEDICATED_CONTROL_KEYS: Readonly<Record<string, string>> = {
   ui_theme: 'ThemePicker',
 };
 
+/**
+ * Ключі, які бекендовий реєстр ВІДДАЄ як робочі, хоча їх ніхто не
+ * читає — виміряно grep-ом по всьому src/backend (поза config.py,
+ * routes_settings.py і тестами) 31.08.2026. Бекенд свої
+ * UNIMPLEMENTED_KEYS фільтрує ще на сервері, тож значок «ще не діє»
+ * для ЦИХ ключів може прийти лише звідси.
+ *
+ * Причина в кожного СВОЯ — та, що справді спрацювала. Спільна відписка
+ * («підсистема не запущена») брехала б: підсистеми якраз живі, мертвий
+ * лише конкретний дріт від ключа до коду.
+ *
+ * Запис знімається, щойно зʼявиться читач (сторож
+ * settingsDeadSwitches.test.tsx звіряє мапу зі справжнім реєстром).
+ */
+export const FRONTEND_UNIMPLEMENTED_KEYS: Readonly<Record<string, string>> = {
+  // db/models.py лише КОМЕНТАРЕМ обіцяє «populated only when …»;
+  // жоден код прапорець не читає — журнал не вмикається ніколи.
+  chat_prompt_logging_enabled:
+    'Вимикач ніщо не читає: колонка журналу в БД є, але код запису ' +
+    'промптів так і не підʼєднано — стан прапорця нічого не змінює.',
+  // Той самий коментар обіцяє «truncated to … before write» — коду
+  // обрізання не існує, ліміт нікуди не передається.
+  chat_prompt_excerpt_max_chars:
+    'Ліміт ніщо не читає: обрізання уривка промпта описане лише в ' +
+    'коментарі моделі БД, самого коду обрізання нема.',
+  // Дрібні пороги (схожість, півжиття, ваги) читаються в memory/*,
+  // а от ГОЛОВНИЙ вимикач — ні: памʼять працює незалежно від нього.
+  cognitive_memory_enabled:
+    'Головний вимикач ніщо не читає: когнітивна памʼять працює ' +
+    'незалежно від нього (її дрібні пороги при цьому живі).',
+  cognitive_memory_disclosure_threshold:
+    'Поріг розкриття ніщо не читає — жоден модуль памʼяті його не питає.',
+  cognitive_memory_idle_timeout_min:
+    'Таймаут бездіяльності ніщо не читає — консолідація ходить за ' +
+    'власним інтервалом, не за цим ключем.',
+  // agent/actions/bash.py обирає профіль з самої дії (compute або
+  // read_host, захардкоджено) — «типовий» з конфіга не питає ніхто.
+  agent_sandbox_profile_default:
+    'Типовий профіль ніщо не читає: пісочниця bash бере профіль із ' +
+    'самої дії, а не з цього ключа.',
+};
+
+/**
+ * Причина, чому ключ «ще не діє», або null для живого ключа.
+ * Джерела два: прапорець бекенда (def.unimplemented) і фронтова мапа
+ * вище. SettingRow малює значок, коли повернено рядок.
+ */
+export function resolveUnimplemented(def: SettingDefinition): string | null {
+  const local = FRONTEND_UNIMPLEMENTED_KEYS[def.key];
+  if (local) return local;
+  if (def.unimplemented) {
+    return 'Підсистема ще не запущена — значення збережеться, ефекту поки нема';
+  }
+  return null;
+}
+
 export interface VisibilityOptions {
   query: string;
   showAdvanced: boolean;

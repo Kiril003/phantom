@@ -1,9 +1,12 @@
 /**
- * V5 TDD — PlanEditor trigger + layout toggle.
+ * V5 TDD — PlanEditor trigger + робоча зона оператора.
  *
  * T2: "✎ План" button in AgentCommandCenter opens PlanEditor (sets open state).
- * T3: OperatorLayout conversation mode → vitals/tape peek; telemetry mode → full columns.
- * T4: AgentLayoutGroup renders both modes, persists via onChange, settings key in store.
+ * T3: OperatorLayout — робоча зона на всю ширину в БУДЬ-ЯКОМУ режимі; peek-панелі
+ *     зняті разом із колонковим поділом v4.
+ * T4 знято 03.09 разом із перемикачем «Агент / Екран оператора»: обидва режими
+ *     давали ідентичну верстку (доводить T3), читачів ui_agent_layout поза самим
+ *     перемикачем не було жодного — жест зберігав значення й не робив нічого.
  */
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { render, screen, fireEvent } from '@testing-library/react';
@@ -14,7 +17,6 @@ import { useSettingsStore } from '../stores/settingsStore';
 import { SystemState } from '@shared/types';
 import OperatorLayout from '../layouts/OperatorLayout';
 import { AgentCommandCenter } from '../components/agent/hud/AgentCommandCenter';
-import { AgentLayoutGroup } from '../components/settings/AgentLayoutGroup';
 
 // ── shared mocks ────────────────────────────────────────────────────────────
 
@@ -84,7 +86,7 @@ vi.mock('framer-motion', async () => {
           (props: Record<string, unknown>) => {
             const { children, ...rest } = props as { children?: React.ReactNode };
             const Tag = key as keyof JSX.IntrinsicElements;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+             
             return <Tag {...(rest as any)}>{children}</Tag>;
           },
       },
@@ -222,64 +224,3 @@ describe('T3 — OperatorLayout conversation vs telemetry', () => {
 
 });
 
-// ── T4: AgentLayoutGroup settings component ────────────────────────────────
-
-describe('T4 — AgentLayoutGroup', () => {
-  it('renders "Агент / Екран оператора" heading', () => {
-    const onChange = vi.fn();
-    render(<AgentLayoutGroup values={{ ui_agent_layout: 'conversation' }} onChange={onChange} />);
-    expect(screen.getByText(/Агент \/ Екран оператора/i)).toBeDefined();
-  });
-
-  it('renders both mode buttons', () => {
-    render(
-      <AgentLayoutGroup values={{ ui_agent_layout: 'conversation' }} onChange={vi.fn()} />,
-    );
-    expect(screen.getByTestId('agent-layout-conversation')).toBeDefined();
-    expect(screen.getByTestId('agent-layout-telemetry')).toBeDefined();
-  });
-
-  it('conversation button is aria-pressed when active', () => {
-    render(
-      <AgentLayoutGroup values={{ ui_agent_layout: 'conversation' }} onChange={vi.fn()} />,
-    );
-    const btn = screen.getByTestId('agent-layout-conversation') as HTMLButtonElement;
-    expect(btn.getAttribute('aria-pressed')).toBe('true');
-  });
-
-  it('telemetry button is NOT aria-pressed when conversation is active', () => {
-    render(
-      <AgentLayoutGroup values={{ ui_agent_layout: 'conversation' }} onChange={vi.fn()} />,
-    );
-    const btn = screen.getByTestId('agent-layout-telemetry') as HTMLButtonElement;
-    expect(btn.getAttribute('aria-pressed')).toBe('false');
-  });
-
-  it('clicking telemetry calls onChange with correct key+value', () => {
-    const onChange = vi.fn();
-    render(<AgentLayoutGroup values={{ ui_agent_layout: 'conversation' }} onChange={onChange} />);
-    fireEvent.click(screen.getByTestId('agent-layout-telemetry'));
-    expect(onChange).toHaveBeenCalledWith('ui_agent_layout', 'telemetry');
-  });
-
-  it('clicking conversation calls onChange with correct key+value', () => {
-    const onChange = vi.fn();
-    render(<AgentLayoutGroup values={{ ui_agent_layout: 'telemetry' }} onChange={onChange} />);
-    fireEvent.click(screen.getByTestId('agent-layout-conversation'));
-    expect(onChange).toHaveBeenCalledWith('ui_agent_layout', 'conversation');
-  });
-
-  it('defaults to conversation when key is absent', () => {
-    render(<AgentLayoutGroup values={{}} onChange={vi.fn()} />);
-    const btn = screen.getByTestId('agent-layout-conversation') as HTMLButtonElement;
-    expect(btn.getAttribute('aria-pressed')).toBe('true');
-  });
-
-  it('settingsStore.setValue persists ui_agent_layout', () => {
-    useSettingsStore.setState({ values: { ui_agent_layout: 'conversation' }, dirty: new Set() });
-    const { setValue } = useSettingsStore.getState();
-    setValue('ui_agent_layout', 'telemetry');
-    expect(useSettingsStore.getState().values['ui_agent_layout']).toBe('telemetry');
-    expect(useSettingsStore.getState().dirty.has('ui_agent_layout')).toBe(true);
-  });
-});

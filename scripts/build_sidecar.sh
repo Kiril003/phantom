@@ -90,12 +90,45 @@ pick_python() {
     [ -n "$c" ] || continue
     command -v "$c" >/dev/null 2>&1 || [ -x "$c" ] || continue
     local v; v="$("$c" -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2>/dev/null)" || continue
+    # Нижня межа — 3.11, і вона виміряна, а не взята зі стелі. Спершу тут
+    # стояло 3.10, і збірка в контейнері Ubuntu 22.04 (де python3 = 3.10.12)
+    # пройшла зелено, а бандл упав на першому ж старті:
+    #   ImportError: cannot import name 'StrEnum' from 'enum'  (ai/tool_use.py:18)
+    # `enum.StrEnum` з'явився у 3.11. CLAUDE.md і оголошує 3.11 — я просто
+    # був щедрішим за проєкт. Верхня межа 3.12 — бо під 3.13+ ще немає
+    # бінарних коліс для pydantic-core, shapely і av.
     case "$v" in
-      3.10|3.11|3.12) echo "$c"; return 0 ;;
+      3.11|3.12) echo "$c"; return 0 ;;
     esac
   done
   return 1
 }
+
+# Середовище могло лишитись від ІНШОЇ машини. Саме це й сталось 29.08 при
+# першому заході в контейнер: на хості `.build/venv-bundle` створювався
+# інтерпретатором з uv, у контейнері того шляху немає, symlink повис, і
+# `python3 -m venv` на непорожній теці впав із «No such file or directory:
+# .../bin/python3». Перевіряємо не наявність файлу, а те, що інтерпретатор
+# справді запускається — і зносимо труп, якщо ні.
+if [ -e "${BUILD_VENV}" ]; then
+  venv_v="$("${BUILD_VENV}/bin/python" -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2>/dev/null || true)"
+  case "${venv_v}" in
+    3.11|3.12)
+      : ;;  # придатне, лишаємо
+    "")
+      say "середовище збірки нежиттєздатне (інший хост чи інтерпретатор) — перестворюю"
+      rm -rf "${BUILD_VENV}" ;;
+    *)
+      # Перевіряти лише «чи запускається» — замало. Саме так і сталось
+      # 29.08 у контейнері: лишилось середовище на 3.10 від попереднього
+      # прогону, воно чудово запускалось, і збірка мовчки пішла на ньому
+      # знову — аж до «Python shared library libpython3.10.so.1.0 was not
+      # found». Версія середовища — така сама його властивість, як
+      # працездатність.
+      say "середовище збірки на Python ${venv_v}, а потрібен 3.11-3.12 — перестворюю"
+      rm -rf "${BUILD_VENV}" ;;
+  esac
+fi
 
 if [ ! -x "${BUILD_VENV}/bin/python" ]; then
   PYBIN="$(pick_python)" || {
@@ -212,6 +245,70 @@ for pair in \
     say "дані не знайдено, пропущено: ${pair%%:*}"
   fi
 done
+# Четвертий пласт — системні бібліотеки, які пітон вантажить ЧЕРЕЗ ctypes,
+# а не лінкує. Аналіз PyInstaller їх не бачить у принципі: у графі імпортів
+# їх немає, у таблиці лінкування теж.
+#
+# Знайдено воротами чистої машини 29.08.2026 — контейнер `debian:12-slim`,
+# без пітона, без venv, без наших пакетів:
+#   OSError: cannot load library 'libsndfile.so': cannot open shared object file
+# `soundfile` тягне її саме ctypes-ом, і на машині розробника вона є
+# системно, тож дефекту не видно НІКОЛИ. Це і є та різниця між «зібралось»
+# і «працює в людини», заради якої ворота існують.
+#
+# Тягнемо разом із залежностями: сама libsndfile лінкується на кодеки
+# (ogg, vorbis, FLAC, opus, mpg123, mp3lame), і без них вона не завантажиться.
+say "збираю системні бібліотеки, що вантажаться через ctypes"
+CTYPES_LIBS=""
+for soname in libsndfile.so.1; do
+  libpath="$("${BUILD_VENV}/bin/python" - "$soname" <<'PY' 2>/dev/null
+import ctypes.util, sys, subprocess, re
+name = sys.argv[1]
+# ctypes.util.find_library хоче ім'я без "lib" і без ".so.N"
+short = re.sub(r"^lib|\.so.*$", "", name)
+p = ctypes.util.find_library(short)
+if p and "/" in p:
+    print(p)
+else:
+    out = subprocess.run(["/sbin/ldconfig", "-p"], capture_output=True, text=True).stdout
+    for line in out.splitlines():
+        if name in line and "=>" in line:
+            print(line.split("=>")[-1].strip())
+            break
+PY
+)"
+  if [ -z "$libpath" ] || [ ! -e "$libpath" ]; then
+    say "УВАГА: ${soname} не знайдено на машині збірки — бандл поїде без неї"
+    continue
+  fi
+  # Сама бібліотека та її нестандартні залежності.
+  # Фільтр ПО ІМЕНІ, а не по шляху. Перший захід у контейнер відфільтрував
+  # за зразком `^/usr/lib/...`, а в Ubuntu ці бібліотеки лежать у
+  # `/lib/x86_64-linux-gnu/`, тож у бандл поїхали `libc.so.6` і `libm.so.6`.
+  # Тягнути з собою власний libc — найшвидший спосіб отримати незрозумілі
+  # падіння: він розійдеться з системним загрузчиком.
+  for dep in "$libpath" $(ldd "$libpath" 2>/dev/null | awk '/=>/ {print $3}' | grep -vE '/(ld-linux[^/]*|libc|libm|libpthread|libdl|librt|libgcc_s)\.so' ); do
+    [ -e "$dep" ] || continue
+    PYI_ARGS+=(--add-binary "${dep}:.")
+    CTYPES_LIBS="${CTYPES_LIBS} $(basename "$dep")"
+  done
+
+  # І ще одне ім'я — БЕЗ версії. Перший прогін воріт чистої машини поклав
+  # у бандл `libsndfile.so.1`, а `soundfile` просить рівно `libsndfile.so`:
+  #     OSError: cannot load library 'libsndfile.so'
+  # На системі різницю прибирає симлінк із пакета розробки, у бандлі його
+  # немає. Кладемо копію під неверсійним іменем — інакше бібліотека їде
+  # разом із застосунком і все одно лишається невидимою для нього.
+  unver="$(basename "$libpath" | sed 's/\.so\..*/.so/')"
+  if [ "$unver" != "$(basename "$libpath")" ]; then
+    mkdir -p "${WORK}/ctypes-alias"
+    cp -f "$libpath" "${WORK}/ctypes-alias/${unver}"
+    PYI_ARGS+=(--add-binary "${WORK}/ctypes-alias/${unver}:.")
+    CTYPES_LIBS="${CTYPES_LIBS} ${unver}(без версії)"
+  fi
+done
+if [ -n "${CTYPES_LIBS}" ]; then say "додано:${CTYPES_LIBS}"; fi
+
 [ "${MODE}" = "onefile" ] && PYI_ARGS+=(--onefile) || PYI_ARGS+=(--onedir)
 
 say "запускаю PyInstaller (${MODE}) — це надовго"

@@ -1086,7 +1086,8 @@ async def _tool_read_file(args: dict[str, Any], user_id: str) -> dict[str, Any]:
         return _err("invalid_args", "path is required")
     try:
         from tools.file_manager import read_file as _rf
-        return _ok(**_rf(path=path.strip()))
+        got = _rf(path=path.strip())
+        return _ok(**_document_aware(got))
     except FileNotFoundError as exc:
         return _err("not_found", str(exc))
     except IsADirectoryError as exc:
@@ -1094,6 +1095,53 @@ async def _tool_read_file(args: dict[str, Any], user_id: str) -> dict[str, Any]:
     except ValueError as exc:
         return _err("forbidden", str(exc))
 
+
+def _document_aware(got: dict[str, Any]) -> dict[str, Any]:
+    """Не давати моделі base64 документа — ніколи.
+
+    `file_manager.read_file` віддає байти: текст або base64. Для файлового
+    браузера у вебі це правильно. Для моделі — ні: на питання «що в цьому
+    договорі» вона діставала стіну base64 і переказувала документ, якого не
+    бачила. Мовчання джерела набувало форми, яку споживач читає як зміст.
+
+    Тут стик, а не кінцевий клас: правимо саме те, що ПІДСТАВЛЯЄТЬСЯ між
+    читалкою й моделлю. Текстові файли не чіпаємо, зображення й архіви теж
+    лишаються собою — змінюється лише те, що доїжджає у промпт.
+    """
+    if got.get("kind") != "binary":
+        return got
+    from tools import document_text
+
+    name = str(got.get("name") or got.get("path") or "")
+    base = {k: v for k, v in got.items() if k != "content_base64"}
+
+    if document_text.is_document(name):
+        res = document_text.extract(got.get("path") or name)
+        if res.ok:
+            text = res.text or ""
+            return {
+                **base,
+                "kind": "document",
+                "extractor": res.extractor,
+                "chars": len(text),
+                "text": text,
+            }
+        return {
+            **base,
+            "kind": "unreadable",
+            "reason": res.reason,
+            "say_it": "скажи людині словами, що цей документ ти не прочитав, і назви причину",
+        }
+
+    if document_text.is_image(name):
+        return {
+            **base,
+            "kind": "unreadable",
+            "reason": "це зображення; описати його я не можу — моделі, яка бачить, тут немає",
+            "say_it": "не описуй зображення, якого не бачив",
+        }
+
+    return got
 
 async def _tool_search_files(args: dict[str, Any], user_id: str) -> dict[str, Any]:
     """Substring filename search inside the allow-list."""

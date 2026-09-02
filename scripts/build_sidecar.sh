@@ -169,9 +169,17 @@ SKIPPED_PKGS=""
 # немає. Те саме сімейство: alembic вантажить міграції шляхом, passlib —
 # хендлер `bcrypt` за назвою, uvicorn[standard] — uvloop/httptools, коли
 # знайде. Кожен із них видно лише в рантаймі й лише на потрібному шляху.
+#
+# Третє сімейство — розбирачі документів. Їх імпортує `tools/document_text.py`
+# усередині функцій, і саме тому їх легко втратити мовчки: без pypdf модуль не
+# падає, він ЧЕСНО ВІДМОВЛЯЄ — «немає бібліотеки», — тож мертвий бандл
+# виглядав би як робочий продукт, що просто не вміє PDF. Збираємо цілком:
+# pypdf піднімає криптопровайдера за станом файла, openpyxl — читалки за
+# типом книги, і жодне з цього не видно в графі імпортів.
 for pkg in torch sentence_transformers transformers tokenizers safetensors \
            chromadb onnxruntime faster_whisper ctranslate2 vosk soundfile \
            cv2 shapely segno piper supertonic \
+           pypdf openpyxl striprtf \
            aiosqlite sqlalchemy alembic passlib bcrypt jose \
            uvloop httptools websockets zeroconf; do
   # `--collect-all` по невстановленому пакету валить PyInstaller, а імена

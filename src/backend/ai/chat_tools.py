@@ -449,7 +449,11 @@ CHAT_DATA_TOOLS: list[dict[str, Any]] = [
         "description": (
             "Прочитати файл усередині дозволеного дерева. Ліміт 1 МіБ — "
             "більше повертається з truncated=True. Повертає kind='text' "
-            "з content або kind='binary' з content_base64."
+            "з content, kind='document' з text (PDF/DOCX/XLSX/RTF/ODT — витяг "
+            "тексту на пристрої), kind='binary' з content_base64 або "
+            "kind='unreadable' з reason. На 'unreadable' скажи людині словами, "
+            "чого саме не прочитав, і назви причину — переказувати вміст "
+            "документа чи зображення, якого не бачив, заборонено."
         ),
         "parameters": {
             "type": "object",

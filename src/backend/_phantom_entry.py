@@ -34,11 +34,47 @@ def _binary_dir() -> Path:
     return Path.cwd()
 
 
+def _writable_root(binary_root: Path) -> Path:
+    """Куди класти дані: поруч із бінарником чи в теку користувача.
+
+    Портативна тека поруч із виконуваним файлом — гарна ідея рівно доти,
+    доки та тека доступна на запис. В AppImage вона НЕ доступна: образ
+    монтується лише для читання, і `mkdir` падає з
+    `OSError: [Errno 30] Read-only file system`. Заміряно 29.08.2026 на
+    зібраному AppImage — бекенд помирав на цьому рядку ще до першого
+    запиту, а оболонка показувала лише «ядро не піднялося», бо потік
+    виводу sidecar тоді ще викидався в нікуди.
+
+    Запасний шлях не вигадуємо: `paths.py` вже має домовленість для
+    непортативного випадку — `platformdirs.user_data_dir("PHANTOM",
+    "PHANTOM-OS")`, і ADR-DSH-002 прямо каже, що запаковані збірки
+    живуть саме там. Перевіряємо запис не припущенням про формат
+    пакунка, а спробою: єдиний надійний тест файлової системи — це запис
+    у неї.
+    """
+    probe = binary_root / ".phantom-write-probe"
+    try:
+        binary_root.mkdir(parents=True, exist_ok=True)
+        probe.touch()
+        probe.unlink()
+        return binary_root
+    except OSError:
+        import platformdirs
+
+        fallback = Path(platformdirs.user_data_dir("PHANTOM", "PHANTOM-OS"))
+        print(
+            f"[phantom] тека поруч із бінарником недоступна на запис "
+            f"({binary_root}) — дані йдуть у {fallback}",
+            file=sys.stderr,
+        )
+        return fallback
+
+
 def _bootstrap_env() -> Path:
-    root = _binary_dir()
+    root = _writable_root(_binary_dir())
     data_dir = root / "data"
     models_dir = root / "models"
-    frontend_dir = root / "frontend"
+    frontend_dir = _binary_dir() / "frontend"
     data_dir.mkdir(parents=True, exist_ok=True)
     models_dir.mkdir(parents=True, exist_ok=True)
 

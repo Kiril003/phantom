@@ -57,9 +57,40 @@ fn spawn_backend_sidecar(handle: &tauri::AppHandle) -> Result<(), String> {
         .env("PHANTOM_PACKAGED", "1")
         .env("PHANTOM_HOST", "127.0.0.1");
 
-    let (_, child) = cmd
+    // Перший елемент — потік подій із stdout/stderr дочірнього процесу.
+    // Тут стояв `_`, і це коштувало нам сліпоти: 29.08.2026 у запакованому
+    // застосунку бекенд не піднявся, а дізнатись причину було НІЗВІДКИ.
+    // Плагін не успадковує stdio, він складає рядки у цей канал; викинувши
+    // канал, ми викидали єдиний слід. Заставка при цьому радила «see logs» —
+    // логів, яких не існує. Тепер кожен рядок іде в журнал оболонки, і
+    // смерть sidecar видно поіменно, разом із кодом виходу.
+    let (mut rx, child) = cmd
         .spawn()
         .map_err(|e| format!("spawn phantom-backend: {e}"))?;
+
+    tauri::async_runtime::spawn(async move {
+        use tauri_plugin_shell::process::CommandEvent;
+        while let Some(event) = rx.recv().await {
+            match event {
+                CommandEvent::Stdout(line) => {
+                    log::info!("[backend] {}", String::from_utf8_lossy(&line).trim_end());
+                }
+                CommandEvent::Stderr(line) => {
+                    log::warn!("[backend] {}", String::from_utf8_lossy(&line).trim_end());
+                }
+                CommandEvent::Error(err) => {
+                    log::error!("[backend] помилка каналу: {err}");
+                }
+                CommandEvent::Terminated(payload) => {
+                    log::error!(
+                        "[backend] процес завершився: код={:?} сигнал={:?}",
+                        payload.code, payload.signal,
+                    );
+                }
+                _ => {}
+            }
+        }
+    });
 
     let state: State<SidecarHandle> = handle.state();
     *state.0.lock().expect("sidecar handle poisoned") = Some(child);

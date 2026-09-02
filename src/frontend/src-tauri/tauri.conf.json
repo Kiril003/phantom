@@ -24,20 +24,6 @@
         "transparent": false,
         "alwaysOnTop": false,
         "url": "splash.html"
-      },
-      {
-        "label": "familiar_council",
-        "title": "Familiar Council",
-        "width": 420,
-        "height": 650,
-        "minWidth": 380,
-        "minHeight": 500,
-        "resizable": true,
-        "fullscreen": false,
-        "decorations": false,
-        "transparent": true,
-        "alwaysOnTop": true,
-        "url": "index.html#/council"
       }
     ],
     "security": {

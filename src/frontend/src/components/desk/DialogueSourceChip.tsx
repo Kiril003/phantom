@@ -55,6 +55,13 @@ type State =
   | { kind: 'none' }
   | { kind: 'named'; word: string; title: string };
 
+/** Провайдер словом: «Gemini · хмара»; невідомий — лише на імʼя. */
+function providerPhrase(id: string): string {
+  const where = WHERE[id.toLowerCase()];
+  const word = providerWord(id);
+  return where ? `${word} · ${where}` : word;
+}
+
 export function DialogueSourceChip(): JSX.Element {
   const [state, setState] = useState<State>({ kind: 'asking' });
 
@@ -74,16 +81,61 @@ export function DialogueSourceChip(): JSX.Element {
         setState({ kind: 'none' });
         return;
       }
-      const where = WHERE[active.toLowerCase()];
       const fallback = (pulse.data.ai_fallback || '').trim();
+      const ready = pulse.data.ai_ready;
+      const reason = (pulse.data.ai_ready_reason || '').trim();
+      const fbReady = pulse.data.ai_fallback_ready;
+      const fbReason = (pulse.data.ai_fallback_reason || '').trim();
+      const fbLoaded = pulse.data.ai_fallback_model_loaded;
+
+      // Старе ядро без полів придатності: кажемо лише те, що знаємо —
+      // хто обраний, — і в підказці зізнаємось, що звʼязку не перевіряли.
+      if (ready === undefined) {
+        setState({
+          kind: 'named',
+          word: providerPhrase(active),
+          title: `ai_active: ${active}${fallback ? ` · запасний: ${fallback}` : ''} — налаштування (GET /health), не перевірка звʼязку`,
+        });
+        return;
+      }
+
+      // Стан не прочитано — це НЕ «непридатний». Мовчання не є вироком.
+      if (ready === null) {
+        setState({
+          kind: 'named',
+          word: `${providerPhrase(active)} · стан невідомий`,
+          title: reason || 'GET /health: стан придатності не прочитано',
+        });
+        return;
+      }
+
+      if (ready) {
+        setState({
+          kind: 'named',
+          word: providerPhrase(active),
+          title: `ai_ready: true — ${active}${fallback ? ` · запасний: ${fallback}` : ''} (GET /health)`,
+        });
+        return;
+      }
+
+      // Обраний не відповість. Далі важить рівно одне: чи є хто інший.
+      if (fbReady && fallback) {
+        // «модель ще не в памʼяті» — з поля ядра, не з нашої здогадки:
+        // перший лист на холодну підіймає гігабайти й коштує десятки секунд.
+        const cold = fbLoaded === false ? ' · модель ще не в памʼяті' : '';
+        setState({
+          kind: 'named',
+          word: `${providerWord(active)} не відповість → ${providerPhrase(fallback)}${cold}`,
+          title: reason || `ai_ready: false для ${active} (GET /health)`,
+        });
+        return;
+      }
+
       setState({
         kind: 'named',
-        word: where ? `${providerWord(active)} · ${where}` : providerWord(active),
-        // Підказка каже прямо, що це НАЛАШТУВАННЯ, а не перевірка звʼязку:
-        // `/health` сьогодні віддає вподобання конфігу, не придатність.
-        title: fallback
-          ? `ai_active: ${active} · запасний: ${fallback} — налаштування (GET /health), не перевірка звʼязку`
-          : `ai_active: ${active} — налаштування (GET /health), не перевірка звʼязку`,
+        word: 'нікому відповісти',
+        title: [reason, fbReason].filter(Boolean).join(' · ') ||
+          `ai_ready: false, запасний теж (GET /health)`,
       });
     })();
     return () => {

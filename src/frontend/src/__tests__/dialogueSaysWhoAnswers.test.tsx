@@ -112,3 +112,110 @@ describe('чіп джерела діалогу', () => {
     await waitFor(() => expect(screen.getByText('Gemini · хмара')).toBeTruthy());
   });
 });
+
+describe('чіп джерела: придатність, а не вподобання', () => {
+  // Контракт ядра (ai/readiness.py, коміт 4f68555): ai_ready,
+  // ai_ready_reason, ai_fallback_ready, ai_fallback_reason,
+  // ai_fallback_model_loaded. `null` означає «стан не прочитано» і НЕ
+  // дорівнює `false` — інакше ми знову судили б за мовчанням.
+  beforeEach(() => health.mockReset());
+
+  const REASON = 'ключа Gemini немає — хмарна модель не відповість';
+
+  it('обраний не відповість, запасний живий → названо обох', async () => {
+    health.mockResolvedValue({
+      ok: true,
+      data: {
+        ...base,
+        ai_ready: false,
+        ai_ready_reason: REASON,
+        ai_fallback_ready: true,
+        ai_fallback_reason: null,
+        ai_fallback_model_loaded: true,
+      },
+    });
+
+    render(<DialogueSourceChip />);
+
+    await waitFor(() =>
+      expect(screen.getByText('Gemini не відповість → Ollama · локально')).toBeTruthy(),
+    );
+    expect(screen.getByTestId('dialogue-source-chip').getAttribute('title')).toBe(REASON);
+  });
+
+  it('запасний живий, але модель ще не в памʼяті — так і сказано', async () => {
+    // Виміряно сесією «Система»: ollama тримає нуль завантажених моделей,
+    // тож перший лист підіймає 4,7 ГБ і коштує десятки секунд. Це поле
+    // ядра, не наша здогадка.
+    health.mockResolvedValue({
+      ok: true,
+      data: {
+        ...base,
+        ai_ready: false,
+        ai_ready_reason: REASON,
+        ai_fallback_ready: true,
+        ai_fallback_reason: null,
+        ai_fallback_model_loaded: false,
+      },
+    });
+
+    render(<DialogueSourceChip />);
+
+    await waitFor(() => expect(screen.getByText(/модель ще не в памʼяті/)).toBeTruthy());
+  });
+
+  it('обидва мертві → «нікому відповісти», обидві причини в підказці', async () => {
+    health.mockResolvedValue({
+      ok: true,
+      data: {
+        ...base,
+        ai_ready: false,
+        ai_ready_reason: REASON,
+        ai_fallback_ready: false,
+        ai_fallback_reason: 'локальний хост моделі не налаштований',
+        ai_fallback_model_loaded: null,
+      },
+    });
+
+    render(<DialogueSourceChip />);
+
+    await waitFor(() => expect(screen.getByText('нікому відповісти')).toBeTruthy());
+    const title = screen.getByTestId('dialogue-source-chip').getAttribute('title') ?? '';
+    expect(title).toContain('ключа Gemini немає');
+    expect(title).toContain('локальний хост моделі не налаштований');
+  });
+
+  it('придатний → просто провайдер, без зайвих слів', async () => {
+    health.mockResolvedValue({
+      ok: true,
+      data: { ...base, ai_ready: true, ai_ready_reason: null, ai_fallback_ready: true },
+    });
+
+    render(<DialogueSourceChip />);
+
+    await waitFor(() => expect(screen.getByText('Gemini · хмара')).toBeTruthy());
+  });
+
+  it('стан не прочитано (null) — це не вирок «непридатний»', async () => {
+    health.mockResolvedValue({
+      ok: true,
+      data: { ...base, ai_ready: null, ai_ready_reason: 'стан не прочитано' },
+    });
+
+    render(<DialogueSourceChip />);
+
+    await waitFor(() => expect(screen.getByText(/стан невідомий/)).toBeTruthy());
+    expect(screen.queryByText(/не відповість|нікому/)).toBeNull();
+  });
+
+  it('старе ядро без полів придатності — поводимось як раніше', async () => {
+    health.mockResolvedValue({ ok: true, data: base });
+
+    render(<DialogueSourceChip />);
+
+    await waitFor(() => expect(screen.getByText('Gemini · хмара')).toBeTruthy());
+    expect(screen.getByTestId('dialogue-source-chip').getAttribute('title')).toContain(
+      'не перевірка звʼязку',
+    );
+  });
+});

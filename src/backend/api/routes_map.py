@@ -548,6 +548,14 @@ async def get_nearby(
     Every external call is guarded — cache hits are free, misses respect
     the adapter's rate limit, and any error returns an empty slice for
     that source rather than raising.
+
+    Але порожній зріз і мовчання джерела — РІЗНІ речі, а виглядали
+    однаково. Overpass не відповідав («All connection attempts failed» у
+    лозі), маршрут віддавав 200 і `{"osm": []}`, і скло малювало
+    «ОКОЛИЦІ · ДАНИХ НЕМАЄ» — відмова, вбрана в порожній успіх. Тому поруч
+    із кожним зрізом їде його стан: `*_status` — "ok" | "unreachable" |
+    "disabled". 200 лишається (решта джерел справді відповіла), але
+    мовчання тепер має імʼя.
     """
     radius_km = radius_m / 1000.0
 
@@ -557,7 +565,10 @@ async def get_nearby(
     )
 
     osm: list[dict[str, Any]] = []
+    osm_status = "disabled"
+    osm_detail: str | None = None
     if config.agent_overpass_enabled:
+        osm_status = "ok"
         try:
             from agent.localization.adapters.overpass import get_default_overpass
             overpass = get_default_overpass()
@@ -575,6 +586,11 @@ async def get_nearby(
                 for f in features
             ]
         except Exception as exc:
+            # Ловимо так само широко, як і раніше — падати маршрут не має
+            # права. Змінилось інше: тепер це видно назовні, а не лише в
+            # лозі, якого ніхто не читає.
+            osm_status = "unreachable"
+            osm_detail = f"{type(exc).__name__}: {exc}" or None
             logger.info("overpass nearby lookup failed: %s", exc)
 
     # MapPOI scan — small table, user-scoped.
@@ -596,7 +612,20 @@ async def get_nearby(
             })
     pois.sort(key=lambda r: r["distance_m"])
 
-    return {"remembered": remembered, "osm": osm, "pois": pois}
+    return {
+        "remembered": remembered,
+        "osm": osm,
+        "pois": pois,
+        # `remembered` і `pois` читаються з власної БД цього вузла: якщо
+        # запит до неї впаде, маршрут віддасть 500, а не порожній успіх —
+        # тобто для них "ok" не приховує третього стану. Поле все одно
+        # присутнє, щоб скло питало стан однаково в усіх трьох, а не
+        # памʼятало, у якого джерела він буває.
+        "remembered_status": "ok",
+        "pois_status": "ok",
+        "osm_status": osm_status,
+        "osm_detail": osm_detail,
+    }
 
 
 @router.get("/geo_tagged_facts")

@@ -131,3 +131,29 @@ def test_health_carries_the_memory_state():
         "не було видно нізвідки"
     )
     assert body["memory_model"]["model"], "стан мусить називати модель"
+
+
+def test_the_node_names_one_version_not_two():
+    """`/health` казав «0.1.0», `/healthz` — «0.19.0-jarvis-online».
+
+    Обидва рядки були зашиті окремо, у різних файлах. Один вузол, що
+    називає дві версії, робить будь-який звіт про збірку недоказовим:
+    незрозуміло, яку саме версію бачив той, хто скаржиться.
+    """
+    os.environ.setdefault("JWT_SECRET_KEY", "test-secret-memory-state")
+    os.environ.setdefault("AI_GEMINI_API_KEY", "fake-key")
+    os.environ.setdefault("PHANTOM_SERIAL_ENABLED", "false")
+
+    from fastapi.testclient import TestClient
+
+    from main import app
+    from observability import _VERSION
+
+    client = TestClient(app)
+    health = client.get("/health").json()
+    healthz = client.get("/healthz").json()
+
+    assert health["version"] == healthz["version"] == _VERSION, (
+        f"вузол називає різні версії: /health={health['version']!r}, "
+        f"/healthz={healthz['version']!r}"
+    )

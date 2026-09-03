@@ -1351,6 +1351,15 @@ def _register_ws(app: FastAPI) -> None:
 
 
 def _register_health(app: FastAPI) -> None:
+    def _app_version() -> str:
+        """Версія вузла з ЄДИНОГО джерела — того самого, що й у /healthz."""
+        try:
+            from observability import _VERSION
+
+            return _VERSION
+        except Exception:  # noqa: BLE001
+            return "unknown"
+
     def _memory_model_state() -> dict:
         """Ніколи не валить /health: стан памʼяті потрібен саме тоді, коли
         щось не так, і сам він не має права стати причиною поломки."""
@@ -1374,7 +1383,11 @@ def _register_health(app: FastAPI) -> None:
             esp32_connected = False
         return {
             "status": "ok",
-            "version": "0.1.0",
+            # Один вузол не має права називати дві версії. `/healthz` віддавав
+            # 0.19.0-jarvis-online, а цей маршрут — зашите «0.1.0», і вони
+            # розійшлись би ще сильніше при першому ж релізі. Джерело одне:
+            # observability._VERSION, звідки її бере й Prometheus.
+            "version": _app_version(),
             "hostname": config.system_hostname,
             "ws_clients": hub.client_count,
             "esp32_connected": esp32_connected,

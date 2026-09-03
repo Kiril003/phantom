@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useElementSize } from '../../desk/useViewportSize';
 import {
   Activity, BookOpen, Clock, Flame, Grid3x3, HardDrive, Layers, Library, MapPin, Pentagon,
   Radar, Route, Ruler, Shield, Sparkles, Wifi,
@@ -91,6 +92,20 @@ const LAYERS: Array<{ key: MapLayerKey; icon: JSX.Element; label: string; short:
   { key: 'recon', icon: <Route size={18} strokeWidth={1.75} />, label: 'Розвідка', short: 'Розвідка' },
   { key: 'facts', icon: <Sparkles size={18} strokeWidth={1.75} />, label: 'Спогади', short: 'Спогади' },
 ];
+
+/**
+ * Скільки треба нижньому ряду HUD, щоб три колонки не налазили одна на одну:
+ * 168 (ліва) + 12 + (200 поле пошуку + 8 + 217 тулбар) + 12 + 168 (права)
+ * = 785, плюс 2 на рамки — 787. Виміряно на склі 03.09.2026, WebKitGTK.
+ * Рейки з'їдають по 76 px з кожного боку пейна, звідси −152.
+ */
+export const HUD_ROW_NEEDS_PX = 787;
+export const HUD_RAILS_PX = 152;
+
+/** Чи бракує пейну місця на повний нижній ряд. paneWidth — ширина ПЕЙНА мапи. */
+export function hudIsNarrow(paneWidth: number): boolean {
+  return paneWidth > 0 && paneWidth - HUD_RAILS_PX < HUD_ROW_NEEDS_PX;
+}
 
 export function HudShell({
   bearing = null,
@@ -254,8 +269,25 @@ export function HudShell({
     { key: 'offline', icon: <HardDrive size={18} strokeWidth={1.75} />, label: 'Офлайн', short: 'Офлайн', active: offlineOpen, onClick: onToggleOffline },
   ];
 
+  // Ширина ПЕЙНА, не вікна: на столі «Театр» мапа має 679 px, бо решту
+  // забирає ДІАЛОГ. Нижній ряд потребує 168 + 12 + (200 + 8 + 217) + 12 + 168
+  // = 785, а між рейками лишається 679 − 152 = 527. Наслідок був виміряний
+  // на склі 03.09: скло пошуку накривало чипс атрибуції на 116 px, і кредит
+  // «© OpenStreetMap contributors · Protomaps» читався як «© Ог / contr /
+  // Proton.» — тобто продукт порушував власне правило ODbL саме там, де воно
+  // записане (AttributionDrawer.tsx). Тому при нестачі місця ряд на 84 px
+  // лишає собі ЛИШЕ дієслова (пошук + тулбар), а факти йдуть у свій регістр
+  // на нижній край.
+  const { ref: hudRef, width: hudWidth } = useElementSize<HTMLDivElement>();
+  const narrow = hudIsNarrow(hudWidth);
+
   return (
-    <div data-testid="hud-shell" className={`pointer-events-none absolute inset-0 z-30 ${className}`}>
+    <div
+      ref={hudRef}
+      data-testid="hud-shell"
+      data-narrow={narrow ? 'true' : 'false'}
+      className={`pointer-events-none absolute inset-0 z-30 ${className}`}
+    >
       {/* Сітка — найнижчий шар HUD: розмітка під хромом, не над ним. */}
       <GridOverlay active={gridOn} />
       <div className="absolute inset-x-3 top-3 flex items-start justify-between gap-3">
@@ -328,17 +360,40 @@ export function HudShell({
       {/* Один рядок замість трьох смуг. Живе МІЖ рейками, тому 76 px.
           Бічні колонки однакової ширини — інакше `justify-between` ставить
           «центр» будь-де, тільки не по центру. */}
-      <div className="absolute bottom-[84px] left-[76px] right-[76px] flex items-end gap-3">
-        {/* Атрибуція переїхала сюди з правого верху: там вона лягала на
-            рейку інструментів на 54×38 px. Місце ліворуч унизу — те саме,
-            де її тримає кожна мапа світу. */}
-        <div className="pointer-events-auto flex w-[168px] shrink-0 flex-col items-start gap-1.5">
+      {/* Вузько: «Позиція» — речення про стан — іде НАД рядом дієслів,
+          у смугу, де під нею нічого немає. Широко вона лишається першою
+          в лівій колонці, як і була. */}
+      {narrow && (
+        <div className="pointer-events-auto absolute bottom-[152px] left-[76px] w-[168px]">
           <WhereChip position={position} pairedDevices={pairedDevices} />
-          <ScaleBar zoom={zoom} lat={lat} />
-          <AttributionDrawer />
         </div>
+      )}
 
-        <div className="pointer-events-auto flex min-w-0 flex-1 items-center justify-center gap-2">
+      {/* Один рядок замість трьох смуг. Живе МІЖ рейками, тому 76 px.
+          Бічні колонки однакової ширини — інакше `justify-between` ставить
+          «центр» будь-де, тільки не по центру. */}
+      <div
+        data-testid="hud-verb-row"
+        className={`absolute left-[76px] right-[76px] flex items-end gap-3 ${
+          narrow ? 'bottom-[100px] justify-center' : 'bottom-[84px]'
+        }`}
+      >
+        {!narrow && (
+          /* Атрибуція переїхала сюди з правого верху: там вона лягала на
+             рейку інструментів на 54×38 px. Місце ліворуч унизу — те саме,
+             де її тримає кожна мапа світу. */
+          <div className="pointer-events-auto flex w-[168px] shrink-0 flex-col items-start gap-1.5">
+            <WhereChip position={position} pairedDevices={pairedDevices} />
+            <ScaleBar zoom={zoom} lat={lat} />
+            <AttributionDrawer />
+          </div>
+        )}
+
+        <div
+          className={`pointer-events-auto flex min-w-0 items-center justify-center gap-2 ${
+            narrow ? 'w-full max-w-[560px]' : 'flex-1'
+          }`}
+        >
           <SearchBar value={searchQuery} onChange={setSearchQuery} onResults={onSearchResults} />
           <NavigationToolbar
             onZoomIn={onZoomIn}
@@ -349,19 +404,46 @@ export function HudShell({
           />
         </div>
 
-        {/* «Поруч» шукало біля позиції з браузера — а вона на цій машині
-            за 8 км від того, що на екрані. Поруч — це поруч із тим, на що
-            людина дивиться. */}
-        <div className="pointer-events-auto flex w-[168px] shrink-0 justify-end">
-          <NearbyPanel lat={center?.[1] ?? tactical.lat} lon={center?.[0] ?? tactical.lon} zoom={zoom} onSelect={() => {}} />
-        </div>
+        {!narrow && (
+          /* «Поруч» шукало біля позиції з браузера — а вона на цій машині
+             за 8 км від того, що на екрані. Поруч — це поруч із тим, на що
+             людина дивиться. */
+          <div className="pointer-events-auto flex w-[168px] shrink-0 justify-end">
+            <NearbyPanel lat={center?.[1] ?? tactical.lat} lon={center?.[0] ?? tactical.lon} zoom={zoom} onSelect={() => {}} />
+          </div>
+        )}
       </div>
 
       {/* Метрологія (Ф2, У6): координата під курсором — нижній край
           пейна, під головним рядком, який стоїть на 84 px. */}
-      <div className="pointer-events-auto absolute bottom-3 left-1/2 -translate-x-1/2">
-        <CoordReadout />
-      </div>
+      {!narrow && (
+        <div className="pointer-events-auto absolute bottom-3 left-1/2 -translate-x-1/2">
+          <CoordReadout />
+        </div>
+      )}
+
+      {/* Вузько: нижній край — регістр фактів, два поверхи, жоден нікого не
+          накриває. Зверху 44-піксельний поверх керунків (координата з її
+          перемикачем формату і «Поруч»), знизу — пласкі факти: лінійка й
+          повний кредит одним рядком: сам текст просить 206 px, плюс знак,
+          шеврон і поля чипса — 252. У 168, де він стояв, кредит ламався на
+          три обрізані рядки. 44 + 4 + 26 = 74 у 84 вільних. */}
+      {narrow && (
+        <div className="absolute bottom-3 left-[76px] right-[76px] flex flex-col gap-1">
+          <div className="flex items-center justify-between gap-2">
+            <div className="pointer-events-auto">
+              <CoordReadout />
+            </div>
+            <div className="pointer-events-auto">
+              <NearbyPanel lat={center?.[1] ?? tactical.lat} lon={center?.[0] ?? tactical.lon} zoom={zoom} onSelect={() => {}} />
+            </div>
+          </div>
+          <div className="pointer-events-auto flex items-center gap-2">
+            <ScaleBar zoom={zoom} lat={lat} />
+            <AttributionDrawer maxWidthPx={252} />
+          </div>
+        </div>
+      )}
     </div>
   );
 }

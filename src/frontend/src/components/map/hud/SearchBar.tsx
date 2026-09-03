@@ -66,7 +66,7 @@ export function SearchBar({ value, onChange, onResults, className = '' }: Search
   };
 
   return (
-    <div className={`relative flex w-full flex-col items-center ${className}`}>
+    <div className={`relative flex w-full min-w-0 flex-col items-center ${className}`}>
       {localResults && (
         <div 
           className="glass-elevated absolute bottom-full mb-3 w-[440px] p-2 rounded-2xl shadow-2xl overflow-hidden animate-in slide-in-from-bottom-2 fade-in duration-200"

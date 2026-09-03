@@ -22,11 +22,20 @@ export interface AttributionDrawerProps {
   className?: string;
   /** Override polling cadence; tests pass 0 for manual control. */
   pollMs?: number;
+  /**
+   * Стеля ширини згорнутого чипса. 168 — коли він стоїть у колонці HUD;
+   * на вузькій мапі чипс переїздить на вільний нижній край, і там кредит
+   * має лягати ОДНИМ рядком (виміряна природна ширина «© OpenStreetMap
+   * contributors · Protomaps» — 206 px). Ламання на три рядки в 168 і
+   * було тим, що читалось як «© Ог / contr / Proton.».
+   */
+  maxWidthPx?: number;
 }
 
 export function AttributionDrawer({
   className = '',
   pollMs,
+  maxWidthPx = 168,
 }: AttributionDrawerProps): JSX.Element {
   const { lines: rawLines, error } = useAttribution({ pollMs });
   const [open, setOpen] = useState(false);
@@ -81,7 +90,8 @@ export function AttributionDrawer({
            накривала правий верх мапи щоразу. Ліцензія лишається на екрані
            завжди, але як чипс у ряд із рештою, а не як банер. Область
            дотику домальована псевдоелементом, щоб палець не схибив. */
-        className="relative flex min-h-[26px] w-full max-w-[168px] items-center gap-1.5 px-2.5 py-1 transition-colors hover:bg-white/5 after:absolute after:inset-x-0 after:-inset-y-[9px] after:content-['']"
+        style={{ maxWidth: maxWidthPx }}
+        className="relative flex min-h-[26px] w-full items-center gap-1.5 px-2.5 py-1 transition-colors hover:bg-white/5 after:absolute after:inset-x-0 after:-inset-y-[9px] after:content-['']"
       >
         <Info size={12} strokeWidth={1.75} className="shrink-0 opacity-70" />
         {/* Лічильник джерел жив тут другим написом і розтягував чипс до

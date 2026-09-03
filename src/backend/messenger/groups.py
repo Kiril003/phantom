@@ -43,7 +43,7 @@ from messenger.blobs import wrap_frame
 from messenger.crypto.keys import KeyStore, PublicBundle, UntrustedBundle
 from messenger.crypto.safety import safety_number
 from messenger.crypto.session import Session
-from messenger.transport import deliver, supabase_road
+from messenger.transport import deliver, drop_pair_key_of, drop_road, supabase_road
 
 logger = logging.getLogger(__name__)
 
@@ -255,36 +255,32 @@ async def ensure_contact(
 # ── Дороги ───────────────────────────────────────────────────────────────────
 
 
-def _roads() -> tuple[str, str, str, str]:
+def _roads() -> tuple[str, str, str, str, str]:
     from config import config
 
     relay = (config.relay_url or "") if config.relay_enabled else ""
     sb_url, sb_key = supabase_road(config)
-    return relay, sb_url, sb_key, config.messenger_public_address
+    return relay, sb_url, sb_key, config.messenger_public_address, drop_road(config)
 
 
 async def _try_deliver(
-    own_node_id: str, member_node_id: str, frame_hex: str, address: str
+    own_node_id: str,
+    member_node_id: str,
+    frame_hex: str,
+    address: str,
+    drop_key: bytes = b"",
 ) -> Optional[bool]:
     """Одна спроба довезти один кадр.
 
     True — вузол-адресат відповів 200. False — дорога є, але мовчить. None —
     дороги немає взагалі, і псувати лічильник спроб за це нечесно.
+
+    `drop_key` — ключ пари з цим учасником: адресу сховка складають лише двоє,
+    тож без ключа сховок для цього кадру — не дорога. Виводить його той, хто
+    має контакт учасника (`drop_pair_key_of`), сюди приходить готовий.
     """
-    # СХОВКА PH5 ТУТ НЕМАЄ, і це прогалина, а не рішення.
-    #
-    # `deliver()` уміє четверту дорогу — сховок, — і в розгорнутій конфігурації
-    # вона ЄДИНА: `relay_url` порожній навмисно, Supabase порожній. Тобто без
-    # прямої адреси груповий кадр досі не має дороги й лягає в чергу назавжди,
-    # тоді як лист один-на-один уже їде.
-    #
-    # Чому не під'єднано одразу: ключ пари для адреси сховка виводиться з
-    # bundle СПІВРОЗМОВНИКА (`drop_pair_key`), а сюди приходить лише
-    # `member_node_id` та адреса. Треба протягнути bundle учасника через
-    # `_attempt_row` і склад групи — це окрема правка з власними воротами, і
-    # робити її наосліп у кінці зміни означало б зламати віяр, який працює.
-    relay, sb_url, sb_key, reply_address = _roads()
-    if not address and not relay and not sb_url:
+    relay, sb_url, sb_key, reply_address, store_url = _roads()
+    if not address and not relay and not sb_url and not (store_url and drop_key):
         return None
     if not frame_hex:
         return None
@@ -296,6 +292,8 @@ async def _try_deliver(
         relay=relay,
         supabase_url=sb_url,
         supabase_key=sb_key,
+        drop_url=store_url,
+        drop_key=drop_key,
         reply_address=reply_address,
     )
 
@@ -305,10 +303,11 @@ async def _attempt_row(
     row: MessengerGroupDelivery,
     member: Optional[MessengerGroupMember],
     address: str,
+    drop_key: bytes = b"",
 ) -> bool:
     """Спроба по рядку черги: веде і сам рядок, і лічильники учасника."""
     ok = await _try_deliver(
-        own_node_id, row.member_node_id, row.outbound_frame or "", address
+        own_node_id, row.member_node_id, row.outbound_frame or "", address, drop_key
     )
     if ok is None:
         return False
@@ -509,12 +508,15 @@ async def _fan_frames(
         contact.session_blob = peer_session.serialize(keys).hex()
         contact.updated_at = _now()
         address = contact.peer_address or member.address or ""
+        drop_key = drop_pair_key_of(keys, contact)
 
         if message_id is None:
             # Запрошення не має рядка в стрічці, тож і черги під нього немає:
             # не доїхало — творець надішле ще раз руками. Вигадувати запрошенню
             # власну чергу в V1 означало б обіцяти те, чого немає.
-            ok = await _try_deliver(keys.node_id, member.node_id, frame.hex(), address)
+            ok = await _try_deliver(
+                keys.node_id, member.node_id, frame.hex(), address, drop_key
+            )
             if ok:
                 member.last_delivered_at = _now()
                 member.failed_attempts = 0
@@ -535,7 +537,7 @@ async def _fan_frames(
             created_at=_now(),
         )
         session.add(row)
-        if await _attempt_row(keys.node_id, row, member, address):
+        if await _attempt_row(keys.node_id, row, member, address, drop_key):
             sent += 1
         else:
             queued += 1
@@ -759,13 +761,20 @@ async def settle_message_state(session: AsyncSession, message_id: str) -> str:
 
 
 async def flush_group_queue(
-    session: AsyncSession, own_node_id: str, *, limit: int = 50
+    session: AsyncSession,
+    own_node_id: str,
+    *,
+    limit: int = 50,
+    keys: Optional[KeyStore] = None,
 ) -> int:
     """Довозить групові кадри, які не доїхали. Повертає кількість доставлених.
 
     Той самий LIMIT 50, що й в особистій черзі, і саме він визначає стелю в 32
     учасники: одне повністю застрягле повідомлення на 31 отримувача ще
     вміщається в один прохід, а на 49 — уже морить голодом усе інше.
+
+    `keys` потрібні лише сховку: ключ пари складається з приватного ключа
+    вузла і контакта учасника. Без них прохід поводиться як раніше.
     """
     rows = list(
         (
@@ -797,13 +806,16 @@ async def flush_group_queue(
             continue
         member = await member_of(session, conversation.id, row.member_node_id)
         address = ""
+        drop_key = b""
         if member is not None and member.contact_id:
             contact = await session.get(MessengerContact, member.contact_id)
             if contact is not None:
                 address = contact.peer_address or ""
+                if keys is not None:
+                    drop_key = drop_pair_key_of(keys, contact)
         if not address and member is not None:
             address = member.address or ""
-        if await _attempt_row(own_node_id, row, member, address):
+        if await _attempt_row(own_node_id, row, member, address, drop_key):
             delivered += 1
         touched.add(row.message_id)
 

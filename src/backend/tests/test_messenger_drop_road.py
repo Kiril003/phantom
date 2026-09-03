@@ -62,6 +62,26 @@ def test_a_broken_bundle_means_no_road_not_a_crash():
     assert drop_pair_key(keys, "") == b""
 
 
+def test_the_pair_key_also_comes_from_a_session_when_there_is_no_bundle():
+    """Контакт, заведений із вхідного кадру, bundle не має — лише сесію. Її
+    довготривалого ключа для адреси сховка досить, і ключ той самий."""
+    from messenger.crypto.session import Session
+    from messenger.transport import drop_pair_key_of
+
+    a = KeyStore.generate(one_time_count=2)
+    b = KeyStore.generate(one_time_count=2)
+    a_side = Session.initiate(a, b.publish_bundle())
+    b_side, _ = Session.accept(b, a_side.encrypt("привіт".encode()))
+    contact_at_b = SimpleNamespace(bundle_json="", session_blob=b_side.serialize(b).hex())
+
+    from_session = drop_pair_key_of(b, contact_at_b)
+    from_bundle = drop_pair_key(a, b.publish_bundle(with_one_time=False).to_json())
+    assert from_session and from_session == from_bundle
+
+    # Ні bundle, ні сесії — ключа немає, і це b"", а не виняток.
+    assert drop_pair_key_of(b, SimpleNamespace(bundle_json="", session_blob=None)) == b""
+
+
 # ── Сам похід у сховок ───────────────────────────────────────────────────────
 
 

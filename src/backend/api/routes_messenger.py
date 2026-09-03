@@ -53,7 +53,13 @@ from messenger.purge import (
     tombstone,
     wipe_message,
 )
-from messenger.transport import deliver, supabase_road
+from messenger.transport import (
+    deliver,
+    drop_pair_key_of,
+    drop_road,
+    store_answered_last_time,
+    supabase_road,
+)
 from messenger.turn import ice_payload, load_turn_config
 from node.identity import node_id
 # Месенджер приймає і користувацький JWT, і токен спареного пристрою:
@@ -190,6 +196,8 @@ async def get_roads(
     relay_url = (getattr(config, "relay_url", "") or "").strip()
     sb_url, _sb_key = supabase_road(config)
     blobs = r2_road(config)
+    store = drop_road(config)
+    store_live = store_answered_last_time(store) if store else None
     client = getattr(request.app.state, "relay_client", None)
     relay_live: Optional[bool] = None
     if relay_on and relay_url:
@@ -253,6 +261,33 @@ async def get_roads(
                 if sb_url
                 else "SUPABASE_MAILBOX_URL + SUPABASE_ANON_KEY у .env вузла "
                 "(ключ publishable, RLS пускає його лише на запис)"
+            ),
+        ),
+        Road(
+            id="drop",
+            title="Сховок",
+            configured=bool(store),
+            live=store_live,
+            state=(
+                ("не відповідає" if store_live is False else "є") if store else "немає"
+            ),
+            detail=(
+                (
+                    f"{_host_only(store)} — конверт сталої довжини під адресою, "
+                    "яку вміють скласти лише двоє"
+                    + (
+                        "; останнього разу не відповів"
+                        if store_live is False
+                        else ""
+                    )
+                )
+                if store
+                else "вимкнено в налаштуваннях вузла"
+            ),
+            howto=(
+                ""
+                if store
+                else "RELAY_STORE_ENABLED=true і RELAY_STORE_URL=https://<сховок> у .env вузла"
             ),
         ),
         Road(
@@ -395,6 +430,15 @@ def road_to(contact: Optional[MessengerContact]) -> str:
     sb_url, sb_key = supabase_road(config)
     if sb_url and sb_key:
         return "cloud"
+    store = drop_road(config)
+    # Сховок є, коли є адреса, ключ пари з цією людиною — і сервер не мовчав
+    # останнього разу, як вузол до нього ходив (по пошту — кожні 45 с).
+    if (
+        store
+        and store_answered_last_time(store) is not False
+        and drop_pair_key_of(_keys(), contact)
+    ):
+        return "drop"
     return ""
 
 
@@ -1071,6 +1115,8 @@ async def edit_message(
             relay=(config.relay_url or "") if config.relay_enabled else "",
             supabase_url=supabase_road(config)[0],
             supabase_key=supabase_road(config)[1],
+            drop_url=drop_road(config),
+            drop_key=drop_pair_key_of(_keys(), contact) if contact else b"",
             reply_address=config.messenger_public_address,
         )
 
@@ -1159,6 +1205,8 @@ async def toggle_reaction(
             relay=(config.relay_url or "") if config.relay_enabled else "",
             supabase_url=supabase_road(config)[0],
             supabase_key=supabase_road(config)[1],
+            drop_url=drop_road(config),
+            drop_key=drop_pair_key_of(_keys(), contact) if contact else b"",
             reply_address=config.messenger_public_address,
         )
 
@@ -1321,6 +1369,8 @@ async def append_message(
             address = contact.peer_address if contact else ""
             relay = (config.relay_url or "") if config.relay_enabled else ""
             sb_url, sb_key = supabase_road(config)
+            store_url = drop_road(config)
+            store_key = drop_pair_key_of(_keys(), contact) if contact else b""
             delivered = await deliver(
                 prepared.frame,
                 peer_node_id=prepared.peer_node_id,
@@ -1329,14 +1379,19 @@ async def append_message(
                 relay=relay,
                 supabase_url=sb_url,
                 supabase_key=sb_key,
+                drop_url=store_url,
+                drop_key=store_key,
                 reply_address=config.messenger_public_address,
             )
-            tried = bool(address or relay or sb_url)
-            if not delivered and not address and not relay and not sb_url:
-                # Standalone/shared node with active local web hub
-                delivered = "local-hub"
+            tried = bool(address or relay or sb_url or (store_url and store_key))
+            # Досі тут стояло «жодної дороги → delivered = "local-hub"» — тобто
+            # галочка саме тоді, коли лист не поїхав нікуди. Немає дороги — лист
+            # у черзі, і це сказано, а не приховано.
             out.delivery = 'sent' if delivered else 'queued'
             row.delivery_state = out.delivery
+            # Обидва поля відповіді кажуть одне: досі `delivery_state` лишався
+            # «local» із моменту створення рядка, хоч у базі вже стояло sent.
+            out.delivery_state = out.delivery
             # Дорога, якою лист СПРАВДІ поїхав. Досі вихідні листи не мали
             # транспорту взагалі: `deliver` знав, яка з трьох гілок спрацювала,
             # і повертав лише «так». Вхідні його мали (`direct`/`mailbox`), і
@@ -2105,7 +2160,7 @@ async def queue_flush(
     # до появи сесії, і той лишиться в черзі назавжди.
     delivered = await flush_queue(session, _keys().node_id, keys=_keys())
     blobs = await flush_blob_queue(session, _keys().node_id)
-    group = await flush_group_queue(session, _keys().node_id)
+    group = await flush_group_queue(session, _keys().node_id, keys=_keys())
     return {"delivered": delivered, "blobs": blobs, "group_frames": group}
 
 
@@ -2226,6 +2281,8 @@ async def delete_message(
         address = (contact.peer_address if contact else "") or ""
         relay = (config.relay_url or "") if config.relay_enabled else ""
         sb_url, sb_key = supabase_road(config)
+        store_url = drop_road(config)
+        store_key = drop_pair_key_of(_keys(), contact) if contact else b""
         delivered = await deliver(
             prepared.frame,
             peer_node_id=prepared.peer_node_id,
@@ -2234,16 +2291,19 @@ async def delete_message(
             relay=relay,
             supabase_url=sb_url,
             supabase_key=sb_key,
+            drop_url=store_url,
+            drop_key=store_key,
             reply_address=config.messenger_public_address,
         )
         if not delivered:
             # Той самий механізм, що й у звичайного повідомлення: кадр лежить
             # при рядку і чекає на смугу повторів. Вимкнений вузол одержувача
             # не скасовує видалення — лише відкладає його.
+            tried = bool(address or relay or sb_url or (store_url and store_key))
             row.outbound_frame = prepared.frame.hex()
             row.delivery_state = "queued"
-            row.delivery_attempts = 1 if (address or relay) else 0
-            row.last_attempt_at = _now() if (address or relay) else None
+            row.delivery_attempts = 1 if tried else 0
+            row.last_attempt_at = _now() if tried else None
 
     conversation.updated_at = _now()
     await session.commit()

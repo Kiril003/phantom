@@ -26,8 +26,15 @@ from messenger.crypto.keys import KeyStore
 from messenger.outbox import OutboxError, prepare_frame
 from messenger.purge import _open_body
 from messenger.blobs import flush_blob_queue
+from messenger.drop_inbox import read_drop_store
 from messenger.r2 import R2Road, drop_object, fetch_object, object_key, r2_road
-from messenger.transport import deliver, supabase_mailbox_endpoint, supabase_road
+from messenger.transport import (
+    deliver,
+    drop_pair_key,
+    drop_road,
+    supabase_mailbox_endpoint,
+    supabase_road,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -92,7 +99,18 @@ async def flush_queue(
 
         relay = (config.relay_url or "") if config.relay_enabled else ""
         sb_url, sb_key = supabase_road(config)
-        if not contact.peer_address and not relay and not sb_url:
+        store_url = drop_road(config)
+        # Ключ пари складається з ключів вузла і bundle контакта; без `keys`
+        # (прохід «лише готові кадри») сховок для цього рядка — не дорога.
+        store_key = (
+            drop_pair_key(keys, contact.bundle_json) if keys is not None else b""
+        )
+        if (
+            not contact.peer_address
+            and not relay
+            and not sb_url
+            and not (store_url and store_key)
+        ):
             # Жодної дороги — спроба нічого не дасть,
             # і лічильник псувати не варто.
             continue
@@ -125,6 +143,8 @@ async def flush_queue(
             relay=relay,
             supabase_url=sb_url,
             supabase_key=sb_key,
+            drop_url=store_url,
+            drop_key=store_key,
             reply_address=config.messenger_public_address,
         )
         if ok:
@@ -296,8 +316,24 @@ async def read_supabase_mailbox(
             await http.aclose()
 
 
+async def _announce(session: AsyncSession, row: MessengerMessage, owner_user_id: str) -> None:
+    """Відкрите вікно має побачити лист зі сховка без опитування — рівно як
+    той, що приїхав у приймальню."""
+    # api над messenger — тому лише тут і лише ліниво, як `_keys` у смузі нижче.
+    from api.routes_messenger import _attachment_states, _message_out
+    from api.websocket_hub import hub
+
+    try:
+        attachments = await _attachment_states(session, [row])
+        out = _message_out(row, attachments.get(row.id))
+        event = "message:deleted" if row.deleted_at else "message:new"
+        await hub.broadcast("messenger", event, out.model_dump(mode="json"), user_id=owner_user_id)
+    except Exception as exc:  # noqa: BLE001 — лист уже в базі; вікно побачить його на оновленні
+        logger.info("оголосити лист зі сховка не вдалось: %s", exc)
+
+
 async def redelivery_loop(interval_s: float = 45.0) -> None:
-    """Фонова смуга: періодично повертається до боргів.
+    """Фонова смуга: періодично повертається до боргів — і ходить по пошту.
 
     Тихо переживає будь-який збій: недоступний співрозмовник — це нормальний
     стан, а не привід зупинити смугу назавжди.
@@ -311,6 +347,9 @@ async def redelivery_loop(interval_s: float = 45.0) -> None:
     if sb_url and not supabase_service_key():
         logger.info("скринька Supabase: читання вимкнено — немає службового ключа")
 
+    # Номер заходу у сховок: коли скриньок більше за 64 імені, вікно вибірки
+    # їде далі з кожним заходом, і жодна не голодує.
+    round_ = 0
     while True:
         try:
             await asyncio.sleep(interval_s)
@@ -326,12 +365,14 @@ async def redelivery_loop(interval_s: float = 45.0) -> None:
                 # в один прохід і не морить голодом решту черги.
                 from messenger.groups import flush_group_queue
 
-                group = await flush_group_queue(session, _keys().node_id)
+                group = await flush_group_queue(session, _keys().node_id, keys=_keys())
             letters = 0
             parked = 0
+            dropped = 0
             service_key = supabase_service_key()
             has_r2 = r2_road(config) is not None
-            if (sb_url and service_key) or has_r2:
+            store_url = drop_road(config)
+            if (sb_url and service_key) or has_r2 or store_url:
                 from db.models import User
 
                 async with AsyncSessionLocal() as session:
@@ -350,15 +391,26 @@ async def redelivery_loop(interval_s: float = 45.0) -> None:
                         # Вкладення, що чекають у хмарі: ключ до них уже в
                         # стрічці, лишилось забрати байти.
                         parked = await fetch_parked_blobs(session, _keys(), owner)
-            if delivered or blobs or group or letters or parked:
+                    if owner is not None and store_url:
+                        # Сховок — єдина дорога, розгорнута за замовчуванням: без
+                        # цього заходу лист із-за кордону не приїхав би ніколи.
+                        visit = await read_drop_store(
+                            session, _keys(), owner, store_url=store_url, round_=round_
+                        )
+                        round_ += 1
+                        dropped = visit.accepted
+                        for row in visit.rows:
+                            await _announce(session, row, owner)
+            if delivered or blobs or group or letters or parked or dropped:
                 logger.info(
                     "черга месенджера: довезено %d, вкладень %d, групових %d, "
-                    "зі скриньки Supabase %d, з хмари %d",
+                    "зі скриньки Supabase %d, з хмари %d, зі сховка %d",
                     delivered,
                     blobs,
                     group,
                     letters,
                     parked,
+                    dropped,
                 )
         except asyncio.CancelledError:
             raise

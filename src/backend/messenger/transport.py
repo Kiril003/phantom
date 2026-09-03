@@ -25,7 +25,7 @@ from cryptography.hazmat.primitives import serialization
 from messenger.crypto.keys import PublicBundle
 from node import peer_channel
 from node import peer_relay as pr
-from node.relay_courier import Held, RelayCourier
+from node.relay_courier import Held, Offline, RelayCourier
 
 logger = logging.getLogger(__name__)
 
@@ -36,9 +36,12 @@ __all__ = [
     "deliver_via_relay",
     "deliver_via_supabase",
     "drop_pair_key",
+    "drop_pair_key_of",
     "drop_road",
     "inbox_url",
     "mailbox_url",
+    "note_store_answered",
+    "store_answered_last_time",
     "supabase_mailbox_endpoint",
     "supabase_road",
 ]
@@ -233,6 +236,16 @@ def drop_road(config: Any) -> str:
     return (getattr(config, "relay_store_url", "") or "").strip()
 
 
+def _pair_key(keys: Any, their_dh: bytes, their_node_id: str) -> bytes:
+    my_raw = keys.identity_dh_private.private_bytes(
+        serialization.Encoding.Raw,
+        serialization.PrivateFormat.Raw,
+        serialization.NoEncryption(),
+    )
+    their_b64 = base64.b64encode(their_dh).decode("ascii")
+    return peer_channel.channel_key(my_raw, their_b64, keys.node_id, their_node_id) or b""
+
+
 def drop_pair_key(keys: Any, bundle_json: str) -> bytes:
     """Ключ пари для адрес сховка; b"" — ключа не скласти, дороги немає.
 
@@ -248,19 +261,68 @@ def drop_pair_key(keys: Any, bundle_json: str) -> bytes:
     """
     try:
         bundle = PublicBundle.from_json(bundle_json or "")
-        my_raw = keys.identity_dh_private.private_bytes(
-            serialization.Encoding.Raw,
-            serialization.PrivateFormat.Raw,
-            serialization.NoEncryption(),
-        )
-        their_b64 = base64.b64encode(bundle.identity_dh).decode("ascii")
-        pair = peer_channel.channel_key(my_raw, their_b64, keys.node_id, bundle.node_id)
+        pair = _pair_key(keys, bundle.identity_dh, bundle.node_id)
     except Exception as exc:  # noqa: BLE001 — кривий bundle не має валити відправку
         # Гучно, а не мовчки: без цього ключа дороги просто «немає», і ніхто
         # не дізнався б, чому листи саме цього контакта не їдуть у сховок.
         logger.warning("ключ пари для сховка не склався: %s", exc)
         return b""
-    return pair or b""
+    return pair
+
+
+def drop_pair_key_of(keys: Any, contact: Any) -> bytes:
+    """Ключ пари для контакта: з bundle, а без нього — із сесії; b"" — немає.
+
+    Контакт, заведений із ВХІДНОГО кадру, bundle не має (`inbox.accept_frame`
+    пише порожній рядок), але сесія з ним тримає той самий довготривалий
+    X25519 співрозмовника — а адресі сховка більше й не треба. Без цієї гілки
+    людина, яка першою написала нам удома, лишалась би без дороги, щойно
+    хтось із двох поїхав.
+    """
+    bundle_json = getattr(contact, "bundle_json", "") or ""
+    if bundle_json:
+        pair = drop_pair_key(keys, bundle_json)
+        if pair:
+            return pair
+    blob = getattr(contact, "session_blob", None)
+    if not blob:
+        return b""
+    try:
+        from messenger.crypto.session import Session
+
+        peer = Session.restore(keys, bytes.fromhex(blob))
+        return _pair_key(keys, peer.peer_identity_dh, peer.peer_node_id)
+    except Exception as exc:  # noqa: BLE001 — зіпсована сесія не має валити список
+        logger.warning("ключ пари для сховка не склався із сесії: %s", exc)
+        return b""
+
+
+# ── Чи відповідав сховок ─────────────────────────────────────────────────────
+#
+# `road_ahead` мусить сказати «дороги немає» ДО того, як людина напише, а
+# сховок — єдина дорога, якої не видно з конфігу: адреса вписана завжди, а чи
+# відповідає сервер, знає лише той, хто в нього ходив. Тому кожен похід —
+# покласти чи забрати — лишає тут один факт: відповів чи мовчав. Без факту
+# (None) дорога вважається наявною: конфіг каже «є», спростувати ще не було чим.
+_store_last: Optional[tuple[str, bool]] = None
+
+
+def _store_id(store_url: str) -> str:
+    return (store_url or "").strip().rstrip("/")
+
+
+def note_store_answered(store_url: str, answered: bool) -> None:
+    """Записати наслідок походу. Будь-яка відповідь сервера — «відповів»,
+    навіть відмова: дорога є, просто лист не взяли; мовчання — «ні»."""
+    global _store_last
+    _store_last = (_store_id(store_url), answered)
+
+
+def store_answered_last_time(store_url: str) -> Optional[bool]:
+    """True/False — останній похід у ЦЕЙ сховок; None — ще не ходили."""
+    if _store_last is None or _store_last[0] != _store_id(store_url):
+        return None
+    return _store_last[1]
 
 
 async def deliver_via_drop(
@@ -307,8 +369,11 @@ async def deliver_via_drop(
     try:
         outcome = await RelayCourier(store_url, client=client).drop(tag, wrapped.blob)
     except Exception as exc:  # noqa: BLE001 — мережа падає як завгодно
+        note_store_answered(store_url, False)
         logger.info("до сховка не достукались: %s", exc)
         return False
+    # Мовчання і відмова — різні факти: після відмови дорога є, після тиші — ні.
+    note_store_answered(store_url, not isinstance(outcome, Offline))
     if isinstance(outcome, Held):
         return True
     # Кожна відмова названа (Busy/Full/Refused/Offline) — і жодна не доставка.

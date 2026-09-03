@@ -47,7 +47,7 @@ async def _queued_message(session, owner: str, *, address: str | None, frame: st
 async def test_a_queued_message_is_delivered_on_retry(auth_root_client, monkeypatch):
     carried = {}
 
-    async def _ok(frame, *, peer_node_id, from_node_id, peer_address="", relay="", supabase_url="", supabase_key="", reply_address=""):
+    async def _ok(frame, *, peer_node_id, from_node_id, peer_address="", relay="", supabase_url="", supabase_key="", reply_address="", drop_url="", drop_key=b""):
         carried['frame'] = frame
         return True
 
@@ -69,7 +69,7 @@ async def test_a_queued_message_is_delivered_on_retry(auth_root_client, monkeypa
 
 @pytest.mark.anyio
 async def test_a_failed_retry_keeps_the_message_and_the_frame(auth_root_client, monkeypatch):
-    async def _fail(frame, *, peer_node_id, from_node_id, peer_address="", relay="", supabase_url="", supabase_key="", reply_address=""):
+    async def _fail(frame, *, peer_node_id, from_node_id, peer_address="", relay="", supabase_url="", supabase_key="", reply_address="", drop_url="", drop_key=b""):
         return False
 
     monkeypatch.setattr(redelivery, "deliver", _fail)
@@ -104,7 +104,7 @@ async def test_without_an_address_no_attempt_is_wasted(auth_root_client):
 
 @pytest.mark.anyio
 async def test_the_node_stops_hammering_a_wall(auth_root_client, monkeypatch):
-    async def _fail(frame, *, peer_node_id, from_node_id, peer_address="", relay="", supabase_url="", supabase_key="", reply_address=""):
+    async def _fail(frame, *, peer_node_id, from_node_id, peer_address="", relay="", supabase_url="", supabase_key="", reply_address="", drop_url="", drop_key=b""):
         return False
 
     monkeypatch.setattr(redelivery, "deliver", _fail)

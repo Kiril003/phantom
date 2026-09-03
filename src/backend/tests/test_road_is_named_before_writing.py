@@ -1,10 +1,11 @@
 """Вузол каже, чи є дорога, ДО того як людина напише.
 
-Навіщо. Дороги в `deliver()` три: пряма (потрібна відома адреса), ретранслятор
-(`relay_url`) і хмара (Supabase). За замовчуванням дві останні порожні —
-ретранслятор навмисно, бо WS-тунель на розгорнутому сервері дає 404. Тобто
-поза домашньою мережею, де адреса невідома, **дороги немає жодної**: лист
-ляже в чергу й лежатиме, доки дорога не зʼявиться.
+Навіщо. Дороги в `deliver()` чотири: пряма (потрібна відома адреса),
+ретранслятор (`relay_url`), хмара (Supabase) і сховок PH5. За замовчуванням
+ретранслятор і хмара порожні — ретранслятор навмисно, бо WS-тунель на
+розгорнутому сервері дає 404. Сховок — єдина дорога, розгорнута й увімкнена
+за замовчуванням; але й вона є лише доти, доки сервер відповідає. Мовчав
+останнього разу — дороги немає, і це сказано, а не приховано.
 
 Дізнатись про це, написавши важливе й чекаючи відповіді, — найдорожчий спосіб.
 Тому вузол називає дорогу **наперед**, а порожнє значення означає прямо:
@@ -47,8 +48,13 @@ async def test_a_known_address_is_named_as_the_direct_road(auth_root_client):
 
 
 @pytest.mark.anyio
-async def test_without_an_address_the_node_says_there_is_NO_road(auth_root_client):
+async def test_without_an_address_the_node_says_there_is_NO_road(auth_root_client, monkeypatch):
     """Найважливіше: порожньо означає «жодної», і це сказано, а не замовчано."""
+    from config import config
+
+    # Сховок вимкнено — лишається рівно та картина, яку описує назва тесту.
+    monkeypatch.setattr(config, "relay_store_enabled", False)
+
     out = _conversation_with_contact(auth_root_client, None)
 
     # Саме порожній рядок, а не `null` і не відсутнє поле: вузол ЗНАЄ, що
@@ -71,6 +77,50 @@ async def test_the_relay_when_configured_is_named(auth_root_client, monkeypatch)
     out = _conversation_with_contact(auth_root_client, None)
 
     assert out["road_ahead"] == "relay"
+
+
+@pytest.mark.anyio
+async def test_the_drop_when_configured_is_the_road_named_ahead(auth_root_client, monkeypatch):
+    """Розгорнута конфігурація: адреси немає, ретранслятор і хмара порожні —
+    і все ж дорога є, бо є сховок. Саме це людина за кордоном мусить побачити
+    ДО того, як напише."""
+    import messenger.transport as transport
+    from config import config
+
+    monkeypatch.setattr(config, "relay_url", "")
+    monkeypatch.setattr(config, "supabase_mailbox_url", "")
+    monkeypatch.setattr(config, "relay_store_enabled", True)
+    monkeypatch.setattr(config, "relay_store_url", "https://store.example")
+    monkeypatch.setattr(transport, "_store_last", None)
+
+    out = _conversation_with_contact(auth_root_client, None)
+
+    assert out["road_ahead"] == "drop"
+
+
+@pytest.mark.anyio
+async def test_a_store_that_went_silent_is_no_longer_promised(auth_root_client, monkeypatch):
+    """Обіцянка тримається на вимірі: мовчав останнього разу — дороги немає;
+    відповів знову — дорога повернулась. Зелене, яке вміє почервоніти."""
+    import messenger.transport as transport
+    from config import config
+    from messenger.transport import note_store_answered
+
+    monkeypatch.setattr(config, "relay_url", "")
+    monkeypatch.setattr(config, "supabase_mailbox_url", "")
+    monkeypatch.setattr(config, "relay_store_enabled", True)
+    monkeypatch.setattr(config, "relay_store_url", "https://store.example")
+    monkeypatch.setattr(transport, "_store_last", None)
+
+    note_store_answered("https://store.example", False)
+    assert _conversation_with_contact(auth_root_client, None)["road_ahead"] == ""
+
+    note_store_answered("https://store.example", True)
+    assert _conversation_with_contact(auth_root_client, None)["road_ahead"] == "drop"
+
+    # Факт про ІНШИЙ сховок цього не стосується.
+    note_store_answered("https://other.example", False)
+    assert _conversation_with_contact(auth_root_client, None)["road_ahead"] == "drop"
 
 
 @pytest.mark.anyio

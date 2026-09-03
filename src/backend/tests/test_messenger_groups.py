@@ -70,7 +70,7 @@ def _capture(monkeypatch, *, ok: bool = True) -> list[tuple[str, bytes]]:
 
     async def _deliver(
         frame, *, peer_node_id, from_node_id, peer_address="", relay="",
-        supabase_url="", supabase_key="", reply_address="",
+        supabase_url="", supabase_key="", reply_address="", drop_url="", drop_key=b"",
     ):
         carried.append((peer_node_id, frame))
         return ok
@@ -272,7 +272,7 @@ async def test_a_dead_node_keeps_its_frame_in_the_queue_until_it_wakes_up(
     # Олег вимкнув вузол: його дорога мовчить, Мартина працює.
     async def _half_dead(
         frame, *, peer_node_id, from_node_id, peer_address="", relay="",
-        supabase_url="", supabase_key="", reply_address="",
+        supabase_url="", supabase_key="", reply_address="", drop_url="", drop_key=b"",
     ):
         if peer_node_id == oleh.node_id:
             return False

@@ -157,6 +157,97 @@ def build_embedding_function(model_name: str, *, device: str = "cpu") -> Any:
     return base
 
 
+def _cache_roots() -> list[Path]:
+    """Куди huggingface_hub справді дивиться — у тому ж порядку."""
+    roots: list[Path] = []
+
+    def add(value: str | None, *tail: str) -> None:
+        # Сам `Path()` кидає на нульовому байті — а зіпсоване середовище не
+        # має права зробити стан памʼяті нечитабельним.
+        if not value:
+            return
+        try:
+            roots.append(Path(value).joinpath(*tail))
+        except (OSError, ValueError):
+            return
+
+    for var in ("SENTENCE_TRANSFORMERS_HOME", "HUGGINGFACE_HUB_CACHE"):
+        add(os.environ.get(var))
+    add(os.environ.get("HF_HOME"), "hub")
+    try:
+        roots.append(Path.home() / ".cache" / "huggingface" / "hub")
+    except (OSError, ValueError, RuntimeError):
+        pass
+    seen: set[str] = set()
+    unique: list[Path] = []
+    for root in roots:
+        key = str(root)
+        if key not in seen:
+            seen.add(key)
+            unique.append(root)
+    return unique
+
+
+def model_state(model_name: str) -> dict[str, Any]:
+    """Чи лежить модель ембедингів на цій машині — без мережі й без завантаження.
+
+    Навіщо окремо від ``build_embedding_function``. У пакунку бети моделі
+    немає навмисно (як і голосових), а `_phantom_entry` переносить HF_HOME
+    у порожній каталог під даними користувача. Тому перший же запис у
+    стратегічну памʼять кидає ``EmbeddingModelMissing`` — і гине в
+    ``except Exception`` десь на шляху виклику. Для людини це виглядає як
+    памʼять, що просто нічого не памʼятає: жодного напису, жодної причини.
+
+    Ця функція — те, що можна показати. Вона НІКОЛИ не кидає й нічого не
+    тягне: стан памʼяті мусить читатись саме тоді, коли памʼять не працює.
+    І це перевірка ДИСКА, а не спроба побудувати функцію — побудова коштує
+    секунди й на голій машині закінчилась би рівно тим винятком, який ми
+    тут і описуємо словами.
+    """
+    # `models--intfloat--multilingual-e5-small` — розкладка кешу hub.
+    flat = "models--" + model_name.replace("/", "--")
+    searched: list[str] = []
+    found_at: str | None = None
+    for root in _cache_roots():
+        searched.append(str(root))
+        try:
+            if (root / flat).is_dir() or (root / model_name).is_dir():
+                found_at = str(root)
+                break
+        # ValueError, а не лише OSError: шлях із нульовим байтом (таке
+        # приїздить зі зіпсованого середовища) валить сам `is_dir`. Зонд,
+        # який падає на дивному шляху, звітує про себе, а не про памʼять.
+        except (OSError, ValueError):
+            continue
+    allowed = os.environ.get("PHANTOM_ALLOW_MODEL_DOWNLOAD") in ("1", "true", "yes")
+    if found_at is not None:
+        return {
+            "model": model_name,
+            "present": True,
+            "path": found_at,
+            "download_allowed": allowed,
+            "reason": None,
+        }
+    return {
+        "model": model_name,
+        "present": False,
+        "path": None,
+        "download_allowed": allowed,
+        "searched": searched,
+        # Рядок для людини, не код помилки: його показує скло.
+        "reason": (
+            f"Модель памʼяті {model_name!r} не встановлена. Довготривала "
+            "памʼять нічого не запамʼятає, доки її немає. "
+            + (
+                "Завантаження дозволено — модель приїде при першому записі."
+                if allowed
+                else "У мережу по неї сам не піду: дозволь явно "
+                "(PHANTOM_ALLOW_MODEL_DOWNLOAD=1) або постав модель поруч."
+            )
+        ),
+    }
+
+
 def read_store_fingerprint(chroma_path: str | Path) -> str | None:
     """The model a Chroma store's vectors were written with, if recorded."""
     path = Path(chroma_path) / FINGERPRINT_FILE

@@ -1351,6 +1351,20 @@ def _register_ws(app: FastAPI) -> None:
 
 
 def _register_health(app: FastAPI) -> None:
+    def _memory_model_state() -> dict:
+        """Ніколи не валить /health: стан памʼяті потрібен саме тоді, коли
+        щось не так, і сам він не має права стати причиною поломки."""
+        try:
+            from memory.embedding_fn import model_state
+
+            return model_state(config.embedding_model)
+        except Exception as exc:  # noqa: BLE001
+            return {
+                "model": config.embedding_model,
+                "present": None,
+                "reason": f"стан памʼяті не прочитано: {type(exc).__name__}",
+            }
+
     @app.get("/health")
     async def _health() -> dict:
         if config.serial_enabled:
@@ -1372,6 +1386,13 @@ def _register_health(app: FastAPI) -> None:
             # dynamically, so it's always the truth.
             "ai_active": config.ai_primary_provider,
             "ai_fallback": config.ai_fallback_provider,
+            # Стан довготривалої памʼяті. У пакунку моделі ембедингів немає
+            # навмисно, і без цього поля єдиним її проявом була тиша: запис
+            # кидав EmbeddingModelMissing, той гинув у broad-except, і людина
+            # бачила памʼять, яка просто нічого не памʼятає. Читається з диска,
+            # нічого не тягне й не кидає — саме тому його видно тоді, коли
+            # памʼять НЕ працює.
+            "memory_model": _memory_model_state(),
         }
 
 

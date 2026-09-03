@@ -136,6 +136,34 @@ export function NearbyPanel({
 
   if (total === 0) {
     // Порожнеча — словом, а не рядками-привидами (гонтлет Р1, удар №1).
+    //
+    // Але «даних немає» має право бути сказаним ЛИШЕ коли джерела
+    // відповіли. Overpass — чуже публічне джерело; коли воно недоступне,
+    // ядро віддає `osm_status: 'unreachable'` (і 200 з порожнім зрізом,
+    // бо власні джерела вузла живі). Доки цей стан не читався, скло
+    // стверджувало факт про світ, маючи на руках мережеву відмову.
+    const osmStatus = data?.osm_status ?? 'ok';
+    if (osmStatus !== 'ok') {
+      const unreachable = osmStatus === 'unreachable';
+      return (
+        <div
+          data-testid="nearby-source-silent"
+          title={
+            unreachable
+              ? data?.osm_detail ?? 'Джерело обʼєктів (Overpass) не відповіло'
+              : 'Джерело обʼєктів вимкнено в налаштуваннях'
+          }
+          className="glass-card flex min-h-[44px] items-center gap-2 rounded-full px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[color:var(--ink-secondary)]"
+        >
+          <AlertTriangle size={12} className="text-amber-500" />
+          <span>
+            {unreachable
+              ? 'Джерело обʼєктів не відповіло'
+              : 'Джерело обʼєктів вимкнено'}
+          </span>
+        </div>
+      );
+    }
     return (
       <div className="glass-card flex min-h-[44px] items-center gap-2 rounded-full px-3 py-2 text-[10px] font-bold uppercase tracking-wider text-[color:var(--ink-secondary)]">
         <MapPin size={12} className="text-[color:var(--ink-muted)]" />

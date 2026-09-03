@@ -58,6 +58,7 @@ export function OmniMap({
   const [timelineOpen, setTimelineOpen] = useState(false);
   // Phase 24-G — Analysis panel state.
   const [analysisOpen, setAnalysisOpen] = useState(false);
+  const measurePath = useMapStore((s) => s.measurePath);
   // Phase 24-G — Search results state.
   const [searchResultsOpen, setSearchResultsOpen] = useState(false);
   const [storyOpen, setStoryOpen] = useState(false);
@@ -66,6 +67,9 @@ export function OmniMap({
     remembered: SearchResult[];
     osm: SearchResult[];
     pois: SearchResult[];
+    /** Стан геокодера: порожньо при 'unreachable' — не відповідь. */
+    sourceStatus?: 'ok' | 'unreachable' | 'disabled';
+    sourceDetail?: string | null;
   }>({ remembered: [], osm: [], pois: [] });
 
   // Phase 24-PRE — HUD action handlers.
@@ -118,7 +122,7 @@ export function OmniMap({
     // TacticalMap mounts. We poll once via rAF and bail out if the
     // glob isn't present (production / SSR / tests).
     const probe = () => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const phantom = (window as any).__phantom;
       const map: maplibregl.Map | undefined = phantom?.map;
       if (!map) return;
@@ -186,13 +190,22 @@ export function OmniMap({
       />
       <LayerLibraryPanel open={libraryOpen} onClose={() => setLibraryOpen(false)} />
       <OfflinePanel open={offlineOpen} onClose={() => setOfflineOpen(false)} />
-      <AnalysisPanel open={analysisOpen} onClose={() => setAnalysisOpen(false)} />
+      {/* Шлях приходить зі стору. Раніше сюди не передавали НІЧОГО, тож
+          обидва інструменти панелі — «Лінійка» і «Рельєф» — не могли
+          спрацювати ніколи: вони чекали на лінію, якої не існувало. */}
+      <AnalysisPanel
+        open={analysisOpen}
+        onClose={() => setAnalysisOpen(false)}
+        selectedPath={measurePath}
+      />
       <StoryPanel open={storyOpen} onClose={() => setStoryOpen(false)} viewportCenter={(center ?? [30.52, 50.45]) as any} />
       <GhostPanel open={ghostOpen} onClose={() => setGhostOpen(false)} systemState="SHADOW" />
       <SearchResultsPanel
         open={searchResultsOpen}
         onClose={() => setSearchResultsOpen(false)}
         results={searchResults}
+        sourceStatus={searchResults.sourceStatus ?? 'ok'}
+        sourceDetail={searchResults.sourceDetail ?? null}
         onSelect={(res) => {
           useMapStore.getState().setCenter([res.lon, res.lat]);
           useMapStore.getState().setZoom(17);

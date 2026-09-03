@@ -256,8 +256,15 @@ export const mapApi = {
     return request<NearbyResponse>('GET', `/map/nearby?${params}`);
   },
   // Phase 24-C — forward-geocode free text → candidate coordinates.
+  // Порожній список і «не змогли спитати» — різні відповіді. Тут це
+  // дорожче, ніж у «поруч»: людина ввела адресу й починає діяти на
+  // підставі «нічого не знайдено» — перевіряє написання, скорочує запит.
   geocode: (query: string, limit = 5) =>
-    request<{ results: GeocodeCandidate[] }>('POST', '/map/geocode', { query, limit }),
+    request<{ results: GeocodeCandidate[]; status?: SourceStatus; detail?: string | null }>(
+      'POST',
+      '/map/geocode',
+      { query, limit },
+    ),
   // Phase 24-C — plan a route through ordered [lat, lon] waypoints.
   planRoute: (waypoints: [number, number][], profile = 'car') =>
     request<RouteResult>('POST', '/map/route', { waypoints, profile }),
@@ -515,10 +522,32 @@ export interface NearbyPoiItem {
   distance_m: number;
 }
 
+/**
+ * Стан джерела, а не лише його вміст.
+ *
+ * До 03.09.2026 маршрут віддавав 200 і порожні зрізи навіть тоді, коли
+ * Overpass не відповів (`Overpass query failed: All connection attempts
+ * failed` у лозі ядра). Скло не мало як відрізнити «поруч нічого немає»
+ * від «не змогли спитати» — і чесно малювало «Околиці · даних немає»,
+ * тобто стверджувало факт про світ, маючи на руках мережеву відмову.
+ *
+ *   'ok'          — джерело відповіло; порожньо означає РІВНО «нічого немає»
+ *   'unreachable' — джерело не відповіло; порожньо не означає нічого
+ *   'disabled'    — вимкнено оператором; лікується перемикачем, не мережею
+ */
+export type SourceStatus = 'ok' | 'unreachable' | 'disabled';
+
 export interface NearbyResponse {
   remembered: NearbyRememberedItem[];
   osm: NearbyOsmItem[];
   pois: NearbyPoiItem[];
+  /** Власна БД вузла: третього стану поки не має — при падінні маршрут дає 500. */
+  remembered_status?: SourceStatus;
+  pois_status?: SourceStatus;
+  /** Overpass — ЧУЖЕ публічне джерело, тобто в офлайні тут завжди 'unreachable'. */
+  osm_status?: SourceStatus;
+  /** Причина рядком (тип винятку + текст) — у підказку, не в напис. */
+  osm_detail?: string | null;
 }
 
 /* ─── Routing / geocoding ───────────────────────────────────────────────── */

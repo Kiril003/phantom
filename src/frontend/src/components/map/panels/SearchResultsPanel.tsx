@@ -26,9 +26,18 @@ export interface SearchResultsPanelProps {
     pois: SearchResult[];
   };
   onSelect: (res: SearchResult) => void;
+  /**
+   * Стан ЗОВНІШНЬОГО джерела пошуку (геокодер). 'unreachable' означає, що
+   * питання не дійшло: порожній список тоді не відповідь, і казати
+   * «нічого не знайдено» — брехня, на підставі якої людина починає діяти
+   * (перевіряє написання, скорочує запит). Виміряно 03.09.2026.
+   */
+  sourceStatus?: 'ok' | 'unreachable' | 'disabled';
+  /** Причина рядком — у підказку, не в напис. */
+  sourceDetail?: string | null;
 }
 
-export function SearchResultsPanel({ open, onClose, results, onSelect }: SearchResultsPanelProps) {
+export function SearchResultsPanel({ open, onClose, results, onSelect, sourceStatus = 'ok', sourceDetail = null }: SearchResultsPanelProps) {
   if (!open) return null;
 
   const total = results.remembered.length + results.osm.length + results.pois.length;
@@ -50,7 +59,24 @@ export function SearchResultsPanel({ open, onClose, results, onSelect }: SearchR
       </div>
 
       <div className="flex-1 overflow-y-auto custom-scrollbar">
-        {total === 0 ? (
+        {total === 0 && sourceStatus !== 'ok' ? (
+          <div
+            data-testid="search-source-silent"
+            title={sourceDetail ?? undefined}
+            className="py-20 text-center space-y-2"
+          >
+            <Search size={32} className="mx-auto opacity-30" />
+            <div className="text-[10px] uppercase font-bold tracking-tighter text-[color:var(--ink-secondary)]">
+              {sourceStatus === 'unreachable'
+                ? 'Не змогли спитати — джерело пошуку не відповіло'
+                : 'Джерело пошуку вимкнено в налаштуваннях'}
+            </div>
+            <div className="text-[9px] normal-case tracking-normal text-[color:var(--ink-muted)] px-6">
+              Це не «нічого не знайдено»: запит не дійшов. Напис не про твій
+              запит, а про дорогу до джерела.
+            </div>
+          </div>
+        ) : total === 0 ? (
           <div className="py-20 text-center space-y-2 opacity-30">
             <Search size={32} className="mx-auto" />
             <div className="text-[10px] uppercase font-bold tracking-tighter">Нічого не знайдено</div>

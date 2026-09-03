@@ -47,8 +47,12 @@ export function SearchBar({ value, onChange, onResults, className = '' }: Search
     const query = value.trim();
     if (!query || !onResults) return;
     try {
-      const { results } = await mapApi.geocode(query, 8);
+      const { results, status, detail } = await mapApi.geocode(query, 8);
       onResults({
+        // Стан джерела їде разом із результатами: порожньо при
+        // 'unreachable' — це не відповідь, і панель мусить сказати інше.
+        sourceStatus: status ?? 'ok',
+        sourceDetail: detail ?? null,
         remembered: [],
         pois: [],
         osm: results.map((r, i) => ({

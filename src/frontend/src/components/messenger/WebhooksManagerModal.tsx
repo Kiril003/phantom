@@ -6,29 +6,33 @@ import {
   Copy,
   Check,
   X,
-  Play,
   Shield,
 } from 'lucide-react';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { soundFx } from '../../utils/messengerSound';
 import { useWorkOsStore, WebhookEndpoint } from '../../stores/workOsStore';
-import { useMessengerStore } from '../../stores/messengerStore';
+
+// ЩО БУЛО: кнопка «Тест» і handleTestTrigger, які вкидали в чат готову подію —
+// відправник «<назва> Bot» із фотографією незнайомця з чужого фотохостингу,
+// репозиторій phantom-companion, коміт 054253e і напис «Build & Test Pipeline
+// Succeeded». Пропс onSendTestWebhook при цьому ніхто не передавав.
+// ЧОМУ ПРИБРАНО ЦІЛКОМ: жодного такого запуску не було — ні бота, ні коміту,
+// ні збірки. Це не повідомлення про подію, а вигаданий запис у справжній
+// стрічці, який неможливо відрізнити від справжнього. Прибрано разом із
+// сутністю: перевірити вебхук можна лише справжнім payload від вузла.
 
 interface WebhooksManagerModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSendTestWebhook?: (wh: WebhookEndpoint) => void;
 }
 
 export const WebhooksManagerModal: React.FC<WebhooksManagerModalProps> = ({
   isOpen,
   onClose,
-  onSendTestWebhook,
 }) => {
   useEscapeClose(isOpen, onClose);
 
   const [copiedId, setCopiedId] = useState<string | null>(null);
-  const [testingId, setTestingId] = useState<string | null>(null);
   const [isCreating, setIsCreating] = useState(false);
   const [newName, setNewName] = useState('');
   const [newSource, setNewSource] = useState<WebhookEndpoint['source']>('github');
@@ -43,36 +47,6 @@ export const WebhooksManagerModal: React.FC<WebhooksManagerModalProps> = ({
     navigator.clipboard.writeText(endpoint);
     setCopiedId(wh.id);
     setTimeout(() => setCopiedId(null), 2000);
-  };
-
-  const handleTestTrigger = (wh: WebhookEndpoint) => {
-    soundFx.playSend();
-    setTestingId(wh.id);
-
-    const messenger = useMessengerStore.getState();
-    messenger.addCustomMessage({
-      id: `msg_wh_${Date.now()}`,
-      senderId: 'bot_ci',
-      senderName: `${wh.name} Bot`,
-      senderAvatar: 'https://images.unsplash.com/photo-1618401471353-b98afee0b2eb?w=200&auto=format&fit=crop&q=80',
-      timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
-      type: 'webhook:event',
-      isSelf: false,
-      webhookEventData: {
-        source: wh.source === 'docker' ? 'ci' : wh.source,
-        eventType: 'push',
-        repository: 'phantom-companion',
-        sender: 'github-actions[bot]',
-        title: `[${wh.name}] Build & Test Pipeline Succeeded`,
-        description: 'Atomic sprint test passed on aarch64 & x86_64 target nodes.',
-        status: 'success',
-        commitHash: '054253e',
-        timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
-      },
-    });
-
-    onSendTestWebhook?.(wh);
-    setTimeout(() => setTestingId(null), 1200);
   };
 
   const handleCreate = (e: React.FormEvent) => {
@@ -174,6 +148,19 @@ export const WebhooksManagerModal: React.FC<WebhooksManagerModalProps> = ({
             </form>
           )}
 
+          {webhooks.length === 0 && !isCreating && (
+            <div className="p-8 text-center bg-[#FAF8F5] border border-[#E8E1D3] rounded-xl">
+              <Webhook className="w-8 h-8 text-[#C3BCAE] mx-auto mb-2" />
+              <p className="text-xs font-bold text-[#21261F]">Вебхуків ще немає</p>
+              <p className="text-[11px] text-[#6E7568] mt-1 max-w-sm mx-auto leading-relaxed">
+                Створіть перший — і тут зʼявиться його адреса й токен. Список
+                зберігається локально на цьому пристрої, вузол про вебхуки не
+                опитується, тож порожньо тут означає саме «нічого не створено»,
+                а не «не вдалося спитати вузол».
+              </p>
+            </div>
+          )}
+
           <div className="space-y-3">
             {webhooks.map((wh) => (
               <div key={wh.id} className="p-4 bg-white border border-[#E8E1D3] rounded-xl flex items-center justify-between">
@@ -200,14 +187,6 @@ export const WebhooksManagerModal: React.FC<WebhooksManagerModalProps> = ({
                 </div>
 
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={() => handleTestTrigger(wh)}
-                    disabled={testingId === wh.id}
-                    className="px-3 py-1.5 bg-[#FAF8F5] border border-[#E8E1D3] text-[#21261F] text-xs font-bold rounded-lg hover:bg-[#F1EBDD] flex items-center gap-1.5 transition-colors"
-                  >
-                    <Play className="w-3 h-3 text-[#D96C35]" />
-                    {testingId === wh.id ? 'Надсилання...' : 'Тест'}
-                  </button>
                   <button
                     onClick={() => toggleWebhook(wh.id)}
                     className={`px-2.5 py-1 rounded-lg text-xs font-bold ${

@@ -1,6 +1,5 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { Radio, Mic, MicOff, PhoneOff, Maximize2 } from 'lucide-react';
-import { HuddleParticipant } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
 import { TeamHuddleStudio } from './TeamHuddleStudio';
 
@@ -21,39 +20,15 @@ export const TeamHuddleBar: React.FC<TeamHuddleBarProps> = ({
   const [isMuted, setIsMuted] = useState(false);
   const [isStudioOpen, setIsStudioOpen] = useState(false);
 
-  const [participants, setParticipants] = useState<HuddleParticipant[]>([
-    {
-      userId: 'u_sanya',
-      name: 'Саня',
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80',
-      isMuted: false,
-      isSpeaking: true,
-      isScreenSharing: false,
-      joinedAt: '5 хв тому',
-    },
-    {
-      userId: 'u_maryna',
-      name: 'Марина',
-      avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&auto=format&fit=crop&q=80',
-      isMuted: true,
-      isSpeaking: false,
-      isScreenSharing: false,
-      joinedAt: '3 хв тому',
-    },
-  ]);
-
-  useEffect(() => {
-    if (!inHuddle) return;
-    const interval = setInterval(() => {
-      setParticipants((prev) =>
-        prev.map((p) => ({
-          ...p,
-          isSpeaking: p.isMuted ? false : Math.random() > 0.4,
-        }))
-      );
-    }, 1500);
-    return () => clearInterval(interval);
-  }, [inHuddle]);
+  // ЩО БУЛО: список `participants` із двома вписаними в код людьми — «Саня»
+  // (нібито говорить, приєднався «5 хв тому») і «Марина» (нібито з вимкненим
+  // мікрофоном, «3 хв тому»), обидві з фотографіями з images.unsplash.com.
+  // Поверх них ще й крутився setInterval, який кожні 1500 мс перекидав
+  // `isSpeaking` через `Math.random() > 0.4` — тобто вигадана людина ще й
+  // вигадано говорила, і чіп у шапці показував «Huddle (2)» у порожній кімнаті.
+  // ЧОМУ ПРИБРАНО: вузли не переказують одне одному стану гуртків узагалі,
+  // тож ані другого учасника, ані його мовлення взятися нізвідки. Лічильник
+  // теж прибрано: рахувати тут можна тільки себе, і про це чесніше словом.
 
   const toggleJoin = () => {
     soundFx.playTap();
@@ -87,7 +62,7 @@ export const TeamHuddleBar: React.FC<TeamHuddleBarProps> = ({
             title="Розгорнути студію Huddle"
           >
             <span className="w-2 h-2 rounded-full bg-emerald-500 animate-ping" />
-            <span>Huddle ({participants.length})</span>
+            <span>{inHuddle ? 'Huddle · ви' : 'Huddle'}</span>
             <Maximize2 className="w-3 h-3 text-emerald-700" />
           </button>
 

@@ -22,6 +22,19 @@ interface ChatDigestModalProps {
 
 const MAX_MESSAGES_IN_PROMPT = 60;
 
+/** Скільки пунктів справді стоїть під заголовком секції. */
+function countBullets(markdown: string, heading: string): number {
+  const lines = markdown.split('\n');
+  const start = lines.findIndex((l) => l.includes(heading));
+  if (start < 0) return 0;
+  let n = 0;
+  for (const line of lines.slice(start + 1)) {
+    if (line.startsWith('#')) break;
+    if (line.trim().startsWith('- ')) n += 1;
+  }
+  return n;
+}
+
 export const ChatDigestModal: React.FC<ChatDigestModalProps> = ({
   isOpen,
   onClose,
@@ -30,12 +43,17 @@ export const ChatDigestModal: React.FC<ChatDigestModalProps> = ({
   const [copied, setCopied] = useState(false);
   const [published, setPublished] = useState(false);
   const [digest, setDigest] = useState<string | null>(null);
+  const [failure, setFailure] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
   const textMessages = (chat?.messages || []).filter((m) => m && m.text && m.text.trim());
 
   const buildDigest = async () => {
-    if (textMessages.length === 0) return;
+    setFailure(null);
+    if (textMessages.length === 0) {
+      setFailure('У цій бесіді ще немає тексту, з якого складати конспект.');
+      return;
+    }
     setIsLoading(true);
     try {
       const transcript = textMessages
@@ -58,35 +76,25 @@ export const ChatDigestModal: React.FC<ChatDigestModalProps> = ({
       });
       const reply = (res?.message?.content || '').trim();
       if (!reply) {
-        setDigest(
-          `### 🎯 Ухвалені рішення\n` +
-            `- Затверджено структуру Work OS та спліт-екран Canvas для робочих гілок.\n` +
-            `- Реалізовано P2P Mesh Huddles без набридливих дзвінків.\n` +
-            `- Додано підтримку Webhook-хабів для GitHub/GitLab.\n\n` +
-            `### 📋 Призначені завдання та дії\n` +
-            `- Кирило: фіналізувати синхронізацію Workspace Drive та роздачу великих файлів.\n` +
-            `- Саня: провести тестування відеозв'язку на iOS WebKit Safari.\n` +
-            `- Марина: підготувати темну та світлу тему для мікро-віджетів.\n\n` +
-            `### ❓ Відкриті питання\n` +
-            `- Чи потрібна підтримка Mermaid діаграм всередині Canvas-блоків (вже додано).\n` +
-            `- Налаштування лімітів локального семантичного індексу.`
-        );
+        // Тут стояв ГОТОВИЙ конспект: три «ухвалені рішення» і три доручення
+        // на імена Кирило / Саня / Марина. Він з'являвся саме тоді, коли
+        // модель не відповіла, — тобто рівно тоді, коли знати не було чого.
+        // Далі його можна було скопіювати як markdown із назвою реального
+        // простору й сьогоднішньою датою або ОПУБЛІКУВАТИ в сам чат
+        // (`handleExportToCanvas` вмикається по `digest`). Вигаданий протокол
+        // наради, підписаний реальними людьми, — не запасний варіант.
+        setFailure('Модель відповіла порожнім — конспекту немає.');
         return;
       }
       setDigest(reply);
-    } catch {
-      setDigest(
-        `### 🎯 Ухвалені рішення\n` +
-          `- Затверджено структуру Work OS та спліт-екран Canvas для робочих гілок.\n` +
-          `- Реалізовано P2P Mesh Huddles без набридливих дзвінків.\n` +
-          `- Додано підтримку Webhook-хабів для GitHub/GitLab.\n\n` +
-          `### 📋 Призначені завдання та дії\n` +
-          `- Кирило: фіналізувати синхронізацію Workspace Drive та роздачу великих файлів.\n` +
-          `- Саня: провести тестування відеозв'язку на iOS WebKit Safari.\n` +
-          `- Марина: підготувати темну та світлу тему для мікро-віджетів.\n\n` +
-          `### ❓ Відкриті питання\n` +
-          `- Чи потрібна підтримка Mermaid діаграм всередині Canvas-блоків.\n` +
-          `- Налаштування лімітів локального семантичного індексу.`
+      setFailure(null);
+    } catch (err) {
+      // Причину несемо в кадр. Тиша тут коштувала б того самого, що й вигадка:
+      // людина не відрізнила б «нема про що» від «не дістався до ядра».
+      setFailure(
+        err instanceof Error && err.message
+          ? `Не вдалося скласти конспект: ${err.message}`
+          : 'Не вдалося скласти конспект — ядро не відповіло.',
       );
     } finally {
       setIsLoading(false);
@@ -96,7 +104,14 @@ export const ChatDigestModal: React.FC<ChatDigestModalProps> = ({
   useEffect(() => {
     if (!isOpen) return;
     setDigest(null);
+    setFailure(null);
     void buildDigest();
+    // `buildDigest` навмисно не в залежностях: вона пересоздається щорендеру
+    // (тримає `textMessages`, а той — новий масив кожного разу), тож із нею в
+    // списку конспект перескладався б на кожен вхідний лист і на кожен кадр.
+    // Конспект будується один раз на відкриття цього простору; перескласти
+    // вручну є чим — кнопка «Перегенерувати» в шапці.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isOpen, chat?.id]);
 
   useEscapeClose(isOpen, onClose);
@@ -137,8 +152,10 @@ export const ChatDigestModal: React.FC<ChatDigestModalProps> = ({
         conversationId: chat.id,
         title: `Smart Digest • ${chatTitle}`,
         rawMarkdown: fullDigestMarkdown,
-        decisionsCount: 3,
-        openQuestionsCount: 2,
+        // Було намертво 3 і 2 — незалежно від того, що насправді в тексті.
+        // Картка в чаті обіцяла «3 рішення» навіть там, де їх нуль.
+        decisionsCount: countBullets(digest ?? '', '🎯 Ухвалені рішення'),
+        openQuestionsCount: countBullets(digest ?? '', '❓ Відкриті питання'),
         updatedBy: store.currentUser.name,
         blocks: [
           { id: 'b1', type: 'decision', content: '🎯 Ухвалені рішення: Синтез рішень з бесіди', updatedAt: 'щойно' },
@@ -204,6 +221,12 @@ export const ChatDigestModal: React.FC<ChatDigestModalProps> = ({
               </p>
               <p className="text-[11px] text-[#6E7568]">Аналізую історію переписки без витоку в хмару</p>
             </div>
+          ) : failure ? (
+            <div className="py-14 text-center space-y-2" role="status">
+              <Sparkles className="w-8 h-8 text-[#B85425] opacity-40 mx-auto" />
+              <p className="text-xs font-bold text-[#21261F]">Конспекту немає</p>
+              <p className="px-6 text-[11px] leading-relaxed text-[#6E7568]">{failure}</p>
+            </div>
           ) : (
             <div className="p-4 rounded-2xl bg-[#FAF7F0] border border-[#E5DEC9] text-xs text-[#21261F] whitespace-pre-wrap leading-relaxed font-sans">
               {digest}
@@ -215,7 +238,8 @@ export const ChatDigestModal: React.FC<ChatDigestModalProps> = ({
         <div className="p-4 bg-[#F7F4EC] border-t border-[#E5DEC9] flex items-center justify-between gap-2">
           <button
             onClick={handleCopy}
-            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white hover:bg-[#FDF5ED] border border-[#E5DEC9] text-xs font-semibold text-[#21261F] transition-all"
+            disabled={!digest}
+            className="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-white hover:bg-[#FDF5ED] border border-[#E5DEC9] text-xs font-semibold text-[#21261F] transition-all disabled:opacity-40 disabled:cursor-not-allowed"
           >
             {copied ? <Check className="w-3.5 h-3.5 text-emerald-600" /> : <Copy className="w-3.5 h-3.5 text-[#6E7568]" />}
             <span>{copied ? 'Скопійовано!' : 'Копіювати MD'}</span>

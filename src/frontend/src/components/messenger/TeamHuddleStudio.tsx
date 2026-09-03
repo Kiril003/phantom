@@ -12,18 +12,13 @@ import {
   X,
 } from 'lucide-react';
 import { soundFx } from '../../utils/messengerSound';
+import { Avatar } from './Avatar';
+import { useMessengerStore } from '../../stores/messengerStore';
 
-interface Participant {
-  id: string;
-  name: string;
-  avatar: string;
-  isMuted: boolean;
-  isSpeaking: boolean;
-  isScreenSharing: boolean;
-  handRaised: boolean;
-  role: 'host' | 'speaker' | 'listener';
-  volume: number;
-}
+// ЩО БУЛО: тип `Participant` описував список із трьох учасників гуртка.
+// ЧОМУ ПРИБРАНО: двоє з тих трьох були вписані в код (див. коментар біля
+// плитки нижче), а третій — це ви. На одного локального учасника список
+// не потрібен: його стан тримають звичайні прапорці нижче.
 
 interface TeamHuddleStudioProps {
   isOpen: boolean;
@@ -36,6 +31,8 @@ export const TeamHuddleStudio: React.FC<TeamHuddleStudioProps> = ({
   onClose,
   chatTitle,
 }) => {
+  const currentUser = useMessengerStore((st) => st.currentUser);
+
   const [isMuted, setIsMuted] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
   const [isHandRaised, setIsHandRaised] = useState(false);
@@ -50,41 +47,10 @@ export const TeamHuddleStudio: React.FC<TeamHuddleStudioProps> = ({
   const screenStreamRef = useRef<MediaStream | null>(null);
   const animFrameRef = useRef<number | null>(null);
 
-  const [participants, setParticipants] = useState<Participant[]>([
-    {
-      id: 'p_kiril',
-      name: 'Кирило (Ви)',
-      avatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
-      isMuted: false,
-      isSpeaking: false,
-      isScreenSharing: false,
-      handRaised: false,
-      role: 'host',
-      volume: 0,
-    },
-    {
-      id: 'p_sanya',
-      name: 'Саня (Lead Dev)',
-      avatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80',
-      isMuted: false,
-      isSpeaking: true,
-      isScreenSharing: false,
-      handRaised: false,
-      role: 'speaker',
-      volume: 68,
-    },
-    {
-      id: 'p_maryna',
-      name: 'Марина (Designer)',
-      avatar: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=200&auto=format&fit=crop&q=80',
-      isMuted: true,
-      isSpeaking: false,
-      isScreenSharing: false,
-      handRaised: true,
-      role: 'listener',
-      volume: 0,
-    },
-  ]);
+  // Єдиний учасник, про якого тут є правда, — ви. Гучність і «говорить»
+  // рахуються з живого мікрофонного потоку нижче, а не задаються числом.
+  const [selfVolume, setSelfVolume] = useState(0);
+  const [selfSpeaking, setSelfSpeaking] = useState(false);
 
   // Timer
   useEffect(() => {
@@ -122,18 +88,16 @@ export const TeamHuddleStudio: React.FC<TeamHuddleStudioProps> = ({
           const avg = sum / dataArray.length;
           const vol = Math.min(100, Math.round((avg / 128) * 100));
 
-          setParticipants((prev) =>
-            prev.map((p) =>
-              p.id === 'p_kiril'
-                ? { ...p, isSpeaking: !isMuted && vol > 15, volume: isMuted ? 0 : vol }
-                : p
-            )
-          );
+          setSelfSpeaking(!isMuted && vol > 15);
+          setSelfVolume(isMuted ? 0 : vol);
 
           animFrameRef.current = requestAnimationFrame(updateVol);
         };
         updateVol();
       } catch (err) {
+        // Мікрофон не дали або його немає. Нічого не підставляємо: смуга
+        // гучності лишається на нулі, «говорить» — false. Саме тут раніше
+        // було найлегше намалювати живу кімнату там, де немає навіть звуку.
         console.warn('Real microphone capture not permitted or available:', err);
       }
     }
@@ -199,9 +163,6 @@ export const TeamHuddleStudio: React.FC<TeamHuddleStudioProps> = ({
   const toggleHand = () => {
     soundFx.playTap();
     setIsHandRaised(!isHandRaised);
-    setParticipants((prev) =>
-      prev.map((p) => (p.id === 'p_kiril' ? { ...p, handRaised: !isHandRaised } : p))
-    );
   };
 
   const sendReaction = (emoji: string) => {
@@ -302,70 +263,87 @@ export const TeamHuddleStudio: React.FC<TeamHuddleStudioProps> = ({
             </div>
           )}
 
-          {/* Participant Tiles Grid */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4 flex-1">
-            {participants.map((p) => (
-              <div
-                key={p.id}
-                className={`relative p-5 rounded-2xl border transition-all flex flex-col items-center justify-center gap-3 ${
-                  p.isSpeaking
-                    ? 'bg-[#FDF9F3] border-[#D96C35] ring-2 ring-[#D96C35]/30 shadow-md'
-                    : 'bg-[#FDFCF9] border-[#E5DEC9] shadow-xs'
-                }`}
-              >
-                {/* Hand raise badge */}
-                {p.handRaised && (
-                  <div className="absolute top-3 left-3 px-2 py-1 bg-amber-100 border border-amber-300 text-amber-800 rounded-lg text-xs font-bold flex items-center gap-1 animate-bounce">
-                    <Hand className="w-3.5 h-3.5" />
-                    <span>Підняв руку</span>
-                  </div>
+          {/* ЩО БУЛО: сітка з трьох плиток. Дві з них — «Саня (Lead Dev)» і
+              «Марина (Designer)» — були вписані просто в код, разом із
+              фотографіями з images.unsplash.com, власними isMuted/isSpeaking/
+              handRaised і навіть гучністю 68. Тобто Саня «говорив», а Марина
+              «підняла руку» в кімнаті, до якої ніхто ніколи не приєднувався.
+              Третя плитка звалася «Кирило (Ви)» — ім'я власника, вписане в код.
+              ЧОМУ ПРИБРАНО: вузли не обмінюються сигналами про гуртки взагалі,
+              тож будь-який другий учасник тут може бути тільки вигаданим.
+              Лишився один справжній — ви: гучність береться з живого потоку
+              мікрофона, а ім'я та аватарка — з вашого профілю, не з рядка. */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-4">
+            <div
+              className={`relative p-5 rounded-2xl border transition-all flex flex-col items-center justify-center gap-3 ${
+                selfSpeaking
+                  ? 'bg-[#FDF9F3] border-[#D96C35] ring-2 ring-[#D96C35]/30 shadow-md'
+                  : 'bg-[#FDFCF9] border-[#E5DEC9] shadow-xs'
+              }`}
+            >
+              {/* Hand raise badge */}
+              {isHandRaised && (
+                <div className="absolute top-3 left-3 px-2 py-1 bg-amber-100 border border-amber-300 text-amber-800 rounded-lg text-xs font-bold flex items-center gap-1 animate-bounce">
+                  <Hand className="w-3.5 h-3.5" />
+                  <span>Підняв руку</span>
+                </div>
+              )}
+
+              {/* Mute status */}
+              <div className="absolute top-3 right-3 flex items-center gap-1.5">
+                {isMuted ? (
+                  <span className="p-1 rounded-lg bg-red-100 text-red-600" title="Вимкнено мікрофон">
+                    <MicOff className="w-3.5 h-3.5" />
+                  </span>
+                ) : (
+                  <span className="p-1 rounded-lg bg-emerald-100 text-emerald-700" title="Мікрофон активний">
+                    <Mic className="w-3.5 h-3.5" />
+                  </span>
                 )}
+              </div>
 
-                {/* Role / Mute status */}
-                <div className="absolute top-3 right-3 flex items-center gap-1.5">
-                  {p.isMuted ? (
-                    <span className="p-1 rounded-lg bg-red-100 text-red-600" title="Вимкнено мікрофон">
-                      <MicOff className="w-3.5 h-3.5" />
-                    </span>
-                  ) : (
-                    <span className="p-1 rounded-lg bg-emerald-100 text-emerald-700" title="Мікрофон активний">
-                      <Mic className="w-3.5 h-3.5" />
-                    </span>
-                  )}
-                </div>
-
-                {/* Avatar with Live Volume Ring */}
-                <div className="relative">
-                  <img
-                    src={p.avatar}
-                    alt={p.name}
-                    className="w-20 h-20 rounded-full object-cover border-2 border-white shadow-md"
+              {/* Avatar with Live Volume Ring */}
+              <div className="relative">
+                <Avatar
+                  src={currentUser.avatar}
+                  name={currentUser.name}
+                  className="w-20 h-20 text-xl border-2 border-white shadow-md"
+                  radius="rounded-full"
+                />
+                {selfSpeaking && (
+                  <div
+                    className="absolute inset-0 rounded-full border-4 border-[#D96C35] animate-ping opacity-60 pointer-events-none"
+                    style={{ animationDuration: '1.2s' }}
                   />
-                  {p.isSpeaking && (
-                    <div
-                      className="absolute inset-0 rounded-full border-4 border-[#D96C35] animate-ping opacity-60 pointer-events-none"
-                      style={{ animationDuration: '1.2s' }}
-                    />
-                  )}
-                </div>
+                )}
+              </div>
 
-                {/* Name & Volume Indicator */}
-                <div className="text-center w-full px-2">
-                  <h4 className="text-sm font-bold text-[#21261F] truncate">{p.name}</h4>
-                  <p className="text-[11px] text-[#6E7568]">
-                    {p.role === 'host' ? '👑 Організатор' : p.role === 'speaker' ? '🎙️ Спікер' : 'Слухач'}
-                  </p>
+              {/* Name & Volume Indicator */}
+              <div className="text-center w-full px-2">
+                <h4 className="text-sm font-bold text-[#21261F] truncate">{currentUser.name}</h4>
+                <p className="text-[11px] text-[#6E7568]">Ви · цей пристрій</p>
 
-                  {/* Dynamic waveform bar */}
-                  <div className="w-full bg-[#E5DEC9] h-1.5 rounded-full mt-2 overflow-hidden">
-                    <div
-                      className="h-full bg-[#D96C35] transition-all duration-100"
-                      style={{ width: `${p.volume}%` }}
-                    />
-                  </div>
+                {/* Dynamic waveform bar */}
+                <div className="w-full bg-[#E5DEC9] h-1.5 rounded-full mt-2 overflow-hidden">
+                  <div
+                    className="h-full bg-[#D96C35] transition-all duration-100"
+                    style={{ width: `${selfVolume}%` }}
+                  />
                 </div>
               </div>
-            ))}
+            </div>
+          </div>
+
+          {/* Порожньо тут не через тишу співрозмовників, а через відсутність
+              каналу — і сказати треба саме це. */}
+          <div className="p-4 bg-white border border-[#E5DEC9] rounded-2xl text-center space-y-1">
+            <p className="text-sm font-bold text-[#21261F]">Крім вас, у гуртку нікого немає</p>
+            <p className="text-[11px] text-[#6E7568] leading-relaxed">
+              Мікрофон і демонстрація екрана працюють на цьому пристрої. Інші
+              учасники не з'являться не тому, що мовчать: вузли поки не
+              переказують одне одному, що гурток відкрито, тож приєднатися
+              сюди нема як.
+            </p>
           </div>
 
           {/* Floating Emoji Reactions Overlay */}

@@ -50,7 +50,13 @@ export const SOVEREIGN_OPERATOR_USER: User = {
   role: 'ROOT',
   rfid_uid_hash: null,
   pin_hash: null,
-  avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
+  // Тут стояло посилання на unsplash.com — тобто продукт, який продається
+  // як «без чужих серверів», ходив по аватарку на чужий сервер, щойно
+  // намалює цього користувача. `null` тут не збіднює екран: аватарка вже
+  // має запасний вигляд (літера в кружечку), і саме він і малювався б,
+  // якби мережі не було. Третій за 29.08 слід чужого сервера в дереві —
+  // після телеметрії Chroma і чотирьох демо-профілів на екрані входу.
+  avatar_url: null,
   created_at: '2026-01-01T00:00:00Z',
   last_seen_at: '2026-08-28T16:00:00Z',
   preferences: {
@@ -174,7 +180,30 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
       }
     }
     if (!token) {
-      if (typeof window !== 'undefined' && (window.navigator.userAgent.includes('PhantomCompanion') || !window.location.host.includes(':8000'))) {
+      // Тут стояла ще й друга умова — перевірка, що хост НЕ той, на якому
+      // сидить бекенд у розробці. (Дослівно не цитую: сторож нижче шукає
+      // цей взірець по файлу, і цитата в коментарі валила б його на
+      // порожньому місці.) Це був замок, що відмикався від адреси: у
+      // запакованому застосунку
+      // фронт віддається asset-протоколом Tauri, хост НЕ містить `:8000`,
+      // отже умова істинна в релізному AppImage: вікно відкрилось — і
+      // оболонка сама себе впустила як `sovereign_root` / роль ROOT, на рік,
+      // без ПІНу. Гейта на розробку тут не було, хоча рядком вище
+      // (`import.meta.env.DEV`) автор явно вмів це робити.
+      //
+      // Саме через це в пакунку не з'являвся екран входу — я вранці списав
+      // це на dev-автовхід, і для стенда це правда, а для AppImage ні: там
+      // vite немає взагалі, а оболонка все одно малювалась.
+      //
+      // Межа знахідки, щоб не роздувати: `'sovereign_token'` бекенду
+      // невідомий — `grep` по всьому Python дає нуль. Отже це НЕ підвищення
+      // прав на сервері: будь-який запит із цим токеном отримає 401. Це
+      // обхід замка в інтерфейсі — але замок і є те, що продукт обіцяє.
+      //
+      // Гілку `PhantomCompanion` лишаю: телефон вантажить цей самий фронт у
+      // WebView, і зняти її наосліп означало б зламати чужий продукт. Вона
+      // передана власнику окремим рішенням.
+      if (typeof window !== 'undefined' && window.navigator.userAgent.includes('PhantomCompanion')) {
         get().setUser(SOVEREIGN_OPERATOR_USER, 'sovereign_token', new Date(Date.now() + 86400000 * 365).toISOString());
         useSystemStore.getState().setAuthenticated(true);
         return true;
@@ -194,7 +223,30 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
           set({ token: res.token, expiresAt: res.expires_at });
         } catch (err) {
           if (!coreRefused(err)) {
-            if (typeof window !== 'undefined' && (window.navigator.userAgent.includes('PhantomCompanion') || !window.location.host.includes(':8000'))) {
+            // Тут стояла ще й друга умова — перевірка, що хост НЕ той, на якому
+      // сидить бекенд у розробці. (Дослівно не цитую: сторож нижче шукає
+      // цей взірець по файлу, і цитата в коментарі валила б його на
+      // порожньому місці.) Це був замок, що відмикався від адреси: у
+      // запакованому застосунку
+      // фронт віддається asset-протоколом Tauri, хост НЕ містить `:8000`,
+      // отже умова істинна в релізному AppImage: вікно відкрилось — і
+      // оболонка сама себе впустила як `sovereign_root` / роль ROOT, на рік,
+      // без ПІНу. Гейта на розробку тут не було, хоча рядком вище
+      // (`import.meta.env.DEV`) автор явно вмів це робити.
+      //
+      // Саме через це в пакунку не з'являвся екран входу — я вранці списав
+      // це на dev-автовхід, і для стенда це правда, а для AppImage ні: там
+      // vite немає взагалі, а оболонка все одно малювалась.
+      //
+      // Межа знахідки, щоб не роздувати: `'sovereign_token'` бекенду
+      // невідомий — `grep` по всьому Python дає нуль. Отже це НЕ підвищення
+      // прав на сервері: будь-який запит із цим токеном отримає 401. Це
+      // обхід замка в інтерфейсі — але замок і є те, що продукт обіцяє.
+      //
+      // Гілку `PhantomCompanion` лишаю: телефон вантажить цей самий фронт у
+      // WebView, і зняти її наосліп означало б зламати чужий продукт. Вона
+      // передана власнику окремим рішенням.
+      if (typeof window !== 'undefined' && window.navigator.userAgent.includes('PhantomCompanion')) {
               get().setUser(SOVEREIGN_OPERATOR_USER, 'sovereign_token', new Date(Date.now() + 86400000 * 365).toISOString());
               useSystemStore.getState().setAuthenticated(true);
               return true;
@@ -254,7 +306,7 @@ export const useAuthStore = create<AuthStoreState>((set, get) => ({
     })),
 }));
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 if (import.meta.env?.DEV && typeof window !== 'undefined') {
   (window as any).__phantom = (window as any).__phantom ?? {};
   (window as any).__phantom.auth = useAuthStore;

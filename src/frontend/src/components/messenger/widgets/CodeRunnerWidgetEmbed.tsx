@@ -47,7 +47,21 @@ export const CodeRunnerWidgetEmbed: React.FC<CodeRunnerWidgetEmbedProps> = ({
           }
           finalOutput = logs.length > 0 ? logs.join('\n') : '✨ Код успішно виконано (0 помилок).';
         } else {
-          finalOutput = `[${runner.language.toUpperCase()} Isolated Sandbox]\nExecuting ${code.split('\n').length} lines...\n✓ Status: 200 OK\nExecution completed without memory leaks.`;
+          // Тут стояв ВИГАДАНИЙ успіх: «[PYTHON Isolated Sandbox] … ✓ Status:
+          // 200 OK … Execution completed without memory leaks» — не виконавши
+          // жодного рядка. Вигаданий код стану, вигадана заява про пам'ять і
+          // обіцянка ізоляції, якої не існує ні тут, ні в гілці JS вище.
+          //
+          // Найтихіша мить — «ми цього не вміємо» — перетворювалась на
+          // найгучніше твердження. І, на відміну від `new Function` поруч,
+          // CSP пакунка цього не спиняє: брехня не потребує дозволу на
+          // виконання.
+          //
+          // Виконання не додаємо — знімаємо обіцянку, якої ніхто не виконує.
+          finalOutput =
+            `${runner.language} тут не запускається.\n` +
+            'Виконуються лише JavaScript і TypeScript, і лише у вікні застосунку.\n' +
+            'Код збережено як є — його ніхто не змінював.';
         }
       } catch (err: any) {
         finalOutput = `⚠️ Runtime Error:\n${err?.stack || err?.message || String(err)}`;
@@ -57,7 +71,13 @@ export const CodeRunnerWidgetEmbed: React.FC<CodeRunnerWidgetEmbedProps> = ({
       setExecutionTimeMs(elapsed);
       setIsRunning(false);
       setOutput(finalOutput);
-      const updated = { ...runner, code, lastOutput: finalOutput, status: 'success' as const };
+      // Стан ставимо за тим, ЩО СТАЛОСЬ, а не за тим, що ми дійшли сюди:
+      // гілка з винятком теж потрапляє в цей рядок. У пакунку це не
+      // теоретично — CSP забороняє `new Function`, тож JS-код дасть
+      // `EvalError`, і напис «Runtime Error» стояв би поруч зі значком успіху.
+      const failed = finalOutput.startsWith('⚠️');
+      const status: CodeRunnerData['status'] = failed ? 'error' : 'success';
+      const updated: CodeRunnerData = { ...runner, code, lastOutput: finalOutput, status };
       setRunner(updated);
       onUpdate?.(updated);
     }, 150);

@@ -335,25 +335,17 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
       timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
       type: 'widget:kanban',
       isSelf: true,
+      // ЩО БУЛО: три вписані картки з вигаданими завданнями й пріоритетами
+      // («Архітектурний огляд Phase 1», «urgent»), які так само їхали в
+      // справжню бесіду одним дотиком. Колонки лишаємо — це каркас, який
+      // людина заповнює; картки прибираємо — це зміст, якого ми не знаємо.
       kanbanData: {
         id: `k_${Date.now()}`,
-        title: 'Командний Спринт & Завдання',
+        title: 'Дошка завдань',
         columns: [
-          {
-            id: 'c1',
-            title: 'Черга (To Do)',
-            items: [{ id: 'i1', title: 'Архітектурний огляд Phase 1', priority: 'high' }],
-          },
-          {
-            id: 'c2',
-            title: 'В роботі (In Progress)',
-            items: [{ id: 'i2', title: 'Реалізація Canvas Split-View', priority: 'urgent', assignee: 'Ви' }],
-          },
-          {
-            id: 'c3',
-            title: 'Завершено (Done)',
-            items: [{ id: 'i3', title: 'Підготовка середовища', priority: 'med' }],
-          },
+          { id: 'c1', title: 'Черга', items: [] },
+          { id: 'c2', title: 'В роботі', items: [] },
+          { id: 'c3', title: 'Завершено', items: [] },
         ],
       },
     });
@@ -370,17 +362,23 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
       timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
       type: 'widget:voting',
       isSelf: true,
+      // ЩО БУЛО, і це найгірше з усього набору: опитування приходило з
+      // УЖЕ ВІДДАНИМ ГОЛОСОМ від імені відправника — `votes: 1`,
+      // `voters: [currentUser.id]`, `winningOptionId: 'o1'`. Тобто один
+      // дотик публікував у бесіду не лише вигадане питання («Затвердити та
+      // викатити у продакшн»), а й **вигадану дію людини**: нібито вона вже
+      // проголосувала за викочування в продакшн, і нібито це вже перемагає.
+      //
+      // Вигаданий зміст — погано. Вигаданий вчинок, приписаний людині, —
+      // інший клас: його не відрізнити від справжнього ні їй, ні іншим.
       votingData: {
         id: `v_${Date.now()}`,
-        question: 'Затвердження релізу Work OS (v1.0)',
+        question: '',
         options: [
-          { id: 'o1', text: 'Затвердити та викатити у продакшн', votes: 1, voters: [currentUser.id] },
-          { id: 'o2', text: 'Потрібно більше тестів', votes: 0, voters: [] },
-          { id: 'o3', text: 'Доопрацювати UI деталі', votes: 0, voters: [] },
+          { id: 'o1', text: '', votes: 0, voters: [] },
+          { id: 'o2', text: '', votes: 0, voters: [] },
         ],
-        totalVotes: 1,
-        winningOptionId: 'o1',
-        deadline: 'до кінця дня',
+        totalVotes: 0,
       },
     });
   };
@@ -396,15 +394,13 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
       timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
       type: 'widget:raci',
       isSelf: true,
+      // Ролі — це каркас матриці, він лишається. Рядки були вигаданим
+      // розподілом відповідальності за роботи, яких ніхто не призначав.
       raciData: {
         id: `raci_${Date.now()}`,
-        title: 'Матриця відповідальності релізу',
+        title: 'Матриця відповідальності',
         roles: ['Тімлід', 'Frontend', 'Backend', 'DevOps'],
-        rows: [
-          { id: 'r1', task: 'Розгортання вузла Phantom OS', r: 'DevOps', a: 'Тімлід', c: 'Backend', i: 'Frontend' },
-          { id: 'r2', task: 'Інтеграція Canvas & Віджетів', r: 'Frontend', a: 'Тімлід', c: 'Дизайн', i: 'Всі' },
-          { id: 'r3', task: 'P2P Swarm & Cloudflare R2 міст', r: 'Backend', a: 'Тімлід', c: 'DevOps', i: 'Frontend' },
-        ],
+        rows: [],
       },
     });
   };
@@ -479,15 +475,20 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
       timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
       type: 'widget:timeline',
       isSelf: true,
+      // ЩО БУЛО: готовий «План розгортання Work OS v1.0» із чотирьох віх —
+      // з відсотками виконання, датами й іменами ЖИВИХ людей у полі
+      // виконавця: «Кирило», «Саня», «Марина». Це не приклад у документації:
+      // `sendTimelineWidget` — пункт меню вкладень, тобто один дотик
+      // **публікував у справжню бесіду** вигаданий план, у якому названі
+      // люди нібито щось роблять на 85 і 70 відсотків.
+      //
+      // Той самий клас, що конспект нарад: вигадка, яка виходить назовні й
+      // виглядає як запис. Порожній таймлайн — не збіднення, а єдина чесна
+      // початкова форма: план складає людина, а не ми за неї.
       timelineData: {
         id: `tl_${Date.now()}`,
-        title: 'План розгортання Work OS v1.0',
-        milestones: [
-          { id: 'm1', title: 'Гібридні гілки (Threads → Canvas)', status: 'completed', progress: 100, dueDate: '26 сер', assignee: 'Кирило' },
-          { id: 'm2', title: 'Мікро-віджети (Kanban, RACI, Timeline)', status: 'in_progress', progress: 85, dueDate: '27 сер', assignee: 'Саня' },
-          { id: 'm3', title: 'Workspace Drive & P2P Swarm', status: 'in_progress', progress: 70, dueDate: '28 сер', assignee: 'Марина' },
-          { id: 'm4', title: 'Локальний Webhook-хаб & CLI клієнт', status: 'pending', progress: 40, dueDate: '30 сер', assignee: 'Кирило' },
-        ],
+        title: 'Таймлайн',
+        milestones: [],
       },
     });
   };
@@ -503,17 +504,21 @@ export const MessageComposer: React.FC<MessageComposerProps> = ({
       timestamp: new Date().toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' }),
       type: 'snippet:async',
       isSelf: true,
+      // ЩО БУЛО: вигаданий голосовий запис на 145 секунд, підписаний
+      // ІМЕНЕМ САМОГО КОРИСТУВАЧА (`authorName: currentUser.name`), з
+      // розшифровкою трьох реплік, яких він ніколи не казав: «Привіт
+      // команді! Сьогодні коротко пройдуся…».
+      //
+      // Це вигадана МОВА, приписана живій людині, — і вона їхала в бесіду
+      // одним дотиком. Порожній запис без тривалості чесний: людина сама
+      // наговорить і сама підпише.
       asyncSnippetData: {
         id: `snip_${Date.now()}`,
-        title: 'Огляд архітектури Canvas та автономних віджетів',
-        durationSeconds: 145,
+        title: '',
+        durationSeconds: 0,
         authorName: currentUser.name,
-        summary: 'Пояснення механіки переходу з лінійного чату у спліт-екран для документування фінальних рішень.',
-        transcripts: [
-          { timestamp: '0:00', timeSeconds: 0, text: 'Привіт команді! Сьогодні коротко пройдуся по гібридних гілках.' },
-          { timestamp: '0:35', timeSeconds: 35, text: 'Будь-яка гілка тепер відкривається в Canvas спліт праворуч.' },
-          { timestamp: '1:12', timeSeconds: 72, text: 'Всі картки та віджети зберігають свій стан у локальному CRDT.' },
-        ],
+        summary: '',
+        transcripts: [],
       },
     });
   };

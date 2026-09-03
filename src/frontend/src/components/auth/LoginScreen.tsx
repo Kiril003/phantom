@@ -62,32 +62,30 @@ export default function LoginScreen() {
         if (profiles.length === 1) return setPhase({ kind: 'pin', who: profiles[0], many: false });
         return setPhase({ kind: 'pick', profiles });
       }
-      throw new Error('No profiles');
+      // Порожній список — це збій ядра, а не новий пристрій: власника
+      // заводить `ensure_default_user` на кожному старті. Саме це й
+      // пояснює екран `Nobody`, разом із тим, звідки взяти разовий PIN.
+      return setPhase({ kind: 'nobody' });
     } catch {
-      // Fallback: Default web demo users for multi-session testing (Kiril & Kyrylo)
-      const demoProfiles: Profile[] = [
-        {
-          id: 'u_kiril',
-          username: 'kiril',
-          avatar_url: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
-        },
-        {
-          id: 'u_kyrylo',
-          username: 'kyrylo',
-          avatar_url: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80',
-        },
-        {
-          id: 'u_alex',
-          username: 'alex',
-          avatar_url: 'https://images.unsplash.com/photo-1535713875002-d1d0cf377fde?w=200&auto=format&fit=crop&q=80',
-        },
-        {
-          id: 'u_phantom',
-          username: 'phantom',
-          avatar_url: 'https://images.unsplash.com/photo-1618005182384-a83a8bd57fbe?w=200&auto=format&fit=crop&q=80',
-        },
-      ];
-      setPhase({ kind: 'pick', profiles: demoProfiles });
+      // Тут стояв фолбек на ЧОТИРИ ВИГАДАНИХ користувачі — kiril, kyrylo,
+      // alex, phantom, з аватарками, що тягнулись із unsplash.com. Він
+      // зʼявився заради багатосесійного тестування у вебі (41173d3), і
+      // разом із `throw new Error('No profiles')` вище робив дві погані
+      // речі одночасно:
+      //
+      //   • перекривав чесний екран `Nobody` — той, що пояснює, що
+      //     порожній список означає збій ядра, і каже, звідки взяти
+      //     разовий PIN. Досягти його було неможливо взагалі;
+      //   • перетворював «ядро не відповідає» на нормальний вигляд
+      //     переліку профілів. Людина з мертвим бекендом бачила
+      //     чотирьох людей, тицяла в них і не розуміла, чому нічого.
+      //
+      // Виміряно 29.08.2026: у запакованому AppImage на екрані входу
+      // стояли рівно ці чотири імені, і я спершу зарахував це як доказ
+      // живого HTTP. Список був вигаданий.
+      //
+      // Ядро недосяжне — так і кажемо. `Unreachable` уміє стукати сам.
+      setPhase({ kind: 'unreachable' });
     }
   }, []);
 

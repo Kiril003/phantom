@@ -43,15 +43,13 @@ const STATUS_PRESETS = [
   { emoji: '🔇', label: 'Не турбувати', text: 'Термінові задачі, тільки важливе' },
 ];
 
-// Готові естетичні аватари
-const AVATAR_PRESETS = [
-  'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=300&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=300&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=300&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=300&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1492562080023-ab3db95bfbce?w=300&auto=format&fit=crop&q=80',
-  'https://images.unsplash.com/photo-1524504388940-b1c1722653e1?w=300&auto=format&fit=crop&q=80',
-];
+// ЩО БУЛО: масив AVATAR_PRESETS із шести фотографій на чужому фотохостингу,
+// які пропонувалися як «готові аватари» для справжнього користувача.
+// ЧОМУ ПРИБРАНО: обраний пресет лягав у профіль як зовнішнє посилання і
+// розсилався всім пірам (globalP2PMesh.updateIdentity нижче), тож кожен, хто
+// відкривав вашу картку, тягнув картинку з чужого сервера і віддавав йому свій IP.
+// ЧИМ ЗАМІНЕНО: власне фото з пристрою (лишається локальним data URL), а без
+// фото Avatar малює літеру в кружечку — заглушка вже є в месенджері.
 
 export const UserProfileModal: React.FC<UserProfileModalProps> = ({
   isOpen,
@@ -319,27 +317,30 @@ export const UserProfileModal: React.FC<UserProfileModalProps> = ({
                 </div>
                 <div className="flex-1 min-w-0">
                   <span className="text-xs font-bold text-[#1E2521] block">Фото профілю</span>
-                  <p className="text-[11px] text-[#6E7568] mb-2 truncate">Оберіть пресет або завантажте фото</p>
-                  <div className="flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-                    {AVATAR_PRESETS.map((pUrl, idx) => (
+                  <p className="text-[11px] text-[#6E7568] mb-2">
+                    Фото не обовʼязкове: без нього показуємо літеру імені.
+                  </p>
+                  <div className="flex items-center gap-1.5 flex-wrap">
+                    <label
+                      className="px-2.5 py-1.5 rounded-lg border border-dashed border-[#C25925] text-[#C25925] text-[11px] font-semibold flex items-center gap-1.5 hover:bg-[#FAF7F0] cursor-pointer"
+                      title="Завантажити з пристрою"
+                    >
+                      <Upload className="w-3.5 h-3.5" />
+                      <span>Завантажити з пристрою</span>
+                      <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
+                    </label>
+                    {avatar && (
                       <button
-                        key={idx}
                         type="button"
                         onClick={() => {
                           soundFx.playTap();
-                          setAvatar(pUrl);
+                          setAvatar('');
                         }}
-                        className={`w-7 h-7 rounded-lg overflow-hidden border transition-transform shrink-0 ${
-                          avatar === pUrl ? 'ring-2 ring-[#C25925] scale-105' : 'border-[#E0D7C6] hover:scale-105'
-                        }`}
+                        className="px-2.5 py-1.5 rounded-lg border border-[#E0D7C6] text-[#6E7568] text-[11px] font-semibold hover:bg-[#FAF7F0] transition-colors"
                       >
-                        <img src={pUrl} alt="preset" className="w-full h-full object-cover" />
+                        Прибрати фото
                       </button>
-                    ))}
-                    <label className="w-7 h-7 rounded-lg border border-dashed border-[#C25925] text-[#C25925] flex items-center justify-center hover:bg-[#FAF7F0] cursor-pointer shrink-0" title="Завантажити з пристрою">
-                      <Upload className="w-3.5 h-3.5" />
-                      <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
-                    </label>
+                    )}
                   </div>
                 </div>
               </div>

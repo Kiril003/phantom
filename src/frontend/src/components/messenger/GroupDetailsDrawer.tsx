@@ -26,6 +26,8 @@ import {
 import { Chat, ChatMember, GroupInviteLink, GroupPermissions, PendingJoinRequest } from '../../types/messenger';
 import { soundFx } from '../../utils/messengerSound';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
+import { Avatar } from './Avatar';
+import { useMessengerStore } from '../../stores/messengerStore';
 
 interface GroupDetailsDrawerProps {
   isOpen: boolean;
@@ -103,8 +105,17 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
     .map((m) => m.fileData!);
 
   const chatTitle = chat.title || 'Бесіда';
-  const chatAvatar = chat.avatar || 'https://images.unsplash.com/photo-1518770660439-4636190af475?w=200&auto=format&fit=crop&q=80';
   const chatCircle = chat.circle || 'work';
+
+  // ЩО БУЛО: `chat.avatar || <фото з images.unsplash.com>`.
+  // Простір без своєї картинки отримував обличчя чужої людини з чужого сервера,
+  // а сам запит ще й повідомляв тому серверу, що цей екран відкрили.
+  // ЧОМУ ПРИБРАНО: заглушка мусить бути своя і мовчазна — <Avatar> малює
+  // літери назви на паперовій підкладці, нікуди не стукаючи.
+
+  // `chat.members` розрізняє два несхожі стани, і плутати їх не можна:
+  // undefined — склад простору сюди не доїхав; [] — доїхав і він порожній.
+  const membersDelivered = Array.isArray(chat.members);
   const members = chat.members || [];
 
   const filteredMembers = members.filter((m) =>
@@ -113,7 +124,10 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
     (m.customTitle && m.customTitle.toLowerCase().includes(memberSearchQuery.toLowerCase()))
   );
 
-  const onlineMembersCount = members.filter((m) => m.isOnline).length;
+  // ЩО БУЛО: `onlineMembersCount` рахував `m.isOnline` і дописував «· N онлайн».
+  // ЧОМУ ПРИБРАНО: присутності вузол не публікує взагалі (див. вкладку
+  // приватності в налаштуваннях), тож ненульове число могло взятися лише з
+  // вигаданого запису. Краще мовчати, ніж рахувати те, чого ми не знаємо.
 
   const handleTogglePermission = (key: keyof GroupPermissions) => {
     soundFx.playTap();
@@ -193,14 +207,16 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
       <div className="p-4 border-b border-[#E6DFD3] bg-[#FDFCF9] shrink-0 space-y-3">
         <div className="flex items-start gap-3.5">
           <div className="relative shrink-0">
-            <img
-              src={chatAvatar}
-              alt={chatTitle}
-              className="w-16 h-16 rounded-2xl object-cover ring-2 ring-[#E6DFD3] shadow-sm"
+            <Avatar
+              src={chat.avatar}
+              name={chatTitle}
+              className="w-16 h-16 text-xl shadow-sm"
+              radius="rounded-2xl"
             />
-            {chat.isOnline !== undefined && (
-              <span className="absolute -bottom-1 -right-1 w-4 h-4 bg-[#E87A42] rounded-full ring-2 ring-[#FDFCF9]" />
-            )}
+            {/* ЩО БУЛО: помаранчева крапка «онлайн» за умовою
+                `chat.isOnline !== undefined` — вона горіла навіть тоді, коли
+                прапорець дорівнював false. ЧОМУ ПРИБРАНО: вузол присутності
+                не публікує, тож у крапки не було джерела ні в true, ні в false. */}
           </div>
 
           <div className="min-w-0 flex-1">
@@ -214,10 +230,11 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
             </div>
 
             <p className="text-xs text-[#5F6A60] mt-0.5">
-              {chat.members ? `${members.length} учасників` : 'Особистий контакт'}
-              {onlineMembersCount > 0 && (
-                <span className="text-[#E87A42] font-semibold"> · {onlineMembersCount} онлайн</span>
-              )}
+              {membersDelivered
+                ? `${members.length} учасників`
+                : chat.type === 'dm' || chat.type === 'direct'
+                  ? 'Особистий контакт'
+                  : 'Склад невідомий'}
             </p>
 
             {chat.publicHandle && (
@@ -338,14 +355,13 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
                 >
                   <div className="flex items-center gap-2.5 min-w-0">
                     <div className="relative shrink-0">
-                      <img
-                        src={member.avatar}
-                        alt={member.name}
-                        className="w-9 h-9 rounded-xl object-cover"
-                      />
-                      {member.isOnline && (
-                        <span className="absolute -bottom-0.5 -right-0.5 w-2.5 h-2.5 bg-[#528A4B] rounded-full ring-2 ring-white" />
-                      )}
+                      {/* ЩО БУЛО: <img src={member.avatar}> без запасного
+                          варіанту плюс зелена крапка `member.isOnline`.
+                          ЧОМУ ЗМІНЕНО: аватарки в учасника може не бути —
+                          тепер це малює локальний <Avatar>; а крапку зняли
+                          разом із лічильником онлайну — присутності вузол
+                          не публікує, підтвердити «він у мережі» нічим. */}
+                      <Avatar src={member.avatar} name={member.name} className="w-9 h-9" />
                     </div>
 
                     <div className="min-w-0">
@@ -376,6 +392,36 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
                 </div>
               ))}
             </div>
+
+            {/* Три різні порожнечі, і жодну не можна показувати замість іншої:
+                склад не доїхав / доїхав і порожній / фільтр нічого не знайшов. */}
+            {!membersDelivered && (
+              <div className="p-4 bg-[#FDF6EC] border border-[#EBD9BE] rounded-2xl text-center space-y-1">
+                <p className="text-xs font-bold text-[#8C5A1A]">Склад простору сюди не дійшов</p>
+                <p className="text-[11px] text-[#8C5A1A] leading-relaxed">
+                  Вузол не передав списку учасників. Це не означає, що простір
+                  порожній — це означає, що ми його складу не знаємо.
+                </p>
+              </div>
+            )}
+
+            {membersDelivered && members.length === 0 && (
+              <div className="p-4 bg-white border border-[#DFD6C5] rounded-2xl text-center space-y-1">
+                <p className="text-xs font-bold text-[#1E2521]">У просторі поки нікого немає</p>
+                <p className="text-[11px] text-[#7A8479] leading-relaxed">
+                  Вузол передав склад, і він порожній. Натисніть «Додати», щоб
+                  запросити першого учасника.
+                </p>
+              </div>
+            )}
+
+            {membersDelivered && members.length > 0 && filteredMembers.length === 0 && (
+              <div className="p-4 bg-white border border-[#DFD6C5] rounded-2xl text-center">
+                <p className="text-[11px] text-[#7A8479] leading-relaxed">
+                  Серед {members.length} учасників нікого не знайдено за запитом «{memberSearchQuery}».
+                </p>
+              </div>
+            )}
           </div>
         )}
 
@@ -517,7 +563,11 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
                       className="p-3 bg-white rounded-2xl border border-[#DFD6C5] space-y-2 shadow-2xs"
                     >
                       <div className="flex items-start gap-2.5">
-                        <img src={req.userAvatar} alt={req.userName} className="w-9 h-9 rounded-xl object-cover" />
+                        {/* ЩО БУЛО: <img src={req.userAvatar}> — прямий запит за
+                            фото на чужий сервер. ЧОМУ ЗМІНЕНО: у заявки може не
+                            бути фото зовсім, а ходити по нього назовні звідси
+                            нема потреби — літери в кружечку малюються локально. */}
+                        <Avatar src={req.userAvatar} name={req.userName} className="w-9 h-9 shrink-0" />
                         <div className="min-w-0 flex-1">
                           <h5 className="font-bold text-xs text-[#1E2521]">{req.userName}</h5>
                           <p className="text-[11px] text-[#7A8479]">{req.requestedAt}</p>
@@ -562,7 +612,11 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
                       id: `inv_${Date.now()}`,
                       code: '',
                       label: 'Нове тимчасове посилання',
-                      creatorName: 'Кирило Милосердов',
+                      // ЩО БУЛО: вписане в код ім'я «Кирило Милосердов».
+                      // ЧОМУ ЗМІНЕНО: автор посилання — той, хто його щойно
+                      // створив; під будь-яким іншим власником рядок у коді
+                      // просто брехав би.
+                      creatorName: useMessengerStore.getState().currentUser.name,
                       createdAt: 'Щойно',
                       usageCount: 0,
                       usageLimit: 10,
@@ -578,6 +632,12 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
                   <span>Створити</span>
                 </button>
               </div>
+
+              {inviteLinks.length === 0 && (
+                <p className="text-[11px] text-[#7A8479] leading-relaxed">
+                  Жодного посилання ще не створено.
+                </p>
+              )}
 
               <div className="space-y-2">
                 {inviteLinks.map((link) => (
@@ -740,29 +800,20 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
               Нещодавні дії в просторі
             </h4>
 
-            {(chat.auditLogs || [
-              {
-                id: 'al_1',
-                actorName: 'Кирило Милосердов',
-                actorAvatar: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=200&auto=format&fit=crop&q=80',
-                action: 'Створено нове посилання для запрошення',
-                detail: '',
-                timestamp: '11:45',
-              },
-              {
-                id: 'al_2',
-                actorName: 'Олексій Коваленко',
-                actorAvatar: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=200&auto=format&fit=crop&q=80',
-                action: 'Закріплено повідомлення',
-                detail: 'Дорожня карта релізу v2.4',
-                timestamp: '10:30',
-              },
-            ]).map((log) => (
+            {/* ЩО БУЛО: `chat.auditLogs || [ …два записи… ]`. Коли вузол журналу
+                не передавав, екран показував двох людей із фотографіями з
+                images.unsplash.com: «Кирило Милосердов» нібито створив
+                посилання об 11:45, а «Олексій Коваленко» нібито закріпив
+                «Дорожню карту релізу v2.4» о 10:30. Жодної з цих дій не було,
+                а другої людини не існує взагалі.
+                ЧОМУ ПРИБРАНО ЦІЛКОМ: резервний список підмінював незнання
+                вигаданою історією — саме там, де журнал мав би бути доказом. */}
+            {(chat.auditLogs || []).map((log) => (
               <div
                 key={log.id}
                 className="p-3 bg-white rounded-2xl border border-[#DFD6C5] flex items-start gap-2.5 shadow-2xs text-xs"
               >
-                <img src={log.actorAvatar} alt={log.actorName} className="w-8 h-8 rounded-xl object-cover shrink-0" />
+                <Avatar src={log.actorAvatar} name={log.actorName} className="w-8 h-8 shrink-0" />
                 <div className="min-w-0 flex-1">
                   <div className="flex items-center justify-between">
                     <span className="font-bold text-[#1E2521]">{log.actorName}</span>
@@ -773,6 +824,27 @@ export const GroupDetailsDrawer: React.FC<GroupDetailsDrawerProps> = ({
                 </div>
               </div>
             ))}
+
+            {/* Знову дві різні порожнечі: журналу не дали — це не те саме,
+                що «нічого не сталося». */}
+            {!Array.isArray(chat.auditLogs) && (
+              <div className="p-4 bg-[#FDF6EC] border border-[#EBD9BE] rounded-2xl text-center space-y-1">
+                <p className="text-xs font-bold text-[#8C5A1A]">Журнал сюди не дійшов</p>
+                <p className="text-[11px] text-[#8C5A1A] leading-relaxed">
+                  Вузол не передав історії дій. Порожній список тут означав би,
+                  що в просторі нічого не відбувалось, — а ми цього не знаємо.
+                </p>
+              </div>
+            )}
+
+            {Array.isArray(chat.auditLogs) && chat.auditLogs.length === 0 && (
+              <div className="p-4 bg-white border border-[#DFD6C5] rounded-2xl text-center">
+                <p className="text-[11px] text-[#7A8479] leading-relaxed">
+                  Вузол передав журнал, і він порожній: у просторі ще нічого
+                  не відбувалось.
+                </p>
+              </div>
+            )}
           </div>
         )}
       </div>

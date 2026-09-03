@@ -1356,6 +1356,24 @@ def _register_ws(app: FastAPI) -> None:
 
 
 def _register_health(app: FastAPI) -> None:
+    def _tls_state() -> dict:
+        """Ніколи не кидає: адреса потрібна саме тоді, коли до вузла не
+        достукались."""
+        try:
+            listener = getattr(app.state, "tls_listener", None)
+            bound = list(getattr(listener, "bound", []) or []) if listener else []
+            return {
+                "bound": bound,
+                "port": int(getattr(config, "pair_tls_port", 0) or 0),
+                # Телефон закріплює саме відбиток (PinnedTrust.kt звіряє лише
+                # його, hostnameVerifier там завжди true), тож застаріле SAN
+                # у сертифікаті нічого не ламає — а от розбіжність відбитка
+                # зламала б усе.
+                "enabled": bool(bound),
+            }
+        except Exception:  # noqa: BLE001
+            return {"bound": [], "port": 0, "enabled": None}
+
     async def _ai_readiness() -> dict:
         """Ніколи не валить /health і не ходить у мережу по хмару: для
         Gemini дивимось наявність ключа, для локальної моделі — коротка
@@ -1436,6 +1454,11 @@ def _register_health(app: FastAPI) -> None:
             # нічого не тягне й не кидає — саме тому його видно тоді, коли
             # памʼять НЕ працює.
             "memory_model": _memory_model_state(),
+            # ДЕ слухає TLS просто зараз. Мережа машини змінилась під живим
+            # вузлом 03.09 (192.168.137.0/24 → 158.196.237.0/21), слухач
+            # перевʼязався сам, а дізнатись про це можна було лише з `ss`.
+            # QR веде саме сюди, тож стан мусить це називати.
+            "tls_listening": _tls_state(),
         }
 
 

@@ -32,6 +32,15 @@ function accuracyWord(m: number | null | undefined): { text: string; dot: string
   return { text: `розкид ${(m / 1000).toFixed(1)} км`, dot: 'var(--signal-alert)' };
 }
 
+/**
+ * Оболонка чипса стану. `bare` — коли чипс стоїть УСЕРЕДИНІ спільної
+ * плити (TacticalStatsZone): скло малюється один раз навколо всіх, а не
+ * чотири рази поспіль. Правило форми №7 — одна плита хрому на кадр.
+ */
+function shell(extra: string, bare?: boolean): string {
+  return bare ? `flex items-center gap-2 ${extra}` : `glass-card flex items-center gap-2 px-3 rounded-full ${extra}`;
+}
+
 export function CoordinateReadout({ lat, lon, source }: {
   lat: number | null;
   lon: number | null;
@@ -91,11 +100,11 @@ const RHUMB = ['Пн', 'Пн-Сх', 'Сх', 'Пд-Сх', 'Пд', 'Пд-Зх', '�
  * показу (гонтлет Р1, удар №8/№11). Коли курс нема кому виміряти,
  * чип каже прочерк: прочерк — теж чесне слово.
  */
-export function CompassChip({ bearing, known = true }: { bearing: number; known?: boolean }) {
+export function CompassChip({ bearing, known = true, bare }: { bearing: number; known?: boolean; bare?: boolean }) {
   if (!known) {
     return (
       <div
-        className="glass-card flex items-center gap-2 px-3 h-[30px] rounded-full"
+        className={shell('h-[30px]', bare)}
         title="Приймача немає — курс невідомий"
         data-testid="compass-chip"
         data-known="false"
@@ -110,7 +119,7 @@ export function CompassChip({ bearing, known = true }: { bearing: number; known?
   const word = RHUMB[Math.round(deg / 45) % 8];
   return (
     <div
-      className="glass-card flex items-center gap-2 px-3 h-[30px] rounded-full"
+      className={shell('h-[30px]', bare)}
       data-testid="compass-chip"
       data-known="true"
     >
@@ -132,11 +141,12 @@ export function CompassChip({ bearing, known = true }: { bearing: number; known?
 /** Джерела, які супутників не бачать узагалі — це не «слабкий сигнал». */
 const NO_RECEIVER = new Set(['browser_geolocation', 'ip_estimate', 'network', 'manual', 'user_stated', 'none']);
 
-export function GpsQualityChip({ satellites, fix, speed, source = 'none' }: {
+export function GpsQualityChip({ satellites, fix, speed, source = 'none', bare }: {
   satellites: number;
   fix: boolean;
   speed: number;
   source?: string;
+  bare?: boolean;
 }) {
   // Рухається — показуємо швидкість; стоїть — вона тільки шумить нулем.
   const moving = fix && speed >= 1;
@@ -151,7 +161,7 @@ export function GpsQualityChip({ satellites, fix, speed, source = 'none' }: {
   if (!fix && NO_RECEIVER.has(source)) {
     return (
       <div
-        className="glass-card flex h-[30px] items-center gap-2 rounded-full px-3"
+        className={shell('h-[30px]', bare)}
         title="Супутникового приймача на цьому ПК немає; позиція складається з мережевих джерел — див. чип позиції внизу ліворуч"
       >
         <Satellite size={12} strokeWidth={1.75} className="text-ink-muted" aria-hidden />
@@ -164,7 +174,7 @@ export function GpsQualityChip({ satellites, fix, speed, source = 'none' }: {
   }
 
   return (
-    <div className="glass-card flex items-center gap-2.5 px-3 h-[30px] rounded-full">
+    <div className={shell('h-[30px]', bare)}>
       <span className="flex items-center gap-1.5">
         <Satellite size={12} strokeWidth={1.75} className="text-ink-muted" aria-hidden />
         <span className="text-[10px] font-semibold text-ink-secondary">Приймач</span>
@@ -196,7 +206,7 @@ export function GpsQualityChip({ satellites, fix, speed, source = 'none' }: {
  * "a small «спрощена графіка» state chip — state visibility, never an
  * apology dialog"). Silent for T0 (full quality, the common case).
  */
-export function RenderTierChip({ tier }: { tier: RenderTier | null }) {
+export function RenderTierChip({ tier, bare }: { tier: RenderTier | null; bare?: boolean }) {
   if (tier === null || tier === 'T0') return null;
   const hint =
     tier === 'T1'
@@ -204,7 +214,7 @@ export function RenderTierChip({ tier }: { tier: RenderTier | null }) {
       : 'Апаратне прискорення недоступне: мапа працює у спрощеному режимі.';
   return (
     <div
-      className="glass-card flex items-center gap-2 px-3 h-[30px] rounded-full"
+      className={shell('h-[30px]', bare)}
       title={hint}
       data-testid="render-tier-chip"
       data-tier={tier}
@@ -221,14 +231,14 @@ export function RenderTierChip({ tier }: { tier: RenderTier | null }) {
  * одному екрані (гонтлет Р1, удар №5). Предмет цього чипа — МАПА:
  * живість підложки, не позиції і не тривог.
  */
-export function StatusChip({ loading, zoom }: { loading: boolean; zoom: number }) {
+export function StatusChip({ loading, zoom, bare }: { loading: boolean; zoom: number; bare?: boolean }) {
   // z15 — жаргон рендерера. Людині корисніше знати, наскільки близько вона
   // дивиться: місто, район чи вулиця.
   const scale =
     zoom < 6 ? 'країна' : zoom < 9 ? 'область' : zoom < 12 ? 'місто' :
     zoom < 15 ? 'район' : zoom < 17 ? 'вулиці' : 'будинки';
   return (
-    <div className="glass-card flex items-center gap-2 px-3 h-[30px] rounded-full">
+    <div className={shell('h-[30px]', bare)}>
       {loading ? (
         <EyeOff size={12} strokeWidth={1.75} className="text-amber-600" aria-hidden />
       ) : (

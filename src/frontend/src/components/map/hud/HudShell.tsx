@@ -356,7 +356,14 @@ export function HudShell({
     >
       {/* Сітка — найнижчий шар HUD: розмітка під хромом, не над ним. */}
       <GridOverlay active={gridOn} />
-      <div className="absolute inset-x-3 top-3 flex items-start justify-between gap-3">
+      {/* Верхній ряд живе МІЖ рейками, як і нижній: `inset-x-3` заводив його
+          під обидві. Виміряно 04.09.2026 на 1024×600: плита станів
+          x 451→667 проти правої рейки x 605→667 — 62×87 px під рейкою, і
+          рейка малюється поверх, тобто третина рядка про приймач і курс
+          була просто невидима. Ліворуч те саме: ViewControls заходив під
+          ліву рейку на 62×25. Перекриття було й до плити — по чотири
+          чипси окремо, — просто його ніхто не міряв проти рейок. */}
+      <div className="absolute left-[76px] right-[76px] top-3 flex items-start justify-between gap-3">
         <div className="pointer-events-auto">
           <ViewControls
             bearing={tactical.bearing ?? bearing ?? 0}

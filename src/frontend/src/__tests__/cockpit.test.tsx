@@ -351,3 +351,54 @@ describe('deskStore: міграція стола «Кокпіт» на пейн 
     expect(cockpit!.panes.map((p) => p.kind)).toEqual(['cockpit']);
   });
 });
+
+describe('кикери кокпіта говорять українською', () => {
+  // Рішення штабу 03.09.2026: кикер називає джерело словом («Машина · 2 с»),
+  // а сирий шлях маршруту лишається в підказці. Доти на склі стояло
+  // «COCKPIT/MACHINE · 2 С», «PAIR/DEVICES · 30 С + WS PAIR», «AGENT_AUDIT»,
+  // «WS AGENT.STREAM» — чесність джерела оберталась службовим англійським.
+  const LATIN = /[A-Za-z]/;
+  const ALLOWED = /^(CPU|RAM|WS|GPU|NPU|ETA|ID|IP|TLS|QR)$/;
+
+  it('жоден кикер не несе шляху маршруту чи латиниці', async () => {
+    render(
+      <>
+        <MachineCell />
+        <ActivityCell />
+        <DevicesCell />
+        <AuditCell />
+      </>,
+    );
+    const kickers = await screen.findAllByTitle(/^джерело: /);
+    expect(kickers.length).toBeGreaterThan(0);
+    for (const el of kickers) {
+      const text = (el.textContent || '').trim();
+      expect(text, `кикер «${text}» не має містити «/»`).not.toContain('/');
+      expect(text, `кикер «${text}» не має містити «_»`).not.toContain('_');
+      const latinWords = text
+        .split(/[^A-Za-zА-Яа-яЇїІіЄєҒґ0-9.]+/)
+        .filter((w) => w && LATIN.test(w));
+      for (const w of latinWords) {
+        expect(ALLOWED.test(w.toUpperCase()), `латиниця «${w}» у кикері «${text}»`).toBe(true);
+      }
+    }
+  });
+
+  it('шлях маршруту не зник — він у підказці', async () => {
+    render(
+      <>
+        <MachineCell />
+        <ActivityCell />
+        <DevicesCell />
+        <AuditCell />
+      </>,
+    );
+    const titles = (await screen.findAllByTitle(/^джерело: /)).map(
+      (el) => el.getAttribute('title') || '',
+    );
+    expect(titles.some((t) => t.includes('cockpit/machine'))).toBe(true);
+    expect(titles.some((t) => t.includes('pair/devices'))).toBe(true);
+    expect(titles.some((t) => t.includes('agent_audit'))).toBe(true);
+    expect(titles.some((t) => t.includes('agent.stream'))).toBe(true);
+  });
+});

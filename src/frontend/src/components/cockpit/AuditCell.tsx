@@ -72,7 +72,8 @@ export function AuditCell() {
   return (
     <CockpitCell
       title="Аудит"
-      source={total !== null ? `agent_audit · ${total} записів` : 'agent_audit'}
+      source={total !== null ? `Журнал агента · ${total} записів` : 'Журнал агента'}
+      route="agent_audit"
       asOf={load.s === 'ok' ? load.at : null}
       actions={
         <button

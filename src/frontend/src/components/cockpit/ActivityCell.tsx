@@ -89,7 +89,8 @@ export function ActivityCell() {
   return (
     <CockpitCell
       title="Активність"
-      source="WS agent.stream"
+      source="Активність · живий канал"
+      route="WS agent.stream"
       asOf={lastAt}
       live={connected}
       actions={

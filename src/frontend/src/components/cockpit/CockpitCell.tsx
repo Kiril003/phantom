@@ -14,6 +14,7 @@ import React from 'react';
 export function CockpitCell({
   title,
   source,
+  route,
   asOf,
   live,
   actions,
@@ -21,8 +22,20 @@ export function CockpitCell({
 }: {
   /** Слово-назва чарунки. */
   title: string;
-  /** Звідки живуть числа — назва джерела, не вигадка. */
+  /**
+   * Джерело ЛЮДСЬКОЮ мовою — те, що читає око: «Машина · 2 с».
+   * Раніше тут стояв сирий шлях маршруту («cockpit/machine · 2 с»,
+   * «pair/devices · 30 с + WS pair», «agent_audit»), і чесність джерела
+   * оберталась службовим англійським просто на склі. Рішення штабу
+   * 03.09.2026: слово — на скло, шлях — у підказку.
+   */
   source: string;
+  /**
+   * Сирий шлях/канал для підказки: `cockpit/machine`, `pair/devices`,
+   * `agent_audit`, `WS agent.stream`. Без нього чарунка не мала б чим
+   * підтвердити, звідки числа.
+   */
+  route?: string;
   /** «станом на …» — час останнього успішного зрізу; null — зрізу ще не було. */
   asOf: Date | null;
   /**
@@ -63,7 +76,7 @@ export function CockpitCell({
             borderColor: 'var(--glass-border)',
             letterSpacing: 'var(--tracking-widest, 0.15em)',
           }}
-          title={`джерело: ${source}`}
+          title={route ? `джерело: ${route}` : `джерело: ${source}`}
         >
           {source}
         </span>

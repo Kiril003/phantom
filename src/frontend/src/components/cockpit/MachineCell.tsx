@@ -72,7 +72,13 @@ export function MachineCell() {
   const asOf = load.s === 'ok' ? load.at : null;
 
   return (
-    <CockpitCell title="Машина" source="cockpit/machine · 2 с" asOf={asOf} live={live}>
+    <CockpitCell
+      title="Машина"
+      source="Машина · 2 с"
+      route="cockpit/machine"
+      asOf={asOf}
+      live={live}
+    >
       {load.s === 'reading' && <CellWord>читаю метрики машини…</CellWord>}
       {load.s === 'unauthorized' && (
         <CellWord>джерело не відповідає цьому користувачу — потрібні operator-права</CellWord>

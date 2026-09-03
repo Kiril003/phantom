@@ -54,7 +54,8 @@ export function DevicesCell() {
   return (
     <CockpitCell
       title="Пристрої"
-      source="pair/devices · 30 с + WS pair"
+      source="Пристрої · 30 с + живий канал"
+      route="pair/devices + WS pair"
       asOf={load.s === 'ok' ? load.at : null}
     >
       {load.s === 'reading' && <CellWord>читаю список пристроїв…</CellWord>}

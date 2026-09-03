@@ -166,7 +166,7 @@ class TestForegroundDefault:
         from agent.kernel.runtime import agent_runtime as rt
         mock_llm.extend([_strategic(1), _done()])
 
-        task_id, started = await rt.start_task("hello world")
+        task_id, started = await rt.start_task("u-track", "hello world")
         assert started is True
         assert task_id
         # Immediately after spawn, the slot should be populated on the
@@ -182,9 +182,9 @@ class TestForegroundDefault:
         from agent.kernel.runtime import agent_runtime as rt
         mock_llm.extend([_strategic(1), _done(), _strategic(1), _done()])
 
-        id1, started1 = await rt.start_task("first")
+        id1, started1 = await rt.start_task("u-track", "first")
         assert started1 is True
-        id2, started2 = await rt.start_task("second")
+        id2, started2 = await rt.start_task("u-track", "second")
         # Second foreground call returns the existing id, started=False, and
         # does NOT queue.
         assert started2 is False
@@ -202,7 +202,7 @@ class TestBackgroundTrack:
         from agent.kernel.runtime import agent_runtime as rt
         mock_llm.extend([_strategic(1), _done("bg-ok")])
 
-        task_id, started = await rt.start_task("bg goal", track="background")
+        task_id, started = await rt.start_task("u-track", "bg goal", track="background")
         assert started is True
         assert rt.background_slot is not None
         assert rt.background_slot.track == "background"
@@ -218,8 +218,8 @@ class TestBackgroundTrack:
         # responses, the order interleaves naturally.
         mock_llm.extend([_strategic(1), _strategic(1), _done("fg"), _done("bg")])
 
-        fg_id, fg_started = await rt.start_task("foreground")
-        bg_id, bg_started = await rt.start_task("background", track="background")
+        fg_id, fg_started = await rt.start_task("u-track", "foreground")
+        bg_id, bg_started = await rt.start_task("u-track", "background", track="background")
         assert fg_started is True
         assert bg_started is True
         assert fg_id != bg_id
@@ -246,12 +246,12 @@ class TestBackgroundQueue:
         # the loop.
         sm = await build_self_model(registry)
         rt.background_slot = TaskState(
-            id="occupier", goal="occupy", track="background",
+            id="occupier", user_id="u-track", goal="occupy", track="background",
             status="running", self_model=sm,
         )
         try:
-            id_a, started_a = await rt.start_task("bg a", track="background")
-            id_b, started_b = await rt.start_task("bg b", track="background")
+            id_a, started_a = await rt.start_task("u-track", "bg a", track="background")
+            id_b, started_b = await rt.start_task("u-track", "bg b", track="background")
             assert started_a is False  # queued, not started
             assert started_b is False
             assert len(rt._track_queues["background"]) == 2
@@ -271,7 +271,7 @@ class TestBackgroundQueue:
 
         sm = await build_self_model(registry)
         rt.background_slot = TaskState(
-            id="occupier", goal="occupy", track="background",
+            id="occupier", user_id="u-track", goal="occupy", track="background",
             status="running", self_model=sm,
         )
         # Fill the queue to its maxlen directly.
@@ -284,7 +284,7 @@ class TestBackgroundQueue:
             ))
         try:
             with pytest.raises(TrackBusyError) as exc_info:
-                await rt.start_task("overflow", track="background")
+                await rt.start_task("u-track", "overflow", track="background")
             assert exc_info.value.track == "background"
             assert exc_info.value.queue_size == maxlen
         finally:
@@ -300,7 +300,16 @@ class TestBackgroundTimeout:
     async def test_background_timeout_finalizes_as_timeout(
         self, isolated_db, mock_llm, monkeypatch,
     ):
-        """Override per-task timeout to 1s; a never-terminating script exceeds."""
+        """Override per-task timeout to 1s; a never-terminating script exceeds.
+
+        `unsafe_mode=True` тут СВІДОМО. Цей тест міряє ГОДИННИК планувальника
+        (чи впаде задача у «timeout»), а не замки безпеки. Відколи замовчування
+        замків повернули на False (002abb2 — до того вони були зняті на всіх
+        внутрішніх входах), задача чесно впирається у ворота згоди й
+        завершується як «stopped», а не «timeout»: людини, яка б схвалила, у
+        тесті немає. Це правильна поведінка продукту, тож тест каже, що саме
+        він міряє, замість того щоб вимагати знятих замків мовчки.
+        """
         from agent.kernel.runtime import agent_runtime as rt
         from agent.kernel.audit import get_task
 
@@ -318,7 +327,7 @@ class TestBackgroundTimeout:
         monkeypatch.setattr(_tactical_mod, "plan", _slow_plan)
 
         task_id, started = await rt.start_task(
-            "slow bg", track="background", timeout_s=1,
+            "u-track", "slow bg", track="background", timeout_s=1, unsafe_mode=True,
         )
         assert started is True
         # The timeout path cancels the inner loop (first finalize runs as
@@ -328,7 +337,7 @@ class TestBackgroundTimeout:
         async def _poll_status():
             start = asyncio.get_event_loop().time()
             while True:
-                row = await get_task(task_id)
+                row = await get_task("u-track", task_id)
                 if row is not None and row["status"] == "timeout":
                     return row
                 if asyncio.get_event_loop().time() - start > 6.0:
@@ -359,7 +368,7 @@ class TestBackgroundBudget:
 
         sm = await build_self_model(registry)
         rt.background_slot = TaskState(
-            id="bgcap", goal="g", track="background",
+            id="bgcap", user_id="u-track", goal="g", track="background",
             status="running", self_model=sm,
         )
         try:
@@ -468,8 +477,8 @@ class TestSharedState:
         from agent.kernel.runtime import agent_runtime as rt
         mock_llm.extend([_strategic(1), _strategic(1), _done(), _done()])
 
-        await rt.start_task("fg", track="foreground")
-        await rt.start_task("bg", track="background")
+        await rt.start_task("u-track", "fg", track="foreground")
+        await rt.start_task("u-track", "bg", track="background")
         assert rt.foreground_slot is not None
         assert rt.background_slot is not None
         # Both SelfModels reference the same registry/capabilities. We don't

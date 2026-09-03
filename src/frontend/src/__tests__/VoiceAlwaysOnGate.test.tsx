@@ -59,9 +59,9 @@ beforeEach(() => {
   __resetVoiceAlwaysOnWS();
   useInputMode.setState({ mode: 'idle' });
   FakeWebSocket.instances = [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   (globalThis as any).WebSocket = FakeWebSocket;
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   (window as any).AudioContext = class {
     audioWorklet = { addModule: () => Promise.resolve() };
     createMediaStreamSource() { return { connect() { /* noop */ }, disconnect() {} }; }
@@ -69,14 +69,14 @@ beforeEach(() => {
     get destination() { return {}; }
     close() { return Promise.resolve(); }
   };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   (globalThis as any).AudioWorkletNode = class {
     port = { postMessage: () => {}, close: () => {}, onmessage: null };
     connect(t: unknown) { return t; }
     disconnect() {}
   };
   window.sessionStorage.setItem('phantom_token', 'test-token');
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   (navigator as any).mediaDevices = {
     getUserMedia: () =>
       Promise.resolve({ getTracks: () => [{ stop: vi.fn() }] }),

@@ -79,14 +79,14 @@ let fakeMap: FakeMap;
 
 beforeEach(() => {
   fakeMap = new FakeMap();
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   (window as any).__phantom = { map: fakeMap };
   useMapStore.setState({ center: [30.5234, 50.4501], toast: null });
   useSettingsStore.setState((s) => ({ values: { ...s.values, ui_coord_format: 'latlon' } }));
 });
 
 afterEach(() => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   delete (window as any).__phantom;
 });
 
@@ -182,7 +182,7 @@ describe('CoordReadout', () => {
   });
 
   it('без мапи і без центра — «координат ще немає»', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     delete (window as any).__phantom;
     useMapStore.setState({ center: null });
     render(<CoordReadout />);
@@ -204,7 +204,7 @@ describe('RulerTool — воскресіння: жива лінійка', () => 
     const { unmount } = render(<RulerTool onClose={() => {}} />);
     expect(screen.getByTestId('ruler-panel')).toHaveTextContent('Клац по мапі — точка');
     unmount();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     delete (window as any).__phantom;
     render(<RulerTool onClose={() => {}} />);
     expect(screen.getByTestId('ruler-panel')).toHaveTextContent('Мапа ще не готова');
@@ -323,7 +323,7 @@ describe('GridOverlay — сітка MGRS', () => {
   });
 
   it('без мапи — «мапа ще не готова»', () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     delete (window as any).__phantom;
     render(<GridOverlay active />);
     expect(screen.getByTestId('grid-off-chip')).toHaveTextContent('Сітка: мапа ще не готова');

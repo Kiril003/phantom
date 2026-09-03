@@ -176,7 +176,7 @@ export const useAgenticStore = create<AgenticState>()(
         } else {
           // JS Eval fallback in safe sandbox
           try {
-            // eslint-disable-next-line no-eval
+             
             const res = eval(trimmed);
             output = String(res);
           } catch (e: any) {

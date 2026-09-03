@@ -63,7 +63,7 @@ export function VoiceAlwaysOnGate({ onStatusChange }: Props = {}) {
       const confidence = typeof t.confidence === 'number' ? t.confidence : 0;
       const minConfidence = text.length <= 2 ? 0.55 : 0.4;
       if (confidence < minConfidence) {
-        // eslint-disable-next-line no-console
+         
         console.debug(
           '[voice-gate] dropped low-confidence',
           { text, confidence, threshold: minConfidence, source: t.source },
@@ -124,7 +124,7 @@ export function VoiceAlwaysOnGate({ onStatusChange }: Props = {}) {
   // console during manual testing without forcing a banner on users.
   useEffect(() => {
     if (errorMessage) {
-      // eslint-disable-next-line no-console
+       
       console.warn('[voice-always-on]', errorMessage);
     }
   }, [errorMessage]);

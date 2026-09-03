@@ -191,20 +191,20 @@ describe('useVoiceRecorder', () => {
       },
       configurable: true,
     });
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     (globalThis as any).MediaRecorder = FakeMediaRecorder;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     (globalThis as any).AudioContext = FakeAudioContext;
     if (typeof performance === 'undefined') {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       (globalThis as any).performance = { now: () => Date.now() };
     }
   });
 
   afterEach(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     delete (globalThis as any).MediaRecorder;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     delete (globalThis as any).AudioContext;
   });
 

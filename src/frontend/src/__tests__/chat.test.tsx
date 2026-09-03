@@ -538,7 +538,7 @@ describe('ChatWindow', () => {
       const b = positions[i + 1];
       expect(a && b).toBeTruthy();
       // compareDocumentPosition: 4 = FOLLOWING (b is after a).
-      // eslint-disable-next-line no-bitwise
+       
       expect((a as Node).compareDocumentPosition(b as Node) & 4).toBeTruthy();
     }
   });
@@ -555,7 +555,7 @@ describe('ChatWindow', () => {
     render(<ChatWindow minimalChrome />);
     const promptEl = screen.getByText('prompt');
     const replyEl = screen.getByText('reply');
-    // eslint-disable-next-line no-bitwise
+     
     expect(promptEl.compareDocumentPosition(replyEl) & 4).toBeTruthy();
   });
 
@@ -682,7 +682,7 @@ describe('ChatWindow TTS playback ducks the always-on mic', () => {
         timeline.push('pause');
       }
     }
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     (window as any).Audio = FakeAudioImpl as unknown as typeof window.Audio;
 
     // URL.createObjectURL exists in jsdom but stub for determinism.
@@ -717,7 +717,7 @@ describe('ChatWindow TTS playback ducks the always-on mic', () => {
   });
 
   afterEach(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     (window as any).Audio = originalAudio;
   });
 

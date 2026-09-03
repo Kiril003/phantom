@@ -52,7 +52,7 @@ import { useMapStore } from '../stores/mapStore';
 
 function dispatch(op: string, payload: Record<string, unknown>, narrative = ''): void {
   act(() => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     (wsClient as any).__dispatch('map', {
       channel: 'map',
       type: op,

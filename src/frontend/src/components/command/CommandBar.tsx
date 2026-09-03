@@ -133,7 +133,7 @@ export function CommandBar({ onNavigate, disableHotkey }: CommandBarProps) {
   const scored = useMemo(
     () => (open ? filterCommands(buildCommands({ onNavigate, close }), query) : []),
     // buildCommands читає стори через getState — залежність від open/query достатня.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
     [open, query, onNavigate, close],
   );
   const groups = useMemo(() => groupBySection(scored), [scored]);

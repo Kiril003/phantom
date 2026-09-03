@@ -257,7 +257,7 @@ function LineContent({
     }
     cursor = tokEnd;
     if (localEnd >= lineLen) break;
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+     
     void localStart;
   }
 

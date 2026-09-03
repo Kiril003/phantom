@@ -62,7 +62,7 @@ export class BrowserGeolocationService {
   static async queryPermission(): Promise<PermissionState | null> {
     if (typeof navigator === 'undefined' || !('permissions' in navigator)) return null;
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const res = await (navigator.permissions as any).query({ name: 'geolocation' });
       return res.state as PermissionState;
     } catch {

@@ -37,7 +37,7 @@ describe('useMicStream — contract', () => {
   });
 
   it('surfaces error when getUserMedia is unavailable', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     (navigator as any).mediaDevices = undefined;
     const { result } = renderHook(() => useMicStream());
     await expect(result.current.acquire('c1')).rejects.toThrow(
@@ -51,7 +51,7 @@ describe('useMicStream — contract', () => {
   it('only calls getUserMedia once for two parallel acquires', async () => {
     const { stream } = makeFakeStream();
     const getUserMedia = vi.fn().mockResolvedValue(stream);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     (navigator as any).mediaDevices = { getUserMedia };
     const { result } = renderHook(() => useMicStream());
     const p1 = result.current.acquire('c1');
@@ -67,7 +67,7 @@ describe('useMicStream — contract', () => {
 
   it('keeps stream alive when one consumer releases', async () => {
     const { stream, tracks } = makeFakeStream();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     (navigator as any).mediaDevices = { getUserMedia: vi.fn().mockResolvedValue(stream) };
     const { result } = renderHook(() => useMicStream());
     await act(async () => {
@@ -86,7 +86,7 @@ describe('useMicStream — contract', () => {
 
   it('stops tracks when the last consumer releases', async () => {
     const { stream, tracks } = makeFakeStream();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     (navigator as any).mediaDevices = { getUserMedia: vi.fn().mockResolvedValue(stream) };
     const { result } = renderHook(() => useMicStream());
     await act(async () => {
@@ -103,7 +103,7 @@ describe('useMicStream — contract', () => {
   });
 
   it('both consumers receive the getUserMedia rejection', async () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     (navigator as any).mediaDevices = {
       getUserMedia: vi.fn().mockRejectedValue(new Error('mic denied')),
     };
@@ -121,7 +121,7 @@ describe('useMicStream — contract', () => {
 
   it('release of an unknown consumer is a no-op', async () => {
     const { stream } = makeFakeStream();
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     (navigator as any).mediaDevices = { getUserMedia: vi.fn().mockResolvedValue(stream) };
     const { result } = renderHook(() => useMicStream());
     await act(async () => {
@@ -137,7 +137,7 @@ describe('useMicStream — contract', () => {
   it('second acquire after full release re-calls getUserMedia', async () => {
     const { stream } = makeFakeStream();
     const getUserMedia = vi.fn().mockResolvedValue(stream);
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     (navigator as any).mediaDevices = { getUserMedia };
     const { result } = renderHook(() => useMicStream());
     await act(async () => {

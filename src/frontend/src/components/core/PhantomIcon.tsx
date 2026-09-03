@@ -190,7 +190,7 @@ export function PhantomIcon({
 
   if (!Cmp) {
     if (import.meta.env.DEV) {
-      // eslint-disable-next-line no-console
+       
       console.warn(`[PhantomIcon] unmapped icon name: "${name}"`);
     }
     return <HelpCircle size={size} strokeWidth={resolvedStroke} fill={resolvedFill} fillOpacity={resolvedFillOpacity} {...rest} />;

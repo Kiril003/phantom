@@ -60,7 +60,7 @@ export function RouteLayer() {
       if (!source) {
         map.addSource(SOURCE_ID, {
           type: 'geojson',
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+           
           data: geojson as any,
         });
         map.addLayer({
@@ -86,7 +86,7 @@ export function RouteLayer() {
           },
         });
       } else {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         source.setData(geojson as any);
       }
     } catch {
@@ -163,7 +163,7 @@ export function RouteLayer() {
         /* ignore teardown errors */
       }
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [map]);
 
   return null;

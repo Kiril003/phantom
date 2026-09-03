@@ -145,7 +145,7 @@ function resolveEffectiveStyle(style: PhantomMapStyle): 'dark' | 'streets' {
   if (style !== 'satellite') return style;
   if (!satelliteRemovedWarned) {
     satelliteRemovedWarned = true;
-    // eslint-disable-next-line no-console
+     
     console.warn(
       "[phantom-map] 'satellite' map style has been removed (no free-for-commercial-use satellite source available) — falling back to 'streets'.",
     );

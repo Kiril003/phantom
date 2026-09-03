@@ -40,7 +40,7 @@ export function HeatmapLayer() {
       if (!source) {
         map.addSource(sourceId, {
           type: 'geojson',
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+           
           data: geojson as any,
         });
         map.addLayer({
@@ -71,7 +71,7 @@ export function HeatmapLayer() {
           },
         });
       } else {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         source.setData(geojson as any);
       }
     } catch {

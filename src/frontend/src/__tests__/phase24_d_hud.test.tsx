@@ -272,7 +272,7 @@ describe('useMapAgentBridge', () => {
   it('applies set_view mutations to mapStore', () => {
     render(<BridgeHarness />);
     act(() => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       (wsClient as any).__dispatch('map', {
         channel: 'map',
         type: 'set_view',
@@ -292,7 +292,7 @@ describe('useMapAgentBridge', () => {
     useMapStore.setState({ layers: { ...useMapStore.getState().layers, heatmap: false } });
     render(<BridgeHarness />);
     act(() => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       (wsClient as any).__dispatch('map', {
         channel: 'map',
         type: 'enable_layer',
@@ -306,7 +306,7 @@ describe('useMapAgentBridge', () => {
     render(<BridgeHarness />);
     expect(() =>
       act(() => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         (wsClient as any).__dispatch('map', {
           channel: 'map',
           type: 'enable_layer',

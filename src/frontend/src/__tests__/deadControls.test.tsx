@@ -42,7 +42,7 @@ vi.mock('framer-motion', async () => {
           const cleaned: Record<string, unknown> = {};
           for (const [k, v] of Object.entries(rest)) if (!drop.has(k)) cleaned[k] = v;
           const Tag = key as unknown as keyof JSX.IntrinsicElements;
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+           
           return <Tag {...(cleaned as any)}>{children}</Tag>;
         },
       },

@@ -19,14 +19,14 @@ import type { Map as MapLibreMap } from 'maplibre-gl';
 export function useHudMap(): MapLibreMap | null {
   const [map, setMap] = useState<MapLibreMap | null>(() => {
     if (typeof window === 'undefined') return null;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     return ((window as any).__phantom?.map as MapLibreMap | undefined) ?? null;
   });
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
     const timer = window.setInterval(() => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       const current = ((window as any).__phantom?.map as MapLibreMap | undefined) ?? null;
       setMap((prev) => (prev === current ? prev : current));
     }, 500);

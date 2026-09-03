@@ -40,7 +40,7 @@ export function ReconLayer() {
       if (!source) {
         map.addSource(sourceId, {
           type: 'geojson',
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+           
           data: geojson as any,
         });
         map.addLayer({
@@ -55,7 +55,7 @@ export function ReconLayer() {
           },
         });
       } else {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+         
         source.setData(geojson as any);
       }
     } catch {

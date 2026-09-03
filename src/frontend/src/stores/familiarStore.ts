@@ -196,9 +196,9 @@ export const useFamiliarStore = create<FamiliarStoreState>((set, get) => ({
 }));
 
 /* ── DevTools handle ─────────────────────────────────────────────────────── */
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 if (typeof window !== 'undefined' && import.meta.env.DEV) {
   (window as any).__phantom = (window as any).__phantom ?? {};
   (window as any).__phantom.familiar = useFamiliarStore;
 }
-/* eslint-enable @typescript-eslint/no-explicit-any */
+ 

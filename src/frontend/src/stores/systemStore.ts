@@ -47,7 +47,7 @@ interface SystemStoreState {
   goSentinel: () => void;
 }
 
-/* eslint-disable @typescript-eslint/no-explicit-any */
+ 
 if (import.meta.env.DEV) {
   (window as any).__phantom = (window as any).__phantom ?? {};
 }

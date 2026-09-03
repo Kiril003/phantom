@@ -37,7 +37,7 @@ import { wsClient } from '../services/websocket';
 import { AirRaidLayer } from '../components/map/layers/AirRaidLayer';
 
 const dispatchAlert = (count: number, oblasts: string[]) => {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   (wsClient as any).__dispatch('map', {
     channel: 'map',
     type: 'alert',
@@ -112,7 +112,7 @@ describe('AirRaidLayer', () => {
   it('ignores broadcasts for other layers', () => {
     render(<AirRaidLayer />);
     act(() => {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+       
       (wsClient as any).__dispatch('map', {
         channel: 'map',
         type: 'alert',

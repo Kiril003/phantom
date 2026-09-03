@@ -19,7 +19,7 @@ vi.mock('framer-motion', async () => {
             (props: Record<string, unknown>) => {
               const { children, ...rest } = props as { children?: React.ReactNode };
               const Tag = (key as string) as keyof JSX.IntrinsicElements;
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+               
               return <Tag {...(rest as any)}>{children}</Tag>;
             },
       }

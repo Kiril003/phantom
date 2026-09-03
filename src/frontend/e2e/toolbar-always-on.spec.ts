@@ -114,7 +114,7 @@ async function pinLogin(page: Page): Promise<void> {
 async function stubVoiceWS(page: Page): Promise<void> {
   await page.addInitScript(() => {
     const Original = window.WebSocket;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     const Stub: any = function (url: string) {
       if (typeof url === 'string' && url.includes('/ws/voice')) {
         return {
@@ -138,7 +138,7 @@ async function stubVoiceWS(page: Page): Promise<void> {
     Stub.CLOSED = Original.CLOSED;
     Stub.CONNECTING = Original.CONNECTING;
     Stub.CLOSING = Original.CLOSING;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     (window as any).WebSocket = Stub;
   });
 }

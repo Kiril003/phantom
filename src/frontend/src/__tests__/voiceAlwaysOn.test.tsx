@@ -130,13 +130,13 @@ beforeEach(() => {
   __resetVoiceAlwaysOnWS();
   useInputMode.setState({ mode: 'idle' });
   FakeWebSocket.instances = [];
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   (globalThis as any).WebSocket = FakeWebSocket;
   // Stub AudioContext so the hook's pre-flight check passes and WS
   // event parsing becomes testable. Real Web Audio is out of scope
   // here; the mic setup is expected to fail at getUserMedia, at which
   // point the WS is already live and serving events.
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   (window as any).AudioContext = class {
     audioWorklet = { addModule: () => Promise.resolve() };
     createMediaStreamSource() { return { connect() { /* noop */ }, disconnect() {} }; }
@@ -149,7 +149,7 @@ beforeEach(() => {
     get destination() { return {}; }
     close() { return Promise.resolve(); }
   };
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   (globalThis as any).AudioWorkletNode = class {
     port = { postMessage: () => {}, close: () => {}, onmessage: null };
     connect(t: unknown) { return t; }
@@ -196,7 +196,7 @@ describe('useVoiceAlwaysOn — auth & media availability', () => {
   it('sets error when getUserMedia is unavailable', async () => {
     // Token is set, but jsdom has no mediaDevices — hook should bail after WS open.
     // Simulate media absence explicitly.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     (navigator as any).mediaDevices = undefined;
     render(<Harness />);
     await act(async () => {
@@ -235,7 +235,7 @@ describe('useVoiceAlwaysOn — server event handling', () => {
     // We accept the audio setup will then fail (no real AudioContext)
     // and the hook logs the mic error, but the WS is still live, so
     // server events still land.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     (navigator as any).mediaDevices = {
       getUserMedia: () => Promise.reject(new Error('no mic in jsdom')),
     };
@@ -325,7 +325,7 @@ describe('useVoiceAlwaysOn — outgoing commands', () => {
     // Succeed at getUserMedia so the hook keeps the WS open past the
     // mic setup block.
     const fakeTrack = { stop: vi.fn() };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     (navigator as any).mediaDevices = {
       getUserMedia: () =>
         Promise.resolve({ getTracks: () => [fakeTrack] }),
@@ -374,7 +374,7 @@ describe('useVoiceAlwaysOn — input mode arbitration', () => {
     // Succeed at getUserMedia so the hook keeps the WS open — we need
     // to verify that a server-side reset cmd flows out to the server.
     const fakeTrack = { stop: vi.fn() };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     (navigator as any).mediaDevices = {
       getUserMedia: () =>
         Promise.resolve({ getTracks: () => [fakeTrack] }),
@@ -461,7 +461,7 @@ describe('useVoiceAlwaysOn — singleton WS (Phase 12.0 Bug 1 fix)', () => {
     __resetVoiceAlwaysOnWS();
     // Permissive mic stub so two parallel hooks both reach WS open.
     const fakeTrack = { stop: vi.fn() };
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     (navigator as any).mediaDevices = {
       getUserMedia: () =>
         Promise.resolve({ getTracks: () => [fakeTrack] }),
@@ -584,7 +584,7 @@ describe('useVoiceAlwaysOn — Phase 13b streaming partials', () => {
     revisedSpy.mockClear();
     // Reject getUserMedia so the WS stays open and the audio setup
     // failure does not prevent the message handler from running.
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+     
     (navigator as any).mediaDevices = {
       getUserMedia: () => Promise.reject(new Error('no mic in jsdom')),
     };

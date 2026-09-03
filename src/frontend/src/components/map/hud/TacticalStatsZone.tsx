@@ -34,9 +34,14 @@ export function TacticalStatsZone() {
           bare
         />
       </div>
-      <div className="py-0.5">
-        <CompassChip bearing={tactical.bearing} known={tactical.fix} bare />
-      </div>
+      {/* Курс без фіксу — рядок із прочерком, тобто мертвий датчик у
+          короні. Те саме правило, що в заголовку діалогу: краще нема, ніж
+          порожній рядок про ніщо. З'явиться фікс — з'явиться й курс. */}
+      {tactical.fix && (
+        <div className="py-0.5">
+          <CompassChip bearing={tactical.bearing} known bare />
+        </div>
+      )}
       <RenderTierChip tier={renderTier} bare />
     </div>
   );

@@ -436,9 +436,18 @@ export function HudShell({
       {/* Вузько: «Позиція» — речення про стан — іде НАД рядом дієслів,
           у смугу, де під нею нічого немає. Широко вона лишається першою
           в лівій колонці, як і була. */}
+      {/* Острівець мапи: позиція + лінійка + кредит ОДНИМ гніздом.
+          Я був розібрав його на троє, розводячи скло пошуку від кредиту
+          ODbL, — і власник це побачив першим ділом («знизу ти прибрав той
+          острівець?»). Гніздо повернуто цілим, просто вище ряду дієслів,
+          де його ніхто не накриває, і ширшим — 264 px, щоб кредит ліг
+          ОДНИМ рядком: текст просить 206, плюс знак, шеврон і поля чипса
+          (~53). На 252 не вистачало сімох пікселів, і він ламався надвоє. */}
       {narrow && (
-        <div className="pointer-events-auto absolute bottom-[152px] left-[76px] w-[168px]">
+        <div className="pointer-events-auto absolute bottom-[152px] left-[76px] flex w-[264px] flex-col items-start gap-1.5">
           <WhereChip position={position} pairedDevices={pairedDevices} />
+          <ScaleBar zoom={zoom} lat={lat} />
+          <AttributionDrawer maxWidthPx={264} />
         </div>
       )}
 
@@ -498,9 +507,9 @@ export function HudShell({
       {/* Вузько: нижній край — регістр фактів, два поверхи, жоден нікого не
           накриває. Зверху 44-піксельний поверх керунків (координата з її
           перемикачем формату і «Поруч»), знизу — пласкі факти: лінійка й
-          повний кредит одним рядком: сам текст просить 206 px, плюс знак,
-          шеврон і поля чипса — 252. У 168, де він стояв, кредит ламався на
-          три обрізані рядки. 44 + 4 + 26 = 74 у 84 вільних. */}
+          лишається керунками: координата з перемикачем формату і «Поруч».
+          Факти (позиція, лінійка, кредит) переїхали в острівець вище — так
+          їх бачить око як одне ціле, а не як три уламки. */}
       {narrow && (
         <div className="absolute bottom-3 left-[76px] right-[76px] flex flex-col gap-1">
           <div className="flex items-center justify-between gap-2">
@@ -511,10 +520,7 @@ export function HudShell({
               <NearbyPanel lat={lookingAt.lat} lon={lookingAt.lon} zoom={zoom} onSelect={handleNearbySelect} />
             </div>
           </div>
-          <div className="pointer-events-auto flex items-center gap-2">
-            <ScaleBar zoom={zoom} lat={lat} />
-            <AttributionDrawer maxWidthPx={252} />
-          </div>
+
         </div>
       )}
     </div>

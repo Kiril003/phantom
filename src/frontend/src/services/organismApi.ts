@@ -36,6 +36,20 @@ export interface HealthPulse {
   ai_active: string;
   /** Запасний двигун, напр. "ollama". */
   ai_fallback: string;
+  /**
+   * Стан моделі довготривалої памʼяті (Сесія 5, 604bef9). `reason` —
+   * готове речення українською ДЛЯ ЛЮДИНИ; коли модель є, `present`
+   * істинний і `reason` порожній. Скло не складає власного тексту:
+   * ядро знає, чому саме памʼять не працює, а фронт цього не знає.
+   */
+  memory_model?: {
+    model: string;
+    present: boolean;
+    path: string | null;
+    download_allowed: boolean;
+    searched?: string[];
+    reason: string | null;
+  };
 }
 
 /**

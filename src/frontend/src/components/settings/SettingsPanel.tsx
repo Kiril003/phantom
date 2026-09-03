@@ -17,6 +17,7 @@ import {
 import { ProfileManagementSection } from './ProfileManagement';
 import { MobilePairing } from './MobilePairing';
 import { SymbiotePanel } from './SymbiotePanel';
+import { MemoryModelNotice } from './MemoryModelNotice';
 import { VaultPanel } from './VaultPanel';
 import { BackupRestoreCard } from './BackupRestoreCard';
 import {
@@ -913,6 +914,11 @@ function CategoryContent({
       </>
     );
   }
+  // Стан моделі памʼяті — над налаштуваннями ШІ, бо саме тут людина
+  // очікує памʼять. Одне місце, не три: кокпіт і симбіот про це
+  // не говорять навмисно.
+  const memoryNotice = category.id === 'ai' ? <MemoryModelNotice /> : null;
+
   if (category.id === 'vault') return <VaultPanel />;
   if (category.id === 'desktop') return <DesktopShellGroup />;
   if (category.id === 'polis_keys') return <KeyVaultPanel />;
@@ -999,6 +1005,7 @@ function CategoryContent({
           <LanguagePicker />
         </>
       )}
+      {memoryNotice}
       {category.id === 'ai' && <AIProviderDiagnostics />}
       {category.id === 'voice' && <NPUDiagnostics />}
       {category.id === 'agent' && <AgentLimitsGroup values={values} onChange={onChange} />}

@@ -25,7 +25,11 @@ export type AgentTaskStatus =
   | 'blocked_quota'
   | 'done'
   | 'failed'
-  | 'stopped';
+  | 'stopped'
+  // Ядро має цей статус з Phase 9.4a (agent/schemas.py:64) і пише його в
+  // базу, а спільний тип його не знав — тож фронт отримував з API статус,
+  // якого в юніоні нема, і малював сире англійське слово. Дрейф закритий.
+  | 'timeout';
 
 export type AgentSubGoalStatus =
   | 'pending'

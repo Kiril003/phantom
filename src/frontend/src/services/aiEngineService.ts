@@ -194,7 +194,13 @@ class AIEngineService {
       try {
         const errJson = JSON.parse(errText);
         parsedMsg = errJson.error?.message || errText;
-      } catch {}
+      } catch {
+        // Тіло помилки не JSON — лишаємо сирий текст як є.
+        // Порожній блок тут ЧЕСНИЙ, на відміну від решти таких у
+        // дереві: нічого не ковтається, бо рядком нижче виняток
+        // однаково летить далі з цим самим текстом. Це розбір
+        // формату, а не приховування відмови.
+      }
       throw new Error(`Gemini API помилка (${res.status}): ${parsedMsg}`);
     }
 
@@ -254,7 +260,13 @@ class AIEngineService {
       try {
         const errJson = JSON.parse(errText);
         parsedMsg = errJson.error?.message || errText;
-      } catch {}
+      } catch {
+        // Тіло помилки не JSON — лишаємо сирий текст як є.
+        // Порожній блок тут ЧЕСНИЙ, на відміну від решти таких у
+        // дереві: нічого не ковтається, бо рядком нижче виняток
+        // однаково летить далі з цим самим текстом. Це розбір
+        // формату, а не приховування відмови.
+      }
       throw new Error(`AI API помилка (${res.status}): ${parsedMsg}`);
     }
 

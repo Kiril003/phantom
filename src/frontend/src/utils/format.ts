@@ -22,6 +22,11 @@ export function formatRelativeClock(secondsAgo: number): string {
 export function sanitizeInput(text: string): string {
   // Basic prompt injection deterrent: strip suspicious control chars
   // and limit length.
+  //
+  // Керівні символи тут навмисні — вони і є те, що ми вирізаємо. Правило
+  // `no-control-regex` застерігає від випадкових; глушимо прицільно й з
+  // причиною, а не вимикаємо правило на все дерево.
+  // eslint-disable-next-line no-control-regex
   return text.trim().slice(0, 5000).replace(/[\u0000-\u0008\u000B-\u000C\u000E-\u001F]/g, '');
 }
 

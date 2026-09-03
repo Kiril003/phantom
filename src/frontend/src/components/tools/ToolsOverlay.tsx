@@ -161,21 +161,15 @@ export function ToolsOverlay({ open, initialTab = 'timer', onClose }: ToolsOverl
               {tab === 'alarm' && <AlarmManager />}
               {tab === 'calendar' && <CalendarManager />}
               {tab === 'files' && <FileBrowser />}
-              {false && (
-                <div
-                  className="playfair"
-                  style={{
-                    padding: 32,
-                    textAlign: 'center',
-                    color: 'var(--ink-muted)',
-                    fontStyle: 'italic',
-                    fontSize: 14,
-                  }}
-                >
-                  Цей інструмент чекає на свою чергу в плані —{' '}
-                  <code style={{ fontStyle: 'normal' }}>docs/PHASE_5_FEATURE_COMPLETION.md</code>.
-                </div>
-              )}
+              {/* Тут стояв блок під `{false && …}` — напис «цей інструмент
+                  чекає на свою чергу в плані». Він був недосяжний за
+                  побудовою: `ToolsTab` — це рівно чотири вкладки вище, і
+                  кожна має свій компонент. А ще раніше вкладку, яка не
+                  готова, взагалі не можна вибрати: `onClick` пропускає
+                  лише `t.ready`. Тобто напис не з'явився б ніколи.
+                  Прибрано за знахідкою `no-constant-binary-expression`,
+                  доданого 30.08 після сусіднього випадку в месенджері, де
+                  за таким самим глушником ховалась зламана фіча. */}
             </div>
           </motion.div>
         </motion.div>

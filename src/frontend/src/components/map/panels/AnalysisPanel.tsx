@@ -1,5 +1,5 @@
-import { useState, useEffect, useMemo } from 'react';
-import { X, Ruler, Mountain, MousePointer2, Activity } from 'lucide-react';
+import { useCallback, useState, useEffect, useMemo } from 'react';
+import { X, Mountain, MousePointer2, Activity } from 'lucide-react';
 import { AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { mapApi } from '../../../services/api';
 import { useMapStore } from '../../../stores/mapStore';
@@ -20,19 +20,23 @@ export interface AnalysisPanelProps {
   selectedPath?: [number, number][]; // lat, lon
 }
 
-export function AnalysisPanel({ open, onClose, selectedPath = [] }: AnalysisPanelProps) {
+/** Стала порожня лінія на весь модуль.
+ *
+ *  Типове `selectedPath = []` у самій деструктуризації створює НОВИЙ масив на
+ *  кожен рендер. Він стоїть у залежностях ефекту нижче, тож ефект зривався б
+ *  щокадру — сьогодні беззбитково (сторож вимагає ≥2 точок), але першого ж
+ *  дня, коли лінію справді почнуть передавати, це стало б чергою запитів до
+ *  бекенда замість одного. Одна стала знімає це назавжди. */
+const NO_PATH: [number, number][] = [];
+
+export function AnalysisPanel({ open, onClose, selectedPath = NO_PATH }: AnalysisPanelProps) {
   const [profile, setProfile] = useState<{ distance_m: number; elevation_m: number }[]>([]);
   const [loading, setLoading] = useState(false);
   const [refusal, setRefusal] = useState<string | null>(null);
-  const [activeTool, setActiveTool] = useState<'none' | 'measure' | 'elevation'>('none');
+  const [activeTool, setActiveTool] = useState<'none' | 'elevation'>('none');
 
-  useEffect(() => {
-    if (open && selectedPath.length >= 2 && activeTool === 'elevation') {
-      fetchProfile();
-    }
-  }, [open, selectedPath, activeTool]);
 
-  const fetchProfile = async () => {
+  const fetchProfile = useCallback(async () => {
     setLoading(true);
     setRefusal(null);
     try {
@@ -50,12 +54,18 @@ export function AnalysisPanel({ open, onClose, selectedPath = [] }: AnalysisPane
     } finally {
       setLoading(false);
     }
-  };
+  }, [selectedPath]);
 
-  const totalDistance = useMemo(() => {
-    if (profile.length === 0) return 0;
-    return profile[profile.length - 1].distance_m;
-  }, [profile]);
+  useEffect(() => {
+    if (open && selectedPath.length >= 2 && activeTool === 'elevation') {
+      void fetchProfile();
+    }
+  }, [open, selectedPath, activeTool, fetchProfile]);
+
+  // Довжина рахується З САМОЇ ЛАМАНОЇ, а не з профілю висот. Раніше вона
+  // бралась як `profile[останній].distance_m` — тобто «Лінійка» не могла
+  // показати метри без DEM-сервера: немає рельєфу, немає й відстані. Довжина
+  // ламаної не потребує нічого, крім координат.
 
   // Порожній профіль повертаємо нулем окремо: сіяти нулем сам Math.min/max означало б,
   // що мінімум ніколи не підніметься вище рівня моря, а вся Україна лежить вище.
@@ -102,12 +112,12 @@ export function AnalysisPanel({ open, onClose, selectedPath = [] }: AnalysisPane
           onClick={() => setActiveTool('none')}
           label="Вибір"
         />
-        <ToolButton 
-          icon={<Ruler size={14} />} 
-          active={activeTool === 'measure'} 
-          onClick={() => setActiveTool('measure')}
-          label="Лінійка"
-        />
+        {/* Тут була друга «Лінійка». Робоча живе на рейці мапи —
+            `RulerTool`: клац ставить точку, подвійний завершує лінію,
+            показує сегменти й азимут. Ця ж кнопка не мала під собою
+            нічого: відстань вона брала з профілю висот, а сам профіль —
+            зі шляху, якого панелі не передавали. Два входи з однією
+            назвою, з яких працює один, гірші за один вхід. */}
         <ToolButton 
           icon={<Mountain size={14} />} 
           active={activeTool === 'elevation'} 
@@ -124,28 +134,17 @@ export function AnalysisPanel({ open, onClose, selectedPath = [] }: AnalysisPane
           </div>
         )}
 
-        {activeTool === 'measure' && (
-          <div className="space-y-4">
-            <div className="p-3 rounded-xl bg-black/[0.04] border border-black/5">
-              <div className="text-[10px] text-[color:var(--ink-muted)] uppercase font-bold mb-1">Відстань</div>
-              <div className="text-2xl font-display text-[color:var(--ink-primary)]">
-                {totalDistance > 1000 
-                  ? `${(totalDistance / 1000).toFixed(2)} км` 
-                  : `${Math.round(totalDistance)} м`}
-              </div>
-            </div>
-            <div className="text-[10px] text-[color:var(--ink-muted)] leading-relaxed italic px-1">
-              Натисніть на мапу, щоб побудувати маршрут для вимірювання.
-            </div>
-          </div>
-        )}
 
         {activeTool === 'elevation' && (
           <div className="space-y-4">
             {selectedPath.length < 2 ? (
               <div className="py-10 text-center space-y-2 opacity-40">
                 <Mountain size={32} className="mx-auto" />
-                <div className="text-[10px] uppercase font-bold tracking-tighter">Побудуйте лінію для профілю висот</div>
+                <div className="text-[10px] uppercase font-bold tracking-tighter">
+                  {selectedPath.length === 0
+                    ? 'Проведіть лінію «Лінійкою» на рейці мапи'
+                    : 'Ще одна точка лінійкою, і профіль побудується'}
+                </div>
               </div>
             ) : loading ? (
               <div className="py-10 text-center space-y-2 opacity-40 animate-pulse">

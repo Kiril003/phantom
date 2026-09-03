@@ -18,10 +18,19 @@ export const InteractiveParametricMathCanvas: React.FC = () => {
   const [isRotating, setIsRotating] = useState(true);
   const [colorMode] = useState<'sunset' | 'cyber' | 'emerald'>('sunset');
 
+  // Кут обертання живе у ref, а не читається зі стану всередині ефекту.
+  // Інакше вибір без виходу: або `rotationAngle` у залежностях — і тоді
+  // цикл rAF розбирається й будується наново КОЖЕН кадр (бо сам себе
+  // оновлює через setRotationAngle), або його там немає — і лінтер має
+  // рацію, що ефект читає застаріле значення. Ref знімає обидва:
+  // джерелом правди для малювання є він, а стан лишається виключно
+  // для підпису на екрані.
+  const angleRef = useRef(rotationAngle);
+
   // Animation Loop for 3D projection
   useEffect(() => {
     let animId: number;
-    let angle = rotationAngle;
+    let angle = angleRef.current;
 
     const render = () => {
       const canvas = canvasRef.current;
@@ -38,6 +47,7 @@ export const InteractiveParametricMathCanvas: React.FC = () => {
 
       if (isRotating) {
         angle = (angle + 0.5) % 360;
+        angleRef.current = angle;
         setRotationAngle(Math.round(angle));
       }
 

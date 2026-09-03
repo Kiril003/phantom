@@ -103,7 +103,7 @@ export function CoordReadout({ className = '' }: { className?: string }): JSX.El
   // Store синхронізує центр лише на moveend, тож до першого руху камери
   // він порожній — а мапа при цьому вже стоїть і центр ЗНАЄ. Питаємо її
   // саму; «координат ще немає» лишається правдою тільки без мапи.
-  const liveCenter = (() => {
+  const liveCenter = useMemo(() => {
     if (cursor || center || !map) return null;
     try {
       const c = map.getCenter();
@@ -111,8 +111,15 @@ export function CoordReadout({ className = '' }: { className?: string }): JSX.El
     } catch {
       return null;
     }
-  })();
-  const point = cursor ?? (center ? { lat: center[1], lon: center[0] } : liveCenter);
+  }, [cursor, center, map]);
+  // Обидва memo тут не про швидкість. `point` збирався літералом
+  // `{ lat, lon }` щорендеру, тобто мав НОВУ тотожність завжди — а від нього
+  // залежить useCallback `copy` нижче. Той useCallback через це пересоздавався
+  // на кожен кадр і не запам'ятовував нічого: обгортка була, користі не було.
+  const point = useMemo(
+    () => cursor ?? (center ? { lat: center[1], lon: center[0] } : liveCenter),
+    [cursor, center, liveCenter],
+  );
   const text = point ? coordText(format, point.lat, point.lon) : 'координат ще немає';
 
   const cycleFormat = useCallback(() => {

@@ -13,3 +13,4 @@ export * from './familiar';
 export * from './studio';
 export * from './mission';
 export * from './polis';
+export * from './space';

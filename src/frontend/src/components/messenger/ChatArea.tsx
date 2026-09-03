@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect, useCallback, useImperativeHandle, useLayoutEffect, forwardRef } from 'react';
 import {
+  MessagesSquare,
   MapPin,
   Play,
   Pause,
@@ -2391,6 +2392,24 @@ export const ChatArea = forwardRef<ChatAreaHandle, ChatAreaProps>(({
                     <div className={`absolute bottom-full mb-1 ${
                       isSelf ? 'right-1' : 'left-1'
                     } bg-[#FDFCF9] border border-[#E8E1D3] text-[#21261F] rounded-[10px] px-1 py-0.5 flex items-center gap-0.5 shadow-[0_1px_2px_rgba(60,44,24,0.05)] z-20 animate-in fade-in duration-100`}>
+                      {/* Гілка від цього листа. Рівень, якого в застосунку не
+                          було: тип `Thread` існував, дороги до нього не було. */}
+                      <button
+                        onClick={() => {
+                          soundFx.playTap();
+                          window.dispatchEvent(
+                            new CustomEvent('phantom:open-thread', {
+                              detail: { messageId: msg.id },
+                            }),
+                          );
+                        }}
+                        className="p-1 hover:bg-[#F3EEE3] rounded"
+                        title="Відповісти гілкою"
+                        aria-label="Відповісти гілкою"
+                      >
+                        <MessagesSquare className="w-3.5 h-3.5" strokeWidth={1.75} />
+                      </button>
+
                       {/* Top 3 Quick Emojis */}
                       {['❤️', '👍', '🔥'].map((emoji) => (
                         <button

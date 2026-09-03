@@ -155,11 +155,40 @@ function DeskIndex() {
   );
 }
 
+/**
+ * Двері для зняття кадрів — і чому вони структурно не можуть поїхати в реліз.
+ *
+ * Столи, мапа і смуга організму живуть за замком. Це правильно: замок і є
+ * те, що продукт обіцяє (29.08 я прибрав обхід, який впускав як ROOT без
+ * ПІНу від самої лише адреси). Але тоді ніхто, крім власника, не може
+ * зняти стіл на склі — а «доведено на склі» у нас єдина форма доказу.
+ *
+ * Тому: `?desk=1` показує оболонку БЕЗ входу, і лише в збірці розробника.
+ *
+ * Чому це не діра:
+ *   • `import.meta.env.DEV` — не прапорець рантайму, а константа, яку
+ *     складальник підставляє на етапі збірки. У прод-бандлі гілка стає
+ *     `if (false)` і **вирізається** — коду просто немає, вмикати нічого;
+ *   • це НЕ автовхід: токена не з'являється, `authenticated` лишається
+ *     false, жоден захищений виклик не пройде. Видно рівно те, що вміє
+ *     намалювати сам інтерфейс;
+ *   • сторож `test_dev_desk_door_cannot_reach_release` червоніє, якщо
+ *     умову зробити досяжною в релізі.
+ *
+ * Зразок узято з телефона, де `phantom://screen/<маршрут>` так само
+ * мертвий у релізі першим рядком `BuildConfig.DEBUG`.
+ */
+function devDeskDoorOpen(): boolean {
+  if (!import.meta.env.DEV) return false;
+  if (typeof window === 'undefined') return false;
+  return new URLSearchParams(window.location.search).has('desk');
+}
+
 function MainRouter() {
   const { authenticated } = useSystemStore();
   const sessionPhase = useAuthStore((s) => s.sessionPhase);
 
-  if (!authenticated) {
+  if (!authenticated && !devDeskDoorOpen()) {
     // Поки токен перевіряється, екран входу показувати не можна: власник
     // нікуди не виходив, а форма блимала йому в обличчя щоразу на старті.
     if (sessionPhase === 'checking') return <PhantomLoader />;

@@ -89,6 +89,17 @@ interface MapStoreState {
   setViewState: (viewState: Partial<{ longitude: number; latitude: number; zoom: number; pitch: number; bearing: number }>) => void;
   updateEntities: (data: string | ArrayBuffer | Entity[]) => void;
 
+  /**
+   * Вимірювальна ламана — точки `[lat, lon]`, які людина ставить кліком.
+   *
+   * До 30.08 такого поняття в сторі не існувало взагалі, тому «Лінійка» і
+   * «Рельєф» у панелі аналітики не могли спрацювати НІКОЛИ: `OmniMap`
+   * малював панель без жодного шляху, а шлях їй передавали тільки тести.
+   */
+  measurePath: [number, number][];
+  /** Публікує ламану. Пише її ВИКЛЮЧНО `RulerTool` — двох вимірювачів не буває. */
+  setMeasurePath: (path: [number, number][]) => void;
+
   /** Phase 24-C — the active planned route (null when none). */
   route: PlannedRoute | null;
   /** True while a plan request is in flight (geocode + route round-trip). */
@@ -197,6 +208,9 @@ export const useMapStore = create<MapStoreState>((set, get) => ({
   selection: null,
   loading: false,
   error: null,
+  measurePath: [],
+  setMeasurePath: (path) => set({ measurePath: path }),
+
   route: null,
   routing: false,
   routeError: null,

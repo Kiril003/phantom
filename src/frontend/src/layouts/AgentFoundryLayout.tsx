@@ -1,5 +1,5 @@
 /** A first-class control surface for agents, executions, and MCP capability. */
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { Activity, Bot, Boxes, CheckCircle2, ChevronRight, Command, FileCode2, Loader2, Network, Play, Radio, RefreshCw, Search, Send, ShieldCheck, Sparkles, Terminal, Workflow, X } from 'lucide-react';
 import type { AgentTaskSummary, CustomAgent, CustomAgentRun } from '@shared/types';
@@ -31,7 +31,7 @@ export default function AgentFoundryLayout() {
   const tasks = useAgentStore((s) => s.historyTasks);
   const loadHistory = useAgentStore((s) => s.loadHistory);
   const [loading, setLoading] = useState(true);
-  const refresh = async () => {
+  const refresh = useCallback(async () => {
     setLoading(true);
     try {
       const [studio, mcp] = await Promise.all([studioApi.list(), agentApi.mcpRuntime()]);
@@ -45,8 +45,8 @@ export default function AgentFoundryLayout() {
       await loadHistory(undefined, 100);
     } catch (error) { setMessage(error instanceof Error ? error.message : 'Foundry could not synchronise with the runtime.'); }
     finally { setLoading(false); }
-  };
-  useEffect(() => { void refresh(); }, []);
+  }, [loadHistory]);
+  useEffect(() => { void refresh(); }, [refresh]);
   const active = tasks.filter((task) => activeStates.has(task.status));
   const submitIntent = async () => {
     if (!intent.trim() || busy) return;

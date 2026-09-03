@@ -3,6 +3,7 @@ import { RotateCcw, Ruler, X } from 'lucide-react';
 import type { MapLayerMouseEvent } from 'maplibre-gl';
 import { useHudMap } from './useHudMap';
 import { formatAzimuth, formatKm, measurePath, type GeoPoint } from '../../../utils/geo';
+import { useMapStore } from '../../../stores/mapStore';
 
 /**
  * Ф2 метрологія, У6 — лінійка: відстань по сегментах і сумарна,
@@ -125,6 +126,18 @@ export function RulerTool({ onClose }: RulerToolProps): JSX.Element {
       if (dblZoomWasOn) map.doubleClickZoom.enable();
     };
   }, [map]);
+
+  // Ламану видно не лише тут. «Рельєф» у панелі «Аналіз» чекав на шлях, і
+  // до 30.08 не отримував його НІКОЛИ: точки лежали в локальному стані цього
+  // компонента, а панель рендерилась узагалі без пропса. Тому лінійка
+  // публікує свій шлях — рівно вона, бо другого вимірювача не буває.
+  // Знімається разом з інструментом: лінія зникає зі скла, і профіль не має
+  // права жити з невидимої лінії.
+  const setMeasurePath = useMapStore((s) => s.setMeasurePath);
+  useEffect(() => {
+    setMeasurePath(points.map((p) => [p.lat, p.lon] as [number, number]));
+  }, [points, setMeasurePath]);
+  useEffect(() => () => setMeasurePath([]), [setMeasurePath]);
 
   const measure = useMemo(() => measurePath(points), [points]);
   const lastSegment = measure.segments[measure.segments.length - 1] ?? null;

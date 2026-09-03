@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { Activity, AlertTriangle, CheckCircle2, CirclePause, FileText, Flag, ListTree, Loader2, MessageSquarePlus, RotateCcw, Save, Square, X } from 'lucide-react';
 import type { AgentAuditEntry, AgentTaskDetail, AgentTaskReport, AgentTaskSummary } from '@shared/types';
@@ -16,7 +16,7 @@ export function ExecutionInspector({ task, onClose, onChanged }: { task: AgentTa
   const [actionBusy, setActionBusy] = useState<string | null>(null);
   const [instruction, setInstruction] = useState('');
   const [error, setError] = useState<string | null>(null);
-  const hydrate = async () => {
+  const hydrate = useCallback(async () => {
     setLoading(true); setError(null);
     try {
       const [taskResponse, reportResponse, auditResponse] = await Promise.all([
@@ -25,8 +25,8 @@ export function ExecutionInspector({ task, onClose, onChanged }: { task: AgentTa
       setDetail(taskResponse); setReport(reportResponse.report); setAudit(auditResponse.audit);
     } catch (reason) { setError(reason instanceof Error ? reason.message : 'Could not load execution evidence.'); }
     finally { setLoading(false); }
-  };
-  useEffect(() => { void hydrate(); }, [task.id]);
+  }, [task.id]);
+  useEffect(() => { void hydrate(); }, [hydrate]);
   useEffect(() => { if (tab !== 'team') return; void agentApi.teamMessages(task.id).then((response) => setTeam(response.messages)).catch(() => setTeam([])); }, [tab, task.id]);
   const action = async (kind: 'pause' | 'resume' | 'stop' | 'checkpoint' | 'intervene') => {
     setActionBusy(kind); setError(null);

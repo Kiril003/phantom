@@ -132,7 +132,9 @@
   --safe-w:         960px;
   --safe-h:         568px;
   --status-bar-h:   44px;
-  --touch-min:      44px;
+  /* 48px, а не 44: власник не влучає пальцем у веб на телефоні (01.09).
+     44 — поріг Apple, 48 — Android; беремо суворіший, він задовольняє обидва. */
+  --touch-min:      48px;
   --touch-key:      56px;
   --radius-sm:      6px;
   --radius-md:      10px;

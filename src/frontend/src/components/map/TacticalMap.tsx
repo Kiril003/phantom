@@ -396,6 +396,16 @@ export function TacticalMap({
       mapRef.current = null;
       setReady(false);
     };
+    // Тут свідомо НЕ повний список залежностей, і це не недогляд.
+    // Прибирання цього ефекту викликає `map.remove()` — тобто повне
+    // знищення мапи. Якби сюди зайшли `resolvedInitialCenter`,
+    // `initialZoom`, `select`, `setCenter`, `setZoom`, то кожна зміна
+    // центру чи зуму РОЗБИРАЛА Б І БУДУВАЛА мапу заново: злітали б шари,
+    // рельєф, підписи й уся позиція. Значення з іменем «initial» за
+    // визначенням читаються один раз — при створенні; далі за ними
+    // стежать окремі ефекти нижче. Перебудова навмисно прив'язана до
+    // одного важеля — `retryNonce`.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [retryNonce]);
 
   const storeCenter = useMapStore((s) => s.center);

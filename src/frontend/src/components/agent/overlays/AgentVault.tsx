@@ -26,11 +26,19 @@ export function AgentVault({ isOpen, onClose }: Props) {
     }
   }, [isOpen, loadHistory]);
 
+  // Було: `if (selectedTask && !reportLoading)` із залежністю лише від
+  // `selectedTask`. Дві біди в одному рядку. По-перше, `reportLoading`
+  // читався СТАРИЙ — ефект не перезапускався на його зміну, тож сторож
+  // судив за станом попереднього кадру. По-друге, він і не мав тут бути:
+  // швидкий перехід «задача A → задача B» поки вантажиться A мовчки
+  // ковтав звіт B, і панель показувала чужий звіт без жодного знаку.
+  // Вибір задачі — це наказ показати ЇЇ звіт, а не прохання.
+  const selectedTaskId = selectedTask?.id ?? null;
   useEffect(() => {
-    if (selectedTask && !reportLoading) {
-      fetchReport(selectedTask.id);
+    if (selectedTaskId) {
+      fetchReport(selectedTaskId);
     }
-  }, [selectedTask]);
+  }, [selectedTaskId, fetchReport]);
 
   const filteredTasks = historyTasks.filter(t => 
     (selectedCategory === 'all' || t.status === selectedCategory) &&

@@ -316,6 +316,13 @@ export function PhantomFamiliar() {
     }
   }, [manifestation]);
 
+  // `tick` тут «зайвий» лише на вигляд: лінтер бачить, що його не читає
+  // тіло useMemo, і не бачить, що `anchorFor` НЕ чиста — вонаміряє живий
+  // DOM через getBoundingClientRect. Саме `tick` (його штовхає ефект вище,
+  // після rAF) і є єдиним способом сказати «переміряй». Прибрати його —
+  // означає назавжди приморозити якір до першого кадру, коли елемент ще
+  // стоїть у HOME_ANCHOR.
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const anchor = useMemo(() => anchorFor(manifestation), [manifestation, tick]);
 
   const floatPath = useMemo(() => {

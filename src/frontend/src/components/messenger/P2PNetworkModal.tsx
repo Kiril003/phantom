@@ -27,6 +27,7 @@ import { callEngine } from '../../services/callEngine';
 import { soundFx } from '../../utils/messengerSound';
 import { useEscapeClose } from '../../hooks/useEscapeClose';
 import { useUIStore } from '../../stores/uiStore';
+import { Avatar } from './Avatar';
 
 /** Адреса без схеми й хвоста запиту — те, що людині корисно бачити. */
 const hostOf = (url: string): string => url.replace(/^\w+:/, '').split('?')[0];
@@ -61,6 +62,13 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
   const [ice, setIce] = useState<{ turn: boolean; ttl: number; urls: string[] } | null>(null);
   const [roads, setRoads] = useState<RoadsReport | null>(null);
 
+  // ЩО БУЛО: і «ще не спитали», і «вузол не відповів» позначалися одним null,
+  // тож після провалу запиту екран далі писав «питаю вузол…», а порожній звіт
+  // читався як відмова. ЧОМУ ЗМІНЕНО: це три різні стани, і людина мусить
+  // бачити саме той, що є насправді.
+  const [iceState, setIceState] = useState<'loading' | 'ready' | 'failed'>('loading');
+  const [roadsState, setRoadsState] = useState<'loading' | 'ready' | 'failed'>('loading');
+
   useEffect(() => {
     if (!isOpen) return;
 
@@ -80,22 +88,33 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
     });
 
     let alive = true;
+    setRoadsState('loading');
+    setIceState('loading');
+
     void messengerApi
       .roads()
       .then((r) => {
-        if (alive) setRoads(r);
+        if (!alive) return;
+        setRoads(r);
+        setRoadsState('ready');
       })
       .catch(() => {
-        if (alive) setRoads(null);
+        if (!alive) return;
+        setRoads(null);
+        setRoadsState('failed');
       });
 
     void callEngine
       .iceInfo()
       .then((info) => {
-        if (alive) setIce(info);
+        if (!alive) return;
+        setIce(info);
+        setIceState('ready');
       })
       .catch(() => {
-        if (alive) setIce(null);
+        if (!alive) return;
+        setIce(null);
+        setIceState('failed');
       });
 
     return () => {
@@ -263,13 +282,25 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
                   )}
                 </div>
 
-                {!roads && (
+                {roadsState === 'loading' && (
                   <div className="p-3 rounded-2xl border border-[#DFD6C4] bg-white/60 text-[11.5px] text-[#7A8479]">
-                    Вузол не відповів — стан доріг невідомий.
+                    Питаю вузол про дороги…
                   </div>
                 )}
 
-                {roads && (
+                {roadsState === 'failed' && (
+                  <div className="p-3 rounded-2xl border border-[#DFD6C4] bg-white/60 text-[11.5px] text-[#7A8479]">
+                    Не вдалося спитати вузол — стан доріг невідомий.
+                  </div>
+                )}
+
+                {roadsState === 'ready' && roads && roads.roads.length === 0 && (
+                  <div className="p-3 rounded-2xl border border-[#DFD6C4] bg-white/60 text-[11.5px] text-[#7A8479]">
+                    Вузол відповів: жодної дороги не налаштовано.
+                  </div>
+                )}
+
+                {roads && roads.roads.length > 0 && (
                   <div className="space-y-1.5">
                     {roads.roads.map((r) => (
                       <div
@@ -499,10 +530,16 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
                   {peers.map((peer, idx) => (
                     <div key={idx} className="p-3.5 bg-white rounded-2xl border border-[#E0D7C5] flex items-center justify-between gap-3 shadow-2xs">
                       <div className="flex items-center gap-3 min-w-0">
-                        <img
-                          src={peer.avatar || 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=150&auto=format&fit=crop&q=80'}
-                          alt={peer.peerName}
-                          className="w-10 h-10 rounded-xl object-cover ring-1 ring-[#DFD6C5] shrink-0"
+                        {/* ЩО БУЛО: за відсутності peer.avatar сюди підставлялося фото
+                            незнайомця з чужого фотохостингу. ЧОМУ ПРИБРАНО: браузер ходив
+                            по нього на сторонній сервер і віддавав йому IP того, хто просто
+                            відкрив список пірів; до того ж чуже обличчя видавалося за піра.
+                            ЧИМ ЗАМІНЕНО: Avatar — та сама літера в кружечку, що і всюди. */}
+                        <Avatar
+                          src={peer.avatar}
+                          name={peer.peerName}
+                          className="w-10 h-10 text-sm shrink-0"
+                          radius="rounded-xl"
                         />
                         <div className="min-w-0">
                           <div className="flex items-center gap-2">
@@ -673,9 +710,11 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
                   <div className="flex items-center justify-between p-2.5 bg-[#FAF7F1] rounded-xl border border-[#E5DC source-serif]">
                     <span className="font-bold text-[#1E2521]">STUN Сервер</span>
                     <span className="font-mono text-[11px] text-[#6A7B71]" data-ice-stun>
-                      {ice === null
+                      {iceState === 'loading'
                         ? 'питаю вузол…'
-                        : hostOf(ice.urls.find((u) => u.startsWith('stun:')) ?? '') || '—'}
+                        : iceState === 'failed' || !ice
+                          ? 'вузол не відповів'
+                          : hostOf(ice.urls.find((u) => u.startsWith('stun:')) ?? '') || '—'}
                     </span>
                   </div>
 
@@ -683,22 +722,24 @@ export const P2PNetworkModal: React.FC<P2PNetworkModalProps> = ({
                       Тому тут стоїть стан від вузла, а не рядок із коду. */}
                   <div
                     className="flex items-center justify-between p-2.5 bg-[#FAF7F1] rounded-xl border border-[#E5DC source-serif]"
-                    data-ice-turn={ice === null ? 'unknown' : ice.turn ? 'on' : 'off'}
+                    data-ice-turn={iceState !== 'ready' || !ice ? 'unknown' : ice.turn ? 'on' : 'off'}
                   >
                     <span className="font-bold text-[#1E2521]">TURN ретранслятор</span>
                     <span
                       className="font-mono text-[11px]"
                       style={{ color: ice?.turn ? '#4C8A55' : '#6A7B71' }}
                     >
-                      {ice === null
+                      {iceState === 'loading'
                         ? 'питаю вузол…'
-                        : ice.turn
-                          ? hostOf(ice.urls.find((u) => u.startsWith('turn:')) ?? '')
-                          : 'не налаштований'}
+                        : iceState === 'failed' || !ice
+                          ? 'вузол не відповів'
+                          : ice.turn
+                            ? hostOf(ice.urls.find((u) => u.startsWith('turn:')) ?? '')
+                            : 'не налаштований'}
                     </span>
                   </div>
 
-                  {ice !== null && (
+                  {iceState === 'ready' && ice && (
                     <p className="px-1 text-[10.5px] leading-relaxed text-[#718177]">
                       {ice.turn
                         ? 'Пряма дорога лишається першою; ретранслятор вмикається, лише коли її немає. Ключі при цьому не залишають ваші вузли — крізь нього їде той самий шифротекст.'

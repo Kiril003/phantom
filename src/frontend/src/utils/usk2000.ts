@@ -143,6 +143,12 @@ export function usk2000ToWgs84(p: UskPoint): { latDeg: number; lonDeg: number } 
 /** Читабельний запис: `зона 6 · X 5 590 128 · Y 6 324 041` (метри цілі). */
 export function formatUsk(p: UskPoint): string {
   const num = (v: number): string =>
-    Math.round(v).toLocaleString('uk-UA').replace(/ /g, ' ');
+    // `toLocaleString('uk-UA')` розділяє тисячі НЕРОЗРИВНИМ пробілом
+    // (U+00A0), і саме його ми міняємо на звичайний. Раніше цей символ
+    // стояв у регулярці дослівно — тобто в коді був невидимий знак,
+    // який лінтер справедливо позначив як `no-irregular-whitespace`.
+    // Код був правильний, запис — ні: невидиме не читається і не
+    // переживає копіювання. Тепер намір видно, поведінка та сама.
+    Math.round(v).toLocaleString('uk-UA').replace(/\u00A0/g, ' ');
   return `зона ${p.zone} · X ${num(p.x)} · Y ${num(p.y)}`;
 }

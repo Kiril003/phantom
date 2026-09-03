@@ -503,7 +503,7 @@ export function IntelligenceHub({ isOpen, onClose }: Props) {
     if (isOpen && !snapshot) {
       void loadHub();
     }
-  }, [isOpen]);
+  }, [isOpen, snapshot, loadHub]);
 
   function handleSearchChange(val: string) {
     setLocalQuery(val);

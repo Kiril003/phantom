@@ -192,6 +192,10 @@ export function PlanEditor({
     return diffs;
   };
 
+  // `buildDiffs` не в списку навмисно: вона читає РІВНО `items` та
+  // `initialSubGoals`, які тут уже стоять, а сама пересоздається щорендеру —
+  // тож її додавання зробило б useMemo безглуздим (перерахунок завжди).
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   const dirty = useMemo(() => buildDiffs().length > 0, [items, initialSubGoals]);
 
   const save = async () => {

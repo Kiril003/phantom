@@ -55,6 +55,8 @@ from cryptography.hazmat.primitives.kdf.hkdf import HKDF
 
 __all__ = [
     "PAIR_TTL_SECONDS",
+    "MeshBlock",
+    "mesh_tail",
     "PairingError",
     "PairingSession",
     "PairingSessionStore",
@@ -262,12 +264,55 @@ def _hmac(key: bytes, msg: bytes) -> bytes:
     return hmac.new(key, msg, hashlib.sha256).digest()
 
 
+@dataclass(frozen=True)
+class MeshBlock:
+    """Довічна СІТЬОВА особа сторони — не ключі паринга.
+
+    Ключі паринга одноразові: X25519 живе один claim, Ed25519 підписує лише
+    `/pair/refresh`. Адреси скриньок у сховку PH5 виводяться зовсім з іншої
+    пари — довічних identity телефона й вузла. Доки цей блок не їхав у
+    `mobile-pair-v1`, ані ПК, ані телефон не мали чим скласти спільний ключ
+    каналу: обидва чесно рахували адреси, і адреси були різні. Мовчки.
+    """
+
+    peer_id: str
+    pub_ed25519_b64: str
+    dh_x25519_b64: str
+
+    @property
+    def is_complete(self) -> bool:
+        return bool(
+            (self.peer_id or "").strip()
+            and (self.pub_ed25519_b64 or "").strip()
+            and (self.dh_x25519_b64 or "").strip()
+        )
+
+
+def mesh_tail(mesh: Optional[MeshBlock]) -> bytes:
+    """Хвіст, яким сітьові ключі прив'язані до цього паринга.
+
+    Порожній, коли блоку немає, — саме тому телефон попередньої збірки
+    лишається сумісним. А відщипнути блок від запиту нової збірки не вийде:
+    телефон уже підписав довге повідомлення, і без полів доказ не зійдеться.
+
+    Байт-у-байт як `PairProofs.meshTail` (core-net/pair/PairProofs.kt).
+    """
+    if mesh is None or not mesh.is_complete:
+        return b""
+    return (
+        mesh.peer_id.encode("utf-8")
+        + b64_decode(mesh.pub_ed25519_b64, expected_len=32)
+        + b64_decode(mesh.dh_x25519_b64, expected_len=32)
+    )
+
+
 def verify_client_proof(
     *,
     shared_key: bytes,
     pair_id: str,
     device_pub_ed25519_b64: str,
     proof_b64: str,
+    mesh: Optional[MeshBlock] = None,
 ) -> None:
     """Constant-time-compare the phone's HMAC over `pair_id || device_pub`.
 
@@ -277,18 +322,31 @@ def verify_client_proof(
     """
     expected = _hmac(
         shared_key,
-        pair_id.encode("utf-8") + b64_decode(device_pub_ed25519_b64, expected_len=32),
+        pair_id.encode("utf-8")
+        + b64_decode(device_pub_ed25519_b64, expected_len=32)
+        + mesh_tail(mesh),
     )
     actual = b64_decode(proof_b64, expected_len=32)
     if not hmac.compare_digest(expected, actual):
         raise PairingError("client proof mismatch", code="bad_proof")
 
 
-def build_server_proof(*, shared_key: bytes, device_jwt: str) -> str:
+def build_server_proof(
+    *,
+    shared_key: bytes,
+    device_jwt: str,
+    node: Optional[MeshBlock] = None,
+) -> str:
     """HMAC server emits so the phone can confirm it's talking to the same
     server it ECDH'd with (defense-in-depth on top of cert-pinning).
+
+    Ключі вузла всередині доказу, а не поруч із ним: інакше посередник
+    підмінив би сітьовий ключ ПК, телефон склав би адресу з чужим ключем і
+    чесно писав би у скриньку, якої вузол ніколи не назве.
     """
-    return base64.b64encode(_hmac(shared_key, device_jwt.encode("utf-8"))).decode("ascii")
+    return base64.b64encode(
+        _hmac(shared_key, device_jwt.encode("utf-8") + mesh_tail(node))
+    ).decode("ascii")
 
 
 def verify_device_signature(

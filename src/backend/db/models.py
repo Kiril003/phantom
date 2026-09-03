@@ -769,6 +769,14 @@ class PairedDevice(Base):
     platform_version: Mapped[Optional[str]] = mapped_column(String(32), nullable=True)
     # Crypto
     device_pub_ed25519: Mapped[str] = mapped_column(String(128), nullable=False)
+    #: Сітьова особа телефона — НЕ ключі паринга. З `peer_dh_x25519` і
+    #: `peer_id` виводиться ключ каналу, а з нього — адреса скриньки у сховку
+    #: PH5. NULL у рядку, зробленому до 03.09.2026: спарування тоді не несло
+    #: жодного X25519, тож листа такому пристрою не покласти нікуди — і сказати
+    #: це людині мусить екран, а не мовчання.
+    peer_id: Mapped[Optional[str]] = mapped_column(String(64), nullable=True)
+    peer_pub_ed25519: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
+    peer_dh_x25519: Mapped[Optional[str]] = mapped_column(String(128), nullable=True)
     # Lifecycle
     paired_at: Mapped[datetime] = mapped_column(DateTime, default=_now, nullable=False)
     last_seen_at: Mapped[datetime] = mapped_column(

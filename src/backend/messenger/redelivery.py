@@ -27,6 +27,8 @@ from messenger.outbox import OutboxError, prepare_frame
 from messenger.purge import _open_body
 from messenger.blobs import flush_blob_queue
 from messenger.drop_inbox import read_drop_store
+from messenger.phone_letters import send_letter
+from node import pair_drop
 from messenger.r2 import R2Road, drop_object, fetch_object, object_key, r2_road
 from messenger.transport import (
     deliver,
@@ -96,6 +98,31 @@ async def flush_queue(
             continue
 
         from config import config
+
+        # Спарований телефон — окрема дорога, бо окрема мова: у нього немає ні
+        # bundle, ні храповика, і `prepare_frame` для нього не має чого зшити.
+        # Без цієї гілки лист власникові на телефон лежав би «у черзі» вічно.
+        if keys is not None:
+            phone = await pair_drop.phone_by_peer_id(
+                session, conversation.owner_user_id, contact.peer_node_id
+            )
+            if phone is not None:
+                store_url = drop_road(config)
+                if not store_url:
+                    continue
+                body = _open_body(keys, row)
+                if body is None:
+                    continue
+                row.delivery_attempts += 1
+                row.last_attempt_at = _now()
+                sent = await send_letter(
+                    store_url, keys, phone, body, message_id=row.client_id
+                )
+                if sent:
+                    row.delivery_state = "sent"
+                    row.outbound_frame = None
+                    delivered += 1
+                continue
 
         relay = (config.relay_url or "") if config.relay_enabled else ""
         sb_url, sb_key = supabase_road(config)

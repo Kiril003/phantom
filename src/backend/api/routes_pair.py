@@ -43,6 +43,7 @@ from security.device_token import (
 )
 from security.pair_crypto import (
     PAIR_TTL_SECONDS,
+    MeshBlock,
     PairingError,
     build_qr_payload,
     build_server_proof,
@@ -51,6 +52,7 @@ from security.pair_crypto import (
     verify_client_proof,
     verify_device_signature,
 )
+from node.pair_drop import drop_ready
 from security.permissions import require_root
 
 logger = logging.getLogger(__name__)
@@ -97,6 +99,21 @@ class PairClaimRequest(BaseModel):
     # profiles yet. Ignored if a profile already exists. Trimmed and
     # length-capped to match Profile.display_name.
     profile_display_name: Optional[str] = Field(default=None, max_length=64)
+    # Довічна СІТЬОВА особа телефона (DeviceIdentityStore.kt) — не ключі
+    # паринга. Саме з них вузол складає ключ каналу й адресу скриньки у
+    # сховку. Optional, бо телефон попередньої збірки їх не шле: такий
+    # пристрій лишається спареним і лишається без сховка, і це видно.
+    peer_id: Optional[str] = Field(default=None, max_length=64)
+    peer_pub_ed25519: Optional[str] = Field(default=None, max_length=64)
+    peer_dh_x25519: Optional[str] = Field(default=None, max_length=64)
+
+    def mesh(self) -> Optional[MeshBlock]:
+        block = MeshBlock(
+            peer_id=(self.peer_id or "").strip(),
+            pub_ed25519_b64=(self.peer_pub_ed25519 or "").strip(),
+            dh_x25519_b64=(self.peer_dh_x25519 or "").strip(),
+        )
+        return block if block.is_complete else None
 
 
 class PairClaimResponse(BaseModel):
@@ -109,6 +126,12 @@ class PairClaimResponse(BaseModel):
     # The phone caches this id locally so subsequent re-pairings under
     # the same operator persona can pass it back via PairClaimRequest.
     profile: dict
+    # Дзеркало сітьового блоку: віддається ЛИШЕ у відповідь на запит, що ніс
+    # свій. Порожньо — телефон старої збірки, і додавати йому ключі, яких він
+    # не вміє перевірити, означало б поламати доказ сервера.
+    node_id: str = ""
+    node_pub_ed25519: str = ""
+    node_dh_x25519: str = ""
 
 
 class PairStatusResponse(BaseModel):
@@ -149,9 +172,31 @@ class PairedDeviceRow(BaseModel):
     capabilities: list[str]
     # Чи тримає цей пристрій з'єднання просто зараз.
     online: bool = False
+    # Чи є з чого скласти СПІЛЬНУ адресу у сховку. false — пару наведено до
+    # обміну ключами: лист такому пристрою нікуди класти, і екран мусить
+    # сказати «перепаруй», а не мовчати.
+    drop_ready: bool = False
 
 
 # ── Helpers ──────────────────────────────────────────────────────────────────
+
+
+def _node_mesh() -> Optional[MeshBlock]:
+    """Сітьова особа вузла — та сама, якою він говорить у месенджері.
+
+    Через `routes_messenger._keys()`, а не свіжим `KeyStore.from_node()`:
+    розійдись тут ключі, і телефон складав би адресу з одним іменем, а вузол
+    ходив би у сховок з іншим. Ключів немає (перший запуск без теки даних) —
+    повертаємо None: сказати «сховка немає» чесніше, ніж віддати ключ нізвідки.
+    """
+    try:
+        from api.routes_messenger import _keys
+        from node.pair_drop import node_mesh
+
+        return node_mesh(_keys())
+    except Exception as exc:  # noqa: BLE001 — відсутні ключі не мають валити паринг
+        logger.warning("сітьові ключі вузла не піднялись: %s", exc)
+        return None
 
 
 def _user_to_dict(u: User) -> dict:
@@ -256,6 +301,7 @@ def _row_to_pydantic(row: PairedDevice) -> PairedDeviceRow:
         ),
         capabilities=caps,
         online=row.id in hub.online_device_ids(),
+        drop_ready=drop_ready(row),
     )
 
 
@@ -674,6 +720,7 @@ async def pair_claim(
             detail={"code": "bad_nonce"},
         )
 
+    mesh = body.mesh()
     try:
         shared_key = derive_shared_key(
             session.server_priv,
@@ -685,6 +732,7 @@ async def pair_claim(
             pair_id=session.pair_id,
             device_pub_ed25519_b64=body.device_pub_ed25519,
             proof_b64=body.client_proof,
+            mesh=mesh,
         )
     except PairingError as exc:
         logger.warning(
@@ -725,6 +773,11 @@ async def pair_claim(
         platform=str(device_meta.get("platform", "android"))[:16],
         platform_version=str(device_meta.get("os_version", "") or "")[:32] or None,
         device_pub_ed25519=body.device_pub_ed25519,
+        # Сітьова особа телефона лягає в ТОЙ САМИЙ рядок, що й пристрій: інакше
+        # відкликання пристрою лишило б скриньку живою, і лист усе ще їхав би.
+        peer_id=mesh.peer_id if mesh else None,
+        peer_pub_ed25519=mesh.pub_ed25519_b64 if mesh else None,
+        peer_dh_x25519=mesh.dh_x25519_b64 if mesh else None,
         # Default capabilities — MVP devices act as sensor + approval surface.
         # Comms / vault flags can be flipped on by a later PATCH endpoint.
         capabilities_json=json.dumps(["sensors", "approvals"]),
@@ -736,7 +789,13 @@ async def pair_claim(
     device_jwt, expires_at_iso = create_device_token(
         device_id=row.id, user_id=owner.id
     )
-    server_proof = build_server_proof(shared_key=shared_key, device_jwt=device_jwt)
+    # Сітьовий блок вузла — лише у відповідь на запит, що ніс свій. Телефон
+    # старої збірки перевіряє доказ над самим JWT, і дописати туди щось
+    # означало б зробити КОЖЕН його паринг невдалим.
+    node = _node_mesh() if mesh else None
+    server_proof = build_server_proof(
+        shared_key=shared_key, device_jwt=device_jwt, node=node
+    )
 
     logger.info(
         "pair/claim: device_id=%s user_id=%s name=%s",
@@ -771,6 +830,9 @@ async def pair_claim(
         server_proof=server_proof,
         user=_user_to_dict(owner),
         profile=_profile_to_dict(profile),
+        node_id=node.peer_id if node else "",
+        node_pub_ed25519=node.pub_ed25519_b64 if node else "",
+        node_dh_x25519=node.dh_x25519_b64 if node else "",
     )
 
 

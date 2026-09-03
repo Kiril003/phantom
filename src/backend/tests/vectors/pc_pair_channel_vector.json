@@ -1,0 +1,36 @@
+{
+  "why": "Один вхід — одна адреса й один конверт. Читається і Kotlin-тестом, і pytest; розходження тут означає, що лист лягає у скриньку, якої другий бік ніколи не назве, або лежить у конверті, якого він не відчинить.",
+  "info_channel": "PHANTOM OS/peer-msg-v2",
+  "info_relay": "PHANTOM OS/peer-relay-v1",
+  "phone": {
+    "peer_id": "592b996388c8a337",
+    "ed25519_pub_b64": "MrU+iC49qsGA16X2Ik1htkAbQ/kB2wnw5NhM5OSicYs=",
+    "x25519_priv_b64": "AQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyA=",
+    "x25519_pub_b64": "B6N8vBQgk8i3VdwbEOhstCY3StFqqFPtC9/AsrhtHHw="
+  },
+  "node": {
+    "node_id": "4485b65a17ddc47295bd71dfacbf0f4f",
+    "ed25519_pub_b64": "XkIwMwRPVqE6aGeZSHvL+mPdHjkgTOwn3TmibaphVig=",
+    "x25519_priv_b64": "ZWZnaGlqa2xtbm9wcXJzdHV2d3h5ent8fX5/gIGCg4Q=",
+    "x25519_pub_b64": "VxR2nRFr92Q2rnS8eT0sMK0ZA8WaxSc4BcfiaYtBDDY="
+  },
+  "epoch": 20334,
+  "expected": {
+    "pair_key_b64": "UVnBdt7citXJBTTv9oZCRW9uWddNMrCQildjh2Fk2K4=",
+    "relay_key_b64": "KYExIi3MddkP6zxIye2j9j19iaNBQ74rqYXgHuR7Ajc=",
+    "msg_tag_phone_to_node": "tLS4728_dWrsU3vCywQqpcEb4jLtZ0fUbLUEkpdrPN4",
+    "msg_tag_node_to_phone": "WVyg9kNh9LVrvAjwLmp2CcR4Qw__mnl-gA14ULFZ4UQ",
+    "ack_tag_phone_to_node": "ywFYMfc3y5oGC6kKi1TdiKQGDRuON34B51D3x-snm2U"
+  },
+  "letter_from_node": {
+    "why": "Кадр запечатано ПК (node/peer_letter.py) під ключем пари вище. Kotlin мусить відчинити його PeerEnvelope.open і повірити підпису PeerSealing.verify — це і є напрям ПК→телефон, якого до 03.09.2026 не існувало.",
+    "frame": "{\"v\":3,\"from\":\"4485b65a17ddc47295bd71dfacbf0f4f\",\"to\":\"592b996388c8a337\",\"n\":\"RkdISUpLTE1OT1BR\",\"ct\":\"XInSarn50WVTp+nlmXu+qEq7mkXzUp1aAfR7aby2JHD54EhhdJKz54SDoOM5HlOZ/A2qCj+aK0jbRG9ztHnZoU3bIODNcc8OOf4de4p9Dd1737yd8ldq5xzaGAIJw/C6nXJoe215vMfp8UUAeTUpqUrVrmc+FQ5hb4xlWPftraQM3/bamZaYEpL6SGIfIs9wO+1qqxrP8VZZt1SZtfIamFJo4CsFndQgUuZ7racBmHb5ao86Cie3eF4Dw/5LOBkMqfaud+v/Kq5g/KZ9Dpy0/i0T5Dt042vWugtaGOS4mD40GL8FgJwfGmubme+SUFu1u5HYOl2/ozkBlTf4rp9EdzhFxWuqFzMFBN/Xx1WNThMHWedDQMWaPKiXs/wVqBWSLrle6jhEUhiHegJh77sOvtWC\"}",
+    "nonce_b64": "RkdISUpLTE1OT1BR",
+    "id": "vector-letter-1",
+    "body": "вузол пише телефону крізь сховок",
+    "sent_at_ms": 1756900000000,
+    "signature_b64": "DWCCTgKtZlRuAocpDxlDkiqROaMrGUhtm00gfjsbHkBGaNrCYYS1vXlM4z1b2GxzK3PEj8WFMPZbl72fxkFDDA",
+    "receipt_over_nonce_b64": "RkdISUpLTE1OT1BR",
+    "receipt_b64": "c5cAVgUX+O8QrHxAN1oLwQGBZ3yAHCTD6nHlKVuQ0jE"
+  }
+}

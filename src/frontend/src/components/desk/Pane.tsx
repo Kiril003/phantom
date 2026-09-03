@@ -70,7 +70,7 @@ export function Pane({
             color: 'var(--ph-color-ink-muted)',
           }}
         >
-          {def.source}
+          {def.SourceChip ? <def.SourceChip /> : def.source}
         </span>
         <span className="flex-1" />
         {pane.mode === 'tile' && (

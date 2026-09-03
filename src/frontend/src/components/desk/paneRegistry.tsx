@@ -1,5 +1,6 @@
 import React, { type ComponentType, type LazyExoticComponent } from 'react';
 import type { PaneKind } from '../../stores/deskStore';
+import { DialogueSourceChip } from './DialogueSourceChip';
 
 /**
  * Реєстр пейнів: слово-назва, чіп джерела, вміст.
@@ -12,8 +13,14 @@ export interface PaneDef {
   kind: PaneKind;
   /** Слово-назва пейна в хедері. */
   title: string;
-  /** Чіп джерела: звідки живе вміст. */
+  /** Чіп джерела: звідки живе вміст. Слово-запас, коли живого чіпа немає. */
   source: string;
+  /**
+   * Живий чіп джерела — коли «звідки» змінюється на ходу й статичне слово
+   * було б літералом. Пейн ДІАЛОГ: «ядро» однакове і для локального
+   * Ollama, і для хмарного Gemini, тобто не каже нічого.
+   */
+  SourceChip?: ComponentType;
   Content: LazyExoticComponent<ComponentType> | null;
 }
 
@@ -28,6 +35,7 @@ export const PANE_REGISTRY: Record<PaneKind, PaneDef> = {
     kind: 'dialogue',
     title: 'Діалог',
     source: 'ядро',
+    SourceChip: DialogueSourceChip,
     Content: React.lazy(() => import('../../layouts/DialogueLayout')),
   },
   company: {

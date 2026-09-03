@@ -50,6 +50,10 @@ MAIN_RS = TAURI_DIR / "src" / "main.rs"
 SPLASH_DIR = REPO_ROOT / "src" / "frontend" / "public"
 SPLASH_HTML = SPLASH_DIR / "splash.html"
 SPLASH_JS = SPLASH_DIR / "splash.js"
+# Адреса бекенда переїхала сюди з трьох різних місць: заставка була ЄДИНОЮ,
+# хто мав її зашитою правильно, а сокети будували хост від `window.location`
+# і в пакунку йшли в нікуди. Тепер джерело одне, тож і сторож дивиться сюди.
+BACKEND_ORIGIN_JS = SPLASH_DIR / "backend-origin.js"
 BUILD_RS = TAURI_DIR / "build.rs"
 SIDECAR_BUILD = REPO_ROOT / "scripts" / "build_sidecar.sh"
 
@@ -300,13 +304,32 @@ class TestSplashHtml:
         )
 
     def test_splash_polls_readyz_loopback_only(self):
+        """Заставка стукає в /readyz, і адресу бере з ЄДИНОГО джерела.
+
+        Адреса більше не зашита в заставці рядком: вона рахується в
+        `backend-origin.js`, бо той самий origin потрібен сокетам, які раніше
+        будували хост від `window.location` і в пакунку йшли в нікуди. Тому
+        сторож тепер тримає три речі окремо: заставка вантажить джерело,
+        стукає саме в /readyz через нього, а джерело дає петлю 127.0.0.1.
+        """
         body = self._body()
-        assert "http://127.0.0.1:8000/readyz" in body, (
-            "V-1: the splash must poll /readyz on 127.0.0.1:8000 — that's "
-            "the gate ADR-DSH-001 binds to."
+        assert 'src="./backend-origin.js"' in SPLASH_HTML.read_text(encoding="utf-8"), (
+            "V-1: без backend-origin.js `window.__PHANTOM_BACKEND__` не існує, "
+            "і петля опитування падає на першому ж рядку — заставка висить вічно."
+        )
+        assert "'/readyz'" in body or '"/readyz"' in body, (
+            "V-1: the splash must poll /readyz — that's the gate ADR-DSH-001 binds to."
+        )
+        assert "__PHANTOM_BACKEND__" in body, (
+            "V-1: адресу заставка мусить брати з єдиного джерела, а не збирати сама."
+        )
+
+        origin = BACKEND_ORIGIN_JS.read_text(encoding="utf-8")
+        assert "'127.0.0.1'" in origin, (
+            "V-1: джерело адреси мусить давати петлю 127.0.0.1 — саме її слухає бекенд."
         )
         # Belt-and-braces: nobody points the splash at a public URL.
-        assert "http://localhost" not in body, (
+        assert "http://localhost" not in body and "'localhost'" not in origin, (
             "V-1: the splash must use 127.0.0.1, not localhost — "
             "Windows IPv6 may resolve localhost to ::1 and the backend "
             "binds 127.0.0.1 only."
@@ -325,11 +348,58 @@ class TestSplashHtml:
             "that path 404s and the user never leaves the splash."
         )
 
-    def test_splash_has_timeout_guard(self):
+    def test_splash_never_stops_polling(self):
+        """Заставка не має права здаватись — і не має права мовчати.
+
+        Тут стояв сторож, що вимагав буквально `MAX_WAIT_MS` і `30000`, з
+        обґрунтуванням «інакше застряглий sidecar лишить користувача перед
+        чорним екраном назавжди». Побоювання правильне, число — ні:
+        заміряно 29.08.2026 на зібраному AppImage, чотири запуски поспіль,
+        бекенд відповідає через 37, 40, 45 і 47 секунд. Тобто заставка
+        виносила вирок ЗАВЖДИ, на справному ядрі, яке піднімалось за
+        кілька секунд ПІСЛЯ нього. Перший екран продукту звинувачував сам
+        себе.
+
+        Контракт свідомо змінено, і сторож переписаний під новий, а не
+        знятий: чорного екрана боятись більше не треба (стан видно
+        текстом), але й брехати не можна — того ж дня заставка з одним
+        лише порогом терпіння тридцять три хвилини запевняла «ядро ще
+        піднімається», коли sidecar не стартував узагалі.
+        """
         body = self._body()
-        assert "MAX_WAIT_MS" in body and "30000" in body, (
-            "V-1: the splash must give up after 30s — otherwise a stuck "
-            "sidecar leaves the user staring at a black screen forever."
+
+        assert "MAX_WAIT_MS" not in body, (
+            "заставка повернулась до жорсткої межі очікування — саме вона "
+            "виносила вирок справному ядру, що стартує 37-47 с"
+        )
+        assert "did not become ready" not in body, (
+            "повернувся текст, що оголошує провал за розкладом, а не за фактом"
+        )
+
+        # 1. Опитування не має верхньої межі: цикл нескінченний, а не while
+        #    із дедлайном.
+        assert "for (;;)" in body, (
+            "цикл опитування мусить бути нескінченним — якщо ядро колись "
+            "відповість, застосунок має відкритись, а не лишитись на заставці"
+        )
+
+        # 2. Пороги — іменовані константи, а не числа, розсипані по коду.
+        for const in ("PATIENCE_MS", "GIVEN_UP_MS"):
+            assert f"const {const}" in body, (
+                f"поріг {const} мусить бути константою — інакше наступна "
+                "правка розсіє числа по файлу і зміст порогів загубиться"
+            )
+
+        # 3. Станів рівно три, і третій каже правду. Нескінченне «ще
+        #    піднімається» — теж брехня, просто ввічлива.
+        assert "гріюсь" in body, "немає стану звичайного прогріву"
+        assert "довше, ніж звично" in body, (
+            "немає стану «довше за звичне» — користувач мусить бачити, що "
+            "система жива, а не застигла"
+        )
+        assert "не піднялося" in body, (
+            "немає чесного стану відмови: після GIVEN_UP_MS заставка мусить "
+            "визнати, що ядро не встало, а не запевняти зворотне безкінечно"
         )
 
 

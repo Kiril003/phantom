@@ -83,6 +83,75 @@ PUBLIC_ROUTE_ALLOWLIST: frozenset[tuple[str, str]] = frozenset({
 })
 
 
+#: Функції, наявність яких у дереві залежностей маршруту означає замок.
+#:
+#: Перелік зібрано НЕ з назв у `security/`, а з реального дерева залежностей
+#: усіх маршрутів застосунку — і перша спроба вгадати по імені дала дев'ятнадцять
+#: хибних спрацювань. Найкорисніший приклад: `/api/v1/api-keys/` прикритий
+#: `get_current_tenant` → `get_current_user_or_api_key`, і жодне з цих імен не
+#: живе в `security/`. Тому тут — виміряне, а не вгадане.
+#:
+#: Свідомо НЕ входять:
+#:   `_extract_token` — дістає токен, але нічого не вимагає (стоїть і на
+#:                      публічних маршрутах);
+#:   `caller_device`  — відповідає «хто просить», віддаючи None для людини за
+#:                      ПК; це впізнавання, не замок;
+#:   `get_db`         — сесія бази.
+AUTH_DEPENDENCIES: frozenset[str] = frozenset({
+    "require_auth",
+    "get_current_user",
+    "get_user_or_device_user",
+    "get_current_user_or_api_key",
+    "get_current_tenant",
+    "get_current_device",
+    "get_auto_login_user",
+    "require_self_or_root",
+    "require_capability_if_device",
+    "require_device_capability",
+    # Внутрішнє замикання обох `require_*_capability` — саме воно опиняється
+    # в дереві, бо зовнішня функція лише повертає його.
+    "_guard",
+})
+
+
+#: Маршрути, замкнені НЕ залежністю, а чимось у самому запиті, або публічні
+#: за протоколом. Кожен прочитано 29.08.2026 — рядок пояснює, ЩО саме стереже.
+#:
+#: Це не пом'якшення сторожа, а визнання того, що замок не завжди має форму
+#: `Depends`. Різниця з `work-os` принципова: там не було НІЧОГО — ні
+#: залежності, ні підпису, ні перевірки токена зі шляху.
+GUARDED_WITHOUT_A_DEPENDENCY: frozenset[tuple[str, str]] = frozenset({
+    # Підписане посилання: HMAC над (шлях, термін) + звірка терміну + resolve
+    # всередині дозволеного кореня. Ключ — підпис, не токен сесії.
+    ("GET", "/api/v1/files/raw"),
+    # Токен перегляду конкретного стенда, звірка через compare_digest.
+    ("GET", "/api/v1/workbench/{workbench_id}/preview/{path:path}"),
+    ("GET", "/api/v1/workbench/{workbench_id}/screenshot/{n}"),
+    # Спарування: телефон ще не має жодного ключа — він його тут і здобуває.
+    # Стереже доказ ECDH проти server_pub із QR (див. шапку routes_pair.py).
+    ("POST", "/api/v1/pair/claim"),
+    ("POST", "/api/v1/pair/refresh"),
+    ("GET", "/api/v1/pair/resolve/{pin}"),
+    # Двері: видача й пред'явлення разового входу — бутстрап автентифікації,
+    # тієї самої родини, що login/pin у списку вище.
+    ("POST", "/api/v1/auth/door"),
+    ("POST", "/api/v1/auth/door/issue"),
+    # `/face/recognize` тут БУВ і його прибрано 29.08.2026: замок поставлено
+    # (`get_current_user`). Заміряно, чому це нічого не ламає: токена він
+    # ніколи не видавав, а обіцяна «підказка на екрані входу» не була
+    # підключена — `<Overlays/>`, єдиний споживач циклу, рендериться лише
+    # після автентифікації.
+    # Вхідна пошта між вузлами. Мусить бути досяжною для незнайомця — саме
+    # так сусід уперше стукає. Ключем є САМ КАДР: відкрити його може лише
+    # той, хто має стан храповика (messenger/inbox.py:202-204), тож JWT тут
+    # нічого не додав би.
+    ("POST", "/api/v1/messenger/inbox"),
+    ("POST", "/api/v1/messenger/call/inbound"),
+    ("POST", "/api/v1/messenger/files/inbound"),
+    ("POST", "/api/v1/messenger/files/outbound-request"),
+})
+
+
 def _enumerate_routes(app: FastAPI) -> Iterable[tuple[str, str]]:
     """Yield (method, path) pairs for every router-mounted HTTP route.
     Skips the static-files mount (anything not an APIRoute) and HEAD
@@ -138,6 +207,62 @@ class TestD3A9PublicRouteAllowlist:
             + "\n".join(
                 f"  {m} {p} → HTTP {sc}" for m, p, sc in unexpected_public
             )
+        )
+
+    def test_every_guarded_route_actually_declares_an_auth_dependency(self):
+        """Питає «чи є замок», а не «який код віддає порожній зонд».
+
+        Чому додано 29.08.2026. Тест вище зондує маршрути БЕЗ ТІЛА, тож
+        обробник, який чекає схему, відповідає 422 — і в його звіт не
+        потрапляє. Саме так `routes_work_os.py` виглядав як «чотири відкриті
+        маршрути», тоді як `Depends` не мав ЖОДЕН із семи: три просто мовчали
+        інакше. Зонд міряв «чи віддає 200», а не «чи є автентифікація», і
+        різниця між цими питаннями коштувала трьох невидимих дверей.
+
+        Тут ми не зондуємо взагалі. Ми дивимось у дерево залежностей
+        маршруту — те саме, яким FastAPI користується під час запиту, — і
+        шукаємо в ньому хоч одну відому функцію автентифікації. Тіло запиту,
+        схема й коди відповіді на це не впливають ніяк.
+        """
+        from main import create_app
+
+        app = create_app()
+
+        def auth_names(dependant) -> set[str]:
+            """Імена всіх залежностей маршруту, включно з вкладеними."""
+            found: set[str] = set()
+            stack = [dependant]
+            seen = set()
+            while stack:
+                node = stack.pop()
+                if id(node) in seen:
+                    continue
+                seen.add(id(node))
+                call = getattr(node, "call", None)
+                if call is not None:
+                    found.add(getattr(call, "__name__", ""))
+                stack.extend(getattr(node, "dependencies", []) or [])
+            return found
+
+        unguarded: list[tuple[str, str]] = []
+        for route in app.routes:
+            if not isinstance(route, APIRoute):
+                continue
+            for method in (route.methods or set()):
+                if method in ("HEAD", "OPTIONS"):
+                    continue
+                if (method, route.path) in PUBLIC_ROUTE_ALLOWLIST:
+                    continue
+                if (method, route.path) in GUARDED_WITHOUT_A_DEPENDENCY:
+                    continue
+                if not (auth_names(route.dependant) & AUTH_DEPENDENCIES):
+                    unguarded.append((method, route.path))
+
+        assert not unguarded, (
+            "Маршрути без жодної залежності автентифікації і поза "
+            "PUBLIC_ROUTE_ALLOWLIST. Порожній зонд їх не побачить, якщо вони "
+            "відповідають 422 на запит без тіла:\n"
+            + "\n".join(f"  {m} {p}" for m, p in sorted(unguarded))
         )
 
     def test_allowlist_entries_actually_exist(self):

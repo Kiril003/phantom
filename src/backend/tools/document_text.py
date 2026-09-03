@@ -151,19 +151,42 @@ def _missing(lib: str, fmt: str) -> Extracted:
     )
 
 
-def _cut(text: str, max_chars: int) -> str:
-    """Обрізати — і СКАЗАТИ це. Мовчазне обрізання = неповне, подане як повне."""
-    if len(text) <= max_chars:
-        return text
-    return (
-        text[:max_chars].rstrip()
-        + f"\n\n[показано {max_chars} символів із {len(text)} — далі обрізано, "
-        "не переказуй документ як повний]"
-    )
+def _ready(text: str, extractor: str, max_chars: int, partial: bool = False) -> Extracted:
+    """Віддати текст — і сказати ПРАВДУ про те, скільки його показано.
 
+    Два тихих способи збрехати тут уже жили, і обидва — про числа, які модуль
+    придумав сам про себе.
 
-def _ready(text: str, extractor: str, max_chars: int) -> Extracted:
-    return Extracted(_cut(text, max_chars), extractor, None, truncated=len(text) > max_chars)
+    ПЕРШИЙ: примітка друкувала `max_chars`, тобто ПОПРОШЕНЕ, а тіло різалось
+    через `.rstrip()`, тобто показувалось менше. «Показано 200001» при 200000
+    показаних — та сама вигадка з виглядом виміру, тільки автор її не
+    документ, а я. Тому N рахується з готового тіла, а не з наміру.
+
+    ДРУГИЙ, тихіший: обхід спиняється, ЩОЙНО набрано `max_chars`, тож довжина
+    виходила рівно стелею — не БІЛЬШОЮ за неї. Перевірка «довше за стелю?»
+    такого не бачила: решта документа зникала без слова, а `truncated`
+    лишався False, тобто стик отримував «повний документ». Тому обхід тепер
+    сам каже, що спинився (`partial`), і це окрема підстава для примітки.
+
+    Форми дві, бо знання різне. Коли текст зібрано ПОВНІСТЮ й лише потім
+    обрізано — повний розмір відомий, і його називають. Коли обхід спинився
+    на півдорозі — розмір документа НЕВІДОМИЙ, і підставляти туди часткову
+    суму не можна: вона читалась би як розмір документа.
+    """
+    if not partial and len(text) <= max_chars:
+        return Extracted(text, extractor, None, truncated=False)
+    body = text[:max_chars].rstrip()
+    if partial:
+        note = (
+            f"[показано {len(body)} символів — далі я не читав, "
+            "тож не переказуй документ як повний]"
+        )
+    else:
+        note = (
+            f"[показано {len(body)} символів із {len(text)} — далі обрізано, "
+            "не переказуй документ як повний]"
+        )
+    return Extracted(f"{body}\n\n{note}", extractor, None, truncated=True)
 
 
 # ── людські причини відмови ───────────────────────────────────────────────
@@ -479,9 +502,14 @@ class _Out:
         return "\n".join(self._lines)
 
 
-def _walk(raw: str, g: _Grammar, limit: int) -> str:
-    """Один прохід по розмітці: межі стають символами, відкинуте не доїжджає."""
+def _walk(raw: str, g: _Grammar, limit: int) -> tuple[str, bool]:
+    """Один прохід: межі стають символами, відкинуте не доїжджає.
+
+    Другим значенням — чи обхід СПИНИВСЯ на стелі. Без цього зупинка була
+    невідрізненна від «документ саме стільки й важить».
+    """
     out = _Out(limit)
+    stopped = False
     pos = 0
     depth = 0
     skip_at: int | None = None
@@ -516,6 +544,7 @@ def _walk(raw: str, g: _Grammar, limit: int) -> str:
                 take = max(0, take - 1)
             depth -= 1
             if out.full:
+                stopped = True
                 break
             continue
         if attrs.rstrip().endswith("/"):  # порожній елемент
@@ -543,7 +572,7 @@ def _walk(raw: str, g: _Grammar, limit: int) -> str:
                 take += 1
         elif named and name in g.text:
             take += 1
-    return out.flush()
+    return out.flush(), stopped
 
 
 # ── PDF ────────────────────────────────────────────────────────────────────
@@ -571,9 +600,11 @@ def _pdf(p: Path, max_chars: int) -> Extracted:
                 "надішліть копію без пароля або зніміть його в переглядачі"
             )
     parts: list[str] = []
+    stopped = False
     for page in reader.pages:
         parts.append(page.extract_text() or "")
         if sum(len(x) for x in parts) > max_chars:
+            stopped = True
             break
     text = "\n".join(parts).strip()
     if not text:
@@ -585,7 +616,7 @@ def _pdf(p: Path, max_chars: int) -> Extracted:
             f"це сканований PDF ({len(reader.pages)} стор.): текстового шару немає, "
             "а розпізнавання зображень у цій збірці немає",
         )
-    return _ready(text, "pypdf", max_chars)
+    return _ready(text, "pypdf", max_chars, stopped)
 
 
 def _pdf_broken(p: Path) -> str:
@@ -610,11 +641,13 @@ def _docx(p: Path, max_chars: int) -> Extracted:
     """DOCX — zip із XML, як і ODT; `python-docx` сюди не потрібен."""
     budget = _Budget()
     with _open_zip(p, "DOCX") as z:
-        body = _walk(_member(z, "word/document.xml", budget), _W, max_chars)
+        body, stopped = _walk(_member(z, "word/document.xml", budget), _W, max_chars)
         margins = _margins(z, budget, max_chars)
     if not body and not margins:
         return Extracted(None, "zipfile+xml", "документ порожній або тримає лише зображення")
-    return _ready("\n\n".join(x for x in (body, margins) if x), "zipfile+xml", max_chars)
+    return _ready(
+        "\n\n".join(x for x in (body, margins) if x), "zipfile+xml", max_chars, stopped
+    )
 
 
 def _margins(z: zipfile.ZipFile, budget: _Budget, max_chars: int) -> str:
@@ -642,7 +675,7 @@ def _margins(z: zipfile.ZipFile, budget: _Budget, max_chars: int) -> str:
                 continue
             bucket = groups.setdefault(label, [])
             try:
-                text = _walk(_member(z, name, budget), _W, max_chars)
+                text, _ = _walk(_member(z, name, budget), _W, max_chars)
             except _Refuse as exc:
                 bucket.append(f"[{name} не показано: {exc}]")
                 continue
@@ -723,6 +756,7 @@ def _pptx(p: Path, max_chars: int) -> Extracted:
     """PPTX — той самий zip із XML: текст слайда живе в `<a:t>`."""
     budget = _Budget()
     chunks: list[str] = []
+    stopped = False
     with _open_zip(p, "PPTX") as z:
         names = set(z.namelist())
         order = _pptx_order(z, names)
@@ -730,17 +764,20 @@ def _pptx(p: Path, max_chars: int) -> Extracted:
             raise _Refuse(_wrong_container(z, "ppt/slides/slideN.xml"))
         for i, member in enumerate(order, 1):
             part = [f"# слайд {i}"]
-            body = _walk(_member(z, member, budget), _A, max_chars)
+            body, cut = _walk(_member(z, member, budget), _A, max_chars)
+            stopped = stopped or cut
             if body:
                 part.append(body)
             notes_member = _pptx_notes(z, names, member)
             if notes_member:
-                notes = _walk(_member(z, notes_member, budget), _A, max_chars)
+                notes, cut = _walk(_member(z, notes_member, budget), _A, max_chars)
+                stopped = stopped or cut
                 if notes:
                     part.append("\n# нотатки доповідача\n" + notes)
             if len(part) > 1:
                 chunks.append("\n".join(part))
             if sum(len(x) for x in chunks) > max_chars:
+                stopped = True
                 break
     if not chunks:
         # Слайди є, тексту немає — це вимір, і його треба назвати, інакше
@@ -748,7 +785,7 @@ def _pptx(p: Path, max_chars: int) -> Extracted:
         return Extracted(
             None, "zipfile+xml", f"у презентації {len(order)} слайд(ів) і жодного тексту"
         )
-    return _ready("\n\n".join(chunks), "zipfile+xml", max_chars)
+    return _ready("\n\n".join(chunks), "zipfile+xml", max_chars, stopped)
 
 
 # ── XLSX ───────────────────────────────────────────────────────────────────
@@ -772,6 +809,7 @@ def _xlsx(p: Path, max_chars: int) -> Extracted:
     formulas = load_workbook(str(p), read_only=True, data_only=False)
     lines: list[str] = []
     total = 0
+    stopped = False
     try:
         for wsv, wsf in zip(values.worksheets, formulas.worksheets):
             head = f"# аркуш: {wsv.title}"
@@ -795,6 +833,7 @@ def _xlsx(p: Path, max_chars: int) -> Extracted:
                     lines.append(line)
                     total += len(line) + 1
                 if total > max_chars:
+                    stopped = True
                     break
             if total > max_chars:
                 break
@@ -804,7 +843,7 @@ def _xlsx(p: Path, max_chars: int) -> Extracted:
     text = "\n".join(lines).strip()
     if not text:
         return Extracted(None, "openpyxl", "книга порожня")
-    return _ready(text, "openpyxl", max_chars)
+    return _ready(text, "openpyxl", max_chars, stopped)
 
 
 # ── RTF ────────────────────────────────────────────────────────────────────
@@ -824,7 +863,7 @@ def _odf(p: Path, max_chars: int) -> Extracted:
     """ODF — це zip із XML. Розбираємо стандартною бібліотекою, без залежностей."""
     budget = _Budget()
     with _open_zip(p, "ODF") as z:
-        text = _walk(_member(z, "content.xml", budget), _ODF, max_chars)
+        text, stopped = _walk(_member(z, "content.xml", budget), _ODF, max_chars)
     if not text:
         return Extracted(None, "zipfile+xml", "документ порожній")
-    return _ready(text, "zipfile+xml", max_chars)
+    return _ready(text, "zipfile+xml", max_chars, stopped)

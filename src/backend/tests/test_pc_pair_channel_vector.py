@@ -10,6 +10,7 @@
 ходять у сховок, і обидва бачать порожньо. Спільний вектор — єдине місце, де
 таке розходження стає червоним.
 """
+import pytest
 import base64
 import json
 from pathlib import Path
@@ -34,7 +35,7 @@ def _raw(text: str) -> bytes:
 
 def test_copies_in_both_trees_are_byte_identical():
     if not COMPANION_COPY.is_file():
-        return  # телефонного дерева поруч немає — звіряти нічого
+        pytest.skip("телефонного дерева поруч немає — звіряти нічого; тихий pass тут ховав би головний доказ хвилі")
     assert COMPANION_COPY.read_bytes() == VECTOR.read_bytes(), (
         "копії вектора розійшлись — один із тестів доводить уже не те, що другий"
     )

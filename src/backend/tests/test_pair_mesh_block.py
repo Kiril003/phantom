@@ -121,7 +121,7 @@ def test_request_reads_the_block_only_when_complete():
 
 def test_kotlin_and_python_tails_are_the_same_function():
     if not KOTLIN_SOURCE.is_file():
-        return  # телефонного дерева поруч немає — звіряти нічого
+        pytest.skip("телефонного дерева поруч немає — звіряти нічого; тихий pass тут ховав би головний доказ хвилі")
     text = KOTLIN_SOURCE.read_text(encoding="utf-8")
     assert "fun meshTail(" in text, "хвоста в Kotlin немає — доказ розійдеться"
     assert "b64ToBytes(mesh.pubKeyB64)" in text

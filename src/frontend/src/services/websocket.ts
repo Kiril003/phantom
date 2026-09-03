@@ -1,5 +1,6 @@
 import type { ContextSnapshot, SystemState, ChatMessage, StateTransition } from '@shared/types';
 import { readToken } from './tokenStore';
+import { wsUrl } from './backendOrigin';
 import { BEARER_SUBPROTOCOL } from './wsAuth';
 
 /* ─── Message types ───────────────────────────────────────────────────────── */
@@ -35,6 +36,14 @@ export type WSChannel =
   // "Mobile Companion" panel subscribes here to live-refresh its device
   // list without polling.
   | 'pair'
+  // Симбіоз — команди до спареного телефона й відповіді від нього.
+  // Труба на бекенді ціла на всю довжину (`POST /symbiote/command` →
+  // черга → цей канал → телефон тягне `/symbiote/inbox` → кладе
+  // `/symbiote/result`), але голову — панель у Налаштуваннях — загубили
+  // при зшиванні гілок, і разом із нею зник цей рядок. Без нього
+  // підписник, типізований через `WSChannel`, не міг підписатись на
+  // канал у принципі: оболонка структурно не чула телефона.
+  | 'symbiote'
   | 'vision'
   // ПОЛІС — mission fabric deltas: node/mission status, gates, keys, waves.
   | 'polis'
@@ -241,8 +250,13 @@ class WebSocketClient {
   }
 
   private _open(): void {
-    const url = new URL('/ws', window.location.href);
-    url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:';
+    // Адресу питаємо в єдиного джерела, а не будуємо від `window.location`.
+    // Так тут і було — `new URL('/ws', window.location.href)` — і в
+    // розробці воно працює, бо vite проксує `/ws`. У запакованому
+    // застосунку фронт віддається asset-протоколом Tauri, `location` вказує
+    // не на sidecar, і сокет іде в нікуди: 29.08.2026 на живому AppImage це
+    // дало «канал обрив / ядро мовчить / ресурси мовчить» при HTTP 200.
+    const url = new URL(wsUrl('/ws'));
     // Always prefer the freshest token from storage: connect() caches the
     // token once, but it may have been refreshed since (the cached one can
     // expire). A reconnect on the stale/expired token authenticates as

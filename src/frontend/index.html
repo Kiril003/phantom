@@ -36,6 +36,11 @@
   </head>
   <body>
     <div id="root"></div>
+    <!-- Єдине джерело адреси бекенда. Звичайний скрипт, а не модуль, і ДО
+         бандла: у пакунку фронт віддається asset-протоколом, де
+         `window.location` вказує не на sidecar, тож усе, що будує адреси,
+         мусить питати тут. Той самий файл вантажить і заставка. -->
+    <script src="/backend-origin.js"></script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>

@@ -13,9 +13,28 @@ import type {
   CliffScreeFeature,
   CliffScreeKind,
 } from '@shared/types';
+import { apiUrl } from './backendOrigin';
 import { clearToken, readToken } from './tokenStore';
 
+/**
+ * Шлях API відносно бекенда. Абсолютну адресу додає `apiUrl()` — і лише
+ * там, де вона потрібна.
+ *
+ * Тут був просто `'/api/v1'`, і в розробці цього досить: vite проксує. У
+ * запакованому застосунку фронт віддається asset-протоколом Tauri, тож
+ * відносний `fetch('/api/v1/…')` іде на `tauri.localhost`, а не на
+ * sidecar — тобто **жоден** виклик API не доходить.
+ *
+ * Виміряно 29.08.2026 на зібраному AppImage: бекенд віддавав рівно одного
+ * користувача (`phantom`), а екран входу малював чотирьох (Kiril, Kyrylo,
+ * Alex, Phantom). Це не бекенд помилявся — це `authApi.picker()` падав, і
+ * спрацьовував демо-фолбек. Я тоді ще й зарахував той список як доказ
+ * живого HTTP; він був доказом протилежного.
+ */
 export const BASE = '/api/v1';
+
+/** Повна адреса ендпойнта: абсолютна в пакунку, відносна в розробці. */
+const endpoint = (path: string): string => apiUrl(`${BASE}${path}`);
 
 class ApiError extends Error {
   constructor(
@@ -39,7 +58,7 @@ export async function request<T>(
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const res = await fetch(`${BASE}${path}`, {
+  const res = await fetch(endpoint(path), {
     method,
     headers,
     credentials: 'include',
@@ -89,8 +108,10 @@ export const authApi = {
       'GET',
       '/auth/config'
     ),
-  quickJoin: (username: string, display_name?: string, pin?: string) =>
-    request<AuthResponse>('POST', '/auth/quick-join', { username, display_name, pin }),
+  // Обгортку «швидкого входу» знято 29.08.2026 разом із самим маршрутом на
+  // бекенді: він видавав ROOT за одним лише іменем і пускав наявного
+  // користувача з неправильним ПІНом. Її ніхто не викликав — див.
+  // backend/tests/test_quick_join_is_not_a_way_past_the_pin.py
   // Day-4 Wave-2 IDB-3 (ADR-IDB-003): pre-PinPad picker tiles. Public —
   // safe to call WITHOUT a bearer token. Whitelist contract pinned at
   // backend tests/test_phase_idb2_shared_pin_picker.py.

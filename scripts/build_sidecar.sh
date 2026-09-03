@@ -60,6 +60,79 @@ weigh() {
   say "ВАГА ${label}: ${human} (${bytes} Б)"
 }
 
+# ── Ворота машини ───────────────────────────────────────────────────────
+#
+# Шлях до замка ЗАШИТИЙ. Латка на справжню подію 03.09: агент, перевіряючи
+# сторожа памʼяті, перенаправив змінну зі шляхом до замка на файл у
+# скретчпаді. Сторож чесно виміряв памʼять, чесно пропустив — і важкий
+# процес стартував поруч із чужою збіркою Gradle, яка тримала СПРАВЖНІЙ
+# замок. Ворота обійшли не хитрістю, а ЧЕРЕЗ саму перевірку: перевірялись
+# не ті ворота. Підміна лишається рівно для перевірки самого сторожа й
+# вимагає сказати це вголос.
+GATE_REAL='/tmp/phantom-verify/gate.lock'
+GATE="${PHANTOM_GATE:-$GATE_REAL}"
+if [ "$GATE" != "$GATE_REAL" ] && [ "${PHANTOM_GATE_TEST:-0}" != "1" ]; then
+  echo "[sidecar] PHANTOM_GATE вказує на ${GATE}, а не на ${GATE_REAL} — відмовляюсь." >&2
+  echo "[sidecar] PyInstaller тут тримає гігабайти й стає першою ціллю oom-guard." >&2
+  echo "[sidecar] Для перевірки САМОГО сторожа: PHANTOM_GATE_TEST=1 — і скажи це вголос." >&2
+  exit 6
+fi
+if [ "${PHANTOM_GATE_TEST:-0}" = "1" ]; then
+  echo "[sidecar] УВАГА: тестовий режим воріт, справжній замок ${GATE_REAL} НЕ перевіряється." >&2
+fi
+
+if [ -f /.dockerenv ]; then
+  # Усередині контейнера воріт немає: /tmp/phantom-verify — поняття хоста,
+  # а сюди нас уже впустив `build_in_container.sh`, який їх і питав.
+  # Кажемо це вголос, щоб пропуск не читався як пройдена перевірка.
+  say "ворота: у контейнері не перевіряю — їх спитав build_in_container.sh на хості"
+else
+  _gate_holder() {
+    local ino
+    ino="$(stat -c %i "$GATE" 2>/dev/null)" || return 1
+    awk -v ino="$ino" '$2=="FLOCK"{split($6,a,":"); if (a[3]==ino){print $5; exit}}' /proc/locks
+  }
+  _ppid_of() {  # $1 — pid. Батько, розібраний СТІЙКО.
+    # Друге поле /proc/pid/stat — comm у дужках, і воно може містити
+    # пробіли: на цій машині живе процес із comm «(npm run dev --p)», для
+    # якого наївний `awk '{print $4}'` дає «dev» замість pid 11012. Сторож,
+    # що читає сміття як номер процесу, визнав би чужого своїм.
+    sed 's/.*) //' "/proc/$1/stat" 2>/dev/null | awk '{print $2}'
+  }
+  _is_ancestor() {  # $1 — pid
+    local p=$$ guard=0
+    while [ "${p:-0}" -gt 1 ] && [ "$guard" -lt 64 ]; do
+      [ "$p" = "$1" ] && return 0
+      p="$(_ppid_of "$p")"
+      [ -n "$p" ] || return 1
+      guard=$((guard + 1))
+    done
+    return 1
+  }
+  mkdir -p "$(dirname "$GATE")" 2>/dev/null || true
+  # Замок, який тримає наш же батько (`flock -w 3600 … build_sidecar.sh`),
+  # це НЕ зайняті ворота — це ми в них і стоїмо. Тому питаємо pid, а не
+  # просто «чи вдається взяти».
+  GATE_HOLDER="$(_gate_holder || true)"
+  if [ -n "${GATE_HOLDER:-}" ] && ! _is_ancestor "$GATE_HOLDER"; then
+    echo "[sidecar] ворота ${GATE} тримає чужий процес (pid ${GATE_HOLDER}):" >&2
+    ps -o pid=,args= -p "$GATE_HOLDER" 2>/dev/null | cut -c1-140 >&2 || true
+    echo "[sidecar] на машині важке — по одному. Чекай, не лізь." >&2
+    exit 7
+  fi
+  if pgrep -f 'org\.gradle\.wrapper\.GradleWrapperMain' >/dev/null 2>&1; then
+    echo "[sidecar] у ps живий Gradle — зараз збирає сусідня сесія. Не лізу." >&2
+    exit 9
+  fi
+  GATE_MIN_MB="${PHANTOM_MIN_MB:-6000}"
+  GATE_FREE_MB="$(free -m | sed -n '2p' | awk '{print $NF}')"
+  if [ -n "${GATE_FREE_MB:-}" ] && [ "${GATE_FREE_MB}" -lt "${GATE_MIN_MB}" ]; then
+    echo "[sidecar] вільної памʼяті ${GATE_FREE_MB} МБ < ${GATE_MIN_MB} МБ — не запускаю PyInstaller." >&2
+    exit 8
+  fi
+  say "ворота: ${GATE} вільні, памʼять ${GATE_FREE_MB} МБ, Gradle не бачу"
+fi
+
 say "triple:      ${TARGET}"
 say "режим:       ${MODE}"
 say "вхідник:     ${BACKEND}/_phantom_entry.py"
@@ -153,8 +226,54 @@ weigh "${BACKEND}/.venv" "робочий venv (для порівняння)"
 # ── 2. Сама збірка.
 rm -rf "${WORK}"
 mkdir -p "${WORK}"
+
+# ── Паспорт збірки всередину бандла ──────────────────────────────────────
+#
+# Виміряно 03.09: у зібраному сайдкарі немає коміта НІДЕ, а `/health`
+# віддає зашите "version": "0.1.0" при 0.20.0 у tauri.conf.json. Тобто
+# запущений продукт не може сказати, з чого він зібраний, — а це рівно те,
+# що потрібно, коли на столі два пакунки й одна скарга.
+#
+# Значення беремо з середовища, коли нас покликав `build_in_container.sh`:
+# він уже спитав дерево ДО збірки, і всередині контейнера `git` може бути
+# відсутній зовсім. Свій `git` — лише запасний шлях для запуску з хоста.
+BUILD_SHA="${PHANTOM_BUILD_SHA:-$(git -C "${ROOT}" rev-parse --short=8 HEAD 2>/dev/null || echo 'nogit')}"
+if [ -n "${PHANTOM_BUILD_DIRTY:-}" ]; then
+  BUILD_DIRTY="${PHANTOM_BUILD_DIRTY}"
+elif [ -n "$(git -C "${ROOT}" status --porcelain 2>/dev/null || echo dirty)" ]; then
+  # Тут навмисно НЕ відмова, на відміну від `build_in_container.sh`.
+  # Відмовляти має та дорога, що робить пакунок для людини; цей скрипт
+  # ганяють ще й поштучно, під час роботи, коли дерево брудне за
+  # визначенням — і жорсткий стоп просто заблокував би сусідні сесії на
+  # спільному дереві.
+  #
+  # Обіцянка від цього не слабшає: заборонено не збирати чорнетку, а видати
+  # її за чисту збірку. Паспорт усередині бандла скаже dirty=true, і якщо
+  # такий сайдкар потім потрапить у пакунок через етап `front` (де sidecar
+  # не перезбирається), два паспорти розійдуться — і це стане видно.
+  BUILD_DIRTY=1
+  say "УВАГА: дерево брудне — паспорт бандла піде з dirty=true (пакунок такий не збереться без PHANTOM_BUILD_ALLOW_DIRTY=1)"
+else
+  BUILD_DIRTY=0
+fi
+BUILD_VERSION="${PHANTOM_BUILD_VERSION:-$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' "${ROOT}/src/frontend/src-tauri/tauri.conf.json" 2>/dev/null || echo '0.0.0')}"
+BUILD_AT="${PHANTOM_BUILD_AT:-$(date -u +%Y-%m-%dT%H:%M:%SZ)}"
+cat > "${WORK}/build_info.json" <<INFO
+{
+  "component": "sidecar",
+  "commit": "${BUILD_SHA}",
+  "dirty": $([ "${BUILD_DIRTY}" = "1" ] && echo true || echo false),
+  "version": "${BUILD_VERSION}",
+  "built_at": "${BUILD_AT}"
+}
+INFO
+say "паспорт бандла: коміт ${BUILD_SHA}, dirty=${BUILD_DIRTY}, версія ${BUILD_VERSION}"
+
 PYI_ARGS=(
   --name "phantom-backend"
+  # Паспорт лягає в корінь бандла, тобто читається як
+  # `Path(sys._MEIPASS) / "build_info.json"` — і в onefile, і в onedir.
+  --add-data "${WORK}/build_info.json:."
   --distpath "${WORK}/dist"
   --workpath "${WORK}/work"
   --specpath "${WORK}"
@@ -351,11 +470,27 @@ weigh "${WORK}/dist" "весь вихід PyInstaller"
 SMOKE_PORT="${PHANTOM_SMOKE_PORT:-8099}"
 SMOKE_DIR="${WORK}/smoke"
 SMOKE_LOG="${WORK}/smoke.log"
-rm -rf "${SMOKE_DIR}"; mkdir -p "${SMOKE_DIR}"
+rm -rf "${SMOKE_DIR}"; mkdir -p "${SMOKE_DIR}/tmp"
+
+# TMPDIR — НА ДИСК, і це не косметика. Заміряно 03.09 на покладеному
+# бінарнику: onefile розпаковує себе в TMPDIR на КОЖНОМУ старті, і розпаковка
+# важить 1 584 090 672 Б (1,48 ГіБ). Типовий `/tmp` тут — tmpfs на 7,7 ГБ,
+# тобто це памʼять машини, а не диск.
+#
+# Точно: при штатному завершенні бутлоадер розпаковку прибирає (перевірено —
+# після `kill` теки не лишилось). Отже це не витік, а ЖИВА ціна: поки
+# бінарник працює, півтора гігабайти RAM зайняті нічим, окрім копії його ж
+# нутрощів. Осиротілі `_MEI*` лишаються лише після жорсткої смерті — саме їх
+# і рахує попередження вгорі цього скрипта.
+#
+# Під час збірки поруч живуть docker, PyInstaller і сторож oom-guard, який
+# стріляє в найбільший процес; півтора зайвих гігабайти тут вирішують.
 say "димова перевірка: піднімаю ПОКЛАДЕНИЙ бінарник на порту ${SMOKE_PORT}"
+say "                  TMPDIR=${SMOKE_DIR}/tmp (на диску: onefile розпакує туди ~1,5 ГБ)"
 (
   cd "${DEST}"
   PORT="${SMOKE_PORT}" PHANTOM_SKIP_TLS=1 PHANTOM_SKIP_MDNS=1 PHANTOM_SKIP_G2_WARMUP=1 \
+    TMPDIR="${SMOKE_DIR}/tmp" \
     PHANTOM_DATA_DIR="${SMOKE_DIR}/data" PHANTOM_MODELS_DIR="${SMOKE_DIR}/models" \
     "./phantom-backend-${TARGET}"
 ) > "${SMOKE_LOG}" 2>&1 &

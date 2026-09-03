@@ -75,14 +75,63 @@ def _bootstrap_env() -> Path:
     data_dir = root / "data"
     models_dir = root / "models"
     frontend_dir = _binary_dir() / "frontend"
-    data_dir.mkdir(parents=True, exist_ok=True)
-    models_dir.mkdir(parents=True, exist_ok=True)
+    # Тек тут НЕ створюємо: поки не спитано середовище, ми ще не знаємо, які
+    # з них справді в силі. Раніше цей рядок безумовно робив `<binary>/data`
+    # і `<binary>/models` навіть тоді, коли оператор оголосив інші — і поруч
+    # із бінарником лишались порожні теки, що виглядають як робочий стан
+    # продукту. Створює той цикл нижче, який працює з дійсними шляхами.
 
     # Env defaults — only set when operator hasn't overridden. Backend
     # modules read these via ``config.py`` / ``paths.py``.
     os.environ.setdefault("PHANTOM_DATA_DIR", str(data_dir))
     os.environ.setdefault("PHANTOM_MODELS_DIR", str(models_dir))
     os.environ.setdefault("PHANTOM_FRONTEND_DIST", str(frontend_dir))
+
+    # ── Похідні шляхи беремо з того, що СПРАВДІ в силі ────────────────────
+    #
+    # Тут була розбіжність, і вона виміряна 03.09 на ЗАПАКОВАНОМУ сайдкарі.
+    # Запуск був такий:
+    #     PHANTOM_DATA_DIR=…/proof-before/data
+    #     PHANTOM_MODELS_DIR=…/proof-before/models
+    # тобто оператор сказав, де його дані. `setdefault` вище це поважає —
+    # і `paths.py` слухняно поклав туди ключі вузла, sqlite/ і geo/. Але
+    # решта блоку рахувалась не з середовища, а з локальних `data_dir` /
+    # `models_dir`, тобто з теки ПОРУЧ ІЗ БІНАРНИКОМ. Наслідок на диску:
+    #
+    #     …/proof-before/data/identity/node_ed25519.key      ← сказане
+    #     …/binaries/data/phantom.db                         ← зроблене
+    #     …/binaries/data/chroma/.embedding_model            ← зроблене
+    #
+    # Продукт розклав власний стан по ДВОХ теках і жодного разу не
+    # поскаржився: база й векторна памʼять поїхали в одне місце, все інше —
+    # в інше. Те саме з моделями: HF_HOME/HUGGINGFACE_HUB_CACHE вказували на
+    # `<binary>/models/hf_cache` при `PHANTOM_MODELS_DIR`, що вказував геть
+    # деінде. А `memory/embedding_fn.model_state()` — те, що показує людині
+    # стан памʼяті на склі — читає рівно ці три змінні. Тобто оператор,
+    # який поставив модель у ОГОЛОШЕНУ ним теку моделей, і далі бачив би
+    # «модель не встановлена». Мовчазна брехня саме того ґатунку, проти
+    # якого весь цей шар і написаний.
+    #
+    # Лікуємо клас, а не випадок: нижче ЖОДЕН шлях не рахується з
+    # `_binary_dir()` наосліп — усі читаються назад із середовища, тож
+    # «оголошене» і «зроблене» не можуть розійтись за побудовою.
+    data_dir = Path(os.environ["PHANTOM_DATA_DIR"])
+    models_dir = Path(os.environ["PHANTOM_MODELS_DIR"])
+    for label, target in (("PHANTOM_DATA_DIR", data_dir), ("PHANTOM_MODELS_DIR", models_dir)):
+        try:
+            target.mkdir(parents=True, exist_ok=True)
+        except OSError as exc:
+            # Не мовчимо і не підміняємо тихцем на свою теку: оператор
+            # назвав це місце сам, і підміна знову розвела б сказане з
+            # зробленим — лише на крок пізніше й непомітніше.
+            print(
+                f"[phantom] {label}={target} недоступна на запис ({exc}). "
+                "Або дай права на цю теку, або прибери змінну — тоді дані "
+                "підуть поруч із бінарником чи в теку користувача.",
+                file=sys.stderr,
+            )
+            raise
+
     os.environ.setdefault(
         "DATABASE_URL",
         f"sqlite+aiosqlite:///{(data_dir / 'phantom.db').as_posix()}",

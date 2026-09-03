@@ -11,8 +11,21 @@
 # Образ описаний у `scripts/build-env.Dockerfile`.
 #
 # Використання:
-#   scripts/build_in_container.sh            # sidecar + оболонка + AppImage
-#   scripts/build_in_container.sh sidecar    # лише sidecar
+#   flock -w 3600 /tmp/phantom-verify/gate.lock scripts/build_in_container.sh
+#   flock -w 3600 /tmp/phantom-verify/gate.lock scripts/build_in_container.sh sidecar
+#
+# Замок обовʼязковий: машина одна, і важке на ній — по одному. Скрипт сам
+# перевіряє, чи ворота не тримає ЧУЖИЙ процес, і чи не живий поруч Gradle.
+# Шлях до замка зашитий; підмінити його можна лише для перевірки самого
+# сторожа, і лише вголос (PHANTOM_GATE_TEST=1).
+#
+# Коди виходу, які означають «не зараз», а не «зламалось»:
+#   6 — PHANTOM_GATE підмінено без PHANTOM_GATE_TEST=1
+#   7 — ворота тримає чужий процес
+#   8 — вільної памʼяті менше за поріг (типово 6000 МБ)
+#   9 — на машині живий Gradle
+#   1 — дерево не дорівнює коміту (обхід: PHANTOM_BUILD_ALLOW_DIRTY=1,
+#       і тоді артефакт отримує «-dirty» в імені)
 
 set -euo pipefail
 
@@ -35,6 +48,149 @@ if [ "$_mei" -gt 0 ]; then
 fi
 
 say() { printf '[контейнер] %s\n' "$*"; }
+die() { printf '[контейнер] %s\n' "$*" >&2; exit 1; }
+
+# ── Ворота машини ───────────────────────────────────────────────────────
+#
+# Шлях до замка ЗАШИТИЙ, і це латка на справжню подію, не педантизм:
+# 03.09 агент, перевіряючи сторожа памʼяті, перенаправив змінну зі шляхом
+# до замка на файл у скретчпаді. Сторож чесно виміряв памʼять, чесно
+# пропустив — і важкий процес стартував поруч із чужою збіркою Gradle, яка
+# тримала СПРАВЖНІЙ замок. Ворота обійшли не хитрістю, а ЧЕРЕЗ саму
+# перевірку: перевірялись не ті ворота.
+#
+# Тому підміна лишається рівно для одного випадку — перевірити самого
+# сторожа — і вимагає сказати це вголос окремою змінною. Мовчазної підміни
+# більше немає.
+GATE_REAL='/tmp/phantom-verify/gate.lock'
+GATE="${PHANTOM_GATE:-$GATE_REAL}"
+if [ "$GATE" != "$GATE_REAL" ] && [ "${PHANTOM_GATE_TEST:-0}" != "1" ]; then
+  echo "[контейнер] PHANTOM_GATE вказує на ${GATE}, а не на ${GATE_REAL} — відмовляюсь." >&2
+  echo "[контейнер] Замок штабу підмінювати не можна: docker і PyInstaller тут" >&2
+  echo "[контейнер] їдять гігабайти й стають першою ціллю сторожа памʼяті." >&2
+  echo "[контейнер] Для перевірки САМОГО сторожа: PHANTOM_GATE_TEST=1 — і скажи це вголос." >&2
+  exit 6
+fi
+if [ "${PHANTOM_GATE_TEST:-0}" = "1" ]; then
+  echo "[контейнер] УВАГА: тестовий режим воріт, справжній замок ${GATE_REAL} НЕ перевіряється." >&2
+fi
+
+# Хто ТРИМАЄ замок. Просте `flock -n` тут не годиться: рекомендований запуск
+# — `flock -w 3600 <замок> ./scripts/build_in_container.sh`, тобто замок
+# тримає наш ЖЕ батько, і глуха відмова відмовляла б власному правильному
+# виклику. Тому питаємо /proc/locks, чий це pid, і дивимось, чи він серед
+# наших предків: свій — проходимо, чужий — стоп.
+_gate_holder() {
+  local ino
+  ino="$(stat -c %i "$GATE" 2>/dev/null)" || return 1
+  awk -v ino="$ino" '$2=="FLOCK"{split($6,a,":"); if (a[3]==ino){print $5; exit}}' /proc/locks
+}
+_ppid_of() {  # $1 — pid. Батько, розібраний СТІЙКО.
+  # `awk '{print $4}'` тут брехав би: друге поле /proc/pid/stat — це comm у
+  # дужках, і воно може містити пробіли. На цій машині просто зараз живе
+  # процес із comm «(npm run dev --p)», і наївний розбір давав для нього
+  # «dev» замість pid 11012. Сторож, що читає сміття як номер процесу,
+  # визнав би чужого своїм. Тому ріжемо все до останньої «) » — після неї
+  # поля рахуються надійно: state, ppid, …
+  sed 's/.*) //' "/proc/$1/stat" 2>/dev/null | awk '{print $2}'
+}
+_is_ancestor() {  # $1 — pid
+  local p=$$ guard=0
+  while [ "${p:-0}" -gt 1 ] && [ "$guard" -lt 64 ]; do
+    [ "$p" = "$1" ] && return 0
+    p="$(_ppid_of "$p")"
+    [ -n "$p" ] || return 1
+    guard=$((guard + 1))
+  done
+  return 1
+}
+
+mkdir -p "$(dirname "$GATE")" 2>/dev/null || true
+GATE_HOLDER="$(_gate_holder || true)"
+if [ -n "${GATE_HOLDER:-}" ] && ! _is_ancestor "$GATE_HOLDER"; then
+  echo "[контейнер] ворота ${GATE} тримає чужий процес (pid ${GATE_HOLDER}):" >&2
+  ps -o pid=,args= -p "$GATE_HOLDER" 2>/dev/null | cut -c1-140 >&2 || true
+  echo "[контейнер] на машині важке — по одному. Чекай, не лізь." >&2
+  exit 7
+fi
+
+# Gradle тут не сусід, а конкурент: він тримає купу на гігабайти, і сторож
+# oom-guard стріляє в НАЙБІЛЬШИЙ процес. Двічі за тиждень так гинула саме
+# збірка, а не той, хто зайняв памʼять.
+if pgrep -f 'org\.gradle\.wrapper\.GradleWrapperMain' >/dev/null 2>&1; then
+  echo "[контейнер] у ps живий Gradle — зараз збирає сусідня сесія. Не лізу." >&2
+  exit 9
+fi
+
+GATE_MIN_MB="${PHANTOM_MIN_MB:-6000}"
+GATE_FREE_MB="$(free -m | sed -n '2p' | awk '{print $NF}')"
+if [ -n "${GATE_FREE_MB:-}" ] && [ "${GATE_FREE_MB}" -lt "${GATE_MIN_MB}" ]; then
+  echo "[контейнер] вільної памʼяті ${GATE_FREE_MB} МБ < ${GATE_MIN_MB} МБ — не запускаю docker." >&2
+  echo "[контейнер] oom-guard застрелив би його як найбільший процес." >&2
+  exit 8
+fi
+say "ворота: ${GATE} вільні, памʼять ${GATE_FREE_MB} МБ, Gradle не бачу"
+
+# ── дерево: лише коміт ──────────────────────────────────────────────────
+#
+# Форма взята з `phantom-companion-integration/scripts/release.sh` — там це
+# вже стоїть після того, як реліз телефона 03.09 зібрався зеленим із дерева,
+# яке переписували ПІД ЧАС збірки. На ПК цієї перевірки не було взагалі:
+# `-v "${ROOT}:/work"` монтує дерево цілком, тобто в пакунок їде рівно те,
+# що лежить на диску в цю секунду, а не те, що є в історії. Виміряно, що це
+# вже кусає: закомічені тести читають файли, яких у жодному коміті немає,
+# тож «доведено на пакунку» не переносилось на SHA — а саме SHA потім
+# називає сайт.
+#
+# Замок серіалізує ЗБІРКИ, а не правки: поки docker жує десять хвилин,
+# сусідня сесія спокійно пише у ті самі файли. Тому питаємо стан дерева
+# ДО того, як щось запущено.
+DIRTY="$(git -C "${ROOT}" status --porcelain 2>/dev/null || echo '?? git-недоступний')"
+DIRTY_SUFFIX=""
+if [ -n "$DIRTY" ]; then
+  if [ "${PHANTOM_BUILD_ALLOW_DIRTY:-0}" != "1" ]; then
+    echo "[контейнер] дерево не дорівнює коміту — пакунок із такого дерева невідтворюваний:" >&2
+    awk 'NR<=12' <<< "$DIRTY" >&2
+    # Саме `if`, а не `[ … ] && echo`. Під `set -e` хибний тест робить
+    # весь список `&&` невдалим, і скрипт помирає ПРЯМО ТУТ — з кодом 1,
+    # але без наступного рядка. Тобто при 12 і менше брудних файлах
+    # оператор отримав би мовчазну відмову й ніколи не побачив, що обхід
+    # узагалі існує. Перевірено: у прогоні 03.09 рядків було 14, і лише
+    # тому підказка надрукувалась.
+    if [ "$(wc -l <<< "$DIRTY")" -gt 12 ]; then
+      echo "  … усього $(wc -l <<< "$DIRTY") рядків" >&2
+    fi
+    die "закомітьте або приберіть зміни, потім запускайте знову (git stash тут заборонено — дерево спільне). Свідомо збираю чорнетку: PHANTOM_BUILD_ALLOW_DIRTY=1"
+  fi
+  # Обхід є, але він не безкоштовний: артефакт мусить сам себе видавати.
+  # Без цього суфікса брудна збірка виглядає на диску точно як чиста, і
+  # через день ніхто вже не скаже, котра з двох поїхала власнику.
+  DIRTY_SUFFIX="-dirty"
+  say "УВАГА: дерево брудне ($(wc -l <<< "$DIRTY") рядків), але PHANTOM_BUILD_ALLOW_DIRTY=1."
+  say "       Артефакт поїде з «-dirty» у назві — відтворити його з коміту НЕМОЖЛИВО."
+fi
+
+# `--short=8` — та сама довжина, що в релізі телефона, щоб дві половини
+# продукту називали коміт однаково.
+HEAD_SHA="$(git -C "${ROOT}" rev-parse --short=8 HEAD 2>/dev/null || echo 'nogit')"
+
+# Версію читаємо з `tauri.conf.json`, а не пишемо числом у скрипті. Тут уже
+# стояв літерал «0.20.0» в імені для appimagetool: варто підняти версію в
+# конфізі — і пакунок мовчки лишився б зі старою назвою, а сайт назвав би
+# третю. Одне джерело правди, і воно те саме, з якого збирає сам tauri.
+VERSION="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["version"])' \
+  "${ROOT}/src/frontend/src-tauri/tauri.conf.json" 2>/dev/null || echo "0.0.0")"
+[ "${VERSION}" != "0.0.0" ] || die "не прочитав version із tauri.conf.json — далі йшла б збірка з вигаданим номером"
+
+# Ім'я артефакту несе коміт. До цього в `.build/out/` лежали два AppImage з
+# однаковими іменами й різних комітів, і сказати, котрий звідки, не міг
+# ніхто. Сайт (platform-site) бере вагу й суму з політики сервера — йому
+# потрібні саме ім'я з SHA і файл `.sha256` поруч.
+APPIMAGE_NAME="PHANTOM OS_${VERSION}_${HEAD_SHA}${DIRTY_SUFFIX}_amd64.AppImage"
+BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+
+say "коміт:  ${HEAD_SHA}${DIRTY_SUFFIX} (дерево $([ -n "$DIRTY" ] && echo брудне || echo чисте))"
+say "версія: ${VERSION}"
 
 if ! docker image inspect "${IMAGE}" >/dev/null 2>&1; then
   say "образу ${IMAGE} немає — збираю з scripts/build-env.Dockerfile"
@@ -81,6 +237,11 @@ docker run --rm \
   -v "${TARGET_VOL}:/work/src/frontend/src-tauri/target" \
   -e STAGE="${STAGE}" \
   -e HOST_UID="$(id -u)" -e HOST_GID="$(id -g)" \
+  -e PHANTOM_BUILD_SHA="${HEAD_SHA}" \
+  -e PHANTOM_BUILD_DIRTY="$([ -n "$DIRTY" ] && echo 1 || echo 0)" \
+  -e PHANTOM_BUILD_VERSION="${VERSION}" \
+  -e PHANTOM_BUILD_AT="${BUILT_AT}" \
+  -e APPIMAGE_NAME="${APPIMAGE_NAME}" \
   "${IMAGE}" bash -euo pipefail -c '
     cd /work
 
@@ -179,6 +340,16 @@ export GST_PLUGIN_SYSTEM_PATH_1_0="\$this_dir/usr/lib/gstreamer-1.0"
 export GST_PLUGIN_PATH_1_0="\$this_dir/usr/lib/gstreamer-1.0"
 export GST_PLUGIN_SCANNER_1_0="\$this_dir/usr/lib/gstreamer1.0/gstreamer-1.0/gst-plugin-scanner"
 export GST_REGISTRY_1_0="\${XDG_CACHE_HOME:-\$HOME/.cache}/phantom-os/gstreamer-registry.bin"
+
+# TMPDIR — на диск, а не в tmpfs. Сайдкар зібраний PyInstaller-ом у onefile,
+# і на КОЖНОМУ старті він розпаковує себе в TMPDIR. Заміряно 03.09 на
+# покладеному бінарнику: 1 584 090 672 Б, тобто 1,48 ГіБ. На типовій машині
+# /tmp — tmpfs, отже поки PHANTOM працює, півтора гігабайти RAM користувача
+# зайняті копією його ж нутрощів. При штатному виході бутлоадер це прибирає,
+# після жорсткої смерті — ні. Ставимо під кеш користувача, де це звичайні
+# файли на диску.
+export TMPDIR="\${TMPDIR:-\${XDG_CACHE_HOME:-\$HOME/.cache}/phantom-os/tmp}"
+mkdir -p "\$TMPDIR" 2>/dev/null || true
 HOOK
 
     # AppRun від linuxdeploy сорсить РІВНО ОДИН гак, за іменем. Тобто просто
@@ -193,10 +364,37 @@ HOOK
 
     echo "[контейнер] плагінів у пакунку: $(ls "$APPDIR/usr/lib/gstreamer-1.0"/*.so | wc -l)"
 
+    # ── Паспорт збірки У ДАНИХ ПАКУНКА ─────────────────────────────────
+    #
+    # Виміряно 03.09: в артефакті не було SHA НІДЕ. `/health` віддавав
+    # зашите "version": "0.1.0" при 0.20.0 у tauri.conf.json, а в
+    # `.build/out/` лежали два AppImage з однаковими іменами — і з якого
+    # коміту котрий, не сказав би ніхто.
+    #
+    # Кладемо поруч із самим сайдкаром, а не в довільну теку ресурсів:
+    # `_phantom_entry._binary_dir()` вже вміє знаходити це місце (так само
+    # він шукає `frontend/`), тож бекенд зможе прочитати власний коміт без
+    # жодного нового механізму розвʼязування шляхів.
+    SIDECAR="$(find "$APPDIR" -name "phantom-backend*" -type f | head -1)"
+    [ -n "$SIDECAR" ] || { echo "[контейнер] сайдкара в AppDir немає — паспорт нема про що писати"; exit 1; }
+    SIDECAR_SUM="$(sha256sum "$SIDECAR" | cut -d" " -f1)"
+    cat > "$(dirname "$SIDECAR")/build_info.json" <<INFO
+{
+  "component": "appimage",
+  "commit": "${PHANTOM_BUILD_SHA}",
+  "dirty": $([ "${PHANTOM_BUILD_DIRTY}" = "1" ] && echo true || echo false),
+  "version": "${PHANTOM_BUILD_VERSION}",
+  "built_at": "${PHANTOM_BUILD_AT}",
+  "sidecar_sha256": "${SIDECAR_SUM}",
+  "appimage": "${APPIMAGE_NAME}"
+}
+INFO
+    echo "[контейнер] паспорт збірки: $(dirname "$SIDECAR")/build_info.json (сайдкар ${SIDECAR_SUM})"
+
     # Перепаковуємо. Стару збірку прибираємо, щоб `find` нижче не виніс її.
     rm -f src-tauri/target/release/bundle/appimage/*.AppImage
     ARCH=x86_64 appimagetool "$APPDIR" \
-      "src-tauri/target/release/bundle/appimage/PHANTOM OS_0.20.0_amd64.AppImage" \
+      "src-tauri/target/release/bundle/appimage/${APPIMAGE_NAME}" \
       >/dev/null 2>&1 \
       || { echo "[контейнер] appimagetool не зібрав пакунок"; exit 1; }
     echo "[контейнер] перепаковано"
@@ -234,11 +432,22 @@ HOOK
 
     # `target` — іменований том, тобто з хоста його не видно. Артефакт
     # треба винести назовні явно, інакше збірка «пройшла», а дати нема чого.
+    #
+    # Виносимо ПОІМЕННО, а не «усе свіже за дві години». `-newermt` вигрібав
+    # би й чужі AppImage, що трапились у томі, і мовчки поклав би поруч
+    # артефакт з іншої збірки — рівно та плутанина двох пакунків, від якої
+    # тут і зʼявилось імʼя з комітом.
     mkdir -p /work/.build/out
-    find src-tauri/target -name "*.AppImage" -newermt "-2 hours" \
-      -exec cp -f {} /work/.build/out/ \;
+    OUT_SRC="src-tauri/target/release/bundle/appimage/${APPIMAGE_NAME}"
+    [ -f "$OUT_SRC" ] || { echo "[контейнер] немає ${OUT_SRC} — виносити нічого"; exit 1; }
+    cp -f "$OUT_SRC" "/work/.build/out/${APPIMAGE_NAME}"
+
+    # Сума рахується з ВИНЕСЕНОГО файла, а не з того, що в томі: сайт
+    # роздаватиме саме цю копію, і саме її має описувати `.sha256`.
+    ( cd /work/.build/out && sha256sum "${APPIMAGE_NAME}" > "${APPIMAGE_NAME}.sha256" )
     echo "[контейнер] винесено:"
     ls -la /work/.build/out/ || true
+    echo "[контейнер] сума: $(cat "/work/.build/out/${APPIMAGE_NAME}.sha256")"
 
     cd /work
     chown -R "$HOST_UID:$HOST_GID" .build src/frontend/src-tauri/binaries \

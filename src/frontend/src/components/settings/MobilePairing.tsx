@@ -44,7 +44,14 @@ interface ClaimToast {
   ts: number;
 }
 
-const PAIR_TTL_S = 60;
+/**
+ * Запас на випадок, коли ядро не назвало строк. Саме число НЕ вживається як
+ * правда про життя коду: 03.09.2026 на склі ядро віддало
+ * `expires_in_seconds: 180`, кільце ділило залишок на 60 — тобто перші дві
+ * третини життя стояло повним і починало рухатись аж під кінець, — а напис
+ * поруч казав «Живе 60 секунд». Три числа, одне з них справжнє.
+ */
+const PAIR_TTL_FALLBACK_S = 60;
 
 /**
  * Вік — словом, українською. Раніше цей рядок віддавав «5s ago» / «2h ago»
@@ -76,9 +83,12 @@ function formatRelative(iso: string): string {
  */
 function CountdownRing({
   expiresAt,
+  totalS,
   onExpire,
 }: {
   expiresAt: number;
+  /** Скільки живе цей код за словом ядра — знаменник кільця. */
+  totalS: number;
   onExpire: () => void;
 }): JSX.Element {
   const [secondsLeft, setSecondsLeft] = useState<number>(() =>
@@ -95,7 +105,7 @@ function CountdownRing({
     return () => clearInterval(id);
   }, [expiresAt, onExpire]);
 
-  const ringPct = Math.max(0, Math.min(1, secondsLeft / PAIR_TTL_S));
+  const ringPct = Math.max(0, Math.min(1, secondsLeft / Math.max(1, totalS)));
   return (
     <div
       style={{
@@ -452,7 +462,9 @@ export function MobilePairing(): JSX.Element {
               lineHeight: 1.4,
             }}
           >
-            Наведи камеру телефона на код. Живе 60 секунд, потім згенеруй новий.
+            {qr
+              ? `Наведи камеру телефона на код. Живе ${qr.expires_in_seconds} секунд, потім згенеруй новий.`
+              : 'Наведи камеру телефона на код. Скільки він житиме — скаже саме ядро, коли код зʼявиться.'}
           </div>
         </div>
         <button
@@ -565,6 +577,7 @@ export function MobilePairing(): JSX.Element {
               />
               <CountdownRing
                 expiresAt={expiresAt}
+                totalS={qr.expires_in_seconds || PAIR_TTL_FALLBACK_S}
                 onExpire={handleQrExpire}
               />
             </div>
@@ -710,7 +723,7 @@ export function MobilePairing(): JSX.Element {
             style={{ color: '#b07a10' }}
           />
           <span className="eyebrow-amber" style={{ fontSize: 9 }}>
-            PAIRED DEVICES
+            СПАРОВАНІ ПРИСТРОЇ
           </span>
           <span
             className="tabular"
@@ -746,14 +759,14 @@ export function MobilePairing(): JSX.Element {
               alignItems: 'center',
               gap: 4,
             }}
-            title="Refresh"
+            title="Оновити список"
           >
             {devicesLoading ? (
               <Loader2 size={10} strokeWidth={1.75} className="animate-spin" />
             ) : (
               <RefreshCw size={10} strokeWidth={1.75} />
             )}
-            Refresh
+            Оновити
           </button>
         </div>
 

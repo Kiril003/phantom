@@ -141,6 +141,24 @@ describe('MobilePairing — generate QR', () => {
     expect(img.src).toBe(QR_FIXTURE.qr_svg_data_url);
   });
 
+  it('строк життя коду бере з ядра, а не з константи', async () => {
+    // 03.09.2026 на склі: ядро віддало `expires_in_seconds: 180`, кільце
+    // ділило залишок на власну константу 60 (тобто дві третини життя стояло
+    // повним), а напис поруч казав «Живе 60 секунд». Три числа, одне з них
+    // справжнє. Тут фіксуємо, що напис іде за ядром.
+    (pairApi.init as unknown as ReturnType<typeof vi.fn>).mockResolvedValueOnce({
+      ...QR_FIXTURE,
+      expires_in_seconds: 180,
+    });
+    render(<MobilePairing />);
+    const btn = await screen.findByText(/Згенерувати QR/i);
+    await act(async () => {
+      fireEvent.click(btn);
+    });
+    expect(await screen.findByText(/Живе 180 секунд/)).toBeTruthy();
+    expect(screen.queryByText(/Живе 60 секунд/)).toBeNull();
+  });
+
   it('shows host, ip:port, truncated pair_id, and підпис про сертифікат', async () => {
     render(<MobilePairing />);
     const btn = await screen.findByText(/Згенерувати QR/i);

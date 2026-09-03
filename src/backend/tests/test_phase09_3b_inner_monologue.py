@@ -33,7 +33,11 @@ class _RecordingHub:
 def recording_hub(monkeypatch):
     """Patch hub.broadcast in-place so emit_monologue sees a fake hub."""
     from api import websocket_hub as _wh
-    from agent import monologue_emitter as _me
+    # Модуль переїхав у `agent.cognition`, і ТІЛО тесту вже ходить туди.
+    # Не переїхала лише ця фікстура — і валила всі шість тестів файлу
+    # помилкою налаштування, тобто вони не стерегли нічого. Та сама
+    # порода, що сторож ради вдень: код переїхав, зонд лишився.
+    from agent.cognition import monologue_emitter as _me
     hub = _RecordingHub()
     monkeypatch.setattr(_wh, "hub", hub)
     _me.reset_rate_limiter_for_tests()

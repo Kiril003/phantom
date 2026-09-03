@@ -1,5 +1,9 @@
 import type { ArtifactCapability } from '@shared/types/chat';
 import { wsClient, type WSChannel, type WSMessage } from '../../../services/websocket';
+// Адреса бекенда — тільки з єдиного джерела. У пакунку фронт віддається
+// asset-протоколом Tauri, тож відносний fetch на /api іде на tauri.localhost,
+// а не на sidecar, і виклик не доходить — виміряно на зібраному AppImage.
+import { apiUrl } from '../../../services/backendOrigin';
 
 const READ_KEYS: Record<string, ArtifactCapability> = {
   'context.snapshot': 'read:context',
@@ -82,7 +86,7 @@ export class ArtifactBroker {
         return;
       }
       try {
-        const r = await fetch('/api/v1/chat/artifact-action', {
+        const r = await fetch(apiUrl('/api/v1/chat/artifact-action'), {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'include',

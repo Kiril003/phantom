@@ -10,6 +10,10 @@ import {
 } from 'recharts';
 import { Brain, Target, User, Activity } from 'lucide-react';
 import { readToken } from '../../../services/tokenStore';
+// Адреса бекенда — тільки з єдиного джерела. У пакунку фронт віддається
+// asset-протоколом Tauri, тож відносний fetch на /api іде на tauri.localhost,
+// а не на sidecar, і виклик не доходить — виміряно на зібраному AppImage.
+import { apiUrl } from '../../../services/backendOrigin';
 
 interface Drive {
   name: string;
@@ -28,7 +32,7 @@ export function WillPanel() {
   const { data, isLoading, error } = useQuery<WillState>({
     queryKey: ['agent-will-state'],
     queryFn: async () => {
-      const resp = await fetch('/api/v1/agent/will/state', {
+      const resp = await fetch(apiUrl('/api/v1/agent/will/state'), {
         headers: {
           'Authorization': `Bearer ${readToken()}`
         }

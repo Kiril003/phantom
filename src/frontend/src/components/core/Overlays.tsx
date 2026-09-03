@@ -34,6 +34,10 @@ import { SystemState } from '@shared/types';
 import { StandingOrdersOverlay } from './StandingOrdersOverlay';
 import { Zap } from 'lucide-react';
 import { readToken } from '../../services/tokenStore';
+// Адреса бекенда — тільки з єдиного джерела. У пакунку фронт віддається
+// asset-протоколом Tauri, тож відносний fetch на /api іде на tauri.localhost,
+// а не на sidecar, і виклик не доходить — виміряно на зібраному AppImage.
+import { apiUrl } from '../../services/backendOrigin';
 
 const TITLES: Record<OverlayName, string> = {
   terminal: 'Terminal',
@@ -200,7 +204,7 @@ function TerminalOverlay() {
 
     try {
       const token = readToken();
-      const res = await fetch('/api/v1/linux/execute', {
+      const res = await fetch(apiUrl('/api/v1/linux/execute'), {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

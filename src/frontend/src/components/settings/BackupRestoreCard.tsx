@@ -1,6 +1,10 @@
 import { useState } from 'react';
 import { DownloadCloud, UploadCloud, AlertTriangle, CheckCircle, Loader2 } from 'lucide-react';
 import { readToken } from '../../services/tokenStore';
+// Адреса бекенда — тільки з єдиного джерела. У пакунку фронт віддається
+// asset-протоколом Tauri, тож відносний fetch на /api іде на tauri.localhost,
+// а не на sidecar, і виклик не доходить — виміряно на зібраному AppImage.
+import { apiUrl } from '../../services/backendOrigin';
 
 export function BackupRestoreCard() {
   const [downloading, setDownloading] = useState(false);
@@ -17,7 +21,7 @@ export function BackupRestoreCard() {
     try {
       // In a real browser environment, we'd use a link or Blob creation.
       const token = readToken();
-      const resp = await fetch('/api/v1/admin/backup/download', {
+      const resp = await fetch(apiUrl('/api/v1/admin/backup/download'), {
         method: 'GET',
         headers: {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),
@@ -68,7 +72,7 @@ export function BackupRestoreCard() {
 
       // fetchApi with FormData usually needs careful handling or native fetch
       const token = readToken();
-      const resp = await fetch('/api/v1/admin/backup/upload', {
+      const resp = await fetch(apiUrl('/api/v1/admin/backup/upload'), {
         method: 'POST',
         headers: {
           ...(token ? { Authorization: `Bearer ${token}` } : {}),

@@ -30,6 +30,7 @@ import { useMicStream } from './useMicStream';
 import { useInputMode } from '../stores/inputModeStore';
 import { readToken } from '../services/tokenStore';
 import { openAuthedSocket } from '../services/wsAuth';
+import { directWsUrl } from '../services/backendOrigin';
 // Лише тип: статичний імпорт значення клав увесь застосунок білим екраном.
 import type { MicVAD as MicVADType } from '@ricky0123/vad-web';
 
@@ -287,22 +288,19 @@ export function __getVoiceAlwaysOnWSRefCount(): number {
 
 function _resolveWsUrl(explicit?: string): string {
   if (explicit) return explicit;
-  const proto = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-  // Phase 12.1 — bypass the Vite WebSocket proxy for `/ws/voice`. Vite's
-  // ws-proxy crashes (EPIPE / 1006) under the combined load of:
-  //   * 30 ms-cadence binary PCM frames flowing client → backend, and
-  //   * concurrent OLED / sensor / chat traffic on the central /ws hub.
-  // The chat hub stays on Vite (text-only, low rate). For voice we go
-  // direct to the backend port. Backend `cors_origins` lists the dev
-  // host; FastAPI doesn't gate WebSocket upgrades on Origin by default,
-  // so this works without extra middleware. Production builds (where
-  // import.meta.env.DEV is false) keep using the same-origin URL.
-  if (import.meta.env.DEV) {
-    const host = `${window.location.hostname}:8000`;
-    return `${proto}//${host}/ws/voice`;
-  }
-  const host = window.location.host;
-  return `${proto}//${host}/ws/voice`;
+  // Phase 12.1 — обхід ws-проксі vite для `/ws/voice`. Проксі падає
+  // (EPIPE / 1006) під поєднанням бінарних PCM-кадрів на 30 мс і
+  // одночасного трафіку OLED / сенсорів / чату на центральному /ws.
+  // Чат лишається на vite (текст, низька частота), голос іде прямо.
+  //
+  // 29.08.2026: звідси прибрано ДВА місця, де адреса була відома окремо —
+  // зашитий `:8000` і побудова від `window.location` для пакунка. У
+  // запакованому AppImage `location.host` вказує не на sidecar, тож
+  // прод-гілка вела сокет у нікуди.
+  // Уся адресна арифметика — в єдиному джерелі. Тут не лишилось ні
+  // `window.location`, ні числа порту: `directWsUrl` сам знає, що в
+  // пакунку веде на sidecar, а в розробці — прямо на бекенд повз проксі.
+  return directWsUrl('/ws/voice');
 }
 
 

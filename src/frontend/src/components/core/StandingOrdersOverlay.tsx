@@ -11,6 +11,10 @@ import {
 } from 'lucide-react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { readToken } from '../../services/tokenStore';
+// Адреса бекенда — тільки з єдиного джерела. У пакунку фронт віддається
+// asset-протоколом Tauri, тож відносний fetch на /api іде на tauri.localhost,
+// а не на sidecar, і виклик не доходить — виміряно на зібраному AppImage.
+import { apiUrl } from '../../services/backendOrigin';
 
 interface StandingOrder {
   id: string;
@@ -30,7 +34,7 @@ export function StandingOrdersOverlay() {
   const fetchOrders = useCallback(async () => {
     try {
       const token = readToken();
-      const res = await fetch('/api/v1/agent/standing_orders', {
+      const res = await fetch(apiUrl('/api/v1/agent/standing_orders'), {
         headers: { Authorization: `Bearer ${token}` }
       });
       if (!res.ok) throw new Error('Failed to fetch orders');
@@ -51,7 +55,7 @@ export function StandingOrdersOverlay() {
   const toggleOrder = async (order: StandingOrder) => {
     try {
       const token = readToken();
-      const res = await fetch(`/api/v1/agent/standing_orders/${order.id}`, {
+      const res = await fetch(apiUrl(`/api/v1/agent/standing_orders/${order.id}`), {
         method: 'PATCH',
         headers: { 
           'Content-Type': 'application/json',

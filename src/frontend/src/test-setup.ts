@@ -81,17 +81,37 @@ if (typeof globalThis.ResizeObserver === 'undefined') {
       /* noop */
     }
   }
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   (globalThis as any).ResizeObserver = RO;
 }
 
 // jsdom lacks URL.createObjectURL — maplibre-gl references it at import time
 if (typeof URL !== 'undefined' && typeof URL.createObjectURL !== 'function') {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   (URL as any).createObjectURL = () => 'blob:phantom-test';
 }
 if (typeof URL !== 'undefined' && typeof URL.revokeObjectURL !== 'function') {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+   
   (URL as any).revokeObjectURL = () => {};
 }
 
+
+// У браузері адресу бекенда дає `public/backend-origin.js`, підключений
+// обома входами. У jsdom того скрипта немає, а `services/backendOrigin.ts`
+// навмисно падає голосно замість вгадувати — тож тести мусять поставити те
+// саме єдине джерело, що й застосунок. Підміняти його на `window.location`
+// тут не можна: тоді тест перевіряв би поведінку, якої в продукті немає.
+if (typeof window !== 'undefined' && !window.__PHANTOM_BACKEND__) {
+  const HOST = '127.0.0.1';
+  const PORT = 8000;
+  const norm = (p: string) => (p.startsWith('/') ? p : `/${p}`);
+  window.__PHANTOM_BACKEND__ = {
+    host: HOST,
+    port: PORT,
+    isPackaged: () => false,
+    origin: () => '',
+    ws: (p: string) => `ws://${window.location.host}${norm(p)}`,
+    http: (p: string) => norm(p),
+    absolute: (p: string) => `http://${HOST}:${PORT}${norm(p)}`,
+  };
+}

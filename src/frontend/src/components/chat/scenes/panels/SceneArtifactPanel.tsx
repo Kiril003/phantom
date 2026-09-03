@@ -5,6 +5,10 @@ import type { ArtifactCapability, ArtifactPhase } from '@shared/types/chat';
 import { ArtifactBroker } from '../artifactBroker';
 import { wsClient } from '../../../../services/websocket';
 import type { WSMessage } from '../../../../services/websocket';
+// Адреса бекенда — тільки з єдиного джерела. У пакунку фронт віддається
+// asset-протоколом Tauri, тож відносний fetch на /api іде на tauri.localhost,
+// а не на sidecar, і виклик не доходить — виміряно на зібраному AppImage.
+import { apiUrl } from '../../../../services/backendOrigin';
 
 interface Props {
   data: { html: string; title: string; capabilities: ArtifactCapability[] };
@@ -36,7 +40,7 @@ const PHASE_LABELS: Record<ArtifactPhase, string> = {
 };
 
 async function readSlice(key: string): Promise<unknown> {
-  const r = await fetch('/api/v1/context/snapshot', { credentials: 'include' });
+  const r = await fetch(apiUrl('/api/v1/context/snapshot'), { credentials: 'include' });
   const snap = await r.json();
   switch (key) {
     case 'context.snapshot': return snap;
@@ -63,7 +67,7 @@ export function SceneArtifactPanel({ data }: Props) {
 
   const handleSave = async () => {
     try {
-      await fetch('/api/v1/studio/agents', {
+      await fetch(apiUrl('/api/v1/studio/agents'), {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         credentials: 'include',
@@ -80,7 +84,7 @@ export function SceneArtifactPanel({ data }: Props) {
       setSaved(true);
       setTimeout(() => setSaved(false), 1500);
     } catch (err) {
-      // eslint-disable-next-line no-console
+       
       console.error(err);
     }
   };

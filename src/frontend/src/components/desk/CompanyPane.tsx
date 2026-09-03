@@ -5,7 +5,15 @@ import { SystemState } from '@shared/types';
 import { agentApi } from '../../services/agentApi';
 import { request } from '../../services/api';
 import { useSystemStore } from '../../stores/systemStore';
+import type { WSMessage } from '../../services/websocket';
 import { ExecutionInspector } from '../foundry/ExecutionInspector';
+import {
+  applyBackgroundEvent,
+  freshnessWord,
+  hhmm,
+  useBackgroundStream,
+  type DelegationMark,
+} from './companyStream';
 
 /**
  * Пейн «Компанія» — єдиний вхід агентного світу (вердикт дизайн-дебати
@@ -16,9 +24,17 @@ import { ExecutionInspector } from '../foundry/ExecutionInspector';
  * ніколи не кликав), кількість активних прогонів. Нижче — список
  * прогонів як є, клік веде в наявний ExecutionInspector.
  *
- * Свіжість: Foundry не має ні polling, ні WS — тому «станом на HH:MM»
- * і явна кнопка оновити; слова «живий» тут нема (словник ATLAS v0.2:
- * вік — окремий маркер, не перефарбовування).
+ * Свіжість: пейн підписаний на канал `background_events` — той самий, у
+ * який ядро шле делеговане (runtime.py:531). Доти це був знімок: `load()`
+ * один раз на монтуванні, і делеговане не зʼявлялось ніде, доки людина не
+ * натисне «оновити». Кнопка лишається — вона потрібна саме тоді, коли
+ * потік обірвано.
+ *
+ * Обрив і порожнеча — різні стани, і кожен названий уголос: при живому
+ * каналі кажемо про потік, при обірваному — що показане ЗАСТИГЛО і на
+ * котрій хвилині. Старий знімок не має права виглядати свіжим. Слова
+ * «живий» тут нема (словник ATLAS v0.2: вік — окремий маркер, не
+ * перефарбовування).
  *
  * Контролі — ОДНА смуга на рівні пейна: «Стоп усій Компанії» (чесно:
  * б'є по кожному активному слоту, бо POST /agent/stop без task_id
@@ -32,8 +48,12 @@ import { ExecutionInspector } from '../foundry/ExecutionInspector';
  * дія «Дати перше завдання» — реальний POST /agent/task).
  *
  * НЕ малюється (доктрина, не побажання): витрати Волі (атрибуції origin
- * нема), хто запустив прогін (колонки origin нема), токени/гроші
- * (скрізь нулі), «Відкотити», метафори заліза.
+ * нема), токени/гроші (скрізь нулі), «Відкотити», метафори заліза.
+ * Виняток, здобутий потоком: `task.started` несе `parent_task_id` і
+ * `subagent_role` — тож для прогонів, чий старт ми ЧУЛИ, слово
+ * «делеговано» і роль малюються з події. Для решти рядків цього напису
+ * нема: в списку з API таких колонок не існує, а мовчання чесніше за
+ * здогад.
  */
 
 const STATE_WORD: Record<SystemState, string> = {
@@ -56,6 +76,11 @@ const STATUS_WORD: Record<string, string> = {
   queued: 'у черзі',
   complete: 'завершено',
   completed: 'завершено',
+  // Ядро пише саме `done` і `timeout` (agent/schemas.py:50). Обох ключів
+  // тут не було, тож завершений прогін підписувався сирим англійським
+  // словом — карта вгадувала статуси, яких бекенд не шле.
+  done: 'завершено',
+  timeout: 'вичерпав час',
   failed: 'провал',
   stopped: 'зупинено',
   cancelled: 'скасовано',
@@ -74,9 +99,10 @@ interface WillEntry {
 
 const WILL_SEEN_KEY = 'phantom.company.will-seen.v1';
 
-function hhmm(d: Date): string {
-  return d.toLocaleTimeString('uk-UA', { hour: '2-digit', minute: '2-digit' });
-}
+/** Пауза перед звіркою з ядром після події про незнайомий прогін.
+ *  Не полінг: спрацьовує лише коли потік сказав те, чого списком не
+ *  доповнити, і гасить чергу подій в один запит. */
+const RECONCILE_DELAY_MS = 1500;
 
 export default function CompanyPane() {
   const systemState = useSystemStore((s) => s.state);
@@ -97,9 +123,32 @@ export default function CompanyPane() {
   const [barMode, setBarMode] = useState<null | 'intervene' | 'launch'>(null);
   const [barText, setBarText] = useState('');
   const [controlWord, setControlWord] = useState<string | null>(null);
+  /** Сліди делегування, почуті з потоку: task_id → батько + роль. Живуть
+   *  окремо від списку, бо знімок з API цих полів не має і затер би їх. */
+  const [delegations, setDelegations] = useState<Record<string, DelegationMark>>({});
   const alive = useRef(true);
 
+  /** Дзеркало списку для обробника подій: два повідомлення в одному тіку
+   *  не мають затирати одне одного, а замикання обробника бачить лише той
+   *  `tasks`, що був на момент рендера. */
+  const tasksRef = useRef<AgentTaskSummary[] | null>(null);
+  /** Коли потік востаннє вніс правку. Порівнюється з моментом старту
+   *  запиту: відповідь, що вилетіла РАНІШЕ за подію, застаріла ще в
+   *  польоті й не має права виглядати останнім словом. */
+  const streamAppliedAt = useRef(0);
+  const reconcileTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const loadRef = useRef<() => void>(() => {});
+
+  const scheduleReconcile = useCallback(() => {
+    if (reconcileTimer.current !== null) return;
+    reconcileTimer.current = setTimeout(() => {
+      reconcileTimer.current = null;
+      if (alive.current) loadRef.current();
+    }, RECONCILE_DELAY_MS);
+  }, []);
+
   const load = useCallback(async () => {
+    const startedAt = Date.now();
     setRefreshing(true);
     const [tasksRes, willRes] = await Promise.allSettled([
       agentApi.listTasks(undefined, 50),
@@ -107,6 +156,7 @@ export default function CompanyPane() {
     ]);
     if (!alive.current) return;
     if (tasksRes.status === 'fulfilled') {
+      tasksRef.current = tasksRes.value.tasks;
       setTasks(tasksRes.value.tasks);
       setTasksError(false);
     } else {
@@ -120,15 +170,48 @@ export default function CompanyPane() {
     }
     setLoadedAt(new Date());
     setRefreshing(false);
-  }, []);
+    if (streamAppliedAt.current > startedAt) scheduleReconcile();
+  }, [scheduleReconcile]);
+
+  useEffect(() => {
+    loadRef.current = () => void load();
+  }, [load]);
 
   useEffect(() => {
     alive.current = true;
     void load();
     return () => {
       alive.current = false;
+      if (reconcileTimer.current !== null) {
+        clearTimeout(reconcileTimer.current);
+        reconcileTimer.current = null;
+      }
     };
   }, [load]);
+
+  /* ── Потік ──────────────────────────────────────────────────────────────
+   * Ядро оголошує делеговане в `background_events`. Тут це стає рядком
+   * списку тієї ж миті — без «оновити» і без полінгу. У рядок іде рівно
+   * те, що приїхало в події; чого подія не сказала — лишається порожнім. */
+  const onStreamEvent = useCallback(
+    (msg: WSMessage) => {
+      const patch = applyBackgroundEvent(tasksRef.current, msg);
+      if (patch.delegation) {
+        const { taskId, parentTaskId, role } = patch.delegation;
+        setDelegations((prev) => ({ ...prev, [taskId]: { parentTaskId, role } }));
+      }
+      // Подія про прогін, якого ми не знаємо: ціль нам ніхто не називав,
+      // тож рядок не вигадуємо — питаємо ядро.
+      if (patch.needsReconcile) scheduleReconcile();
+      if (patch.tasks === null) return;
+      tasksRef.current = patch.tasks;
+      streamAppliedAt.current = Date.now();
+      setTasks(patch.tasks);
+    },
+    [scheduleReconcile],
+  );
+
+  const { connected: streamConnected, lastEventAt } = useBackgroundStream(onStreamEvent);
 
   /* Воля: «поки вас не було» = записи, новіші за останній перегляд
    * журналу (localStorage). Немає позначки — рахуємо всі наявні. */
@@ -354,11 +437,17 @@ export default function CompanyPane() {
             </div>
           )}
           <span className="flex-1" />
-          {loadedAt && (
-            <span style={{ fontSize: 11, color: 'var(--ph-color-ink-muted)' }}>
-              План, станом на {hhmm(loadedAt)}
-            </span>
-          )}
+          {/* Свіжість словом: поки канал тримається — про потік; щойно
+            * обірвався — що показане застигло і на котрій хвилині. Старий
+            * знімок не має права виглядати свіжим. */}
+          <span
+            style={{
+              fontSize: 11,
+              color: streamConnected ? 'var(--ph-color-ink-muted)' : 'var(--ph-color-danger)',
+            }}
+          >
+            {freshnessWord({ connected: streamConnected, lastEventAt, loadedAt })}
+          </span>
           <button
             type="button"
             aria-label="Оновити"
@@ -394,7 +483,17 @@ export default function CompanyPane() {
 
       {/* Список прогонів як є */}
       <div className="flex-1 min-h-0 overflow-y-auto" style={{ padding: 'var(--ph-space-2) var(--ph-space-4)' }}>
-        {tasksError && <Word text="ядро не відповіло — список прогонів недоступний" />}
+        {/* HTTP може мовчати, поки WS живий: тоді рядки з потоку внизу є,
+          * але список неповний — і це сказано, а не приховано. */}
+        {tasksError && (
+          <Word
+            text={
+              (tasks ?? []).length > 0
+                ? 'ядро не відповіло — список нижче не оновлено і може бути неповним'
+                : 'ядро не відповіло — список прогонів недоступний'
+            }
+          />
+        )}
         {/* Порожнеча — скомпонована: що це, чому порожньо, ОДНА первинна дія.
          * Не «сторінка не долоадилась», а спроєктована тиша. */}
         {!tasksError && tasks !== null && tasks.length === 0 && (
@@ -421,9 +520,17 @@ export default function CompanyPane() {
               }}
             >
               Прогін — це завдання, яке Компанія веде сама: планує кроки, діє
-              і лишає слід у журналі Волі. Тут з&apos;явиться кожен — живий і
+              і лишає слід у журналі Волі. Тут зʼявиться кожен — живий і
               завершений.
             </span>
+            {/* Порожньо і обірвано — не одне й те саме. Перше означає «нічого
+              * не було», друге — «ми не почуємо, навіть якщо є». Кажемо обидва. */}
+            {!streamConnected && (
+              <span style={{ maxWidth: 380, fontSize: 11, lineHeight: 1.5, color: 'var(--ph-color-danger)' }}>
+                Потік обірвано — новий прогін сюди сам не дійде, доки звʼязок
+                не відновиться. Тисніть «Оновити», щоб перепитати ядро.
+              </span>
+            )}
             <button
               type="button"
               onClick={() => setBarMode('launch')}
@@ -444,8 +551,9 @@ export default function CompanyPane() {
             </button>
           </div>
         )}
-        {!tasksError &&
-          (tasks ?? []).map((t) => (
+        {(tasks ?? []).map((t) => {
+          const mark = delegations[t.id];
+          return (
             <button
               key={t.id}
               type="button"
@@ -462,7 +570,9 @@ export default function CompanyPane() {
                   className="truncate"
                   style={{ flex: 1, fontSize: 'var(--ph-type-caption-size)', color: 'var(--ph-color-ink)' }}
                 >
-                  {t.goal}
+                  {/* Ціль порожня лише тоді, коли ядро її не назвало —
+                    * підставляти сюди щось своє означало б вигадати. */}
+                  {t.goal || 'ціль не названа ядром'}
                 </span>
                 <span
                   style={{
@@ -479,9 +589,19 @@ export default function CompanyPane() {
                 {new Date(t.created_at).toLocaleString('uk-UA', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}
                 {' · '}
                 {t.track === 'background' ? 'тло' : 'передній план'}
+                {/* Тільки для прогонів, чий `task.started` ми чули: батько і
+                  * роль приїхали в події. Для решти рядків цього напису нема. */}
+                {mark && (
+                  <>
+                    {' · делеговано'}
+                    {mark.role ? ` · роль ${mark.role}` : ''}
+                    {mark.parentTaskId ? ` · від ${mark.parentTaskId.slice(0, 8)}` : ''}
+                  </>
+                )}
               </div>
             </button>
-          ))}
+          );
+        })}
       </div>
 
       {/* ОДНА смуга контролів на рівні пейна */}

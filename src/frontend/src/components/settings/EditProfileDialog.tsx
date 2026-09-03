@@ -101,7 +101,7 @@ export function EditProfileDialog({
       await patchUser(token, user.id, body);
       onSaved();
     } catch (e: unknown) {
-      setError(e instanceof Error ? e.message : 'Save failed');
+      setError(e instanceof Error ? e.message : 'Не вдалося зберегти');
     } finally {
       setBusy(false);
     }

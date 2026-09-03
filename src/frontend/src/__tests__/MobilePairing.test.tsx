@@ -160,7 +160,7 @@ describe('MobilePairing — generate QR', () => {
     expect(screen.getByText(/локальна мережа · без сертифіката/i)).toBeTruthy();
   });
 
-  it('shows "ROOT trust required" banner on ApiError 403', async () => {
+  it('на 403 показує українською, що парувати може лише ROOT', async () => {
     vi.mocked(pairApi.init).mockRejectedValueOnce(
       new ApiError(403, 'FORBIDDEN', 'forbidden'),
     );
@@ -170,14 +170,14 @@ describe('MobilePairing — generate QR', () => {
       fireEvent.click(btn);
     });
     expect(
-      await screen.findByText(/ROOT trust required to pair a device/i),
+      await screen.findByText(/Парувати пристрій може лише ROOT/i),
     ).toBeTruthy();
     expect(screen.queryByAltText(/Pairing QR code/i)).toBeNull();
   });
 });
 
 describe('MobilePairing — WS lifecycle', () => {
-  it('clears the QR and shows a "paired successfully" toast on pair/claimed', async () => {
+  it('на pair/claimed прибирає QR і каже українською, що пристрій спаровано', async () => {
     render(<MobilePairing />);
     const btn = await screen.findByText(/Згенерувати QR/i);
     await act(async () => {
@@ -197,7 +197,7 @@ describe('MobilePairing — WS lifecycle', () => {
     });
 
     expect(
-      await screen.findByText(/Pixel 8 paired successfully/i),
+      await screen.findByText(/Pixel 8 — спаровано/i),
     ).toBeTruthy();
     expect(screen.queryByAltText(/Pairing QR code/i)).toBeNull();
     await waitFor(() => {

@@ -46,14 +46,20 @@ interface ClaimToast {
 
 const PAIR_TTL_S = 60;
 
+/**
+ * Вік — словом, українською. Раніше цей рядок віддавав «5s ago» / «2h ago»
+ * і в списку пристроїв поруч стояло англійське «seen»: єдиний екран, який
+ * власник бачить одразу після парування телефона, говорив чужою мовою.
+ * Секунди не показуємо: «щойно» чесніше за «7s ago» і не смикається щотику.
+ */
 function formatRelative(iso: string): string {
   const t = new Date(iso).getTime();
   if (!Number.isFinite(t)) return iso;
   const dt = (Date.now() - t) / 1000;
-  if (dt < 60) return `${Math.floor(dt)}s ago`;
-  if (dt < 3600) return `${Math.floor(dt / 60)}m ago`;
-  if (dt < 86_400) return `${Math.floor(dt / 3600)}h ago`;
-  return `${Math.floor(dt / 86_400)}d ago`;
+  if (dt < 60) return 'щойно';
+  if (dt < 3600) return `${Math.floor(dt / 60)} хв тому`;
+  if (dt < 86_400) return `${Math.floor(dt / 3600)} год тому`;
+  return `${Math.floor(dt / 86_400)} дн тому`;
 }
 
 /**
@@ -287,7 +293,7 @@ export function MobilePairing(): JSX.Element {
       setDevices(rows);
     } catch (err) {
       // Non-fatal: keep prior list, surface the error in a banner.
-      setError(err instanceof Error ? err.message : 'Failed to load devices');
+      setError(err instanceof Error ? err.message : 'Не вдалося прочитати список пристроїв');
     } finally {
       setDevicesLoading(false);
     }
@@ -303,10 +309,10 @@ export function MobilePairing(): JSX.Element {
         const name =
           (msg.data?.device_name as string) ||
           (msg.data?.device_model as string) ||
-          'phone';
+          'телефон';
         setToast({
           kind: 'claimed',
-          message: `${name} paired successfully`,
+          message: `${name} — спаровано`,
           ts: Date.now(),
         });
         setQr(null);
@@ -314,7 +320,7 @@ export function MobilePairing(): JSX.Element {
       } else if (msg.type === 'revoked') {
         setToast({
           kind: 'revoked',
-          message: 'Device revoked',
+          message: 'Доступ пристрою відкликано',
           ts: Date.now(),
         });
         void refreshDevices();
@@ -351,10 +357,10 @@ export function MobilePairing(): JSX.Element {
     } catch (err) {
       const msg =
         err instanceof ApiError && err.status === 403
-          ? 'ROOT trust required to pair a device.'
+          ? 'Парувати пристрій може лише ROOT — цьому користувачу ядро відмовило.'
           : err instanceof Error
             ? err.message
-            : 'Failed to start pairing';
+            : 'Не вдалося почати парування';
       setError(msg);
     } finally {
       setGenerating(false);
@@ -368,7 +374,7 @@ export function MobilePairing(): JSX.Element {
         await pairApi.revoke(id, 'revoked from desktop');
         await refreshDevices();
       } catch (err) {
-        setError(err instanceof Error ? err.message : 'Revoke failed');
+        setError(err instanceof Error ? err.message : 'Не вдалося відкликати доступ');
       } finally {
         setRevokingId(null);
       }
@@ -426,7 +432,7 @@ export function MobilePairing(): JSX.Element {
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div className="micro-label" style={{ fontSize: 9 }}>
-            MOBILE COMPANION
+            МОБІЛЬНИЙ КОМПАНЬЙОН
           </div>
           <div
             style={{
@@ -820,7 +826,7 @@ export function MobilePairing(): JSX.Element {
               >
                 {d.platform}
                 {d.platform_version ? ` · ${d.platform_version}` : ''} ·{' '}
-                {formatRelative(d.paired_at)} · seen{' '}
+                спарований {formatRelative(d.paired_at)} · бачений{' '}
                 {formatRelative(d.last_seen_at)}
               </div>
             </div>

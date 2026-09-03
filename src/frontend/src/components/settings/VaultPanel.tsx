@@ -51,8 +51,8 @@ const KIND_CONFIGS: KindConfig[] = [
       { key: 'provider', label: 'Провайдер', secret: false, placeholder: 'Gmail, Proton, Outlook…' },
       { key: 'address', label: 'Адреса', secret: false, placeholder: 'name@example.com' },
       { key: 'password', label: 'Пароль', secret: true },
-      { key: 'app_password', label: 'App password', secret: true },
-      { key: 'recovery', label: 'Recovery code', secret: true, multiline: true },
+      { key: 'app_password', label: 'Пароль застосунку', secret: true },
+      { key: 'recovery', label: 'Код відновлення', secret: true, multiline: true },
     ],
   },
   {
@@ -71,7 +71,7 @@ const KIND_CONFIGS: KindConfig[] = [
       { key: 'platform', label: 'Платформа', secret: false, placeholder: 'Telegram, Signal, Viber' },
       { key: 'handle', label: 'Handle', secret: false, placeholder: '@nickname' },
       { key: 'password', label: 'Пароль', secret: true },
-      { key: 'recovery_phone', label: 'Recovery phone', secret: false },
+      { key: 'recovery_phone', label: 'Телефон відновлення', secret: false },
     ],
   },
   {
@@ -149,7 +149,7 @@ const KIND_CONFIGS: KindConfig[] = [
       { key: 'chain', label: 'Мережа', secret: false, placeholder: 'BTC, ETH, SOL…' },
       { key: 'address', label: 'Адреса', secret: false },
       { key: 'seed_phrase', label: 'Seed фраза', secret: true, multiline: true },
-      { key: 'private_key', label: 'Private key', secret: true },
+      { key: 'private_key', label: 'Приватний ключ', secret: true },
     ],
   },
   {

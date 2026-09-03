@@ -120,8 +120,24 @@ else
     echo "[sidecar] на машині важке — по одному. Чекай, не лізь." >&2
     exit 7
   fi
-  if pgrep -f 'org\.gradle\.wrapper\.GradleWrapperMain' >/dev/null 2>&1; then
-    echo "[sidecar] у ps живий Gradle — зараз збирає сусідня сесія. Не лізу." >&2
+  # Рахуємо лише СПРАВЖНІ демони, за comm=java. `pgrep -f` збігається з
+  # ТЕКСТОМ САМОЇ ПЕРЕВІРКИ: із цим скриптом, із чужим зондом, що шукає
+  # Gradle, і з самим pgrep. Заміряно 03.09: під час перевірки цього ж
+  # сторожа `pgrep -f` повернув два «живі Gradle» — справжній демон і
+  # ВЛАСНУ ОБОЛОНКУ вимірювача, бо в її рядку запуску стояв цей шаблон.
+  # Без справжнього демона поруч сторож відмовив би збірці рівно тому, що
+  # хтось інший ПИТАЄ про Gradle, — і відмовив би тихо, бо «не лізу»
+  # читається як обережність, а не як дефект. Дужка в шаблоні рятує від
+  # себе, але не від чужих зондів без дужки; comm — від усіх.
+  _gradle_alive() {
+    local p
+    for p in $(pgrep -f 'org\.gradle\.wrapper\.GradleWrapperMain' 2>/dev/null); do
+      [ "$(cat "/proc/$p/comm" 2>/dev/null)" = java ] && return 0
+    done
+    return 1
+  }
+  if _gradle_alive; then
+    echo "[sidecar] у ps живий Gradle (java) — зараз збирає сусідня сесія. Не лізу." >&2
     exit 9
   fi
   GATE_MIN_MB="${PHANTOM_MIN_MB:-6000}"

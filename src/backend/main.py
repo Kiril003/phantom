@@ -1356,6 +1356,17 @@ def _register_ws(app: FastAPI) -> None:
 
 
 def _register_health(app: FastAPI) -> None:
+    async def _ai_readiness() -> dict:
+        """Ніколи не валить /health і не ходить у мережу по хмару: для
+        Gemini дивимось наявність ключа, для локальної моделі — коротка
+        проба з кешем."""
+        try:
+            from ai.readiness import ai_readiness
+
+            return await ai_readiness()
+        except Exception:  # noqa: BLE001
+            return {"ai_ready": None, "ai_ready_reason": "стан не прочитано"}
+
     def _build_passport() -> dict:
         """Паспорт збірки: те, ЩО СПРАВДІ зібрано, а не літерал у коді.
 
@@ -1413,6 +1424,11 @@ def _register_health(app: FastAPI) -> None:
             # dynamically, so it's always the truth.
             "ai_active": config.ai_primary_provider,
             "ai_fallback": config.ai_fallback_provider,
+            # Вподобання конфігу — це НЕ стан. Вузол віддавав ai_active
+            # "gemini" там, де ключа немає взагалі, а скло чесно повторювало
+            # це людині як «Gemini · хмара · ключ». Тому поруч з обраним
+            # їде готовий: хто справді відповість і чому ні.
+            **(await _ai_readiness()),
             # Стан довготривалої памʼяті. У пакунку моделі ембедингів немає
             # навмисно, і без цього поля єдиним її проявом була тиша: запис
             # кидав EmbeddingModelMissing, той гинув у broad-except, і людина

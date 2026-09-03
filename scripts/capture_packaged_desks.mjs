@@ -55,15 +55,15 @@ const GATE_TEST = process.env.PHANTOM_GATE_TEST === '1';
 const GATE = process.env.PHANTOM_GATE || GATE_REAL;
 if (GATE !== GATE_REAL && !GATE_TEST) {
   console.error(
-    `[знімач] PHANTOM_GATE вказує на ${GATE}, а не на ${GATE_REAL} — відмовляюсь.\n` +
-    '[знімач] Замок штабу підмінювати не можна: старт пакунка розпаковує ~1,7 ГБ\n' +
-    '[знімач] і стає найбільшим процесом, тобто першою ціллю сторожа памʼяті.\n' +
-    '[знімач] Для перевірки САМОГО сторожа: PHANTOM_GATE_TEST=1 — і скажи це вголос.'
+    `[кадр] PHANTOM_GATE вказує на ${GATE}, а не на ${GATE_REAL} — відмовляюсь.\n` +
+    '[кадр] Замок штабу підмінювати не можна: старт пакунка розпаковує ~1,7 ГБ\n' +
+    '[кадр] і стає найбільшим процесом, тобто першою ціллю сторожа памʼяті.\n' +
+    '[кадр] Для перевірки САМОГО сторожа: PHANTOM_GATE_TEST=1 — і скажи це вголос.'
   );
   process.exit(6);
 }
 if (GATE_TEST) {
-  console.error(`[знімач] УВАГА: тестовий режим воріт, справжній замок ${GATE_REAL} НЕ перевіряється.`);
+  console.error(`[кадр] УВАГА: тестовий режим воріт, справжній замок ${GATE_REAL} НЕ перевіряється.`);
 }
 const MIN_MB = Number(process.env.PHANTOM_MIN_MB || 5000);
 const MATCH = new RegExp(process.env.PHANTOM_MATCH || 'phantom', 'i');

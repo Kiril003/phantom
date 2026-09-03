@@ -149,8 +149,17 @@ class TestSettingsRegistry:
 # ─── 5. Loop integration (source-level + behavioural smoke) ──────────────────
 
 
+# Петля переїхала в `agent/kernel/`, а шлях лишився старим — і чотири
+# сторожі цього класу падали не на порушенні інваріанта, а на
+# FileNotFoundError. Тобто вони не стерегли нічого відтоді, як файл
+# переїхав: доводити треба ІСНУВАННЯ джерела, інакше «червоне» каже
+# про сам зонд, а не про продукт.
 _LOOP_PATH = (
-    Path(__file__).resolve().parent.parent / "agent" / "loop.py"
+    Path(__file__).resolve().parent.parent / "agent" / "kernel" / "loop.py"
+)
+assert _LOOP_PATH.is_file(), (
+    f"джерело петлі не знайдено за {_LOOP_PATH} — сторожі нижче читають "
+    "файл, і мовчазний переїзд робить їх сліпими, а не червоними"
 )
 
 
@@ -178,10 +187,19 @@ class TestLoopIntegration:
         action council would otherwise abort."""
         src = _LOOP_PATH.read_text(encoding="utf-8")
         marker_council = 'kind="high_risk_action"'
-        marker_phone = "from .approve_on_phone import request_phone_approval"
+        # Імпорт став абсолютним (`from agent.operations.approve_on_phone …`),
+        # і сторож шукав відносний — тобто не знаходив його взагалі й падав
+        # на власному маркері, доводячи порушення порядку, якого не було.
+        # Тримаємо хвіст рядка, спільний для обох форм запису.
+        marker_phone = "approve_on_phone import request_phone_approval"
         idx_council = src.find(marker_council)
         idx_phone = src.find(marker_phone)
-        assert idx_council > 0 and idx_phone > 0
+        assert idx_council > 0, f"маркер ради не знайдено: {marker_council}"
+        assert idx_phone > 0, (
+            f"маркер телефонного схвалення не знайдено: {marker_phone} — "
+            "порядок нижче доводити нічим, і мовчазне перейменування зробило б "
+            "сторожа сліпим"
+        )
         assert idx_council < idx_phone, (
             "Phase 23-D regression: council consult must fire BEFORE "
             "request_phone_approval, otherwise a silent approve-on-phone "

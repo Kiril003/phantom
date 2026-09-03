@@ -278,3 +278,50 @@ def test_опис_інструмента_не_обіцяє_чого_немає()
     assert f"{LIMIT_CHARS:,}".replace(",", " ") in d, "стеля на символи не названа"
     assert "truncated" in d, "моделі не сказано, як виглядає обрив"
     assert "base64" in d, "моделі не сказано, що двійкове до неї не їде"
+
+
+# ── стик і розбирач кажуть про обрив ОДНЕ, і жоден не з'їдає іншого ───────────
+
+SLACK: int = getattr(te, "_TRUNCATION_NOTE_SLACK", 512)
+
+_MARKER = "[показано 200000 символів із 229164 — далі обрізано, не переказуй документ як повний]"
+
+
+def _fake_extract(text: str, truncated: bool):
+    return lambda path, **kwargs: document_text.Extracted(text, "тест", None, truncated=truncated)
+
+
+async def test_рядок_розбирача_про_обрив_доїжджає_до_моделі(tmp_path, monkeypatch):
+    """Розбирач дописує в кінець тексту «показано N символів із M».
+
+    Він цінніший за моє сусіднє поле: модель читає його В ТОМУ САМОМУ рядку,
+    що й зміст, і бачить справжнє M. Мій ніж стояв рівно на стелі й зрізав
+    його разом із хвостом тіла — тобто сильніша з двох правд гинула на стику.
+    """
+    _write_docx(tmp_path / "з_маркером.docx", ["коротко"])
+    monkeypatch.setattr(
+        document_text,
+        "extract",
+        _fake_extract("я" * LIMIT_CHARS + "\n\n" + _MARKER, True),
+    )
+    out = await _read(tmp_path / "з_маркером.docx")
+
+    assert out.get("truncated") is True
+    assert _MARKER in out.get("text", ""), "розбирач сказав про обрив, а стик це зрізав"
+    assert out.get("truncation"), "власне поле стику теж мусить лишитись"
+
+
+async def test_розбирач_що_знехтував_стелею_однаково_впирається_в_ніж(tmp_path, monkeypatch):
+    """Запас під рядок про обрив не сміє стати діркою без дна.
+
+    Якщо розбирач колись поверне мільйон символів і скаже, що не обрізав, —
+    у промпт однаково їде не більше, ніж стеля плюс запас, і про обрив
+    сказано.
+    """
+    _write_docx(tmp_path / "без_стелі.docx", ["коротко"])
+    monkeypatch.setattr(document_text, "extract", _fake_extract("я" * 1_000_000, False))
+    out = await _read(tmp_path / "без_стелі.docx")
+
+    assert out.get("truncated") is True, "стик змовчав про обрив, який зробив сам"
+    assert out.get("chars") <= LIMIT_CHARS + SLACK, out.get("chars")
+    assert out.get("chars") == len(out["text"])

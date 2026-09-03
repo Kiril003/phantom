@@ -40,7 +40,31 @@ const REPO = resolve(import.meta.dirname, '..');
 const OUT = process.env.PHANTOM_SHOTS || join(REPO, '.build/shots');
 const APPIMAGE = process.env.PHANTOM_APPIMAGE || join(REPO, '.build/out/PHANTOM OS_0.20.0_amd64.AppImage');
 const TMPBASE = process.env.PHANTOM_TMP || join(REPO, '.build/tmp');
-const GATE = process.env.PHANTOM_GATE || '/tmp/phantom-verify/gate.lock';
+// Замок штабу. Шлях НЕ підмінюваний — і це не педантизм, а латка на
+// справжню подію: 03.09 агент, перевіряючи сторожа памʼяті, перенаправив
+// PHANTOM_GATE на файл у скретчпаді, сторож чесно пропустив, і пакунок
+// стартував поруч із чужою збіркою Gradle. Обійти ворота вдалось не в обхід
+// перевірки, а ЧЕРЕЗ неї — бо перевірялись не ті ворота.
+//
+// Правило дому: замок стосується всього, що їсть гігабайти — збірки,
+// контейнера, СТАРТУ пакунка, емулятора, моделі. Тому підміна лишається
+// рівно для одного випадку — перевірити самого сторожа — і вимагає сказати
+// це вголос окремою змінною. Мовчазної підміни більше немає.
+const GATE_REAL = '/tmp/phantom-verify/gate.lock';
+const GATE_TEST = process.env.PHANTOM_GATE_TEST === '1';
+const GATE = process.env.PHANTOM_GATE || GATE_REAL;
+if (GATE !== GATE_REAL && !GATE_TEST) {
+  console.error(
+    `[знімач] PHANTOM_GATE вказує на ${GATE}, а не на ${GATE_REAL} — відмовляюсь.\n` +
+    '[знімач] Замок штабу підмінювати не можна: старт пакунка розпаковує ~1,7 ГБ\n' +
+    '[знімач] і стає найбільшим процесом, тобто першою ціллю сторожа памʼяті.\n' +
+    '[знімач] Для перевірки САМОГО сторожа: PHANTOM_GATE_TEST=1 — і скажи це вголос.'
+  );
+  process.exit(6);
+}
+if (GATE_TEST) {
+  console.error(`[знімач] УВАГА: тестовий режим воріт, справжній замок ${GATE_REAL} НЕ перевіряється.`);
+}
 const MIN_MB = Number(process.env.PHANTOM_MIN_MB || 5000);
 const MATCH = new RegExp(process.env.PHANTOM_MATCH || 'phantom', 'i');
 // Коли поруч із пакунком висить dev-вікно з тим самим заголовком, різати

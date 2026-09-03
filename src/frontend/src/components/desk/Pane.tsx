@@ -47,8 +47,12 @@ export function Pane({
           ...headerProps?.style,
         }}
       >
+        {/* Назва пейна — підмет заголовка, вона не ріжеться ніколи.
+            Живий чіп джерела вміє бути довгим («Gemini не відповість →
+            Ollama · локально · модель ще не в памʼяті»), і 03.09.2026 він
+            з'їв назву до «ДІА…». Поступається чіп, не назва. */}
         <span
-          className="uppercase truncate"
+          className="uppercase shrink-0"
           style={{
             fontFamily: 'var(--ph-font-display)',
             fontSize: 'var(--ph-type-micro-size)',
@@ -59,7 +63,7 @@ export function Pane({
           {def.title}
         </span>
         <span
-          className="truncate"
+          className="truncate min-w-0"
           title="Джерело вмісту"
           style={{
             fontSize: 9,

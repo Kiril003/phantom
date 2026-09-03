@@ -258,6 +258,114 @@ class PiperTTSProvider(TTSProvider):
 # ── Factory ───────────────────────────────────────────────────────────────────
 
 
+class SupertonicTTSProvider(TTSProvider):
+    """Supertonic-3 — нейронний голос у самому процесі.
+
+    ЧОМУ ЙОГО МОЖНА ІМПОРТУВАТИ, на відміну від Piper. Пакет `supertonic`
+    поширюється під **MIT**, тож застереження, що стоїть у `PiperTTSProvider`
+    (GPL-3.0 і похідний твір), сюди не стосується. Це і є та «пізніша віха»,
+    про яку там написано: перехід на не-GPL рушій.
+
+    ВАГИ — ОКРЕМИЙ ТВІР, і ліцензія в них інша: **BigScience Open RAIL-M**,
+    з переліком заборонених застосувань (Attachment A). Тому ваги в пакунок
+    НЕ кладуться: вони живуть у `~/.cache/supertonic3` на машині власника.
+    У пакунок їде лише MIT-пакет.
+
+    `auto_download=False` — навмисно й обовʼязково. Продукт не має права сам
+    ходити в мережу по 400 МБ: або ваги вже на машині, або голосу немає, і
+    тоді ми чесно падаємо в тишу, а не тягнемо щось за спиною власника.
+
+    Рушій піднімається ЛІНИВО: конструктор коштує ~3 с, і платити їх під час
+    вибору провайдера означало б гальмувати старт заради голосу, якого,
+    можливо, ніхто сьогодні не попросить.
+    """
+
+    name = "supertonic"
+
+    #: Виміряно 31.08 на цій машині: підняття 3.1 с, синтез фрази 5.0 с.
+    _MODEL = "supertonic-3"
+    _SAMPLE_RATE = 44_100
+
+    def __init__(self) -> None:
+        if importlib.util.find_spec("supertonic") is None:
+            raise RuntimeError("supertonic не встановлено")
+        # Ці чотири ключі лежали в конфігу з нульовою кількістю читачів —
+        # той самий клас, що ховав сам Supertonic. Я спершу зашив шлях і
+        # голос жорстко, не помітивши їх; вони знають більше за мене:
+        # типовий голос тут M1, а не F1, і біля потоків стоїть ВИМІР —
+        # «12 потоків ORT удвічі повільніші».
+        self._voice = getattr(config, "voice_tts_supertonic_voice", "M1")
+        self._steps = int(getattr(config, "voice_tts_supertonic_steps", 8))
+        self._threads = int(getattr(config, "voice_tts_supertonic_threads", 4))
+        self._dir = self._weights_dir()
+        if self._dir is None:
+            raise RuntimeError(
+                "ваги Supertonic не знайдено — очікую ~/.cache/supertonic3 "
+                "(пакунок їх не несе: ліцензія ваг RAIL-M, вони лишаються на машині)"
+            )
+        self._tts = None  # ліниво
+
+    @staticmethod
+    def _weights_dir() -> Optional[Path]:
+        configured = getattr(config, "voice_tts_supertonic_model_dir", "") or ""
+        for cand in (
+            Path(configured) if configured else None,
+            Path(os.environ["SUPERTONIC_MODEL_DIR"]) if os.environ.get("SUPERTONIC_MODEL_DIR") else None,
+            Path.home() / ".cache" / "supertonic3",
+        ):
+            if cand and (cand / "onnx").is_dir() and (cand / "voice_styles").is_dir():
+                return cand
+        return None
+
+    def _engine(self):
+        if self._tts is None:
+            from supertonic import TTS  # MIT — імпорт у процесі дозволений
+            self._tts = TTS(
+                model=self._MODEL,
+                model_dir=str(self._dir),
+                auto_download=False,
+                # Не типове значення ORT: біля цього ключа в конфігу стоїть
+                # виміряне «12 потоків удвічі повільніші за 4».
+                intra_op_num_threads=self._threads,
+            )
+        return self._tts
+
+    async def synthesize(self, text: str, voice: str, speed: float) -> TTSResult:
+        def _run() -> bytes:
+            tts = self._engine()
+            name = voice if voice in _SUPERTONIC_VOICES else self._voice
+            audio, _ = tts.synthesize(
+                text,
+                tts.get_voice_style(name),
+                lang="uk",
+                speed=speed or 1.0,
+                total_steps=self._steps,
+            )
+            import numpy as np
+
+            arr = np.asarray(audio, dtype="float32").reshape(-1)
+            pcm = (np.clip(arr, -1.0, 1.0) * 32767.0).astype("<i2").tobytes()
+            buf = io.BytesIO()
+            with wave.open(buf, "wb") as w:
+                w.setnchannels(1)
+                w.setsampwidth(2)
+                w.setframerate(self._SAMPLE_RATE)
+                w.writeframes(pcm)
+            return buf.getvalue()
+
+        wav = await asyncio.to_thread(_run)
+        return TTSResult(
+            audio_wav=wav,
+            sample_rate=self._SAMPLE_RATE,
+            engine=self.name,
+            voice=voice,
+        )
+
+
+#: Десять вбудованих голосів Supertonic-3, як їх називає сам пакет.
+_SUPERTONIC_VOICES = {f"{g}{i}" for g in ("F", "M") for i in range(1, 6)}
+
+
 def build_tts_provider() -> TTSProvider:
     """
     Choose a TTS provider. If voice_tts_enabled is off we short-circuit
@@ -266,11 +374,35 @@ def build_tts_provider() -> TTSProvider:
     """
     if not config.voice_tts_enabled:
         return SilentTTSProvider()
-    try:
-        return PiperTTSProvider()
-    except Exception as exc:
-        logger.warning("Piper unavailable, using SilentTTSProvider: %s", exc)
+
+    # Опція `voice_tts_engine` існувала в конфізі з трьома значеннями і
+    # **не читалася ніким** — тобто налаштування, яке нічого не робить.
+    # Тепер читається; `auto` пробує рушії за якістю, а не за алфавітом.
+    wanted = getattr(config, "voice_tts_engine", "auto")
+
+    order: list[type[TTSProvider]]
+    if wanted == "silent":
         return SilentTTSProvider()
+    elif wanted == "supertonic":
+        order = [SupertonicTTSProvider]
+    elif wanted == "piper":
+        order = [PiperTTSProvider]
+    else:  # auto
+        # Supertonic перший навмисно: він у процесі (MIT), тримається теплим
+        # і не платить запуском окремого процесу на кожну фразу, як Piper.
+        order = [SupertonicTTSProvider, PiperTTSProvider]
+
+    for cls in order:
+        try:
+            provider = cls()
+            logger.info("TTS: обрано %s", provider.name)
+            return provider
+        except Exception as exc:  # noqa: BLE001
+            # Не `debug`: мовчазне падіння в тишу — саме те, через що продукт
+            # пів року не говорив, маючи робочий голос на диску.
+            logger.warning("TTS %s недоступний: %s", cls.__name__, exc)
+    logger.warning("TTS: жоден рушій не піднявся — лишається тиша")
+    return SilentTTSProvider()
 
 
 # ── Phase 9.2 — language-aware voice selection ────────────────────────────────

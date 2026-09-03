@@ -72,6 +72,31 @@ def voice_for_text(text: str) -> str:
     return select_voice_for_text(text)
 
 
+def preload_tts() -> dict:
+    """Розігріти рушій озвучки, щоб перша фраза не коштувала повного підйому.
+
+    Ця функція **не існувала**, хоча `lifespan_warmup._lane_tts_preload`
+    імпортувала її на кожному старті. Наслідок був не падінням, а гіршим:
+    `ImportError` ловився у `except Exception` і лягав у журнал як
+    `TTS preload skipped: ...` — рядок, що виглядає буденно. Смуга розігріву
+    не робила нічого, лічильник відмов тихо ріс, і ніхто не питав чому.
+
+    Повертає словник для журналу: який рушій піднявся і чи він насправді
+    вміє говорити. Саме «вміє говорити», а не «сконструювався»: мовчазний
+    `SilentTTSProvider` теж конструюється успішно.
+    """
+    provider = get_tts_provider()
+    warm = getattr(provider, "_engine", None)
+    if callable(warm):
+        # Ліниві рушії піднімаються тут — інакше цю секунду заплатить
+        # перша ж фраза власника.
+        warm()
+    return {
+        "engine": provider.name,
+        "speaks": provider.name != "silent",
+    }
+
+
 def reset_providers() -> None:
     """Force a rebuild of both providers — call after a voice_* setting
     changes in /settings so the new mode / voice takes effect."""

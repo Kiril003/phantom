@@ -1,9 +1,10 @@
-import { useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useElementSize } from '../../desk/useViewportSize';
 import {
   Activity, BookOpen, Clock, Flame, Grid3x3, HardDrive, Layers, Library, MapPin, Pentagon,
   Radar, Route, Ruler, Shield, Sparkles, Wifi,
 } from 'lucide-react';
+import { useHudMap } from './useHudMap';
 import { ScaleBar } from './ScaleBar';
 import { MapRail, type RailItem } from './MapRail';
 import { ViewControls } from './ViewControls';
@@ -102,6 +103,26 @@ const LAYERS: Array<{ key: MapLayerKey; icon: JSX.Element; label: string; short:
 export const HUD_ROW_NEEDS_PX = 787;
 export const HUD_RAILS_PX = 152;
 
+/** Вибір у «Поруч» — джерело трьох різних форм координати. */
+export type NearbyPick =
+  | { kind: 'remembered'; item: { place_lat: number | null; place_lon: number | null } }
+  | { kind: 'osm'; item: { lat: number; lon: number } }
+  | { kind: 'poi'; item: { lat: number; lon: number } };
+
+/**
+ * Куди вести мапу за вибором у «Поруч», у порядку maplibre [lon, lat].
+ * `null` — спогад без місця: він приходить із `place_lat/place_lon = null`,
+ * і вести нікуди. Мовчазний рух у нуль-нуль (Гвінейська затока) був би
+ * гіршим за нерух.
+ */
+export function nearbyPickToCenter(picked: NearbyPick): [number, number] | null {
+  if (picked.kind === 'remembered') {
+    const { place_lat: lat, place_lon: lon } = picked.item;
+    return lat != null && lon != null ? [lon, lat] : null;
+  }
+  return [picked.item.lon, picked.item.lat];
+}
+
 /** Чи бракує пейну місця на повний нижній ряд. paneWidth — ширина ПЕЙНА мапи. */
 export function hudIsNarrow(paneWidth: number): boolean {
   return paneWidth > 0 && paneWidth - HUD_RAILS_PX < HUD_ROW_NEEDS_PX;
@@ -147,6 +168,9 @@ export function HudShell({
   const zoom = useMapStore((s) => s.zoom);
   const center = useMapStore((s) => s.center);
   const { position, pairedDevices } = usePosition();
+  const hudMap = useHudMap();
+  const setCenter = useMapStore((s) => s.setCenter);
+  const setZoom = useMapStore((s) => s.setZoom);
   const layers = useMapStore((s) => s.layers);
   const toggleLayer = useMapStore((s) => s.toggleLayer);
   const searchQuery = useMapStore((s) => s.searchQuery);
@@ -178,6 +202,48 @@ export function HudShell({
     recon: track.length,
     facts: geoTaggedFacts.length,
   };
+
+  /**
+   * Де шукає «Поруч». Коментар нижче в рядку панелі вже казав правду —
+   * «поруч це поруч із тим, на що людина дивиться» — але запасним варіантом
+   * стояла `tactical`, тобто позиція з IP. На цій машині вона в Чехії:
+   * у лозі бекенда було `map/nearby?lat=49.83&lon=18.28`, поки мапа стояла
+   * на Києві (50.45, 30.52), бо `center` у сторі порожній до першого руху
+   * камери. Мапа при цьому центр ЗНАЄ — питаємо її саму, як це вже робить
+   * CoordReadout (CoordReadout.tsx:105).
+   */
+  const lookingAt = useMemo<{ lat: number | null; lon: number | null }>(() => {
+    if (center) return { lat: center[1], lon: center[0] };
+    if (hudMap) {
+      try {
+        const c = hudMap.getCenter();
+        return { lat: c.lat, lon: c.lng };
+      } catch {
+        /* мапа ще не готова — нижче чесний запас */
+      }
+    }
+    return { lat: tactical.lat, lon: tactical.lon };
+  }, [center, hudMap, tactical.lat, tactical.lon]);
+
+  /**
+   * Натиск на місце в «Поруч» вів у `() => {}` — тобто кожен рядок списку
+   * був кнопкою, яка мовчки нічого не робить (три види: пам'ять, OSM, мітки).
+   * Дорога вже існувала: SearchBar веде мапу тим самим `setCenter` зі стору
+   * (SearchBar.tsx:88,107) — тут та сама дорога, а не друга.
+   *
+   * Спогад без координат нікуди не веде чесно: він приходить із
+   * `place_lat/place_lon = null` — тоді мапу не рухаємо взагалі.
+   */
+  const handleNearbySelect = useCallback(
+    (picked: NearbyPick) => {
+      const lonLat = nearbyPickToCenter(picked);
+      if (!lonLat) return;
+      setCenter(lonLat);
+      // Місце за 40 м не варте того, щоб дивитись на нього з висоти кварталу.
+      if (zoom < 16) setZoom(16);
+    },
+    [setCenter, setZoom, zoom],
+  );
 
   const layerItems: RailItem[] = [
     ...LAYERS.map((item) => ({
@@ -409,7 +475,7 @@ export function HudShell({
              за 8 км від того, що на екрані. Поруч — це поруч із тим, на що
              людина дивиться. */
           <div className="pointer-events-auto flex w-[168px] shrink-0 justify-end">
-            <NearbyPanel lat={center?.[1] ?? tactical.lat} lon={center?.[0] ?? tactical.lon} zoom={zoom} onSelect={() => {}} />
+            <NearbyPanel lat={lookingAt.lat} lon={lookingAt.lon} zoom={zoom} onSelect={handleNearbySelect} />
           </div>
         )}
       </div>
@@ -435,7 +501,7 @@ export function HudShell({
               <CoordReadout />
             </div>
             <div className="pointer-events-auto">
-              <NearbyPanel lat={center?.[1] ?? tactical.lat} lon={center?.[0] ?? tactical.lon} zoom={zoom} onSelect={() => {}} />
+              <NearbyPanel lat={lookingAt.lat} lon={lookingAt.lon} zoom={zoom} onSelect={handleNearbySelect} />
             </div>
           </div>
           <div className="pointer-events-auto flex items-center gap-2">

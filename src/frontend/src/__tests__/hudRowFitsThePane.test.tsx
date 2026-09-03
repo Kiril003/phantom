@@ -18,7 +18,12 @@
  */
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
-import { hudIsNarrow, HUD_ROW_NEEDS_PX, HUD_RAILS_PX } from '../components/map/hud/HudShell';
+import {
+  hudIsNarrow,
+  nearbyPickToCenter,
+  HUD_ROW_NEEDS_PX,
+  HUD_RAILS_PX,
+} from '../components/map/hud/HudShell';
 import { AttributionDrawer } from '../components/map/hud/AttributionDrawer';
 
 vi.mock('../hooks/useAttribution', () => ({
@@ -73,5 +78,30 @@ describe('чипс атрибуції', () => {
     expect(
       screen.getByText('© OpenStreetMap contributors · Protomaps'),
     ).toBeTruthy();
+  });
+});
+
+describe('«Поруч»: натиск веде мапу', () => {
+  // Рядки списку були кнопками з `onSelect={() => {}}` — три види місць,
+  // жодне нікуди не вело. Дорога та сама, що в SearchBar: setCenter зі стору,
+  // а TacticalMap.tsx:413 на зміну центру робить flyTo.
+  it('обʼєкт OSM → [lon, lat]', () => {
+    expect(nearbyPickToCenter({ kind: 'osm', item: { lat: 50.45, lon: 30.52 } })).toEqual([30.52, 50.45]);
+  });
+
+  it('мітка → [lon, lat]', () => {
+    expect(nearbyPickToCenter({ kind: 'poi', item: { lat: 49.84, lon: 24.03 } })).toEqual([24.03, 49.84]);
+  });
+
+  it('спогад із місцем → [lon, lat]', () => {
+    expect(
+      nearbyPickToCenter({ kind: 'remembered', item: { place_lat: 50.0, place_lon: 30.0 } }),
+    ).toEqual([30.0, 50.0]);
+  });
+
+  it('спогад без місця → нікуди, а не в нуль-нуль', () => {
+    expect(
+      nearbyPickToCenter({ kind: 'remembered', item: { place_lat: null, place_lon: null } }),
+    ).toBeNull();
   });
 });

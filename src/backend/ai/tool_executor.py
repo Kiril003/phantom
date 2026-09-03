@@ -440,15 +440,73 @@ async def _tool_get_sensor_status(args: dict[str, Any], user_id: str) -> dict[st
     )
 
 
+async def _search_web_keyless(query: str) -> dict[str, Any]:
+    """Пошук без ключа — той самий `web.search`, що вміє агент.
+
+    Викликаємо дію напряму, а не через петлю агента: людина спитала «знайди»,
+    а не «зроби задачу», і піднімати заради цього планувальник означало б
+    платити хвилиною за те, що робиться за секунду.
+    """
+    try:
+        from agent.actions.base import ActionContext
+        from agent.actions.web import WebSearch
+    except Exception as exc:  # noqa: BLE001
+        return _err("unavailable", f"пошук без ключа недоступний: {exc}")
+
+    try:
+        action = WebSearch(query=query, max_results=5)
+        # `workspace_dir` обовʼязковий у контексті — той самий, який дає
+        # петля агента. Без нього дія падає на валідації, і «пошуку немає»
+        # повернулось би іншим шляхом.
+        result = await action.execute(
+            ActionContext(
+                task_id="chat-search",
+                step_idx=0,
+                workspace_dir=config.agent_workspace_dir,
+            )
+        )
+    except Exception as exc:  # noqa: BLE001
+        return _err("network", f"пошук DuckDuckGo не вдався: {exc}")
+
+    if not getattr(result, "ok", False):
+        return _err("network", str(getattr(result, "error", "пошук не вдався")))
+
+    payload = getattr(result, "output", None) or {}
+    rows = payload.get("results") or []
+    return {
+        "ok": True,
+        # Назване джерело: без ключа це НЕ обґрунтований пошук Google, і
+        # видавати одне за інше означало б обіцяти повноту, якої немає.
+        "engine": "duckduckgo",
+        "summary": "",
+        "sources": [
+            {"title": str(r.get("title") or ""), "url": str(r.get("url") or ""),
+             "snippet": str(r.get("snippet") or "")}
+            for r in rows
+        ],
+    }
+
+
 async def _tool_search_web(args: dict[str, Any], user_id: str) -> dict[str, Any]:
     query = args.get("query")
     if not isinstance(query, str) or not query.strip():
         return _err("invalid_args", "query is required")
 
-    # Only Gemini provides grounded Google search. If primary isn't gemini
-    # or the key is missing, degrade gracefully.
+    # Обґрунтований пошук Google дає лише Gemini. Але «немає ключа» ніколи
+    # не означало «немає пошуку»: поруч, у тому ж дереві, живе
+    # `agent/actions/web.py::WebSearch` — DuckDuckGo, БЕЗ жодного ключа,
+    # RiskLevel.SAFE, зареєстрований у реєстрі дій.
+    #
+    # Доти тут стояла глуха стіна «web search unavailable via local model»,
+    # і модель, прочитавши її, чесно казала людині «не вмію шукати» —
+    # маючи справний пошук за один виклик. Це не брак спроможності, а
+    # знання, яке не доходило до того, хто ухвалює рішення.
+    #
+    # Тепер стіна стала дверима: без ключа йдемо в DDG і КАЖЕМО, що це він,
+    # бо «знайдено в Google» і «знайдено в DuckDuckGo» — різні обіцянки
+    # щодо повноти.
     if config.ai_primary_provider != "gemini" or not config.ai_gemini_api_key:
-        return _err("unavailable", "web search unavailable via local model")
+        return await _search_web_keyless(query.strip())
 
     try:
         from google import genai

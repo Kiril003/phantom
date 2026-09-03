@@ -167,7 +167,11 @@ async def ingest_webhook(channel_token: str, request: Request):
         "type": "webhook:event",
         "senderId": "webhook_bot",
         "senderName": "DevHub Bot",
-        "senderAvatar": "https://images.unsplash.com/photo-1618401471353-b98afee0b2eb?w=200&auto=format&fit=crop&q=80",
+        # Гліф, а не адреса. Тут стояло посилання на images.unsplash.com:
+        # дані події справжні (з вебхука), аватарка декоративна — але щоб
+        # її показати, польовий пристрій ХОДИВ у стоковий фотобанк і цим
+        # повідомляв третій стороні, що застосунок працює і коли саме.
+        "senderAvatar": "\N{DESKTOP COMPUTER}",
         "timestamp": time.strftime("%H:%M"),
         "webhookEventData": {
             "source": "github" if "x-github-event" in headers else "gitlab" if "x-gitlab-event" in headers else "custom",
@@ -200,7 +204,11 @@ async def cli_send_message(req: CliSendMessageRequest):
         "id": msg_id,
         "senderId": "cli_operator",
         "senderName": "Phantom CLI",
-        "senderAvatar": "https://images.unsplash.com/photo-1550751827-4bd374c3f58b?w=200&auto=format&fit=crop&q=80",
+        # Гліф, а не адреса. Тут стояло посилання на images.unsplash.com:
+        # дані події справжні (з вебхука), аватарка декоративна — але щоб
+        # її показати, польовий пристрій ХОДИВ у стоковий фотобанк і цим
+        # повідомляв третій стороні, що застосунок працює і коли саме.
+        "senderAvatar": "\N{DESKTOP COMPUTER}",
         "timestamp": time.strftime("%H:%M"),
         "type": msg_type,
         "text": req.text,

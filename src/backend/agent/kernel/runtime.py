@@ -234,7 +234,7 @@ class TaskState:
     #   * the Council high-risk auto-engage is bypassed
     # Defaults False (current behaviour). Toggled per-task via the UI
     # shield switch or the POST /agent/task/{id}/safety endpoint.
-    unsafe_mode: bool = True
+    unsafe_mode: bool = False
     # Phase 32 — Premium Isolation.
     # Tracks the git branch this task is isolated in.
     branch_isolation: str | None = None
@@ -259,7 +259,7 @@ class QueuedTask:
     user_id: str = ""
     order_id: str | None = None
     timeout_s: int | None = None
-    unsafe_mode: bool = True
+    unsafe_mode: bool = False
     queued_at: float = field(default_factory=time.monotonic)
 
 
@@ -588,7 +588,7 @@ class AgentRuntime:
         track: Track = "foreground",
         order_id: str | None = None,
         timeout_s: int | None = None,
-        unsafe_mode: bool = True,
+        unsafe_mode: bool = False,
         subagent_role: str | None = None,
         parent_task_id: str | None = None,
         delegation_depth: int = 0,
@@ -650,7 +650,7 @@ class AgentRuntime:
         order_id: str | None,
         timeout_s: int | None,
         task_id: str | None = None,
-        unsafe_mode: bool = True,
+        unsafe_mode: bool = False,
         subagent_role: str | None = None,
         parent_task_id: str | None = None,
         delegation_depth: int = 0,
@@ -752,7 +752,7 @@ class AgentRuntime:
         *,
         user_id: str,
         brief: "MissionBrief",
-        unsafe_mode: bool = True,
+        unsafe_mode: bool = False,
     ) -> tuple[str, str]:
         """Start a long-horizon mission — plan phases, spawn foreground task loop.
 

@@ -10,6 +10,7 @@ import {
   fetchNodeManifest,
   resolveBackendPort,
 } from '../organismApi';
+import { readToken, writeToken, clearToken } from '../tokenStore';
 
 const HEALTH_BODY = {
   status: 'ok',
@@ -37,6 +38,7 @@ describe('organismApi', () => {
     fetchMock.mockReset();
     vi.stubGlobal('fetch', fetchMock);
     localStorage.clear();
+    clearToken();
   });
 
   afterEach(() => {
@@ -96,17 +98,23 @@ describe('organismApi', () => {
     it('401 — unauthorized БЕЗ побічних ефектів: токен лишається', async () => {
       // Клас дефекту, який ловимо: api.ts request() на 401 зносить токен —
       // фоновий пульс вибивав би власника з сесії кожні 5 секунд.
-      localStorage.setItem('phantom_token', 'tkn-123');
+      // Дім токена — sessionStorage (services/tokenStore), і кладемо ми
+      // його туди ж, куди кладе застосунок. Раніше тест писав прямо в
+      // localStorage і вимагав, щоб він там і лишився, — але саме звідти
+      // токен свідомо прибрали (диск переживає перезапуск), і `readToken`
+      // переносить спадок у sessionStorage, витираючи копію з диска.
+      // Тобто перевіряємо те, про що тест: після 401 токен ЖИВИЙ.
+      writeToken('tkn-123');
       fetchMock.mockResolvedValueOnce(jsonResponse({ detail: 'no' }, 401));
       await expect(fetchLinuxResources()).resolves.toEqual({
         ok: false,
         reason: 'unauthorized',
       });
-      expect(localStorage.getItem('phantom_token')).toBe('tkn-123');
+      expect(readToken()).toBe('tkn-123');
     });
 
     it('403 (не operator) — теж unauthorized', async () => {
-      localStorage.setItem('phantom_token', 'tkn-123');
+      writeToken('tkn-123');
       fetchMock.mockResolvedValueOnce(jsonResponse({ detail: 'forbidden' }, 403));
       await expect(fetchLinuxResources()).resolves.toEqual({
         ok: false,

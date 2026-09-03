@@ -35,7 +35,10 @@ const SRC = readFileSync(
  *  й НЕ є вигадкою — інакше сторож падав би на власному поясненні. */
 function senderBodies(): [string, string][] {
   const out: [string, string][] = [];
-  const re = /const (send[A-Za-z]+) = \(\) => \{([\s\S]*?)\n  \};/g;
+  // `\n {2}\};` замість двох пробілів літералами: правило no-regex-spaces
+  // (храповик лінту) справедливо каже, що пробіли в регулярці не порахуєш
+  // оком. Взірець той самий, запис чесніший.
+  const re = /const (send[A-Za-z]+) = \(\) => \{([\s\S]*?)\n {2}\};/g;
   let m: RegExpExecArray | null;
   while ((m = re.exec(SRC))) {
     const body = m[2]

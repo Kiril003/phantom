@@ -159,7 +159,11 @@ function Presence({
 }) {
   return (
     <div className="flex items-center min-w-0" style={{ gap: 10 }}>
-          {/* Mini orb — same soul, 26px */}
+          {/* Mini orb — same soul, 26px. На плитці його немає: 26 px орба
+              коштували рівно того, чого бракувало СЛОВУ стану — воно різалось
+              до «Го…» (виміряно 03.09: 21 px із потрібних 57). Слово несе той
+              самий стан і не бреше; правило дому — правда словом, не знаком. */}
+          {!narrow && (
           <svg viewBox="0 0 32 32" width={26} height={26} aria-hidden>
             <defs>
               <radialGradient id="dialogue-voice-core" cx="35%" cy="30%">
@@ -186,8 +190,10 @@ function Presence({
               }}
             />
           </svg>
+          )}
+      {/* Слово стану не ріжеться ніколи: воно — підмет цього заголовка. */}
       <span
-        className="playfair truncate"
+        className="playfair shrink-0"
         style={{ fontSize: 14, color: 'var(--ink-secondary)' }}
       >
         {label}
@@ -203,26 +209,33 @@ function Presence({
         </span>
       )}
       {!narrow && stress != null && <StressChip stress={stress} />}
-      <span className="flex items-center" style={{ gap: 5, fontSize: 11 }}>
-        <Route size={12} strokeWidth={1.75} style={{ color: 'var(--primary-deep)' }} />
-        <span style={{ fontWeight: 600, textTransform: 'capitalize' }}>
-          {provider ?? '—'}
-        </span>
-        {voiceMode !== 'off' && (
-          <span
-            style={{
-              fontSize: 9,
-              color: 'var(--primary-deep)',
-              padding: '1px 5px',
-              borderRadius: 999,
-              background: 'rgba(244,175,37,0.15)',
-              letterSpacing: '0.1em',
-            }}
-          >
-            {voiceMode === 'wake_word' ? 'на слово' : 'наживо'}
+      {/* Провайдер — теж слово, тож на плитці його або видно повністю, або
+          немає: «Ge…» — не назва моделі. У широкому діалозі він лишається. */}
+      {!narrow && (
+        <span className="flex items-center" style={{ gap: 5, fontSize: 11 }}>
+          <Route size={12} strokeWidth={1.75} style={{ color: 'var(--primary-deep)' }} />
+          <span style={{ fontWeight: 600, textTransform: 'capitalize' }}>
+            {provider ?? '—'}
           </span>
-        )}
-      </span>
+        </span>
+      )}
+      {/* Мікрофон, що слухає, ховати не можна НІДЕ: це не оздоба, а
+          попередження. Тому чипс голосу живе поза блоком провайдера. */}
+      {voiceMode !== 'off' && (
+        <span
+          className="shrink-0"
+          style={{
+            fontSize: 9,
+            color: 'var(--primary-deep)',
+            padding: '1px 5px',
+            borderRadius: 999,
+            background: 'rgba(244,175,37,0.15)',
+            letterSpacing: '0.1em',
+          }}
+        >
+          {voiceMode === 'wake_word' ? 'на слово' : 'наживо'}
+        </span>
+      )}
     </div>
   );
 }

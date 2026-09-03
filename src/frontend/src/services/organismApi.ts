@@ -20,6 +20,8 @@
  * джерело чесно мовчить, доки власник проксі не додасть '/node'.
  */
 
+import { readToken } from './tokenStore';
+
 /* ─── Форми відповідей (звірені curl-ом з 127.0.0.1:8010, 2026-08-23) ── */
 
 /** GET /health — публічний, без токена. */
@@ -108,10 +110,9 @@ export function fetchHealth(): Promise<Pulse<HealthPulse>> {
 }
 
 export function fetchLinuxResources(): Promise<Pulse<LinuxResources>> {
-  const token =
-    typeof localStorage !== 'undefined'
-      ? localStorage.getItem('phantom_token')
-      : null;
+  // sessionStorage через tokenStore — див. коментар у cockpitApi.ts:
+  // читач localStorage тут мовчки віддавав «немає доступу» власникові.
+  const token = readToken();
   if (!token) return Promise.resolve(SILENT_UNAUTHORIZED);
   return fetchPulse<LinuxResources>('/api/v1/linux/resources', {
     headers: { Authorization: `Bearer ${token}` },

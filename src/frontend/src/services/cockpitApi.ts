@@ -18,6 +18,7 @@
  */
 
 import type { Pulse } from './organismApi';
+import { readToken } from './tokenStore';
 
 /* ── Форми відповідей ─────────────────────────────────────────────────── */
 
@@ -79,10 +80,13 @@ const PULSE_TIMEOUT_MS = 4000;
 const SILENT_UNREACHABLE = { ok: false, reason: 'unreachable' } as const;
 const SILENT_UNAUTHORIZED = { ok: false, reason: 'unauthorized' } as const;
 
+// Токен живе в sessionStorage (services/tokenStore) з того дня, коли його
+// зняли з диска. Поки тут стояв власний читач localStorage, кожен фетч
+// кокпіта повертав «немає доступу», НЕ спитавши ядро: власник із роллю ROOT
+// читав на склі, що йому бракує прав, а в лозі бекенда не було жодного
+// запиту. Єдине місце токена — tokenStore, тут лише його читач.
 function token(): string | null {
-  return typeof localStorage !== 'undefined'
-    ? localStorage.getItem('phantom_token')
-    : null;
+  return readToken();
 }
 
 async function authedPulse<T>(url: string): Promise<Pulse<T>> {

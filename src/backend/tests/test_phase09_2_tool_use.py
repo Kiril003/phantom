@@ -157,9 +157,24 @@ class TestGeminiToolUse:
         assert out.provider == "gemini"
 
     @pytest.mark.asyncio
-    async def test_text_only_refusal(self, monkeypatch):
+    async def test_text_only_reply_comes_back_as_text_not_as_a_nameless_tool(
+        self, monkeypatch
+    ):
+        """Модель відповіла текстом замість виклику інструмента.
+
+        Раніше цей сторож чекав `ToolUseError(MODEL_REFUSED)` після трьох
+        спроб. Продукт відтоді змінився СВІДОМО: текстова відповідь
+        повертається одразу як результат із порожнім `tool_name`, і
+        `chat_pipeline` на це спирається (`if not tool_choice.tool_name:` —
+        віддає текст людині, не виконуючи нічого). Тобто стара умова
+        описувала устрій, якого вже немає, і трималась червоною.
+
+        Переписано під теперішній устрій, але зуби лишились там, де вони
+        справді потрібні: текст мусить ДОЇХАТИ, а порожнє імʼя НЕ сміє
+        виглядати як інструмент, який можна виконати.
+        """
         from ai import gemini_provider
-        from ai.tool_use import ToolErrorKind, ToolUseError, all_tactical_tools
+        from ai.tool_use import ToolCallResult, all_tactical_tools
         from agent.actions.registry import registry
 
         stub = _StubGeminiClient([
@@ -173,9 +188,24 @@ class TestGeminiToolUse:
             system_prompt="s", user_message="u",
             tools=all_tactical_tools(registry), max_retries=3,
         )
-        assert isinstance(out, ToolUseError)
-        assert out.kind == ToolErrorKind.MODEL_REFUSED
-        assert out.parse_attempts == 3
+        assert isinstance(out, ToolCallResult)
+        assert out.tool_name == "", "порожнє імʼя — ознака «це текст, не виклик»"
+        assert out.raw_reasoning == "I refuse", "текст моделі загубився дорогою"
+        assert out.arguments == {}
+
+    def test_the_pipeline_never_executes_a_nameless_tool(self):
+        """Друга половина того самого: порожнє імʼя безпечне рівно доти,
+        доки споживач його ПЕРЕВІРЯЄ. Якщо перевірку колись знімуть,
+        порожній рядок піде в диспетчер як назва інструмента."""
+        import pathlib
+
+        src = (
+            pathlib.Path(__file__).resolve().parent.parent / "ai" / "chat_pipeline.py"
+        ).read_text(encoding="utf-8")
+        assert "if not tool_choice.tool_name:" in src, (
+            "зникла перевірка порожнього імені — текстова відповідь піде "
+            "в диспетчер як виклик інструмента без назви"
+        )
 
     @pytest.mark.asyncio
     async def test_unknown_tool_retries_then_succeeds(self, monkeypatch):

@@ -51,6 +51,14 @@ def _classify_gemini_error(exc: Exception) -> tuple[ToolErrorKind, bool, float |
     msg = str(exc)
     lower = msg.lower()
 
+    # «Провайдер не відповів» і «ми не змогли скласти або розібрати» — різні
+    # поломки. TypeError/AttributeError/KeyError народжуються в НАШОМУ коді
+    # (збірка contents, читання candidates), а не на дроті; називати їх
+    # мережею означає послати людину перевіряти звʼязок, яким ще ніхто не
+    # користувався. Той самий поділ, що вже зроблено для ollama.
+    if isinstance(exc, (TypeError, AttributeError, KeyError, IndexError)):
+        return ToolErrorKind.UNKNOWN, False, None
+
     retry_after: float | None = None
     m = _RETRY_AFTER_RE.search(msg)
     if m:
@@ -122,14 +130,21 @@ def _get_client():
 
 def _build_contents(
     user_message: str,
-    history: list[dict],
+    history: list[dict] | None,
 ) -> list[dict[str, Any]]:
     """
     Build the contents list for Gemini from conversation history + new user message.
     Handles 'user', 'assistant' (model), and 'tool' roles.
+
+    `history=None` — звичайний випадок (перший хід, `call_with_tools` без
+    історії), а не помилка. Без цього рядка цикл нижче кидав
+    `TypeError: 'NoneType' object is not iterable`, той ловився широким
+    `except` навколо ЗАПИТУ й доповідався як «gemini network/api error» —
+    тобто наша власна вада збірки запиту вбиралась у мережеву, і людині
+    радили б перевіряти звʼязок, яким тут ще ніхто не користувався.
     """
     contents: list[dict[str, Any]] = []
-    for msg in history:
+    for msg in history or []:
         role = msg.get("role")
         content = msg.get("content", "")
 

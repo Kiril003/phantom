@@ -85,6 +85,22 @@ async def _run_async_migrations() -> None:
     )
     async with connectable.connect() as connection:
         await connection.run_sync(_configure_and_run)
+        # Без цього рядка міграція лишала базу в ПІВСТАНІ, і мовчки.
+        # Виміряно 03.09.2026 на базі стенда: `alembic upgrade head` віддав
+        # 0 і надрукував «Running upgrade … -> a7c31f0b95e2», три колонки
+        # справді зʼявились — а `alembic_version` лишився на старій ревізії.
+        #
+        # Механіка: у SQLAlchemy 2.x `connect()` відкриває транзакцію, яку на
+        # виході відкочують, якщо не закомітити. DDL у SQLite alembic робить
+        # поза транзакцією («Will assume non-transactional DDL»), тому схема
+        # доїжджала, а ЗАПИС ВЕРСІЇ — звичайний UPDATE усередині транзакції —
+        # відкочувався разом із нею.
+        #
+        # Наслідок був гірший за «не спрацювало»: наступний `upgrade head`
+        # пробував додати ті самі колонки вдруге й падав на «duplicate
+        # column», а виглядало це як зламана міграція, а не як незакомічений
+        # стан.
+        await connection.commit()
     await connectable.dispose()
 
 

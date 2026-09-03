@@ -79,12 +79,6 @@ class PINLoginRequest(BaseModel):
     pin: str = Field(..., min_length=1, max_length=32)
 
 
-class QuickJoinRequest(BaseModel):
-    username: str = Field(..., min_length=1, max_length=64)
-    display_name: Optional[str] = None
-    pin: Optional[str] = None
-
-
 class AuthResponse(BaseModel):
     user: dict
     token: str
@@ -261,76 +255,22 @@ async def login_pin(
     return AuthResponse(user=_user_to_dict(user), token=token, expires_at=expires_at)
 
 
-@router.post("/quick-join", response_model=AuthResponse)
-async def quick_join(
-    req: QuickJoinRequest,
-    request: Request,
-    response: Response,
-    db: AsyncSession = Depends(get_db),
-) -> AuthResponse:
-    """Fast sovereign join/login for desktop and demo stand without complex registration."""
-    clean_username = req.username.strip().lstrip("@").lower()
-    if not clean_username:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail="Username cannot be empty",
-        )
-
-    # Look for existing user
-    stmt = select(User).where(User.username == clean_username)
-    res = await db.execute(stmt)
-    user = res.scalar_one_or_none()
-
-    if user is None:
-        # Create new user
-        all_users_stmt = select(func.count(User.id))
-        count_res = await db.execute(all_users_stmt)
-        user_count = count_res.scalar() or 0
-        role = "ROOT" if user_count == 0 or clean_username in ("kiril", "root", "admin") else "OPERATOR"
-
-        pin_hash = hash_secret(req.pin) if req.pin else None
-        prefs = {
-            "display_name": req.display_name.strip() if req.display_name else req.username.strip(),
-            "language": "uk",
-            "tts_enabled": True,
-            "theme": "auto",
-        }
-
-        user = User(
-            id=f"user_{uuid.uuid4().hex[:16]}",
-            username=clean_username,
-            role=role,
-            pin_hash=pin_hash,
-            preferences_json=json.dumps(prefs),
-            behavioral_model_json=json.dumps({"interaction_count": 1, "trust_level": 1.0}),
-        )
-        db.add(user)
-        await db.commit()
-        await db.refresh(user)
-        logger.info("quick-join: created user %s (%s)", user.username, user.role)
-    else:
-        # If user exists and pin is provided and user has pin_hash, verify it
-        if req.pin and user.pin_hash:
-            if not verify_secret(req.pin, user.pin_hash):
-                logger.warning("quick-join: pin mismatch for user %s, continuing", user.username)
-        # Update display name if given
-        if req.display_name:
-            try:
-                prefs = json.loads(user.preferences_json)
-                prefs["display_name"] = req.display_name.strip()
-                user.preferences_json = json.dumps(prefs)
-            except Exception:
-                pass
-        await _touch_last_seen(db, user)
-
-    token, expires_at = create_token(user.id, user.username, user.role)
-    response.set_cookie(
-        "phantom_token", token,
-        httponly=True, samesite="lax",
-        max_age=config_session_timeout_s(),
-    )
-    return AuthResponse(user=_user_to_dict(user), token=token, expires_at=expires_at)
-
+# Тут був `POST /auth/quick-join` — «швидкий вхід для десктопа й демо-стенда
+# без складної реєстрації». Знято 29.08.2026, бо він робив екран входу з ПІНом
+# декоративним. Три діри в одному обробнику:
+#   1. ім'я `kiril`/`root`/`admin` (і будь-яке перше на порожній базі) давало
+#      роль ROOT без пароля й без ключа;
+#   2. наявний користувач із НЕПРАВИЛЬНИМ ПІНом усе одно входив — перевірка
+#      була, але вердикт її ігнорував: `logger.warning(... "continuing")`, і
+#      виконання тривало до видачі токена;
+#   3. без `pin` у тілі звірки не було взагалі.
+# Тобто будь-хто, хто дотягнувся до порту, входив ким завгодно. Прикривала лише
+# прив'язка до петлі — а весь сенс вузла в тому, щоб бути досяжним із телефона.
+#
+# Знято ЦІЛКОМ, а не прикрито автентифікацією: маршрут, що лишився б у
+# поверхні, наступного разу знову втратив би замок. Викликів не було — у фронті
+# лежала невживана обгортка `api.quickJoin`, її прибрано разом.
+# Сторож: tests/test_quick_join_is_not_a_way_past_the_pin.py
 
 @router.post("/refresh", response_model=RefreshResponse)
 async def refresh(

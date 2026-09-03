@@ -144,10 +144,24 @@ async def face_enroll(
 @router.post("/recognize", response_model=RecognizeResponse)
 async def face_recognize(
     req: RecognizeRequest,
+    _user: User = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ) -> RecognizeResponse:
-    """Auth-optional: used both for active profile switching (logged-in) and
-    as a login suggestion (logged-out)."""
+    """Перемикання активного профілю — для того, хто ВЖЕ увійшов.
+
+    Було «auth-optional: … as a login suggestion (logged-out)», і замка не
+    стояло. Наслідок: будь-хто, хто дотягнувся до порту, надсилав вектор і
+    діставав `username`, `user_id` і `role` — тобто перебирав, чиї обличчя
+    цей вузол знає. У продукті, чия суть — не розголошувати, це розголошення
+    того, хто тут живе.
+
+    Токена ця відповідь ніколи не видавала: способом ВХОДУ розпізнавання не
+    є, воно лише наповнює `faceStore`. А обіцяна «підказка на екрані входу»
+    не була підключена взагалі — `App.tsx:162` віддає `LoginScreen` замість
+    усього дерева, і `<Overlays/>` (єдиний споживач циклу розпізнавання)
+    рендериться лише після автентифікації. Тобто замок тут не забирає нічого,
+    що працювало; він забирає те, що працювало ЛИШЕ для чужого.
+    """
     _check_enabled()
     threshold = float(config.face_recognition_threshold)
     match = await match_embedding(db, req.embedding, threshold)

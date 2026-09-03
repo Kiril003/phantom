@@ -13,8 +13,10 @@ import logging
 import json
 import time
 from typing import Any, Dict, List, Optional
-from fastapi import APIRouter, Header, HTTPException, Request, status
+from fastapi import APIRouter, Depends, Header, HTTPException, Request, status
 from pydantic import BaseModel, Field
+
+from security.device_auth import get_user_or_device_user
 
 try:
     from api.websocket_hub import hub
@@ -26,7 +28,30 @@ except ImportError:
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/work-os", tags=["work-os"])
+#: Замок стоїть НА РОУТЕРІ, а не на кожному обробнику окремо, і це навмисно.
+#:
+#: Знайдено 29.08.2026: жоден із СЕМИ маршрутів цього файла не мав `Depends`,
+#: тоді як сусідній `routes_messenger.py` скрізь бере `get_user_or_device_user`.
+#: Сторож `TestD3A9PublicRouteAllowlist` назвав лише чотири — бо він зондує без
+#: тіла, і решта відповідала 422 замість 200. Тобто беззахисними були всі сім,
+#: а видно було чотири: зонд міряв «чи віддає 200», а не «чи є автентифікація».
+#:
+#: Найгірший із них — `POST /webhooks/{channel_token}`. Токен у шляху ніде НЕ
+#: звірявся (grep по дереву: жодного порівняння), тобто був декоративним, а
+#: обробник розсилав подію через `hub.broadcast("messenger", ...)` усім
+#: під'єднаним клієнтам. Це не витік, а вкидання: будь-хто, хто дотягнувся до
+#: порту, малював власникові фальшиве повідомлення в месенджері.
+#:
+#: Вебхук лишається під тим самим замком, а не «публічним із перевіркою
+#: токена»: сховища каналів у дереві не існує, і вигадати його тут означало б
+#: вигадати ще один секрет без власника. Коли зовнішньому CI справді треба буде
+#: писати сюди — це має бути справжній реєстр каналів, а не рядок у адресі.
+#: Сторож: tests/test_work_os_has_no_open_doors.py
+router = APIRouter(
+    prefix="/work-os",
+    tags=["work-os"],
+    dependencies=[Depends(get_user_or_device_user)],
+)
 
 
 class WebhookPayload(BaseModel):

@@ -28,7 +28,7 @@ from datetime import datetime, timezone
 from typing import Optional
 
 import segno
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Request, status
 from pydantic import BaseModel, Field
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -526,8 +526,52 @@ def _local_ip_guess() -> str:
 # ── Routes ───────────────────────────────────────────────────────────────────
 
 
+def _tls_is_live(request: Request) -> bool:
+    """Чи СЛУХАЄ хтось той порт, який ми збираємось оголосити.
+
+    Найважливіше слово тут — «слухає». Раніше конверт спирався на наявність
+    ФАЙЛА сертифіката, а файл створюється незалежно від того, чи слухач
+    піднявся: з `PHANTOM_SKIP_TLS=1` відбиток був справжній, endpoints вели
+    на `https://…:8443`, і телефон чесно йшов туди, де нікого немає. Провал
+    виглядав як мережева проблема, а не як «TLS вимкнено».
+
+    `bound` порожній, доки слухач не став на жоден інтерфейс, тож саме він і
+    є відповіддю. Родина та сама, що «файл існує ≠ інтерпретатор запускається».
+    """
+    listener = getattr(request.app.state, "tls_listener", None)
+    return bool(listener is not None and getattr(listener, "bound", None))
+
+
+async def _tls_advertisement(request: Request, lan_ip: str) -> tuple[str, list, int, str]:
+    """Що чесно оголосити в конверті: (host, endpoints, port, відбиток).
+
+    Один помічник на обидва маршрути навмисно: доки це жило двома копіями,
+    вони вже розійшлись би при першій же правці однієї з них.
+    """
+    tls_port = int(getattr(config, "pair_tls_port", 0) or 0)
+    fingerprint = ""
+    if tls_port and _tls_is_live(request):
+        try:
+            from security.tls_identity import cert_fingerprint_sha256, ensure_node_cert
+
+            await asyncio.to_thread(ensure_node_cert, [lan_ip])
+            fingerprint = await asyncio.to_thread(cert_fingerprint_sha256)
+        except Exception as exc:  # noqa: BLE001 — без TLS паринг усе одно можливий
+            logger.warning("TLS: відбиток недоступний (%s)", exc)
+
+    if not fingerprint:
+        # Слухача немає — не обіцяємо ні відбитка, ні https-адреси, і віддаємо
+        # той порт, який справді відповідає.
+        host, _ = await asyncio.to_thread(_addressing, 0, lan_ip)
+        return host, [], _plain_http_port(), "dev-no-pin"
+
+    host, endpoints = await asyncio.to_thread(_addressing, tls_port, lan_ip)
+    return host, endpoints, tls_port, fingerprint
+
+
 @router.post("/pair/init", response_model=PairInitResponse)
 async def pair_init(
+    request: Request,
     current_user: User = Depends(require_root),
 ) -> PairInitResponse:
     """ROOT operator initiates a pairing attempt. Server allocates an
@@ -536,35 +580,21 @@ async def pair_init(
     """
     session = session_store.create(created_by_user_id=current_user.id)
     lan_ip = _local_ip_guess()
-    fingerprint = ""
-    tls_port = int(getattr(config, "pair_tls_port", 0) or 0)
-    if tls_port:
-        try:
-            from security.tls_identity import cert_fingerprint_sha256, ensure_node_cert
-
-            await asyncio.to_thread(ensure_node_cert, [lan_ip])
-            fingerprint = await asyncio.to_thread(cert_fingerprint_sha256)
-        except Exception as exc:  # noqa: BLE001 — без TLS паринг усе одно можливий
-            logger.warning("TLS: відбиток недоступний (%s)", exc)
-    host, endpoints = await asyncio.to_thread(_addressing, tls_port, lan_ip)
-    if not fingerprint:
-        endpoints = []
+    host, endpoints, port, fingerprint = await _tls_advertisement(request, lan_ip)
+    # ЩО ЦЕЙ КОНВЕРТ ДОВОДИТЬ, А ЩО НІ — щоб наступний не думав, що тут усе
+    # закрито. Payload НЕ підписаний: `build_qr_payload` складає звичайний
+    # dict. Ключ у ньому є (`server_pub`), тож підмінити адресу в ЧУЖОМУ
+    # конверті не вийде — телефон робитиме ECDH проти чужого ключа й не
+    # зійдеться. Але підмінити конверт ЦІЛКОМ можна: хто покаже телефону свій,
+    # той спарує його зі своїм вузлом. Захист від цього — звірка поза каналом
+    # (те, що людина бачить на обох екранах), а не підпис усередині.
     qr = build_qr_payload(
         session,
         host=host,
         ip=lan_ip,
-        port=tls_port or _plain_http_port(),
+        port=port,
         endpoints=endpoints,
-        # Cert pin is filled in by Caddy/mkcert in deploy. For dev we use a
-        # well-known sentinel ("dev-no-pin") so the phone can opt out of
-        # cert pinning when the server runs cleartext on the LAN. Production
-        # MUST set `PAIR_CERT_SHA256` in config so this turns into a real
-        # SHA-256 fingerprint.
-        cert_sha256_hex=(
-            fingerprint
-            or getattr(config, "pair_cert_sha256", "")
-            or "dev-no-pin"
-        ),
+        cert_sha256_hex=fingerprint,
     )
     logger.info(
         "pair/init: user=%s pair_id=%s ttl=%ds",
@@ -590,7 +620,7 @@ async def pair_init(
 
 
 @router.get("/pair/resolve/{pin}")
-async def pair_resolve(pin: str) -> dict:
+async def pair_resolve(pin: str, request: Request) -> dict:
     """Вхід за коротким кодом — без камери й без QR.
 
     Телефон уже вміє це (PairDiscoveryClient: знайти вузол по mDNS, потім
@@ -609,27 +639,14 @@ async def pair_resolve(pin: str) -> dict:
             detail={"code": "pin_unknown"},
         )
     lan_ip = _local_ip_guess()
-    tls_port = int(getattr(config, "pair_tls_port", 0) or 0)
-    fingerprint = ""
-    if tls_port:
-        try:
-            from security.tls_identity import cert_fingerprint_sha256
-
-            fingerprint = await asyncio.to_thread(cert_fingerprint_sha256)
-        except Exception as exc:  # noqa: BLE001
-            logger.warning("TLS: відбиток недоступний (%s)", exc)
-    host, endpoints = await asyncio.to_thread(_addressing, tls_port, lan_ip)
-    if not fingerprint:
-        endpoints = []
+    host, endpoints, port, fingerprint = await _tls_advertisement(request, lan_ip)
     return build_qr_payload(
         session,
         host=host,
         ip=lan_ip,
-        port=tls_port or _plain_http_port(),
+        port=port,
         endpoints=endpoints,
-        cert_sha256_hex=(
-            fingerprint or getattr(config, "pair_cert_sha256", "") or "dev-no-pin"
-        ),
+        cert_sha256_hex=fingerprint,
     )
 
 

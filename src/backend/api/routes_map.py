@@ -1072,19 +1072,32 @@ async def post_geocode(
     cached inside the geocoder (7-day forward TTL), so repeat lookups are
     free. On geocoder outage we return an empty list rather than raising —
     the caller shows "нічого не знайдено" instead of a hard error.
+
+    Саме на цьому місці стояла та сама вада, що й у `/nearby`, і тут вона
+    дорожча: людина, яка ввела адресу й дістала «нічого не знайдено»,
+    ПОЧИНАЄ ДІЯТИ — перевіряє написання, скорочує запит, шукає інакше. А
+    правда була «ми не змогли спитати». Тому поруч зі списком їде `status`:
+    "ok" | "unreachable". Порожній список при "ok" означає рівно те, що
+    каже; при "unreachable" він не означає нічого.
     """
     from agent.localization.adapters.nominatim import get_default_nominatim
 
     query = body.query.strip()
     if not query:
-        return {"results": []}
+        return {"results": [], "status": "ok", "detail": None}
     try:
         geocoder = get_default_nominatim()
         results = await geocoder.geocode(query, limit=body.limit)
     except Exception as exc:  # noqa: BLE001 — geocoder is best-effort
         logger.info("geocode failed for %r: %s", query[:40], exc)
-        return {"results": []}
+        return {
+            "results": [],
+            "status": "unreachable",
+            "detail": f"{type(exc).__name__}: {exc}",
+        }
     return {
+        "status": "ok",
+        "detail": None,
         "results": [
             {
                 "lat": r.lat,

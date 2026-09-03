@@ -109,6 +109,57 @@ def test_a_working_source_says_ok_and_carries_its_finds(
     assert [f["name"] for f in body["osm"]] == ["Кав'ярня"]
 
 
+def test_geocode_does_not_call_an_outage_nothing_found(
+    auth_root_client, monkeypatch
+):
+    """Та сама вада, знайдена поруч у тому ж файлі, і дорожча за першу.
+
+    `/map/geocode` віддавав `{"results": []}` на будь-який збій геокодера —
+    докстрінг прямо казав «the caller shows "нічого не знайдено"». Але
+    людина, яка ввела адресу й дістала «нічого не знайдено», ПОЧИНАЄ
+    ДІЯТИ: перевіряє написання, скорочує запит, шукає інакше. Тобто
+    неправда про джерело перетворюється на змарнований час людини.
+    """
+    class _Dead:
+        async def geocode(self, *a, **kw):
+            raise ConnectionError("Nominatim unreachable")
+
+    import agent.localization.adapters.nominatim as nom
+
+    monkeypatch.setattr(nom, "get_default_nominatim", lambda: _Dead())
+
+    res = auth_root_client.post("/api/v1/map/geocode", json={"query": "Хрещатик 1"})
+    assert res.status_code == 200, res.text
+    body = res.json()
+
+    assert body["results"] == []
+    assert body["status"] == "unreachable", (
+        "мовчазний геокодер знову подається як «нічого не знайдено»"
+    )
+    assert "Nominatim unreachable" in body["detail"]
+
+
+def test_geocode_says_ok_when_it_really_found_nothing(
+    auth_root_client, monkeypatch
+):
+    """Зворотний бік: справжня порожнеча мусить лишитись порожнечею."""
+    class _Empty:
+        async def geocode(self, *a, **kw):
+            return []
+
+    import agent.localization.adapters.nominatim as nom
+
+    monkeypatch.setattr(nom, "get_default_nominatim", lambda: _Empty())
+
+    body = auth_root_client.post(
+        "/api/v1/map/geocode", json={"query": "цього немає ніде"}
+    ).json()
+
+    assert body["results"] == []
+    assert body["status"] == "ok"
+    assert body["detail"] is None
+
+
 def test_every_slice_carries_a_status(auth_root_client, monkeypatch):
     """Скло мусить питати стан однаково в усіх трьох джерел, а не памʼятати,
     у якого з них він буває."""

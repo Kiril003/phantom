@@ -24,7 +24,25 @@ ErrorCallback = Callable[[ErrorMessage], Awaitable[None]]
 
 HEARTBEAT_TIMEOUT_S = 10.0   # alert if no heartbeat for 10s
 RECONNECT_DELAY_S = 3.0
+# ESP32 — аксесуар ОПЦІЙНИЙ, тобто «його немає» це не аварія, а звичайний
+# стан більшості машин. Доти доки цикл повторював спробу кожні 3 с і кричав
+# logger.error щоразу, він давав 60 рядків зі 100 за пʼять хвилин і ховав
+# справжні помилки в шумі про власну норму. Відступ росте вдвічі й
+# упирається в пʼять хвилин: відсутній аксесуар коштує майже нічого, а
+# ввімкнений у розетку помічається так само швидко, як і раніше.
+RECONNECT_MAX_DELAY_S = 300.0
 MAX_LINE_BYTES = 8192
+
+
+def retry_delay_for(failures: int) -> float:
+    """Скільки чекати перед спробою номер `failures`+1.
+
+    Окремою функцією, бо саме її перевіряє сторож: інакше «відступ росте»
+    довелося б доводити, чекаючи хвилинами в тесті.
+    """
+    if failures <= 0:
+        return RECONNECT_DELAY_S
+    return min(RECONNECT_DELAY_S * (2 ** (failures - 1)), RECONNECT_MAX_DELAY_S)
 
 
 class SerialBridge:
@@ -41,6 +59,11 @@ class SerialBridge:
         self._connected = False
         self._last_heartbeat = 0.0
         self._reconnect_task: asyncio.Task | None = None
+        # Скільки разів підряд не вдалося підключитись, і чому востаннє.
+        # Потрібні обидва: перше задає відступ, друге — те, що можна
+        # ПОКАЗАТИ замість крику в лозі.
+        self._failures = 0
+        self._last_error: str | None = None
         self._read_task: asyncio.Task | None = None
         self._watchdog_task: asyncio.Task | None = None
 
@@ -66,6 +89,26 @@ class SerialBridge:
     @property
     def is_connected(self) -> bool:
         return self._connected
+
+    @property
+    def accessory_state(self) -> dict:
+        """Стан аксесуара словами — щоб «його немає» жило в СТАНІ, а не в
+        потоці помилок.
+
+        ESP32 опційний, тож `not connected` — це не збій, і поводитись із
+        ним як зі збоєм означає щохвилини ховати справжні помилки під
+        рядками про власну норму.
+        """
+        if self._connected:
+            return {"state": "connected", "attempts": 0, "detail": None}
+        if not self._running:
+            return {"state": "off", "attempts": 0, "detail": None}
+        return {
+            "state": "not_connected",
+            "attempts": self._failures,
+            "retry_in_s": retry_delay_for(self._failures),
+            "detail": self._last_error,
+        }
 
     @property
     def last_heartbeat_ago(self) -> float:
@@ -106,7 +149,22 @@ class SerialBridge:
             except asyncio.CancelledError:
                 break
             except Exception as exc:
-                logger.error("SerialBridge connection error: %s", exc)
+                self._failures += 1
+                self._last_error = f"{type(exc).__name__}: {exc}"
+                if self._failures == 1:
+                    # Один раз — на повний голос, із поясненням, що це не
+                    # обовʼязково поломка.
+                    logger.warning(
+                        "ESP32 не підключено (%s). Аксесуар опційний — "
+                        "повторюю з відступом, що росте; стан видно в "
+                        "accessory_state, далі про це мовчу.",
+                        self._last_error,
+                    )
+                else:
+                    logger.debug(
+                        "SerialBridge connection error #%d: %s",
+                        self._failures, exc,
+                    )
             finally:
                 self._connected = False
                 command_sender.set_writer(None)
@@ -117,8 +175,14 @@ class SerialBridge:
                         pass
 
             if self._running:
-                logger.info("Reconnecting in %.1fs…", RECONNECT_DELAY_S)
-                await asyncio.sleep(RECONNECT_DELAY_S)
+                delay = retry_delay_for(self._failures)
+                # Той самий рядок кожні 3 с був половиною шуму. Тепер він
+                # тільки там, де щось справді змінилось.
+                if self._failures <= 1:
+                    logger.info("Reconnecting in %.1fs…", delay)
+                else:
+                    logger.debug("Reconnecting in %.1fs (спроба %d)…", delay, self._failures + 1)
+                await asyncio.sleep(delay)
 
     async def _connect(self) -> None:
         logger.info(
@@ -135,6 +199,11 @@ class SerialBridge:
         self._connected = True
         self._last_heartbeat = time.monotonic()
         command_sender.set_writer(writer)
+        # Скидаємо і лічильник, і відступ: аксесуар, увімкнений у розетку
+        # після години тиші, не має чекати наступних пʼяти хвилин, а
+        # наступна його втрата мусить знову сказати про себе на повний голос.
+        self._failures = 0
+        self._last_error = None
         logger.info("ESP32 serial connected")
 
     # ── Read loop ──────────────────────────────────────────────────────────────

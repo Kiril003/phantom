@@ -63,7 +63,11 @@ class ReverseGeocodeResult:
 
 
 class NominatimGeocoder:
-    URL = "https://nominatim.openstreetmap.org"
+    #: Те саме, що в Overpass: адреса — з конфігу. На машині власника тут
+    #: справді є куди піти (локальний Nominatim на 8088 відповідає).
+    @property
+    def URL(self) -> str:  # noqa: N802
+        return config.geo_nominatim_url
 
     def __init__(self, rate_limit: Optional[PerSecondRateLimiter] = None) -> None:
         self._rate_limit = rate_limit if rate_limit is not None else PerSecondRateLimiter(1.0)

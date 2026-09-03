@@ -57,7 +57,13 @@ class OSMFeature:
 
 
 class OverpassQuery:
-    URL = "https://overpass-api.de/api/interpreter"
+    #: Адреса джерела читається з конфігу, а не зашита тут. Літерал означав,
+    #: що власник із власним стеком поруч однаково ходить у чуже демо —
+    #: змінити це не міг ніхто. `property`, а не поле класу: конфіг
+    #: перечитується гаряче, і кешоване на імпорті значення пережило б зміну.
+    @property
+    def URL(self) -> str:  # noqa: N802 — імʼя лишається тим самим для викликів
+        return config.geo_overpass_url
 
     def __init__(self, rate_limit: Optional[PerSecondRateLimiter] = None) -> None:
         self._rate_limit = rate_limit if rate_limit is not None else PerSecondRateLimiter(1.0)

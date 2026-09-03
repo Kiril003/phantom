@@ -174,3 +174,78 @@ def test_every_slice_carries_a_status(auth_root_client, monkeypatch):
             f"{slice_name} їде без стану — саме так і зʼявляється порожнеча, "
             "про яку не можна нічого спитати"
         )
+
+
+def test_nearby_names_the_source_and_whether_it_is_ours(
+    auth_root_client, monkeypatch
+):
+    """Скло не має вгадувати, чиїм джерелом воно щойно скористалось.
+
+    «Порожньо в околиці» від власного вузла і те саме від чужого демо —
+    різні речі для людини й різні дії. Тому джерело називає бекенд.
+    """
+    from config import config
+
+    monkeypatch.setattr(config, "agent_overpass_enabled", False)
+
+    # Замовчування — публічне, і воно мусить чесно зізнатись у цьому.
+    monkeypatch.setattr(
+        config, "geo_overpass_url", "https://overpass-api.de/api/interpreter"
+    )
+    body = _nearby(auth_root_client)
+    assert body["osm_source"]["local"] is False
+    assert body["osm_source"]["name"] == "overpass-public"
+    assert body["osm_source"]["base"] == "overpass-api.de"
+
+    # Локальна адреса — і поле мусить це побачити САМЕ З АДРЕСИ, а не з
+    # окремого прапорця, який забудуть перемкнути.
+    monkeypatch.setattr(config, "geo_overpass_url", "http://127.0.0.1:12345/api/interpreter")
+    body = _nearby(auth_root_client)
+    assert body["osm_source"]["local"] is True
+    assert body["osm_source"]["name"] == "overpass-local"
+    assert body["osm_source"]["base"] == "127.0.0.1:12345"
+
+
+def test_geocode_names_its_source_too(auth_root_client, monkeypatch):
+    """На машині власника локальний Nominatim СПРАВДІ є (8088 відповідає),
+    тож для пошуку `local: true` — не гіпотеза, а досяжний стан."""
+    from config import config
+
+    class _Empty:
+        async def geocode(self, *a, **kw):
+            return []
+
+    import agent.localization.adapters.nominatim as nom
+
+    monkeypatch.setattr(nom, "get_default_nominatim", lambda: _Empty())
+
+    monkeypatch.setattr(config, "geo_nominatim_url", "http://127.0.0.1:8088")
+    body = auth_root_client.post(
+        "/api/v1/map/geocode", json={"query": "Хрещатик"}
+    ).json()
+    assert body["source"] == {
+        "name": "nominatim-local",
+        "local": True,
+        "base": "127.0.0.1:8088",
+    }
+
+
+def test_no_adapter_hardcodes_a_host():
+    """Сторож на саму ваду: доки адреса зашита літералом, власник із власним
+    стеком поруч однаково ходить у чуже — змінити це не може ніхто."""
+    import pathlib
+    import re
+
+    adapters = (
+        pathlib.Path(__file__).resolve().parent.parent
+        / "agent" / "localization" / "adapters"
+    )
+    offenders = []
+    for path in adapters.glob("*.py"):
+        for num, line in enumerate(path.read_text(encoding="utf-8").splitlines(), 1):
+            code = line.split("#", 1)[0]
+            if re.search(r'["\']https?://[a-zA-Z]', code):
+                offenders.append(f"{path.name}:{num}: {line.strip()[:70]}")
+    assert not offenders, (
+        "адреса джерела зашита в адаптері замість конфігу:\n" + "\n".join(offenders)
+    )

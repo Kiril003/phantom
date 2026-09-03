@@ -63,7 +63,13 @@ def _cooldown_for_failures(consecutive_failures: int) -> int:
 
 
 class IpApiLocator:
-    URL = "https://ipapi.co/json/"
+    #: Адреса — з конфігу, як і в решти геоджерел. Тут це важить більше:
+    #: запит іде без жодної дії людини й повідомляє третій стороні саму
+    #: IP-адресу пристрою.
+    @property
+    def URL(self) -> str:  # noqa: N802
+        return config.geo_ip_locator_url
+
     CACHE_TTL_S = 600.0  # 10 min
 
     def __init__(self, rate_limit: Optional[DailyRateLimiter] = None) -> None:
@@ -176,7 +182,7 @@ class IpApiLocator:
             try:
                 logger.debug("ipapi failed, trying ip-api.com fallback...")
                 async with httpx.AsyncClient(timeout=5.0) as client:
-                    resp = await client.get("http://ip-api.com/json/")
+                    resp = await client.get(config.geo_ip_locator_fallback_url)
                 resp.raise_for_status()
                 data = resp.json()
                 if data.get("status") == "success":

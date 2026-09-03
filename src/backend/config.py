@@ -746,6 +746,13 @@ class PhantomConfig(BaseSettings):
     agent_nominatim_enabled: bool = True
     agent_nominatim_user_agent: str = "PHANTOM-OS/0.9 (localhost)"
     agent_nominatim_cache_ttl_s: int = 7 * 24 * 3600
+    # Адреса джерела — НЕ літерал у адаптері. Мапу продають як офлайнову, а
+    # геокодер, «Поруч» і маршрут за замовчуванням ходили на три чужі
+    # публічні сервіси, зашиті в код: змінити їх не міг ніхто, навіть той,
+    # у кого поруч стоїть власний стек. Замовчування лишається публічним
+    # (щоб нічого не зламалось), але тепер це ВИБІР, а не вирок.
+    # Змінна середовища: PHANTOM_GEO_NOMINATIM_URL.
+    geo_nominatim_url: str = "https://nominatim.openstreetmap.org"
     # Overpass API — nearby OSM features. Cached 24 h per (lat,lon,radius).
     # The Overpass public mirror blocks httpx's default User-Agent with
     # HTTP 406 Not Acceptable, so we must send an identifiable UA string
@@ -753,6 +760,17 @@ class PhantomConfig(BaseSettings):
     agent_overpass_enabled: bool = True
     agent_overpass_cache_ttl_s: int = 24 * 3600
     agent_overpass_user_agent: str = "PHANTOM-OS/0.9 (localhost)"
+    #: PHANTOM_GEO_OVERPASS_URL. На машині власника локального Overpass
+    #: НЕМАЄ (виміряно 03.09: серед слухачів його немає жодного), тож для
+    #: «Поруч» це поле поки лишається публічним чесно, а не про людське око.
+    geo_overpass_url: str = "https://overpass-api.de/api/interpreter"
+    #: Визначення міста за IP — ДВА чужі сервіси, обидва були зашиті в
+    #: адаптері (`ipapi.co` і запасний `ip-api.com`). Знайдено сторожем на
+    #: літерали 03.09: штаб просив три джерела мапи, а їх виявилось чотири.
+    #: Тут ціна вища за решту: запит іде НАВІТЬ БЕЗ дії користувача і
+    #: повідомляє третій стороні саму IP-адресу пристрою.
+    geo_ip_locator_url: str = "https://ipapi.co/json/"
+    geo_ip_locator_fallback_url: str = "http://ip-api.com/json/"
     # Memory-to-geo bridge (spaCy NER). Disable if the model is unavailable.
     agent_geo_extractor_enabled: bool = True
     agent_geo_extractor_min_entity_length: int = 3

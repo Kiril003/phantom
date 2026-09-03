@@ -595,6 +595,7 @@ async def get_nearby(
 
     # MapPOI scan — small table, user-scoped.
     from agent.localization.base import haversine_km
+    from agent.localization.source_state import describe_source
     poi_result = await db.execute(
         select(MapPOI).where(MapPOI.user_id == token_data.user_id)
     )
@@ -625,6 +626,14 @@ async def get_nearby(
         "pois_status": "ok",
         "osm_status": osm_status,
         "osm_detail": osm_detail,
+        # ХТО відповів. «Порожньо в околиці» від власного вузла і те саме від
+        # чужого демо-сервера — різні речі для людини й різні дії. Скло не
+        # має вгадувати це з фронту, тож джерело називає бекенд.
+        "osm_source": describe_source(
+            getattr(config, "geo_overpass_url", ""),
+            public_name="overpass-public",
+            local_name="overpass-local",
+        ),
     }
 
 
@@ -1060,6 +1069,18 @@ class _GeocodeBody(BaseModel):
     limit: int = Field(default=5, ge=1, le=10)
 
 
+def _geocoder_source() -> dict:
+    """Джерело пошуку адреси — те саме поле, що й у `/nearby`, тим самим
+    помічником: два описи розійшлися б при першій же правці одного з них."""
+    from agent.localization.source_state import describe_source
+
+    return describe_source(
+        getattr(config, "geo_nominatim_url", ""),
+        public_name="nominatim-public",
+        local_name="nominatim-local",
+    )
+
+
 @router.post("/geocode")
 async def post_geocode(
     body: _GeocodeBody,
@@ -1084,7 +1105,12 @@ async def post_geocode(
 
     query = body.query.strip()
     if not query:
-        return {"results": [], "status": "ok", "detail": None}
+        return {
+            "results": [],
+            "status": "ok",
+            "detail": None,
+            "source": _geocoder_source(),
+        }
     try:
         geocoder = get_default_nominatim()
         results = await geocoder.geocode(query, limit=body.limit)
@@ -1094,10 +1120,12 @@ async def post_geocode(
             "results": [],
             "status": "unreachable",
             "detail": f"{type(exc).__name__}: {exc}",
+            "source": _geocoder_source(),
         }
     return {
         "status": "ok",
         "detail": None,
+        "source": _geocoder_source(),
         "results": [
             {
                 "lat": r.lat,

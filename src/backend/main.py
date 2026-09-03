@@ -978,9 +978,14 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
 
 
 def create_app() -> FastAPI:
+    from build_info import version as _build_version
+
     app = FastAPI(
         title="PHANTOM OS API",
-        version="0.1.0",
+        # Четвертий голос про версію, знайдений сторожем на літерали: цей
+        # номер їде в /docs і в схему OpenAPI, тобто саме його бачить той,
+        # хто інтегрується з вузлом.
+        version=_build_version(),
         description="PHANTOM OS Backend — AI-powered autonomous assistant",
         lifespan=lifespan,
         docs_url="/docs" if config.debug else None,
@@ -1351,14 +1356,20 @@ def _register_ws(app: FastAPI) -> None:
 
 
 def _register_health(app: FastAPI) -> None:
-    def _app_version() -> str:
-        """Версія вузла з ЄДИНОГО джерела — того самого, що й у /healthz."""
-        try:
-            from observability import _VERSION
+    def _build_passport() -> dict:
+        """Паспорт збірки: те, ЩО СПРАВДІ зібрано, а не літерал у коді.
 
-            return _VERSION
-        except Exception:  # noqa: BLE001
-            return "unknown"
+        `scripts/build_sidecar.sh` давно кладе в бандл `build_info.json` із
+        комітом і ознакою брудного дерева — і його не читав ніхто. Без цього
+        сайт (він бере версію з політики сервера) і продукт називали б різні
+        версії, а скарга «зламалось на версії N» лишалась недоказовою.
+        """
+        try:
+            from build_info import build_info
+
+            return dict(build_info())
+        except Exception:  # noqa: BLE001 — версія не має права валити /health
+            return {"version": "unknown", "source": "unavailable"}
 
     def _memory_model_state() -> dict:
         """Ніколи не валить /health: стан памʼяті потрібен саме тоді, коли
@@ -1387,7 +1398,10 @@ def _register_health(app: FastAPI) -> None:
             # 0.19.0-jarvis-online, а цей маршрут — зашите «0.1.0», і вони
             # розійшлись би ще сильніше при першому ж релізі. Джерело одне:
             # observability._VERSION, звідки її бере й Prometheus.
-            "version": _app_version(),
+            "version": _build_passport()["version"],
+            # Коміт і чистота дерева — поруч із версією, бо саме вони
+            # роблять версію доказом, а не написом.
+            "build": _build_passport(),
             "hostname": config.system_hostname,
             "ws_clients": hub.client_count,
             "esp32_connected": esp32_connected,

@@ -36,7 +36,19 @@ logger = logging.getLogger(__name__)
 # ── Process-start anchor ──────────────────────────────────────────────────────
 
 _PROCESS_STARTED_AT: float = time.time()
-_VERSION: str = "0.19.0-jarvis-online"
+# Версія — з паспорта збірки, не літералом. Літерал тут розійшовся і з
+# `/health` (казав 0.1.0), і з тим, що зібрано насправді (tauri.conf: 0.20.0),
+# і зробив будь-яку скаргу «зламалось на версії N» недоказовою.
+def _read_version() -> str:
+    try:
+        from build_info import version as _bi_version
+
+        return _bi_version()
+    except Exception:  # noqa: BLE001 — версія не має права валити метрики
+        return "dev"
+
+
+_VERSION: str = _read_version()
 
 
 # ── Correlation-id plumbing ───────────────────────────────────────────────────

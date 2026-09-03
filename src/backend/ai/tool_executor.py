@@ -1079,15 +1079,27 @@ async def _tool_list_files(args: dict[str, Any], user_id: str) -> dict[str, Any]
 
 
 async def _tool_read_file(args: dict[str, Any], user_id: str) -> dict[str, Any]:
-    """Read a single file inside the allow-list, capped at 1 MiB."""
+    """Read a single file inside the allow-list; a document arrives as text.
+
+    Байти читає `file_manager` (1 МіБ), а документ розбирається ЦІЛКОМ — і те,
+    й те синхронне. Тому обидві дії їдуть одним стрибком у робочий потік
+    (`asyncio.to_thread` — той самий спосіб, що в `memory/strategic_memory`,
+    `voice/stt_engine`, `core/system_monitor`). Без нього `asyncio.wait_for` в
+    `execute_tool` не міг перервати НІЧОГО: заміряно end-to-end із
+    timeout_s=0.2 — відповідь прийшла за 2,58 с, і цикл подій стояв усі
+    2,58 с разом із вебсокетом, голосом і кадром (1 удар стороннього серця
+    замість ~51).
+
+    Скасування потік не вбиває — `to_thread` не переривається. Тому робота в
+    ньому мусить бути СКІНЧЕННОЮ сама по собі: найгірший випадок тримає
+    `DOCUMENT_MAX_BYTES`, а не таймаут.
+    """
     _ = user_id
     path = args.get("path")
     if not isinstance(path, str) or not path.strip():
         return _err("invalid_args", "path is required")
     try:
-        from tools.file_manager import read_file as _rf
-        got = _rf(path=path.strip())
-        return _ok(**_document_aware(got))
+        return _ok(**await asyncio.to_thread(_read_for_the_model, path.strip()))
     except FileNotFoundError as exc:
         return _err("not_found", str(exc))
     except IsADirectoryError as exc:
@@ -1096,52 +1108,166 @@ async def _tool_read_file(args: dict[str, Any], user_id: str) -> dict[str, Any]:
         return _err("forbidden", str(exc))
 
 
+def _read_for_the_model(path: str) -> dict[str, Any]:
+    """Синхронна половина інструмента — байти й розбір — в одному потоці."""
+    from tools.file_manager import read_file as _rf
+    return _document_aware(_rf(path=path))
+
+
+# Дві стелі, і обидві виміряні, а не вигадані:
+#   • `file_manager.read_file` спиняється на 1 МіБ, але розбирачеві потрібен
+#     увесь файл — тож для документа тієї стелі не існувало взагалі: файл
+#     85 400 441 Б стик прочитав цілком за 1,31 с із піком RSS 525 МБ.
+#     16 МіБ — з того ж виміру (пік ≈ 6× від розміру): ~100 МБ на розбір,
+#     що переживає oom-guard. Більший документ дістає НАЗВАНУ відмову, а не
+#     смерть процесу й не мовчання.
+#   • текст 229 164 символи мовчки ставав 200 000 з обривом посеред слова.
+#     Стеля лишається, мовчання — ні.
+# Розбирач має власну стелю всередині; дублювання тут не шкода — мовчання
+# шкода, а від зміни його підпису цей бік не має ламатись.
+DOCUMENT_MAX_BYTES: int = 16 * 1024 * 1024
+DOC_TEXT_MAX_CHARS: int = 200_000
+
+
+def _mib(n: int) -> str:
+    return f"{n / (1024 * 1024):.1f} МіБ"
+
+
 def _document_aware(got: dict[str, Any]) -> dict[str, Any]:
-    """Не давати моделі base64 документа — ніколи.
+    """Двійкове не їде в модель як base64 — ніколи, а не «крім переліку».
 
     `file_manager.read_file` віддає байти: текст або base64. Для файлового
-    браузера у вебі це правильно. Для моделі — ні: на питання «що в цьому
-    договорі» вона діставала стіну base64 і переказувала документ, якого не
-    бачила. Мовчання джерела набувало форми, яку споживач читає як зміст.
+    браузера у вебі це правильно (він і далі читає її напряму через
+    `api/routes_files.py`). Для моделі — ні: на питання «що в цьому договорі»
+    вона діставала стіну base64 і переказувала документ, якого не бачила.
+    Мовчання джерела набувало форми, яку споживач читає як зміст.
 
-    Тут стик, а не кінцевий клас: правимо саме те, що ПІДСТАВЛЯЄТЬСЯ між
-    читалкою й моделлю. Текстові файли не чіпаємо, зображення й архіви теж
-    лишаються собою — змінюється лише те, що доїжджає у промпт.
+    **Правило перевернуте.** Було «ці розширення не можна» — і повз нього
+    їхали `.docm`, `.xls`, `.odp`, `.epub` і файл БЕЗ розширення (те, що
+    приходить у месенджері). Список форматів скінченний і завжди
+    відставатиме, тому тут стоїть протилежне: у промпт їде або текст, або
+    названа відмова. Base64 не їде взагалі — жодного винятку немає, бо
+    жодному споживачеві цього стику він не потрібен: модель у цій збірці
+    тексту не бачить у base64, а зображень не бачить зовсім. Якщо колись
+    зʼявиться модель, яка бачить, base64 повернеться саме в гілку зображень —
+    і це буде рішення про ТУ модель, а не про читалку.
+
+    **Документ упізнається за іменем, а не за тим, як його назвала читалка.**
+    RTF — ASCII без нулів, тож читалка звала його `kind='text'`, стик виходив
+    на першому ж рядку, і модель бачила сиру розмітку `{\\rtf1\\ansi…}`, тоді
+    як `striprtf` на тому самому файлі дає «Договір оренди № 17…». Тому
+    перевірка імені стоїть ПЕРЕД перевіркою `kind`, а сире поле `content`
+    відкидається разом із `content_base64`: розмітка — така сама стіна шуму.
     """
-    if got.get("kind") != "binary":
-        return got
+    from pathlib import Path
+
     from tools import document_text
 
     name = str(got.get("name") or got.get("path") or "")
-    base = {k: v for k, v in got.items() if k != "content_base64"}
+    path = str(got.get("path") or name)
+    base = {k: v for k, v in got.items() if k not in ("content_base64", "content")}
 
     if document_text.is_document(name):
-        res = document_text.extract(got.get("path") or name)
-        if res.ok:
-            text = res.text or ""
-            return {
-                **base,
-                "kind": "document",
-                "extractor": res.extractor,
-                "chars": len(text),
-                "text": text,
-            }
-        return {
-            **base,
-            "kind": "unreadable",
-            "reason": res.reason,
-            "say_it": "скажи людині словами, що цей документ ти не прочитав, і назви причину",
-        }
+        return _document_text_or_refusal(document_text, base, path, got.get("size"))
 
     if document_text.is_image(name):
         return {
             **base,
             "kind": "unreadable",
+            "truncated": False,
             "reason": "це зображення; описати його я не можу — моделі, яка бачить, тут немає",
             "say_it": "не описуй зображення, якого не бачив",
         }
 
+    if got.get("kind") == "binary":
+        ext = Path(name).suffix.lower() or "без розширення"
+        return {
+            **base,
+            "kind": "unreadable",
+            "truncated": False,
+            "reason": (
+                f"двійковий файл ({ext}): тексту з нього тут дістати нічим, "
+                "а base64 у відповідь не їде — переказати його неможливо"
+            ),
+            "say_it": "скажи людині словами, що цей файл ти не прочитав, і назви формат",
+        }
+
+    # Текстовий файл, який ніхто не називав документом, — їде як є.
     return got
+
+
+def _document_text_or_refusal(
+    document_text: Any,
+    base: dict[str, Any],
+    path: str,
+    size: Any,
+) -> dict[str, Any]:
+    """Текст документа зі стелями, кожна з яких називає себе вголос."""
+    from pathlib import Path
+
+    if not isinstance(size, int):
+        try:
+            size = Path(path).stat().st_size
+        except OSError:
+            size = None
+    if size is None or size > DOCUMENT_MAX_BYTES:
+        measured = f"{_mib(size)} проти стелі {_mib(DOCUMENT_MAX_BYTES)}" if size else (
+            "розміру не видно, тож стелю перевірити нічим"
+        )
+        return {
+            **base,
+            "kind": "unreadable",
+            "truncated": False,
+            "reason": f"документ завеликий ({measured}) — я його навіть не відкривав",
+            "say_it": "скажи людині, що документ завеликий і ти його не читав; назви числа",
+        }
+
+    try:
+        # +1 символ — щоб ПЕРЕПОВНЕННЯ було видно, а не вгадувалось за рівністю.
+        res = document_text.extract(path, max_chars=DOC_TEXT_MAX_CHARS + 1)
+    except TypeError:  # розбирач змінив підпис — беремо те, що він дає
+        res = document_text.extract(path)
+    if not res.ok:
+        return {
+            **base,
+            "kind": "unreadable",
+            "truncated": False,
+            "reason": res.reason,
+            "say_it": "скажи людині словами, що цей документ ти не прочитав, і назви причину",
+        }
+
+    text = res.text or ""
+    cut = len(text) > DOC_TEXT_MAX_CHARS or bool(getattr(res, "truncated", False))
+    if cut:
+        text = _cut_at_boundary(text, DOC_TEXT_MAX_CHARS)
+    out = {
+        **base,
+        "kind": "document",
+        "extractor": res.extractor,
+        "chars": len(text),
+        # Поле від побайтової читалки (ліміт 1 МіБ) тут не значить нічого:
+        # документ перечитано цілком. Лишити його означало б їхати з
+        # `truncated: False` поруч із обрізаним текстом — саме так і було.
+        "truncated": cut,
+        "text": text,
+    }
+    if cut:
+        out["truncation"] = (
+            f"обрізано на {DOC_TEXT_MAX_CHARS} символах — кінець документа сюди "
+            "не доїхав, і що в ньому, я не знаю"
+        )
+        out["say_it"] = (
+            "скажи людині, що бачив лише початок документа; не переказуй його як повний"
+        )
+    return out
+
+
+def _cut_at_boundary(text: str, limit: int) -> str:
+    """Різати по межі слова: обрив посеред слова читається як зіпсутий текст."""
+    head = text[:limit]
+    edge = max(head.rfind("\n"), head.rfind(" "))
+    return head[:edge] if edge >= limit - 400 else head
+
 
 async def _tool_search_files(args: dict[str, Any], user_id: str) -> dict[str, Any]:
     """Substring filename search inside the allow-list."""

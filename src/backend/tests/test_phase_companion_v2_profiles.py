@@ -65,6 +65,9 @@ async def fresh_user() -> AsyncIterator:
     yield u
 
 
+from security.pair_crypto import _HKDF_INFO
+
+
 def _build_pair_proofs(*, qr: dict, pair_id: str):
     """Mirror what the phone's pair-flow client does so we can drive
     ``/pair/claim`` end-to-end without touching real Android.
@@ -82,7 +85,10 @@ def _build_pair_proofs(*, qr: dict, pair_id: str):
         algorithm=hashes.SHA256(),
         length=32,
         salt=nonce_bytes,
-        info=b"phantom-os/mobile-pair-v1",
+        # Рядок ЗВІРЯЄТЬСЯ з кодом, а не переписується руками: розійшовся
+        # регістром — і кожен claim падав у bad_proof, мовчки й задовго до
+        # цієї хвилі (`_HKDF_INFO` каже те саме про свою власну історію).
+        info=_HKDF_INFO,
     ).derive(shared)
 
     device_priv = ed25519.Ed25519PrivateKey.generate()

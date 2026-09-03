@@ -15,7 +15,7 @@ from __future__ import annotations
 import json
 import uuid
 from datetime import datetime, timezone
-from typing import Optional
+from typing import Literal, Optional
 
 import logging
 
@@ -40,7 +40,7 @@ from messenger.crypto.keys import KeyStore, PublicBundle, UntrustedBundle
 from messenger.crypto.safety import format_safety_number, safety_number
 from messenger.crypto.session import Session
 from messenger.edits import EDIT_MAX_CHARS, apply_edit
-from messenger.blobs import wrap_frame
+from messenger.blobs import WIRE_KINDS, wrap_frame
 from messenger.geo import parse_point
 from messenger.guard import GuardRejected, inbox_guard
 from messenger.inbox import InboxError, RadioFrame, accept_frame
@@ -737,7 +737,18 @@ class MessageIn(BaseModel):
     client_id: str = Field(min_length=1, max_length=64)
     author_id: str = Field(min_length=1, max_length=64)
     author_name: str = Field(min_length=1, max_length=120)
-    kind: str = "text"
+    #: Рівно те, що вміє дріт, і НЕ вільний рядок. `wrap_frame` кидає
+    #: `ValueError` на тип поза `WIRE_KINDS`, а обробник нижче ловить лише
+    #: `OutboxError`; глобального обробника `ValueError` немає. Тобто вільний
+    #: рядок тут означав 500 — поломку вузла замість «такого не приймаю».
+    #: Відмова мусить приходити ВІД СХЕМИ, на вході: до першої дії обробника і
+    #: до першого запису в базу, інакше в стрічці лишався б лист, якого не
+    #: отримав ніхто.
+    #:
+    #: Перелік БЕРЕТЬСЯ звідти ж, звідки його читає дріт, а не копіюється
+    #: сюди списком. Копія розійшлася б тихо: тип, доданий у `WIRE_KINDS` і
+    #: забутий тут, дав би 422 на справжній кадр.
+    kind: Literal[WIRE_KINDS] = "text"  # type: ignore[valid-type]
     body: Optional[str] = None
     ciphertext: Optional[str] = None
     transport: Optional[str] = None

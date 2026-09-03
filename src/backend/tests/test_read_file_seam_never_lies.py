@@ -24,6 +24,7 @@ base64 замість змісту, бо тоді вона переказує д
 from __future__ import annotations
 
 import asyncio
+import re
 import time
 import zipfile
 
@@ -325,3 +326,28 @@ async def test_розбирач_що_знехтував_стелею_однак�
     assert out.get("truncated") is True, "стик змовчав про обрив, який зробив сам"
     assert out.get("chars") <= LIMIT_CHARS + SLACK, out.get("chars")
     assert out.get("chars") == len(out["text"])
+
+
+async def test_власне_поле_стику_не_називає_числа_яких_не_знає(tmp_path, monkeypatch):
+    """Число в моєму полі рахувало б і примітку розбирача як зміст документа.
+
+    Тіло 200 001 символ + примітка на 83 → моє поле казало «показано 200084
+    символів», тобто 83 символи ПРО обрізання рахувались як обрізаний текст.
+    Той самий клас, що й дефекти вище, лише мій власний: число називає не те,
+    що обіцяє. Скільки байтів тексту поїхало, каже `chars` — і воно точне;
+    скільки з них зміст документа, знає лише той, хто різав, і він це пише в
+    кінці самого тексту. Тож моє поле каже ФАКТ обрізання, а не лічбу.
+    """
+    _write_docx(tmp_path / "з_приміткою.docx", ["коротко"])
+    note = "\n\n[показано 200001 символів — далі я не читав, тож не переказуй як повний]"
+    monkeypatch.setattr(
+        document_text, "extract", _fake_extract("я" * LIMIT_CHARS + note, True)
+    )
+    out = await _read(tmp_path / "з_приміткою.docx")
+
+    assert out.get("truncated") is True
+    assert out.get("truncation")
+    assert not re.search(r"\d", out["truncation"]), (
+        f"число в полі стику рахує й примітку розбирача: {out['truncation']!r}"
+    )
+    assert out.get("chars") == len(out["text"]), "chars мусить лишатись точним"

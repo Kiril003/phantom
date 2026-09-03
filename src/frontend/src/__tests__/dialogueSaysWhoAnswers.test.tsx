@@ -43,12 +43,26 @@ describe('чіп джерела діалогу', () => {
 
     render(<DialogueSourceChip />);
 
-    await waitFor(() => expect(screen.getByText('Gemini · хмара · ключ')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Gemini · хмара')).toBeTruthy());
     const chip = screen.getByTestId('dialogue-source-chip');
     expect(chip.getAttribute('title')).toContain('ai_active: gemini');
     expect(chip.getAttribute('title')).toContain('запасний: ollama');
+    // Підказка мусить казати, що це налаштування, а не доведений звʼязок.
+    expect(chip.getAttribute('title')).toContain('не перевірка звʼязку');
     // Літерала «ядро» на склі більше немає.
     expect(chip.textContent).not.toBe('ядро');
+  });
+
+  it('слова «ключ» у чіпі немає: наявність ключа нам ніхто не казав', async () => {
+    // 03.09.2026: на стенді ключа Gemini немає (ні `.env`, ні змінної в
+    // середовищі), а `/health` віддає `ai_active: "gemini"`. Доки ядро не
+    // скаже придатність, чіп не має права натякати, що ключ є.
+    health.mockResolvedValue({ ok: true, data: base });
+
+    render(<DialogueSourceChip />);
+
+    await waitFor(() => expect(screen.getByTestId('dialogue-source-chip')).toBeTruthy());
+    expect(screen.getByTestId('dialogue-source-chip').textContent).not.toMatch(/ключ/);
   });
 
   it('локальний провайдер названий локальним', async () => {
@@ -95,6 +109,6 @@ describe('чіп джерела діалогу', () => {
     expect(screen.getByText('питаю ядро…')).toBeTruthy();
 
     release({ ok: true, data: base });
-    await waitFor(() => expect(screen.getByText('Gemini · хмара · ключ')).toBeTruthy());
+    await waitFor(() => expect(screen.getByText('Gemini · хмара')).toBeTruthy());
   });
 });

@@ -18,6 +18,14 @@ from ai.tool_use import (
     ToolUseError,
 )
 
+from ai.ollama_shape import (
+    OllamaShapeError,
+    content_of,
+    message_of,
+    tokens_of,
+    tool_call_of,
+)
+
 logger = logging.getLogger(__name__)
 
 
@@ -31,6 +39,13 @@ def _classify_ollama_error(exc: Exception) -> tuple[ToolErrorKind, bool, float |
     """
     msg = str(exc).lower()
     type_name = type(exc).__name__.lower()
+
+    # «Провайдер не відповів» і «відповідь не розібралась» — РІЗНІ поломки, і
+    # плутати їх дорого: коли AttributeError у нашому розборі підіймався як
+    # мережа, людина в полі перевіряла б звʼязок, якого не бракувало — сервер
+    # відповів 200. Наша вада не має права виглядати як обрив.
+    if isinstance(exc, (OllamaShapeError, AttributeError, KeyError, TypeError)):
+        return ToolErrorKind.UNKNOWN, False, None
 
     if isinstance(exc, asyncio.TimeoutError) or "timeout" in msg or "timed out" in msg:
         return ToolErrorKind.TIMEOUT, True, None
@@ -124,28 +139,21 @@ class OllamaProvider(AIProvider):
 
         response = await client.chat(**kwargs)
 
-        msg = response.message
-        fn_name: str | None = None
-        fn_args: dict[str, Any] = {}
-
-        if msg.tool_calls:
-            first_call = msg.tool_calls[0]
-            fn_name = first_call.function.name
-            raw_args = first_call.function.arguments
-            fn_args = dict(raw_args) if isinstance(raw_args, dict) else {}
-
-        tokens_used = 0
-        if hasattr(response, "eval_count"):
-            tokens_used = (response.eval_count or 0) + (
-                getattr(response, "prompt_eval_count", 0) or 0
-            )
+        # Читаємо через `ollama_shape`, а не крапкою: пінований клієнт
+        # (0.3.1) віддає TypedDict, і `response.message` кидав AttributeError
+        # на КОЖНІЙ відповіді — розмова на ПК не відповідала жодного разу,
+        # хоча сервер повертав 200.
+        msg = message_of(response)
+        fn_name, fn_args = tool_call_of(msg)
+        tokens_used = tokens_of(response)
+        msg_content = content_of(msg)
 
         if fn_name:
             form, content, attachments = parse_function_call(fn_name, fn_args)
-            if not content and msg.content:
-                content = msg.content or ""
+            if not content and msg_content:
+                content = msg_content
         else:
-            form, content, attachments = parse_plain_text(msg.content or "")
+            form, content, attachments = parse_plain_text(msg_content)
 
         return AIResponse(
             content=content,
@@ -239,7 +247,7 @@ class OllamaProvider(AIProvider):
                     parse_attempts=attempt,
                 )
 
-            raw = (response.message.content or "").strip()
+            raw = content_of(message_of(response)).strip()
             try:
                 envelope = json.loads(raw)
             except json.JSONDecodeError as exc:

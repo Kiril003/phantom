@@ -4,6 +4,12 @@ import { MessageCircle, Menu, Plus, Check, Edit3, Trash2 } from 'lucide-react';
 import { useTranslation } from '../../i18n/useTranslation';
 import type { ChatSession } from '@shared/types';
 
+/**
+ * Оголошена ширина панелі. ChatWindow рахує з неї поріг оверлея, тож
+ * число живе тут, поруч із версткою, і імпортується — а не дублюється.
+ */
+export const SESSIONS_PANEL_W = 260;
+
 interface ChatSidebarProps {
   sessionsOpen: boolean;
   setSessionsOpen: (open: boolean) => void;
@@ -13,6 +19,11 @@ interface ChatSidebarProps {
   openSession: (id: string) => void;
   deleteSession: (id: string) => Promise<void>;
   updateSession: (id: string, summary: string) => Promise<void>;
+  /**
+   * Панель накриває розмову, а не стоїть із нею в ряду. Вмикає ChatWindow,
+   * коли за виміром власної ширини 260px сусіда просто нема звідки взяти.
+   */
+  overlay?: boolean;
 }
 
 export function ChatSidebar({
@@ -24,6 +35,7 @@ export function ChatSidebar({
   openSession,
   deleteSession,
   updateSession,
+  overlay = false,
 }: ChatSidebarProps) {
   const { t, locale } = useTranslation();
   const [editingSessionId, setEditingSessionId] = useState<string | null>(null);
@@ -32,18 +44,51 @@ export function ChatSidebar({
   if (!sessionsOpen) return null;
 
   return (
-    <motion.aside
+    <>
+      {/* Затемнення позаду оверлея. Воно ж — «клік поза панеллю»: інакше
+          на вузькому пейні панель накриває розмову, а закрити її можна
+          лише влучивши в 44-піксельний хрестик угорі. Кнопка, а не div,
+          щоб той самий вихід був і з клавіатури. */}
+      {overlay && (
+        <motion.button
+          type="button"
+          initial={{ opacity: 0 }}
+          animate={{ opacity: 1 }}
+          exit={{ opacity: 0 }}
+          transition={{ duration: 0.18 }}
+          onClick={() => setSessionsOpen(false)}
+          aria-label={t('chat.sessions.close')}
+          data-testid="chat-sessions-scrim"
+          className="absolute inset-0 z-30"
+          style={{
+            background: 'rgba(10, 14, 22, 0.42)',
+            backdropFilter: 'blur(2px)',
+            border: 'none',
+            padding: 0,
+          }}
+        />
+      )}
+      <motion.aside
       initial={{ x: '-100%', opacity: 0 }}
       animate={{ x: 0, opacity: 1 }}
       exit={{ x: '-100%', opacity: 0 }}
       transition={{ type: 'spring', damping: 25, stiffness: 200 }}
-      className="w-[260px] flex flex-col shrink-0 glass z-20"
+      data-testid="chat-sessions-panel"
+      data-overlay={overlay ? 'true' : undefined}
+      /* Оверлей виходить із потоку — саме тому він нічого не забирає в
+         розмови. Сусідом у ряду (широкий пейн) лишається все як було:
+         shrink-0, повна висота, своя колонка. */
+      className={
+        overlay
+          ? 'absolute inset-y-0 left-0 w-[260px] max-w-[86%] flex flex-col glass z-40'
+          : 'w-[260px] flex flex-col shrink-0 glass z-20'
+      }
       style={{
         borderTop: 'none',
         borderBottom: 'none',
         borderLeft: 'none',
         borderRight: '1px solid var(--glass-border)',
-        boxShadow: '4px 0 24px rgba(0,0,0,0.1)',
+        boxShadow: overlay ? '8px 0 32px rgba(0,0,0,0.28)' : '4px 0 24px rgba(0,0,0,0.1)',
         background: 'var(--surface-base)',
       }}
     >
@@ -166,7 +211,6 @@ export function ChatSidebar({
                 {editingSessionId === sess.id ? (
                   <input
                     type="text"
-                    // eslint-disable-next-line jsx-a11y/no-autofocus
                     autoFocus
                     value={editSessionText}
                     onChange={(e) => setEditSessionText(e.target.value)}
@@ -282,6 +326,7 @@ export function ChatSidebar({
           );
         })}
       </div>
-    </motion.aside>
+      </motion.aside>
+    </>
   );
 }

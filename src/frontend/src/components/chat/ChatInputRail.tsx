@@ -189,8 +189,16 @@ export function ChatInputRail({
               setPendingAttachments((curr) => [...curr, sel])
             }
           />
+          {/* Перенесення (flex-wrap), а не кліп: у ряду 4 контроли по 44px
+              із shrink-0 — 224px незмінного хрому разом із проміжками. У
+              пейні ДІАЛОГ на стандартному столі «Театр» (частка 1/3) при
+              вікні 920px ряду дістається 257px, тож на поле лишалось 36px і
+              підказка сипалась по літері. Без wrap єдиний спосіб влізти —
+              виштовхнути «Надіслати» за край (та сама хвороба, що вже
+              лікували в MessengerLayout). Тепер ряд чесно стає у два
+              рядки. */}
           <div
-            className="glass-card flex items-end gap-2 pl-2 pr-2 transition-all"
+            className="glass-card flex flex-wrap items-end gap-2 pl-2 pr-2 transition-all"
             style={{
               borderRadius: inputFocused ? 22 : 9999,
               minHeight: 44,
@@ -316,66 +324,86 @@ export function ChatInputRail({
               <Plus size={16} strokeWidth={2} />
             </button>
 
-            <textarea
-              ref={textareaRef}
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={handleKeyDown}
-              onFocus={() => setInputFocused(true)}
-              onBlur={() => setInputFocused(false)}
-              placeholder={sending ? t('chat.input.sending') : (placeholder || t('chat.input.placeholder'))}
-              rows={1}
-              aria-label="Поле повідомлення"
-              className="flex-1 resize-none outline-none bg-transparent"
-              style={{
-                minHeight: 36,
-                maxHeight: 120,
-                padding: '8px 10px',
-                color: 'var(--ink-primary)',
-                fontFamily: 'var(--font-display)',
-                fontSize: 'var(--fs-base)',
-                lineHeight: 'var(--lh-normal)',
-                border: 'none',
-                opacity: sending ? 0.72 : 1,
-              }}
-            />
+            {/* Поле і «Надіслати» — одна нерозривна одиниця переносу. Якщо
+                лишити їх окремими дітьми ряду, є смуга ширин (~385–410px на
+                пейн), де поле ще влазить у перший рядок, а кнопка вже ні — і
+                вона зʼїжджає сама-одна під ліві іконки. Групою вони або
+                стоять поруч, або переїжджають разом. */}
+            <div className="flex-1 flex items-end gap-2">
+              <textarea
+                ref={textareaRef}
+                value={input}
+                onChange={(e) => setInput(e.target.value)}
+                onKeyDown={handleKeyDown}
+                onFocus={() => setInputFocused(true)}
+                onBlur={() => setInputFocused(false)}
+                placeholder={sending ? t('chat.input.sending') : (placeholder || t('chat.input.placeholder'))}
+                rows={1}
+                aria-label="Поле повідомлення"
+                className="flex-1 resize-none outline-none bg-transparent"
+                style={{
+                  minHeight: 36,
+                  /* Підлога ширини. У textarea власний UA-стиль ставить
+                     overflow:auto, а це за специфікацією flexbox обнуляє
+                     автоматичний мінімальний розмір — тож поле лишалось
+                     ЄДИНИМ, що піддається стисканню, і сідало до 36px. Число
+                     тримає рядок читабельним і водночас є порогом, за яким
+                     ряд переноситься замість того, щоб душити поле. */
+                  minWidth: 140,
+                  /* Ширина тут нічого не фіксує: у flex-1 базис 0% і поле
+                     росте вільно. Вона лише прибирає з розрахунку природну
+                     ширину textarea (cols=20 ≈ 220px) — інакше саме вона, а
+                     не наша підлога, вирішувала б, коли ряд переноситься, і
+                     перенос починався б уже на 500px. */
+                  width: 140,
+                  maxHeight: 120,
+                  padding: '8px 10px',
+                  color: 'var(--ink-primary)',
+                  fontFamily: 'var(--font-display)',
+                  fontSize: 'var(--fs-base)',
+                  lineHeight: 'var(--lh-normal)',
+                  border: 'none',
+                  opacity: sending ? 0.72 : 1,
+                }}
+              />
 
-            <button
-              type="button"
-              onClick={handleSend}
-              disabled={!input.trim() || sending}
-              className="flex items-center justify-center shrink-0 self-end active:scale-95"
-              style={{
-                width: 40,
-                height: 40,
-                minWidth: 44,
-                minHeight: 44,
-                borderRadius: 9999,
-                background:
-                  input.trim() && !sending
-                    ? 'linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 60%, var(--ink-inverse)))'
-                    : 'var(--glass-subtle)',
-                color:
-                  input.trim() && !sending ? 'var(--ink-inverse)' : 'var(--ink-muted)',
-                border:
-                  input.trim() && !sending
-                    ? '1px solid color-mix(in srgb, var(--accent) 70%, transparent)'
-                    : '1px solid var(--glass-border)',
-                boxShadow:
-                  input.trim() && !sending
-                    ? '0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent), 0 0 22px var(--accent-glow)'
-                    : 'none',
-                opacity: input.trim() && !sending ? 1 : 0.6,
-                /* Без зменшення: scale(0.94) робив кнопку 41px і рвав
-                   правило 44×44 у неактивному стані. */
-                transition:
-                  'background 200ms, color 200ms, box-shadow 220ms, border-color 200ms, opacity 200ms, transform 180ms cubic-bezier(0.16, 1, 0.3, 1)',
-              }}
-              aria-label="Надіслати"
-              data-active={input.trim() && !sending ? '1' : '0'}
-            >
-              <Send size={16} strokeWidth={2} />
-            </button>
+              <button
+                type="button"
+                onClick={handleSend}
+                disabled={!input.trim() || sending}
+                className="flex items-center justify-center shrink-0 self-end active:scale-95"
+                style={{
+                  width: 40,
+                  height: 40,
+                  minWidth: 44,
+                  minHeight: 44,
+                  borderRadius: 9999,
+                  background:
+                    input.trim() && !sending
+                      ? 'linear-gradient(135deg, var(--accent), color-mix(in srgb, var(--accent) 60%, var(--ink-inverse)))'
+                      : 'var(--glass-subtle)',
+                  color:
+                    input.trim() && !sending ? 'var(--ink-inverse)' : 'var(--ink-muted)',
+                  border:
+                    input.trim() && !sending
+                      ? '1px solid color-mix(in srgb, var(--accent) 70%, transparent)'
+                      : '1px solid var(--glass-border)',
+                  boxShadow:
+                    input.trim() && !sending
+                      ? '0 0 0 4px color-mix(in srgb, var(--accent) 12%, transparent), 0 0 22px var(--accent-glow)'
+                      : 'none',
+                  opacity: input.trim() && !sending ? 1 : 0.6,
+                  /* Без зменшення: scale(0.94) робив кнопку 41px і рвав
+                     правило 44×44 у неактивному стані. */
+                  transition:
+                    'background 200ms, color 200ms, box-shadow 220ms, border-color 200ms, opacity 200ms, transform 180ms cubic-bezier(0.16, 1, 0.3, 1)',
+                }}
+                aria-label="Надіслати"
+                data-active={input.trim() && !sending ? '1' : '0'}
+              >
+                <Send size={16} strokeWidth={2} />
+              </button>
+            </div>
           </div>
         </div>
       </div>

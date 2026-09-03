@@ -12,8 +12,9 @@ import {
 } from 'lucide-react';
 import { MessageBubble } from './MessageBubble';
 import { type AttachSelection } from './AttachDrawer';
-import { ChatSidebar } from './ChatSidebar';
+import { ChatSidebar, SESSIONS_PANEL_W } from './ChatSidebar';
 import { ChatInputRail } from './ChatInputRail';
+import { useElementSize } from '../desk/useViewportSize';
 import { useChatStore } from '../../stores/chatStore';
 import { useChatStream } from '../../hooks/useChatStream';
 import { useSystemStore } from '../../stores/systemStore';
@@ -71,6 +72,28 @@ function streamingMessageShape(
 /** Колонка читання: на 1440 рядок через увесь екран читати неможливо. */
 const TRANSCRIPT_MAX_W = 900;
 
+/**
+ * Скільки ширини ряд композера мусить лишити розмові, щоб «Надіслати»
+ * взагалі мала де стояти. Не стеля з голови — сума оголошених мінімумів
+ * ChatInputRail:
+ *   поле (minWidth 140) + gap-2 (8) + «Надіслати» (minWidth 44) = 192.
+ * Ця трійця — одна нерозривна одиниця переносу, тож вужче за 192 ряду
+ * нема куди подітись: flex виштовхує кнопку за край, а її зрізає
+ * overflow-hidden поверхні. Плюс відступи по дорозі до ряду: рейка px-4
+ * (32) і сам ряд pl-2/pr-2 (16).
+ */
+const COMPOSER_MIN_W = 192 + 32 + 16;
+
+/**
+ * Виміряний поріг, з якого панель розмов має право бути сусідом у ряду:
+ * її власні 260px плюс 240px, без яких композер ламається — 500px
+ * ВЛАСНОЇ ширини ChatWindow (у пейні ДІАЛОГ це ще −16px відступів
+ * DialogueLayout, тобто пейн ≈516px). Вужче — панель стає оверлеєм, бо
+ * 260 фіксованих пікселів у такий пейн не влазять у принципі: у
+ * виміряному пейні 457px розмові лишалось 133px на ряд, якому треба 192.
+ */
+const SIDEBAR_INLINE_MIN_W = SESSIONS_PANEL_W + COMPOSER_MIN_W;
+
 export function ChatWindow({
   minimalChrome = false,
   showVoice = true,
@@ -113,6 +136,13 @@ export function ChatWindow({
   // inside the chat surface. The menu toggle in the header (and the
   // sticky one in the input rail) is the operator's way to open it.
   const [sessionsOpen, setSessionsOpen] = useState(false);
+
+  // Ширину міряємо у СЕБЕ, а не у вікна: цей чат живе і пейном стола
+  // (третина «Театру»), і повним екраном — вікно нічого не знає про те,
+  // скільки місця дісталось саме розмові. 0 = ще не виміряно (перший
+  // кадр) — тоді поводимось як широкий, щоб панель не блимала оверлеєм.
+  const { ref: shellRef, width: shellWidth } = useElementSize<HTMLDivElement>();
+  const sessionsOverlay = shellWidth > 0 && shellWidth < SIDEBAR_INLINE_MIN_W;
 
 
   const [input, setInput] = useState('');
@@ -195,7 +225,7 @@ export function ChatWindow({
     // in flight.
     ttsPlayer.stop();
     void voiceApi.stop().catch((err) => {
-      // eslint-disable-next-line no-console
+       
       console.warn('[voice] stop request failed:', err);
     });
   }, []);
@@ -460,7 +490,7 @@ export function ChatWindow({
         releaseDuck();
         releaseExternalAudio();
         // Non-fatal — TTS failures shouldn't block the chat flow.
-        // eslint-disable-next-line no-console
+         
         console.warn('[voice] TTS playback failed:', err);
       }
     })();
@@ -557,7 +587,10 @@ export function ChatWindow({
 
   return (
     <div
-      className={`flex h-full w-full min-h-0 ${className}`}
+      ref={shellRef}
+      // relative — якір для оверлея панелі розмов: він накриває саме цю
+      // поверхню, не спливаючи на весь застосунок.
+      className={`flex h-full w-full min-h-0 relative ${className}`}
       style={{ background: 'transparent' }}
     >
       <AnimatePresence>
@@ -571,6 +604,7 @@ export function ChatWindow({
           openSession={openSession}
           deleteSession={deleteSession}
           updateSession={updateSession}
+          overlay={sessionsOverlay}
         />
       )}
       </AnimatePresence>

@@ -673,7 +673,9 @@ export const CanvasSplitView: React.FC<CanvasSplitViewProps> = ({
       {/* B) BOARD MODE (Kanban Sprint Board) */}
       {viewMode === 'board' && (
         <div className="flex-1 min-h-0 p-4 md:p-6 overflow-x-auto overflow-y-hidden bg-[#FAF8F5]">
-          <div className="flex gap-4 h-full min-w-[760px]">
+          {/* Було `min-w-[760px]` — на 393px це гарантована горизонтальна
+            прокрутка. Дві колонки поруч лише там, де вони вміщаються. */}
+          <div className="flex flex-col lg:flex-row gap-4 h-full lg:min-w-[760px]">
             {kanbanColumns.map((col) => {
               const colBlocks = blocks.filter((b) => {
                 if (col.id === 'done') return b.status === 'done' || b.checked;
@@ -771,6 +773,8 @@ export const CanvasSplitView: React.FC<CanvasSplitViewProps> = ({
         <div className="flex-1 min-h-0 relative overflow-hidden bg-[#FAF8F5] bg-[radial-gradient(#D9CFBB_1px,transparent_1px)] [background-size:16px_16px]">
           <div className="absolute inset-0 p-6 overflow-auto custom-scrollbar">
             {/* SVG Link lines between consecutive nodes */}
+            {/* phone-ok: полотно дошки навмисно більше за екран і гортається
+                всередині власної панелі (`overflow-auto` вище), а не сторінкою. */}
             <svg className="absolute inset-0 w-[1200px] h-[900px] pointer-events-none stroke-[#D96C35]/30 stroke-2">
               {blocks.slice(0, -1).map((b, i) => {
                 const next = blocks[i + 1];

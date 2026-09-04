@@ -14,6 +14,7 @@ import { MessageBubble } from './MessageBubble';
 import { type AttachSelection } from './AttachDrawer';
 import { ChatSidebar, SESSIONS_PANEL_W } from './ChatSidebar';
 import { ChatInputRail } from './ChatInputRail';
+import { ColdModelNotice } from './ColdModelNotice';
 import { useElementSize } from '../desk/useViewportSize';
 import { useChatStore } from '../../stores/chatStore';
 import { useChatStream } from '../../hooks/useChatStream';
@@ -997,6 +998,12 @@ export function ChatWindow({
             position above the input rail. ModelCard echo + pending-
             attachment chips render above the rail too.
             Phase 27-e — outer pb-3→pb-2; ModelCard now lazy. */}
+        {/* Ціна першого листа — сказана ДО того, як людина його напише.
+            Виміряно: холодна відповідь 21,6 с, з них 21,3 с — підняття
+            моделі в памʼять; гаряча — 833 мс. Напис стоїть над полем, бо
+            платить за це саме той, хто зараз пише. */}
+        <ColdModelNotice />
+
         <ChatInputRail
           input={input}
           setInput={setInput}

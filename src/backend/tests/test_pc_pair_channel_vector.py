@@ -17,11 +17,25 @@ from pathlib import Path
 
 from node import peer_channel, peer_relay as pr
 
-VECTOR = Path(__file__).resolve().parent / "vectors" / "pc_pair_channel_vector.json"
-COMPANION_COPY = (
-    Path(__file__).resolve().parents[4]
-    / "phantom-companion-drop"
-    / "core-net/src/test/resources/pc_pair_channel_vector.json"
+VECTOR_NAME = "pc_pair_channel_vector.json"
+VECTOR = Path(__file__).resolve().parent / "vectors" / VECTOR_NAME
+
+#: Копії в деревах телефона шукаємо ГЛОБОМ, а не за іменем дерева.
+#:
+#: Тут стояв прибитий шлях на `phantom-companion-drop` — дерево, якого вже
+#: немає. Сторож від того не червонів: він ЧЕСНО пропускався («телефонного
+#: дерева поруч немає»), і саме чесність робила його невидимим — у зведенні
+#: це читалось як «37 passed, 1 skipped». Головний доказ хвилі не
+#: перевірявся відтоді, як дерево зникло.
+#:
+#: Дерева тут створюються й зникають щодня (зараз копій ДВАНАДЦЯТЬ), тож
+#: прив'язка до імені — гарантія тихої смерті сторожа. Той самий рецепт уже
+#: працює в `platform-site/server/tests/test_directory.py`, і саме тому
+#: директорна звірка жива, а парувальна була мертва.
+PHONE_COPIES = sorted(
+    Path(__file__).resolve().parents[4].glob(
+        f"*/core-net/src/test/resources/{VECTOR_NAME}"
+    )
 )
 
 
@@ -33,11 +47,27 @@ def _raw(text: str) -> bytes:
     return base64.b64decode(text + "=" * (-len(text) % 4))
 
 
-def test_copies_in_both_trees_are_byte_identical():
-    if not COMPANION_COPY.is_file():
-        pytest.skip("телефонного дерева поруч немає — звіряти нічого; тихий pass тут ховав би головний доказ хвилі")
-    assert COMPANION_COPY.read_bytes() == VECTOR.read_bytes(), (
-        "копії вектора розійшлись — один із тестів доводить уже не те, що другий"
+def test_copies_in_every_phone_tree_are_byte_identical():
+    """Звіряємо з УСІМА знайденими копіями, а не з першою.
+
+    Дерев поруч буває двадцять; розходження в будь-якому з них означає, що
+    два тести доводять різні речі, і котрийсь із них бреше. Тому червоне
+    називає саме те дерево, яке розійшлось.
+    """
+    if not PHONE_COPIES:
+        pytest.skip(
+            "жодного дерева телефона поруч — звіряти нічого. Якщо це CI, "
+            "перевір, що дерева викачані: пропуск тут ховає ГОЛОВНИЙ доказ хвилі"
+        )
+
+    mine = VECTOR.read_bytes()
+    diverged = [
+        str(copy) for copy in PHONE_COPIES if copy.read_bytes() != mine
+    ]
+    assert not diverged, (
+        "копії вектора розійшлись — адреси скриньок у ПК і телефона рахуються "
+        "з різних чисел, і жоден бік про це не дізнається:\n  "
+        + "\n  ".join(diverged)
     )
 
 

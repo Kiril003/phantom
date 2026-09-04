@@ -1167,6 +1167,53 @@ class AgentRuntime:
         await self._teardown_browser()
         return True
 
+    async def stop_all(self, *, timeout_s: float = 5.0) -> int:
+        """Зупинити ВСІ доріжки — те, що потрібне при вимкненні вузла.
+
+        Навіщо окремо від `stop()`. `stop()` без `task_id` цілиться в
+        ПЕРЕДНЮ доріжку, а вимкнення мусить гасити всі. Гірше: гачок
+        вимкнення питав `agent_runtime.current_task`, а цей аксесор
+        track-залежний (читає ContextVar `current_track`, який у контексті
+        lifespan дорівнює "foreground"). Тож задача, що йшла ФОНОВОЮ
+        доріжкою, робила `current_task` порожнім, `stop()` не викликався
+        ЖОДНОГО разу, і фоновий бігун жив далі.
+
+        Саме так вузол писав спроби ШІ ще 13 хвилин ПІСЛЯ SIGTERM: цикл
+        повторів до провайдера ніхто не скасовував — не тому, що він не
+        слухає скасування, а тому, що скасування до нього не доходило.
+
+        Повертає кількість скасованих бігунів. Чекає на них обмежено:
+        вимкнення не має права висіти, якщо задача ігнорує скасування.
+        """
+        self.controls.emergency_stop.set()
+        runners = [
+            r for r in (self.task_runner, self.background_runner)
+            if r is not None and not r.done()
+        ]
+        for runner in runners:
+            runner.cancel()
+        if runners:
+            # `gather` із return_exceptions: CancelledError — очікуваний
+            # результат, а не збій; висіти на ньому не можна.
+            # `asyncio.wait`, а НЕ `wait_for(gather(...))`. Перший варіант я
+            # написала саме через gather — і власний сторож його спіймав:
+            # `wait_for` скасовує внутрішній gather і ЧЕКАЄ на нього, а
+            # gather чекає на задачі. Задача, що ковтає CancelledError,
+            # тримала вимкнення так само намертво, як і до правки — ліки
+            # відтворювали ту саму ваду на рівень нижче.
+            #
+            # `wait` із таймаутом просто повертає керування: хто не
+            # завершився — лишається, але ВИМКНЕННЯ ЙДЕ ДАЛІ.
+            _done, pending = await asyncio.wait(runners, timeout=timeout_s)
+            if pending:
+                logger.warning(
+                    "agent stop_all: %d бігун(ів) не завершились за %.1f с — "
+                    "лишаю їх і вимикаюсь далі",
+                    len(pending), timeout_s,
+                )
+        await self._teardown_browser()
+        return len(runners)
+
     async def checkpoint_now(self, task_id: str) -> int | None:
         target = self._find_active(task_id)
         if target is None:

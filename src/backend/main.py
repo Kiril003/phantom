@@ -893,8 +893,15 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         try:
             from agent.kernel.runtime import agent_runtime
             from agent.kernel.audit import mark_orphans_paused
-            if agent_runtime.current_task is not None:
-                await agent_runtime.stop()
+            # НЕ `current_task` і НЕ `stop()`. Перше — track-залежний
+            # аксесор (читає ContextVar, який тут завжди "foreground"), тож
+            # задача на ФОНОВІЙ доріжці робила цю умову хибною й гачок не
+            # спрацьовував ЖОДНОГО разу. Друге — гасить лише передню доріжку.
+            # Разом це давало вузол, що писав спроби ШІ ще 13 хвилин після
+            # SIGTERM: скасування просто не доходило до фонового бігуна.
+            cancelled = await agent_runtime.stop_all()
+            if cancelled:
+                logger.info("Agent shutdown: скасовано бігунів — %d", cancelled)
             await mark_orphans_paused("uvicorn_shutdown")
         except Exception as exc:
             logger.warning("Agent shutdown hook failed: %s", exc)

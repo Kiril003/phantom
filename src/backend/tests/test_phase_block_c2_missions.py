@@ -147,7 +147,7 @@ class TestPlanMission:
 
         plan_data = _make_mission_plan_json(n_phases=5)
 
-        with patch("agent.planner.mission.llm_json", new=AsyncMock(return_value=plan_data)):
+        with patch("agent.cognition.planner.mission.llm_json", new=AsyncMock(return_value=plan_data)):
             result = await plan_mission(
                 user_id=_uid(),
                 brief=brief,
@@ -177,7 +177,7 @@ class TestPlanMission:
         # LLM returns 20 phases — planner must cap at 12.
         plan_data = _make_mission_plan_json(n_phases=20)
 
-        with patch("agent.planner.mission.llm_json", new=AsyncMock(return_value=plan_data)):
+        with patch("agent.cognition.planner.mission.llm_json", new=AsyncMock(return_value=plan_data)):
             result = await plan_mission(
                 user_id=_uid(),
                 brief=brief,
@@ -201,7 +201,7 @@ class TestPlanMission:
             ]}
         ]}
 
-        with patch("agent.planner.mission.llm_json", new=AsyncMock(return_value=bad_data)):
+        with patch("agent.cognition.planner.mission.llm_json", new=AsyncMock(return_value=bad_data)):
             with pytest.raises(RuntimeError, match="success_criteria"):
                 await plan_mission(
                     user_id=_uid(),
@@ -231,7 +231,7 @@ class TestPlanMission:
             "risk_assessment": "low",
         }
 
-        with patch("agent.planner.mission.llm_json", new=AsyncMock(return_value=plan_data)):
+        with patch("agent.cognition.planner.mission.llm_json", new=AsyncMock(return_value=plan_data)):
             result = await plan_mission(
                 user_id=_uid(),
                 brief=brief,
@@ -296,7 +296,7 @@ class TestPlanPhase:
                 risk_assessment="low",
             )
 
-        with patch("agent.planner.phase.strategic.plan", new=_mock_strategic_plan):
+        with patch("agent.cognition.planner.phase.strategic.plan", new=_mock_strategic_plan):
             result = await plan_phase(
                 user_id=user_id,
                 mission=mission,
@@ -357,18 +357,18 @@ class TestStartMission:
             pass
 
         monkeypatch.setattr(
-            "agent.planner.mission.plan_mission",
+            "agent.cognition.planner.mission.plan_mission",
             _mock_plan_mission,
         )
 
-        with patch("agent.runtime.AgentRuntime.start_mission") as _m:
+        with patch("agent.kernel.runtime.AgentRuntime.start_mission") as _m:
             # We need the REAL start_mission — use it directly.
             pass
 
         # Patch the loop import inside runtime.
-        with patch("agent.loop.run_task_loop", new=AsyncMock(side_effect=_mock_loop)):
+        with patch("agent.kernel.loop.run_task_loop", new=AsyncMock(side_effect=_mock_loop)):
             with patch(
-                "agent.planner.mission.plan_mission",
+                "agent.cognition.planner.mission.plan_mission",
                 new=AsyncMock(side_effect=_mock_plan_mission),
             ):
                 mission_id, task_id = await runtime.start_mission(
@@ -437,9 +437,9 @@ class TestStartMission:
                 ],
             )
 
-        with patch("agent.loop.run_task_loop", new=AsyncMock()):
+        with patch("agent.kernel.loop.run_task_loop", new=AsyncMock()):
             with patch(
-                "agent.planner.mission.plan_mission",
+                "agent.cognition.planner.mission.plan_mission",
                 new=AsyncMock(side_effect=_mock_plan_mission),
             ):
                 mission_id, task_id = await runtime.start_mission(
@@ -543,11 +543,11 @@ class TestMissionLoop:
         async def _mock_finalize(state_, outcome, summary, error=None):
             state_.status = outcome
 
-        with patch("agent.loop.plan_phase", new=AsyncMock(side_effect=_mock_plan_phase)):
-            with patch("agent.loop._run_phase_subgoals", new=AsyncMock(side_effect=_mock_run_phase_subgoals)):
+        with patch("agent.kernel.loop.plan_phase", new=AsyncMock(side_effect=_mock_plan_phase)):
+            with patch("agent.kernel.loop._run_phase_subgoals", new=AsyncMock(side_effect=_mock_run_phase_subgoals)):
                 with patch.object(runtime, "finalize_task", new=AsyncMock(side_effect=_mock_finalize)):
                     with patch.object(runtime, "_broadcast", new=AsyncMock()):
-                        with patch("agent.loop.update_task_status", new=AsyncMock()):
+                        with patch("agent.kernel.loop.update_task_status", new=AsyncMock()):
                             await run_mission_loop(runtime, state)
 
         assert executed_phases == ["phase-0", "phase-1", "phase-2"]
@@ -596,11 +596,11 @@ class TestMissionLoop:
             state_.status = outcome
             finalized_outcomes.append(outcome)
 
-        with patch("agent.loop.plan_phase", new=AsyncMock(side_effect=_mock_plan_phase)):
-            with patch("agent.loop._run_phase_subgoals", new=AsyncMock(side_effect=_mock_run_phase_subgoals)):
+        with patch("agent.kernel.loop.plan_phase", new=AsyncMock(side_effect=_mock_plan_phase)):
+            with patch("agent.kernel.loop._run_phase_subgoals", new=AsyncMock(side_effect=_mock_run_phase_subgoals)):
                 with patch.object(runtime, "finalize_task", new=AsyncMock(side_effect=_mock_finalize)):
                     with patch.object(runtime, "_broadcast", new=AsyncMock()):
-                        with patch("agent.loop.update_task_status", new=AsyncMock()):
+                        with patch("agent.kernel.loop.update_task_status", new=AsyncMock()):
                             await run_mission_loop(runtime, state)
 
         assert "done" in finalized_outcomes
@@ -651,11 +651,11 @@ class TestMissionLoop:
         async def _mock_finalize(state_, outcome, summary, error=None):
             state_.status = outcome
 
-        with patch("agent.loop.plan_phase", new=AsyncMock(side_effect=_mock_plan_phase)):
-            with patch("agent.loop._run_phase_subgoals", new=AsyncMock(side_effect=_mock_run_phase_subgoals_fail)):
+        with patch("agent.kernel.loop.plan_phase", new=AsyncMock(side_effect=_mock_plan_phase)):
+            with patch("agent.kernel.loop._run_phase_subgoals", new=AsyncMock(side_effect=_mock_run_phase_subgoals_fail)):
                 with patch.object(runtime, "finalize_task", new=AsyncMock(side_effect=_mock_finalize)):
                     with patch.object(runtime, "_broadcast", new=AsyncMock()):
-                        with patch("agent.loop.update_task_status", new=AsyncMock()):
+                        with patch("agent.kernel.loop.update_task_status", new=AsyncMock()):
                             await run_mission_loop(runtime, state)
 
         from agent.missions.store import get_mission
@@ -704,9 +704,9 @@ class TestMissionLoop:
                 estimated_total_actions=1,
             )
 
-        with patch("agent.loop.run_mission_loop", new=AsyncMock(side_effect=_spy_mission_loop)):
-            with patch("agent.planner.strategic.plan", new=AsyncMock(side_effect=_instant_plan)):
-                with patch("agent.loop.tactical.plan") as mock_tactical:
+        with patch("agent.kernel.loop.run_mission_loop", new=AsyncMock(side_effect=_spy_mission_loop)):
+            with patch("agent.cognition.planner.strategic.plan", new=AsyncMock(side_effect=_instant_plan)):
+                with patch("agent.kernel.loop.tactical.plan") as mock_tactical:
                     # Make tactical return DONE_TASK immediately.
                     from agent.schemas import PlanStep, InnerMonologue
                     mock_tactical.return_value = PlanStep(
@@ -715,10 +715,10 @@ class TestMissionLoop:
                         args={"summary": "legacy task done"},
                         monologue=InnerMonologue(),
                     )
-                    with patch("agent.loop.update_task_status", new=AsyncMock()):
+                    with patch("agent.kernel.loop.update_task_status", new=AsyncMock()):
                         with patch.object(runtime, "_broadcast", new=AsyncMock()):
                             with patch.object(runtime, "finalize_task", new=AsyncMock()):
-                                with patch("agent.loop.execute_action") as mock_exec:
+                                with patch("agent.kernel.loop.execute_action") as mock_exec:
                                     # Shouldn't reach execute — DONE_TASK is terminal.
                                     await _run_task_loop_impl(runtime, state)
 

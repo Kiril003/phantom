@@ -1185,11 +1185,20 @@ class AgentRuntime:
         Повертає кількість скасованих бігунів. Чекає на них обмежено:
         вимкнення не має права висіти, якщо задача ігнорує скасування.
         """
-        self.controls.emergency_stop.set()
         runners = [
             r for r in (self.task_runner, self.background_runner)
             if r is not None and not r.done()
         ]
+        if not runners:
+            # Нічого не біжить — і прапорець НЕ чіпаємо. Перша версія
+            # ставила `emergency_stop` беззастережно, і це отруювало спільний
+            # ControlBus: задача, що мала завершитись як «timeout», після
+            # порожнього вимкнення фіналізувалась як «stopped». Тобто ліки
+            # від зависання ламали звіт про причину зупинки — сусідній тест
+            # це й спіймав.
+            await self._teardown_browser()
+            return 0
+        self.controls.emergency_stop.set()
         for runner in runners:
             runner.cancel()
         if runners:

@@ -348,33 +348,89 @@ docker run --rm \
           [ -e "$APPDIR/usr/lib/$base" ] || cp -aL "$dep" "$APPDIR/usr/lib/" 2>/dev/null || true
         done
 
-    # Гак, що каже ядру, де шукати плагіни. `_1_0` — саме та назва змінної,
-    # яку читає GStreamer 1.x; без суфікса вона теж є, ставимо обидві.
-    cat > "$APPDIR/apprun-hooks/phantom-gstreamer.sh" <<HOOK
-export GST_PLUGIN_SYSTEM_PATH_1_0="\$this_dir/usr/lib/gstreamer-1.0"
-export GST_PLUGIN_PATH_1_0="\$this_dir/usr/lib/gstreamer-1.0"
-export GST_PLUGIN_SCANNER_1_0="\$this_dir/usr/lib/gstreamer1.0/gstreamer-1.0/gst-plugin-scanner"
-export GST_REGISTRY_1_0="\${XDG_CACHE_HOME:-\$HOME/.cache}/phantom-os/gstreamer-registry.bin"
+    # Сайдкар знаходимо ТУТ, бо його треба вже двом: гаку рантайму (щоб
+    # виміряти, скільки місця просить розпаковка) і паспорту збірки нижче.
+    # Один пошук, одна відповідь — двома `find` вони могли б розійтись.
+    SIDECAR="$(find "$APPDIR" -name "phantom-backend*" -type f | head -1)"
+    [ -n "$SIDECAR" ] || { echo "[контейнер] сайдкара в AppDir немає — далі нема про що говорити"; exit 1; }
 
-# TMPDIR — на диск, а не в tmpfs. Сайдкар зібраний PyInstaller-ом у onefile,
-# і на КОЖНОМУ старті він розпаковує себе в TMPDIR. Заміряно 03.09 на
-# покладеному бінарнику: 1 584 090 672 Б, тобто 1,48 ГіБ. На типовій машині
-# /tmp — tmpfs, отже поки PHANTOM працює, півтора гігабайти RAM користувача
-# зайняті копією його ж нутрощів. При штатному виході бутлоадер це прибирає,
-# після жорсткої смерті — ні. Ставимо під кеш користувача, де це звичайні
-# файли на диску.
-export TMPDIR="\${TMPDIR:-\${XDG_CACHE_HOME:-\$HOME/.cache}/phantom-os/tmp}"
-mkdir -p "\$TMPDIR" 2>/dev/null || true
-HOOK
+    # ── Скільки місця просить розпаковка onefile ────────────────────────
+    #
+    # Число НЕ константа. Константа тут була б зеленим, що не вміє
+    # почервоніти: бандл важчає щомісяця, а «1700 МіБ» у гаку лишалось би
+    # назавжди — і гак спокійно обирав би теку, якої вже не вистачає.
+    # Тому питаємо сам бінарник: у CArchive PyInstaller-а є таблиця вмісту,
+    # і сума РОЗПАКОВАНИХ розмірів у ній — рівно те, що ляже в TMPDIR.
+    NEED_BYTES="$(python3 - "$SIDECAR" <<"PYTOC"
+import struct, sys
+M = b"MEI\014\013\012\013\016"
+f = open(sys.argv[1], "rb")
+f.seek(0, 2); n = f.tell()
+tail = 4 * 1024 * 1024
+f.seek(max(0, n - tail)); b = f.read()
+i = b.rfind(M)
+if i < 0:
+    print(0); sys.exit(0)
+o = max(0, n - tail) + i
+f.seek(o)
+magic, pkg, toff, tlen, pyv, pylib = struct.unpack("!8sIIii64s", f.read(88))
+f.seek(o + 88 - pkg + toff); t = f.read(tlen)
+pos = 0; total = 0
+while pos + 18 <= len(t):
+    elen, dpos, dlen, ulen, flag, typ = struct.unpack("!iIIIBc", t[pos:pos + 18])
+    if elen <= 18 or pos + elen > len(t):
+        break
+    total += ulen; pos += elen
+print(total)
+PYTOC
+)"
+    [ "${NEED_BYTES:-0}" -gt 0 ] \
+      || { echo "[контейнер] не прочитав таблицю вмісту сайдкара — гак лишився б без міри"; exit 1; }
+    # +10%: 17 тисяч файлів округляються вгору по блоках файлової системи
+    # (~35 МіБ), решта — запас, щоб не лишити машину рівно в нулі.
+    NEED_MIB=$(( NEED_BYTES / 1048576 * 11 / 10 ))
+    echo "[контейнер] розпаковка сайдкара: ${NEED_BYTES} Б, гак проситиме ${NEED_MIB} МіБ"
 
-    # AppRun від linuxdeploy сорсить РІВНО ОДИН гак, за іменем. Тобто просто
-    # покласти файл поруч — недостатньо, його ніхто не прочитає: та сама
-    # «написане, але не викликане», лише в оболонці.
-    if ! grep -q "phantom-gstreamer.sh" "$APPDIR/AppRun"; then
-      sed -i "s|^exec .*AppRun.wrapped|source \"\$this_dir\"/apprun-hooks/phantom-gstreamer.sh\n&|" \
+    # Гак рантайму. Живе ФАЙЛОМ у дереві (scripts/apprun-hooks/), а не
+    # heredoc-ом тут: цей блок обгорнутий в одинарні лапки docker-виклику, і
+    # будь-який апостроф усередині awk чи printf рвав би обгортку. Плюс
+    # файл можна перевірити окремо, без десятихвилинної збірки.
+    # `target` — іменований том, тобто AppDir переживає збірки, і AppRun у
+    # ньому може бути з ПОПЕРЕДНЬОЇ збірки. Гак раніше звався
+    # phantom-gstreamer.sh, тож треба прибрати і файл, і рядок, який його
+    # кличе — саме в такому порядку думок.
+    #
+    # Прибрати лише файл було б гірше, ніж не чіпати нічого: AppRun стоїть
+    # під `set -e`, і `source` неіснуючого файла вбиває застосунок ще до
+    # вікна, мовчки. Перевірено на AppRun із кандидата 1b700934: після
+    # видалення самого файла там лишалось «source …/phantom-gstreamer.sh»,
+    # тобто пакунок, який не стартує взагалі.
+    rm -f "$APPDIR/apprun-hooks/phantom-gstreamer.sh"
+    sed -i "\|apprun-hooks/phantom-gstreamer\.sh|d" "$APPDIR/AppRun"
+    # Саме `if`, а не `grep && { … }`. Форма з `&&` тут працює лише тому, що
+    # стоїть у СЕРЕДИНІ скрипта: `set -e` милує невдале перше слово списку.
+    # Опинившись останньою в блоці, вона віддала б код 1 при цілком
+    # справному стані — так уже гинула перевірка брудного дерева вище.
+    if grep -q "phantom-gstreamer.sh" "$APPDIR/AppRun"; then
+      echo "[контейнер] у AppRun лишився виклик старого гака — зупиняюсь"; exit 1
+    fi
+    cp /work/scripts/apprun-hooks/phantom-runtime.sh \
+       "$APPDIR/apprun-hooks/phantom-runtime.sh"
+    sed -i "s|@NEED_MIB@|${NEED_MIB}|g" "$APPDIR/apprun-hooks/phantom-runtime.sh"
+    # Незамінений маркер означав би `local need_mib=@NEED_MIB@` — тобто гак,
+    # що мовчки нічого не порівнює. Питаємо явно.
+    if grep -q "@NEED_MIB@" "$APPDIR/apprun-hooks/phantom-runtime.sh"; then
+      echo "[контейнер] у гаку лишився незамінений @NEED_MIB@ — зупиняюсь"; exit 1
+    fi
+
+    # AppRun від linuxdeploy сорсить гаки ПОІМЕННО. Тобто просто покласти
+    # файл поруч — недостатньо, його ніхто не прочитає: та сама «написане,
+    # але не викликане», лише в оболонці.
+    if ! grep -q "phantom-runtime.sh" "$APPDIR/AppRun"; then
+      sed -i "s|^exec .*AppRun.wrapped|source \"\$this_dir\"/apprun-hooks/phantom-runtime.sh\n&|" \
         "$APPDIR/AppRun"
     fi
-    grep -q "phantom-gstreamer.sh" "$APPDIR/AppRun" \
+    grep -q "phantom-runtime.sh" "$APPDIR/AppRun" \
       || { echo "[контейнер] гак не під’єднано до AppRun — зупиняюсь"; exit 1; }
 
     echo "[контейнер] плагінів у пакунку: $(ls "$APPDIR/usr/lib/gstreamer-1.0"/*.so | wc -l)"
@@ -390,8 +446,7 @@ HOOK
     # `_phantom_entry._binary_dir()` вже вміє знаходити це місце (так само
     # він шукає `frontend/`), тож бекенд зможе прочитати власний коміт без
     # жодного нового механізму розвʼязування шляхів.
-    SIDECAR="$(find "$APPDIR" -name "phantom-backend*" -type f | head -1)"
-    [ -n "$SIDECAR" ] || { echo "[контейнер] сайдкара в AppDir немає — паспорт нема про що писати"; exit 1; }
+    # `$SIDECAR` знайдено вище, разом із міркою для гака рантайму.
     SIDECAR_SUM="$(sha256sum "$SIDECAR" | cut -d" " -f1)"
     cat > "$(dirname "$SIDECAR")/build_info.json" <<INFO
 {

@@ -70,6 +70,40 @@ def _writable_root(binary_root: Path) -> Path:
         return fallback
 
 
+def _adopt_legacy_db(legacy: Path, target: Path) -> None:
+    """Забрати базу зі старого місця, якщо продукт її там лишив.
+
+    До 04.09.2026 запакована збірка клала базу в КОРІНЬ теки даних
+    (`<дані>/phantom.db`), бо `_bootstrap_env` рахував шлях сам; дерево клало
+    її в `<дані>/sqlite/`. Тепер виробник шляху один — `paths.resolve_data_dir`.
+
+    Переїзд робиться тільки тоді, коли на новому місці НІЧОГО немає: інакше ми
+    затерли б живу базу старою. `-wal` і `-shm` їдуть разом — лишити їх позаду
+    означало б викинути незакріплені транзакції. `rename` у межах однієї теки
+    даних атомарний, тож напівперенесеного стану не буває.
+
+    Тиха відмова тут була б гіршою за виняток: людина побачила б порожній
+    вузол і не дізналась, що її база лежить поруч. Тому не мовчимо.
+    """
+    if not legacy.is_file() or target.exists():
+        return
+    try:
+        target.parent.mkdir(parents=True, exist_ok=True)
+        for suffix in ("", "-wal", "-shm"):
+            src = legacy.with_name(legacy.name + suffix)
+            if src.exists():
+                src.rename(target.with_name(target.name + suffix))
+    except OSError as exc:
+        print(
+            f"[phantom] не переніс базу {legacy} -> {target} ({exc}). "
+            "Стара база лишилась на місці; перенеси її руками, інакше вузол "
+            "заведе порожню.",
+            file=sys.stderr,
+        )
+        return
+    print(f"[phantom] база переїхала: {legacy} -> {target}", file=sys.stderr)
+
+
 def _bootstrap_env() -> Path:
     root = _writable_root(_binary_dir())
     data_dir = root / "data"
@@ -132,11 +166,43 @@ def _bootstrap_env() -> Path:
             )
             raise
 
-    os.environ.setdefault(
-        "DATABASE_URL",
-        f"sqlite+aiosqlite:///{(data_dir / 'phantom.db').as_posix()}",
-    )
-    os.environ.setdefault("CHROMA_PATH", str(data_dir / "chroma"))
+    # ── Де лежить база: ОДИН виробник шляху, не два ───────────────────────
+    #
+    # Тут стояло `data_dir / "phantom.db"` — тобто КОРІНЬ теки даних. А
+    # `config.database_url` рахує той самий шлях інакше:
+    # `paths.resolve_data_dir("sqlite") / "phantom.db"`, тобто ПІДТЕКУ. Двоє
+    # рахували одне й те саме різними способами, і в запакованій збірці
+    # перемагав цей рядок (env б-є default_factory), а в дереві — той.
+    #
+    # Наслідок на диску, виміряний у пакунку:
+    #
+    #     <дані>/phantom.db          ← справжня база
+    #     <дані>/sqlite/phantom.db   ← 0 байтів
+    #
+    # У дереві — навпаки. Порожній файл виглядає як база й нею не є: хто
+    # переноситиме дані між установками, візьме приманку і «втратить» усе.
+    # Мовчки, бо обидва місця існують і жодне не скаржиться.
+    #
+    # Лікуємо не випадок, а причину: шлях питаємо в того самого
+    # `paths.resolve_data_dir`, з якого його бере `config.py`. Тепер
+    # розійтись їм нема як — виробник один. `setdefault` лишається: якщо
+    # оператор назвав свою базу, вона й далі його.
+    from paths import resolve_data_dir  # noqa: PLC0415 — після PHANTOM_DATA_DIR
+
+    db_target = resolve_data_dir("sqlite") / "phantom.db"
+    os.environ.setdefault("DATABASE_URL", f"sqlite+aiosqlite:///{db_target.as_posix()}")
+    os.environ.setdefault("CHROMA_PATH", str(resolve_data_dir("chroma")))
+
+    # Переїзд бази зі старого місця. Без нього виправлення вище коштувало б
+    # рівно того, від чого рятує: у кожного, хто вже ставив бету, база лежить
+    # у корені теки даних, і вузол, почавши дивитись у `sqlite/`, не знайшов
+    # би її й мовчки завів порожню — чати, памʼять і налаштування виглядали б
+    # як стерті.
+    #
+    # Робимо це ЛИШЕ коли в силі саме наш шлях: якщо оператор назвав свою
+    # базу через DATABASE_URL, ми не знаємо його розкладки й не чіпаємо нічого.
+    if os.environ["DATABASE_URL"].endswith(db_target.as_posix()):
+        _adopt_legacy_db(data_dir / "phantom.db", db_target)
 
     # Hugging Face / transformers caches — keep them inside our models dir
     # so the portable folder is fully self-contained.

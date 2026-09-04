@@ -108,6 +108,11 @@ def test_declared_data_dir_owns_db_and_chroma(bootstrap, tmp_path):
         "CHROMA_PATH не в оголошеній теці даних — відбиток моделі й вектори "
         f"поїдуть повз PHANTOM_DATA_DIR: {env['CHROMA_PATH']}"
     )
+    # `in` тут — навмисно слабка перевірка «взагалі в тій теці». Сильну —
+    # «у ТОМУ САМОМУ файлі, що й у config.py» — робить тест нижче. Саме ця
+    # слабкість і пропустила 04.09 роздвоєння бази: обидва шляхи
+    # (<дані>/phantom.db і <дані>/sqlite/phantom.db) містять str(declared),
+    # тож підрядок був зелений, поки на диску лежали дві різні бази.
     assert str(declared) in env["DATABASE_URL"], (
         f"DATABASE_URL не в оголошеній теці даних: {env['DATABASE_URL']}"
     )
@@ -115,6 +120,122 @@ def test_declared_data_dir_owns_db_and_chroma(bootstrap, tmp_path):
         "поруч із бінарником зʼявилась тека data, хоча оператор оголосив "
         "іншу — саме так продукт і роздвоював власний стан"
     )
+
+
+def test_entry_and_config_name_the_same_database_file(bootstrap, tmp_path):
+    """Два виробники шляху до бази мусять називати ОДИН файл.
+
+    Виміряно 04.09.2026 в пакунку. Шлях до бази рахували двоє, і по-різному:
+
+        _phantom_entry._bootstrap_env()  ->  <дані>/phantom.db
+        config.PhantomConfig.database_url ->  <дані>/sqlite/phantom.db
+
+    У запакованій збірці перемагав вхідник (env б-є `default_factory`), у
+    дереві — config. Тобто та сама програма клала базу у два різні місця
+    залежно від того, як її запустили, і мовчала про це. На диску лишалась
+    приманка: `<дані>/sqlite/phantom.db` на 0 байтів — файл, який виглядає
+    як база й нею не є. Хто переносив би дані між установками, узяв би його
+    й «загубив» усе.
+
+    Сторож питає не рядок, а ЗГОДУ: беремо те, що виставив вхідник, і те,
+    що порахував би config САМ, якби вхідник мовчав. Розійдуться будь-коли й
+    з будь-якої причини — тут почервоніє. Літерала шляху тут навмисно немає:
+    записаний двічі, він проходив би повз будь-яку зміну домовленості.
+    """
+    run, _ = bootstrap
+    declared = tmp_path / "declared-data"
+    entry_url = run(data=declared)["DATABASE_URL"]
+
+    from config import PhantomConfig
+
+    os.environ.pop("DATABASE_URL", None)
+    # `_env_file=None` — щоб не приїхав DATABASE_URL із чийогось `.env` і не
+    # зробив цей тест зеленим ні про що.
+    config_url = PhantomConfig(_env_file=None).database_url
+
+    assert entry_url == config_url, (
+        "вхідник і config називають РІЗНІ бази:\n"
+        f"  _phantom_entry: {entry_url}\n"
+        f"  config.py:      {config_url}\n"
+        "У пакунку виграє перший, у дереві другий — тобто продукт кладе стан "
+        "у два місця залежно від способу запуску, і в порожньому лишається "
+        "приманка на 0 байтів."
+    )
+
+
+def test_database_does_not_sit_at_the_root_of_the_data_dir(bootstrap, tmp_path):
+    """Дзеркало до попереднього: саме той шлях, який був у пакунку, — не наш.
+
+    Тест вище стереже ЗГОДУ двох виробників; він лишився б зеленим, якби
+    обидва раптом переїхали в корінь теки даних. Цей називає вимір: база
+    живе в підтеці `sqlite/`, як і решта видів даних (`chroma/`, `tls/`,
+    `identity/`), а не поруч із ними в корені.
+    """
+    run, _ = bootstrap
+    declared = tmp_path / "declared-data"
+    env = run(data=declared)
+
+    db_file = Path(env["DATABASE_URL"].split("///", 1)[1])
+    assert db_file.parent != declared, (
+        f"база лягла в КОРІНЬ теки даних ({db_file}) — рівно те, що вже "
+        "розвело пакунок і дерево"
+    )
+    from paths import resolve_data_dir
+
+    assert db_file.parent == resolve_data_dir("sqlite"), (
+        f"база не в підтеці, яку оголошує paths.resolve_data_dir('sqlite'): "
+        f"{db_file.parent}"
+    )
+
+
+def test_legacy_db_at_data_root_is_adopted(bootstrap, tmp_path):
+    """База зі СТАРОГО місця мусить переїхати сама.
+
+    Виправлення шляху без переїзду коштувало б рівно того, від чого воно
+    рятує: у кожного, хто вже ставив бету, база лежить у корені теки даних, і
+    вузол, почавши дивитись у `sqlite/`, завів би порожню. Людина побачила б
+    стерті чати й памʼять — тобто саме «втратив усе», лише з іншого боку.
+    """
+    run, _ = bootstrap
+    declared = tmp_path / "declared-data"
+    declared.mkdir()
+    legacy = declared / "phantom.db"
+    legacy.write_bytes(b"REAL-DB-BYTES" * 100)
+    (declared / "phantom.db-wal").write_bytes(b"wal")
+    (declared / "phantom.db-shm").write_bytes(b"shm")
+
+    env = run(data=declared)
+    moved = Path(env["DATABASE_URL"].split("///", 1)[1])
+
+    assert moved.is_file(), f"база не переїхала: {moved} не існує"
+    assert moved.read_bytes() == b"REAL-DB-BYTES" * 100, "переїхали не ті байти"
+    assert not legacy.exists(), "стара база лишилась поруч — знову дві правди на диску"
+    for suffix in ("-wal", "-shm"):
+        assert moved.with_name(moved.name + suffix).is_file(), (
+            f"{suffix} лишився позаду — це викинуті незакріплені транзакції"
+        )
+
+
+def test_adoption_never_overwrites_a_live_db(bootstrap, tmp_path):
+    """Дзеркало: якщо на новому місці ВЖЕ є база, стара її не затирає.
+
+    Без цього переїзд сам став би тим знищенням даних, проти якого написаний:
+    достатньо було б колись запустити пакунок обома способами.
+    """
+    run, _ = bootstrap
+    declared = tmp_path / "declared-data"
+    (declared / "sqlite").mkdir(parents=True)
+    live = declared / "sqlite" / "phantom.db"
+    live.write_bytes(b"LIVE-DB" * 500)
+    stale = declared / "phantom.db"
+    stale.write_bytes(b"STALE-DB")
+
+    env = run(data=declared)
+    target = Path(env["DATABASE_URL"].split("///", 1)[1])
+
+    assert target == live
+    assert live.read_bytes() == b"LIVE-DB" * 500, "живу базу затерто старою"
+    assert stale.is_file(), "стару базу видалено, хоча переїзд не відбувся"
 
 
 def test_declared_models_dir_owns_every_hf_cache(bootstrap, tmp_path):

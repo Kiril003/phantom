@@ -28,6 +28,11 @@
 #      всередині пакунка, а не зашитий літерал «0.1.0».
 #   5. TLS: вузол у пакунку СЛУХАЄ порт пари, і його сертифікат дає
 #      відбиток — той, що поїде в QR. Міряється СЛУХАЧ, не файл.
+#   6. TMPFS: на машині, де `/tmp` — tmpfs (Arch, Fedora — за замовчуванням),
+#      пакунок СТАРТУЄ. Доводиться двома прогонами того самого бінарника:
+#      без гака AppRun він мусить УПАСТИ, з гаком — піднятись, і TMPDIR
+#      мусить виявитись не в памʼяті. Контроль, який раптом пройшов, —
+#      теж червоне: значить стовп осліп.
 #
 # ЩО ЦІ ВОРОТА НЕ ДОВОДЯТЬ (чесно, щоб ніхто не подумав інакше):
 #   * скло. У контейнері немає дисплея, тож `phantom-os-shell` (Tauri) тут
@@ -51,6 +56,10 @@
 #   scripts/clean_machine_gate.sh --artifact СТАРИЙ.AppImage # без паспорта
 #   scripts/clean_machine_gate.sh --skip-tls --images debian:12-slim
 #     ↑ п'ятий стовп: слухача немає, і це видно ІМЕННО на слухачі.
+#   scripts/clean_machine_gate.sh --tmpfs-mib 4096
+#     ↑ шостий стовп мусить сказати «СТОВП ОСЛІП»: у 4 ГіБ tmpfs розпаковка
+#       влазить, контроль проходить — і ворота зобовʼязані назвати це
+#       червоним, бо доводити їм більше нічого.
 #
 set -uo pipefail
 
@@ -97,7 +106,10 @@ head1() { printf '\n\033[1m%s\033[0m\n' "$*"; }
 die()  { printf '\n[ВОРОТА] ПОМИЛКА: %s\n' "$*" >&2; exit 2; }
 
 usage() {
-  sed -n '2,54p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  # Межа шапки — НЕ число рядка. «2,54p» тут уже протухло: шапка виросла на
+  # шостий стовп, і --help почав обрізати текст посеред речення. Читаємо до
+  # першого не-коментаря, тобто до самого коду.
+  awk 'NR==1 {next} /^#/ {sub(/^# ?/, ""); print; next} {exit}' "${BASH_SOURCE[0]}"
   exit 0
 }
 
@@ -109,6 +121,7 @@ while [ $# -gt 0 ]; do
     --port)      PORT="${2-}";     shift 2 ;;
     --lock-wait) LOCK_WAIT="${2-}"; shift 2 ;;
     --skip-tls)  SKIP_TLS=1; shift ;;
+    --tmpfs-mib) PHANTOM_GATE_TMPFS_MIB="${2-}"; shift 2 ;;
     --keep)      KEEP=1; shift ;;
     -h|--help)   usage ;;
     *) die "невідомий аргумент: $1" ;;
@@ -607,6 +620,222 @@ run_image() {
 }
 
 # ─────────────────────────────────────────────────────────────────────────
+# СТОВП 6: /tmp — tmpfs (машина Arch/Fedora, а не наш контейнер)
+# ─────────────────────────────────────────────────────────────────────────
+#
+# Чому цього стовпа не було і чому дефект проліз. Усе вище бігає в
+# контейнерах, де `/tmp` — звичайна тека на overlayfs, та ще й сідекар
+# запускається з примусовим `TMPDIR=/work/tmp` на диску. Тобто прилад
+# справний, а обстановка не та: у ЛЮДИНИ на Arch і Fedora `/tmp` — tmpfs за
+# замовчуванням, і onefile розпаковується в ПАМʼЯТЬ.
+#
+# Що саме ламається. У tmpfs немає власного місця: сторінки беруться з
+# памʼяті й свопу. Коли доступного менше, ніж просить розпаковка, запис
+# падає з ENOSPC — і бутлоадер каже:
+#
+#     [PYI-…:ERROR] Failed to extract entry: cv2/cv2.abi3.so
+#
+# Заміряно на кандидаті 1b700934: розпаковка важить 1 679 286 096 Б
+# (1601 МіБ), а cv2.abi3.so — лише 139-й запис із 17823, на позначці
+# 261–323 МіБ. Тобто ім-я у повідомленні називає не винуватця, а того, на
+# кому скінчилось місце: найбільший файл бандла зовсім інший
+# (torch/lib/libtorch_cpu.so, 414 МіБ).
+#
+# Стелю tmpfs тут задає `--tmpfs /tmp:size=…`, а не тиск на памʼять хоста.
+# Це навмисно: ENOSPC той самий, але вимір ДЕТЕРМІНОВАНИЙ і обмежений —
+# ворота не можуть зʼїсти памʼять спільної машини й підставити чужу збірку.
+#
+# ЩО ЦЕЙ СТОВП ДОВОДИТЬ, двома прогонами того самого бінарника:
+#   КОНТРОЛЬ — без гака, TMPDIR за замовчуванням (= tmpfs): мусить ВПАСТИ.
+#              Якщо він ПРОЙДЕ, обстановка більше не відтворює дефект, стовп
+#              осліп — і це теж червоне. Зелене, що не вміє почервоніти, тут
+#              коштувало б наступній збірці тихо загубленого лікування.
+#   ЛІКУВАННЯ — гак засорсено рівно так, як це робить AppRun: мусить ПРОЙТИ,
+#              і TMPDIR мусить виявитись НЕ на tmpfs.
+TMPFS_MIB="${PHANTOM_GATE_TMPFS_MIB:-320}"
+
+write_tmpfs_payload() {
+  cat > "$1" <<'TPAYLOAD'
+#!/usr/bin/env bash
+set -u
+kv() { printf 'KV %s=%s\n' "$1" "$2"; }
+export HOME=/work
+
+cd /work || { kv FATAL "no /work"; exit 90; }
+
+# ── 0. довести, що обстановка ТА САМА, яку ми обіцяли ────────────────────
+# Без цього стовп доводив би невідомо що: якби docker проігнорував
+# --tmpfs, контроль упав би з іншої причини, а звіт назвав би це дефектом.
+kv TMP_FS  "$(df -PT /tmp | awk 'NR==2{print $2}')"
+kv TMP_MIB "$(df -PBM /tmp | awk 'NR==2{gsub(/M/,"",$4); print $4+0}')"
+
+# ── 1. розпакувати пакунок ───────────────────────────────────────────────
+# У /work (bind-mount на диск хоста), а не в /tmp: сам AppImage важить
+# ще ~0,94 ГіБ, і в 320-мегабайтний tmpfs він не влізе за побудовою.
+if ! /artifact.AppImage --appimage-extract >/work/extract.log 2>&1; then
+  kv EXTRACT_OK 0
+  kv EXTRACT_TAIL "$(tail -2 /work/extract.log | tr '\n' ' ' | tr -d '"')"
+  exit 91
+fi
+kv EXTRACT_OK 1
+BIN=/work/squashfs-root/usr/bin/phantom-backend
+HOOK=/work/squashfs-root/apprun-hooks/phantom-runtime.sh
+[ -x "${BIN}" ] || { kv FATAL "немає ${BIN}"; exit 92; }
+
+# ── 2. чи гак узагалі Є і чи його ХТОСЬ КЛИЧЕ ────────────────────────────
+# Два різні твердження. Файл поруч, якого ніхто не сорсить, — це рівно
+# «написане, але не викликане», і воно виглядає як лікування.
+[ -f "${HOOK}" ] && kv HOOK_PRESENT 1 || kv HOOK_PRESENT 0
+kv APPRUN_SOURCES_HOOK "$(grep -c 'phantom-runtime\.sh' /work/squashfs-root/AppRun 2>/dev/null || echo 0)"
+kv HOOK_NEED_MIB "$(sed -n 's/.*local need_mib=\([0-9]*\).*/\1/p' "${HOOK}" 2>/dev/null | head -1)"
+
+# ── 3. КОНТРОЛЬ: так, як воно падало в людини ────────────────────────────
+# Гак не сорситься. TMPDIR порожній, отже бутлоадер бере /tmp — tmpfs.
+( unset TMPDIR; "${BIN}" --selftest-pdf /work/control.pdf ) >/work/control.log 2>&1
+kv CONTROL_RC "$?"
+kv CONTROL_TAIL "$(grep -m1 -iE 'failed to extract|error|no space' /work/control.log \
+                   | tr -d '"' | cut -c1-140)"
+kv CONTROL_PDF_BYTES "$(stat -c %s /work/control.pdf 2>/dev/null || echo 0)"
+# Скільки він устиг записати, перш ніж упертись у стелю. Це те саме число,
+# за яким видно, ЧОМУ в повідомленні опинився саме cv2: розпаковка помирає
+# на тому записі, який перетнув межу, а не на найбільшому файлі бандла.
+kv CONTROL_TMP_LEFT_MIB "$(df -PBM /tmp | awk 'NR==2{gsub(/M/,"",$4); print $4+0}')"
+kv CONTROL_MEI_MIB "$(du -sm /tmp/_MEI* 2>/dev/null | awk '{s+=$1} END{print s+0}')"
+rm -rf /tmp/_MEI* 2>/dev/null
+
+# ── 4. ЛІКУВАННЯ: рівно те, що робить AppRun ─────────────────────────────
+# `this_dir` — та сама змінна, яку AppRun оголошує перед сорсингом гаків;
+# сайдкар успадкує це середовище, бо main.rs не робить env_clear().
+if [ -f "${HOOK}" ]; then
+  this_dir=/work/squashfs-root
+  # shellcheck disable=SC1090
+  . "${HOOK}" 2>/work/hook.log
+  kv CURED_TMPDIR "${TMPDIR:-порожньо}"
+  kv CURED_TMPDIR_FS "$(df -PT "${TMPDIR:-/tmp}" 2>/dev/null | awk 'NR==2{print $2}')"
+  "${BIN}" --selftest-pdf /work/cured.pdf >/work/cured.log 2>&1
+  kv CURED_RC "$?"
+  kv CURED_TAIL "$(grep -m1 -iE 'failed to extract|error|no space' /work/cured.log \
+                   | tr -d '"' | cut -c1-140)"
+  kv CURED_PDF_BYTES "$(stat -c %s /work/cured.pdf 2>/dev/null || echo 0)"
+else
+  kv CURED_RC 99
+fi
+
+chown -R "${GATE_UID:-0}:${GATE_GID:-0}" /work 2>/dev/null
+exit 0
+TPAYLOAD
+  chmod +x "$1"
+}
+
+run_tmpfs_pillar() {
+  local img="$1"
+  local tag; tag="$(echo "${img}" | tr ':/' '__')"
+  local work="${WORK_ROOT}/${RUN_ID}-tmpfs-${tag}"
+  local name="phantom-gate-tmpfs-${RUN_ID}-${tag}"
+  local out="${work}/gate.out"
+
+  rm -rf "${work}"; mkdir -p "${work}"
+  WORKDIRS+=("${work}"); CONTAINERS+=("${name}")
+  write_tmpfs_payload "${work}/payload.sh"
+
+  head1 "── СТОВП 6: /tmp як tmpfs (${TMPFS_MIB} МіБ), образ ${img} ──"
+  if ! preflight "tmpfs-стовп"; then
+    RES_LINES+=("ПРОПУЩЕНО tmpfs-стовп  машина зайнята (Gradle/памʼять)")
+    return 70
+  fi
+
+  # `exec` навмисно: типовий docker --tmpfs монтує noexec, а `/tmp` на
+  # живій машині виконуваний. Без цього контроль падав би з ЧУЖОЇ причини,
+  # і ворота показали б дефект там, де його немає.
+  flock -w "${LOCK_WAIT}" "${LOCK}" \
+    docker run --rm --name "${name}" \
+      --memory 5g --memory-swap 5g \
+      --tmpfs "/tmp:rw,exec,size=${TMPFS_MIB}m" \
+      -e GATE_UID="$(id -u)" -e GATE_GID="$(id -g)" \
+      -v "${ARTIFACT}:/artifact.AppImage:ro" \
+      -v "${work}:/work" \
+      "${img}" bash /work/payload.sh >"${out}" 2>&1 &
+  local child=$!
+  CHILDREN+=("${child}")
+  local rc=0
+  wait "${child}" || rc=$?
+
+  unset R; declare -gA R
+  local k v line kvn=0
+  while IFS= read -r line; do
+    case "${line}" in
+      KV\ *) k="${line#KV }"; v="${k#*=}"; k="${k%%=*}"; R["${k}"]="${v}"; kvn=$((kvn + 1)) ;;
+    esac
+  done <"${out}" 2>/dev/null
+  R[KVCOUNT]="${kvn}"; R[RC]="${rc}"
+
+  if [ "${kvn}" = "0" ]; then
+    printf '  \033[31mЧЕРВОНЕ\033[0m — %s\n' "ВИМІР НЕ ВІДБУВСЯ: контейнер не стартував (rc=${rc})"
+    RES_LINES+=("ЧЕРВОНЕ tmpfs-стовп  вимір не відбувся, про пакунок не сказано нічого")
+    return 1
+  fi
+
+  local fails=()
+
+  # Обстановка. Якщо /tmp тут не tmpfs або він великий — стовп міряє не те.
+  say "/tmp у контейнері: ${R[TMP_FS]:-?}, вільно ${R[TMP_MIB]:-?} МіБ"
+  if [ "${R[TMP_FS]:-}" != "tmpfs" ]; then
+    fails+=("ОБСТАНОВКА НЕ ТА: /tmp це '${R[TMP_FS]:-?}', а не tmpfs — стовп нічого не доводить")
+  fi
+
+  if [ "${R[EXTRACT_OK]:-0}" != "1" ]; then
+    fails+=("ПАКУНОК НЕ РОЗПАКУВАВСЯ: ${R[EXTRACT_TAIL]:-без подробиць}")
+  fi
+
+  # Гак: є і його кличуть — два різні твердження.
+  if [ "${R[HOOK_PRESENT]:-0}" != "1" ]; then
+    fails+=("ГАКА НЕМАЄ В ПАКУНКУ: apprun-hooks/phantom-runtime.sh відсутній")
+  elif [ "${R[APPRUN_SOURCES_HOOK]:-0}" = "0" ]; then
+    fails+=("ГАК Є, АЛЕ ЙОГО НІХТО НЕ КЛИЧЕ: AppRun не сорсить phantom-runtime.sh")
+  else
+    say "гак у пакунку є, AppRun його сорсить; просить ${R[HOOK_NEED_MIB]:-?} МіБ"
+  fi
+
+  # КОНТРОЛЬ мусить упасти. Успіх тут — це осліплий стовп, і мовчати про
+  # це не можна: наступна збірка загубила б лікування непомітно.
+  if [ "${R[CONTROL_RC]:-0}" = "0" ]; then
+    fails+=("СТОВП ОСЛІП: без гака пакунок ПІДНЯВСЯ на ${R[TMP_MIB]:-?}-МіБ tmpfs — обстановка більше не відтворює дефект; підніми --tmpfs-mib")
+  elif ! printf '%s' "${R[CONTROL_TAIL]:-}" | grep -qi 'extract\|no space'; then
+    # Контроль упав — але чи ВІД ТОГО? Падіння з іншої причини (немає
+    # exec на tmpfs, бракує бібліотеки, урізаний образ) виглядало б як
+    # чесне червоне і мовчки перетворило б стовп на окрасу: він
+    # «відтворював би дефект», не відтворюючи його.
+    fails+=("КОНТРОЛЬ УПАВ НЕ ВІД МІСЦЯ (код ${R[CONTROL_RC]}): «${R[CONTROL_TAIL]:-без рядка помилки}» — стовп міряє не те, що обіцяє")
+  else
+    say "КОНТРОЛЬ (без гака, TMPDIR=/tmp): впав, код ${R[CONTROL_RC]}"
+    say "  ${R[CONTROL_TAIL]:-без рядка помилки}"
+    say "  устиг записати ${R[CONTROL_MEI_MIB]:-?} МіБ, у tmpfs лишилось ${R[CONTROL_TMP_LEFT_MIB]:-?} МіБ"
+  fi
+
+  # ЛІКУВАННЯ мусить пройти, і саме на диску.
+  if [ "${R[CURED_RC]:-1}" != "0" ]; then
+    fails+=("ЛІКУВАННЯ НЕ ДІЄ: з гаком пакунок теж упав (код ${R[CURED_RC]:-?}): ${R[CURED_TAIL]:-без подробиць}")
+  elif [ "${R[CURED_TMPDIR_FS]:-}" = "tmpfs" ] || [ "${R[CURED_TMPDIR_FS]:-}" = "ramfs" ]; then
+    fails+=("ГАК ОБРАВ ПАМʼЯТЬ: TMPDIR=${R[CURED_TMPDIR]:-?} лежить на ${R[CURED_TMPDIR_FS]} — це та сама вада, лише іншим шляхом")
+  elif [ "${R[CURED_PDF_BYTES]:-0}" -lt 1 ] 2>/dev/null; then
+    fails+=("ЛІКУВАННЯ ПОРОЖНЄ: код 0, а PDF нульового розміру — сідекар не доїхав до роботи")
+  else
+    say "ЛІКУВАННЯ (гак як в AppRun): пройшло, TMPDIR=${R[CURED_TMPDIR]} на ${R[CURED_TMPDIR_FS]}"
+    say "  сайдкар намалював PDF ${R[CURED_PDF_BYTES]} Б — тобто розпакувався ПОВНІСТЮ"
+  fi
+
+  if [ ${#fails[@]} -eq 0 ]; then
+    printf '  \033[32mЗЕЛЕНЕ\033[0m — %s\n' "tmpfs-стовп: без гака падає, з гаком стартує"
+    RES_LINES+=("ЗЕЛЕНЕ  tmpfs-стовп  контроль впав (${R[CONTROL_RC]}), лікування пройшло, TMPDIR на ${R[CURED_TMPDIR_FS]}")
+    return 0
+  fi
+  local f
+  for f in "${fails[@]}"; do printf '  \033[31mЧЕРВОНЕ\033[0m — %s\n' "${f}"; done
+  RES_LINES+=("ЧЕРВОНЕ tmpfs-стовп  ${fails[0]}")
+  return 1
+}
+
+# ─────────────────────────────────────────────────────────────────────────
 # Суд над одним прогоном
 # ─────────────────────────────────────────────────────────────────────────
 # Кожна перевірка називає СВОЮ причину. «Ні» без причини не відрізнити від
@@ -786,6 +1015,19 @@ for img in ${IMAGES}; do
   fi
   verdict || RED=1
 done
+
+# Стовп 6 — ОДИН раз, на першому образі. Він доводить властивість ПАКУНКА
+# (куди лягає розпаковка onefile), а не властивість дистрибутива, тож ганяти
+# його тричі означало б тричі заплатити 1,6 ГіБ розпаковки за той самий факт.
+# Іде ПІСЛЯ циклу навмисно: він переписує `R`, і всередині циклу затер би
+# виміри образу до того, як `verdict` їх прочитає.
+if [ "${GATE_SKIP_TMPFS:-0}" = "1" ]; then
+  say ""
+  say "УВАГА: стовп 6 (tmpfs) пропущено на вимогу GATE_SKIP_TMPFS=1 — про"
+  say "поведінку на Arch/Fedora, де /tmp у памʼяті, тут не сказано нічого."
+else
+  run_tmpfs_pillar "$(echo "${IMAGES}" | awk '{print $1}')" || RED=1
+fi
 
 head1 "ПІДСУМОК"
 for l in "${RES_LINES[@]:-}"; do say "${l}"; done

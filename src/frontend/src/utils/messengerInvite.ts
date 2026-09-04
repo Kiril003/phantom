@@ -197,7 +197,22 @@ export async function nodeIdOf(compact: string): Promise<string | null> {
   }
 }
 
-/** Адреса, за якою цей вузол видно браузеру. Людина може її виправити. */
+/**
+ * Адреса, за якою цей вузол видно ІНШОМУ пристрою.
+ *
+ * Тут стояв `window.location.origin` — і це найгірший можливий здогад:
+ * у розробці він дає `http://127.0.0.1:5175` (петля, для телефона порожнє
+ * місце), а в запакованому застосунку — origin asset-протоколу Tauri,
+ * який не є мережевою адресою взагалі. Тобто запрошення з ПК носило
+ * адресу, за якою до нього НІХТО не міг достукатись, і це не залежало від
+ * того, чи все інше в парі справне.
+ *
+ * Правду про адресу знає лише вузол: `GET /health` віддає
+ * `tls_listening.bound` — інтерфейси, на яких слухач СПРАВДІ став, і порт.
+ * Тому справжня адреса береться звідти (`selfAddress()`), а ця функція
+ * лишається запасним здогадом на випадок, коли ядро мовчить, і людина
+ * бачить його в полі, щоб виправити рукою.
+ */
 export function selfAddressGuess(): string {
   try {
     return window.location.origin;
@@ -238,6 +253,30 @@ export async function inviteInClipboard(): Promise<string | null> {
     const text = await navigator.clipboard.readText();
     if (!text) return null;
     return parseInvite(text) ? text : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Адреса вузла зі слів самого вузла: `https://<інтерфейс>:<порт>`.
+ *
+ * `null` — ядро не відповіло або слухач не став на жоден інтерфейс; тоді
+ * викликач лишається зі здогадом `selfAddressGuess()` і мусить сказати
+ * людині, що адресу варто перевірити. Петлю (`127.0.0.1`, `::1`) сюди не
+ * пускаємо навмисно: для іншого пристрою вона нічого не означає.
+ */
+export async function selfAddress(): Promise<string | null> {
+  try {
+    const { fetchHealth } = await import('../services/organismApi');
+    const pulse = await fetchHealth();
+    if (!pulse.ok) return null;
+    const tls = pulse.data.tls_listening;
+    if (!tls || !tls.enabled || !tls.port) return null;
+    const host = (tls.bound || []).find(
+      (h) => h && h !== '127.0.0.1' && h !== '::1' && h !== '0.0.0.0',
+    );
+    return host ? `https://${host}:${tls.port}` : null;
   } catch {
     return null;
   }

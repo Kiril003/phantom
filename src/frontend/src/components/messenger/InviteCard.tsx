@@ -3,7 +3,7 @@ import { Check, Copy, QrCode, Share2, X } from 'lucide-react';
 import QRCode from 'qrcode';
 import { messengerApi } from '../../services/messengerApi';
 import { soundFx } from '../../utils/messengerSound';
-import { copyText, encodeInvite, selfAddressGuess } from '../../utils/messengerInvite';
+import { copyText, encodeInvite, selfAddress, selfAddressGuess } from '../../utils/messengerInvite';
 
 const NAME_KEY = 'phantom_invite_name';
 const ADDR_KEY = 'phantom_invite_address';
@@ -26,11 +26,30 @@ export const InviteCard: React.FC<InviteCardProps> = ({ onClose }) => {
     () => localStorage.getItem(ADDR_KEY) ?? selfAddressGuess(),
   );
   const [compact, setCompact] = useState<string | null>(null);
+  /** true — адресу назвав сам вузол; false — це наш здогад із браузера. */
+  const [addressFromNode, setAddressFromNode] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
   const [shared, setShared] = useState(false);
   const [showQr, setShowQr] = useState(false);
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
+
+  // Адресу питаємо у вузла: браузерний origin у розробці — петля, а в
+  // пакунку — asset-протокол Tauri; ні те, ні те телефон не відкриє.
+  // Людину не перебиваємо: якщо вона вже правила поле руками (адреса
+  // збережена), лишаємо її вибір.
+  useEffect(() => {
+    if (localStorage.getItem(ADDR_KEY)) return;
+    let alive = true;
+    void selfAddress().then((addr) => {
+      if (!alive || !addr) return;
+      setAddress(addr);
+      setAddressFromNode(true);
+    });
+    return () => {
+      alive = false;
+    };
+  }, []);
 
   // Ключ беремо один раз: кожен виклик /identity витрачає одноразовий prekey,
   // а запас у вузла скінченний — смикати його на кожен рух пальця не можна.
@@ -139,8 +158,9 @@ export const InviteCard: React.FC<InviteCardProps> = ({ onClose }) => {
             className="mt-1 w-full px-3 py-2 text-[13px] font-mono rounded-xl border border-[#E6DFD3] bg-white focus:outline-none focus:border-[#E87A42]"
           />
           <span className="text-[11px] text-[#7A6A55] block mt-1 leading-snug">
-            Підставили ту, за якою ви самі відкрили цю сторінку. Якщо ваш вузол видно
-            ззовні під іншою — впишіть її, інакше листи до вас чекатимуть.
+            {addressFromNode
+              ? 'Адресу назвав сам вузол — це той інтерфейс і порт, на яких стоїть його слухач. Якщо ззовні його видно під іншою адресою, впишіть її.'
+              : 'Це ЗДОГАД із адреси, за якою ви відкрили цю сторінку, — вузол своєї не назвав. Для іншого пристрою вона може нічого не означати: перевірте її, інакше листи до вас чекатимуть.'}
           </span>
         </label>
       </div>

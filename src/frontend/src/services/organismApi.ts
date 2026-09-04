@@ -53,6 +53,12 @@ export interface HealthPulse {
    */
   ai_fallback_model_loaded?: boolean | null;
   /**
+   * Де слухач TLS СПРАВДІ став (`bound`) і на якому порту. Єдине джерело
+   * правди про адресу, за якою вузол видно іншому пристрою: браузерний
+   * `location.origin` у розробці дає петлю, а в пакунку — asset-протокол.
+   */
+  tls_listening?: { bound: string[]; port: number; enabled: boolean } | null;
+  /**
    * Стан моделі довготривалої памʼяті (Сесія 5, 604bef9). `reason` —
    * готове речення українською ДЛЯ ЛЮДИНИ; коли модель є, `present`
    * істинний і `reason` порожній. Скло не складає власного тексту:

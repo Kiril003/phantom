@@ -26,12 +26,17 @@
 #      з попереднім числом робить людина;
 #   4. ПАСПОРТ: `/health` називає версію й коміт із `build_info.json`
 #      всередині пакунка, а не зашитий літерал «0.1.0».
+#   5. TLS: вузол у пакунку СЛУХАЄ порт пари, і його сертифікат дає
+#      відбиток — той, що поїде в QR. Міряється СЛУХАЧ, не файл.
 #
 # ЩО ЦІ ВОРОТА НЕ ДОВОДЯТЬ (чесно, щоб ніхто не подумав інакше):
 #   * скло. У контейнері немає дисплея, тож `phantom-os-shell` (Tauri) тут
 #     не піднімається. Доводиться СІДЕКАР — той бінарник, що обслуговує
 #     `/health` і всі маршрути. Вигляд вікна доводиться на склі, не тут.
 #   * поведінка на залізі власника: інші ядро, драйвери, звук.
+#   * рукостискання TLS. Зонд — голий bash, йому нема чим його зробити, і для
+#     твердження «слухач став» воно не потрібне. Що саме віддає сертифікат
+#     телефону — доводить телефон, не ці ворота.
 #
 # ЯК ЗАПУСКАТИ:
 #   scripts/clean_machine_gate.sh                       # свіжий артефакт
@@ -44,6 +49,8 @@
 #   scripts/clean_machine_gate.sh --artifact /немає/такого   # порожня ціль
 #   scripts/clean_machine_gate.sh --artifact ОБРІЗАНИЙ.AppImage
 #   scripts/clean_machine_gate.sh --artifact СТАРИЙ.AppImage # без паспорта
+#   scripts/clean_machine_gate.sh --skip-tls --images debian:12-slim
+#     ↑ п'ятий стовп: слухача немає, і це видно ІМЕННО на слухачі.
 #
 set -uo pipefail
 
@@ -90,7 +97,7 @@ head1() { printf '\n\033[1m%s\033[0m\n' "$*"; }
 die()  { printf '\n[ВОРОТА] ПОМИЛКА: %s\n' "$*" >&2; exit 2; }
 
 usage() {
-  sed -n '2,50p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
+  sed -n '2,54p' "${BASH_SOURCE[0]}" | sed 's/^# \{0,1\}//'
   exit 0
 }
 
@@ -327,16 +334,39 @@ fi
 # ── 3. підняти сідекар ───────────────────────────────────────────────────
 # TMPDIR — на прив'язану теку (диск), бо onefile розпакує туди ~1,5 ГБ на
 # КОЖНОМУ старті. Це жива ціна, не разова.
-mkdir -p /work/tmp /work/data /work/models
+# Тека даних названа ОДИН раз: її ж читає перевірка відбитка нижче
+# (`security/tls_identity.cert_path()` = <дані>/tls/node-cert.pem). Двома
+# літералами вони розійшлись би при першій же правці — і зонд шукав би
+# сертифікат не там, де його поклав вузол, звітуючи «сертифіката немає».
+DATA_DIR=/work/data
+mkdir -p /work/tmp "${DATA_DIR}" /work/models
 cd "${BIN}" || exit 93
 env_extra=()
 [ "${GATE_SKIP_TLS:-0}" = "1" ] && env_extra+=("PHANTOM_SKIP_TLS=1")
 t1=$SECONDS
 env TMPDIR=/work/tmp PORT="${PORT}" HOME=/work \
-    PHANTOM_DATA_DIR=/work/data PHANTOM_MODELS_DIR=/work/models \
+    PHANTOM_DATA_DIR="${DATA_DIR}" PHANTOM_MODELS_DIR=/work/models \
     "${env_extra[@]}" \
     ./phantom-backend >/work/backend.log 2>&1 &
 PID=$!
+
+# Зупинка з ПОВІДЦЕМ — вимір, а не косметика. 04.09 цей крок затримав ворота
+# на 16 хвилин: після SIGTERM пакунок ЖИВ, писав у лог спроби ШІ ще 13 хвилин
+# по сигналу, а `wait` чекав на нього без кінця — тримаючи замок спільної
+# машини й чужі черги за собою. Тепер «не вмер від SIGTERM» — це ЧИСЛО у
+# звіті, а не зависання: те саме правило, що й для проби з'єднання вище.
+stop_node() {
+  local w=0
+  kill "${PID}" 2>/dev/null
+  while kill -0 "${PID}" 2>/dev/null && [ "${w}" -lt 20 ]; do sleep 1; w=$((w + 1)); done
+  if kill -0 "${PID}" 2>/dev/null; then
+    kv SIGTERM_IGNORED_S "${w}"
+    kill -9 "${PID}" 2>/dev/null
+  else
+    kv EXIT_AFTER_SIGTERM_S "${w}"
+  fi
+  wait "${PID}" 2>/dev/null
+}
 
 # ── 4. чекати на /health, ДОВГО ──────────────────────────────────────────
 http_get() { # $1 шлях, $2 файл тіла -> друкує рядок статусу
@@ -366,7 +396,7 @@ if [ -z "${STATUS}" ]; then
   kv HEALTH_REACHED 0
   kv WAITED $((SECONDS - t1))
   kv LOG_TAIL "$(tail -12 /work/backend.log | tr '\n' '|' | tr -d '"')"
-  kill "${PID}" 2>/dev/null; wait "${PID}" 2>/dev/null
+  stop_node
   chown -R "${HOST_UID}:${HOST_GID}" /work 2>/dev/null
   exit 94
 fi
@@ -393,8 +423,113 @@ else
   kv OPENAPI_STATUS "недосяжно"
 fi
 
+# ── 6b. TLS: СЛУХАЧ і ВІДБИТОК ───────────────────────────────────────────
+# Останній стовп агентських воріт бети: чи вузол У ПАКУНКУ слухає https і чи
+# має відбиток, який поїде в QR.
+#
+# Міряємо СЛУХАЧА, а не файл, і це не педантизм. Продукт уже провів цю межу
+# сам: `api/routes_pair.py::_tls_is_live()` дивиться на `listener.bound`, а не
+# на наявність сертифіката — бо файл створюється незалежно від того, чи слухач
+# піднявся. Був випадок, коли відбиток був справжній, конверт вів на
+# `https://…:8443`, а слухача не було: телефон чесно йшов туди, де нікого
+# немає, і провал виглядав як мережева проблема. Родина та сама, що «файл
+# існує ≠ інтерпретатор запускається».
+#
+# Порт НЕ зашитий: його називає сам вузол у /health.tls_listening.port, а туди
+# він потрапляє з config.pair_tls_port. Якщо вузол його не назве — стовп
+# недоведений, і так і буде сказано; підставляти 8443 «бо зазвичай так» —
+# означало б доводити збіг із власною константою.
+tls_block="$(grep -o '"tls_listening"[[:space:]]*:[[:space:]]*{[^}]*}' /work/health.json 2>/dev/null | head -1)"
+TLS_PORT="$(printf '%s' "${tls_block}" | grep -o '"port"[[:space:]]*:[[:space:]]*[0-9]\{1,\}' | grep -o '[0-9]\{1,\}$' | head -1)"
+kv TLS_PORT "${TLS_PORT:-}"
+# Слова вузла про себе. Вони йдуть у звіт ПОРУЧ із виміром, а не замість
+# нього: розбіжність між «enabled» і тим, що приймає з'єднання, — саме те,
+# заради чого цей стовп існує.
+claim_bound="$(printf '%s' "${tls_block}" | grep -o '"bound"[[:space:]]*:[[:space:]]*\[[^]]*\]' | sed 's/.*\[//; s/\]//' | tr -d '"' | tr ',' ' ')"
+kv TLS_CLAIM_BOUND "${claim_bound}"
+kv TLS_CLAIM_ENABLED "$(printf '%s' "${tls_block}" | grep -o '"enabled"[[:space:]]*:[[:space:]]*[a-z]\{1,\}' | sed 's/.*:[[:space:]]*//')"
+
+h2ip4() { printf '%d.%d.%d.%d' "0x${1:6:2}" "0x${1:4:2}" "0x${1:2:2}" "0x${1:0:2}"; }
+
+# Повідець на з'єднання — заміряно, а не про всяк випадок. Адреса зі слів
+# вузла може бути НЕДОСЯЖНОЮ (03.09 мережа машини змінилась під живим вузлом,
+# і `bound` показував стару адресу). Голий `/dev/tcp` на таку адресу висить до
+# таймауту ядра: на цій машині проба на мовчазну адресу не повернулась за 2
+# хвилини. Вимір, що зависає, — не вимір. `timeout` — з тих самих coreutils,
+# що `base64`; якщо його немає, кажемо про це і йдемо без повідця.
+HAVE_TIMEOUT=0
+command -v timeout >/dev/null 2>&1 && HAVE_TIMEOUT=1
+kv TLS_TOOL_TIMEOUT "${HAVE_TIMEOUT}"
+tcp_ok() {
+  if [ "${HAVE_TIMEOUT}" = "1" ]; then
+    # Адреси йдуть АРГУМЕНТАМИ, не підстановкою в текст команди: одна з них
+    # приходить із JSON, який склав вузол, і в дорогу до `bash -c` їй нема чого.
+    timeout 5 bash -c 'exec 3<>/dev/tcp/$0/$1' "$1" "$2" >/dev/null 2>&1
+  else
+    (exec 3<>"/dev/tcp/$1/$2") >/dev/null 2>&1
+  fi
+}
+
+KERNEL=""; KNOCKED=""; CONNECTED=""
+if [ -n "${TLS_PORT:-}" ] && [ "${TLS_PORT:-0}" != "0" ]; then
+  hexport="$(printf '%04X' "${TLS_PORT}")"
+  # ЯДРО, а не слова вузла: у /proc/net/tcp стан 0A — це LISTEN. Ця частина
+  # не залежить від жодного нашого інструмента і від жодної обіцянки процесу.
+  for pf in /proc/net/tcp /proc/net/tcp6; do
+    [ -r "${pf}" ] || continue
+    while read -r _sl loc _rem st _rest; do
+      [ "${st}" = "0A" ] || continue
+      [ "${loc#*:}" = "${hexport}" ] || continue
+      hx="${loc%%:*}"
+      if [ "${#hx}" -eq 8 ]; then KERNEL="${KERNEL}$(h2ip4 "${hx}") "
+      else KERNEL="${KERNEL}v6:${hx} "; fi
+    done < "${pf}"
+  done
+  # Стукаємо туди, куди має сенс: адреси з ядра, адреси зі слів вузла, і
+  # loopback. Одне ПРИЙНЯТЕ з'єднання = слухач став. Порожньо скрізь —
+  # слухача немає, і це вже не питання тлумачення.
+  seen=""
+  for a in ${KERNEL} ${claim_bound} 127.0.0.1; do
+    case "${a}" in v6:*) continue ;; esac
+    # Адреси зі слів вузла — це текст із JSON. У дорогу до `/dev/tcp/` йде
+    # лише те, що схоже на IPv4; решта — у звіт як «не адреса», не в шлях.
+    case "${a}" in *[!0-9.]*|"") continue ;; esac
+    case " ${seen} " in *" ${a} "*) continue ;; esac
+    seen="${seen}${a} "
+    KNOCKED="${KNOCKED}${a} "
+    if tcp_ok "${a}" "${TLS_PORT}"; then CONNECTED="${a}"; break; fi
+  done
+  # Окремо й навмисно: слухач сідає на LAN-адреси й НЕ на loopback
+  # (`tls_listener.lan_addresses()` викидає loopback). Телефон дзвонить на
+  # LAN-адресу, тож 0 тут — не вада, а очікуваний вимір.
+  if tcp_ok 127.0.0.1 "${TLS_PORT}"; then kv TLS_LOOPBACK 1; else kv TLS_LOOPBACK 0; fi
+fi
+kv TLS_KERNEL_LISTEN "${KERNEL% }"
+kv TLS_KNOCKED "${KNOCKED% }"
+kv TLS_CONNECT "${CONNECTED}"
+
+# Відбиток — ТИМ САМИМ способом, що й продукт
+# (`security/tls_identity.cert_fingerprint_sha256`): PEM → DER → sha256,
+# нижній регістр без роздільників. `base64` і `sha256sum` — з coreutils; якщо
+# в образі їх немає, стовп тут НЕДОВЕДЕНИЙ, і так і буде написано. Обхід не
+# вигадуємо: вимір, який доставляє собі інструменти, більше нічого не доводить.
+CERT="${DATA_DIR}/tls/node-cert.pem"
+kv TLS_CERT_PATH "${CERT}"
+have_b64=0; have_sha=0
+command -v base64    >/dev/null 2>&1 && have_b64=1
+command -v sha256sum >/dev/null 2>&1 && have_sha=1
+kv TLS_TOOL_BASE64 "${have_b64}"
+kv TLS_TOOL_SHA256 "${have_sha}"
+if [ -f "${CERT}" ]; then kv TLS_CERT_PRESENT 1; else kv TLS_CERT_PRESENT 0; fi
+if [ -f "${CERT}" ] && [ "${have_b64}" = "1" ] && [ "${have_sha}" = "1" ]; then
+  sed -n '/BEGIN CERTIFICATE/,/END CERTIFICATE/{/CERTIFICATE/d;p;}; /END CERTIFICATE/q' "${CERT}" \
+    | tr -d '\r\n ' | base64 -d >/work/node-cert.der 2>/dev/null
+  kv TLS_CERT_DER "$(stat -c %s /work/node-cert.der 2>/dev/null || echo 0)"
+  kv TLS_FINGERPRINT "$(sha256sum /work/node-cert.der 2>/dev/null | cut -d' ' -f1)"
+fi
+
 # ── 7. прибрати ──────────────────────────────────────────────────────────
-kill "${PID}" 2>/dev/null; wait "${PID}" 2>/dev/null
+stop_node
 kv LOG_TAIL "$(tail -4 /work/backend.log | tr '\n' '|' | tr -d '"')"
 chown -R "${HOST_UID}:${HOST_GID}" /work 2>/dev/null
 exit 0
@@ -529,13 +664,59 @@ verdict() {
         say "  (збігається з build_info.json усередині пакунка)"
       fi
     fi
+
+    # 5. TLS: СЛУХАЧ (не файл) і ВІДБИТОК
+    if [ -z "${R[TLS_PORT]:-}" ] || [ "${R[TLS_PORT]:-0}" = "0" ]; then
+      fails+=("ПОРТ TLS НЕВІДОМИЙ: /health не назвав tls_listening.port — стовп не доведено (зашивати 8443 не буду)")
+    elif [ -n "${R[TLS_CONNECT]:-}" ]; then
+      say "СЛУХАЧ TLS Є: ${R[TLS_CONNECT]}:${R[TLS_PORT]} прийняв зʼєднання"
+      say "  порт із конфігу вузла (health.tls_listening.port), LISTEN у ядрі: ${R[TLS_KERNEL_LISTEN]:-—}"
+      say "  loopback :${R[TLS_PORT]} не слухається (${R[TLS_LOOPBACK]:-?}) — так і має бути, слухач сидить на LAN"
+    else
+      fails+=("СЛУХАЧА НЕМАЄ: :${R[TLS_PORT]} не прийняв зʼєднання (стукав: ${R[TLS_KNOCKED]:-нікуди}; LISTEN у ядрі: ${R[TLS_KERNEL_LISTEN]:-нічого}; вузол каже enabled=${R[TLS_CLAIM_ENABLED]:-?}, bound=${R[TLS_CLAIM_BOUND]:-порожньо})")
+    fi
+
+    # Розбіжність між словом вузла і виміром — окремим рядком, бо вона
+    # означає зламаний ВУЗОЛ або зламаний ЗОНД, і мовчати про неї не можна.
+    if [ "${R[TLS_CLAIM_ENABLED]:-}" = "true" ] && [ -z "${R[TLS_CONNECT]:-}" ]; then
+      fails+=("ВУЗОЛ КАЖЕ НЕПРАВДУ ПРО СЕБЕ: health.tls_listening.enabled=true, а зʼєднання на :${R[TLS_PORT]:-?} не приймається")
+    elif [ "${R[TLS_CLAIM_ENABLED]:-}" = "false" ] && [ -n "${R[TLS_CONNECT]:-}" ]; then
+      fails+=("ВУЗОЛ КАЖЕ НЕПРАВДУ ПРО СЕБЕ: health.tls_listening.enabled=false, а :${R[TLS_PORT]} приймає зʼєднання на ${R[TLS_CONNECT]}")
+    fi
+
+    # Відбиток. Це ДРУГА, окрема перевірка: сертифікат може бути на місці без
+    # слухача (саме так і було в тому провалі), а слухач без сертифіката не
+    # підніметься взагалі. Тому кожна називає свою причину окремо.
+    if [ "${R[TLS_TOOL_BASE64]:-0}" != "1" ] || [ "${R[TLS_TOOL_SHA256]:-0}" != "1" ]; then
+      fails+=("ВІДБИТОК НЕ ДОВЕДЕНО на цьому образі — вада ВИМІРУ, не пакунка: base64=${R[TLS_TOOL_BASE64]:-?}, sha256sum=${R[TLS_TOOL_SHA256]:-?}")
+    elif [ "${R[TLS_CERT_PRESENT]:-0}" != "1" ]; then
+      fails+=("СЕРТИФІКАТА НЕМАЄ: ${R[TLS_CERT_PATH]:-?} — відбитка для QR не існує")
+    elif [ "${R[TLS_CERT_DER]:-0}" -lt 100 ] 2>/dev/null; then
+      # Порожній DER дав би sha256 порожнечі — 64 бездоганні шістнадцяткові
+      # знаки, тобто зелене на нічому. Довжина перевіряється ПЕРЕД формою.
+      fails+=("СЕРТИФІКАТ ПОРОЖНІЙ АБО ЗІПСОВАНИЙ: DER ${R[TLS_CERT_DER]:-0} Б — це не сертифікат")
+    elif ! printf '%s' "${R[TLS_FINGERPRINT]:-}" | grep -qE '^[0-9a-f]{64}$'; then
+      fails+=("ВІДБИТОК НЕ ПОРАХОВАНО: '${R[TLS_FINGERPRINT]:-порожньо}' (DER ${R[TLS_CERT_DER]:-0} Б)")
+    else
+      say "ВІДБИТОК: ${R[TLS_FINGERPRINT]}"
+      say "  (PEM→DER ${R[TLS_CERT_DER]} Б→sha256 — тим самим способом, що cert_fingerprint_sha256)"
+    fi
+  fi
+
+  # Не стовп, але число, за яке заплачено 16 хвилинами замка спільної машини:
+  # чи вмирає пакунок від SIGTERM. Оболонка на склі шле саме його, коли людина
+  # закриває вікно.
+  if [ -n "${R[SIGTERM_IGNORED_S]:-}" ]; then
+    say "SIGTERM: пакунок НЕ завершився за ${R[SIGTERM_IGNORED_S]} с — довелось SIGKILL"
+  elif [ -n "${R[EXIT_AFTER_SIGTERM_S]:-}" ]; then
+    say "SIGTERM: пакунок завершився за ${R[EXIT_AFTER_SIGTERM_S]} с"
   fi
 
   [ "${R[SKIP_TLS]}" = "1" ] && say "УВАГА: пройдено з PHANTOM_SKIP_TLS=1, не в умовчальному режимі"
 
   if [ ${#fails[@]} -eq 0 ]; then
     printf '  \033[32mЗЕЛЕНЕ\033[0m — %s\n' "${img}"
-    RES_LINES+=("ЗЕЛЕНЕ  ${img}  маршрутів=${R[ROUTES_PATHS]}/${R[ROUTES_OPS]}  версія=${R[HEALTH_VERSION]}  коміт=${R[HEALTH_COMMIT]}  /health за ${R[TTFH]}с$([ "${R[SKIP_TLS]}" = 1 ] && echo '  [SKIP_TLS]')")
+    RES_LINES+=("ЗЕЛЕНЕ  ${img}  маршрутів=${R[ROUTES_PATHS]}/${R[ROUTES_OPS]}  версія=${R[HEALTH_VERSION]}  коміт=${R[HEALTH_COMMIT]}  /health за ${R[TTFH]}с  tls=${R[TLS_CONNECT]}:${R[TLS_PORT]}  відбиток=${R[TLS_FINGERPRINT]:0:12}…$([ "${R[SKIP_TLS]}" = 1 ] && echo '  [SKIP_TLS]')")
     return 0
   fi
   local f
@@ -602,5 +783,9 @@ if [ "${TLS_FELL_BACK}" = "1" ]; then
 fi
 say "НЕ ДОВЕДЕНО цими воротами: скло (Tauri-оболонка потребує дисплея),"
 say "поведінка на залізі власника, і будь-що поза сідекаром."
+say "Про TLS доведено рівно два твердження: слухач на порту пари ПРИЙМАЄ"
+say "зʼєднання, і сертифікат вузла дає відбиток. Рукостискання зонд не"
+say "робить (голий bash), тож «телефон побачить саме цей відбиток» —"
+say "не звідси: це доводить телефон."
 
 exit "${RED}"

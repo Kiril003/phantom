@@ -645,17 +645,28 @@ export const Sidebar: React.FC<SidebarProps> = ({
     setFolderContextMenu(null);
   };
 
+  /**
+   * Посилання на простір. Було «🔗 Deep Link на «X» скопійовано!» —
+   * англійське слово на українському склі й обіцянка переходу, якої не
+   * існувало: параметр `?folder=` не читав ніхто, і людина з посилання
+   * потрапляла у звичайний список. Механізм тепер є (MessengerRoot читає
+   * його на монтуванні), тож і слова кажуть правду.
+   *
+   * Межа, яку називаємо вголос: адреса береться з цього ж вікна, тож поза
+   * цією машиною посилання відкриється лише там, де застосунок доступний
+   * за тією ж адресою.
+   */
   const handleCopyFolderLinkAction = (folder: SmartFolder) => {
     soundFx.playSend();
     const deepLink = `${window.location.origin}${window.location.pathname}?folder=${encodeURIComponent(folder.id)}`;
     if (navigator.clipboard && navigator.clipboard.writeText) {
       navigator.clipboard.writeText(deepLink).then(() => {
-        showToast(`🔗 Deep Link на «${folder.name}» скопійовано!`);
+        showToast(`🔗 Посилання на «${folder.name}» — у буфері`);
       }).catch(() => {
-        showToast(`🔗 Посилання: ${deepLink}`);
+        showToast(`🔗 Не змогли покласти в буфер. Посилання: ${deepLink}`);
       });
     } else {
-      showToast(`🔗 Посилання: ${deepLink}`);
+      showToast(`🔗 Буфер недоступний. Посилання: ${deepLink}`);
     }
     setFolderContextMenu(null);
   };

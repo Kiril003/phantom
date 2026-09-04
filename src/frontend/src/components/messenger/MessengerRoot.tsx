@@ -77,6 +77,25 @@ export const MessengerRoot: React.FC<MessengerRootProps> = ({ className = '' }) 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  /**
+   * Посилання на простір із бічної смуги («Копіювати посилання») клало в
+   * буфер `…?folder=<id>` і бадьоро писало «Deep Link скопійовано!». Той
+   * параметр не читав НІХТО: людина відкривала посилання й потрапляла у
+   * звичайний список, як і без нього. Обіцянка без механізму, знайдена
+   * штабом 04.09.2026.
+   *
+   * Механізм — тут: один раз на монтуванні беремо `folder` із запиту й
+   * робимо його активним. Неіснуючий id мовчки ігноруємо: посилання на
+   * видалений простір не має ні падати, ні брехати про перехід.
+   */
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const wanted = new URLSearchParams(window.location.search).get('folder');
+    if (!wanted) return;
+    const exists = useMessengerStore.getState().smartFolders?.some((f) => f.id === wanted);
+    if (exists) useMessengerStore.getState().setActiveFolder(wanted);
+  }, []);
+
   // Синхронізація активного користувача сесії (наприклад kiril або kyrylo) та реєстрація слухачів Mesh
   useEffect(() => {
     // Check URL parameters for explicit user identity (e.g. ?u=kyrylo or ?u=kiril)

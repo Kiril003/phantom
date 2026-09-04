@@ -114,3 +114,27 @@ describe('круговий доказ: що ПК показав, те й роз�
     expect(parsed.address).not.toMatch(/:\d{2,5}$/);
   });
 });
+
+describe('дві мови однієї схеми', () => {
+  // `phantom://invite/` спільна для ПК і телефона, а формати різні:
+  // телефон чекає `PH2:<base64url>:<6 hex>` — РІВНО три частини через
+  // двокрапку (PeerInvite.kt); ПК склеює схему з base64url двійкового
+  // конверта, де двокрапок немає взагалі. Тобто рядок з InviteCard на
+  // телефоні дає «поганий код». Тут це зафіксовано числом, щоб ніхто не
+  // подав одне за інше — і щоб зміна формату не пройшла мовчки.
+  it('рядок ПК не має форми телефонного (три частини через двокрапку)', () => {
+    const link = encodeInvite({
+      compact: fakeCompact(),
+      address: 'https://158.196.237.8:8443',
+      name: 'ПК',
+    });
+    const body = link.slice('phantom://invite/'.length);
+    expect(body.split(':').length, `тіло: ${body.slice(0, 24)}…`).toBe(1);
+    expect(body.startsWith('PH2:')).toBe(false);
+  });
+
+  it('телефонний код у полі ПК лишається впізнаваним як телефонний', () => {
+    const phone = 'PH2:cGVlcnxuYW1lfGtleXxkaHxob3N0fDg0NDM:a1b2c3';
+    expect(parseInvite(phone)?.kind).toBe('phone');
+  });
+});

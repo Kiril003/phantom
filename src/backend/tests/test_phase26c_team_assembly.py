@@ -165,7 +165,19 @@ class _MockSpawn:
     def __init__(self) -> None:
         self.calls: list[dict[str, Any]] = []
 
-    async def __call__(self, *, runtime, parent_state, goal, role, constraints, timeout_s):
+    # Підміна мусить приймати РІВНО те, що приймає справжня
+    # `spawn_subagent` (agent/team/spawn.py:184). Вона відростила
+    # `extra_origin` і `branch`, підміна за нею не пішла — і всі шість
+    # тестів падали на `unexpected keyword argument 'branch'`, доводячи
+    # розбіжність підміни з продуктом, а не ваду продукту.
+    #
+    # Іменовані параметри лишаю замість `**kwargs` навмисно: так підміна
+    # й далі ловить виклик із ХИБНИМ іменем аргументу, а `**kwargs`
+    # проковтнув би його мовчки.
+    async def __call__(
+        self, *, runtime, parent_state, goal, role, constraints, timeout_s,
+        extra_origin="delegate", branch=None,
+    ):
         cid = f"child-{role}-{uuid.uuid4().hex[:6]}"
         self.calls.append({
             "child_id": cid, "role": role, "goal": goal,

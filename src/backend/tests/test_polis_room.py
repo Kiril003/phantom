@@ -35,12 +35,12 @@ class FakeMesh:
 @pytest.fixture
 def svc(monkeypatch):
     service = PolisService()
-    graph = MissionGraph(mission_id="mroom")
+    graph = MissionGraph(mission_id="a1b2c3d4e5f6")
     graph.add(PlanNode(id="a", title="Архітектура", prompt="спроєктуй", status="done",
                        output_summary="модулі готові"))
     graph.add(PlanNode(id="b", title="Ядро", prompt="реалізуй", depends_on=["a"]))
-    m = ActiveMission("mroom", "u1", "Тест", "бриф", "dev_studio", graph)
-    service.missions["mroom"] = m
+    m = ActiveMission("a1b2c3d4e5f6", "u1", "Тест", "бриф", "dev_studio", graph)
+    service.missions["a1b2c3d4e5f6"] = m
 
     async def no_emit(*a, **k):
         return None
@@ -63,9 +63,9 @@ def _patch_mesh(monkeypatch, mesh: FakeMesh) -> None:
 async def test_chat_answers_and_stores_history(svc, monkeypatch):
     mesh = FakeMesh([json.dumps({"reply": "Ядро в черзі, архітектура готова."})])
     _patch_mesh(monkeypatch, mesh)
-    reply = await svc.chat("mroom", "як справи з ядром?")
+    reply = await svc.chat("a1b2c3d4e5f6", "як справи з ядром?")
     assert "черзі" in reply["text"]
-    roles = [c["role"] for c in svc.missions["mroom"].chat]
+    roles = [c["role"] for c in svc.missions["a1b2c3d4e5f6"].chat]
     assert roles == ["operator", "phantom"]
     assert "СТАН:" in mesh.calls[0]["system_prompt"]
     assert "Архітектура" in mesh.calls[0]["system_prompt"]
@@ -79,9 +79,9 @@ async def test_chat_add_node_action_extends_live_graph(svc, monkeypatch):
                      "prompt": "перевір OWASP", "after": ["b"]}],
     })])
     _patch_mesh(monkeypatch, mesh)
-    reply = await svc.chat("mroom", "додай перевірку безпеки після ядра")
+    reply = await svc.chat("a1b2c3d4e5f6", "додай перевірку безпеки після ядра")
     assert any(a.startswith("add_node:") for a in reply["applied"])
-    g = svc.missions["mroom"].graph
+    g = svc.missions["a1b2c3d4e5f6"].graph
     added = [n for n in g.nodes.values() if n.title == "Аудит безпеки"]
     assert len(added) == 1 and added[0].depends_on == ["b"]
 
@@ -93,10 +93,10 @@ async def test_chat_pause_resume_actions(svc, monkeypatch):
         json.dumps({"reply": "Продовжую.", "actions": [{"type": "resume"}]}),
     ])
     _patch_mesh(monkeypatch, mesh)
-    await svc.chat("mroom", "зупинись поки що")
-    assert svc.missions["mroom"].status == "paused"
-    await svc.chat("mroom", "продовжуй")
-    assert svc.missions["mroom"].status == "running"
+    await svc.chat("a1b2c3d4e5f6", "зупинись поки що")
+    assert svc.missions["a1b2c3d4e5f6"].status == "paused"
+    await svc.chat("a1b2c3d4e5f6", "продовжуй")
+    assert svc.missions["a1b2c3d4e5f6"].status == "running"
 
 
 @pytest.mark.asyncio
@@ -106,9 +106,9 @@ async def test_chat_survives_llm_failure_with_state_fallback(svc, monkeypatch):
             raise RuntimeError("429 quota")
 
     _patch_mesh(monkeypatch, DeadMesh())
-    reply = await svc.chat("mroom", "статус?")
+    reply = await svc.chat("a1b2c3d4e5f6", "статус?")
     assert "Тест" in reply["text"]  # state brief embedded
-    assert svc.missions["mroom"].chat[-1]["role"] == "phantom"
+    assert svc.missions["a1b2c3d4e5f6"].chat[-1]["role"] == "phantom"
 
 
 @pytest.mark.asyncio
@@ -123,26 +123,44 @@ async def test_execute_streams_transcript(svc, monkeypatch, tmp_path):
     monkeypatch.setattr(svc, "_emit", capture)
     mesh = FakeMesh(["Повна реалізація ядра з усіма модулями і тестами."])
     _patch_mesh(monkeypatch, mesh)
-    m = svc.missions["mroom"]
+    m = svc.missions["a1b2c3d4e5f6"]
     node = m.graph.nodes["b"]
     m.graph.mark_running("b")
     await svc._execute(m, node)
     assert node.status == "done"
     assert m.transcripts["b"].startswith("Повна реалізація")
     assert deltas and deltas[-1]["total_chars"] == len(m.transcripts["b"])
-    assert svc.workers("mroom")[-1]["tail"].endswith("тестами.")
+    assert svc.workers("a1b2c3d4e5f6")[-1]["tail"].endswith("тестами.")
 
 
 def test_artifact_path_traversal_blocked(svc, tmp_path, monkeypatch):
-    monkeypatch.setattr("agent.fabric.service._POLIS_HOME", str(tmp_path))
-    secret = tmp_path.parent / "secret.txt"
-    secret.write_text("топсекрет")
-    os.makedirs(tmp_path / "mroom", exist_ok=True)
-    (tmp_path / "mroom" / "a.md").write_text("# Архітектура\nмодулі")
+    """Ідентифікатор місії тут ШІСТНАДЦЯТКОВИЙ, і це не косметика.
 
-    assert svc.read_artifact("mroom", "../secret.txt") is None
-    assert svc.read_artifact("mroom", "a.md") == "# Архітектура\nмодулі"
-    arts = svc.list_artifacts("mroom")
+    `read_artifact` першим рядком відкидає id, що не збігається з
+    `^[0-9a-f]{6,40}$`. Доки тест передавав "mroom", виклик повертав None
+    ще ДО будь-якої роботи зі шляхом — і перевірка «../secret.txt дає None»
+    проходила, не дійшовши ані до `_safe_rel`, ані до `_contained`. Тобто
+    сторож обходу шляху був ЗЕЛЕНИЙ і не стеріг нічого: він однаково
+    пройшов би при повністю відкритому обході.
+
+    З валідним id виклик доходить до захисту, і твердження нарешті
+    означає те, що написано в імені тесту.
+    """
+    monkeypatch.setattr("agent.fabric.service._POLIS_HOME", str(tmp_path))
+    # Принада мусить лежати РІВНО там, куди веде один `..` від теки місії
+    # (`<POLIS_HOME>/<id>/..` = сам POLIS_HOME). Доти вона лежала на рівень
+    # вище, тобто «../secret.txt» не діставав її НАВІТЬ БЕЗ ЗАХИСТУ — і
+    # твердження не могло почервоніти ні за яких умов. Доведено 04.09:
+    # знімаю обидва шари (`_safe_rel` і `_contained`) — тест усе одно
+    # зелений. Сторож безпеки, який не вміє впасти, не стереже нічого.
+    secret = tmp_path / "secret.txt"
+    secret.write_text("топсекрет")
+    os.makedirs(tmp_path / "a1b2c3d4e5f6", exist_ok=True)
+    (tmp_path / "a1b2c3d4e5f6" / "a.md").write_text("# Архітектура\nмодулі")
+
+    assert svc.read_artifact("a1b2c3d4e5f6", "../secret.txt") is None
+    assert svc.read_artifact("a1b2c3d4e5f6", "a.md") == "# Архітектура\nмодулі"
+    arts = svc.list_artifacts("a1b2c3d4e5f6")
     assert [a["name"] for a in arts] == ["a.md"]
     assert arts[0]["title"] == "Архітектура"
     assert arts[0]["node_id"] == "a"
@@ -150,12 +168,12 @@ def test_artifact_path_traversal_blocked(svc, tmp_path, monkeypatch):
 
 def test_worker_transcript_falls_back_to_artifact(svc, tmp_path, monkeypatch):
     monkeypatch.setattr("agent.fabric.service._POLIS_HOME", str(tmp_path))
-    path = tmp_path / "mroom" / "a.md"
+    path = tmp_path / "a1b2c3d4e5f6" / "a.md"
     os.makedirs(path.parent, exist_ok=True)
     path.write_text("збережений результат")
-    svc.missions["mroom"].graph.nodes["a"].artifact_paths = [str(path)]
-    assert svc.worker_transcript("mroom", "a") == "збережений результат"
-    assert svc.worker_transcript("mroom", "ghost") == ""
+    svc.missions["a1b2c3d4e5f6"].graph.nodes["a"].artifact_paths = [str(path)]
+    assert svc.worker_transcript("a1b2c3d4e5f6", "a") == "збережений результат"
+    assert svc.worker_transcript("a1b2c3d4e5f6", "ghost") == ""
 
 
 @pytest.mark.asyncio
@@ -171,21 +189,21 @@ async def test_forge_writes_real_file_tree(svc, tmp_path, monkeypatch):
     )
     mesh = FakeMesh([code])
     _patch_mesh(monkeypatch, mesh)
-    m = svc.missions["mroom"]
+    m = svc.missions["a1b2c3d4e5f6"]
     node = m.graph.nodes["b"]
     m.graph.mark_running("b")
     await svc._execute(m, node)
 
-    ws = tmp_path / "mroom" / "workspace"
+    ws = tmp_path / "a1b2c3d4e5f6" / "workspace"
     assert (ws / "src" / "app.py").read_text() == "print('polis')\n"
     assert (ws / "web" / "style.css").read_text() == "body{color:#fff}\n"
     assert not (tmp_path / "evil.sh").exists()
     assert not (tmp_path.parent / "evil.sh").exists()
 
-    names = [a["name"] for a in svc.list_artifacts("mroom")]
+    names = [a["name"] for a in svc.list_artifacts("a1b2c3d4e5f6")]
     assert "workspace/src/app.py" in names and "workspace/web/style.css" in names
-    assert svc.read_artifact("mroom", "workspace/src/app.py") == "print('polis')\n"
-    assert svc.read_artifact("mroom", "workspace/../../etc/passwd") is None
+    assert svc.read_artifact("a1b2c3d4e5f6", "workspace/src/app.py") == "print('polis')\n"
+    assert svc.read_artifact("a1b2c3d4e5f6", "workspace/../../etc/passwd") is None
     forged_msgs = [c for c in m.chat if c["role"] == "system" and "викував" in c["text"]]
     assert len(forged_msgs) == 1 and "2 файл" in forged_msgs[0]["text"]
 
@@ -203,7 +221,7 @@ async def test_research_node_grounds_in_live_sources(svc, tmp_path, monkeypatch)
 
     mesh = FakeMesh(["Звіт на основі джерел."])
     _patch_mesh(monkeypatch, mesh)
-    m = svc.missions["mroom"]
+    m = svc.missions["a1b2c3d4e5f6"]
     node = m.graph.nodes["b"]
     node.domain = "research"
     m.graph.mark_running("b")
@@ -233,7 +251,7 @@ async def test_harvest_renders_capped_sources():
 
 @pytest.mark.asyncio
 async def test_system_events_recorded_into_chat(svc):
-    m = svc.missions["mroom"]
+    m = svc.missions["a1b2c3d4e5f6"]
     await svc._chat_system(m, "✓ «Архітектура» виконано", node_id="a")
     assert m.chat[-1]["role"] == "system"
     assert m.chat[-1]["node_id"] == "a"

@@ -25,8 +25,28 @@ from config import config
 
 
 def test_qr_carries_the_tls_port_when_the_listener_is_up(auth_root_client, monkeypatch) -> None:
+    """Імʼя тесту обіцяло «коли слухач піднятий» — а слухача ніхто не піднімав.
+
+    Під pytest `start_tls_listener` свідомо не стартує, тож `_tls_is_live`
+    віддавав False, конверт чесно оголошував HTTP-порт, і тест падав на
+    8000 != 8443 — доводячи не ваду продукту, а власну незібрану обстановку.
+    Гірше: у такому вигляді він СУПЕРЕЧИВ сторожу
+    `test_pairing_envelope_does_not_promise_tls_it_lacks`, який тримає
+    протилежне й правильне: без живого слухача TLS не оголошують взагалі
+    (29.08 телефон через це йшов на порт, якого ніхто не слухає).
+
+    Тому тепер тест піднімає те, що обіцяє іменем: слухача, що СТАВ на
+    інтерфейс. Зуби лишились — порт у QR мусить бути TLS-ним, а не HTTP.
+    """
     monkeypatch.setattr(config, "pair_tls_port", 8443, raising=False)
     monkeypatch.setattr(config, "port", 8000, raising=False)
+
+    from api import routes_pair
+
+    # `bound` непорожній = слухач став на інтерфейс. Саме це, а не наявність
+    # файла сертифіката, і є відповіддю на питання «чи є куди йти телефону».
+    monkeypatch.setattr(routes_pair, "_tls_is_live", lambda request: True)
+
     resp = auth_root_client.post("/api/v1/pair/init")
     assert resp.status_code == 200, resp.text
     assert resp.json()["qr"]["port"] == 8443

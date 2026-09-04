@@ -29,6 +29,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import sys
 from datetime import datetime, timezone
 from typing import Any, Literal
 
@@ -249,7 +250,45 @@ def _write_pdf_weasyprint(html: str, out_path: str) -> None:
 #: Родини, у яких є кирилиця. Vera, що йде в комплекті з reportlab, її НЕ має:
 #: український звіт вийшов би з порожнім тілом, бо Helvetica/Vera мовчки
 #: пропускають гліфи, яких не знають, замість помилки.
-_FONT_DIRS = (
+#:
+#: До 04.09.2026 тут стояли ЛИШЕ системні теки — і це робило рушій PDF мертвим
+#: у пакунку. Заміряно: у `debian:12-slim`, `ubuntu:22.04` і `fedora:40`
+#: шрифтових файлів рівно НУЛЬ, жодної з перелічених нижче тек там навіть не
+#: існує; у самому AppImage — теж нуль. reportlab при цьому в бандлі живий,
+#: тобто рушій їхав, а малювати кирилицю йому було нічим. На машині розробника
+#: DejaVu стоїть системно, тож дефект не було видно НІКОЛИ — той самий клас, що
+#: `libsndfile` через ctypes: «є на моїй машині» читається як «є».
+
+#: Тека зі шрифтами ВСЕРЕДИНІ пакунка. Спосіб розвʼязування взято ОДИН-В-ОДИН
+#: із `build_info._bundle_dirs()` — `sys._MEIPASS` для onefile, відкіт на теку
+#: виконуваного файла, — а не написано заново. Причина конкретна: 03.09 пакунок
+#: уже казав про одне місце, а писав в інше, і стан читався як «не встановлено»
+#: поруч зі встановленим. Два різні розвʼязувачі шляху до одного бандла — це та
+#: сама розбіжність, лише закладена наперед. Кладе туди файли `--add-data
+#: "${BACKEND}/assets/fonts:assets/fonts"` у `scripts/build_sidecar.sh`; ім'я
+#: підтеки нижче — друга половина тієї ж домовленості.
+_BUNDLE_FONT_SUBDIR = os.path.join("assets", "fonts")
+
+
+def _bundled_font_dirs() -> tuple[str, ...]:
+    """Теки шрифтів усередині бандла PyInstaller — порожньо, якщо не в бандлі."""
+    dirs: list[str] = []
+    meipass = getattr(sys, "_MEIPASS", None)
+    if meipass:
+        dirs.append(os.path.join(str(meipass), _BUNDLE_FONT_SUBDIR))
+    try:
+        exe_dir = os.path.dirname(os.path.realpath(sys.executable))
+    except (OSError, ValueError):
+        exe_dir = ""
+    if exe_dir:
+        dirs.append(os.path.join(exe_dir, _BUNDLE_FONT_SUBDIR))
+    return tuple(dirs)
+
+
+#: Пакунок — ПЕРШИМ: він знає свій вміст точно, система — як пощастить.
+#: Системні теки лишаються далі, тож на десктопі з уже поставленим DejaVu
+#: поведінка не змінюється взагалі.
+_FONT_DIRS = _bundled_font_dirs() + (
     "/usr/share/fonts/TTF",                  # Arch
     "/usr/share/fonts/truetype/dejavu",      # Debian, Ubuntu
     "/usr/share/fonts/dejavu",               # Fedora, RHEL
@@ -263,11 +302,14 @@ _FONT_FILES = (
 )
 
 _RL_FAMILY: str | None | Literal[False] = None  # None — ще не шукали, False — немає
+#: Тека, з якої родину справді взято. Без неї «шрифт знайдено» не відрізнити
+#: від «шрифт знайдено В ПАКУНКУ»: на десктопі розробника обидва однакові.
+_RL_FAMILY_DIR: str | None = None
 
 
 def _reportlab_font() -> str | None:
     """Ім'я зареєстрованої родини з кирилицею, або None."""
-    global _RL_FAMILY
+    global _RL_FAMILY, _RL_FAMILY_DIR
     if _RL_FAMILY is not None:
         return _RL_FAMILY or None
 
@@ -298,6 +340,7 @@ def _reportlab_font() -> str | None:
                 logger.warning("pdf_export: font %s unusable (%s)", base, exc)
                 continue
             _RL_FAMILY = family
+            _RL_FAMILY_DIR = directory
             return family
 
     _RL_FAMILY = False
@@ -335,6 +378,20 @@ def _write_pdf_reportlab(report: Any, ledger_md: str, style: str, out_path: str)
             + [p.description for p in report.phases]
         )
         if _needs_unicode(probe):
+            # Саме `sys.frozen`, а не «чи непорожній _bundled_font_dirs()»:
+            # відкіт на теку виконуваного файла є ЗАВЖДИ, і за ним пакунок від
+            # dev-запуску не відрізнити — порада поїхала б навпаки.
+            if getattr(sys, "frozen", False):
+                # У пакунку порада «постав системний шрифт» веде людину не туди:
+                # свій DejaVu ми ВЕЗЕМО з собою, тож сюди можна дійти лише якщо
+                # збірка його загубила. Кажемо це прямо — інакше дефект збірки
+                # виглядав би як недоукомплектована машина користувача.
+                raise _FontMissing(
+                    "No Unicode font found inside the package, and this report "
+                    "contains non-Latin text. The bundled DejaVu at "
+                    f"{_BUNDLE_FONT_SUBDIR} is missing — this is a build defect, "
+                    "not a missing system package. Rebuild the sidecar."
+                )
             raise _FontMissing(
                 "No Unicode font found, and this report contains non-Latin text. "
                 "Install DejaVu (Debian/Ubuntu: fonts-dejavu-core, Arch: ttf-dejavu, "
@@ -510,4 +567,149 @@ def _write_pdf(report: Any, ledger_md: str, style: str, out_path: str) -> None:
     )
 
 
-__all__ = ["export_mission_pdf"]
+# ── Самоперевірка: чи намалює ЦЕЙ вузол кирилицю ──────────────────────────────
+#
+# Навіщо це в продукті, а не в тестах. «Файл шрифта лежить у пакунку» — не
+# доказ, і саме на цій різниці проєкт ловиться регулярно: 04.09 reportlab у
+# бандлі був цілком живий (67 модулів у змісті PYZ), а український звіт не
+# виходив узагалі, бо шрифту не було ні в пакунку, ні в базових образах. Тому
+# питаємо не наявність, а РЕЗУЛЬТАТ, і тим самим кодом, яким продукт малює
+# справжній звіт: `_reportlab_font()` → `_write_pdf_reportlab()` → байти на
+# диску, у яких видно вбудовану родину.
+#
+# Оголошується як прапорець `_phantom_entry.py --selftest-pdf`, тож ворота
+# чистої машини (і людина, у якої «звіт порожній») питають ПАКУНОК, а не
+# дерево розробника.
+
+#: Навмисно з тих літер, на яких ламаються неповні кириличні шрифти: ґ, є, і,
+#: ї, апостроф і лапки-ялинки.
+_SELFTEST_TEXT = "Ґанок, їжак, єдиний з'їзд — «Місія виконана»."
+
+
+def selftest_cyrillic(out_path: str) -> dict[str, Any]:
+    """Намалювати PDF з українським текстом. Кидає `_FontMissing`, якщо нічим.
+
+    Повертає `{"path", "bytes", "family", "font_dir", "embedded", "faces"}`.
+    `embedded` — чи видно назву родини всередині самого файла: reportlab
+    вбудовує підмножину гліфів під іменем виду `AAAAAA+DejaVuSans`, і це
+    відрізняє «намальовано нашим шрифтом» від «файл ненульовий».
+    """
+    from agent.schemas import MissionReport, MissionReportPhase
+
+    report = MissionReport(
+        mission_id="selftest" + "0" * 24,
+        brief=_SELFTEST_TEXT,
+        success_criteria="PDF ненульового розміру з кирилицею всередині.",
+        quality_bar=None,
+        status="succeeded",
+        started_at="1970-01-01T00:00:00Z",
+        finished_at="1970-01-01T00:00:00Z",
+        wall_duration_h=0.0,
+        overall_summary=_SELFTEST_TEXT,
+        phases=[
+            MissionReportPhase(
+                idx=0,
+                description=_SELFTEST_TEXT,
+                success_criteria=_SELFTEST_TEXT,
+                status="succeeded",
+                duration_h=0.0,
+                achievements=[_SELFTEST_TEXT],
+                decisions=[],
+                artifacts=[],
+                lessons=[_SELFTEST_TEXT],
+                failure_modes=[],
+            )
+        ],
+        total_artifacts=0,
+        total_decisions=0,
+        aggregate_lessons=[_SELFTEST_TEXT],
+        resource_summary={},
+        council_engagements=0,
+        budget_spent_usd=None,
+        composed_at="1970-01-01T00:00:00Z",
+    )
+
+    # Саме `_write_pdf_reportlab`, а не `_write_pdf`: перший — та дорога, якою
+    # продукт справді малює звіт у пакунку (weasyprint у бандл не їде, він
+    # закоментований у requirements). Обгортка вище лише перебирає бекенди й
+    # ховала б причину відмови за «render_failed».
+    _write_pdf_reportlab(report, "", "branded", out_path)
+
+    size = os.path.getsize(out_path)
+    family = _RL_FAMILY or ""
+    embedded = False
+    if family:
+        with open(out_path, "rb") as fh:
+            embedded = family.encode("ascii", "ignore") in fh.read()
+
+    # Скільки РІЗНИХ файлів стоїть за чотирма гранями. Питання не педантичне:
+    # `_reportlab_font()` реєструє грань як `path if os.path.isfile(path) else
+    # base`, тобто з неповним комплектом курсив ТИХО стає прямим і жоден лог
+    # про це не скаже. Рахуємо саме файли, а не імена — імена є завжди.
+    faces = 0
+    if family:
+        from reportlab.pdfbase import pdfmetrics
+
+        seen = set()
+        for name in (family, f"{family}-Bold", f"{family}-Italic", f"{family}-BoldItalic"):
+            try:
+                fname = pdfmetrics.getFont(name).face.filename  # type: ignore[attr-defined]
+            except Exception:
+                continue
+            if fname:
+                seen.add(os.path.realpath(str(fname)))
+        faces = len(seen)
+
+    return {
+        "path": out_path,
+        "bytes": size,
+        "family": family,
+        "font_dir": _RL_FAMILY_DIR or "",
+        "embedded": embedded,
+        "faces": faces,
+    }
+
+
+def selftest_cli(out_path: str | None = None) -> int:
+    """Обгортка для `--selftest-pdf`. 0 — намальовано, 1 — ні. Друкує причину."""
+    import tempfile
+
+    if not out_path:
+        out_path = os.path.join(tempfile.gettempdir(), "phantom-selftest-pdf.pdf")
+
+    def _say(line: str) -> None:
+        print(f"[selftest-pdf] {line}", flush=True)
+
+    _say(f"frozen={bool(getattr(sys, 'frozen', False))}")
+    _say("dirs=" + os.pathsep.join(_FONT_DIRS))
+    try:
+        res = selftest_cyrillic(out_path)
+    except Exception as exc:  # _FontMissing і будь-яка інша поломка рушія
+        _say(f"FAIL {type(exc).__name__}: {exc}")
+        return 1
+
+    _say(f"font_dir={res['font_dir']}")
+    _say(f"family={res['family']}")
+    _say(f"path={res['path']}")
+    _say(f"bytes={res['bytes']}")
+    _say(f"embedded={int(bool(res['embedded']))}")
+    _say(f"faces={res['faces']}")
+    if res["bytes"] <= 0:
+        _say("FAIL: файл нульового розміру")
+        return 1
+    if res["faces"] < 4:
+        _say(
+            f"FAIL: різних файлів накреслень {res['faces']} із 4 — курсив тихо "
+            "малювався б прямим"
+        )
+        return 1
+    if not res["embedded"]:
+        # Ненульовий файл без вбудованої родини — це саме той «зелений
+        # порожній звіт», проти якого весь цей модуль.
+        _say("FAIL: родину не вбудовано у PDF")
+        return 1
+    _say("OK")
+    return 0
+
+
+__all__ = ["export_mission_pdf", "selftest_cyrillic", "selftest_cli"]

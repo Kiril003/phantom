@@ -221,13 +221,31 @@ def main() -> None:
             pass  # already set by an earlier import
 
     _force_utf8_locale()
-    _bootstrap_env()
 
     # Make backend package layout (api, core, ai, ...) importable as
     # top-level modules — matches the dev layout used in ``main.py``.
     backend_dir = Path(__file__).resolve().parent
     if str(backend_dir) not in sys.path:
         sys.path.insert(0, str(backend_dir))
+
+    # ── `--selftest-pdf`: чи намалює ЦЕЙ пакунок кирилицю ─────────────────
+    #
+    # Стоїть ДО `_bootstrap_env()` навмисно: самоперевірці не потрібні ні
+    # тека даних, ні моделі, ні кеш HF, і створювати їх заради неї означало б
+    # лишити на диску сліди продукту, який навіть не піднімався.
+    #
+    # Навіщо прапорець узагалі. Рушій PDF у бандлі був живий, а українського
+    # звіту не виходило: шрифту не було ні в пакунку, ні на чистій машині —
+    # і побачити це можна було лише в людини. Ворота чистої машини не мають
+    # ні пітона, ні venv (це їхня суть), тож спитати «а намалюй» можна тільки
+    # сам пакунок. Це не тестовий гак: рівно ця команда відповідає людині,
+    # у якої «звіт вийшов порожній», за одну секунду й без нашої участі.
+    if len(sys.argv) > 1 and sys.argv[1] == "--selftest-pdf":
+        from agent.missions.pdf_export import selftest_cli
+
+        raise SystemExit(selftest_cli(sys.argv[2] if len(sys.argv) > 2 else None))
+
+    _bootstrap_env()
 
     # Телеметрія Chroma — глушимо ДО того, як хтось підніме перший клієнт,
     # але вже ПІСЛЯ того, як шлях до пакетів бекенда став видимий (інакше

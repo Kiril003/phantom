@@ -380,6 +380,7 @@ for pair in \
     say "дані не знайдено, пропущено: ${pair%%:*}"
   fi
 done
+
 # Четвертий пласт — системні бібліотеки, які пітон вантажить ЧЕРЕЗ ctypes,
 # а не лінкує. Аналіз PyInstaller їх не бачить у принципі: у графі імпортів
 # їх немає, у таблиці лінкування теж.
@@ -443,6 +444,50 @@ PY
   fi
 done
 if [ -n "${CTYPES_LIBS}" ]; then say "додано:${CTYPES_LIBS}"; fi
+
+# П'ятий пласт — ШРИФТ. Окремим блоком, а не рядком у третьому пласті даних,
+# рівно тому, що там «не знайшов — сказав і пропустив», а тут пропуск
+# заборонений: мовчазний пропуск і є той дефект, який цей блок закриває.
+#
+# Виміряно 04.09.2026. У трьох базових образах — debian:12-slim, ubuntu:22.04,
+# fedora:40 — шрифтових файлів (.ttf/.otf/.ttc) РІВНО НУЛЬ: жодної з тек, які
+# перелічує `_FONT_DIRS` у `agent/missions/pdf_export.py`, там навіть не існує.
+# У самому AppImage теж нуль, згадок «dejavu» — нуль. При цьому reportlab у
+# бандлі ЖИВИЙ (67 модулів у змісті PYZ). Тобто рушій PDF їхав, а малювати
+# кирилицю йому було нічим, і український звіт у пакунку не виходив узагалі.
+# На машині розробника DejaVu стоїть системно — тому дефекту не було видно.
+#
+# Чотири накреслення, а не два. `_reportlab_font()` реєструє грань як
+# `path if os.path.isfile(path) else base`, тобто з двома файлами курсив ТИХО
+# став би прямим. Тихе погіршення тут коштувало б 700 КБ економії й одного
+# «чому в звіті все прямим» через місяць.
+#
+# LICENSE — умова розповсюдження, а не документація. Ми веземо чужий шрифт, і
+# Bitstream Vera дозволяє це саме за умови, що повідомлення про авторство їде
+# РАЗОМ із файлами. Немає файла — немає збірки.
+FONTS_SRC="${BACKEND}/assets/fonts"
+FONTS_DEST="assets/fonts"
+FONT_REQUIRED=(
+  DejaVuSans.ttf
+  DejaVuSans-Bold.ttf
+  DejaVuSans-Oblique.ttf
+  DejaVuSans-BoldOblique.ttf
+  LICENSE
+)
+FONTS_MISSING=""
+for f in "${FONT_REQUIRED[@]}"; do
+  [ -s "${FONTS_SRC}/${f}" ] || FONTS_MISSING="${FONTS_MISSING} ${f}"
+done
+if [ -n "${FONTS_MISSING}" ]; then
+  echo "[sidecar] у ${FONTS_SRC} бракує:${FONTS_MISSING}" >&2
+  echo "[sidecar] Без цих файлів пакунок збереться зелено й не намалює жодної" >&2
+  echo "[sidecar] кириличної літери у звіті PDF — саме той дефект, який ця" >&2
+  echo "[sidecar] тека закриває. Мовчазний пропуск тут заборонений." >&2
+  exit 1
+fi
+PYI_ARGS+=(--add-data "${FONTS_SRC}:${FONTS_DEST}")
+weigh "${FONTS_SRC}" "шрифт DejaVu + LICENSE (їде в бандл як ${FONTS_DEST})"
+
 
 [ "${MODE}" = "onefile" ] && PYI_ARGS+=(--onefile) || PYI_ARGS+=(--onedir)
 

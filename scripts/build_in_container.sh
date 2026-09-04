@@ -406,6 +406,48 @@ HOOK
 INFO
     echo "[контейнер] паспорт збірки: $(dirname "$SIDECAR")/build_info.json (сайдкар ${SIDECAR_SUM})"
 
+    # ── Наскрізно: чи намалює САЙДКАР кирилицю СВОЇМ шрифтом ────────────
+    #
+    # Виміряно 04.09: у пакунку не було жодного шрифтового файла, а reportlab
+    # був живий — тобто рушій PDF їхав, і український звіт виходив порожнім
+    # рівно в людини, ніколи в нас. Тепер шрифт їде всередині сайдкара
+    # (`assets/fonts`), і ця перевірка питає не «чи лежить файл», а «намалюй».
+    #
+    # Ключове тут — ДРУГА умова. Образ збірки має системний DejaVu, тож сам
+    # успіх нічого не доводив би: `_FONT_DIRS` знайшов би системний шрифт і
+    # пакунок без свого лишився б зеленим. Тому вимагаємо, щоб `font_dir`
+    # вказував УСЕРЕДИНУ розпакованого onefile (${SELFTMP}/_MEI…), а не в
+    # /usr/share/fonts. Це та сама різниця, що між «бібліотека є в списку» і
+    # «бібліотека є в бандлі».
+    #
+    # TMPDIR — на /work (диск хоста): onefile розпаковує себе на ~1,5 ГіБ.
+    SELFTMP=/work/.build/selftest-tmp
+    rm -rf "$SELFTMP"; mkdir -p "$SELFTMP"
+    SELFPDF="$SELFTMP/selftest.pdf"
+    echo "[контейнер] питаю сайдкар: намалюй звіт кирилицею"
+    if ! TMPDIR="$SELFTMP" "$SIDECAR" --selftest-pdf "$SELFPDF" > "$SELFTMP/out.log" 2>&1; then
+      echo "[контейнер] сайдкар НЕ намалював кирилицю:"
+      cat "$SELFTMP/out.log"
+      exit 1
+    fi
+    cat "$SELFTMP/out.log"
+    SELF_DIR="$(grep -m1 "font_dir=" "$SELFTMP/out.log" | sed "s/.*font_dir=//")"
+    case "$SELF_DIR" in
+      "$SELFTMP"/*)
+        echo "[контейнер] шрифт узято З ПАКУНКА: $SELF_DIR" ;;
+      *)
+        echo "[контейнер] шрифт узято НЕ з пакунка, а з: ${SELF_DIR:-(не сказано)}"
+        echo "[контейнер] отже на машині без DejaVu звіт був би порожній — зупиняюсь."
+        exit 1 ;;
+    esac
+    SELF_BYTES="$(stat -c %s "$SELFPDF" 2>/dev/null || echo 0)"
+    [ "${SELF_BYTES}" -gt 0 ] || { echo "[контейнер] PDF нульового розміру"; exit 1; }
+    echo "[контейнер] PDF з українським текстом: ${SELF_BYTES} Б"
+    # Доказ лишаємо на диску: розпаковку (1,5 ГіБ) прибираємо, сам PDF — ні.
+    # Порожній звіт від непорожнього відрізняє людина, відкривши файл.
+    mv -f "$SELFPDF" /work/.build/selftest-cyrillic.pdf
+    rm -rf "$SELFTMP"
+
     # Перепаковуємо. Стару збірку прибираємо, щоб `find` нижче не виніс її.
     rm -f src-tauri/target/release/bundle/appimage/*.AppImage
     ARCH=x86_64 appimagetool "$APPDIR" \

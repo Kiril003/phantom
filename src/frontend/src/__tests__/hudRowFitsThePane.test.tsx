@@ -23,7 +23,7 @@ import {
   nearbyPickToCenter,
   HUD_ROW_NEEDS_PX,
   HUD_RAILS_PX,
-} from '../components/map/hud/HudShell';
+} from '../components/map/hud/hudLayout';
 import { AttributionDrawer } from '../components/map/hud/AttributionDrawer';
 
 vi.mock('../hooks/useAttribution', () => ({

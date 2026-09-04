@@ -28,8 +28,15 @@ os.environ.setdefault("JWT_SECRET_KEY", "test-secret-ph2-refusal")
 os.environ.setdefault("AI_GEMINI_API_KEY", "fake-key")
 os.environ.setdefault("PHANTOM_SERIAL_ENABLED", "false")
 
-# Схоже на те, що показує телефон: префікс формату + корисне навантаження.
-PHONE_INVITE = "PH2:eyJuIjoiZm9vIiwiayI6ImJhciJ9AAAAAAAAAAAAAAAAAAAAAAAA"
+# СПРАВЖНІЙ код телефона, складений за `PeerInvite.kt::encode`, а не схожий
+# на нього: три частини через ':' — префікс, тіло base64url
+# (peerId|імʼя|Ed25519|X25519|хост|порт) і контрольна сума FNV-1a у hex.
+# Вигаданий зразок ловився б за префіксом так само, але брехав би про те,
+# ЩО САМЕ вставляє людина — а сторож із вигаданим артефактом рано чи пізно
+# доводить не те, що написано в його імені.
+PHONE_INVITE = (
+    "PH2:OWYyYzFhN2I1ZTBkNGMzYXzQotC10LvQtdGE0L7QvSDQmtC40YDQuNC70LB8Wm05dlltRnlSV1F5TlRVeE9WQjFZa3RsZVVKaGMyVTJOSFYwYVd4ZlgxOHxabTl2WW1GeVdESTFOVEU1VUhWaVMyVjVRbUZ6WlRZMGRYUnBiRjlmWDE4fHww:9181d6c3"
+)
 
 
 def _add_contact(client, **body):

@@ -33,7 +33,15 @@ export interface InviteParts {
 export type ParsedInvite =
   | ({ kind: 'invite' } & InviteParts)
   | { kind: 'compact'; compact: string }
-  | { kind: 'bundle'; bundle: Record<string, unknown> };
+  | { kind: 'bundle'; bundle: Record<string, unknown> }
+  /**
+   * Запрошення З ТЕЛЕФОНА (`PH2:<payload>:<6 hex>`). Це НЕ ключ вузла ПК:
+   * телефон і ПК рахують різні простори імен, і вузол на такий рядок
+   * відповідає 400. Доти payload проходив як «стислий ключ» (перший байт
+   * збігався), людина отримувала «неприйнятний bundle» і не мала жодного
+   * способу здогадатись, що вставила код не туди.
+   */
+  | { kind: 'phone'; token: string };
 
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
@@ -122,6 +130,13 @@ function decodeEnvelope(raw: Uint8Array): InviteParts | null {
 export function parseInvite(text: string): ParsedInvite | null {
   const raw = (text || '').trim();
   if (!raw) return null;
+
+  // Телефонне запрошення розпізнаємо ДО всього іншого: його payload —
+  // теж base64url, і за першим байтом він проходив як стислий ключ вузла.
+  // Формат: `PH2:<base64url>:<6 hex>` (роздільник — двокрапка), інколи
+  // всередині посилання `phantom://invite/PH2:…`.
+  const phone = raw.match(/PH2:[A-Za-z0-9\-_]{8,}:[0-9a-fA-F]{6}/);
+  if (phone) return { kind: 'phone', token: phone[0] };
 
   if (raw.startsWith('{')) {
     try {

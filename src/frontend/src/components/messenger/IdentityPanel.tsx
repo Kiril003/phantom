@@ -66,6 +66,14 @@ export const IdentityPanel: React.FC = () => {
       // Приймаємо і запрошення одним рядком, і голий ключ, і давній JSON.
       const found = parseInvite(bundleText);
       if (!found) throw new SyntaxError('не запрошення');
+      // Код із телефона — не ключ вузла ПК: вузол рахує інший простір імен
+      // і відповідає 400 «неприйнятний bundle». Кажемо це словом.
+      if (found.kind === 'phone') {
+        setError(
+          'Це код із телефона. Щоб додати телефон, покажіть ЙОМУ код зі сторінки спарування: Налаштування → Звʼязок і пристрої → Мобільний.',
+        );
+        return;
+      }
       const key = found.kind === 'bundle' ? { bundle: found.bundle } : { compact: found.compact };
       const contact = await messengerApi.addContact(
         name.trim() || (found.kind === 'invite' && found.name.trim()) || 'Без імені',

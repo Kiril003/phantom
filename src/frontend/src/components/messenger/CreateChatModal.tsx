@@ -197,6 +197,13 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
       if (found.address) setAddress(found.address);
       if (!nameTouched) setName(found.name);
     }
+    // Телефонне запрошення нікуди не веде на ПК: вузол рахує інший простір
+    // імен і відповідає 400. Кажемо це словом і даємо двері, а не лишаємо
+    // людину з червоним рядком про «неприйнятний bundle».
+    if (found.kind === 'phone') {
+      setNodeId(null);
+      return;
+    }
     const compact = found.kind === 'bundle' ? null : found.compact;
     if (!compact) {
       setNodeId(null);
@@ -304,6 +311,13 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
   // P2P Invite submit handler
   const openConversation = async () => {
     if (!parsed || busy) return;
+    // Телефонне запрошення сюди не веде: вузол ПК рахує інший простір імен
+    // і відповість 400. Кнопка не мовчить і не шле в нікуди — вона каже,
+    // що робити (панель поруч веде на спарування).
+    if (parsed.kind === 'phone') {
+      setError('Це код із телефона. Додати телефон можна лише зі сторінки спарування — кнопка вище.');
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
@@ -819,7 +833,38 @@ export const CreateChatModal: React.FC<CreateChatModalProps> = ({
                 />
               )}
 
-              {parsed && (
+              {/* Код із телефона: кажемо, ЩО це, і ведемо туди, де він
+                  справді працює. Доти payload проходив як стислий ключ
+                  вузла, вузол відповідав 400 «неприйнятний bundle», і
+                  людина лишалась із червоним рядком без жодної підказки. */}
+              {parsed?.kind === 'phone' && (
+                <div
+                  data-testid="invite-is-from-phone"
+                  className="p-3 bg-[#FDF6EC] rounded-2xl border border-[#E8C99A] space-y-2"
+                >
+                  <span className="text-[13px] font-extrabold text-[#1E2521] block leading-snug">
+                    Це запрошення з телефона, а не з іншого компʼютера
+                  </span>
+                  <span className="text-[11.5px] text-[#6E7568] block leading-snug">
+                    Щоб додати свій телефон, покажіть ЙОМУ код зі сторінки
+                    спарування — там компʼютер малює QR, який телефон читає
+                    камерою. Зворотний бік не працює: вузли рахують різні
+                    імена, і цей рядок для компʼютера нічого не означає.
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      onClose();
+                      window.location.assign('/settings?section=devices&category=mobile');
+                    }}
+                    className="px-3 py-1.5 text-[12px] font-bold rounded-xl border border-[#E87A42] text-[#C25925] hover:bg-[#FBE7D6] transition-colors"
+                  >
+                    Відкрити спарування телефона
+                  </button>
+                </div>
+              )}
+
+              {parsed && parsed.kind !== 'phone' && (
                 <div className="p-3 bg-white rounded-2xl border border-[#DDD4C4] space-y-2">
                   <span className="text-[14px] font-extrabold text-[#1E2521] block leading-snug">
                     {claimedName ? (

@@ -17,6 +17,8 @@ from ...schemas import (
     SubGoal,
     ThoughtBudget,
 )
+from config import config
+
 from ._llm import PlannerLLMError, llm_json
 
 logger = logging.getLogger(__name__)

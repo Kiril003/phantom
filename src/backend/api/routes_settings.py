@@ -363,6 +363,12 @@ CATEGORY_SPEC: list[dict[str, Any]] = [
             "agent_browser_geolocation_enabled",
             "wardriving_cell_precision",
             "wardriving_heatmap_precision",
+            # Випікання дорожніх пакетів. Стоїть у «Карті», а не в
+            # «Загальних», бо людина йде сюди рівно тоді, коли дивиться на
+            # мапу і бачить, що доріг немає.
+            "bake_min_ram_pct",
+            "bake_low_strikes",
+            "bake_keep_source_extracts",
         ],
     },
     {
@@ -482,6 +488,9 @@ LABEL_OVERRIDES: dict[str, str] = {
     "ui_map_default_zoom": "Zoom за замовч.",
     "ui_map_style": "Стиль карти",
     "wardriving_cell_precision": "Wardriving cell precision",
+    "bake_min_ram_pct": "Випікання: мінімум вільної памʼяті (%)",
+    "bake_low_strikes": "Випікання: скільки вимірів поспіль нижче порога",
+    "bake_keep_source_extracts": "Випікання: тримати завантажені витяги",
     "wardriving_heatmap_precision": "Heatmap precision",
     "wardriving_max_records_query": "Max query records",
     "agent_enabled": "Агент увімкнено",

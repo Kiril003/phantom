@@ -5,6 +5,7 @@
 """
 from __future__ import annotations
 
+import re
 import sqlite3
 from pathlib import Path
 
@@ -233,3 +234,92 @@ def test_a_road_without_motorroad_carries_no_empty_pair():
     from geo.bake.mesh_writer import encode_tags
 
     assert "motorroad" not in encode_tags({"highway": "residential"})
+
+
+# ── ОДИН ЗАКОН, ЧОТИРИ ФАЙЛИ ─────────────────────────────────────────────
+#
+# `ROUTING_KEYS` живе в нашій `mesh_writer.py`, у сусідній печі
+# `road-mesh-bake/mesh_bake.py` і в котлінському `RoadMeshStore.kt` (у кількох
+# деревах). Це рівно той механізм, що породив вихідну ваду: один закон у
+# кількох файлах, розходження нікого не червонить.
+#
+# Прибрати копію ми не можемо: продукт не сміє залежати в РАНТАЙМІ від файла
+# поза своїм деревом (у пакунок він не поїде). Але ТЕСТ може прочитати всі
+# джерела й відмовитись бути зеленим, коли вони розійшлись.
+#
+# Відсутнє джерело пропускаємо — але гучно, через `skip` із причиною, а не
+# тихим `return`: «файла нема» і «файли збігаються» мусять виглядати
+# по-різному, інакше сторож почне мовчки хвалити порожнечу.
+
+_SIBLING_BAKER = Path("/home/kyrylo/phantom_ai/road-mesh-bake/mesh_bake.py")
+_KOTLIN_STORES = (
+    Path("/home/kyrylo/phantom_ai/PHANTOM_OS_BLUEPRINT/phantom-companion/core-sensor/"
+         "src/main/java/local/phantom/companion/core/sensor/nav/RoadMeshStore.kt"),
+)
+
+
+def _python_keys(path: Path) -> list[str]:
+    src = re.sub(r"#[^\n]*", "", path.read_text(encoding="utf-8"))
+    m = re.search(r"ROUTING_KEYS[^=]*=\s*\(", src)
+    assert m, f"{path}: не знайшов ROUTING_KEYS"
+    i, depth, j = m.end(), 1, m.end()
+    while depth:
+        depth += (src[j] == "(") - (src[j] == ")")
+        j += 1
+    return re.findall(r'"([^"]+)"', src[i:j - 1])
+
+
+def _kotlin_keys(path: Path) -> list[str]:
+    # Коментарі знімаємо ПЕРШИМИ: попередній зонд зупинявся на дужці всередині
+    # коментаря й доповідав власне обмеження як число ключів у файлі.
+    src = re.sub(r"//[^\n]*", "", path.read_text(encoding="utf-8"))
+    m = re.search(r"ROUTING_KEYS\s*=\s*listOf\(", src)
+    assert m, f"{path}: не знайшов ROUTING_KEYS"
+    i, depth, j = m.end(), 1, m.end()
+    while depth:
+        depth += (src[j] == "(") - (src[j] == ")")
+        j += 1
+    return re.findall(r'"([^"]+)"', src[i:j - 1])
+
+
+def test_our_key_list_matches_the_sibling_baker_exactly():
+    """Дві печі печуть ОДИН артефакт — тут потрібна дослівна рівність.
+
+    Порядок входить у байти (`encode_tags` обходить список, а не вхід), тож
+    розбіжність тут означає два різні пакети з однаковою назвою.
+    """
+    if not _SIBLING_BAKER.exists():
+        pytest.skip(f"сусідньої печі нема на диску: {_SIBLING_BAKER}")
+    assert list(ROUTING_KEYS) == _python_keys(_SIBLING_BAKER)
+
+
+@pytest.mark.parametrize("store", _KOTLIN_STORES, ids=lambda p: p.parts[5])
+def test_no_key_the_phone_writes_is_missing_from_our_packs(store: Path):
+    """Асиметрія, яку легко проґавити: телефон не лише ЧИТАЄ пакети — він САМ
+    пише теги для тайлів з Overpass (`AppContainer` → `put` → `encodeTags`),
+    і там білий список Kotlin таки застосовується.
+
+    Тому ключ, який знає Kotlin і не знає піч, дає правило, що спрацьовує
+    ЗАЛЕЖНО ВІД ТОГО, ЗВІДКИ ПРИЇХАЛА ДОРОГА — і людина ніколи не зрозуміє,
+    чому маршрут поводиться по-різному в тому самому місці.
+
+    Зворотний бік (ми попереду Kotlin) НЕ падіння: `decodeTags` не фільтрує за
+    списком, тож зайвий ключ у пакеті телефон прочитає. Тому перевіряємо
+    напрямок, а не рівність — інакше сторож був би червоним щоразу, коли одна
+    зі сторін просто йде першою.
+    """
+    if not store.exists():
+        pytest.skip(f"дерева телефона нема на диску: {store}")
+    phone = _kotlin_keys(store)
+    missing = [k for k in phone if k not in ROUTING_KEYS]
+    assert not missing, (
+        f"телефон пише ці ключі, а піч їх не несе: {missing} — "
+        "правило оживатиме залежно від походження дороги"
+    )
+    # Спільна підмножина мусить іти в ТОМУ САМОМУ порядку: він вирішує байти.
+    common_ours = [k for k in ROUTING_KEYS if k in phone]
+    common_theirs = [k for k in phone if k in ROUTING_KEYS]
+    assert common_ours == common_theirs, (
+        "спільні ключі йдуть у різному порядку — два кодувальники дадуть "
+        "різні байти на тих самих тегах"
+    )

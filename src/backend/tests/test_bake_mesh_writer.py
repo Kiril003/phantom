@@ -252,7 +252,28 @@ def test_a_road_without_motorroad_carries_no_empty_pair():
 # по-різному, інакше сторож почне мовчки хвалити порожнечу.
 
 _SIBLING_BAKER = Path("/home/kyrylo/phantom_ai/road-mesh-bake/mesh_bake.py")
+# ДЕРЕВО НАЗИВАЄТЬСЯ, і порядок тут не декоративний.
+#
+# Перша версія цього сторожа дивилась ЛИШЕ на `phantom-companion`
+# (`rebuild/mobile-day1`) — і це не те дерево, з якого збирається бета.
+# Пакунок бети йде зі СТВОЛА `integration/beta`. Сторож був би зелений навіть
+# тоді, коли ствол розійшовся б із піччю, бо мейнлайновий список (17) —
+# підмножина нашого (23) за побудовою. Тобто він міряв не той шар, що рівно та
+# пастка, з якої почалась уся ця робота.
+#
+# Заміряно 05.09.2026 власним розбирачем (коментарі знімаються ПЕРШИМИ):
+#   integration/beta      22 ключі, motorroad немає, %7C є     ← ЇДЕ В БЕТУ
+#   rebuild/mobile-day1   17 ключів, motorroad немає, %7C нема
+#   wave/transit-05sep    23 ключі, motorroad Є
+#
+# Про мейнлайн правильно казати не «там 17 ключів» (звучить як кількість), а
+# «там ключ не доживе до бази ані з пакета, ані з Overpass, і `%7C` не
+# розекранується» — це наслідок, а не число.
 _KOTLIN_STORES = (
+    # Ствол бети — головний. Його розбіжність із піччю доїде до людей.
+    Path("/home/kyrylo/phantom_ai/PHANTOM_OS_BLUEPRINT/phantom-companion-integration/"
+         "core-sensor/src/main/java/local/phantom/companion/core/sensor/nav/RoadMeshStore.kt"),
+    # Мейнлайн — другим: у бету не їде, але розходження тут теж варте слова.
     Path("/home/kyrylo/phantom_ai/PHANTOM_OS_BLUEPRINT/phantom-companion/core-sensor/"
          "src/main/java/local/phantom/companion/core/sensor/nav/RoadMeshStore.kt"),
 )
@@ -293,7 +314,7 @@ def test_our_key_list_matches_the_sibling_baker_exactly():
     assert list(ROUTING_KEYS) == _python_keys(_SIBLING_BAKER)
 
 
-@pytest.mark.parametrize("store", _KOTLIN_STORES, ids=lambda p: p.parts[5])
+@pytest.mark.parametrize("store", _KOTLIN_STORES, ids=lambda p: p.parts[5].replace("phantom-companion", "companion"))
 def test_no_key_the_phone_writes_is_missing_from_our_packs(store: Path):
     """Асиметрія, яку легко проґавити: телефон не лише ЧИТАЄ пакети — він САМ
     пише теги для тайлів з Overpass (`AppContainer` → `put` → `encodeTags`),

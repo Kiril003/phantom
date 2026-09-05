@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import { ProfileManagementSection } from './ProfileManagement';
 import { MobilePairing } from './MobilePairing';
+import { RoadPackBaker } from '../map/hud/RoadPackBaker';
 import { SymbiotePanel } from './SymbiotePanel';
 import { MemoryModelNotice } from './MemoryModelNotice';
 import { VaultPanel } from './VaultPanel';
@@ -97,6 +98,11 @@ const VIRTUAL_CATEGORIES: SettingsCategory[] = [
   { id: 'license', label: 'Ліцензія', icon: '', settings: [] },
   { id: 'api_keys', label: 'Ключі доступу', icon: '', settings: [] },
   { id: 'members', label: 'Учасники', icon: '', settings: [] },
+  // Піч дорожніх пакетів. Дім саме тут, а не в HUD мапи: випікання — довга,
+  // рідкісна, свідома дія, яку роблять сидячи, а HUD існує для того, хто веде
+  // авто. У панелі «Офлайн» лишились двері, а стан роботи видно з пульса
+  // стрічки організму на будь-якому столі.
+  { id: 'road_packs', label: 'Дорожні пакети', icon: '', settings: [] },
   { id: DANGER_CATEGORY_ID, label: 'Небезпечна зона', icon: '', settings: [] },
 ];
 
@@ -133,6 +139,15 @@ export default function SettingsPanel() {
   const setQuery = useSettingsStore((s) => s.setQuery);
 
   const [activeCategoryId, setActiveCategoryId] = useState<string>('');
+  // Прохання ззовні (двері з панелі «Офлайн», пульс печі) споживається РАЗ і
+  // одразу гаситься: інакше воно перебивало б кожен наступний вибір людини.
+  const requestedCategoryId = useSettingsStore((s) => s.requestedCategoryId);
+  const requestCategory = useSettingsStore((s) => s.requestCategory);
+  useEffect(() => {
+    if (!requestedCategoryId) return;
+    setActiveCategoryId(requestedCategoryId);
+    requestCategory(null);
+  }, [requestedCategoryId, requestCategory]);
   const [status, setStatus] = useState<
     | { kind: 'idle' }
     | { kind: 'loading' }
@@ -919,6 +934,7 @@ function CategoryContent({
   // не говорять навмисно.
   const memoryNotice = category.id === 'ai' ? <MemoryModelNotice /> : null;
 
+  if (category.id === 'road_packs') return <RoadPackBaker />;
   if (category.id === 'vault') return <VaultPanel />;
   if (category.id === 'desktop') return <DesktopShellGroup />;
   if (category.id === 'polis_keys') return <KeyVaultPanel />;

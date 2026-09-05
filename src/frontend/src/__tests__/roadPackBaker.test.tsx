@@ -23,7 +23,7 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
+import { render, screen, fireEvent } from '@testing-library/react';
 import type { BakeSnapshot, BakeStage } from '@shared/types';
 
 const pending = () => new Promise(() => {});
@@ -336,5 +336,43 @@ describe('незміряне не малюється нулем', () => {
       }),
     );
     expect(document.body.textContent ?? '').not.toContain('undefined');
+  });
+});
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * ДІМ печі та ДВЕРІ до нього — досяжність, а не вигляд.
+ *
+ * Рішення продукту 05.09.2026: піч живе в Налаштуваннях › Мапа › «Дорожні
+ * пакети», бо випікання — довга, рідкісна, свідома дія, яку роблять сидячи,
+ * а HUD мапи існує для того, хто веде авто. У HUD лишились ДВЕРІ.
+ *
+ * Тести питають те, що ламається мовчки: чи є категорія в дереві навігації
+ * (без цього картка існує, але людина її не знайде — рівно та вада, через
+ * яку значок печі жив у незмонтованому StatusBar), і чи двері справді
+ * просять ТУ САМУ категорію, а не відкривають налаштування абиде.
+ * ───────────────────────────────────────────────────────────────────────── */
+describe('дім печі досяжний з навігації', () => {
+  it('категорія «Дорожні пакети» стоїть у розділі «Мапа»', async () => {
+    const { SETTINGS_SECTIONS, sectionForCategory } = await import(
+      '../components/settings/settingsSections'
+    );
+    const map = SETTINGS_SECTIONS.find((s) => s.id === 'map');
+    expect(map?.categories).toContain('road_packs');
+    expect(sectionForCategory('road_packs').id).toBe('map');
+  });
+
+  it('двері з панелі «Офлайн» просять саме road_packs і відкривають налаштування', async () => {
+    const { OfflinePanel } = await import('../components/map/panels/OfflinePanel');
+    const { useSettingsStore } = await import('../stores/settingsStore');
+    const { useDeskStore } = await import('../stores/deskStore');
+    const opened: string[] = [];
+    useDeskStore.setState({ openPane: ((k: string) => opened.push(k)) as never });
+
+    render(<OfflinePanel open onClose={() => {}} />);
+    const door = screen.getByTestId('offline-door-road-packs');
+    fireEvent.click(door);
+
+    expect(useSettingsStore.getState().requestedCategoryId).toBe('road_packs');
+    expect(opened).toContain('settings');
   });
 });

@@ -225,3 +225,36 @@ def test_format_version_is_an_integer_because_it_is_read_from_a_pragma():
     record = PackRecord(pack_id="p", bytes=1, format_version=2, sha256="0" * 64,
                         way_count=1, row_count=1, cell_count=1, baked_at="t")
     assert isinstance(record.to_dict()["format_version"], int)
+
+
+def test_no_sub_country_extract_url_ever_enters_the_catalogue():
+    """Слід у мережі, а не трафік: обласний URL розголошує район інтересу.
+
+    Запит `ukraine-latest.osm.pbf` каже спостерігачеві «хтось цікавиться
+    Україною». Запит витягу однієї області каже «хтось цікавиться САМЕ ЦИМ
+    районом» — і для продукту, яким користуються у воюючій країні, це різниця
+    не теоретична. Тому дрібніший обсяг береться з файла КРАЇНИ й ріжеться
+    рамкою локально.
+
+    Сторож потрібен саме тому, що порушення виглядатиме як оптимізація: качати
+    876 МБ заради Києва щиро здається марнотратством, і наступна людина
+    «полагодить» це одним рядком. Тест ловить рядок, не намір.
+    """
+    from geo.bake import catalogue
+
+    for source in catalogue.SOURCES.values():
+        assert source.path.count("/") == 1, (
+            f"{source.id}: шлях {source.path!r} глибший за <континент>/<країна> — "
+            "схоже на під-країновий витяг"
+        )
+
+    for scope in catalogue.SCOPES:
+        if scope.bbox is None:
+            continue
+        # Обсяг із рамкою МУСИТЬ їхати на джерело рівня країни, а не на власне.
+        assert scope.source_id in catalogue.SOURCES, scope.id
+        assert catalogue.SOURCES[scope.source_id].path.endswith("-latest.osm.pbf")
+        assert scope.id != scope.source_id, (
+            f"{scope.id}: обсяг із рамкою дістав власне джерело — саме та зміна, "
+            "яку це правило забороняє"
+        )

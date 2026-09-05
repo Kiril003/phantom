@@ -49,6 +49,12 @@ export function applyLanguageToDom(locale: Locale): void {
 }
 
 interface SettingsStoreState {
+  /** Категорія, яку попросили відкрити ЗВІДКИ-ІНДЕ на столі (двері з HUD,
+   *  пульс стрічки). `GoDesk` відкриває пейн налаштувань без параметра, тож
+   *  без цього поля будь-які двері висаджували б людину на першій-ліпшій
+   *  категорії — і подорож «хочу піч» закінчувалась би пошуком очима. */
+  requestedCategoryId: string | null;
+  requestCategory: (id: string | null) => void;
   categories: SettingsCategory[];
   values: Record<string, unknown>;
   dirty: Set<string>;
@@ -99,6 +105,8 @@ function loadShowAdvanced(): boolean {
 }
 
 export const useSettingsStore = create<SettingsStoreState>((set, get) => ({
+  requestedCategoryId: null,
+  requestCategory: (id) => set({ requestedCategoryId: id }),
   categories: [],
   values: {},
   dirty: new Set(),

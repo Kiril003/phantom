@@ -1,7 +1,6 @@
-import { useState } from 'react';
 import { OfflineRegionManager } from '../hud/OfflineRegionManager';
-import { RoadPackBaker } from '../hud/RoadPackBaker';
-import { useBakeStore } from '../../../stores/bakeStore';
+import { useDeskStore } from '../../../stores/deskStore';
+import { useSettingsStore } from '../../../stores/settingsStore';
 import { X } from 'lucide-react';
 
 /**
@@ -12,7 +11,6 @@ import { X } from 'lucide-react';
  * вирок власника лишає стіл на пʼятьох пейнах.
  */
 
-type Register = 'tiles' | 'roads';
 
 export interface OfflinePanelProps {
   open: boolean;
@@ -23,14 +21,18 @@ export function OfflinePanel({ open, onClose }: OfflinePanelProps): JSX.Element 
   // Якщо піч має що сказати — відкриваємось на «Дорогах». Людина, яка йде сюди
   // з пульса стрічки, йде саме до печі; висадити її на «Тайлах» означало б
   // зробити зайвий клац на кожному поверненні до роботи, що триває годину.
-  const bakeSnapshot = useBakeStore((s) => s.snapshot);
-  const [register, setRegister] = useState<Register>(bakeSnapshot ? 'roads' : 'tiles');
+  const openPane = useDeskStore((s) => s.openPane);
+  const requestCategory = useSettingsStore((s) => s.requestCategory);
   if (!open) return null;
 
-  const tabs: Array<[Register, string]> = [
-    ['tiles', 'Тайли'],
-    ['roads', 'Дороги'],
-  ];
+  // Двері, а не другий дім. Піч живе в Налаштуваннях › Мапа › «Дорожні
+  // пакети»: випікання — довга свідома дія, яку роблять сидячи, а HUD існує
+  // для того, хто веде авто. Тримати картку в обох місцях означало б два
+  // джерела правди про одну роботу.
+  const toOven = () => {
+    requestCategory('road_packs');
+    openPane('settings');
+  };
 
   return (
     <div
@@ -48,37 +50,26 @@ export function OfflinePanel({ open, onClose }: OfflinePanelProps): JSX.Element 
           <X size={14} />
         </button>
 
-        <nav
-          role="tablist"
-          aria-label="офлайн"
-          className="w-[320px] shrink-0 glass-card rounded-xl flex items-center gap-0.5 p-1 shadow-xl border border-black/10"
-        >
-          {tabs.map(([id, label]) => {
-            const active = register === id;
-            return (
-              <button
-                key={id}
-                role="tab"
-                aria-selected={active}
-                onClick={() => setRegister(id)}
-                data-testid={`offline-register-${id}`}
-                className="flex-1 h-[30px] rounded-lg text-[11px] font-semibold uppercase tracking-wider transition-all active:scale-[0.96]"
-                style={{
-                  color: active ? 'var(--ink-inverse)' : 'var(--ink-muted)',
-                  background: active ? 'var(--accent)' : 'transparent',
-                }}
-              >
-                {label}
-              </button>
-            );
-          })}
-        </nav>
 
-        {register === 'tiles' ? (
-          <OfflineRegionManager className="shadow-2xl border border-black/10" />
-        ) : (
-          <RoadPackBaker className="shadow-2xl border border-black/10" />
-        )}
+        <OfflineRegionManager className="shadow-2xl border border-black/10" />
+
+        {/* Двері до печі. Один рядок, не друга картка: дім печі — Налаштування
+            › Мапа › «Дорожні пакети». Тайли (підложка мапи ПК) і дорожні
+            пакети (для телефона) — РІЗНІ артефакти, і склеювати їх у два
+            реєстри однієї картки означало б натякати, що це одне й те саме. */}
+        <button
+          onClick={toOven}
+          data-testid="offline-door-road-packs"
+          className="w-[320px] glass-card rounded-xl px-3 py-2.5 text-left shadow-xl border border-black/10 transition-all active:scale-[0.98]"
+        >
+          <span className="block text-[11px] font-semibold uppercase tracking-wider"
+                style={{ color: 'var(--ink-primary)' }}>
+            Дорожні пакети для телефона →
+          </span>
+          <span className="block text-[10px] mt-0.5" style={{ color: 'var(--ink-muted)' }}>
+            маршрути без інтернету — у Налаштуваннях › Мапа
+          </span>
+        </button>
       </div>
     </div>
   );

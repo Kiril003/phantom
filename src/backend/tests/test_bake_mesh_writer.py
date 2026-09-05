@@ -77,13 +77,18 @@ def test_format_version_is_read_back_from_the_file_not_from_the_constant(tmp_pat
     assert finalize(part).format_version == 3, "finalize повірив константі, а не файлу"
 
 
-def test_motorroad_stays_out_of_the_whitelist():
-    """RoadProfile.kt:80 його читає, але в білому списку його нема.
+def test_motorroad_is_now_in_the_whitelist():
+    """Рішення змінилось 05.09.2026 — і цей сторож змінюється разом із ним.
 
-    Додати його — змінити поведінку маршрутизації на телефоні; це рішення
-    власника, а не пічки.
+    Раніше тут стояло `assert "motorroad" not in ROUTING_KEYS` з приміткою, що
+    додати ключ — рішення власника, а не пічки. Рішення ухвалено: `motorroad`
+    це не клас дороги, а властивість «правила як на автомагістралі», і без неї
+    `RoadProfile.kt:80` не міг відмовити пішому НІ НА ЯКОМУ пакеті.
+
+    Лишаю сторожа на місці, а не видаляю: він тепер стереже протилежне
+    твердження і саме тому не дасть тихо відкотити зміну назад.
     """
-    assert "motorroad" not in ROUTING_KEYS
+    assert "motorroad" in ROUTING_KEYS
 
 
 def test_cell_key_wraps_to_signed_64_like_the_jvm():
@@ -141,7 +146,8 @@ def test_tags_outside_the_whitelist_never_reach_the_pack(tmp_path):
     con.close()
     assert {r[0] for r in rows} == {10}, "лінія без highway потрапила в пакет"
     assert rows[0][1] == "Хрещатик" and rows[0][2] == 1
-    assert "note" not in rows[0][3] and "motorroad" not in rows[0][3]
+    # `note` — поза білим списком, тож у пакет не їде.
+    assert "note" not in rows[0][3]
 
 
 def test_the_flush_hook_fires_and_can_stop_the_bake(tmp_path):
@@ -191,3 +197,39 @@ def test_finalize_reports_counts_read_from_the_finished_file(tmp_path):
     assert facts.row_count == 9 + 1
     assert facts.cell_count == 9
     assert len(facts.sha256) == 64 and facts.bytes == part.stat().st_size
+
+
+def test_motorroad_reaches_the_pack_so_the_phone_rule_can_fire():
+    """Правило, яке не могло спрацювати, тепер має чим спрацювати.
+
+    `RoadProfile.kt:80` читає `tags["motorroad"]` і відмовляє пішому на трасі з
+    автомагістральними правилами. До 05.09.2026 ключа не було в жодному білому
+    списку, тож жоден пакет його не ніс і правило було мертвим на всіх даних.
+
+    Тест перевіряє не «ключ є у списку» (це переказ константи), а що значення
+    ДОЇЖДЖАЄ в закодований рядок і виживає розбір — тобто саме те, чого
+    бракувало. І окремо — що він СТОЇТЬ В КІНЦІ: порядок вирішує байти, і
+    вставка в середину мовчки розсинхронізувала б нас із сусідньою пічкою.
+    """
+    from geo.bake.mesh_writer import ROUTING_KEYS, encode_tags
+
+    assert ROUTING_KEYS[-1] == "motorroad", (
+        "motorroad мусить лишатись останнім: інакше кожна наявна пара змінює "
+        "позицію і звірка з попереднім пакетом стає нечитабельною"
+    )
+
+    encoded = encode_tags({"highway": "trunk", "motorroad": "yes"})
+    assert "motorroad=yes" in encoded
+    # Дзеркало розбирача телефона (`RoadMeshStore.decodeTags`): він НЕ фільтрує
+    # за білим списком, тому пара доїжджає до `tags["motorroad"]` без жодної
+    # правки Kotlin.
+    decoded = dict(p.split("=", 1) for p in encoded.split("|") if "=" in p)
+    assert decoded["motorroad"] == "yes"
+
+
+def test_a_road_without_motorroad_carries_no_empty_pair():
+    """Відсутній ключ не стає порожньою парою — інакше «немає даних» на телефоні
+    прочиталось би як «motorroad=», тобто значення."""
+    from geo.bake.mesh_writer import encode_tags
+
+    assert "motorroad" not in encode_tags({"highway": "residential"})

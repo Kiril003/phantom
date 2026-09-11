@@ -244,6 +244,7 @@ say "дерево: ${ROOT}"
 # `tauri build` падав саме так, при 214 ГБ вільного диску й вільній памʼяті.
 docker run --rm \
   --shm-size=2g \
+  --memory="${PHANTOM_BUILD_MEM:-5g}" --cpus="${PHANTOM_BUILD_CPUS:-6}" \
   -v "${ROOT}:/work" \
   -v "${CACHE}/cargo:/root/.cargo/registry" \
   -v "${CACHE}/pip:/root/.cache/pip" \

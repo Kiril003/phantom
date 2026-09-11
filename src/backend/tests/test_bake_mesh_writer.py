@@ -18,10 +18,14 @@ from geo.bake.mesh_writer import (
     cells_covering, encode_points, encode_tags, finalize,
 )
 
-# Дерево телефона, де живе авторитетний DB_VERSION.
-_COMPANION = Path(
-    "/home/kyrylo/phantom_ai/PHANTOM_OS_BLUEPRINT/phantom-companion/core-sensor/"
-    "src/main/java/local/phantom/companion/core/sensor/nav/RoadMeshStore.kt"
+# Читачі пакета на телефоні: `RoadPackImporter.kt` відмовляє пакету, чий
+# `PRAGMA user_version` новіший за MAX_KNOWN_PACK_FORMAT. Це і є контракт
+# версії; `RoadMeshStore.DB_VERSION` — схема бази телефона, інше число.
+_PACK_IMPORTERS = (
+    Path("/home/kyrylo/phantom_ai/PHANTOM_OS_BLUEPRINT/phantom-companion-integration/"
+         "feature-precision/src/main/java/local/phantom/companion/feature/precision/RoadPackImporter.kt"),
+    Path("/home/kyrylo/phantom_ai/PHANTOM_OS_BLUEPRINT/phantom-companion/"
+         "feature-precision/src/main/java/local/phantom/companion/feature/precision/RoadPackImporter.kt"),
 )
 
 
@@ -52,17 +56,16 @@ def test_the_pack_declares_version_two_and_only_the_ways_table(tmp_path):
     assert tables == {"ways"}, "жоден компаньйон не має читача для stops/rails/routes"
 
 
-def test_the_version_matches_the_phone_tree_that_actually_ships():
-    if not _COMPANION.exists():
-        pytest.skip(f"дерева компаньйона нема за {_COMPANION}")
-    declared = [
-        line for line in _COMPANION.read_text().splitlines()
-        if "const val DB_VERSION" in line
-    ]
-    assert declared, "RoadMeshStore.kt більше не оголошує DB_VERSION"
-    assert f"= {FORMAT_VERSION}" in declared[0], (
-        f"телефон каже {declared[0].strip()}, пічка пише {FORMAT_VERSION} — "
-        "міняти обидва в одному коміті"
+@pytest.mark.parametrize("importer", _PACK_IMPORTERS, ids=lambda p: p.parts[5].replace("phantom-companion", "companion"))
+def test_the_phone_can_read_the_format_we_bake(importer: Path):
+    """Пакет не сміє бути новішим за те, що читач телефона визнає за своє."""
+    if not importer.exists():
+        pytest.skip(f"читача пакетів нема за {importer}")
+    declared = re.findall(r"MAX_KNOWN_PACK_FORMAT\s*=\s*(\d+)", importer.read_text())
+    assert declared, "RoadPackImporter.kt більше не оголошує MAX_KNOWN_PACK_FORMAT"
+    assert FORMAT_VERSION <= int(declared[0]), (
+        f"пічка пише формат {FORMAT_VERSION}, телефон читає до v{declared[0]} — "
+        "пакет відмовлять на імпорті"
     )
 
 
@@ -209,14 +212,14 @@ def test_motorroad_reaches_the_pack_so_the_phone_rule_can_fire():
 
     Тест перевіряє не «ключ є у списку» (це переказ константи), а що значення
     ДОЇЖДЖАЄ в закодований рядок і виживає розбір — тобто саме те, чого
-    бракувало. І окремо — що він СТОЇТЬ В КІНЦІ: порядок вирішує байти, і
-    вставка в середину мовчки розсинхронізувала б нас із сусідньою пічкою.
+    бракувало. І окремо — що дописані ключі СТОЯТЬ У ХВОСТІ в порядку появи: порядок
+    вирішує байти, і вставка в середину мовчки розсинхронізувала б нас із сусідньою пічкою.
     """
     from geo.bake.mesh_writer import ROUTING_KEYS, encode_tags
 
-    assert ROUTING_KEYS[-1] == "motorroad", (
-        "motorroad мусить лишатись останнім: інакше кожна наявна пара змінює "
-        "позицію і звірка з попереднім пакетом стає нечитабельною"
+    assert ROUTING_KEYS[-2:] == ("motorroad", "ford"), (
+        "нові ключі лише дописуються в хвіст у порядку появи: інакше кожна "
+        "наявна пара змінює позицію і звірка з попереднім пакетом стає нечитабельною"
     )
 
     encoded = encode_tags({"highway": "trunk", "motorroad": "yes"})

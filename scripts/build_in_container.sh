@@ -503,6 +503,39 @@ INFO
     mv -f "$SELFPDF" /work/.build/selftest-cyrillic.pdf
     rm -rf "$SELFTMP"
 
+    # ── Наскрізно: чи спече САЙДКАР пакет СВОЇМ osmium ──────────────────
+    #
+    # Той самий різновид перевірки, що й шрифт вище, і та сама пастка. Образ
+    # збірки має системний python з osmium, тож сам успіх нічого не доводив
+    # би: робітник міг би взяти чужу привʼязку й лишити пакунок зеленим.
+    # Тому вимагаємо, щоб `osmium_from=` вказував УСЕРЕДИНУ розпакованого
+    # onefile (${BAKETMP}/_MEI…), а не в /usr/lib/python3.
+    #
+    # Питаємо не `import osmium`, а справжній обхід витягу у тимчасовому
+    # файлі: імпорт доводить, що модуль знайдено, і нічого не каже про те,
+    # чи поїхали з ним вісім .so і вкладені libbz2/liblz4. Різниця між
+    # «бібліотека є в списку» і «бібліотека є в бандлі» вже коштувала цьому
+    # дому одного порожнього звіту.
+    BAKETMP=/work/.build/selftest-bake-tmp
+    rm -rf "$BAKETMP"; mkdir -p "$BAKETMP"
+    echo "[контейнер] питаю сайдкар: чи спечеш ти взагалі"
+    if ! TMPDIR="$BAKETMP" "$SIDECAR" --selftest-bake > "$BAKETMP/out.log" 2>&1; then
+      echo "[контейнер] сайдкар НЕ може пекти:"
+      cat "$BAKETMP/out.log"
+      exit 1
+    fi
+    cat "$BAKETMP/out.log"
+    BAKE_FROM="$(grep -m1 "osmium_from=" "$BAKETMP/out.log" | sed "s/.*osmium_from=//")"
+    case "$BAKE_FROM" in
+      "$BAKETMP"/*)
+        echo "[контейнер] osmium узято З ПАКУНКА: $BAKE_FROM" ;;
+      *)
+        echo "[контейнер] osmium узято НЕ з пакунка, а з: ${BAKE_FROM:-(не сказано)}"
+        echo "[контейнер] отже на машині без системного pyosmium не спеклося б нічого — зупиняюсь."
+        exit 1 ;;
+    esac
+    rm -rf "$BAKETMP"
+
     # Перепаковуємо. Стару збірку прибираємо, щоб `find` нижче не виніс її.
     rm -f src-tauri/target/release/bundle/appimage/*.AppImage
     ARCH=x86_64 appimagetool "$APPDIR" \

@@ -15,7 +15,9 @@ import { wsClient } from './websocket';
 import { registerTtsPlayerWsHandler } from './ttsPlayer';
 import { useFamiliarStore } from '../stores/familiarStore';
 import { useUIStore } from '../stores/uiStore';
+import { useBakeStore } from '../stores/bakeStore';
 import type {
+  BakeSnapshot,
   FamiliarPose,
   FamiliarTarget,
 } from '@shared/types';
@@ -118,6 +120,28 @@ export function registerPolisBellHandler(): () => void {
   });
 }
 
+/**
+ * Піч дорожніх пакетів. Кожне повідомлення несе ПОВНИЙ знімок роботи, тож
+ * стор його заміняє — зливати не можна: зникле поле мусить зникнути.
+ *
+ * `pack.visible` приходить, коли спечений пакет стало видно шляху доставки;
+ * знімок у ньому той самий, тож окремої гілки він не потребує.
+ *
+ * Канал тут лише пришвидшує — жодна гілка інтерфейсу не залежить від того,
+ * що сокет живий: `bakeStore.refresh()` читає ту саму правду по HTTP.
+ */
+export function registerBakeWsHandler(): () => void {
+  return wsClient.on('bake', (msg) => {
+    if (!msg.type.startsWith('job.') && msg.type !== 'pack.visible') return;
+    const data = msg.data as Record<string, unknown>;
+    // Домовлений вигляд — голий знімок у `data`. Обгортку `{job: …}` теж
+    // приймаємо: два читачі цього контракту вже розійшлись у тому, чи вона є.
+    const raw = (data.job ?? data) as Record<string, unknown> | null;
+    if (!raw || typeof raw.job_id !== 'string' || typeof raw.stage !== 'string') return;
+    useBakeStore.getState().applySnapshot(raw as unknown as BakeSnapshot);
+  });
+}
+
 export function registerWsHandlers(): () => void {
   const unsubs: Array<() => void> = [
     registerFamiliarWsHandler(),
@@ -125,6 +149,8 @@ export function registerWsHandlers(): () => void {
     registerTtsPlayerWsHandler(),
     // ПОЛІС — глобальний дзвін Ратуші.
     registerPolisBellHandler(),
+    // Піч дорожніх пакетів — знімок роботи з бекенда.
+    registerBakeWsHandler(),
   ];
   return () => {
     unsubs.forEach((u) => {

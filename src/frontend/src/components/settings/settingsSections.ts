@@ -54,8 +54,8 @@ export const SETTINGS_SECTIONS: readonly SettingsSectionDef[] = [
   {
     id: 'map',
     label: 'Мапа',
-    blurb: 'Підложка, позиція, вардрайвінг',
-    categories: ['map'],
+    blurb: 'Підложка, позиція, вардрайвінг, дорожні пакети',
+    categories: ['map', 'road_packs'],
   },
   {
     id: 'devices',

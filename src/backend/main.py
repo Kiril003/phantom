@@ -26,6 +26,7 @@ from api.routes_chat import router as chat_router, register_ws_handlers as regis
 from api.routes_context import router as context_router
 from api.routes_settings import router as settings_router
 from api.routes_bake import router as bake_router
+from api.routes_bake_jobs import router as bake_jobs_router
 from api.routes_map import router as map_router
 from api.routes_geo_offline import router as geo_offline_router
 from api.routes_geo_geofences import router as geo_geofences_router
@@ -813,7 +814,49 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
         logger.warning("Черга месенджера не піднялась (%s)", exc)
         app.state.messenger_queue_task = None
 
+    # ── Випікання дорожніх пакетів ────────────────────────────────────────
+    #
+    # Служба живе весь час роботи вузла, а не час запиту: робота триває
+    # хвилини й переживає той HTTP-виклик, який її почав. Гачок подій —
+    # `BakeBroadcaster`, він же притлумлює потік у канал «bake».
+    try:
+        from api.routes_bake_jobs import BakeBroadcaster
+        from geo.bake.job import BakeService
+
+        app.state.bake_service = BakeService(on_event=BakeBroadcaster())
+    except BaseException as exc:  # noqa: BLE001
+        logger.warning("Служба випікання не піднялась (%s) — пекти буде нічим", exc)
+        app.state.bake_service = None
+
+    # Підмітаємо недопечене САМЕ НА СТАРТІ, а не на вимкненні. Рештки в
+    # `map_packs/.tmp` (`*.db.part`, `*.idx`) лишаються рівно тоді, коли
+    # вимкнення НЕ відбулось: вузол убили, машина згасла, oom-guard
+    # застрелив найбільший процес — а найбільший процес під час випікання
+    # це саме робітник. Прибирання на виході доглядало б лише той випадок,
+    # у якому сміття й так не лишається, і мовчки збирало б гігабайти в
+    # усіх інших. Файл `.part` до того ж виглядає як пакет для будь-кого,
+    # хто дивиться на теку.
+    _bake_service = getattr(app.state, "bake_service", None)
+    if _bake_service is not None:
+        try:
+            _swept = await _bake_service.sweep_orphans()
+            if _swept:
+                logger.info("Випікання: прибрано решток від перерваних робіт: %d", _swept)
+        except Exception as exc:
+            logger.warning("Випікання: рештки прибрати не вдалось (%s)", exc)
+
     yield
+
+    # Випікання спиняємо ПЕРШИМ: робітник — найважчий нащадок вузла, і
+    # лишити його жити довше за батька означає віддати машині процес, який
+    # пише в теку даних застосунку, що вже не працює.
+    _bake_service = getattr(app.state, "bake_service", None)
+    if _bake_service is not None:
+        try:
+            if await _bake_service.cancel("shutdown"):
+                logger.info("Випікання: роботу спинено, бо вузол вимикається")
+        except Exception as exc:
+            logger.debug("Випікання: скасування на вимкненні не пройшло: %s", exc)
 
     queue_task = getattr(app.state, "messenger_queue_task", None)
     if queue_task is not None:
@@ -1076,6 +1119,7 @@ def create_app() -> FastAPI:
     app.include_router(settings_router, prefix=prefix)
     app.include_router(map_router, prefix=prefix)
     app.include_router(bake_router, prefix=prefix)
+    app.include_router(bake_jobs_router, prefix=prefix)
     app.include_router(geo_offline_router, prefix=prefix)
     app.include_router(geo_geofences_router, prefix=prefix)
     app.include_router(linux_router, prefix=prefix)

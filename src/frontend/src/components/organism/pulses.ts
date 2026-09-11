@@ -22,6 +22,7 @@ import {
   type SilenceReason,
 } from '../../services/organismApi';
 import { wsClient } from '../../services/websocket';
+import { useBakeStore, isTerminal as isBakeTerminal } from '../../stores/bakeStore';
 
 /* ─── Загальна модель пульсу для подання ──────────────────────────────── */
 
@@ -179,3 +180,63 @@ export function formatClock(now: Date): string {
   const ss = String(now.getSeconds()).padStart(2, '0');
   return `${hh}:${mm}:${ss}`;
 }
+
+/* ─── Піч дорожніх пакетів ────────────────────────────────────────────
+ *
+ * Живе тут, а не в `core/StatusBar`, і це не смак. `StatusBar` НЕ монтується
+ * на шляху стола — `layouts/DashboardLayout.tsx` каже це прямим текстом і
+ * ставить замість нього стрічку організму. Значок печі, покладений туди,
+ * був написаний, покритий тестом і недосяжний: людина, яка відійшла на
+ * сорок хвилин, не побачила б його ніде. Стрічка — єдина поверхня, що є на
+ * КОЖНОМУ столі, тому саме тут єдине місце, де про піч можна дізнатись,
+ * не відкриваючи панель.
+ */
+export interface BakePulse {
+  /** Слово для стрічки або null, коли показувати нічого. */
+  text: string | null;
+  /** Тон: тривога для самозупинки й помилки, звичайний для решти. */
+  alert: boolean;
+  stage: string | null;
+}
+
+export function useBakePulse(): BakePulse {
+  const snapshot = useBakeStore((s) => s.snapshot);
+  const seenJobId = useBakeStore((s) => s.seenJobId);
+  const refresh = useBakeStore((s) => s.refresh);
+  const running = snapshot != null && !isBakeTerminal(snapshot);
+
+  useEffect(() => {
+    void refresh();
+    // Поки піч працює — щоп'ять секунд; коли ні — раз на пів хвилини, суто
+    // щоб помітити роботу, запущену з іншого вікна.
+    const t = setInterval(() => void refresh(), running ? 5000 : 30000);
+    return () => clearInterval(t);
+  }, [refresh, running]);
+
+  if (!snapshot) return { text: null, alert: false, stage: null };
+
+  // Кінцевий стан стоїть, доки людина не відкрила картку: тост живе три
+  // секунди й не є носієм новини для того, хто відійшов.
+  const unseen = !running && snapshot.job_id !== seenJobId;
+  if (!running && !unseen) return { text: null, alert: false, stage: snapshot.stage };
+
+  const failed = snapshot.stage === 'failed';
+  const text = running
+    ? `${snapshot.label_ua} · ${BAKE_STAGE_WORD[snapshot.stage] ?? snapshot.stage}`
+    : snapshot.stage === 'done'
+      ? `${snapshot.label_ua} · готово`
+      : failed
+        ? `${snapshot.label_ua} · спинилась`
+        : `${snapshot.label_ua} · скасовано`;
+  return { text, alert: failed || snapshot.stage === 'cancelled', stage: snapshot.stage };
+}
+
+/** Стадія → слово стрічки. Сьомого слова тут не вигадуємо. */
+const BAKE_STAGE_WORD: Record<string, string> = {
+  preflight: 'перевірка',
+  downloading: 'завантаження',
+  verifying: 'звірка',
+  indexing: 'читання файла',
+  baking: 'випікання',
+  finalizing: 'завершення',
+};

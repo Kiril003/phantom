@@ -26,6 +26,7 @@ import {
   useNodeIdentity,
   useResourcesPulse,
   useWsPulse,
+  useBakePulse,
 } from './pulses';
 
 /* ─── Токени (--ph-* з fallback на старі змінні) ─────────────────────── */
@@ -219,6 +220,7 @@ export function OrganismStrip() {
   const health = useHealthPulse();
   const resources = useResourcesPulse();
   const wsConnected = useWsPulse();
+  const bake = useBakePulse();
   const now = useClock();
 
   const h = health.data;
@@ -303,6 +305,17 @@ export function OrganismStrip() {
           <Silent />
         )}
       </Pulse>
+
+      {/* Піч дорожніх пакетів. Присутня лише коли є про що сказати — робота
+          в русі або кінцевий стан, якого людина ще не бачила. Це єдина
+          поверхня, що є на КОЖНОМУ столі: значок у StatusBar був недосяжний,
+          бо той не монтується на цьому шляху. */}
+      {bake.text && (
+        <Pulse>
+          <Word>піч</Word>
+          <Value>{bake.text}</Value>
+        </Pulse>
+      )}
 
       <div style={{ flex: 1 }} />
 

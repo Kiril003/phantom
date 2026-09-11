@@ -123,3 +123,52 @@ describe('standalone-збірка Ф1', () => {
     expect(screen.queryByRole('dialog')).toBeNull();
   });
 });
+
+/* ─────────────────────────────────────────────────────────────────────────
+ * ДОСЯЖНІСТЬ пульса печі, а не його правильність.
+ *
+ * Попередня версія цього індикатора жила в `core/StatusBar` і мала власний
+ * зелений тест — але `StatusBar` не монтується на шляху стола
+ * (`layouts/DashboardLayout.tsx` ставить замість нього цю стрічку). Тобто
+ * компонент був написаний, покритий і невидимий: людина, що відійшла на
+ * сорок хвилин, не побачила б його НІДЕ.
+ *
+ * Тому тест малює стрічку — поверхню, яка справді монтується, — і питає,
+ * чи видно з неї піч. Тест на самому компоненті цього довести не може за
+ * побудовою: він зелений і тоді, коли компонента немає на жодному екрані.
+ * ───────────────────────────────────────────────────────────────────────── */
+describe('піч видно зі стрічки, що монтується на столі', () => {
+  it('робота в русі — пульс присутній у стрічці', async () => {
+    const { useBakeStore } = await import('../../../stores/bakeStore');
+    useBakeStore.setState({
+      snapshot: {
+        job_id: 'j-reach', scope_id: 'kyiv', label_ua: 'Київ', stage: 'baking',
+        started_at: '2026-09-05T10:00:00.000Z', updated_at: '2026-09-05T10:00:30.000Z',
+        download: {
+          bytes_done: 1, bytes_total: 1, resumed_from_bytes: 0, rate_bps: null,
+          source_last_modified: null, from_cache: true,
+        },
+        verify: { bytes_hashed: 0, bytes_total: 0 },
+        bake: {
+          nodes_seen: null, nodes_kept: null, ways_seen: 10, ways_kept: 10,
+          rows_written: 10, cells: 2, elapsed_s: 30, ram_available_pct: null,
+          input_bytes: null, output_bytes: null, index_bytes: null,
+        },
+        outcome: null, pack: null, previous: null, guard: null,
+      },
+      seenJobId: null,
+    });
+    render(<OrganismStrip />);
+    expect(document.body.textContent ?? '').toContain('піч');
+    expect(document.body.textContent ?? '').toContain('Київ');
+  });
+
+  it('печі немає — стрічка про неї мовчить', async () => {
+    // Стор — модульний одинак; без явного скидання сюди протікає знімок із
+    // попереднього випадку, і тест «мовчить» пройшов би на чужих даних.
+    const { useBakeStore } = await import('../../../stores/bakeStore');
+    useBakeStore.setState({ snapshot: null, seenJobId: null });
+    render(<OrganismStrip />);
+    expect(document.body.textContent ?? '').not.toContain('піч');
+  });
+});

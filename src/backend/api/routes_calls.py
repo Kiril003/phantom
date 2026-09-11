@@ -218,7 +218,12 @@ async def _send(
                     "from_node_id": _keys().node_id,
                     "contact_id": payload.contact_id or (contact.id if contact else None),
                     "display_name": user.username or (contact.display_name if contact else "Співрозмовник"),
-                    "verified": (contact.verified_at is not None) if contact else True,
+                    # Тут стояло `else True`: коли контакту НЕМАЄ — тобто ми не
+                    # знаємо про того, хто дзвонить, узагалі нічого, — вузол
+                    # позначав дзвінок звіреним, і картка на тому боці малювала
+                    # зелений щит невідомому. Невідоме — це `None`, а не «так»:
+                    # рушій носить `verified` як `boolean | null` саме для цього.
+                    "verified": (contact.verified_at is not None) if contact else None,
                     "sdp": payload.sdp,
                     "candidate": payload.candidate,
                     "media": payload.media,

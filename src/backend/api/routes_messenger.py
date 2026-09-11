@@ -1659,16 +1659,13 @@ async def list_directory_users(
     # Тут стояла таблиця «ім'я → фотографія з Unsplash»: справжнім людям вузла
     # роздавались обличчя ЧУЖИХ людей із фотобанку. Не заглушка, не силует —
     # фотографія сторонньої людини під іменем твого співрозмовника.
-    #
-    # Лишається згенерований знак за іменем: він очевидно синтетичний і нікого
-    # не вдає.
     return [
         DirectoryUserOut(
             id=u.id,
             username=u.username,
             display_name=u.username.capitalize(),
             role=u.role or "OPERATOR",
-            avatar=f"https://api.dicebear.com/7.x/bottts/svg?seed={u.username}",
+            avatar=None,
         )
         for u in users
     ]

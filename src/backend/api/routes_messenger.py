@@ -1225,7 +1225,7 @@ async def toggle_reaction(
     attachments = await _attachment_states(session, [row])
     out = _message_out(row, attachments.get(row.id), reactions.get(message_id))
     # Інші вікна того самого вузла мусять побачити позначку без опитування.
-    await hub.broadcast("messenger", "message:reaction", out.model_dump(mode="json"))
+    await hub.broadcast("messenger", "message:reaction", out.model_dump(mode="json"), user_id=user.id)
     return out
 
 
@@ -2119,7 +2119,7 @@ async def receive_frame(
     # вкладка одержувача замінила бульбашку надгробком, а не додала рядок.
     event = "message:deleted" if row.deleted_at else "message:new"
     await hub.broadcast(
-        "messenger", event, out.model_dump(mode="json")
+        "messenger", event, out.model_dump(mode="json"), user_id=owner
     )
     return out.model_dump(mode="json")
 
@@ -2283,7 +2283,9 @@ async def delete_message(
         await session.delete(row)
         await session.commit()
         await hub.broadcast(
-            "messenger", "message:deleted", {"id": del_id, "client_id": del_client_id, "conversation_id": conversation_id}
+            "messenger", "message:deleted",
+            {"id": del_id, "client_id": del_client_id, "conversation_id": conversation_id},
+            user_id=user.id,
         )
         return {"deleted": True, "for_everyone": False, "blobs": dropped}
 
@@ -2338,7 +2340,7 @@ async def delete_message(
 
     out = _message_out(row)
     await hub.broadcast(
-        "messenger", "message:deleted", out.model_dump(mode="json")
+        "messenger", "message:deleted", out.model_dump(mode="json"), user_id=user.id
     )
     return {
         "deleted": True,

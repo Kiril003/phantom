@@ -100,7 +100,15 @@ export default defineConfig({
   },
   build: {
     outDir: 'dist',
-    sourcemap: true,
+    // Мап джерел у зібраному пакунку НЕМА, і це не гігієна, а вимір.
+    // 04.09.2026 на артефакті `.build/out/PHANTOM OS_0.20.0_cc10f419_amd64.AppImage`:
+    // Tauri вкладає всю теку `dist/` у бінарник оболонки `usr/bin/phantom-os-shell`,
+    // і в його таблиці ресурсів лежало 143 ключі `…js.map` — рівно стільки,
+    // скільки мап було в `dist/`. Тобто 21,7 МБ із 36,1 МБ теки — це ВЕСЬ
+    // вихідний код веба, який читає будь-хто, хто розпакує AppImage.
+    // Дев-сервер мапи має завжди й від цього рядка не залежить.
+    // Ворота на самому пакунку: `scripts/package_carries_no_sources.py`.
+    sourcemap: false,
     // Vite inlines assets under 4 kB as data: URIs. For the tiny @fontsource
     // unicode-range subsets that turns 21 self-hosted fonts into `data:` fonts,
     // which the packaged CSP refuses (no font-src, so `default-src 'self'`).

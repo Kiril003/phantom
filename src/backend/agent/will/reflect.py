@@ -83,8 +83,13 @@ async def propose_goals(
         return []
 
 
-async def _gather_observations(db: AsyncSession, user_id: str) -> str:
-    """Best-effort context for reflection. Never raises."""
+async def _user_observations(db: AsyncSession, user_id: str) -> list[str]:
+    """The parts derived from THIS user — mind state and narrative. Empty means
+    the will knows nothing about the person it is supposed to serve.
+
+    Kept apart from the framing below because the doctrine and the drive are
+    constants: they are present on every run, so a reflection that counted them
+    as "observations" could never tell knowing something from knowing nothing."""
     parts: list[str] = []
     try:
         from memory.mind_state import get_mind_state, format_for_prompt
@@ -101,8 +106,13 @@ async def _gather_observations(db: AsyncSession, user_id: str) -> str:
             parts.append(f"[НАРАТИВ]\n{narr[:800]}")
     except Exception as exc:
         logger.debug("reflect narrative read failed: %s", exc)
-    # Self-generated goals must serve the entity's values and current needs,
-    # not drift — give reflection the doctrine and the dominant drive.
+    return parts
+
+
+def _constant_framing() -> list[str]:
+    """Doctrine + dominant drive. Steers goals that observation justifies; on
+    its own it justifies nothing."""
+    parts: list[str] = []
     try:
         from agent.cognition.will.values import values_system
         doctrine = values_system._load_doctrine()
@@ -119,7 +129,12 @@ async def _gather_observations(db: AsyncSession, user_id: str) -> str:
                          f"(тиск {dominant.pressure():.2f}) — врахуй цю потребу.")
     except Exception as exc:
         logger.debug("reflect drive read failed: %s", exc)
-    return "\n\n".join(parts)
+    return parts
+
+
+async def _gather_observations(db: AsyncSession, user_id: str) -> str:
+    """Best-effort context for reflection. Never raises."""
+    return "\n\n".join(await _user_observations(db, user_id) + _constant_framing())
 
 
 async def reflect_and_seed(
@@ -133,7 +148,19 @@ async def reflect_and_seed(
     Returns the list of created goal ids."""
     from agent.will import goals as goals_repo
 
-    obs = observations if observations is not None else await _gather_observations(db, user_id)
+    if observations is not None:
+        obs = observations
+    else:
+        user_parts = await _user_observations(db, user_id)
+        if not user_parts:
+            # Asking a 7B model to "propose 1-3 goals" with nothing but the
+            # doctrine in front of it does not produce silence — it produces a
+            # plausible-sounding strategy for a company that does not exist.
+            # That is where the 20 self_generated goals came from. No
+            # observation, no proposal, and no LLM call.
+            logger.info("reflect: no observation of user %s — not proposing goals", user_id)
+            return []
+        obs = "\n\n".join(user_parts + _constant_framing())
     active = await goals_repo.list_active(db, user_id)
     proposals = await propose_goals(obs, active, dispatch_llm=dispatch_llm)
     created: list[str] = []

@@ -37,6 +37,11 @@ class WillDecision:
     goal_id: Optional[str] = None
     action_text: str = ""
     rationale: str = ""
+    # Only meaningful for kind="standing_order": the cadence the will chose,
+    # in the shape agent.operations.standing_orders.schedules.parse_schedule
+    # accepts. None means the will named no cadence — the engine then refuses
+    # the decision rather than inventing one.
+    schedule: Optional[dict] = None
 
 
 @dataclass

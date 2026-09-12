@@ -20,7 +20,12 @@ from agent.will.types import WillTickResult, WillDecision
 logger = logging.getLogger(__name__)
 
 
-async def _default_dispatch_llm(prompt: str, system: str) -> str:
+async def _default_dispatch_llm(prompt: str, system: str) -> tuple[str, int]:
+    """Returns (text, tokens_used). The token count is what the provider
+    actually reported — every adapter fills AIResponse.tokens_used
+    (ollama_provider.py:148, anthropic_provider.py:186, gemini_provider.py:366).
+    Returning it beside the text is the whole reason the will can bill a real
+    number; discarding it here is what made the token ledger read 0 forever."""
     from ai.hub import ai_hub
     resp = await ai_hub.dispatch(
         "chat",
@@ -28,7 +33,32 @@ async def _default_dispatch_llm(prompt: str, system: str) -> str:
          "user_id": "will", "model_override": config.ai_reasoning_model},
         provider_hint=config.ai_primary_provider,
     )
-    return resp.content or ""
+    return (resp.content or ""), int(getattr(resp, "tokens_used", 0) or 0)
+
+
+class _TokenMeter:
+    """Wraps a dispatch_llm and keeps the usage the planning helpers drop.
+
+    The helpers (reflect/decompose/decide/self_growth) are typed to receive
+    `(prompt, system) -> str`, so anything the provider reported alongside the
+    text is lost at that seam. The meter unwraps a (text, tokens) pair, keeps
+    the count, and hands the helper the plain string it expects — so no helper
+    signature changes. A stub that returns a bare str bills 0, which is correct:
+    it made no provider call."""
+
+    def __init__(self, inner: Callable[[str, str], Awaitable]) -> None:
+        self._inner = inner
+        self.tokens = 0
+        self.calls = 0
+
+    async def __call__(self, prompt: str, system: str) -> str:
+        out = await self._inner(prompt, system)
+        self.calls += 1
+        if isinstance(out, tuple):
+            text, tokens = out
+            self.tokens += int(tokens or 0)
+            return text
+        return out
 
 
 async def _default_start_task(**kwargs) -> tuple[str, bool]:
@@ -95,26 +125,37 @@ class WillEngine:
                 should_reflect = True
                 self._last_reflect[user_id] = today
 
+        # The tree has a ceiling for decomposition (below); reflection used to
+        # ignore it and seed up to 3 more roots a day regardless, which is how
+        # a tree pinned at the ceiling still grew.
+        if should_reflect and len(active) >= config.will_max_active_goals:
+            should_reflect = False
+            notes.append("reflect_skipped:at_ceiling")
+
         if should_reflect and await self.governor.can_spend(db, user_id):
+            meter = _TokenMeter(self.dispatch_llm)
             try:
-                created = await reflect_and_seed(db, user_id, dispatch_llm=self.dispatch_llm)
-                await self.governor.note_spend(db, user_id, calls=1, tokens=0)
+                created = await reflect_and_seed(db, user_id, dispatch_llm=meter)
                 if created:
                     notes.append(f"reflected:{len(created)}")
             except Exception as exc:
                 logger.debug("orient reflect failed: %s", exc)
+            await self.governor.note_spend(
+                db, user_id, calls=meter.calls, tokens=meter.tokens)
             # Identity grows from deeds — fold the recent journal into the
             # self-narrative once per reflection, so who PHANTOM is reflects
             # what it has actually done. Budget-gated, best-effort.
             if await self.governor.can_spend(db, user_id):
+                meter = _TokenMeter(self.dispatch_llm)
                 try:
                     grew = await grow_identity_from_journal(
-                        db, user_id, dispatch_llm=self.dispatch_llm)
-                    await self.governor.note_spend(db, user_id, calls=1, tokens=0)
+                        db, user_id, dispatch_llm=meter)
                     if grew:
                         notes.append("grew_identity")
                 except Exception as exc:
                     logger.debug("orient identity growth failed: %s", exc)
+                await self.governor.note_spend(
+                    db, user_id, calls=meter.calls, tokens=meter.tokens)
 
         active2 = await goals_repo.list_active(db, user_id)
         target = None
@@ -130,13 +171,15 @@ class WillEngine:
                         target = g
                         break
         if target is not None and await self.governor.can_spend(db, user_id):
+            meter = _TokenMeter(self.dispatch_llm)
             try:
-                created = await decompose_goal(db, user_id, target, dispatch_llm=self.dispatch_llm)
-                await self.governor.note_spend(db, user_id, calls=1, tokens=0)
+                created = await decompose_goal(db, user_id, target, dispatch_llm=meter)
                 if created:
                     notes.append(f"decomposed:{len(created)}")
             except Exception as exc:
                 logger.debug("orient decompose failed: %s", exc)
+            await self.governor.note_spend(
+                db, user_id, calls=meter.calls, tokens=meter.tokens)
 
         return ",".join(notes)
 
@@ -154,21 +197,31 @@ class WillEngine:
         active = await goals_repo.list_active(db, user_id)
         budget = await self.governor.remaining(db, user_id)
         motivation = self._motivation()
+        decide_meter = _TokenMeter(self.dispatch_llm)
         decision = await decide_next(snapshot, active, budget,
-                                     dispatch_llm=self.dispatch_llm, motivation=motivation)
-        await self.governor.note_spend(db, user_id, calls=1, tokens=0)
+                                     dispatch_llm=decide_meter, motivation=motivation)
+        await self.governor.note_spend(
+            db, user_id, calls=decide_meter.calls, tokens=decide_meter.tokens)
 
         if decision.kind == "noop":
             return WillTickResult(decision, note="noop")
 
         dispatched = False
         task_id = None
+        outcome = decision.kind
         try:
             async with intent_mutex.hold("will"):
                 # Value gate — effectful decisions are checked against the
                 # values doctrine; a confident rejection vetoes the action.
                 if decision.kind in ("start_task", "standing_order"):
                     verdict = await self.evaluate_values(decision.action_text)
+                    # tokens=0 here is NOT metered, unlike the four sites above.
+                    # values_system.evaluate goes through llm_json → _call →
+                    # ai_router.generate_raw, which is typed `-> str`
+                    # (ai/provider.py:191) and drops the provider's usage before
+                    # it is reachable. Counting this honestly means changing
+                    # generate_raw, which every planner shares. Left uncounted
+                    # and named rather than guessed.
                     await self.governor.note_spend(db, user_id, calls=1, tokens=0)
                     if (verdict is not None and not getattr(verdict, "aligned", True)
                             and getattr(verdict, "confidence", 0.0) >= 0.5):
@@ -184,30 +237,84 @@ class WillEngine:
                         user_id=user_id, goal=decision.action_text,
                         origin="will", track="background",
                     )
-                    dispatched = bool(started or task_id)
-                    if decision.goal_id:
+                    # `started` False with a task_id means the runtime put the
+                    # goal on an in-memory deque (runtime.py:622-633) or handed
+                    # back the id of a task already occupying the slot — no row
+                    # in agent_tasks, nothing survives a restart. Reporting that
+                    # as "dispatched" is the lie; it is a queue admission.
+                    dispatched = bool(started)
+                    outcome = "dispatched" if started else (
+                        f"queued_in_memory:{task_id}" if task_id else "start_task_refused")
+                    # A goal is only running once a task actually runs for it.
+                    if started and decision.goal_id:
                         await goals_repo.set_status(db, decision.goal_id, "running")
                 elif decision.kind == "proactive_seed":
+                    # This is NOT a dispatch. The only consumer is the chat
+                    # route (api/routes_chat.py:454-461), which reads the queue
+                    # when the owner next types; the queue is a process-local
+                    # dict that dies with the process. There is no durable
+                    # non-chat destination for a conversational seed in this
+                    # tree, so the will says what it did instead of claiming
+                    # delivery.
+                    outcome = "seed_refused"
                     try:
                         from agent.consciousness_stream import consciousness_stream
-                        consciousness_stream._pending_insights.setdefault(user_id, []).append(
-                            decision.action_text)
-                        dispatched = True
+                        consciousness_stream.push_insight(user_id, decision.action_text)
+                        outcome = "seeded_for_next_chat_turn"
                     except Exception as exc:
                         logger.debug("proactive_seed failed: %s", exc)
-                elif decision.kind == "standing_order":
-                    # Executive arm handled in a later sub-project; record intent now.
                     dispatched = False
+                elif decision.kind == "standing_order":
+                    dispatched, outcome, _ = await self._file_standing_order(
+                        db, user_id, decision)
         except IntentBusy:
             return WillTickResult(decision, dispatched=False, note="intent_busy")
 
         await self.journal.record(
-            db, user_id, decision, task_id=task_id,
-            outcome="dispatched" if dispatched else decision.kind,
+            db, user_id, decision, task_id=task_id, outcome=outcome,
             budget_delta={"calls": 1},
         )
         return WillTickResult(decision, dispatched=dispatched, task_id=task_id,
-                              note="dispatched" if dispatched else decision.kind)
+                              note=outcome)
+
+    async def _file_standing_order(self, db: AsyncSession, user_id: str,
+                                   decision: WillDecision) -> tuple[bool, str, str | None]:
+        """Put a standing-order decision into the standing_orders table, which
+        StandingOrderRunner polls every `agent_standing_orders_poll_s` seconds
+        (wired at main.py:704-711). That is a durable destination with a live
+        reader — unlike the chat seed queue.
+
+        Refuses rather than inventing: a rule with no cadence is not a rule, and
+        guessing one would schedule work the will never asked for."""
+        if not config.agent_standing_orders_enabled:
+            return (False, "standing_order_refused:runner_disabled", None)
+        if not decision.schedule:
+            return (False, "standing_order_refused:no_schedule", None)
+        from agent.operations.standing_orders.schedules import parse_schedule
+        try:
+            payload = dict(decision.schedule)
+            schedule = parse_schedule(payload)
+        except Exception as exc:
+            logger.debug("will standing_order schedule rejected: %s", exc)
+            return (False, "standing_order_refused:invalid_schedule", None)
+
+        import json as _json
+        from db.models import StandingOrder
+        row = StandingOrder(
+            user_id=user_id,
+            description=(decision.rationale or decision.action_text)[:256],
+            kind=schedule.kind,
+            schedule_json=_json.dumps(payload, ensure_ascii=False),
+            action_json=_json.dumps({"kind": "task", "goal": decision.action_text[:512]},
+                                    ensure_ascii=False),
+            action_kind="task",
+            enabled=True,
+        )
+        db.add(row)
+        await db.flush()
+        if decision.goal_id:
+            await goals_repo.set_status(db, decision.goal_id, "running")
+        return (True, f"standing_order_filed:{row.id}", row.id)
 
     async def start(self) -> None:
         if self._task is not None and not self._task.done():

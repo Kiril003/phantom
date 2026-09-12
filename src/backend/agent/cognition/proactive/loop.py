@@ -741,16 +741,15 @@ class ProactiveLoop:
             for t in list(self._recent_triggers)[-5:]
         ]
         
-        # Phase 28 — Will Engine: top goal from stack
-        top_goal_obj = await goal_stack.pop_highest()
-        # Note: pop_highest marks it as 'running' in DB, but we haven't fired it yet.
-        # If we decide 'none', we might want to put it back. For now, just peak.
-        # Wait, I'll add a 'peek_highest' to GoalStack to avoid marking it prematurely.
+        # Phase 28 — Will Engine: top goal from stack.
+        # peek, not pop: this value is only rendered into a prompt line
+        # (`top_goal` at loop.py:112). pop_highest() flips the row to "running",
+        # and nothing here ever fires it or puts it back — every cycle of this
+        # loop burned one more pending goal to a status it would never leave.
+        top_goal_obj = await goal_stack.peek_highest()
         top_goal_str = "—"
         if top_goal_obj:
             top_goal_str = f"{top_goal_obj.description} (prio: {top_goal_obj.priority():.2f})"
-            # Since we 'popped' it, we MUST use it or revert.
-            # I'll change pop_highest to peek for this context.
 
         return {
             "emotion": emotion,

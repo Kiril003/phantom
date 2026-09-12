@@ -33,12 +33,23 @@ async def db_factory():
     os.unlink(tmp)
 
 
+async def _observe_user(db_factory, text="Власник другий тиждень пише про офлайн-карти."):
+    """Give the will something real about the user. Without this reflection
+    refuses to propose, which is the point of
+    test_orient_refuses_to_invent_goals_without_observation below."""
+    from db.models import PhantomNarrative
+    async with db_factory() as db:
+        db.add(PhantomNarrative(user_id="u1", narrative_text=text, turn_count=5))
+        await db.commit()
+
+
 @pytest.mark.asyncio
 async def test_orient_bootstrap_reflects_when_no_goals(db_factory, monkeypatch):
     from agent.will.engine import WillEngine
     from agent.will import goals
     from config import config
     monkeypatch.setattr(config, "will_enabled", True, raising=False)
+    await _observe_user(db_factory)
 
     async def fake_llm(prompt, system):
         return '[{"description":"Перша самопороджена ціль","horizon_level":1}]'
@@ -116,6 +127,7 @@ async def test_orient_scheduled_reflect_only_once_per_day(db_factory, monkeypatc
     monkeypatch.setattr(config, "will_reflect_hour_local", 4, raising=False)
 
     calls = {"n": 0}
+    await _observe_user(db_factory)
 
     async def fake_llm(prompt, system):
         calls["n"] += 1
@@ -136,3 +148,65 @@ async def test_orient_scheduled_reflect_only_once_per_day(db_factory, monkeypatc
         await db.commit()
     # ACTION-level goal has no decompose; reflect should fire exactly once.
     assert calls["n"] == 1
+
+
+@pytest.mark.asyncio
+async def test_orient_refuses_to_invent_goals_without_observation(db_factory, monkeypatch):
+    """The 20 self_generated goals found in the live DB on 12.09 described a
+    company that does not exist, in broken Ukrainian. They came from asking a
+    7B model to "propose 1-3 goals" with nothing in front of it but the values
+    doctrine — a constant present on every run. No observation of the user must
+    mean no proposal AND no LLM call."""
+    from agent.will.engine import WillEngine
+    from agent.will import goals
+    from config import config
+    monkeypatch.setattr(config, "will_enabled", True, raising=False)
+
+    calls = {"n": 0}
+
+    async def fake_llm(prompt, system):
+        calls["n"] += 1
+        return '[{"description":"вигадана ціль","horizon_level":1}]'
+    eng = WillEngine()
+    eng.dispatch_llm = fake_llm
+    async with db_factory() as db:
+        note = await eng.orient(db, "u1", [], now=datetime(2026, 6, 27, 12, 0))
+        await db.commit()
+    assert calls["n"] == 0, "asked the model to invent goals with nothing observed"
+    assert "reflected" not in note
+    async with db_factory() as db:
+        active = await goals.list_active(db, "u1")
+    assert active == []
+
+
+@pytest.mark.asyncio
+async def test_orient_does_not_reflect_past_the_active_goal_ceiling(db_factory, monkeypatch):
+    """Decomposition has always respected will_max_active_goals; reflection did
+    not, so a tree pinned at the ceiling still grew by up to 3 roots a day."""
+    from agent.will.engine import WillEngine
+    from agent.will import goals
+    from config import config
+    monkeypatch.setattr(config, "will_max_active_goals", 2, raising=False)
+    monkeypatch.setattr(config, "will_reflect_hour_local", 4, raising=False)
+    await _observe_user(db_factory)
+
+    calls = {"n": 0}
+
+    async def fake_llm(prompt, system):
+        calls["n"] += 1
+        return '[{"description":"ще одна ціль","horizon_level":1}]'
+    eng = WillEngine()
+    eng.dispatch_llm = fake_llm
+    async with db_factory() as db:
+        await goals.seed(db, "u1", "ціль а", 6)
+        await goals.seed(db, "u1", "ціль б", 6)  # 2 active == ceiling
+        await db.commit()
+    async with db_factory() as db:
+        active = await goals.list_active(db, "u1")
+        note = await eng.orient(db, "u1", active, now=datetime(2026, 6, 27, 4, 30))
+        await db.commit()
+    assert "reflect_skipped:at_ceiling" in note
+    assert calls["n"] == 0
+    async with db_factory() as db:
+        active = await goals.list_active(db, "u1")
+    assert len(active) == 2

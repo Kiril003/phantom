@@ -32,7 +32,12 @@ _PROMPT = """\
 - noop: зараз діяти не варто
 
 Поверни ЛИШЕ JSON:
-{{"kind": "...", "goal_id": "<id або null>", "action_text": "...", "rationale": "..."}}"""
+{{"kind": "...", "goal_id": "<id або null>", "action_text": "...", "rationale": "..."}}
+
+Якщо kind="standing_order", ОБОВʼЯЗКОВО додай поле "schedule" — без нього правило
+не буде створене. Одна з двох форм:
+{{"kind": "interval", "every_s": <1..86400>}}
+{{"kind": "cron", "minute": "0", "hour": "9", "day": "*", "month": "*", "day_of_week": "*"}}"""
 
 
 def _strip_fence(raw: str) -> str:
@@ -74,11 +79,13 @@ async def decide_next(
         kind = str(parsed.get("kind", "noop"))
         if kind not in ("start_task", "standing_order", "proactive_seed", "noop"):
             kind = "noop"
+        sched = parsed.get("schedule")
         return WillDecision(
             kind=kind,  # type: ignore[arg-type]
             goal_id=parsed.get("goal_id") or None,
             action_text=str(parsed.get("action_text", ""))[:500],
             rationale=str(parsed.get("rationale", ""))[:500],
+            schedule=sched if isinstance(sched, dict) else None,
         )
     except Exception as exc:
         logger.debug("decide_next parse failed: %s", exc)

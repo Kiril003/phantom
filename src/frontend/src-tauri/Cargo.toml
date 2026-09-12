@@ -32,6 +32,20 @@ tauri-build = { version = "2.0", features = [] }
 [dependencies]
 tauri = { version = "2.0", features = [] }
 tauri-plugin-shell = "2.0"
+serde = { version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+log = "0.4"
+env_logger = "0.11"
+
+# Shipped without crypto deps in V-1; updater + signing arrives Day-5.
+
+# ПОРЯДОК СЕКЦІЙ ТУТ — НЕ КОСМЕТИКА. Усе, що йде після `[target.…]`, належить
+# ЦІЙ цілі, а не загальним залежностям. 12.09.2026 я вставив target-секцію
+# посеред списку, і `serde`, `serde_json`, `log`, `env_logger` мовчки стали
+# залежностями тієї цілі. На Linux це не впало (умова там істинна), тобто
+# `cargo check` був зелений при структурно хибному маніфесті. Тримай усі
+# `[target.…]` НАПРИКІНЦІ.
+
 # Другий примірник — не помилка користувача, а звичайний подвійний клік.
 # Без цього плагіна він доходив до кінця: другий бекенд упирався в зайнятий
 # 127.0.0.1:8000, виходив кодом 1 (відтворено 12.09.2026), а людина лишалась
@@ -39,12 +53,17 @@ tauri-plugin-shell = "2.0"
 # мобільних цілях крейт не збирається.
 [target.'cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))'.dependencies]
 tauri-plugin-single-instance = "2.0"
-serde = { version = "1.0", features = ["derive"] }
-serde_json = "1.0"
-log = "0.4"
-env_logger = "0.11"
 
-# Shipped without crypto deps in V-1; updater + signing arrives Day-5.
+# Єдина причина: сказати вголос, коли вікна не буде. У релізі під Windows
+# стоїть `windows_subsystem = "windows"`, тобто консолі немає й stderr не веде
+# нікуди — паніка на старті лишає людину перед подвійним кліком, після якого
+# НЕ СТАЛОСЬ НІЧОГО. `MessageBoxW` з user32 — єдиний спосіб показати текст до
+# того, як існує хоч одне вікно застосунку.
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.59", features = [
+  "Win32_Foundation",
+  "Win32_UI_WindowsAndMessaging",
+] }
 
 [features]
 # `default` keeps the windowed shell. `headless` is reserved for CI smoke

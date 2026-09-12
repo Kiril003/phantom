@@ -45,7 +45,17 @@ on:
         default: nsis
 
 permissions:
-  contents: read
+  # `write` потрібен рівно для одного: покласти пакунок у РЕЛІЗ, а не в
+  # артефакти. Причина виміряна — див. крок «Publish to the release».
+  contents: write
+
+# Один прогін на раз. Windows-хвилини списуються ×2, а два паралельні прогони
+# цієї роботи — це просто подвійний рахунок за ту саму відповідь.
+# УВАГА: група призначається з файла САМОГО прогону, тож прогін, запущений ДО
+# появи цього блоку, новим тегом не скасується — його гасять руками.
+concurrency:
+  group: pc-windows
+  cancel-in-progress: true
 
 jobs:
   windows-exe:
@@ -163,29 +173,63 @@ jobs:
           }
           "портативна тека: {0:N0} МБ" -f ((Get-ChildItem $out -Recurse -File | Measure-Object Length -Sum).Sum / 1MB)
 
-      - uses: actions/upload-artifact@v4
-        with:
-          name: phantom-os-windows-portable
-          path: portable/
-          retention-days: 14
-
-      - name: Installers, if any were asked for
-        if: inputs.bundles != 'none'
+      # ЧОМУ РЕЛІЗ, А НЕ АРТЕФАКТ — і це вимір, а не смак.
+      #
+      # Артефакти Actions рахуються в сховище плану: GitHub Free для приватного
+      # репозиторію дає **500 МБ**, і «якщо на акаунті немає платіжного методу,
+      # використання блокується, щойно квота вичерпана». Портативна тека тут —
+      # ~1,7-2 ГБ (лише torch у `_internal` це ~700 МБ), тобто вивантаження
+      # впало б ПІСЛЯ години роботи, і єдиним наслідком години була б червона
+      # позначка.
+      #
+      # Реліз цієї ціни не платить: «немає обмеження на сумарний розмір релізу
+      # й на трафік», обмеження лише на файл — 2 ГіБ. Тому пакунок їде туди.
+      # `gh` на раннері вже стоїть, стороннього action не беремо.
+      - name: Zip the portable folder
         shell: pwsh
         run: |
-          $b = "src/frontend/src-tauri/target/release/bundle"
-          if (Test-Path $b) { Get-ChildItem $b -Recurse -File -Include *.exe, *.msi | Select-Object FullName, Length }
-          else { "пакувальник нічого не поклав у $b" }
+          $sha = "${{ github.sha }}".Substring(0,8)
+          $zip = "PHANTOM-OS-windows-portable-$sha.zip"
+          Compress-Archive -Path "portable/*" -DestinationPath $zip -CompressionLevel Optimal
+          $len = (Get-Item $zip).Length
+          "архів: {0} — {1:N0} МБ" -f $zip, ($len / 1MB)
+          # Межа релізу — 2 ГіБ на файл. Сказати це тут дешевше, ніж дізнатись
+          # від `gh` після вивантаження половини.
+          if ($len -ge 2GB) { throw "$zip важить $len Б — більше за межу релізу 2 ГіБ" }
+          (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower() + "  " + $zip | Out-File -Encoding ascii "$zip.sha256"
+          "PORTABLE_ZIP=$zip" | Out-File -Append -Encoding ascii $env:GITHUB_ENV
+
+      - name: Publish to the release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $files = @($env:PORTABLE_ZIP, "$env:PORTABLE_ZIP.sha256")
+          $inst = Get-ChildItem "src/frontend/src-tauri/target/release/bundle" -Recurse -File -Include *.exe, *.msi -ErrorAction SilentlyContinue
+          if ($inst) { $files += $inst.FullName }
+          $files | ForEach-Object { "додаю: $_" }
+          gh release create "${{ github.ref_name }}" @files `
+            --title "PHANTOM OS для Windows (${{ github.ref_name }})" `
+            --notes "Портативна тека: розпакуй і запусти ``PHANTOM OS.exe``. Поруч мусять лишитись ``phantom-backend.exe`` і тека ``_internal`` — без неї ядро не підніметься. Зібрано з ${{ github.sha }}. НЕ підписано: SmartScreen покаже попередження." `
+            --draft=false
+        continue-on-error: true
+
+      # Якщо релізу не сталось (запуск без тега), пакунок усе одно має бути
+      # доступний — але тоді він упреться в ті самі 500 МБ, і про це сказано
+      # вголос, а не мовчки.
+      - name: Fall back to an artifact, and say what that costs
+        if: github.ref_type != 'tag'
+        shell: pwsh
+        run: |
+          Write-Host "::warning::запуск без тега — пакунок піде в артефакти, а там квота 500 МБ на приватному Free. Якщо вивантаження впаде, це квота, а не збірка. Постав тег win-exe-* і перезапусти."
 
       - uses: actions/upload-artifact@v4
-        if: inputs.bundles != 'none'
+        if: github.ref_type != 'tag'
         with:
-          name: phantom-os-windows-installers
-          path: |
-            src/frontend/src-tauri/target/release/bundle/nsis/*.exe
-            src/frontend/src-tauri/target/release/bundle/msi/*.msi
-          if-no-files-found: warn
-          retention-days: 14
+          name: phantom-os-windows-portable
+          path: ${{ env.PORTABLE_ZIP }}
+          retention-days: 7
 
       # Провал мусить лишити слід: без цього «збірка червона» — це все, що
       # власник побачить, а лог PyInstaller і димової перевірки згорить разом

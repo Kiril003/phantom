@@ -123,6 +123,35 @@ class TestCargoManifest:
             "V-1: build-dependency tauri-build must be 2.x"
         )
 
+    def test_target_sections_come_last(self):
+        """Спіймано на собі 12.09.2026.
+
+        Усе, що стоїть ПІСЛЯ `[target.\'cfg(…)\'.dependencies]`, належить ТІЙ
+        цілі. Я вставив target-секцію посеред списку, і `serde`, `serde_json`,
+        `log`, `env_logger` мовчки стали залежностями лише тієї цілі. На Linux
+        умова була істинна, тож `cargo check` лишався ЗЕЛЕНИЙ при структурно
+        хибному маніфесті — зламалось би воно там, де ніхто не дивиться.
+        """
+        body = CARGO_TOML.read_text(encoding="utf-8")
+        first_target = body.find("[target.")
+        assert first_target != -1, "target-секцій немає — нема чого стерегти"
+        plain = body[body.index("[dependencies]"):first_target]
+        for name in ("serde", "serde_json", "log", "env_logger", "tauri-plugin-shell"):
+            assert f"\n{name} " in plain or f"\n{name}=" in plain, (
+                f"залежність {name!r} стоїть ПІСЛЯ першої секції [target.…] — "
+                "тобто мовчки стала залежністю тієї цілі, а не загальною"
+            )
+
+    def test_windows_only_dependency_stays_windows_only(self):
+        """`windows-sys` на Linux не збирається; тягнути його туди нема за чим."""
+        body = CARGO_TOML.read_text(encoding="utf-8")
+        i = body.find("[target.'cfg(windows)'.dependencies]")
+        assert i != -1, (
+            "секція cfg(windows) зникла — разом із нею зникає єдиний спосіб "
+            "сказати людині вголос, що вікна не буде"
+        )
+        assert "windows-sys" in body[i:], "windows-sys виїхав із секції cfg(windows)"
+
     def test_cargo_release_profile_is_size_optimized(self):
         body = CARGO_TOML.read_text(encoding="utf-8")
         # Mobile-class device target — release profile must shave bytes.
@@ -401,6 +430,37 @@ class TestMainRs:
                 f"немає {call} — вікно першого примірника не підніметься з "
                 "усіх станів, у яких воно буває"
             )
+
+    def test_main_rs_never_dies_silently_on_windows(self):
+        """Подвійний клік, після якого не сталось НІЧОГО.
+
+        У релізі під Windows стоїть `windows_subsystem = "windows"` — консолі
+        немає, stderr не веде нікуди. Паніка на старті там невидима повністю:
+        ні вікна, ні помилки, ні сліду. А проміжок до першого вікна багатий на
+        причини: бракує WebView2 (портативна тека, на відміну від інсталятора
+        NSIS, завантажувача не несе), не знайшовся сайдкар, не прочитався
+        конфіг. Це та сама вада, що «гріюсь 204s», лише коротша: прилад мовчить.
+        """
+        code = self._code()
+        assert "std::panic::set_hook" in code, (
+            "немає гака паніки — будь-який провал до першого вікна на Windows "
+            "лишиться зовсім невидимим"
+        )
+        assert "MessageBoxW" in code, (
+            "нічим сказати вголос: до появи вікна застосунку єдиний спосіб "
+            "показати текст на Windows — MessageBoxW"
+        )
+        assert "webview_version" in code, (
+            "немає перевірки WebView2 — на машині без нього tauri панікує в "
+            "build(), і людина бачить порожнечу"
+        )
+        assert "WebView2" in self._body(), (
+            "повідомлення не називає WebView2 — людина не знає, що ставити"
+        )
+        assert "leave_a_trace" in code, (
+            "слід не лишається: людина закриє вікно повідомлення, і показати "
+            "нам буде нічого"
+        )
 
     def test_main_rs_windows_subsystem_is_windows_in_release(self):
         """Cosmetic but required: without the cfg_attr, a Windows release

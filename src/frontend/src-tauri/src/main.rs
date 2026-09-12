@@ -41,6 +41,37 @@ fn main() {
     // вимкнений за замовчуванням, — це відсутній прилад.
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
+    // Будь-яка паніка на старті мусить стати видимою. Тут її ловлять ДО того,
+    // як зʼявилось вікно: саме в цьому проміжку живуть «бракує WebView2»,
+    // «не знайшов сайдкар» і «не зміг прочитати конфіг».
+    std::panic::set_hook(Box::new(|info| {
+        let text = format!(
+            "PHANTOM OS не зміг стартувати.\n\n{info}\n\nПодробиці збережено у {}",
+            std::env::temp_dir().join("phantom-os-startup.log").display()
+        );
+        leave_a_trace(&text);
+        tell_the_user_out_loud("PHANTOM OS", &text);
+    }));
+
+    // Вікно PHANTOM малює Microsoft Edge WebView2. На Windows 11 він є завжди,
+    // на Windows 10 — не обовʼязково, і портативна тека, на відміну від
+    // інсталятора NSIS, не несе завантажувача (`webviewInstallMode` працює
+    // лише в інсталяторі). Без цієї перевірки tauri панікує в `build()`, а
+    // людина бачить порожнечу.
+    #[cfg(windows)]
+    if let Err(e) = tauri::webview_version() {
+        let text = format!(
+            "PHANTOM OS показує вікно через Microsoft Edge WebView2, \
+             і на цій машині його немає.\n\n\
+             Постав «Microsoft Edge WebView2 Runtime» (безкоштовний, від Microsoft) \
+             і запусти PHANTOM ще раз.\n\n\
+             Подробиця: {e}"
+        );
+        leave_a_trace(&text);
+        tell_the_user_out_loud("PHANTOM OS — бракує WebView2", &text);
+        std::process::exit(1);
+    }
+
     tauri::Builder::default()
         // ПЕРШИМ, і це вимога плагіна, а не стиль: він мусить перехопити
         // запуск раніше, ніж решта почне робити роботу другого примірника.
@@ -153,6 +184,52 @@ fn spawn_backend_sidecar(handle: &tauri::AppHandle) -> Result<(), String> {
     *state.0.lock().expect("sidecar handle poisoned") = Some(child);
     log::info!("phantom-backend sidecar started; PHANTOM_PACKAGED=1 host=127.0.0.1");
     Ok(())
+}
+
+/// Сказати людині вголос, коли вікна ще не існує.
+///
+/// У релізі під Windows стоїть `windows_subsystem = "windows"` — консолі немає,
+/// stderr не веде НІКУДИ. Паніка на старті там виглядає так: людина двічі
+/// клацає по exe, і не стається нічого. Ні вікна, ні помилки, ні сліду. Це та
+/// сама вада, що «гріюсь 204s», лише коротша: прилад мовчить.
+///
+/// `MessageBoxW` — єдине, чим можна показати текст ДО того, як існує хоч одне
+/// вікно застосунку.
+#[cfg(windows)]
+fn tell_the_user_out_loud(title: &str, body: &str) {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+        MessageBoxW, MB_ICONERROR, MB_OK, MB_SETFOREGROUND, MB_TOPMOST,
+    };
+    fn wide(s: &str) -> Vec<u16> {
+        s.encode_utf16().chain(std::iter::once(0)).collect()
+    }
+    let (body, title) = (wide(body), wide(title));
+    // SAFETY: обидва рядки завершені нулем і живуть довше за виклик; вікна-
+    // власника немає навмисно — його ще не існує.
+    unsafe {
+        MessageBoxW(
+            std::ptr::null_mut(),
+            body.as_ptr(),
+            title.as_ptr(),
+            MB_OK | MB_ICONERROR | MB_TOPMOST | MB_SETFOREGROUND,
+        );
+    }
+}
+
+/// На Linux stderr веде в журнал юніта, тож вікно не потрібне.
+#[cfg(not(windows))]
+fn tell_the_user_out_loud(title: &str, body: &str) {
+    eprintln!("[{title}] {body}");
+}
+
+/// Слід, який переживе закрите вікно повідомлення.
+///
+/// Людина прочитає текст і натисне «ОК» — і якщо потім захоче показати його
+/// нам, показувати буде нічого. Файл лежить у тимчасовій теці, бо вона
+/// записна завжди, на відміну від теки поруч із застосунком.
+fn leave_a_trace(text: &str) {
+    let path = std::env::temp_dir().join("phantom-os-startup.log");
+    let _ = std::fs::write(path, text);
 }
 
 /// Другий запуск мусить ПОКАЗАТИ те, що вже працює.

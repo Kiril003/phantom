@@ -67,4 +67,12 @@ export const PANE_REGISTRY: Record<PaneKind, PaneDef> = {
     source: 'цей вузол',
     Content: React.lazy(() => import('../../components/settings/SettingsPanel')),
   },
+  messenger: {
+    kind: 'messenger',
+    title: 'Месенджер',
+    // Не «ядро»: листування живе на вузлі й ходить у меш/реле, а не в
+    // ланцюг ШІ. Джерело називаємо тим, чим воно є.
+    source: 'вузол · мережа',
+    Content: React.lazy(() => import('../../layouts/MessengerLayout')),
+  },
 };

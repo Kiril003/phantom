@@ -40,11 +40,55 @@ class ApiError extends Error {
   constructor(
     public status: number,
     public code: string,
-    message: string
+    message: string,
+    /** `Retry-After` у секундах — лише коли бекенд його справді прислав. */
+    public retryAfterS: number | null = null,
   ) {
     super(message);
     this.name = 'ApiError';
   }
+}
+
+/**
+ * Слова для випадку, коли бекенд НЕ надіслав `detail`.
+ *
+ * Тут стояло `'Unknown error'` — англійською, в українському застосунку, і
+ * головне: неправда. 12.09.2026 у полі розмови на склі висів саме цей
+ * рядок, і причина була відома точно — ядро не запущене (на 127.0.0.1:8000
+ * не слухав ніхто, `pgrep phantom-backend` = 0). «Невідомо» сказала гілка
+ * «інакше», а не вимір. Гілка «інакше» тепер називає те, що справді
+ * сталось, і каже, що з цим робити.
+ *
+ * Порожнє тіло на 5xx — це завжди або мертвий upstream, або проксі перед
+ * ним: vite віддає 500 за мертвим бекендом, не 502 (виміряно 29.08).
+ */
+function wordsForStatus(status: number): string {
+  if (status >= 500) {
+    return 'Ядро не відповідає. Схоже, служба вузла не запущена — перезапусти застосунок або підніми ядро вручну.';
+  }
+  if (status === 401) return 'Сесія недійсна — потрібен вхід.';
+  if (status === 403) return 'Ядро відмовило: бракує прав на цю дію.';
+  if (status === 404) return 'Ядро не знає цієї адреси — застосунок і служба різних версій.';
+  if (status === 408 || status === 504) return 'Ядро не встигло відповісти.';
+  if (status === 429) return 'Забагато запитів поспіль — зачекай і повтори.';
+  return `Ядро відповіло помилкою ${status} без пояснення.`;
+}
+
+/** Мережевий провал (fetch кинув): з'єднання не відбулось узагалі. */
+function wordsForNetwork(): string {
+  return 'Немає з’єднання з ядром. Служба вузла не відповідає на своєму порту.';
+}
+
+/**
+ * Штамповані англійські `detail` бекенда, які нічого не пояснюють людині.
+ * Точний перелік, а не здогад: `security/auth.py:321,341` і
+ * `api/dependencies.py:17` шлють рівно «Not authenticated». Такий рядок —
+ * не вимір, а заглушка фреймворку, тож слово беремо своє.
+ */
+const CANNED_SERVER_PHRASES = new Set(['not authenticated', 'unauthorized', 'forbidden']);
+
+function isCanned(detail: string): boolean {
+  return CANNED_SERVER_PHRASES.has(detail.trim().toLowerCase());
 }
 
 export async function request<T>(
@@ -58,12 +102,18 @@ export async function request<T>(
   };
   if (token) headers['Authorization'] = `Bearer ${token}`;
 
-  const res = await fetch(endpoint(path), {
-    method,
-    headers,
-    credentials: 'include',
-    body: body !== undefined ? JSON.stringify(body) : undefined,
-  });
+  let res: Response;
+  try {
+    res = await fetch(endpoint(path), {
+      method,
+      headers,
+      credentials: 'include',
+      body: body !== undefined ? JSON.stringify(body) : undefined,
+    });
+  } catch {
+    // `TypeError: Failed to fetch` — теж англійською і теж нічого не каже.
+    throw new ApiError(0, 'NETWORK', wordsForNetwork());
+  }
 
   if (!res.ok) {
     // Phase 10.4 fix 2: on expired/invalid token, drop it so the next
@@ -78,8 +128,32 @@ export async function request<T>(
         /* SSR / restricted storage: ignore */
       }
     }
-    const err = await res.json().catch(() => ({ detail: 'Unknown error', code: 'UNKNOWN' }));
-    throw new ApiError(res.status, err.code ?? 'UNKNOWN', err.detail ?? 'Unknown error');
+    const err = await res.json().catch(() => ({} as { detail?: string; code?: string }));
+    const raw = typeof err.detail === 'string' && err.detail.trim() ? err.detail : null;
+    const detail = raw && !isCanned(raw) ? raw : null;
+    // Бекенд називає причину машинним кодом у заголовку `X-Error-Code`
+    // (`api/routes_auth.py:157` тощо), а читав його досі ніхто — тіло
+    // відповіді поля `code` не несе. Беремо саме звідти.
+    //
+    // Заголовки тут — ДОДАТОК до причини, а не причина. Тож читаємо їх
+    // так, щоб їхня відсутність не могла перетворити «ядро відмовило, ось
+    // чому» на голий TypeError: це був би рівно той дефект, який ця
+    // функція й лікує.
+    const header = (name: string): string | null => {
+      try {
+        return res.headers?.get(name) ?? null;
+      } catch {
+        return null;
+      }
+    };
+    const headerCode = header('X-Error-Code');
+    const retryAfter = Number(header('Retry-After'));
+    throw new ApiError(
+      res.status,
+      err.code ?? headerCode ?? `HTTP_${res.status}`,
+      detail ?? wordsForStatus(res.status),
+      Number.isFinite(retryAfter) && retryAfter > 0 ? retryAfter : null,
+    );
   }
 
   if (res.status === 204) return undefined as T;

@@ -1,4 +1,4 @@
-import {} from 'react';
+import { useEffect, useState } from 'react';
 import { motion } from 'framer-motion';
 import { OmniMap } from '../components/map/OmniMap';
 import { EASE_PHANTOM } from '../styles/motion';
@@ -7,6 +7,63 @@ import { useSystemStore } from '../stores/systemStore';
 import '../styles/map.css';
 
 const DEFAULT_ZOOM = 15;
+
+/**
+ * Очікування сесії словами — і чому тут не крутиться саме лише кільце.
+ *
+ * До 12.09.2026 тут було кільце `animate-spin` і напис «PHANTOM OS», і
+ * більше нічого. На кадрі зі скла пейн МАПА крутив його безкінечно: сесії
+ * не було й не могло бути, а пейн мовчав про це так само і першу секунду,
+ * і п'яту хвилину. Це той самий клас вади, що й «Unknown error» поруч —
+ * прилад, який не називає причини.
+ *
+ * Зразок узято з `PhantomLoader` (app/App.tsx): підпис іде за прожитим
+ * часом, і після порога каже, що саме не приїхало.
+ */
+function WaitingForSession() {
+  const [elapsed, setElapsed] = useState(0);
+  useEffect(() => {
+    const t = setInterval(() => setElapsed((s) => s + 1), 1000);
+    return () => clearInterval(t);
+  }, []);
+
+  const late = elapsed >= 8;
+
+  return (
+    <div
+      className="w-full h-full flex flex-col items-center justify-center"
+      style={{ background: 'var(--surface-void)', padding: 24 }}
+    >
+      <div className="flex flex-col items-center" style={{ gap: 12, maxWidth: 340 }}>
+        {!late && (
+          <div
+            className="w-8 h-8 border-2 rounded-full animate-spin"
+            style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }}
+          />
+        )}
+        <span
+          className="tracking-widest font-mono text-xs uppercase"
+          style={{ color: 'var(--ink-muted)', textAlign: 'center' }}
+        >
+          {late ? 'Мапа не відкрилась' : 'Чекаю на сесію вузла'}
+        </span>
+        {late && (
+          <span
+            style={{
+              fontSize: 11,
+              lineHeight: 1.5,
+              color: 'var(--ink-muted)',
+              textAlign: 'center',
+            }}
+          >
+            Мапа читає тайли й треки цього вузла, тож без входу вона порожня.
+            Сесії немає {elapsed} с — увійди в PHANTOM, і пейн намалюється сам.
+          </span>
+        )}
+      </div>
+    </div>
+  );
+}
 
 export default function MapLayout() {
   const authenticated = useSystemStore((s) => s.authenticated);
@@ -20,26 +77,7 @@ export default function MapLayout() {
   const initialZoom =
     typeof zoomRaw === 'number' && Number.isFinite(zoomRaw) ? zoomRaw : DEFAULT_ZOOM;
 
-  if (!authenticated) {
-    return (
-      <div
-        className="w-full h-full flex flex-col items-center justify-center"
-        style={{ background: 'var(--surface-void)' }}
-      >
-        <div className="flex flex-col items-center gap-3">
-          <div
-            className="w-8 h-8 border-2 rounded-full animate-spin"
-            style={{ borderColor: 'var(--accent)', borderTopColor: 'transparent' }}
-          />
-          <span
-            className="tracking-widest font-mono text-ink-muted text-xs"
-          >
-            PHANTOM OS
-          </span>
-        </div>
-      </div>
-    );
-  }
+  if (!authenticated) return <WaitingForSession />;
 
   return (
     <motion.div

@@ -3,11 +3,10 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, PlugZap, RotateCw, ShieldAlert } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { useSystemStore } from '../../stores/systemStore';
-import { authApi } from '../../services/api';
+import { ApiError, authApi } from '../../services/api';
 import { AmbientGlows } from '../core/AmbientGlows';
 import { Orb } from '../core/Orb';
 import PinPad from './PinPad';
-import type { User } from '@shared/types';
 
 interface Profile {
   id: string;
@@ -51,7 +50,7 @@ export default function LoginScreen() {
   const [error, setError] = useState('');
   const [now, setNow] = useState(() => Date.now());
 
-  const { setUser, isLocked, lockedUntil } = useAuthStore();
+  const { setUser, isLocked, lockedUntil, setLockout, incrementAttempts } = useAuthStore();
   const setAuthenticated = useSystemStore((s) => s.setAuthenticated);
 
   const load = useCallback(async () => {
@@ -104,6 +103,25 @@ export default function LoginScreen() {
   const locked = isLocked();
   const lockLeft = locked && lockedUntil ? Math.max(0, Math.ceil((lockedUntil - now) / 1000)) : 0;
 
+  /**
+   * Невдалий вхід називає причину — і НЕ впускає.
+   *
+   * Тут стояв фолбек «standalone / web demo mode»: будь-яка помилка
+   * `loginPin` — 401 за невірним кодом, 403 за віддаленим разовим кодом,
+   * 429 за блокуванням — складала обʼєкт `User` з роллю ROOT для імен
+   * `phantom`/`kiril`, клала токен-літерал `'local_demo_token'` і ставила
+   * `authenticated = true`. Наслідків два, і обидва погані:
+   *
+   *   • людина з НЕВІРНИМ кодом потрапляла всередину. Далі кожен виклик
+   *     до ядра повертав 401, бо токен не є токеном, — і замість «код не
+   *     підійшов» вона отримувала мовчазну оболонку, що ні на що не
+   *     відповідає;
+   *   • вигадана особа з чужою роллю. Той самий клас, що й чотири
+   *     вигадані профілі в `picker`, які тут уже прибрано вище.
+   *
+   * Замок від цього не міцнішає й не слабшає: сервер однаково не видав
+   * токена. Міняється лише те, чи каже екран правду.
+   */
   const submitPin = async (pin: string) => {
     if (phase.kind !== 'pin' || locked) return;
     setBusy(true);
@@ -112,22 +130,27 @@ export default function LoginScreen() {
       const res = await authApi.loginPin(phase.who.username, pin);
       setUser(res.user, res.token, res.expires_at);
       setAuthenticated(true);
-    } catch {
-      // Fallback for standalone / web demo mode (e.g. Netlify try.phantom-os.dev)
-      const user: User = {
-        id: phase.who.id || `u_${phase.who.username}`,
-        username: phase.who.username,
-        role: (phase.who.username === 'phantom' || phase.who.username === 'kiril' ? 'ROOT' : 'OPERATOR') as any,
-        avatar_url: phase.who.avatar_url || null,
-        rfid_uid_hash: null,
-        pin_hash: 'demo_pin_hash',
-        last_seen_at: new Date().toISOString(),
-        created_at: new Date().toISOString(),
-        preferences: {} as any,
-        behavioral_model: {} as any,
-      };
-      setUser(user, 'local_demo_token', new Date(Date.now() + 86400000).toISOString());
-      setAuthenticated(true);
+    } catch (err) {
+      if (err instanceof ApiError) {
+        if (err.status === 429) {
+          // Тривалість паузи беремо з `Retry-After`, а не вигадуємо.
+          if (err.retryAfterS) setLockout(Date.now() + err.retryAfterS * 1000);
+          setError(
+            err.retryAfterS
+              ? `Забагато спроб. Пауза ${err.retryAfterS} с.`
+              : 'Забагато спроб. Ядро зробило паузу.',
+          );
+        } else if (err.status === 401) {
+          incrementAttempts();
+          setError('Код не підійшов.');
+        } else if (err.status === 403) {
+          setError('Разовий код приймається лише з екрана самого пристрою.');
+        } else {
+          setError(err.message);
+        }
+      } else {
+        setError('Вхід не вдався, і причини ядро не назвало.');
+      }
     } finally {
       setBusy(false);
     }
@@ -200,6 +223,7 @@ export default function LoginScreen() {
             <div style={{ marginTop: 22 }}>
               <PinPad onSubmit={(pin) => void submitPin(pin)} disabled={busy || locked} error={error} />
             </div>
+            <WhereIsTheCode />
             {phase.many && (
               <BackToPicker
                 onBack={() => {
@@ -211,6 +235,85 @@ export default function LoginScreen() {
           </>
         )}
       </motion.div>
+    </div>
+  );
+}
+
+/**
+ * «Звідки взяти код?» — бо форма, яка просить те, чого не пояснює, це не
+ * форма, а глуха стіна.
+ *
+ * Виміряно 12.09.2026 по коду ядра: код народжується один раз, на першому
+ * старті вузла (`security/auth.py:252-291`, `secrets.choice` по цифрах,
+ * довжина 6 — вшитого типового коду НЕМА), і лягає у файл
+ * `identity/bootstrap_pin` з правами 0600. У журнал він теж пишеться, але
+ * рівнем WARNING — а `env_logger` оболонки без `RUST_LOG` пропускає лише
+ * `error` (`src-tauri/src/main.rs:31`), тож у запакованому застосунку той
+ * рядок НЕ видно ніде. Обіцяти журнал тут було б неправдою.
+ *
+ * Це поки що підказка, а не дорога: показати сам код на екрані застосунок
+ * не може — жоден ендпойнт його не віддає, а `main.rs` не має ЖОДНОЇ
+ * `#[tauri::command]`, тож і файл із WebView не читається. Дорогу треба
+ * прокладати в ядрі або в оболонці; підказка живе тут, доки її нема, бо
+ * мовчазна стіна гірша за чесну.
+ */
+function WhereIsTheCode() {
+  const [open, setOpen] = useState(false);
+  return (
+    <div style={{ marginTop: 14, width: '100%' }}>
+      <button
+        type="button"
+        onClick={() => setOpen((v) => !v)}
+        aria-expanded={open}
+        style={{
+          minHeight: 44,
+          width: '100%',
+          background: 'transparent',
+          border: 'none',
+          color: 'var(--ink-muted)',
+          fontSize: 12,
+          cursor: 'pointer',
+          textDecoration: 'underline',
+          textUnderlineOffset: 3,
+        }}
+      >
+        Звідки взяти код?
+      </button>
+      {open && (
+        <div
+          className="glass"
+          style={{
+            marginTop: 4,
+            padding: 14,
+            borderRadius: 14,
+            fontSize: 12,
+            lineHeight: 1.6,
+            color: 'var(--ink-secondary, var(--ink-muted))',
+            textAlign: 'left',
+          }}
+        >
+          <p style={{ margin: 0 }}>
+            Це не пароль від хмари. Код живе лише на цьому пристрої: ядро
+            створило його випадковим на першому запуску й більше ніде не
+            зберігає.
+          </p>
+          <p style={{ margin: '8px 0 0' }}>
+            Шість цифр лежать у файлі <code>identity/bootstrap_pin</code> у
+            теці даних вузла — у зібраному застосунку це{' '}
+            <code>~/.local/share/PHANTOM/data</code>, у дереві розробки —{' '}
+            <code>.phantom-data</code>.
+          </p>
+          <p style={{ margin: '8px 0 0' }}>
+            Він приймається тільки з екрана самого пристрою: по мережі цей
+            код не спрацює, доки ти не заміниш його на свій у Налаштуваннях
+            → Профіль.
+          </p>
+          <p style={{ margin: '8px 0 0', color: 'var(--signal-warn)' }}>
+            Показати код просто тут застосунок поки не вміє. Це наша
+            недоробка, не твоя.
+          </p>
+        </div>
+      )}
     </div>
   );
 }

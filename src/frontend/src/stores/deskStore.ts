@@ -11,7 +11,14 @@ import { create } from 'zustand';
  * відновлює її частку.
  */
 
-export type PaneKind = 'map' | 'dialogue' | 'company' | 'analytics' | 'settings' | 'cockpit';
+export type PaneKind =
+  | 'map'
+  | 'dialogue'
+  | 'company'
+  | 'analytics'
+  | 'settings'
+  | 'cockpit'
+  | 'messenger';
 export type PaneMode = 'tile' | 'float' | 'full';
 
 export interface PaneRect {
@@ -87,10 +94,27 @@ function presetDesks(): Desk[] {
       name: 'Компанія',
       panes: [gridPane('company', 'company', 1)],
     },
+    {
+      // Месенджер був недосяжний: маршрут /messenger існував, а дороги
+      // туди зі скла не було жодної — ні кнопки, ні рядка палітри, ні
+      // адресного рядка у вікні Tauri. Смуга столів — єдина навігація,
+      // яку видно завжди, тож дорога живе саме тут.
+      id: 'talks',
+      name: 'Розмови',
+      panes: [gridPane('talks', 'messenger', 1)],
+    },
   ];
 }
 
-const KNOWN_KINDS: PaneKind[] = ['map', 'dialogue', 'company', 'analytics', 'settings', 'cockpit'];
+const KNOWN_KINDS: PaneKind[] = [
+  'map',
+  'dialogue',
+  'company',
+  'analytics',
+  'settings',
+  'cockpit',
+  'messenger',
+];
 const KNOWN_MODES: PaneMode[] = ['tile', 'float', 'full'];
 
 function isFiniteNumber(v: unknown): v is number {

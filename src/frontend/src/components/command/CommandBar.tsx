@@ -42,6 +42,11 @@ export interface CommandBarProps {
    * дефолт deskStore.openPane(kind).
    */
   onNavigate?: (kind: PaneKind) => void;
+  /**
+   * Перехід за шляхом роутера. Приходить ззовні, а не з `useNavigate()`
+   * тут: палітру рендерять і поза роутером, і хук там падав би.
+   */
+  onRoute?: (path: string) => void;
   /** Вимкнути глобальний слухач Ctrl+K (для тестів/кастомного тригера). */
   disableHotkey?: boolean;
 }
@@ -91,7 +96,7 @@ function Highlighted({ text, indices }: { text: string; indices: number[] }) {
   );
 }
 
-export function CommandBar({ onNavigate, disableHotkey }: CommandBarProps) {
+export function CommandBar({ onNavigate, onRoute, disableHotkey }: CommandBarProps) {
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
   const [cursor, setCursor] = useState(0);
@@ -131,10 +136,10 @@ export function CommandBar({ onNavigate, disableHotkey }: CommandBarProps) {
 
   /* Живий список — з поточного стану сторів на кожен рендер відкритої палітри. */
   const scored = useMemo(
-    () => (open ? filterCommands(buildCommands({ onNavigate, close }), query) : []),
+    () => (open ? filterCommands(buildCommands({ onNavigate, onRoute, close }), query) : []),
     // buildCommands читає стори через getState — залежність від open/query достатня.
-     
-    [open, query, onNavigate, close],
+
+    [open, query, onNavigate, onRoute, close],
   );
   const groups = useMemo(() => groupBySection(scored), [scored]);
   const flat = useMemo(() => groups.flatMap((g) => g.items), [groups]);

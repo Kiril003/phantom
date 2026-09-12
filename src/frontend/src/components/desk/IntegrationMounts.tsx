@@ -1,4 +1,5 @@
 import React from 'react';
+import { useNavigate } from 'react-router-dom';
 
 /**
  * К4-міст до агента f1-command-organism — файли ПРИЇХАЛИ, міст
@@ -14,11 +15,18 @@ import React from 'react';
 const CommandBar = React.lazy(() => import('../command/CommandBar'));
 const OrganismStrip = React.lazy(() => import('../organism/OrganismStrip'));
 
-/** Командний рядок (Ctrl+K) — глобально в оболонці застосунку. */
+/**
+ * Командний рядок (Ctrl+K) — глобально в оболонці застосунку.
+ *
+ * Роутер живе ТУТ: сама палітра рендериться і поза ним (тести), тож
+ * `useNavigate()` усередині неї падав би. Звідси й приходять рядки-шляхи
+ * для поверхонь, які ще не стали пейнами.
+ */
 export function CommandBarMount() {
+  const navigate = useNavigate();
   return (
     <React.Suspense fallback={null}>
-      <CommandBar />
+      <CommandBar onRoute={(path) => navigate(path)} />
     </React.Suspense>
   );
 }

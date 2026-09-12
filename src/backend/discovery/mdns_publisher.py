@@ -141,6 +141,22 @@ def start_mdns(port: int, instance_name: str = "PHANTOM") -> bool:
     if os.environ.get("PHANTOM_SKIP_MDNS") == "1":
         logger.info("mdns: оголошення вимкнено (PHANTOM_SKIP_MDNS=1)")
         return False
+    # Треті двері тим самим шляхом, що й TLS-слухач: оголошення розповідає
+    # всій підмережі імʼя машини, її адресу й порт. У пакунку це робиться
+    # лише за згодою людини — так само, як спарування.
+    if os.environ.get("PHANTOM_PACKAGED") == "1":
+        try:
+            from config import config as _cfg
+
+            allowed = bool(getattr(_cfg, "lan_doors_enabled", False))
+        except Exception:  # noqa: BLE001 — конфіг не має права валити старт
+            allowed = False
+        if not allowed:
+            logger.info(
+                "mdns: не оголошуюсь — у пакованій збірці двері в мережу "
+                "зачинені до згоди (lan_doors_enabled)"
+            )
+            return False
     global _publisher
     if _publisher is not None:
         return True

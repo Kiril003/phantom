@@ -805,15 +805,21 @@ class ProactiveLoop:
             # sub-package; the suppress() above hid the ModuleNotFoundError
             # and no proactive monologue was ever emitted.
             from ..monologue_emitter import MonologueEvent, emit_monologue
+            mono_kind = (decision.get("kind") or "").strip().lower() or (
+                "speak" if decision.get("should_speak") else "none"
+            )
+            mono_reason = str(decision.get("reason") or "")[:200]
+            mono_causality = str(decision.get("causality_reason") or "")[:200]
+            mono_priority = int(decision.get("priority") or 5)
             await emit_monologue(MonologueEvent(
                 kind="proactive",
                 source="proactive",
                 monologue={
-                    "kind": kind,
-                    "reason": reason,
-                    "causality": causality,
+                    "kind": mono_kind,
+                    "reason": mono_reason,
+                    "causality": mono_causality,
                     "message_preview": str(decision.get("message") or "")[:120],
-                    "priority": priority,
+                    "priority": mono_priority,
                 },
                 task_id=None,
             ))

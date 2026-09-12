@@ -75,10 +75,58 @@ function statusFor(waitedMs) {
   return `ядро не піднялося за ${s}s — чекаю далі, але щось не так`;
 }
 
+// Рядок логу бекенда, як він є: «2026-09-12 19:09:11,833 [phantom] [INFO]
+// lifespan_warmup: voice models preload: …». На склі від нього потрібен зміст,
+// а не мітка часу й рівень — їх людина однаково не читає, а місця вони
+// займають половину рядка.
+function tidy(line) {
+  return String(line)
+    .replace(/^\d{4}-\d\d-\d\d[ T]\d\d:\d\d:\d\d[,.]\d+\s*/, '')
+    .replace(/^\[phantom\]\s*/, '')
+    .replace(/^\[(DEBUG|INFO|WARNING|ERROR|CRITICAL)\]\s*/, '')
+    .replace(/^(INFO|WARNING|ERROR):\s+/, '')
+    .trim()
+    .slice(0, 120);
+}
+
+// Оболонка кладе сюди `{code, signal, last}`, щойно сайдкар помер
+// (`tell_the_splash_the_backend_died` у `src-tauri/src/main.rs`). Доти
+// змінної немає — і саме тому перевірка робиться щоразу, а не один раз на
+// старті: смерть приходить пізніше за перший кадр.
+function deathLine(died) {
+  const how = died.signal != null ? `сигнал ${died.signal}` : `код ${died.code ?? '?'}`;
+  // Зайнятий порт — не поломка, а другий примірник, і сказати це треба
+  // словами людини. Виміряно 12.09.2026: власник запустив пакунок кілька
+  // разів поспіль, другий уперся в зайнятий 8000 і вийшов кодом 1, а
+  // заставка тим часом обіцяла прогрів.
+  if (/address already in use|Errno 98/i.test(died.last || '')) {
+    return 'PHANTOM уже запущено — закрий той примірник або відкрий його вікно';
+  }
+  const tail = died.last ? ` · останнє від ядра: ${tidy(died.last)}` : '';
+  return `ядро зупинилось (${how})${tail}`;
+}
+
+// Що показати, поки ядро встає. Лічильник САМ ПО СОБІ читається як поломка:
+// заміряно 12.09.2026 на артефакті 74469351 — ядро піднімалось 2,5 хвилини й
+// увесь цей час чесно писало в журнал, що саме робить, а на склі стояло
+// «гріюсь 204s». Тому щойно ядро сказало перше слово, показуємо ЙОГО, а
+// лічильник лишається поруч як міра часу, а не як вирок.
+function waitingLine(waitedMs) {
+  const said = window.__PHANTOM_BACKEND_LINE__ ? tidy(window.__PHANTOM_BACKEND_LINE__) : '';
+  if (!said) return statusFor(waitedMs);
+  const s = Math.floor(waitedMs / 1000);
+  return waitedMs < PATIENCE_MS ? `ядро: ${said}` : `ядро ${s}s: ${said}`;
+}
+
 async function loop() {
   for (;;) {
     if (await pollOnce()) return;
-    STATUS_EL.textContent = statusFor(performance.now() - t0);
+    // Смерть має пріоритет над таймером: поки її не видно, лічильник
+    // «гріюсь» описує очікування, якого вже немає.
+    const died = window.__PHANTOM_BACKEND_DIED__;
+    STATUS_EL.textContent = died
+      ? deathLine(died)
+      : waitingLine(performance.now() - t0);
     await new Promise((res) => setTimeout(res, POLL_MS));
   }
 }

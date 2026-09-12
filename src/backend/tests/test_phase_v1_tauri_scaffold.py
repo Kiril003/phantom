@@ -239,6 +239,17 @@ class TestMainRs:
     def _body(self) -> str:
         return MAIN_RS.read_text(encoding="utf-8")
 
+    def _code(self) -> str:
+        """Тіло БЕЗ рядкових коментарів.
+
+        Сторож, що забороняє рядок, мусить дивитись на код: пояснення, чому
+        того рядка не має бути, саме його й цитує. Спіймано тут же,
+        12.09.2026, — той самий клас, що вже двічі ловив нас на splash.js.
+        """
+        return "\n".join(
+            line for line in self._body().splitlines() if not line.lstrip().startswith("//")
+        )
+
     def test_main_rs_sets_phantom_packaged_env(self):
         """The refuse-LAN-bind guard (V-4, `main.py:211`) activates ONLY
         when PHANTOM_PACKAGED=1. If the shell forgets to set it, the
@@ -250,10 +261,25 @@ class TestMainRs:
         )
 
     def test_main_rs_pins_loopback_host(self):
+        """Ім'я змінної тут — уся робота, і воно було неправильним.
+
+        Сторож вимагав `PHANTOM_HOST`, і рядок слухняно стояв у main.rs від
+        V-1. Заміряно 12.09.2026 на запакованому сайдкарі: `config.py` — це
+        `BaseSettings` без `env_prefix`, тобто поле `host` читається зі
+        змінної `HOST`. Запуск із `HOST=0.0.0.0 PHANTOM_PACKAGED=1` справді
+        довів `config.host` до `0.0.0.0` і підняв сторож V-4; із
+        `PHANTOM_HOST=0.0.0.0` не мінялось нічого. Єдина згадка
+        `PHANTOM_HOST` у всьому дереві була ось тут — сторож стеріг ЖЕСТ, а
+        не його наслідок, і захист «у глибину» не вмикався ніколи.
+        """
         body = self._body()
-        assert '.env("PHANTOM_HOST", "127.0.0.1")' in body, (
-            "V-1: main.rs must set PHANTOM_HOST=127.0.0.1 (defence-in-depth "
-            "alongside the V-4 refuse-guard)."
+        assert '.env("HOST", "127.0.0.1")' in body, (
+            "main.rs мусить ставити HOST=127.0.0.1 — саме цю змінну читає "
+            "pydantic-settings; PHANTOM_HOST не читає ніхто."
+        )
+        assert '.env("PHANTOM_HOST"' not in body, (
+            "повернувся PHANTOM_HOST — змінна, якої не читає жоден рядок "
+            "бекенда; поруч із живим HOST вона лише вдає другий замок."
         )
 
     def test_main_rs_uses_shell_sidecar_api(self):
@@ -274,6 +300,76 @@ class TestMainRs:
         assert ".kill()" in body, (
             "V-1 LEAK: main.rs must kill() the sidecar on exit — orphan "
             "uvicorn keeps :8000 bound across re-launches."
+        )
+
+    def test_main_rs_logs_the_backend_without_being_asked(self):
+        """Прилад, вимкнений за замовчуванням, — це відсутній прилад.
+
+        `env_logger::init()` без `RUST_LOG` ставить фільтр `error`. Рядки
+        сайдкара йдуть на `info` (stdout) і `warn` (stderr), тож канал,
+        заведений 29.08.2026 саме щоб бачити причину смерті, був німий у
+        всіх, хто не знає про `RUST_LOG`: 12.09.2026 у журналі перед
+        `код=Some(1)` не було жодного рядка `[backend]` — і з цього зробили
+        висновок, що оболонка взагалі не читає дитину.
+        """
+        body = self._body()
+        code = self._code()
+        assert 'default_filter_or("info")' in body, (
+            "оболонка знову лишає фільтр логера на `error` — рядки бекенда "
+            "на `info`/`warn` не побачить ніхто, і причина смерті пропаде"
+        )
+        assert "env_logger::init()" not in code, (
+            "повернувся `env_logger::init()` — саме він ставить фільтр "
+            "`error` і робить канал сайдкара німим"
+        )
+
+    def test_main_rs_tells_the_window_what_the_backend_is_doing(self):
+        """Лічильник без змісту читається як поломка.
+
+        Заміряно 12.09.2026 на артефакті `74469351`: `/health` відповів через
+        ~2,5 хвилини, ядро весь цей час писало в журнал кожен свій крок, а на
+        склі стояло «гріюсь 204s». Рядок бекенда мусить доїжджати до
+        заставки ДОКИ ядро встає, а не лише коли воно померло.
+        """
+        body = self._body()
+        assert "__PHANTOM_BACKEND_LINE__" in body, (
+            "рядки бекенда не доїжджають до скла, поки ядро встає — "
+            "заставка лишається з лічильником, який описує очікування "
+            "замість роботи"
+        )
+        assert "THROTTLE" in body, (
+            "немає тротла: холодний старт видає сотні рядків, і кожен окремим "
+            "`eval` — це IPC на пусте місце"
+        )
+
+    def test_main_rs_tells_the_window_when_the_sidecar_dies(self):
+        """Смерть сайдкара мусить дійти до скла, а не лише в журнал.
+
+        Заміряно 12.09.2026 на артефакті `74469351`: коли :8000 уже зайнятий,
+        бекенд чесно каже `[Errno 98] address already in use` і виходить кодом
+        1 — а заставка 204 секунди рахувала «гріюсь», бо про `Terminated`
+        знав тільки виклик `log::error!`, чий stderr у запакованому застосунку
+        не веде нікуди. Найдешевша правда продукту тут — назвати код виходу й
+        останній рядок бекенда на тому ж екрані, де людина чекає.
+        """
+        body = self._body()
+        assert "CommandEvent::Terminated" in body, (
+            "оболонка мусить ловити смерть сайдкара — без цієї гілки "
+            "заставка чекає на процес, якого вже немає"
+        )
+        assert "__PHANTOM_BACKEND_DIED__" in body, (
+            "смерть сайдкара не доходить до вебв'ю: заставка читає саме цю "
+            "змінну, і без неї лишається з лічильником «гріюсь» назавжди"
+        )
+        assert ".eval(" in body, (
+            "сказати склу нічим: заставка — файл у public/ без збирача й без "
+            "window.__TAURI__, тож слухач подій там не зібрався б"
+        )
+        # Код виходу без останнього рядка бекенда називає ФАКТ смерті й
+        # мовчить про причину — а причина в нашому випадку була в рядку.
+        assert "last_line" in body, (
+            "оболонка не запамʼятовує останній рядок бекенда — на склі "
+            "лишиться «код 1» без жодної підказки, чому"
         )
 
     def test_main_rs_windows_subsystem_is_windows_in_release(self):

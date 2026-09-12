@@ -80,6 +80,27 @@ WORKSHOP_BYTES = re.compile(rb"(showcase|storybook|__mocks__|\.stories\.)", re.I
 # знайти менше, ніж лічба; вирок виносить лічба.
 ASSET_FILE = re.compile(rb"[A-Za-z0-9_.\-]{1,120}\.map(?![A-Za-z0-9_.\-])")
 
+# 12.09: перший в історії пакунок БЕЗ мап (74469351) лічба відмовила — 2 влучання.
+# Обидва виміряні за контекстом, і жодне не є ключем ресурсу:
+#
+#     return data.map((v) => serializeIpcPayload…      ← JS клею Tauri
+#     assertion failed: seq1.len().map_or(true, |x|…   ← Rust самого рантайму
+#
+# Тобто «помилятись лише в бік червоного» дійшло до межі, де воно перестає бути
+# обережністю: ворота, які не можуть пропустити ЖОДЕН пакунок, нічого не стережуть —
+# їх знімуть із дороги, і разом із ними зникне справжня перевірка. Тому лічба
+# лишається ВИДИМОЮ стелею у звіті, а вирок виносить класифікація кожного влучання:
+#
+#   ключ ресурсу — перед `.map` стоїть `.js`/`.css`/`.mjs`, або імʼя файла після `/`;
+#   код          — далі йде літера (`.map_or`) чи перед крапкою кінець виразу (`data.map(`);
+#   невідоме     — усе інше: лишається ЧЕРВОНИМ і друкується з контекстом.
+#
+# Незалежний другий канал — `sourceMappingURL`: маркер, яким сам браузер шукає мапу.
+# Він не залежить від імен файлів, тож переживе зміну складальника.
+KEY_TAIL = re.compile(rb"\.(?:js|css|mjs)$")
+KEY_PATH = re.compile(rb"/[A-Za-z0-9_\-.]{1,120}$")
+CODE_HEAD = re.compile(rb"[A-Za-z0-9_$)\]]$")
+
 
 def die(msg: str) -> None:
     print(f"[пакунок] {msg}", file=sys.stderr)
@@ -95,11 +116,37 @@ def scan_shell(path: str) -> tuple[int, int, int, list[str]]:
     """
     with open(path, "rb") as fh:
         blob = fh.read()
-    maps = blob.count(b".map")
+    maps, unknown = classify_maps(blob)
     shop = len(WORKSHOP_BYTES.findall(blob))
     seen = blob.count(b"/assets/")
     names = sorted({m.group(0).decode("ascii", "replace") for m in ASSET_FILE.finditer(blob)})
-    return maps, shop, seen, names
+    return maps, shop, seen, names, unknown
+
+
+def classify_maps(blob: bytes) -> tuple[int, list[str]]:
+    """Скільки з влучань `.map` — справді мапи джерел, і що лишилось невідомим.
+
+    Друге значення повертається НЕ для окраси: невідоме йде в червоне і мусить
+    бути показане людині з контекстом, інакше «не зарахував» не відрізнити від
+    «не побачив».
+    """
+    maps = blob.count(b"sourceMappingURL")
+    unknown: list[str] = []
+    i = blob.find(b".map")
+    while i >= 0:
+        head = blob[max(0, i - 200):i]
+        tail = blob[i + 4:i + 5]
+        if KEY_TAIL.search(head) or KEY_PATH.search(head):
+            maps += 1
+        elif tail.isalnum() or tail == b"_":
+            pass
+        elif CODE_HEAD.search(head):
+            pass
+        else:
+            around = blob[max(0, i - 40):i + 20].decode("latin-1").replace("\n", "\\n")
+            unknown.append(around)
+        i = blob.find(b".map", i + 1)
+    return maps + len(unknown), unknown
 
 
 def self_test() -> None:
@@ -113,13 +160,26 @@ def self_test() -> None:
     import tempfile
 
     green = b"index.html" + b"".join(f"/assets/i-{i}.js".encode() for i in range(20))
+    # Два шматки коду, ЗНЯТІ З ЖИВОГО БІНАРНИКА 74469351 — саме на них ворота
+    # відмовили чистий пакунок 12.09. Зелений бік тепер доводиться ними, а не
+    # синтетикою: якщо класифікація зламається, впаде тут, а не на артефакті.
+    green += b"return data.map((v) => serializeIpcPayload(v))"
+    green += b"assertion failed: seq1.len().map_or(true, |x| x <= n)"
     red = green + b"/assets/i-0.js.map" + b"/assets/Foo.stories.tsx"
-    for blob, want_maps, want_shop, want_keys in ((green, 0, 0, 20), (red, 1, 1, 22)):
+    marker = green + b"//# sourceMappingURL=elsewhere"
+    strange = green + b"\x00\x00.map\x00\x00"
+    cases = (
+        (green, 0, 0, 20),
+        (red, 1, 1, 22),
+        (marker, 1, 0, 20),
+        (strange, 1, 0, 20),
+    )
+    for blob, want_maps, want_shop, want_keys in cases:
         with tempfile.NamedTemporaryFile(delete=False) as fh:
             fh.write(blob)
             path = fh.name
         try:
-            maps, shop, keys, _ = scan_shell(path)
+            maps, shop, keys, _, _ = scan_shell(path)
         finally:
             os.unlink(path)
         colour = "зелене" if not (maps or shop) else "червоне"
@@ -186,7 +246,7 @@ def main() -> None:
             die("не знайшов у пакунку бінарника з вбудованим вебом — прилад "
                 "осліп, а сліпий прилад не має права зеленіти")
 
-        emb_maps, emb_shop, keys, samples = scan_shell(shell)
+        emb_maps, emb_shop, keys, samples, unknown = scan_shell(shell)
         rel_shell = shell[len(mount):]
         if keys == 0:
             die(f"у {rel_shell} нуль ключів «/assets/» — веб або не вбудовано, "
@@ -205,6 +265,8 @@ def main() -> None:
                 print(f"    файлом: {item}", file=sys.stderr)
             for item in samples[:3]:
                 print(f"    в оболонці: {item}", file=sys.stderr)
+            for item in unknown[:3]:
+                print(f"    невідоме влучання: {item}", file=sys.stderr)
             die("мапи джерел віддають увесь код веба тому, хто розпакує AppImage")
 
         print("[пакунок] мап джерел і показових вікон немає — їде лише продукт")

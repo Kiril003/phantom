@@ -277,8 +277,23 @@ docker run --rm \
       echo "[контейнер] етап front — sidecar НЕ перезбирається, береться наявний"
       test -f src/frontend/src-tauri/binaries/phantom-backend-x86_64-unknown-linux-gnu \
         || { echo "[контейнер] але його немає — спершу прожени етап sidecar"; exit 1; }
+      # onedir без своєї теки — це бінарник, що НЕ ЗАПУСТИТЬСЯ: бутлоадер
+      # шукає `_internal` поруч і мовчки вмирає, не знайшовши.
+      test -d src/frontend/src-tauri/binaries/_internal \
+        || { echo "[контейнер] сайдкар є, а теки _internal немає — це onefile-збірка; прожени етап sidecar заново"; exit 1; }
     else
-      ./scripts/build_sidecar.sh --onefile
+      # ONEDIR, а не onefile — і це повернення до типового режиму збирача,
+      # не обхід. Заміряно 12.09.2026 на артефакті b5463b2a, три прогони
+      # поспіль із чищенням `_MEI*`: розпаковка onefile коштує 9,5 с МЕДІАНИ
+      # (6,3 / 9,5 / 9,7) і ~1,6 ГБ запису — при КОЖНОМУ старті. Власник
+      # назвав такий старт «нереально повільним».
+      #
+      # Причина, записана 06.09 («на Linux onedir неможливий, бо бандлер
+      # Tauri кладе ресурси в usr/lib/<product>/, а сайдкар у usr/bin/»),
+      # стосувалась пакування DEB. Цей AppImage бандлер не збирає: нижче ми
+      # самі беремо AppDir, самі його латаємо й самі кличемо appimagetool —
+      # отже розкладка наша, і `_internal` кладемо поруч із сайдкаром.
+      ./scripts/build_sidecar.sh
     fi
 
     if [ "$STAGE" = "sidecar" ]; then
@@ -355,6 +370,21 @@ docker run --rm \
     SIDECAR="$(find "$APPDIR" -name "phantom-backend*" -type f | head -1)"
     [ -n "$SIDECAR" ] || { echo "[контейнер] сайдкара в AppDir немає — далі нема про що говорити"; exit 1; }
 
+    # ── `_internal` ПОРУЧ ІЗ САЙДКАРОМ ─────────────────────────────────────
+    # Tauri копіює в AppDir лише сам файл `externalBin`; теки-супутниці він не
+    # знає. Бутлоадер PyInstaller шукає `_internal` рівно поруч із собою і без
+    # неї вмирає мовчки — жодного рядка, лише процес, якого нема. Тому кладемо
+    # її тут, до appimagetool, і перевіряємо, що вона доїхала.
+    if [ -d src/frontend/src-tauri/binaries/_internal ]; then
+      rm -rf "$(dirname "$SIDECAR")/_internal"
+      cp -a src/frontend/src-tauri/binaries/_internal "$(dirname "$SIDECAR")/_internal"
+      test -f "$(dirname "$SIDECAR")/_internal/base_library.zip" \
+        || { echo "[контейнер] _internal доїхала без base_library.zip — це не тека PyInstaller"; exit 1; }
+      echo "[контейнер] _internal поруч із сайдкаром: $(du -sh "$(dirname "$SIDECAR")/_internal" | cut -f1)"
+    else
+      echo "[контейнер] _internal немає — збірка onefile, покладаюсь на розпаковку в рантаймі"
+    fi
+
     # ── Скільки місця просить розпаковка onefile ────────────────────────
     #
     # Число НЕ константа. Константа тут була б зеленим, що не вміє
@@ -385,8 +415,15 @@ while pos + 18 <= len(t):
 print(total)
 PYTOC
 )"
-    [ "${NEED_BYTES:-0}" -gt 0 ] \
-      || { echo "[контейнер] не прочитав таблицю вмісту сайдкара — гак лишився б без міри"; exit 1; }
+    # У onedir таблиці вмісту немає взагалі — і це не збій читання, а
+    # відсутність розпаковки: гакові нема чого міряти, бо нема чого класти.
+    if [ -d "$(dirname "$SIDECAR")/_internal" ]; then
+      NEED_BYTES=0
+      echo "[контейнер] onedir: розпаковки в рантаймі немає, гак проситиме 0 МіБ"
+    else
+      [ "${NEED_BYTES:-0}" -gt 0 ] \
+        || { echo "[контейнер] не прочитав таблицю вмісту сайдкара — гак лишився б без міри"; exit 1; }
+    fi
     # +10%: 17 тисяч файлів округляються вгору по блоках файлової системи
     # (~35 МіБ), решта — запас, щоб не лишити машину рівно в нулі.
     NEED_MIB=$(( NEED_BYTES / 1048576 * 11 / 10 ))

@@ -8,6 +8,38 @@ name: pc-desktop-ci
 # `plugins.shell.scope` key, and a splash page that resolved to a 404. Every one
 # of those is invisible to `tsc`, `vitest` and `vite build`; only compiling and
 # packaging the shell catches them. That is what this workflow exists to do.
+#
+# ── Про Windows, і чому тут ДВІ роботи, а не матриця по ОС ────────────────────
+#
+# `tauri.conf.json` оголошує `targets: ["appimage","deb","msi","nsis"]`, але
+# зібраний застосунок під Windows не проходив ЖОДНОГО разу. Причина одна й
+# точна, і вона не в Rust:
+#
+#   `bundle.externalBin: ["binaries/phantom-backend"]` розгортається в
+#   `binaries/phantom-backend-<triple><exe>` (tauri-utils `external_binaries`),
+#   тобто під Windows шукається
+#       binaries/phantom-backend-x86_64-pc-windows-msvc.exe
+#   а в дереві лежить ЛИШЕ
+#       binaries/phantom-backend-x86_64-unknown-linux-gnu
+#   Далі `tauri-build` кличе `copy_binaries` і падає ще в build.rs —
+#   `resource path ... doesn't exist`. Це стається під `cargo check` так само,
+#   як під `cargo build`: скрипт збірки виконується в обох.
+#
+# Заміряно 06.09.2026 на цьому ж дереві (Linux, підставлене неіснуюче імʼя
+# сайдкара): build.rs упав рівно з цим рядком; з `externalBin: []` оболонка
+# зібралась за 1 хв 13 с. Тобто портативний тут САМ КРЕЙТ, а не постачання.
+#
+# Сусідній `desktop-ci.yml` має `windows-latest` у матриці — і це НЕ шаблон,
+# який можна перенести: він перевіряє `src/desktop` (aegis-film), у якого
+# `externalBin` немає взагалі, тож він у цю стіну не впирається.
+#
+# Чого бракує для СПРАВЖНЬОЇ Windows-збірки — рівно одного: сайдкара.
+# `scripts/build_sidecar.sh` — 604 рядки bash із `venv/bin/python` (у Windows
+# це `Scripts/`), `ldd`, `find`, підбором `libsndfile.so.1` і планкою glibc.
+# Windows-сайдкар — це окремий збирач, а не прапорець; доки його немає,
+# `msi`/`nsis` у конфізі лишаються НАМІРОМ, а не спроможністю.
+#
+# Тому робота нижче названа тим, що вона доводить, і не більшим.
 
 on:
   push:
@@ -78,6 +110,12 @@ jobs:
       - name: Backend sidecar
         run: scripts/build_sidecar.sh
 
+      # Лапки тут несуть роботу, а не стиль: `data: fonts` — це двокрапка з
+      # пробілом усередині простого скаляра, і YAML такого не приймає. Через
+      # цей рядок ВЕСЬ файл був невалідним із 14.08.2026 (коміт 5107435), тобто
+      # ця перевірка не бігала жодного разу — GitHub відхиляє workflow цілком,
+      # а не пропускає зламаний крок. Заміряно 06.09: два сусідні workflow
+      # розбираються, цей — ні, в обох деревах ПК.
       - name: "Assert the frontend dist has no data: fonts"
         working-directory: src/frontend
         run: |
@@ -121,3 +159,66 @@ jobs:
             echo "::error::the shell panicked during startup"
             exit 1
           fi
+
+  windows-shell:
+    # Назва — це і є вимір: доводиться КОМПІЛЯЦІЯ крейта під MSVC, і нічого
+    # більше. Тут немає сайдкара, отже немає застосунку, який можна запустити,
+    # і зелений значок цієї роботи НЕ означає «PHANTOM OS їздить на Windows».
+    name: windows — крейт оболонки компілюється (БЕЗ сайдкара, не постачальний застосунок)
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: src/frontend/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src/frontend/src-tauri
+
+      # Той самий бандл, що й на Linux: `tsc && vite build` без жодного
+      # зовнішнього процесу, тож він мусить збиратись і тут. Якщо колись
+      # зʼявиться крок збірки, який кличе unix-утиліту, впаде саме тут.
+      - name: Frontend bundle
+        working-directory: src/frontend
+        run: |
+          npm ci
+          npx vite build
+
+      # ЄДИНЕ місце, де ця робота відступає від правди продукту, і воно
+      # навмисне й вузьке: `externalBin` знімається, щоб build.rs не шукав
+      # Windows-сайдкара, якого ми ще не вміємо збирати. Патч живе В ЦІЙ
+      # РОБОТІ, а не в `tauri.conf.json`, — щоб справжня Windows-збірка,
+      # коли її навчаться робити, впала чесно, а не мовчки поїхала без
+      # бекенда. `TAURI_CONFIG` — це JSON merge-patch, який tauri-build
+      # накладає поверх конфігу (`cargo:rerun-if-env-changed=TAURI_CONFIG`).
+      - name: Compile the shell for MSVC (sidecar requirement lifted)
+        working-directory: src/frontend/src-tauri
+        env:
+          TAURI_CONFIG: '{"bundle":{"externalBin":[]}}'
+        run: cargo build --release
+
+      # Сторож проти скам'янілості: щойно Windows-сайдкар зʼявиться в дереві,
+      # ця робота стає брехнею («компілюється без сайдкара», коли сайдкар уже
+      # є) — і має почервоніти, щоб її переписали на справжнє пакування, а не
+      # лишили вічним напівзеленим. Це та сама фігура, що й решта воріт тут:
+      # ворота, які не вміють почервоніти, нічого не стережуть.
+      - name: Fail once a Windows sidecar exists (this job must then be replaced)
+        shell: bash
+        working-directory: src/frontend/src-tauri
+        run: |
+          if ls binaries/phantom-backend-*windows*.exe >/dev/null 2>&1; then
+            echo "::error::Windows-сайдкар зʼявився в binaries/ — ця робота більше" \
+                 "не описує правду. Прибери TAURI_CONFIG, збери справжній msi/nsis" \
+                 "і перейменуй роботу."
+            exit 1
+          fi
+          echo "::notice::Доведено лише компіляцію крейта під MSVC." \
+               "Пакування (msi/nsis), запуск і зʼєднання з бекендом на Windows" \
+               "НЕ перевірені: Windows-сайдкара не існує."

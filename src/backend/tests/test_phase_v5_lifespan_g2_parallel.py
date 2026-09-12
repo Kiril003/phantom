@@ -75,6 +75,109 @@ async def test_g2_lanes_run_in_parallel(monkeypatch):
     )
 
 
+@pytest.mark.asyncio
+async def test_deferred_lanes_do_not_hold_the_start(monkeypatch):
+    """Прогрів не має права тримати вікно зачиненим.
+
+    Заміряно 12.09.2026 на артефакті `b5463b2a`: `voice_preload` 13,3 с,
+    `tts_preload` 12,0 с, `minilm` 3,8 с — і все це ПЕРШ ніж людині дозволять
+    сказати перше слово. Власник назвав такий старт «нереально повільним», і
+    мав рацію: жодна з цих смуг не робить нічого, чого людина просила в першу
+    мить. Усі три лише гріють кеш — це записано в їхніх власних докстрінгах.
+
+    Тут доводиться саме те, що мало б бути очевидним і не було: повільна
+    ВІДКЛАДЕНА смуга не додає до часу старту ані секунди.
+    """
+    import lifespan_warmup as lw
+
+    # conftest ставить PHANTOM_SKIP_G2_WARMUP=1 на всю добірку — під ним
+    # чисті прогріви взагалі не потрапляють у перелік, і тест доводив би
+    # порожнечу. Тут перевіряється ЗВИЧАЙНИЙ шлях продукту.
+    monkeypatch.setenv("PHANTOM_SKIP_G2_WARMUP", "0")
+
+    slow, quick = 1.5, 0.05
+    finished: list[str] = []
+
+    def _lane(name: str, delay: float):
+        async def _run() -> None:
+            await asyncio.sleep(delay)
+            finished.append(name)
+        return _run
+
+    monkeypatch.setattr(
+        lw,
+        "_G2_LANES",
+        (
+            ("voice_preload", _lane("voice_preload", slow)),
+            ("tts_preload", _lane("tts_preload", slow)),
+            ("minilm", _lane("minilm", slow)),
+            ("cpu_sampler", _lane("cpu_sampler", quick)),
+            ("home_tenant", _lane("home_tenant", quick)),
+        ),
+    )
+
+    t0 = time.perf_counter()
+    await lw.run_g2_parallel()
+    elapsed = time.perf_counter() - t0
+
+    assert elapsed < slow / 2, (
+        f"старт чекав на прогрів: {elapsed:.2f} с при відкладених смугах по "
+        f"{slow} с. Саме так народжуються 34 секунди до першого вікна."
+    )
+    assert sorted(finished) == ["cpu_sampler", "home_tenant"], (
+        f"смуги з побічними діями мусять завершитись ДО повернення "
+        f"(маємо {finished!r}) — вони не прогрів, від них залежить вузол"
+    )
+
+    # А тепер головне: відкладене таки МУСИТЬ статись, а не зникнути.
+    # `asyncio.create_task` без сильного посилання дає збирачеві сміття право
+    # прибрати задачу посеред роботи, і «пішло у фон» тихо означає «не буде».
+    assert lw._background_lanes, "фонові смуги не втримані — їх збере GC"
+    # Чекаємо на САМІ задачі, а не на годинник. Сон із вгаданим запасом —
+    # це наступний мигтючий тест: він не описує систему, він описує, наскільки
+    # зайнята машина. Тут бар'єр точний за побудовою.
+    await asyncio.gather(*list(lw._background_lanes))
+    assert sorted(finished) == ["cpu_sampler", "home_tenant", "minilm",
+                                "tts_preload", "voice_preload"], (
+        f"фоновий прогрів не завершився: {finished!r}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_minilm_does_not_load_torch_to_learn_a_file_is_missing(monkeypatch):
+    """3,8 секунди, щоб сказати «моделі немає».
+
+    Шлях до тієї відповіді вів через `strategic_memory._get_ef` →
+    `build_embedding_function` → chromadb → sentence-transformers → torch.
+    Тобто ціну імпорту платив КОЖЕН старт, а відповідь була про відсутній
+    файл. Зонд, що відповідає за мілісекунди, уже існував — `model_state`.
+    """
+    import lifespan_warmup as lw
+
+    monkeypatch.setattr(
+        lw, "config", type("C", (), {"embedding_model": "intfloat/e5-small-v2"})()
+    )
+    import memory.embedding_fn as ef
+    monkeypatch.setattr(
+        ef, "model_state",
+        lambda name: {"present": False, "download_allowed": False,
+                      "reason": "модель не встановлена"},
+    )
+
+    def _explode():  # pragma: no cover — має не викликатись
+        raise AssertionError(
+            "смуга полізла у важкий шлях, хоч моделі на диску немає — "
+            "це знову імпорт torch заради відповіді про файл"
+        )
+
+    import memory.strategic_memory as sm
+    monkeypatch.setattr(sm, "_get_ef", lambda: _explode())
+
+    t0 = time.perf_counter()
+    await lw._lane_minilm()
+    assert time.perf_counter() - t0 < 0.5
+
+
 # ───────────────────────────────────────────────────── failure containment ──
 
 

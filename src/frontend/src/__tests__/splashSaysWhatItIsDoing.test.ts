@@ -1,79 +1,102 @@
 /**
- * Заставка мусить казати, ЩО вона робить і скільки це триває звично.
+ * Заставка мусить казати ЛЮДИНІ, що зараз робиться — не журналом і не голим
+ * лічильником.
  *
- * Виміряно 29.08.2026 на зібраному пакунку: 37, 40, 45 і 47 секунд до
- * першої відповіді `/health`, з них 6-16 с — розпакування onefile-бандла,
- * і воно повторюється на КОЖНОМУ запуску, не лише на першому. Тобто сорок
- * секунд людина дивилась на одне слово «гріюсь» без причини й без жодної
- * оцінки часу — а на 30-й секунді старша версія ще й оголошувала провал
- * справному ядру.
+ * Історія цього файла — історія двох помилок поспіль, і друга була наша.
+ * Спершу заставка показувала «гріюсь 204s»: лічильник без змісту, який на
+ * живому старті читається як поломка. Ми замінили його рядком журналу
+ * бекенда — і 12.09.2026 власник побачив на склі
  *
- * Логіка заставки (три стани, нескінченне опитування) уже під сторожем у
- * `src/backend/tests/test_phase_v1_tauri_scaffold.py`. Тут — СЛОВА, і
- * тримає їх фронт, бо файл живе в його зоні.
+ *     ядро: lifespan_warmup: Chroma janitor: SQL deleted=0 kept=0; FS deleted=0
+ *
+ * і спитав: «от що то за написи? кому воно треба?». Правдивий рядок для
+ * інженера — для людини той самий нуль.
+ *
+ * Тому сторож тепер не грепає файл, а ЗАПУСКАЄ заставку й читає те, що
+ * побачить людина.
  */
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
 const SRC = readFileSync(resolve(__dirname, '../../public/splash.js'), 'utf8');
 
-/** Тіло `statusFor` — тільки те, що показується людині. */
-function statusForBody(): string {
-  const m = SRC.match(/function statusFor\([\s\S]*?\n\}/);
-  expect(m, 'функція statusFor мусить існувати').toBeTruthy();
-  return m![0];
+function runSplash(): void {
+  new Function(SRC)();
 }
 
-/** Рядки-літерали з тіла, тобто саме те, що читає людина. */
-function shownStrings(body: string): string[] {
-  return [...body.matchAll(/['`]([^'`]{4,})['`]/g)].map((m) => m[1]);
+function shown(): string {
+  return document.getElementById('status')!.textContent ?? '';
 }
 
 describe('слова заставки', () => {
-  it('перший стан називає ПРИЧИНУ очікування, а не саме очікування', () => {
-    const first = shownStrings(statusForBody())[0] ?? '';
-    // Причина: що саме зараз відбувається.
-    expect(first, `перший стан: «${first}»`).toMatch(/розпаков|грію|запускаюсь/);
-    // І скільки це триває звично — інакше людина не знає, чи чекати.
-    expect(first, `перший стан: «${first}»`).toMatch(/хвилин|секунд|с\b/);
+  beforeEach(() => {
+    document.body.innerHTML = '<div id="status">starting…</div>';
+    (window as unknown as Record<string, unknown>).__PHANTOM_BACKEND__ = {
+      absolute: (p: string) => `http://127.0.0.1:8000${p}`,
+    };
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('fetch failed')));
   });
 
-  it('перший стан не обіцяє, що «далі буде швидше»', () => {
-    // onefile розпаковується ЩОРАЗУ; обіцянка «перший запуск довгий» була
-    // б неправдою, яку людина перевірить на другому запуску.
-    //
-    // Дивимось лише на ПОКАЗАНЕ, не на весь файл: коментар поруч якраз
-    // пояснює, чому цієї обіцянки немає, і сторож по всьому тілу червонів
-    // би на власному поясненні. Той самий клас пастки, що вже двічі ловив
-    // нас сьогодні.
-    for (const line of shownStrings(statusForBody())) {
-      expect(line, `обіцянка в «${line}»`).not.toMatch(/перш(ий|е) (запуск|раз)/i);
-    }
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    delete (window as unknown as Record<string, unknown>).__PHANTOM_BACKEND_LINE__;
+    delete (window as unknown as Record<string, unknown>).__PHANTOM_BACKEND_DIED__;
   });
 
-  it('до порога терпіння немає слова про помилку', () => {
-    // Перший показаний рядок — це й є стан до порога.
-    const first = shownStrings(statusForBody())[0] ?? '';
-    expect(first).not.toMatch(/помилк|збій|провал|не вдалося|error/i);
+  it('перший стан називає роботу й номер кроку, а не очікування', async () => {
+    runSplash();
+    await vi.waitFor(() => expect(shown()).toMatch(/крок 1 з \d/), { timeout: 3000 });
+    // Що саме робиться — людськими словами.
+    expect(shown()).toMatch(/розпаков/);
+    // І жодного слова про помилку до порога терпіння.
+    expect(shown()).not.toMatch(/помилк|збій|провал|не вдалося/i);
   });
 
-  it('після порога сказано, що довше за звичне, і що ядро мовчить', () => {
-    const body = statusForBody();
-    expect(body).toMatch(/довше, ніж звично/);
-    expect(body).toMatch(/ядро ще не відповіло/);
+  it('крок росте, коли ядро повідомляє про віху', async () => {
+    runSplash();
+    await vi.waitFor(() => expect(shown()).toMatch(/крок 1 з/), { timeout: 3000 });
+    (window as unknown as Record<string, unknown>).__PHANTOM_BACKEND_LINE__ =
+      '2026-09-12 20:36:50,274 [INFO] main: PHANTOM OS starting...';
+    await vi.waitFor(() => expect(shown()).toMatch(/крок 2 з/), { timeout: 3000 });
+    expect(shown()).toMatch(/піднімаю ядро/);
   });
 
-  it('на склі заставки немає англійських слів', () => {
+  it('шум із журналу на скло не потрапляє ніколи', async () => {
+    // Рівно той рядок, що обурив власника: смуга, яка НІЧОГО не зробила.
+    // Вона не подія, і показувати її не можна — ні як прогрес, ні як шум.
+    runSplash();
+    (window as unknown as Record<string, unknown>).__PHANTOM_BACKEND_LINE__ =
+      '[phantom] [INFO] lifespan_warmup: Chroma janitor: SQL deleted=0 kept=0; FS deleted=0 freed=0.0 MB';
+    await vi.waitFor(() => expect(shown()).toMatch(/крок/), { timeout: 3000 });
+    expect(shown()).not.toMatch(/janitor|deleted|Chroma|lifespan/i);
+  });
+
+  it('крок не стрибає назад', async () => {
+    // Смуги йдуть паралельно, рядки приходять уперемішку. Крок, що
+    // повертається назад, читається як поломка.
+    runSplash();
+    (window as unknown as Record<string, unknown>).__PHANTOM_BACKEND_LINE__ =
+      'INFO: Application startup complete.';
+    await vi.waitFor(() => expect(shown()).toMatch(/крок 5 з/), { timeout: 3000 });
+    (window as unknown as Record<string, unknown>).__PHANTOM_BACKEND_LINE__ =
+      '2026-09-12 20:36:50,274 [INFO] main: PHANTOM OS starting...';
+    await new Promise((r) => setTimeout(r, 600));
+    expect(shown()).toMatch(/крок 5 з/);
+  });
+
+  it('на склі заставки немає англійських слів', async () => {
     // 'online' було єдиним англійським словом на найпершому екрані
     // застосунку. Видно його мить — але мить теж на склі.
-    const shown = [
-      ...shownStrings(statusForBody()),
-      ...[...SRC.matchAll(/STATUS_EL\.textContent = ['`]([^'`]+)['`]/g)].map((m) => m[1]),
-    ];
-    for (const line of shown) {
-      const latin = line.replace(/\$\{[^}]*\}/g, '').match(/[A-Za-z]{2,}/g) ?? [];
-      expect(latin, `англійське в «${line}»`).toEqual([]);
+    runSplash();
+    await vi.waitFor(() => expect(shown()).toMatch(/крок/), { timeout: 3000 });
+    const latin = shown().match(/[A-Za-z]{2,}/g) ?? [];
+    expect(latin, `англійське в «${shown()}»`).toEqual([]);
+    // І в самих літералах теж — окрім рядка ПРИЧИНИ смерті, який приходить
+    // від ядра і англійським бути може.
+    const literals = [...SRC.matchAll(/text: '([^']+)'/g)].map((m) => m[1]);
+    for (const line of literals) {
+      expect(line.match(/[A-Za-z]{2,}/g) ?? [], `англійське в «${line}»`).toEqual([]);
     }
   });
 });

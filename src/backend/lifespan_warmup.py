@@ -48,7 +48,26 @@ G2_LANE_TIMEOUT_S = float(os.environ.get("PHANTOM_G2_LANE_TIMEOUT_S", "30"))
 #: Lanes that only populate caches — no observable effect beyond first-request
 #: latency, so `PHANTOM_SKIP_G2_WARMUP=1` may drop them. Every other lane has a
 #: side effect the daemon (and the test suite) depends on, and must always run.
-_PURE_WARMUP_LANES = frozenset({"minilm", "voice_preload"})
+_PURE_WARMUP_LANES = frozenset({"minilm", "voice_preload", "tts_preload"})
+# `tts_preload` тут не було, і це була діра саме там, де найдорожче:
+# смуга коштує 12,0 с (виміряно 12.09.2026), гріє виключно кеш — і
+# `PHANTOM_SKIP_G2_WARMUP=1` її не вимикав. Вимикач, що пропускає
+# найважче, — це не вимикач.
+
+#: Смуги, які НЕ мають права тримати старт. Кожна з них лише гріє кеш — це
+#: записано в докстрінгах самих смуг («first WS hit just waits longer»), тож
+#: відкласти їх не міняє поведінки, лише те, КОЛИ платиться завантаження.
+#:
+#: Заміряно 12.09.2026 на артефакті `b5463b2a`, мітки часу самого пакунка:
+#: `voice_preload` 13,3 с, `tts_preload` 12,0 с, `minilm` 3,8 с — і все це
+#: перш ніж людині дозволять сказати перше слово. Власник назвав старт
+#: «нереально повільним», і 22,8 с із 34 лежали тут і в розпакуванні onefile.
+_DEFERRED_LANES = frozenset({"minilm", "voice_preload", "tts_preload"})
+
+#: Фонові смуги треба ТРИМАТИ. `asyncio.create_task` не утримує задачу сам:
+#: без сильного посилання збирач сміття має право прибрати її посеред роботи,
+#: і смуга зникає без сліду — прогрів «іде у фон» і не відбувається ніколи.
+_background_lanes: set[asyncio.Task] = set()
 
 #: Що лишається при PHANTOM_MESSENGER_ONLY=1 — тільки смуги з побічним
 #: ефектом, потрібним самому вузлу. Моделей і Chroma месенджер не імпортує.
@@ -63,6 +82,19 @@ async def _lane_minilm() -> None:
     chat message doesn't pay 1-3 s of cold-load latency on the event
     loop's worker thread (Phase 11c.5 Bug 2)."""
     try:
+        # СПЕРШУ — чи модель узагалі є на диску. Заміряно 12.09.2026: смуга
+        # витрачала 3,8 с, щоб сказати «моделі немає», бо шлях до тієї
+        # відповіді веде через імпорт chromadb і sentence-transformers, а той
+        # тягне torch. Тобто ціну платив КОЖЕН старт, а відповідь була про
+        # відсутній файл. Зонд, що вміє відповісти за мілісекунди, уже
+        # існував — `model_state` дивиться в кеші huggingface на диску.
+        from memory.embedding_fn import model_state
+
+        state = model_state(config.embedding_model)
+        if not state.get("present") and not state.get("download_allowed"):
+            logger.info("MiniLM: %s", state.get("reason"))
+            return
+
         from memory.strategic_memory import _get_ef
 
         def _warm() -> None:
@@ -321,6 +353,24 @@ async def run_g2_parallel() -> None:
         lanes = tuple((n, fn) for n, fn in lanes if n not in _PURE_WARMUP_LANES)
         logger.info("G2 model-preload lanes skipped (PHANTOM_SKIP_G2_WARMUP=1)")
 
+    # Старт чекає лише смуги з ПОБІЧНИМИ ДІЯМИ. Чисті прогріви йдуть у фон:
+    # вікно відкривається, прогрів триває за ним, і перша потреба в моделі
+    # чекає на СВОЮ смугу, а не на всі сім.
+    blocking = tuple((n, fn) for n, fn in lanes if n not in _DEFERRED_LANES)
+    deferred = tuple((n, fn) for n, fn in lanes if n in _DEFERRED_LANES)
+
+    for name, lane_fn in deferred:
+        task = asyncio.create_task(
+            _run_lane_with_budget(name, lane_fn), name=f"g2:{name}"
+        )
+        _background_lanes.add(task)
+        task.add_done_callback(_background_lanes.discard)
+    if deferred:
+        logger.info(
+            "G2: прогрів у фоні, старт його не чекає — %s",
+            ", ".join(n for n, _ in deferred),
+        )
+
     await asyncio.gather(
-        *(_run_lane_with_budget(name, lane_fn) for name, lane_fn in lanes)
+        *(_run_lane_with_budget(name, lane_fn) for name, lane_fn in blocking)
     )

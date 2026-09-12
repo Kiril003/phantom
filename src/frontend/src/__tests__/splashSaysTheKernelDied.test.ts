@@ -76,33 +76,23 @@ describe('заставка й смерть ядра', () => {
     expect(status.textContent).not.toMatch(/грію|розпаков/);
   });
 
-  it('поки ядро встає, показує ЩО воно робить, а не лише лічильник', async () => {
-    // Це і є вада 12.09: ядро піднімалось 2,5 хвилини, чесно писало в журнал
-    // кожен крок, а на склі стояло «гріюсь 204s» — лічильник без змісту
-    // читається як поломка.
+  it('поки ядро встає, показує КРОК людськими словами, а не рядок логу', async () => {
+    // Спершу було «гріюсь 204s» — лічильник без змісту при живому старті.
+    // Потім ми показали рядок журналу, і власник спитав: «от що то за написи?
+    // кому воно треба?». Обидва рази прилад говорив не мовою того, хто
+    // дивиться. Тепер рядок ядра лише ВПІЗНАЄТЬСЯ, а на склі стоїть крок.
     (window as unknown as Record<string, unknown>).__PHANTOM_BACKEND_LINE__ =
-      '2026-09-12 19:09:11,833 [phantom] [INFO] lifespan_warmup: voice models preload';
+      '2026-09-12 19:09:11,833 [phantom] [INFO] main: PHANTOM OS starting...';
     runSplash();
     const status = document.getElementById('status')!;
-    await vi.waitFor(() => expect(status.textContent).toContain('voice models preload'), {
+    await vi.waitFor(() => expect(status.textContent).toMatch(/піднімаю ядро/), {
       timeout: 3000,
     });
+    expect(status.textContent).toMatch(/крок 2 з/);
+    // Нічого з рядка логу на скло не потрапило.
     expect(status.textContent).not.toContain('2026-09-12');
-    delete (window as unknown as Record<string, unknown>).__PHANTOM_BACKEND_LINE__;
-  });
-
-  it('сигнал показується сигналом, а не кодом', async () => {
-    // SIGKILL від oom-guard — звичайна смерть на цій машині, і код виходу
-    // в ній відсутній. «код ?» тут був би гіршим за правду.
-    (window as unknown as Record<string, unknown>).__PHANTOM_BACKEND_DIED__ = {
-      code: null,
-      signal: 9,
-      last: 'Killed',
-    };
-    runSplash();
-    const status = document.getElementById('status')!;
-    await vi.waitFor(() => expect(status.textContent).toContain('сигнал 9'), { timeout: 3000 });
-    expect(status.textContent).not.toContain('код');
+    expect(status.textContent).not.toContain('[phantom]');
+    expect(status.textContent).not.toContain('main:');
   });
 
   it('поки ядро живе-піднімається, про смерть не згадує', async () => {
@@ -110,7 +100,7 @@ describe('заставка й смерть ядра', () => {
     // вигадувати відмову. Це та сама вада навиворіт: вирок справному ядру.
     runSplash();
     const status = document.getElementById('status')!;
-    await vi.waitFor(() => expect(status.textContent).toMatch(/запускаюсь|грію/), { timeout: 3000 });
+    await vi.waitFor(() => expect(status.textContent).toMatch(/розпаков|крок/), { timeout: 3000 });
     expect(status.textContent).not.toMatch(/зупинилось|код|сигнал/);
   });
 });

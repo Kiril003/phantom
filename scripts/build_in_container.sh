@@ -375,9 +375,14 @@ docker run --rm \
     # знає. Бутлоадер PyInstaller шукає `_internal` рівно поруч із собою і без
     # неї вмирає мовчки — жодного рядка, лише процес, якого нема. Тому кладемо
     # її тут, до appimagetool, і перевіряємо, що вона доїхала.
-    if [ -d src/frontend/src-tauri/binaries/_internal ]; then
+    # Шлях ВІД КОРЕНЯ дерева, а не відносний: цей блок виконується з
+    # `/work/src/frontend` (туди перейшли заради tauri build), і відносний
+    # `src/frontend/...` мовчки вказував у нікуди — перевірка казала
+    # «збірка onefile» на цілком onedir-сайдкарі, і пакунок їхав без теки.
+    INTERNAL_SRC="/work/src/frontend/src-tauri/binaries/_internal"
+    if [ -d "$INTERNAL_SRC" ]; then
       rm -rf "$(dirname "$SIDECAR")/_internal"
-      cp -a src/frontend/src-tauri/binaries/_internal "$(dirname "$SIDECAR")/_internal"
+      cp -a "$INTERNAL_SRC" "$(dirname "$SIDECAR")/_internal"
       test -f "$(dirname "$SIDECAR")/_internal/base_library.zip" \
         || { echo "[контейнер] _internal доїхала без base_library.zip — це не тека PyInstaller"; exit 1; }
       echo "[контейнер] _internal поруч із сайдкаром: $(du -sh "$(dirname "$SIDECAR")/_internal" | cut -f1)"

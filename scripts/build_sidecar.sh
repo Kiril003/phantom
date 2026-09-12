@@ -604,9 +604,14 @@ else
   install -m 0755 "${WORK}/dist/phantom-backend/phantom-backend" "${BIN_OUT}"
   weigh "${BIN_OUT}" "бінарник (onedir)"
   weigh "${DEST}/_internal" "тека _internal"
-  say "УВАГА: Tauri кладе в bundle лише сам файл externalBin, без сусідніх тек."
-  say "Отже `_internal` треба донести окремо (bundle.resources або власний spawn)."
-  say "Поки цього немає — AppImage збереться і не запуститься."
+  # Зворотні лапки в ПОДВІЙНИХ лапках bash виконує як команду. Тут стояло
+  # `say "Отже \`_internal\` треба донести окремо"` — і рядок 608 щоразу
+  # падав з «_internal: command not found». Не помічали цього два тижні, бо
+  # гілку onedir не проганяв ніхто: контейнер завжди просив --onefile.
+  say 'УВАГА: Tauri кладе в bundle лише сам файл externalBin, без сусідніх тек.'
+  say 'Теку _internal доносить build_in_container.sh — він кладе її поруч із'
+  say 'сайдкаром у AppDir до appimagetool. Без цього кроку пакунок збереться'
+  say 'і не запуститься.'
 fi
 weigh "${WORK}/dist" "весь вихід PyInstaller"
 

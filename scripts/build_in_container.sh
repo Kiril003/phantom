@@ -583,9 +583,13 @@ INFO
     fi
     cat "$BAKETMP/out.log"
     BAKE_FROM="$(grep -m1 "osmium_from=" "$BAKETMP/out.log" | sed "s/.*osmium_from=//")"
+    # Дві форми тієї самої умови — як і зі шрифтом вище. `INTERNAL_DIR`
+    # обчислено там же, абсолютним.
     case "$BAKE_FROM" in
       "$BAKETMP"/*)
-        echo "[контейнер] osmium узято З ПАКУНКА: $BAKE_FROM" ;;
+        echo "[контейнер] osmium узято З ПАКУНКА (onefile): $BAKE_FROM" ;;
+      "$INTERNAL_DIR"/*)
+        echo "[контейнер] osmium узято З ПАКУНКА (onedir): $BAKE_FROM" ;;
       *)
         echo "[контейнер] osmium узято НЕ з пакунка, а з: ${BAKE_FROM:-(не сказано)}"
         echo "[контейнер] отже на машині без системного pyosmium не спеклося б нічого — зупиняюсь."

@@ -372,6 +372,36 @@ class TestMainRs:
             "лишиться «код 1» без жодної підказки, чому"
         )
 
+    def test_main_rs_hands_a_second_launch_to_the_first(self):
+        """Другий примірник — подвійний клік, не помилка користувача.
+
+        Без плагіна другий запуск доходив до кінця: його бекенд упирався в
+        зайнятий 127.0.0.1:8000 і виходив кодом 1 (відтворено 12.09.2026), а
+        людина лишалась перед заставкою, яка обіцяла прогрів. Текст «PHANTOM
+        уже запущено» — половина ліків: він каже, що сталось, і не дає куди
+        піти. Друга половина — підняти те вікно, що вже працює.
+        """
+        code = self._code()
+        assert "tauri_plugin_single_instance::init" in code, (
+            "плагін single-instance зник — другий запуск знову піде по всій "
+            "дорозі до зайнятого порту"
+        )
+        # Порядок — вимога плагіна, а не стиль: він мусить перехопити запуск
+        # раніше, ніж решта почне робити роботу другого примірника.
+        first = code.index("tauri_plugin_single_instance::init")
+        shell = code.index("tauri_plugin_shell::init")
+        assert first < shell, (
+            "single-instance зареєстрований ПІСЛЯ інших плагінів — перехоплення "
+            "спрацює запізно"
+        )
+        # Підняти вікно — це три дії, а не одна: схований і мінімізований —
+        # різні стани, і `show` без фокуса виводить вікно за іншими.
+        for call in ("unminimize()", "show()", "set_focus()"):
+            assert call in code, (
+                f"немає {call} — вікно першого примірника не підніметься з "
+                "усіх станів, у яких воно буває"
+            )
+
     def test_main_rs_windows_subsystem_is_windows_in_release(self):
         """Cosmetic but required: without the cfg_attr, a Windows release
         build pops a console window alongside the WebView."""

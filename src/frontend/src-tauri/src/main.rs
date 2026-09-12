@@ -42,6 +42,12 @@ fn main() {
     env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     tauri::Builder::default()
+        // ПЕРШИМ, і це вимога плагіна, а не стиль: він мусить перехопити
+        // запуск раніше, ніж решта почне робити роботу другого примірника.
+        .plugin(tauri_plugin_single_instance::init(|app, _argv, _cwd| {
+            log::info!("другий примірник — піднімаю вікно першого");
+            raise_the_existing_window(app);
+        }))
         .plugin(tauri_plugin_shell::init())
         .manage(SidecarHandle(Mutex::new(None)))
         .setup(|app| {
@@ -147,6 +153,27 @@ fn spawn_backend_sidecar(handle: &tauri::AppHandle) -> Result<(), String> {
     *state.0.lock().expect("sidecar handle poisoned") = Some(child);
     log::info!("phantom-backend sidecar started; PHANTOM_PACKAGED=1 host=127.0.0.1");
     Ok(())
+}
+
+/// Другий запуск мусить ПОКАЗАТИ те, що вже працює.
+///
+/// «PHANTOM уже запущено» на заставці — половина ліків: людина дізнається, що
+/// сталось, і далі не має куди піти. Плагін `single-instance` віддає керування
+/// першому примірнику, тож другий взагалі не дійде до сайдкара й не впреться
+/// в зайнятий порт. Вікно могло бути мінімізоване або схованим — тому три дії,
+/// а не одна: `unminimize` без `show` лишає схоже вікно схованим, а `show` без
+/// `set_focus` виводить його за іншими.
+fn raise_the_existing_window(app: &tauri::AppHandle) {
+    match app.get_webview_window("main") {
+        Some(window) => {
+            let _ = window.unminimize();
+            let _ = window.show();
+            if let Err(e) = window.set_focus() {
+                log::warn!("вікно не взяло фокус: {e}");
+            }
+        }
+        None => log::error!("другий примірник: вікна «main» немає — піднімати нічого"),
+    }
 }
 
 /// Те, що ядро каже про себе, мусить бути видно на заставці.

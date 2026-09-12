@@ -64,6 +64,14 @@ jobs:
         with:
           workspaces: src/frontend/src-tauri
 
+      # Дешева перевірка ПЕРЕД важким: якщо `Cargo.lock` розійшовся з
+      # маніфестом, це видно за секунди, а не після сорока хвилин `pip install`
+      # і PyInstaller. Заміряно локально: `cargo metadata --locked` — 2 с.
+      - name: Rust lock is honoured
+        working-directory: src/frontend/src-tauri
+        run: cargo metadata --locked --format-version 1 > $env:TEMP/metadata.json
+        shell: pwsh
+
       - name: Node deps
         working-directory: src/frontend
         run: npm ci

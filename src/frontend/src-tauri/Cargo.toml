@@ -32,6 +32,13 @@ tauri-build = { version = "2.0", features = [] }
 [dependencies]
 tauri = { version = "2.0", features = [] }
 tauri-plugin-shell = "2.0"
+# Другий примірник — не помилка користувача, а звичайний подвійний клік.
+# Без цього плагіна він доходив до кінця: другий бекенд упирався в зайнятий
+# 127.0.0.1:8000, виходив кодом 1 (відтворено 12.09.2026), а людина лишалась
+# перед заставкою, яка обіцяла прогрів. Цільова умова — саме десктопи: на
+# мобільних цілях крейт не збирається.
+[target.'cfg(any(target_os = "linux", target_os = "windows", target_os = "macos"))'.dependencies]
+tauri-plugin-single-instance = "2.0"
 serde = { version = "1.0", features = ["derive"] }
 serde_json = "1.0"
 log = "0.4"

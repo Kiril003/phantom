@@ -123,6 +123,35 @@ class TestCargoManifest:
             "V-1: build-dependency tauri-build must be 2.x"
         )
 
+    def test_target_sections_come_last(self):
+        """Спіймано на собі 12.09.2026.
+
+        Усе, що стоїть ПІСЛЯ `[target.\'cfg(…)\'.dependencies]`, належить ТІЙ
+        цілі. Я вставив target-секцію посеред списку, і `serde`, `serde_json`,
+        `log`, `env_logger` мовчки стали залежностями лише тієї цілі. На Linux
+        умова була істинна, тож `cargo check` лишався ЗЕЛЕНИЙ при структурно
+        хибному маніфесті — зламалось би воно там, де ніхто не дивиться.
+        """
+        body = CARGO_TOML.read_text(encoding="utf-8")
+        first_target = body.find("[target.")
+        assert first_target != -1, "target-секцій немає — нема чого стерегти"
+        plain = body[body.index("[dependencies]"):first_target]
+        for name in ("serde", "serde_json", "log", "env_logger", "tauri-plugin-shell"):
+            assert f"\n{name} " in plain or f"\n{name}=" in plain, (
+                f"залежність {name!r} стоїть ПІСЛЯ першої секції [target.…] — "
+                "тобто мовчки стала залежністю тієї цілі, а не загальною"
+            )
+
+    def test_windows_only_dependency_stays_windows_only(self):
+        """`windows-sys` на Linux не збирається; тягнути його туди нема за чим."""
+        body = CARGO_TOML.read_text(encoding="utf-8")
+        i = body.find("[target.'cfg(windows)'.dependencies]")
+        assert i != -1, (
+            "секція cfg(windows) зникла — разом із нею зникає єдиний спосіб "
+            "сказати людині вголос, що вікна не буде"
+        )
+        assert "windows-sys" in body[i:], "windows-sys виїхав із секції cfg(windows)"
+
     def test_cargo_release_profile_is_size_optimized(self):
         body = CARGO_TOML.read_text(encoding="utf-8")
         # Mobile-class device target — release profile must shave bytes.
@@ -239,6 +268,17 @@ class TestMainRs:
     def _body(self) -> str:
         return MAIN_RS.read_text(encoding="utf-8")
 
+    def _code(self) -> str:
+        """Тіло БЕЗ рядкових коментарів.
+
+        Сторож, що забороняє рядок, мусить дивитись на код: пояснення, чому
+        того рядка не має бути, саме його й цитує. Спіймано тут же,
+        12.09.2026, — той самий клас, що вже двічі ловив нас на splash.js.
+        """
+        return "\n".join(
+            line for line in self._body().splitlines() if not line.lstrip().startswith("//")
+        )
+
     def test_main_rs_sets_phantom_packaged_env(self):
         """The refuse-LAN-bind guard (V-4, `main.py:211`) activates ONLY
         when PHANTOM_PACKAGED=1. If the shell forgets to set it, the
@@ -250,10 +290,25 @@ class TestMainRs:
         )
 
     def test_main_rs_pins_loopback_host(self):
+        """Ім'я змінної тут — уся робота, і воно було неправильним.
+
+        Сторож вимагав `PHANTOM_HOST`, і рядок слухняно стояв у main.rs від
+        V-1. Заміряно 12.09.2026 на запакованому сайдкарі: `config.py` — це
+        `BaseSettings` без `env_prefix`, тобто поле `host` читається зі
+        змінної `HOST`. Запуск із `HOST=0.0.0.0 PHANTOM_PACKAGED=1` справді
+        довів `config.host` до `0.0.0.0` і підняв сторож V-4; із
+        `PHANTOM_HOST=0.0.0.0` не мінялось нічого. Єдина згадка
+        `PHANTOM_HOST` у всьому дереві була ось тут — сторож стеріг ЖЕСТ, а
+        не його наслідок, і захист «у глибину» не вмикався ніколи.
+        """
         body = self._body()
-        assert '.env("PHANTOM_HOST", "127.0.0.1")' in body, (
-            "V-1: main.rs must set PHANTOM_HOST=127.0.0.1 (defence-in-depth "
-            "alongside the V-4 refuse-guard)."
+        assert '.env("HOST", "127.0.0.1")' in body, (
+            "main.rs мусить ставити HOST=127.0.0.1 — саме цю змінну читає "
+            "pydantic-settings; PHANTOM_HOST не читає ніхто."
+        )
+        assert '.env("PHANTOM_HOST"' not in body, (
+            "повернувся PHANTOM_HOST — змінна, якої не читає жоден рядок "
+            "бекенда; поруч із живим HOST вона лише вдає другий замок."
         )
 
     def test_main_rs_uses_shell_sidecar_api(self):
@@ -274,6 +329,137 @@ class TestMainRs:
         assert ".kill()" in body, (
             "V-1 LEAK: main.rs must kill() the sidecar on exit — orphan "
             "uvicorn keeps :8000 bound across re-launches."
+        )
+
+    def test_main_rs_logs_the_backend_without_being_asked(self):
+        """Прилад, вимкнений за замовчуванням, — це відсутній прилад.
+
+        `env_logger::init()` без `RUST_LOG` ставить фільтр `error`. Рядки
+        сайдкара йдуть на `info` (stdout) і `warn` (stderr), тож канал,
+        заведений 29.08.2026 саме щоб бачити причину смерті, був німий у
+        всіх, хто не знає про `RUST_LOG`: 12.09.2026 у журналі перед
+        `код=Some(1)` не було жодного рядка `[backend]` — і з цього зробили
+        висновок, що оболонка взагалі не читає дитину.
+        """
+        body = self._body()
+        code = self._code()
+        assert 'default_filter_or("info")' in body, (
+            "оболонка знову лишає фільтр логера на `error` — рядки бекенда "
+            "на `info`/`warn` не побачить ніхто, і причина смерті пропаде"
+        )
+        assert "env_logger::init()" not in code, (
+            "повернувся `env_logger::init()` — саме він ставить фільтр "
+            "`error` і робить канал сайдкара німим"
+        )
+
+    def test_main_rs_tells_the_window_what_the_backend_is_doing(self):
+        """Лічильник без змісту читається як поломка.
+
+        Заміряно 12.09.2026 на артефакті `74469351`: `/health` відповів через
+        ~2,5 хвилини, ядро весь цей час писало в журнал кожен свій крок, а на
+        склі стояло «гріюсь 204s». Рядок бекенда мусить доїжджати до
+        заставки ДОКИ ядро встає, а не лише коли воно померло.
+        """
+        body = self._body()
+        assert "__PHANTOM_BACKEND_LINE__" in body, (
+            "рядки бекенда не доїжджають до скла, поки ядро встає — "
+            "заставка лишається з лічильником, який описує очікування "
+            "замість роботи"
+        )
+        assert "THROTTLE" in body, (
+            "немає тротла: холодний старт видає сотні рядків, і кожен окремим "
+            "`eval` — це IPC на пусте місце"
+        )
+
+    def test_main_rs_tells_the_window_when_the_sidecar_dies(self):
+        """Смерть сайдкара мусить дійти до скла, а не лише в журнал.
+
+        Заміряно 12.09.2026 на артефакті `74469351`: коли :8000 уже зайнятий,
+        бекенд чесно каже `[Errno 98] address already in use` і виходить кодом
+        1 — а заставка 204 секунди рахувала «гріюсь», бо про `Terminated`
+        знав тільки виклик `log::error!`, чий stderr у запакованому застосунку
+        не веде нікуди. Найдешевша правда продукту тут — назвати код виходу й
+        останній рядок бекенда на тому ж екрані, де людина чекає.
+        """
+        body = self._body()
+        assert "CommandEvent::Terminated" in body, (
+            "оболонка мусить ловити смерть сайдкара — без цієї гілки "
+            "заставка чекає на процес, якого вже немає"
+        )
+        assert "__PHANTOM_BACKEND_DIED__" in body, (
+            "смерть сайдкара не доходить до вебв'ю: заставка читає саме цю "
+            "змінну, і без неї лишається з лічильником «гріюсь» назавжди"
+        )
+        assert ".eval(" in body, (
+            "сказати склу нічим: заставка — файл у public/ без збирача й без "
+            "window.__TAURI__, тож слухач подій там не зібрався б"
+        )
+        # Код виходу без останнього рядка бекенда називає ФАКТ смерті й
+        # мовчить про причину — а причина в нашому випадку була в рядку.
+        assert "last_line" in body, (
+            "оболонка не запамʼятовує останній рядок бекенда — на склі "
+            "лишиться «код 1» без жодної підказки, чому"
+        )
+
+    def test_main_rs_hands_a_second_launch_to_the_first(self):
+        """Другий примірник — подвійний клік, не помилка користувача.
+
+        Без плагіна другий запуск доходив до кінця: його бекенд упирався в
+        зайнятий 127.0.0.1:8000 і виходив кодом 1 (відтворено 12.09.2026), а
+        людина лишалась перед заставкою, яка обіцяла прогрів. Текст «PHANTOM
+        уже запущено» — половина ліків: він каже, що сталось, і не дає куди
+        піти. Друга половина — підняти те вікно, що вже працює.
+        """
+        code = self._code()
+        assert "tauri_plugin_single_instance::init" in code, (
+            "плагін single-instance зник — другий запуск знову піде по всій "
+            "дорозі до зайнятого порту"
+        )
+        # Порядок — вимога плагіна, а не стиль: він мусить перехопити запуск
+        # раніше, ніж решта почне робити роботу другого примірника.
+        first = code.index("tauri_plugin_single_instance::init")
+        shell = code.index("tauri_plugin_shell::init")
+        assert first < shell, (
+            "single-instance зареєстрований ПІСЛЯ інших плагінів — перехоплення "
+            "спрацює запізно"
+        )
+        # Підняти вікно — це три дії, а не одна: схований і мінімізований —
+        # різні стани, і `show` без фокуса виводить вікно за іншими.
+        for call in ("unminimize()", "show()", "set_focus()"):
+            assert call in code, (
+                f"немає {call} — вікно першого примірника не підніметься з "
+                "усіх станів, у яких воно буває"
+            )
+
+    def test_main_rs_never_dies_silently_on_windows(self):
+        """Подвійний клік, після якого не сталось НІЧОГО.
+
+        У релізі під Windows стоїть `windows_subsystem = "windows"` — консолі
+        немає, stderr не веде нікуди. Паніка на старті там невидима повністю:
+        ні вікна, ні помилки, ні сліду. А проміжок до першого вікна багатий на
+        причини: бракує WebView2 (портативна тека, на відміну від інсталятора
+        NSIS, завантажувача не несе), не знайшовся сайдкар, не прочитався
+        конфіг. Це та сама вада, що «гріюсь 204s», лише коротша: прилад мовчить.
+        """
+        code = self._code()
+        assert "std::panic::set_hook" in code, (
+            "немає гака паніки — будь-який провал до першого вікна на Windows "
+            "лишиться зовсім невидимим"
+        )
+        assert "MessageBoxW" in code, (
+            "нічим сказати вголос: до появи вікна застосунку єдиний спосіб "
+            "показати текст на Windows — MessageBoxW"
+        )
+        assert "webview_version" in code, (
+            "немає перевірки WebView2 — на машині без нього tauri панікує в "
+            "build(), і людина бачить порожнечу"
+        )
+        assert "WebView2" in self._body(), (
+            "повідомлення не називає WebView2 — людина не знає, що ставити"
+        )
+        assert "leave_a_trace" in code, (
+            "слід не лишається: людина закриє вікно повідомлення, і показати "
+            "нам буде нічого"
         )
 
     def test_main_rs_windows_subsystem_is_windows_in_release(self):
@@ -392,14 +578,33 @@ class TestSplashHtml:
 
         # 3. Станів рівно три, і третій каже правду. Нескінченне «ще
         #    піднімається» — теж брехня, просто ввічлива.
-        assert "гріюсь" in body, "немає стану звичайного прогріву"
-        assert "довше, ніж звично" in body, (
+        #
+        #    Судимо КОД, не коментарі: тут стояло `assert "гріюсь" in body`, і
+        #    після 12.09 той рядок проходив би через коментар, який цитує
+        #    скаргу власника на слово «гріюсь». Сторож, задоволений власним
+        #    поясненням, — третій випадок цього класу за два дні.
+        code = "\n".join(
+            line for line in body.splitlines() if not line.lstrip().startswith("//")
+        )
+        # Перший стан: що робиться і котрий це крок. Слова «гріюсь» більше
+        # немає навмисно — власник 12.09.2026 сказав про журнальні написи на
+        # склі: «от що то за написи? кому воно треба?». Лічильник без змісту й
+        # рядок логу — однаково не мова того, хто дивиться.
+        assert "крок" in code, (
+            "немає номера кроку — людина не бачить, чи старт рухається"
+        )
+        assert "довше, ніж звично" in code, (
             "немає стану «довше за звичне» — користувач мусить бачити, що "
             "система жива, а не застигла"
         )
-        assert "не піднялося" in body, (
+        assert "не піднялося" in code, (
             "немає чесного стану відмови: після GIVEN_UP_MS заставка мусить "
             "визнати, що ядро не встало, а не запевняти зворотне безкінечно"
+        )
+        # І порада, що робити. Без неї третій стан чесний, але безпорадний.
+        assert "закрий" in code or "відкрий" in code, (
+            "стан відмови не каже, ЩО робити — людина лишається перед вироком "
+            "без дії"
         )
 
 

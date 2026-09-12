@@ -164,6 +164,19 @@ async def start_tls_listener(app: Any) -> Optional[TlsListener]:
         return None
     if os.environ.get("PYTEST_CURRENT_TEST") or os.environ.get("PHANTOM_SKIP_TLS"):
         return None
+    # У пакунку двері в локальну мережу зачинені, доки людина їх не відчинила.
+    # Слухач сідає на КОЖНУ адресу з `lan_addresses()` — 12.09.2026 це був
+    # `158.196.239.126:8443` на wlan0 у публічній /21, і згоди ніхто не питав.
+    # Сторож головного порту сюди не дістає: він судить `config.host`, а ця
+    # дорога йде повз нього.
+    if os.environ.get("PHANTOM_PACKAGED") == "1" and not getattr(
+        config, "lan_doors_enabled", False
+    ):
+        logger.info(
+            "TLS: двері в мережу зачинені — паковану збірку не відчиняють "
+            "самі. Увімкни спарування, коли справді треба (lan_doors_enabled)."
+        )
+        return None
 
     from security.tls_identity import ensure_node_cert
 

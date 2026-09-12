@@ -1,0 +1,245 @@
+# PHANTOM OS — Windows: сайдкар, оболонка, портативна тека.
+#
+# ЧОМУ ОКРЕМИЙ ФАЙЛ І ЛИШЕ ЗА РУЧНИМ ЗАПУСКОМ. Ця робота ставить ~2 ГБ
+# залежностей і пече PyInstaller-бандл; на приватному репозиторії хвилина
+# `windows-latest` коштує вдвічі проти linux. Тримати таке на кожному push
+# означало б палити ліміт власника на кожній правці тексту. `pc-desktop-ci.yml`
+# лишається дешевим сторожем на кожен push; цей файл — вимір на вимогу.
+#
+# ЧОГО ЦЯ РОБОТА НЕ ДОВОДИТЬ, і це сказано тут, а не десь у звіті:
+#   • що оболонка ПІДНІМЕТЬСЯ на Windows. Раннер збирає й запускає сайдкар
+#     (димова перевірка всередині збирача стукає в /health), але вікно Tauri
+#     тут ніхто не відкриває. Зелений значок = «зібралось і бекенд віддає
+#     /health», не «застосунок працює».
+#   • що воно працює на ЧИСТІЙ машині. На раннері є і Python, і VC++ runtime.
+#
+# Артефакт `phantom-os-windows-portable` — тека, яку власник розпаковує й
+# запускає подвійним кліком. Це і є «дійти до exe».
+
+name: pc — Windows exe
+
+on:
+  # ТЕГ, а не гілка, і це обхід справжньої пастки GitHub, а не смак.
+  #
+  # `workflow_dispatch` показує кнопку «Run workflow» лише для файлів, що
+  # лежать на ТИПОВІЙ гілці репозиторію. Заміряно 12.09.2026: типова гілка тут
+  # `companion-v2-phase-0`, і з робочих потоків на ній є сам лише `ci.yml`.
+  # Тобто доки цей файл не доїде туди, кнопки не існує — ні в UI, ні для API.
+  #
+  # Тег працює з БУДЬ-ЯКОЇ гілки й лишає запуск навмисним: звичайні коміти в
+  # гілку нічого не запускають, а 120-хвилинна Windows-робота стартує рівно
+  # тоді, коли хтось свідомо поставив тег. Прибрати цей тригер, щойно файл
+  # опиниться на типовій гілці.
+  push:
+    tags:
+      - "win-exe-*"
+  workflow_dispatch:
+    inputs:
+      skip_smoke:
+        description: "Пропустити димову перевірку сайдкара (лише для налагодження самої збірки)"
+        type: boolean
+        default: false
+      bundles:
+        description: "Які інсталятори пекти (nsis, msi, 'nsis,msi' або none)"
+        type: string
+        default: nsis
+
+permissions:
+  # `write` потрібен рівно для одного: покласти пакунок у РЕЛІЗ, а не в
+  # артефакти. Причина виміряна — див. крок «Publish to the release».
+  contents: write
+
+# Один прогін на раз. Windows-хвилини списуються ×2, а два паралельні прогони
+# цієї роботи — це просто подвійний рахунок за ту саму відповідь.
+# УВАГА: група призначається з файла САМОГО прогону, тож прогін, запущений ДО
+# появи цього блоку, новим тегом не скасується — його гасять руками.
+concurrency:
+  group: pc-windows
+  cancel-in-progress: true
+
+jobs:
+  windows-exe:
+    name: windows — сайдкар + оболонка + портативна тека
+    runs-on: windows-latest
+    # Заміряно частинами: підйом сайдкара до /health на пакунку — 34-64 с,
+    # а от `pip install` (~2 ГБ) і PyInstaller на цій машині не міряні ніколи.
+    # 45 хвилин Linux-роботи тут завідомо мало.
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+
+      # 3.11 — не смак. `chromadb` тягне `chroma-hnswlib==0.7.6`, у якої колеса
+      # win_amd64 є для cp37…cp311 і НЕМАЄ для cp312; помилка розвʼязку називає
+      # chroma-hnswlib, а не пітон, тож причину легко не впізнати.
+      - uses: actions/setup-python@v5
+        id: python
+        with:
+          python-version: "3.11"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: npm
+          cache-dependency-path: src/frontend/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src/frontend/src-tauri
+
+      # Дешева перевірка ПЕРЕД важким: якщо `Cargo.lock` розійшовся з
+      # маніфестом, це видно за секунди, а не після сорока хвилин `pip install`
+      # і PyInstaller. Заміряно локально: `cargo metadata --locked` — 2 с.
+      - name: Rust lock is honoured
+        working-directory: src/frontend/src-tauri
+        run: cargo metadata --locked --format-version 1 > $env:TEMP/metadata.json
+        shell: pwsh
+
+      - name: Node deps
+        working-directory: src/frontend
+        run: npm ci
+
+      # Збирач робить усе сам: власний venv, PyInstaller onedir, розкладку в
+      # `src-tauri/binaries/` і димову перевірку ПОКЛАДЕНОГО бінарника.
+      # Запускається ДО оболонки: `tauri-build` резолвить `bundle.externalBin`
+      # у build.rs і без сайдкара падає ще на `cargo check`.
+      # `PHANTOM_BUNDLE_PYTHON` — не перестраховка. `pick_python()` пробує
+      # `py -3.11` і `python3.11`; на Windows другого не існує взагалі, а
+      # перший, якщо `py.exe` на раннері є, може привести до ІНШОГО 3.11, ніж
+      # обрав setup-python. Тут ім'я приходить від самого setup-python, тож
+      # збирається тим інтерпретатором, який ця робота оголосила.
+      - name: Backend sidecar (PyInstaller onedir)
+        shell: pwsh
+        env:
+          PHANTOM_BUNDLE_PYTHON: ${{ steps.python.outputs.python-path }}
+        run: |
+          $args = @()
+          if ("${{ inputs.skip_smoke }}" -eq "true") { $args += "--skip-smoke" }
+          python scripts/build_sidecar_windows.py @args
+
+      - name: Sidecar landed where tauri-build will look for it
+        shell: pwsh
+        run: |
+          $bin = "src/frontend/src-tauri/binaries/phantom-backend-x86_64-pc-windows-msvc.exe"
+          $int = "src/frontend/src-tauri/binaries/_internal"
+          if (-not (Test-Path $bin)) { throw "немає $bin — tauri-build впаде в build.rs" }
+          if (-not (Test-Path $int)) { throw "немає $int — onedir-бандл встановиться і не запуститься" }
+          "sidecar: {0:N1} МБ" -f ((Get-Item $bin).Length / 1MB)
+          "_internal: {0:N1} МБ" -f ((Get-ChildItem $int -Recurse -File | Measure-Object Length -Sum).Sum / 1MB)
+
+      # `beforeBuildCommand` у tauri.conf.json сам кличе `npm run build`,
+      # тож окремого кроку збірки фронтенда тут немає навмисно — два збирання
+      # одного бандла різнили б те, що поїде, від того, що перевірили.
+      - name: Tauri build
+        working-directory: src/frontend
+        shell: pwsh
+        run: |
+          $b = "${{ inputs.bundles }}"
+          if ($b -eq "none") { npx tauri build --no-bundle }
+          else { npx tauri build --bundles $b }
+
+      # Портативна тека збирається ЯВНО, а не береться з `target/release`.
+      # Причина: `tauri-build` кладе поруч із exe лише сам `externalBin` (уже
+      # без потрійника в імені), а `bundle.resources` — робота пакувальника,
+      # тобто `_internal` у `target/release` НЕ зʼявляється. Тека без нього
+      # запустилась би й одразу вмерла: бутлоадер PyInstaller шукає `_internal`
+      # поруч із собою.
+      - name: Assemble the portable folder
+        shell: pwsh
+        run: |
+          $rel = "src/frontend/src-tauri/target/release"
+          $out = "portable/PHANTOM OS"
+          New-Item -ItemType Directory -Force -Path $out | Out-Null
+          Copy-Item "$rel/phantom-os-shell.exe" "$out/PHANTOM OS.exe"
+          $side = "$rel/phantom-backend.exe"
+          if (-not (Test-Path $side)) {
+            throw "у $rel немає phantom-backend.exe — tauri-build не поклав сайдкар поруч з оболонкою"
+          }
+          Copy-Item $side "$out/phantom-backend.exe"
+          Copy-Item "src/frontend/src-tauri/binaries/_internal" "$out/_internal" -Recurse
+          Get-ChildItem $out | Select-Object Name, Length
+
+      - name: The portable folder carries all three parts
+        shell: pwsh
+        run: |
+          $out = "portable/PHANTOM OS"
+          foreach ($p in @("PHANTOM OS.exe", "phantom-backend.exe", "_internal")) {
+            if (-not (Test-Path "$out/$p")) { throw "у портативній теці немає $p" }
+          }
+          # Бутлоадер шукає рівно це імʼя; будь-яке інше — мовчазна смерть.
+          if (-not (Test-Path "$out/_internal/base_library.zip")) {
+            throw "_internal без base_library.zip — це не тека PyInstaller"
+          }
+          "портативна тека: {0:N0} МБ" -f ((Get-ChildItem $out -Recurse -File | Measure-Object Length -Sum).Sum / 1MB)
+
+      # ЧОМУ РЕЛІЗ, А НЕ АРТЕФАКТ — і це вимір, а не смак.
+      #
+      # Артефакти Actions рахуються в сховище плану: GitHub Free для приватного
+      # репозиторію дає **500 МБ**, і «якщо на акаунті немає платіжного методу,
+      # використання блокується, щойно квота вичерпана». Портативна тека тут —
+      # ~1,7-2 ГБ (лише torch у `_internal` це ~700 МБ), тобто вивантаження
+      # впало б ПІСЛЯ години роботи, і єдиним наслідком години була б червона
+      # позначка.
+      #
+      # Реліз цієї ціни не платить: «немає обмеження на сумарний розмір релізу
+      # й на трафік», обмеження лише на файл — 2 ГіБ. Тому пакунок їде туди.
+      # `gh` на раннері вже стоїть, стороннього action не беремо.
+      - name: Zip the portable folder
+        shell: pwsh
+        run: |
+          $sha = "${{ github.sha }}".Substring(0,8)
+          $zip = "PHANTOM-OS-windows-portable-$sha.zip"
+          Compress-Archive -Path "portable/*" -DestinationPath $zip -CompressionLevel Optimal
+          $len = (Get-Item $zip).Length
+          "архів: {0} — {1:N0} МБ" -f $zip, ($len / 1MB)
+          # Межа релізу — 2 ГіБ на файл. Сказати це тут дешевше, ніж дізнатись
+          # від `gh` після вивантаження половини.
+          if ($len -ge 2GB) { throw "$zip важить $len Б — більше за межу релізу 2 ГіБ" }
+          (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower() + "  " + $zip | Out-File -Encoding ascii "$zip.sha256"
+          "PORTABLE_ZIP=$zip" | Out-File -Append -Encoding ascii $env:GITHUB_ENV
+
+      - name: Publish to the release
+        if: github.ref_type == 'tag'
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $files = @($env:PORTABLE_ZIP, "$env:PORTABLE_ZIP.sha256")
+          $inst = Get-ChildItem "src/frontend/src-tauri/target/release/bundle" -Recurse -File -Include *.exe, *.msi -ErrorAction SilentlyContinue
+          if ($inst) { $files += $inst.FullName }
+          $files | ForEach-Object { "додаю: $_" }
+          gh release create "${{ github.ref_name }}" @files `
+            --title "PHANTOM OS для Windows (${{ github.ref_name }})" `
+            --notes "Портативна тека: розпакуй і запусти ``PHANTOM OS.exe``. Поруч мусять лишитись ``phantom-backend.exe`` і тека ``_internal`` — без неї ядро не підніметься. Зібрано з ${{ github.sha }}. НЕ підписано: SmartScreen покаже попередження." `
+            --draft=false
+        continue-on-error: true
+
+      # Якщо релізу не сталось (запуск без тега), пакунок усе одно має бути
+      # доступний — але тоді він упреться в ті самі 500 МБ, і про це сказано
+      # вголос, а не мовчки.
+      - name: Fall back to an artifact, and say what that costs
+        if: github.ref_type != 'tag'
+        shell: pwsh
+        run: |
+          Write-Host "::warning::запуск без тега — пакунок піде в артефакти, а там квота 500 МБ на приватному Free. Якщо вивантаження впаде, це квота, а не збірка. Постав тег win-exe-* і перезапусти."
+
+      - uses: actions/upload-artifact@v4
+        if: github.ref_type != 'tag'
+        with:
+          name: phantom-os-windows-portable
+          path: ${{ env.PORTABLE_ZIP }}
+          retention-days: 7
+
+      # Провал мусить лишити слід: без цього «збірка червона» — це все, що
+      # власник побачить, а лог PyInstaller і димової перевірки згорить разом
+      # із раннером.
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: phantom-os-windows-logs
+          path: |
+            .build/pyinstaller-win/smoke.log
+            .build/pyinstaller-win/*.txt
+          if-no-files-found: ignore
+          retention-days: 7

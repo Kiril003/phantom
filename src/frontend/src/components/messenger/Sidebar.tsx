@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Search,
   Plus,
@@ -53,6 +53,7 @@ import {
   LayoutGrid
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
+import { useDeskStore } from '../../stores/deskStore';
 import { Chat, PersonaSphere, SmartFolder, UserProfile } from '../../types/messenger';
 import { Avatar } from './Avatar';
 import { soundFx } from '../../utils/messengerSound';
@@ -223,9 +224,22 @@ export const Sidebar: React.FC<SidebarProps> = ({
   onOpenP2PNetworkModal,
   onSwitchPersonaSphere,
 }) => {
-  // Док PHANTOM на /messenger сховано, тож вихід мусить бути тут — інакше
-  // месенджер стає глухим кутом без дороги назад в ОС.
   const navigate = useNavigate();
+
+  /**
+   * Вихід із месенджера.
+   *
+   * Було `navigate('/')`. 12.09 месенджер переїхав у пейн стола «Розмови»,
+   * тобто «/» і є те місце, де ми вже стоїмо — кнопка стала мовчазною.
+   * Тепер вона перемикає на перший стіл, що не є «Розмовами»; поза
+   * оболонкою (прямий шлях у браузері) лишається старий перехід на «/».
+   */
+  const leaveToDesks = useCallback(() => {
+    const { desks, activeDeskId, setActiveDesk } = useDeskStore.getState();
+    const target = desks.find((d) => d.id !== activeDeskId);
+    if (target) setActiveDesk(target.id);
+    navigate('/');
+  }, [navigate]);
 
   // Кола та перейменування живуть у сторі — сюди беремо їх напряму, бо пропів на них немає.
   const activeCircle = useMessengerStore((s) => s.activeCircle);
@@ -942,11 +956,11 @@ export const Sidebar: React.FC<SidebarProps> = ({
           <button
             onClick={() => {
               soundFx.playTap();
-              navigate('/');
+              leaveToDesks();
             }}
             className="w-[36px] h-[36px] min-h-0 min-w-0 rounded-[10px] text-[#8EA093] hover:bg-[#18231C] hover:text-white flex items-center justify-center transition-colors shrink-0"
-            title="Повернутися до PHANTOM"
-            aria-label="Повернутися до PHANTOM"
+            title="До столів PHANTOM"
+            aria-label="До столів PHANTOM"
           >
             <LayoutGrid className="w-[18px] h-[18px]" strokeWidth={1.75} />
           </button>

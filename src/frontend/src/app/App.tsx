@@ -58,12 +58,11 @@ const SunriseWorkspace = React.lazy(() => import('../layouts/SunriseWorkspace'))
 const AgentFoundryLayout = React.lazy(() => import('../layouts/AgentFoundryLayout'));
 
 // Злиття 29.08: месенджер приїхав окремою гілкою, де він володів «/» і «*».
-// Тут «/» належить активному столу, тож месенджер сидить на власному шляху.
-// Це не пониження: у гілці месенджера «*» ковтав /map, /settings, /polis,
-// /foundry, /analytics — вісім місць коду вели туди, де маршруту не було,
-// і малювався месенджер. Тепер ці шляхи вперше ведуть куди написано.
-const MessengerLayout = React.lazy(() => import('../layouts/MessengerLayout'));
-
+// Тут «/» належить активному столу. 12.09 він переїхав із власного шляху в
+// пейн `messenger` на столі «Розмови» — бо шлях без дороги не є дорогою:
+// по всьому src рядок «/messenger» згадувався двічі, і обидва рази це було
+// читання `location.pathname`, а не перехід. Поверхню вантажить
+// paneRegistry.
 const DashboardLayout = React.lazy(() => import('../layouts/DashboardLayout'));
 const GhostLayout = React.lazy(() => import('../layouts/GhostLayout'));
 const DreamLayout = React.lazy(() => import('../layouts/DreamLayout'));
@@ -118,7 +117,7 @@ const STATE_PANE: Partial<Record<SystemState, 'dialogue' | 'company'>> = {
  * navigate('/map' тощо) не ламаються — вони ведуть у ту саму поверхню,
  * що тепер живе пейном.
  */
-function GoDesk({ desk, float }: { desk?: string; float?: 'settings' }) {
+function GoDesk({ desk, float }: { desk?: string; float?: 'settings' | 'messenger' }) {
   const setActiveDesk = useDeskStore((s) => s.setActiveDesk);
   const openPane = useDeskStore((s) => s.openPane);
   useEffect(() => {
@@ -130,7 +129,7 @@ function GoDesk({ desk, float }: { desk?: string; float?: 'settings' }) {
   return <Navigate to="/" replace />;
 }
 
-function DeskIndex() {
+export function DeskIndex() {
   const state = useSystemStore((s) => s.state);
   const desks = useDeskStore((s) => s.desks);
   const activeDeskId = useDeskStore((s) => s.activeDeskId);
@@ -146,7 +145,13 @@ function DeskIndex() {
       {overlay && (
         <div
           className="absolute inset-0 overflow-hidden"
-          style={{ background: 'var(--ph-color-ground)' }}
+          // zIndex обов'язковий, і це не смак. Без нього «Режим Привид»
+          // НЕ гасив екрана: DialogueLayout усередині пейна має власні
+          // z-10/z-2, жоден предок пейна не творить контексту накладання,
+          // тож ці шари конкурували з оверлеєм у корені й вигравали —
+          // чат, поле вводу й банер помилки лишались читомими поверх
+          // «чорного» Привида. Вище за повноекранний пейн (60 + z).
+          style={{ background: 'var(--ph-color-ground)', zIndex: 100 }}
         >
           <StateSurface />
         </div>
@@ -208,11 +213,10 @@ function MainRouter() {
             {/* К4: старі шляхи ведуть у відповідний стіл/пейн. */}
             <Route path="map" element={<GoDesk desk="theatre" />} />
             <Route path="chat" element={<GoDesk desk="theatre" />} />
-            {/* Вхід у месенджер з оболонки: після злиття він більше не
-                показується самопливом на «/». Кнопка «Повернутися до
-                PHANTOM» у його лівій рейці веде на «/» і нарешті означає
-                те, що на ній написано. */}
-            <Route path="messenger" element={<MessengerLayout />} />
+            {/* Месенджер живе столом «Розмови» (deskStore пресет `talks`).
+                Шлях лишається дійсним для закладок і зовнішніх посилань —
+                він веде в той самий стіл, а не у другу копію поверхні. */}
+            <Route path="messenger" element={<GoDesk desk="talks" />} />
             <Route path="analytics" element={<GoDesk desk="cockpit" />} />
             <Route path="operator" element={<GoDesk desk="company" />} />
             <Route path="foundry" element={<GoDesk desk="company" />} />

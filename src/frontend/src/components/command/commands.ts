@@ -7,11 +7,10 @@
  *  «Столи»      — перемикання столів (deskStore двигуна f1-desk-engine);
  *                 підказка рядка несе вміст стола — «Стіл: Компанія» і
  *                 пейн «Компанія» більше не близнюки;
- *  «Переходи»   — рівно п'ять пейнів: Мапа, Діалог, Компанія,
- *                 Налаштування, Аналітика (вердикт власника 22.08:
- *                 «багато кнопок погано» — інші входи чекають дебату);
- *                 підказка називає наслідок: відкрити пейн на активному
- *                 столі;
+ *  «Переходи»   — пейни: Мапа, Діалог, Компанія, Налаштування, Огляд і
+ *                 Месенджер (вердикт власника 22.08: «багато кнопок
+ *                 погано» — інші входи чекають дебату); підказка називає
+ *                 наслідок: відкрити пейн на активному столі;
  *  «Дії»        — теми (settingsStore.setTheme: DOM+localStorage одразу,
  *                 бекенд best-effort) і швидкий погляд «ШІ: стан ланцюга»
  *                 (борг У10: ланцюг живе карткою в «Огляді», але глянути
@@ -77,7 +76,6 @@ export interface CommandItem {
   peek?: () => Promise<string>;
 }
 
-/** Пейни «Переходів» — рівно п'ять, за вердиктом власника. */
 const NAV_TARGETS: ReadonlyArray<{ kind: PaneKind; title: string; keywords: string[] }> = [
   { kind: 'map', title: 'Мапа', keywords: ['map', 'мапа', 'карта'] },
   { kind: 'dialogue', title: 'Діалог', keywords: ['dialogue', 'chat', 'чат'] },
@@ -86,6 +84,11 @@ const NAV_TARGETS: ReadonlyArray<{ kind: PaneKind; title: string; keywords: stri
   // Ф4: слово «кокпіт» тепер веде на стіл «Кокпіт» (авто-рядок
   // «Стіл: Кокпіт» нижче), а огляд аналітики зветься «Огляд».
   { kind: 'analytics', title: 'Огляд', keywords: ['analytics', 'огляд', 'аналітика'] },
+  {
+    kind: 'messenger',
+    title: 'Месенджер',
+    keywords: ['messenger', 'месенджер', 'листування', 'люди', 'дзвінок'],
+  },
 ];
 
 /**
@@ -106,9 +109,40 @@ export interface BuildCommandsOptions {
    * викликає його замість дефолтного deskStore.openPane(kind).
    */
   onNavigate?: (kind: PaneKind) => void;
+  /**
+   * Перехід за шляхом роутера — для поверхонь, що ще не стали пейнами.
+   * Без нього такі рядки в палітру не потрапляють: рядок, що нікуди не
+   * веде, гірший за його відсутність.
+   */
+  onRoute?: (path: string) => void;
   /** Закрити палітру — викликається перед кожною дією. */
   close: () => void;
 }
+
+/**
+ * Поверхні-шляхи: живі, але без пейна і без жодної кнопки в оболонці.
+ *
+ * «Поліс» (SunriseWorkspace, 342 рядки) малює вкладки Робота / Населення
+ * / Ключі / Світ і композер місій — тобто це не заглушка. Але 12.09.2026
+ * жодна кнопка в оболонці туди не вела: єдиним входом був пункт дока, а
+ * док (FloatingToolbar) на цьому шляху не монтується взагалі. У вікні
+ * Tauri адресного рядка немає, тож розділ був недосяжний так само, як
+ * месенджер. Палітра дає дорогу, не додаючи постійного хрому — вердикт
+ * власника 22.08 «багато кнопок погано» лишається чинним.
+ */
+const ROUTE_TARGETS: ReadonlyArray<{
+  path: string;
+  title: string;
+  hint: string;
+  keywords: string[];
+}> = [
+  {
+    path: '/polis',
+    title: 'Поліс',
+    hint: 'агентство: місії, воркери, громадяни, ключі',
+    keywords: ['polis', 'поліс', 'місія', 'агентство'],
+  },
+];
 
 /**
  * Побудова списку з ЖИВОГО стану сторів. Викликати на рендер палітри —
@@ -155,6 +189,23 @@ export function buildCommands(opts: BuildCommandsOptions): CommandItem[] {
         else useDeskStore.getState().openPane(nav.kind);
       },
     });
+  }
+
+  if (opts.onRoute) {
+    const route = opts.onRoute;
+    for (const target of ROUTE_TARGETS) {
+      items.push({
+        id: `route:${target.path}`,
+        section: 'Переходи',
+        title: target.title,
+        hint: target.hint,
+        keywords: target.keywords,
+        run: () => {
+          opts.close();
+          route(target.path);
+        },
+      });
+    }
   }
 
   for (const theme of THEMES) {

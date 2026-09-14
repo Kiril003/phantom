@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import os
+import sys
 import time
 import uuid
 from contextlib import asynccontextmanager
@@ -30,7 +31,17 @@ from api.routes_bake_jobs import router as bake_jobs_router
 from api.routes_map import router as map_router
 from api.routes_geo_offline import router as geo_offline_router
 from api.routes_geo_geofences import router as geo_geofences_router
-from api.routes_linux import router as linux_router
+#: Пісочниця виконання команд у `linux/` тягне POSIX-лише stdlib (`pwd`,
+#: `resource` — читання/зміна UID і rlimit) прямо на рівні модуля. На Windows
+#: цих модулів стандартної бібліотеки НЕМА взагалі: не «не працює», а
+#: ModuleNotFoundError ще на імпорті — і на старті сайдкара (main:app
+#: не піднявся б), і в PyInstaller (--collect-submodules бачить те саме).
+#: Перший реальний прогін на Windows (14.09.2026) впав саме тут. Фіча
+#: відсутня на цій платформі за конструкцією POSIX API, а не недороблена.
+if sys.platform == "win32":
+    linux_router = None
+else:
+    from api.routes_linux import router as linux_router
 from api.routes_tools import router as tools_router
 from api.routes_license import router as license_router
 from licensing.enforcement import install_enforcement
@@ -1122,7 +1133,8 @@ def create_app() -> FastAPI:
     app.include_router(bake_jobs_router, prefix=prefix)
     app.include_router(geo_offline_router, prefix=prefix)
     app.include_router(geo_geofences_router, prefix=prefix)
-    app.include_router(linux_router, prefix=prefix)
+    if linux_router is not None:
+        app.include_router(linux_router, prefix=prefix)
     app.include_router(tools_router, prefix=prefix)
     # Commerce — /license/* binds this device to an Ed25519-signed
     # certificate from the platform license server; verified offline

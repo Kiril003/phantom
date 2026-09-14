@@ -324,10 +324,18 @@ def pyinstaller_args(passport: Path) -> list[str]:
     ]
     # Пакети бекенда перелічуємо З ДИСКА: список у скрипті протух би на
     # першому ж новому пакеті.
+    #
+    # `linux` — виняток, і навмисний: `linux/executor.py` імпортує `pwd` і
+    # `resource` на рівні модуля (POSIX-лише stdlib, керування UID/rlimit),
+    # яких на Windows не існує в принципі. `--collect-submodules` змушує
+    # PyInstaller статично проімпортувати пакет для аналізу — і саме це
+    # впало на першому реальному прогоні (14.09.2026), ще до самого бандла.
+    # `api/routes_linux.py` (лишається в переліку — `api` потрібен) сам
+    # уже не тягне цей пакет на Windows: main.py вимикає імпорт умовно.
     for pkg in sorted(
         p.parent.name
         for p in BACKEND.glob("*/__init__.py")
-        if p.parent.name not in {"tests", ".venv"}
+        if p.parent.name not in {"tests", ".venv", "linux"}
     ):
         args += ["--collect-submodules", pkg]
     for mod in sorted(

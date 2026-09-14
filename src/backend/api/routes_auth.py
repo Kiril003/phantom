@@ -79,6 +79,13 @@ class PINLoginRequest(BaseModel):
     pin: str = Field(..., min_length=1, max_length=32)
 
 
+class ClaimRequest(BaseModel):
+    """Перший запуск: людина називає себе і ставить СВІЙ PIN."""
+
+    display_name: str = Field(..., min_length=1, max_length=64)
+    pin: str = Field(..., min_length=4, max_length=12)
+
+
 class AuthResponse(BaseModel):
     user: dict
     token: str
@@ -271,6 +278,122 @@ async def login_pin(
 # поверхні, наступного разу знову втратив би замок. Викликів не було — у фронті
 # лежала невживана обгортка `api.quickJoin`, її прибрано разом.
 # Сторож: tests/test_quick_join_is_not_a_way_past_the_pin.py
+
+
+@router.get("/bootstrap")
+async def bootstrap_state(
+    request: Request,
+    db: AsyncSession = Depends(get_db),
+) -> dict:
+    """Чи цей вузол ще нічий — тобто чи перший запуск не завершено.
+
+    **Вада, заради якої це існує.** Пакована збірка заводить власника
+    `phantom` сама і мінтить йому випадковий шестизначний PIN. Той PIN
+    лягає у файл `identity/bootstrap_pin` (на Windows це
+    `%LOCALAPPDATA%\\PHANTOM-OS\\PHANTOM\\…`) і друкується в журнал
+    запуску. У портативного застосунку немає ані консолі, ані причини
+    здогадатись про цей шлях — тож людина, яка щойно розпакувала архів,
+    бачить запит PIN, якого ніде не існує для неї. Це не «забув пароль»,
+    це замок без ключа з коробки: застосунок неможливо відкрити взагалі.
+
+    Сам PIN звідси НЕ повертається і не повертатиметься. Замість
+    «покажи мені секрет» тут «двері ще не замкнено» — а замкнути їх
+    своїм PIN дає [claim_bootstrap] нижче. Секрет, якого не віддають,
+    не можна ані підслухати, ані лишити в журналі проксі.
+    """
+    from security.auth import read_bootstrap_pin
+
+    client_host = _resolve_client_ip(request)
+    if not is_loopback_host(client_host):
+        # Не 403: чужому взагалі не варто знати, що такий стан буває.
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+
+    result = await db.execute(select(User).where(User.username == "phantom"))
+    owner = result.scalars().first()
+    unclaimed = (
+        owner is not None
+        and read_bootstrap_pin() is not None
+        and is_default_pin(owner.pin_hash)
+    )
+    return {"unclaimed": unclaimed}
+
+
+@router.post("/bootstrap/claim", response_model=AuthResponse)
+async def claim_bootstrap(
+    req: ClaimRequest,
+    request: Request,
+    response: Response,
+    db: AsyncSession = Depends(get_db),
+) -> AuthResponse:
+    """Перший запуск: людина заводить СЕБЕ — ім'я і власний PIN.
+
+    Три перевірки, і кожна звужує вікно до однієї миті:
+      1. лише з петлі — тобто з екрана самої машини;
+      2. лише поки вузол нічий: PIN власника ще той, що намінтило ядро,
+         і маркер на місці. Після цього виклику маркера немає, і двері
+         зачинені назавжди — повторний виклик дістане 409;
+      3. PIN мусить бути новий: лишити той самий бутстрап-PIN означало б
+         вийти з цього стану, не вийшовши з нього.
+
+    Хто дотягнувся до петлі в цю мить, уже сидить за цією машиною і вже
+    може прочитати `identity/bootstrap_pin` очима. Тобто ручка не додає
+    доступу — вона прибирає потребу шукати файл.
+    """
+    from security.auth import discard_bootstrap_pin, read_bootstrap_pin
+
+    client_host = _resolve_client_ip(request)
+    if not is_loopback_host(client_host):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Not found")
+
+    result = await db.execute(select(User).where(User.username == "phantom"))
+    owner = result.scalars().first()
+    marker = read_bootstrap_pin()
+    if owner is None or marker is None or not is_default_pin(owner.pin_hash):
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="This node already has an owner.",
+            headers={"X-Error-Code": "ALREADY_CLAIMED"},
+        )
+
+    pin = req.pin.strip()
+    if not pin.isdigit():
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="PIN must be digits only.",
+            headers={"X-Error-Code": "PIN_NOT_NUMERIC"},
+        )
+    if pin == marker:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Choose a PIN of your own, not the one the core minted.",
+            headers={"X-Error-Code": "PIN_UNCHANGED"},
+        )
+
+    name = req.display_name.strip()
+    owner.pin_hash = hash_secret(pin)
+    try:
+        prefs = json.loads(owner.preferences_json or "{}")
+    except (ValueError, TypeError):
+        prefs = {}
+    prefs["display_name"] = name
+    owner.preferences_json = json.dumps(prefs)
+    await db.commit()
+    await db.refresh(owner)
+
+    # Маркер знімається ПІСЛЯ запису: якщо коміт не вдасться, вузол
+    # лишається нічиїм і людина може спробувати ще, а не опиниться
+    # замкненою з обох боків.
+    discard_bootstrap_pin()
+    logger.warning("Вузол прийнято власником: %s (PIN замінено, маркер знято)", name)
+
+    token, expires_at = create_token(owner.id, owner.username, owner.role)
+    await _touch_last_seen(db, owner)
+    response.set_cookie(
+        "phantom_token", token,
+        httponly=True, samesite="lax",
+        max_age=config_session_timeout_s(),
+    )
+    return AuthResponse(user=_user_to_dict(owner), token=token, expires_at=expires_at)
 
 @router.post("/refresh", response_model=RefreshResponse)
 async def refresh(

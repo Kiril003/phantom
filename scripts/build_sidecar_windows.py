@@ -63,6 +63,17 @@ import subprocess
 import sys
 import time
 import urllib.error
+
+# Перший реальний прогін на Windows-раннері (13.09.2026) упав на самому
+# першому кириличному print(): консоль GitHub Actions там сидить на
+# cp1252, а не на UTF-8, і `say()`/`die()` кидали UnicodeEncodeError
+# ще до того, як скрипт устиг зробити бодай щось. Лінукс/мак цього не
+# бачать — там stdout за замовчуванням UTF-8, тому воно й "написано,
+# жодного разу не запускалось" пройшло повз. Примусити тут, до
+# першого say()/die() — 121 рядок файла несе кирилицю.
+if sys.platform == "win32":
+    sys.stdout.reconfigure(encoding="utf-8")
+    sys.stderr.reconfigure(encoding="utf-8")
 import urllib.request
 from pathlib import Path
 from typing import NoReturn

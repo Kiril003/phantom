@@ -3,7 +3,7 @@ import { motion } from 'framer-motion';
 import { ArrowLeft, PlugZap, RotateCw, ShieldAlert } from 'lucide-react';
 import { useAuthStore } from '../../stores/authStore';
 import { useSystemStore } from '../../stores/systemStore';
-import { authApi } from '../../services/api';
+import { authApi, type AuthResponse } from '../../services/api';
 import { AmbientGlows } from '../core/AmbientGlows';
 import { Orb } from '../core/Orb';
 import PinPad from './PinPad';
@@ -19,6 +19,9 @@ type Phase =
   | { kind: 'loading' }
   | { kind: 'unreachable' }
   | { kind: 'nobody' }
+  // Перший запуск: вузол ще нічий. Стоїть ПЕРЕД `pin`, бо саме тут людина
+  // застрягала — див. [Claim] нижче.
+  | { kind: 'claim' }
   | { kind: 'pick'; profiles: Profile[] }
   | { kind: 'pin'; who: Profile; many: boolean };
 
@@ -57,6 +60,21 @@ export default function LoginScreen() {
   const load = useCallback(async () => {
     setPhase({ kind: 'loading' });
     try {
+      // ПЕРШИМ питанням — «а цей вузол узагалі чийсь?».
+      //
+      // Доти екран одразу просив PIN, якого в людини не було й не могло
+      // бути: пакована збірка мінтить його випадковим у файл
+      // `identity/bootstrap_pin` (на Windows усередині %LOCALAPPDATA%) і в
+      // журнал запуску, а в портативного застосунку немає ані консолі, ані
+      // причини знати той шлях. Людина, яка щойно розпакувала архів,
+      // упиралась у замок без ключа з коробки — і це читалось як «застосунок
+      // не працює», хоч працювало все, крім дверей.
+      //
+      // Ручка лише на петлі й лише поки вузол нічий; помилка тут нічого не
+      // ламає — просто йдемо звичайним шляхом і питаємо PIN, як питали.
+      const bootstrap = await authApi.bootstrapState().catch(() => null);
+      if (bootstrap?.unclaimed) return setPhase({ kind: 'claim' });
+
       const profiles = await authApi.picker();
       if (profiles && profiles.length > 0) {
         if (profiles.length === 1) return setPhase({ kind: 'pin', who: profiles[0], many: false });
@@ -158,6 +176,14 @@ export default function LoginScreen() {
         {phase.kind === 'loading' && <Waiting />}
         {phase.kind === 'unreachable' && <Unreachable onRetry={() => void load()} />}
         {phase.kind === 'nobody' && <Nobody onRetry={() => void load()} />}
+        {phase.kind === 'claim' && (
+          <Claim
+            onDone={(res) => {
+              setUser(res.user, res.token, res.expires_at);
+              setAuthenticated(true);
+            }}
+          />
+        )}
 
         {phase.kind === 'pick' && (
           <>
@@ -386,6 +412,168 @@ function Nobody({ onRetry }: { onRetry: () => void }) {
         <RotateCw size={14} strokeWidth={2.25} />
         Перевірити ще раз
       </button>
+    </div>
+  );
+}
+
+/**
+ * Перший запуск: людина заводить СЕБЕ.
+ *
+ * **Вада, заради якої цей екран існує.** Ядро на першому старті створює
+ * власника `phantom` і мінтить йому випадковий шестизначний PIN — у файл
+ * `identity/bootstrap_pin` (на Windows усередині `%LOCALAPPDATA%`) і в журнал
+ * запуску. У портативної збірки немає ані консолі, ані причини знати той шлях,
+ * а автовхід свідомо вимкнений, доки PIN бутстрапний. Людина, яка щойно
+ * розпакувала архів, упиралась у запит PIN, якого для неї не існує ніде.
+ * Власник 15.09: «запускається але пише сесія застаріла і просить пін»,
+ * «чому людина не може створити свій профіль?».
+ *
+ * Реєстрації ж не було взагалі: кнопку «Створити профіль» свого часу прибрали
+ * ПРАВИЛЬНО (вела на маршрут під автентифікацією, тобто в нікуди), але нічим
+ * не замінили — див. коментар над [Nobody].
+ *
+ * Чому це не діра. Ручка приймає лише з петлі й лише поки вузол нічий; після
+ * першого разу вона віддає 409 назавжди. Хто дотягнувся до петлі в цю мить,
+ * уже сидить за цією машиною і вже може прочитати той файл очима — екран не
+ * додає доступу, він прибирає потребу шукати файл.
+ */
+function Claim({ onDone }: { onDone: (res: AuthResponse) => void }) {
+  const [name, setName] = useState('');
+  const [pin, setPin] = useState('');
+  const [again, setAgain] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+
+  // Межі — ті самі, що на ядрі (`ClaimRequest`: 4..12 цифр), і названі тут
+  // словами ДО натиску. Кнопка, яка мовчки не працює, — це та сама мовчазна
+  // відмова, тільки без повідомлення.
+  const pinOk = /^\d{4,12}$/.test(pin);
+  const same = pin.length > 0 && pin === again;
+  const nameOk = name.trim().length > 0;
+  const ready = nameOk && pinOk && same && !busy;
+
+  const why = !nameOk
+    ? 'Скажи, як тебе звати'
+    : !pinOk
+      ? 'PIN — від 4 до 12 цифр'
+      : !same
+        ? 'PIN не збігається'
+        : '';
+
+  const submit = async () => {
+    if (!ready) return;
+    setBusy(true);
+    setError('');
+    try {
+      onDone(await authApi.claimBootstrap(name.trim(), pin));
+    } catch (e) {
+      // Причину кажемо словами. «Не вийшло» без причини на першому ж екрані
+      // застосунку — найгірше можливе перше враження.
+      const detail = e instanceof Error ? e.message : '';
+      setError(detail || 'Ядро не прийняло — спробуй ще раз');
+      setBusy(false);
+    }
+  };
+
+  const field: React.CSSProperties = {
+    width: '100%',
+    minHeight: 44,
+    marginTop: 6,
+    padding: '0 12px',
+    borderRadius: 12,
+    border: '1px solid var(--hairline, rgba(255,255,255,.12))',
+    background: 'var(--surface-raised, rgba(255,255,255,.04))',
+    color: 'var(--ink-primary)',
+    fontSize: 14,
+  };
+  const label: React.CSSProperties = {
+    fontSize: 11,
+    fontWeight: 700,
+    letterSpacing: .3,
+    color: 'var(--ink-muted)',
+    textTransform: 'uppercase',
+  };
+
+  return (
+    <div className="glass" style={{ marginTop: 22, padding: 22, borderRadius: 18, width: '100%' }}>
+      <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--ink-primary)' }}>
+        Цей пристрій ще нічий
+      </div>
+      <div style={{ marginTop: 6, fontSize: 12, color: 'var(--ink-secondary)', lineHeight: 1.5 }}>
+        Заведи себе: імʼя і PIN, яким відмикатимеш. Обидва лишаються тут, на
+        пристрої — нікуди не йдуть і ні з ким не звіряються.
+      </div>
+
+      <div style={{ marginTop: 16 }}>
+        <div style={label}>Як тебе звати</div>
+        <input
+          style={field}
+          value={name}
+          maxLength={64}
+          autoFocus
+          onChange={(e) => setName(e.target.value)}
+          placeholder="Імʼя або позивний"
+        />
+      </div>
+
+      <div style={{ marginTop: 12 }}>
+        <div style={label}>PIN</div>
+        <input
+          style={field}
+          value={pin}
+          inputMode="numeric"
+          type="password"
+          maxLength={12}
+          onChange={(e) => setPin(e.target.value.replace(/\D/g, ''))}
+          placeholder="Від 4 до 12 цифр"
+        />
+      </div>
+
+      <div style={{ marginTop: 12 }}>
+        <div style={label}>PIN ще раз</div>
+        <input
+          style={field}
+          value={again}
+          inputMode="numeric"
+          type="password"
+          maxLength={12}
+          onChange={(e) => setAgain(e.target.value.replace(/\D/g, ''))}
+          onKeyDown={(e) => { if (e.key === 'Enter') void submit(); }}
+          placeholder="Щоб не помилитись"
+        />
+      </div>
+
+      {(why || error) && (
+        <div style={{ marginTop: 10, fontSize: 12, color: error ? 'var(--signal-danger,#f87171)' : 'var(--ink-muted)' }}>
+          {error || why}
+        </div>
+      )}
+
+      <button
+        type="button"
+        onClick={() => void submit()}
+        disabled={!ready}
+        className="flex items-center justify-center"
+        style={{
+          marginTop: 16,
+          width: '100%',
+          minHeight: 44,
+          borderRadius: 12,
+          border: 'none',
+          background: ready ? 'linear-gradient(135deg,#f4af25,#fb923c)' : 'var(--surface-raised, rgba(255,255,255,.06))',
+          color: ready ? 'var(--primary-shadow, #5c3d05)' : 'var(--ink-muted)',
+          fontSize: 14,
+          fontWeight: 700,
+          cursor: ready ? 'pointer' : 'not-allowed',
+        }}
+      >
+        {busy ? 'Заводжу…' : 'Це мій пристрій'}
+      </button>
+
+      <div style={{ marginTop: 12, fontSize: 11, color: 'var(--ink-muted)', lineHeight: 1.5 }}>
+        Далі цей екран не зʼявиться: пристрій матиме власника, і зайти можна
+        буде лише цим PIN.
+      </div>
     </div>
   );
 }
